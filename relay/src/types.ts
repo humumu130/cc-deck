@@ -3,6 +3,8 @@
 
 import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
+import type { AllowRule } from "./allow-rules.js";
+import type { ProjectGroup, ProjectBoard, OrgConfirm } from "./projects.js";
 
 // ---------- 事件信封 ----------
 
@@ -19,6 +21,18 @@ export interface Envelope<T extends string = string, P = unknown> {
 }
 
 // ---------- 会话状态 ----------
+
+// #27 会话引擎（V2 Agent 无关编排）：编排核心只依赖 AgentLike 抽象契约，
+// engine 标记驱动 spawn 工厂分叉（session-manager newAgent）与 resume 锚语义
+// （claude=SDK session_id / codex=thread_id）。扩展第三引擎时在此扩枚举——
+// 接入纪律②：契约从「编排需要什么」出发，不从「某个 Agent 有什么」
+export type SessionEngine = "claude" | "codex" | "trae" | "qwen-code" | "codebuddy" | "zcode";
+
+export interface EngineSelection {
+  engine?: SessionEngine;
+  model?: string;
+  provider?: string;
+}
 
 export type SessionStatus =
   | "WORKING"   // 推导中/执行工具
@@ -39,6 +53,71 @@ export interface TokenUsage {
   cache_read_input_tokens: number;
   cache_creation_input_tokens: number;
 }
+
+export type ActivityKind = "tool_use" | "tool_result" | "assistant_text" | "system";
+
+export interface ActivityCapabilities {
+  native_status: boolean;
+  operation_summary: boolean;
+  native_elapsed: boolean;
+  approval: boolean;
+}
+
+export interface StatusDockState {
+  state: SessionStatus;
+  task_summary?: {
+    text: string;
+    source: "todo" | "dispatch" | "board" | "session";
+    updated_at: number;
+  };
+  activity?: {
+    kind: ActivityKind;
+    text: string;
+    tool?: string;
+    observed_at: number;
+    occurred_at?: number;
+  };
+  elapsed_ms?: number;
+  capabilities: ActivityCapabilities;
+  updated_at: number;
+}
+
+export interface SourceCapabilities {
+  models?: boolean;
+  activity?: boolean;
+  notifications?: boolean;
+  commands?: string[];
+  [key: string]: boolean | string[] | undefined;
+}
+
+export interface NotificationSourceContext {
+  domain: string;
+  entityId: string;
+  sessionId?: string;
+  segment?: string;
+  alertId: string;
+  returnPath: string;
+}
+
+export type NotificationKind = "org-confirm" | "waiting" | "dispatch" | "acceptance" | "system";
+export type NotificationGroup = "action" | "attention" | "activity";
+export type NotificationSeverity = "info" | "working" | "waiting" | "error" | "done";
+
+export interface NotificationItem {
+  key: string;
+  kind: NotificationKind;
+  group: NotificationGroup;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  sourceContext: NotificationSourceContext;
+  actionable: boolean;
+  created_at: number;
+  resolved_at?: number;
+  handled_at?: number;
+}
+
+export const SNAPSHOT_SCHEMA_VERSION = 1 as const;
 
 // 任务清单（CLI TodoWrite 工具的最新快照；手表/手机进度展示用）
 export interface TodoItem {
@@ -75,7 +154,7 @@ export interface ArtifactItem {
   first_at: number;    // 首次出现（ms）
   last_at: number;     // 最后一次写（ms；排序键）
   size?: number;       // 最近一次 stat 的字节数（捕获时顺手 stat；缺省不显）
-  exists?: boolean;    // 最近一次 stat 是否存在；false → UI「已删除」态
+  exists?: boolean;    // 最近一次 stat 是否存在；false → 下发前过滤（#224 面板=磁盘现状，已删不出现）；state 内部保留供文件重建时合并复用
   origin?: "cwd" | "outside";  // 相对会话 cwd 的位置（UI 决定相对/绝对展示与角标）
 }
 
@@ -91,7 +170,10 @@ export interface SessionState {
   action_summary: string;     // 最近动作摘要，如 "修改 src/auth.ts"
   started_at: number;
   updated_at: number;
+  activity?: StatusDockState;
+  activity_capabilities?: ActivityCapabilities;
   waiting_request?: WaitingPayload;   // status===WAITING 时必有
+  waiting_started_at?: number;        // 当前 WAITING 实例起点（与 request_id 一一对应）
   stats: FileChangeStats;
   last_error?: string;
   done_reason?: string;
@@ -118,6 +200,35 @@ export interface SessionState {
   // 恢复成功即清除，失败保留（卡片标「恢复失败」，可重试）
   pinned?: boolean;
   saved?: boolean;
+  // #26 M2 项目组派单：worker 会话归属的项目组 id（dispatch spawn 时写入）与承接
+  // 档位（咨询 Leader 无此二字段）。§2.5 单聊分流的落地面 = 列表卡按 project_gid
+  // 出组徽标 + 项目组详情回执流（消息级视觉分组/话题折叠为设计稿未落项——端上
+  // 实际分组键是数据源 src，非 project_gid，勿据此注释推断端上行为）
+  project_gid?: string;
+  dispatch_tier?: string;
+  // 雇员会话（#17 独立家目录）：Leader/派单 worker/随手办 spawn 时置 true，
+  // 用户自建会话不置。启用 CCR_EMPLOYEE_CONFIG_DIR 时，雇员的 CLI 子进程带
+  // CLAUDE_CONFIG_DIR 指到独立家——transcript/任务清单/全局配置与用户默认家
+  //（~/.claude）物理隔离，用户的会话列表与终端 resume 列表不再出现工作会话。
+  // 读取路径（transcriptHasAssistant / 任务清单轮询）按此标记选家；未启用开关
+  // 时标记仅作身份标识，路径行为与从前逐字节一致
+  employee?: boolean;
+  // #17 第二批：创建时实际落定的家（spawn 注入的 CLAUDE_CONFIG_DIR 值）。
+  // resume/读取按「创建时的家」而非当前配置推导——开关翻转只影响新会话，
+  // 存量按记录走（无记录 = 关态/pre-#17 创建，即默认家），切换天然无损。
+  // 随 SESSION_CREATED 首帧流经事件流，回放还原；Leader 锚同字段
+  employee_home?: string;
+  // #27 引擎标记（V2 Agent 无关编排）：undefined = claude（存量/绝大多数部署，
+  // 行为逐字节不变）；"codex" = CodexAgentSession（codex exec 一回合一进程，
+  // resume 锚 = codex thread_id）。随 SESSION_CREATED 首帧流经事件流，回放还原
+  engine?: SessionEngine;
+  engine_model?: string;
+  engine_provider?: string;
+  engine_role?: string;
+  // #26 M3 两层联动（§6.2 组挂起→成员会话全 parked）：成员会话随组挂起休眠时
+  // 记来源组 id——进程已停、可点开可发消息（消息路径 resumeAgent 天然复活）；
+  // 组复活清除。路由表记录不受影响（档案永存，复活后查表拉原班）
+  org_parked?: string;
   // 最近一次任务完成汇报（#254）：TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到；
   // 记入会话状态仅随 SNAPSHOT 下发（SESSION_UPDATED 增量帧不携带），端上按 ts 去重后恢复
   // 未读汇报。remaining_count 为数字（剩余条数）——TASK_DONE 事件的 remaining 是 TodoItem[]，
@@ -152,7 +263,8 @@ export interface PendingInput {
   body?: string;
 }
 
-// 托管会话权限模式（SDK PermissionMode 的安全子集：bypassPermissions 不开放远程切换）
+// 托管会话权限模式四档（#217 起 bypassPermissions 也接受：创建时勾选「跳过权限确认」
+// 的会话可切回，SDK 硬约束——非 skip 启动的会话切跳过会被拒，报错译制见 COMMAND_PERM）
 export type ManagedPermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
 // 时间线历史条目（持久化 & 快照下发用）
@@ -166,6 +278,7 @@ export interface LogEntry {
   streaming?: boolean; // true = 该文本块仍在生成中
   detail?: string; // P2 转录：工具完整入参/输出（等宽展开）
   diff?: string[]; // P2 转录：Edit/Write 的 +/- diff 行（着色渲染）
+  occurred_at?: number; // 引擎/bridge 明确提供的原生产生时间；缺失时沿用 ts
 }
 
 // ---------- 事件 payload（Relay -> 客户端） ----------
@@ -176,6 +289,8 @@ export interface SessionCreatedPayload {
   title: string;
   model: string;
   external?: boolean;
+  engine?: SessionEngine;     // #27 非 claude 引擎随首帧下发（端上徽标数据源）
+  provider?: string;
 }
 
 export interface SessionUpdatedPayload {
@@ -203,6 +318,7 @@ export interface SessionUpdatedPayload {
   // 可能短暂脱钩，端上卡片按钮只看 waiting_request、详情弹窗只看 status，任一帧
   // 带上权威值即可让两端收敛一致（旧 relay 不发此字段，端上有 status 兜底清理）
   waiting_request?: WaitingPayload | null;
+  waiting_started_at?: number;
   updated_at?: number;          // #157 事件对应的活动时刻：水合帧（重启回放）≠ envelope
                                // 发出时刻，端上最后活跃时间以此为准；旧客户端忽略不受影响
 }
@@ -227,6 +343,10 @@ export interface WaitingPayload {
   suggestions: string[];
   questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时客户端渲染选项点选作答）
   decidable?: boolean;   // false = 仅通知（外部会话 CLI 本地在等，远程无法决定）；默认 true
+  // #212 允许并记住：存在 = 该请求可记忆（非危险形态），客户端展示「记住」入口；
+  // pattern/label 由 relay 侧 suggestPattern 算好，端上零解析成本。作答走
+  // COMMAND_CONTINUE + remember_scope，由 relay 落规则（allow-rules.ts）
+  remember?: { pattern: string; label: string };
 }
 
 // AskUserQuestion 工具的问题结构（SDK input.questions 防御性清洗后）
@@ -264,6 +384,7 @@ export interface SnapshotPayload {
   sessions: SessionState[];
   logs: Record<string, LogEntry[]>;   // session_id -> 时间线（重启用历史补齐；#408 预算截断：每会话最近 K 条 + 总字节上限）
   server_time: number;
+  schema_version?: number;
   // #408 大帧根治截断标记：session_id -> 被裁掉的更早条数（未截断的会话不出现）。
   // LogEntry 无独立 seq（seq 在 Envelope 层，日志条目本身不存），无法给出可续传的
   // earliest_seq 序号，改用"被省略条数"表达截断；旧客户端忽略未知字段，新客户端
@@ -272,6 +393,33 @@ export interface SnapshotPayload {
   // relay 本机平台（process.platform，#8）：手机端新建会话表单自适应路径文案与
   // 盘符拦截依据（0.5.3 起客户端已在读，此前 relay 漏组装恒空串）
   platform?: string;
+  models?: string[];
+  homedir?: string;
+  deliverables?: boolean;
+  acceptances?: AcceptanceSummary[];
+  relay_dev?: string;
+  relay_name?: string;
+  boards?: ProjectBoard[];
+  notifications?: NotificationItem[];
+  source_capabilities?: SourceCapabilities;
+  // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；随快照而非
+  // HTTP API 下发——云桥手机无 HTTP 直连通道，WS 快照三端通吃）
+  allow_rules?: AllowRule[];
+  // #26 M2 组织：项目组索引 + 待决确认单（LAN ws-server 与 cloud-client 两处快照
+  // 同步组装，#117 教训；空数组也下发——端上以字段存在性判断能力，与 allow_rules
+  // 同口径。板不随快照（一板一文件按需拉：COMMAND_PROJECT_DETAIL）
+  projects?: ProjectGroup[];
+  org_confirms?: OrgConfirm[];
+  // #17 第二批：雇员独立家开关状态（设置页数据源；空对象也下发——端上以字段
+  // 存在性判断能力）。locked=true（env 显式设置）时端上开关只读
+  settings?: EmployeeHomeSettingsPayload;
+}
+
+// SNAPSHOT.settings / SETTINGS_UPDATED 载荷
+export interface EmployeeHomeSettingsPayload {
+  employee_home: boolean;   // 开关生效态
+  value: string | null;     // 实际家路径（关闭时 null；auto 已展开为绝对路径）
+  source: "env" | "file" | "default"; // env=环境变量锁定（UI 只读）
 }
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）
@@ -281,6 +429,23 @@ export interface SessionLogPayload {
   tool?: string;
   detail?: string;
   diff?: string[];
+  occurred_at?: number;
+}
+
+export interface SessionActivityPayload {
+  session_id: string;
+  state: SessionStatus;
+  activity_kind: ActivityKind;
+  text: string;
+  tool?: string;
+  observed_at: number;
+  occurred_at?: number;
+  capabilities: ActivityCapabilities;
+  seq_local: number;
+}
+
+export interface NotificationsUpdatedPayload {
+  items: NotificationItem[];
 }
 
 export type EventType =
@@ -292,6 +457,7 @@ export type EventType =
   | "SESSION_ERROR"
   | "SESSION_DONE"
   | "SESSION_LOG"
+  | "SESSION_ACTIVITY"
   | "TASK_DONE"
   | "SESSION_DELETED"
   | "SNAPSHOT"
@@ -300,6 +466,13 @@ export type EventType =
   | "PAIRED_DEVICE"
   | "USER_NOTE"
   | "ACCEPTANCES_UPDATED"
+  | "ALLOW_RULES_UPDATED"
+  | "PROJECTS_UPDATED"
+  | "BOARD_UPDATED"
+  | "ORG_CONFIRM_UPDATED"
+  | "DISPATCH_DONE"
+  | "SETTINGS_UPDATED"
+  | "NOTIFICATIONS_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -312,6 +485,7 @@ export type EventPayloadMap = {
   SESSION_ERROR: SessionErrorPayload;
   SESSION_DONE: SessionDonePayload;
   SESSION_LOG: SessionLogPayload;
+  SESSION_ACTIVITY: SessionActivityPayload;
   TASK_DONE: TaskDonePayload;
   SESSION_DELETED: SessionDeletedPayload;
   SNAPSHOT: SnapshotPayload;
@@ -322,6 +496,23 @@ export type EventPayloadMap = {
   // #184 验收单状态推送（瞬态：seq:0 不落 ndjson；LAN 直播 + 云桥 onEnv 转发）——
   // payload.acceptances 与 SNAPSHOT.acceptances 同源同构（listAcceptances() 全量）
   ACCEPTANCES_UPDATED: AcceptancesUpdatedPayload;
+  // #212 记住规则变更推送（瞬态，同上语义）：删规则后广播最新全量，在线端设置页
+  // 实时收敛；离线端由 SNAPSHOT.allow_rules 兜底
+  ALLOW_RULES_UPDATED: AllowRulesUpdatedPayload;
+  // #26 M2 组织变更（瞬态，同 ACCEPTANCES_UPDATED 语义）：立项/状态迁移/升降级/
+  // 派单入编后广播全量索引；离线端由 SNAPSHOT.projects 兜底
+  PROJECTS_UPDATED: ProjectsUpdatedPayload;
+  // #26 M2 任务板变更（瞬态）：派单承接/收口联动搬卡/Leader 板操作后带该组全量板
+  BOARD_UPDATED: BoardUpdatedPayload;
+  // #26 M2 确认单变更（瞬态）：新单入队/决议后广播待决队列；离线端由
+  // SNAPSHOT.org_confirms 兜底
+  ORG_CONFIRM_UPDATED: OrgConfirmUpdatedPayload;
+  // #40 M4 派单完成回调（瞬态）：收口时广播，端上弹通知；见 DispatchDonePayload
+  DISPATCH_DONE: DispatchDonePayload;
+  // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
+  // SNAPSHOT.settings 兜底
+  SETTINGS_UPDATED: EmployeeHomeSettingsPayload;
+  NOTIFICATIONS_UPDATED: NotificationsUpdatedPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -404,6 +595,38 @@ export interface AcceptancesUpdatedPayload {
   acceptances: AcceptanceSummary[]; // 与 SNAPSHOT.acceptances 同源（listAcceptances()）
 }
 
+// #212 记住规则变更（删规则后广播）：与 SNAPSHOT.allow_rules 同源（store.list() 全量）
+export interface AllowRulesUpdatedPayload {
+  rules: AllowRule[];
+}
+
+// #26 M2 组织推送载荷（与 SNAPSHOT 同源同构）
+export interface ProjectsUpdatedPayload {
+  groups: ProjectGroup[]; // listGroups() 全量（小表，写穿全量）
+}
+export interface BoardUpdatedPayload {
+  gid: string;
+  board: ProjectBoard; // 该组全量板（单组小表）
+}
+export interface OrgConfirmUpdatedPayload {
+  pending: OrgConfirm[]; // listPendingConfirms()
+}
+
+// #40 M4 派单完成回调（谁派活谁收通知）：worker 派单在 closeOpenDispatches 收口
+// （onTurnEnd/onSessionEnd 兜底/挂起联动）时广播瞬态帧——在线端弹通知/横幅；
+// 离线端由台账（SNAPSHOT 侧 org 状态/板）与重连全量兜底，不重复弹。同步失败路径
+//（spawn 失败 CLI 当场拿 error）与断档补记（relay 重启，用户在场）不发此帧。
+export interface DispatchDonePayload {
+  dispatch_id: string;          // 同台账分单 id
+  tier: string;                 // DispatchTier（圈 tier 字符串宽松化：端上只读展示）
+  status: "done" | "failed";
+  receipt: string;              // 回执（≤200 字，与台账同源）
+  worker_session_id: string;    // 承接方会话（详情跳转用）
+  gid?: string;                 // 项目组单才有（板联动跳转）
+  actor?: string;               // "leader"=Leader CLI 派 / "user"=咨询档 / 缺省=旧数据
+  ts: number;
+}
+
 // #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——
 // 浏览器报 UA 截断摘要+平台（"Chrome·Windows" 式），App 报 OS+型号+版本
 //（"android·Pixel 8 · CC Deck 0.3.35" 式）。桥不解析透传；relay 只做长度校验
@@ -464,19 +687,44 @@ export type CommandType =
   | "COMMAND_PIN_SESSION"
   | "COMMAND_RESUME_SESSION"
   | "COMMAND_IMPORT_PUSH"
-  | "COMMAND_ARTIFACT_FETCH";
+  | "COMMAND_ALLOW_RULE_REMOVE"
+  | "COMMAND_ORG_CONFIRM"
+  | "COMMAND_PROJECT_DETAIL"
+  | "COMMAND_ARTIFACT_FETCH"
+  | "COMMAND_SETTINGS_UPDATE"
+  | "COMMAND_ORG_ACTION"
+  | "COMMAND_NOTIFICATION_ACK"
+  | "COMMAND_ENGINE_PROFILE_UPDATE"
+  | "COMMAND_ARTIFACT_GROUP_FETCH"
+  // M12-1 四新命令（v2-m10-freeze §3.1 新增候选定岗）：均经 orgCommand 咽喉→orgAction
+  // 单漏斗执行（canonical payload→旧 shape adapter 映射，不建第二事实源）
+  | "COMMAND_TASK_CREATE"
+  | "COMMAND_TASK_UPDATE"
+  | "COMMAND_DISPATCH"
+  | "COMMAND_LESSON_APPEND";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
   type: CommandType;
   ts: number;
+  auth?: {
+    device_id: string;
+    role: "owner" | "operator" | "viewer";
+    capabilities: string[];
+  };
+  actor?: {
+    device_id: string;
+    role: "owner" | "operator" | "viewer";
+    capabilities: string[];
+  };
 }
 
 export interface CreateCommand extends CommandBase {
   type: "COMMAND_CREATE";
   // autoMkdir（#208）：客户端创建表单「目录不存在时自动创建」开关，开=指定目录
   // 不存在时 relay 侧 mkdir -p；缺省/假 = 旧三级回落行为
-  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode; autoMkdir?: boolean };
+  // engine：缺省 = claude；未知引擎由 relay registry 明确拒绝。
+  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode; autoMkdir?: boolean; engine?: SessionEngine; model?: string; provider?: string };
 }
 
 export interface MessageCommand extends CommandBase {
@@ -494,7 +742,9 @@ export interface StopCommand extends CommandBase {
 
 export interface ContinueCommand extends CommandBase {
   type: "COMMAND_CONTINUE";
-  payload: { session_id: string; request_id: string };
+  // #212 remember_scope：allow 本次的同时落「允许并记住」规则（本会话/所有会话）。
+  // 可记忆性以当时下发的 WaitingPayload.remember 为准（危险形态 relay 不落规则）
+  payload: { session_id: string; request_id: string; remember_scope?: "session" | "global" };
 }
 
 export interface RejectCommand extends CommandBase {
@@ -602,6 +852,128 @@ export interface ArtifactFetchCommand extends CommandBase {
   payload: { session_id: string; path: string };
 }
 
+// #212 删除「允许并记住」规则（设置页「记住的规则」列表）。成功后 relay 广播
+// ALLOW_RULES_UPDATED 全量，各端列表收敛；幂等（删不存在的 id 回 ok:false）
+export interface AllowRuleRemoveCommand extends CommandBase {
+  type: "COMMAND_ALLOW_RULE_REMOVE";
+  payload: { id: string };
+}
+
+// #26 M2 组织确认单决议（用户点击确认卡 ✓/✗；Leader 只提案不决议）。成功后 relay
+// 广播 ORG_CONFIRM_UPDATED + PROJECTS_UPDATED（副作用=组状态迁移/信任累积等）
+export interface OrgConfirmCommand extends CommandBase {
+  type: "COMMAND_ORG_CONFIRM";
+  payload: { confirm_id: string; approve: boolean };
+}
+
+// #26 M2 项目组详情（ack.data = { group, board, receipts }：编制 + 全量板 + 该锚点
+// 最近派单回执流——§3.1 项目组详情四分节的数据源）
+export interface ProjectDetailCommand extends CommandBase {
+  type: "COMMAND_PROJECT_DETAIL";
+  payload: { gid: string };
+}
+
+// #17 第二批：雇员独立家开关热切换（三端设置项）。ack.data = 最新状态
+//（EmployeeHomeSettingsPayload）；成功后广播 SETTINGS_UPDATED，env 锁定时 ok:false
+export interface SettingsUpdateCommand extends CommandBase {
+  type: "COMMAND_SETTINGS_UPDATE";
+  payload: { employee_home: boolean };
+}
+
+export interface OrgActionCommand extends CommandBase {
+  type: "COMMAND_ORG_ACTION";
+  payload: { action: "create"; name: string; anchor_dir: string; tier: string };
+}
+
+// ---------- M12-1 四新命令（canonical payload 冻结，v2-m10-freeze §3.1 新增候选） ----------
+// 公共约定：ACK ok 路径 data={entity_id, gid}（设计稿 §七口径）；DISPATCH 并列 dispatch_id。
+// 全部经 orgCommand 咽喉（org:write 能力位+审计一行）→orgAction 单漏斗执行。
+
+// 建板卡：映射 orgAction board/op=upsert（无 entry_id=新卡，status 缺省 todo）
+export interface TaskCreateCommand extends CommandBase {
+  type: "COMMAND_TASK_CREATE";
+  payload: {
+    gid: string;                                  // 目标组（板随组落 boards/<gid>.json）
+    text: string;                                 // 卡文本（store 层必填）
+    status?: "todo" | "doing" | "done";           // 缺省 todo
+    note?: string;
+  };
+}
+
+// 改板卡：映射 orgAction board/op=upsert（带 entry_id=更新，status 缺省不动旧值）。
+// text 可选——缺省时 adapter 从现板补旧值（M12-2 编排最常用"只推 status"）
+export interface TaskUpdateCommand extends CommandBase {
+  type: "COMMAND_TASK_UPDATE";
+  payload: {
+    gid: string;
+    entry_id: string;                             // 目标卡（不存在即拒）
+    text?: string;
+    status?: "todo" | "doing" | "done";
+    note?: string;
+  };
+}
+
+// 派单：映射 orgAction dispatch→dispatchWorker（M12-1 只做命令面接线，零新增编排——
+// task.create→dispatch 自动编排语义是 M12-2 的单）。gid 派单锚取自组（anchor_dir 可省）；
+// entry_id 认领既有板卡（触发依赖/gate 前置检查）
+export interface DispatchCommand extends CommandBase {
+  type: "COMMAND_DISPATCH";
+  payload: {
+    gid?: string;
+    anchor_dir?: string;                          // gid 缺省时必填（绝对路径）
+    /** M12-2：无 task 时必填（M12-1 语义零变化）；编排链（带 task）可省——缺省兜底 task.text */
+    prompt?: string;
+    title?: string;
+    entry_id?: string;
+    role?: string;
+    skills?: string[];
+    engine?: string;                              // SessionEngine 词表外拒收（store 层校验）
+    model?: string;
+    provider?: string;
+    /** M12-2 编排链开关：给了就先写卡（task 入账）再派单（认领承接），task.create→dispatch
+     * 自动链。与 entry_id 互斥（既建新卡又认领旧卡属二义性，拒收）。依赖/gate 预检不过
+     * 零写零 spawn 返回 blocked；坏引用（depends_on 指不存在卡）error 拒收非 blocked。 */
+    task?: {
+      text: string;
+      status?: "todo" | "doing";                  // 缺省 todo（done 建卡即完成不收）
+      note?: string;
+      depends_on?: string[];                      // #087 beads：依赖卡 id 引用
+      gate?: { reason: string };                  // #087 gate：编排只设闸，清除仍走人决策口（gate:null 无自动路径）
+    };
+    /** M12-3 重投锚：原单 dispatch_id——新台账行沿用原单 root id（同 id 追加行：读侧
+     * 收敛视图末行赢=重投后看到 running；导入侧行序终态切分自动出 <id>#r<N> 段链，
+     * 零改导入器）。原单须已终态（done/failed），在途单拒收防双跑。 */
+    redispatch_of?: string;
+  };
+}
+
+// 经验回流：映射 orgAction lesson-append（M12-1 新增最小 action，单漏斗内调 addLesson
+// ——板冻结/文本必填/tags 洗刷语义全在 store 层）
+export interface LessonAppendCommand extends CommandBase {
+  type: "COMMAND_LESSON_APPEND";
+  payload: {
+    gid: string;
+    text: string;
+    tags?: string[];
+    source_dispatch_id?: string;
+  };
+}
+
+export interface NotificationAckCommand extends CommandBase {
+  type: "COMMAND_NOTIFICATION_ACK";
+  payload: { notification_key: string; action: "handled" | "dismissed" };
+}
+
+export interface EngineProfileUpdateCommand extends CommandBase {
+  type: "COMMAND_ENGINE_PROFILE_UPDATE";
+  payload: { engine: SessionEngine; provider: string; profile_ref: string };
+}
+
+export interface ArtifactGroupFetchCommand extends CommandBase {
+  type: "COMMAND_ARTIFACT_GROUP_FETCH";
+  payload: { session_id: string; group_key: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -629,7 +1001,19 @@ export type Command =
   | PinSessionCommand
   | ResumeSessionCommand
   | ImportPushCommand
-  | ArtifactFetchCommand;
+  | AllowRuleRemoveCommand
+  | OrgConfirmCommand
+  | ProjectDetailCommand
+  | SettingsUpdateCommand
+  | ArtifactFetchCommand
+  | OrgActionCommand
+  | NotificationAckCommand
+  | EngineProfileUpdateCommand
+  | ArtifactGroupFetchCommand
+  | TaskCreateCommand
+  | TaskUpdateCommand
+  | DispatchCommand
+  | LessonAppendCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
 // bypassPermissions=跳过全部确认——skip 会话被误切后靠此切回）
@@ -743,6 +1127,8 @@ export interface CommandAckPayload {
   // #79 仅 COMMAND_ARTIFACT_FETCH 成功时携带：字节数 + 扩展名推导的 MIME
   //（客户端分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧）
   artifact?: { size: number; mime: string };
+  // #26 M2 仅 COMMAND_PROJECT_DETAIL 成功时携带：{ group, board, receipts }
+  data?: unknown;
   // #65 幂等重放标记：同 command_id 二次到达时回放首次回执并置 true（首次执行
   // 的回执恒不带）；ok/error 语义保持首次原样，客户端不识别也不受影响
   duplicate?: boolean;

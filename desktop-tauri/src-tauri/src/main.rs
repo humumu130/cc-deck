@@ -52,6 +52,8 @@ if (!window.ccDeck) {
     relayStatus: () => window.__TAURI__.core.invoke("relay_status"),
     relayToggle: (on) => window.__TAURI__.core.invoke("relay_toggle", { on }),
     saveArtifact: (name, b64) => window.__TAURI__.core.invoke("save_artifact", { name, b64 }),
+    // #240 IME 激活点击（仅 macOS 壳实现）：焦点真丢后拉回输入框必须走原生 hit-test
+    imeClick: (x, y) => window.__TAURI__.core.invoke("ime_click", { x, y }),
   };
 }
 document.addEventListener("click", (e) => {
@@ -69,16 +71,17 @@ window.open = (url) => {
 "#;
 
 /// 本机 relay 探测（等价 Electron 的 cc-deck:probe-local）：
-/// GET http://127.0.0.1:8787/local-info，1.5s 超时，返回 { ok, port, token } 或 null；
+/// GET http://127.0.0.1:<relay_port>/local-info，1.5s 超时，返回 { ok, port, token } 或 null；
 /// 失败静默（页面回退手动配置），不 panic 不弹错
 #[tauri::command]
 async fn probe_local() -> Option<Value> {
-    const ENDPOINT: &str = "http://127.0.0.1:8787/local-info";
+    // 端口跟随 relay_port（M2 变体默认 8788；生产 8787——行为不变）
+    let endpoint = format!("http://127.0.0.1:{}/local-info", relay_port());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(1500))
         .build()
         .ok()?;
-    let resp = match client.get(ENDPOINT).send().await {
+    let resp = match client.get(&endpoint).send().await {
         Ok(r) if r.status().is_success() => r,
         _ => return None,
     };
@@ -104,6 +107,24 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// #29（C-P2-2）执行类/脚本类危险扩展：save_artifact 落盘下载目录与 open_path 系统
+/// 默认程序打开两条 IPC 若被 XSS/假 relay 数据驱动（save 落 .bat 后 open 一次即
+/// ShellExecute），构成 XSS→RCE 链。落盘与打开一律拒绝；reveal（文件管理器定位）
+/// 只定位不执行，保持放行。.js/.sh 一并拒——Windows 下 WSH 双击即跑、macOS 下
+/// .sh 双击开 Terminal 执行，交付物快速保存的便利不值得这条链（分享/下载入口不受影响）
+const DANGEROUS_EXTS: &[&str] = &[
+    "bat", "cmd", "com", "cpl", "scr", "pif", "msc", "hta", "lnk", "url", "reg", "scf",
+    "inf", "ade", "adp", "mst", "jar", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1",
+    "psm1", "ps2", "sh", "bash", "zsh", "command", "osx", "app", "exe", "dll", "msi",
+    "apk", "deb", "rpm", "dmg", "pkg", "workflow",
+];
+fn dangerous_ext(name: &str) -> bool {
+    match name.rsplit_once('.') {
+        Some((_, e)) if !e.is_empty() => DANGEROUS_EXTS.contains(&e.to_ascii_lowercase().as_str()),
+        _ => false,
+    }
+}
+
 /// #326 打开转录里的本地文件：reveal=true 在文件管理器中定位该项，false 用系统默认
 /// 程序打开。只接受绝对路径（盘符/UNC/斜杠开头）且拒含 ".."，防相对路径歧义与穿越；
 /// opener 走系统 API 不经 shell，无注入面
@@ -116,6 +137,10 @@ fn open_path(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), St
         || p.starts_with('/');
     if !is_abs || p.contains("..") {
         return Err("仅支持绝对路径".into());
+    }
+    // #29（C-P2-2）：默认程序打开=Windows 上 ShellExecute，.bat/.lnk 等直接执行
+    if !reveal && dangerous_ext(p) {
+        return Err("已拒绝打开可执行/脚本类文件（防伪造产物执行），请用「在文件夹中显示」定位后自行处理".into());
     }
     if reveal {
         app.opener().reveal_item_in_dir(p).map_err(|e| e.to_string())
@@ -149,6 +174,11 @@ fn save_artifact(app: tauri::AppHandle, name: String, b64: String) -> Result<Str
     let safe: String = name.chars().filter(|c| *c != '/' && *c != '\\' && *c != '\0').collect();
     if safe.is_empty() || safe == "." || safe == ".." {
         return Err("无效文件名".into());
+    }
+    // #29（C-P2-2）：可执行/脚本类扩展拒绝落盘下载目录（配合 open_path 守卫断
+    // XSS→落盘→执行链；错误信息指引用分享/浏览器入口替代）
+    if dangerous_ext(&safe) {
+        return Err(format!("已拒绝保存可执行/脚本类文件（{safe}）：请用「分享」或浏览器打开后另存"));
     }
     // 重名递增：name.ext → name-2.ext（下载目录常有同名旧件，静默覆盖会吞用户文件）
     let (stem, ext) = match safe.rsplit_once('.') {
@@ -282,6 +312,55 @@ fn app_version(app: tauri::AppHandle) -> String {
     app.config().version.clone().unwrap_or_else(|| "unknown".into())
 }
 
+/// #240 IME 激活点击：web 传来 msginput 中心点的「WebView 本地坐标」（CSS px，左上原点），
+/// 壳构造原生 NSEvent（mouseDown+mouseUp）经 NSApp sendEvent 派发——走 WebView 原生
+/// hit-test 才会激活 NSTextInputClient（第三方输入法如微信输入法的组字上下文），
+/// JS programmatic focus 不触发（实测：caret 闪、IME 悬浮条假活、打字全丢；系统
+/// 输入法无恙，故仅第三方 IME 用户受害）。窗口本地坐标避开多屏 y 翻转；
+/// app 内部 sendEvent 不经 HID，零辅助功能权限。仅 macOS；其他平台返回 Err
+/// 由 web 侧回落 JS focus（Windows WebView2 无此病，#19 eval focus 已够）。
+#[tauri::command]
+fn ime_click(window: tauri::WebviewWindow, x: f64, y: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSWindow};
+        use objc2_foundation::NSPoint;
+        if !window.is_focused().unwrap_or(false) {
+            let _ = window.set_focus();
+        }
+        let scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let h_pts = window.inner_size().map_err(|e| e.to_string())?.height as f64 / scale;
+        // WebView CSS px（左上原点）→ NSEvent 窗口本地坐标（内容区左下原点）：仅 y 翻转
+        let loc = NSPoint::new(x, h_pts - y);
+        // #018-T2 适配 objc2-app-kit 0.3 生成绑定：sharedApplication 需 MainThreadMarker、
+        // mouseEventWithType 生成为 snake_case 长名（参数序不变）。Tauri 同步 command 跑
+        // 主线程，MainThreadMarker::new() 正常 Some；None=非常规调用态，显式报错不静默
+        let mtm = MainThreadMarker::new().ok_or("ime_click 须在主线程调用")?;
+        let app = NSApplication::sharedApplication(mtm);
+        // 安全性：ns_window() 返回的 NSWindow 指针在本窗口存续期有效（Tauri 契约），
+        // as_ref 仅在该前提下读 windowNumber
+        let win_num = unsafe { (window.ns_window().map_err(|e| e.to_string())?
+            as *mut NSWindow)
+            .as_ref() }
+            .map(|w| w.windowNumber())
+            .unwrap_or(0);
+        for ty in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
+            let ev = NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                ty, loc, NSEventModifierFlags::empty(), 0.0, win_num, None, 0, 1, 1.0,
+            )
+            .ok_or("NSEvent 构造失败")?;
+            app.sendEvent(&ev);
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, x, y);
+        Err("ime_click 仅 macOS".into())
+    }
+}
+
 /// 托盘（等价 Electron 的 createTray）：默认窗口图标 + “显示主窗口/退出”菜单，双击唤起；
 /// 任何一步失败整段回退（TRAY_OK=false），主窗口照常，关窗不再隐藏到托盘
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -344,12 +423,248 @@ static EMBEDDED_RELAY_ERR: std::sync::Mutex<Option<String>> = std::sync::Mutex::
 // 应用退出（kill_embedded_relay）置 false。监督线程据此区分「该重拉」与「别添乱」
 static RELAY_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+// #36 M2 并行测试变体（2026-10-03 用户拍板）：构建期 CCDECK_BUILD_M2=1 烙入——与
+// 生产 CC Deck 同机并存互不干扰（默认端口 8788、数据/组织根 ~/.cc-deck-m2、断
+// 生产 bridge.json 镜像、mDNS 广播名带 M2）。生产构建不设该 env = 行为与从前
+// 逐字节一致，提交面保持生产缺省（M2 只在构建命令行注入）
+const M2_BUILD: bool = option_env!("CCDECK_BUILD_M2").is_some();
+
+const PRODUCTION_RELAY_PORT: u16 = 8787;
+const M2_RELAY_PORT: u16 = 8788;
+
+fn default_relay_port(m2: bool) -> u16 {
+    if m2 { M2_RELAY_PORT } else { PRODUCTION_RELAY_PORT }
+}
+
 fn relay_port() -> u16 {
-    std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8787)
+    std::env::var("CCR_DESKTOP_RELAY_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default_relay_port(M2_BUILD))
+}
+
+// cc-deck 根目录：生产 ~/.cc-deck，M2 变体 ~/.cc-deck-m2（数据/内嵌日志全量隔离）
+fn deck_root(home: &str) -> std::path::PathBuf {
+    std::path::Path::new(home).join(if M2_BUILD { ".cc-deck-m2" } else { ".cc-deck" })
 }
 
 fn port_listening(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResourceState {
+    Present,
+    Missing,
+    InvalidPath,
+}
+
+#[derive(Debug, Clone)]
+struct EmbeddedRelayResources {
+    script: std::path::PathBuf,
+    inject_cs: std::path::PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResourceProbe {
+    script: ResourceState,
+    inject_cs: ResourceState,
+}
+
+fn absolute_resource_path(path: std::path::PathBuf) -> std::path::PathBuf {
+    let canonical = std::fs::canonicalize(&path).unwrap_or(path);
+    let mut value = canonical.to_string_lossy().into_owned();
+    if let Some(stripped) = value.strip_prefix("\\\\?\\") {
+        value = stripped.to_string();
+    }
+    std::path::PathBuf::from(value)
+}
+
+fn embedded_relay_resources(resource_dir: &std::path::Path) -> EmbeddedRelayResources {
+    EmbeddedRelayResources {
+        script: absolute_resource_path(resource_dir.join("resources").join("relay.mjs")),
+        inject_cs: absolute_resource_path(resource_dir.join("resources").join("bin").join("inject.cs")),
+    }
+}
+
+fn probe_resource_path(path: &std::path::Path) -> ResourceState {
+    if !path.is_absolute() {
+        return ResourceState::InvalidPath;
+    }
+    if !path.exists() {
+        return ResourceState::Missing;
+    }
+    if path.is_file() {
+        ResourceState::Present
+    } else {
+        ResourceState::InvalidPath
+    }
+}
+
+fn probe_embedded_relay_resources(resource_dir: &std::path::Path) -> ResourceProbe {
+    let resources = embedded_relay_resources(resource_dir);
+    ResourceProbe {
+        script: probe_resource_path(&resources.script),
+        inject_cs: probe_resource_path(&resources.inject_cs),
+    }
+}
+
+fn resource_error(label: &str, path: &std::path::Path, state: ResourceState) -> String {
+    match state {
+        ResourceState::Missing => format!("内置 {label} 缺失：{}", path.display()),
+        ResourceState::InvalidPath => format!("内置 {label} 路径无效：{}", path.display()),
+        ResourceState::Present => String::new(),
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelayPortOwner {
+    Available,
+    EmbeddedRelay,
+    ExternalRelay,
+    ExternalProcess,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RelayPortProbe {
+    port: u16,
+    owner: RelayPortOwner,
+    process_name: Option<String>,
+}
+
+#[allow(dead_code)]
+impl RelayPortProbe {
+    fn conclusion(&self) -> String {
+        match self.owner {
+            RelayPortOwner::Available => format!("端口 {} 空闲", self.port),
+            RelayPortOwner::EmbeddedRelay => format!("端口 {} 由自家 relay 占用", self.port),
+            RelayPortOwner::ExternalRelay => format!("端口 {} 由外部 relay 占用", self.port),
+            RelayPortOwner::ExternalProcess => format!(
+                "端口 {} 由外来进程占用（{}）",
+                self.port,
+                self.process_name.as_deref().unwrap_or("进程名未知"),
+            ),
+        }
+    }
+}
+
+fn classify_relay_port(listening: bool, embedded: bool, relay_handshake: bool) -> RelayPortOwner {
+    if !listening {
+        RelayPortOwner::Available
+    } else if embedded {
+        RelayPortOwner::EmbeddedRelay
+    } else if relay_handshake {
+        RelayPortOwner::ExternalRelay
+    } else {
+        RelayPortOwner::ExternalProcess
+    }
+}
+
+#[allow(dead_code)]
+fn relay_handshake(port: u16) -> bool {
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(250)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
+    if stream
+        .write_all(b"GET /local-info HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return false;
+    }
+    let mut response = Vec::new();
+    if stream.read_to_end(&mut response).is_err() {
+        return false;
+    }
+    let response_text = String::from_utf8_lossy(&response);
+    let body = response_text
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .unwrap_or("");
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| value.get("ok").and_then(Value::as_bool))
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
+#[allow(dead_code)]
+fn process_name_for_port(port: u16) -> Option<String> {
+    let output = std::process::Command::new("lsof")
+        .args(["-nP", "-a", "-iTCP", &port.to_string(), "-sTCP:LISTEN", "-Fpc"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix('c').filter(|name| !name.is_empty()).map(str::to_owned))
+}
+
+#[cfg(not(unix))]
+#[allow(dead_code)]
+fn process_name_for_port(_port: u16) -> Option<String> {
+    None
+}
+
+#[allow(dead_code)]
+fn probe_relay_port(port: u16) -> RelayPortProbe {
+    let listening = port_listening(port);
+    let embedded = EMBEDDED_RELAY.lock().map(|relay| relay.is_some()).unwrap_or(false);
+    let handshake = listening && !embedded && relay_handshake(port);
+    let process_name = if listening && !embedded && !handshake {
+        process_name_for_port(port)
+    } else {
+        None
+    };
+    RelayPortProbe {
+        port,
+        owner: classify_relay_port(listening, embedded, handshake),
+        process_name,
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RelayDevContract {
+    name: &'static str,
+    default_port: u16,
+    port_env: &'static str,
+    data_dir_env: &'static str,
+}
+
+#[allow(dead_code)]
+fn relay_dev_contracts() -> [RelayDevContract; 2] {
+    [
+        RelayDevContract { name: "production", default_port: PRODUCTION_RELAY_PORT, port_env: "CCR_PORT", data_dir_env: "CCR_DATA_DIR" },
+        RelayDevContract { name: "M2", default_port: M2_RELAY_PORT, port_env: "CCR_PORT", data_dir_env: "CCR_DATA_DIR" },
+    ]
+}
+
+fn relay_spawn_env(port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, parent_pid: u32) -> Vec<(String, String)> {
+    vec![
+        ("CCR_PORT".into(), port.to_string()),
+        ("CCR_DATA_DIR".into(), data_dir.to_string_lossy().into_owned()),
+        ("CCR_INJECT_CS".into(), inject_cs.to_string_lossy().into_owned()),
+        ("CCR_NOHOOK_IDLE_MS".into(), "60000".into()),
+        ("CCR_PARENT_PID".into(), parent_pid.to_string()),
+    ]
+}
+
+fn apply_relay_spawn_env(cmd: &mut std::process::Command, envs: &[(String, String)]) {
+    cmd.env_remove("NODE_OPTIONS");
+    for (key, value) in envs {
+        cmd.env(key, value);
+    }
 }
 
 // node 探测只做 PATH 查找（不执行 node——Windows 商店的 WindowsApps 假别名 stub
@@ -428,54 +743,64 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     // resource_dir 可能给盘符相对路径（"D:..."），CreateProcess 传参会被 node 解析成
     // 纯盘符 EISDIR——canonicalize 成 \?\ 绝对路径，一劳永逸
     // canonicalize 后剥掉 \?\ verbatim 前缀：node 的 realpathSync 不认它（剥成盘符 EISDIR）
-    let abs = |p: std::path::PathBuf| {
-        let c = std::fs::canonicalize(&p).unwrap_or(p);
-        let mut s = c.to_string_lossy().into_owned();
-        if let Some(t) = s.strip_prefix("\\\\?\\") {
-            s = t.to_string();
-        }
-        std::path::PathBuf::from(s)
-    };
-    let script = abs(res.join("resources").join("relay.mjs"));
-    let inject_cs = abs(res.join("resources").join("bin").join("inject.cs"));
+    let resources = embedded_relay_resources(&res);
+    let resource_probe = probe_embedded_relay_resources(&res);
+    let script = resources.script;
+    let inject_cs = resources.inject_cs;
     println!("[embedded-relay] script={}", script.display());
-    if !script.exists() {
-        return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
+    if resource_probe.script != ResourceState::Present {
+        return Err(resource_error("relay.mjs", &script, resource_probe.script));
+    }
+    if resource_probe.inject_cs != ResourceState::Present {
+        return Err(resource_error("inject.cs", &inject_cs, resource_probe.inject_cs));
     }
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "无法定位用户目录".to_string())?;
-    let data_dir = std::path::Path::new(&home).join(".cc-deck").join("data");
+    let data_dir = deck_root(&home).join("data");
     let _ = std::fs::create_dir_all(&data_dir);
+    // M2 变体增补 env（#36 并行测试版）：组织数据隔离到 ~/.cc-deck-m2/org；org CLI
+    // 显式落共享位 ~/.cc-deck/bin/org（ORG_LEADER_BOOTSTRAP_PROMPT 硬编码该绝对
+    // 路径，且 ensureOrgCli 在「设 ORG_DIR 而未设 ORG_BIN_DIR」时不物化）；断
+    // bridge.json 镜像（不覆写生产归属文件）；mDNS 广播名后缀（发现列表可分辨）。
+    // 生产构建为空集零增补
+    let extra_env: Vec<(String, String)> = if M2_BUILD {
+        vec![
+            ("CCR_ORG_DIR".to_string(), deck_root(&home).join("org").to_string_lossy().into_owned()),
+            ("CCR_ORG_BIN_DIR".to_string(), std::path::Path::new(&home).join(".cc-deck").join("bin").join("org").to_string_lossy().into_owned()),
+            ("CCR_NO_BRIDGE_MIRROR".to_string(), "1".to_string()),
+            ("CCR_MDNS_NAME".to_string(), "CC Deck M2 Relay".to_string()),
+        ]
+    } else {
+        Vec::new()
+    };
     // #71 跨平台：CREATE_NO_WINDOW 是 Windows 专属（防 node 子进程闪 cmd 窗），
     // mac 上无此概念——cfg 门控按平台分流
     #[cfg(target_os = "windows")]
-    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path) -> std::io::Result<std::process::Child> {
+    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path, extra_env: &[(String, String)]) -> std::io::Result<std::process::Child> {
         use std::os::windows::process::CommandExt;
         let out = std::fs::File::create(log)?;
-        std::process::Command::new(node)
-            .arg(script)
-            .env("CCR_PORT", port.to_string())
-            .env("CCR_DATA_DIR", data_dir)
-            .env("CCR_INJECT_CS", inject_cs)
-            .env("CCR_NOHOOK_IDLE_MS", "60000")
-            .env("CCR_PARENT_PID", std::process::id().to_string())
-            .env_remove("NODE_OPTIONS")
-            .stdout(out.try_clone()?)
+        let mut cmd = std::process::Command::new(node);
+        let envs = relay_spawn_env(port, data_dir, inject_cs, std::process::id());
+        cmd.arg(script);
+        apply_relay_spawn_env(&mut cmd, &envs);
+        for (k, v) in extra_env {
+            cmd.env(k, v);
+        }
+        cmd.stdout(out.try_clone()?)
             .stderr(out)
             .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .spawn()
     }
     #[cfg(not(target_os = "windows"))]
-    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path) -> std::io::Result<std::process::Child> {
+    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path, extra_env: &[(String, String)]) -> std::io::Result<std::process::Child> {
         let out = std::fs::File::create(log)?;
-        std::process::Command::new(node)
-            .arg(script)
-            .env("CCR_PORT", port.to_string())
-            .env("CCR_DATA_DIR", data_dir)
-            .env("CCR_INJECT_CS", inject_cs)
-            .env("CCR_NOHOOK_IDLE_MS", "60000")
-            .env("CCR_PARENT_PID", std::process::id().to_string())
-            .env_remove("NODE_OPTIONS")
-            .stdout(out.try_clone()?)
+        let mut cmd = std::process::Command::new(node);
+        let envs = relay_spawn_env(port, data_dir, inject_cs, std::process::id());
+        cmd.arg(script);
+        apply_relay_spawn_env(&mut cmd, &envs);
+        for (k, v) in extra_env {
+            cmd.env(k, v);
+        }
+        cmd.stdout(out.try_clone()?)
             .stderr(out)
             .spawn()
     }
@@ -483,7 +808,7 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     let node = node_path().ok_or(
         "未检测到 Node.js 运行时——内置 relay 需要它（VS Code 的 Claude Code 扩展自带运行时，不算已装）。请到 nodejs.org 安装 Node.js 后重启 CC Deck",
     )?;
-    match spawn_relay(&node, &script, port, &data_dir, &inject_cs, &log)
+    match spawn_relay(&node, &script, port, &data_dir, &inject_cs, &log, &extra_env)
     {
         Ok(child) => {
             println!("[embedded-relay] spawned pid={} port={}", child.id(), port);
@@ -681,7 +1006,9 @@ fn write_relay_service_plist(app: &tauri::AppHandle) -> Result<std::path::PathBu
     }
     let inject_cs = abs(res.join("resources").join("bin").join("inject.cs"));
     let home = std::env::var("HOME").map_err(|_| "无法定位用户目录".to_string())?;
-    let data_dir = format!("{home}/.cc-deck/data");
+    // #018-T2：走 deck_root（M2 变体 → ~/.cc-deck-m2/data）——此前硬编码 ~/.cc-deck/data，
+    // M2 构建开「开机自启」会把 M2 relay 数据写进生产数据目录（跨变体污染）
+    let data_dir = deck_root(&home).join("data").to_string_lossy().into_owned();
     let log = format!("{data_dir}/relay-service.log");
     let port = relay_port();
     let inject_env = if std::path::Path::new(&inject_cs).exists() {
@@ -838,7 +1165,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
@@ -929,4 +1256,172 @@ fn main() {
                 let _ = app_handle;
             }
         });
+}
+
+#[cfg(test)]
+mod t1a_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn t1a_probe_report() {
+        let mut failures = 0;
+        let mut check = |label: &str, passed: bool| {
+            if passed {
+                println!("t1a {label}: ok");
+            } else {
+                failures += 1;
+                println!("t1a {label}: fail");
+            }
+        };
+
+        let temp_root = std::env::temp_dir().join(format!(
+            "cc-deck-t1a-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock before unix epoch")
+                .as_nanos()
+        ));
+        let resource_root = temp_root.join("bundle");
+        std::fs::create_dir_all(resource_root.join("resources/bin")).expect("create probe resources");
+        std::fs::write(resource_root.join("resources/relay.mjs"), b"// probe").expect("write relay fixture");
+        std::fs::write(resource_root.join("resources/bin/inject.cs"), b"// probe").expect("write inject fixture");
+
+        let present = probe_embedded_relay_resources(&resource_root);
+        check(
+            "resource present",
+            present.script == ResourceState::Present && present.inject_cs == ResourceState::Present,
+        );
+
+        std::fs::remove_file(resource_root.join("resources/relay.mjs")).expect("remove relay fixture");
+        let missing = probe_embedded_relay_resources(&resource_root);
+        check("resource missing", missing.script == ResourceState::Missing);
+        check(
+            "resource invalid path",
+            probe_resource_path(Path::new("relative/resources/relay.mjs")) == ResourceState::InvalidPath,
+        );
+
+        let free_probe = probe_relay_port(0);
+        check(
+            "port available",
+            free_probe.owner == RelayPortOwner::Available
+                && free_probe.conclusion() == "端口 0 空闲",
+        );
+        check(
+            "port self relay",
+            classify_relay_port(true, true, false) == RelayPortOwner::EmbeddedRelay,
+        );
+        check(
+            "port external relay handshake",
+            classify_relay_port(true, false, true) == RelayPortOwner::ExternalRelay,
+        );
+        check(
+            "port external process",
+            classify_relay_port(true, false, false) == RelayPortOwner::ExternalProcess,
+        );
+
+        let contracts = relay_dev_contracts();
+        let data_dir = temp_root.join("data");
+        let inject_cs = temp_root.join("inject.cs");
+        let production_env = relay_spawn_env(contracts[0].default_port, &data_dir, &inject_cs, 42);
+        let m2_env = relay_spawn_env(contracts[1].default_port, &data_dir, &inject_cs, 42);
+        let env_value = |envs: &[(String, String)], key: &str| {
+            envs.iter().find(|(name, _)| name == key).map(|(_, value)| value.clone())
+        };
+        check(
+            "spawn production default 8787",
+            contracts[0].name == "production" && contracts[0].default_port == PRODUCTION_RELAY_PORT,
+        );
+        check(
+            "spawn M2 default 8788",
+            contracts[1].name == "M2" && contracts[1].default_port == M2_RELAY_PORT,
+        );
+        check(
+            "spawn production CCR_PORT",
+            contracts[0].port_env == "CCR_PORT"
+                && env_value(&production_env, contracts[0].port_env) == Some("8787".to_string()),
+        );
+        check(
+            "spawn M2 CCR_PORT",
+            contracts[1].port_env == "CCR_PORT"
+                && env_value(&m2_env, contracts[1].port_env) == Some("8788".to_string()),
+        );
+        check(
+            "spawn production CCR_DATA_DIR",
+            contracts[0].data_dir_env == "CCR_DATA_DIR"
+                && env_value(&production_env, contracts[0].data_dir_env)
+                    == data_dir.to_str().map(str::to_owned),
+        );
+        check(
+            "spawn M2 CCR_DATA_DIR",
+            contracts[1].data_dir_env == "CCR_DATA_DIR"
+                && env_value(&m2_env, contracts[1].data_dir_env)
+                    == data_dir.to_str().map(str::to_owned),
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+        println!("t1a summary: ok={} fail={}", 13 - failures, failures);
+        assert_eq!(failures, 0, "T1a probe failures");
+    }
+}
+
+// #018-T2 平台差异/资源契约 Rust 侧探针（cargo test --bin cc-deck-desktop-tauri t2_probe；
+// node 直跑对照面见 tests/t2-probes.mjs）。只测纯函数与静态结构——需要 GUI/AppHandle
+// 的路径（tray/窗口装饰/launchd 真注册）归 T3 装机批。
+#[cfg(test)]
+mod t2_tests {
+    use super::*;
+
+    #[test]
+    fn t2_probe_report() {
+        let mut failures = 0;
+        let mut check = |label: &str, passed: bool| {
+            if passed {
+                println!("t2 {label}: ok");
+            } else {
+                failures += 1;
+                println!("t2 {label}: fail");
+            }
+        };
+
+        // 平台差异·盘点锁：危险扩展清单跨平台一致（#29 C-P2-2 双平台同守卫）
+        check("dangerous_ext: Windows/mac 双平台危险扩展全拒（大小写不敏感）",
+            dangerous_ext("evil.bat") && dangerous_ext("EVIL.SH") && dangerous_ext("x.Js")
+                && dangerous_ext("malware.app") && dangerous_ext("a.b.exe"));
+        check("dangerous_ext: 普通交付物放行（md/无扩展名/空串）",
+            !dangerous_ext("报告.md") && !dangerous_ext("noext") && !dangerous_ext(""));
+
+        // 平台差异·盘点锁：home 根随变体隔离（M2 构建 → .cc-deck-m2；生产 → .cc-deck 不变）
+        let expected_root = if M2_BUILD { ".cc-deck-m2" } else { ".cc-deck" };
+        check("deck_root: 数据根随构建变体隔离（plist 服务化 data_dir 同源）",
+            deck_root("/home/u").ends_with(expected_root));
+
+        // 平台差异·盘点锁：Windows \\?\ verbatim 前缀剥除（canonicalize 产物 node 不认）
+        let verbatim = std::path::PathBuf::from(r"\\?\C:\Users\u\app\resources\relay.mjs");
+        check("absolute_resource_path: 剥 \\\\?\\ verbatim 前缀（Windows canonicalize 形态）",
+            absolute_resource_path(verbatim).to_string_lossy().starts_with("C:"));
+
+        // 资源加载·握手分界：真 TCP 上 ExternalRelay（回 {"ok":true}）vs ExternalProcess（非 relay 回包）
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind probe port");
+        let port = listener.local_addr().expect("local addr").port();
+        let server = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
+                let mut buf = [0u8; 512];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                let _ = std::io::Write::write_all(
+                    &mut stream,
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true}",
+                );
+            }
+        });
+        check("relay_handshake: relay 形应答 → ExternalRelay 判定", relay_handshake(port));
+        let _ = server.join();
+        check("classify: listening+handshake → ExternalRelay（外部托管 relay 让位不抢）",
+            classify_relay_port(true, false, true) == RelayPortOwner::ExternalRelay);
+
+        println!("t2 summary: ok={} fail={}", 6 - failures, failures);
+        assert_eq!(failures, 0, "T2 probe failures");
+    }
 }

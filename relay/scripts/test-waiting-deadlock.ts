@@ -13,6 +13,9 @@
 //   ③ SESSION_UPDATED 恒带 waiting_request 权威值（null = 已清）
 //   ④ RESOLVED 仅在 request_id 匹配当前挂起请求时才收口状态（防时序窗口打掉新请求）
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -96,6 +99,17 @@ class FakeAgent implements AgentLike {
 }
 
 const bus = new EventBus();
+// 沙盒铁律：钉死数据目录防生产泄漏（fake 工厂直驱也会经 create() 写 last-cwd 落到
+// 被继承的生产 dataDir——2026-09-28 事故实证，详见 test-ws.ts 头部）
+// CCR_NO_TITLE_GEN（#20 审查补）：COMMAND_CREATE 带 prompt 会触发 requestSmartTitle
+// 真 spawn 起名 CLI，transcript 落全局 ~/.claude/projects（test-ws 同款残渣）
+// CCR_CLOUD_URL：统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
+const wdlDataDir = mkdtempSync(join(tmpdir(), "ccr-wdl-"));
+process.env.CCR_DATA_DIR = wdlDataDir;
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+process.env.CCR_CLOUD_URL = "";
+process.env.CCR_NO_TITLE_GEN = "1";
 const cfg = loadConfig();
 const mgr = new SessionManager(bus, cfg);
 
@@ -186,4 +200,5 @@ agent().turnEnd(true, "interrupted");
 }
 
 console.log("\nWAITING DEADLOCK TESTS PASSED");
+rmSync(wdlDataDir, { recursive: true, force: true }); // #20 备案收尾：dataDir 沙盒成功路径此前残留
 process.exit(0);

@@ -1,0 +1,445 @@
+#!/bin/bash
+# COMMAND_MESSAGE 投递工具：dispatch <payload.json 文件> <session_id>
+# 或 dispatch -c '{"text":"..."}' <session_id>。payload 是 COMMAND_MESSAGE.payload
+# 中除 session_id 外的字段；本脚本会用第二个参数强制覆盖 payload.session_id。
+# 插件分发环境不保证存在 node_modules/ws，因此下面的系统 node 代码只依赖
+# net/crypto/fs，内置最小 RFC6455 客户端；不降级 HTTP 轮询，避免丢失 COMMAND_ACK。
+#
+# 失败回退（#018-C3：无网转 PM 代挂或重试；不丢 command_id；receipt 三态可判）：
+#   重投   dispatch --retry <dispatch_id>   从待发队列取原 envelope 补投，同
+#          dispatch_id 续链（对账 grep 一键贯穿两次投递）、attempt 续号（忠实
+#          「试过几轮」，report timeout 判定 attempt>=2 兼容）、同 command_id
+#          （relay 幂等回放，不双投）
+#   代挂   dispatch --defer ... <session_id>  跳过投递直接转存待发队列
+#          （exit 3=挂起 receipt）；投递失败（无网/超时/断线，短重试耗尽）自动
+#          转存同队列——转存≠重派，队列只被显式 --retry 消费（守 018 :88「勿自
+#          动重复派单」）；relay 明确拒收（ok:false）不转存（业务错，重投无意义）
+#   放弃   dispatch --discard <dispatch_id>   receipt=放弃终态（队列记 discarded）
+#   队列：$CCR_DATA_DIR/cli-deferred.ndjson，append-only，每行一个生命周期事件
+#   （queued 含 envelope 全文=重投凭据 / done / discarded）；每 dispatch_id 文件
+#   序最后一行为当前态——崩在任意点不丢活。receipt 三态：成功（exit 0+台账
+#   ok:true）/放弃（--discard exit 0+队列 discarded）/挂起（--defer exit 3+队列
+#   pending）；失败自动转存=exit 1（失败终态）+队列 pending 凭据，两账合看可判。
+#   与「重试」的边界：重试=即时短窗（同进程 2s 内第二次尝试）；代挂=跨时长窗
+#   （relay 恢复后人工/PM 决策 --retry 补投）。
+#
+# 环境注入链（#018-C1 文档化，与 bin/deliver 同一口径）：M2 会话由 relay spawn 时
+# 继承注入 CCR_DATA_DIR/CCR_TOKEN/CCR_PORT 三件套（relay/src/org.ts F-09 CLI 模板
+# 同源）；手动终端无注入时逐级回落生产默认：
+#   CCR_DATA_DIR       relay 数据目录（默认 ~/.cc-deck/data）
+#   CCR_TOKEN          relay 令牌（缺省读 $CCR_DATA_DIR/token）
+#   CCR_PORT           relay 端口（缺省读 $CCR_DATA_DIR/bridge.json 的 port，再缺省 8787）
+#   CCR_ACK_TIMEOUT_MS 单拍 ACK 等待毫秒（默认 15000；<100 收敛为 100，桩测/慢网可调）
+# 三 ID 全链路日志（#018 :653 DoD，PM 侧 reconciliation 对账面）：每拍向 stderr 打
+# 单行 JSON（phase=send/ack/final/queued，恒含 session_id/dispatch_id/command_id/
+# attempt），grep '"dispatch_id":"<id>"' 即可对账投递→ACK→回执三拍；权威账仍是
+# $CCR_DATA_DIR/cli-dispatches.ndjson（append-only，终态一行，attempt 记终局拍）。
+set -uo pipefail
+
+usage() {
+  echo "用法: dispatch <payload.json 文件> <session_id> [--defer]" >&2
+  echo "      dispatch -c '<payload JSON>' <session_id> [--defer]" >&2
+  echo "      dispatch --retry <dispatch_id>     # 从待发队列补投挂起单" >&2
+  echo "      dispatch --discard <dispatch_id>   # 放弃挂起单（放弃终态）" >&2
+  exit 1
+}
+
+data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
+mkdir -p "$data"
+log="$data/cli-dispatches.ndjson"
+# phase 过程账（#018-C2）：每拍一行独立 ndjson，与终态台账分账——台账不变量是
+# 「append-only 终态一行」，中间拍混入会破坏 dispatch-report 四类判定；过程链
+# 完整性对账（断拍=可判定）走 dispatch-report --phase 消费此账
+phase_log_file="$data/cli-phase.ndjson"
+# 待发队列（#018-C3）：append-only 生命周期账，见头注失败回退段
+defer_log="$data/cli-deferred.ndjson"
+
+# ---- C3 子命令分派：--retry/--discard 自包含处理，不进投递主干 ----
+action="send"
+retry_id=""
+if [ "${1:-}" = "--retry" ] || [ "${1:-}" = "--discard" ]; then
+  [ "$#" -eq 2 ] || usage
+  action="${1#--}"
+  retry_id="$2"
+fi
+if [ "$action" != "send" ]; then
+  [ -f "$defer_log" ] || { echo "dispatch：待发队列不存在（$defer_log）——无可${action}的单" >&2; exit 2; }
+  # 扫描该 dispatch_id 的最新队列行（文件序最后一条=当前态）；协议=STATE<TAB>payload
+  last="$(python3 - "$defer_log" "$retry_id" <<'PY'
+import json, sys
+path, did = sys.argv[1:3]
+last = None
+for raw in open(path, encoding="utf-8"):
+    try:
+        obj = json.loads(raw.strip())
+    except Exception:
+        continue
+    if isinstance(obj, dict) and obj.get("dispatch_id") == did:
+        last = obj
+if last is None:
+    print("NOTFOUND")
+elif last.get("type") == "queued":
+    print("QUEUED\t" + json.dumps(last, ensure_ascii=False, separators=(",", ":")))
+else:
+    print("TERMINAL\t" + str(last.get("type", "unknown")))
+PY
+)"
+  state="${last%%$'\t'*}"
+  payload="${last#*$'\t'}"
+  case "$state" in
+    NOTFOUND) echo "dispatch：队列无 dispatch_id=$retry_id 的记录" >&2; exit 2 ;;
+    QUEUED) ;;
+    *) echo "dispatch：该单不在挂起态（队列当前态=${payload:-$state}），无可${action}的单" >&2; exit 2 ;;
+  esac
+  if [ "$action" = "discard" ]; then
+    python3 - "$defer_log" "$retry_id" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, did = sys.argv[1:3]
+with open(path, "a", encoding="utf-8") as f:
+    f.write(json.dumps({
+        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "type": "discarded", "dispatch_id": did,
+    }, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+    echo "ok=discarded dispatch_id=$retry_id（已放弃，receipt=放弃终态；台账原始失败行保留）"
+    exit 0
+  fi
+  # --retry：凭据行恢复 envelope 与三 ID（不丢 command_id：同 id 补投，relay 幂等回放）
+  command_file="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-command.XXXXXX")"
+  trap 'rm -f "$command_file"' EXIT
+  printf '%s' "$payload" | python3 -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read())["command"], ensure_ascii=False))' >"$command_file"
+  IFS="$(printf '\t')" read -r command_id sid base_attempt <<EOF2
+$(printf '%s' "$payload" | python3 -c 'import json,sys
+d = json.loads(sys.stdin.read())
+cmd = d.get("command") or {}
+cid = str(cmd.get("command_id") or "")
+sid2 = str((cmd.get("payload") or {}).get("session_id") or d.get("session_id") or "")
+base = str(int(d.get("attempts_used") or 0))
+print("\t".join((cid, sid2, base)), end="")')
+EOF2
+  [ -n "$command_id" ] || { echo "dispatch：凭据行缺 command_id（队列行损坏）" >&2; exit 2; }
+  dispatch_id="$retry_id"
+  attempt="$((base_attempt + 1))"
+  SKIP_ENVELOPE=1
+  echo "dispatch：--retry 补投 $dispatch_id（第 $attempt 轮起，command_id=$command_id）…" >&2
+fi
+
+mode="file"
+payload_source=""
+sid="${sid:-}"
+if [ "${SKIP_ENVELOPE:-0}" != "1" ]; then
+  # --defer 末尾旗标：dispatch <payload> <sid> --defer / dispatch -c '<json>' <sid> --defer
+  if [ "${@: -1}" = "--defer" ]; then
+    DEFER=1
+    set -- "${@:1:$#-1}"
+  fi
+  if [ "${1:-}" = "-c" ]; then
+    [ "$#" -eq 3 ] || usage
+    mode="json"
+    payload_source="$2"
+    sid="$3"
+  else
+    [ "$#" -eq 2 ] || usage
+    payload_source="$1"
+    sid="$2"
+  fi
+  [ -n "$sid" ] || usage
+fi
+
+token="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
+port="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
+: "${port:=8787}"
+if [ "${SKIP_ENVELOPE:-0}" != "1" ]; then
+  dispatch_id="$(python3 - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+)"
+  command_id="$(python3 - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+)"
+fi
+attempt="${attempt:-1}"
+# ACK 单拍等待（CCR_ACK_TIMEOUT_MS 可调，默认 15s；非数字/过小收敛）
+ack_timeout="${CCR_ACK_TIMEOUT_MS:-15000}"
+case "$ack_timeout" in ""|*[!0-9]*) ack_timeout=15000 ;; esac
+[ "$ack_timeout" -ge 100 ] || ack_timeout=100
+# 三 ID 每拍日志（stderr 单行 JSON）：phase send/ack/final ×ok/error/attempt，
+# 与 append_log 同键名——控制台 grep 与台账对账同一套 ID。同行落盘 phase 过程账
+# （cli-phase.ndjson），落盘失败不阻塞主流程（stderr 仍出，审计面尽力而为）
+phase_log() { # $1=phase $2=ok(true|false|null) $3=error（须已消毒）
+  local line
+  line="$(python3 - "$sid" "$dispatch_id" "$command_id" "$1" "$2" "$3" "${attempt:-1}" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+sid, did, cid, phase, ok, error, attempt = sys.argv[1:8]
+print(json.dumps({
+    "tool": "dispatch", "phase": phase,
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "session_id": sid, "dispatch_id": did, "command_id": cid,
+    "attempt": int(attempt),
+    "ok": None if ok == "null" else ok == "true",
+    "error": error or None,
+}, ensure_ascii=False, separators=(",", ":")))
+PY
+)" || return 0
+  printf '%s\n' "$line" >&2
+  printf '%s\n' "$line" >> "$phase_log_file" 2>/dev/null \
+    || echo "dispatch：phase 过程账写入失败（$phase_log_file），stderr 日志仍可 grep 对账" >&2
+}
+append_log() {
+  python3 - "$log" "$sid" "$dispatch_id" "$command_id" "$1" "$2" "${attempt:-1}" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, sid, dispatch_id, command_id, ok, error, attempt = sys.argv[1:8]
+record = {
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "session_id": sid,
+    "dispatch_id": dispatch_id,
+    "command_id": command_id,
+    "type": "COMMAND_MESSAGE",
+    "ok": ok == "true",
+    "error": error or None,
+    # 018 :88 状态机：attempt 落审计——短重试用掉第几次、终局在哪一拍，可判定
+    "attempt": int(attempt),
+}
+with open(path, "a", encoding="utf-8") as f:
+    f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+}
+# C3 待发队列助手：queued 行含 envelope 全文（=重投凭据，同 command_id 供 relay 幂等
+# 回放）；done/discarded 只记态。append-only，每 dispatch_id 文件序最后一行=当前态
+defer_enqueue() { # $1=source(auto|defer)：auto=投递失败自动转存 / defer=--defer 显式代挂
+  python3 - "$defer_log" "$sid" "$dispatch_id" "$command_id" "$command_file" "${attempt:-1}" "$1" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, sid, did, cid, cmd_path, attempt, source = sys.argv[1:8]
+row = {
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "type": "queued", "source": source,
+    "session_id": sid, "dispatch_id": did, "command_id": cid,
+    "attempts_used": int(attempt),
+    "command": json.load(open(cmd_path, encoding="utf-8")),
+}
+with open(path, "a", encoding="utf-8") as f:
+    f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+}
+queue_resolve() { # $1=done|discarded
+  python3 - "$defer_log" "$dispatch_id" "$1" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, did, typ = sys.argv[1:4]
+row = {"ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+       "type": typ, "dispatch_id": did}
+with open(path, "a", encoding="utf-8") as f:
+    f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+}
+fail() { # $1=stderr 文案 $2=台账 error（缺省同 $1；自动转存时传 deferred 前缀版）
+         # $3=尾拍标记（如 deferred：final 拍后补 queued 拍——链序 final(终态)→queued(挂起)）
+  msg="$1"
+  extra=""
+  [ "${attempt:-1}" -ge 2 ] && extra="；已短重试一次仍无有效 ACK，转人工巡检，勿自动重复派单"
+  echo "dispatch 失败：$msg$extra；请确认 relay 在线后重试，未静默丢单。" >&2
+  phase_log final false "$msg"
+  append_log "false" "${2:-$msg}" || echo "dispatch 审计写入失败：$log" >&2
+  [ -n "${3:-}" ] && phase_log queued null "$3"
+  exit 1
+}
+# 失败原因归一（消毒后单行）：有 ACK 可解析取其 error，无 ACK 取 node 侧 stderr 首行
+attempt_error() {
+  if [ -n "$SEND_ACK" ]; then
+    python3 - "$SEND_ACK" "$token" <<'PY'
+import json, sys
+try:
+    print(str(json.loads(sys.argv[1]).get("error") or "ACK ok 非 true").replace(sys.argv[2], "[redacted]"))
+except Exception:
+    print("WS 连接失败或未收到有效 ACK")
+PY
+  else
+    echo "${SEND_ERR:-WS 连接失败或未收到有效 ACK}"
+  fi
+}
+
+# --defer 代挂不投递，token 缺失不阻塞（转存是本地动作，--retry 补投时才需要 token）
+[ -n "$token" ] || [ "${DEFER:-0}" = "1" ] || fail "未找到 relay token（$data/token，relay 未初始化？）"
+if [ "${SKIP_ENVELOPE:-0}" != "1" ]; then
+  if [ "$mode" = "file" ]; then
+    [ -f "$payload_source" ] || fail "payload 文件不存在：$payload_source"
+    payload_file="$payload_source"
+  else
+    payload_file="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-payload.XXXXXX")"
+    printf '%s' "$payload_source" >"$payload_file"
+  fi
+  command_file="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-command.XXXXXX")"
+  trap 'rm -f "$command_file"; [ "$mode" = "json" ] && rm -f "$payload_file"' EXIT
+  if ! python3 - "$payload_file" "$command_file" "$sid" "$command_id" <<'PY'
+import json, sys, time
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit("payload 必须是 JSON 对象")
+payload["session_id"] = sys.argv[3]
+command = {
+    "command_id": sys.argv[4],
+    "type": "COMMAND_MESSAGE",
+    "ts": int(time.time() * 1000),
+    "payload": payload,
+}
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump(command, f, ensure_ascii=False, separators=(",", ":"))
+PY
+  then
+    fail "payload 不是有效 JSON 对象"
+  fi
+fi
+
+# ---- C3 代挂出口：跳过投递直接转存，exit 3=挂起 receipt（≠失败 1/放弃 0）----
+if [ "${DEFER:-0}" = "1" ]; then
+  defer_enqueue defer
+  phase_log queued null "deferred"
+  echo "ok=deferred dispatch_id=$dispatch_id command_id=$command_id"
+  echo "dispatch：已转存待发队列（$defer_log），relay 恢复后 --retry $dispatch_id 补投或 --discard 放弃" >&2
+  exit 3
+fi
+
+set +e
+# 单次投递（内嵌 RFC6455 客户端）：SEND_ACK/SEND_STATUS/SEND_ERR 落全局，供重试循环与
+# 下方 redaction 阶段共用；stderr 落临时文件（node 侧 finish 已做 token 消毒），
+# 供无 ACK 时取具体失败原因（连不上/超时/断线）落审计，不只留笼统话
+send_once() {
+  SEND_ERR_FILE="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-err.XXXXXX")"
+  SEND_ACK="$(node - "$port" "$token" "$command_file" "$command_id" "$ack_timeout" 2>"$SEND_ERR_FILE" <<'NODE'
+const fs = require("node:fs");
+const net = require("node:net");
+const crypto = require("node:crypto");
+const [portText, token, commandPath, commandId, timeoutText] = process.argv.slice(2);
+const port = Number(portText), command = fs.readFileSync(commandPath);
+// 单拍 ACK 等待（bash 层已校验数字与下限；此处再兜底）
+const ACK_TIMEOUT = Math.max(100, Number(timeoutText) || 15000);
+const timeoutLabel = `${ACK_TIMEOUT / 1000}s`.replace(/\.0$/, "");
+const key = crypto.randomBytes(16).toString("base64");
+const expected = crypto.createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+const socket = net.createConnection({ host: "127.0.0.1", port });
+let buffer = Buffer.alloc(0), upgraded = false, finished = false;
+const timer = setTimeout(() => finish(12, `${timeoutLabel} 超时，未收到 COMMAND_ACK`), ACK_TIMEOUT);
+socket.setTimeout(ACK_TIMEOUT, () => finish(12, `${timeoutLabel} 超时，未收到 COMMAND_ACK`));
+function finish(code, message, ack) {
+  if (finished) return;
+  finished = true; clearTimeout(timer);
+  if (ack) process.stdout.write(JSON.stringify(ack));
+  // stderr 同红线：relay 回传的 error 可能回显 token（如鉴权失败信息），与 bash 层
+  // redaction 同口径消毒后再落控制台
+  if (message) process.stderr.write(message.split(token).join("[redacted]") + "\n");
+  socket.destroy(); process.exitCode = code;
+}
+function frame(data, opcode = 1) {
+  const body = Buffer.isBuffer(data) ? data : Buffer.from(data), mask = crypto.randomBytes(4);
+  let header;
+  if (body.length < 126) header = Buffer.from([0x80 | opcode, 0x80 | body.length]);
+  else if (body.length < 65536) { header = Buffer.alloc(4); header[0] = 0x80 | opcode; header[1] = 0x80 | 126; header.writeUInt16BE(body.length, 2); }
+  else { header = Buffer.alloc(10); header[0] = 0x80 | opcode; header[1] = 0x80 | 127; header.writeBigUInt64BE(BigInt(body.length), 2); }
+  const masked = Buffer.alloc(body.length);
+  for (let i = 0; i < body.length; i++) masked[i] = body[i] ^ mask[i % 4];
+  return Buffer.concat([header, mask, masked]);
+}
+function consumeFrames() {
+  while (buffer.length >= 2) {
+    const first = buffer[0], second = buffer[1], opcode = first & 0x0f, masked = !!(second & 0x80);
+    let length = second & 0x7f, offset = 2;
+    if (length === 126) { if (buffer.length < 4) return; length = buffer.readUInt16BE(2); offset = 4; }
+    else if (length === 127) { if (buffer.length < 10) return; const n = buffer.readBigUInt64BE(2); if (n > BigInt(Number.MAX_SAFE_INTEGER)) return finish(11, "WS 帧过大"); length = Number(n); offset = 10; }
+    let mask;
+    if (masked) { if (buffer.length < offset + 4) return; mask = buffer.subarray(offset, offset + 4); offset += 4; }
+    if (buffer.length < offset + length) return;
+    const body = Buffer.from(buffer.subarray(offset, offset + length)); buffer = buffer.subarray(offset + length);
+    if (mask) for (let i = 0; i < body.length; i++) body[i] ^= mask[i % 4];
+    if (opcode === 8) return finish(11, "relay 关闭了 WS 连接");
+    if (opcode === 9) { socket.write(frame(body, 10)); continue; }
+    if (opcode !== 1) continue;
+    let ack; try { ack = JSON.parse(body.toString("utf8")); } catch { continue; }
+    if (ack && ack.type === "COMMAND_ACK" && ack.command_id === commandId) {
+      return ack.ok === true ? finish(0, "", ack) : finish(10, String(ack.error || "ACK ok 非 true"), ack);
+    }
+  }
+}
+socket.on("connect", () => {
+  const path = "/ws?token=" + encodeURIComponent(token);
+  socket.write("GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n");
+});
+socket.on("data", (chunk) => {
+  buffer = Buffer.concat([buffer, chunk]);
+  if (!upgraded) {
+    const end = buffer.indexOf("\r\n\r\n"); if (end < 0) return;
+    const header = buffer.subarray(0, end).toString("latin1"); buffer = buffer.subarray(end + 4);
+    const status = header.split("\r\n", 1)[0] || "";
+    const accept = /^Sec-WebSocket-Accept:\s*(.+)$/im.exec(header)?.[1]?.trim();
+    if (!/^HTTP\/1\.1 101\b/.test(status) || accept !== expected) return finish(11, "WS 握手失败（token 或 relay 连接无效）");
+    upgraded = true; socket.write(frame(command));
+  }
+  if (upgraded) consumeFrames();
+});
+socket.on("error", () => finish(11, "无法连接 relay（连接拒绝/网络错误/超时）"));
+socket.on("close", () => { if (!finished) finish(11, "WS 连接意外关闭"); });
+NODE
+)"
+  SEND_STATUS=$?
+  SEND_ERR="$(head -1 "$SEND_ERR_FILE" 2>/dev/null || true)"
+  rm -f "$SEND_ERR_FILE"
+}
+
+phase_log send null ""
+send_once
+if [ "$SEND_STATUS" -eq 0 ]; then phase_log ack true "" ; else phase_log ack false "$(attempt_error)"; fi
+# 018 :88「超时未 ACK：一次短重试；仍无 ACK 转人工巡检，不自动重复派单」：
+# 未有效 ACK = 12（超时，单拍 CCR_ACK_TIMEOUT_MS 可调）/ 11（连不上、握手失败、连接
+# 中断）；10 = relay 明确拒收（ok:false），不重试转人工。重试沿用同一 envelope 与
+# command_id（relay 对重复 command_id 幂等回放首次 ACK，不双投副作用），不另起新 id。
+# C3：attempt 起点参数化——--retry 补投从队列 attempts_used+1 续号（同 dispatch_id
+# 续链、忠实「试过几轮」历史，report timeout 判定 attempt>=2 兼容）
+if [ "$SEND_STATUS" -ne 0 ] && [ "$SEND_STATUS" -ne 10 ]; then
+  attempt=$((attempt + 1))
+  echo "dispatch：第 $attempt 次尝试（首次未收到有效 ACK，2 秒后短重试）…" >&2
+  sleep 2
+  phase_log send null ""
+  send_once
+  if [ "$SEND_STATUS" -eq 0 ]; then phase_log ack true "" ; else phase_log ack false "$(attempt_error)"; fi
+fi
+set -e
+ack="$SEND_ACK"
+node_status="$SEND_STATUS"
+if [ "$node_status" -ne 0 ]; then
+  # 有 ACK 取其 error、无 ACK（连不上/超时/断线）取 node 侧消毒后的 stderr 首行
+  err="$(attempt_error)"
+  # C3 失败自动转存：连接性失败（11/12）短重试耗尽 → 转存待发队列（转存≠重派，
+  # 队列只被显式 --retry 消费）；拒收 10 不转存（业务错，重投无意义转人工）。
+  # exit 保持 1=失败终态；台账 error 带 deferred: 前缀（report 第四态判据），两账
+  # （台账失败行+队列 pending 行）合看=「已挂起待补投」可判定，不静默丢单
+  if [ "$node_status" -ne 10 ] && [ "$attempt" -ge 2 ]; then
+    defer_enqueue auto
+    echo "dispatch：已转存待发队列（$defer_log），relay 恢复后 --retry $dispatch_id 补投或 --discard $dispatch_id 放弃" >&2
+    fail "$err" "deferred: $err" "deferred"
+  fi
+  fail "$err"
+fi
+ack_ok="$(python3 - "$ack" <<'PY'
+import json, sys
+try:
+    print("true" if json.loads(sys.argv[1]).get("ok") is True else "false")
+except Exception:
+    print("false")
+PY
+)"
+[ "$ack_ok" = "true" ] || fail "ACK ok 非 true"
+echo "ok=true command_id=$command_id"
+phase_log final true ""
+append_log "true" ""
+# C3：--retry 补投成功 → 队列挂起单收口（done 行；台账 ok:true 行同 dispatch_id，
+# 一次失败+一次成功两行=T7 收口形态，report 归 success）
+if [ "${SKIP_ENVELOPE:-0}" = "1" ]; then
+  queue_resolve done
+  echo "dispatch：--retry 补投成功，队列挂起单已收口（done）" >&2
+fi

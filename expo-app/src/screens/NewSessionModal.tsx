@@ -4,6 +4,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay } from "../store";
+// E2c：判定门纯函数直用 ListScreen E2B-COMMANDS 锚点段导出（零复制粘贴，W1b/E2b
+// 两端同语义不共享代码口径的 expo 侧复用面——锚点段自包含零 RN 依赖）
+import {
+  ackTapGuard,
+  ackVerdict,
+  cmdCapBlocked,
+  cmdCapRemember,
+  orgFlightKey,
+  unknownCommandError,
+  type AckVerdict,
+  type CmdCaps,
+} from "./ListScreen";
 
 // 任务模板：点击填入提示词（不自动提交）
 const PRESETS: { label: string; text: string }[] = [
@@ -26,7 +38,20 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   // 时间线说明「已自动创建」）；关（默认）=旧行为回落默认目录并说明。AsyncStorage
   // 记忆偏好（偏好型开关，不像 bypass 语义敏感需要每次显式勾）
   const [autoMkdir, setAutoMkdir] = useState(false);
+  // #27 引擎选择（偏好型，同 autoMkdir 记忆口径）：勾选 = codex 引擎（relay 侧
+  // 需装好 codex CLI；旧 relay 忽略未知字段，建出 claude 会话无害）
+  const [useCodex, setUseCodex] = useState(false);
   const [loadedInit, setLoadedInit] = useState(false);
+
+  // E2c：新建会话判定门全链（ListScreen orgDecide 同构）。COMMAND_CREATE 走 ACK
+  // 严格三态：ok=不本地造会话（等 SNAPSHOT 权威帧落表）、清 prompt+收弹窗；
+  // rejected=relay 错误透传行内可重试；unconfirmed=断连拒发/超时收摊统一文案。
+  // 旧 relay 未知命令签名 → 记能力位静默降级（弹窗内提示，不轰炸）；双击闸防
+  // 重复建会话；无自动重试（重试=用户重点；store 全局 4s 重发同 id 一次+6s 收摊封顶）
+  const CREATE_CMD = "COMMAND_CREATE";
+  const CREATE_CAP_MSG = "该源 relay 版本不支持新建会话，升级 relay 后可用";
+  const [createFlight, setCreateFlight] = useState<Set<string>>(new Set());
+  const [createCaps, setCreateCaps] = useState<CmdCaps>({});
 
   // 目标源（#294 批3 + #369 记忆）：聚合且多源时 chips 选发送目标，默认=上次选择
   //（AsyncStorage 跨次记忆，对齐网页端 ccd_new_target），无记忆回落活动源。
@@ -51,8 +76,10 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     setLoadedInit(true);
     setErr(null);
     setTargetId(null);
+    setCreateFlight(new Set()); // 残留飞行表清位（能力位 createCaps 不清：relay 版本记忆跨开合有效）
     void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
     void AsyncStorage.getItem("ccr_auto_mkdir").then((v) => setAutoMkdir(v === "1"));
+    void AsyncStorage.getItem("ccr_use_codex").then((v) => setUseCodex(v === "1"));
     void AsyncStorage.getItem("ccr_new_target").then((v) => {
       if (v && snap.sources.some((x) => x.id === v)) setTargetId(v);
     });
@@ -74,14 +101,42 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     }
     setErr(null);
     void AsyncStorage.setItem("ccr_cwd", cc);
-    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: "" + p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}), ...(autoMkdir ? { autoMkdir: true } : {}) }, multi ? effTarget ?? undefined : undefined)) {
-      setPrompt("");
-      onClose();
-    } else {
-      // 失败必须内联报错：全局 Toast 被 RN Modal 原生层压住，store.send 发出的
-      // lastErrorCmd 在本弹窗里永远看不见，表现为「点了没反应」
-      setErr(multi ? "该源未连接，命令未发送" : "未连接服务器，命令未发送");
+    // 判定门链（orgDecide 同序）：双击闸 → 能力位降级 → 发送 → onAck 三态收场。
+    // 失败内联报错不关弹窗：全局 Toast 被 RN Modal 原生层压住，store 反馈在本弹窗
+    // 里永远看不见，必须行内呈现
+    const fk = orgFlightKey(effTarget ?? "active", "create");
+    if (ackTapGuard(createFlight, fk) === "skip") return;
+    if (cmdCapBlocked(createCaps, CREATE_CMD)) {
+      setErr(CREATE_CAP_MSG);
+      return;
     }
+    setCreateFlight((prev) => new Set(prev).add(fk));
+    const settle = (v: AckVerdict): void => {
+      setCreateFlight((prev) => {
+        const n = new Set(prev);
+        n.delete(fk);
+        return n;
+      });
+      if (v.ok) {
+        // 成功不本地造会话状态（等 SNAPSHOT 权威帧落表），清 prompt+收弹窗
+        setPrompt("");
+        onClose();
+        return;
+      }
+      if (unknownCommandError(v.error)) {
+        setCreateCaps((prev) => cmdCapRemember(prev, CREATE_CMD));
+        setErr(CREATE_CAP_MSG);
+        return;
+      }
+      setErr(v.error ?? "命令未确认（超时或源未连接），可重试");
+    };
+    const sent = store.send(
+      "COMMAND_CREATE",
+      { cwd: cc, prompt: "" + p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(useCodex ? { engine: "codex" as const } : {}) },
+      multi ? effTarget ?? undefined : undefined,
+      (r) => settle(ackVerdict(r)),
+    );
+    if (!sent) settle(ackVerdict(null)); // 断连拒发：同 unconfirmed 口径，不静默丢单
   };
 
   return (
@@ -154,8 +209,29 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
               </View>
               <Text style={m.bypassT}>目录不存在时自动创建</Text>
             </Pressable>
-            <Pressable style={m.createBtn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={create}>
-              <Text style={m.createT}>启动会话</Text>
+            {/* #27 引擎选择：同 checkbox 语言 + AsyncStorage 跨次记忆（偏好型） */}
+            <Pressable
+              style={m.bypassRow}
+              hitSlop={6}
+              onPress={() =>
+                setUseCodex((v) => {
+                  const next = !v;
+                  void AsyncStorage.setItem("ccr_use_codex", next ? "1" : "0");
+                  return next;
+                })
+              }
+            >
+              <View style={[m.bypassBox, useCodex && m.bypassBoxOn]}>
+                {useCodex ? <Text style={m.bypassCheck}>✓</Text> : null}
+              </View>
+              <Text style={m.bypassT}>用 Codex 引擎</Text>
+            </Pressable>
+            <Pressable
+              style={[m.createBtn, createFlight.size > 0 && m.createBtnBusy]}
+              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }}
+              onPress={create}
+            >
+              <Text style={m.createT}>{createFlight.size > 0 ? "启动中…" : "启动会话"}</Text>
             </Pressable>
             <Pressable style={m.cancel} android_ripple={{ color: c.tintSoft, borderless: false, radius: 22 }} onPress={onClose}>
               <Text style={m.cancelT}>取消</Text>
@@ -213,6 +289,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     height: 48, borderRadius: 14, marginTop: 4, backgroundColor: c.brandA,
     alignItems: "center", justifyContent: "center",
   },
+  createBtnBusy: { opacity: 0.6 },
   createT: { color: "#fff", fontSize: 15.5, fontWeight: "700" },
   cancel: { height: 42, marginTop: 8, alignItems: "center", justifyContent: "center" },
   cancelT: { color: c.dim, fontSize: 14 },

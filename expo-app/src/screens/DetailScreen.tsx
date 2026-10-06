@@ -18,12 +18,13 @@ import * as FileSystem from "expo-file-system/legacy";
 import { WebView } from "react-native-webview";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
-import { withA, type ThemeColors } from "../theme";
+import { withA, STATUS_ZH, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import { fromB64, toB64 } from "../e2e";
-import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
+// E3a：hasActivityCapability 为值导入（E1 落库面，只消费不修改）；其余仍纯类型
+import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
@@ -32,11 +33,12 @@ import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
-// 详情页视图 tab（与网页端 tabs 对齐：消息/任务/全部/输出物/定时/统计，同序）。
-// 消息/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
+// 详情页视图 tab（与网页端 tabs 对齐：对话/任务/全部/输出物/定时/统计，同序）。
+// 对话/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
 // 原"工具/系统"过滤 chips 与设置抽屉"过程消息·隐藏档"重叠，移除。
+// #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」。
 const VIEWS = [
-  { k: "msg", label: "消息" },
+  { k: "msg", label: "对话" },
   { k: "todos", label: "任务" },
   { k: "all", label: "全部" },
   { k: "arts", label: "输出物" },
@@ -104,26 +106,9 @@ let agCollapsed = false;
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
 
-// #216 排查探针（test.9 取证版，定案后移除）：最近一次胶囊 onPress 的完整事件
-// 指纹 + 胶囊中心测量原值。五段修的四道围堵（时间窗/坐标吞/复弹冷却/键盘期
-// 禁点）真机实测把真点也吞了（键盘收起后胶囊点不动），全部拆除——本版只记录
-// 不拦截，真机 logcat 抓 [perm216] 行直接定案：
-//   · d=触点到胶囊中心的距离（-1=坐标或中心取不到）；
-//   · ctr=measureInWindow 原始回值（判单位/错位）；
-//   · kb=onPress 时刻的键盘高度（判 kbInsets 假死）；
-//   · dt/pin=onPressIn 预记录（真手指按下）与 onPress 的间隔/坐标——onPress
-//     触发却无对应 pressIn/坐标不符 = 合成点击（performClick 错派）铁证
-let lastFocusAt = 0;
-const permProbe = { txt: "init", ctr: "?", kb: -1, dt: -1, pin: "none", pinAt: 0, r1s: 0 };
-// #216 探针·渲染风暴计数：近 1 秒 DetailScreen 渲染次数（详情页体每次渲染打点）。
-// 「弱网热点→重连→快照重放→SESSION_UPDATED 风暴」假说的直接检验量：错弹时 r1s
-// 高（>10/s）=风暴实锤，r1s 平静=排除、回到事件层取证。数组滚动窗口，量小无泄漏
-const permRenders: number[] = [];
-function permProbeRenderTick(): void {
-  const now = Date.now();
-  permRenders.push(now);
-  while (permRenders.length && now - permRenders[0] > 1000) permRenders.shift();
-}
+// #216 防误派守卫/探针机制（三~六段修 + lastFocusAt/lastLinkAt）随 0.6.1 发版
+// 整体摘除（dev 6fef1e3 拆四道围挡 + 7076c9c 探针摘除）：围挡在真机上误伤
+// 正常点胶囊，最终定案=无守卫直连（错派根因由 RN/ColorOS 层消化）
 
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
@@ -200,6 +185,180 @@ function fmtArtTime(ts: number): string {
 // 词内给出断点，长中文路径会被从词中间拆开，ZWSP 提供合法断点。仅用于显示；复制走
 // 按钮的原串（零宽空格进剪贴板=粘到终端的隐性坏路径），故路径 Text 不再开 selectable
 const brkPath = (p: string) => p.replace(/([\\/])/g, "$1\u200B").replace(/-/g, "-\u200B");
+
+// \u2500\u2500\u2500 E3a \u53EA\u8BFB\u6295\u5F71\u7EAF\u51FD\u6570\u6BB5\uFF08\u96F6 RN \u8FD0\u884C\u65F6\u4F9D\u8D56\uFF0Ctest-e3a-detail.ts \u76F4\u8DD1 import\uFF09\u2500\u2500\u2500\u2500
+//
+// #018-E3a\uFF1Adetail \u8BFB\u4FA7\u4E09\u9762\u6295\u5F71\u2014\u2014\u7B49\u5F85\u6761\u53BB\u91CD / dock \u6D3B\u52A8\u8231\u6A21\u578B / \u4EA7\u7269\u5206\u7EC4\u3002
+// \u534F\u8BAE\u7F3A\u53E3\u5907\u6848\uFF1AB0/B4a \u7684 group_key\u3001directory_label\u3001existence_state \u4E09\u5B57\u6BB5\u5C1A\u672A\u8FDB
+// protocol.ts \u7684 ArtifactItem\uFF08E1 \u53EA\u843D\u4E86 activity \u9762\uFF09\uFF0C\u6B64\u5904\u4EE5\u672C\u5730\u7ED3\u6784\u6269\u5C55\u9632\u5FA1\u6D88\u8D39
+// \u2014\u2014\u5B57\u6BB5\u51FA\u73B0\u5373\u7528\uFF0C\u4E0D\u51FA\u73B0\u8D70 #222/\u65E7 relay \u56DE\u9000\uFF1B\u534F\u8BAE\u843D\u5E93\u540E\u628A B4aArtifact \u4E0A\u79FB\u5373\u53EF\u3002
+
+/** B4a \u4EA7\u7269\u5206\u7EC4\u6269\u5C55\u5B57\u6BB5\uFF08\u534F\u8BAE\u7F3A\u53E3\u672C\u5730\u5907\u6848\uFF0C\u89C1\u4E0A\uFF1Brelay \u843D\u5E93\u540E\u4E0A\u79FB protocol.ts\uFF09 */
+type B4aArtifact = ArtifactItem & {
+  group_key?: string | null;       // \u4E0D\u900F\u660E\u5206\u7EC4 id\uFF08relay \u6743\u5A01\uFF0C\u975E\u8DEF\u5F84\u6D3E\u751F\uFF09
+  directory_label?: string | null; // \u5206\u7EC4\u5C55\u793A\u540D
+  existence_state?: "exists" | "missing" | "unknown" | null;
+};
+
+export type ArtExistence = "exists" | "missing" | "unknown";
+export interface GroupedArtifact { item: ArtifactItem; existence: ArtExistence; openable: boolean }
+export interface ArtifactGroup { key: string; label: string; leaf: string; files: GroupedArtifact[]; at: number; size: number }
+export type ArtifactRow =
+  | { kind: "group"; group: ArtifactGroup; at: number }
+  | { kind: "file"; art: GroupedArtifact; at: number };
+
+/** existence \u4E09\u6001\u5F52\u4E00\uFF1AB4a \u663E\u5F0F\u5B57\u6BB5\u4F18\u5148\uFF1B\u65E7 relay \u65E0\u5B57\u6BB5\u56DE\u9000 exists \u5E03\u5C14
+ * \uFF08false\u2192missing \u53EF\u5F00 sheet \u770B\u300C\u5DF2\u5220\u9664\u300D\u5B9A\u683C CTA\uFF1B\u7F3A\u7701\u2192exists\uFF09\u3002unknown \u53EA\u6765\u81EA
+ * B4a \u663E\u5F0F\u4E0B\u53D1\u2014\u2014\u4E0D\u731C\u3001\u4E0D\u7ED9\u65E7\u6570\u636E\u9020\u672A\u77E5\u6001\uFF08\u65E7\u884C\u4FDD\u6301\u53EF\u6253\u5F00\uFF0C\u96F6\u56DE\u5F52\uFF09 */
+export function artExistenceOf(t: ArtifactItem): ArtExistence {
+  const st = (t as B4aArtifact).existence_state;
+  if (st === "exists" || st === "missing" || st === "unknown") return st;
+  return t.exists === false ? "missing" : "exists";
+}
+
+const artRecOf = (t: ArtifactItem): number => t.last_at || t.first_at || 0;
+
+/**
+ * \u4EA7\u7269\u5206\u7EC4\u6295\u5F71\uFF08arts tab \u6570\u636E\u9762\uFF09\uFF1A
+ * - B4a group_key \u5B58\u5728 \u2192 \u6309\u4E0D\u900F\u660E id \u5206\u6876\uFF0Clabel = directory_label ?? key\uFF08relay
+ *   \u6743\u5A01\u5206\u7EC4\uFF0C\u5355\u6587\u4EF6\u7EC4\u4E5F\u7167\u7EC4\u6E32\u67D3\uFF09\uFF1Bleaf \u53D6\u5C55\u793A\u540D\u672B\u6BB5\uFF08\u8DEF\u5F84\u5F62\uFF09\u6216\u539F\u6837
+ * - \u65E0 group_key \u2192 #222 \u65E7\u53E3\u5F84\u56DE\u9000\uFF1AdirOf \u6D3E\u751F\u7236\u76EE\u5F55\uFF0C\u540C\u76EE\u5F55\uFF08lowercase \u5F52\u4E00\uFF09\u22652
+ *   \u4E2A\u6587\u4EF6\u624D\u805A\u5408\uFF0C\u5355\u6587\u4EF6\u76EE\u5F55\u4E0E\u6839\u6563\u4EF6\u4FDD\u6301\u6563\u884C
+ * - \u7EC4\u5185\u6309\u6700\u8FD1\u6D3B\u8DC3\u964D\u5E8F\uFF1B\u7EC4 at=\u7EC4\u5185\u6700\u65B0\u3001size=\u6210\u5458\u5408\u8BA1\uFF1B\u7EC4\u4E0E\u6563\u6587\u4EF6\u6309 at \u964D\u5E8F\u6DF7\u6392
+ *   \uFF08\u4E0E #222 \u6DF7\u6392\u540C\u5219\uFF0C\u300C\u6700\u65B0\u4EA4\u4ED8\u6C38\u8FDC\u5728\u9876\u300D\uFF09
+ */
+export function artifactRowsOf(items: ArtifactItem[], dirOf: (t: ArtifactItem) => string): ArtifactRow[] {
+  const arts = items.map((item) => ({ item, existence: artExistenceOf(item) }));
+  // \u65E7\u53E3\u5F84\u76EE\u5F55\u8BA1\u6570\uFF08lowercase \u5F52\u4E00\uFF0C\u4E0E web-console artDirOf \u540C\u5224\uFF09
+  const dirN = new Map<string, number>();
+  for (const { item } of arts) {
+    const dir = (dirOf(item) || "").toLowerCase();
+    if (dir) dirN.set(dir, (dirN.get(dir) ?? 0) + 1);
+  }
+  const groups = new Map<string, ArtifactGroup>();
+  const loose: GroupedArtifact[] = [];
+  const of = (item: ArtifactItem, existence: ArtExistence): GroupedArtifact =>
+    ({ item, existence, openable: existence !== "unknown" });
+  for (const { item, existence } of arts) {
+    const gk = (item as B4aArtifact).group_key;
+    if (typeof gk === "string" && gk) {
+      let g = groups.get(gk);
+      if (!g) {
+        const label = (item as B4aArtifact).directory_label || gk;
+        g = { key: gk, label, leaf: label.split(/[\\/]/).pop() || label, files: [], at: 0, size: 0 };
+        groups.set(gk, g);
+      }
+      g.files.push(of(item, existence));
+    } else {
+      const dir = dirOf(item) || "";
+      if (dir && (dirN.get(dir.toLowerCase()) ?? 0) >= 2) {
+        const key = dir.toLowerCase();
+        let g = groups.get(key);
+        if (!g) {
+          g = { key, label: dir, leaf: dir.split(/[\\/]/).pop() || dir, files: [], at: 0, size: 0 };
+          groups.set(key, g);
+        }
+        g.files.push(of(item, existence));
+      } else {
+        loose.push(of(item, existence));
+      }
+    }
+  }
+  for (const g of groups.values()) {
+    g.files.sort((a, b) => artRecOf(b.item) - artRecOf(a.item));
+    for (const f of g.files) {
+      const at = artRecOf(f.item);
+      if (at > g.at) g.at = at;
+      if (typeof f.item.size === "number") g.size += f.item.size;
+    }
+  }
+  loose.sort((a, b) => artRecOf(b.item) - artRecOf(a.item));
+  return [
+    ...[...groups.values()].map((group) => ({ kind: "group" as const, group, at: group.at })),
+    ...loose.map((art) => ({ kind: "file" as const, art, at: artRecOf(art.item) })),
+  ].sort((a, b) => b.at - a.at);
+}
+
+/** \u7B49\u5F85\u6761\u53BB\u91CD\uFF1A\u540C request \u53EA\u6E32\u67D3\u4E00\u6761\uFF0C\u952E = waiting_request.request_id\uFF08\u4EFB\u52A1\u4E66\u6240\u79F0
+ * waiting_request.id \u7684\u534F\u8BAE\u5B9E\u540D\uFF1B\u7F3A id \u624D\u56DE\u9000 received_at|tool \u6D3E\u751F\u952E\uFF09\u3002\u9996\u89C1\u4F18\u5148\u3001
+ * \u8F93\u5165\u6B21\u5E8F\u5373\u6743\u5A01\u5E8F\u2014\u2014\u5FEB\u7167\u6062\u590D/\u4E8B\u4EF6\u91CD\u6295/R1 \u591A\u8BF7\u6C42\u5217\u8868\u5171\u7528\u6B64\u5F52\u4E00 */
+export function dedupeWaitingBars(payloads: (WaitingPayload | null | undefined)[]): WaitingPayload[] {
+  const seen = new Set<string>();
+  const out: WaitingPayload[] = [];
+  for (const p of payloads) {
+    if (!p) continue;
+    const key = p.request_id || `${p.received_at ?? ""}|${p.tool_name ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
+/** done/error \u6536\u53E3\u6761\uFF1AERROR \u26A0 \u5E38\u9A7B\uFF08\u5BF9\u9F50\u65E2\u6709\u72B6\u6001\u6761\u8BED\u4E49\uFF09\uFF1BDONE \u2713 \u53EA\u5728\u56DE\u5408\u6536\u5C3E
+ * \u5C3E\u7A97\u5185\u663E\u793A\uFF08activity.state=DONE \u843D\u5B9A\u540E DONE_TAIL_MS \u5185\uFF09\u2014\u2014DONE \u662F\u4F1A\u8BDD\u9759\u606F\u6001\uFF0C
+ * \u5E38\u9A7B\u6536\u53E3\u6761\u4F1A\u7ED9\u6BCF\u4E2A\u5386\u53F2\u4F1A\u8BDD\u90FD\u7CCA\u4E00\u6761\uFF1B\u5C3E\u7A97\u5373\u300C\u672C\u8F6E\u521A\u6536\u53E3\u300D\u8BED\u4E49\uFF0C\u8FC7\u7A97\u81EA\u9690 */
+export const DONE_TAIL_MS = 8000;
+export type ClosingBar = { kind: "done" | "error"; text: string };
+export function closingBarOf(s: SessionState | null | undefined, now: number): ClosingBar | null {
+  if (!s) return null;
+  if (s.status === "ERROR") return { kind: "error", text: s.last_error || "\u51FA\u9519\u4E86" };
+  if (s.status === "DONE" && s.activity?.state === "DONE" && typeof s.activity.updated_at === "number") {
+    const age = now - s.activity.updated_at;
+    if (age >= 0 && age <= DONE_TAIL_MS) return { kind: "done", text: "\u672C\u8F6E\u5DF2\u5B8C\u6210" };
+  }
+  return null;
+}
+
+// \u56DB\u6001\u56FE\u6807\uFF1A\u4E0E\u8272\u53CC\u901A\u9053\u533A\u5206\uFF08\u2736\u25C9\u2713\u26A0 + working/waiting/done/error \u56DB\u4E3B\u9898\u8272\uFF09\uFF0C\u4E0D\u5F15\u65B0\u4F9D\u8D56
+const DOCK_ICONS: Record<string, string> = { WORKING: "\u2736", WAITING: "\u25C9", DONE: "\u2713", ERROR: "\u26A0" };
+
+export interface DockModel {
+  state: SessionStatus;
+  icon: string;
+  summary?: string;   // \u4EFB\u52A1\u6458\u8981\uFF08task_summary.text\uFF09
+  actKind?: string;   // \u5F53\u524D\u6D3B\u52A8 kind
+  actText?: string;
+  actTool?: string;
+  elapsedMs?: number;
+}
+
+/**
+ * \u5934\u90E8\u6D3B\u52A8\u8231\u6295\u5F71\uFF08B0 StatusDockState \u53EA\u8BFB\u6D88\u8D39\uFF09\uFF1A
+ * - activity \u7F3A\u5931 \u2192 null\uFF08\u6574\u8231\u4E0D\u6E32\u67D3\uFF0C\u65E0\u5047\u300C\u7A7A\u95F2\u300D\uFF09
+ * - native_status \u80FD\u529B\u5173 \u2192 null\uFF08\u6838\u5FC3\u80FD\u529B\u4E0D\u5728\u6574\u8231\u4E0D\u6E32\u67D3\uFF1Blegacy \u5F52\u4E00\u5316\u80FD\u529B\u5168\u5173\u540C\u6B64\uFF09
+ * - \u4EFB\u52A1\u6458\u8981/\u5F53\u524D\u6D3B\u52A8\u6309 operation_summary\u3001\u8017\u65F6\u6309 native_elapsed \u5404\u81EA\u95E8\u63A7\uFF0C\u5B57\u6BB5
+ *   \u7F3A\u7701\u4E0D\u51FA\u884C\uFF08\u4E0D\u51FA\u5047 0 / \u5047\u7A7A\u4E32\uFF09
+ * - approval \u4E0D\u5165\u8231\uFF1A\u5BA1\u6279\u7531\u6A2A\u5E45/\u72B6\u6001\u6761\u627F\u8F7D\uFF0C\u8231\u5185\u4E0D\u51FA\u7B2C\u56DB\u884C\u5047\u5360\u4F4D
+ */
+export function dockModelOf(s: SessionState | null | undefined): DockModel | null {
+  const act = s?.activity;
+  if (!act || !s) return null;
+  if (!hasActivityCapability(s, "native_status")) return null;
+  if (act.state !== "WORKING" && act.state !== "WAITING" && act.state !== "DONE" && act.state !== "ERROR") return null;
+  const m: DockModel = { state: act.state, icon: DOCK_ICONS[act.state] ?? "\u00B7" };
+  if (hasActivityCapability(s, "operation_summary")) {
+    const ts = act.task_summary;
+    const text = typeof ts?.text === "string" ? ts.text.trim() : "";
+    if (text) m.summary = text;
+    const a = act.activity;
+    if (a && typeof a.text === "string" && a.text.trim()) {
+      m.actText = a.text.trim();
+      if (typeof a.kind === "string" && a.kind) m.actKind = a.kind;
+      if (typeof a.tool === "string" && a.tool) m.actTool = a.tool;
+    }
+  }
+  if (hasActivityCapability(s, "native_elapsed") && typeof act.elapsed_ms === "number") m.elapsedMs = act.elapsed_ms;
+  return m;
+}
+
+/** E3b 决议定向守卫（纯）：晚到 ACK 失败是否仍应提示——仅当同一 request 仍挂起
+ * （已翻态/换请求=帧已收敛，不误报「决议未生效」）。决议 payload 本就带 request_id
+ * （relay 按 id 执行），此守卫管的是**回执侧**的定向 */
+export function decisionStillPending(wr: WaitingPayload | null | undefined, requestId: string): boolean {
+  return !!wr && wr.request_id === requestId;
+}
+// \u2500\u2500\u2500 E3a \u7EAF\u51FD\u6570\u6BB5\u6B62 \u2500\u2500\u2500
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
@@ -670,10 +829,25 @@ function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void })
           <Image source={{ uri: v.uri }} style={{ flex: 1, backgroundColor: c.panel2 }} resizeMode="contain" />
         ) : v.kind === "html" ? (
           // 晨间反馈：HTML 报告此前当纯文本显示源码——夜间报告等交付物都是 HTML，
-          // 必须渲染。正文已在内存，source html 免文件权限；透明底让报告自带底色透出
+          // 必须渲染。正文已在内存，source html 免文件权限；透明底让报告自带底色透出。
+          // #29（C-P2-3）：交付物内容=外部会话/LLM 产出，属不可信源——渲染关 JS
+          //（报告不需要脚本；web 端同功能已用无 allow-scripts 的 sandbox iframe 并注
+          // 释「交付物不该带脚本」，此处对齐）、禁新窗口/文件访问，外链跳转交给系统
+          // 浏览器（onShouldStartLoadWithRequest 只放行首帧 about:blank 载入，其余
+          // http(s) 一律转出 App，防全屏 Modal 内任意导航钓鱼）
           <WebView
             source={{ html: v.text }}
             originWhitelist={["*"]}
+            javaScriptEnabled={false}
+            allowFileAccess={false}
+            setSupportMultipleWindows={false}
+            onShouldStartLoadWithRequest={(req) => {
+              // 首帧（about:/data: 源内载入）放行；其余导航一律拦下，http(s) 转系统
+              // 浏览器，非 http(s)（intent:/file:/自定义 scheme）直接丢弃
+              if (/^(about|data):/i.test(req.url)) return true;
+              if (/^https?:/i.test(req.url)) void Linking.openURL(req.url).catch(() => undefined);
+              return false;
+            }}
             style={{ flex: 1, backgroundColor: "transparent" }}
           />
         ) : v.kind === "md" ? (
@@ -768,7 +942,9 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
     return data;
   };
   const doFetch = async () => {
-    if (busy || dead || !art) return;
+    // E3b 三态守卫：unknown（B4a 显式状态未知）不给拉取——行层已不开 sheet，此为
+    // 双保险；失败回退由 ferr 可见错误承载（行/列表不清不动，三态定格）
+    if (busy || dead || !art || artExistenceOf(art) === "unknown") return;
     setBusy(true);
     setFerr(null);
     try {
@@ -784,7 +960,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   // 晨间反馈二轮：分享=文件本体（原「分享路径」是理解偏了）——未拉取先走同一
   // 拉取链（缓存命中秒出、顺带点亮主按钮「已缓存」），落盘后进系统分享面板
   const doShare = async () => {
-    if (busy || dead || !art) return;
+    if (busy || dead || !art || artExistenceOf(art) === "unknown") return; // E3b 三态守卫同 doFetch
     setBusy(true);
     setFerr(null);
     try {
@@ -872,6 +1048,68 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   );
 }
 
+// #222 文件夹 ⋯ sheet（手机端对齐桌面端 openFolderPop 菜单）：chrome 镜像
+// ArtSheet（permScrim/permSheet/permGrab 底部面板）。身份行 = 文件夹 chip +
+// 叶子名 + ×N 徽标；元信息 = 目录 · 总大小 · 最近时间；主 CTA = 展开/收起
+// （写显式折叠记录后即关，sheet 让位看到列表变化）；次级 = 复制目录路径
+// （「已复制 ✓」1.5s，同 ArtSheet 反馈形态）
+function ArtFolSheet({ fol, onToggle, onClose }: { fol: { key: string; dir: string; leaf: string; count: number; size: number; at: number; open: boolean } | null; onToggle: () => void; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  return (
+    <Modal visible={!!fol} transparent animationType="slide" onRequestClose={fol ? onClose : undefined}>
+      {fol ? (
+      <Pressable style={d.permScrim} onPress={onClose}>
+        <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
+          <View style={d.permGrab} />
+          <View style={d.artTitleRow}>
+            <View style={[d.artChip, { borderColor: withA(c.brandB, 0.45) }]}>
+              <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c.brandB} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z" />
+              </Svg>
+            </View>
+            <Text style={d.artTitle} numberOfLines={2}>{fol.leaf}</Text>
+            <Text style={[d.artTag, { color: c.brandB, borderColor: withA(c.brandB, 0.4) }]}>×{fol.count}</Text>
+          </View>
+          <Text style={d.artMeta} numberOfLines={3}>
+            {[fol.dir, fmtArtSize(fol.size), fmtArtTime(fol.at)].filter(Boolean).join(" · ")}
+          </Text>
+          <Pressable
+            style={d.artPri}
+            android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+            onPress={() => { onToggle(); onClose(); }}
+          >
+            <Text style={d.artPriT}>{fol.open ? "收起文件夹" : "展开查看"}</Text>
+          </Pressable>
+          <Text style={d.artCap}>{fol.open ? `收起后 ${fol.count} 个文件折叠为文件夹行` : `展开列出 ${fol.count} 个文件`}</Text>
+          <View style={d.artPath}>
+            <Text style={d.artPathT}>{brkPath(fol.dir)}</Text>
+          </View>
+          <View style={d.artSecRow}>
+            <Pressable
+              style={d.artSec}
+              android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
+              onPress={() => {
+                void Clipboard.setStringAsync(fol.dir).then(() => {
+                  setCopied(true);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              <Text style={d.artSecT}>{copied ? "已复制 ✓" : "复制目录路径"}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+      ) : null}
+    </Modal>
+  );
+}
+
 // #36 权限模式四选一面板（设计定案 docs/perm-mode-design.md §4.2/4.3）：替代原
 // 循环点击——恒定 2 击直达任意档、每档一句描述首次使用即懂；跳过档（bypassPermissions
 // 免审执行一切命令与编辑）首击只展开底部确认区、再击「确认跳过」才发命令，误触不可达。
@@ -908,10 +1146,6 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
               <Text style={d.permX}>✕</Text>
             </Pressable>
           </View>
-          {/* #216 排查探针（test.9 取证版，定案后移除）：最近一次胶囊 onPress 的
-              全指纹（触点/距离/键盘高度/pressIn 间隔）+ 胶囊中心测量原值——真机
-              logcat 的 [perm216] 行同款数据，面板上兜底肉眼可读，长按可复制 */}
-          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · ctr ${permProbe.ctr} · kb${permProbe.kb} · dt${permProbe.dt} · r1s${permProbe.r1s} · ${permProbe.pin}`}</Text>
           {PERM_CYCLE.map((m) => {
             const danger = m === "bypassPermissions";
             return (
@@ -1114,6 +1348,46 @@ function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; s
   );
 }
 
+// E3a 状态/收口条（类 CLI，固定工具区内）：ERROR ⚠ 常驻 / DONE ✓ 尾窗收口（本轮
+// 刚结束 8s 内，「本轮已完成」）/ WAITING 等待行（横幅不可见时的兜底行，原状态条
+// 语义原样收编）。显隐与文案全部走 closingBarOf 纯投影；仅 DONE 尾窗激活期起 1s
+// 低频步进自隐（#148 铁律不用 Animated/高频帧），其余态零计时器零多余渲染
+function StatusStrip({ s, wr, bannerVisible }: { s: SessionState; wr: WaitingPayload | null; bannerVisible: boolean }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [, tick] = useState(0);
+  const bar = closingBarOf(s, Date.now());
+  const tailLive = bar?.kind === "done";
+  useEffect(() => {
+    if (!tailLive) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [tailLive]);
+  if (s.status === "ERROR" || bar) {
+    return (
+      <View style={d.strip}>
+        {s.status === "ERROR" ? (
+          <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
+        ) : (
+          <Text style={d.stripDone} numberOfLines={1}>✓ {bar!.text}</Text>
+        )}
+      </View>
+    );
+  }
+  if (s.status === "WAITING" && !bannerVisible) {
+    return (
+      <View style={d.strip}>
+        <LiveStatusLine
+          summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name || (wr.input_summary ?? "").slice(0, 48)}`) : "等待 CLI 输入"}
+          startedAt={wr?.received_at}
+          color={c.waiting}
+        />
+      </View>
+    );
+  }
+  return null;
+}
+
 // 排队注入消息：脉冲呼吸（类 CLI queued），CLI 处理/回合结束时上浮为正式消息。
 // #148 同源降级：原 Animated 逐帧呼吸（native 驱动 900ms 往返）与列表呼吸灯同一
 // 渲染风暴——改低频步进：六级三角波 600ms/步（3.6s 一拍），每秒 ~1.7 次提交
@@ -1280,22 +1554,10 @@ export interface DetailBackHandle {
 export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
-  // #216 探针：渲染风暴打点（体级执行，无条件——每次渲染都计，见模块级注释）
-  permProbeRenderTick();
-  // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
-  // #216 六段修（test.9，用户定调「堵不如疏」）：一~五段修的四道围挡全部拆除
-  // （时间窗/坐标吞/复弹冷却/键盘期禁点——真机实测反把真点吞了：键盘收起后
-  // 胶囊也不响应）。本版 setPermPanel 恢复纯透传，只在打开时打 logcat 取证
-  // 日志（[perm216] 行，配合胶囊 onPress 处的全指纹记录），真机复现「错弹/
-  // 点不动」时数据直接定案根源，再做一次性根治
-  const [permPanel, setPermPanelRaw] = useState(false);
-  const setPermPanel = (v: boolean) => {
-    if (v) {
-      permProbe.r1s = permRenders.length;
-      console.log("[perm216] OPEN", permProbe.txt, "| ctr", permProbe.ctr, "| kb", permProbe.kb, "| dt", permProbe.dt, "| pin", permProbe.pin, "| r1s", permProbe.r1s);
-    }
-    setPermPanelRaw(v);
-  };
+  // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换。
+  // #216 终态（dev 0.6.1/0.6.2 定稿）：三~五段修的守卫链全数拆除，胶囊
+  // onPress 直连 setPermPanel——守卫在真机上误伤正常点击（六段修定案）
+  const [permPanel, setPermPanel] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
@@ -1310,11 +1572,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // #129 回车键行为：开 = 回车发送（恢复 #68 多行化之前的旧习惯）；关 = 回车换行
   const enterSend = useEnterSend();
   const inputRef = useRef<TextInput>(null);
-  // #216 四段修·坐标守卫：权限胶囊中心窗口坐标（onLayout 时 measureInWindow
-  // 测一次；胶囊随 head 固定在顶部不滚动，一次测量终身有效）——胶囊 onPress
-  // 用触点与中心的距离判错派（机制见 onPress 处注释）
-  const permPillRef = useRef<View>(null);
-  const permPillCtr = useRef<{ x: number; y: number } | null>(null);
+  // #216 四段修的坐标守卫 ref（permPillRef/permPillCtr）随终态拆除（见上）
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -1368,6 +1626,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const scrollRef = useRef<ScrollView>(null);
   const allScrollRef = useRef<ScrollView>(null);
   const pagerRef = useRef<ScrollView>(null);
+  // E3b 决议定向守卫：晚到 ACK 失败只在同一请求仍挂起时提示（wr 每渲染同步进 ref，
+  // 回调闭包读到的不是过期渲染帧）
+  const wrRef = useRef<WaitingPayload | null>(null);
   // 六视图滑动指示条：由翻页滚动位置原生驱动（useNativeDriver 跟手，不走 JS 线程不掉帧）
   const scrollX = useRef(new Animated.Value(0)).current;
   const [tabRowW, setTabRowW] = useState(0);
@@ -1635,6 +1896,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [taskHold, setTaskHold] = useState(false);
   // #35 输出物详情 sheet：点行打开（artPop 为该条快照，rel 由挂载点按会话 cwd 现算）
   const [artPop, setArtPop] = useState<ArtifactItem | null>(null);
+  // #222 文件夹 ⋯ sheet（2026-10-02 用户拍板「手机端也要一样处理」：行尾统一 ⋯，
+  // 菜单内容按文件夹语义定制）：快照 = 分组摘要 + 开合态。folOpen 是输出物视图
+  // IIFE 局部函数，组件根级挂载点不可达——开合态在行尾 Pressable 处（作用域内）
+  // 随快照带出；onToggle 写显式 artFold 记录 + 同步翻转快照（sheet 是 Modal 单发
+  // 交互，主 CTA 按下即关，快照无陈旧窗口）
+  const [folPop, setFolPop] = useState<{ key: string; dir: string; leaf: string; count: number; size: number; at: number; open: boolean } | null>(null);
   const [taskAnchor, setTaskAnchor] = useState<{ x: number; y: number } | undefined>(undefined);
   const openTaskRef = (n: number, hold = false, anchor?: { x: number; y: number }) => {
     setTaskPop(n);
@@ -1822,7 +2089,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ? snap.sources.find((x) => x.id === s.src)?.name
       : undefined;
   // 元信息次行左段（源标注·无则计时顶格，不空占位）
-  const srcMeta = [external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ");
+  const srcMeta = [external ? "" : s.engine === "codex" ? "Codex" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ");
   // 上下文水位：relay 下发的当回合占用 + 按模型上限（与列表卡 mini 条、网页端同口径）
   const ctxUsed = s.context_usage ?? 0;
   const ctxLimit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
@@ -1836,13 +2103,18 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const canCmd = snap.connected && (!s.historical || external || resumable);
   // #36 权限模式：胶囊四态（幽灵/点亮/警示）+ 面板直选，替代 subFilterRow 循环 chip
   const perm = (s.permission_mode ?? "default") as PermMode;
-  const wr = s.waiting_request;
+  // E3a 等待条去重：渲染层只认 dedupeWaitingBars 产出（同 request 只一条，键=
+  // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
+  // 列表零改渲染层
+  const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
+  wrRef.current = wr; // E3b 决议定向守卫同步（见 wrRef 声明处）
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
   const bannerVisible = !!wr && s.status === "WAITING" && wr.decidable !== false;
-  // 状态条只保留"需要注意"的状态：出错/等待确认（横幅未兜底时）。
-  // WORKING 状态行移入对话流（类 CLI），不再占顶栏
-  const showStrip = s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible);
+  // E3a 头部活动舱投影：activity 缺失 / native_status 能力关 → null 整舱不渲染
+  const dock = dockModelOf(s);
+  // 舱态配色：四态各占主题色（图标+文字同色双通道）；其余态投影已滤不为 null
+  const dockColor = !dock ? "" : dock.state === "WORKING" ? c.working : dock.state === "WAITING" ? c.waiting : dock.state === "DONE" ? c.done : c.error;
 
   const send = (override?: string) => {
     const text = (override ?? input).trim();
@@ -1996,10 +2268,30 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       setPicking(false);
     }
   };
-  const decide = (allow: boolean) => {
+  const decide = (allow: boolean, rememberScope?: "session" | "global") => {
     if (!wr) return;
-    store.send(allow ? "COMMAND_CONTINUE" : "COMMAND_REJECT", { session_id: sid, request_id: wr.request_id });
+    const rid = wr.request_id;
+    // E3b 审批真链路：ACK ok 才翻本地态——本地零预清（等待条由 SESSION_UPDATED/
+    // SESSION_WAITING 权威帧收敛，relay 执行后同步推帧）；失败回退=等待条保留 +
+    // 全局错误 toast（notifyCmdError 走 App toast 通道）。request_id 定向：晚到失败
+    // 只在同一请求仍挂起时提示（decisionStillPending 守卫）。不重试风暴：沿用全局
+    // ACK 纪律（4s 重发一次、6s 收摊回调），重试=用户重点按钮；send false 路径
+    //（未连接/会话不存在）已有全局 toast，不叠报
+    // #212 remember_scope：allow 的同时落「允许并记住」规则（relay 侧判定危险形态不落）
+    store.send(allow ? "COMMAND_CONTINUE" : "COMMAND_REJECT", {
+      session_id: sid, request_id: rid,
+      ...(allow && rememberScope ? { remember_scope: rememberScope } : {}),
+    }, undefined, (r) => {
+      if (r.ok) return;
+      if (!decisionStillPending(wrRef.current, rid)) return;
+      store.notifyCmdError(`决议未生效（${r.err || "命令未确认"}），等待条保留，可重点按钮重试`);
+    });
+    setRmOpen(false);
   };
+  // #212 允许并记住：范围确认条展开态。按 request_id 复位——换请求/审批收口
+  //（waiting_request 清空）自动回主按钮组，不残留上一次的展开
+  const [rmOpen, setRmOpen] = useState(false);
+  useEffect(() => { setRmOpen(false); }, [wr?.request_id]);
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
@@ -2042,47 +2334,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <View style={d.permCluster}>
               {!external && canCmd && !s.historical ? (
                 <Pressable
-                  ref={permPillRef}
                   style={[
                     d.permPill,
                     perm === "default"
                       ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
                       : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
                   ]}
-                  onLayout={() => {
-                    permPillRef.current?.measureInWindow((x, y, w, h) => {
-                      permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
-                      // #216 探针：中心测量原值（dp 口径应为 ~胶囊中心；若真机
-                      // 回 px 会被 scale 放大 3.5 倍——单位错位当场暴露）
-                      permProbe.ctr = `${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)}`;
-                    });
-                  }}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  // #216 探针·pressIn 预记录：真实手指按下必先于 onPress 走这里，
-                  // 坐标即手指真实触点。onPress 触发而 pin 缺失/坐标对不上 =
-                  // 合成点击（performClick 类错派）铁证，logcat 侧 [perm216] 行回读
-                  onPressIn={(e) => {
-                    const t = e.nativeEvent.changedTouches?.[0];
-                    permProbe.pin = `in@${t ? `${Math.round(t.pageX)},${Math.round(t.pageY)}` : "?"}`;
-                    permProbe.pinAt = Date.now();
-                  }}
-                  onPress={(e) => {
-                    // #216 六段修：只记录不拦截（四道围挡已拆，见 setPermPanel 处
-                    // 注释）。全指纹：触点坐标 x/y、距胶囊中心 d（-1=坐标或中心
-                    // 取不到）、kb=当时键盘高度（判 kbInsets 假死）、dt=pressIn→
-                    // press 间隔（-1=无 pressIn）、fΔ=距上次输入框聚焦毫秒
-                    const t = e.nativeEvent.changedTouches?.[0];
-                    const px = t?.pageX ?? e.nativeEvent.pageX;
-                    const py = t?.pageY ?? e.nativeEvent.pageY;
-                    const ctr = permPillCtr.current;
-                    const dist = ctr && typeof px === "number" && typeof py === "number"
-                      ? Math.round(Math.hypot(px - ctr.x, py - ctr.y)) : -1;
-                    permProbe.kb = kb;
-                    permProbe.dt = permProbe.pinAt > 0 ? Date.now() - permProbe.pinAt : -1;
-                    permProbe.txt = `x=${typeof px === "number" ? Math.round(px) : "?"} y=${typeof py === "number" ? Math.round(py) : "?"} d=${dist}${ctr ? "" : "/noctr"}`;
-                    console.log("[perm216] press", permProbe.txt, "| ctr", permProbe.ctr, "| kb", kb, "| dt", permProbe.dt, "|", permProbe.pin, "| fΔ", Date.now() - lastFocusAt);
-                    setPermPanel(true);
-                  }}
+                  onPress={() => setPermPanel(true)}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
                 >
@@ -2199,6 +2458,25 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               </Pressable>
             </View>
           </View>
+          {/* E3a 头部活动舱（B0 StatusDockState 只读投影）：状态行 + 任务摘要 + 当前活动。
+              四态图标/色双通道区分（✶◉✓⚠ + 四主题色），不引新依赖；行高恒定 lineHeight +
+              numberOfLines=1（390 宽不抖）；耗时按 native_elapsed、摘要/活动按
+              operation_summary 各自门控；approval 不入舱（横幅承载） */}
+          {dock ? (
+            <View style={d.dock}>
+              <View style={d.dockRow}>
+                <Text style={[d.dockIcon, { color: dockColor }]}>{dock.icon}</Text>
+                <Text style={[d.dockStateT, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
+                {dock.elapsedMs !== undefined ? <Text style={d.dockElapsed}>· {fmtElapsed(dock.elapsedMs)}</Text> : null}
+              </View>
+              {dock.summary ? <Text style={d.dockSummary} numberOfLines={1}>{dock.summary}</Text> : null}
+              {dock.actText ? (
+                <Text style={d.dockAct} numberOfLines={1}>
+                  {dock.actKind === "tool_use" ? "⚙ " : ""}{dock.actTool ? `${dock.actTool} · ` : ""}{dock.actText}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -2206,19 +2484,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。头部 ▴/▾ 可整体折叠 */}
       {!collapsed ? (
       <View style={d.fixedBar}>
-        {showStrip ? (
-            <View style={d.strip}>
-              {s.status === "ERROR" ? (
-                <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
-              ) : (
-                <LiveStatusLine
-                  summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name || (wr.input_summary ?? "").slice(0, 48)}`) : "等待 CLI 输入"}
-                  startedAt={wr?.received_at}
-                  color={c.waiting}
-                />
-              )}
-            </View>
-          ) : null}
+        {/* E3a：状态/收口条收编 StatusStrip——ERROR ⚠ 常驻 / DONE ✓ 尾窗收口 / WAITING
+            兜底行；投影与显隐判定内聚组件内（含尾窗自隐计时），WORKING 状态行仍居
+            对话流（类 CLI），顶栏只留「需要注意」的态 */}
+        <StatusStrip s={s} wr={wr} bannerVisible={bannerVisible} />
           {/* tab 行：模型 chip 已挪头部副信息行（#391 返工）；tabWrap 自测宽供指示条几何 */}
           <View style={d.filterRow}>
             <View style={d.tabWrap} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
@@ -2440,47 +2709,29 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             const created = arts.filter((t) => t.op === "create").sort(byRec);
             const edited = arts.filter((t) => t.op !== "create").sort(byRec);
             const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
-            // #222 分组口径（与 web-console artifactsTabHtml 一致）：分组键 = 父目录
-            // toLowerCase 归一（Windows 源大小写不敏感）；同键 ≥2 文件才聚合，单文件
-            // 目录与根目录文件保持散文件；只按直接父目录一层，不递归
-            const dirN = new Map<string, number>();
-            for (const t of arts) {
-              const dir = artDirOf(s, t).toLowerCase();
-              if (dir) dirN.set(dir, (dirN.get(dir) ?? 0) + 1);
-            }
+            // E3a 分组投影统一走 artifactRowsOf：B4a group_key/directory_label 优先
+            //（不透明 id 分桶、relay 展示名、单文件组照组渲染），旧 relay 无 B4a 字段
+            // 回退 #222 父目录口径（同键 ≥2 才聚合、单文件目录与根散件保持散行）；
+            // existence 三态在此归一，行渲染按 openable 收打开按钮
+            const rows = artifactRowsOf(arts, (t) => artDirOf(s, t));
             const folders = new Map<string, { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }>();
-            const loose: ArtifactItem[] = [];
-            for (const t of arts) {
-              const dir = artDirOf(s, t);
-              const key = dir.toLowerCase();
-              if (dir && (dirN.get(key) ?? 0) >= 2) {
-                let g = folders.get(key);
-                if (!g) {
-                  g = { key, dir, leaf: dir.split(/[\\/]/).pop() || dir, files: [], at: 0, size: 0 };
-                  folders.set(key, g);
-                }
-                g.files.push(t);
-                const at = t.last_at || t.first_at || 0;
-                if (at > g.at) g.at = at;
-                if (typeof t.size === "number") g.size += t.size;
-              } else {
-                loose.push(t);
+            for (const r of rows) {
+              if (r.kind === "group") {
+                folders.set(r.group.key, { key: r.group.key, dir: r.group.label, leaf: r.group.leaf, files: r.group.files.map((f) => f.item), at: r.at, size: r.group.size });
               }
             }
-            for (const g of folders.values()) g.files.sort(byRec);
             // 默认开合：最近活跃（组内最新时间最大）的文件夹展开、其余折叠；
             // 用户点过的以 artFold 显式记录优先
             let newestKey = "";
             let newestAt = -1;
             for (const g of folders.values()) if (g.at > newestAt) { newestAt = g.at; newestKey = g.key; }
             const folOpen = (k: string) => artFold[sid + "|" + k] ?? k === newestKey;
-            // 混排：文件夹（按组内最新时间）与散文件（按各自时间）降序同列竞争
-            const items = [
-              ...[...folders.values()].map((g) => ({ kind: "folder" as const, g })),
-              ...loose.map((t) => ({ kind: "file" as const, t })),
-            ].sort((a, b) =>
-              (b.kind === "folder" ? b.g.at : b.t.last_at || b.t.first_at || 0) -
-              (a.kind === "folder" ? a.g.at : a.t.last_at || a.t.first_at || 0),
+            // 混排：artifactRowsOf 已按 at 降序（组 at=组内最新、散件按各自时间），
+            // 此处只换渲染形（文件夹行 / 散文件行同列竞争）
+            const items = rows.map((r) =>
+              r.kind === "group"
+                ? { kind: "folder" as const, g: folders.get(r.group.key)! }
+                : { kind: "file" as const, t: r.art.item },
             );
             const artRow = (t: ArtifactItem, i: number, opts?: { sub?: boolean; badge?: boolean }) => {
               const rel = artRelOf(s, t);
@@ -2491,7 +2742,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 : rel
                   ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
                   : t.path.slice(0, t.path.length - name.length);
-              const dead = t.exists === false;
+              // E3a existence 三态：missing 沿用「已删除」红标（sheet 内定格 CTA 仍可开）；
+              // unknown=B4a 显式「状态未知」中性标且不给打开按钮（Pressable disabled +
+              // 无 onPress，旧 relay 数据不猜 unknown 零回归）
+              const existence = artExistenceOf(t);
+              const dead = existence === "missing";
+              const unknown = existence === "unknown";
               const outside = !rel && t.origin !== "cwd";
               const kc = KC[artKindOf(name)];
               return (
@@ -2499,19 +2755,21 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   key={t.path + "|" + i}
                   style={[d.cronRow, opts?.sub ? { borderTopWidth: 0, marginTop: 0, paddingVertical: 4 } : i === 0 ? { borderTopWidth: 0, marginTop: 0 } : null]}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => setArtPop(t)}
-                  accessibilityLabel={`输出物 ${name}，点按查看路径详情`}
+                  disabled={unknown}
+                  onPress={unknown ? undefined : () => setArtPop(t)}
+                  accessibilityLabel={unknown ? `输出物 ${name}，状态未知，不可打开` : `输出物 ${name}，点按查看路径详情`}
                 >
                   <View style={[d.artChip, { borderColor: withA(kc, 0.45) }]}>
                     <Text style={[d.artChipT, { color: kc }]}>{artExtOf(name)}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={d.artNameRow}>
-                      <Text style={[d.cronName, dead && { color: c.dim }]} numberOfLines={1}>{name}</Text>
+                      <Text style={[d.cronName, (dead || unknown) && { color: c.dim }]} numberOfLines={1}>{name}</Text>
                       {opts?.badge ? (
                         <Text style={[d.artTag, t.op === "create" ? { color: c.done } : { color: c.dim }]}>{t.op === "create" ? "新建" : "修改"}</Text>
                       ) : null}
                       {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
+                      {unknown ? <Text style={[d.artTag, { color: c.faint }]}>状态未知</Text> : null}
                       {outside ? <Text style={[d.artTag, { color: c.working }]}>cwd 外</Text> : null}
                     </View>
                     <Text style={d.cronMeta} numberOfLines={1}>
@@ -2548,7 +2806,16 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                         {[g.dir, g.size > 0 ? fmtArtSize(g.size) : "", fmtArtTime(g.at)].filter(Boolean).join(" · ")}
                       </Text>
                     </View>
-                    <Text style={[d.artChev, open && d.artChevOn]}>›</Text>
+                    {/* #222 行尾统一 ⋯（2026-10-02 用户拍板，两端同口径）：chevron 换
+                        三点菜单钮弹文件夹 sheet（展开/收起 + 复制目录路径）；内层
+                        Pressable 优先接管触点，点它不会触发行级折叠切换 */}
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => setFolPop({ key: g.key, dir: g.dir, leaf: g.leaf, count: g.files.length, size: g.size, at: g.at, open })}
+                      accessibilityLabel={`文件夹 ${g.leaf} 操作`}
+                    >
+                      <Text style={d.artDots}>⋯</Text>
+                    </Pressable>
                   </Pressable>
                   {open ? (
                     <View style={d.artKids}>
@@ -2620,7 +2887,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         // 空态垂直居中（同定时视图手法）：仅 list 为空时容器撑满可视面板并居中提示组，
         // 底部大 padding（横幅/命令条的滚动余量）在空态收对称，否则中心会偏上一两百 px；
         // 非空分支样式零变化
-        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom, ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
+        // G5（冲刺审查）：任务完成汇报悬浮钮（App.tsx TaskDoneFloat，详情页贴命令栏
+        // 上方 right:12）非空时末条正文右下角被遮——滚动内容条件让位 +52（浮钮形态
+        // 用户已拍板 #17 勿改，只让内容让路；空态居中提示不受浮钮影响不补）
+        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom + (snap.taskDoneQueue.length > 0 ? 52 : 0), ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
         onTouchStart={() => { touching.current = true; }}
         onTouchEnd={() => { touching.current = false; }}
         onTouchCancel={() => { touching.current = false; }}
@@ -2810,14 +3080,42 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               <Text style={d.waitPs}>$ </Text>
               {wr!.input_summary}
             </Text>
-            <View style={d.wbtns}>
-              <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
-                <Text style={d.btnAllowT}>✓ 允许</Text>
-              </PressScale>
-              <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
-                <Text style={d.btnRejectT}>✕ 拒绝</Text>
-              </PressScale>
-            </View>
+            {rmOpen && wr!.remember ? (
+              /* #212 范围确认条：主按钮组原地换成两选（对齐 web 端交互） */
+              <View>
+                <Text style={d.rmLabel} numberOfLines={2}>
+                  将记住 <Text style={d.rmLabelB}>{wr!.remember.label}</Text>，之后同类请求不再逐条弹窗（危险命令除外）
+                </Text>
+                <View style={d.wbtns}>
+                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "session")}>
+                    <Text style={d.btnAllowT}>仅本会话</Text>
+                  </PressScale>
+                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "global")}>
+                    <Text style={d.btnAllowT}>所有会话</Text>
+                  </PressScale>
+                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => setRmOpen(false)}>
+                    <Text style={d.btnRejectT}>✕ 返回</Text>
+                  </PressScale>
+                </View>
+              </View>
+            ) : (
+              <View>
+                <View style={d.wbtns}>
+                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
+                    <Text style={d.btnAllowT}>✓ 允许</Text>
+                  </PressScale>
+                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
+                    <Text style={d.btnRejectT}>✕ 拒绝</Text>
+                  </PressScale>
+                </View>
+                {/* #212 remember 由 relay 判定可记忆才下发（危险形态无此字段 = 不出现） */}
+                {wr!.remember ? (
+                  <Pressable style={d.rmEntry} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={() => setRmOpen(true)}>
+                    <Text style={d.rmEntryT}>✓ 允许并记住…</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
           </View>
           </FadeIn>
           )
@@ -2930,7 +3228,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
               // 用户能自诊断「是断连不是键盘坏了」
               ref={inputRef}
-              onFocus={() => { lastFocusAt = Date.now(); }}
               style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
@@ -3017,6 +3314,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       {/* #216 同构修：弹层改常驻受控（勿改回条件挂卸，见各组件头注释） */}
       <ContentMenu text={menuText} onClose={() => setMenuText(null)} />
       <ArtSheet art={artPop} rel={artPop ? artRelOf(s, artPop) : ""} sid={sid} onClose={() => setArtPop(null)} />
+      {/* #222 文件夹 ⋯ sheet：开合态随 folPop 快照（folOpen 是输出物视图闭包局部，
+          根级不可达）；onToggle 写显式 artFold 记录 + 同步翻转快照，主 CTA 单发即关 */}
+      <ArtFolSheet
+        fol={folPop}
+        onToggle={() => {
+          if (!folPop) return;
+          setArtFold((m) => ({ ...m, [sid + "|" + folPop.key]: !folPop.open }));
+          setFolPop((p) => (p ? { ...p, open: !p.open } : p));
+        }}
+        onClose={() => setFolPop(null)}
+      />
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -3132,6 +3440,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
   },
   stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
+  // E3a done 收口条（与 stripErr 同形同号级，色走 done）
+  stripDone: { flex: 1, color: c.done, fontSize: 12.5, fontWeight: "600" },
+  // E3a 头部活动舱：行高恒定（lineHeight 锁定）+ 单行截断，390 宽不抖；紧凑三行
+  //（状态/摘要/活动）随内容 0~3 行，能力门控缺行不占位
+  dock: { marginTop: 5 },
+  dockRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  dockIcon: { fontSize: 11, width: 13, textAlign: "center", lineHeight: 15 },
+  dockStateT: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
+  dockElapsed: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
+  dockSummary: { fontSize: 11, color: c.dim, lineHeight: 15, marginTop: 1 },
+  dockAct: { fontSize: 10.5, color: c.faint, lineHeight: 14, marginTop: 1 },
   stripBtnWarn: {
     height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
     borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center",
@@ -3190,8 +3509,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   permTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
   permX: { color: c.faint, fontSize: 14, lineHeight: 18 },
-  // #216 排查探针（test.8 临时）：9px mono 小字，只求真机截图回读可辨
-  permProbeT: { color: c.faint, fontSize: 9, fontFamily: "monospace", marginBottom: 4, lineHeight: 12 },
   permRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10, overflow: "hidden",
@@ -3259,12 +3576,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   artTag: { fontSize: 10, lineHeight: 13, borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
   artFoot: { color: c.faint, fontSize: 10.5, textAlign: "center", paddingVertical: 16 },
-  // #222 文件夹分组：文件夹头行（垂直居中 + 叶子名加粗）/ 折叠箭头（› 旋 90° 指下）/
-  // 展开子列（左缘引导线 + 缩进，子行紧凑无分隔线）
+  // #222 文件夹分组：文件夹头行（垂直居中 + 叶子名加粗）/ 行尾 ⋯ 菜单钮（与文件行
+  // 同款，点按弹文件夹 sheet，2026-10-02 用户拍板统一）/ 展开子列（左缘引导线 +
+  // 缩进，子行紧凑无分隔线）
   artFolRow: { alignItems: "center" },
   artFolName: { color: c.text, fontSize: 12.5, fontWeight: "700", lineHeight: 17 },
-  artChev: { color: c.faint, fontSize: 13, lineHeight: 16 },
-  artChevOn: { transform: [{ rotate: "90deg" }] },
+  artDots: { color: c.faint, fontSize: 15, lineHeight: 18, paddingHorizontal: 2 },
   artKids: { marginLeft: 13, borderLeftWidth: 1, borderLeftColor: c.line, paddingLeft: 8, marginVertical: 2 },
   // #83 sheet 重设计样式（仅 ArtSheet 使用，零共享）：字号阶梯 14 标题 > 13 CTA >
   // 12 次级按钮 > 11 元信息/路径 mono > 10 caption/相对路径 > 9 chip
@@ -3410,6 +3727,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: "transparent", borderWidth: 1, borderColor: withA(c.waiting, 0.45),
   },
   btnRejectT: { color: c.dangerFg, fontWeight: "600", fontSize: 14 },
+  /* #212 允许并记住：次级入口（视觉弱于「允许」）+ 范围确认条说明行 */
+  rmEntry: {
+    marginTop: 8, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
+    backgroundColor: "transparent", borderWidth: 1, borderColor: c.line,
+  },
+  rmEntryT: { color: c.dim, fontWeight: "600", fontSize: 12.5 },
+  rmLabel: { color: c.faint, fontSize: 11.5, lineHeight: 16, marginBottom: 9 },
+  rmLabelB: { color: c.dim, fontWeight: "600" },
   // AskUserQuestion 作答横幅（#190 stepper 指示器行）
   askSteps: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 10 },
   askCount: { color: c.dim, fontSize: 11, marginRight: 2 },

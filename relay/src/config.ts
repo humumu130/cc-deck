@@ -1,7 +1,27 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
+// 循环 import 安全：settings.ts ← config.ts 只在函数体内互调（parseEmployeeConfigDir
+// / isFreshInstall 均运行期取 live binding），无模块初始化期交叉
+import { isFreshInstall } from "./settings.js";
+
+// #17 三态解析（纯函数，无副作用——告警由调用方负责）：
+// "" / null → null（关闭）；"auto" → dataDir 下 claude-home（resolve 绝对化）；
+// 绝对路径 → 原样；相对路径 → null（拒绝，防 cwd 漂移）。
+// auto 无需 mkdir：CLI 对不存在的 CLAUDE_CONFIG_DIR（含嵌套缺失父目录）自建并
+// 正常运行（边界审查实测 2.1.269）；relay 读取路径对缺失目录 catch/null 失败
+// 安全——后人勿「补 mkdir」。
+export function parseEmployeeConfigDir(v: string | null | undefined, dataDir: string): string | null {
+  const t = (v ?? "").trim();
+  if (t === "auto") {
+    // resolve 绝对化：CCR_DATA_DIR 允许相对，join 产物若仍是相对串会把「家按
+    // cwd 漂移」从显式相对分支重新放进来（审查 P2-1——CLI 子进程 cwd 与
+    // relay 读取路径 cwd 不同，读写两头错位）
+    return resolve(join(dataDir, "claude-home"));
+  }
+  return t && isAbsolute(t) ? t : null;
+}
 
 export interface RelayConfig {
   port: number;
@@ -14,18 +34,39 @@ export interface RelayConfig {
   cloudUrls: string[];       // 云桥地址列表（CCR_CLOUD_URL 逗号分隔），空 = 云桥禁用
   cloudUrl: string;          // 主桥（首地址）：PAIR_ACK 下发给新配对设备
   cloudToken: string;        // 云桥层连接 token（CCR_CLOUD_TOKEN，所有桥共用）
+  // 雇员独立家目录（#17）：null = 关闭（行为与从前一致）；路径 = 启用，relay
+  // spawn 的雇员会话（Leader/worker/随手办）CLI 子进程 CLAUDE_CONFIG_DIR 指到
+  // 该目录，transcript/任务清单与用户默认家（~/.claude）物理隔离。
+  // CCR_EMPLOYEE_CONFIG_DIR 三态：未设置 = 关闭；"auto" = <dataDir>/claude-home；
+  // 绝对路径 = 自定义位置。相对路径视为配置错误按关闭处理并告警（防 cwd 漂移
+  // 让家跟着启动目录走）
+  employeeConfigDir: string | null;
+  // #17 第二批审查修正 P1：新装判定预算值——loadConfig 在写 token/bridge-token
+  // 之前捕获（首启那两个文件落盘后再判恒为「存量」，「新装默认开」成死码）。
+  // index.ts 启动序把它传给 resolveEmployeeHome；可选=测试字面量不必填
+  freshInstall?: boolean;
+}
+
+// dataDir 纯解析（无 mkdir/写 token 副作用）：模块级 store（acceptance 等）需要与
+// loadConfig 同源判定但不该触发目录创建。插件 bundle（CC_DECK_PLUGIN 由 esbuild
+// define 注入）数据固定 ~/.cc-deck/data，与插件升级/卸载解耦；开发模式默认 relay/data
+export function resolveDataDir(): string {
+  return (
+    process.env.CCR_DATA_DIR ??
+    ((process.env.CC_DECK_PLUGIN as string | undefined)
+      ? join(homedir(), ".cc-deck", "data")
+      : join(process.cwd(), "data"))
+  );
 }
 
 export function loadConfig(): RelayConfig {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  // 插件 bundle（CC_DECK_PLUGIN 由 esbuild define 注入）数据固定 ~/.cc-deck/data，
-  // 与插件升级/卸载解耦；开发模式默认 relay/data
-  const dataDir =
-    process.env.CCR_DATA_DIR ??
-    ((process.env.CC_DECK_PLUGIN as string | undefined)
-      ? join(homedir(), ".cc-deck", "data")
-      : join(process.cwd(), "data"));
+  const dataDir = resolveDataDir();
   mkdirSync(dataDir, { recursive: true });
+
+  // #17 第二批审查修正 P1：新装判定必须先于下方 token/bridge-token 首启落盘——
+  // isFreshInstall 把这两个文件当「至少跑过一次」的信号，晚于写盘判恒 false
+  const freshInstall = isFreshInstall(dataDir);
 
   const envToken = process.env.CCR_TOKEN;
   // 插件/daemon 形态没有外部传 token：data/token 持久化（首启生成，重启不变，手机不用重配）
@@ -77,8 +118,18 @@ export function loadConfig(): RelayConfig {
     .filter(Boolean);
   const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
 
+  // #17 雇员独立家三态解析（见 RelayConfig.employeeConfigDir 注释；纯函数抽至
+  // parseEmployeeConfigDir 供 settings.ts 产品层复用）
+  const envRaw = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
+  if (envRaw && !isAbsolute(envRaw) && envRaw !== "auto") {
+    // 相对路径不可预测（守护进程 cwd 漂移），拒绝启用而非猜一个位置；
+    // "~" 开头不会自动展开，提示用户用 $HOME 展开后的绝对路径
+    console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR 需绝对路径或 "auto"（~ 请展开为 $HOME/...），收到相对路径 "${envRaw}"，雇员独立家保持关闭`);
+  }
+  const employeeConfigDir = parseEmployeeConfigDir(envRaw, dataDir);
+
   return {
-    port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,
-    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken,
+    port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir, freshInstall,
+    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken, employeeConfigDir,
   };
 }

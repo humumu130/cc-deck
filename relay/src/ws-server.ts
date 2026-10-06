@@ -1,10 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, type Dirent } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
-import { listArtifacts, serveArtifact } from "./artifacts.js";
+import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
 import {
   serveAcceptancePage,
   loadAcceptance,
@@ -17,13 +17,15 @@ import {
   type CloudSubmit,
 } from "./acceptance.js";
 import { listModels } from "./models.js";
+// #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
+import { listGroups, listPendingConfirms } from "./projects.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import { Bridge, parseGateTools } from "./bridge.js";
-import type { BridgeEvent, Command, CommandAckPayload, Envelope } from "./types.js";
+import { SNAPSHOT_SCHEMA_VERSION, type BridgeEvent, type Command, type CommandAckPayload, type Envelope } from "./types.js";
 
 function localIps(): Set<string> {
   const out = new Set<string>();
@@ -105,7 +107,11 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
       if (s.done) continue;
       let submits: CloudSubmit[] | null = null;
       try {
+        // #28 results 读面收紧：提交数组含全部勾选+备注，不该让任何拿到 id 的互联网
+        // 读走——GET 携云桥 token（与 /cloud WS 同源密钥）。旧 Worker 忽略未知 header，
+        // 新 Worker 验它——**必须新版 relay 先发、新 Worker 后发**，反序回流 401 断流
         const r = await fetch(`${base}/view/acceptance-${s.id}.results.json`, {
+          headers: { authorization: `Bearer ${cfg.cloudToken}` },
           signal: AbortSignal.timeout(10_000),
         });
         if (r.ok) submits = (await r.json()) as CloudSubmit[];
@@ -115,6 +121,7 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
       if (added.length > 0) {
         const acc = loadAcceptance(s.id);
         if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr);
+        mgr.settleAcceptanceResult(s.id); // M12-7 收单归因回写（幂等，与 LAN 提交同口径）
       }
     }
     try {
@@ -129,7 +136,10 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
   setInterval(() => void tick(), 60_000).unref?.();
 }
 
-const COMMAND_TYPES = new Set([
+// LAN 入口命令白名单（不在表内拒发 "unsupported command"）。导出供测试与 cloud-client
+// 白名单做逐字一致断言（#117/#212 教训：加命令漏白名单=实机死路，mgr case 与单测全过、
+// 唯独入口层挡死）
+export const COMMAND_TYPES = new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
   "COMMAND_STOP",
@@ -157,6 +167,24 @@ const COMMAND_TYPES = new Set([
   "COMMAND_RESUME_SESSION",
   "COMMAND_IMPORT_PUSH",
   "COMMAND_ARTIFACT_FETCH",
+  // #212 允许并记住：设置页规则删除（漏加时 ws 入口白名单拒发 "invalid command
+  // shape"，手机端删除必失败——mgr 的 case 与单测都过，唯独 ws 层挡死，实机首验抓到）
+  "COMMAND_ALLOW_RULE_REMOVE",
+  // #26 M2 组织：确认单决议（用户端确认卡）+ 项目组详情拉取
+  "COMMAND_ORG_CONFIRM",
+  "COMMAND_PROJECT_DETAIL",
+  // #018-R1b：org 命令真链路（立项 create；与云通道同走 mgr.orgCommand 咽喉——
+  // 漏加时 ws 白名单在此拒发，mgr 的 case 与单测都过、唯独 LAN 实机死路，#212 同款坑）
+  "COMMAND_ORG_ACTION",
+  // #018-R1c：通知生命周期 ACK（handled/dismissed；与云通道同走 mgr）
+  "COMMAND_NOTIFICATION_ACK",
+  // #17 第二批：雇员独立家开关切换（三端设置项）
+  "COMMAND_SETTINGS_UPDATE",
+  // M12-1 四新命令（v2-m10-freeze §3.1）：经 orgCommand 咽喉→orgAction 单漏斗
+  "COMMAND_TASK_CREATE",
+  "COMMAND_TASK_UPDATE",
+  "COMMAND_DISPATCH",
+  "COMMAND_LESSON_APPEND",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -306,7 +334,11 @@ export function startServer(
       return true;
     }
     const file = mobileDir + rel;
-    if (!existsSync(file)) {
+    // #29（A-P3）：existsSync 对目录也真——rel 形如 "." 或命中子目录时 readFileSync
+    // 抛 EISDIR 炸 request 回调，必须 isFile 收口
+    let isFile = false;
+    try { isFile = statSync(file).isFile(); } catch {}
+    if (!isFile) {
       res.writeHead(404).end("not found");
       return true;
     }
@@ -315,10 +347,14 @@ export function startServer(
     return true;
   };
 
-  const wss = new WebSocketServer({ noServer: true });
+  // #29（A-P2）：ws 接收缓冲上限 1MB——此前无 maxPayload，恶意/失控客户端单帧可把
+  // relay 内存吃到上限（ws 默认 100MB/帧）。合法上行帧远小于此：命令帧 KB 级、
+  // 导入回发帧（ccdeck-import-resp 含连接条目列表）实测几十 KB
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
+    rules: mgr.allowRules, // #212 允许并记住：与 AgentSession 同一份规则存储
     // #316 审查修复：待配对手表连接未鉴权，不计入"手机在线"——否则配对连接会让
     // 提问/权限门控误判有手机在场，挂起等一个不存在的审批方
     hasClients: () =>
@@ -383,9 +419,18 @@ export function startServer(
       return;
     }
     if (url.pathname === "/api/lan-auth" && req.method === "POST") {
+      // #29（A-P2）：无鉴权端点（挑战密文落盘前）——body 8KB 帽防内存放大
+      //（合法挑战帧恒 <1KB：dev 路由键+box 密文几十字节），超限直接掐连接
+      if (rateLimited(`lan-auth:${req.socket.remoteAddress ?? "?"}`)) {
+        res.writeHead(429, { "content-type": "application/json" }).end('{"ok":false,"error":"太频繁"}');
+        return;
+      }
       let body = "";
       req.setEncoding("utf8");
-      req.on("data", (c) => { body += c; });
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 8192) req.destroy();
+      });
       req.on("end", () => {
         try {
           // #95 修正：nacl.box 需发送者公钥解密，dev 藏密文里则无从获取——dev 提为
@@ -441,10 +486,14 @@ export function startServer(
       // 带 Origin（跨源页面）：白名单回显放行；无 Origin：同源 fetch / 本机进程，认 Host。
       // Host 浏览器不可伪造；能伪造的非浏览器进程本来就能直接读 token 文件，非此端点威胁面。
       let allowOrigin = "";
-      // #43 回环豁免：请求落在本机（Host=loopback）时 Origin 一律放行——本机页面/
-      // webview（tauri/electron 的 Origin:null）领码 Failed to fetch 根修；本机到本机的跨源检查无安全意义
+      // #43 回环豁免（#29 收紧）：只认 Origin:"null"（tauri/electron webview 加载本地页
+      // 的真实形态）。原版「Host=loopback 即回显任意 Origin」等于对任意网站开门——远程
+      // 网页的 JS 发起的 loopback 请求 Host 就是 127.0.0.1，恶意页 fetch 本端点即可携
+      // 任意 Origin 读走 {token,…}=主 token 泄露（Safari/Firefox 无 PNA 拦截）。残留：
+      // 沙箱 iframe 也能造 Origin:null（ACAO:* 可读），第二刀=桌面端改走 tauri command
+      // 注入 token 后彻底关闭本豁免（备案）
       const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb) allowOrigin = origin === "null" ? "*" : origin;
+      if (origin && reqLb && origin === "null") allowOrigin = "*";
       else if (origin) {
         try {
           const u = new URL(origin);
@@ -499,9 +548,10 @@ export function startServer(
       const ips = localIps();
       const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let acao = "";
-      // #43 回环豁免（同 /local-info）：exe webview Origin:null 直通
+      // #43 回环豁免（同 /local-info，#29 同步收紧）：只认 Origin:"null"（exe webview）。
+      // 「Host=loopback 即回显任意 Origin」= 对任意网站开门（loopback 请求 Host 恒 127.0.0.1）
       const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb2) acao = origin === "null" ? "*" : origin;
+      if (origin && reqLb2 && origin === "null") acao = "*";
       else if (origin) {
         try {
           const u = new URL(origin);
@@ -522,7 +572,7 @@ export function startServer(
     // #393 手动通知（LAN token 鉴权）：body {session_id?, done: string[]} → 该会话（缺省
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
-      void handleNotify(req, res, mgr, cfg, bus);
+      void handleNotify(req, res, mgr, cfg);
       return;
     }
     // Artifacts 产物中心（2026-09-14）：CLI 把输出物写 ~/.cc-deck/artifacts/ 即对全部
@@ -541,14 +591,25 @@ export function startServer(
         res.writeHead(401).end("unauthorized");
         return;
       }
-      if (!serveArtifact(decodeURIComponent(url.pathname.slice("/artifacts/".length)), res)) {
+      // #29（A-P2）：%ZZ 畸形编码让 decodeURIComponent 抛 URIError——未捕获会炸掉整个
+      // http server request 回调（进程级风险），400 兜底
+      let artName: string;
+      try {
+        artName = decodeURIComponent(url.pathname.slice("/artifacts/".length));
+      } catch {
+        res.writeHead(400).end("bad encoding");
+        return;
+      }
+      if (!serveArtifact(artName, res)) {
         res.writeHead(404).end("not found");
       }
       return;
     }
     // 2026-09-19 输出物原地登记（意图声明制）：交付物写到它本该在的地方（项目
     // docs/ 等），agent 完成交付后 POST 登记原路径——文件不搬动，看板只记
-    // path/size/时间。归因：发起 cwd 前缀匹配最近活跃会话（见 deliverByCwd）
+    // path/size/时间。归因：#227 起 session_id 优先（deliver 脚本自动携带 Bash 环境的
+    // CLAUDE_CODE_SESSION_ID，hook 上下文经 CC_DECK_SESSION_ID 透传）——精确挂账；
+    // 无身份（手动终端调用）回落 cwd 前缀匹配最近活跃会话（见 deliverByCwd）
     if (req.method === "POST" && url.pathname === "/api/deliver") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");
@@ -561,13 +622,78 @@ export function startServer(
       });
       req.on("end", () => {
         try {
-          const { path: p, cwd } = JSON.parse(body) as { path?: unknown; cwd?: unknown };
+          const { path: p, cwd, session_id: sid } = JSON.parse(body) as {
+            path?: unknown; cwd?: unknown; session_id?: unknown;
+          };
           if (typeof p !== "string" || !p.trim()) {
             res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path 必填"}');
             return;
           }
-          const r = mgr.deliverByCwd(typeof cwd === "string" && cwd ? cwd : p, p);
-          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
+          const validated = validateDeliverablePath(p);
+          if (!validated.ok) {
+            res.writeHead(400, { "content-type": "application/json" })
+              .end(JSON.stringify({ ok: false, error: validated.error }));
+            return;
+          }
+          const c = typeof cwd === "string" && cwd ? cwd : p;
+          // #72A0FIX2：校验闸快照随签名穿透进登记侧——mgr 不再二次 stat（TOCTOU
+          // 剩余段收口），unverified 标记由登记侧落账（deliverables.json + 账面）
+          const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid)
+            ? mgr.deliverBySession(sid, c, validated.path, validated)
+            : mgr.deliverByCwd(c, validated.path, validated);
+          // #72A0（P1-1B）：校验闸已在 open+fstat 同一时刻采集 stat 快照并标记
+          // symlink 分量（unverified——原地交付合法不拒绝，目标元数据不当文件本体
+          // 口径）；标记随响应回传供调用方核对
+          const respBody = r.ok && validated.unverified ? { ...r, unverified: true } : r;
+          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(respBody));
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
+      return;
+    }
+    // #26 M2 分诊指令通道（Leader 会话有 Bash，分诊决策 = 执行 org CLI → 此处）：
+    // POST /api/org?token=...  body { action, ...payload }，action 全集见
+    // session-manager.orgAction（status/project-create/project-status/project-tier/
+    // suggest-hold/dispatch/board/project-detail；M3 追加 rate/tag——路由表评鉴，
+    // Leader 手动记 good/bad 与技能标签；#26 补章追加 member-retire/member-add——
+    // 编制面执行动作）。鉴权循 deliver 先例（主 token）。
+    // 用户端决议不经此（走 WS COMMAND_ORG_CONFIRM）——Leader 只提案不决议。
+    // M1/M2 审查轮：白名单强制上述口径——confirm-decide 属人类决议面，HTTP 放行
+    // 等于允许读过 token 的进程（含 Leader/被注入的 worker）自批确认卡，绕过
+    // 「用户是指挥/验收者」的确认门槛（此前只是注释声明，未强制）
+    if (req.method === "POST" && url.pathname === "/api/org") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      let body = "";
+      req.on("data", (c: Buffer) => {
+        body += c;
+        if (body.length > 65536) req.destroy(); // 派单 prompt 可长，64KB 上限
+      });
+      req.on("end", () => {
+        try {
+          const { action, ...payload } = JSON.parse(body) as { action?: unknown };
+          if (typeof action !== "string" || !action.trim()) {
+            res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"action 必填"}');
+            return;
+          }
+          // 决议类动作不开放 HTTP（Leader 提案面）；未来新增 orgAction 动作默认
+          // 也不放行，需显式加白名单（防决议面被新动作意外扩大）
+          const ORG_HTTP_ACTIONS = new Set([
+            "status", "project-create", "project-status", "project-tier", "suggest-hold",
+            "dispatch", "board", "project-detail", "rate", "tag",
+            "member-retire", "member-add", // #26 补章：编制面执行动作（可逆：复拉走 member-add），非决议类
+          ]);
+          if (!ORG_HTTP_ACTIONS.has(action.trim())) {
+            res.writeHead(403, { "content-type": "application/json" }).end(
+              JSON.stringify({ ok: false, error: `action「${action.trim()}」不开放 HTTP 通道（决议类只走用户端确认卡）` }),
+            );
+            return;
+          }
+          const r = mgr.orgAction(action.trim(), payload as Record<string, unknown>);
+          res.writeHead(r.ok ? 200 : 422, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");
         }
@@ -620,6 +746,7 @@ export function startServer(
           // #138 回填自动回流：按出单时盖进记录的 cwd 归因到会话推 system 行（详见
           // notifyAcceptanceRefill；与 #175 云回流共用同一条通知路径）
           notifyAcceptanceRefill(acc, rows, mgr);
+          mgr.settleAcceptanceResult(id); // M12-7 收单归因回写（幂等，与云回流同口径）
           // #184 状态即时广播：LAN 提交落盘即推（云回流走 poll tick 的签名对账）
           emitAcceptancesUpdated(bus);
         } catch {
@@ -794,6 +921,7 @@ export function startServer(
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
+          schema_version: SNAPSHOT_SCHEMA_VERSION,
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
@@ -803,6 +931,19 @@ export function startServer(
           deliverables: readPluginConfig().deliverables,
           // #137 三步方案②：验收单待填态汇总（云通道 cloud-client 同步携带）
           acceptances: listAcceptances(),
+          // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；
+          // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
+          allow_rules: mgr.allowRules.list(),
+          // #26 M2 组织：项目组索引 + 待决确认单（cloud-client 云通道快照同步携带，
+          // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
+          projects: listGroups(),
+          org_confirms: listPendingConfirms(),
+          // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
+          // 下发——端上以字段存在性判断能力）
+          notifications: mgr.notificationsList(),
+          // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
+          // #117 教训）
+          settings: mgr.employeeHomeState(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -829,11 +970,14 @@ export function startServer(
         return;
       }
       // #45 三码体系·客户端间转发：手机「从手机导入」的回发帧（t=ccdeck-import-resp）
-      // 不是命令——原样转发给同 relay 的其他已认证 ws 客户端（网页/exe 的导入监听器）
+      // 不是命令——原样转发给同 relay 的其他已认证 ws 客户端（网页/exe 的导入监听器）。
+      // #29（A-P1）：pairing 未鉴权连接必须跳过——该帧含 LAN 主 token/云桥凭据，
+      // 转给待配对手表连接等于把全部凭据喂给任意 LAN 设备（2 分钟配对窗常驻可收）
       if (cmd && (cmd as { t?: string }).t === "ccdeck-import-resp") {
         const raw = JSON.stringify(cmd);
         for (const c of wss.clients) {
-          if (c !== ws && c.readyState === WebSocket.OPEN) c.send(raw);
+          if (c === ws || (c as ClientWs).pairing) continue;
+          if (c.readyState === WebSocket.OPEN) c.send(raw);
         }
         ws.send('{"t":"ccdeck-import-resp-ack"}');
         return;
@@ -842,7 +986,6 @@ export function startServer(
         !cmd ||
         typeof cmd.command_id !== "string" ||
         typeof cmd.type !== "string" ||
-        !COMMAND_TYPES.has(cmd.type) ||
         typeof cmd.payload !== "object" ||
         cmd.payload === null
       ) {
@@ -854,6 +997,10 @@ export function startServer(
             error: "invalid command shape",
           }),
         );
+        return;
+      }
+      if (!COMMAND_TYPES.has(cmd.type)) {
+        ws.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" }));
         return;
       }
       // #316 手表配对授权：ws-server 层消化（持有待配对池），不进 mgr
@@ -926,9 +1073,9 @@ async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Pr
   const ips = localIps();
   const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
   let acao = "";
-  // #43 回环豁免（同 /local-info、/api/pair-code）：exe webview Origin:null 直通
+  // #43 回环豁免（同 /local-info、/api/pair-code，#29 同步收紧）：只认 Origin:"null"
   const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-  if (origin && reqLb) acao = origin === "null" ? "*" : origin;
+  if (origin && reqLb && origin === "null") acao = "*";
   else if (origin) {
     try {
       const u = new URL(origin);
@@ -999,7 +1146,6 @@ async function handleNotify(
   res: ServerResponse,
   mgr: SessionManager,
   cfg: RelayConfig,
-  bus: EventBus,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
   if ((url.searchParams.get("token") ?? "") !== cfg.token) {
@@ -1027,9 +1173,6 @@ async function handleNotify(
         sessions[0];
       if (!target) { res.writeHead(503).end('{"error":"无可投递会话"}'); return; }
       mgr.notifyConfirm(target.session_id, text);
-      // #52 全端化：确认提醒除落目标会话 todos 外，瞬态 USER_NOTE 直播全部在线端
-      //（web/exe 据此弹横幅/系统通知；PAIRED_DEVICE 同款 seq:0 语义，不补发防重复弹）
-      bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target.session_id }));
       return;
     }

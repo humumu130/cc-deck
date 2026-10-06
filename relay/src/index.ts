@@ -1,22 +1,26 @@
 import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
-import { networkInterfaces, homedir, hostname } from "node:os";
-import { join } from "node:path";
+import { networkInterfaces, homedir, hostname, tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
+import { resolveEmployeeHome, writeSettingsFile } from "./settings.js";
 import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
-import { compactEvents, loadEvents, reduceHistory, rewriteFile } from "./history.js";
+import { compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
 import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
+import { orgDir } from "./org.js";
+import { listConfirms } from "./projects.js";
+import { DecisionNotificationWatcher } from "./decision-notify.js";
 
 // 内嵌模式（桌面壳 CCR_PARENT_PID 标记）：日志加时间戳——embedded-relay.log 此前
 // 全是裸行，云桥翻动/断连这类时序问题无从对表排障（2026-09-18 电脑端排查之痛）
@@ -29,6 +33,18 @@ if (process.env.CCR_PARENT_PID) {
 }
 
 const cfg = loadConfig();
+
+// #29（A 路补刀）：进程级兜底——HTTP/WS 回调里漏网的 throw（畸形输入触发解析异常等，
+// 如 /artifacts 的 %ZZ URIError 旧例）默认行为是杀掉整个 relay，全部会话陪葬。
+// 已知 throw 点都在源头修（try/catch 400），这里只兜未枚举到的：记日志留痕继续跑。
+// 权衡：崩溃更糟（supervisor 重启也硬掐在途会话）；单进程本地 relay 的状态一致性
+// 风险由「异常点本就未触达持久层」的工程事实覆盖。
+process.on("uncaughtException", (err) => {
+  console.error(`[uncaught] ${err instanceof Error ? err.stack : String(err)}`);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
+});
 
 // #28（2026-09-10 用户机实测根因）：同数据目录双 relay 进程（CLI 插件 supervisor +
 // exe 内嵌共用 ~/.cc-deck/data，同身份连桥）被桥按 dev 顶号互踢——闪断循环、重启
@@ -218,6 +234,21 @@ if (cliArgs.has("--stop")) {
 }
 
 
+// #17 第二批：产品层设置合成覆盖——env 显式设置（部署面）> settings.json（用户面，
+// 三端设置项读写）> 默认值（新装开/存量关）。loadConfig 只解析 env，此处合成最终值。
+// 审查修正 P1：freshInstall 用 loadConfig 预算值（此刻 token/bridge-token 已落盘，
+// 现算恒存量）；default 层决定一次性物化进 settings.json——防「首靴判新装开、
+// 次靴判存量关」振荡。块放早期 exit（--pair/--qr/--daemon/--stop）之后：那些
+// 路径不该混入配置日志（审查修正 P3）
+{
+  const st = resolveEmployeeHome(cfg.dataDir, cfg.freshInstall);
+  cfg.employeeConfigDir = st.value;
+  if (st.source === "default") writeSettingsFile(cfg.dataDir, { employeeHome: st.enabled });
+  if (st.source !== "env" && st.enabled) {
+    console.log(`[config] 雇员独立家已开启（${st.source === "file" ? "设置项" : "新装默认"}）：${st.value}`);
+  }
+}
+
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");
 
@@ -240,6 +271,16 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 const prior = loadEvents(persistPath);
 const kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept); // 启动时压缩
+// #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
+// 月增 ~100MB（心跳+流式帧稳定供给）。每 6h 查大小，超阈值（CCR_EVENTS_COMPACT_MB
+// 缺省 64，下限 16 防误配 0）压一次——客户端重连走内存 replay 零感知，详见
+// history.ts compactEventsFile 注释
+const eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
+const compactEventsTick = (): void => {
+  const r = compactEventsFile(persistPath, eventsCompactBytes);
+  if (r) console.log(`[events] 运行期压缩：${(r.before / 1048576).toFixed(1)}MB → ${(r.after / 1048576).toFixed(1)}MB`);
+};
+setInterval(compactEventsTick, 6 * 3600_000).unref?.();
 const replayed = reduceHistory(kept);
 
 const bus = new EventBus({ preload: kept, persistPath });
@@ -264,6 +305,33 @@ for (const s of mgr.snapshot()) {
 // 清单内会话只标 saved（可见不可操作、卡片「已保存」），用户点卡发 COMMAND_RESUME_SESSION
 // 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
 const pinned = mgr.applyPinned();
+
+// #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
+// 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
+// 条目摘掉（events 压缩挤掉 CREATED → 内存无此会话 → 文件条目被清），锚才是权威，
+// ensureLeader 把休眠卡重建并重新入 pinned。除首建带上岗引导 spawn 一次外零 spawn
+//（首建即 spawn，见 org.ts 引导注释）；org 目录不可用时只横幅点名，不阻断 relay
+// 其余功能（下次启动重试）
+const leader = mgr.ensureLeader();
+
+const decisionNotify = new DecisionNotificationWatcher({
+  dataDir: cfg.dataDir,
+  listConfirms,
+  snapshotSessions: () => mgr.snapshot(),
+  leaderSessionId: () => mgr.getLeaderSessionId(),
+  notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
+});
+decisionNotify.start();
+
+// #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍
+// parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + 下方
+// autoReviveManaged 的豁免失效）。必须在 autoReviveManaged（5s 延迟）之前按组状态
+// 反推补标；零 spawn，纯标记复原
+const parkedRehydrated = mgr.rehydrateParkedMembers();
+
+// #26 M3 挂起自动化：两周无活动的在办组 → Leader 主动建议暂缓（确认卡，用户点头
+// 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
+mgr.startStaleScan();
 
 // #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
 // 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）
@@ -362,8 +430,14 @@ startServer(bus, mgr, cfg, {
   },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
-    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）
-    advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
+    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）。
+    // CCR_NO_MDNS=1 关断（测试/沙盒）：真启动测试 relay ×3 会往局域网发 3 个同名
+    // 幽灵实例，同网真实设备短窗内可见（#20 审查实锤）。生产不设，广播行为不变
+    if (process.env.CCR_NO_MDNS !== "1") {
+      // CCR_MDNS_NAME：广播名覆盖（#36 M2 并行测试版，2026-10-03）——同机双 relay
+      // 并存（生产 8787 + M2 8788）时发现列表可分辨；缺省与生产逐字节一致
+      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
+    }
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
@@ -373,7 +447,19 @@ startServer(bus, mgr, cfg, {
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
     writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join(homedir(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync(hookHome)) {
+    // 沙箱测试形态不镜像（2026-10-02 实锤）：check-bundle-sync 冒烟（mktemp /tmp +
+    // 40000+ 随机端口）与测试套件（CLAUDE_CONFIG_DIR 隔离 ~/.claude）走此分支会把
+    // 随机端口/临时 bridgeToken 顶进生产 ~/.cc-deck/data/bridge.json——hooks/deliver
+    // 读到死端口全断（当晚 deliver 连 46086 拒连实锤；2026-09-28 事故同型）。
+    // 镜像语义只属于真实 dev 形态（repo 内 dataDir、不隔离 CLAUDE 配置），
+    // #211 dev/插件换班语义不受影响。CCR_NO_BRIDGE_MIRROR=1 另留显式关断
+    //（判断口径 ==="1"，与 CCR_NO_TITLE_GEN/CCR_WATCHDOG_DISABLE 约定对齐：
+    // 真值判断会把 "0"/"false" 等显式保留意图也当关断）。
+    // macOS os.tmpdir() 是 /var/folders/…，mktemp 惯用的字面 /tmp 须一并覆盖
+    const sandboxed =
+      !!process.env.CLAUDE_CONFIG_DIR ||
+      [tmpdir(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep).startsWith(t + sep));
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync(hookHome)) {
       try {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}
@@ -395,6 +481,16 @@ console.log(`  端口:   ${cfg.port}`);
 console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);
 if (pinned.saved > 0) {
   console.log(`  置顶:   ${pinned.saved} 个会话已休眠登记（点卡片按需恢复，不自动拉起）`);
+}
+console.log(
+  leader.ok
+    ? `  团队:   Leader ${leader.created ? "首次创建" : leader.rebuilt ? "已从锚重建" : "在线"}（${orgDir()}）`
+    : process.env.CCR_NO_LEADER === "1"
+      ? "  团队:   Leader 已禁用（CCR_NO_LEADER，测试/沙盒态）"
+      : `  团队:   Leader 未就绪：${leader.error}（下次启动重试）`,
+);
+if (parkedRehydrated > 0) {
+  console.log(`  团队:   ${parkedRehydrated} 个挂起组成员已重建退休标记（不自动拉起）`);
 }
 console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 console.log(

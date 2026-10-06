@@ -53,6 +53,10 @@ if (existsSync(join(root, "mobile", "cc-deck.apk"))) {
 }
 copy(join(relayRoot, "bin", "inject.cs"), join(out, "bin", "inject.cs"));
 copy(join(relayRoot, "hooks", "bridge-hook.mjs"), join(out, "scripts", "hook.mjs"));
+// desktop-tauri 内嵌 relay：与插件 bundle 同源复制（018 :424/:630——三产物统一由本
+// 脚本生成、SHA 一致，禁手工 cp；历史上靠人工「桌面副本同步」曾漂移，P1a 上报后
+// 2026-10-05 补此步）。产物同步清单与 tauri.conf.json resources 映射呼应（见 :32 ⚠）
+copy(join(out, "scripts", "relay.mjs"), join(root, "desktop-tauri", "src-tauri", "resources", "relay.mjs"));
 
 // 3. 版本同步：plugin.json 为源，写回 marketplace.json（防两处手改漂移）
 const pluginJson = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf-8"));

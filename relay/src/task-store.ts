@@ -8,8 +8,10 @@ import type { TodoItem } from "./types.js";
 
 // 返回 null = 该会话无任务目录（旧版 CLI/其他形态），调用方走 transcript 回退；
 // [] = 目录存在但为空（任务全删/清空）——权威空态，直接清空而非回退
-export function readTaskStoreTodos(cliSessionId: string): TodoItem[] | null {
-  const dir = path.join(homedir(), ".claude", "tasks", cliSessionId);
+// #17 base：雇员独立家时传独立家目录（CLI 任务清单随 CLAUDE_CONFIG_DIR 落那），
+// 缺省 = 用户默认家，行为与从前一致
+export function readTaskStoreTodos(cliSessionId: string, base?: string): TodoItem[] | null {
+  const dir = path.join(base ?? path.join(homedir(), ".claude"), "tasks", cliSessionId);
   let files: string[];
   try {
     files = readdirSync(dir).filter((f) => f.endsWith(".json"));

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -19,6 +20,13 @@ function cmd(c: Omit<Command, "command_id" | "ts">): Command {
 }
 
 const bus = new EventBus();
+// 沙盒铁律：真 CLI 会话测试更必须钉死数据目录——create() 写 last-cwd、CLI 子进程
+// 进 child-sessions.json，落点被继承的生产 env 劫持即污染生产（2026-09-28 事故实证）
+process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-sessions-"));
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+process.env.CCR_NO_TITLE_GEN = "1"; // 起名子进程会另落一份全局 transcript，测试不需要
+process.env.CCR_CLOUD_URL = ""; // 统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
 const cfg = loadConfig();
 const mgr = new SessionManager(bus, cfg);
 
@@ -152,6 +160,41 @@ assert(
 assert(subs.every((x) => typeof x.ended_at === "number" && x.ended_at > 0), `C all subagents ended (got ${JSON.stringify(subs.map((x) => x.ended_at))})`);
 assert(subagentEventSeen.has(ackC.session_id!), "C emitted SESSION_UPDATED with subagents");
 
+// #134 BOOT 段防碰撞（冲刺 F-13 审查补锁）：mintAdapterBoot 每次调用必须是新
+// 随机尾——改回 static 复用（进程级秒戳）会让 relay 内 resume 重建 adapter 后
+// blockSeq 归零撞 id，被中断回合的条目被新回合流式块顶掉（2026-09-28 真链路实锤）
+{
+  const { mintAdapterBoot } = await import("../src/agent-adapter.js");
+  const b1 = mintAdapterBoot();
+  const b2 = mintAdapterBoot();
+  assert(b1 !== b2 && b1.length > 0 && b2.length > 0, `adapter BOOT 段每次铸造唯一（${b1} / ${b2}）`);
+}
+
+// #17 雇员独立家：childEnv 注入两态 + 任务清单按家读取
+{
+  const { childEnv } = await import("../src/agent-adapter.js");
+  const onEnv = childEnv({ configHome: "/tmp/emp-home-x" });
+  assert(onEnv.CLAUDE_CONFIG_DIR === "/tmp/emp-home-x", "childEnv 传 configHome → 注入 CLAUDE_CONFIG_DIR");
+  // 关闭态断言须屏蔽运行机自身携带的 CLAUDE_CONFIG_DIR（childEnv 透传 process.env，
+  // 本特性面向的恰恰是全局设了该变量的用户——断言口径=「不新增键」而非「键不存在」）
+  const ambientCfg = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  const offEnv = childEnv();
+  assert(!("CLAUDE_CONFIG_DIR" in offEnv), "childEnv 未传 → 不设键（CLI 用默认家）");
+  if (ambientCfg !== undefined) process.env.CLAUDE_CONFIG_DIR = ambientCfg;
+  assert(offEnv.CCR_RELAY_CHILD === "1", "childEnv 既有注入不受影响");
+  assert(childEnv({ configHome: "/tmp/emp-home-y" }).CLAUDE_CONFIG_DIR === "/tmp/emp-home-y",
+    "显式 configHome 覆盖继承值（透传优先级正确）");
+  const { readTaskStoreTodos } = await import("../src/task-store.js");
+  const empHome = mkdtempSync(join(tmpdir(), "ccr-emp-ts-"));
+  mkdirSync(join(empHome, "tasks", "cli-emp-1"), { recursive: true });
+  writeFileSync(join(empHome, "tasks", "cli-emp-1", "1.json"), JSON.stringify({ id: 1, subject: "雇员任务", status: "pending" }));
+  const tsEmp = readTaskStoreTodos("cli-emp-1", empHome);
+  assert(tsEmp !== null && tsEmp.length === 1 && tsEmp[0].content === "雇员任务", "任务清单按独立家读取");
+  assert(readTaskStoreTodos("cli-emp-1") === null, "默认家读不到该会话任务（双家隔离成立）");
+  rmSync(empHome, { recursive: true, force: true }); // #20 备案收尾：独立家沙盒成功路径此前残留
+}
+
 // gitDiff 统计：形状若不匹配会是 0，只告警不判失败（待真机数据核对）
 if (a && a.stats.lines_added > 0) {
   console.log(`ok - A diff stats: ${JSON.stringify(a.stats)}`);
@@ -166,6 +209,19 @@ for (const id of [ackA.session_id, ackB.session_id, ackC.session_id]) {
 }
 await new Promise((r) => setTimeout(r, 3000));
 rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+
+// 全局 transcript 收尾：真 CLI 的 transcript 落 ~/.claude/projects/<cwd-slug>/，slug
+// 只可能是本测试探针会话——删净不留残渣进用户可见列表（与 test-ws.ts 同款纪律，
+// 2026-09-28 事故后补）。全等匹配（#20 审查修正）：endsWith 会误删任何恰以
+// --tmp-test 结尾的真实项目目录；按探针绝对路径现算 slug（CLI 同规则：非字母
+// 数字→"-"）精确删
+try {
+  const slug = tmpDir.replace(/[^A-Za-z0-9]/g, "-");
+  const projs = join(homedir(), ".claude", "projects");
+  for (const n of readdirSync(projs)) {
+    if (n === slug) rmSync(join(projs, n), { recursive: true, force: true });
+  }
+} catch {} // 目录不存在/权限异常不阻塞测试结论
 
 console.log("\nSESSION TESTS PASSED");
 process.exit(0);

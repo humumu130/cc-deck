@@ -10,8 +10,8 @@
 //   ④ 表单页与提交 API 同源，无 CORS 面；登记数据内嵌前做 < 转义（防注入）
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { ServerResponse } from "node:http";
+import { resolveDataDir } from "./config.js";
 
 export interface AcceptanceRow {
   task: string;
@@ -25,6 +25,18 @@ export interface Acceptance {
   preface?: string[];
   rows: AcceptanceRow[];
   notes?: string[];
+  // #28 per-sheet 云通道密钥（出单 CLI 写入本地 json；KV 上是 acceptance-<id>.key
+  // 同值）。仅随 SNAPSHOT 汇总（key 字段）下发已配对端拼云链接 #key——绝不进
+  // 表单页 DATA（云页面 HTML 公开可读，内嵌 key 等于没加）
+  sheet_key?: string;
+  // M12-7 卡归因（D18/freeze §4 sheet 级归因的运行时读面）：出单方（CLI/会话）
+  // 写入，relay 只读不造——缺省=NULL 档（不猜不补，同导入器「缺失写 NULL 禁造」
+  // 口径）；收单回写仅在 gid+entry_id 双在场时发生（settleAcceptanceResult）。
+  // 导入映射备案：gid→acceptance_sheet.group_id、entry_id→task_id（现导入器
+  // task_id 恒 NULL/cwd 匹配 group，字段对齐属导入批后续）；表单页 DATA 剥除
+  //（同 sheet_key 口径——云页面公开可读，归因不外泄）
+  gid?: string;
+  entry_id?: string;
 }
 export type Verdict = "pass" | "fail" | null;
 export interface ResultRow {
@@ -36,7 +48,16 @@ export interface ResultRow {
 export const ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
 
 export function acceptanceDir(): string {
-  return process.env.CCR_ACCEPTANCE_DIR || join(homedir(), ".cc-deck", "data", "acceptances");
+  // 随 dataDir（resolveDataDir 与 loadConfig 同源解析）：生产 bundle（CC_DECK_PLUGIN
+  // define）= ~/.cc-deck/data/acceptances——与出单 CLI（~/.cc-deck/bin/acceptance，
+  // #22③ 勘误：其缺省路径硬编码同处但头部尊重 CCR_ACCEPTANCE_DIR env）咬合不变；
+  // 开发/沙盒 relay（CCR_DATA_DIR）自然隔离。此前独立硬编码家目录，任何沙盒 relay
+  // 都会直接服务用户的真实验收单（2026-09-28 expo 沙盒实锤：验收单卡出现在测试
+  // app 上）。CCR_ACCEPTANCE_DIR 显式覆盖保留——测试口 + 部署迁移口：**自定义
+  // CCR_DATA_DIR 的生产部署**（非默认家）relay 会去 CCR_DATA_DIR/acceptances、
+  // 出单 CLI 仍写 ~/.cc-deck/data/acceptances，两边劈叉——此时必须给 relay 与
+  // CLI 同设 CCR_ACCEPTANCE_DIR（两端口径一致，任一单边设置都会读写分家）
+  return process.env.CCR_ACCEPTANCE_DIR || join(resolveDataDir(), "acceptances");
 }
 
 export function loadAcceptance(id: string): Acceptance | null {
@@ -71,7 +92,9 @@ export function rateLimited(id: string, limit = 10, windowMs = 60_000): boolean 
 }
 
 // 校验并落盘一次提交；返回错误串（null=成功）
-export function saveResult(id: string, payload: unknown, ua: string): string | null {
+// ck：云端条目 nonce（#28 审查补）——Worker append 时生成的唯一 k，随条目落 history
+//（字段 ck）。applyCloudSubmits 按 ck 判「已消费」，替代内容签名（内容签名会吞改回原判）
+export function saveResult(id: string, payload: unknown, ua: string, ck?: string): string | null {
   if (typeof payload !== "object" || payload === null) return "bad body";
   const rows = (payload as { rows?: unknown }).rows;
   if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return "rows 非法";
@@ -98,7 +121,10 @@ export function saveResult(id: string, payload: unknown, ua: string): string | n
     fail: clean.filter((r) => r.verdict === "fail").length,
     skip: clean.filter((r) => r.verdict === null).length,
   };
-  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean });
+  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean, ...(ck ? { ck } : {}) });
+  // #25-P4 本地 history 帽：云端 KV 侧同款 50 条帽，本地落盘此前无上限——单文件
+  // 被反复改判/云回流时只增不减；留最近 50 次提交足够回溯
+  if (history.length > 50) history = history.slice(history.length - 50);
   writeFileSync(file, JSON.stringify({ id, history }, null, 1));
   return null;
 }
@@ -116,6 +142,10 @@ export interface AcceptanceSummary {
   // done 保留为纯统计口径（表单页/回流摘要用），不再作消失条件。
   submitted: boolean;
   done: boolean; // 最新提交已覆盖全部行（统计口径）
+  // #28 云通道 per-sheet 密钥：随 SNAPSHOT 下发已配对端，expo 等端拼云链接
+  // …html#<key>（无 key 的老单不下发该字段，端上退回无后缀链接）。密钥本就随
+  // 填写链接到用户手里，下发到已配对设备是同信任级；绝不进表单页 DATA
+  key?: string;
 }
 
 // 扫 acceptances 目录汇总：<id>.json 为单，配对 <id>.results.json 取最新一次提交
@@ -151,10 +181,49 @@ export function listAcceptances(limit = 20): AcceptanceSummary[] {
         done = judged >= a.rows.length;
       }
     } catch {}
-    out.push({ id, title: a.title, created_at: a.created_at, total: a.rows.length, judged, submitted, done });
+    out.push({
+      id, title: a.title, created_at: a.created_at, total: a.rows.length, judged, submitted, done,
+      ...(typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}),
+    });
   }
   out.sort((x, y) => y.created_at - x.created_at);
   return out.slice(0, limit);
+}
+
+// ---- 收单闭环判定（M12-7）----
+// 读最新一次提交算收口四态（纯读，无副作用；调用方=SessionManager.settleAcceptanceResult
+// 归因回写板卡）。口径对齐 #195 生命周期语义：
+//   submitted = 有提交（哪怕留空行）——待填消失条件，值守 receipt 候选的 reviewed 依据
+//   all_pass  = 最新提交全部行 pass（0 fail 0 未判）——唯一触发卡 done 的收口信号
+//     （D14「sheet.close 全过」的 v1 信号面：fail/未判完→卡保持+修复卡路径既有；
+//      未提交→未收单不动作）
+//   atrophied 档不设——history append-only，最新行即现值，改判自然覆盖
+export interface AcceptanceClosure {
+  submitted: boolean;
+  all_pass: boolean;
+  fail_count: number;
+  total: number;
+}
+export function acceptanceClosure(id: string): AcceptanceClosure | null {
+  const a = loadAcceptance(id);
+  if (!a) return null;
+  let submitted = false;
+  let all_pass = false;
+  let fail_count = 0;
+  try {
+    const r = JSON.parse(readFileSync(join(acceptanceDir(), `${id}.results.json`), "utf-8")) as {
+      history?: { rows?: { verdict?: string | null }[] }[];
+    };
+    const last = r.history?.[r.history.length - 1];
+    if (last?.rows && Array.isArray(last.rows)) {
+      submitted = true;
+      const pass = last.rows.filter((x) => x.verdict === "pass").length;
+      fail_count = last.rows.filter((x) => x.verdict === "fail").length;
+      // 全行 pass（行数对齐登记行=判完且全过；登记行数以 loadAcceptance 为准）
+      all_pass = pass === a.rows.length && fail_count === 0 && last.rows.length >= a.rows.length;
+    }
+  } catch {}
+  return { submitted, all_pass, fail_count, total: a.rows.length };
 }
 
 // ---- 表单页（自包含单 HTML；勾选交互按用户口径：怎么简单怎么来）----
@@ -162,7 +231,11 @@ export function listAcceptances(limit = 20): AcceptanceSummary[] {
 // （云桥所在 CF tunnel ingress 按 path 白名单分流，只有 / 系白名单路径可达——
 //   POST /nacl.js 方法分支=提交端点：web-console 仅 GET 该路径，无干扰）
 export function acceptanceHtml(a: Acceptance, apiPath = "/api/acceptance"): string {
-  const data = JSON.stringify(a).replace(/</g, "\\u003c");
+  // #28：sheet_key 绝不进页面 DATA（云页面 HTML 公开可读，内嵌 key=白加密钥）；
+  // key 只走链接 fragment（#key）由页面 JS 取 location.hash 带回。M12-7：卡归因
+  //（gid/entry_id）同口径剥除——表单页只需要题目与行，归因不进公开页
+  const { sheet_key: _sk, gid: _g, entry_id: _e, ...pub } = a;
+  const data = JSON.stringify(pub).replace(/</g, "\\u003c");
   const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
   const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
   return `<!doctype html>
@@ -262,10 +335,14 @@ document.getElementById("submit").onclick = function () {
     rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
   }
   document.getElementById("msg").textContent = "提交中…";
+  // #28 云通道防伪造：出单链接以 fragment（#<key>）携带每单密钥（不进服务器日志/
+  // Referer/缓存键），提交随 body 带回由 Worker 对照。LAN 端点不校验（家庭网威胁
+  // 模型=家人，维持能力链接口径）；云版页面缺 fragment 时提交会被 403 并显示原因
+  var sheetKey = location.hash.replace(/^#/, "").trim() || undefined;
   fetch(${JSON.stringify(apiPath)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: DATA.id, rows: rows }),
+    body: JSON.stringify({ id: DATA.id, rows: rows, key: sheetKey }),
   }).then(function (r) { return r.json(); }).then(function (j) {
     if (!j.ok) { document.getElementById("msg").textContent = "提交失败：" + (j.error || "稍后再试"); return; }
     var p = 0, f = 0, s = 0;
@@ -307,19 +384,27 @@ export function serveAcceptancePage(id: string, res: ServerResponse, apiPath?: s
 export interface CloudSubmit {
   at: number;
   ua: string;
+  k?: string; // #28 审查补：Worker append 时生成的条目 nonce（去重身份键）
   rows: unknown;
 }
 export function applyCloudSubmits(id: string, submits: CloudSubmit[]): CloudSubmit[] {
   if (!ACCEPTANCE_ID_RE.test(id)) return [];
+  // #28 审查补·去重身份键换血：原内容签名（JSON.stringify(rows)）把「内容」当
+  // 「身份」——改判 A→B→改回 A′（逐字段同 A）时 A′ 撞 A 的签名被静默吞掉：不落盘、
+  // 不通知、每 60s 重放永远再丢，本地最新判定永久停在 B 与云端劈叉。改为：
+  //   有 k（新 Worker 条目）：按 k 判已消费（history 条目落盘时透传为 ck 字段）
+  //   无 k（存量/旧 Worker 条目）：fallback 内容签名（老语义，防存量重放）
+  const seenK = new Set<string>();
   const seen = new Set<string>();
   try {
     const h = (
       JSON.parse(readFileSync(join(acceptanceDir(), `${id}.results.json`), "utf-8")) as {
-        history?: { rows?: unknown }[];
+        history?: { rows?: unknown; ck?: unknown }[];
       }
     ).history;
     if (Array.isArray(h)) {
       for (const e of h) {
+        if (typeof (e as { ck?: unknown }).ck === "string") seenK.add((e as { ck: string }).ck);
         try {
           seen.add(JSON.stringify((e as { rows?: unknown }).rows ?? null));
         } catch {}
@@ -331,10 +416,11 @@ export function applyCloudSubmits(id: string, submits: CloudSubmit[]): CloudSubm
   for (const s of submits) {
     if (!s || typeof s !== "object" || !Array.isArray((s as CloudSubmit).rows)) continue;
     const sig = JSON.stringify(s.rows);
-    if (seen.has(sig)) continue;
+    if (typeof s.k === "string" ? seenK.has(s.k) : seen.has(sig)) continue;
     // ua 加 cloud/ 前缀区分来源（与 LAN 直提的 UA 落盘格式一致，截断同款）
     const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
-    if (saveResult(id, { rows: s.rows }, ua) === null) {
+    if (saveResult(id, { rows: s.rows }, ua, typeof s.k === "string" ? s.k : undefined) === null) {
+      if (typeof s.k === "string") seenK.add(s.k);
       seen.add(sig);
       added.push(s);
     }

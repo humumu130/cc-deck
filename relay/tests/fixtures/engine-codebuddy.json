@@ -1,0 +1,5 @@
+{
+  "assistant": {"type":"assistant","text":"CodeBuddy response"},
+  "stream": {"type":"content_block_delta","delta":"partial"},
+  "done": {"type":"message_stop","done":true}
+}

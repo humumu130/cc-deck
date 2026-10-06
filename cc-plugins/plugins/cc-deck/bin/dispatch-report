@@ -1,0 +1,491 @@
+#!/bin/bash
+# dispatch-report：派单审计账对账巡检（#018-C2，018 :424 验收口径）。
+# 读 cli-dispatches.ndjson（bin/dispatch 的 append-only 审计账）做四类判定：
+#   timeout   ok:false 且 error 属超时/连不上/断线类且 attempt:2 仍败 = 短重试用尽
+#             终态（C1 已转人工，此处列待处置清单）
+#   orphan    某 command_id 全部行均 ok:false（无任何有效 ACK）= 派单未达无人认领，
+#             待人工重投
+#   duplicate 同 command_id 出现 ≥2 条 ok:true 行（relay 幂等回放防双投，审计面仍
+#             是重复迹象）；同 dispatch_id 跨 command_id（换新 id 违 C1 纪律迹象）
+#   seq-gap   审计账无 seq 字段的代位判定：坏行（非 JSON/缺关键字段/类型错）计数
+#             报行号 + ts 倒序（时钟回拨/并发写异常）报行号。代位备案：append-only
+#             NDJSON 无序号，018 :235 seq-gap 口径在 events 流面，CLI 审计面以
+#             「行完整性+时序单调」代位；V1 若 events 侧需要可另接
+# ACK 误读防护：成功统计与 orphan/timeout 判定只认 ok 严格布尔真——ok:"yes"/"1"/
+# "true"（字符串）或缺省一律不算成功，按坏行（ACK 误读态）计数，绝不进成功账。
+# 行完整性（C2fix/P2-1）：error 字段必在场且为 null|string（C1 schema 恒写）——
+# 缺省/类型错计坏行报行号，不进 orphan/timeout 语义分类（坏行不臆断未达）。
+# DELIVER 行（deliver HTTP 直投）无状态机，不入本对账面（失败回退属 C3 线）。
+# deferred 第四态（#018-C3）：失败自动转存/--defer 的台账行 error 带「deferred:」
+# 前缀=挂起待补投，≠失败≠成功——排除出 orphan/timeout，单列 counts.deferred；
+# 交叉同目录 cli-deferred.ndjson（队列最新态）：discarded=放弃终态非异常、
+# queued=挂起互证、仅队列挂起无台账行（--defer 直转存）单列 queue_pending。
+# 挂起是已知状态非损坏：只 warn 不进 blocking，处置入口 --retry 补投 / --discard 放弃。
+# 环境注入（#018-C1 文档化）：离线审计读者，只需 CCR_DATA_DIR（或位置参数显式账本
+# 路径）；不读 CCR_TOKEN/CCR_PORT（不对 relay 建连）。
+# timeout/orphan 项携带 dispatch_ids（#018-C1：PM 对账三 ID 键对齐 cli-dispatches
+# 行与控制台 phase 日志——grep '"dispatch_id":"<id>"' 一套键贯穿）。
+# --phase 模式（#018-C2）：对账 phase 过程账（$CCR_DATA_DIR/cli-phase.ndjson，
+# dispatch/deliver 每拍落盘）的「投递→ACK→final 三拍链完整性」——缺拍=脚本中断
+# 可判定；phase 成功而终态台账无行=崩在落账前可判定。口径（019 巡检）：ack ok 只
+# 证明投递不证明执行——final ok:false 且台账有行者不在此重复判失败（orphan/timeout
+# 归主对账面），此处降为 warn 提示。phase 账不存在=旧版/未落盘期，提示不谎报干净。
+# --phase C3 联动：phase 值域扩 queued（转存拍）；链仅 queued 无投递拍=挂起链
+# （--defer 直接转存），不判断拍不误报断拍；失败转存链（三拍齐+queued）回归三拍
+# 判定；--retry 补投成功同 dispatch_id 续链（phases 去重、final 取末次），自然归 complete。
+# 用法: dispatch-report [--json] [--strict] [--phase] [账本路径]
+#   --json    机器可读 {counts, items, verdict}
+#   --strict  duplicate/seq-gap 升级为非零退出（缺省仅 warn）；--phase 下对断拍/
+#             终态缺行本就非零，无额外效果
+#   --phase   过程账三拍链对账模式（主对账不跑；phase 账与位置参数账本同目录）
+#   账本缺省 $CCR_DATA_DIR/cli-dispatches.ndjson（未设 CCR_DATA_DIR 时 ~/.cc-deck/data）
+# 退出码：0=账干净或仅 warn；1=orphan/timeout 待处置（--strict 下含 duplicate/seq-gap）
+#         或 --phase 断拍/终态缺行；2=用法错误/账本不存在（不静默谎报干净）
+set -uo pipefail
+
+usage() {
+  echo "用法: dispatch-report [--json] [--strict] [账本路径]" >&2
+  echo "  账本缺省 \$CCR_DATA_DIR/cli-dispatches.ndjson（未设 CCR_DATA_DIR 时 ~/.cc-deck/data）" >&2
+  echo "  --json 机器可读；--strict 把 duplicate/seq-gap 升级为非零退出" >&2
+  exit 2
+}
+
+json_mode=0
+strict=0
+phase_mode=0
+ledger=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) json_mode=1 ;;
+    --strict) strict=1 ;;
+    --phase) phase_mode=1 ;;
+    -h|--help) usage ;;
+    -*) usage ;;
+    *)
+      [ -z "$ledger" ] || usage
+      ledger="$1"
+      ;;
+  esac
+  shift
+done
+[ -n "$ledger" ] || ledger="${CCR_DATA_DIR:-$HOME/.cc-deck/data}/cli-dispatches.ndjson"
+
+exec python3 - "$ledger" "$json_mode" "$strict" "$phase_mode" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime
+
+ledger = sys.argv[1]
+json_mode = sys.argv[2] == "1"
+strict = sys.argv[3] == "1"
+phase_mode = sys.argv[4] == "1"
+
+# C1 三态（exit 11 连不上/断线、12 超时）对应的 error 文本类；匹配用子串——
+# 10（relay 明确拒收）与 bash 前置失败（缺 token/payload 坏）不属此类，落 orphan
+TIMEOUT_CLASS = ("超时", "无法连接", "握手失败", "关闭了 WS 连接", "连接意外关闭")
+
+
+def parse_ts_ms(ts):
+    """ISO 字符串（含 Z）或 epoch 数值 → 毫秒；不可解析返回 None"""
+    if isinstance(ts, bool):
+        return None
+    if isinstance(ts, (int, float)):
+        return ts if ts > 1e11 else ts * 1000  # 秒级数值容错升毫秒
+    if isinstance(ts, str) and ts:
+        try:
+            return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+# ---------- --phase：过程账三拍链对账（#018-C2） ----------
+# 主对象=cli-phase.ndjson（与账本同目录）；终态台账仅交叉用（可缺）。
+# 判定域：断拍（缺 send/ack/final 任一拍=脚本中断迹象）与「phase 成功而终态账
+# 缺行」（崩在 append_log 前）= fail；final ok:false=终态失败，台账面已判
+# orphan/timeout，此处仅 warn 提示不重复判（019 口径：ack ok 只证明投递不证明
+# 执行，过程面不替内容面下结论）。phase 账不存在=旧版/未落盘期，明说非异常。
+def run_phase_mode():
+    phase_file = os.path.join(os.path.dirname(os.path.abspath(ledger)), "cli-phase.ndjson")
+    exists = os.path.isfile(phase_file)
+    chains = {}
+    bad_lines = 0
+    rows = 0
+    if exists:
+        with open(phase_file, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
+                    continue
+                rows += 1
+                try:
+                    obj = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    bad_lines += 1
+                    continue
+                if not isinstance(obj, dict):
+                    bad_lines += 1
+                    continue
+                did = obj.get("dispatch_id")
+                ph = obj.get("phase")
+                if not isinstance(did, str) or not did or ph not in ("send", "ack", "final", "queued"):
+                    bad_lines += 1
+                    continue
+                c = chains.setdefault(did, {
+                    "phases": [], "final_ok": None, "error": "",
+                    "tool": obj.get("tool") if isinstance(obj.get("tool"), str) else "",
+                    "session_id": obj.get("session_id") if isinstance(obj.get("session_id"), str) else "",
+                    "command_id": obj.get("command_id") if isinstance(obj.get("command_id"), str) else "",
+                })
+                if ph not in c["phases"]:
+                    c["phases"].append(ph)
+                if ph == "final":
+                    if isinstance(obj.get("ok"), bool):
+                        c["final_ok"] = obj["ok"]
+                    if isinstance(obj.get("error"), str) and obj["error"]:
+                        c["error"] = obj["error"]
+    broken = []
+    failed = []
+    pending_chains = []  # C3 挂起链：仅 queued 拍（--defer 直接转存，无投递拍）——不判断拍
+    complete = 0
+    for did in sorted(chains):
+        c = chains[did]
+        if "queued" in c["phases"] and not any(p in ("send", "ack", "final") for p in c["phases"]):
+            pending_chains.append({
+                "dispatch_id": did, "tool": c["tool"],
+                "session_id": c["session_id"], "command_id": c["command_id"],
+            })
+            continue
+        missing = [p for p in ("send", "ack", "final") if p not in c["phases"]]
+        if not missing and c["final_ok"] is None:
+            missing = ["final(ok 非布尔)"]
+        if missing:
+            broken.append({
+                "dispatch_id": did, "missing": missing, "tool": c["tool"],
+                "session_id": c["session_id"], "command_id": c["command_id"],
+            })
+        elif c["final_ok"] is False:
+            failed.append({"dispatch_id": did, "error": c["error"], "tool": c["tool"]})
+        else:
+            complete += 1
+    ledger_dids = set()
+    if os.path.isfile(ledger):
+        with open(ledger, encoding="utf-8") as f:
+            for raw in f:
+                try:
+                    obj = json.loads(raw.strip())
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if isinstance(obj, dict) and isinstance(obj.get("dispatch_id"), str) and obj["dispatch_id"]:
+                    ledger_dids.add(obj["dispatch_id"])
+    # 交叉只对「phase 判成功」的链要求台账有行：断拍/失败链本身已是可判定异常，
+    # 崩在落账前的情形由断拍项覆盖，不双报
+    missing_in_ledger = sorted(
+        d for d in chains if d not in ledger_dids and chains[d]["final_ok"] is True
+    )
+    no_phase = sorted(ledger_dids - set(chains))
+    counts = {
+        "rows": rows, "bad_lines": bad_lines,
+        "broken": len(broken), "failed": len(failed), "complete": complete,
+        "success_missing_ledger_row": len(missing_in_ledger),
+        "ledger_without_phase": len(no_phase),
+        "pending_chains": len(pending_chains),
+        "phase_file_exists": exists,
+    }
+    verdict = "fail" if (broken or missing_in_ledger) else ("warn" if failed else "clean")
+    if json_mode:
+        print(json.dumps({
+            "counts": counts,
+            "items": {
+                "broken": broken, "failed": failed,
+                "success_missing_ledger_row": missing_in_ledger,
+                "pending_chains": pending_chains,
+            },
+            "verdict": verdict,
+        }, ensure_ascii=False, indent=2))
+    else:
+        if not exists:
+            print(f"phase 链对账：phase 过程账不存在（{phase_file}）——C1 前旧账或未发生投递，非异常证据")
+        else:
+            print(f"phase 链对账（C2 过程面）：{phase_file}")
+            print(f"共 {rows} 行：完整 {complete} / 断拍 {len(broken)} / 失败链 {len(failed)} / 挂起链 {len(pending_chains)} / 坏行 {bad_lines}")
+        print(f"① 断拍链（缺 phase 拍——脚本中断/崩溃迹象，可判定）：{len(broken)}")
+        for it in broken:
+            print(f"   - dispatch_id={it['dispatch_id']} 缺 {','.join(it['missing'])} tool={it['tool']} session_id={it['session_id']} command_id={it['command_id']}")
+        print(f"② 失败链（final ok:false——orphan/timeout 归主对账面，此处仅过程提示）：{len(failed)}")
+        for it in failed:
+            print(f"   - dispatch_id={it['dispatch_id']} error={it['error']}")
+        print(f"③ 终态账缺行（phase 成功但台账无该 dispatch_id——崩在落账前，可判定）：{len(missing_in_ledger)}")
+        for d in missing_in_ledger:
+            print(f"   - dispatch_id={d}")
+        print(f"④ 无 phase 链的台账行（旧版/未落盘期，提示不判异常）：{len(no_phase)}")
+        print(f"⑤ 挂起链（仅 queued 拍——--defer 直接转存无投递拍，不判断拍非断拍）：{len(pending_chains)}")
+        for it in pending_chains:
+            print(f"   - dispatch_id={it['dispatch_id']} command_id={it['command_id']}（relay 恢复后 --retry 补投）")
+        if verdict == "fail":
+            print("结论：fail——断拍/终态账缺行待人工巡检（投递链不完整，勿臆断已投达）")
+        elif verdict == "warn":
+            print("结论：warn——存在失败链（终态处置归台账面，过程面仅提示）")
+        else:
+            print("结论：clean——phase 链全完整（投递→ACK→final 三拍齐，终态账对得上）")
+    return 1 if verdict == "fail" else 0
+
+
+if phase_mode:
+    sys.exit(run_phase_mode())
+
+if not os.path.isfile(ledger):
+    print(f"dispatch 巡检失败：账本不存在：{ledger}（未发生过派单？路径设错？——不静默谎报干净）", file=sys.stderr)
+    sys.exit(2)
+
+
+rows_total = 0
+valid = []          # 结构可信行（语义分类只用这些）
+bad = []            # seq-gap：坏行 {line, reason}
+deliver_rows = 0
+misread_rows = 0    # ok 缺省/非布尔——ACK 误读态（坏行子集，绝不进成功账）
+
+with open(ledger, encoding="utf-8") as f:
+    for lineno, raw in enumerate(f, 1):
+        line = raw.strip()
+        if not line:
+            continue
+        rows_total += 1
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            bad.append({"line": lineno, "reason": "非 JSON"})
+            continue
+        if not isinstance(obj, dict):
+            bad.append({"line": lineno, "reason": "非 JSON 对象"})
+            continue
+        errs = []
+        rtype = obj.get("type")
+        for field in ("session_id", "dispatch_id", "type"):
+            v = obj.get(field)
+            # DELIVER 行允许 session_id 空串：deliver 三级归因全缺时已 stderr 警告、
+            # 空值如实落账（合法状态非损坏）；COMMAND_MESSAGE 仍严判（dispatch 用法
+            # 强制 session_id 位置参数，空串只可能是坏行）
+            if not isinstance(v, str) or (not v and not (field == "session_id" and rtype == "DELIVER")):
+                errs.append(f"缺/错字段 {field}")
+        if isinstance(rtype, str) and rtype not in ("COMMAND_MESSAGE", "DELIVER"):
+            errs.append(f"未知 type（{rtype}）")
+        # ok 严格布尔：缺省/字符串/数字全是 ACK 误读态——不算成功，也不臆断失败
+        if "ok" not in obj:
+            errs.append("缺字段 ok（ACK 误读态）")
+        elif not isinstance(obj["ok"], bool):
+            errs.append(f"ok 类型错（{json.dumps(obj['ok'], ensure_ascii=False)}，非布尔——ACK 误读态）")
+        # error 必在场且为 null|string（C2fix/P2-1：C1 写账 schema 恒写 error——成功
+        # null、失败字符串）——缺省即坏行：损坏/截断行（如 ok:false 且缺 error）不得
+        # 混进 valid 被臆断成 orphan「未达」而误触发重投（坏行不进语义分类）
+        if "error" not in obj:
+            errs.append("缺字段 error")
+        elif not (obj["error"] is None or isinstance(obj["error"], str)):
+            errs.append("错字段 error")
+        if rtype == "COMMAND_MESSAGE":
+            cid = obj.get("command_id")
+            if not isinstance(cid, str) or not cid:
+                errs.append("缺/错字段 command_id")
+            att = obj.get("attempt")
+            if isinstance(att, bool) or not isinstance(att, int) or att < 1:
+                errs.append("缺/错字段 attempt")
+        ts_ms = parse_ts_ms(obj.get("ts"))
+        if ts_ms is None:
+            errs.append("缺/错字段 ts")
+        if errs:
+            bad.append({"line": lineno, "reason": "；".join(errs)})
+            if "ok" not in obj or not isinstance(obj.get("ok"), bool):
+                misread_rows += 1
+            continue
+        if rtype == "DELIVER":
+            deliver_rows += 1  # HTTP 直投无状态机，不入四类对账（C3 线备案）
+        valid.append({
+            "line": lineno, "ts_ms": ts_ms, "type": rtype,
+            "session_id": obj["session_id"], "dispatch_id": obj["dispatch_id"],
+            "command_id": obj.get("command_id"), "ok": obj["ok"],
+            "error": obj.get("error"), "attempt": obj.get("attempt"),
+        })
+
+# seq-gap 代位之二：ts 单调性（只比行间先后，不取当下时钟——无 Date.now 依赖）
+ts_regressions = []
+prev = None
+for r in valid:
+    if prev is not None and r["ts_ms"] < prev["ts_ms"]:
+        ts_regressions.append({"line": r["line"], "reason": f"ts 倒序（前一行 L{prev['line']}）"})
+    prev = r
+
+# 语义分类（仅 COMMAND_MESSAGE 有效行；DELIVER 已排除）
+by_cmd = {}
+for r in valid:
+    if r["type"] == "COMMAND_MESSAGE":
+        by_cmd.setdefault(r["command_id"], []).append(r)
+
+# C3 队列交叉：同目录 cli-deferred.ndjson（append-only 生命周期账）——每 dispatch_id
+# 文件序最后一行=当前态（queued/done/discarded）。账缺文件=无转存史，交叉全跳过
+queue_file = os.path.join(os.path.dirname(os.path.abspath(ledger)), "cli-deferred.ndjson")
+queue_state = {}
+queue_bad = 0
+if os.path.isfile(queue_file):
+    with open(queue_file, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                queue_bad += 1
+                continue
+            if (isinstance(obj, dict) and isinstance(obj.get("dispatch_id"), str)
+                    and obj["dispatch_id"] and obj.get("type") in ("queued", "done", "discarded")):
+                queue_state[obj["dispatch_id"]] = obj["type"]
+            else:
+                queue_bad += 1
+
+timeout_items = []
+orphan_items = []
+deferred_items = []   # C3 第四态：挂起待补投（末行 error 带 deferred: 前缀且队列未终决）
+discarded_items = []  # C3 队列交叉：已 --discard 放弃终态——失败行不再算 orphan/timeout
+dup_cmd_items = []
+success_commands = 0
+for cmd, rs in by_cmd.items():
+    oks = [r for r in rs if r["ok"] is True]
+    lines = [r["line"] for r in rs]
+    last = rs[-1]
+    if oks:
+        success_commands += 1
+        if len(oks) >= 2:
+            dup_cmd_items.append({
+                "kind": "command_id", "command_id": cmd,
+                "lines": [r["line"] for r in oks],
+                "dispatch_ids": sorted({r["dispatch_id"] for r in oks}),
+                "session_id": last["session_id"],
+                "note": "同 command_id 多条有效 ACK（relay 幂等回放防双投，请核验是否真双投）",
+            })
+        continue
+    # 无任何有效 ACK：全失败行——先过 C3 三态（队列终决 > 挂起前缀），再归 timeout/orphan
+    q_state = None
+    for d in sorted({r["dispatch_id"] for r in rs}):
+        if d in queue_state:
+            q_state = queue_state[d]
+    item = {
+        "command_id": cmd, "lines": lines,
+        "session_id": last["session_id"],
+        "dispatch_ids": sorted({r["dispatch_id"] for r in rs}),
+        "attempt": last["attempt"],
+        "error": last["error"] or "",
+    }
+    if q_state == "discarded":
+        discarded_items.append({**item, "queue_state": "discarded"})
+        continue
+    if last["error"] and last["error"].startswith("deferred"):
+        deferred_items.append({**item, "queue_state": q_state or "unknown"})
+        continue
+    # 按 error 类分 timeout 终态 / orphan
+    terminal = any(
+        r["attempt"] is not None and r["attempt"] >= 2
+        and any(k in (r["error"] or "") for k in TIMEOUT_CLASS)
+        for r in rs
+    )
+    (timeout_items if terminal else orphan_items).append(item)
+
+# 仅队列挂起无台账行（--defer 显式代挂：转存不投递，台账无行）——挂起已知状态非异常
+queue_pending_dids = sorted(
+    d for d, t in queue_state.items() if t == "queued" and d not in {r["dispatch_id"] for r in valid}
+)
+
+# 同 dispatch_id 跨 command_id（换新 id = 违 C1「不换新 id」纪律的迹象）
+by_disp = {}
+for r in valid:
+    if r["type"] == "COMMAND_MESSAGE":
+        by_disp.setdefault(r["dispatch_id"], set()).add(r["command_id"])
+dup_disp_items = [
+    {"kind": "dispatch_id", "dispatch_id": d, "command_ids": sorted(cids),
+     "note": "同 dispatch_id 跨 command_id（换新 id 违 C1 纪律迹象）"}
+    for d, cids in sorted(by_disp.items()) if len(cids) > 1
+]
+
+counts = {
+    "rows": rows_total,
+    "valid_rows": len(valid),
+    "deliver_rows": deliver_rows,
+    "bad_rows": len(bad),
+    "ack_misread_rows": misread_rows,
+    "ts_regressions": len(ts_regressions),
+    "timeout": len(timeout_items),
+    "orphan": len(orphan_items),
+    "deferred": len(deferred_items),
+    "discarded": len(discarded_items),
+    "queue_pending": len(queue_pending_dids),
+    "queue_bad_lines": queue_bad,
+    "duplicate_commands": len(dup_cmd_items),
+    "duplicate_dispatches": len(dup_disp_items),
+    "success_commands": success_commands,
+}
+
+dup_all = dup_cmd_items + dup_disp_items
+seqgap_all = bad + ts_regressions
+blocking = counts["timeout"] + counts["orphan"]
+# C3：deferred/queue_pending 是挂起已知状态非损坏——只 warn 不进 blocking；
+# discarded=放弃终态已决，不进 warnable
+warnable = len(dup_all) + len(seqgap_all) + counts["deferred"] + counts["queue_pending"]
+if blocking or (strict and warnable):
+    verdict = "fail"
+elif warnable:
+    verdict = "warn"
+else:
+    verdict = "clean"
+
+items = {
+    "timeout": timeout_items,
+    "orphan": orphan_items,
+    "deferred": deferred_items,
+    "queue_pending": queue_pending_dids,
+    "duplicate": dup_all,
+    "seqgap": seqgap_all,
+}
+
+if json_mode:
+    print(json.dumps({"counts": counts, "items": items, "verdict": verdict},
+                     ensure_ascii=False, indent=2))
+else:
+    print(f"dispatch 巡检（C2 对账）：{ledger}")
+    print(f"共 {counts['rows']} 行：有效 {counts['valid_rows']}（内 DELIVER {counts['deliver_rows']} 不入对账）/ 坏行 {counts['bad_rows']}")
+    print(f"① timeout（重试用尽待处置）：{counts['timeout']}")
+    for it in timeout_items:
+        print(f"   - L{it['lines'][-1]} command_id={it['command_id']} session_id={it['session_id']} dispatch_id={','.join(it['dispatch_ids'])} attempt:{it['attempt']} error={it['error']}")
+    print(f"② orphan（未达待人工重投）：{counts['orphan']}")
+    for it in orphan_items:
+        print(f"   - L{it['lines'][0]} command_id={it['command_id']} session_id={it['session_id']} dispatch_id={','.join(it['dispatch_ids'])} error={it['error']}")
+    print(f"③ duplicate（重复迹象待核验）：{len(dup_all)}")
+    for it in dup_all:
+        if it["kind"] == "command_id":
+            print(f"   - command_id={it['command_id']} 成功行 L{it['lines']} dispatch={it['dispatch_ids']}")
+        else:
+            print(f"   - dispatch_id={it['dispatch_id']} 跨 command_id {it['command_ids']}")
+    print(f"④ seq-gap（行完整性/时序代位）：坏行 {counts['bad_rows']} + 倒序 {counts['ts_regressions']}")
+    for it in seqgap_all:
+        print(f"   - L{it['line']} {it['reason']}")
+    print(f"⑤ deferred（挂起待处置——relay 恢复后 --retry 补投 / --discard 放弃，非异常非丢单）：{counts['deferred']}"
+          f"（另：队列挂起无台账行 {counts['queue_pending']} / 已放弃终态 {counts['discarded']} / 队列坏行 {counts['queue_bad_lines']}）")
+    for it in deferred_items:
+        print(f"   - L{it['lines'][-1]} command_id={it['command_id']} session_id={it['session_id']} dispatch_id={','.join(it['dispatch_ids'])} queue={it['queue_state']} error={it['error']}")
+    for d in queue_pending_dids:
+        print(f"   - dispatch_id={d}（仅队列挂起，--defer 直转存无台账行）")
+    if verdict == "fail" and blocking:
+        print("结论：fail——orphan/timeout 待处置，转人工巡检（重投前先核台账，勿自动重复派单）")
+    elif verdict == "fail":
+        # C2fix/P3-1：strict 下仅 duplicate/seq-gap 升级的 fail——对账异常话术，
+        # 不喊重投（无 orphan/timeout 时「待处置重投」文案会误导操作员重复派单）
+        print("结论：fail——对账异常（duplicate/seq-gap 待人工核验；无 orphan/timeout，无需重投）")
+    elif verdict == "warn":
+        msg = "结论：warn——duplicate/seq-gap 待人工核验（--strict 可升级为非零退出）"
+        if counts["deferred"] or counts["queue_pending"]:
+            msg += f"；deferred 挂起 {counts['deferred'] + counts['queue_pending']} 单待 --retry 补投或 --discard 放弃"
+        print(msg)
+    else:
+        print("结论：clean——账面干净（四类零发现）")
+
+sys.exit(1 if verdict == "fail" else 0)
+PY

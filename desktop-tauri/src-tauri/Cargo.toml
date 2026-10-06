@@ -30,6 +30,14 @@ reqwest = { version = "0.12", default-features = false, features = ["json"] }
 # #74 第七轮：红黄绿圆点编程定位（系统默认 7,6 贴窗口角观感差）；仅 mac 拉此依赖
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-decorum = "1"
+# #240 IME 激活点击：WKWebView 里 JS programmatic focus 不激活第三方输入法（微信输入法
+# 实测 caret 闪 + IME 假活 + 打字黑洞），唯一可靠激活路径是原生鼠标点击——构造
+# NSEvent 走 NSApp sendEvent 派发（app 内部派发无 TCC 权限问题）
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
+# NSGraphicsContext：NSEvent::mouseEventWithType_… 构造方法的 feature 门控（#018-T2 补——
+# 该方法在 objc2-app-kit 0.3 生成为 snake_case 长名且需此 feature，此前本机从未编译到此处）
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSEvent", "NSWindow", "NSGraphicsContext"] }
 
 [profile.release]
 # 换壳动机是体积（Electron 106MB → ~10MB），按 Tauri 官方体积优化档配置

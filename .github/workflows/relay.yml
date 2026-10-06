@@ -22,7 +22,19 @@ jobs:
         # 只跑自包含测试：进程内/回环网络/fake-injector，不需要 Claude CLI 与 API 凭据。
         # test:sessions / test:ws 通过 agent SDK query() 拉起真实 claude CLI 子进程并
         # 等待真实模型回合完成，CI 无 CLI/凭据必挂，故排除。
-        script: [test:bus, test:history, test:bridge, test:cloud]
+        # test:org / test:leader（#26 矩阵式 M1）：纯 fs + agentFactory 假工厂，同为自包含
+        # test:projects / test:dispatch（#26 矩阵式 M2）：mkdtemp 沙盒 + 假工厂派单收口，同上
+        # test:routing（#26 矩阵式 M3）：路由表 store 纯 fs 单测，同上
+        # test:autorevive（#75/#17）：自动拉起纯单元（假工厂+fs 夹具，含雇员独立家读家锁），同上
+        # test:settings（#17 第二批）：设置三层合成纯单元（env>file>default + 热切换广播），同上
+        # test:settings-ws（#17 第二批补强）：子进程真 relay 起停 ×3（新装物化/存量收敛/env
+        #   锁定），纯协议断言不创建会话——CCR_NO_LEADER=1 显式关掉启动序的 Leader
+        #   首建（不设则无锚即真拉 Leader CLI，「不拉 CLI」靠开关保证而非碰巧），CI 可跑
+        # test:codex（#27 P0）：CodexAgentSession 用 /bin/sh 桩脚本替代真 codex CLI
+        #   （CCR_CODEX_PATH 注入），零 codex 二进制零 API key，CI 可跑
+        # test:artifacts-dead（#224）/ test:deliver-session（#227/#230，dev 0.6.1/0.6.2 线）：
+        #   输出物下发口径与会话身份挂账，均 mkdtemp 沙盒纯单元，CI 可跑
+        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive, test:settings, test:settings-ws, test:codex, test:artifacts-dead, test:deliver-session]
     defaults:
       run:
         working-directory: relay

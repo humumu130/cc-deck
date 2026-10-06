@@ -1,0 +1,4 @@
+[
+  {"key":"bad:1","kind":"leader-duty","source_session_id":"s1","created_at":1,"revision":"1"},
+  {"key":"bad:2","kind":"waiting","source_session_id":"s2","created_at":"bad","revision":"1"}
+]

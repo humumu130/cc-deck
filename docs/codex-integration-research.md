@@ -87,3 +87,43 @@ Codex Remote 底层是"SSH 上去拉起 codex app-server，再说 JSON-RPC"—�
 - openai/codex 仓库：https://github.com/openai/codex
 - 智谱 Codex 接入：https://docs.bigmodel.cn/cn/coding-plan/tool/codex
 - 本机配置参考：`~/.codex/config.toml`、`~/.codex/models.json`（key 与 Claude Code 共用，已验证）
+
+---
+
+## 附录：P0 动工前复核（2026-10-01，全部通过零漂移）
+
+| 复核项 | 结果 |
+|---|---|
+| CLI 版本 | ✅ codex-cli 0.154.0——与调研当日同版，零漂移 |
+| GLM 接线 | ✅ config.toml 原样（ZAI/glm-5.3/responses 端点 /api/v1），实跑回「OK」 |
+| `codex exec --json` 事件流 | ✅ 形态一致，一手词汇表见下 |
+| 会话文件 | ✅ `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（三层日期目录，比调研记录更细）；行结构 `{timestamp, ordinal, type:"event_msg", payload}` |
+| resume 能力 | ✅ `codex exec resume <session-id>`（另有 fork；`--cd` 定 cwd、`-i` 附图、`-c` 配置覆盖） |
+
+### 一手事件词汇表（两次冒烟实测，headless exec 形态）
+
+```
+{"type":"thread.started","thread_id":"01a0f5ac-…"}                    ← 会话锚点（≈SDK session id）
+{"type":"turn.started"}
+{"type":"item.started","item":{"id","type":"command_execution","command","aggregated_output","exit_code","status"}}   ← 流式开始
+{"type":"item.completed","item":{"id","type":"command_execution"|"agent_message","text"?,…}}
+{"type":"turn.completed","usage":{"input_tokens","cached_input_tokens","cache_write_input_tokens","output_tokens","reasoning_output_tokens"}}
+```
+
+usage 映射注意：`cached_input_tokens` ≈ Claude 口径的 cache_read——**统计页累加勿计入实耗**（与预算口径同理）；`reasoning_output_tokens` 是 output 的子集（glm-5.3 max effort 下 reasoning 单列）。
+
+headless 审批语义：exec 形态无交互审批（sandbox 档位 + `--skip-git-repo-check`）；远程审批流（WAITING 形态）P0 不做，Codex 会话卡先标「无审批面」，app-server 富接入（P1）再评估。
+
+### AgentAdapter 契约缺口盘点（现状 → V2 契约的泄漏点清单）
+
+已有缝（引擎无关，可直接承载第二实现）：`AgentLike` 接口 + `AgentCallbacks` + `setAgentFactory` 工厂缝（agent-adapter.ts:133/176；测试 fake factory 整替引擎跑全套件即证明）。
+
+Claude 特有路径泄漏在编排层（V2 纪律②要收编的面，P0 demo 可先绕行不阻塞）：
+1. transcript 读取（transcriptHasAssistant / ~/.claude/projects JSONL 解析）——Codex 对等物是 rollout-*.jsonl（event_msg 行），格式不同
+2. 任务清单轮询（~/.claude/tasks/<sid>，TodoWrite 快照）——Codex 无对等物（P0 降级：任务面板恒空）
+3. titlegen（spawn CLI 起名）——Codex 用首 prompt 派生即可
+4. hooks 桥接外部会话（bridge-hook.mjs 是 Claude Code 插件）——Codex 外部会话发现 = 扫 sessions 目录（发现层新增一种格式）
+5. 雇员独立家（CLAUDE_CONFIG_DIR）——Codex 对等物 CODEX_HOME（接线时核）
+6. ListTodoTools/GLM 裁剪（agent-adapter.ts spawn options）——Claude 实现细节，P0 不外溢
+
+P0 demo 最小面：`CodexAgentSession implements AgentLike`（spawn codex exec --json + 事件流→AgentCallbacks 映射：thread.started→onInit、agent_message→onLog、command_execution→onLog(tool_use)、turn.completed→onTurnEnd+usage）+ 引擎选择（create 参数/配置）+ web/手机双栈可见（会话卡标引擎）。契约收敛= demo 落地后从两实现归纳，先不写空头接口。

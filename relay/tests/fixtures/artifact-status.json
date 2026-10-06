@@ -1,0 +1,9 @@
+{
+  "cwd": "/workspace/cc-deck",
+  "items": [
+    { "path": "/workspace/cc-deck/build/app.apk", "source_id": "office", "last_at": 2100, "failure": "download timeout" },
+    { "path": "/workspace/cc-deck/build/app.json", "source_id": "office", "last_at": 2000, "exists": false },
+    { "path": "/workspace/cc-deck/build/app.apk", "source_id": "home", "last_at": 2200, "source_reachable": false },
+    { "path": "/workspace/cc-deck/build/app.zip", "source_id": "office", "last_at": 1900, "download_status": "failed" }
+  ]
+}

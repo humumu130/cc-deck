@@ -1,0 +1,15 @@
+{
+  "pending_receipts": [],
+  "failed_or_hanging_dispatches": [],
+  "unlocked_todos": [
+    {"todo_id":"todo-night","playbook":"consult","risk":"known","token_estimate":100}
+  ],
+  "stale_doing": [],
+  "running_sessions": [],
+  "duty_policy": {
+    "enabled": true,
+    "allowed_playbooks": ["consult"],
+    "overnight_budget": 1000,
+    "overnight_budget_used": 1000
+  }
+}

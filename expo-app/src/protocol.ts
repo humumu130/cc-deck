@@ -14,6 +14,62 @@ export interface TokenUsage {
   cache_creation_input_tokens: number;
 }
 
+export type ActivityKind = "tool_use" | "tool_result" | "assistant_text" | "system";
+
+export interface ActivityCapabilities {
+  native_status: boolean;
+  operation_summary: boolean;
+  native_elapsed: boolean;
+  approval: boolean;
+}
+
+export interface StatusDockState {
+  state: SessionStatus;
+  task_summary?: { text: string; source: "todo" | "dispatch" | "board" | "session"; updated_at: number };
+  activity?: { kind: ActivityKind; text: string; tool?: string; observed_at: number; occurred_at?: number };
+  elapsed_ms?: number;
+  capabilities: ActivityCapabilities;
+  updated_at: number;
+}
+
+export interface SessionActivityPayload {
+  session_id: string;
+  state: SessionStatus;
+  activity_kind: ActivityKind;
+  text: string;
+  tool?: string;
+  observed_at: number;
+  occurred_at?: number;
+  capabilities: ActivityCapabilities;
+  seq_local: number;
+}
+
+export interface SourceCapabilities {
+  models?: boolean;
+  activity?: boolean;
+  notifications?: boolean;
+  commands?: string[];
+  [key: string]: boolean | string[] | undefined;
+}
+
+export interface NotificationItem {
+  key: string;
+  kind: string;
+  group: string;
+  severity: string;
+  title: string;
+  body: string;
+  sourceContext: { domain: string; entityId: string; sessionId?: string; segment?: string; alertId: string; returnPath: string };
+  actionable: boolean;
+  created_at: number;
+  resolved_at?: number;
+  handled_at?: number;
+}
+
+export interface NotificationsUpdatedPayload {
+  items: NotificationItem[];
+}
+
 export interface AskOption {
   label: string;
   description?: string;
@@ -34,6 +90,29 @@ export interface WaitingPayload {
   questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时渲染选项点选作答）
   decidable?: boolean;
   received_at?: number;
+  // #212 允许并记住：存在 = 可记忆（非危险形态），渲染「记住」入口；作答发
+  // COMMAND_CONTINUE + remember_scope（relay 落规则）。旧 relay 无此字段
+  remember?: { pattern: string; label: string };
+}
+
+// #212 记住的规则（relay AllowRule 镜像）：SNAPSHOT.allow_rules / ALLOW_RULES_UPDATED 携带
+export interface AllowRule {
+  id: string;
+  scope: "session" | "global";
+  session_id?: string;
+  tool: string;
+  pattern: string; // Bash=命令前缀；Edit 族=目录前缀；其他="*"（工具级）
+  created_at: number;
+  created_by: string;
+}
+
+// #17 第二批 雇员独立家设置（relay 三层合成镜像）：SNAPSHOT.settings /
+// SETTINGS_UPDATED 携带。source = 生效来源（env=环境变量锁定 UI 只读；file=设置项；
+// default=新装/存量推导）
+export interface EmployeeHomeSettings {
+  employee_home: boolean;
+  value: string | null;
+  source: "env" | "file" | "default";
 }
 
 export interface TodoItem {
@@ -83,6 +162,8 @@ export interface SessionState {
   action_summary: string;
   started_at: number;
   updated_at: number;
+  activity?: StatusDockState; // optional: old relay snapshots omit activity
+  activity_capabilities?: ActivityCapabilities; // optional: capability-aware downgrade
   waiting_request?: WaitingPayload | null;
   stats: FileChangeStats;
   last_error?: string;
@@ -115,6 +196,86 @@ export interface SessionState {
   // 列表源角标/详情页源标注用。sid 为 uuid 全局唯一，可作跨源主键；单源模式不写
   // （watch 网关直发 snap.sessions，保持手表快照字节不变）
   src?: string;
+  // #26 M2 组织归属：project_gid = 所属项目组（卡徽标 [组名] 与组详情编制的数据源）；
+  // dispatch_tier = 派单档位（随手办/轻立项/正经立项）。旧 relay 不带 = 无组织域
+  project_gid?: string;
+  dispatch_tier?: string;
+  // #27 引擎标记：undefined = claude；"codex" = CodexAgentSession（codex exec
+  // 驱动）。卡片「托管/Codex」徽标数据源；旧 relay 不带 = claude
+  engine?: string;
+}
+
+// ---------- #26 M2 组织域（v3.1 矩阵式；relay projects.ts 镜像） ----------
+// 项目组（SNAPSHOT.projects / PROJECTS_UPDATED 携带；结项=archived 单向终态）
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  anchor_dir: string;
+  tier: "轻立项" | "正经立项";
+  status: "pending" | "active" | "parked" | "archived";
+  created_at: number;
+  updated_at: number;
+  headcount?: { session_id: string; role: string; joined_at: number }[];
+  note?: string;
+}
+
+// 待决议确认卡（SNAPSHOT.org_confirms / ORG_CONFIRM_UPDATED）：Leader 只提案，
+// 用户 ✓/✗ 决议（COMMAND_ORG_CONFIRM）；decided 后不再出现在 pending 清单
+export interface OrgConfirm {
+  id: string;
+  kind: "project-create" | "tier-change" | "suggest-hold" | "archive" | "revive";
+  title: string;
+  reason?: string;
+  created_at: number;
+  status: "pending" | "approved" | "rejected";
+  payload?: Record<string, unknown>;
+}
+
+// 任务板条目（COMMAND_PROJECT_DETAIL.board 携带；BOARD_UPDATED 增量维护）
+export interface BoardEntry {
+  id: string;
+  text: string;
+  status: "todo" | "doing" | "done";
+  note?: string;
+  owner_session?: string;
+  dispatch_id?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ProjectBoard {
+  gid: string;
+  frozen: boolean;
+  entries: BoardEntry[];
+}
+
+// 派单台账行（COMMAND_PROJECT_DETAIL.receipts 携带，最近 30 条按 anchor 过滤新在前）
+export interface DispatchReceipt {
+  ts: number;
+  id: string;
+  tier: string;
+  target: string;
+  status: string;
+  receipt?: string;
+  session_id?: string;
+  project_anchor?: string;
+}
+
+// #26 M3 熟手池条目（COMMAND_PROJECT_DETAIL.pool 携带）：路由表档案（§5 成员卡进化：
+// 经验 N 次·上次·评价·标签）join 会话运行态，服务端拼好、端上零 join。
+// resumable=false = 退休（会话不在册/无 SDK 句柄，只剩路由表档案）；parked = 随本组
+// 挂起休眠（org_parked 指回本组）；busy 口径与派单时 pickVeteran 现场口径一致
+export interface RoutingPoolEntry {
+  session_id: string;
+  count: number;
+  failed: number;
+  last_ts: number;
+  rating?: "good" | "bad";
+  tags?: string[];
+  title?: string;
+  busy: boolean;
+  resumable: boolean;
+  parked: boolean;
 }
 
 export interface PendingInput {
@@ -146,6 +307,7 @@ export interface LogEntry {
   streaming?: boolean; // true = 该文本块仍在生成中
   detail?: string; // 工具完整入参/输出（展开查看）
   diff?: string[]; // Edit/Write 的 +/- diff 行（着色渲染）
+  occurred_at?: number; // optional: old relay only has relay receive time ts
 }
 
 export interface Envelope {
@@ -154,6 +316,153 @@ export interface Envelope {
   ts: number;
   type: string;
   payload: any;
+}
+
+export type EventType =
+  | "SESSION_ACTIVITY"
+  | "NOTIFICATIONS_UPDATED"
+  | string;
+
+export interface SnapshotPayload {
+  sessions: SessionState[];
+  logs: Record<string, LogEntry[]>;
+  server_time: number;
+  schema_version?: number;
+  models?: string[];
+  homedir?: string;
+  deliverables?: boolean;
+  acceptances?: unknown[];
+  relay_dev?: string;
+  relay_name?: string;
+  projects?: ProjectGroup[];
+  boards?: ProjectBoard[];
+  org_confirms?: OrgConfirm[];
+  notifications?: NotificationItem[];
+  source_capabilities?: SourceCapabilities;
+}
+
+const ACTIVITY_KINDS: readonly ActivityKind[] = ["tool_use", "tool_result", "assistant_text", "system"];
+const SESSION_STATUSES: readonly SessionState["status"][] = ["WORKING", "WAITING", "ERROR", "DONE"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
+export function normalizeActivityCapabilities(value: unknown): ActivityCapabilities {
+  const raw = isRecord(value) ? value : {};
+  return {
+    native_status: raw.native_status === true,
+    operation_summary: raw.operation_summary === true,
+    native_elapsed: raw.native_elapsed === true,
+    approval: raw.approval === true,
+  };
+}
+
+export function hasActivityCapability(session: SessionState, capability: keyof ActivityCapabilities): boolean {
+  return session.activity_capabilities?.[capability] === true || session.activity?.capabilities[capability] === true;
+}
+
+export function parseSessionActivityPayload(value: unknown): SessionActivityPayload | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.session_id !== "string" || !value.session_id) return null;
+  if (typeof value.state !== "string" || !SESSION_STATUSES.includes(value.state as SessionState["status"])) return null;
+  if (typeof value.activity_kind !== "string" || !ACTIVITY_KINDS.includes(value.activity_kind as ActivityKind)) return null;
+  if (typeof value.text !== "string" || typeof value.observed_at !== "number" || !Number.isFinite(value.observed_at)) return null;
+  if (typeof value.seq_local !== "number" || !Number.isInteger(value.seq_local) || value.seq_local < 0) return null;
+  if (value.tool !== undefined && typeof value.tool !== "string") return null;
+  if (value.occurred_at !== undefined && (typeof value.occurred_at !== "number" || !Number.isFinite(value.occurred_at))) return null;
+  return {
+    session_id: value.session_id,
+    state: value.state as SessionActivityPayload["state"],
+    activity_kind: value.activity_kind as ActivityKind,
+    text: value.text,
+    ...(value.tool === undefined ? {} : { tool: value.tool }),
+    observed_at: value.observed_at,
+    ...(value.occurred_at === undefined ? {} : { occurred_at: value.occurred_at }),
+    capabilities: normalizeActivityCapabilities(value.capabilities),
+    seq_local: value.seq_local,
+  };
+}
+
+export function normalizeSnapshotSession(session: SessionState): SessionState {
+  const capabilities = session.activity
+    ? normalizeActivityCapabilities(session.activity.capabilities ?? session.activity_capabilities)
+    : session.activity_capabilities === undefined
+      ? undefined
+      : normalizeActivityCapabilities(session.activity_capabilities);
+  if (!session.activity && capabilities === undefined) return session;
+  if (!session.activity) return { ...session, activity_capabilities: capabilities };
+  const activity: StatusDockState = { ...session.activity, capabilities: capabilities! };
+  return { ...session, activity, activity_capabilities: capabilities };
+}
+
+export function normalizeNotifications(value: unknown): NotificationItem[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is NotificationItem => isRecord(item) && typeof item.key === "string" && !!item.key);
+}
+
+function normalizeSourceCapabilities(value: unknown): SourceCapabilities | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: SourceCapabilities = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "boolean" || (Array.isArray(entry) && entry.every((item) => typeof item === "string"))) out[key] = entry;
+  }
+  return out;
+}
+
+export interface NormalizedSnapshotPayload {
+  sessions: SessionState[];
+  notifications: NotificationItem[] | null;
+  notificationsLegacy: boolean;
+  deliverables: boolean;
+  schemaVersion?: number;
+  sourceCapabilities?: SourceCapabilities;
+}
+
+export function normalizeSnapshotPayload(value: unknown): NormalizedSnapshotPayload {
+  const payload = isRecord(value) ? value : {};
+  const notifications = normalizeNotifications(payload.notifications);
+  const sessions = Array.isArray(payload.sessions)
+    ? payload.sessions.filter((session): session is SessionState => isRecord(session) && typeof session.session_id === "string").map(normalizeSnapshotSession)
+    : [];
+  return {
+    sessions,
+    notifications,
+    notificationsLegacy: notifications === null,
+    deliverables: payload.deliverables === true,
+    ...(typeof payload.schema_version === "number" ? { schemaVersion: payload.schema_version } : {}),
+    sourceCapabilities: normalizeSourceCapabilities(payload.source_capabilities),
+  };
+}
+
+export function reduceSessionActivity(
+  sessions: Map<string, SessionState>,
+  activitySeq: Map<string, number>,
+  value: unknown,
+): boolean {
+  const activity = parseSessionActivityPayload(value);
+  if (!activity) return false;
+  const session = sessions.get(activity.session_id);
+  if (!session) return false;
+  const previousSeq = activitySeq.get(activity.session_id);
+  if (previousSeq !== undefined && activity.seq_local <= previousSeq) return false;
+  const capabilities = normalizeActivityCapabilities(activity.capabilities);
+  const dock: StatusDockState = {
+    ...(session.activity ?? {}),
+    state: activity.state,
+    activity: {
+      kind: activity.activity_kind,
+      text: activity.text,
+      ...(activity.tool === undefined ? {} : { tool: activity.tool }),
+      observed_at: activity.observed_at,
+      ...(activity.occurred_at === undefined ? {} : { occurred_at: activity.occurred_at }),
+    },
+    capabilities,
+    updated_at: activity.observed_at,
+  };
+  sessions.set(activity.session_id, { ...session, activity: dock, activity_capabilities: capabilities });
+  activitySeq.set(activity.session_id, activity.seq_local);
+  return true;
 }
 
 export type CommandType =
@@ -174,7 +483,14 @@ export type CommandType =
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
-  | "COMMAND_ARTIFACT_FETCH";
+  | "COMMAND_ARTIFACT_FETCH"
+  | "COMMAND_ALLOW_RULE_REMOVE"
+  | "COMMAND_ORG_CONFIRM" // #26 M2 确认卡决议（✓/✗；relay 单漏斗 orgAction）
+  | "COMMAND_PROJECT_DETAIL"
+  | "COMMAND_ORG_ACTION"
+  | "COMMAND_NOTIFICATION_ACK"
+  | "COMMAND_ENGINE_PROFILE_UPDATE"
+  | "COMMAND_ARTIFACT_GROUP_FETCH"; // B0 types-only commands; old relay ignores/rejects
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {
@@ -195,4 +511,150 @@ export interface CommandAck {
   // #79 仅 COMMAND_ARTIFACT_FETCH 成功 ACK 携带：字节数 + 扩展名推导 MIME
   //（分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧，ref=command_id）
   artifact?: { size: number; mime: string };
+  // #26 M2/M3 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts, pool }
+  data?: unknown;
+}
+
+// ─── E4a 只读投影（源胶囊副行 / 通知域分组 / 能力卡）：纯函数零依赖，
+// test-e4a-setup.ts 直跑 import（同 test-e1-reducer 先例，无需模块桩） ───
+
+/** 通知域分组词表（007 IA B+ 口径）：action=需你行动 / attention=注意 / activity=动态。
+ * 与 relay NotificationGroup 同源（relay/src/types.ts），值替换帧只改账不改词表 */
+export type NotificationGroup = "action" | "attention" | "activity";
+
+export interface NotificationBucketView {
+  group: NotificationGroup;
+  count: number;
+  badgeCount: number; // 仅 action 组有意义：未决 actionable 计数
+}
+
+export interface NotificationProjection {
+  legacy: boolean; // true = 旧 relay（无通知账 null/undefined）→ 横幅计数整块不渲染
+  total: number;
+  badgeCount: number; // 未决 actionable（action 组）——前台通知角标/「需你行动」计数
+  buckets: Record<NotificationGroup, NotificationBucketView>;
+}
+
+// dismissed_at 为 relay lifecycle 扩展字段、冻结面 NotificationItem 暂无（E3b 回单
+// 备案 4，不擅改）——此处防御读取：帧里带了就算已处理，没带不误判
+type NotificationLifecycleExtras = { dismissed_at?: number };
+
+function notificationHandled(n: NotificationItem): boolean {
+  const x = n as NotificationItem & NotificationLifecycleExtras;
+  return n.handled_at !== undefined || x.dismissed_at !== undefined || n.resolved_at !== undefined;
+}
+
+/** 通知域只读投影（镜像 relay groupNotifications 读侧语义，单遍 O(n)）：
+ * 未知分组条目跳过（畸形防御，同 relay `if (!bucket) continue`）；角标=action 组
+ * 且 actionable 且未决（handled/dismissed/resolved 全空）。入参只读不突变（重连
+ * 快照/值替换帧反复投影不丢不重） */
+export function projectNotifications(items: readonly NotificationItem[] | null | undefined): NotificationProjection {
+  const buckets: Record<NotificationGroup, NotificationBucketView> = {
+    action: { group: "action", count: 0, badgeCount: 0 },
+    attention: { group: "attention", count: 0, badgeCount: 0 },
+    activity: { group: "activity", count: 0, badgeCount: 0 },
+  };
+  if (!items) return { legacy: true, total: 0, badgeCount: 0, buckets };
+  let total = 0;
+  for (const n of items) {
+    const b = buckets[n.group as NotificationGroup];
+    if (!b) continue;
+    total++;
+    b.count++;
+    if (n.group === "action" && n.actionable && !notificationHandled(n)) b.badgeCount++;
+  }
+  return { legacy: false, total, badgeCount: buckets.action.badgeCount, buckets };
+}
+
+/** 源胶囊副行输入（结构化最小面，store SourceStatus 天然满足）：018 §2.6 轻量口径
+ * 之外，仅当快照带 capability/version 类字段才补一行说明 */
+export interface SourceCapsuleInput {
+  channel: "lan" | "cloud" | null;
+  schemaVersion?: number;
+  notificationsLegacy?: boolean;
+}
+
+/** 源胶囊副行：`v{schema} · 云桥|直连 ·(通知不可用)`；旧 relay（schema_version 缺省）
+ * → null = 不出该行（轻量行保持 状态点+源名+必要异常 原样，不猜字段不造假数据） */
+export function capsuleSubline(src: SourceCapsuleInput | null | undefined): string | null {
+  if (!src || typeof src.schemaVersion !== "number") return null;
+  const parts = [`v${src.schemaVersion}`, src.channel === "cloud" ? "云桥" : "直连"];
+  if (src.notificationsLegacy) parts.push("通知不可用");
+  return parts.join(" · ");
+}
+
+/** 能力卡模型（设置页只读）：快照带 schema_version / source_capabilities 任一才出卡；
+ * 旧 relay 两者皆缺 → null = 整卡隐藏（018 §2.7「旧 relay 缺字段按能力隐藏」）。
+ * 行级同样按字段在场渲染（缺 key 不出该行，不出假「—」）。隐私红线：本模型只产
+ * 文案与计数，绝不携带 token/密钥类字段值——source_capabilities 上的未知键一律
+ * 不读（018 §2.5：秘密只存 env/keychain 引用，不进快照更不进渲染树） */
+export interface CapabilityRow {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface CapabilityCardModel {
+  rows: CapabilityRow[];
+  privacy: string; // profile 非秘密引用文案（静态，不含任何密钥内容）
+}
+
+export function capabilityCardModel(input: {
+  schemaVersion?: number;
+  sourceCapabilities?: SourceCapabilities;
+  models?: string[];
+}): CapabilityCardModel | null {
+  const caps = input.sourceCapabilities;
+  if (typeof input.schemaVersion !== "number" && !caps) return null;
+  const rows: CapabilityRow[] = [];
+  if (typeof input.schemaVersion === "number") {
+    rows.push({ key: "schema", label: "协议版本", value: `v${input.schemaVersion}` });
+  }
+  if (caps) {
+    if (caps.activity !== undefined) rows.push({ key: "activity", label: "活动摘要/耗时", value: caps.activity ? "支持" : "不可用" });
+    if (caps.models !== undefined) rows.push({ key: "modelsCap", label: "模型清单", value: caps.models ? "支持" : "不可用" });
+    if (caps.notifications !== undefined) rows.push({ key: "notifications", label: "通知域", value: caps.notifications ? "支持" : "不可用" });
+    if (Array.isArray(caps.commands) && caps.commands.length) rows.push({ key: "commands", label: "已登记命令", value: `${caps.commands.length} 项` });
+  }
+  if (Array.isArray(input.models) && input.models.length) rows.push({ key: "modelCount", label: "可用模型", value: `${input.models.length} 个` });
+  return {
+    rows,
+    privacy: "引擎凭证只以环境变量或系统密钥引用保存在电脑端，不随快照下发，也不在本页显示。",
+  };
+}
+
+// ─── E4b 通知 ACK 可见面（Setup 通知区模型 + 双击闸）：接线所需增量，纯函数零依赖 ───
+
+/** 待办通知行（Setup 通知区渲染模型）：key=源域稳定键（ackNotification 定位键），
+ * title 单行展示。语义=角标镜像（action 组且 actionable 且未决），与
+ * projectNotifications 的 badgeCount 同一口径——乐观 handled_at 一落账（ackNotification
+ * 乐观突变）行即刻消失（无再点位），ACK 失败回滚后行回来（重试=重点按钮） */
+export interface TodoRow {
+  key: string;
+  title: string;
+}
+
+export interface TodoSurface {
+  rows: TodoRow[]; // 有界 ≤TODO_SURFACE_MAX（390 宽不整屏失控）
+  overflow: number; // 溢出计数（「还有 N 条」角标行）
+}
+
+export const TODO_SURFACE_MAX = 8;
+
+export function todoSurface(items: readonly NotificationItem[] | null | undefined): TodoSurface {
+  if (!items || items.length === 0) return { rows: [], overflow: 0 };
+  const pending: NotificationItem[] = [];
+  for (const n of items) {
+    if (n.group !== "action" || !n.actionable) continue;
+    if (notificationHandled(n)) continue;
+    pending.push(n);
+  }
+  const rows = pending.slice(0, TODO_SURFACE_MAX).map((n) => ({ key: n.key, title: n.title }));
+  return { rows, overflow: pending.length - rows.length };
+}
+
+/** ACK 双击闸：飞行中同 key 再点 → skip（不双发命令）；出结果（onDone）后出闸。
+ * node 直测锁定「重复点击不双发」的调用面语义 */
+export function ackTapGuard(inFlight: ReadonlySet<string>, key: string): "skip" | "go" {
+  return inFlight.has(key) ? "skip" : "go";
 }

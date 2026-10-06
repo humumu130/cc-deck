@@ -1,0 +1,27 @@
+{
+  "notifications": [
+    {
+      "key": "org-confirm:cf-m1:1",
+      "kind": "org-confirm",
+      "source_session_id": "s-leader",
+      "created_at": 1000,
+      "group": "action",
+      "actionable": true,
+      "revision": "1",
+      "source_context": { "domain": "org-confirm", "entityId": "cf-m1", "alertId": "org-confirm:cf-m1:1", "returnPath": "/org/confirm/cf-m1", "sessionId": "s-leader" }
+    },
+    {
+      "key": "waiting:s-m2:req-2",
+      "kind": "waiting",
+      "source_session_id": "s-m2",
+      "created_at": 1100,
+      "group": "action",
+      "actionable": true,
+      "revision": "req-2",
+      "source_context": { "domain": "waiting", "entityId": "req-2", "alertId": "x" }
+    },
+    { "key": "bad:1", "kind": "leader-duty", "source_session_id": "s1", "created_at": 1200, "revision": "1" },
+    { "key": "bad:2", "kind": "waiting", "source_session_id": 42, "created_at": 1300, "revision": "1" },
+    { "key": "waiting:s-m3:req-3", "kind": "waiting", "source_session_id": "s-m3", "created_at": 1400, "revision": "req-3" }
+  ]
+}

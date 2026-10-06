@@ -1,0 +1,5 @@
+{
+  "plain": "Trae plain stdout line",
+  "json": {"type":"assistant","text":"Trae event-shaped output"},
+  "badLine": "{not-json"
+}

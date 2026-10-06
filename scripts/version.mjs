@@ -23,8 +23,11 @@ const targets = [
   {
     name: "web-console CONSOLE_VERSION",
     file: "web-console/index.html",
-    get: (s) => /^const CONSOLE_VERSION = "(.+?)";$/m.exec(s)?.[1],
-    set: (s) => s.replace(/^const CONSOLE_VERSION = "(?:.+?)";$/m, `const CONSOLE_VERSION = "${canonical}";`),
+    // 行尾注释容忍（2026-10-03）：dev→m2 合并带入的 `"; // dev 0.6.2 …` 尾注曾让
+    // `$` 锚定正则取不到值、版本闸门误报「未找到」。取值只认引号内；回写只替换
+    // 语句本体、尾注原样保留
+    get: (s) => /^const CONSOLE_VERSION = "(.+?)";/m.exec(s)?.[1],
+    set: (s) => s.replace(/^const CONSOLE_VERSION = "(?:.+?)";/m, `const CONSOLE_VERSION = "${canonical}";`),
   },
   {
     name: "expo-app app.json expo.version",

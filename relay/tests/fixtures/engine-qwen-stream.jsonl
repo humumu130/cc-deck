@@ -1,0 +1,5 @@
+{"type":"assistant","text":"分析任务中","created_at":1728100000100}
+{"type":"tool_call","name":"read_file","text":"读取 src/index.ts","created_at":1728100000200}
+{"type":"tool_result","name":"read_file","result":"文件内容","created_at":1728100000300}
+{"type":"done","text":"完成","created_at":1728100000400}
+{"unknown":"future-shape"}

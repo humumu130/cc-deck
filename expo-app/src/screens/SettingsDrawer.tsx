@@ -11,6 +11,7 @@ import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
+import type { AllowRule } from "../protocol";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
 import Svg, { Path, Rect } from "react-native-svg";
@@ -118,6 +119,7 @@ const ICON_MSG = "M4 5h16v10H9l-4 4z"; // 消息泡（过程消息）
 const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; // 半月（空闲变灰）
 const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回车发送）
 const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
+const ICON_HOME = "M3 11 12 4l9 7M5 10v10h14V10"; // 小屋（#17 第二批 雇员独立家）
 
 // 扫描框角标（ScanScreen 取景框同语言 mini 版）：四角 L 亮角 + 中部扫描横线，
 // 纯 View 线条绘制（App 无 svg 依赖，与既有图形语言一致）
@@ -311,6 +313,15 @@ export default function SettingsDrawer({
     );
   };
   const snap = useRelay();
+  // #17 第二批 雇员独立家 ⓘ 弹窗（渲染闭包 snap 即最新——抽屉随 emit 重渲）：
+  // 语义 + 两条边界（只影响新会话 / 新装默认开）+ env 锁定附注
+  const empHomeHelp = () => {
+    Alert.alert(
+      "雇员独立家",
+      "开启后，系统拉起的雇员（自动干活的会话）使用独立目录保存配置与任务，不再读写你本机的 Claude 目录；关闭则共用。\n\n· 改动只影响之后新建的会话，已有会话保持原处\n· 新装默认开启，升级前已部署的默认关闭"
+        + (snap.empHome?.source === "env" ? "\n· 本台服务器由部署环境锁定，开关不可更改" : ""),
+    );
+  };
   const [servers, setServers] = useState<ServerEntry[]>([]);
   rebuildSrvColors(servers.map((s) => s.id));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -482,6 +493,24 @@ export default function SettingsDrawer({
     snap.sources.find((s) => s.state === "online") ??
     snap.sources[0] ??
     null;
+
+  // #212 记住规则（设置抽屉「记住的规则」区数据）：各在线源合并展示；
+  // legacy 计数支持分态——全部在线源都是旧 relay（allowRules 为 null）时显示
+  // 「升级后可用」。数据在 SourceStatus 上（connStatusPatch 透出），删除/事件
+  // 到达都经快照发布自动重渲，无需手动刷新
+  const ruleRows: { src: SourceStatus; r: AllowRule }[] = [];
+  let ruleOnline = 0;
+  let ruleLegacy = 0;
+  for (const s of snap.sources) {
+    if (s.state !== "online") continue;
+    ruleOnline++;
+    if (!Array.isArray(s.allowRules)) { ruleLegacy++; continue; }
+    for (const r of s.allowRules) ruleRows.push({ src: s, r });
+  }
+  const ruleMultiSrc = new Set(ruleRows.map((x) => x.src.id)).size > 1;
+  // 删除两次点按确认（web 端同款 arm 模式，3s 超时复位）
+  const [ruleArm, setRuleArm] = useState<string | null>(null);
+  const ruleArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // （#36 状态卡已删：connDotColor/connSubText 随之退役）
 
   // 关于区检查更新行已删（#130 收敛进关于弹窗），upd 不再需要
@@ -683,6 +712,63 @@ export default function SettingsDrawer({
         )}
         {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
 
+        {/* #212 记住的规则：审批卡「允许并记住」落的规则（各在线源合并展示），
+            删除按条目所属源路由发命令。分态：无在线源 / 全旧 relay（不支持）/
+            空表 / 列表。两次点按确认删除（对齐 web 端） */}
+        <View style={d.secHead}>
+          <Text style={d.secTitleT}>记住的规则{ruleRows.length ? ` · ${ruleRows.length}` : ""}</Text>
+          <View style={d.secToggle} />
+        </View>
+        {ruleOnline === 0 ? (
+          <Text style={d.srvEmpty}>连接电脑后可查看</Text>
+        ) : ruleLegacy === ruleOnline ? (
+          <Text style={d.srvEmpty}>此电脑版本不支持，升级后可用</Text>
+        ) : ruleRows.length === 0 ? (
+          <Text style={d.srvEmpty}>暂无记住的规则</Text>
+        ) : (
+          <View>
+            {ruleRows.map(({ src, r }) => {
+              const key = `${src.id}|${r.id}`;
+              const armed = ruleArm === key;
+              return (
+                <View key={key} style={d.ruleRow}>
+                  <View style={d.ruleHead}>
+                    <Text style={d.ruleTool}>{r.tool}</Text>
+                    <View style={d.ruleScope}>
+                      <Text style={d.ruleScopeT}>{r.scope === "session" ? "本会话" : "全局"}</Text>
+                    </View>
+                    {ruleMultiSrc ? (
+                      <Text style={d.ruleSrc} numberOfLines={1}>{src.relayName || src.name}</Text>
+                    ) : null}
+                    <Pressable
+                      hitSlop={6}
+                      onPress={() => {
+                        if (!armed) {
+                          setRuleArm(key);
+                          if (ruleArmTimer.current) clearTimeout(ruleArmTimer.current);
+                          ruleArmTimer.current = setTimeout(() => setRuleArm(null), 3000);
+                          return;
+                        }
+                        setRuleArm(null);
+                        if (ruleArmTimer.current) clearTimeout(ruleArmTimer.current);
+                        // 删除按源路由（rule id 只在所属 relay 存储里有效）
+                        store.send("COMMAND_ALLOW_RULE_REMOVE", { id: r.id }, src.id, (ack) => {
+                          if (ack.ok) store.dropAllowRuleLocal(src.id, r.id);
+                          else Alert.alert("删除失败", ack.err || "服务器未找到此规则");
+                        });
+                      }}
+                      accessibilityLabel={`删除规则 ${r.tool} ${r.pattern === "*" ? "全部操作" : r.pattern}`}
+                    >
+                      <Text style={armed ? d.ruleDelArmT : d.ruleDelT}>{armed ? "确认删除？" : "删除"}</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={d.rulePat} numberOfLines={2}>{r.pattern === "*" ? "全部操作" : r.pattern}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆。
             #130 默认改折叠（低频区让路；存过偏好的老用户不受影响——null 才用默认） */}
         <View style={d.secHead}>
@@ -743,6 +829,33 @@ export default function SettingsDrawer({
             thumbColor="#EDEDF2"
           />
         </View>
+        {/* #17 第二批 雇员独立家（relay 级设置，显示组末尾与本地偏好同区收纳）：活动源
+            SNAPSHOT.settings 携带才渲染（旧 relay 无字段 = 行隐藏）；source=env = 部署
+            环境锁定只读；切换走 COMMAND_SETTINGS_UPDATE，成功由 SETTINGS_UPDATED 广播
+            收敛（不本地乐观更新，开关回弹即失败/未生效），失败 Alert 原文提示 */}
+        {snap.empHome ? (
+          <View style={[d.setItem, d.setRow]}>
+            <View style={d.setL}>
+              <LineIcon path={ICON_HOME} />
+              <Text style={d.setLabel}>雇员独立家</Text>
+              <Pressable hitSlop={8} onPress={empHomeHelp} accessibilityLabel="雇员独立家说明">
+                <Text style={d.helpMark}>ⓘ</Text>
+              </Pressable>
+            </View>
+            <Switch
+              value={snap.empHome.employee_home}
+              disabled={snap.empHome.source === "env"}
+              onValueChange={(v) => {
+                if (snap.empHome?.source === "env") return;
+                store.empHomeSet(v, (r) => {
+                  if (!r.ok) Alert.alert("雇员独立家", r.err || "设置未生效，请稍后重试");
+                });
+              }}
+              trackColor={{ false: withA(c.dim, 0.3), true: c.brandA }}
+              thumbColor="#EDEDF2"
+            />
+          </View>
+        ) : null}
         {/* 多源聚合（#294 批4）开关已移除（2026-09-14）：与会话列表上方「单源/聚合」
             胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
         </>
@@ -987,6 +1100,23 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   pairRefreshT: { color: c.dim, fontSize: 12.5 },
   pairHintT: { color: c.faint, fontSize: 10, marginTop: 6, textAlign: "center" },
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
+  // #212 记住规则行：首行 tool（等宽粗体）+ scope 徽章 + [源名] + 删除，次行
+  // pattern 等宽小字（命令前缀/目录路径）；卡形态与服务器行同语言
+  ruleRow: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
+  },
+  ruleHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  ruleTool: { color: c.text, fontSize: 12, fontWeight: "700", fontFamily: "monospace" },
+  ruleScope: {
+    borderWidth: 1, borderColor: c.line, borderRadius: 5,
+    paddingHorizontal: 4, paddingVertical: 1, backgroundColor: c.tintSoft,
+  },
+  ruleScopeT: { color: c.dim, fontSize: 9, fontWeight: "600", lineHeight: 11 },
+  ruleSrc: { flex: 1, color: c.faint, fontSize: 9.5, textAlign: "right" },
+  ruleDelT: { color: c.faint, fontSize: 11, marginLeft: "auto" },
+  ruleDelArmT: { color: c.waiting, fontSize: 11, fontWeight: "700", marginLeft: "auto" },
+  rulePat: { color: c.dim, fontSize: 10, fontFamily: "monospace", lineHeight: 13.5, marginTop: 3 },
   setItem: {
     paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.line,

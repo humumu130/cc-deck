@@ -1,11 +1,11 @@
 // 历史持久化测试：deriveTitle / compactEvents / reduceHistory / EventBus 持久化+预载 / adopt
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
-import { compactEvents, deriveTitle, loadEvents, reduceHistory, rewriteFile } from "../src/history.js";
+import { compactEvents, compactEventsFile, deriveTitle, loadEvents, reduceHistory, rewriteFile } from "../src/history.js";
 import type { Envelope, SnapshotPayload } from "../src/types.js";
 
 let pass = 0;
@@ -31,6 +31,23 @@ const events: Envelope[] = [];
 let seq = 0;
 const sid = "s1";
 events.push(mk(++seq, sid, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "测试", title: "测试", model: "m" }));
+
+// #17 雇员标记随首帧流经事件流：重启回放重建卡片后身份存活（独立家选家依赖）
+{
+  const empEv = [mk(++seq, "emp-1", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "e", model: "m", employee: true })];
+  assert(reduceHistory(empEv).get("emp-1")?.state.employee === true, "回放重建雇员标记");
+  // 第二批：创建时落定的家随首帧回放——开关翻转后存量会话按记录走（无损）
+  const homeEv = [mk(++seq, "emp-2", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "e2", model: "m", employee: true, employee_home: "/tmp/emp-home-rec" })];
+  assert(reduceHistory(homeEv).get("emp-2")?.state.employee_home === "/tmp/emp-home-rec", "回放重建创建时的家（employee_home）");
+  // #27 引擎标记随首帧回放：codex 卡重启后被当 claude 收养 → resume 走错工厂静默
+  // 换引擎（P1-2）。同款口径：载荷带 key 才落，不带（claude 会话）不带键
+  {
+    const codexEv = [mk(++seq, "eng-1", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "c", model: "m", engine: "codex" })];
+    assert(reduceHistory(codexEv).get("eng-1")?.state.engine === "codex", "回放重建引擎标记（codex 重启不换引擎）");
+    const claudeEv = [mk(++seq, "eng-2", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "k", model: "m" })];
+    assert(!("engine" in (reduceHistory(claudeEv).get("eng-2")?.state ?? {})), "无引擎载荷不带键（claude 缺省语义不变）");
+  }
+}
 for (let i = 0; i < 350; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
 for (let i = 0; i < 80; i++) events.push(mk(++seq, sid, "SESSION_UPDATED", { status: "WORKING", action_summary: `u${i}`, stats: null }));
 events.push(mk(++seq, sid, "SESSION_HEARTBEAT", { elapsed_ms: 1, action_summary: "h" }));
@@ -92,8 +109,47 @@ assert(before.seq === 4, "新事件 seq=4");
 assert(bus2.replayAfter(3).length === 1, "跨重启补发缺口");
 const snapshot = { sessions: null as unknown, logs: null as unknown } as SnapshotPayload;
 
+// ---------- #25-P1 compactEventsFile：运行期压缩（长跑治理） ----------
+console.log("compactEventsFile:");
+{
+  const cdir = mkdtempSync(join(tmpdir(), "ccr-hist-cmp-"));
+  const cpath = join(cdir, "events.ndjson");
+  const mkc = (seq: number, type: string, payload: unknown = {}): Envelope =>
+    ({ seq, session_id: "cx", ts: 1000 + seq, type: type as Envelope["type"], payload });
+  const evs: Envelope[] = [mkc(1, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "p", title: "t", model: "m" })];
+  for (let i = 0; i < 400; i++) evs.push(mkc(2 + i, "SESSION_LOG", { kind: "assistant_text", text: `l${i}` })); // 流式帧
+  evs.push(mkc(402, "SESSION_HEARTBEAT", { elapsed_ms: 1, action_summary: "h" })); // 心跳：压缩稳定来源
+  evs.push(mkc(403, "SESSION_DONE", { terminal_reason: "success", duration_ms: 5, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 } }));
+  rewriteFile(cpath, evs);
+  assert(compactEventsFile(cpath, evs.length * 999) === null, "低于阈值不动作（null）");
+  const r1 = compactEventsFile(cpath, 0);
+  assert(!!r1 && r1.after < r1.before, `超阈值压缩生效（${r1?.before}→${r1?.after} 字节）`);
+  const after = loadEvents(cpath);
+  assert(!after.some((e) => e.type === "SESSION_HEARTBEAT"), "压缩后心跳丢弃");
+  assert(after.filter((e) => e.type === "SESSION_LOG").length === 300, "日志留最后 300 条");
+  assert(after.some((e) => e.type === "SESSION_CREATED") && after.some((e) => e.type === "SESSION_DONE"), "CREATED/DONE 保留");
+  assert(after.every((e, i, a) => i === 0 || a[i - 1].seq <= e.seq), "压缩后 seq 有序");
+  assert(compactEventsFile(cpath, 0) === null, "已最简幂等（再压 null 不白写）");
+  // 压缩后继续追加：运行期压缩的真实时序（压缩→新事件照常落盘→重启 load 完整）
+  const cbus = new EventBus({ preload: after, persistPath: cpath });
+  cbus.emit("cx", "SESSION_LOG", { kind: "system", text: "post-compact" });
+  const reloaded = loadEvents(cpath);
+  assert((reloaded.at(-1)!.payload as { text?: string }).text === "post-compact", "压缩后新事件照常追加");
+  assert(new EventBus({ preload: reloaded, persistPath: cpath }).lastSeq() === cbus.lastSeq(), "压缩不破坏 seq 延续（重启视角）");
+  assert(!readdirSync(cdir).some((f) => f.includes(".tmp-")), "原子写无 .tmp 残件");
+  rmSync(cdir, { recursive: true, force: true });
+}
+
 // ---------- SessionManager.adopt ----------
 console.log("SessionManager.adopt:");
+// 沙盒铁律：钉死数据目录防生产泄漏（继承的 CCR_DATA_DIR 等生产 env 会被 loadConfig
+// env 优先级整包劫持——2026-09-28 事故实证，详见 test-ws.ts 头部）
+// CCR_CLOUD_URL：统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
+process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-hist-cfg-"));
+const cfgDataDir = process.env.CCR_DATA_DIR;
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+process.env.CCR_CLOUD_URL = "";
 const cfg = loadConfig();
 cfg.token = "test";
 const mgr = new SessionManager(bus2, cfg);
@@ -130,6 +186,7 @@ assert(Object.keys(mgr.snapshotLogs()).length === 1, "快照含时间线");
 }
 
 rmSync(dir, { recursive: true, force: true });
+rmSync(cfgDataDir, { recursive: true, force: true }); // #20 备案收尾：cfg 沙盒目录成功路径此前残留
 void snapshot;
 
 console.log(`\n${fail === 0 ? "HISTORY TESTS PASSED" : "HISTORY TESTS FAILED"} (${pass} pass / ${fail} fail)`);

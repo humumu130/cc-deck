@@ -1,0 +1,257 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "009 BEADS 思想轻量化落地（cc-deck 团队编排）",
+    "locale": "zh-CN",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "user",
+      "label": "01 / 用户"
+    },
+    {
+      "id": "relay",
+      "label": "02 / relay · board store"
+    },
+    {
+      "id": "pmw",
+      "label": "03 / PM 派单 · worker 实施"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-intake",
+      "label": "需求 · 拆卡入库",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p-gate",
+      "label": "就绪门槛 · 派单",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-close",
+      "label": "执行 · 验收 · 经验回流",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "demand",
+    "split",
+    "board",
+    "ready",
+    "dispatch",
+    "exec",
+    "accept"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "demand"
+    ],
+    "allowedTerminals": [
+      "lessons"
+    ],
+    "requiredEdges": [
+      {
+        "from": "ready",
+        "to": "blocked"
+      },
+      {
+        "from": "blocked",
+        "to": "confirm"
+      },
+      {
+        "from": "confirm",
+        "to": "ready"
+      },
+      {
+        "from": "accept",
+        "to": "lessons"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "demand",
+      "lane": "user",
+      "col": 0,
+      "type": "external",
+      "label": "需求确认",
+      "sublabel": "立项 · 拍板"
+    },
+    {
+      "id": "split",
+      "lane": "pmw",
+      "col": 0,
+      "type": "backend",
+      "label": "PM 拆卡",
+      "sublabel": "depends_on · gate 标注",
+      "tag": "DAG 思想"
+    },
+    {
+      "id": "board",
+      "lane": "relay",
+      "col": 1,
+      "type": "database",
+      "label": "board store",
+      "sublabel": "任务卡入库 · 单一事实源"
+    },
+    {
+      "id": "ready",
+      "lane": "relay",
+      "col": 2,
+      "type": "backend",
+      "label": "ready 就绪集",
+      "sublabel": "依赖全done·gate未堵",
+      "tag": "bd ready",
+      "width": 120
+    },
+    {
+      "id": "blocked",
+      "lane": "relay",
+      "col": 3,
+      "type": "security",
+      "label": "blocked 态",
+      "sublabel": "gate 映射 · 不自动关闭"
+    },
+    {
+      "id": "confirm",
+      "lane": "user",
+      "col": 3,
+      "type": "security",
+      "label": "人类确认卡",
+      "sublabel": "用户决策唯一写面",
+      "tag": "gate 不越权"
+    },
+    {
+      "id": "dispatch",
+      "lane": "pmw",
+      "col": 3,
+      "type": "messagebus",
+      "label": "PM 派单",
+      "sublabel": "claim 台账原子记录",
+      "tag": "不双写"
+    },
+    {
+      "id": "exec",
+      "lane": "pmw",
+      "col": 4,
+      "type": "backend",
+      "label": "领卡执行",
+      "sublabel": "任务书 · 回执纪律"
+    },
+    {
+      "id": "accept",
+      "lane": "pmw",
+      "col": 5,
+      "type": "security",
+      "label": "PM 验收",
+      "sublabel": "回执核对 → done",
+      "tag": "全绿"
+    },
+    {
+      "id": "lessons",
+      "lane": "relay",
+      "col": 5,
+      "type": "database",
+      "label": "lessons 分区",
+      "sublabel": "收口回执 · 筛选注入",
+      "tag": "不全量灌上下文"
+    }
+  ],
+  "edges": [
+    {
+      "from": "demand",
+      "to": "split",
+      "label": "议题"
+    },
+    {
+      "from": "split",
+      "to": "board",
+      "label": "任务卡"
+    },
+    {
+      "from": "board",
+      "to": "ready",
+      "label": "派单前置"
+    },
+    {
+      "from": "ready",
+      "to": "blocked",
+      "label": "未就绪 · gate 映射",
+      "variant": "dashed",
+      "role": "error"
+    },
+    {
+      "from": "blocked",
+      "to": "confirm",
+      "label": "涉险决策上抛",
+      "variant": "dashed"
+    },
+    {
+      "from": "confirm",
+      "to": "ready",
+      "label": "拍板解除",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "from": "ready",
+      "to": "dispatch",
+      "label": "就绪 · 可派",
+      "variant": "emphasis"
+    },
+    {
+      "from": "dispatch",
+      "to": "exec",
+      "label": "任务书"
+    },
+    {
+      "from": "exec",
+      "to": "accept",
+      "label": "回执"
+    },
+    {
+      "from": "accept",
+      "to": "lessons",
+      "label": "收口回执写入",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "beads 映射 · 依赖与派单",
+      "items": [
+        "DAG 依赖 → 任务卡 depends_on 字段",
+        "bd ready → relay 内就绪集计算",
+        "bd claim → 派单台账原子记录"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "beads 映射 · 门槛与经验",
+      "items": [
+        "gate → blocked 态 + 确认卡",
+        "lessons → board 分区，筛选注入",
+        "handoff → 任务书 + 回执链"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "轻量化纪律",
+      "items": [
+        "零 bd/Dolt 二进制依赖",
+        "确认卡仍是用户决策唯一写面",
+        "依赖全 done + gate 未 blocked 才可派",
+        "M3 BeadsBoardProvider 不排期"
+      ]
+    }
+  ]
+}

@@ -194,6 +194,12 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
     const who = r.login.name.length > 16 ? `${r.login.name.slice(0, 16)}…` : r.login.name;
     const viaId = rd ? store.sourceIdForRelay(rd) : undefined;
     const activeId = await store.activeServerId();
+    // #29（C-P2-5）：码带 rd 但未匹配到已连接源时不再无声回落活动源——伪造登录码
+    //（dev/pk 均为攻击者生成）可借回落把攻击者的 web 身份授权给自己的真实 relay，
+    // 而 Alert 文案里的目标名取自手机自己的源列表、看起来完全正常（「密封证明持钥
+    // 者=出码者」在两者都是攻击者时不构成防线）。回落行为保留（旧码不带 rd 的兼容
+    // +真正多源场景），但必须显式告知换轨，由人做最终判断
+    const fallbackActive = !!rd && !viaId;
     const viaName = (viaId ? servers.find((e) => e.id === viaId) : servers.find((e) => e.id === activeId))?.name;
     const grant = () => {
       if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who }, viaId)) {
@@ -213,7 +219,8 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
     }
     Alert.alert(
       "扫码登录",
-      `允许「${who}」接入${viaName ? `「${viaName}」` : "这台服务器"}？\n授权后它可查看会话并发送指令。`,
+      `允许「${who}」接入${viaName ? `「${viaName}」` : "这台服务器"}？\n授权后它可查看会话并发送指令。` +
+        (fallbackActive ? "\n\n⚠ 该码指定的服务器当前未连接，授权将发给上面的源——如与预期不符请取消。" : ""),
       [
         { text: "取消", style: "cancel" },
         {

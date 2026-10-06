@@ -1,0 +1,5 @@
+{
+  "tool": {"status":"WORKING","actionSummary":"读取配置","log":{"kind":"tool_use","text":"读取 package.json","tool":"Read","ts":100}},
+  "assistant": {"status":"WORKING","log":{"kind":"assistant_text","text":"正在检查配置","ts":120,"occurred_at":110}},
+  "waiting": {"status":"WAITING","actionSummary":"等待授权","log":{"kind":"system","text":"授权请求","ts":140}}
+}

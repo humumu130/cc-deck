@@ -13,9 +13,55 @@ interface Env {
   ASSETS?: Fetcher; // [assets] 静态托管绑定：/app 路径映射网页控制台
 }
 
+// #28 审查补：/view/ results POST 每 IP 限流窗（isolate 内存级，见使用处注释）
+const postHits = new Map<string, number[]>();
+
+// #29（B-P0-1 根治）：rl- dev 必须持对应公钥——devId 口径 = 公钥原始字节前 8 字节
+// hex（与 relay/src/e2e.ts devId、Node 桥 index.ts rlDevOfRk 一致）。桥侧 rl- 注册
+// 此前无鉴权：持 token 者可冒真实 relay 的 dev 注册 + 上报假 rk，发现帧把「真 dev +
+// 假公钥」喂给浏览器/expo 写进配对锚 → 后续密封永久指向攻击者公钥（web/expo 侧
+// 过滤是纵深，这里是断根）。现行 relay 自 7b7cd3a 起连桥恒带 rk 且 dev 即派生值，
+// 收紧零影响。wb-/ph-/wt- 无所有权证明，顶替 DoS 面为协议固有，不在本刀范围
+function rlDevOfRk(rk: string): string | null {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(rk)) return null; // nacl 32 字节公钥恒 43 字符 + '='
+  const bin = atob(rk);
+  if (bin.length !== 32) return null;
+  let hex = "";
+  for (let i = 0; i < 8; i++) hex += bin.charCodeAt(i).toString(16).padStart(2, "0");
+  return "rl-" + hex;
+}
+
+// #29 残留备案转正（托管版零安全头，2026-10-01）：Worker 出口统一补安全响应头，
+// 覆盖 assets 转发页（run_worker_first 含 /——_headers 文件在 binding 转发下语义
+// 不可靠，出口处补是唯一全覆盖点）与 KV 直出的 /view/ 页。四头皆不破坏自家页面
+//（预览 iframe 均为 blob: 同源）；严格 CSP 故意不上——托管静态页=web-console 本体，
+// 单文件应用带内联脚本，没有 Tauri set_csp 那样的自动哈希注入，script-src 'self'
+// 会当场砸掉云版控制台。HSTS 不带 includeSubDomains：cc-*.humumu.online 的姊妹
+// 子域不归本 Worker 管辖，不替它们做承诺
+const SEC_HEADERS: Record<string, string> = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-frame-options": "SAMEORIGIN",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "strict-transport-security": "max-age=31536000",
+};
+function withSecHeaders(res: Response): Response {
+  // WS upgrade（101/webSocket）原样放行：Response 构造器拒 101，且安全头对已建立
+  // 的双向通道无意义；上游已带同名的响应不覆盖
+  if (res.webSocket || res.status === 101) return res;
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(SEC_HEADERS)) if (!headers.has(k)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    const url = new URL(req.url);
+    return withSecHeaders(await routeFetch(req, env));
+  },
+};
+
+async function routeFetch(req: Request, env: Env): Promise<Response> {
+  const url = new URL(req.url);
     // #24 域名分层：cc-deck.humumu.online = 新主域（/=项目主页、/app=网页控制台、/dl=下载）；
     // cc.humumu.online = 旧域（文档路径 301 平移；/cloud /cloud-poll /wan /health 的 ws/API 通道双域常驻，
     // ws upgrade 不跟随 301——relay 与手机正在用的桥连接绝不能断，烘焙地址收口留给后续版本）
@@ -44,38 +90,97 @@ export default {
     if (url.pathname.startsWith("/view/")) {
       // 文档/设计稿在线预览（KV 直出 text/html 内联打开；/dl/ 是 attachment 下载，
       // HTML 设计稿要看不能下——2026-09-16 relay/连接区重设计提案走此通道）
+      // #28 安全收窄（2026-10-01）：此前 GET 键名白名单 ^[\w.-]+$ 等于把整个 DL KV
+      //（安装包/签名/dmg/验收单结果）全部暴露成 /view/ 可读——键名可猜即事实公开
+      // #29-fix（2026-10-02 方案 b，用户拍板「堵写不堵读」）：GET 读面从 #29 B 面
+      // 的「acceptance 系 + 硬名单」放宽为 HTML/JSON 文档类通用——#29 收得太死，
+      // 误伤合法文档页（xhs-ccdeck-v6.html 审稿页 404 实锤）。写面不松：POST 提交
+      // 仍锁 acceptance 系 + 每 IP 限流 + per-sheet 密钥；acceptance-*.results.json
+      // 匿名读仍 401（下方 Bearer 分支先行接管，通用读不经过它）；.key 键（#28 提交
+      // 密钥）不在 .html/.json 扩展名集合内，HTTP 层照旧永不可读。
       const doc = url.pathname.slice(6);
       if (!/^[\w.-]+$/.test(doc) || !env.DL) return new Response("bad name", { status: 400 });
-      // #175 验收单云通道提交端点（2026-09-24）：公司网浏览器打不开家庭 LAN，云版表单页
+      const ACC_RESULTS_RE = /^acceptance-[0-9a-f]{32}\.results\.json$/;
+      const PREVIEW_KEYS = new Set(["acc-132.html"]); // 存量设计稿预览（2026-09-16 重设计提案）
+      // #175+#28 验收单云通道提交端点：公司网浏览器打不开家庭 LAN，云版表单页
       //（/view/acceptance-<id>.html，出单工具上传）把勾选结果 POST 到同名 .results.json
-      // 键。键名白名单收紧到 acceptance-<32hex>.results.json——绝不放宽到任意键名，
-      // 防此端点被用来覆盖 apk/清单等 /dl 键。存提交数组（read-merge-write append，
-      // 上限 50 条）：家庭 relay 每 60s 拉回、签名去重落盘（断线期间多次提交一次补齐）。
-      // 无鉴权——id 128bit 不可枚举即凭证（与 relay 本体 /api/acceptance 同口径）。
+      // 键（read-merge-write append 上限 50 条，家庭 relay 每 60s 拉回）。
+      // #28 起加 per-sheet 密钥：出单工具另传 acceptance-<id>.key，填表链接以
+      // fragment（…html#<key>）分发——fragment 不进服务器日志/Referer/CF 缓存键，
+      // 页面 JS 提交时带上，此处对照 KV。缺失/不符 403：断「拿到 id → 伪造全 ✓ →
+      // relay 拉回假关单」链。老单（无 .key 键，存量 12 张均已 submitted）一律 403，
+      // 不留豁免口。
       if (req.method === "POST") {
-        if (!/^acceptance-[0-9a-f]{32}\.results\.json$/.test(doc)) return new Response("bad name", { status: 400 });
+        if (!ACC_RESULTS_RE.test(doc)) return new Response("bad name", { status: 400 });
+        // #28 审查补：每 IP 提交限流（10 次/60s，内存级——Worker isolate 生命周期内
+        // 有效，跨 isolate 不共享但配合边缘分发足够）。持 key 者灌 50+ 条会挤掉未及
+        // 拉回的合法提交（rolling 帽）+ 烧穿账号 KV 写配额殃及其他验收单
+        const ip = req.headers.get("CF-Connecting-IP") ?? "?";
+        const now = Date.now();
+        const arr = (postHits.get(ip) ?? []).filter((t) => now - t < 60_000);
+        if (arr.length >= 10) return new Response("rate limited", { status: 429 });
+        arr.push(now);
+        postHits.set(ip, arr);
+        if (postHits.size > 1000) for (const [k, v] of postHits) if (v.every((t) => now - t >= 60_000)) postHits.delete(k);
         const body = await req.text();
         if (body.length > 65536) return new Response("too large", { status: 413 });
         let rows: unknown;
+        let key: unknown;
         try {
-          rows = (JSON.parse(body) as { rows?: unknown }).rows;
+          const parsed = JSON.parse(body) as { rows?: unknown; key?: unknown };
+          rows = parsed.rows;
+          key = parsed.key;
         } catch {
           return new Response("bad json", { status: 400 });
         }
         if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return new Response("bad rows", { status: 400 });
-        const cur = (await env.DL.get(doc, { type: "json" })) as { at: number; ua: string; rows: unknown }[] | null;
-        const hist = Array.isArray(cur) ? cur : [];
-        hist.push({ at: Date.now(), ua: (req.headers.get("user-agent") ?? "").slice(0, 100), rows });
+        const sheetId = doc.slice("acceptance-".length, doc.indexOf(".results.json"));
+        const expectKey = await env.DL.get(`acceptance-${sheetId}.key`);
+        if (!expectKey || typeof key !== "string" || key.length !== 32 || key !== expectKey) {
+          // #28 审查补：文案对老单（从未有 #key 链接）不能误导——指引回家庭网
+          return new Response('{"ok":false,"error":"密钥缺失或不符：请核对链接是否完整（含 # 后缀）；旧单请改用家庭网链接填写"}', {
+            status: 403,
+            headers: { "content-type": "application/json", "cache-control": "no-store" },
+          });
+        }
+        // #28 审查补：键值若被误写成非法 JSON，type:"json" 会 reject 冒泡成 500 且
+        // 永久卡死该单（每次 POST 都炸、须手工清 KV）——兜住当空数组重建即自愈
+        let cur: unknown = null;
+        try {
+          cur = await env.DL.get(doc, { type: "json" });
+        } catch { /* 坏值当 null 重建 */ }
+        const hist = Array.isArray(cur) ? (cur as { at: number; ua: string; k?: string; rows: unknown }[]) : [];
+        // #28 审查补：条目带唯一 k（nonce）——relay 侧按 k 去重（内容签名会把
+        // 「改回原判」的合法重复内容静默吞掉，A→B→A′ 中 A′ 永久丢失）
+        hist.push({ at: Date.now(), ua: (req.headers.get("user-agent") ?? "").slice(0, 100), k: crypto.randomUUID(), rows });
         await env.DL.put(doc, JSON.stringify(hist.slice(-50)));
         return new Response('{"ok":true}', {
           status: 200,
           headers: { "content-type": "application/json", "cache-control": "no-store" },
         });
       }
-      let html = await env.DL.get(doc, { type: "text" });
-      // 链接后缀宽容（2026-09-24 用户实测踩坑）：手抄/转述丢了 .html 的预览链接
-      //（/view/acceptance-<id>）补 .html 重查一次，仍无才 404；POST 白名单不受影响
-      if (!html && !doc.endsWith(".html")) html = await env.DL.get(doc + ".html", { type: "text" });
+      // GET results.json = relay 回流专用读面（提交数组含全部勾选+备注，不该让任何
+      // 拿到 id 的互联网读走）：与 /cloud 桥同源的 token 做 Bearer。部署顺序注意：
+      // relay 带 header 的新版先发（旧 Worker 忽略未知 header），Worker 验证后发——
+      // 反序会让存量 relay 回流 401 断流（KV 数组仍在，relay 升级后幂等补齐）
+      if (ACC_RESULTS_RE.test(doc)) {
+        const auth = req.headers.get("authorization") ?? "";
+        // #28 审查补：!env.CLOUD_TOKEN 前置——secret 漏绑/环境名拼错时模板串会拼出
+        // 字面量 "Bearer undefined"，攻击者发同名 header 即通过（string !== undefined
+        // 恒真的对照组写法在 218 行安全，唯独这里的拼接有此陷阱）
+        if (!env.CLOUD_TOKEN || auth !== `Bearer ${env.CLOUD_TOKEN}`) return new Response("unauthorized", { status: 401 });
+        const val = await env.DL.get(doc);
+        if (val === null) return new Response("[]", { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+        return new Response(val, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+      }
+      // 无后缀规范化前置（保留 2026-09-24「手抄丢了 .html 也能打开」行为，且对 json
+      // 同样不误补）：非 .html/.json 结尾的键名先补 .html 再查——副作用即安全增益：
+      // .key（#28 提交密钥）等任何其他后缀/无后缀键经补后缀后永远寻址不到原键值。
+      // 门=扩展名白名单（文档类），门内不问键名前缀
+      let page = doc;
+      if (!/\.(html|json)$/i.test(page) && !PREVIEW_KEYS.has(page)) page += ".html";
+      if (!/\.(html|json)$/i.test(page) && !PREVIEW_KEYS.has(page)) return new Response("not found", { status: 404 });
+      const html = await env.DL.get(page, { type: "text" });
       if (!html) return new Response("not found", { status: 404 });
       return new Response(html, {
         status: 200,
@@ -83,14 +188,18 @@ export default {
       });
     }
     if (url.pathname.startsWith("/dl/")) {
-      const name = url.pathname.slice(4);
+      let name = url.pathname.slice(4);
       // /dl/<file> KV 直出（≤25MiB）：Range/206 断点续传（2026-09-17）——手机更新器的
       // .part + Range 续传拿到 200 会弃包全量重下，公司长传输被防火墙掐断后永远差
       // 最后一口气（用户实测"下到 99% 就重下"死循环）。KV 值全量读进内存可承受
       const dlOut = (obj: ArrayBuffer, filename: string): Response => {
+        // 非 ASCII 文件名（中文，#219）：Headers 值必须是 ByteString，中文直接进
+        // filename 会 throw 500——RFC 5987 filename* 主用 + percent-encoded filename
+        // 兜底老浏览器；ASCII 名 encodeURIComponent 为恒等，行为不变
+        const fnAscii = encodeURIComponent(filename);
         const base: Record<string, string> = {
           "content-type": "application/octet-stream",
-          "content-disposition": `attachment; filename="${filename}"`,
+          "content-disposition": `attachment; filename="${fnAscii}"; filename*=UTF-8''${fnAscii}`,
           "cache-control": "no-store",
           "accept-ranges": "bytes",
           "content-length": String(obj.byteLength),
@@ -119,7 +228,42 @@ export default {
         if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
         return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
       }
-      if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      // #219（2026-10-02，dev 8f1b789）：pathname 是百分号编码原样（中文名 %E4%B8%AD…），
+      // 解码后再用——此前 /^\w.-+$/ 不认 %，中文名一律 400。KV 键是扁平字符串、无文件
+      // 系统路径语义，校验只需拦控制字符/路径分隔符/空名：Unicode 字母数字（\p{L}\p{N}）
+      // 放行；解码后的 name 同时用于下文 KV get 与下载文件名（与上传侧键对齐）
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        return new Response("bad name", { status: 400 });
+      }
+      if (!/^[\p{L}\p{N}_.-]+$/u.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      // #28 审查补（P0，两审查交叉实锤）：/dl/ 此前对任何过键名校验的键通用直出，
+      // 把 /view/ 专门保护的两类键整个旁路——GET /dl/acceptance-<id>.key 明文回
+      // per-sheet 密钥（伪造提交通行证）、/dl/…results.json 绕过 Bearer 读全部勾选。
+      // 本分支只服务安装包/公开产物：验收单键（acceptance- 前缀）与密钥/结果后缀
+      // 一律 404（与不存在键同形，不做存在性侧信道）。KV 实测键画像：安装包
+      //（cc-deck-*/snap-*）+ acc-132.html 预览，无 acceptance- 开头的安装包
+      if (/^acceptance-/.test(name) || name.endsWith(".key") || name.endsWith(".results.json")) {
+        return new Response("not found", { status: 404 });
+      }
+      // #29（B-P3 允许清单）：通用直出只服务安装包/公开产物形态（cc-deck-* 各端
+      // 安装包、tauri-* updater 清单与签名、snap-* 快照指针）——将来误传的任意私货
+      //（内网信息/临时文件）不自动变成公网可下。白名单外 404（与不存在键同形，
+      // 不做存在性侧信道）；acc-132.html 预览走 /view/ 白名单，不在此列。
+      // #29-fix（2026-10-02 事故复盘）：允许清单漏了 App OTA 的两份更新清单
+      // latest.json / latest-test.json（updates.ts 的 CF 通道 URL）——23:31 部署
+      // 后 CF 前置通道检查更新全 404，公司网用户（ECS 裸 IP 被墙）检查更新失明，
+      // 复活 #89。两键是纯公开产物（版本号+下载直链），补入允许清单。
+      // #220 放行（dev 8f1b789）：固定名 cc-deck.apk（点号）不匹配前缀 cc-deck-
+      //（横线）曾被守卫误杀 404、专属 KV 直出成死代码——豁免之，走下文直出/302 分支
+      if (
+        name !== "cc-deck.apk" &&
+        !/^(cc-deck-|tauri-|snap-)/.test(name) &&
+        !/^latest(-test)?\.json$/.test(name)
+      ) {
+        return new Response("not found", { status: 404 });
+      }
       // #15 时代的 cc-deck.apk 302 ECS 已废（2026-09-17）：R8 后 APK 16MB < KV 25MiB，
       // 改 KV 直出优先（公司网络屏蔽 ECS 裸 IP，302 对公司死路=更新 99% 循环根因）；
       // KV 未上传时 302 ECS 兜底（家庭 Wi-Fi 可达）
@@ -188,12 +332,18 @@ export default {
     if (dev.length < 1 || dev.length > 64) {
       return new Response("bad dev", { status: 400 });
     }
+    // #29（B-P0-1 根治，与 Node 桥同刀）：rl- dev 必须持对应公钥（dev=rl-<公钥前
+    // 8 字节 hex>），冒名注册真实 relay dev + 假 rk 一律拒——否则发现帧把假公钥喂给
+    // 浏览器/expo 写进配对锚。放外层 fetch（不唤醒 DO 即拒）
+    if (dev.startsWith("rl-")) {
+      const rk = url.searchParams.get("rk") ?? "";
+      if (rlDevOfRk(rk) !== dev) return new Response("bad rk", { status: 401 });
+    }
     // 单 DO 实例承载全部连接，路由表才互相可见。
     // 必须转发原始 Request——用 req.url 字符串会丢 Upgrade 头，握手即 500
     const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
     return stub.fetch(req);
-  },
-};
+}
 
 export class RouterDO extends DurableObject {
   // 公共桥防滥用限流（家用规模远够不着阈值，只有真滥用才触发）：
@@ -223,11 +373,17 @@ export class RouterDO extends DurableObject {
         }
         for (const ws of this.ctx.getWebSockets(connId)) {
           try {
-            // #373 下行解信封：目标为 /wan 手表时 {to,from,data:{t:"wan",frame}} → 明文 frame
+            // #373 下行解信封：目标为 /wan 手表时 {to,from,data:{t:"wan",frame}} → 明文 frame。
+            // #29（B-P2）：仅对 /wan 注册连接（附件带 wanTo）解封——此前对任意目标
+            // 盲目解封，持 token 者可把伪装信封 {t:"wan",frame:"<任意帧>"} 解开后直投
+            // 任意在线设备（内层帧的 from 语义完全丢失，接收方视作桥/relay 下发）。
+            // 常规帧只多一次原有 JSON.parse，仅命中信封形态才读附件，无热路径开销
             let out = frame;
             try {
               const env = JSON.parse(frame) as { data?: { t?: string; frame?: unknown } };
-              if (env?.data?.t === "wan" && typeof env.data.frame === "string") out = env.data.frame;
+              if (env?.data?.t === "wan" && typeof env.data.frame === "string" && this.attachOf(ws)?.wanTo) {
+                out = env.data.frame;
+              }
             } catch { /* 非信封帧原样发 */ }
             ws.send(out);
           } catch (e) {
@@ -267,9 +423,12 @@ export class RouterDO extends DurableObject {
       return Response.json({ ok: true, bridge: "cloudflare", devices: this.router.devs().length });
     }
     if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll" && url.pathname !== "/wan") return new Response("not found", { status: 404 });
-    // #373 /wan 手表明文透传：to=目标 relay dev 必填（该连接的固定投递目标）
+    // #373 /wan 手表明文透传：to=目标 relay dev 必填（该连接的固定投递目标）。
+    // #29（B-P2）：to 强制 rl- 前缀——该通道语义就是「手表→自家 relay」，放宽到
+    // 任意 dev 等于给手表开了「向任意在线设备投明文帧」的口子（外层 fetch 已过
+    // token，这里补形态校验）
     const wanTo = url.pathname === "/wan" ? url.searchParams.get("to") ?? "" : "";
-    if (url.pathname === "/wan" && (wanTo.length < 1 || wanTo.length > 64)) return new Response("bad to", { status: 400 });
+    if (url.pathname === "/wan" && (!wanTo.startsWith("rl-") || wanTo.length > 64)) return new Response("bad to", { status: 400 });
     const dev = url.searchParams.get("dev") ?? "";
     const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发；浏览器连接不带）
     if (dev.length < 1 || dev.length > 64) return new Response("bad dev", { status: 400 });
@@ -279,7 +438,8 @@ export class RouterDO extends DurableObject {
     this.rehydrate();
     this.sweepPolls();
     const connCount = this.ctx.getWebSockets().length + this.polls.size;
-    if (connCount > RouterDO.MAX_CONNS || this.router.devs().length > RouterDO.MAX_DEVS) {
+    // #29（B-P3 off-by-one）：>= 才是「最多 MAX 个」——> 会让门禁放到 MAX+1
+    if (connCount >= RouterDO.MAX_CONNS || this.router.devs().length >= RouterDO.MAX_DEVS) {
       return new Response("bridge busy", { status: 429 });
     }
 
@@ -298,7 +458,7 @@ export class RouterDO extends DurableObject {
         const cl = Number(req.headers.get("content-length") ?? "0");
         if (cl > 8 << 20) return new Response("too large", { status: 413 });
         if (!this.rateOk(ip)) return new Response("rate limited", { status: 429 });
-        this.ensurePoll(dev, sid);
+        if (!this.ensurePoll(dev, sid)) return new Response("dev busy via websocket", { status: 409 });
         const body = await req.text();
         if (body.length > 8 << 20) return new Response("too large", { status: 413 });
         this.router.handleFrame("poll:" + sid, body);
@@ -309,6 +469,7 @@ export class RouterDO extends DurableObject {
       // 而占坑攻击必须不断换新 sid——正好逐次扣
       if (!this.polls.has(sid) && !this.rateOk(ip)) return new Response("rate limited", { status: 429 });
       const s = this.ensurePoll(dev, sid);
+      if (!s) return new Response("dev busy via websocket", { status: 409 });
       const waitMs = Math.min(Number(url.searchParams.get("wait") ?? "20") || 20, 25) * 1000;
       if (s.queue.length === 0 && !s.closed) {
         await new Promise<void>((r) => {
@@ -375,10 +536,16 @@ export class RouterDO extends DurableObject {
   // 下一个 POST/GET 即重挂，relay→浏览器方向的帧不再 ROUTE_MISS。
   // register 用会话既有的 p.dev：他人 POST 猜中 sid 时不能把会话改道到自己名下。
   // 同 dev 轮换 sid 占坑由 router 的顶替语义天然化解：新 sid register 踢掉旧
-  // poll 会话（close hook 移出 polls），同 dev 在线 poll 会话恒 ≤ 1
-  private ensurePoll(dev: string, sid: string) {
+  // poll 会话（close hook 移出 polls），同 dev 在线 poll 会话恒 ≤ 1。
+  // #29（B-P2 poll 顶替）：新 poll 会话不得顶替同 dev 的活跃 WebSocket——register
+  // 的顶替语义会把它 4000 踢下线，持 token 者 POST 猜中 dev 即可免费踢任意在线
+  // 设备（poll 创建本该是纯兜底动作）。浏览器只有 WS 升级失败才降级 poll（彼时
+  // WS 已断，无冲突）；返回 null 由调用方回 409
+  private ensurePoll(dev: string, sid: string): { dev: string; queue: string[]; resolver: (() => void) | null; lastSeen: number; closed: boolean } | null {
     let p = this.polls.get(sid);
     if (!p) {
+      const cur = this.router.connOfDev(dev);
+      if (cur && !cur.startsWith("poll:")) return null;
       p = { dev, queue: [], resolver: null, lastSeen: Date.now(), closed: false };
       this.polls.set(sid, p);
     }

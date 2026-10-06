@@ -1,0 +1,16 @@
+{
+  "now": 1000000,
+  "pending_receipts": [
+    {"sid":"sid-receipt","receipt_path":"/tmp/receipt.json","mtime":999000}
+  ],
+  "failed_or_hanging_dispatches": [
+    {"dispatch_id":"dispatch-hanging","status":"hanging","hanging_ms":7200000,"playbook":"consult"}
+  ],
+  "unlocked_todos": [
+    {"todo_id":"todo-unlocked","content":"整理证据","playbook":"consult","risk":"known"}
+  ],
+  "stale_doing": [
+    {"session_id":"sid-stale","dispatch_id":"dispatch-stale","doing_ms":5400000,"risk":"unknown"}
+  ],
+  "running_sessions": []
+}

@@ -1,0 +1,24 @@
+{
+  "notifications": [
+    {
+      "key": "org-confirm:cf-dup:1",
+      "kind": "org-confirm",
+      "source_session_id": "s-leader",
+      "created_at": 1000,
+      "group": "action",
+      "actionable": true,
+      "revision": "1",
+      "first_sent_at": 1100
+    },
+    {
+      "key": "org-confirm:cf-dup:1",
+      "kind": "org-confirm",
+      "source_session_id": "s-leader",
+      "created_at": 1200,
+      "group": "action",
+      "actionable": true,
+      "revision": "1",
+      "handled_at": 1300
+    }
+  ]
+}

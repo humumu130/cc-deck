@@ -1,15 +1,15 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { statusColor, withA, type ThemeColors } from "../theme";
+import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { FadeIn, PressScale } from "../motion";
-import type { SessionState } from "../protocol";
+import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
@@ -92,6 +92,18 @@ const GroupHeader = memo(function GroupHeader({ name, color, online, count }: {
   );
 });
 
+// 段头（E2a 只读投影）：「待处理」/「其他会话」小节标题 + 实际渲染卡数；与源
+// 分组头同族形制（色条换粗体小标，无源属性）。吸顶行自带底色，滚动叠加不透字
+const SectionHeader = memo(function SectionHeader({ label, count }: { label: string; count: number }) {
+  const styles = useThemeStyles(makeStyles);
+  return (
+    <View style={styles.secHead} accessibilityLabel={`${label}，${count} 个会话`}>
+      <Text style={styles.secHeadT}>{label}</Text>
+      <Text style={styles.secCount}>{count}</Text>
+    </View>
+  );
+});
+
 // 新增会话 ＋：圆头细条十字，与品牌星芒同线条语言
 function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
   const w = 2.8;
@@ -106,10 +118,12 @@ function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: str
 const ACT_W = 78;    // 单个操作按钮宽
 const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
 
-// 列表行模型（信息层级重设计）：聚合多源时插源分组头行，会话行原样引用
-// SessionState 对象（分组/包装不改写会话，行级 memo 依赖引用不变）
+// 列表行模型（E2a 只读投影）：三行型——段头（待处理/其他会话）、源分组头、
+// 会话卡；卡行原样引用 SessionState 对象（分组/包装不改写会话，行级 memo 依赖
+// 引用不变）。行序与 key 由 buildListProjection 纯函数产出
 type ListRow =
-  | { h: true; key: string; name: string; color: string; online: boolean; count: number }
+  | { h: "sec"; key: string; label: string; count: number }
+  | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
 
 // #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
@@ -120,6 +134,312 @@ function clipSrcName(name: string): string {
     if (w > 6) return name.slice(0, i > 0 ? i : 1).trimEnd() + "…";
   }
   return name;
+}
+
+// ---------- E2a 列表只读投影（纯函数段，零 RN 依赖） ----------
+// 数据源全部是 store 现有状态（activity / activity_capabilities / aggregate /
+// sources / source_capabilities / notifications，#018-E1/E4 落库口径），只投影不
+// 取数、不接真命令。expo-app/scripts/test-e2a-list.ts 与 relay/scripts/
+// test-e2a-queue.ts（#018-E2a-up fixture）绕过 RN 桩直跑本段做断言。
+
+/* E2A-QUEUE-START */
+// #018-E2a-up 单流投影富版（018 §2.1.1 推荐分组规则；与 W1a Web queueFlagsOf /
+// queuePartition 同语义——非共享代码层，Web/Expo 各自实现、fixture 同套）。E2a 简版
+// （WAITING 全占待处理）与 W1a 的口径分叉就此对齐：
+// - needs_action 三型入待处理 + working 一型：真实 WAITING 可决策（reason=waiting）/
+//   待验收类持久行动（last_task_done，reason=acceptance）/ 会话级 actionable 未决
+//   通知（reason=notification）/ 确有可观察工作状态的 WORKING（reason=working）；
+// - 不占位四则：WAITING 无 waiting_request（脱钩帧）、decidable:false、已 resolved
+//   通知、绑定他人 session 的通知；在线空转 WORKING（无活动证据）同样不占行动位；
+// - 同键互斥首见优先（默认键 session_id，多源场景 opts.keyOf 注入复合键）；
+// - 组内序：pending 按 reason 优先级（waiting>acceptance>notification>working）+
+//   updated_at 倒序，others 按 updated_at 倒序；
+// - 旧 relay 降级：无 status / waiting_request、last_task_done、activity 畸形 /
+//   通知池非数组 / 条目非对象，一律安全落组不崩不伪造。
+export type QueueReason = "waiting" | "acceptance" | "notification" | "working" | "other";
+
+// queue_flags 五标志（018 §2.1.1 协议语义，客户端派生）
+export interface QueueFlags {
+  needs_action: boolean; // 行动位（waiting/acceptance/notification 三型任一）
+  is_working: boolean; // WORKING 事实位（在线不占位——进不进待处理另看活动证据）
+  needs_acceptance: boolean; // 待验收汇报在
+  is_other: boolean; // 不入待处理组
+  reason: QueueReason;
+}
+
+// 待处理组内排序优先级：可决策 > 待验收 > 通知要求 > 工作中
+export const QUEUE_REASON_ORDER: Record<string, number> = { waiting: 0, acceptance: 1, notification: 2, working: 3 };
+
+// 五标志判定（旧 relay 缺字段全形态降级：不崩、不伪造）
+export function queueFlagsOf(s: SessionState, notifActionable?: boolean): QueueFlags {
+  const o: Partial<SessionState> = s && typeof s === "object" ? s : {};
+  const st = typeof o.status === "string" ? o.status : "";
+  const wr = o.waiting_request;
+  // 真实可决策 WAITING：waiting_request 在且为对象、decidable 非 false（缺省=可决策）
+  const waitingDecidable = st === "WAITING" && !!wr && typeof wr === "object" && wr.decidable !== false;
+  const ltd = o.last_task_done;
+  const acceptance = !!ltd && typeof ltd === "object";
+  const notif = notifActionable === true;
+  const working = st === "WORKING";
+  const act = o.activity?.activity;
+  // 可观察工作状态：活动正文或工具名在场（仅 kind/时间戳不算——在线不占行动位）
+  const observableWork = !!(act && ((typeof act.text === "string" && act.text !== "") || (typeof act.tool === "string" && act.tool !== "")));
+  const needsAction = waitingDecidable || acceptance || notif;
+  const inPending = needsAction || (working && observableWork);
+  const reason: QueueReason = waitingDecidable ? "waiting"
+    : acceptance ? "acceptance"
+    : notif ? "notification"
+    : working && observableWork ? "working"
+    : "other";
+  return { needs_action: needsAction, is_working: working, needs_acceptance: acceptance, is_other: !inPending, reason };
+}
+
+// 单流分区主入口：pending（待处理，置顶）/ others（其他会话）两组互斥。同一会话
+// 只出现一次（首见优先，重复 id 直接过滤）；opts.notifications = 全源归一通知池
+//（判「通知明确要求动作」：actionable 且未 resolved 且 sourceContext.sessionId
+// 绑定本会话）；畸形会话（非对象/无 id）跳过不入流、非数组入参 → 空两组（旧 relay
+// 缺字段降级不崩）。flags 逐会话在账（键=keyOf）。调用方必须先做完筛选（折叠空闲/
+// 删除舞步）再进来——组头计数只能来自过滤后实际渲染卡数，不能使用源总数（018
+// §2.1.1 硬条款，buildListProjection 的段头 count 全部取自本函数输出）
+export interface SplitOptions {
+  keyOf?: (s: SessionState) => string;
+  notifications?: unknown; // 归一化 NotificationItem[]；非数组 = 旧 relay 降级空池
+}
+export interface PendingSplit {
+  pending: SessionState[];
+  others: SessionState[];
+  flags: Map<string, QueueFlags>;
+}
+export function splitPending(sessions: SessionState[], opts?: SplitOptions): PendingSplit {
+  const keyOf = typeof opts?.keyOf === "function" ? opts.keyOf : (s: SessionState) => s.session_id;
+  const notifSids = new Set<string>();
+  const pool: unknown[] = Array.isArray(opts?.notifications) ? opts.notifications : [];
+  for (const n of pool) {
+    if (!n || typeof n !== "object") continue;
+    const item = n as { actionable?: unknown; resolved_at?: unknown; sourceContext?: { sessionId?: unknown } };
+    if (item.actionable !== true) continue;
+    if (item.resolved_at !== undefined && item.resolved_at !== null) continue; // 已解决不再要求动作
+    const sid = item.sourceContext && typeof item.sourceContext === "object" ? item.sourceContext.sessionId : undefined;
+    if (typeof sid === "string" && sid) notifSids.add(sid); // 只认绑定本会话的未决通知
+  }
+  const pending: SessionState[] = [];
+  const others: SessionState[] = [];
+  const flags = new Map<string, QueueFlags>();
+  const seen = new Set<string>();
+  for (const s of Array.isArray(sessions) ? sessions : []) {
+    if (!s || typeof s !== "object" || typeof s.session_id !== "string" || !s.session_id) continue;
+    const k = String(keyOf(s));
+    if (seen.has(k)) continue; // 首见优先，重复直接滤
+    seen.add(k);
+    const f = queueFlagsOf(s, notifSids.has(s.session_id));
+    flags.set(k, f);
+    (f.is_other ? others : pending).push(s);
+  }
+  const recency = (x: SessionState): number => (x && (x.updated_at || x.started_at)) || 0;
+  pending.sort((a, b) => {
+    const ra = QUEUE_REASON_ORDER[flags.get(String(keyOf(a)))?.reason ?? "other"] ?? 9;
+    const rb = QUEUE_REASON_ORDER[flags.get(String(keyOf(b)))?.reason ?? "other"] ?? 9;
+    return ra !== rb ? ra - rb : recency(b) - recency(a);
+  });
+  others.sort((a, b) => recency(b) - recency(a));
+  return { pending, others, flags };
+}
+/* E2A-QUEUE-END */
+
+// E2B-COMMANDS-START
+// #018-E2b root 写链路纯函数段（自包含零 RN 依赖；W1b 347768d W1B-COMMANDS 同构
+// 参照——两端同语义不共享代码）。§5.4 硬条款：ACK 必须核 ok === true，HTTP 200/
+// 已发送/退出 0 都不算成功；无自动重试风暴（重试=用户重点；store 全局纪律已封顶：
+// 4s 超时重发同 command_id 一次 → 6s 收摊回调一次，调用方只呈现不自动重发）。
+// payload 口径对齐 relay 实况：
+//   COMMAND_NOTIFICATION_ACK {notification_key, action:"handled"|"dismissed"}（B0 冻结词表）
+//   COMMAND_ORG_CONFIRM      {confirm_id, approve:boolean}（relay 咽喉 ===true 严判）
+// 通知不清零（B3a 口径）：本段与消费组件均无清池操作——打开/浏览/重连/动作失败
+// 回滚零删行；badge 收缩只随 handled/dismissed 权威账。
+export interface AckLike { ok?: unknown; error?: unknown; err?: unknown }
+export interface AckVerdict { ok: boolean; error: string | null; kind: "ok" | "rejected" | "unconfirmed" }
+
+// ACK 严格判定三态：ack 缺失（发送失败/超时收摊）→ unconfirmed（可重试文案）；
+// ok === true 才成功；其余一律 rejected（error/err 字符串透传，非串兜底文案）
+export function ackVerdict(ack: AckLike | null | undefined): AckVerdict {
+  if (ack == null || typeof ack !== "object") {
+    return { ok: false, error: "命令未确认（超时或源未连接），可重试", kind: "unconfirmed" };
+  }
+  if (ack.ok === true) return { ok: true, error: null, kind: "ok" };
+  const msg = typeof ack.error === "string" && ack.error ? ack.error
+    : typeof ack.err === "string" && ack.err ? ack.err : null;
+  return { ok: false, error: msg ?? "命令被拒绝", kind: "rejected" };
+}
+
+// 旧 relay 未知命令错误三签名（ws 白名单拒发 "invalid command shape" / 旧
+// handleCommand default "unsupported command" / org 咽喉 "unsupported org action: x"）。
+// 命中 = 该源 relay 版本没有这条命令（非暂时性故障）→ 能力位记忆，静默降级防弹窗轰炸
+export function unknownCommandError(err: unknown): boolean {
+  return typeof err === "string" && /invalid command shape|^unsupported command|unsupported org action/.test(err);
+}
+
+export type CmdCaps = Record<string, boolean>;
+// 能力位记忆（纯对象进出）：未知命令错误后记住「此源不再发该命令」
+export function cmdCapRemember(caps: unknown, cmd: string): CmdCaps {
+  const next: CmdCaps = { ...((caps && typeof caps === "object" ? caps : {}) as CmdCaps) };
+  next[cmd] = false;
+  return next;
+}
+export function cmdCapBlocked(caps: unknown, cmd: string): boolean {
+  return !!(caps && typeof caps === "object" && (caps as CmdCaps)[cmd] === false);
+}
+// 恢复条件：①relay 身份变更（同一连接换指另一台 relay 实例）②快照 schema_version>=1
+//（relay 升级新命令面上线）。旧 relay 恒 legacy（version 0）→ 记忆稳定不被快照冲掉
+export function cmdCapRecoverOnSnapshot(caps: unknown, snapshotLike: unknown, identityChanged: boolean): CmdCaps {
+  const p = (snapshotLike && typeof snapshotLike === "object" ? snapshotLike : {}) as Record<string, unknown>;
+  const v = typeof p.schema_version === "number" && Number.isFinite(p.schema_version) ? p.schema_version : 0;
+  if (identityChanged !== true && v < 1) return (caps && typeof caps === "object" ? caps : {}) as CmdCaps;
+  return {};
+}
+
+// 双击闸：飞行中同键再点 → skip（expo/W1b 同语义同 fixture，不共享代码）
+export function ackTapGuard(inFlight: Set<string> | null | undefined, flightKey: string): "go" | "skip" {
+  return inFlight && inFlight.has(flightKey) ? "skip" : "go";
+}
+// 组织确认复合飞行键：confirm_id 是源域命名空间，跨源可能撞名
+export function orgFlightKey(srcId: string, confirmId: string): string {
+  return String(srcId) + "/" + String(confirmId);
+}
+
+// 组织确认 payload 组装（relay 咽喉 confirm-decide：approve 必须真布尔——
+// `payload.approve === true` 严格判，字符串 "1"/数字 1 会判否决）；confirm_id 空串/null 拒发
+export function orgConfirmPayload(confirmId: unknown, approve: unknown): { confirm_id: string; approve: boolean } | null {
+  if (typeof confirmId !== "string" || !confirmId.trim()) return null;
+  return { confirm_id: confirmId, approve: approve === true };
+}
+
+// 可行动项（badge 计数/「知道了」按钮位口径）：actionable===true 且 resolved_at/
+// handled_at/dismissed_at 全空且 key 为字符串。池非数组/条目畸形一律安全空——
+// 不清零不伪造（通知不清零的收缩面只由权威账驱动）
+export function notifActionableOf(items: unknown): { key: string }[] {
+  if (!Array.isArray(items)) return [];
+  return items.filter((n): n is { key: string } => {
+    if (!n || typeof n !== "object") return false;
+    const o = n as Record<string, unknown>;
+    return o.actionable === true && o.resolved_at == null && o.handled_at == null
+      && o.dismissed_at == null && typeof o.key === "string";
+  });
+}
+// E2B-COMMANDS-END
+
+// 源配色映射（#294 审查修复口径）：按跨端稳定键 colorKey 排序等距分配调色板，
+// 与输入顺序无关——分组头与逐卡角标共用同一映射，同屏同源必同色
+export function sourcePalette(sources: { id: string; colorKey?: string }[]): Map<string, string> {
+  const sorted = [...sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
+  return new Map(sorted.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]]));
+}
+
+// 活动指标行模型：store activity 最后值的只读投影。四行（状态/动作/耗时/审批）
+// 按各自 capability 门控——字段缺省 = 该行不渲染；activity 缺失 = 返回 null
+//（整块不渲染，不显示假「空闲」）。activity 在而 capability 全关（旧 relay
+// 归一化产物）→ 返回空对象，渲染层按空块处理
+export interface ActivityMetrics {
+  state?: SessionStatus;     // native_status 门控
+  summary?: string;          // operation_summary 门控（activity.text）
+  elapsedMs?: number;        // native_elapsed 门控（elapsed_ms；缺失不出行）
+  approvalPending?: boolean; // approval 门控（waiting_request 存在 = 待审批）
+}
+export function activityMetricsOf(s: SessionState): ActivityMetrics | null {
+  const a = s.activity;
+  if (!a) return null;
+  const out: ActivityMetrics = {};
+  if (hasActivityCapability(s, "native_status")) out.state = a.state;
+  if (hasActivityCapability(s, "operation_summary")) out.summary = a.activity?.text ?? "";
+  if (hasActivityCapability(s, "native_elapsed") && typeof a.elapsed_ms === "number") out.elapsedMs = a.elapsed_ms;
+  if (hasActivityCapability(s, "approval")) out.approvalPending = !!s.waiting_request;
+  return out;
+}
+
+// 投影行模型：section（待处理/其他会话段头）· source（源分组头，srcId=null =
+// 「—」降级占位组）· card（会话卡，pending 标记置顶组归属）。组头 count 一律
+// = 该组实际渲染卡数（去重后），不是原始数组长度
+export type ProjectionRow =
+  | { kind: "section"; key: string; label: string; count: number }
+  | { kind: "source"; key: string; srcId: string | null; name: string; color: string; online: boolean; count: number }
+  | { kind: "card"; key: string; s: SessionState; pending: boolean };
+
+export interface ProjectionSource {
+  id: string;
+  name: string;
+  state: string;
+  colorKey?: string;
+}
+
+export interface ProjectionParams {
+  sessions: SessionState[];
+  aggregate: boolean;
+  sources: ProjectionSource[];
+  // 活动源 source_capabilities?.activity === true；旧 relay 缺省/false = legacy
+  sourceActivityCap: boolean;
+  // #018-E2a-up 全源归一通知池（snap.sources 各源 notifications 平铺）；缺省 =
+  // 无通知域，旧 relay（notifications 为 null/缺字段）自然降级空池
+  notifications?: unknown;
+}
+
+// 列表投影主入口：
+// - 待处理段恒置顶（跨源汇总，段头计数=实际卡数）；
+// - 非聚合或仅单源 → 「其他会话」平铺直列；
+// - 聚合多源 + 能力在 → 按源分组（组序=store 源序，组头带源名/配色/在线/计数）；
+// - 聚合多源 + 能力缺失（legacy）→ 降级为单一「—」占位组平铺，不隐藏结构；
+// - 聚合分组下无 src / 源已不在列表的会话落「—」占位组殿后（降级不丢卡）
+export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
+  // E2a-up 富版分区：needs_action 四型/不占位四则/互斥/组内序全在 splitPending
+  //（018 §2.1.1）；段头/组头 count 全部取自本函数输出的过滤后卡数，绝不用源总数
+  const { pending, others } = splitPending(p.sessions, { notifications: p.notifications });
+  const rows: ProjectionRow[] = [];
+  if (pending.length) {
+    rows.push({ kind: "section", key: "sec-pending", label: "待处理", count: pending.length });
+    for (const s of pending) rows.push({ kind: "card", key: s.session_id, s, pending: true });
+  }
+  if (!others.length) return rows;
+  const useGroups = p.aggregate && p.sources.length > 1;
+  if (!useGroups) {
+    rows.push({ kind: "section", key: "sec-others", label: "其他会话", count: others.length });
+    for (const s of others) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+    return rows;
+  }
+  if (!p.sourceActivityCap) {
+    // legacy relay：源能力缺失，分组依据不可信 → 「—」占位组平铺（结构保留）
+    rows.push({ kind: "source", key: "src-degraded", srcId: null, name: "—", color: "", online: false, count: others.length });
+    for (const s of others) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+    return rows;
+  }
+  const palette = sourcePalette(p.sources);
+  const stateOf = new Map(p.sources.map((x) => [x.id, x.state] as const));
+  const bySrc = new Map<string, SessionState[]>();
+  for (const s of others) {
+    const k = s.src ?? "";
+    const list = bySrc.get(k);
+    if (list) list.push(s);
+    else bySrc.set(k, [s]);
+  }
+  for (const src of p.sources) {
+    const cards = bySrc.get(src.id);
+    if (!cards?.length) continue;
+    bySrc.delete(src.id);
+    rows.push({
+      kind: "source",
+      key: `src-${src.id}`,
+      srcId: src.id,
+      name: displaySrcName(src.name),
+      color: palette.get(src.id) ?? srcColor(src.colorKey ?? src.id),
+      online: stateOf.get(src.id) === "online",
+      count: cards.length,
+    });
+    for (const s of cards) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  }
+  // 无归属（快照无 src / 源已删）→ 「—」占位组殿后
+  const rest = [...bySrc.values()].flat();
+  if (rest.length) {
+    rows.push({ kind: "source", key: "src-unknown", srcId: null, name: "—", color: "", online: false, count: rest.length });
+    for (const s of rest) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  }
+  return rows;
 }
 
 // cc light 风格：运行中黄灯呼吸（亮度呼吸，对齐网页端呼吸灯）
@@ -413,8 +733,35 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
   );
 }
 
+// E2a 活动指标块：store activity 最后值的只读投影——状态/动作/耗时/审批四行，
+// 各自按 activity_capabilities 门控显隐；activity 缺失=整块不渲染（不显示假
+// 「空闲」），capability 全关（legacy 归一化产物）= 空块同效不渲染。行高恒定
+//（lineHeight 定值）+ 单行 ellipsis 截断 + tabular 数字，390 宽小屏不抖卡高
+function ActivityBlock({ s }: { s: SessionState }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const m = activityMetricsOf(s);
+  if (!m) return null;
+  const lines: [string, string, string][] = [];
+  if (m.state !== undefined) lines.push(["状态", STATUS_ZH[m.state] ?? m.state, statusColor(m.state, c)]);
+  if (m.summary !== undefined) lines.push(["动作", m.summary || "—", c.dim]);
+  if (m.elapsedMs !== undefined) lines.push(["耗时", fmtElapsed(m.elapsedMs), c.dim]);
+  if (m.approvalPending !== undefined) lines.push(["审批", m.approvalPending ? "待审批" : "—", m.approvalPending ? c.waiting : c.faint]);
+  if (!lines.length) return null;
+  return (
+    <View style={styles.actBlock}>
+      {lines.map(([k, v, vc]) => (
+        <Text key={k} style={styles.actLine} numberOfLines={1}>
+          <Text style={styles.actKey}>{k} </Text>
+          <Text style={[styles.actVal, { color: vc }]}>{v}</Text>
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge,
+  s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge, orgTag,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -426,6 +773,7 @@ const SessionCard = memo(function SessionCard({
   density: ListDensity;
   dim?: boolean; // #32 离线源降权
   srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
+  orgTag?: string | null; // #26 M2 组织归属（项目组名/派单档位）：标准档缀元信息行、紧凑档占目录位、极简档无位不显
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -500,7 +848,10 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
+          {/* E2a 活动指标块（紧凑档）：activity 缺失/能力全关时自返回 null */}
+          <ActivityBlock s={s} />
           <View style={styles.footC}>
+            {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
             {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡 */}
@@ -533,6 +884,8 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
+          {/* E2a 活动指标块（标准档）：四行按 capability 门控；极简档无位不显 */}
+          <ActivityBlock s={s} />
           {/* 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行小字（原 tag 胶囊 +
               目录/历史分散多段 → 单段 faint 尾截断），右侧 ctx 水位（#145 改动统计行
               移除，详情页统计保留全量） */}
@@ -540,7 +893,8 @@ const SessionCard = memo(function SessionCard({
             {/* #86 多源源标签独立放左下（对齐桌面端卡底统计行形态），不再挤标题行 */}
             {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Text style={styles.meta} numberOfLines={1}>
-              {s.external ? "外部 CLI" : "托管"}
+              {/* #26 M2 组织归属前置（§2.5 分流形态）：组名/档位最先交代，旧 relay 无字段零变化 */}
+              {orgTag ? `${orgTag} · ` : ""}{s.external ? "外部 CLI" : s.engine === "codex" ? "Codex" : "托管"}
               {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
               {dormant ? " · 已保存" : ""}
               {s.historical && !s.external ? " · 历史" : ""}
@@ -553,6 +907,209 @@ const SessionCard = memo(function SessionCard({
     </SwipeRow>
   );
 });
+
+// ---------- #26 M2 组织区（v3.1 矩阵式）----------
+// 与 web-console 组织域同口径：确认卡（Leader 只提案 → 用户 ✓/✗ 决议，§4「用户是
+// 指挥/验收者」）、项目组三态 chips（结项=archived 单向终态不占常驻位）、组详情弹窗
+// （编制/任务板/回执流）。旧 relay 快照无 projects 字段（null）→ 整区不渲染，兼容
+const ORG_ST_ZH: Record<string, string> = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
+const ORG_CF_KIND_ZH: Record<string, string> = {
+  "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活",
+};
+// chips 排序：待确认 → 在办 → 已挂起（同 web 端 org zone 顺序契约）
+const ORG_ST_ORD: Record<string, number> = { pending: 0, active: 1, parked: 2 };
+function orgStColor(st: string, c: ThemeColors): string {
+  return st === "active" ? c.done : st === "pending" ? c.waiting : c.faint;
+}
+
+// 组织区（列表顶条件区，随待填验收单卡同位）：确认卡行 + 项目组 chips
+function OrgZone({ confirms, groups, onDecide, onOpenGroup }: {
+  confirms: { src: SourceStatus; cf: OrgConfirm }[];
+  groups: { src: SourceStatus; g: ProjectGroup }[];
+  onDecide: (srcId: string, confirmId: string, approve: boolean) => void;
+  onOpenGroup: (src: SourceStatus, g: ProjectGroup) => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  if (!confirms.length && !groups.length) return null;
+  const sorted = [...groups].sort((a, b) => (ORG_ST_ORD[a.g.status] ?? 9) - (ORG_ST_ORD[b.g.status] ?? 9));
+  return (
+    <View style={styles.orgZone}>
+      {confirms.map(({ src, cf }) => (
+        <View key={cf.id} style={styles.orgCf}>
+          <Text style={styles.orgCfKind}>{ORG_CF_KIND_ZH[cf.kind] ?? cf.kind}</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.orgCfTitle} numberOfLines={1}>{cf.title}</Text>
+            {cf.reason ? <Text style={styles.orgCfReason} numberOfLines={1}>{cf.reason}</Text> : null}
+          </View>
+          <Pressable
+            style={[styles.orgCfBtn, { backgroundColor: c.done }]}
+            hitSlop={8}
+            accessibilityLabel={`同意确认卡：${cf.title}`}
+            onPress={() => onDecide(src.id, cf.id, true)}
+          >
+            <Text style={[styles.orgCfBtnT, { color: c.onDone }]}>✓</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.orgCfBtn, styles.orgCfBtnR, { borderColor: withA(c.error, 0.5) }]}
+            hitSlop={8}
+            accessibilityLabel={`否决确认卡：${cf.title}`}
+            onPress={() => onDecide(src.id, cf.id, false)}
+          >
+            <Text style={[styles.orgCfBtnT, { color: c.error }]}>✗</Text>
+          </Pressable>
+        </View>
+      ))}
+      <View style={styles.orgChips}>
+        {sorted.map(({ src, g }) => (
+          <Pressable
+            key={g.id}
+            style={[
+              styles.orgChip,
+              g.status === "active" && { borderColor: withA(c.done, 0.5), backgroundColor: withA(c.done, 0.08) },
+              g.status === "pending" && { borderColor: withA(c.waiting, 0.5), backgroundColor: withA(c.waiting, 0.08) },
+            ]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            accessibilityLabel={`项目组 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${(g.headcount ?? []).length + 1} 人，点按查看详情`}
+            onPress={() => onOpenGroup(src, g)}
+          >
+            <Text style={[styles.orgChipT, { color: orgStColor(g.status, c) }]} numberOfLines={1}>{g.name}</Text>
+            <Text style={styles.orgChipSt}>·{ORG_ST_ZH[g.status] ?? g.status}·{(g.headcount ?? []).length + 1}人</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// 组详情弹窗（对齐 web 端 org drawer）：状态/档位 → 编制（组内会话可点入）→ 任务板
+//（轻立项单列简化态 / 正经立项三段；挂起=冻结只读）→ 最近派单回执流（§3.5 过程不
+// 回灌只收回执一行）。板不随快照（帧预算纪律）——COMMAND_PROJECT_DETAIL 按需拉取；
+// 状态行优先取源快照实时值（PROJECTS_UPDATED 即时反映），拉取结果兜底
+function GroupModal({ srcId, target, onClose, onOpenSession }: {
+  srcId: string;
+  target: { gid: string; name: string };
+  onClose: () => void;
+  onOpenSession: (sid: string) => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const snap = useRelay();
+  // undefined=加载中 / null=失败 / 对象=详情
+  const [detail, setDetail] = useState<{ group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | null | undefined>(undefined);
+  useEffect(() => {
+    setDetail(undefined);
+    // send 当即失败（未连接/源不在）没有 ACK 回调，直接落失败态
+    if (!store.orgDetail(srcId, target.gid, setDetail)) setDetail(null);
+  }, [srcId, target.gid]);
+  const g = detail?.group;
+  const board = detail?.board;
+  const ents = board?.entries ?? [];
+  // #26 M3 熟手池（§5 成员卡进化）：路由表档案 join 运行态，服务端拼好（detail.pool）；
+  // 旧版 relay 无 pool 字段 → 空数组回落（编制快照仍在 group.headcount，不丢信息）
+  const pool = useMemo(() => detail?.pool ?? [], [detail]);
+  const liveG = useMemo(() => {
+    for (const src of snap.sources) {
+      const hit = (src.projects ?? []).find((x) => x.id === target.gid);
+      if (hit) return hit;
+    }
+    return g;
+  }, [snap.sources, target.gid, g]);
+  const entRow = (e: BoardEntry) => (
+    <View key={e.id} style={styles.gmEnt}>
+      <Text style={styles.gmEntT} numberOfLines={2}>{e.text}</Text>
+      {e.note ? <Text style={styles.gmEntNote} numberOfLines={1}>{e.note}</Text> : null}
+    </View>
+  );
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.gmWrap}>
+        <View style={styles.gmHead}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.gmTitle} numberOfLines={1}>{target.name}</Text>
+            <View style={styles.gmTags}>
+              <Text style={[styles.gmTag, { color: orgStColor(liveG?.status ?? "", c) }]}>
+                {ORG_ST_ZH[liveG?.status ?? ""] ?? liveG?.status ?? "…"}
+              </Text>
+              <Text style={styles.gmTag}>{liveG?.tier ?? g?.tier ?? ""}</Text>
+            </View>
+          </View>
+          <Pressable hitSlop={10} onPress={onClose} accessibilityLabel="关闭项目组详情">
+            <Text style={styles.gmClose}>✕</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.gmBody} showsVerticalScrollIndicator={false}>
+          {detail === undefined ? (
+            <Text style={styles.gmEmpty}>加载中…</Text>
+          ) : detail === null ? (
+            <Text style={styles.gmEmpty}>详情拉取失败（源可能已断开或 relay 版本过旧）</Text>
+          ) : (
+            <>
+              {/* 熟手池：经验 N 次 · 上次 · 在忙/空闲/随组挂起/已退休（退休=只剩路由表档案，
+                  不可点）；空闲/随组挂起可点开（消息/派单即拉起）；Leader 兼管不占行 */}
+              <Text style={styles.gmSec}>熟手池 · {pool.length} 人（Leader 兼管）</Text>
+              {pool.length ? pool.map((p) => {
+                const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
+                const stColor = p.busy ? c.waiting : p.parked || !p.resumable ? c.faint : c.done;
+                const body = (
+                  <View style={[styles.gmSess, !p.resumable ? { opacity: 0.62 } : null]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.gmSessT} numberOfLines={1}>
+                        {p.title || p.session_id.slice(0, 8)}{p.rating === "bad" ? "（差评·避开）" : ""}
+                      </Text>
+                      <Text style={styles.gmSessSt} numberOfLines={1}>
+                        {`${p.count} 次 · 上次 ${fmtLastActive(p.last_ts)}`}
+                        {p.tags?.length ? ` · ${p.tags.map((t) => "#" + t).join(" ")}` : ""}
+                      </Text>
+                    </View>
+                    <Text style={[styles.gmSessSt, { color: stColor }]}>{st}</Text>
+                  </View>
+                );
+                return p.resumable ? (
+                  <Pressable
+                    key={p.session_id}
+                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                    onPress={() => { onClose(); onOpenSession(p.session_id); }}
+                  >
+                    {body}
+                  </Pressable>
+                ) : (
+                  <View key={p.session_id}>{body}</View>
+                );
+              }) : <Text style={styles.gmEmpty}>熟手池为空（首次派单后积累）</Text>}
+              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=待办/进行/完成三段 */}
+              <Text style={styles.gmSec}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
+              {ents.length === 0 ? (
+                <Text style={styles.gmEmpty}>板为空</Text>
+              ) : g?.tier === "轻立项" ? (
+                <View style={styles.gmCol}>{ents.map(entRow)}</View>
+              ) : (
+                ([["todo", "待办"], ["doing", "进行"], ["done", "完成"]] as const).map(([st, lb]) => (
+                  <View key={st} style={styles.gmColGroup}>
+                    <Text style={styles.gmColH}>{lb} {ents.filter((e) => e.status === st).length}</Text>
+                    <View style={styles.gmCol}>{ents.filter((e) => e.status === st).map(entRow)}</View>
+                  </View>
+                ))
+              )}
+              {/* 回执流：readDispatchLog 按 project_anchor 过滤，最近 30 条新在前 */}
+              <Text style={styles.gmSec}>最近派单回执</Text>
+              {(detail.receipts ?? []).length ? detail.receipts!.map((r) => (
+                <View key={r.id + r.ts} style={[styles.gmRec, { borderLeftColor: r.status === "failed" ? c.error : c.line }]}>
+                  <Text style={styles.gmRecB}>[{r.tier}] {r.status}</Text>
+                  {r.receipt ? <Text style={styles.gmRecT} numberOfLines={5}>{r.receipt}</Text> : null}
+                  {/* 对齐 web（index.html 回执流）：target 归 meta 行、过滤 org-leader、
+                      截 8 位——整段 UUID 上屏既占行又不可辨 */}
+                  <Text style={styles.gmRecMeta}>{r.ts ? new Date(r.ts).toLocaleString() : ""}{r.target && r.target !== "org-leader" ? ` · ${r.target.slice(0, 8)}` : ""}</Text>
+                </View>
+              )) : <Text style={styles.gmEmpty}>暂无派单回执</Text>}
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
 
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, ref }: Props) {
   const { c } = useTheme();
@@ -666,6 +1223,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
+  // E2b 通知中心开关（声明前置：requestBack 返回栈句柄在其上方引用）
+  const [notifOpen, setNotifOpen] = useState(false);
   // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分不同来源）。
   // 抽屉关上时重读——切服务器不重挂载本页，副标题要跟着换
   const [activeName, setActiveName] = useState("");
@@ -680,9 +1239,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }, [drawerOpen]);
 
   // 硬件返回（#282）：抽屉/图例开着时先关浮层而不是退出 App（列表页是根路由）。
-  // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发
+  // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发。
+  // E2b：通知中心 Modal 纳入返回栈最前位——返回键只关浮层，列表分组/滚动位/
+  // 未决计数零触碰（通知中心打开不清零，返回也不重置）
   useImperativeHandle(ref, () => ({
     requestBack: () => {
+      if (notifOpen) {
+        setNotifOpen(false);
+        return true;
+      }
       if (legendOpen) {
         setLegendOpen(false);
         return true;
@@ -693,7 +1258,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       }
       return false;
     },
-  }), [drawerOpen, legendOpen]);
+  }), [notifOpen, drawerOpen, legendOpen]);
 
   // 左缘手势条：从屏幕左缘右滑呼出侧边栏（透明覆盖条，只认横向滑动，不拦点击/竖向滚动）
   const edgePan = useRef(
@@ -721,6 +1286,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 聚合多源 = 分组态（信息层级重设计：#294 批2 逐卡源角标改为分组头归属）；
   // 统计行「N 源聚合」/空态文案/顶栏副标题沿用同一开关
   const badgeOn = snap.aggregate && snap.sources.length > 1;
+  // E2a 分组渲染条件：聚合 + 多源 + 源活动能力在（source_capabilities.activity，
+  // 旧 relay legacy 缺省 = 降级「—」占位组，不逐源分组）。分组头已交代归属时
+  // 逐卡源角标同步收起，避免同屏双份源标注
+  const grouped = badgeOn && snap.sourceCapabilities?.activity === true;
   // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
   // 唯一在线源（在线源=1 时列表平铺单源视图）：唯一在线源即"当前源"，顶栏副标题
@@ -786,10 +1355,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   };
   const openAcc = (item: { src: SourceStatus; a: AcceptanceSummary }) => {
     // 链接按源当前通道择路（同出单工具双发口径）：LAN 通道 = 同网直连表单页；
-    // 云通道/未知 = CF Worker /view KV 页面（无 token，32hex id 即鉴权）
+    // 云通道/未知 = CF Worker /view KV 页面。#28 起云链接需带 per-sheet 密钥
+    // fragment（…html#<key>，SNAPSHOT key 字段；新 Worker 缺 key 提交 403）——
+    // 旧 relay 无 key 字段（undefined）退回无后缀链接（旧 Worker 本就不验）
     const url = item.src.channel === "lan" && item.src.lanHint
       ? `http://${item.src.lanHint}/acceptance/${item.a.id}`
-      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html`;
+      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html${item.a.key ? `#${item.a.key}` : ""}`;
     void Linking.openURL(url).catch(() => undefined);
     seenAcc(item.a.id);
   };
@@ -810,33 +1381,153 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sorted, collapseIdle, idleDimMin, pendingDel, deleting],
   );
 
-  // 分组态行模型：按源分区渲染（组头：源色条+源名+在线点+计数 → 组内会话卡）；
-  // 组序按组内最近活动倒序，组内保持全局排序（活跃置顶+更新倒序）。非分组态
-  // （单源/聚合单源）原样平铺，渲染不变。行包装对象每快照重建无妨——会话对象
-  // 引用原样透传，SessionCard memo 的行级重渲不受影响；映射在 memo 内构建，
-  // 依赖稳定（snap.sources 快照粒度变化）
-  const rows = useMemo<ListRow[]>(() => {
-    // 全局排序平铺（2026-09-17）：活跃置顶 + 最近优先，不分源组
-    //（源归属由每卡胶囊标签承载，不再按源分区打乱全局顺序）
-    return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
-  }, [badgeOn, visible, snap.sources, onlineSrcs]);
+  // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶（E2a-up 富版：
+  // 可决策 WAITING/待验收/未决 actionable 通知/有活动证据的 WORKING，非 WAITING
+  // 全占的简版）→ 其他会话按模式分流（单源平铺 / 聚合多源按源分组 / legacy 降级
+  // 「—」占位组）。行包装对象每快照重建无妨——会话对象引用原样透传，SessionCard
+  // memo 的行级重渲不受影响；组头/段头 count 一律=去重后实际卡数
+  const projection = useMemo(
+    () => buildListProjection({
+      sessions: visible,
+      aggregate: snap.aggregate,
+      sources: snap.sources,
+      sourceActivityCap: snap.sourceCapabilities?.activity === true,
+      // E2a-up：全源归一通知池（各源 notifications 平铺；旧 relay null → 空池降级）
+      notifications: snap.sources.flatMap((x) => x.notifications ?? []),
+    }),
+    [visible, snap.aggregate, snap.sources, snap.sourceCapabilities],
+  );
+  const rows = useMemo<ListRow[]>(() => projection.map((r) =>
+    r.kind === "section"
+      ? { h: "sec" as const, key: r.key, label: r.label, count: r.count }
+      : r.kind === "source"
+        ? { h: "src" as const, key: r.key, name: r.name, color: r.color, online: r.online, count: r.count }
+        : { h: false as const, key: r.key, s: r.s },
+  ), [projection]);
+  // 段头/组头吸顶（E2a 390 宽稳定口径）：头行定高+自带底色，滚动叠加不跳动
+  const stickyIndices = useMemo(
+    () => rows.reduce<number[]>((acc, r, i) => { if (r.h !== false) acc.push(i); return acc; }, []),
+    [rows],
+  );
 
-  // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启即恒显
-  // （分组头只在多在线源时出现——单源在线/离线源缓存混排时卡片曾全裸奔）；
-  // 配色与分组头同调色板，同屏稳定
+  // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启且未
+  // 走分组头（降级/单在线源混排）时恒显；配色与分组头共用 sourcePalette，同屏稳定
   const srcBadgeMap = useMemo(() => {
-    if (!badgeOn) return null;
+    if (!badgeOn || grouped) return null;
     const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
-    // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
-    // （0014daa 补回 nameOf 时漏了 colorOf，release 包渲染即 ReferenceError 闪退）
-    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
-    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
+    const colorOf = sourcePalette(snap.sources);
     return (src: string | undefined): { name: string; color: string } | null => {
       if (!src) return null;
       return { name: nameOf.get(src) ?? "其他", color: colorOf.get(src) ?? srcColor(src) };
     };
-  }, [badgeOn, snap.sources]);
+  }, [badgeOn, grouped, snap.sources]);
   const srcBadgeOf = srcBadgeMap ?? (() => null);
+
+  // #26 M2 组织域：待决议确认卡 + 项目组 chips（结项不占常驻位）——跨源平铺
+  // （src+item 对），组名映射供卡片组织徽标（project_gid → 组名，无组回落档位）
+  const orgConfirms = useMemo(() => {
+    const out: { src: SourceStatus; cf: OrgConfirm }[] = [];
+    for (const src of snap.sources) for (const cf of src.orgConfirms ?? []) out.push({ src, cf });
+    return out;
+  }, [snap.sources]);
+  const orgGroups = useMemo(() => {
+    const out: { src: SourceStatus; g: ProjectGroup }[] = [];
+    for (const src of snap.sources)
+      for (const g of src.projects ?? []) if (g.status !== "archived") out.push({ src, g });
+    return out;
+  }, [snap.sources]);
+  const projNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const src of snap.sources) for (const g of src.projects ?? []) m.set(g.id, g.name);
+    return m;
+  }, [snap.sources]);
+  const orgTagOf = useCallback(
+    (s: SessionState) => (s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null),
+    [projNameById],
+  );
+  // 组详情弹窗：点 chip 打开 → COMMAND_PROJECT_DETAIL 按需拉取
+  const [orgOpen, setOrgOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
+  // E2b：确认卡决议走 ACK 严格判定门（W1b 同构）——approve 经 orgConfirmPayload
+  // 强转真布尔（relay 咽喉 ===true 严判）、双击闸、失败可见态；unknownCommandError
+  // 记能力位后该源决议降级禁用（不再弹错轰炸）；成功不本地造状态，等
+  // ORG_CONFIRM_UPDATED 权威帧收敛（与 store orgConfirm 注释同口径）。无自动重试
+  //（重试=用户重点；store 全局 4s 重发一次+6s 收摊封顶）
+  const [orgFlight, setOrgFlight] = useState<Set<string>>(new Set());
+  const [orgErr, setOrgErr] = useState<{ key: string; msg: string } | null>(null);
+  const [orgCaps, setOrgCaps] = useState<CmdCaps>({});
+  const ORG_CMD = "COMMAND_ORG_CONFIRM";
+  const ORG_CAP_MSG = "该源 relay 版本不支持确认卡决议，升级 relay 后可用";
+  const orgDecide = useCallback((srcId: string, confirmId: string, approve: boolean) => {
+    const fk = orgFlightKey(srcId, confirmId);
+    if (ackTapGuard(orgFlight, fk) === "skip") return;
+    const payload = orgConfirmPayload(confirmId, approve);
+    if (!payload) return;
+    if (cmdCapBlocked(orgCaps, ORG_CMD)) {
+      setOrgErr({ key: fk, msg: ORG_CAP_MSG });
+      return;
+    }
+    setOrgFlight((prev) => new Set(prev).add(fk));
+    setOrgErr(null);
+    const settle = (v: AckVerdict): void => {
+      setOrgFlight((prev) => {
+        const n = new Set(prev);
+        n.delete(fk);
+        return n;
+      });
+      if (v.ok) return; // 成功等权威帧，不本地造状态
+      if (unknownCommandError(v.error)) {
+        setOrgCaps((prev) => cmdCapRemember(prev, ORG_CMD));
+        setOrgErr({ key: fk, msg: ORG_CAP_MSG });
+        return;
+      }
+      setOrgErr({ key: fk, msg: v.error ?? "决议未生效，可重试" });
+    };
+    const sent = store.orgConfirm(srcId, confirmId, payload.approve, (r) => settle(ackVerdict(r)));
+    if (!sent) settle(ackVerdict(null)); // 未连接：同 unconfirmed 口径可见可重试
+  }, [orgFlight, orgCaps]);
+
+  // E2b：通知中心（root 通知动作宿主）。池=全源 notifications 只读平铺——
+  // **不清零硬条款**（B3a 口径）：打开/浏览/关闭/重连/动作失败回滚零删行（本组件
+  // 无任何清池 state；badge 与行动行只随 handled/dismissed 权威账收缩）。
+  // 动作走 store.ackNotification（E3b 真链路：乐观+失败回滚+onDone），本层 ACK
+  // 严格判定后呈现行内错误；无自动重试（重试=重点按钮），双击闸防重复 ACK
+  const notifRows = useMemo(() => {
+    const out: { srcId: string; srcName: string; item: NotificationItem }[] = [];
+    for (const src of snap.sources)
+      for (const n of src.notifications ?? [])
+        out.push({ srcId: src.id, srcName: displaySrcName(src.name), item: n });
+    return out;
+  }, [snap.sources]);
+  const notifPending = useMemo(() => notifActionableOf(notifRows.map((r) => r.item)), [notifRows]);
+  const [notifFlight, setNotifFlight] = useState<Set<string>>(new Set());
+  const [notifErr, setNotifErr] = useState<Map<string, string>>(new Map());
+  const notifAct = useCallback((key: string, action: "handled" | "dismissed") => {
+    if (ackTapGuard(notifFlight, key) === "skip") return;
+    setNotifFlight((prev) => new Set(prev).add(key));
+    const settle = (msg: string | null): void => {
+      setNotifFlight((prev) => {
+        const n = new Set(prev);
+        n.delete(key);
+        return n;
+      });
+      setNotifErr((prev) => {
+        const n = new Map(prev);
+        if (msg) n.set(key, msg);
+        else n.delete(key);
+        return n;
+      });
+    };
+    const sent = store.ackNotification(key, action, (r) => {
+      const v = ackVerdict({ ok: r.ok, error: r.err });
+      if (v.ok) {
+        settle(null);
+        return;
+      }
+      // 乐观回滚由 store 负责（E3b 行回来）；本层只呈现行内错误，不自动重试
+      settle(unknownCommandError(v.error) ? "该源 relay 版本不支持通知动作" : v.error ?? "未生效，可重试");
+    });
+    if (!sent) settle(ackVerdict(null).error); // 未连接：unconfirmed 文案
+  }, [notifFlight]);
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
@@ -1021,6 +1712,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Text>
           </Pressable>
         ) : null}
+        {notifPending.length > 0 ? (
+          // E2b 通知中心入口：badge=未决行动项计数（只随权威账收缩，打开不清零）
+          <Pressable
+            style={styles.bellBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+            onPress={() => setNotifOpen(true)}
+            hitSlop={4}
+            accessibilityLabel={`通知中心，${notifPending.length} 项需行动`}
+          >
+            <Text style={styles.bellT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <FlatList
@@ -1030,6 +1733,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         key={density}
         data={rows}
         keyExtractor={(r) => r.key}
+        stickyHeaderIndices={stickyIndices}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1040,11 +1744,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             progressBackgroundColor={c.panel}
           />
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 14, paddingTop: 6 }}
+        // G5（冲刺审查）：任务完成汇报悬浮钮（列表页抬高让开 FAB，bottom=insets+124）
+        // 非空时末卡右缘被遮——条件让位 +52（浮钮形态用户拍板 #17 勿改，只让内容让路）
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 14, paddingTop: 6 }}
         // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）
+        // #26 M2 组织区（确认卡 + 项目组 chips）与之同位平铺；OrgZone 空数据自返回 null
         ListHeaderComponent={
-          accPending.length > 0 ? (
-            <Pressable
+          <>
+            {accPending.length > 0 ? (
+              <Pressable
               style={styles.accCard}
               android_ripple={{ color: c.tintSoft, borderless: false }}
               accessibilityLabel={`验收单待填：${accPending[0].a.title}，点击打开填写页面`}
@@ -1070,7 +1778,23 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                 <Text style={styles.accCloseT}>×</Text>
               </Pressable>
             </Pressable>
-          ) : null
+            ) : null}
+            <OrgZone
+              confirms={orgConfirms}
+              groups={orgGroups}
+              onDecide={orgDecide}
+              onOpenGroup={(src, g) => setOrgOpen({ srcId: src.id, gid: g.id, name: g.name })}
+            />
+            {orgErr ? (
+              // E2b：决议失败可见态（ACK 判定门产出）——行内错误可关闭，无自动重试
+              <View style={styles.orgErrRow}>
+                <Text style={styles.orgErrT} numberOfLines={2}>{orgErr.msg}</Text>
+                <Pressable hitSlop={8} accessibilityLabel="关闭决议错误提示" onPress={() => setOrgErr(null)}>
+                  <Text style={styles.orgErrClose}>×</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </>
         }
         onScrollBeginDrag={() => { scrollArmed.current = true; }}
         onEndReached={footRefresh}
@@ -1083,8 +1807,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           ) : null
         }
         renderItem={({ item }) =>
-          item.h ? (
-            <GroupHeader name={item.name} color={item.color} online={item.online} count={item.count} />
+          item.h === "sec" ? (
+            <SectionHeader label={item.label} count={item.count} />
+          ) : item.h === "src" ? (
+            <GroupHeader name={item.name} color={item.color || c.faint} online={item.online} count={item.count} />
           ) : (
             <SessionCard
               s={item.s}
@@ -1096,6 +1822,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               onReveal={setRevealSid}
               density={density}
               srcBadge={srcBadgeOf(item.s.src)}
+              orgTag={orgTagOf(item.s)}
             />
           )
         }
@@ -1178,12 +1905,144 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           </FadeIn>
         </Pressable>
       ) : null}
+
+      {/* #26 M2 项目组详情弹窗（点组织区 chip 呼出） */}
+      {orgOpen ? (
+        <GroupModal
+          srcId={orgOpen.srcId}
+          target={{ gid: orgOpen.gid, name: orgOpen.name }}
+          onClose={() => setOrgOpen(null)}
+          onOpenSession={onOpen}
+        />
+      ) : null}
+
+      {/* E2b 通知中心（铃铛/返回键呼出；打开/关闭零清零，池只读自快照） */}
+      <NotifCenterModal
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        rows={notifRows}
+        flight={notifFlight}
+        errs={notifErr}
+        onAct={notifAct}
+      />
     </SafeAreaView>
+  );
+}
+
+// E2b 通知中心 Modal：全源通知池只读列表 + actionable 未决行「知道了/忽略」动作。
+// 池只读自 store 快照——本组件无任何清池路径（打开/浏览/关闭/重连不清零）；
+// 动作经 ACK 严格判定门（notifAct）：失败行内错误可重试，飞行中按钮转「…」；
+// 旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造
+function NotifCenterModal({ open, onClose, rows, flight, errs, onAct }: {
+  open: boolean;
+  onClose: () => void;
+  rows: { srcId: string; srcName: string; item: NotificationItem }[];
+  flight: Set<string>;
+  errs: Map<string, string>;
+  onAct: (key: string, action: "handled" | "dismissed") => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const pendingKeys = useMemo(
+    () => new Set(notifActionableOf(rows.map((r) => r.item)).map((n) => n.key)),
+    [rows],
+  );
+  return (
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.notiMask} onPress={onClose}>
+        <Pressable style={styles.notiSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.notiHead}>
+            <Text style={styles.notiTitle}>通知中心</Text>
+            <Text style={styles.notiSub}>{pendingKeys.size > 0 ? `${pendingKeys.size} 项需行动` : "暂无待行动项"}</Text>
+            <Pressable hitSlop={10} accessibilityLabel="关闭通知中心" onPress={onClose}>
+              <Text style={styles.notiClose}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView style={styles.notiList} contentContainerStyle={{ paddingBottom: 24 }}>
+            {rows.length === 0 ? (
+              <Text style={styles.notiEmpty}>暂无通知</Text>
+            ) : rows.map(({ srcId, srcName, item }) => {
+              const actionable = pendingKeys.has(item.key);
+              const busy = flight.has(item.key);
+              const err = errs.get(item.key);
+              return (
+                <View key={`${srcId}/${item.key}`} style={styles.notiRow}>
+                  <View style={styles.notiRowHead}>
+                    {actionable ? <View style={styles.notiDot} /> : null}
+                    <Text style={[styles.notiRowTitle, !actionable && { color: c.dim }]} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.notiSrc} numberOfLines={1}>{srcName}</Text>
+                  </View>
+                  {item.body ? <Text style={styles.notiBody} numberOfLines={2}>{item.body}</Text> : null}
+                  {err ? <Text style={styles.notiErrT} numberOfLines={2}>{err}</Text> : null}
+                  {actionable ? (
+                    <View style={styles.notiActRow}>
+                      <Pressable
+                        style={[styles.notiBtn, { backgroundColor: c.done, opacity: busy ? 0.5 : 1 }]}
+                        disabled={busy}
+                        accessibilityLabel={`知道了：${item.title}`}
+                        onPress={() => onAct(item.key, "handled")}
+                      >
+                        <Text style={[styles.notiBtnT, { color: c.onDone }]}>{busy ? "…" : "知道了"}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.notiBtn, styles.notiBtnGhost, { borderColor: withA(c.dim, 0.5), opacity: busy ? 0.5 : 1 }]}
+                        disabled={busy}
+                        accessibilityLabel={`忽略：${item.title}`}
+                        onPress={() => onAct(item.key, "dismissed")}
+                      >
+                        <Text style={[styles.notiBtnT, { color: c.dim }]}>{busy ? "…" : "忽略"}</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
+  // ═══════ E2b：通知中心入口/Modal + 决议错误行 ═══════
+  bellBtn: {
+    backgroundColor: c.tintSoft, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 6,
+  },
+  bellT: { color: c.brandA, fontSize: 11, fontWeight: "700" },
+  notiMask: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
+  notiSheet: {
+    backgroundColor: c.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    borderWidth: 1, borderColor: c.line, maxHeight: "78%",
+  },
+  notiHead: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
+  },
+  notiTitle: { color: c.text, fontSize: 15, fontWeight: "700", flex: 1 },
+  notiSub: { color: c.brandA, fontSize: 11, fontWeight: "600" },
+  notiClose: { color: c.faint, fontSize: 20, fontWeight: "600", paddingLeft: 6 },
+  notiList: { paddingHorizontal: 14 },
+  notiEmpty: { color: c.faint, fontSize: 12, textAlign: "center", paddingVertical: 32 },
+  notiRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line, gap: 4 },
+  notiRowHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  notiDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
+  notiRowTitle: { color: c.text, fontSize: 13, fontWeight: "600", flexShrink: 1 },
+  notiSrc: { color: c.faint, fontSize: 10, marginLeft: "auto" },
+  notiBody: { color: c.dim, fontSize: 12, lineHeight: 17 },
+  notiActRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+  notiBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  notiBtnGhost: { backgroundColor: "transparent", borderWidth: 1 },
+  notiBtnT: { fontSize: 12, fontWeight: "600" },
+  notiErrT: { color: c.error, fontSize: 11, lineHeight: 15 },
+  orgErrRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 10, borderWidth: 1, borderColor: withA(c.error, 0.45),
+    backgroundColor: c.panel, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8,
+  },
+  orgErrT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
+  orgErrClose: { color: c.faint, fontSize: 15, fontWeight: "600" },
   // #137 待填验收单卡（列表顶部条件卡）：卡片形制对齐会话卡（panel 底/line 边/
   // 12 圆角），品牌色只点「验收单」标签与「去填写」动作（#102 品牌色克制）
   accCard: {
@@ -1278,12 +2137,30 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendT: { color: c.text, fontSize: 12.5 },
   // 源分组头：源色竖条+源名+在线点+会话计数，下衬 hairline 分区线（组间距 =
-  // 头部上下留白 + 卡片自身 marginBottom，形成"区隔靠间距"的分区节奏）
+  // 头部上下留白 + 卡片自身 marginBottom，形成"区隔靠间距"的分区节奏）；
+  // E2a 起组头吸顶（stickyHeaderIndices），自带页面底色防滚动叠加透字
   grpHead: {
     flexDirection: "row", alignItems: "center", gap: 7,
     marginTop: 10, marginBottom: 9, paddingBottom: 7,
     borderBottomWidth: 1, borderBottomColor: c.line,
+    backgroundColor: c.bg,
   },
+  // E2a 段头（待处理/其他会话）：分组头同族小节标题 + 实际渲染计数；吸顶行
+  // 定高（无内容浮动）+ 自带底色
+  secHead: {
+    flexDirection: "row", alignItems: "baseline", gap: 6,
+    marginTop: 10, marginBottom: 7, paddingBottom: 6,
+    borderBottomWidth: 1, borderBottomColor: c.line,
+    backgroundColor: c.bg,
+  },
+  secHeadT: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2 },
+  secCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
+  // E2a 活动指标块：四行定高小字（行距 gap 3、lineHeight 定值、单行 ellipsis），
+  // 键淡值常——activity 缺失/能力全关时整块不渲染
+  actBlock: { marginTop: 4, marginBottom: 1, paddingLeft: 6, gap: 3 },
+  actLine: { fontSize: 11, lineHeight: 14 },
+  actKey: { color: c.faint, fontSize: 10 },
+  actVal: { fontSize: 11, fontVariant: ["tabular-nums"] },
   grpBar: { width: 3, height: 13, borderRadius: 1.5 },
   grpName: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2, flexShrink: 1 },
   grpDot: { width: 6, height: 6, borderRadius: 3 },
@@ -1400,6 +2277,56 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
     backgroundColor: c.fabBg, borderWidth: 1, borderColor: c.fabLine,
   },
+  // #26 M2 组织区（v3.1 矩阵式）：确认卡 + 项目组 chips——确认卡形制对齐验收单卡
+  // （panel 底/line 边/12 圆角），动作色沿用审批按钮（done ✓ / error ✗）；chips 沿
+  // 折叠空闲胶囊形制，状态只到描边+tint（pending 黄 / active 绿 / parked 中性）
+  orgZone: { gap: 6, marginBottom: 8 },
+  orgCf: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 9, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
+  },
+  orgCfKind: { color: c.brandA, fontSize: 10, fontWeight: "700", flexShrink: 0 },
+  orgCfTitle: { color: c.text, fontSize: 12.5, fontWeight: "600" },
+  orgCfReason: { color: c.faint, fontSize: 10.5, marginTop: 1 },
+  orgCfBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  orgCfBtnR: { borderWidth: 1, backgroundColor: "transparent" },
+  orgCfBtnT: { fontSize: 15, fontWeight: "700" },
+  orgChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  orgChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+    borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft, maxWidth: 210, overflow: "hidden",
+  },
+  orgChipT: { fontSize: 11.5, fontWeight: "600", maxWidth: 120 },
+  orgChipSt: { color: c.faint, fontSize: 9.5 },
+  // 组详情弹窗（gm*）：头部（名称+状态/档位 tags）→ 编制行 → 板段 → 回执流
+  gmWrap: { flex: 1, backgroundColor: c.bg },
+  gmHead: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
+  },
+  gmTitle: { color: c.text, fontSize: 15, fontWeight: "700" },
+  gmTags: { flexDirection: "row", gap: 6, marginTop: 4 },
+  gmTag: { color: c.dim, fontSize: 10.5, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 999, borderWidth: 1, borderColor: c.line },
+  gmClose: { color: c.dim, fontSize: 17, padding: 4 },
+  gmBody: { padding: 16, paddingBottom: 40 },
+  gmSec: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 0.3, marginTop: 16, marginBottom: 7 },
+  gmSess: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingHorizontal: 6, borderRadius: 9 },
+  gmDot: { width: 8, height: 8, borderRadius: 4 },
+  gmSessT: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 },
+  gmSessSt: { color: c.faint, fontSize: 10 },
+  gmCol: { gap: 5 },
+  gmColGroup: { marginBottom: 8 },
+  gmColH: { color: c.faint, fontSize: 10.5, fontWeight: "700", marginBottom: 4 },
+  gmEnt: { borderWidth: 1, borderColor: c.line, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: c.panel },
+  gmEntT: { color: c.text, fontSize: 12 },
+  gmEntNote: { color: c.faint, fontSize: 10.5, marginTop: 2 },
+  gmRec: { borderLeftWidth: 2, borderLeftColor: c.line, paddingLeft: 8, paddingVertical: 3, marginBottom: 6 },
+  gmRecB: { color: c.text, fontSize: 11.5, fontWeight: "600" },
+  gmRecT: { color: c.dim, fontSize: 11, marginTop: 1 },
+  gmRecMeta: { color: c.faint, fontSize: 10, marginTop: 1 },
+  gmEmpty: { color: c.faint, fontSize: 11.5, paddingVertical: 4 },
 });
 
 // 连接中三点（2026-09-16；#116 wave 式）。#148 同源降级：原 native 逐帧插值

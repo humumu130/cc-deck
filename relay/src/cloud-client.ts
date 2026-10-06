@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { homedir } from "node:os";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
@@ -7,7 +8,9 @@ import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
-import type { Command, CommandAckPayload, Envelope, PeerMeta } from "./types.js";
+import { listGroups, listPendingConfirms } from "./projects.js";
+import { listModels } from "./models.js";
+import { SNAPSHOT_SCHEMA_VERSION, type Command, type CommandAckPayload, type Envelope, type PeerMeta } from "./types.js";
 
 interface PhoneState {
   lastSeq: number; // hello 时上报，用于补发
@@ -24,6 +27,50 @@ interface CloudFrame {
 // #42 设备身份元数据校验：pair_req 的 meta 由配对方自报（浏览器 UA 摘要 / App 型号
 // 版本），桥不解析透传，入库前的唯一防线在这里——只认四个已知键，值 trim 后非空且
 // 为字符串才收，超长（>120 字符）截断；全部无效则视为不带 meta（旧客户端等价）
+// 云通道命令白名单（phone 密封/wan 明文两 intake 共用，不在表内拒发 "unsupported
+// command"，与 ws-server LAN 口径同构）。M12-1 立：与 ws-server COMMAND_TYPES 逐字
+// 一致（#117/#212 教训——加命令漏白名单=mgr case 与单测全过、唯独入口层挡死的实机
+// 死路）；test-m12-commands 断言两处列表 diff 为空
+export const COMMAND_TYPES = new Set([
+  "COMMAND_CREATE",
+  "COMMAND_MESSAGE",
+  "COMMAND_STOP",
+  "COMMAND_CONTINUE",
+  "COMMAND_REJECT",
+  "COMMAND_EXT_MODE",
+  "COMMAND_EXT_INPUT",
+  "COMMAND_EXT_STOP",
+  "COMMAND_DELETE",
+  "COMMAND_RENAME",
+  "COMMAND_ANSWER",
+  "COMMAND_PAIR_START",
+  "COMMAND_PAIR_CODE",
+  "COMMAND_LOGIN_GRANT",
+  "COMMAND_WATCH_GRANT",
+  "COMMAND_PEERS",
+  "COMMAND_PEER_KICK",
+  "COMMAND_PEERS_IMPORT",
+  "COMMAND_CLOUD_INFO",
+  "COMMAND_PERM",
+  "COMMAND_MODEL",
+  "COMMAND_REFRESH_TODOS",
+  "COMMAND_TODO_HIDE",
+  "COMMAND_PIN_SESSION",
+  "COMMAND_RESUME_SESSION",
+  "COMMAND_IMPORT_PUSH",
+  "COMMAND_ARTIFACT_FETCH",
+  "COMMAND_ALLOW_RULE_REMOVE",
+  "COMMAND_ORG_CONFIRM",
+  "COMMAND_PROJECT_DETAIL",
+  "COMMAND_ORG_ACTION",
+  "COMMAND_NOTIFICATION_ACK",
+  "COMMAND_SETTINGS_UPDATE",
+  "COMMAND_TASK_CREATE",
+  "COMMAND_TASK_UPDATE",
+  "COMMAND_DISPATCH",
+  "COMMAND_LESSON_APPEND",
+]);
+
 const PEER_META_MAX = 120;
 // 0.4.4 出码端在场证明 TTL：覆盖合并码浮层 120s 生命周期 + 重连空档（180s）
 const SIGHTING_TTL_MS = 180_000;
@@ -376,15 +423,29 @@ export class CloudClient {
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
         acceptances: listAcceptances(),
+        // #212 允许并记住：规则全量（与 ws-server 直连快照同源同步，#117 教训）
+        allow_rules: this.mgr.allowRules.list(),
+        // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
+        // 云桥手机设置页同样要读 source 判锁定态）
+        settings: this.mgr.employeeHomeState(),
+        // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
+        projects: listGroups(),
+        org_confirms: listPendingConfirms(),
+        // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
+        // 通知列表同样靠快照兜底；空数组也下发）
+        notifications: this.mgr.notificationsList(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
+        homedir: homedir(),
+        models: listModels(this.mgr.cfg.model),
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
         ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),
@@ -431,6 +492,19 @@ export class CloudClient {
       const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown; bc?: unknown; meta?: unknown; client_type?: unknown };
       const bc = pr.bc === true;
       const pubkey = typeof pr.pubkey === "string" ? pr.pubkey : "";
+      // #29（C-P0-1 配套）：无钥空码信标放行——新版网页端扫码登录/合并码的在场帧不再
+      // 携带 pubkey（公共桥上假 relay 读到 web 公钥即可不经手机授权、直接密封 pair_ack
+      // 冒充授权），sighting 记 f.from（桥侧连接 dev）。伪造 sighting 至多骗出码端一次
+      // 回传尝试：回传帧按 wb 公钥密封，假 dev 无对应私钥解不开，风险止于浪费。
+      // 带码帧仍必须带公钥（addPeer 需随帧公钥，码配对语义=码担保公钥）
+      if (!pubkey && !String(pr.code ?? "")) {
+        this.wbSightings.set(f.from, Date.now());
+        if (this.wbSightings.size > 200) {
+          const sweep = Date.now();
+          for (const [d, ts] of this.wbSightings) if (sweep - ts > SIGHTING_TTL_MS) this.wbSightings.delete(d);
+        }
+        return;
+      }
       // 身份自报（2026-09-14）：客户端可带 client_type（phone|web|watch）声明终端类型，
       // dev 前缀随之派生（ph-/wb-/wt-）——缺省 web 兼容旧客户端。f.from 校验天然防冒名
       // （from 必须等于自报身份派生值，冒名者需持有对应私钥）。修正：云桥配对的手机
@@ -576,6 +650,10 @@ export class CloudClient {
       this.sendSealed(f.from, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid command shape" });
       return;
     }
+    if (!COMMAND_TYPES.has(cmd.type)) {
+      this.sendSealed(f.from, { type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" });
+      return;
+    }
     const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `cloud-${f.from}`);
     this.sendSealed(f.from, { type: "COMMAND_ACK", ...ack });
   }
@@ -649,6 +727,10 @@ export class CloudClient {
     }
     const cmd = obj as Command;
     if (typeof cmd === "object" && cmd && typeof cmd.command_id === "string" && typeof cmd.type === "string") {
+      if (!COMMAND_TYPES.has(cmd.type)) {
+        this.sendWan(dev, { type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" });
+        return;
+      }
       const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `wan-${dev}`);
       this.sendWan(dev, { type: "COMMAND_ACK", ...ack });
       return;
@@ -679,6 +761,8 @@ export class CloudClient {
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        models: listModels(this.mgr.cfg.model),
       },
     };
     this.sendWan(dev, snapshot);

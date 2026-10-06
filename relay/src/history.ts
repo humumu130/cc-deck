@@ -1,7 +1,7 @@
 // 会话历史持久化：events.ndjson 追加写 + 重启时重放重建
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Envelope, EventType, LogEntry, SessionState } from "./types.js";
+import type { Envelope, EventType, LogEntry, SessionEngine, SessionState } from "./types.js";
 import { contextLimitOf, REPLAY_CONTEXT_MAX } from "./context-limit.js";
 
 const MAX_SESSIONS_KEPT = 30;
@@ -75,9 +75,35 @@ function tail<T>(arr: T[], n: number): T[] {
   return arr.length <= n ? arr : arr.slice(arr.length - n);
 }
 
+// #25-P1 原子重写：tmp+rename——boot 场景无并发无所谓，运行期压缩（compactEventsFile）
+// 场景下直接覆盖写若中途崩溃（盘满/被杀）会留下截断文件；rename 同文件系统原子，
+// 崩溃只会留下可清理的 .tmp 残件，正文件要么旧要么新
 export function rewriteFile(path: string, events: Envelope[]): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+  const tmp = `${path}.tmp-${Date.now()}`;
+  writeFileSync(tmp, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+  renameSync(tmp, path);
+}
+
+// #25-P1 运行期压缩（长跑治理）：此前压缩只在 boot 一次，运行期纯追加（心跳每
+// 5s/忙会话一条 + 流式帧每帧落盘），生产实证 121MB/84k 行、不重启月增 ~100MB——
+// boot 越来越慢 + 重启 loadEvents 内存尖峰。语义与 boot 压缩完全同款（重放等价：
+// 「每类型最后一条生效」）；客户端断线重连走 EventBus 内存 replay 不读文件，压缩
+// 零感知。同步整段执行：单线程事件循环内 emit 不会交错进来；低频触发（定时+阈值）
+// 数秒阻塞可接受。失败静默返回 null——审计面动作绝不影响主流程，下次再试
+export function compactEventsFile(path: string, minBytes: number): { before: number; after: number } | null {
+  try {
+    if (!existsSync(path)) return null;
+    const size = statSync(path).size;
+    if (size < minBytes) return null;
+    const prior = loadEvents(path);
+    const kept = compactEvents(prior);
+    if (prior.length === kept.length) return null; // 已是最简，不白写一遍
+    rewriteFile(path, kept);
+    return { before: size, after: statSync(path).size };
+  } catch {
+    return null;
+  }
 }
 
 export function appendLine(path: string, env: Envelope): void {
@@ -98,7 +124,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; started_at?: number };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; provider?: string; started_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -117,6 +143,15 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         logs: [],
       };
       if (p.external) rs.state.external = true;
+      // #17 雇员标记随首帧流经事件流：重启回放后 transcript/任务清单读取路径
+      // 按此选家（雇员独立家），resume 也据此传 CLAUDE_CONFIG_DIR
+      if (p.employee) rs.state.employee = true;
+      // #17 第二批：创建时落定的家随首帧回放——开关翻转后存量会话按记录走
+      if (typeof p.employee_home === "string" && p.employee_home) rs.state.employee_home = p.employee_home;
+      // #27 引擎标记随首帧回放：不还原 = 重启后 codex 卡被当 claude 收养（resume
+      // 走 AgentSession + thread_id，会话静默换引擎）——三角度审查 P1-2 实测缺口
+      if (p.engine) rs.state.engine = p.engine;
+      if (p.provider) rs.state.engine_provider = p.provider;
       out.set(e.session_id, rs);
       continue;
     }
@@ -161,11 +196,13 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       case "SESSION_WAITING": {
         s.status = "WAITING";
         s.waiting_request = e.payload as SessionState["waiting_request"];
+        s.waiting_started_at = e.ts;
         break;
       }
       case "SESSION_WAITING_RESOLVED": {
         s.status = "WORKING";
         s.waiting_request = undefined;
+        s.waiting_started_at = undefined;
         const d = (e.payload as { decision: string }).decision;
         rs.logs.push({ ts: e.ts, kind: "system", text: `已${d === "allow" ? "允许" : d === "answer" ? "作答" : "拒绝"}` });
         break;

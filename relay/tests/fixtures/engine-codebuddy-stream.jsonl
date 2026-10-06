@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"cb-sess-1","model":"codebuddy-test","timestamp":"2026-10-05T08:00:00.000Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"开始检查代码"}]},"timestamp":"2026-10-05T08:00:01.000Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu1","name":"Read","input":{"file_path":"src/index.ts"}}]},"timestamp":"2026-10-05T08:00:02.000Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu1","content":"文件内容 ok"}]},"timestamp":"2026-10-05T08:00:03.000Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"检查完成"}]},"timestamp":"2026-10-05T08:00:04.000Z"}
+{"type":"result","subtype":"success","is_error":false,"result":"done","timestamp":"2026-10-05T08:00:05.000Z"}

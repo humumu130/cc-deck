@@ -37,6 +37,13 @@ export class CloudRouter {
     return this.devOf.get(connId);
   }
 
+  // #29（B-P2 poll 顶替）：dev 当前占用的连接 id（无=离线）。适配器用它区分
+  // 「同 dev 旧 poll 会话」（可顶替，防占坑）与「同 dev 活跃 WebSocket」（poll 兜底
+  // 传输不得踢主传输——否则持 token 者 POST 猜中 dev 即可把任意在线设备踢下线）
+  connOfDev(dev: string): string | undefined {
+    return this.connOf.get(dev);
+  }
+
   // 登记（token 鉴权在适配器层完成）。同 dev 新连接顶替旧连接并踢掉，
   // 避免设备闪断重连期间双连接重复投递。rk 为可选公钥（relay 连接上报）。
   register(connId: string, dev: string, rk?: string): void {

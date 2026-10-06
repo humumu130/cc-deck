@@ -1,0 +1,4 @@
+正在分析项目结构…
+读取了 3 个文件
+[trae-cli] step 2/5 completed
+Error: Config file not found. Please specify a valid config file on the command line option --config-file

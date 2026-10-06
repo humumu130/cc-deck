@@ -1,16 +1,48 @@
 #!/usr/bin/env python3
 # 验收单出单工具（#136 三步方案①，激活 #125 在线表单）：把四段结构验收单 md 登记为
 # data/acceptances/<id>.json，回吐在线表单链接（浏览器打开点选填写，结果落
-# <id>.results.json）。用法：acceptance <验收单.md>。md 解析规则（对齐全局验收单
+# <id>.results.json）。用法：acceptance <验收单.md> [--gid <组id>] [--entry <板卡id>]。
+# md 解析规则（对齐全局验收单
 # 四段结构，宽容解析）：第一个 "# " 行=标题；首个表格前的其余非空行=前置说明
 # （去 "- " 列表符）；表格行 "| 任务号 | 验收项 | 通过标准 | … |" 取前三列（通过
 # 与否/问题两列是留给用户填的，忽略），表头与 --- 分隔行自动跳过；表格后的非空行
 # =备注。同 md 重复出单=新 id 新单（旧单历史留痕不清理；改了 md 就重新出一张）。
+#
+# --gid/--entry 归因透传（M12-8，2026-10-06）：写进单 json 的 gid/entry_id 字段——
+# relay 收单全过经 settleAcceptanceResult 按归因回写板卡终态 done（M12-7 链；
+# relay 只读不造，缺省不写键=NULL 档零回写，与导入器「缺失写 NULL」同纪律）。
+#
+# CCR_NO_CLOUD=1 测试缝：跳过云通道段（登记与 LAN 链接照常）——集成测试直跑本
+# 脚本时禁真网 KV 上传；生产无此 env 行为逐字节不变。
+#
+# #28 云通道密钥（2026-10-01）：出单时另生成 per-sheet 密钥上传 KV
+#（acceptance-<id>.key，仅 Worker 对照用、HTTP 白名单永不可读），云链接以
+# fragment（#<key>）携带——fragment 不进服务器日志/Referer/缓存键，页面提交时
+# 带回 Worker 验证。目的：id（页面链接）泄露 ≠ 可伪造提交（此前拿到 id 即可
+# 伪造全 ✓ → relay 拉回假关单）。key 上传失败则不吐云链接（LAN 不受影响）——
+# 防止「页面在云上但谁也提交不了」的半残单。
 import json, os, re, secrets, subprocess, sys, time
 
-md = sys.argv[1] if len(sys.argv) > 1 else ""
+# 参数解析：md 路径 + 可选 --gid/--entry（两形态都吃：--gid X 与 --gid=X）
+md, gid_arg, entry_arg = "", "", ""
+_args = sys.argv[1:]
+_i = 0
+while _i < len(_args):
+    _a = _args[_i]
+    if _a == "--gid" and _i + 1 < len(_args):
+        gid_arg = _args[_i + 1]; _i += 2
+    elif _a.startswith("--gid="):
+        gid_arg = _a[6:]; _i += 1
+    elif _a == "--entry" and _i + 1 < len(_args):
+        entry_arg = _args[_i + 1]; _i += 2
+    elif _a.startswith("--entry="):
+        entry_arg = _a[8:]; _i += 1
+    elif not md:
+        md = _a; _i += 1
+    else:
+        _i += 1
 if not md or not os.path.isfile(md):
-    sys.exit("用法: acceptance <验收单.md>")
+    sys.exit("用法: acceptance <验收单.md> [--gid <组id>] [--entry <板卡id>]")
 
 lines = open(md, encoding="utf-8").read().splitlines()
 title, preface, rows, notes = "", [], [], []
@@ -41,26 +73,45 @@ if not rows:
     sys.exit("ERR: 未解析到验收表行（找 | 任务号 | 验收项 | 通过标准 | 形态的表格）")
 title = title or os.path.basename(md)
 
-acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(
-    os.path.expanduser("~"), ".cc-deck", "data", "acceptances")
+# 寻址 env 优先序（#36 M2 并行版，2026-10-03，F-09 deliver/org 同款）：CCR_DATA_DIR
+# 缺省回落生产路径；M2 会话由 relay spawn 继承 env 路由到 ~/.cc-deck-m2，生产无 env
+# 时逐字节同行为
+data_dir = os.environ.get("CCR_DATA_DIR") or os.path.join(
+    os.path.expanduser("~"), ".cc-deck", "data")
+acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(data_dir, "acceptances")
 os.makedirs(acc_dir, exist_ok=True)
 aid = secrets.token_hex(16)
+# #28 per-sheet 密钥：与 KV 上 acceptance-<id>.key 同值落本地 json（sheet_key）——
+# relay 随 SNAPSHOT 汇总下发已配对端（expo 云卡拼 #key）；表单页 DATA 不嵌（公开读面）
+skey = secrets.token_hex(16)
+# 会话身份沿用 deliver 的注入优先级：Claude Code 子进程通常有
+# CLAUDE_CODE_SESSION_ID；hook/显式转发场景用 CC_DECK_SESSION_ID；手动终端为空。
+sid = (os.environ.get("CC_DECK_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID") or
+       os.environ.get("CLAUDE_SESSION_ID") or "").strip()
 doc = {"id": aid, "title": title, "created_at": int(time.time()),
        # cwd=出单会话归因键（#138）：用户提交后 relay 按它把「3✓ 1✗ 2未测」摘要
        # 回流成该会话的 system 行；旧单没这字段=回流静默跳过
        "cwd": os.getcwd(),
+       "sheet_key": skey,
        "rows": rows, **({"preface": preface} if preface else {}),
-       **({"notes": notes} if notes else {})}
+       **({"notes": notes} if notes else {}),
+       **({"session_id": sid} if sid else {}),
+       **({"gid": gid_arg} if gid_arg else {}),
+       **({"entry_id": entry_arg} if entry_arg else {})}
 path = os.path.join(acc_dir, f"{aid}.json")
 with open(path, "w", encoding="utf-8") as f:
     json.dump(doc, f, ensure_ascii=False, indent=1)
 
-# 端口以 relay 自报为准（bridge.json），缺省 8787（同 deliver 口径）
-port = "8787"
-try:
-    port = str(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])
-except Exception:
-    pass
+# 端口以 relay 自报为准（bridge.json），缺省 8787（同 deliver 口径）。env 优先序：
+# CCR_PORT > bridge.json > 8787（#36 M2 并行版路由，缺省逐字节同行为）
+if os.environ.get("CCR_PORT"):
+    port = os.environ["CCR_PORT"]
+else:
+    port = "8787"
+    try:
+        port = str(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])
+    except Exception:
+        pass
 ip = "127.0.0.1"
 for iface in ("en0", "en1"):
     try:
@@ -72,4 +123,81 @@ for iface in ("en0", "en1"):
         pass
 
 print(f"✅ 已登记 {len(rows)} 行：{path}")
-print(f"   填写链接: http://{ip}:{port}/acceptance/{aid}")
+print(f"   填写链接(家庭网): http://{ip}:{port}/acceptance/{aid}")
+
+# #175 云通道：从本地 relay 拉云版表单页（提交端点烙成 CF /view/acceptance-<id>.results.json）
+# 上传 KV——公司网浏览器经 https://cc.humumu.online/view/acceptance-<id>.html#<key> 打开提交，
+# 家庭 relay 每 60s 拉回结果。云端上传失败仍保留 LAN 链接，但命令非零提醒补投。
+# CCR_NO_CLOUD=1 测试缝：登记已落盘+LAN 链接已打印，此处干净退出跳过云段（真网 KV
+# 上传禁入集成测试；头注备案）。缺省（env 未设）云通道照常，行为逐字节不变。
+if os.environ.get("CCR_NO_CLOUD") == "1":
+    sys.exit(0)
+# #28 顺序：密钥先传成功才传页面/吐云链接（key 缺失的云页面=部署后谁都提交不了）。
+html_path = f"/tmp/acceptance-{aid}.html"
+key_path = f"/tmp/acceptance-{aid}.key"
+cloud_failed = False
+# 上传脚本用 m1 worktree 副本（#28：回读校验改 CF API 直读，不再依赖公网 /dl/——
+# /dl/ 已拒 .key 键；旧 checkout 副本无此改造且该目录属 peer 地盘不动）
+KVPUT = "/Users/xdd/dev/cc-deck-m1/scripts/kv-put-verified.sh"
+try:
+    with open(key_path, "w", encoding="utf-8") as f:
+        f.write(skey)
+    # #29（D-P2）：per-sheet 密钥是 32 位提交通行证——落 /tmp 期间最小权限（默认
+    # 644 同机其他账户可读），且无论上传成败用完即删（finally 兜异常路径）
+    os.chmod(key_path, 0o600)
+    kv_key = subprocess.run([KVPUT, key_path, f"acceptance-{aid}.key"],
+                            capture_output=True, text=True, errors="replace")
+    if kv_key.returncode != 0:
+        cloud_failed = True
+        print(f"   ❌ 密钥上传失败，云通道未发布（家庭网链接仍可用，请修复网络后重试）：{(kv_key.stdout + kv_key.stderr).strip()[:200]}")
+    else:
+        try:
+            page = subprocess.run(["curl", "-sS", "--max-time", "10", "-o", html_path,
+                                   "-w", "%{http_code}",
+                                   f"http://127.0.0.1:{port}/acceptance-cloud/{aid}"],
+                                  check=True, capture_output=True, text=True, errors="replace")
+            status = page.stdout.strip()
+            if status != "200":
+                raise RuntimeError(f"HTTP {status}")
+            raw_page = open(html_path, encoding="utf-8").read().strip()
+            if not raw_page:
+                raise RuntimeError("响应体为空")
+            try:
+                ack = json.loads(raw_page)
+            except json.JSONDecodeError:
+                ack = None
+            if isinstance(ack, dict) and ack.get("ok") is not True:
+                raise RuntimeError(f"ACK ok 非 true：{ack.get('error') or '未知错误'}")
+        except Exception as e:
+            cloud_failed = True
+            print(f"   ❌ 云端表单页获取失败（{e}，请确认 relay 在线后重试；家庭网链接仍可用）")
+        # errors="replace"：脚本输出偶带非 UTF-8 字节（代理报错混入），text=True 严格解码
+        # 会把真实失败原因吞成 UnicodeDecodeError；上传失败只做一次快速重试，最终非零退出
+        kv = None
+        if not cloud_failed:
+            for attempt in (1, 2):
+                kv = subprocess.run([KVPUT, html_path, f"acceptance-{aid}.html"],
+                                    capture_output=True, text=True, errors="replace")
+                if kv.returncode == 0:
+                    break
+                if attempt == 1:
+                    print("    云端上传失败（网络抖动），请确认网络后自动重试一次…")
+            if kv and kv.returncode == 0:
+                print(f"   填写链接(公司网): https://cc.humumu.online/view/acceptance-{aid}.html#{skey}")
+            else:
+                cloud_failed = True
+                detail = (kv.stdout + kv.stderr).strip()[:200] if kv else "未执行上传"
+                print(f"   ❌ 云端上传失败（家庭网链接仍可用，请修复网络后重试）：{detail}")
+except Exception as e:
+    cloud_failed = True
+    print(f"   ❌ 云端发布失败（家庭网链接仍可用，请确认 relay 在线后重试）：{e}")
+finally:
+    # #29（D-P2）：临时件清理（密钥必删；html 无敏感性一并收走，链接已打进输出）
+    for p in (key_path, html_path):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+if cloud_failed:
+    sys.exit(1)

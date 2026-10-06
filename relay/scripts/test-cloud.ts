@@ -44,7 +44,14 @@ const BRIDGE_PORT = 8797;
 const BRIDGE_TOKEN = "cloud-token-123";
 const dataDir = mkdtempSync(join(tmpdir(), "cc-cloud-test-"));
 const oldCwd = process.cwd();
-process.chdir(dataDir); // loadConfig 的 dataDir = cwd/data，隔离云身份文件
+// chdir（#20 审查更正）已不承担 dataDir 隔离职责——loadConfig 走 env 钉死的
+// CCR_DATA_DIR（=tmpdir 本身）；保留 chdir 仅为收尾在 Windows 上能删 tmpdir
+process.chdir(dataDir);
+// 沙盒铁律：chdir 兜底挡不住被继承的 CCR_DATA_DIR（env 优先级更高，2026-09-28 事故
+// 实证）——显式钉 env 才是真隔离
+process.env.CCR_DATA_DIR = dataDir;
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 process.env.CCR_CLOUD_URL = `ws://127.0.0.1:${BRIDGE_PORT}/cloud`;
 process.env.CCR_CLOUD_TOKEN = BRIDGE_TOKEN;
 process.env.CCR_NO_TITLE_GEN = "1";
@@ -416,6 +423,24 @@ assert(
   await waitFor(() => webInbox.some((m) => m.t === "pair_nack")),
   "错配对码被拒（pair_nack）",
 );
+// #29（C-P0-1）：无钥空码信标（新版网页端扫码登录/合并码在场帧不再携带 pubkey——
+// 公共桥上假 relay 读到公钥即可密封 pair_ack 冒充授权）。契约：放行记 sighting
+//（键=桥侧连接 dev，伪造至多骗一次回传尝试——回传按 wb 公钥密封解不开），
+// 不回包不烧预算；无钥带码仍拒（码配对语义=码担保随帧公钥），且拒收不烧码
+{
+  const sight = () => (cloud as unknown as { wbSightings: Map<string, number> }).wbSightings;
+  const before = sight().get(webDev) ?? 0;
+  const nacks = webInbox.filter((m) => m.t === "pair_nack").length;
+  webSend({ t: "pair_req", code: "", name: "web-beacon" }, true);
+  assert(await waitFor(() => (sight().get(webDev) ?? 0) > before), "无钥空码信标记 sighting（连接 dev 为键）");
+  await wait(300);
+  assert(webInbox.filter((m) => m.t === "pair_nack").length === nacks, "信标不回 nack/不烧错码预算");
+  webSend({ t: "pair_req", code: pairCode, name: "web-nokey" }, true);
+  await wait(300);
+  assert(!identity.peers.has(webDev), "无钥带码拒收（码配对必须随帧公钥）");
+  assert((sight().get(webDev) ?? 0) > before, "拒收路径不抹信标 sighting");
+  // 无钥带码不烧码：下方正码配对照常成功即覆盖
+}
 // 冒名 dev（连接冒用 webDev 但公钥派生不一致）：静默丢弃且不烧码
 {
   const fakeKp = generateKeyPair();

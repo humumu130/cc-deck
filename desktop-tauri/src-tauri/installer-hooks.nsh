@@ -4,9 +4,13 @@
 ; 权限，perMachine 直接装不上）——netsh 放行仅在安装进程恰好有提升时生效（nsExec 失败
 ; 静默跳过不阻塞安装）；无管理员权限的机器配对走云桥码（出站 wss，不依赖入站放行）。
 ; 先删后加：升级重装时幂等，不堆重复规则
+; #29（C-P3-7）：profile 收窄 any→private——原规则把 8787/TCP 入站对公用网络配置
+; 文件也放行，咖啡店/公共 Wi-Fi 上本机 relay 端口对同网段所有人开放（认证虽归
+; relay，端口暴露本身不必）；家庭/公司可信网络行为不变。公共网络下配对走云桥
+; 出站 wss（本就无入站依赖）。升级重装经"先删后加"自动换成新规则
 !macro NSIS_HOOK_POSTINSTALL
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="CC Deck Relay"'
-  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="CC Deck Relay" dir=in action=allow protocol=TCP localport=8787 profile=any'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="CC Deck Relay" dir=in action=allow protocol=TCP localport=8787 profile=private'
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL

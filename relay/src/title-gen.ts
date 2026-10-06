@@ -10,6 +10,7 @@ export async function generateTitle(
   model: string,
   onSid?: (sid: string) => void,
   cwd?: string,
+  configHome?: string,
 ): Promise<{ title: string | null; sid?: string }> {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
@@ -32,7 +33,13 @@ export async function generateTitle(
           cwd: cwd ?? process.cwd(),
           // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
           ...(resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath()! } : {}),
-          env: { ...process.env, CCR_RELAY_CHILD: "1" }, // 防止被全局 bridge hook 注册成外部会话
+          // 防止被全局 bridge hook 注册成外部会话；#17 开关开启时 titlegen 一次性
+          // 会话落独立家（relay 内部工具会话，不区分归属——默认家不再冒 .tmp-titlegen 目录）
+          env: {
+            ...process.env,
+            CCR_RELAY_CHILD: "1",
+            ...(configHome ? { CLAUDE_CONFIG_DIR: configHome } : {}),
+          },
           permissionMode: "bypassPermissions",
           maxTurns: 1,
         },

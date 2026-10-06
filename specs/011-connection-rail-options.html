@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Q1 rail 连接图标去留 · 双方案草图</title>
+<style>
+    :root {
+      --bg0: #07111D; --bg1: #0B1624; --surface1: #101E2F; --surface2: #15273B;
+      --hover: #1D344D; --line: #2A4058; --line-soft: #203247;
+      --text-strong: #E8EFF8; --text: #C4D0DE; --dim: #8394A9; --faint: #53677E;
+      --brand: #E2855E; --brand-hover: #F0A06A;
+      --done: #4BCB91; --working: #E9B84C; --error: #EC7472; --info: #7EAFE8;
+      --chrome: #070D15; --rail: #06101B; --card-border: rgba(71,101,132,.48);
+      --surface-veil: rgba(16,30,47,.9);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg0); color: var(--text); font: 13px/1.6 -apple-system, "SF Pro Text", "PingFang SC", sans-serif; padding: 28px 24px 60px; }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 { font-size: 17px; color: var(--text-strong); letter-spacing: .3px; }
+    h1 small { font-weight: 400; color: var(--dim); font-size: 12px; margin-left: 8px; }
+    .note { background: var(--surface1); border: 1px solid var(--line-soft); border-radius: 10px; padding: 10px 14px; margin: 14px 0 26px; color: var(--dim); font-size: 12px; }
+    .note b { color: var(--text); font-weight: 600; }
+    .note em { color: var(--brand-hover); font-style: normal; }
+
+    .opt { border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden; margin-bottom: 30px; background: var(--bg1); }
+    .opt-head { display: flex; align-items: baseline; gap: 10px; padding: 13px 18px; background: var(--surface1); border-bottom: 1px solid var(--line-soft); }
+    .opt-head .tag { font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 2px 9px; border-radius: 99px; }
+    .opt-a .tag { color: var(--brand); background: rgba(226,133,94,.14); border: 1px solid rgba(226,133,94,.4); }
+    .opt-b .tag { color: var(--info); background: rgba(126,175,232,.13); border: 1px solid rgba(126,175,232,.4); }
+    .opt-head h2 { font-size: 14px; color: var(--text-strong); }
+    .opt-head small { color: var(--faint); font-size: 11px; margin-left: auto; }
+
+    /* 画布：桌面 frame 特写 */
+    .canvas { display: flex; padding: 22px 18px; gap: 14px; background: var(--bg0); }
+    .stage { flex: 1; min-width: 0; border: 1px solid var(--frame-line, var(--line)); border-radius: 12px; overflow: visible; background: var(--rail); box-shadow: 0 14px 34px rgba(1,8,16,.4); }
+    .windowbar { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    .window-dots { display: inline-flex; gap: 5px; }
+    .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: #36414D; }
+    .window-title { font-size: 11px; color: var(--dim); }
+    .stage-body { display: flex; min-height: 300px; position: relative; }
+    .railcol { width: 56px; padding: 9px 6px; display: flex; flex-direction: column; align-items: center; border-right: 1px solid var(--line-soft); }
+    .rail-brand { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid rgba(232,239,248,.25); border-radius: 9px; color: var(--text-strong); font-weight: 700; font-size: 12px; margin-bottom: 10px; }
+    .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
+    .rail-btn:hover { background: var(--hover); }
+    .rail-btn.active { background: var(--hover); border-color: var(--line); color: var(--text-strong); }
+    .rail-spring { flex: 1; }
+    .main { flex: 1; padding: 16px; background: var(--bg1); }
+    .main h3 { font-size: 12px; color: var(--faint); font-weight: 500; margin-bottom: 12px; }
+
+    /* 源切换器（简化复刻） */
+    .source-switcher { position: relative; margin-right: 4px; }
+    .source-trigger { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 8px; background: var(--surface1); border: 1px solid var(--line-soft); color: var(--text); font-size: 11px; cursor: default; }
+    .source-trigger strong { color: var(--text-strong); font-size: 11px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; }
+    .dot.g { background: var(--done); } .dot.a { background: var(--working); } .dot.r { background: var(--error); }
+
+    /* 连接胶囊（两案共同的顶栏新成员，010 Q3） */
+    .conn-pop-anchor { position: relative; margin-left: auto; }
+    .conn-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--line); color: var(--text); font-size: 11px; cursor: pointer; transition: all .18s ease; white-space: nowrap; }
+    .conn-pill:hover { border-color: var(--info); color: var(--text-strong); }
+    .conn-pill .sum { color: var(--dim); }
+    .conn-pill.st-warn { border-color: rgba(236,116,114,.5); background: rgba(236,116,114,.12); }
+    .conn-pill.st-warn .sum { color: var(--error); }
+    .conn-pop { position: absolute; top: 30px; right: 0; width: 248px; background: var(--surface-veil); backdrop-filter: blur(14px); border: 1px solid var(--card-border); border-radius: 12px; padding: 10px; display: none; z-index: 30; box-shadow: 0 18px 40px rgba(1,8,16,.55); }
+    .conn-pop.open { display: block; }
+    .conn-pop .ph { font-size: 10px; color: var(--faint); letter-spacing: .8px; padding: 2px 6px 8px; }
+    .conn-row { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 8px; font-size: 12px; }
+    .conn-row + .conn-row { border-top: 1px solid var(--line-soft); }
+    .conn-row strong { color: var(--text-strong); font-size: 12px; }
+    .conn-row .st { margin-left: auto; font-size: 10px; color: var(--dim); }
+    .conn-row.bad .st { color: var(--error); }
+    .btn-reconnect { font-size: 10px; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(236,116,114,.45); background: rgba(236,116,114,.12); color: var(--error); cursor: pointer; }
+    .btn-reconnect:hover { background: rgba(236,116,114,.2); }
+    .conn-manage { display: block; margin-top: 8px; padding: 7px 6px 2px; border-top: 1px solid var(--line-soft); font-size: 11px; color: var(--info); text-decoration: none; cursor: pointer; }
+    .conn-manage:hover { text-decoration: underline; }
+
+    /* 方案 B：rail 降噪连接图标（44×44 单色，无发光） */
+    .rail-conn-b { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; }
+    .rail-conn-b:hover { background: var(--hover); color: var(--text); }
+    .rail-conn-b .sig { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+    .rail-conn-b .sig i { width: 3px; background: currentColor; border-radius: 1px; }
+    .rail-conn-b .sig i:nth-child(1) { height: 5px; } .rail-conn-b .sig i:nth-child(2) { height: 8px; } .rail-conn-b .sig i:nth-child(3) { height: 11px; } .rail-conn-b .sig i:nth-child(4) { height: 14px; opacity: .35; }
+    .rail-conn-b .mini-dot { position: absolute; right: 6px; bottom: 6px; width: 6px; height: 6px; border: 2px solid var(--rail); border-radius: 50%; background: var(--done); }
+    .rail-conn-b.bad .mini-dot { background: var(--error); }
+    .rail-conn-b.pop-open { background: var(--hover); border-color: var(--line); color: var(--text-strong); }
+    .rail-note { font-size: 10px; color: var(--faint); text-align: center; margin: 4px 0 6px; width: 44px; }
+
+    /* 三态样张条 */
+    .states { padding: 14px 18px 18px; border-top: 1px solid var(--line-soft); background: var(--bg1); }
+    .states h4 { font-size: 11px; color: var(--faint); font-weight: 500; margin-bottom: 10px; }
+    .states .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .sample { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--line); font-size: 11px; color: var(--text); cursor: pointer; }
+    .sample.active-ghost { outline: 1px dashed var(--brand); outline-offset: 2px; }
+    .sample.warn { border-color: rgba(236,116,114,.5); background: rgba(236,116,114,.12); }
+    .sample .sum { color: var(--dim); } .sample.warn .sum { color: var(--error); }
+    .hint { font-size: 10px; color: var(--faint); }
+
+    /* 对比表 */
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-soft); }
+    th { color: var(--faint); font-weight: 500; font-size: 11px; }
+    td { color: var(--text); }
+    td.k { color: var(--dim); width: 120px; }
+    .verdict { margin-top: 26px; padding: 14px 16px; border: 1px solid rgba(226,133,94,.4); background: rgba(226,133,94,.08); border-radius: 12px; font-size: 12px; color: var(--text); }
+    .verdict b { color: var(--brand-hover); }
+    code { color: var(--info); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Q1 · rail 连接图标去留 <small>specs/011 双方案草图 · 两案顶栏胶囊完全相同，唯一差异在左侧 rail</small></h1>
+  <div class="note">
+    <b>已拍板不变部分</b>（两案共用）：状态主承载移顶栏 <b>连接胶囊</b>（当前源 + 三态 + 多源汇总「2 源 · 1 异常」+ 异常行内「重连」+「管理连接…」直达设置）；管理页留在设置域不升第六域。胶囊与 popover 在下方两案画布中均为<b>可点击演示</b>；三态样张点击可切换主胶囊状态。
+  </div>
+
+  <!-- ═══════════ 方案 A ═══════════ -->
+  <div class="opt opt-a">
+    <div class="opt-head"><span class="tag">方案 A</span><h2>胶囊独占 · rail 图标退役</h2><small>Leader 提案</small></div>
+    <div class="canvas">
+      <div class="stage">
+        <div class="windowbar">
+          <span class="window-dots"><i></i><i></i><i></i></span>
+          <span class="window-title">CC Deck · Command Bridge</span>
+          <div class="source-switcher"><span class="source-trigger"><span class="dot g"></span><strong>公司电脑</strong><span>⌄</span></span></div>
+          <div class="conn-pop-anchor">
+            <button class="conn-pill" type="button" data-pill><span class="dot g" data-pill-dot></span><span data-pill-label>公司电脑</span></button>
+            <div class="conn-pop" data-pop>
+              <div class="ph">连接状态</div>
+              <div class="conn-row"><span class="dot g"></span><strong>公司电脑</strong><span class="st">已连接 · 12ms</span></div>
+              <div class="conn-row bad"><span class="dot r"></span><strong>家里 iMac</strong><button class="btn-reconnect" type="button">重连</button><span class="st">失联 3 分钟</span></div>
+              <a class="conn-manage">⚙ 管理连接…（直达设置 · 连接与设备）</a>
+            </div>
+          </div>
+          <span style="font-size:10px;color:var(--faint);">⌘K</span>
+        </div>
+        <div class="stage-body">
+          <div class="railcol">
+            <div class="rail-brand">cc</div>
+            <button class="rail-btn active" title="会话">⌂</button>
+            <button class="rail-btn" title="团队">👥<span style="position:absolute;top:5px;right:5px;font-size:8px;background:var(--error);color:#fff;border-radius:99px;padding:0 4px;">1</span></button>
+            <button class="rail-btn" title="项目">▣</button>
+            <div class="rail-spring"></div>
+            <button class="rail-btn" title="通知">🔔<span style="position:absolute;top:5px;right:5px;font-size:8px;background:var(--error);color:#fff;border-radius:99px;padding:0 4px;">2</span></button>
+            <button class="rail-btn" title="设置">⚙</button>
+          </div>
+          <div class="main">
+            <h3>← rail 回归纯域导航：会话 / 团队 / 项目 / 通知 / 设置，无连接图标</h3>
+            <div style="border:1px dashed var(--line);border-radius:10px;height:190px;display:grid;place-items:center;color:var(--faint);font-size:11px;">（域内容区，与本决策无关）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="states">
+      <h4>连接胶囊三态（点击样张，上方画布主胶囊实时切换）</h4>
+      <div class="row">
+        <button class="sample" type="button" data-set="single"><span class="dot g"></span>公司电脑</button>
+        <button class="sample" type="button" data-set="multi-ok"><span class="dot g"></span><span>2 源</span><span class="sum">全部正常</span></button>
+        <button class="sample warn" type="button" data-set="multi-bad"><span class="dot r"></span><span>2 源 · 1 异常</span><span class="sum">家里 iMac 失联</span></button>
+        <span class="hint">↖ 汇总态与单源态分开显示；异常时胶囊描边泛红并给最小恢复动作</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 方案 B ═══════════ -->
+  <div class="opt opt-b">
+    <div class="opt-head"><span class="tag">方案 B</span><h2>胶囊 + rail 副入口（降噪版 44×44）</h2><small>Codex 提案（specs/010）</small></div>
+    <div class="canvas">
+      <div class="stage">
+        <div class="windowbar">
+          <span class="window-dots"><i></i><i></i><i></i></span>
+          <span class="window-title">CC Deck · Command Bridge</span>
+          <div class="source-switcher"><span class="source-trigger"><span class="dot g"></span><strong>公司电脑</strong><span>⌄</span></span></div>
+          <div class="conn-pop-anchor">
+            <button class="conn-pill" type="button" data-pill-b><span class="dot g" data-pillb-dot></span><span data-pillb-label>公司电脑</span></button>
+            <div class="conn-pop" data-pop-b>
+              <div class="ph">连接状态</div>
+              <div class="conn-row"><span class="dot g"></span><strong>公司电脑</strong><span class="st">已连接 · 12ms</span></div>
+              <div class="conn-row bad"><span class="dot r"></span><strong>家里 iMac</strong><button class="btn-reconnect" type="button">重连</button><span class="st">失联 3 分钟</span></div>
+              <a class="conn-manage">⚙ 管理连接…（直达设置 · 连接与设备）</a>
+            </div>
+          </div>
+          <span style="font-size:10px;color:var(--faint);">⌘K</span>
+        </div>
+        <div class="stage-body">
+          <div class="railcol">
+            <div class="rail-brand">cc</div>
+            <button class="rail-conn-b" type="button" data-rail-b title="连接状态（与顶栏胶囊开同一面板）"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="mini-dot" data-railb-dot></span></button>
+            <div class="rail-note">同面板</div>
+            <button class="rail-btn active" title="会话">⌂</button>
+            <button class="rail-btn" title="团队">👥<span style="position:absolute;top:5px;right:5px;font-size:8px;background:var(--error);color:#fff;border-radius:99px;padding:0 4px;">1</span></button>
+            <button class="rail-btn" title="项目">▣</button>
+            <div class="rail-spring"></div>
+            <button class="rail-btn" title="通知">🔔<span style="position:absolute;top:5px;right:5px;font-size:8px;background:var(--error);color:#fff;border-radius:99px;padding:0 4px;">2</span></button>
+            <button class="rail-btn" title="设置">⚙</button>
+          </div>
+          <div class="main">
+            <h3>← rail 保留连接图标：44×44 对齐域按钮、单色去发光，点击与胶囊开同一 popover</h3>
+            <div style="border:1px dashed var(--line);border-radius:10px;height:190px;display:grid;place-items:center;color:var(--faint);font-size:11px;">（域内容区，与本决策无关）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="states">
+      <h4>此画布同步演示：三态切换时 rail 副入口角点变色（绿→红），异常状态在 rail 侧同样可见</h4>
+      <div class="row">
+        <button class="sample" type="button" data-setb="single"><span class="dot g"></span>公司电脑</button>
+        <button class="sample" type="button" data-setb="multi-ok"><span class="dot g"></span><span>2 源</span><span class="sum">全部正常</span></button>
+        <button class="sample warn" type="button" data-setb="multi-bad"><span class="dot r"></span><span>2 源 · 1 异常</span><span class="sum">家里 iMac 失联</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 对比 -->
+  <table>
+    <tr><th></th><th>方案 A · 胶囊独占</th><th>方案 B · 胶囊 + rail 副入口</th></tr>
+    <tr><td class="k">状态入口数</td><td>1（顶栏）</td><td>2（顶栏 + rail，同 popover）</td></tr>
+    <tr><td class="k">rail 语义</td><td>纯域导航（会话/团队/项目/通知/设置）</td><td>域导航 + 一个常驻状态副入口</td></tr>
+    <tr><td class="k">视线成本</td><td>异常必看顶栏，rail 侧无冗余提示</td><td>视线常驻 rail 时不抬头也能发现异常</td></tr>
+    <tr><td class="k">腾位</td><td>rail 首格空出，后续新增域不挤</td><td>rail 首格被占用</td></tr>
+    <tr><td class="k">支持理由</td><td>单一事实源、rail 语言统一（现图标突兀感的根除法）</td><td>保留习惯锚点；44×44 降噪后不再突兀</td></tr>
+  </table>
+
+  <div class="verdict">
+    <b>待拍板</b>：A 或 B。两案的胶囊/popover/设置直达完全一致，拍板后发小单微调 005 即可（A=删除 <code>.rail-connection</code>；B=按本草图降噪改造它），改动量都很小。
+  </div>
+</div>
+
+<script>
+(function () {
+  var STATES = {
+    "single":    { dot: "g", label: "公司电脑", warn: false },
+    "multi-ok":  { dot: "g", label: "2 源", warn: false, sum: "全部正常" },
+    "multi-bad": { dot: "r", label: "2 源 · 1 异常", warn: true, sum: "家里 iMac 失联" }
+  };
+  function apply(key, pillSel, dotAttr, labelAttr, railSel) {
+    var s = STATES[key];
+    var pill = document.querySelector(pillSel);
+    var dot = pill.querySelector(dotAttr);
+    var label = pill.querySelector(labelAttr);
+    dot.className = "dot " + s.dot;
+    label.textContent = s.sum ? s.label + "  " + s.sum : s.label;
+    pill.classList.toggle("st-warn", s.warn);
+    if (railSel) {
+      var rail = document.querySelector(railSel);
+      rail.classList.toggle("bad", s.warn);
+      var rd = rail.querySelector("[data-railb-dot]");
+      if (rd) rd.style.background = s.warn ? "var(--error)" : (s.dot === "a" ? "var(--working)" : "var(--done)");
+    }
+  }
+  // 方案 A
+  document.querySelectorAll("[data-set]").forEach(function (b) {
+    b.addEventListener("click", function () { apply(b.dataset.set, "[data-pill]", "[data-pill-dot]", "[data-pill-label]", null); });
+  });
+  // 方案 B（胶囊与 rail 副入口联动同一 popover）
+  document.querySelectorAll("[data-setb]").forEach(function (b) {
+    b.addEventListener("click", function () { apply(b.dataset.setb, "[data-pill-b]", "[data-pillb-dot]", "[data-pillb-label]", "[data-rail-b]"); });
+  });
+  function bindPop(toggleSel, popSel) {
+    var t = document.querySelector(toggleSel), p = document.querySelector(popSel);
+    t.addEventListener("click", function (e) { e.stopPropagation(); p.classList.toggle("open"); t.classList.toggle("pop-open"); });
+    document.addEventListener("click", function (e) { if (!p.contains(e.target) && e.target !== t) { p.classList.remove("open"); t.classList.remove("pop-open"); } });
+  }
+  bindPop("[data-pill]", "[data-pop]");
+  bindPop("[data-pill-b]", "[data-pop-b]");
+  document.querySelector("[data-rail-b]").addEventListener("click", function (e) {
+    e.stopPropagation();
+    var p = document.querySelector("[data-pop-b]");
+    p.classList.toggle("open");
+    this.classList.toggle("pop-open");
+  });
+})();
+</script>
+</body>
+</html>

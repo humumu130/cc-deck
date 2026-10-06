@@ -11,11 +11,15 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { delimiter as pathDelimiter, join } from "node:path";
 import { resolveClaudeCliPath } from "./cli-path.js";
+import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import type {
   FileChangeStats,
+  ActivityCapabilities,
+  ActivityKind,
   SessionLogPayload,
   SessionStatus,
   SubagentInfo,
+  StatusDockState,
   TodoItem,
   TokenUsage,
   WaitingPayload,
@@ -44,7 +48,7 @@ import {
 // PATH 仅 /usr/bin:/bin:/usr/sbin:/sbin——会话里 hook 报 node: command not found、
 // gradle 报 Cannot run program "node"（当日实证），每个会话被迫手动补 PATH。spawn 时
 // 统一补常见安装目录（不存在的目录在 PATH 里无害），CCR_EXTRA_PATH 可追加自定义位。
-export function childEnv(): NodeJS.ProcessEnv {
+export function childEnv(opts?: { configHome?: string }): NodeJS.ProcessEnv {
   const extra = [
     join(homedir(), "node/bin"),       // 用户级 node（本机实证位置）
     "/usr/local/bin",                  // macOS Intel / 惯装位
@@ -59,7 +63,171 @@ export function childEnv(): NodeJS.ProcessEnv {
     PATH: merged.join(pathDelimiter),
     CCR_RELAY_CHILD: "1",
     CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+    // #17 雇员独立家：configHome 有值时 CLI 子进程的会话记录/任务清单/全局配置
+    // 全部落到该目录，与用户默认家（~/.claude）物理隔离。undefined = 不设此键，
+    // CLI 沿用默认家（用户自建会话/未启用开关的部署，行为与从前一致）
+    ...(opts?.configHome ? { CLAUDE_CONFIG_DIR: opts.configHome } : {}),
   };
+}
+
+// #134 id 防碰撞 BOOT 段铸造（2026-09-28 冲刺审查补锁：抽成导出函数供单测
+// 验证「每次调用都是新随机尾」——防未来改回 static 复用静默复发时间线劫持）
+export const mintAdapterBoot = (): string =>
+  Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+export interface ActivityTaskSources {
+  todos?: TodoItem[];
+  dispatch?: string;
+  board?: string;
+  session?: string;
+}
+
+export interface ActivityMapperInput {
+  state?: SessionStatus;
+  operation?: string;
+  activityKind?: ActivityKind;
+  activityText?: string;
+  tool?: string;
+  ts?: number;
+  occurred_at?: number;
+  now?: number;
+  task?: ActivityTaskSources;
+  capabilities: ActivityCapabilities;
+  allowWaiting?: boolean;
+  unsupported?: string;
+}
+
+export type ActivityTimeBasis = "occurred_at" | "relay_received";
+
+export interface AdapterPreflightResult {
+  ok: boolean;
+  command: string;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ClaudePreflightOptions {
+  cliPath?: string | null;
+  credentialConfigured?: boolean;
+  version?: string;
+}
+
+export function preflightClaude(options: ClaudePreflightOptions = {}): AdapterPreflightResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const cliPath = options.cliPath === undefined ? resolveClaudeCliPath() : options.cliPath;
+  if (!cliPath) errors.push("Claude CLI 未找到或不可执行");
+  if (typeof query !== "function") errors.push("Claude SDK query 不可用");
+  if (options.credentialConfigured === false) errors.push("Claude provider 凭证未配置");
+  else if (options.credentialConfigured === undefined) warnings.push("凭证状态需由部署配置显式核验");
+  if (!options.version) warnings.push("Claude CLI 版本需在目标环境通过 --version 核验");
+  return { ok: errors.length === 0, command: cliPath ?? "claude", errors, warnings };
+}
+
+export type MappedStatusDock = StatusDockState & {
+  time_basis: ActivityTimeBasis;
+  unsupported?: boolean;
+  diagnostic?: string;
+};
+
+function finiteTime(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+export function deriveActivityTaskSummary(task: ActivityTaskSources | undefined, now = Date.now()): StatusDockState["task_summary"] {
+  const todo = task?.todos?.find((item) => item.status === "in_progress" && item.active_form?.trim());
+  if (todo?.active_form) return { text: todo.active_form.trim(), source: "todo", updated_at: todo.updated_at ?? now };
+  if (task?.dispatch?.trim()) return { text: task.dispatch.trim(), source: "dispatch", updated_at: now };
+  if (task?.board?.trim()) return { text: task.board.trim(), source: "board", updated_at: now };
+  if (task?.session?.trim()) return { text: task.session.trim(), source: "session", updated_at: now };
+  return undefined;
+}
+
+export function mapActivityState(input: ActivityMapperInput): MappedStatusDock {
+  const now = finiteTime(input.now, Date.now());
+  const receivedAt = finiteTime(input.ts, now);
+  const occurredAt = typeof input.occurred_at === "number" && Number.isFinite(input.occurred_at)
+    ? input.occurred_at
+    : undefined;
+  const requestedState = input.state ?? "WORKING";
+  const state = requestedState === "WAITING" && !input.allowWaiting ? "WORKING" : requestedState;
+  const text = input.activityText?.trim() || input.operation?.trim();
+  const activity = text ? {
+    kind: input.activityKind ?? "system",
+    text,
+    ...(input.tool ? { tool: input.tool } : {}),
+    observed_at: receivedAt,
+    ...(occurredAt === undefined ? {} : { occurred_at: occurredAt }),
+  } : undefined;
+  const result: MappedStatusDock = {
+    state,
+    ...(deriveActivityTaskSummary(input.task, now) ? { task_summary: deriveActivityTaskSummary(input.task, now) } : {}),
+    ...(activity ? { activity } : {}),
+    capabilities: input.capabilities,
+    updated_at: now,
+    time_basis: occurredAt === undefined ? "relay_received" : "occurred_at",
+    ...(input.unsupported ? { unsupported: true, diagnostic: input.unsupported } : {}),
+  };
+  return result;
+}
+
+export interface ActivityMergeResult {
+  state: MappedStatusDock;
+  merged: boolean;
+  terminal: boolean;
+}
+
+export function mergeActivitySamples(
+  previous: MappedStatusDock | undefined,
+  next: MappedStatusDock,
+  options: { windowMs?: number; terminal?: boolean } = {},
+): ActivityMergeResult {
+  const terminal = options.terminal === true || next.state === "DONE" || next.state === "ERROR" || next.activity?.kind === "tool_result";
+  const sameTool = Boolean(previous?.activity?.tool && next.activity?.tool && previous.activity.tool === next.activity.tool);
+  const sameKind = previous?.activity?.kind === next.activity?.kind;
+  const delta = previous && next.activity ? Math.abs(next.activity.observed_at - (previous.activity?.observed_at ?? 0)) : Infinity;
+  const windowMs = options.windowMs ?? 150;
+  if (!terminal && sameTool && sameKind && delta <= windowMs) return { state: next, merged: true, terminal: false };
+  return { state: next, merged: false, terminal };
+}
+
+export function mergeActivityFragments(
+  previous: MappedStatusDock | undefined,
+  next: MappedStatusDock,
+  options: { windowMs?: number; terminal?: boolean } = {},
+): MappedStatusDock {
+  return mergeActivitySamples(previous, next, options).state;
+}
+
+export const CLAUDE_ACTIVITY_CAPABILITIES: ActivityCapabilities = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: true,
+};
+
+export interface ClaudeActivityInput {
+  status: SessionStatus;
+  actionSummary?: string;
+  log?: { kind: ActivityKind; text: string; tool?: string; ts?: number; occurred_at?: number };
+  task?: ActivityTaskSources;
+  now?: number;
+}
+
+export function mapClaudeActivity(input: ClaudeActivityInput): MappedStatusDock {
+  return mapActivityState({
+    state: input.status,
+    operation: input.actionSummary,
+    activityKind: input.log?.kind,
+    activityText: input.log?.text,
+    tool: input.log?.tool,
+    ts: input.log?.ts,
+    occurred_at: input.log?.occurred_at,
+    now: input.now,
+    task: input.task,
+    capabilities: CLAUDE_ACTIVITY_CAPABILITIES,
+    allowWaiting: true,
+  });
 }
 
 // streaming input 模式的 prompt 源：push 用户消息 / end 收尾
@@ -102,6 +270,7 @@ export class AsyncQueue<T> {
 }
 
 interface PendingPermission {
+  tool: string; // #212 记规则用（allow 时从 pending 还原 tool+input）
   input: Record<string, unknown>;
   resolve: (r: PermissionResult) => void;
   created_at: number;
@@ -169,7 +338,7 @@ export interface AgentLike {
   // echo（#62）：客户端回显文本（文件消息正文合成路径指令后传原文本短回显，不露临时
   // 路径）；不传则回显 = 截断正文 + 图片计数
   sendMessage(text: string, images?: string[], echo?: string): void;
-  allow(requestId: string, by?: string): boolean;
+  allow(requestId: string, by?: string, rememberScope?: "session" | "global"): boolean;
   deny(requestId: string, reason?: string, by?: string): boolean;
   answer(requestId: string, answers: string[], by?: string): boolean;
   stop(): Promise<void>;
@@ -200,16 +369,22 @@ export class AgentSession {
   private pendingFileUses = new Map<string, { tool: string; path: string }>();
   private queue = new AsyncQueue<SDKUserMessage>();
   private pending = new Map<string, PendingPermission>();
+  // #212 允许并记住：权限请求先查规则，命中直接放行（不下发审批卡）
+  private readonly rules: AllowRuleStore | undefined;
   private stopping = false;
   private resultSeenForTurn = true;
   private lastSummary = "启动中";
   // 流式文本块：index->id 映射 + id->累计文本 + 当前消息内文本块 id 顺序表
   // （完整 assistant 消息的 content 数组可能重排/剔除 thinking，不能按 index 对齐，按文本块出现顺序对齐）
-  // #134 id 防碰撞：进程启动随机段掺进 id——resume/重启重建 adapter 后 blockSeq 从头计数，
-  // 纯序号 id（t1/t2…）会跨重启复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
-  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。与 bridge.ts
-  // 的 XSTREAM_BOOT 同款防御
-  private static readonly ADAPTER_BOOT = Date.now().toString(36);
+  // #134 id 防碰撞：启动随机段掺进 id——重建 adapter 后 blockSeq 从头计数，纯序号
+  // id（t1/t2…）会跨重建复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
+  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。
+  // 2026-09-28 冲刺升级：原 BOOT 段是 static（进程级秒戳）——relay 进程内 resume
+  // 重建 adapter（看门狗恢复/auto-revive/消息复活都是热路径）时 blockSeq 归零，
+  // 同会话新旧回合撞 id，被中断回合的条目被新回合流式块顶掉（真链路实锤：同一
+  // relay 先后两个 CLI 的 id 共享前缀）。改实例级 + 随机尾段，跨重建永不相撞；
+  // bridge.ts XSTREAM_BOOT 为单例+会话级计数（进程内不重置）无此险，不动
+  private readonly adapterBoot = mintAdapterBoot();
   private blockSeq = 0;
   private streamIdx = new Map<number, string>();
   private streamBufs = new Map<string, string>();
@@ -236,8 +411,15 @@ export class AgentSession {
     // 等待输入，首个回合由后续 sendMessage 开启）。空串与 undefined 语义不同：
     // 空串照旧推送（保持既有 create/resume 调用行为逐字节不变）
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan" | "bypassPermissions"; images?: string[] },
+    opts?: {
+      resume?: string;
+      permissionMode?: "default" | "acceptEdits" | "plan" | "bypassPermissions";
+      images?: string[];
+      rules?: AllowRuleStore; // #212 允许并记住：缺省 = 无规则（标题生成等非会话级用法）
+      configHome?: string;    // #17 雇员独立家：传入则 CLI 子进程带 CLAUDE_CONFIG_DIR
+    },
   ) {
+    this.rules = opts?.rules;
     if (initialPrompt !== undefined || (opts?.images?.length ?? 0) > 0) {
       this.pushUserMessage(initialPrompt ?? "", opts?.images);
     }
@@ -260,8 +442,9 @@ export class AgentSession {
         // CLAUDE_CODE_ENABLE_TODO_TOOLS：CLI 按模型身份门控任务工具（TaskCreate/Get/Update/
         // List 仅对 Claude 系模型默认提供），GLM 等其它模型一律裁剪→任务面板恒空。官方
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
-        // PATH 补全：见 childEnv()（M0）
-        env: childEnv(),
+        // PATH 补全：见 childEnv()（M0）；#17 雇员独立家：configHome 时注入
+        // CLAUDE_CONFIG_DIR（transcript/任务清单落独立家）
+        env: childEnv({ configHome: opts?.configHome }),
         permissionMode: opts?.permissionMode ?? "default",
         // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
         // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过
@@ -409,7 +592,7 @@ export class AgentSession {
               // #265 混合形态：正文尾部被 z.ai append 桥调用/输出——拆段，桥段归
               // 工具日志，正文复用流式 id 原地替换（流式期间已只下发正文部分）
               const { body, segs } = splitZaiText(block.text);
-              const id = this.streamOrder[ti++] ?? `t${AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
+              const id = this.streamOrder[ti++] ?? `t${this.adapterBoot}-${++this.blockSeq}`;
               if (body) {
                 this.cb.onLog("assistant_text", truncate(body, 400), {
                   full: fullText(body, 400),
@@ -602,7 +785,7 @@ export class AgentSession {
     };
     const idx = ev.index ?? -1;
     if (ev.type === "content_block_start" && ev.content_block?.type === "text") {
-      const id = `t${AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
+      const id = `t${this.adapterBoot}-${++this.blockSeq}`;
       this.streamIdx.set(idx, id);
       this.streamBufs.set(id, "");
       this.streamOrder.push(id);
@@ -728,6 +911,14 @@ export class AgentSession {
     input: Record<string, unknown>,
     opts: CanUseToolOpts,
   ): Promise<PermissionResult> {
+    // #212 允许并记住：命中已记规则 → 本地放行，不下发审批卡（可解释性：时间线
+    // 留一条 system 日志）。危险形态（组合命令/黑名单 token）永不进记忆通道，见
+    // allow-rules.ts matchPattern 的双重防护
+    const hit = this.rules?.match(this.id, toolName, input);
+    if (hit) {
+      this.cb.onLog("system", `已按记住的规则放行 ${toolName}（${hit.pattern === "*" ? "工具级" : hit.pattern}）`);
+      return Promise.resolve({ behavior: "allow", updatedInput: input });
+    }
     const requestId = opts.requestId ?? opts.toolUseID;
     // AskUserQuestion：结构化问题下发，客户端渲染选项作答
     const questions = toolName === "AskUserQuestion" ? parseAskQuestions(input) : [];
@@ -735,16 +926,21 @@ export class AgentSession {
       ? `提问: ${questions.map((q) => q.header).join(" / ")}`
       : opts.title ?? summarizeToolUse(toolName, input);
     this.lastSummary = summary;
+    // #212 可记忆请求带 remember（pattern/label 预算好，端上零解析）；
+    // 危险形态 suggestPattern 返回 null → 不带字段 → 端上不显示「记住」入口
+    const remember = suggestPattern(toolName, input);
     this.cb.onWaiting({
       request_id: requestId,
       tool_name: toolName,
       input_summary: summary,
       suggestions: [],
       ...(questions.length ? { questions } : {}),
+      ...(remember ? { remember } : {}),
     });
     this.cb.onLog("system", questions.length ? summary : `等待确认: ${summary}`);
     return new Promise<PermissionResult>((resolve) => {
       this.pending.set(requestId, {
+        tool: toolName,
         input,
         created_at: Date.now(),
         resolve: (r) => {
@@ -794,9 +990,15 @@ export class AgentSession {
     if (this.pending.size === 0) this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 
-  allow(requestId: string, by?: string): boolean {
+  allow(requestId: string, by?: string, rememberScope?: "session" | "global"): boolean {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    // #212 允许并记住：落规则（pattern 由 pending 里的 tool+input 重新推导——
+    // 与下发卡片时的 remember 同源，危险形态此处自然得 null 不落）
+    if (rememberScope && this.rules) {
+      const sug = suggestPattern(p.tool, p.input);
+      if (sug) this.rules.add(p.tool, sug.pattern, rememberScope, rememberScope === "session" ? this.id : undefined, by ?? "unknown");
+    }
     p.resolve({ behavior: "allow", updatedInput: p.input });
     this.cb.onWaitingResolved(requestId, "allow", by);
     return true;

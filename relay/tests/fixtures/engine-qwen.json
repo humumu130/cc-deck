@@ -1,0 +1,5 @@
+{
+  "assistant": {"type":"assistant","text":"Qwen response","created_at":1234},
+  "tool": {"type":"tool_call","name":"read_file","text":"读取文件"},
+  "empty": {}
+}

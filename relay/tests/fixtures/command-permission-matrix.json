@@ -1,0 +1,9 @@
+{
+  "roles": ["owner", "operator", "viewer"],
+  "capabilities": ["org:write", "profile:write", "artifact:read", "artifact:batch"],
+  "allow": {
+    "owner": ["org:write", "profile:write", "artifact:read"],
+    "operator": ["org:write", "profile:write", "artifact:read"],
+    "viewer": ["artifact:read"]
+  }
+}

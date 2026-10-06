@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
+// ../../cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -1947,29 +1947,29 @@ var require_nacl_fast = __commonJS({
         return smlen;
       }
       function unpackneg(r, p) {
-        var t = gf2(), chk = gf2(), num = gf2(), den = gf2(), den2 = gf2(), den4 = gf2(), den6 = gf2();
+        var t = gf2(), chk = gf2(), num2 = gf2(), den = gf2(), den2 = gf2(), den4 = gf2(), den6 = gf2();
         set25519(r[2], gf1);
         unpack25519(r[1], p);
-        S(num, r[1]);
-        M(den, num, D3);
-        Z2(num, num, r[2]);
+        S(num2, r[1]);
+        M(den, num2, D3);
+        Z2(num2, num2, r[2]);
         A2(den, r[2], den);
         S(den2, den);
         S(den4, den2);
         M(den6, den4, den2);
-        M(t, den6, num);
+        M(t, den6, num2);
         M(t, t, den);
         pow2523(t, t);
-        M(t, t, num);
+        M(t, t, num2);
         M(t, t, den);
         M(t, t, den);
         M(r[0], t, den);
         S(chk, r[0]);
         M(chk, chk, den);
-        if (neq25519(chk, num)) M(r[0], r[0], I2);
+        if (neq25519(chk, num2)) M(r[0], r[0], I2);
         S(chk, r[0]);
         M(chk, chk, den);
-        if (neq25519(chk, num)) return -1;
+        if (neq25519(chk, num2)) return -1;
         if (par25519(r[0]) === p[31] >> 7) Z2(r[0], gf0, r[0]);
         M(r[3], r[0], r[1]);
         return 0;
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
+// ../../cc-deck/relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
+// ../../cc-deck/relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
+// ../../cc-deck/relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
+// ../../cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2600,26 +2600,26 @@ var require_permessage_deflate = __commonJS({
             value = value[0];
             if (key === "client_max_window_bits") {
               if (value !== true) {
-                const num = +value;
-                if (!Number.isInteger(num) || num < 8 || num > 15) {
+                const num2 = +value;
+                if (!Number.isInteger(num2) || num2 < 8 || num2 > 15) {
                   throw new TypeError(
                     `Invalid value for parameter "${key}": ${value}`
                   );
                 }
-                value = num;
+                value = num2;
               } else if (!this._isServer) {
                 throw new TypeError(
                   `Invalid value for parameter "${key}": ${value}`
                 );
               }
             } else if (key === "server_max_window_bits") {
-              const num = +value;
-              if (!Number.isInteger(num) || num < 8 || num > 15) {
+              const num2 = +value;
+              if (!Number.isInteger(num2) || num2 < 8 || num2 > 15) {
                 throw new TypeError(
                   `Invalid value for parameter "${key}": ${value}`
                 );
               }
-              value = num;
+              value = num2;
             } else if (key === "client_no_context_takeover" || key === "server_no_context_takeover") {
               if (value !== true) {
                 throw new TypeError(
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
+// ../../cc-deck/relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
+// ../../cc-deck/relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3333,8 +3333,8 @@ var require_receiver = __commonJS({
           return;
         }
         const buf = this.consume(8);
-        const num = buf.readUInt32BE(0);
-        if (num > Math.pow(2, 53 - 32) - 1) {
+        const num2 = buf.readUInt32BE(0);
+        if (num2 > Math.pow(2, 53 - 32) - 1) {
           const error = this.createError(
             RangeError,
             "Unsupported WebSocket frame: payload length > 2^53 - 1",
@@ -3345,7 +3345,7 @@ var require_receiver = __commonJS({
           cb2(error);
           return;
         }
-        this._payloadLength = num * Math.pow(2, 32) + buf.readUInt32BE(4);
+        this._payloadLength = num2 * Math.pow(2, 32) + buf.readUInt32BE(4);
         this.haveLength(cb2);
       }
       /**
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
+// ../../cc-deck/relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
+// ../../cc-deck/relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
+// ../../cc-deck/relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
+// ../../cc-deck/relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
+// ../../cc-deck/relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
+// ../../cc-deck/relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
+// ../../cc-deck/relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,21 +6001,21 @@ var require_QRMath = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
-    function QRPolynomial(num, shift) {
-      if (num.length === void 0) {
-        throw new Error(num.length + "/" + shift);
+    function QRPolynomial(num2, shift) {
+      if (num2.length === void 0) {
+        throw new Error(num2.length + "/" + shift);
       }
       var offset = 0;
-      while (offset < num.length && num[offset] === 0) {
+      while (offset < num2.length && num2[offset] === 0) {
         offset++;
       }
-      this.num = new Array(num.length - offset + shift);
-      for (var i = 0; i < num.length - offset; i++) {
-        this.num[i] = num[i + offset];
+      this.num = new Array(num2.length - offset + shift);
+      for (var i = 0; i < num2.length - offset; i++) {
+        this.num[i] = num2[i + offset];
       }
     }
     QRPolynomial.prototype = {
@@ -6026,36 +6026,36 @@ var require_QRPolynomial = __commonJS({
         return this.num.length;
       },
       multiply: function(e) {
-        var num = new Array(this.getLength() + e.getLength() - 1);
+        var num2 = new Array(this.getLength() + e.getLength() - 1);
         for (var i = 0; i < this.getLength(); i++) {
           for (var j2 = 0; j2 < e.getLength(); j2++) {
-            num[i + j2] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j2)));
+            num2[i + j2] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j2)));
           }
         }
-        return new QRPolynomial(num, 0);
+        return new QRPolynomial(num2, 0);
       },
       mod: function(e) {
         if (this.getLength() - e.getLength() < 0) {
           return this;
         }
         var ratio = QRMath.glog(this.get(0)) - QRMath.glog(e.get(0));
-        var num = new Array(this.getLength());
+        var num2 = new Array(this.getLength());
         for (var i = 0; i < this.getLength(); i++) {
-          num[i] = this.get(i);
+          num2[i] = this.get(i);
         }
         for (var x = 0; x < e.getLength(); x++) {
-          num[x] ^= QRMath.gexp(QRMath.glog(e.get(x)) + ratio);
+          num2[x] ^= QRMath.gexp(QRMath.glog(e.get(x)) + ratio);
         }
-        return new QRPolynomial(num, 0).mod(e);
+        return new QRPolynomial(num2, 0).mod(e);
       }
     };
     module.exports = QRPolynomial;
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6566,9 +6566,9 @@ var require_QRBitBuffer = __commonJS({
         var bufIndex = Math.floor(index / 8);
         return (this.buffer[bufIndex] >>> 7 - index % 8 & 1) == 1;
       },
-      put: function(num, length) {
+      put: function(num2, length) {
         for (var i = 0; i < length; i++) {
-          this.putBit((num >>> length - i - 1 & 1) == 1);
+          this.putBit((num2 >>> length - i - 1 & 1) == 1);
         }
       },
       getLengthInBits: function() {
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
+// ../../cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
+// ../../cc-deck/relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
+  "../../cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
+// ../../cc-deck/relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
+  "../../cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
+// ../../cc-deck/relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
+  "../../cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
+// ../../cc-deck/relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
+  "../../cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
+// ../../cc-deck/relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
+  "../../cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
+// ../../cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "../../cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
+// ../../cc-deck/relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
+  "../../cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
+// ../../cc-deck/relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
+// ../../cc-deck/relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
+// ../../cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
+// ../../cc-deck/relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "../../cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -10337,55 +10337,138 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname } from "node:os";
-import { join as join17 } from "node:path";
-import { writeFileSync as writeFileSync12, openSync as openSync3, readFileSync as readFileSync17, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
-import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
+import { networkInterfaces as networkInterfaces3, homedir as homedir15, hostname, tmpdir as tmpdir3 } from "node:os";
+import { join as join24, sep as sep8 } from "node:path";
+import { writeFileSync as writeFileSync19, openSync as openSync4, readFileSync as readFileSync23, rmSync as rmSync5, existsSync as existsSync17, readdirSync as readdirSync7, statSync as statSync7 } from "node:fs";
+import { spawn as spawn6, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/config.ts
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { isAbsolute, join as join2, resolve } from "node:path";
 import { homedir } from "node:os";
+
+// src/settings.ts
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+var SETTINGS_FILE = "settings.json";
+function settingsPath(dataDir2) {
+  return join(dataDir2, SETTINGS_FILE);
+}
+function readSettingsFile(dataDir2) {
+  const p = settingsPath(dataDir2);
+  if (!existsSync(p)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(p, "utf-8"));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("not an object");
+    return { employeeHome: raw.employeeHome === true };
+  } catch (e) {
+    console.warn(`[settings] ${SETTINGS_FILE} \u8BFB\u53D6\u5931\u8D25\uFF08\u6309\u672A\u914D\u7F6E\u5904\u7406\uFF09: ${e.message}`);
+    return null;
+  }
+}
+function writeSettingsFile(dataDir2, s) {
+  try {
+    const p = settingsPath(dataDir2);
+    let prev = {};
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf-8"));
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) prev = raw;
+    } catch {
+    }
+    const merged = { ...prev, ...s };
+    const tmp = p + ".tmp";
+    writeFileSync(tmp, JSON.stringify(merged, null, 2), "utf-8");
+    renameSync(tmp, p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isFreshInstall(dataDir2) {
+  return !existsSync(join(dataDir2, "events.ndjson")) && !existsSync(join(dataDir2, "bridge-token")) && !existsSync(join(dataDir2, "token")) && !existsSync(settingsPath(dataDir2));
+}
+function defaultSettings(dataDir2, freshInstall) {
+  return { employeeHome: freshInstall ?? isFreshInstall(dataDir2) };
+}
+function resolveEmployeeHome(dataDir2, freshInstall) {
+  const envRaw = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
+  const fromEnv = parseEmployeeConfigDir(envRaw, dataDir2);
+  if (fromEnv !== null || envRaw !== "") {
+    return { enabled: fromEnv !== null, value: fromEnv, source: "env" };
+  }
+  const file = readSettingsFile(dataDir2);
+  if (file) {
+    return {
+      enabled: file.employeeHome,
+      value: file.employeeHome ? parseEmployeeConfigDir("auto", dataDir2) : null,
+      source: "file"
+    };
+  }
+  const def = defaultSettings(dataDir2, freshInstall);
+  return {
+    enabled: def.employeeHome,
+    value: def.employeeHome ? parseEmployeeConfigDir("auto", dataDir2) : null,
+    source: "default"
+  };
+}
+
+// src/config.ts
+function parseEmployeeConfigDir(v, dataDir2) {
+  const t = (v ?? "").trim();
+  if (t === "auto") {
+    return resolve(join2(dataDir2, "claude-home"));
+  }
+  return t && isAbsolute(t) ? t : null;
+}
+function resolveDataDir() {
+  return process.env.CCR_DATA_DIR ?? ("1" ? join2(homedir(), ".cc-deck", "data") : join2(process.cwd(), "data"));
+}
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  const dataDir2 = process.env.CCR_DATA_DIR ?? ("1" ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
-  mkdirSync(dataDir2, { recursive: true });
+  const dataDir2 = resolveDataDir();
+  mkdirSync2(dataDir2, { recursive: true });
+  const freshInstall = isFreshInstall(dataDir2);
   const envToken = process.env.CCR_TOKEN;
-  const tokenFile = join(dataDir2, "token");
+  const tokenFile = join2(dataDir2, "token");
   let token;
   if (envToken && envToken.length >= 8) {
     token = envToken;
-  } else if (existsSync(tokenFile)) {
-    token = readFileSync(tokenFile, "utf-8").trim();
+  } else if (existsSync2(tokenFile)) {
+    token = readFileSync2(tokenFile, "utf-8").trim();
   } else {
     token = randomUUID().replace(/-/g, "");
-    writeFileSync(tokenFile, token, "utf-8");
+    writeFileSync2(tokenFile, token, "utf-8");
   }
   let defaultCwd = process.env.CCR_CWD || "";
   if (!defaultCwd) {
     try {
-      defaultCwd = readFileSync(join(dataDir2, "last-cwd"), "utf-8").trim();
+      defaultCwd = readFileSync2(join2(dataDir2, "last-cwd"), "utf-8").trim();
     } catch {
     }
   }
   if (!defaultCwd) defaultCwd = homedir();
   const model = process.env.CCR_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? "glm-5.3";
   let bridgeToken = process.env.CCR_BRIDGE_TOKEN ?? "";
-  const bridgeTokenPath = join(dataDir2, "bridge-token");
+  const bridgeTokenPath = join2(dataDir2, "bridge-token");
   if (!bridgeToken) {
-    if (existsSync(bridgeTokenPath)) {
-      bridgeToken = readFileSync(bridgeTokenPath, "utf-8").trim();
+    if (existsSync2(bridgeTokenPath)) {
+      bridgeToken = readFileSync2(bridgeTokenPath, "utf-8").trim();
     } else {
       bridgeToken = randomUUID().replace(/-/g, "");
-      writeFileSync(bridgeTokenPath, bridgeToken, "utf-8");
+      writeFileSync2(bridgeTokenPath, bridgeToken, "utf-8");
     }
   }
   const DEFAULT_CLOUD_URL = "wss://cc.humumu.online/cloud";
   const DEFAULT_CLOUD_TOKEN = "ccdeck-public-9f3k2m7v";
   const cloudUrls = (process.env.CCR_CLOUD_URL ?? DEFAULT_CLOUD_URL).split(",").map((s) => s.trim()).filter(Boolean);
   const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
+  const envRaw = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
+  if (envRaw && !isAbsolute(envRaw) && envRaw !== "auto") {
+    console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR \u9700\u7EDD\u5BF9\u8DEF\u5F84\u6216 "auto"\uFF08~ \u8BF7\u5C55\u5F00\u4E3A $HOME/...\uFF09\uFF0C\u6536\u5230\u76F8\u5BF9\u8DEF\u5F84 "${envRaw}"\uFF0C\u96C7\u5458\u72EC\u7ACB\u5BB6\u4FDD\u6301\u5173\u95ED`);
+  }
+  const employeeConfigDir = parseEmployeeConfigDir(envRaw, dataDir2);
   return {
     port,
     token,
@@ -10394,9 +10477,11 @@ function loadConfig() {
     model,
     bridgeToken,
     dataDir: dataDir2,
+    freshInstall,
     cloudUrls,
     cloudUrl: cloudUrls[0] ?? "",
-    cloudToken
+    cloudToken,
+    employeeConfigDir
   };
 }
 
@@ -10429,7 +10514,7 @@ function detectLanIp(interfaces = os.networkInterfaces()) {
 }
 
 // src/history.ts
-import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, mkdirSync as mkdirSync2 } from "node:fs";
+import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, existsSync as existsSync3, mkdirSync as mkdirSync3, statSync, renameSync as renameSync2 } from "node:fs";
 import { dirname } from "node:path";
 
 // src/context-limit.ts
@@ -10458,9 +10543,9 @@ var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 300;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
 function loadEvents(path6) {
-  if (!existsSync2(path6)) return [];
+  if (!existsSync3(path6)) return [];
   const out = [];
-  for (const line of readFileSync2(path6, "utf-8").split("\n")) {
+  for (const line of readFileSync3(path6, "utf-8").split("\n")) {
     const t = line.trim();
     if (!t) continue;
     try {
@@ -10509,12 +10594,28 @@ function tail(arr, n) {
   return arr.length <= n ? arr : arr.slice(arr.length - n);
 }
 function rewriteFile(path6, events) {
-  mkdirSync2(dirname(path6), { recursive: true });
-  writeFileSync2(path6, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+  mkdirSync3(dirname(path6), { recursive: true });
+  const tmp = `${path6}.tmp-${Date.now()}`;
+  writeFileSync3(tmp, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+  renameSync2(tmp, path6);
+}
+function compactEventsFile(path6, minBytes) {
+  try {
+    if (!existsSync3(path6)) return null;
+    const size = statSync(path6).size;
+    if (size < minBytes) return null;
+    const prior2 = loadEvents(path6);
+    const kept2 = compactEvents(prior2);
+    if (prior2.length === kept2.length) return null;
+    rewriteFile(path6, kept2);
+    return { before: size, after: statSync(path6).size };
+  } catch {
+    return null;
+  }
 }
 function appendLine(path6, env) {
-  mkdirSync2(dirname(path6), { recursive: true });
-  writeFileSync2(path6, JSON.stringify(env) + "\n", { flag: "a" });
+  mkdirSync3(dirname(path6), { recursive: true });
+  writeFileSync3(path6, JSON.stringify(env) + "\n", { flag: "a" });
 }
 function reduceHistory(events) {
   const out = /* @__PURE__ */ new Map();
@@ -10540,6 +10641,10 @@ function reduceHistory(events) {
         logs: []
       };
       if (p.external) rs2.state.external = true;
+      if (p.employee) rs2.state.employee = true;
+      if (typeof p.employee_home === "string" && p.employee_home) rs2.state.employee_home = p.employee_home;
+      if (p.engine) rs2.state.engine = p.engine;
+      if (p.provider) rs2.state.engine_provider = p.provider;
       out.set(e.session_id, rs2);
       continue;
     }
@@ -10578,11 +10683,13 @@ function reduceHistory(events) {
       case "SESSION_WAITING": {
         s.status = "WAITING";
         s.waiting_request = e.payload;
+        s.waiting_started_at = e.ts;
         break;
       }
       case "SESSION_WAITING_RESOLVED": {
         s.status = "WORKING";
         s.waiting_request = void 0;
+        s.waiting_started_at = void 0;
         const d2 = e.payload.decision;
         rs2.logs.push({ ts: e.ts, kind: "system", text: `\u5DF2${d2 === "allow" ? "\u5141\u8BB8" : d2 === "answer" ? "\u4F5C\u7B54" : "\u62D2\u7EDD"}` });
         break;
@@ -10749,13 +10856,14 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync9, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
-import { homedir as homedir6 } from "node:os";
-import { isAbsolute as isAbsolute4, join as join10, resolve as resolve6, sep as sep5 } from "node:path";
+import { randomUUID as randomUUID8 } from "node:crypto";
+import { existsSync as existsSync10, mkdirSync as mkdirSync11, readFileSync as readFileSync15, realpathSync as realpathSync3, statSync as statSync4, writeFileSync as writeFileSync12 } from "node:fs";
+import { homedir as homedir8 } from "node:os";
+import { isAbsolute as isAbsolute6, join as join17, resolve as resolve7, sep as sep6 } from "node:path";
 
 // src/artifacts.ts
-import { readdirSync, statSync, readFileSync as readFileSync3, existsSync as existsSync3 } from "node:fs";
-import { join as join2, resolve, extname } from "node:path";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync as readFileSync4, realpathSync } from "node:fs";
+import { dirname as dirname2, extname, join as join3, normalize, relative, resolve as resolve2, sep } from "node:path";
 import { homedir as homedir2 } from "node:os";
 var MIME = {
   ".html": "text/html; charset=utf-8",
@@ -10773,50 +10881,1002 @@ var MIME = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8"
 };
+var ARTIFACT_SEGMENT = "[\\w\u4E00-\u9FFF][\\w\u4E00-\u9FFF.-]*";
+var ARTIFACT_NAME_RE = new RegExp(`^${ARTIFACT_SEGMENT}(?:/${ARTIFACT_SEGMENT})?$`);
 function artifactsDir() {
-  return process.env.CCR_ARTIFACTS_DIR || join2(homedir2(), ".cc-deck", "artifacts");
+  return process.env.CCR_ARTIFACTS_DIR || join3(homedir2(), ".cc-deck", "artifacts");
 }
 function listArtifacts() {
   const dir = artifactsDir();
-  let files;
+  let entries;
   try {
-    files = readdirSync(dir);
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   const out = [];
-  for (const f of files) {
-    if (f.startsWith(".")) continue;
+  const addFile = (name, path6) => {
+    if (name.startsWith(".")) return;
     try {
-      const st2 = statSync(join2(dir, f));
-      if (st2.isFile()) out.push({ name: f, size: st2.size, mtime: st2.mtimeMs });
+      const st2 = lstatSync(path6);
+      if (st2.isFile()) out.push({ name, size: st2.size, mtime: st2.mtimeMs });
     } catch {
+    }
+  };
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    if (entry.isSymbolicLink()) continue;
+    const path6 = join3(dir, entry.name);
+    if (entry.isDirectory()) {
+      let children;
+      try {
+        children = readdirSync(path6, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const child of children) {
+        if (child.name.startsWith(".")) continue;
+        if (child.isSymbolicLink()) continue;
+        addFile(`${entry.name}/${child.name}`, join3(path6, child.name));
+      }
+    } else {
+      addFile(entry.name, path6);
     }
   }
   out.sort((a, b) => b.mtime - a.mtime);
   return out;
 }
-function serveArtifact(name, res) {
-  if (!/^[\w一-鿿][\w一-鿿.-]*$/.test(name)) return false;
-  const dir = resolve(artifactsDir());
-  const full = resolve(join2(dir, name));
-  if (!full.startsWith(dir + "/") && full !== dir) return false;
-  const path6 = full;
-  if (!existsSync3(path6)) return false;
-  const st2 = statSync(path6);
-  if (!st2.isFile()) return false;
-  const type = MIME[extname(path6).toLowerCase()] ?? "application/octet-stream";
+function validateDeliverablePath(rawPath) {
+  const trimmed = rawPath.trim();
+  if (!trimmed) return { ok: false, path: "", error: "path \u5FC5\u987B\u662F\u975E\u7A7A\u6587\u4EF6\u8DEF\u5F84" };
+  const path6 = resolve2(trimmed);
+  let fd2;
   try {
-    const data = readFileSync3(path6);
+    fd2 = openSync(path6, constants.O_RDONLY);
+  } catch (e) {
+    if (e?.code === "EISDIR") {
+      return { ok: false, path: path6, error: `\u4EA4\u4ED8\u7269\u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6: ${path6}` };
+    }
+    return { ok: false, path: path6, error: `\u4EA4\u4ED8\u7269\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE: ${path6}` };
+  }
+  try {
+    const st2 = fstatSync(fd2);
+    if (!st2.isFile()) return { ok: false, path: path6, error: `\u4EA4\u4ED8\u7269\u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6: ${path6}` };
+    let unverified = false;
+    try {
+      unverified = lstatSync(path6).isSymbolicLink() || realpathSync(dirname2(path6)) !== dirname2(path6);
+    } catch {
+      unverified = true;
+    }
+    if (unverified) return { ok: true, path: path6, size: null, mtime: null, unverified: true };
+    return { ok: true, path: path6, size: st2.size, mtime: st2.mtimeMs, unverified: false };
+  } finally {
+    try {
+      closeSync(fd2);
+    } catch {
+    }
+  }
+}
+function serveArtifact(name, res) {
+  if (!ARTIFACT_NAME_RE.test(name) || name.includes("\\")) return false;
+  const dir = resolve2(artifactsDir());
+  let realRoot;
+  try {
+    realRoot = realpathSync(dir);
+  } catch {
+    return false;
+  }
+  const full = resolve2(join3(dir, name));
+  if (!full.startsWith(dir + sep) || relative(dir, full).split(sep).length > 2) return false;
+  let real;
+  try {
+    real = realpathSync(full);
+  } catch {
+    return false;
+  }
+  if (real !== realRoot && !real.startsWith(realRoot + sep)) return false;
+  if (relative(realRoot, real).split(sep).length > 2) return false;
+  const type = MIME[extname(real).toLowerCase()] ?? "application/octet-stream";
+  let fd2;
+  try {
+    fd2 = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    return false;
+  }
+  try {
+    const st2 = fstatSync(fd2);
+    if (!st2.isFile()) return false;
+    const data = readFileSync4(fd2);
     res.writeHead(200, { "content-type": type, "content-length": st2.size, "cache-control": "no-store" });
     res.end(data);
     return true;
   } catch {
     return false;
+  } finally {
+    try {
+      closeSync(fd2);
+    } catch {
+    }
   }
 }
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// src/org.ts
+import { readFileSync as readFileSync5, writeFileSync as writeFileSync4, existsSync as existsSync4, mkdirSync as mkdirSync4, rmSync, chmodSync } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { dirname as dirname3, join as join4 } from "node:path";
+var COMMAND_CAPABILITY_MATRIX = {
+  owner: ["org:write", "profile:write", "artifact:read"],
+  operator: ["org:write", "profile:write", "artifact:read"],
+  viewer: ["artifact:read"]
+};
+function evaluateCommandPermission(actorRole, capability, options = {}) {
+  const normalized = typeof options === "string" ? { command_id: options } : options;
+  const roleCapabilities = COMMAND_CAPABILITY_MATRIX[actorRole];
+  const explicit = normalized.capabilities ?? [];
+  const zcodeDenied = normalized.engine === "zcode";
+  const allowed = !zcodeDenied && (roleCapabilities?.includes(capability) === true || capability === "artifact:batch" && (actorRole === "owner" || actorRole === "operator") && explicit.includes("artifact:batch"));
+  if (allowed) return { allowed: true, actor_role: actorRole, capability };
+  return {
+    allowed: false,
+    actor_role: actorRole,
+    capability,
+    reason: zcodeDenied ? "zcode_unsupported" : "missing_capability",
+    ack: {
+      command_id: normalized.command_id ?? "",
+      ok: false,
+      error: "forbidden",
+      actor_role: actorRole
+    }
+  };
+}
+var ORG_LEADER_TITLE = "Leader";
+var ORG_LEADER_BOOTSTRAP_PROMPT = "\uFF08Leader \u4E0A\u5C97\u5F15\u5BFC\uFF0C\u7CFB\u7EDF\u6D88\u606F\uFF09\u4F60\u5DF2\u88AB\u521B\u5EFA\u4E3A\u5E38\u9A7B\u56E2\u961F\u7684 Leader\u3002\u8BF7\u53EA\u505A\u4E00\u4EF6\u4E8B\uFF1A\u9605\u8BFB\u672C\u76EE\u5F55\u7684 CLAUDE.md\uFF08\u56E2\u961F\u8BB0\u5FC6\u4E0E\u5206\u8BCA\u901A\u9053\uFF09\uFF0C\u7136\u540E\u7528\u4E00\u4E24\u53E5\u8BDD\u786E\u8BA4\u4E0A\u5C97\u2014\u2014\u590D\u8FF0\u4F60\u7684\u4E94\u54CD\u5E94\u5206\u8BCA\uFF08\u54A8\u8BE2/\u968F\u624B\u529E/\u8F7B\u7ACB\u9879/\u6B63\u7ECF\u7ACB\u9879/\u5EFA\u8BAE\u6682\u7F13\uFF09\u5373\u53EF\u3002\u4E0D\u8981\u6267\u884C\u5176\u4ED6\u64CD\u4F5C\u3001\u4E0D\u8981\u6539\u52A8\u4EFB\u4F55\u6587\u4EF6\u3002";
+function orgDir() {
+  return process.env.CCR_ORG_DIR || join4(homedir3(), ".cc-deck", "org");
+}
+function ensureOrgDir(dir) {
+  const d2 = dir ?? orgDir();
+  mkdirSync4(d2, { recursive: true });
+  return d2;
+}
+function orgFilePath(name, dir) {
+  return join4(dir ?? orgDir(), name);
+}
+var ORG_CLAUDE_MD_SEED = `# \u56E2\u961F CLAUDE.md \u2014\u2014 \u5E38\u9A7B\u56E2\u961F\u7684\u8BB0\u5FC6\u4E0E\u7EAA\u5F8B
+
+> \u4F60\u5728 org \u76EE\u5F55\u5DE5\u4F5C\uFF08\u56E2\u961F\u7684\u5BB6\uFF0C\u4E0D\u5C5E\u4E8E\u4EFB\u4F55\u9879\u76EE\uFF09\uFF0C\u672C\u6587\u4EF6\u968F\u4F1A\u8BDD\u81EA\u52A8\u52A0\u8F7D\u3002
+> \u4E2A\u4EBA\u5C42\uFF08\u7528\u6237\u624B\u5199\u7684\u5168\u5C40 CLAUDE.md / memory\uFF09\u4F18\u5148\u2014\u2014\u51B2\u7A81\u65F6\u4EE5\u4E2A\u4EBA\u5C42\u4E3A\u51C6\u3002
+
+## \u4F60\u7684\u89D2\u8272\uFF1ALeader
+
+- \u4F60\u662F\u7528\u6237\u7684\u6280\u672F\u5408\u4F19\u4EBA\uFF1A\u5E38\u9A7B\u3001\u552F\u4E00\u3001\u4E0D\u96B6\u5C5E\u4EFB\u4F55\u9879\u76EE\u3002
+- \u4F60\u6301\u6709\u4E24\u672C\u8D26\uFF1A
+  1. \u56E2\u961F\u8BB0\u5FC6 = \u672C\u6587\u4EF6\uFF08\u6162\u8D26\uFF1A\u7ECF\u9A8C\u3001\u504F\u597D\u3001\u65B9\u6CD5\u8BBA\u3001\u5751\uFF09\u3002
+  2. \u6D3E\u5355\u53F0\u8D26 = \u540C\u76EE\u5F55 dispatch-log.ndjson\uFF08\u5FEB\u8D26\uFF1A\u4F55\u65F6\u6D3E\u4E86\u4EC0\u4E48\u3001\u7ED3\u679C\u5982\u4F55\uFF1B\u7CFB\u7EDF\u81EA\u52A8\u8BB0\u5F55\uFF0C\u52FF\u624B\u6539\uFF09\u3002
+- \u6362\u58F3\u4E0D\u6362\u6863\uFF1A\u4F60\u4F1A\u88AB\u66F4\u6362\u6A21\u578B\u6216\u91CD\u5EFA\u4F1A\u8BDD\uFF0C\u8D26\u662F\u6587\u4EF6\u4E0D\u662F\u8BB0\u5FC6\u3002\u6BCF\u6B21\u4E0A\u5C97\u5148\u8BFB\u672C\u6587\u4EF6\u81EA\u68C0\u2014\u2014\u80FD\u590D\u8FF0\u5173\u952E\u504F\u597D\u5373\u901A\u8FC7\u3002
+
+## \u56E2\u961F\u8BB0\u5FC6\u5199\u5165\u7EAA\u5F8B\uFF08\u5B81\u7F3A\u6BCB\u6EE5\uFF09
+
+\u5199\u5165\u95E8\u69DB\u2014\u2014\u4E09\u6761\u540C\u65F6\u6EE1\u8DB3\u624D\u5199\uFF1A
+- \u8DE8\u9879\u76EE\u53EF\u590D\u7528\uFF08\u53EA\u5BF9\u5355\u4E2A\u9879\u76EE\u6709\u6548\u7684\u7ECF\u9A8C\u5199\u8BE5\u9879\u76EE\u81EA\u5DF1\u7684 CLAUDE.md\uFF09\uFF1B
+- \u518D\u9047\u5230\u65F6\u4F60\u5E0C\u671B\u76F4\u63A5\u60F3\u8D77\uFF08\u5FD8\u4E86\u4F1A\u91CD\u590D\u52B3\u52A8\u6216\u91CD\u590D\u8E29\u5751\uFF09\uFF1B
+- \u4E2A\u4EBA\u5C42\u6CA1\u6709\uFF08\u7528\u6237\u5168\u5C40 CLAUDE.md \u5DF2\u6709\u7684\u504F\u597D\u4E0D\u6284\u5199\u8FDB\u6765\uFF09\u3002
+
+\u4F18\u5148\u8BB0\u8FD9\u51E0\u7C7B\uFF1A
+- \u7528\u6237\u660E\u8BF4\u300C\u8BB0\u4F4F\u8FD9\u4E2A\u300D\u300C\u4EE5\u540E\u90FD\u8FD9\u6837\u300D\u7684\u504F\u597D\u4E0E\u51B3\u5B9A\uFF1B
+- \u88AB\u9A8C\u8BC1\u6709\u6548\u7684\u5DE5\u4F5C\u65B9\u6CD5\u4E0E\u6D41\u7A0B\uFF1B
+- \u8E29\u8FC7\u7684\u5751\u4E0E\u6392\u67E5\u8DEF\u5F84\uFF08\u542B\u7ED5\u8FC7\u65B9\u6848\u3001\u73AF\u5883\u7279\u5F02\u6027\uFF09\u3002
+
+\u5199\u6CD5\u7EA6\u675F\uFF1A
+- \u589E\u91CF\u8FFD\u52A0\u6216\u539F\u5730\u5C0F\u6539\uFF0C\u4E0D\u91CD\u6392\u4E0D\u5220\u65E2\u6709\u6761\u76EE\uFF1B\u6BCF\u6761\u5E26\u65E5\u671F\u524D\u7F00\uFF08\u5982\u300C2026-09-26 \u300D\uFF09\uFF1B
+- \u4E00\u6761\u4E00\u4E8B\uFF0C\u80FD\u4E00\u53E5\u8BDD\u8BF4\u6E05\u7684\u4E0D\u5199\u4E09\u53E5\uFF1B
+- \u8FC7\u65F6\u6761\u76EE\u6807\u6CE8\u300C\u5DF2\u8FC7\u65F6\u300D\u800C\u975E\u5220\u9664\uFF08\u4FDD\u7559\u5BA1\u8BA1\u7EBF\u7D22\uFF09\u3002
+
+## \u56E2\u961F\u4FE1\u606F
+
+- \u56E2\u961F\u76EE\u5F55\uFF1A\u672C\u6587\u4EF6\u6240\u5728\u76EE\u5F55\u3002
+- \u6D3E\u5355\u53F0\u8D26 / \u4F1A\u8BDD\u951A\uFF1A\u540C\u76EE\u5F55 dispatch-log.ndjson / org.json\uFF08\u5747\u7CFB\u7EDF\u7EF4\u62A4\uFF0C\u52FF\u624B\u6539\uFF09\u3002
+`;
+var ORG_CLAUDE_MD_M2_MARKER = "## M2 \u5206\u8BCA\u901A\u9053";
+var ORG_CLAUDE_MD_M2_SECTION = `${ORG_CLAUDE_MD_M2_MARKER}\uFF082026-09-27 \u8D77\uFF0Cv3.1 \xA74\uFF09
+
+- \u4E0A\u65B9\u82E5\u8FD8\u6709\u300C\u8FC7\u6E21\u671F\u7EAA\u5F8B\uFF08M1\uFF09\u300D\u6BB5\uFF1A\u6574\u6BB5\u5DF2\u8FC7\u65F6\u2014\u2014\u9879\u76EE Leader \u9000\u5F79\uFF0C\u4F60\u662F\u552F\u4E00\u5206\u8BCA\u51FA\u53E3\uFF0C\u6C9F\u901A\u7EBF\u6536\u655B\u4E3A 1\uFF08\u65B0\u88C5\u6587\u4EF6\u65E0\u6B64\u6BB5\uFF0C\u8BFB\u4E0B\u6587\u5373\u53EF\uFF09\u3002
+- \u7528\u6237\u7684\u4E00\u5207\u6765\u610F\u5148\u5206\u8BCA\uFF0C\u4E94\u54CD\u5E94\uFF08\u54CD\u5E94\u56DB\u6863 + \u7B2C\u4E94\u6001\uFF09\uFF1A
+  1. \u54A8\u8BE2\uFF1A\u95EE\u9898/\u5206\u6790\uFF0C\u4E0D\u6539\u4EE3\u7801\u2014\u2014\u5BF9\u8BDD\u5185\u76F4\u63A5\u7B54\uFF1B\u53D1\u73B0 spec \u52D8\u8BEF\u987A\u624B\u4FEE\uFF08\u8F6C\u968F\u624B\u529E\u96F6\u786E\u8BA4\uFF09\u3002
+  2. \u968F\u624B\u529E\uFF1A30 \u79D2~\u51E0\u5206\u949F\u5C0F\u6539\u2014\u2014\`~/.cc-deck/bin/org dispatch <\u9879\u76EE\u76EE\u5F55> "<\u4EFB\u52A1>"\` \u6D3E worker\uFF08\u4E0D\u5EFA\u7EC4\u3001\u4E0D\u5EFA worktree\uFF09\u3002
+  3. \u8F7B\u7ACB\u9879\uFF1A\u51E0\u5C0F\u65F6~\u51E0\u5929\u5C0F\u529F\u80FD\u2014\u2014\`org create <\u540D> <\u76EE\u5F55> \u8F7B\u7ACB\u9879\`\uFF08\u9996\u6B21\u987B\u7528\u6237\u786E\u8BA4\uFF0C\u540C\u7C7B\u514D\u786E\u8BA4\u4FE1\u4EFB\u7D2F\u79EF\uFF09\u3002
+  4. \u6B63\u7ECF\u7ACB\u9879\uFF1A\u590D\u6742\u9879\u76EE\u2014\u2014\`org create <\u540D> <\u76EE\u5F55> \u6B63\u7ECF\u7ACB\u9879\`\uFF08\u6BCF\u6B21\u987B\u7528\u6237\u786E\u8BA4\uFF0C\u9632\u8BEF\u5224\u6863\u70E7\u94B1\uFF09\u3002
+  5. \u5EFA\u8BAE\u6682\u7F13\uFF1A\u4F9D\u8D56\u672A\u5C31\u7EEA/\u65F6\u673A\u4E0D\u5BF9\u2014\u2014\`org hold <\u7EC4id|-> "<\u7406\u7531>" "<\u89E3\u9664\u6761\u4EF6>"\`\uFF08\u7528\u6237\u70B9\u5934\u624D\u6302\u8D77\uFF09\u3002
+- \u5176\u4ED6\u6307\u4EE4\uFF1A\`org status\`\uFF08\u5168\u666F\uFF09/ \`org set <id> active|parked|archived\`\uFF08\u72B6\u6001\u8FC1\u79FB\uFF0C\u4F60\u8BF4\u5148\u653E\u653E=\u6302\u8D77\uFF09/ \`org tier <id> <\u6863> "<\u7406\u7531>"\`\uFF08\u5347\u964D\u7EA7\uFF09/ \`org board ...\`\uFF08\u4EFB\u52A1\u677F\u7EF4\u62A4\uFF09/ \`org detail <id>\`\uFF08\u7F16\u5236/\u677F/\u56DE\u6267\u6D41\uFF09\u3002
+- \u786E\u8BA4\u5361\uFF1A\u6B63\u7ECF\u7ACB\u9879/\u5347\u964D\u7EA7/\u6709\u60AC\u8D26\u7ED3\u9879\u4F1A\u51FA\u786E\u8BA4\u5355\uFF0C\u7B49\u7528\u6237\u5728\u5BA2\u6237\u7AEF \u2713/\u2717\u2014\u2014\u4F60\u53EA\u63D0\u6848\u4E0D\u51B3\u8BAE\uFF0C\u4E0D\u4EE3\u7528\u6237\u51B3\u5B9A\u3002
+- \u968F\u624B\u529E worker \u7684\u7EAA\u5F8B\uFF08\u56DE\u6267\u4E00\u884C/commit \u524D\u7F00\uFF09\u7531\u6D3E\u5355\u7CFB\u7EDF\u81EA\u52A8\u6CE8\u5165\uFF0C\u65E0\u9700\u4F60\u8F6C\u8FF0\uFF1B\u53F0\u8D26\u7CFB\u7EDF\u81EA\u52A8\u8BB0\uFF0C\u52FF\u624B\u6539\u3002
+`;
+var ORG_CLAUDE_MD_M2P1_MARKER = "## \u5206\u8BCA\u6267\u884C\u53E3\u5F84";
+var ORG_CLAUDE_MD_M2P1_SECTION = `${ORG_CLAUDE_MD_M2P1_MARKER}\uFF082026-09-28 \u8865\u5F3A\uFF0C\u5B9E\u6D4B\u6821\u51C6\uFF0C\u4F18\u5148\u7EA7\u9AD8\u4E8E\u4E0A\u6587\u63AA\u8F9E\uFF09
+
+- \u968F\u624B\u529E\u4E00\u5F8B\u6D3E worker\uFF1A\u51E1\u7ED3\u8BBA\u662F\u300C\u8981\u6539\u6587\u4EF6/\u8DD1\u547D\u4EE4\u4EA4\u4ED8\u70B9\u4EC0\u4E48\u300D\u7684\u5C0F\u4E8B\uFF0C\u5FC5\u987B\u8D70
+  \`~/.cc-deck/bin/org dispatch <\u9879\u76EE\u76EE\u5F55> "<\u4EFB\u52A1>"\` \u6D3E\u5355\u2014\u2014\u5373\u4F7F\u4F60\u4EB2\u624B\u505A\u66F4\u5FEB\u4E5F\u4E0D\u884C\u3002
+  \u4F60\u4EB2\u81EA\u52A8\u624B = \u6D3B\u4E0D\u5728\u53F0\u8D26\u3001\u65E0\u5BA1\u8BA1\u3001\u65E0\u4EBA\u63A5\u76D8\u3002\u4F60\u7684\u53CC\u624B\u53EA\u7528\u4E8E\uFF1A\u8BFB\u6863\u67E5\u8BC1\u3001\u4E0E\u7528\u6237\u5BF9\u8BDD\u3001
+  \u6267\u884C org \u5206\u8BCA\u6307\u4EE4\u672C\u8EAB\u3002
+- \u6682\u7F13\u5FC5\u987B\u843D\u53F0\u8D26\uFF1A\u51E1\u5206\u8BCA\u7ED3\u8BBA\u662F\u300C\u65F6\u673A\u672A\u5230/\u4F9D\u8D56\u672A\u5C31\u7EEA/\u7B49\u7528\u6237\u53D1\u8BDD\u300D\uFF0C\u65E0\u8BBA\u6709\u6CA1\u6709\u9879\u76EE\u7EC4\uFF0C
+  \u90FD\u8981\u843D \`org hold <\u7EC4id|-> "<\u7406\u7531>" "<\u89E3\u9664\u6761\u4EF6>"\`\u3002\u6682\u7F13\u53EA\u8BB0\u5728\u4F1A\u8BDD\u4EFB\u52A1\u6E05\u5355\u91CC =
+  relay \u91CD\u542F\u5373\u84B8\u53D1\u3001org status \u91CC\u770B\u4E0D\u89C1 = \u7B49\u4E8E\u6CA1\u8BF4\u3002
+`;
+function ensureOrgClaudeMd(dir) {
+  const p = orgFilePath("CLAUDE.md", dir);
+  if (!existsSync4(p)) {
+    writeFileSync4(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION, "utf-8");
+    return "created";
+  }
+  const cur = readFileSync5(p, "utf-8");
+  const hasM2 = cur.includes(ORG_CLAUDE_MD_M2_MARKER);
+  const hasM2P1 = cur.includes(ORG_CLAUDE_MD_M2P1_MARKER);
+  if (hasM2 && hasM2P1) return "exists";
+  const parts = [cur.trimEnd()];
+  if (!hasM2) parts.push(ORG_CLAUDE_MD_M2_SECTION);
+  if (!hasM2P1) parts.push(ORG_CLAUDE_MD_M2P1_SECTION);
+  writeFileSync4(p, parts.join("\n\n"), "utf-8");
+  return "upgraded";
+}
+function readOrgAnchor(dir) {
+  try {
+    const raw = JSON.parse(readFileSync5(orgFilePath("org.json", dir), "utf-8"));
+    if (raw.version !== 1 || typeof raw.leader_session_id !== "string" || !raw.leader_session_id) return null;
+    return {
+      version: 1,
+      leader_session_id: raw.leader_session_id,
+      // 旧锚/手写锚缺该字段容忍为空串（=首建窗口形态，ensureLeader 走废锚重建）
+      leader_sdk_id: typeof raw.leader_sdk_id === "string" ? raw.leader_sdk_id : "",
+      employee_home: typeof raw.employee_home === "string" && raw.employee_home ? raw.employee_home : void 0,
+      created_at: typeof raw.created_at === "number" ? raw.created_at : 0,
+      updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0
+    };
+  } catch {
+    return null;
+  }
+}
+function writeOrgAnchor(a, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync4(d2, { recursive: true });
+    writeFileSync4(orgFilePath("org.json", d2), JSON.stringify(a, null, 2) + "\n", "utf-8");
+    return true;
+  } catch (e) {
+    console.warn(`[org] \u951A\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function clearOrgAnchor(dir) {
+  try {
+    rmSync(orgFilePath("org.json", dir), { force: true });
+  } catch {
+  }
+}
+function dispatchLogPath(dir) {
+  return orgFilePath("dispatch-log.ndjson", dir);
+}
+function appendDispatch(e, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync4(d2, { recursive: true });
+    writeFileSync4(dispatchLogPath(d2), JSON.stringify(e) + "\n", { flag: "a" });
+    return true;
+  } catch (e2) {
+    console.warn(`[org] \u53F0\u8D26\u5199\u5165\u5931\u8D25: ${e2 instanceof Error ? e2.message : String(e2)}`);
+    return false;
+  }
+}
+function readDispatchLog(dir, max = 500) {
+  const p = dispatchLogPath(dir);
+  if (!existsSync4(p)) return [];
+  const byId = /* @__PURE__ */ new Map();
+  for (const line of readFileSync5(p, "utf-8").split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const e = JSON.parse(t);
+      if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
+    } catch {
+    }
+  }
+  const all = [...byId.values()];
+  return all.length <= max ? all : all.slice(all.length - max);
+}
+var ORG_CLI_TEMPLATE = `#!/bin/bash
+# \u77E9\u9635\u5F0F\u56E2\u961F\u5206\u8BCA CLI\uFF08#26 M2\uFF0C\u8BBE\u8BA1\u7A3F docs/v8-team-matrix.html v3.1 \xA74\uFF09\uFF1A
+# Leader \u4F1A\u8BDD\u5185\u7684\u5206\u8BCA\u6307\u4EE4\u901A\u9053\u2014\u2014POST /api/org\uFF08token \u9274\u6743\u5FAA deliver \u5148\u4F8B\uFF09\u3002
+# Leader \u53EA\u63D0\u6848\u4E0D\u51B3\u8BAE\u2014\u2014\u786E\u8BA4\u5361 \u2713/\u2717 \u7531\u7528\u6237\u5728\u5BA2\u6237\u7AEF\u70B9\u3002
+# \u7528\u6CD5\uFF1A
+#   org status                                     \u56E2\u961F\u5168\u666F\uFF1A\u9879\u76EE\u7EC4\u7D22\u5F15/\u5F85\u51B3\u786E\u8BA4\u5355/\u8FDB\u884C\u4E2D\u6D3E\u5355
+#   org create <name> <anchor> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879>    \u7ACB\u9879\uFF08\u6B63\u7ECF/\u9996\u6B21\u8F7B \u2192 \u7528\u6237\u786E\u8BA4\u5361\uFF1B\u5E42\u7B49\u79CD\u5B50\u9632\u6F02\u79FB CLAUDE.md\uFF09
+#   org set <id> <active|parked|archived> [note]   \u72B6\u6001\u8FC1\u79FB\uFF08\u7ED3\u9879\u6709\u60AC\u8D26/\u672A\u5B8C \u2192 \u51FA\u786E\u8BA4\u5361\u9644\u6838\u5BF9\u6E05\u5355\uFF09
+#   org tier <id> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879> <reason>        \u5347\u964D\u7EA7\uFF08\u5FC5\u987B\u5E26\u4E00\u53E5\u7406\u7531\uFF1B\u786E\u8BA4\u5361\uFF09
+#   org hold <id|-> <reason> [condition]           \u5EFA\u8BAE\u6682\u7F13\uFF08id=- \u65E0\u7EC4\u6682\u7F13\u4EC5\u53F0\u8D26\uFF1B\u70B9\u5934\u5373\u6302\u8D77\uFF09
+#   org dispatch <anchor> <task> [gid] [title] [skills] \u6D3E\u5355 worker\uFF08\u65E0 gid=\u968F\u624B\u529E\uFF1B\u6709 gid=\u9879\u76EE\u7EC4\u4EFB\u52A1+\u677F\u8054\u52A8\uFF1Bskills=\u9017\u53F7\u5206\u9694\u6280\u80FD\u6807\u7B7E\uFF0C\u4F18\u5148\u6D3E\u5E26\u6807\u7B7E\u719F\u624B\uFF09
+#   org board upsert <gid> <text> [todo|doing|done]
+#   org board move <gid> <entry_id> <todo|doing|done>
+#   org board del <gid> <entry_id>
+#   org detail <id>                                \u9879\u76EE\u7EC4\u8BE6\u60C5\uFF1A\u72B6\u6001/\u7F16\u5236/\u4EFB\u52A1\u677F/\u6700\u8FD1\u6D3E\u5355\u56DE\u6267\u6D41
+#   org rate <gid> <sid> <good|bad>                \u719F\u624B\u8BC4\u4EF7\uFF08M3 \u8DEF\u7531\u8868\uFF1Bbad=\u4E0B\u6B21\u6D3E\u5355\u907F\u5F00\uFF09
+#   org tag <gid> <sid> <tag>...                   \u6280\u80FD\u6807\u7B7E\uFF08\u6574\u7EC4\u66FF\u6362\uFF0C\u7A7A\u683C\u5206\u9694\uFF09
+#   org member-retire <gid> <sid> [reason]         \u6210\u5458\u7EA7\u9000\u4F11\uFF08\u7F16\u5236\u9664\u540D\uFF1B\u672C\u7EC4\u60AC\u8D26\u6309\u4E2D\u65AD\u6536\u53E3\uFF0C\u8DEF\u7531\u6863\u6848\u4FDD\u7559\uFF09
+#   org member-add <gid> <sid> [role] [engine] [model] [provider]  \u590D\u62C9\u5165\u7F16\uFF08\u53EF\u8986\u76D6\u5F15\u64CE\u9009\u62E9\uFF09
+# \u76F8\u5BF9\u8DEF\u5F84 anchor \u4EE5\u5F53\u524D\u76EE\u5F55\u8865\u5168\uFF08deliver \u540C\u53E3\u5F84\uFF09\u3002\u7531 relay \u7269\u5316\u4E0E\u5347\u7EA7\uFF08ensureOrgCli\uFF09\u3002
+set -euo pipefail
+# \u51B2\u523A F-09\uFF1ACCR_DATA_DIR/CCR_PORT/CCR_TOKEN \u73AF\u5883\u8986\u76D6\uFF08\u6C99\u76D2/\u591A\u5B9E\u4F8B\u9694\u79BB\uFF09\u3002
+# Leader \u4F1A\u8BDD\u7531 relay spawn\uFF0C\u7ECF childEnv \u7EE7\u627F relay \u7684 CCR_* \u2014\u2014 \u6C99\u76D2 relay \u62C9\u8D77\u7684
+# Leader \u8C03\u672C CLI \u81EA\u52A8\u6253\u5230\u6C99\u76D2\uFF1B\u751F\u4EA7\u65E0\u8FD9\u4E9B env \u65F6\u884C\u4E3A\u4E0E\u65E7\u7248\u9010\u5B57\u8282\u4E00\u81F4\u3002
+data="\${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
+token="\${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
+[ -z "$token" ] && { echo "\u672A\u627E\u5230 token\uFF08$data/token \u6216\u73AF\u5883\u53D8\u91CF CCR_TOKEN\uFF0Crelay \u672A\u521D\u59CB\u5316\uFF1F\uFF09" >&2; exit 1; }
+port="\${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
+: "\${port:=8787}"
+
+action="\${1:-}"
+[ -z "$action" ] && { sed -n '3,20p' "$0" | sed 's/^# //' >&2; exit 1; }
+shift || true
+
+abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
+
+case "$action" in
+  status)
+    body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    ;;
+  create)
+    [ $# -ge 3 ] || { echo "\u7528\u6CD5: org create <name> <anchor> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879>" >&2; exit 1; }
+    a2="$(abs "$2")"
+    body="$(python3 - "$1" "$a2" "$3" <<'PY'
+import json, sys
+print(json.dumps({"action":"project-create","name":sys.argv[1],"anchor":sys.argv[2],"tier":sys.argv[3]},ensure_ascii=False))
+PY
+)"
+    ;;
+  set)
+    [ $# -ge 2 ] || { echo "\u7528\u6CD5: org set <id> <active|parked|archived> [note]" >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+d={"action":"project-status","id":sys.argv[1],"to":sys.argv[2]}
+if len(sys.argv)>3: d["note"]=sys.argv[3]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  tier)
+    [ $# -ge 3 ] || { echo "\u7528\u6CD5: org tier <id> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879> <reason>" >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+print(json.dumps({"action":"project-tier","id":sys.argv[1],"to":sys.argv[2],"reason":sys.argv[3]},ensure_ascii=False))
+PY
+)"
+    ;;
+  hold)
+    [ $# -ge 2 ] || { echo "\u7528\u6CD5: org hold <id|-> <reason> [condition]" >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+gid="" if sys.argv[1]=="-" else sys.argv[1]
+d={"action":"suggest-hold","reason":sys.argv[2]}
+if gid: d["id"]=gid
+if len(sys.argv)>3: d["condition"]=sys.argv[3]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  dispatch)
+    [ $# -ge 2 ] || { echo "\u7528\u6CD5: org dispatch <anchor> <task> [gid] [title] [skills]" >&2; exit 1; }
+    anchor="$(abs "$1")"; shift
+    task="$1"; shift || true
+    gid=""; title=""; skills=""
+    if [ $# -ge 1 ]; then gid="$1"; shift || true; fi
+    if [ $# -ge 1 ]; then title="$1"; shift || true; fi
+    if [ $# -ge 1 ]; then skills="$1"; shift || true; fi
+    body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
+import json, sys
+d={"action":"dispatch","anchor":sys.argv[1],"prompt":sys.argv[2]}
+if sys.argv[3]: d["gid"]=sys.argv[3]
+if sys.argv[4]: d["title"]=sys.argv[4]
+if sys.argv[5]: d["skills"]=[t.strip() for t in sys.argv[5].split(",") if t.strip()]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  board)
+    [ $# -ge 3 ] || { echo "\u7528\u6CD5: org board upsert|move|del <gid> <text|entry_id> [status]" >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+op, gid = sys.argv[1], sys.argv[2]
+d={"action":"board","op":op,"gid":gid}
+if op=="upsert":
+    d["text"]=sys.argv[3]
+    if len(sys.argv)>4: d["status"]=sys.argv[4]
+else:
+    d["entry_id"]=sys.argv[3]
+    if len(sys.argv)>4: d["status"]=sys.argv[4]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  detail)
+    [ $# -ge 1 ] || { echo "\u7528\u6CD5: org detail <id>" >&2; exit 1; }
+    body="$(python3 - "$1" <<'PY'
+import json, sys
+print(json.dumps({"action":"project-detail","id":sys.argv[1]},ensure_ascii=False))
+PY
+)"
+    ;;
+  rate)
+    [ $# -ge 3 ] || { echo "\u7528\u6CD5: org rate <gid> <sid> <good|bad>" >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+print(json.dumps({"action":"rate","gid":sys.argv[1],"sid":sys.argv[2],"rating":sys.argv[3]},ensure_ascii=False))
+PY
+)"
+    ;;
+  tag)
+    [ $# -ge 3 ] || { echo "\u7528\u6CD5: org tag <gid> <sid> <tag>..." >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+print(json.dumps({"action":"tag","gid":sys.argv[1],"sid":sys.argv[2],"tags":sys.argv[3:]},ensure_ascii=False))
+PY
+)"
+    ;;
+  member-retire)
+    [ $# -ge 2 ] || { echo "\u7528\u6CD5: org member-retire <gid> <sid> [reason]" >&2; exit 1; }
+    reason="\${3:-}"
+    body="$(python3 - "$1" "$2" "$reason" <<'PY'
+import json, sys
+d={"action":"member-retire","gid":sys.argv[1],"sid":sys.argv[2]}
+if sys.argv[3]: d["reason"]=sys.argv[3]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  member-add)
+    [ $# -ge 2 ] || { echo "\u7528\u6CD5: org member-add <gid> <sid> [role] [engine] [model] [provider]" >&2; exit 1; }
+    role="\${3:-worker}"
+    engine="\${4:-}"
+    model="\${5:-}"
+    provider="\${6:-}"
+    body="$(python3 - "$1" "$2" "$role" "$engine" "$model" "$provider" <<'PY'
+import json, sys
+d={"action":"member-add","gid":sys.argv[1],"sid":sys.argv[2],"role":sys.argv[3]}
+if sys.argv[4]: d["engine"]=sys.argv[4]
+if sys.argv[5]: d["model"]=sys.argv[5]
+if sys.argv[6]: d["provider"]=sys.argv[6]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  *)
+    echo "\u672A\u77E5\u5B50\u547D\u4EE4: $action" >&2; exit 1
+    ;;
+esac
+
+exec curl -sS -X POST "http://127.0.0.1:\${port}/api/org?token=\${token}" -H 'content-type: application/json' --data-binary "$body"
+`;
+function ensureOrgCli() {
+  const target = process.env.CCR_ORG_BIN_DIR ?? (process.env.CCR_ORG_DIR ? null : join4(homedir3(), ".cc-deck", "bin", "org"));
+  if (!target) return null;
+  try {
+    let cur = "";
+    try {
+      cur = readFileSync5(target, "utf-8");
+    } catch {
+    }
+    if (cur === ORG_CLI_TEMPLATE) return target;
+    mkdirSync4(dirname3(target), { recursive: true });
+    writeFileSync4(target, ORG_CLI_TEMPLATE, "utf-8");
+    chmodSync(target, 493);
+    return target;
+  } catch (e) {
+    console.warn(`[org] \u5206\u8BCA CLI \u7269\u5316\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+// src/projects.ts
+import { existsSync as existsSync6, mkdirSync as mkdirSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync6 } from "node:fs";
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { isAbsolute as isAbsolute2, join as join6 } from "node:path";
+
+// src/routing.ts
+import { existsSync as existsSync5, mkdirSync as mkdirSync5, readFileSync as readFileSync6, writeFileSync as writeFileSync5 } from "node:fs";
+import { join as join5 } from "node:path";
+function routingPath(dir) {
+  return join5(dir ?? orgDir(), "routing.json");
+}
+function load(dir) {
+  const p = routingPath(dir);
+  if (!existsSync5(p)) return { entries: [] };
+  try {
+    const raw = JSON.parse(readFileSync6(p, "utf-8"));
+    if (Array.isArray(raw?.entries)) return raw;
+  } catch {
+  }
+  return { entries: [] };
+}
+function save(s, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync5(d2, { recursive: true });
+    writeFileSync5(routingPath(d2), JSON.stringify(s, null, 2) + "\n", "utf-8");
+    return true;
+  } catch (e) {
+    console.warn(`[routing] \u8DEF\u7531\u8868\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function recordRoutingResult(gid, sessionId, status, receipt, dir) {
+  if (!gid || !sessionId) return null;
+  const s = load(dir);
+  let e = s.entries.find((x) => x.gid === gid && x.session_id === sessionId);
+  if (!e) {
+    e = { gid, session_id: sessionId, count: 0, failed: 0, last_ts: 0, tags: [] };
+    s.entries.push(e);
+  }
+  if (status === "done") e.count++;
+  else e.failed++;
+  e.last_ts = Date.now();
+  const r = (receipt ?? "").trim();
+  if (r) e.last_receipt = r.length > 80 ? r.slice(0, 80) : r;
+  save(s, dir);
+  return e;
+}
+function routingFor(gid, dir) {
+  if (!gid) return [];
+  const s = load(dir);
+  const bad = (e) => e.rating === "bad" ? 1 : 0;
+  return s.entries.filter((e) => e.gid === gid).sort((a, b) => bad(a) - bad(b) || b.count - a.count || b.last_ts - a.last_ts);
+}
+function rateRouting(gid, sessionId, rating, dir) {
+  const s = load(dir);
+  const e = s.entries.find((x) => x.gid === gid && x.session_id === sessionId);
+  if (!e) return { ok: false, error: `\u65E0\u8BE5\u719F\u624B\u8BB0\u5F55\uFF08gid=${gid} sid=${sessionId}\uFF09\u2014\u2014\u8BC4\u4EF7\u8DDF\u7740\u5408\u4F5C\u8BB0\u5F55\u8D70` };
+  e.rating = rating;
+  save(s, dir);
+  return { ok: true, entry: e };
+}
+function tagRouting(gid, sessionId, tags, dir) {
+  const s = load(dir);
+  const e = s.entries.find((x) => x.gid === gid && x.session_id === sessionId);
+  if (!e) return { ok: false, error: `\u65E0\u8BE5\u719F\u624B\u8BB0\u5F55\uFF08gid=${gid} sid=${sessionId}\uFF09\u2014\u2014\u6807\u7B7E\u8DDF\u7740\u5408\u4F5C\u8BB0\u5F55\u8D70` };
+  e.tags = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 8);
+  save(s, dir);
+  return { ok: true, entry: e };
+}
+
+// src/projects.ts
+function projectsFilePath(dir) {
+  return join6(dir ?? orgDir(), "projects.json");
+}
+function boardsDirPath(dir) {
+  return join6(dir ?? orgDir(), "boards");
+}
+function boardFilePath(gid, dir) {
+  return join6(boardsDirPath(dir), `${gid}.json`);
+}
+function confirmsFilePath(dir) {
+  return join6(dir ?? orgDir(), "confirms.json");
+}
+function readProjectsFile(dir) {
+  try {
+    const raw = JSON.parse(readFileSync7(projectsFilePath(dir), "utf-8"));
+    return {
+      groups: Array.isArray(raw.groups) ? raw.groups : [],
+      trust_light: raw.trust_light === true
+    };
+  } catch {
+    return { groups: [], trust_light: false };
+  }
+}
+function writeProjectsFile(f, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync6(d2, { recursive: true });
+    writeFileSync6(projectsFilePath(d2), JSON.stringify(f, null, 2) + "\n", "utf-8");
+    return true;
+  } catch (e) {
+    console.warn(`[projects] \u7D22\u5F15\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function listGroups(dir) {
+  return readProjectsFile(dir).groups;
+}
+function listGroupsByStatus(dir) {
+  const g2 = listGroups(dir);
+  const pick = (s) => g2.filter((x) => x.status === s);
+  return { active: pick("active"), parked: pick("parked"), archived: pick("archived"), pending: pick("pending") };
+}
+function findGroup(idOrName, dir) {
+  const g2 = listGroups(dir);
+  return g2.find((x) => x.id === idOrName || x.name === idOrName) ?? null;
+}
+function findGroupByAnchor(anchorDir, dir) {
+  const norm = (p) => p.replace(/\/+$/, "");
+  return listGroups(dir).find((x) => norm(x.anchor_dir) === norm(anchorDir) && x.status !== "archived") ?? null;
+}
+function maxActiveGroups() {
+  const n = Number(process.env.CCR_ORG_MAX_GROUPS);
+  return Number.isFinite(n) && n > 0 ? n : 5;
+}
+function saveGroup(g2, dir) {
+  const f = readProjectsFile(dir);
+  const i = f.groups.findIndex((x) => x.id === g2.id);
+  if (i >= 0) f.groups[i] = g2;
+  else f.groups.push(g2);
+  return writeProjectsFile(f, dir);
+}
+var TRANSITIONS = {
+  pending: ["active", "archived"],
+  active: ["parked", "archived"],
+  parked: ["active", "archived"],
+  archived: ["active"]
+};
+function canTransition(from, to2) {
+  return TRANSITIONS[from]?.includes(to2) ?? false;
+}
+function createGroup(input, dir) {
+  const f = readProjectsFile(dir);
+  const activeCount = f.groups.filter((x) => x.status === "active").length;
+  if (activeCount >= maxActiveGroups()) {
+    return { ok: false, error: `\u5E76\u884C\u9879\u76EE\u7EC4\u5DF2\u8FBE\u4E0A\u9650 ${maxActiveGroups()}\uFF08\u62A4\u680F\uFF09\uFF0C\u5148\u7ED3\u9879\u6216\u6302\u8D77\u518D\u7ACB\u9879` };
+  }
+  const clash = findGroupByAnchor(input.anchor_dir, dir);
+  if (clash) {
+    return { ok: false, error: `\u951A\u70B9\u76EE\u5F55\u5DF2\u88AB\u9879\u76EE\u7EC4\u300C${clash.name}\u300D\u5360\u7528\uFF08${clash.status}\uFF09\uFF0C\u4E00\u951A\u4E00\u7EC4` };
+  }
+  const now = Date.now();
+  const needsConfirm = input.tier === "\u6B63\u7ECF\u7ACB\u9879" || !f.trust_light;
+  const group = {
+    id: `pg-${randomUUID2().slice(0, 8)}`,
+    name: input.name,
+    anchor_dir: input.anchor_dir,
+    status: needsConfirm ? "pending" : "active",
+    tier: input.tier,
+    headcount: input.headcount ?? [],
+    ...input.role_defaults ? { role_defaults: input.role_defaults } : {},
+    single_card: input.tier === "\u8F7B\u7ACB\u9879",
+    created_at: now,
+    updated_at: now
+  };
+  if (!saveGroup(group, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  let confirm = null;
+  if (needsConfirm) {
+    confirm = addConfirm(
+      {
+        kind: "project-create",
+        title: `\u7ACB\u9879\u786E\u8BA4\uFF1A${group.name}`,
+        reason: input.tier === "\u6B63\u7ECF\u7ACB\u9879" ? "\u6B63\u7ECF\u7ACB\u9879\u5FC5\u987B\u786E\u8BA4\uFF08\u4E00\u6B21\u70B9\u51FB\uFF0C\u9632\u8BEF\u5224\u6863\u70E7\u94B1\uFF09" : "\u8F7B\u7ACB\u9879\u9996\u6B21\u786E\u8BA4\u4E00\u6B21\uFF08\u540C\u7C7B\u514D\u786E\u8BA4\uFF0C\u4FE1\u4EFB\u7D2F\u79EF\uFF09",
+        payload: { gid: group.id, tier: group.tier, anchor_dir: group.anchor_dir }
+      },
+      dir
+    );
+  }
+  return { ok: true, group, needsConfirm, confirm };
+}
+function handleOrgActionCreate(payload, dir) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, error: "org action payload \u65E0\u6548" };
+  }
+  const raw = payload;
+  if (raw.action !== "create") return { ok: false, error: `unsupported org action: ${String(raw.action ?? "")}` };
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  const anchor = typeof raw.anchor_dir === "string" ? raw.anchor_dir.trim() : "";
+  const tier = typeof raw.tier === "string" ? raw.tier.trim() : "";
+  if (!name || !anchor) return { ok: false, error: "name/anchor_dir \u5FC5\u586B" };
+  if (!isAbsolute2(anchor)) return { ok: false, error: "anchor_dir \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+  if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
+  return createGroup({ name, anchor_dir: anchor, tier }, dir);
+}
+var adaptOrgAction = handleOrgActionCreate;
+function setGroupStatus(id2, to2, note, dir) {
+  const f = readProjectsFile(dir);
+  const g2 = f.groups.find((x) => x.id === id2 || x.name === id2);
+  if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${id2}` };
+  if (g2.status === to2) return { ok: true, group: g2 };
+  if (!canTransition(g2.status, to2)) {
+    return { ok: false, error: `\u975E\u6CD5\u8F6C\u79FB ${g2.status} \u2192 ${to2}\uFF08\xA76.2 \u72B6\u6001\u673A\uFF09` };
+  }
+  if (to2 === "active") {
+    const activeCount = f.groups.filter((x) => x.status === "active").length;
+    if (activeCount >= maxActiveGroups()) {
+      return { ok: false, error: `\u5E76\u884C\u9879\u76EE\u7EC4\u5DF2\u8FBE\u4E0A\u9650 ${maxActiveGroups()}\uFF08\u62A4\u680F\uFF09` };
+    }
+  }
+  const now = Date.now();
+  g2.status = to2;
+  g2.updated_at = now;
+  if (to2 === "parked") g2.parked_at = now;
+  if (to2 === "archived") {
+    g2.archived_at = now;
+    if (note) g2.archive_note = note;
+  }
+  if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  freezeBoard(g2.id, to2 !== "active", dir);
+  return { ok: true, group: g2 };
+}
+function setGroupTier(id2, to2, dir) {
+  const f = readProjectsFile(dir);
+  const g2 = f.groups.find((x) => x.id === id2 || x.name === id2);
+  if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${id2}` };
+  if (g2.tier === to2) return { ok: true, group: g2 };
+  g2.tier = to2;
+  g2.single_card = to2 === "\u8F7B\u7ACB\u9879";
+  g2.updated_at = Date.now();
+  if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  return { ok: true, group: g2 };
+}
+function addMember(gid, sessionId, role, selectionOrDir, dir) {
+  const selection = typeof selectionOrDir === "string" ? void 0 : selectionOrDir;
+  const dataDir2 = typeof selectionOrDir === "string" ? selectionOrDir : dir;
+  const f = readProjectsFile(dataDir2);
+  const g2 = f.groups.find((x) => x.id === gid);
+  if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
+  const current = g2.headcount.find((h) => h.session_id === sessionId);
+  if (!current) {
+    g2.headcount.push({ session_id: sessionId, role, ...selection });
+    g2.updated_at = Date.now();
+    if (!saveGroup(g2, dataDir2)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  } else if (selection || current.role !== role) {
+    current.role = role;
+    if (selection?.engine !== void 0) current.engine = selection.engine;
+    if (selection?.model !== void 0) current.model = selection.model;
+    if (selection?.provider !== void 0) current.provider = selection.provider;
+    g2.updated_at = Date.now();
+    if (!saveGroup(g2, dataDir2)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  }
+  return { ok: true, group: g2 };
+}
+function removeMember(gid, sessionId, dir) {
+  const f = readProjectsFile(dir);
+  const g2 = f.groups.find((x) => x.id === gid);
+  if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
+  g2.headcount = g2.headcount.filter((h) => h.session_id !== sessionId);
+  g2.updated_at = Date.now();
+  if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  return { ok: true, group: g2 };
+}
+function loadBoardFile(gid, dir) {
+  try {
+    const raw = JSON.parse(readFileSync7(boardFilePath(gid, dir), "utf-8"));
+    return {
+      gid,
+      entries: Array.isArray(raw.entries) ? raw.entries : [],
+      frozen: raw.frozen === true,
+      updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0
+    };
+  } catch {
+    return { gid, entries: [], frozen: false, updated_at: 0 };
+  }
+}
+function saveBoardFile(b, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync6(boardsDirPath(d2), { recursive: true });
+    writeFileSync6(boardFilePath(b.gid, d2), JSON.stringify(b, null, 2) + "\n", "utf-8");
+    return true;
+  } catch (e) {
+    console.warn(`[projects] \u677F\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function loadBoard(gid, dir) {
+  return loadBoardFile(gid, dir);
+}
+function writableBoard(gid, dir) {
+  const g2 = listGroups(dir).find((x) => x.id === gid);
+  if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
+  if (g2.status !== "active") return { ok: false, error: `\u4EFB\u52A1\u677F\u5DF2\u51BB\u7ED3\uFF08\u9879\u76EE\u7EC4 ${g2.status}\uFF09\uFF0C\u6062\u590D\u5728\u529E\u540E\u53EF\u5199` };
+  const b = loadBoardFile(gid, dir);
+  if (b.frozen) return { ok: false, error: "\u4EFB\u52A1\u677F\u5DF2\u51BB\u7ED3\uFF08frozen \u6807\u8BB0\uFF09" };
+  return { ok: true, board: b };
+}
+function freezeBoard(gid, frozen, dir) {
+  const b = loadBoardFile(gid, dir);
+  if (b.frozen === frozen) return;
+  b.frozen = frozen;
+  b.updated_at = Date.now();
+  saveBoardFile(b, dir);
+}
+function upsertBoardEntry(gid, entry, dir) {
+  const w2 = writableBoard(gid, dir);
+  if (!w2.ok) return w2;
+  const now = Date.now();
+  let e = entry.id ? w2.board.entries.find((x) => x.id === entry.id) : void 0;
+  if (e) {
+    e.text = entry.text;
+    if (entry.status) e.status = entry.status;
+    if (entry.owner_session !== void 0) e.owner_session = entry.owner_session;
+    if (entry.dispatch_id !== void 0) e.dispatch_id = entry.dispatch_id;
+    if (entry.note !== void 0) e.note = entry.note;
+    e.updated_at = now;
+  } else {
+    e = {
+      id: entry.id ?? `t-${randomUUID2().slice(0, 8)}`,
+      text: entry.text,
+      status: entry.status ?? "todo",
+      owner_session: entry.owner_session,
+      dispatch_id: entry.dispatch_id,
+      ts: now,
+      updated_at: now,
+      note: entry.note
+    };
+    w2.board.entries.push(e);
+  }
+  w2.board.updated_at = now;
+  if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
+  return { ok: true, entry: e };
+}
+function moveBoardEntry(gid, entryId, to2, dir) {
+  const w2 = writableBoard(gid, dir);
+  if (!w2.ok) return w2;
+  const e = w2.board.entries.find((x) => x.id === entryId);
+  if (!e) return { ok: false, error: `\u677F\u6761\u76EE\u4E0D\u5B58\u5728: ${entryId}` };
+  e.status = to2;
+  e.updated_at = Date.now();
+  w2.board.updated_at = e.updated_at;
+  if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
+  return { ok: true, entry: e };
+}
+function removeBoardEntry(gid, entryId, dir) {
+  const w2 = writableBoard(gid, dir);
+  if (!w2.ok) return w2;
+  const before = w2.board.entries.length;
+  w2.board.entries = w2.board.entries.filter((x) => x.id !== entryId);
+  if (w2.board.entries.length === before) return { ok: false, error: `\u677F\u6761\u76EE\u4E0D\u5B58\u5728: ${entryId}` };
+  w2.board.updated_at = Date.now();
+  if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
+  return { ok: true };
+}
+function moveEntryByDispatch(gid, dispatchId, to2, dir) {
+  const w2 = writableBoard(gid, dir);
+  if (!w2.ok) return;
+  const e = w2.board.entries.find((x) => x.dispatch_id === dispatchId);
+  if (!e || e.status === to2) return;
+  e.status = to2;
+  e.updated_at = Date.now();
+  w2.board.updated_at = e.updated_at;
+  saveBoardFile(w2.board, dir);
+}
+function readConfirms(dir) {
+  try {
+    const raw = JSON.parse(readFileSync7(confirmsFilePath(dir), "utf-8"));
+    return Array.isArray(raw.confirms) ? raw.confirms : [];
+  } catch {
+    return [];
+  }
+}
+function writeConfirms(list, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync6(d2, { recursive: true });
+    const pending = list.filter((c) => c.status === "pending");
+    const decided = list.filter((c) => c.status !== "pending").slice(-200);
+    writeFileSync6(confirmsFilePath(d2), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n", "utf-8");
+    return true;
+  } catch (e) {
+    console.warn(`[projects] \u786E\u8BA4\u5355\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function listConfirms(dir) {
+  return readConfirms(dir);
+}
+function listPendingConfirms(dir) {
+  return readConfirms(dir).filter((c) => c.status === "pending");
+}
+var confirmCreatedHook = null;
+function setConfirmCreatedHook(hook) {
+  confirmCreatedHook = hook;
+}
+function addConfirm(input, dir) {
+  const c = {
+    id: `cf-${randomUUID2().slice(0, 8)}`,
+    kind: input.kind,
+    title: input.title,
+    reason: input.reason,
+    payload: input.payload ?? {},
+    status: "pending",
+    created_at: Date.now()
+  };
+  const list = readConfirms(dir);
+  list.push(c);
+  writeConfirms(list, dir);
+  try {
+    confirmCreatedHook?.(c);
+  } catch (e) {
+    console.warn(`[projects] \u786E\u8BA4\u5355\u4EA7\u751F\u56DE\u8C03\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return c;
+}
+function decideConfirm(id2, approve, by, dir) {
+  const list = readConfirms(dir);
+  const c = list.find((x) => x.id === id2);
+  if (!c) return { ok: false, error: `\u786E\u8BA4\u5355\u4E0D\u5B58\u5728: ${id2}` };
+  if (c.status !== "pending") return { ok: false, error: `\u786E\u8BA4\u5355\u5DF2\u51B3\u8BAE\uFF08${c.status}\uFF09\uFF0C\u4E0D\u53EF\u518D\u51B3` };
+  c.status = approve ? "approved" : "rejected";
+  c.decided_at = Date.now();
+  c.decided_by = by;
+  if (!writeConfirms(list, dir)) return { ok: false, error: "\u786E\u8BA4\u5355\u5199\u5165\u5931\u8D25" };
+  return { ok: true, confirm: c };
+}
+var PROJECT_CLAUDE_MD_SEED_PREFIX = "# \u9879\u76EE CLAUDE.md \u2014\u2014 \u9632\u6F02\u79FB\u7EAA\u5F8B";
+function projectClaudeMdSeed(name) {
+  return `${PROJECT_CLAUDE_MD_SEED_PREFIX}\uFF08${name}\uFF09
+
+> \u77E9\u9635\u5F0F\u56E2\u961F\u7ACB\u9879\u65F6\u81EA\u52A8\u751F\u6210\uFF08\u5E42\u7B49\u79CD\u5B50\uFF1A\u5DF2\u5B58\u5728\u5219\u4E0D\u52A8\uFF09\u3002\u672C\u6587\u4EF6\u968F\u4F1A\u8BDD\u81EA\u52A8\u52A0\u8F7D\uFF0C\u666E\u901A\u4F1A\u8BDD\u4E5F\u8986\u76D6\u3002
+
+## \u9632\u6F02\u79FB\u6761\u6B3E\uFF08\u8BBE\u8BA1\u7A3F \xA73.4\uFF09
+
+- **spec \u4E0E\u4EE3\u7801\u540C\u6743\u8D70 git**\uFF1Aspec / prd / \u51B3\u7B56\u8BB0\u5F55\u7684\u6539\u52A8\u8FDB\u540C\u4E00 commit\uFF0C\u56DE\u6267\u300C\u6539\u52A8\u6587\u4EF6\u300D\u81EA\u7136\u4F53\u73B0\u2014\u2014\u4E0D\u8BBE\u9644\u5E26\u7269\u3001\u4E0D\u52A0\u786E\u8BA4\u3002
+- **\u6539\u4E00\u5B57\u4EA6\u987B\u62A5**\uFF1A\u52A8\u5230\u672C\u76EE\u5F55\u4EFB\u4F55\u6587\u6863\u7684\u6539\u52A8\uFF0C\u56DE\u6267\u4E2D\u5FC5\u987B\u5217\u51FA\u6539\u52A8\u6587\u4EF6\u3002
+- **\u7ED3\u9879\u5F52\u6863\u524D\u65AD\u8A00\u7EA7\u6838\u5BF9**\uFF1A\u5148 \`git log --follow\` \u673A\u68B0\u6E05\u8D26\u65E0\u56DE\u6267\u53D8\u66F4\uFF0C\u518D\u9010\u65AD\u8A00\u67E5\u4EE3\u7801\uFF1B\u96F6\u5F02\u5E38\u4E00\u53E5\u8BDD\u5F52\u6863\uFF0C\u6709\u5F02\u5E38\u51FA\u6F02\u79FB\u6E05\u5355\u8D70\u9A8C\u6536\u5355\u9010\u6761\u88C1\u51B3\u3002
+- **\u4F60\u672C\u4EBA\u76F4\u6539\u5929\u7136\u5408\u6CD5**\uFF0C\u4E0D\u5165\u6838\u5BF9\u5F02\u5E38\u3002
+- **\u7EA2\u7EBF**\uFF1A\u4E0D\u505A\u6BB5\u843D\u7EA7\u6620\u5C04\u4E0E\u8986\u76D6\u7387\u7EDF\u8BA1\uFF08\u9632\u6ED1\u5761\uFF09\u3002
+`;
+}
+function ensureProjectClaudeMd(anchorDir, name) {
+  try {
+    const p = join6(anchorDir, "CLAUDE.md");
+    if (existsSync6(p)) return "exists";
+    mkdirSync6(anchorDir, { recursive: true });
+    writeFileSync6(p, projectClaudeMdSeed(name), "utf-8");
+    return "created";
+  } catch (e) {
+    console.warn(`[projects] \u9879\u76EE CLAUDE.md \u79CD\u5B50\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return "error";
+  }
+}
+function buildArchiveChecklist(gid, dir) {
+  const g2 = listGroups(dir).find((x) => x.id === gid);
+  if (!g2) return null;
+  const openDispatches = readDispatchLog(dir).filter((e) => {
+    const anchor = e.project_anchor ?? "";
+    return anchor && anchor.replace(/\/+$/, "") === g2.anchor_dir.replace(/\/+$/, "") && (e.status === "running" || e.status === "dispatched");
+  }).map((e) => ({ id: e.id, tier: e.tier, status: e.status, target: e.target, ts: e.ts }));
+  const b = loadBoardFile(gid, dir);
+  const openBoardEntries = b.entries.filter((x) => x.status !== "done").length;
+  return { gid: g2.id, name: g2.name, openDispatches, headcount: g2.headcount, openBoardEntries, anchor_dir: g2.anchor_dir };
+}
+function setLightConfirmTrusted(trusted, dir) {
+  const f = readProjectsFile(dir);
+  if (f.trust_light === trusted) return;
+  f.trust_light = trusted;
+  writeProjectsFile(f, dir);
+}
+function markHoldSuggested(gid, at, dir) {
+  const f = readProjectsFile(dir);
+  const g2 = f.groups.find((x) => x.id === gid);
+  if (!g2) return;
+  g2.hold_suggested_at = at;
+  saveGroup(g2, dir);
+}
+function findStaleGroups(now, staleDays, dir, memberActivity) {
+  if (staleDays <= 0) return [];
+  const cutoff = now - staleDays * 864e5;
+  const DAY = 864e5;
+  const out = [];
+  const dispatchLog = readDispatchLog(dir);
+  for (const g2 of listGroups(dir)) {
+    if (g2.status !== "active") continue;
+    const board = loadBoard(g2.id, dir);
+    let last = Math.max(g2.updated_at, board.updated_at);
+    const anchor = g2.anchor_dir.replace(/\/+$/, "");
+    for (const e of dispatchLog) {
+      const a = e.project_anchor ?? "";
+      if (a && a.replace(/\/+$/, "") === anchor && e.ts > last) last = e.ts;
+    }
+    for (const r of routingFor(g2.id, dir)) {
+      if (r.last_ts > last) last = r.last_ts;
+    }
+    const ma = memberActivity?.[g2.id] ?? 0;
+    if (ma > last) last = ma;
+    if (last < cutoff) out.push({ gid: g2.id, name: g2.name, idleDays: Math.max(1, Math.floor((now - last) / DAY)) });
+  }
+  return out;
+}
+
+// ../../cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -40275,21 +41335,21 @@ function VJ(e, t) {
 
 // src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { homedir as homedir4 } from "node:os";
-import { delimiter as pathDelimiter, join as join8 } from "node:path";
+import { randomUUID as randomUUID5 } from "node:crypto";
+import { homedir as homedir5 } from "node:os";
+import { delimiter as pathDelimiter, join as join13 } from "node:path";
 
 // src/cli-path.ts
-import { accessSync, constants as constants2, existsSync as existsSync5, readFileSync as readFileSync5 } from "node:fs";
+import { accessSync, constants as constants3, existsSync as existsSync8, readFileSync as readFileSync9 } from "node:fs";
 import { createRequire } from "node:module";
-import { delimiter as delimiter2, dirname as dirname5, join as join7 } from "node:path";
-import { homedir as homedir3 } from "node:os";
+import { delimiter as delimiter2, dirname as dirname7, join as join11 } from "node:path";
+import { homedir as homedir4 } from "node:os";
 var cached;
 function usable(p) {
-  if (!p || !existsSync5(p)) return false;
+  if (!p || !existsSync8(p)) return false;
   if (process.platform === "win32") return true;
   try {
-    accessSync(p, constants2.X_OK);
+    accessSync(p, constants3.X_OK);
     return true;
   } catch {
     return false;
@@ -40315,45 +41375,45 @@ function fromPath(name) {
   if (process.platform === "win32") {
     for (const dir of dirs) {
       for (const ext of [".exe", ".cmd", ".bat"]) {
-        const p = join7(dir, name + ext);
+        const p = join11(dir, name + ext);
         if (usable(p)) return p;
       }
     }
   } else {
     for (const dir of dirs) {
-      const p = join7(dir, name);
+      const p = join11(dir, name);
       if (usable(p)) return p;
     }
   }
   return null;
 }
 function cmdToFallbackJs(p) {
-  const direct = join7(dirname5(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
-  if (existsSync5(direct)) return direct;
+  const direct = join11(dirname7(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+  if (existsSync8(direct)) return direct;
   try {
-    const txt = readFileSync5(p, "utf8");
+    const txt = readFileSync9(p, "utf8");
     const m = txt.match(/(?:%~dp0\\?"|")(%~dp0\\)?([^"\r\n]+\.js)"/i);
     if (m) {
       const rel = m[2].replace(/\\+/g, "\\");
-      const cand = rel.match(/^[a-zA-Z]:[\\/]/) ? rel : join7(dirname5(p), rel);
-      if (existsSync5(cand)) return cand;
+      const cand = rel.match(/^[a-zA-Z]:[\\/]/) ? rel : join11(dirname7(p), rel);
+      if (existsSync8(cand)) return cand;
     }
   } catch {
   }
   return null;
 }
 function knownLocations() {
-  const home = homedir3();
+  const home = homedir4();
   if (process.platform === "win32") {
-    const appdata = process.env.APPDATA ?? join7(home, "AppData", "Roaming");
+    const appdata = process.env.APPDATA ?? join11(home, "AppData", "Roaming");
     return [
-      join7(home, ".local", "bin", "claude.exe"),
+      join11(home, ".local", "bin", "claude.exe"),
       // native 安装器默认位置
-      join7(appdata, "npm", "node_modules", "@anthropic-ai", "claude-code", "cli.js")
+      join11(appdata, "npm", "node_modules", "@anthropic-ai", "claude-code", "cli.js")
     ];
   }
   return [
-    join7(home, ".local", "bin", "claude"),
+    join11(home, ".local", "bin", "claude"),
     "/opt/homebrew/bin/claude",
     "/usr/local/bin/claude",
     "/usr/bin/claude"
@@ -40379,6 +41439,169 @@ function resolveClaudeCliPath() {
   return null;
 }
 
+// src/allow-rules.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { mkdirSync as mkdirSync8, readFileSync as readFileSync10, writeFileSync as writeFileSync7 } from "node:fs";
+import { join as join12 } from "node:path";
+var BASH_TOKEN_DENY = /* @__PURE__ */ new Set([
+  "rm",
+  "sudo",
+  "su",
+  "kill",
+  "pkill",
+  "killall",
+  "shutdown",
+  "reboot",
+  "halt",
+  "mkfs",
+  "dd",
+  "chmod",
+  "chown",
+  "curl",
+  "wget",
+  "launchctl",
+  "crontab",
+  "systemctl",
+  "defaults",
+  "osascript",
+  "nvram",
+  "fdisk",
+  "parted"
+]);
+var SHELL_COMPOSITE = /[;|&<>`]|\$\(/;
+function isMemorable(tool, input) {
+  if (tool === "AskUserQuestion" || tool === "ExitPlanMode") return false;
+  if (tool === "Bash") {
+    const cmd = String(input?.command ?? "");
+    if (!cmd.trim()) return false;
+    if (SHELL_COMPOSITE.test(cmd)) return false;
+    const tokens = cmd.trim().split(/\s+/);
+    if (BASH_TOKEN_DENY.has(tokens[0] ?? "")) return false;
+    return true;
+  }
+  if (tool === "Edit" || tool === "Write" || tool === "NotebookEdit") {
+    return typeof input?.file_path === "string" && input.file_path.length > 0;
+  }
+  return true;
+}
+function suggestPattern(tool, input) {
+  if (!isMemorable(tool, input)) return null;
+  if (tool === "Bash") {
+    const tokens = String(input?.command ?? "").trim().split(/\s+/);
+    let i = 0;
+    while (i < tokens.length && /^\w+=/.test(tokens[i] ?? "")) i++;
+    const sig = tokens.slice(i).filter((t) => !t.startsWith("-"));
+    const pattern = sig.slice(0, 2).join(" ") || tokens[i] || tokens[0] || "";
+    if (!pattern) return null;
+    return { pattern, label: `\u300C${pattern}\u300D\u5F00\u5934\u7684\u547D\u4EE4` };
+  }
+  if (tool === "Edit" || tool === "Write" || tool === "NotebookEdit") {
+    const fp2 = String(input?.file_path ?? "");
+    const dir = fp2.replace(/\/[^/]*$/, "");
+    if (!dir) return null;
+    return { pattern: dir, label: `${dir} \u4E0B\u7684\u6587\u4EF6\u7F16\u8F91` };
+  }
+  return { pattern: "*", label: `${tool} \u5168\u90E8\u653E\u884C` };
+}
+function matchPattern(rule, tool, input) {
+  if (rule.tool !== tool) return false;
+  if (tool === "Bash") {
+    const cmd = String(input?.command ?? "").trim();
+    if (!cmd || SHELL_COMPOSITE.test(cmd)) return false;
+    const tokens = cmd.split(/\s+/);
+    let i = 0;
+    while (i < tokens.length && /^\w+=/.test(tokens[i] ?? "")) i++;
+    const sig = tokens.slice(i).filter((t) => !t.startsWith("-"));
+    const head = sig.slice(0, 2).join(" ") || tokens[i] || "";
+    return !!head && head === rule.pattern;
+  }
+  if (tool === "Edit" || tool === "Write" || tool === "NotebookEdit") {
+    const fp2 = String(input?.file_path ?? "");
+    return !!fp2 && (fp2 === rule.pattern || fp2.startsWith(rule.pattern + "/"));
+  }
+  return true;
+}
+var AllowRuleStore = class {
+  rules = [];
+  file;
+  // #212 规则集变更回调（add / remove / dropSession 实际改表后触发）：宿主挂 bus
+  // 广播 ALLOW_RULES_UPDATED。此前广播只挂在删除命令一处——「允许并记住」落规则后
+  // 不广播，在线手机设置抽屉看不到刚记的规则（直到重连拿快照），实机首验抓到。
+  // 收敛到存储层统一触发，两个落规则点（bridge 外部会话 / agent-adapter 托管会话）
+  // 与删除路径全覆盖，后续新 mutation 不再漏。
+  onChange;
+  notify() {
+    try {
+      this.onChange?.();
+    } catch {
+    }
+  }
+  constructor(dataDir2) {
+    this.file = join12(dataDir2, "allow-rules.json");
+    try {
+      const raw = readFileSync10(this.file, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) this.rules = parsed.filter((r) => r && r.tool && r.pattern);
+    } catch {
+      this.rules = [];
+    }
+  }
+  persist() {
+    try {
+      mkdirSync8(join12(this.file, ".."), { recursive: true });
+      writeFileSync7(this.file, JSON.stringify(this.rules, null, 2));
+    } catch {
+    }
+  }
+  /** 会话 id + 工具 + 入参 → 命中的规则（null = 无规则，正常下发审批卡） */
+  match(sessionId, tool, input) {
+    for (const r of this.rules) {
+      if (r.scope === "session" && r.session_id !== sessionId) continue;
+      if (matchPattern(r, tool, input)) return r;
+    }
+    return null;
+  }
+  /** 记一条（去重：同 scope+session+tool+pattern 只留最新） */
+  add(tool, pattern, scope, sessionId, by) {
+    this.rules = this.rules.filter(
+      (r) => !(r.tool === tool && r.pattern === pattern && r.scope === scope && r.session_id === sessionId)
+    );
+    const rule = {
+      id: randomUUID4(),
+      scope,
+      ...scope === "session" && sessionId ? { session_id: sessionId } : {},
+      tool,
+      pattern,
+      created_at: Date.now(),
+      created_by: by
+    };
+    this.rules.push(rule);
+    this.persist();
+    this.notify();
+    return rule;
+  }
+  remove(id2) {
+    const before = this.rules.length;
+    this.rules = this.rules.filter((r) => r.id !== id2);
+    if (this.rules.length === before) return false;
+    this.persist();
+    this.notify();
+    return true;
+  }
+  /** 会话删除时清掉它的 session 级规则 */
+  dropSession(sessionId) {
+    const before = this.rules.length;
+    this.rules = this.rules.filter((r) => !(r.scope === "session" && r.session_id === sessionId));
+    if (this.rules.length !== before) {
+      this.persist();
+      this.notify();
+    }
+  }
+  list() {
+    return [...this.rules];
+  }
+};
+
 // src/summarizer.ts
 var MAX_SUMMARY = 80;
 function basename3(p) {
@@ -40392,7 +41615,9 @@ function normLines(s) {
 }
 function truncate(s, n = MAX_SUMMARY) {
   const one = normLines(s);
-  return one.length <= n ? one : one.slice(0, n - 1) + "\u2026";
+  if (one.length <= n) return one;
+  const cut = one.slice(0, n - 1);
+  return (/[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut) + "\u2026";
 }
 function normKey(text) {
   return truncate(text.trim(), 300).replace(/\s+/g, " ");
@@ -40839,15 +42064,15 @@ function taskDoneLabel(t) {
 }
 
 // src/agent-adapter.ts
-function childEnv() {
+function childEnv(opts) {
   const extra = [
-    join8(homedir4(), "node/bin"),
+    join13(homedir5(), "node/bin"),
     // 用户级 node（本机实证位置）
     "/usr/local/bin",
     // macOS Intel / 惯装位
     "/opt/homebrew/bin",
     // macOS Apple Silicon (homebrew)
-    join8(homedir4(), ".npm-global/bin"),
+    join13(homedir5(), ".npm-global/bin"),
     // npm 全局自定义前缀惯用位
     ...process.env.CCR_EXTRA_PATH ? process.env.CCR_EXTRA_PATH.split(pathDelimiter) : []
   ];
@@ -40857,23 +42082,70 @@ function childEnv() {
     ...process.env,
     PATH: merged.join(pathDelimiter),
     CCR_RELAY_CHILD: "1",
-    CLAUDE_CODE_ENABLE_TODO_TOOLS: "1"
+    CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+    // #17 雇员独立家：configHome 有值时 CLI 子进程的会话记录/任务清单/全局配置
+    // 全部落到该目录，与用户默认家（~/.claude）物理隔离。undefined = 不设此键，
+    // CLI 沿用默认家（用户自建会话/未启用开关的部署，行为与从前一致）
+    ...opts?.configHome ? { CLAUDE_CONFIG_DIR: opts.configHome } : {}
   };
 }
+var mintAdapterBoot = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function finiteTime(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+function deriveActivityTaskSummary(task, now = Date.now()) {
+  const todo = task?.todos?.find((item) => item.status === "in_progress" && item.active_form?.trim());
+  if (todo?.active_form) return { text: todo.active_form.trim(), source: "todo", updated_at: todo.updated_at ?? now };
+  if (task?.dispatch?.trim()) return { text: task.dispatch.trim(), source: "dispatch", updated_at: now };
+  if (task?.board?.trim()) return { text: task.board.trim(), source: "board", updated_at: now };
+  if (task?.session?.trim()) return { text: task.session.trim(), source: "session", updated_at: now };
+  return void 0;
+}
+function mapActivityState(input) {
+  const now = finiteTime(input.now, Date.now());
+  const receivedAt = finiteTime(input.ts, now);
+  const occurredAt = typeof input.occurred_at === "number" && Number.isFinite(input.occurred_at) ? input.occurred_at : void 0;
+  const requestedState = input.state ?? "WORKING";
+  const state = requestedState === "WAITING" && !input.allowWaiting ? "WORKING" : requestedState;
+  const text = input.activityText?.trim() || input.operation?.trim();
+  const activity = text ? {
+    kind: input.activityKind ?? "system",
+    text,
+    ...input.tool ? { tool: input.tool } : {},
+    observed_at: receivedAt,
+    ...occurredAt === void 0 ? {} : { occurred_at: occurredAt }
+  } : void 0;
+  const result = {
+    state,
+    ...deriveActivityTaskSummary(input.task, now) ? { task_summary: deriveActivityTaskSummary(input.task, now) } : {},
+    ...activity ? { activity } : {},
+    capabilities: input.capabilities,
+    updated_at: now,
+    time_basis: occurredAt === void 0 ? "relay_received" : "occurred_at",
+    ...input.unsupported ? { unsupported: true, diagnostic: input.unsupported } : {}
+  };
+  return result;
+}
+var CLAUDE_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: true
+};
 var AsyncQueue = class {
   values = [];
   resolvers = [];
   closed = false;
   push(value) {
     if (this.closed) throw new Error("queue closed");
-    const resolve7 = this.resolvers.shift();
-    if (resolve7) resolve7({ value, done: false });
+    const resolve8 = this.resolvers.shift();
+    if (resolve8) resolve8({ value, done: false });
     else this.values.push(value);
   }
   end() {
     this.closed = true;
-    for (const resolve7 of this.resolvers.splice(0)) {
-      resolve7({ value: void 0, done: true });
+    for (const resolve8 of this.resolvers.splice(0)) {
+      resolve8({ value: void 0, done: true });
     }
   }
   get iterable() {
@@ -40887,7 +42159,7 @@ var AsyncQueue = class {
             if (self2.closed) {
               return Promise.resolve({ value: void 0, done: true });
             }
-            return new Promise((resolve7) => self2.resolvers.push(resolve7));
+            return new Promise((resolve8) => self2.resolvers.push(resolve8));
           }
         };
       }
@@ -40898,11 +42170,12 @@ function watermarkFromUsage(u) {
   if (!u || typeof u.input_tokens !== "number") return 0;
   return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
 }
-var AgentSession = class _AgentSession {
+var AgentSession = class {
   constructor(cwd, model, cb2, initialPrompt, opts) {
     this.cwd = cwd;
     this.model = model;
     this.cb = cb2;
+    this.rules = opts?.rules;
     if (initialPrompt !== void 0 || (opts?.images?.length ?? 0) > 0) {
       this.pushUserMessage(initialPrompt ?? "", opts?.images);
     }
@@ -40923,9 +42196,19 @@ var AgentSession = class _AgentSession {
         // CLAUDE_CODE_ENABLE_TODO_TOOLS：CLI 按模型身份门控任务工具（TaskCreate/Get/Update/
         // List 仅对 Claude 系模型默认提供），GLM 等其它模型一律裁剪→任务面板恒空。官方
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
-        // PATH 补全：见 childEnv()（M0）
-        env: childEnv(),
+        // PATH 补全：见 childEnv()（M0）；#17 雇员独立家：configHome 时注入
+        // CLAUDE_CONFIG_DIR（transcript/任务清单落独立家）
+        env: childEnv({ configHome: opts?.configHome }),
         permissionMode: opts?.permissionMode ?? "default",
+        // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
+        // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过
+        // 权限启动」的授权——CLI 只认 --allow-dangerously-skip-permissions。缺失时
+        // resume 恢复 bypass 档被 Refusing restored mode 静默回落 default（relay 重启
+        // 后 bypass 会话被降级、且运行中 setPermissionMode 切跳过必被拒的根源），
+        // 已被降级的存量会话也永远回不去。带标志不改变初始档（初始档仍由
+        // permissionMode 决定），只打开运行中切跳过档的门——面板跳过行本就有
+        // 「危险」badge + 二次武装，用户点击即明确授权
+        allowDangerouslySkipPermissions: true,
         ...opts?.resume ? { resume: opts.resume } : {},
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
@@ -40972,7 +42255,7 @@ var AgentSession = class _AgentSession {
   cwd;
   model;
   cb;
-  id = randomUUID3();
+  id = randomUUID5();
   startedAt = Date.now();
   stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   // 流已关闭（stop/进程退出）：此后 sendMessage 不可用，调用方走 resume 重建
@@ -40986,16 +42269,22 @@ var AgentSession = class _AgentSession {
   pendingFileUses = /* @__PURE__ */ new Map();
   queue = new AsyncQueue();
   pending = /* @__PURE__ */ new Map();
+  // #212 允许并记住：权限请求先查规则，命中直接放行（不下发审批卡）
+  rules;
   stopping = false;
   resultSeenForTurn = true;
   lastSummary = "\u542F\u52A8\u4E2D";
   // 流式文本块：index->id 映射 + id->累计文本 + 当前消息内文本块 id 顺序表
   // （完整 assistant 消息的 content 数组可能重排/剔除 thinking，不能按 index 对齐，按文本块出现顺序对齐）
-  // #134 id 防碰撞：进程启动随机段掺进 id——resume/重启重建 adapter 后 blockSeq 从头计数，
-  // 纯序号 id（t1/t2…）会跨重启复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
-  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。与 bridge.ts
-  // 的 XSTREAM_BOOT 同款防御
-  static ADAPTER_BOOT = Date.now().toString(36);
+  // #134 id 防碰撞：启动随机段掺进 id——重建 adapter 后 blockSeq 从头计数，纯序号
+  // id（t1/t2…）会跨重建复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
+  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。
+  // 2026-09-28 冲刺升级：原 BOOT 段是 static（进程级秒戳）——relay 进程内 resume
+  // 重建 adapter（看门狗恢复/auto-revive/消息复活都是热路径）时 blockSeq 归零，
+  // 同会话新旧回合撞 id，被中断回合的条目被新回合流式块顶掉（真链路实锤：同一
+  // relay 先后两个 CLI 的 id 共享前缀）。改实例级 + 随机尾段，跨重建永不相撞；
+  // bridge.ts XSTREAM_BOOT 为单例+会话级计数（进程内不重置）无此险，不动
+  adapterBoot = mintAdapterBoot();
   blockSeq = 0;
   streamIdx = /* @__PURE__ */ new Map();
   streamBufs = /* @__PURE__ */ new Map();
@@ -41070,7 +42359,7 @@ var AgentSession = class _AgentSession {
               this.cb.onLog("tool_result", "zai \u5185\u7F6E\u5DE5\u5177\u7ED3\u679C", { tool: "zai", detail: capDetail(block.text, 2e3) });
             } else {
               const { body, segs } = splitZaiText(block.text);
-              const id2 = this.streamOrder[ti++] ?? `t${_AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
+              const id2 = this.streamOrder[ti++] ?? `t${this.adapterBoot}-${++this.blockSeq}`;
               if (body) {
                 this.cb.onLog("assistant_text", truncate(body, 400), {
                   full: fullText(body, 400),
@@ -41225,7 +42514,7 @@ var AgentSession = class _AgentSession {
     const ev2 = msg.event;
     const idx = ev2.index ?? -1;
     if (ev2.type === "content_block_start" && ev2.content_block?.type === "text") {
-      const id2 = `t${_AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
+      const id2 = `t${this.adapterBoot}-${++this.blockSeq}`;
       this.streamIdx.set(idx, id2);
       this.streamBufs.set(id2, "");
       this.streamOrder.push(id2);
@@ -41329,25 +42618,33 @@ var AgentSession = class _AgentSession {
     this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
   }
   handlePermission(toolName, input, opts) {
+    const hit = this.rules?.match(this.id, toolName, input);
+    if (hit) {
+      this.cb.onLog("system", `\u5DF2\u6309\u8BB0\u4F4F\u7684\u89C4\u5219\u653E\u884C ${toolName}\uFF08${hit.pattern === "*" ? "\u5DE5\u5177\u7EA7" : hit.pattern}\uFF09`);
+      return Promise.resolve({ behavior: "allow", updatedInput: input });
+    }
     const requestId = opts.requestId ?? opts.toolUseID;
     const questions = toolName === "AskUserQuestion" ? parseAskQuestions(input) : [];
     const summary = questions.length ? `\u63D0\u95EE: ${questions.map((q2) => q2.header).join(" / ")}` : opts.title ?? summarizeToolUse(toolName, input);
     this.lastSummary = summary;
+    const remember = suggestPattern(toolName, input);
     this.cb.onWaiting({
       request_id: requestId,
       tool_name: toolName,
       input_summary: summary,
       suggestions: [],
-      ...questions.length ? { questions } : {}
+      ...questions.length ? { questions } : {},
+      ...remember ? { remember } : {}
     });
     this.cb.onLog("system", questions.length ? summary : `\u7B49\u5F85\u786E\u8BA4: ${summary}`);
-    return new Promise((resolve7) => {
+    return new Promise((resolve8) => {
       this.pending.set(requestId, {
+        tool: toolName,
         input,
         created_at: Date.now(),
         resolve: (r) => {
           this.pending.delete(requestId);
-          resolve7(r);
+          resolve8(r);
         }
       });
     });
@@ -41384,9 +42681,13 @@ var AgentSession = class _AgentSession {
     }
     if (this.pending.size === 0) this.cb.onStatusChange("WORKING", this.lastSummary);
   }
-  allow(requestId, by) {
+  allow(requestId, by, rememberScope) {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    if (rememberScope && this.rules) {
+      const sug = suggestPattern(p.tool, p.input);
+      if (sug) this.rules.add(p.tool, sug.pattern, rememberScope, rememberScope === "session" ? this.id : void 0, by ?? "unknown");
+    }
     p.resolve({ behavior: "allow", updatedInput: p.input });
     this.cb.onWaitingResolved(requestId, "allow", by);
     return true;
@@ -41446,13 +42747,13 @@ var AgentSession = class _AgentSession {
 };
 
 // src/title-gen.ts
-async function generateTitle(task, model, onSid, cwd) {
+async function generateTitle(task, model, onSid, cwd, configHome) {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
   let timer;
   let sidSeen = false;
-  const timeout = new Promise((resolve7) => {
-    timer = setTimeout(() => resolve7({ title: null }), 2e4);
+  const timeout = new Promise((resolve8) => {
+    timer = setTimeout(() => resolve8({ title: null }), 2e4);
     timer.unref();
   });
   try {
@@ -41466,8 +42767,13 @@ async function generateTitle(task, model, onSid, cwd) {
           cwd: cwd ?? process.cwd(),
           // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
           ...resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath() } : {},
-          env: { ...process.env, CCR_RELAY_CHILD: "1" },
-          // 防止被全局 bridge hook 注册成外部会话
+          // 防止被全局 bridge hook 注册成外部会话；#17 开关开启时 titlegen 一次性
+          // 会话落独立家（relay 内部工具会话，不区分归属——默认家不再冒 .tmp-titlegen 目录）
+          env: {
+            ...process.env,
+            CCR_RELAY_CHILD: "1",
+            ...configHome ? { CLAUDE_CONFIG_DIR: configHome } : {}
+          },
           permissionMode: "bypassPermissions",
           maxTurns: 1
         }
@@ -41496,8 +42802,8 @@ async function generateTitle(task, model, onSid, cwd) {
 }
 
 // src/cron.ts
-import { readFileSync as readFileSync6 } from "node:fs";
-import { join as join9 } from "node:path";
+import { readFileSync as readFileSync11 } from "node:fs";
+import { join as join14 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
 var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
 function tsNum(v) {
@@ -41536,7 +42842,7 @@ function normalizeTask(raw, fallbackId) {
 function readCronTasks(cwd) {
   let text;
   try {
-    text = readFileSync6(join9(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+    text = readFileSync11(join14(cwd, ".claude", "scheduled_tasks.json"), "utf8");
   } catch (e) {
     return e.code === "ENOENT" ? void 0 : "bad";
   }
@@ -41567,11 +42873,11 @@ function cronTasksKey(tasks) {
 }
 
 // src/task-store.ts
-import { readdirSync as readdirSync3, readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
-import { homedir as homedir5 } from "node:os";
+import { readdirSync as readdirSync3, readFileSync as readFileSync12, statSync as statSync3 } from "node:fs";
+import { homedir as homedir6 } from "node:os";
 import path from "node:path";
-function readTaskStoreTodos(cliSessionId) {
-  const dir = path.join(homedir5(), ".claude", "tasks", cliSessionId);
+function readTaskStoreTodos(cliSessionId, base) {
+  const dir = path.join(base ?? path.join(homedir6(), ".claude"), "tasks", cliSessionId);
   let files;
   try {
     files = readdirSync3(dir).filter((f) => f.endsWith(".json"));
@@ -41582,7 +42888,7 @@ function readTaskStoreTodos(cliSessionId) {
   for (const f of files) {
     try {
       const fp2 = path.join(dir, f);
-      const t = JSON.parse(readFileSync7(fp2, "utf-8"));
+      const t = JSON.parse(readFileSync12(fp2, "utf-8"));
       if (t.status === "deleted") continue;
       const subject = typeof t.subject === "string" ? t.subject.trim() : "";
       if (!subject) continue;
@@ -41638,13 +42944,13 @@ async function snapshotTree() {
   return out;
 }
 function psExec(cmd, args) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     try {
       execFile(cmd, args, { timeout: 1e4, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-        resolve7(err ? "" : String(stdout));
+        resolve8(err ? "" : String(stdout));
       });
     } catch {
-      resolve7("");
+      resolve8("");
     }
   });
 }
@@ -41710,7 +43016,7 @@ async function killTree(root) {
 }
 
 // src/uploads.ts
-import { mkdirSync as mkdirSync4, writeFileSync as writeFileSync3 } from "node:fs";
+import { mkdirSync as mkdirSync9, writeFileSync as writeFileSync8 } from "node:fs";
 import path2 from "node:path";
 function tmpUploadDir(dataDir2) {
   return path2.join(dataDir2, "..", "tmp");
@@ -41734,7 +43040,7 @@ function saveUploadImages(dataDir2, sessionId, images) {
   if (images.length === 0) return [];
   const dir = tmpUploadDir(dataDir2);
   try {
-    mkdirSync4(dir, { recursive: true });
+    mkdirSync9(dir, { recursive: true });
   } catch {
   }
   const sidKey = sidKeyOf(sessionId);
@@ -41746,7 +43052,7 @@ function saveUploadImages(dataDir2, sessionId, images) {
     const ext = sniffImageExt(head);
     const p = path2.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
     try {
-      writeFileSync3(p, Buffer.from(b64, "base64"));
+      writeFileSync8(p, Buffer.from(b64, "base64"));
       saved.push(p);
     } catch {
     }
@@ -41757,7 +43063,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
   if (files.length === 0) return [];
   const dir = tmpUploadDir(dataDir2);
   try {
-    mkdirSync4(dir, { recursive: true });
+    mkdirSync9(dir, { recursive: true });
   } catch {
   }
   const sidKey = sidKeyOf(sessionId);
@@ -41767,7 +43073,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
     const f = files[i];
     const p = path2.join(dir, `file-${sidKey}-${stamp}-${i + 1}-${safeName(f.name)}`);
     try {
-      writeFileSync3(p, Buffer.from(f.b64, "base64"));
+      writeFileSync8(p, Buffer.from(f.b64, "base64"));
       saved.push(p);
     } catch {
     }
@@ -41776,17 +43082,17 @@ function saveUploadFiles(dataDir2, sessionId, files) {
 }
 
 // src/todo-hidden.ts
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync13, writeFileSync as writeFileSync9 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
 var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
 var MAX_PER_SESSION = 200;
 var fileCache = null;
 var keySets = /* @__PURE__ */ new Map();
-function load() {
+function load2() {
   if (fileCache) return fileCache;
   try {
-    const raw = JSON.parse(readFileSync8(FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync13(FILE, "utf-8"));
     fileCache = {};
     for (const [k3, v] of Object.entries(raw)) {
       if (Array.isArray(v)) {
@@ -41802,7 +43108,7 @@ function load() {
 function hiddenTodoKeys(sessionId) {
   let s = keySets.get(sessionId);
   if (!s) {
-    s = new Set(load()[sessionId] ?? []);
+    s = new Set(load2()[sessionId] ?? []);
     keySets.set(sessionId, s);
   }
   return s;
@@ -41814,13 +43120,1169 @@ function addHiddenTodoKey(sessionId, key) {
   s.add(key);
   const capped = [...s].slice(-MAX_PER_SESSION);
   keySets.set(sessionId, new Set(capped));
-  const disk = load();
+  const disk = load2();
   disk[sessionId] = capped;
   fileCache = disk;
   try {
-    writeFileSync4(FILE, JSON.stringify(disk));
+    writeFileSync9(FILE, JSON.stringify(disk));
   } catch {
   }
+}
+
+// src/decision-notify.ts
+import { mkdirSync as mkdirSync10, readFileSync as readFileSync14, writeFileSync as writeFileSync10 } from "node:fs";
+import { join as join15 } from "node:path";
+var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
+function isDecisionNotificationKind(value) {
+  return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
+}
+function transitionNotification(item, action, at) {
+  const next = { ...item };
+  if (action === "source_succeeded" && next.handled_at === void 0) next.handled_at = at;
+  if (action === "dismissed") {
+    if (next.dismissed_at === void 0) next.dismissed_at = at;
+    if (next.handled_at === void 0) next.handled_at = at;
+  }
+  if (action === "resolved" && next.resolved_at === void 0) next.resolved_at = at;
+  return next;
+}
+function stableKey(kind, entityId, revision) {
+  if (!isDecisionNotificationKind(kind)) throw new Error(`unsupported notification kind: ${String(kind)}`);
+  if (kind === "dispatch") return `${kind}:${entityId}`;
+  if (revision === void 0 || String(revision).length === 0) return `${kind}:${entityId}`;
+  return `${kind}:${entityId}:${String(revision)}`;
+}
+var DEFAULT_WAIT_MIN = 10;
+var DEFAULT_REMIND_HOURS = 24;
+var DEFAULT_INTERVAL_MS = 2e4;
+function numberEnv(name, fallback, min) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= min ? value : fallback;
+}
+function enabledEnv() {
+  return process.env.CCR_DECISION_NOTIFY !== "0";
+}
+function ledgerPathOf(options) {
+  const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ?? process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
+  if (override) return override;
+  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join15(process.cwd(), "data");
+  return join15(dataDir2, "decision-notifications.json");
+}
+function defaultNotificationGroup(kind) {
+  return kind === "system" ? "activity" : "action";
+}
+function defaultActionable(kind, group) {
+  return group === "action" && kind !== "system";
+}
+function normalizeDecisionNotification(item) {
+  if (!item || typeof item !== "object") return null;
+  const x = item;
+  if (typeof x.key !== "string" || !isDecisionNotificationKind(x.kind) || typeof x.source_session_id !== "string" || typeof x.created_at !== "number" || typeof x.revision !== "string") return null;
+  const group = x.group === "action" || x.group === "attention" || x.group === "activity" ? x.group : defaultNotificationGroup(x.kind);
+  return {
+    key: x.key,
+    kind: x.kind,
+    source_session_id: x.source_session_id,
+    created_at: x.created_at,
+    ...typeof x.first_sent_at === "number" ? { first_sent_at: x.first_sent_at } : {},
+    ...typeof x.reminded_at === "number" ? { reminded_at: x.reminded_at } : {},
+    ...typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {},
+    ...typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {},
+    ...typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {},
+    group,
+    actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
+    revision: x.revision
+  };
+}
+function readDecisionNotificationLedger(path6) {
+  try {
+    const raw = JSON.parse(readFileSync14(path6, "utf-8"));
+    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.notifications) ? raw.notifications : [];
+    const notifications = list.map(normalizeDecisionNotification).filter((item) => item !== null);
+    return { notifications };
+  } catch {
+    return { notifications: [] };
+  }
+}
+function writeDecisionNotificationLedger(path6, ledger) {
+  mkdirSync10(join15(path6, ".."), { recursive: true });
+  writeFileSync10(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
+}
+function confirmRevision(confirm) {
+  const revision = confirm.revision;
+  return typeof revision === "string" || typeof revision === "number" ? String(revision) : String(confirm.created_at);
+}
+function confirmKey(confirm) {
+  return stableKey("org-confirm", confirm.id, confirmRevision(confirm));
+}
+function confirmSourceSession(confirm) {
+  for (const key of ["source_session_id", "session_id", "source_session"]) {
+    const value = confirm.payload?.[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
+}
+function waitingKey(session) {
+  return stableKey("waiting", session.session_id, session.waiting_request.request_id);
+}
+function allowWaiting(session) {
+  const request = session.waiting_request;
+  return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
+}
+function kindLabel(kind) {
+  switch (kind) {
+    case "project-create":
+      return "\u7ACB\u9879\u786E\u8BA4";
+    case "tier-change":
+      return "\u6863\u4F4D\u53D8\u66F4";
+    case "suggest-hold":
+      return "\u6682\u7F13\u5EFA\u8BAE";
+    case "archive":
+      return "\u7ED3\u9879\u786E\u8BA4";
+    case "revive":
+      return "\u590D\u6D3B\u786E\u8BA4";
+  }
+}
+function compact(text, max = 160) {
+  const oneLine = text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}\u2026` : oneLine;
+}
+function confirmText(confirm, sourceSessionId) {
+  const source = sourceSessionId ? ` \xB7 \u6765\u6E90\u4F1A\u8BDD ${sourceSessionId.slice(0, 12)}` : " \xB7 \u6765\u6E90\uFF1ALeader \u63A7\u5236\u4F1A\u8BDD";
+  const summary = confirm.reason ? `\uFF1A${compact(confirm.reason)}` : "";
+  return `[\u62CD\u677F] ${compact(confirm.title, 70)} \xB7 ${kindLabel(confirm.kind)}${source}${summary}`;
+}
+function waitingText(session) {
+  const tool = compact(session.waiting_request?.tool_name || "\u64CD\u4F5C", 60);
+  return `[\u5BA1\u6279] \u5F53\u524D\u4F1A\u8BDD\u7B49\u5F85\u5141\u8BB8 ${tool} \xB7 \u6765\u6E90\u4F1A\u8BDD ${session.session_id.slice(0, 12)}`;
+}
+var DecisionNotificationWatcher = class {
+  path;
+  intervalMs;
+  waitMs;
+  remindMs;
+  enabled;
+  now;
+  options;
+  ledger;
+  timer = null;
+  constructor(options) {
+    this.options = options;
+    this.path = ledgerPathOf(options);
+    this.intervalMs = options.intervalMs ?? numberEnv("CCR_DECISION_NOTIFY_INTERVAL_MS", DEFAULT_INTERVAL_MS, 1e3);
+    this.waitMs = (options.waitMin ?? numberEnv("CCR_DECISION_WAIT_MIN", DEFAULT_WAIT_MIN, 0)) * 6e4;
+    this.remindMs = (options.remindHours ?? numberEnv("CCR_DECISION_REMIND_HOURS", DEFAULT_REMIND_HOURS, 0)) * 36e5;
+    this.enabled = options.enabled ?? enabledEnv();
+    this.now = options.now ?? (() => Date.now());
+    this.ledger = readDecisionNotificationLedger(this.path);
+  }
+  get ledgerPath() {
+    return this.path;
+  }
+  snapshotLedger() {
+    return this.ledger.notifications.map((item) => ({ ...item }));
+  }
+  start() {
+    if (!this.enabled || this.timer) return;
+    this.scan();
+    this.timer = setInterval(() => this.scan(), this.intervalMs);
+    this.timer.unref?.();
+  }
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+  scan(now = this.now()) {
+    if (!this.enabled) return;
+    const confirms = this.options.listConfirms();
+    const sessions = this.options.snapshotSessions();
+    const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
+    const activeConfirmKeys = /* @__PURE__ */ new Set();
+    const activeWaitingKeys = /* @__PURE__ */ new Set();
+    let changed = false;
+    for (const confirm of confirms) {
+      const key = confirmKey(confirm);
+      const existing = byKey.get(key);
+      if (confirm.status === "pending") {
+        activeConfirmKeys.add(key);
+        const item = existing ?? {
+          key,
+          kind: "org-confirm",
+          source_session_id: confirmSourceSession(confirm),
+          created_at: confirm.created_at,
+          group: "action",
+          actionable: true,
+          revision: confirmRevision(confirm)
+        };
+        if (!existing) {
+          this.ledger.notifications.push(item);
+          byKey.set(key, item);
+          changed = true;
+        }
+        if (!item.source_session_id) {
+          const source = confirmSourceSession(confirm);
+          if (source) item.source_session_id = source;
+        }
+        const target = this.targetSession(item.source_session_id, sessions);
+        if (!item.first_sent_at && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.source_session_id = target;
+          item.first_sent_at = now;
+          changed = true;
+        } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.reminded_at = now;
+          changed = true;
+        }
+      } else if (existing && !existing.resolved_at) {
+        existing.resolved_at = confirm.decided_at ?? now;
+        changed = true;
+      }
+    }
+    for (const session of sessions) {
+      if (!allowWaiting(session)) continue;
+      const key = waitingKey(session);
+      activeWaitingKeys.add(key);
+      const existing = byKey.get(key);
+      const item = existing ?? {
+        key,
+        kind: "waiting",
+        source_session_id: session.session_id,
+        created_at: session.waiting_started_at ?? session.updated_at,
+        group: "action",
+        actionable: true,
+        revision: session.waiting_request.request_id
+      };
+      if (!existing) {
+        this.ledger.notifications.push(item);
+        byKey.set(key, item);
+        changed = true;
+      }
+      const startedAt = session.waiting_started_at ?? session.updated_at;
+      if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.first_sent_at = now;
+        changed = true;
+      } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.reminded_at = now;
+        changed = true;
+      }
+    }
+    for (const item of this.ledger.notifications) {
+      if (item.resolved_at) continue;
+      if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+      if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+    }
+    if (changed) writeDecisionNotificationLedger(this.path, this.ledger);
+  }
+  targetSession(preferred, sessions) {
+    if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
+    const leader2 = this.options.leaderSessionId();
+    if (leader2 && sessions.some((session) => session.session_id === leader2)) return leader2;
+    return sessions[0]?.session_id ?? null;
+  }
+};
+
+// src/agent-codex.ts
+import { spawn as spawn3 } from "node:child_process";
+import { randomUUID as randomUUID6 } from "node:crypto";
+import { existsSync as existsSync9, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync11 } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter as delimiter3, dirname as dirname8, join as join16 } from "node:path";
+var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+var CODEX_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var CodexEventMapper = class {
+  /** 当前回合起始时刻（turn.started 记，回合收口事件算时长用；测试可注入 now 定值） */
+  turnStartMs = 0;
+  /** 上个回合是否已收口（turn.completed/turn.failed）。会话侧判「进程退出但回合
+   *  未收口」用——true 时退出码不再补发 onTurnEnd（防双发） */
+  turnTerminal = true;
+  /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
+  lastThreadId;
+  handle(raw, cb2, now = Date.now()) {
+    if (!raw || typeof raw !== "object") return;
+    const ev2 = raw;
+    switch (ev2.type) {
+      case "thread.started": {
+        const tid = typeof ev2.thread_id === "string" ? ev2.thread_id : "";
+        this.lastThreadId = tid || this.lastThreadId;
+        cb2.onInit(tid, "codex");
+        break;
+      }
+      case "turn.started":
+        this.turnStartMs = now;
+        this.turnTerminal = false;
+        cb2.onStatusChange("WORKING", "\u6267\u884C\u4E2D");
+        break;
+      case "item.started": {
+        const it2 = ev2.item;
+        if (it2?.type === "command_execution") {
+          cb2.onLog("tool_use", truncate(it2.command ?? "(\u547D\u4EE4)", 200) || "(\u547D\u4EE4)", {
+            tool: "command",
+            id: it2.id,
+            full: capDetail(it2.command ?? "")
+          });
+        }
+        break;
+      }
+      case "item.completed": {
+        const it2 = ev2.item;
+        if (!it2) break;
+        if (it2.type === "agent_message") {
+          cb2.onLog("assistant_text", it2.text ?? "", { id: it2.id });
+        } else if (it2.type === "command_execution") {
+          const exit = it2.exit_code ?? null;
+          const ok2 = it2.status === "failed" || exit !== null && exit !== 0 ? false : true;
+          const head = (it2.aggregated_output ?? "").trim().split("\n")[0] ?? "";
+          cb2.onLog("tool_result", ok2 ? head || `\u9000\u51FA\u7801 ${exit ?? "?"}` : `\u5931\u8D25\uFF08\u9000\u51FA\u7801 ${exit ?? "?"}\uFF09`, {
+            tool: "command",
+            id: it2.id,
+            full: capDetail(it2.aggregated_output ?? "")
+          });
+        }
+        break;
+      }
+      case "turn.completed": {
+        const u = ev2.usage ?? {};
+        cb2.onUsage({
+          input_tokens: num(u.input_tokens),
+          output_tokens: num(u.output_tokens),
+          cache_read_input_tokens: num(u.cached_input_tokens),
+          cache_creation_input_tokens: num(u.cache_write_input_tokens)
+        });
+        cb2.onTurnEnd(true, "success", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
+        this.turnTerminal = true;
+        break;
+      }
+      case "turn.failed": {
+        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
+        cb2.onTurnEnd(false, truncate(msg ?? "\u56DE\u5408\u5931\u8D25", 200) || "\u56DE\u5408\u5931\u8D25", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
+        this.turnTerminal = true;
+        break;
+      }
+      case "error": {
+        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
+        cb2.onLog("system", `codex \u9519\u8BEF\uFF1A${truncate(msg ?? "(\u65E0\u4FE1\u606F)", 200)}`);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+};
+var cachedBin;
+function resolveCodexCliPath() {
+  if (cachedBin !== void 0) return cachedBin;
+  const fromEnv = process.env.CCR_CODEX_PATH;
+  if (fromEnv === "__none__") {
+    cachedBin = null;
+    return null;
+  }
+  if (fromEnv && existsSync9(fromEnv)) {
+    cachedBin = fromEnv;
+    return cachedBin;
+  }
+  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex.bat", "codex"] : ["codex"];
+  const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
+  for (const d2 of dirs) {
+    for (const n of names) {
+      const p = join16(d2, n);
+      if (existsSync9(p)) {
+        cachedBin = p;
+        return p;
+      }
+    }
+  }
+  cachedBin = null;
+  return null;
+}
+function materializeImages(images) {
+  if (!images || images.length === 0) return [];
+  const dir = mkdtempSync(join16(tmpdir(), "ccr-codex-img-"));
+  const out = [];
+  images.forEach((b64, i) => {
+    if (typeof b64 !== "string" || b64.length === 0) return;
+    try {
+      const p = join16(dir, `${i}.img`);
+      writeFileSync11(p, Buffer.from(b64, "base64"));
+      out.push(p);
+    } catch {
+    }
+  });
+  return out;
+}
+var CodexAgentSession = class {
+  id = randomUUID6();
+  startedAt = Date.now();
+  stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  ended = false;
+  cb;
+  cwd;
+  bin;
+  threadId;
+  mapper = new CodexEventMapper();
+  proc = null;
+  pid;
+  // 排队消息带图绑定（#63）：文本与该条的临时图路径一起入队，merge 时图拼接；
+  // 队列元素里的图路径在落盘时已持久，消费回合结束才清理
+  queued = [];
+  // 本回合消费的图所在目录（回合收口清理；排队中未消费的不在此列）
+  turnImageDirs = /* @__PURE__ */ new Set();
+  stopping = false;
+  stderrTail = "";
+  get childPid() {
+    return this.pid;
+  }
+  constructor(cwd, _model, cb2, initialPrompt, opts) {
+    this.cwd = cwd;
+    this.cb = cb2;
+    this.threadId = opts?.resume;
+    const bin = resolveCodexCliPath();
+    if (!bin) {
+      throw new Error("codex CLI \u672A\u627E\u5230\uFF08\u5B89\u88C5 codex \u6216\u8BBE CCR_CODEX_PATH\uFF09");
+    }
+    this.bin = bin;
+    if (initialPrompt !== void 0) this.execTurn(initialPrompt, materializeImages(opts?.images));
+  }
+  sendMessage(text, images, echo) {
+    if (this.ended) {
+      console.warn("[codex] \u4F1A\u8BDD\u5DF2\u7ED3\u675F\uFF0C\u6D88\u606F\u4E22\u5F03");
+      return;
+    }
+    const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
+    if (echo !== void 0) {
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+    } else {
+      const full = fullText(text, 200);
+      this.cb.onLog("user_message", truncate(text, 200) + marker, {
+        full: full === void 0 ? void 0 : full + marker
+      });
+    }
+    if (images && images.length > 0) {
+      const paths = materializeImages(images);
+      if (this.proc) {
+        if (this.queued.length >= 50) {
+          this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
+          return;
+        }
+        this.queued.push({ text, images: paths.length > 0 ? paths : void 0 });
+        return;
+      }
+      this.execTurn(text, paths);
+      return;
+    }
+    if (this.proc) {
+      if (this.queued.length >= 50) {
+        this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
+        return;
+      }
+      this.queued.push({ text });
+      return;
+    }
+    this.execTurn(text);
+  }
+  // headless 无审批通道（WAITING 形态 P0 不做）——三口恒 false，端上不出现审批卡
+  allow(_requestId, _by, _rememberScope) {
+    return false;
+  }
+  deny(_requestId, _reason, _by) {
+    return false;
+  }
+  answer(_requestId, _answers, _by) {
+    return false;
+  }
+  hasPending() {
+    return false;
+  }
+  async setPermissionMode(_mode) {
+  }
+  async stop() {
+    if (this.ended) return;
+    this.stopping = true;
+    this.ended = true;
+    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname8(p))));
+    this.queued = [];
+    this.cleanupTurnImages(queuedDirs);
+    const child = this.proc;
+    this.proc = null;
+    this.pid = void 0;
+    this.cb.onSessionEnd("stopped");
+    if (child?.pid) void killTree(child.pid).catch(() => {
+    });
+  }
+  // -- 内部 -------------------------------------------------------------
+  execTurn(prompt, images = []) {
+    const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
+    if (this.threadId) args.push("resume", this.threadId);
+    for (const p of images) args.push("--image", p);
+    args.push("-");
+    this.turnImageDirs = new Set(images.map((p) => dirname8(p)));
+    this.mapper.turnTerminal = false;
+    this.mapper.turnStartMs = Date.now();
+    let child;
+    try {
+      child = spawn3(this.bin, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: this.cwd,
+        env: childEnv()
+      });
+    } catch (e) {
+      this.failTurn(`codex \u542F\u52A8\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    this.proc = child;
+    this.pid = child.pid;
+    this.stderrTail = "";
+    this.cb.onStatusChange("WORKING", "\u542F\u52A8\u4E2D");
+    let pending = Buffer.alloc(0);
+    child.stdout.on("data", (d2) => {
+      pending = Buffer.concat([pending, d2]);
+      let i;
+      while ((i = pending.indexOf(10)) >= 0) {
+        const line = pending.subarray(0, i).toString("utf-8").trim();
+        pending = pending.subarray(i + 1);
+        if (line) this.onLine(line);
+      }
+    });
+    child.stderr.on("data", (d2) => {
+      this.stderrTail = (this.stderrTail + d2.toString("utf-8")).slice(-500);
+    });
+    child.on("error", (e) => {
+      this.cb.onLog("system", `codex \u8FDB\u7A0B\u9519\u8BEF\uFF1A${truncate(e.message, 200)}`);
+    });
+    child.on("close", (code) => this.onClose(code));
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(prompt, "utf-8");
+  }
+  onLine(line) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      this.cb.onLog("system", `codex \u8F93\u51FA\u975E JSON\uFF1A${truncate(line, 120)}`);
+      return;
+    }
+    const ev2 = parsed;
+    if (ev2?.type === "thread.started" && typeof ev2.thread_id === "string" && ev2.thread_id) {
+      this.threadId = ev2.thread_id;
+    }
+    this.mapper.handle(parsed, this.cb);
+  }
+  onClose(code) {
+    this.proc = null;
+    this.pid = void 0;
+    this.cleanupTurnImages();
+    if (this.stopping) return;
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      const why = code === null ? "\u8FDB\u7A0B\u88AB\u4FE1\u53F7\u7EC8\u6B62" : `\u9000\u51FA\u7801 ${code}`;
+      this.cb.onTurnEnd(false, `codex ${why}${this.stderrTail ? `\uFF1A${truncate(this.stderrTail.trim().split("\n").at(-1) ?? "", 160)}` : ""}`, dur);
+      if (!this.threadId) {
+        this.ended = true;
+        this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
+        return;
+      }
+    }
+    if (this.queued.length > 0 && !this.ended) {
+      const merged = this.queued.map((q2) => q2.text).join("\n\n");
+      const imgs = this.queued.flatMap((q2) => q2.images ?? []);
+      this.queued = [];
+      this.execTurn(merged, imgs);
+    }
+  }
+  /** 回合收口清理本回合消费的临时图目录；extraDirs=会话终止时排队未消费的 */
+  cleanupTurnImages(extraDirs) {
+    const dirs = this.turnImageDirs;
+    this.turnImageDirs = /* @__PURE__ */ new Set();
+    for (const d2 of extraDirs ?? []) dirs.add(d2);
+    for (const d2 of dirs) {
+      try {
+        rmSync3(d2, { recursive: true, force: true });
+      } catch {
+      }
+    }
+  }
+  /** spawn 同步失败收口（onClose 崩溃分支的同款语义，无进程版） */
+  failTurn(why) {
+    this.proc = null;
+    this.pid = void 0;
+    if (this.stopping || this.ended) return;
+    this.cleanupTurnImages();
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      this.cb.onTurnEnd(false, truncate(why, 300), dur);
+    }
+    if (!this.threadId) {
+      this.ended = true;
+      this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
+    }
+  }
+};
+
+// src/agent-jsonl.ts
+import { spawn as spawn4 } from "node:child_process";
+import { accessSync as accessSync2, constants as constants4 } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { randomUUID as randomUUID7 } from "node:crypto";
+function messageBlocksOf(event) {
+  const message = event.message;
+  if (!message || typeof message !== "object" || Array.isArray(message)) return void 0;
+  const content = message.content;
+  if (typeof content === "string") return [{ type: "text", text: content }];
+  if (!Array.isArray(content)) return void 0;
+  return content.filter(
+    (b) => Boolean(b) && typeof b === "object" && !Array.isArray(b)
+  );
+}
+function blockOf(blocks, blockType) {
+  return blocks?.find((b) => String(b.type ?? "").toLowerCase() === blockType);
+}
+function blockTextOf(blocks) {
+  if (!blocks) return void 0;
+  const text = blocks.filter((b) => String(b.type ?? "").toLowerCase() === "text" && typeof b.text === "string").map((b) => b.text).join("");
+  return text || void 0;
+}
+function splitUtf8Lines() {
+  let pending = Buffer.alloc(0);
+  const take = () => {
+    const lines = [];
+    let at = pending.indexOf(10);
+    while (at >= 0) {
+      const line = pending.subarray(0, at).toString("utf8").trim();
+      pending = pending.subarray(at + 1);
+      if (line) lines.push(line);
+      at = pending.indexOf(10);
+    }
+    return lines;
+  };
+  return {
+    push(chunk) {
+      pending = Buffer.concat([pending, chunk]);
+      return take();
+    },
+    flush() {
+      const tail2 = pending.toString("utf8").trim();
+      pending = Buffer.alloc(0);
+      return tail2 ? [tail2] : [];
+    }
+  };
+}
+function parseJsonDocument(lines) {
+  if (lines.length === 0) return [];
+  const parsed = [];
+  let failed = false;
+  for (const line of lines) {
+    try {
+      parsed.push(JSON.parse(line));
+    } catch {
+      failed = true;
+      break;
+    }
+  }
+  if (!failed && parsed.length === lines.length) return parsed;
+  const whole = lines.join("\n").trim();
+  if (!whole) return [];
+  try {
+    return [JSON.parse(whole)];
+  } catch {
+    return [];
+  }
+}
+function textOf(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const text = value.map(textOf).filter((x) => Boolean(x)).join("");
+    return text || void 0;
+  }
+  if (value && typeof value === "object") {
+    const v = value;
+    for (const key of ["text", "content", "output", "response", "result", "message"]) {
+      const text = textOf(v[key]);
+      if (text) return text;
+    }
+  }
+  return void 0;
+}
+function numberOf(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function usageOf(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const u = value;
+  const input = numberOf(u.input_tokens ?? u.inputTokens);
+  const output = numberOf(u.output_tokens ?? u.outputTokens);
+  if (input === void 0 && output === void 0) return void 0;
+  return {
+    input_tokens: input ?? 0,
+    output_tokens: output ?? 0,
+    cache_read_input_tokens: numberOf(u.cache_read_input_tokens ?? u.cacheReadInputTokens) ?? 0,
+    cache_creation_input_tokens: numberOf(u.cache_creation_input_tokens ?? u.cacheCreationInputTokens) ?? 0
+  };
+}
+var GenericJsonEventMapper = class {
+  turnTerminal = false;
+  textSequence = 0;
+  initialized = false;
+  handle(raw, cb2) {
+    if (Array.isArray(raw)) {
+      for (const item of raw) this.handle(item, cb2);
+      return;
+    }
+    if (!raw || typeof raw !== "object") return;
+    const event = raw;
+    const type = String(event.type ?? event.event ?? event.kind ?? "").toLowerCase();
+    const sessionId = [event.session_id, event.sessionId, event.thread_id, event.threadId, event.id].find((x) => typeof x === "string" && x.length > 0);
+    const model = typeof event.model === "string" ? event.model : void 0;
+    if (!this.initialized && (sessionId || type === "init" || type === "session.started" || type === "session_start")) {
+      this.initialized = true;
+      cb2.onInit(sessionId ?? "external", model ?? "unknown");
+    }
+    const isErrorFlag = event.is_error === true || event.isError === true;
+    if (type.includes("error") || event.error !== void 0 || isErrorFlag) {
+      const message2 = textOf(event.error) ?? textOf(event.message) ?? textOf(event.result) ?? "\u5F15\u64CE\u8FD4\u56DE\u9519\u8BEF";
+      cb2.onLog("system", message2, { full: message2 });
+      cb2.onStatusChange("ERROR", message2);
+      this.turnTerminal = true;
+      cb2.onTurnEnd(false, message2, 0);
+      return;
+    }
+    const blocks = messageBlocksOf(event);
+    const blockToolUse = blockOf(blocks, "tool_use");
+    const blockToolResult = blockOf(blocks, "tool_result");
+    if (type.includes("tool") || type.includes("command") || type === "function_call" || blockToolUse) {
+      const name = String(event.name ?? event.tool ?? event.command ?? blockToolUse?.name ?? "\u5DE5\u5177");
+      const detail = textOf(event.input ?? event.arguments ?? event.detail ?? blockToolUse?.input);
+      cb2.onLog("tool_use", `${name} \u8C03\u7528`, { tool: name, detail });
+      cb2.onStatusChange("WORKING", `${name} \u6267\u884C\u4E2D`);
+    }
+    if (blockToolResult) {
+      const resultText = textOf(blockToolResult.content) ?? "\u5DE5\u5177\u7ED3\u679C";
+      cb2.onLog("tool_result", resultText.slice(0, 400), { full: resultText });
+      cb2.onStatusChange("WORKING", "\u5DE5\u5177\u7ED3\u679C");
+    }
+    const text = textOf(event.delta ?? event.text ?? event.content ?? event.output ?? event.response ?? event.result ?? event.message) ?? blockTextOf(blocks);
+    if (text) {
+      const id2 = `jsonl-${++this.textSequence}`;
+      cb2.onLog("assistant_text", text.slice(0, 400), { full: text, id: id2 });
+      cb2.onStatusChange("WORKING", "\u751F\u6210\u56DE\u590D");
+    } else if (!type || type === "log" || type === "progress" || type === "status") {
+      cb2.onStatusChange("WORKING", "\u5F15\u64CE\u8FD0\u884C\u4E2D");
+    }
+    const message = event.message && typeof event.message === "object" ? event.message : void 0;
+    const usage = usageOf(event.usage ?? message?.usage ?? event.stats);
+    if (usage) {
+      cb2.onUsage(usage);
+      cb2.onContext?.(usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens);
+    }
+    const todos = Array.isArray(event.todos) ? event.todos : void 0;
+    if (todos) cb2.onTodos(todos);
+    const terminal = type.includes("done") || type.includes("complete") || type === "result" || type === "finish" || event.done === true;
+    if (terminal && !this.turnTerminal) {
+      this.turnTerminal = true;
+      cb2.onTurnEnd(true, textOf(event.message) ?? "success", 0);
+    }
+  }
+};
+function safeProviderEnv(profile) {
+  const env = {};
+  if (profile?.apiKeyEnv) env[profile.apiKeyEnv] = process.env[profile.apiKeyEnv];
+  if (profile?.baseUrlEnv) env[profile.baseUrlEnv] = process.env[profile.baseUrlEnv];
+  return Object.fromEntries(Object.entries(env).filter(([, value]) => value !== void 0));
+}
+function preflightEngine(config) {
+  const errors = [];
+  const warnings = [];
+  if (!config.command.trim()) errors.push("\u672A\u914D\u7F6E CLI \u547D\u4EE4");
+  if (config.command.includes("/") || config.command.includes("\\")) {
+    try {
+      accessSync2(config.command, constants4.X_OK);
+    } catch {
+      errors.push("CLI \u547D\u4EE4\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u6267\u884C");
+    }
+  } else if (config.command.trim()) {
+    const probe = spawnSync("which", [config.command], { stdio: "ignore" });
+    if (probe.status !== 0) errors.push("CLI \u672A\u5728\u5F53\u524D PATH \u63A2\u6D4B\u5230");
+  }
+  if (config.provider?.baseUrl) {
+    try {
+      new URL(config.provider.baseUrl);
+    } catch {
+      errors.push("base URL \u65E0\u6CD5\u89E3\u6790");
+    }
+  }
+  if (config.provider?.apiKeyEnv && !process.env[config.provider.apiKeyEnv]) {
+    errors.push(`provider \u5BC6\u94A5\u73AF\u5883\u53D8\u91CF\u672A\u8BBE\u7F6E: ${config.provider.apiKeyEnv}`);
+  }
+  if (config.provider?.baseUrlEnv && !process.env[config.provider.baseUrlEnv]) {
+    errors.push(`provider base URL \u73AF\u5883\u53D8\u91CF\u672A\u8BBE\u7F6E: ${config.provider.baseUrlEnv}`);
+  }
+  if (!config.command.includes("/") && !config.command.includes("\\")) {
+    warnings.push("\u547D\u4EE4\u5B58\u5728\u6027\u9700\u5728\u76EE\u6807\u8FD0\u884C\u73AF\u5883 PATH \u4E2D\u6838\u9A8C");
+  }
+  return { ok: errors.length === 0, command: config.command, errors, warnings };
+}
+var JsonProcessAgentSession = class {
+  id = randomUUID7();
+  startedAt = Date.now();
+  stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  ended = false;
+  proc = null;
+  pid;
+  queued = [];
+  stopping = false;
+  initialized = false;
+  contextPacket;
+  stderrTail = "";
+  mapper = new GenericJsonEventMapper();
+  jsonCandidateLines = [];
+  // B1a 畸形行计数：JSONL 档单行解析失败跳过并计数（不中断流）。批量纯函数面
+  // mapJsonlStream 同口径供 fixture 直跑断言；此处是流式会话侧的落地
+  malformedLines = 0;
+  opts;
+  get childPid() {
+    return this.pid;
+  }
+  /** 本会话累计的畸形行数（单行解析失败被跳过的行；诊断面用，不影响流） */
+  get malformedLineCount() {
+    return this.malformedLines;
+  }
+  constructor(opts) {
+    this.opts = opts;
+    this.contextPacket = opts.contextPacket ?? `CC Deck context packet
+engine=${opts.label}
+cwd=${opts.cwd}`;
+    if (opts.initialPrompt !== void 0) this.execTurn(opts.initialPrompt);
+  }
+  sendMessage(text, _images, echo) {
+    if (this.ended) return;
+    this.opts.cb.onLog("user_message", echo ?? text.slice(0, 200), { full: echo ?? text });
+    if (this.proc) {
+      this.queued.push(text);
+      return;
+    }
+    this.execTurn(text);
+  }
+  allow() {
+    return false;
+  }
+  deny() {
+    return false;
+  }
+  answer() {
+    return false;
+  }
+  hasPending() {
+    return false;
+  }
+  async setPermissionMode() {
+  }
+  async stop() {
+    if (this.ended) return;
+    this.stopping = true;
+    this.ended = true;
+    this.queued = [];
+    const pid = this.pid;
+    this.proc = null;
+    this.pid = void 0;
+    this.opts.cb.onSessionEnd("stopped");
+    if (pid) await killTree(pid).catch(() => {
+    });
+  }
+  promptFor(text) {
+    return `${this.contextPacket}
+
+\u5F53\u524D\u7528\u6237\u6D88\u606F:
+${text}`;
+  }
+  execTurn(text) {
+    const prompt = this.promptFor(text);
+    const command = this.opts.command ?? this.opts.label;
+    const args = this.buildArgs(prompt);
+    const env = {
+      ...childEnv(),
+      ...safeProviderEnv(this.opts.providerProfile),
+      ...this.opts.env,
+      CCR_ENGINE: this.opts.label
+    };
+    let child;
+    try {
+      child = spawn4(command, args, { cwd: this.opts.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    } catch (error) {
+      this.fail(`\u542F\u52A8\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    this.proc = child;
+    this.pid = child.pid;
+    this.stderrTail = "";
+    this.mapper = new GenericJsonEventMapper();
+    this.jsonCandidateLines = [];
+    if (!this.initialized) {
+      queueMicrotask(() => {
+        if (this.initialized || this.ended) return;
+        this.initialized = true;
+        this.opts.cb.onInit(this.id, this.opts.model);
+      });
+    }
+    this.opts.cb.onStatusChange("WORKING", `${this.opts.label} \u542F\u52A8\u4E2D`);
+    const framer = splitUtf8Lines();
+    const lines = [];
+    child.stdout?.on("data", (chunk) => {
+      for (const line of framer.push(chunk)) {
+        lines.push(line);
+        this.handleLine(line);
+      }
+    });
+    child.stderr?.on("data", (chunk) => {
+      this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-500);
+    });
+    child.on("error", (error) => this.fail(`\u8FDB\u7A0B\u9519\u8BEF: ${error.message}`));
+    child.on("close", (code) => {
+      for (const line of framer.flush()) {
+        lines.push(line);
+        this.handleLine(line);
+      }
+      if (this.jsonCandidateLines.length > 1) {
+        const fallback = parseJsonDocument(this.jsonCandidateLines);
+        if (fallback.length === 1) {
+          this.mapper.handle(fallback[0], this.mapperCallbacks());
+        } else if (fallback.length === 0) {
+          this.malformedLines += this.jsonCandidateLines.length;
+          this.opts.cb.onLog(
+            "system",
+            `${this.opts.label}: ${this.jsonCandidateLines.length} \u884C\u65E0\u6CD5\u89E3\u6790\u4E3A JSON\uFF0C\u5DF2\u8DF3\u8FC7`,
+            { full: this.jsonCandidateLines.map((l) => l.slice(0, 120)).join("\n") }
+          );
+        }
+      }
+      this.proc = null;
+      this.pid = void 0;
+      if (this.stopping) return;
+      if (!this.mapper.turnTerminal) {
+        if (code === 0) {
+          this.mapper.turnTerminal = true;
+          this.opts.cb.onTurnEnd(true, "success", 0);
+        } else {
+          const detail = this.stderrTail.trim().split("\n").at(-1) || `\u9000\u51FA\u7801 ${code ?? "unknown"}`;
+          this.opts.cb.onLog("system", `${this.opts.label}: ${detail}`, { full: detail });
+          this.opts.cb.onStatusChange("ERROR", detail);
+          this.mapper.turnTerminal = true;
+          this.opts.cb.onTurnEnd(false, `${this.opts.label}: ${detail}`, 0);
+        }
+      }
+      if (!this.initialized) {
+        this.initialized = true;
+        this.opts.cb.onInit(this.id, this.opts.model);
+      }
+      if (this.queued.length > 0 && !this.ended) {
+        const next = this.queued.shift();
+        this.execTurn(next);
+      }
+    });
+    child.stdin?.on("error", () => {
+    });
+    child.stdin?.end(prompt, "utf8");
+  }
+  handleLine(line) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      if (this.jsonCandidateLines.length > 0 || line.startsWith("{") || line.startsWith("[")) {
+        this.jsonCandidateLines.push(line);
+        return;
+      }
+      this.opts.cb.onLog("assistant_text", line.slice(0, 400), { full: line });
+      this.opts.cb.onStatusChange("WORKING", "\u5F15\u64CE\u8F93\u51FA\u4E2D");
+      return;
+    }
+    this.jsonCandidateLines = [];
+    this.mapper.handle(parsed, this.mapperCallbacks());
+  }
+  mapperCallbacks() {
+    return {
+      ...this.opts.cb,
+      onInit: (id2, model, permission) => {
+        this.initialized = true;
+        this.opts.cb.onInit(id2 === "external" ? this.id : id2, model === "unknown" ? this.opts.model : model, permission);
+      }
+    };
+  }
+  fail(message) {
+    if (this.stopping || this.ended) return;
+    this.mapper.turnTerminal = true;
+    this.opts.cb.onLog("system", message, { full: message });
+    this.opts.cb.onStatusChange("ERROR", message);
+    this.opts.cb.onTurnEnd(false, message, 0);
+  }
+};
+
+// src/agent-trae.ts
+var TRAE_CAPABILITIES = {
+  resume: false,
+  reinjection: true,
+  approval: false,
+  images: false,
+  usage: false,
+  todos: false,
+  artifacts: false,
+  streaming: false
+};
+var TRAE_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var TraeAgentSession = class extends JsonProcessAgentSession {
+  constructor(opts) {
+    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli" });
+  }
+  buildArgs(prompt) {
+    return ["run", prompt];
+  }
+};
+function preflightTrae(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
+}
+function createTraeAgent(opts) {
+  return new TraeAgentSession(opts);
+}
+
+// src/agent-qwen.ts
+var QWEN_CODE_CAPABILITIES = {
+  resume: false,
+  reinjection: true,
+  approval: false,
+  images: false,
+  usage: true,
+  todos: false,
+  artifacts: false,
+  streaming: false
+};
+var QWEN_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var QwenCodeAgentSession = class extends JsonProcessAgentSession {
+  constructor(opts) {
+    super({ ...opts, label: "qwen-code", command: opts.command ?? process.env.CCR_QWEN_PATH ?? "qwen" });
+  }
+  buildArgs(prompt) {
+    return ["-p", prompt, "--output-format", "json"];
+  }
+};
+function preflightQwen(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_QWEN_PATH ?? "qwen", provider: config?.provider });
+}
+function createQwenCodeAgent(opts) {
+  return new QwenCodeAgentSession(opts);
+}
+
+// src/agent-codebuddy.ts
+var CODEBUDDY_CAPABILITIES = {
+  resume: false,
+  reinjection: true,
+  approval: false,
+  images: false,
+  usage: false,
+  todos: false,
+  artifacts: false,
+  streaming: false
+};
+var CODEBUDDY_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var CodeBuddyAgentSession = class extends JsonProcessAgentSession {
+  constructor(opts) {
+    super({ ...opts, label: "codebuddy", command: opts.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code" });
+  }
+  buildArgs(prompt) {
+    return ["--print", prompt, "--output-format", "stream-json"];
+  }
+};
+function preflightCodeBuddy(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", provider: config?.provider });
+}
+function createCodeBuddyAgent(opts) {
+  return new CodeBuddyAgentSession(opts);
+}
+
+// src/agent-zcode.ts
+var ZCODE_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: false,
+  native_elapsed: false,
+  approval: false
+};
+
+// src/engine-registry.ts
+function profileFor(engine, provider) {
+  if (!provider) return void 0;
+  const key = engine.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  const apiKeyEnv = process.env[`CCR_${key}_API_KEY_ENV`];
+  const baseUrlEnv = process.env[`CCR_${key}_BASE_URL_ENV`];
+  return { provider, ...apiKeyEnv ? { apiKeyEnv } : {}, ...baseUrlEnv ? { baseUrlEnv } : {} };
+}
+var definitions = {
+  trae: {
+    id: "trae",
+    label: "Trae",
+    capabilities: TRAE_CAPABILITIES,
+    reinjection: true,
+    create: (opts) => createTraeAgent(opts),
+    preflight: (provider) => preflightTrae({ provider })
+  },
+  "qwen-code": {
+    id: "qwen-code",
+    label: "Qwen Code",
+    capabilities: QWEN_CODE_CAPABILITIES,
+    reinjection: true,
+    create: (opts) => createQwenCodeAgent(opts),
+    preflight: (provider) => preflightQwen({ provider })
+  },
+  codebuddy: {
+    id: "codebuddy",
+    label: "CodeBuddy Code",
+    capabilities: CODEBUDDY_CAPABILITIES,
+    reinjection: true,
+    create: (opts) => createCodeBuddyAgent(opts),
+    preflight: (provider) => preflightCodeBuddy({ provider })
+  }
+};
+function isSessionEngine(value) {
+  return value === "claude" || value === "codex" || value === "trae" || value === "qwen-code" || value === "codebuddy" || value === "zcode";
+}
+function isReinjectionEngine(value) {
+  return value === "trae" || value === "qwen-code" || value === "codebuddy";
+}
+function getEngineDefinition(engine) {
+  return engine in definitions ? definitions[engine] : void 0;
+}
+function createRegisteredEngine(engine, opts) {
+  const definition = getEngineDefinition(engine);
+  if (!definition) return void 0;
+  const check = definition.preflight(opts.providerProfile ?? profileFor(engine, opts.provider));
+  if (!check.ok) throw new Error(`${definition.label} preflight \u5931\u8D25: ${check.errors.join("\uFF1B")}`);
+  return definition.create(opts);
+}
+function providerProfileFor(engine, provider) {
+  return profileFor(engine, provider);
 }
 
 // src/session-manager.ts
@@ -41867,7 +44329,12 @@ function sanitizeImportPushEntry(raw) {
   }
   return { kind, wsUrl, ...token ? { token } : {}, ...cloud ? { cloud } : {} };
 }
-function resolveCreateCwd(rawCwd, defaultCwd) {
+function expandHome(p) {
+  if (p === "~") return homedir8();
+  if (p.startsWith("~/")) return join17(homedir8(), p.slice(2));
+  return p;
+}
+function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const isUsableDir = (p) => {
     if (!p) return false;
     try {
@@ -41876,22 +44343,37 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
       return false;
     }
   };
-  const wanted = (rawCwd || "").trim();
-  const def = (defaultCwd || "").trim();
+  const tryMkdir = (abs) => {
+    try {
+      mkdirSync11(abs, { recursive: true });
+      return isUsableDir(abs);
+    } catch {
+      return false;
+    }
+  };
+  const wanted = expandHome((rawCwd || "").trim());
+  const def = expandHome((defaultCwd || "").trim());
+  let mkdirFailed = false;
   if (wanted) {
-    const abs = resolve6(wanted);
+    const abs = resolve7(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
+    if (autoMkdir) {
+      if (tryMkdir(abs)) {
+        return { cwd: abs, fallbackNote: `\u5DE5\u4F5C\u76EE\u5F55 ${abs} \u539F\u4E0D\u5B58\u5728\uFF0C\u5DF2\u6309\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5F00\u5173\u521B\u5EFA` };
+      }
+      mkdirFailed = true;
+    }
   }
   if (def) {
-    const abs = resolve6(def);
+    const abs = resolve7(def);
     if (isUsableDir(abs)) {
-      const note = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve6(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
+      const note = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
       return { cwd: abs, fallbackNote: note };
     }
   }
-  const home = homedir6();
-  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve6(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
-  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve6(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
+  const home = homedir8();
+  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve7(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const wantedDesc = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C${defDesc}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
   const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
@@ -41930,7 +44412,7 @@ function sanitizeFiles(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync9(join10(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync15(join17(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41941,13 +44423,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync5(join10(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync12(join17(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync9(join10(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync15(join17(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41958,14 +44440,14 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync5(join10(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync12(join17(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 var DELIVERABLES_CAP = 300;
 function readDeliverables(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync9(join10(dataDir2, "deliverables.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync15(join17(dataDir2, "deliverables.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter(
       (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
     ) : [];
@@ -41977,13 +44459,13 @@ function appendDeliverable(dataDir2, e) {
   const list = readDeliverables(dataDir2).filter((x) => !(x.sid === e.sid && x.path === e.path));
   list.push(e);
   try {
-    writeFileSync5(join10(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    writeFileSync12(join17(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
   } catch {
   }
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync9(join10(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync15(join17(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -41996,11 +44478,11 @@ function readTitleOverrides(dataDir2) {
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
-  return join10(dataDir2, "pinned-sessions.json");
+  return join17(dataDir2, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync9(pinnedSessionsPath(dataDir2), "utf-8"));
+    const raw = JSON.parse(readFileSync15(pinnedSessionsPath(dataDir2), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -42008,13 +44490,14 @@ function readPinnedSessions(dataDir2) {
 }
 function writePinnedSessions(dataDir2, ids) {
   try {
-    writeFileSync5(pinnedSessionsPath(dataDir2), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
+    writeFileSync12(pinnedSessionsPath(dataDir2), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
   } catch {
   }
 }
 var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
+var ARTIFACT_STAT_INTERVAL_MS = 2e4;
 var MAX_SESSIONS = 20;
 var ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
 var ARTIFACT_CHUNK_BYTES = 512 * 1024;
@@ -42066,6 +44549,20 @@ function resumePendingWindowMs() {
   const v = Number(process.env.CCR_RESUME_PENDING_MS);
   return Number.isFinite(v) && v >= 5e3 ? v : 45e3;
 }
+function resumeInitTimeoutMs() {
+  const v = Number(process.env.CCR_RESUME_INIT_MS);
+  return Number.isFinite(v) && v >= 100 ? v : 45e3;
+}
+function transcriptHasAssistant(cwd, sdkId, configHome) {
+  try {
+    const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
+    const base = configHome ?? join17(homedir8(), ".claude");
+    const p = join17(base, "projects", slug, `${sdkId}.jsonl`);
+    return readFileSync15(p, "utf-8").includes('"type":"assistant"');
+  } catch {
+    return false;
+  }
+}
 function watchdogDisabled() {
   return process.env.CCR_WATCHDOG_DISABLE === "1";
 }
@@ -42075,9 +44572,14 @@ var SessionManager = class {
   constructor(bus2, cfg2) {
     this.bus = bus2;
     this.cfg = cfg2;
+    this.allowRules = new AllowRuleStore(cfg2.dataDir);
+    this.allowRules.onChange = () => this.bus.emitTransient("ALLOW_RULES_UPDATED", { rules: this.allowRules.list() });
     this.childSdkIds = new Set(readChildSessions(cfg2.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg2.dataDir));
     this.titleOverrides = readTitleOverrides(cfg2.dataDir);
+    this.loadNotifications();
+    this.reconcileOrphanConfirms();
+    setConfirmCreatedHook((c2) => this.recordOrgConfirmNotification(c2));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -42085,6 +44587,8 @@ var SessionManager = class {
       this.pollTaskStore();
     }, CRON_POLL_INTERVAL_MS);
     c.unref();
+    const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
+    r.unref();
   }
   bus;
   sessions = /* @__PURE__ */ new Map();
@@ -42098,8 +44602,30 @@ var SessionManager = class {
   childSdkIds;
   deletedExtIds;
   titleOverrides;
+  // #018-R1c 决策通知账（结构化投影）：内存 Map + notifications.json 持久。
+  // 与 decision-notify watcher 的文本推送通道（decision-notifications.json）并存
+  // 不冲突——那边管「注入会话的提醒文本」，这边管「端上通知列表的结构化数据源」
+  notifications = /* @__PURE__ */ new Map();
+  notificationsJson = "";
+  // 上次投影的序列化基线（值变才发帧的 dedup 锚）
+  // #26 矩阵式 M1：组织 Leader 常驻态。leaderId = 当前 Leader 的 relay 会话 id
+  //（isLeaderSession 的内存匹配源——COMMAND_MESSAGE/onTurnEnd 高频路径零盘 IO）；
+  // ensureLeader 维护，onInit 不重置（resume 换流只会话对象换、relay id 不变）。
+  // leaderOpenDispatch = 进行中派单 id FIFO（M2 泛化为 openDispatches：按会话键一
+  // FIFO——Leader=咨询档同机制复用，worker=派单承接；回合串行，消息数=回合数。
+  // 值带收口所需 tier/gid/anchor：收口行写回真实档位，gid 联动任务板搬卡）
+  openDispatches = /* @__PURE__ */ new Map();
+  leaderId = null;
+  leaderEnsured = false;
+  // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
+  // boot 调一次，无此入口则开火清场后要等 relay 下次重启才有 Leader（长跑进程失聪）
+  leaderBootRetries = 0;
+  // #26 M3 挂起自动化扫描节拍（boot + 每小时；startStaleScan 起，CCR_ORG_STALE_DAYS=0 不起）
+  staleTimer = null;
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   cfg;
+  /** #212 允许并记住：规则存储单例（Bridge / AgentSession / HTTP API 三方共用同一份） */
+  allowRules;
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
   // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
   // 与休眠登记路径，免拉真 CLI 子进程
@@ -42107,8 +44633,36 @@ var SessionManager = class {
   setAgentFactory(fn) {
     this.agentFactory = fn;
   }
+  // #17 雇员独立家：雇员会话（Leader/worker/随手办）生效的 CLAUDE_CONFIG_DIR；
+  // 非雇员或未启用开关（cfg.employeeConfigDir=null）返回 undefined = 用户默认家。
+  // spawn（create/resume/fresh 回退/reviveSaved）与读取路径（transcript 判记忆、
+  // 任务清单轮询）统一经此选家。
+  // #17 第二批根治（三角度审查共识）：会话创建时落定的家（employee_home）优先
+  // 于当前配置推导——开关翻转只影响新会话，存量按记录走；无记录 = 关态/pre-#17
+  // 创建（即默认家），切换天然无损，不再出现「换家后存量 resume 找不到会话」
+  employeeHome(state) {
+    return state.employee_home ?? void 0;
+  }
   newAgent(cwd, model, cb2, initialPrompt, opts) {
-    return this.agentFactory ? this.agentFactory(cwd, model, cb2, initialPrompt, opts) : new AgentSession(cwd, model, cb2, initialPrompt, opts);
+    if (opts?.engine && opts.engine !== "claude" && opts.engine !== "codex") {
+      const registered = createRegisteredEngine(opts.engine, {
+        cwd,
+        model,
+        provider: opts.provider,
+        cb: cb2,
+        initialPrompt,
+        contextPacket: opts.role ? `role=${opts.role}
+provider=${opts.provider ?? "default"}` : void 0,
+        providerProfile: providerProfileFor(opts.engine, opts.provider)
+      });
+      if (registered) return registered;
+      throw new Error(`\u672A\u6CE8\u518C\u5F15\u64CE: ${opts.engine}`);
+    }
+    if (opts?.engine === "codex") {
+      return this.agentFactory ? this.agentFactory(cwd, model, cb2, initialPrompt, { engine: "codex", resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images }) : new CodexAgentSession(cwd, model, cb2, initialPrompt, { resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images });
+    }
+    const withRules = { ...opts, rules: this.allowRules };
+    return this.agentFactory ? this.agentFactory(cwd, model, cb2, initialPrompt, withRules) : new AgentSession(cwd, model, cb2, initialPrompt, withRules);
   }
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
   ownsCliSession(cliSid) {
@@ -42120,7 +44674,277 @@ var SessionManager = class {
     return this.deletedExtIds.has(id2);
   }
   snapshot() {
-    return [...this.sessions.values()].map((s) => this.cloneState(s));
+    return [...this.sessions.values()].map((s) => {
+      const c = this.cloneState(s);
+      if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+      return c;
+    });
+  }
+  // #17 第二批：雇员独立家开关（三端设置项后端）。热生效不重启——写
+  // settings.json → cfg 重推导 → 广播 SETTINGS_UPDATED；此后新会话立即用新家，
+  // 存量会话按各自 employee_home 记录走（不受翻转影响）。env 显式设置（部署
+  // 覆盖面）时设置项锁定：拒改并给可读指引
+  applyEmployeeHome(enabled) {
+    const cur = resolveEmployeeHome(this.cfg.dataDir);
+    if (cur.source === "env") {
+      return { ok: false, error: `\u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u7531\u73AF\u5883\u53D8\u91CF CCR_EMPLOYEE_CONFIG_DIR \u663E\u5F0F\u8BBE\u5B9A\uFF08${cur.value ?? "\u503C\u975E\u6CD5\uFF0C\u6309\u5173\u95ED\u5904\u7406"}\uFF09\uFF0C\u8BBE\u7F6E\u9879\u88AB\u90E8\u7F72\u9501\u5B9A\u2014\u2014\u8BF7\u8C03\u6574\u73AF\u5883\u53D8\u91CF\u540E\u91CD\u542F relay` };
+    }
+    if (!writeSettingsFile(this.cfg.dataDir, { employeeHome: enabled })) {
+      return { ok: false, error: "settings.json \u5199\u76D8\u5931\u8D25\uFF08\u76D8\u6EE1/\u6743\u9650\uFF1F\uFF09" };
+    }
+    const next = resolveEmployeeHome(this.cfg.dataDir);
+    this.cfg.employeeConfigDir = next.value;
+    const payload = { employee_home: next.enabled, value: next.value, source: next.source };
+    this.bus.emitTransient("SETTINGS_UPDATED", payload);
+    return { ok: true, data: payload };
+  }
+  // SNAPSHOT.settings / 设置页数据源（每次现算：env/文件/默认三层合成）
+  employeeHomeState() {
+    const st2 = resolveEmployeeHome(this.cfg.dataDir);
+    return { employee_home: st2.enabled, value: st2.value, source: st2.source };
+  }
+  // ---------- #018-R1c 决策通知账（产生/生命周期/投影三段，B3a 纯函数只消费） ----------
+  // 数据面：NOTIFICATIONS_UPDATED 瞬态帧（全量替换语义）+ SNAPSHOT.notifications
+  //（ws-server 与 cloud-client 两处快照组装同源取 notificationsList()，#117 教训）。
+  // 与 M4 DISPATCH_DONE / ORG_CONFIRM_UPDATED 等既有瞬时通道并存：那些管在线弹，
+  // 这边持久落账管离线兜底与列表沉淀（任务书对账：不双发靠 stableKey 一单一行）。
+  notificationsPath() {
+    return join17(this.cfg.dataDir, "notifications.json");
+  }
+  // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
+  // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
+  notificationsList() {
+    return [...this.notifications.values()].sort((a, b) => a.created_at - b.created_at || (a.key < b.key ? -1 : 1));
+  }
+  // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
+  loadNotifications() {
+    try {
+      const raw = JSON.parse(readFileSync15(this.notificationsPath(), "utf-8"));
+      const list = Array.isArray(raw.notifications) ? raw.notifications : [];
+      for (const item of list) {
+        if (item && typeof item.key === "string" && item.key) this.notifications.set(item.key, item);
+      }
+    } catch {
+    }
+    this.trimNotifications();
+    this.notificationsJson = JSON.stringify(this.notificationsList());
+  }
+  // 上限纪律（仿 org confirms 只留 200 条已决）：未决全留 + 最近 200 条已决
+  trimNotifications() {
+    const all = [...this.notifications.values()].sort((a, b) => a.created_at - b.created_at || (a.key < b.key ? -1 : 1));
+    const resolved = all.filter((n) => n.resolved_at !== void 0 || n.handled_at !== void 0 || n.dismissed_at !== void 0);
+    for (const n of resolved.slice(0, Math.max(0, resolved.length - 200))) this.notifications.delete(n.key);
+  }
+  persistNotifications() {
+    this.trimNotifications();
+    try {
+      mkdirSync11(this.cfg.dataDir, { recursive: true });
+      writeFileSync12(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
+    } catch (e) {
+      console.warn(`[notify] \u901A\u77E5\u8D26\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // 值变才发（R1a applyActivity 同款 dedup 纪律）：序列化比对，集合无变不发帧
+  projectNotifications() {
+    const json = JSON.stringify(this.notificationsList());
+    if (json === this.notificationsJson) return;
+    this.notificationsJson = json;
+    this.bus.emitTransient("NOTIFICATIONS_UPDATED", { items: JSON.parse(json) });
+  }
+  // 产生源统一入口：B3a stableKey 防重——同 key 已在账即静默（重复事件/重放不双发，
+  // 已决议的账同 key 重放也不复活）。revision 语义对齐 B3a：org-confirm=created_at、
+  // waiting=request_id、dispatch 无 revision（一单一行）
+  upsertNotification(kind, entityId, revision, seed) {
+    const key = stableKey(kind, entityId, revision);
+    if (this.notifications.has(key)) return;
+    const item = {
+      key,
+      kind,
+      group: seed.group,
+      severity: seed.severity,
+      title: seed.title,
+      body: seed.body,
+      sourceContext: {
+        domain: seed.domain,
+        entityId,
+        ...seed.sessionId ? { sessionId: seed.sessionId } : {},
+        alertId: key,
+        returnPath: seed.returnPath
+      },
+      actionable: seed.actionable,
+      created_at: Date.now()
+    };
+    this.notifications.set(key, item);
+    this.persistNotifications();
+    this.projectNotifications();
+  }
+  // 生命周期收口：matcher 定位（org-confirm 按 confirm id、waiting 按会话），
+  // transitionNotification 只填空位（幂等）；已 resolved 的账跳过（ACK 不复活）。
+  // action 用 B3a 词表：source_succeeded（=handled）/dismissed/resolved
+  transitionNotifications(match, action) {
+    const at = Date.now();
+    let changed = false;
+    for (const n of [...this.notifications.values()]) {
+      if (!match(n) || n.resolved_at !== void 0) continue;
+      const next = transitionNotification(n, action, at);
+      if (JSON.stringify(next) !== JSON.stringify(n)) {
+        this.notifications.set(n.key, next);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.persistNotifications();
+      this.projectNotifications();
+    }
+  }
+  // COMMAND_NOTIFICATION_ACK 后端（B0 冻结 action 词表 handled|dismissed；resolved
+  // 由来源事件驱动不经此）。已 resolved 的账幂等 ok 不复活；未知 key 拒收
+  notificationAck(key, action) {
+    const item = this.notifications.get(key);
+    if (!item) return { ok: false, error: `\u901A\u77E5\u4E0D\u5B58\u5728: ${key.slice(0, 48)}` };
+    if (item.resolved_at !== void 0) return { ok: true };
+    this.transitionNotifications((n) => n.key === key, action === "dismissed" ? "dismissed" : "source_succeeded");
+    return { ok: true };
+  }
+  // R1c 源②同步点：WAITING 在等 → 产生（stableKey=waiting:session:request，同请求
+  // 重放天然去重）；不在等（决议翻回/终态）→ 该会话未决 waiting 账全 resolved。
+  // onWaiting/onStatusChange/onWaitingResolved/onTurnEnd/onSessionEnd 五路共用，
+  // 勿在回调里散写迁移
+  syncWaitingNotification(managed) {
+    const req = managed.state.waiting_request;
+    if (managed.state.status === "WAITING" && req) {
+      this.upsertNotification("waiting", managed.state.session_id, req.request_id, {
+        title: `\u7B49\u5F85\u6279\u51C6 ${req.tool_name}`,
+        body: req.input_summary,
+        severity: "waiting",
+        group: "action",
+        actionable: req.decidable !== false,
+        // 仅通知形态（decidable=false）不可端上决议
+        sessionId: managed.state.session_id,
+        domain: "session",
+        returnPath: "session"
+      });
+      return;
+    }
+    this.transitionNotifications((n) => n.kind === "waiting" && n.sourceContext.sessionId === managed.state.session_id, "resolved");
+  }
+  // #018-R1FIX1 P1-1 org-confirm 单一产生适配口：projects.addConfirm 是全部确认单
+  // 的唯一产生咽喉（立项/结项/档位/暂缓/自动暂缓），构造器经 setConfirmCreatedHook
+  // 把每张新卡同步入账。此前仅 orgCommand("create") 接了账（R1c 源①），旧 orgAction
+  // 四入口与自动暂缓建议落单只在 confirms.json 可见，三端结构化通知面漏项、离线端
+  // 重启后无账可还原（PM R1 终审 P1-1）。stableKey=org-confirm:<id>:<created_at>，
+  // 同 key 重放天然去重（B3a 口径）
+  recordOrgConfirmNotification(confirm) {
+    this.upsertNotification("org-confirm", confirm.id, String(confirm.created_at), {
+      title: confirm.title,
+      body: confirm.reason,
+      severity: "waiting",
+      group: "action",
+      actionable: true,
+      sessionId: this.leaderId ?? void 0,
+      domain: "org",
+      returnPath: "org"
+    });
+  }
+  // #018-R1FIX1 P2-1 superseded waiting 精确收口：按 (session, request_id) 只关旧
+  // key。场景：req-1 在等时 req-2 已替代（状态机守卫正确不动当前请求），迟到的
+  // req-1 resolved 若走 syncWaitingNotification 会被「仍在等」分支挡住——旧 key
+  // 永久悬挂成假 action、端上 badge 虚高。matcher 带 request_id 精确匹配，绝不清
+  // 当前 req-2
+  resolveWaitingNotification(sessionId, requestId) {
+    this.transitionNotifications(
+      (n) => n.kind === "waiting" && n.sourceContext.sessionId === sessionId && n.key === stableKey("waiting", sessionId, requestId),
+      "resolved"
+    );
+  }
+  // #018-R1FIX1 P2-2 确认副作用失败语义：原确认项不 resolved，同 key 原地转 error
+  // 告警面——「决议已落 + 执行失败」结构化告警，重启后仍可见、可 ACK handled/
+  // dismissed 收口。transitionNotification 只填空位的幂等纪律在此不适用（severity/
+  // title 需覆写），本方法是通知账段内专用收口点：Map 写点仍集中在本段，单写者
+  // 纪律不变（P3-1 口径）。原账缺失（异常清理）时静默——失败事实已由 ACK/审计面
+  // 与 COMMAND 错误回执承载
+  failConfirmNotification(confirm, what, error) {
+    const key = stableKey("org-confirm", confirm.id, String(confirm.created_at));
+    const item = this.notifications.get(key);
+    if (!item || item.resolved_at !== void 0) return;
+    const next = {
+      ...item,
+      severity: "error",
+      title: `\u51B3\u8BAE\u6267\u884C\u5931\u8D25\uFF1A${item.title}`,
+      body: `${what}\u5931\u8D25: ${error}\uFF08\u51B3\u8BAE\u5DF2\u7559\u75D5 ${confirm.status}\uFF1B\u53EF\u7528 org set \u76F4\u8FBE\u901A\u9053\u8865\u6551\uFF0C\u5904\u7406\u540E\u53EF ACK \u6536\u53E3\uFF09`
+    };
+    if (JSON.stringify(next) === JSON.stringify(item)) return;
+    this.notifications.set(key, next);
+    this.persistNotifications();
+    this.projectNotifications();
+  }
+  // #018-R1FIX1 P2-5 org-confirm 孤儿对账（启动时对事实源）：确认单被外部清理/
+  // 损坏后，通知账 pending 项会永久悬挂成假 action——转 resolved 并在 body 记
+  // 「孤儿对账」原因。范围收窄备案：只对账「确认单彻底不在事实源」的孤儿；事实源
+  // 里已决议的 pending 通知不在此收口——那是 P2-2 error 告警面的载体（副作用失败
+  // = 决议已落 + 通知未决），启动对账若一并收口会让 P2-2 的「重启后可见」失效。
+  // 事实源文件整体缺失（org 目录未建/换域挂载）不判孤儿——防 org 目录错配时误收
+  // 口全部在决项。只对账不删除，审计面不动。
+  // #018-R1FIX2 P2-5/P2-6 闸门加固（PM 复审）：existsSync 只挡「当前路径完全没有
+  // 文件」——文件在但读取/JSON 失败时 listConfirms 回退空集合、或 CCR_ORG_DIR 指
+  // 到另一个已有 confirms.json 的域，都会把全部 pending org-confirm 批量误标
+  // resolved。fail-closed 总则：误收口的代价 = 丢用户确认提醒；漏收口的代价 = 假
+  // pending 留着、用户点进去 discover 拒收——取后者。七档判定：文件不存在 / 读
+  // 异常 / 解析失败 / 根值非对象 / confirms 非数组 / 条目缺有效 id / 空清单（空与
+  // 「刚被清空的外域」证明力等价，不足）→ 一律不对账（保留通知）；仅「非空且全部
+  // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
+  //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
+  //，跨域误指无法在数据层比对——不硬造，以「非空才对账」收窄误收口窗口
+  reconcileOrphanConfirms() {
+    const known = this.readConfirmsForReconcile();
+    if (!known) return;
+    const at = Date.now();
+    let changed = false;
+    for (const n of [...this.notifications.values()]) {
+      if (n.kind !== "org-confirm" || n.resolved_at !== void 0) continue;
+      if (known.has(n.sourceContext.entityId)) continue;
+      const next = transitionNotification(
+        { ...n, body: `${n.body}\uFF08\u5B64\u513F\u5BF9\u8D26\uFF1A\u786E\u8BA4\u5355\u5DF2\u4E0D\u5728\u4E8B\u5B9E\u6E90\uFF0C\u542F\u52A8\u5BF9\u8D26\u81EA\u52A8\u6536\u53E3\uFF09` },
+        "resolved",
+        at
+      );
+      this.notifications.set(n.key, next);
+      changed = true;
+    }
+    if (changed) {
+      this.persistNotifications();
+      this.projectNotifications();
+    }
+  }
+  // R1FIX2 对账闸门读取：null = 事实源证明力不足（不对账，保留通知）；Set = known
+  // id 集合（正常对账）。自治读文件而非经 listConfirms——后者的 catch-回退空正是
+  // P2-6 把「读失败」伪装成「空清单」再放行批量收口的通道，闸门处必须区分「读不
+  // 出来」与「真的没有」（只读消费 confirms.json 文件本身，projects.ts 结构不动）
+  readConfirmsForReconcile() {
+    const path6 = join17(orgDir(), "confirms.json");
+    if (!existsSync10(path6)) return null;
+    let raw;
+    try {
+      raw = readFileSync15(path6, "utf-8");
+    } catch {
+      return null;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (typeof parsed !== "object" || parsed === null) return null;
+    if (!Array.isArray(parsed.confirms)) return null;
+    const known = /* @__PURE__ */ new Set();
+    for (const c of parsed.confirms) {
+      const id2 = c?.id;
+      if (typeof id2 !== "string" || !id2) return null;
+      known.add(id2);
+    }
+    if (known.size === 0) return null;
+    return known;
   }
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
   // CC 自带的 session name 在本环境基本不生成，这里兜底；已有 CC 名时外部会话由 bridge 跳过
@@ -42128,15 +44952,15 @@ var SessionManager = class {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join10(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join17(this.cfg.dataDir, ".tmp-titlegen");
     try {
-      mkdirSync5(titleCwd, { recursive: true });
+      mkdirSync11(titleCwd, { recursive: true });
     } catch {
     }
     void generateTitle(task, this.cfg.model, (sid) => {
       this.childSdkIds.add(sid);
       appendChildSession(this.cfg.dataDir, sid);
-    }, titleCwd).then(({ title: t }) => {
+    }, titleCwd, this.sessions.get(sessionId)?.state.employee ? this.employeeHome(this.sessions.get(sessionId).state) : void 0).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
@@ -42216,7 +45040,7 @@ var SessionManager = class {
         rs2.state.title = ov2;
         rs2.state.title_locked = true;
       }
-      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
+      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
       this.applyDeclaredDeliverables(id2);
       adopted2++;
     }
@@ -42224,7 +45048,8 @@ var SessionManager = class {
   }
   // #75 无人值守连续性（2026-09-19 用户拍板最小闭环：不追求完善机制，先保证
   // 「重启后当前工作会话能被拉起继续干活」）：relay 启动收养历史托管会话后，凡
-  // CLI 任务存储（~/.claude/tasks/<cli_sid>/，权威源）里仍有未完成待办
+  // CLI 任务存储（按会话家：默认 ~/.claude 或雇员独立家的 tasks/<cli_sid>/，
+  // 权威源）里仍有未完成待办
   //（pending/in_progress）的托管会话，自动 resume 并注入续跑指令——不再依赖人
   // 发消息触发恢复。约束：外部会话不适用（用户终端自管，hooks 会重新接入）；
   // 无未完成待办的不拉（已收工/纯闲聊会话拉起来只会空转耗 token）；单次上限
@@ -42235,9 +45060,15 @@ var SessionManager = class {
     const candidates = [];
     for (const s of this.sessions.values()) {
       if (s.state.external || s.agent) continue;
+      if (s.state.org_parked) continue;
+      if (s.state.project_gid) {
+        const pg2 = findGroup(s.state.project_gid);
+        if (pg2 && pg2.status !== "active") continue;
+      }
+      if (this.isRetiredMember(s.state.session_id)) continue;
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
       if (!s.state.relay_session_id) continue;
-      const todos = readTaskStoreTodos(s.state.relay_session_id);
+      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
       if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
       if (Date.now() - s.state.updated_at > 48 * 36e5) continue;
       candidates.push({ s, updated: s.state.updated_at });
@@ -42324,7 +45155,7 @@ var SessionManager = class {
       state.title = ov2;
       state.title_locked = true;
     }
-    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
+    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
     this.applyDeclaredDeliverables(id2);
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -42345,6 +45176,7 @@ var SessionManager = class {
     const changed = s.state.status !== status;
     s.state.status = status;
     s.state.action_summary = summary;
+    if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
     if (changed || status === "WORKING") {
@@ -42404,6 +45236,7 @@ var SessionManager = class {
     if (!s) return false;
     const todos = [...s.state.todos ?? [], { content: `[\u5F85\u786E\u8BA4] ${text}`, status: "pending" }];
     this.setTodos(sessionId, todos);
+    this.bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
     return true;
   }
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
@@ -42494,9 +45327,9 @@ var SessionManager = class {
     if (!item.path || item.path === "(\u672A\u77E5\u6587\u4EF6)") return;
     const cwd = s.state.cwd || "";
     let p = item.path;
-    if (!isAbsolute4(p) && cwd) p = resolve6(cwd, p);
-    const adir = resolve6(artifactsDir()).toLowerCase();
-    if (!p.toLowerCase().startsWith(adir + sep5)) return;
+    if (!isAbsolute6(p) && cwd) p = resolve7(cwd, p);
+    const adir = resolve7(artifactsDir()).toLowerCase();
+    if (!p.toLowerCase().startsWith(adir + sep6)) return;
     const key = p.toLowerCase();
     const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     const idx = list.findIndex((a) => a.path.toLowerCase() === key);
@@ -42507,7 +45340,7 @@ var SessionManager = class {
     } catch {
       exists = false;
     }
-    const origin = cwd ? p === cwd || p.startsWith(cwd + sep5) ? "cwd" : "outside" : void 0;
+    const origin = cwd ? p === cwd || p.startsWith(cwd + sep6) ? "cwd" : "outside" : void 0;
     if (idx >= 0) {
       const a = list[idx];
       list[idx] = {
@@ -42548,27 +45381,42 @@ var SessionManager = class {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
   }
   // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
   // 不搬动），stat 补 size/exists；同路径重复登记幂等合并（tools 记「登记」，
   // 产物目录自动收录的条目并入同 key 不重复）。持久化 deliverables.json
-  registerDeliverable(sessionId, rawPath) {
+  // #72A0FIX2（P1-1B 剩余段收口）：①签名穿透校验闸快照——入参带
+  // validateDeliverablePath 的一次性快照时本侧不再 statSync（消「闸后二次 stat」
+  // 的 TOCTOU 剩余段：size 取快照值；unverified 快照 size=null → 账面不记尺寸，
+  // symlink 目标元数据不入账）；②失败不先落账——取证/校验全部通过前不碰
+  // deliverables.json（旧序 appendDeliverable 先于 stat，登记即失败也已写账）；
+  // ③unverified 标记随 ArtifactItem + deliverables.json 落账（applyDeclaredDeliverables
+  // 重启挂回还原），此前只到 HTTP 响应、重启即丢；重复登记以最新证据为准
+  registerDeliverable(sessionId, rawPath, snapshot) {
     const s = this.sessions.get(sessionId);
     if (!s) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
-    const p = resolve6(rawPath.trim());
-    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now() });
-    const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
-    const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
+    const p = resolve7(rawPath.trim());
     let size;
     let exists = true;
-    try {
-      size = statSync4(p).size;
-    } catch {
-      exists = false;
+    let unverified = false;
+    if (snapshot) {
+      if (!snapshot.ok) return { ok: false, error: snapshot.error ?? "\u4EA4\u4ED8\u7269\u6821\u9A8C\u672A\u901A\u8FC7" };
+      size = snapshot.size ?? void 0;
+      unverified = snapshot.unverified === true;
+    } else {
+      try {
+        size = statSync4(p).size;
+      } catch {
+        exists = false;
+      }
     }
+    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now(), ...unverified ? { unverified: true } : {} });
+    const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
     const ts2 = Date.now();
     if (idx >= 0) {
       const a = list[idx];
@@ -42577,10 +45425,12 @@ var SessionManager = class {
         tools: a.tools.includes("\u767B\u8BB0") ? a.tools : [...a.tools, "\u767B\u8BB0"],
         last_at: ts2,
         size,
-        exists
+        exists,
+        unverified: unverified || void 0
+        // 最新证据 wins：复核过普通文件即摘标
       };
     } else {
-      list.push({ path: p, op: "create", tools: ["\u767B\u8BB0"], adds: 0, dels: 0, first_at: ts2, last_at: ts2, size, exists });
+      list.push({ path: p, op: "create", tools: ["\u767B\u8BB0"], adds: 0, dels: 0, first_at: ts2, last_at: ts2, size, exists, ...unverified ? { unverified: true } : {} });
       if (list.length > 200) {
         list.sort((x, y) => y.last_at - x.last_at);
         list.length = 200;
@@ -42593,36 +45443,131 @@ var SessionManager = class {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
     return { ok: true };
   }
   // cwd→会话归因核心（deliverByCwd 与 #138 验收单回填通知共用）：会话 cwd 与入参
   // cwd 互为前缀都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。
-  // Bash 环境拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行
-  // 会话极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）。
+  // #227 起降级为兜底：Claude Code 的 Bash 子进程环境现已注入 CLAUDE_CODE_SESSION_ID
+  //（deliver 脚本自动携带、hook 上下文经 CC_DECK_SESSION_ID 透传），/api/deliver 带
+  // session_id 走 deliverBySession 精确挂账——同仓库并行会话被「最近活跃」抢归属的
+  // 误挂（2026-10-02 实锤：推广会话产物挂到外部会话名下）从根上消除。本启发式保留
+  // 给无身份调用：手动终端跑 deliver、#138 验收单回填（relay 自己发起，无会话身份）。
   // 空 cwd 会话跳过（原先 "" + sep 会前缀匹配一切绝对路径，属潜在误归因，顺手修复）
+  // #203 realpath 归一（2026-09-25）：macOS /tmp 是 /private/tmp 的符号链接——会话
+  // 登记逻辑路径（/tmp）与 Bash/hook 上报物理路径（/private/tmp/keyhive）两种形态
+  // 并存时前缀匹配失配（secret 会话实锤：deliver-guard 自动登记与手动补登记同死
+  // 此处，且 hook 失败静默无人知）。两边 realpath 后再比；路径已消失（历史会话
+  // cwd 被删）realpathSync 会 throw，回落 resolve 值。低频调用（deliver/验收单
+  // 回填），循环内逐会话归一的代价可忽略
   matchSessionByCwd(cwd) {
-    const c = resolve6(cwd || ".");
+    const norm = (x) => {
+      const r = resolve7(x || ".");
+      try {
+        return realpathSync3(r);
+      } catch {
+        return r;
+      }
+    };
+    const c = norm(cwd);
     let best = null;
     for (const s of this.sessions.values()) {
-      const sc2 = s.state.cwd;
-      if (!sc2) continue;
-      const related = c === sc2 || c.startsWith(sc2 + sep5) || sc2.startsWith(c + sep5);
+      const rawCwd = s.state.cwd;
+      if (!rawCwd) continue;
+      const sc2 = norm(rawCwd);
+      const related = c === sc2 || c.startsWith(sc2 + sep6) || sc2.startsWith(c + sep6);
       if (!related) continue;
       if (!best || s.state.updated_at > best.updated) best = { id: s.state.session_id, updated: s.state.updated_at };
     }
     return best ? best.id : null;
   }
-  // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）
-  deliverByCwd(cwd, rawPath) {
+  // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）。#72A0FIX2：可选透传
+  // 校验闸快照（签名穿透，登记侧不再二次 stat）
+  deliverByCwd(cwd, rawPath, snapshot) {
     const sid = this.matchSessionByCwd(cwd);
     if (!sid) return { ok: false, error: "\u65E0\u5339\u914D\u4F1A\u8BDD\uFF08cwd \u5BF9\u4E0D\u4E0A\u4EFB\u4F55\u5DF2\u77E5\u4F1A\u8BDD\uFF09" };
-    const r = this.registerDeliverable(sid, rawPath);
+    const r = this.registerDeliverable(sid, rawPath, snapshot);
     return r.ok ? { ok: true, session_id: sid } : r;
   }
-  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
+  // #230 CLI 原生 sid → 卡 id 反查：deliverBySession 第三查取。裸 UUID 老卡（journal
+  // 回放保留的前 ext- 约定外部卡）与托管会话的卡 id 都和 CLI sid 无前缀推导关系，
+  // 唯一锚点是 state.relay_session_id（ensureExternal 建卡/收养时写入，托管会话即
+  // SDK 会话 id）。ownsCliSession 的返回 id 版本（同款遍历，低频调用可忽略）
+  findByCliSid(cliSid) {
+    for (const s of this.sessions.values()) if (s.state.relay_session_id === cliSid) return s.state.session_id;
+    return null;
+  }
+  // #227 显式归因（/api/deliver 带 session_id）：会话在册 → 精确挂账，绕开 cwd 启发式。
+  // 三查：①卡 id 直接命中（托管会话）②ext- 前缀形态（deliver 环境拿到的是 CLI 原生
+  // id，现行外部会话在 sessions 里存的是 ext- 前缀形态）③relay_session_id 反查（#230
+  // 补：老外部卡/托管卡 id 与 CLI sid 无前缀关系，2026-10-02 生产实锤——deliver 带
+  // CLI sid 两查全 miss，回落 cwd 启发式把产物挂给隔壁卡）。sid 不在册（会话已清理/
+  // env 残留）回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的卡 id 供核对
+  //（deliverables.json 按 e.sid === 卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
+  deliverBySession(sid, cwd, rawPath, snapshot) {
+    const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : this.findByCliSid(sid);
+    if (real) {
+      const r = this.registerDeliverable(real, rawPath, snapshot);
+      return r.ok ? { ok: true, session_id: real } : r;
+    }
+    return this.deliverByCwd(cwd, rawPath, snapshot);
+  }
+  // #224 输出物存在性复查（2026-10-02 用户：「已经删除的输出物为什么还要展示——嫌
+  // 列表不够多不够乱吗」）。设计：面板 = 磁盘现状，不是历史清单——已删条目
+  // （exists === false）一律不下发（emit 帧 / SNAPSHOT 均过滤），删除即从面板消失；
+  // state 内部保留 dead 条目（文件重建时 mergeArtifact 合并复用 adds/dels 历史，
+  // transcript 重扫幂等），fetch 白名单含 dead 无安全问题（文件不在自然 404）。
+  // 复查两层：① 20s 定时轮询（变化才广播，全端面板 ≤20s 收敛）；② 每次 artifacts
+  // 帧下发前 re-stat（emit 点各自调用），保证任何出口数据新鲜。不动 updated_at——
+  // stat 不是会话活动（#157 教训：虚假刷活跃会破坏置灰计时）。
+  restatArtifacts(s) {
+    const list = s.state.artifacts;
+    if (!list || !list.length) return false;
+    let changed = false;
+    s.state.artifacts = list.map((a) => {
+      let size;
+      let exists = true;
+      try {
+        size = statSync4(a.path).size;
+      } catch {
+        exists = false;
+      }
+      if (exists !== a.exists || size !== a.size) {
+        changed = true;
+        return { ...a, size, exists };
+      }
+      return a;
+    });
+    return changed;
+  }
+  // #224 下发口径：re-stat 后剔除已删条目（拷贝下发，防客户端改内存态）
+  aliveArtifacts(s) {
+    this.restatArtifacts(s);
+    return (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a }));
+  }
+  // #224 定时轮询：有 artifacts 的会话全量 re-stat，有变化才广播（无变化静默——
+  // 避免每 20s 无意义 SESSION_UPDATED 刷全端）。updated_at 帧内显式携带 state 原值：
+  // stat 不是会话活动（#157），缺省时三端回落信封时间戳会把删文件/改尺寸刷成
+  // 「最后活跃＝当下」，闲置置灰计时被重置
+  pollArtifactsExistence() {
+    for (const [id2, s] of this.sessions) {
+      if (!s.state.artifacts?.length) continue;
+      if (!this.restatArtifacts(s)) continue;
+      this.bus.emit(id2, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        stats: { ...s.state.stats },
+        artifacts: (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a })),
+        ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+        updated_at: s.state.updated_at
+      });
+    }
+  }
+  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）。
+  // #72A0FIX2：挂回条目还原 unverified 标记（落账面持久化的最后一环——标记跨重启不丢）
   applyDeclaredDeliverables(sessionId) {
     const s = this.sessions.get(sessionId);
     if (!s) return;
@@ -42638,7 +45583,7 @@ var SessionManager = class {
       } catch {
         exists = false;
       }
-      list.push({ path: e.path, op: "create", tools: ["\u767B\u8BB0"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists });
+      list.push({ path: e.path, op: "create", tools: ["\u767B\u8BB0"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists, ...e.unverified ? { unverified: true } : {} });
     }
     s.state.artifacts = list;
   }
@@ -42653,13 +45598,13 @@ var SessionManager = class {
     for (const it2 of items) this.mergeArtifact(id2, it2, true);
     this.applyDeclaredDeliverables(id2);
     if (!s.state.artifacts) return;
-    const merged = s.state.artifacts;
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: (merged ?? []).map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
       updated_at: s.state.updated_at
     });
@@ -42690,9 +45635,11 @@ var SessionManager = class {
   setExternalWaiting(id2, payload) {
     const s = this.sessions.get(id2);
     if (!s) return;
+    const at = Date.now();
     s.state.status = "WAITING";
     s.state.waiting_request = payload;
-    s.state.updated_at = Date.now();
+    s.state.waiting_started_at = at;
+    s.state.updated_at = at;
     this.bus.emit(id2, "SESSION_WAITING", payload);
   }
   // 外部会话记录 CLI 上报的最新权限模式——恢复会话（claude --resume）时镜像原始启动
@@ -42704,11 +45651,17 @@ var SessionManager = class {
   }
   // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
   // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
+  // M1 审查轮：返回 false = 拒删（组织 Leader 卡——锚 org.json 仍指向它，§3.5
+  // 逻辑常驻锚是权威；进程内删卡只会让组织失聪：leaderEnsured 已真 → ensureLeader
+  // no-op，重启前无入口。解散组织走清锚通道：删锚后重启即不再拉起）
   deleteSession(id2) {
     const s = this.sessions.get(id2);
-    if (!s) return;
+    if (!s) return true;
+    if (this.isLeaderSession(id2)) return false;
+    this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
     this.sessions.delete(id2);
     this.lastStoreTodos.delete(id2);
+    this.allowRules.dropSession(id2);
     if (s.state.external) {
       this.deletedExtIds.add(id2);
       appendDeletedExt(this.cfg.dataDir, id2);
@@ -42717,6 +45670,7 @@ var SessionManager = class {
       writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id2));
     }
     this.bus.emit(id2, "SESSION_DELETED", { session_id: id2 });
+    return true;
   }
   // #144：at = 完成时刻（默认判定时刻）。静默推断收敛（sweep 扫描）必须传真实
   // 最后活动时刻 idleSince——relay 重启后首轮 sweep 会批量收殓回放出的 WORKING
@@ -42731,6 +45685,7 @@ var SessionManager = class {
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
     s.state.waiting_request = void 0;
+    s.state.waiting_started_at = void 0;
     s.state.updated_at = at;
     this.bus.emit(id2, "SESSION_DONE", {
       terminal_reason: reason,
@@ -42795,7 +45750,16 @@ var SessionManager = class {
       switch (cmd.type) {
         case "COMMAND_CREATE": {
           const pm2 = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : void 0;
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2);
+          const requestedEngine = cmd.payload.engine;
+          if (requestedEngine !== void 0 && !isSessionEngine(requestedEngine)) {
+            return { command_id: cmd.command_id, ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(requestedEngine)}` };
+          }
+          const engine = requestedEngine;
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2, cmd.payload.autoMkdir === true, {
+            ...engine ? { engine } : {},
+            ...cmd.payload.model ? { model: cmd.payload.model } : {},
+            ...cmd.payload.provider ? { provider: cmd.payload.provider } : {}
+          });
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
@@ -42818,8 +45782,21 @@ var SessionManager = class {
               return { command_id: cmd.command_id, ok: false, error: "\u6587\u4EF6\u4FDD\u5B58\u5931\u8D25\uFF08\u4E34\u65F6\u76EE\u5F55\u4E0D\u53EF\u5199\uFF09" };
             }
           }
+          if (this.isLeaderSession(cmd.payload.session_id)) {
+            const dispatchId = randomUUID8();
+            this.pushOpenDispatch(cmd.payload.session_id, { id: dispatchId, tier: "\u54A8\u8BE2", actor: "user" });
+            appendDispatch({
+              ts: Date.now(),
+              id: dispatchId,
+              tier: "\u54A8\u8BE2",
+              target: "org-leader",
+              status: "running",
+              session_id: cmd.payload.session_id,
+              actor: "user"
+            });
+          }
           if (!s.agent || s.agent.ended || s.wd.gaveUp) {
-            if (s.agent && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
+            if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
               s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
               s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
@@ -42845,6 +45822,9 @@ var SessionManager = class {
           }
           const s = this.sessions.get(sid) ?? this.sessions.get(`ext-${sid}`);
           if (!s) return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u4E0D\u5B58\u5728" };
+          if (s.state.engine) {
+            return { command_id: cmd.command_id, ok: false, error: `${s.state.engine} \u4F1A\u8BDD\u4E0D\u652F\u6301\u8FD0\u884C\u65F6\u5207\u6362\u6A21\u578B\uFF0C\u8BF7\u65B0\u5EFA\u4F1A\u8BDD\u65F6\u6307\u5B9A` };
+          }
           if (s.state.external) {
             if (!this.bridge) return { command_id: cmd.command_id, ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u901A\u9053\u672A\u5C31\u7EEA" };
             const r = this.bridge.extInput(s.state.session_id, `/model ${model}`);
@@ -42874,7 +45854,9 @@ var SessionManager = class {
             this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362: ${PERM_MODE_ZH[mode]}`);
             this.emitUpdated(live, true);
           }).catch((e) => {
-            this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+            const raw = e instanceof Error ? e.message : String(e);
+            const friendly = /not launched with --dangerously-skip-permissions/.test(raw) ? "\u8DF3\u8FC7\u6863\u4E0D\u53EF\u7528\uFF1A\u8BE5\u4F1A\u8BDD\u4E0D\u662F\u4EE5\u8DF3\u8FC7\u6743\u9650\u521B\u5EFA\u7684\uFF08\u8DF3\u8FC7\u6863\u53EA\u80FD\u5728\u521B\u5EFA\u4F1A\u8BDD\u65F6\u5F00\u542F\uFF09" : raw;
+            this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362\u5931\u8D25: ${friendly}`);
           });
           return { command_id: cmd.command_id, ok: true };
         }
@@ -42885,15 +45867,16 @@ var SessionManager = class {
         }
         case "COMMAND_CONTINUE": {
           const s = this.require(cmd.payload.session_id);
+          const scope = cmd.payload.remember_scope;
           if (s.state.external) {
-            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow")) {
+            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow", void 0, scope, by)) {
               return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
             }
             this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "allow", by);
             return { command_id: cmd.command_id, ok: true };
           }
           const live = this.requireLive(cmd.payload.session_id);
-          if (!live.agent.allow(cmd.payload.request_id, by)) {
+          if (!live.agent.allow(cmd.payload.request_id, by, scope)) {
             return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
           }
           return { command_id: cmd.command_id, ok: true };
@@ -43004,7 +45987,18 @@ var SessionManager = class {
           if (s.state.status === "WORKING" || s.state.status === "WAITING") {
             return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u8FD0\u884C\u4E2D\uFF0C\u4E0D\u80FD\u5220\u9664" };
           }
-          this.deleteSession(cmd.payload.session_id);
+          if (!this.deleteSession(cmd.payload.session_id)) {
+            return { command_id: cmd.command_id, ok: false, error: "Leader \u5361\u4E0D\u53EF\u5220\u9664\uFF08\u903B\u8F91\u5E38\u9A7B\uFF0C\u951A\u662F\u6743\u5A01\uFF09\uFF1B\u89E3\u6563\u56E2\u961F\u8BF7\u6E05 org.json \u951A\u540E\u91CD\u542F" };
+          }
+          return { command_id: cmd.command_id, ok: true };
+        }
+        // #212 删除「允许并记住」规则。删不存在的 id 回 ok:false；成功后的
+        // ALLOW_RULES_UPDATED 广播由 allowRules.onChange 统一触发（构造处挂接，
+        // 覆盖落规则/删除/会话清理全部 mutation——见 AllowRuleStore.onChange 注释）
+        case "COMMAND_ALLOW_RULE_REMOVE": {
+          if (!this.allowRules.remove(cmd.payload.id)) {
+            return { command_id: cmd.command_id, ok: false, error: "no such rule" };
+          }
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_RENAME": {
@@ -43016,7 +46010,7 @@ var SessionManager = class {
           s.state.updated_at = Date.now();
           this.titleOverrides[s.state.session_id] = title;
           try {
-            writeFileSync5(join10(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+            writeFileSync12(join17(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
           } catch {
           }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
@@ -43199,7 +46193,7 @@ var SessionManager = class {
         }
         case "COMMAND_ARTIFACT_FETCH": {
           const s = this.require(cmd.payload.session_id);
-          const key = resolve6(String(cmd.payload.path ?? "")).toLowerCase();
+          const key = resolve7(String(cmd.payload.path ?? "")).toLowerCase();
           const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
           if (!hit) {
             return { command_id: cmd.command_id, ok: false, error: "\u8DEF\u5F84\u672A\u767B\u8BB0\u5728\u8BE5\u4F1A\u8BDD\u7684\u8F93\u51FA\u7269\u6E05\u5355\u91CC\uFF0C\u65E0\u6743\u62C9\u53D6" };
@@ -43216,7 +46210,7 @@ var SessionManager = class {
           }
           const ref = cmd.command_id;
           try {
-            const buf = readFileSync9(hit.path);
+            const buf = readFileSync15(hit.path);
             const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
             for (let seq = 0; seq < total; seq++) {
               this.bus.emitTransient(
@@ -43236,8 +46230,46 @@ var SessionManager = class {
           }
           return { command_id: cmd.command_id, ok: true, artifact: { size: st2.size, mime: mimeOf(hit.path) } };
         }
+        case "COMMAND_ORG_ACTION": {
+          const r = this.orgCommand(
+            "owner",
+            by,
+            String(cmd.payload.action ?? ""),
+            cmd.payload
+          );
+          if ("forbidden" in r) return r.forbidden;
+          return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
+        }
+        case "COMMAND_ORG_CONFIRM": {
+          const r = this.orgCommand("owner", by, "confirm-decide", {
+            confirm_id: cmd.payload.confirm_id,
+            approve: cmd.payload.approve
+          });
+          if ("forbidden" in r) return r.forbidden;
+          return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? {} : { error: r.error } };
+        }
+        case "COMMAND_PROJECT_DETAIL": {
+          const r = this.orgAction("project-detail", { id: cmd.payload.gid });
+          return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
+        }
+        case "COMMAND_SETTINGS_UPDATE": {
+          if (typeof cmd.payload.employee_home !== "boolean") {
+            return { command_id: cmd.command_id, ok: false, error: "employee_home \u987B\u4E3A\u5E03\u5C14\u503C" };
+          }
+          const r = this.applyEmployeeHome(cmd.payload.employee_home);
+          return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
+        }
+        case "COMMAND_NOTIFICATION_ACK": {
+          if (typeof cmd.payload.notification_key !== "string" || !cmd.payload.notification_key) {
+            return { command_id: cmd.command_id, ok: false, error: "notification_key \u5FC5\u586B" };
+          }
+          const r = this.notificationAck(cmd.payload.notification_key, cmd.payload.action);
+          return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? {} : { error: r.error } };
+        }
         case "COMMAND_WATCH_GRANT":
           return { command_id: cmd.command_id, ok: false, error: "\u624B\u8868\u914D\u5BF9\u6388\u6743\u4EC5\u9650\u5C40\u57DF\u7F51\u4FE1\u9053" };
+        default:
+          return { command_id: cmd.command_id, ok: false, error: "unsupported command" };
       }
     } catch (e) {
       return {
@@ -43247,17 +46279,18 @@ var SessionManager = class {
       };
     }
   }
-  create(rawCwd, prompt, permissionMode) {
-    const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
+  create(rawCwd, prompt, permissionMode, autoMkdir = false, opts) {
+    const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
     if (!cwd) throw new Error(fallbackNote);
-    if (!process.env.CCR_CWD && cwd !== homedir6()) {
+    if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir8()) {
       this.cfg.defaultCwd = cwd;
       try {
-        writeFileSync5(join10(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+        writeFileSync12(join17(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
       } catch {
       }
     }
     this.evictOldSessions();
+    const selectedModel = opts?.model?.trim() || this.cfg.model;
     const managed = {
       agent: null,
       state: {
@@ -43266,29 +46299,51 @@ var SessionManager = class {
         cwd,
         initial_prompt: prompt,
         title: deriveTitle(prompt),
-        model: this.cfg.model,
+        model: selectedModel,
         status: "WORKING",
         action_summary: "\u542F\u52A8\u4E2D",
         started_at: Date.now(),
         turn_started_at: Date.now(),
         updated_at: Date.now(),
-        stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }
+        stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+        // #17 雇员身份随卡落位：Leader/派单 worker/随手办置 true（spawn 传
+        // CLAUDE_CONFIG_DIR + 读取路径选家都按它），用户自建会话不置
+        ...opts?.employee ? { employee: true } : {},
+        // #17 第二批：创建时实际落定的家随卡记录——开关此后翻转，本会话
+        // resume/读取仍按此值走（存量无损）；关态创建不落（=默认家）
+        ...opts?.employee && this.cfg.employeeConfigDir ? { employee_home: this.cfg.employeeConfigDir } : {},
+        // #27 引擎随卡落位：resume/看门狗/读取路径按它分叉；不落 = claude 存量口径
+        ...opts?.engine ? { engine: opts.engine } : {},
+        ...opts?.provider ? { engine_provider: opts.provider } : {},
+        ...opts?.role ? { engine_role: opts.role } : {}
       },
+      // #21③ 首回合在途：见 ManagedSession.pendingInitial（onInit 待命化避让用）
+      ...prompt.trim() ? { pendingInitial: true } : {},
       logs: [],
       lastUpdateEmit: 0,
       lastProgressAt: Date.now(),
       lastProgressKind: "",
       unacked: [],
       wd: { phase: "idle", recoveries: [], gaveUp: false },
-      streamGen: 0
+      streamGen: 0,
+      activitySeq: 0
     };
     const agent = this.newAgent(
       cwd,
-      this.cfg.model,
+      selectedModel,
       this.agentCallbacks(managed),
       // 空提示词 = parked 形态（#49）：会话建好等输入，不注入空消息
       prompt.trim() ? prompt : void 0,
-      permissionMode ? { permissionMode } : void 0
+      {
+        ...permissionMode ? { permissionMode } : {},
+        // #17 雇员独立家：create 是统一 spawn 口，按本次会话身份注入（与 resume
+        // 口同走 employeeHome()，单点编码防两处写法漂移——审查 P3-2）
+        ...managed.state.employee ? { configHome: this.employeeHome(managed.state) } : {},
+        // #27 引擎透传（newAgent 工厂缝分叉）
+        ...opts?.engine ? { engine: opts.engine } : {},
+        ...opts?.provider ? { provider: opts.provider } : {},
+        ...opts?.role ? { role: opts.role } : {}
+      }
     );
     managed.agent = agent;
     managed.state.session_id = agent.id;
@@ -43297,7 +46352,13 @@ var SessionManager = class {
       cwd,
       initial_prompt: prompt,
       title: managed.state.title,
-      model: this.cfg.model
+      model: selectedModel,
+      ...managed.state.engine_provider ? { provider: managed.state.engine_provider } : {},
+      // #17 雇员标记随首帧进事件流：重启回放重建卡片后 resume/读取路径照常选家
+      ...managed.state.employee ? { employee: true } : {},
+      ...managed.state.employee_home ? { employee_home: managed.state.employee_home } : {},
+      // #27 引擎随首帧下发（端上徽标 + 重启回放还原分叉依据）
+      ...managed.state.engine ? { engine: managed.state.engine } : {}
     });
     if (fallbackNote) {
       const entry = { ts: Date.now(), kind: "system", text: fallbackNote };
@@ -43305,8 +46366,86 @@ var SessionManager = class {
       this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
       console.log(`[create-cwd] ${agent.id.slice(0, 8)} ${fallbackNote}`);
     }
-    this.requestSmartTitle(agent.id, prompt);
+    if (!managed.state.engine) this.requestSmartTitle(agent.id, prompt);
     return agent.id;
+  }
+  // ===== R1a activity 状态舱（#018 单写者批·段1）=====
+  // mapper（agent-adapter/agent-jsonl 纯函数层，本批只 import 消费）产出的 dock
+  // 经 applyActivity 唯一咽喉写入 state.activity / activity_capabilities：
+  // 值有变才写才发（防重放风暴）；终态（DONE/ERROR）冻结——保留最后状态供
+  // SNAPSHOT，不再发新瞬态。ws-server SNAPSHOT 用 mgr.snapshot() 直通
+  //（SessionState 带上字段即自动进快照），本批不碰 ws-server。
+  // 引擎 → activity 能力位（B0 冻结口径，claude 缺省）。codex 的 approval 位随
+  // remote_mode（远端决议通道开 = 可审批），与 mapCodexActivity 的
+  // remoteDecisionChannel 同源语义；各常量从对应 adapter 模块 import 消费
+  activityCapabilitiesOf(state) {
+    switch (state.engine) {
+      case "codex":
+        return { ...CODEX_ACTIVITY_CAPABILITIES, approval: state.remote_mode === true };
+      case "trae":
+        return { ...TRAE_ACTIVITY_CAPABILITIES };
+      case "qwen-code":
+        return { ...QWEN_ACTIVITY_CAPABILITIES };
+      case "codebuddy":
+        return { ...CODEBUDDY_ACTIVITY_CAPABILITIES };
+      case "zcode":
+        return { ...ZCODE_ACTIVITY_CAPABILITIES };
+      default:
+        return { ...CLAUDE_ACTIVITY_CAPABILITIES };
+    }
+  }
+  // dock 展示值比较（浅口径）：只比端上可见内容（state/task_summary 文本与来源/
+  // activity 三元组/capabilities），忽略 updated_at、observed_at、occurred_at、
+  // task_summary.updated_at 等纯计时字段——重复回调（流式重吐/同帧重放）时间戳
+  // 必然刷新，比进去就永远不等，防风暴 dedup 形同虚设
+  activityDockEqual(a, b) {
+    if (!a) return false;
+    if (a.state !== b.state) return false;
+    const ta2 = a.task_summary;
+    const tb = b.task_summary;
+    if (ta2 === void 0 !== (tb === void 0)) return false;
+    if (ta2 && tb && (ta2.text !== tb.text || ta2.source !== tb.source)) return false;
+    const aa = a.activity;
+    const ba = b.activity;
+    if (aa === void 0 !== (ba === void 0)) return false;
+    if (aa && ba) {
+      if (aa.kind !== ba.kind || aa.text !== ba.text || aa.tool !== ba.tool) return false;
+    }
+    const ca = a.capabilities;
+    const cb2 = b.capabilities;
+    return ca.native_status === cb2.native_status && ca.operation_summary === cb2.operation_summary && ca.native_elapsed === cb2.native_elapsed && ca.approval === cb2.approval;
+  }
+  // dock 写入唯一咽喉：值有变才写 state + 发 SESSION_ACTIVITY 瞬态（不进
+  // events.ndjson、不占 seq；重连恢复靠 SNAPSHOT 最后值，快照直通天然成立）。
+  // 终态（DONE/ERROR）下整体冻结：不覆写（保留收口前最后状态供快照）、不发帧
+  //（迟到的流尾回调不再打扰各端；错误详情走既有 SESSION_ERROR/SESSION_LOG 通道）。
+  // 存储形态裁回 StatusDockState（time_basis/unsupported/diagnostic 是 mapper
+  // 内部元数据，不进会话状态）
+  applyActivity(managed, dock) {
+    if (managed.state.status === "DONE" || managed.state.status === "ERROR") return;
+    const next = {
+      state: dock.state,
+      ...dock.task_summary ? { task_summary: { ...dock.task_summary } } : {},
+      ...dock.activity ? { activity: { ...dock.activity } } : {},
+      capabilities: { ...dock.capabilities },
+      updated_at: dock.updated_at
+    };
+    if (this.activityDockEqual(managed.state.activity, next)) return;
+    managed.state.activity = next;
+    managed.state.activity_capabilities = { ...dock.capabilities };
+    const act = next.activity;
+    const payload = {
+      session_id: managed.state.session_id,
+      state: next.state,
+      activity_kind: act?.kind ?? "system",
+      text: act?.text ?? next.task_summary?.text ?? "",
+      ...act?.tool ? { tool: act.tool } : {},
+      observed_at: act?.observed_at ?? next.updated_at,
+      ...act?.occurred_at !== void 0 ? { occurred_at: act.occurred_at } : {},
+      capabilities: { ...next.capabilities },
+      seq_local: ++managed.activitySeq
+    };
+    this.bus.emitTransient("SESSION_ACTIVITY", payload);
   }
   // AgentSession 回调：create 与 resume 共用（状态机与事件下发完全一致）
   agentCallbacks(managed) {
@@ -43319,6 +46458,7 @@ var SessionManager = class {
         managed.state.status = "WORKING";
         managed.state.action_summary = "\u6D41\u5DF2\u6062\u590D";
         managed.state.waiting_request = void 0;
+        managed.state.waiting_started_at = void 0;
         managed.state.turn_started_at = Date.now();
         this.pushExternalLog(managed.state.session_id, "system", "\u68C0\u6D4B\u5230\u4F1A\u8BDD\u6D41\u4ECD\u5728\u5DE5\u4F5C\uFF0C\u5DF2\u81EA\u52A8\u64A4\u9500\u7B49\u5F85\u72B6\u6001");
         this.emitUpdated(managed, true);
@@ -43336,6 +46476,18 @@ var SessionManager = class {
           appendChildSession(this.cfg.dataDir, sdkId);
         }
         managed.state.relay_session_id = sdkId;
+        if (managed.state.session_id === this.leaderId) {
+          const a = readOrgAnchor();
+          if (a && a.leader_session_id === managed.state.session_id) {
+            writeOrgAnchor({ ...a, leader_sdk_id: sdkId, updated_at: Date.now() });
+          }
+          if (managed.unacked.length === 0 && managed.state.status === "WORKING" && !managed.pendingInitial) {
+            managed.state.status = "DONE";
+            managed.state.done_reason = "\u5F85\u547D\uFF08\u7B49\u5F85\u54A8\u8BE2\uFF09";
+            managed.state.action_summary = "Leader \xB7 \u5F85\u547D";
+            managed.state.turn_started_at = void 0;
+          }
+        }
         managed.state.model = model;
         if (isManagedMode(permissionMode)) managed.state.permission_mode = permissionMode;
         this.emitUpdated(managed, true);
@@ -43348,17 +46500,42 @@ var SessionManager = class {
         const changed = managed.state.status !== effStatus;
         if (changed && effStatus === "WORKING") managed.state.turn_started_at = Date.now();
         const cleared = live && effStatus !== "WAITING";
-        if (cleared) managed.state.waiting_request = void 0;
+        if (cleared) {
+          managed.state.waiting_request = void 0;
+          managed.state.waiting_started_at = void 0;
+        }
         managed.state.status = effStatus;
         managed.state.action_summary = summary;
+        this.applyActivity(managed, mapActivityState({
+          state: effStatus,
+          operation: summary,
+          now: Date.now(),
+          task: { todos: managed.state.todos },
+          capabilities: this.activityCapabilitiesOf(managed.state),
+          allowWaiting: true
+        }));
         this.emitUpdated(managed, changed || cleared);
+        this.syncWaitingNotification(managed);
       },
       onWaiting: (p) => {
         if (!mine()) return;
         touch("waiting");
+        const at = Date.now();
+        this.applyActivity(managed, mapActivityState({
+          state: "WAITING",
+          operation: `\u7B49\u5F85\u6279\u51C6 ${p.tool_name}\uFF1A${p.input_summary}`,
+          activityKind: "system",
+          activityText: `\u7B49\u5F85\u6279\u51C6 ${p.tool_name}\uFF1A${p.input_summary}`,
+          now: at,
+          task: { todos: managed.state.todos },
+          capabilities: this.activityCapabilitiesOf(managed.state),
+          allowWaiting: true
+        }));
         managed.state.status = "WAITING";
         managed.state.waiting_request = p;
-        managed.state.updated_at = Date.now();
+        managed.state.waiting_started_at = at;
+        managed.state.updated_at = at;
+        this.syncWaitingNotification(managed);
         this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
       },
       onWaitingResolved: (requestId, decision, resolvedBy) => {
@@ -43368,7 +46545,11 @@ var SessionManager = class {
         if (!cur || cur.request_id === requestId) {
           managed.state.status = "WORKING";
           managed.state.waiting_request = void 0;
+          managed.state.waiting_started_at = void 0;
           this.emitUpdated(managed, true);
+          this.syncWaitingNotification(managed);
+        } else {
+          this.resolveWaitingNotification(managed.state.session_id, requestId);
         }
         managed.state.updated_at = Date.now();
         this.bus.emit(managed.state.session_id, "SESSION_WAITING_RESOLVED", {
@@ -43436,13 +46617,48 @@ var SessionManager = class {
           if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
         }
         this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+        if (kind !== "user_message") {
+          this.applyActivity(managed, mapActivityState({
+            state: managed.state.status,
+            activityKind: kind === "thinking" ? "assistant_text" : kind,
+            activityText: text,
+            ...meta?.tool ? { tool: meta.tool } : {},
+            ts: entry.ts,
+            now: entry.ts,
+            task: { todos: managed.state.todos },
+            capabilities: this.activityCapabilitiesOf(managed.state),
+            allowWaiting: true
+          }));
+        }
       },
       onTurnEnd: (ok2, reason, durationMs) => {
         if (!mine()) return;
+        managed.pendingInitial = void 0;
         if (managed.wd.phase === "recovering") return;
+        const delivered = ok2 && reason !== "interrupted";
+        const homeLost = !ok2 && /No conversation found/i.test(reason);
+        if (homeLost) {
+          const entry = { kind: "system", text: "\u4F1A\u8BDD\u8BB0\u5F55\u4E0D\u5728\u5F53\u524D\u914D\u7F6E\u7684\u5BB6\u76EE\u5F55\u2014\u2014\u82E5\u6539\u8FC7 CCR_EMPLOYEE_CONFIG_DIR \u8BF7\u5207\u56DE\u539F\u503C\u518D\u8BD5\uFF1B\u4E5F\u53EF\u80FD\u662F\u8BE5\u4F1A\u8BDD\u8BB0\u5F55\u7684\u72EC\u7ACB\u5BB6\u76EE\u5F55\u5DF2\u88AB\u5220\u9664\uFF08\u539F\u8BB0\u5F55\u65E0\u635F\u4FDD\u7559\uFF0C\u53EF\u53E6\u6D3E\u65B0\u5355\uFF09", ts: Date.now() };
+          managed.logs.push(entry);
+          if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+          this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+        }
+        this.closeOpenDispatches(
+          managed.state.session_id,
+          ok2 ? "done" : "failed",
+          delivered ? this.receiptWithResultLine(managed.state.session_id, reason) : reason,
+          false,
+          // 路由表记账恢复原判：failed 回合照记（干砸也是 worker 的账，failed 计数
+          // 是避开调度的信号）；仅「成功被用户中断」与「换家失联」不记——
+          // 中断≠交付，换家≠干砸
+          !(ok2 && reason === "interrupted") && !homeLost,
+          void 0,
+          delivered ? void 0 : "todo"
+        );
         managed.state.updated_at = Date.now();
         managed.state.duration_ms = durationMs;
         managed.state.waiting_request = void 0;
+        managed.state.waiting_started_at = void 0;
         if (ok2) {
           managed.state.status = "DONE";
           managed.state.done_reason = reason;
@@ -43456,10 +46672,13 @@ var SessionManager = class {
           managed.state.last_error = reason;
           this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason });
         }
+        this.syncWaitingNotification(managed);
       },
       onSessionEnd: (reason) => {
         if (!mine()) return;
+        managed.pendingInitial = void 0;
         if (managed.wd.phase === "recovering") return;
+        this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, void 0, "todo");
         managed.wd.phase = "idle";
         if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
           managed.state.status = "DONE";
@@ -43470,6 +46689,7 @@ var SessionManager = class {
             stats: { ...managed.state.stats }
           });
         }
+        this.syncWaitingNotification(managed);
       }
     };
   }
@@ -43481,24 +46701,88 @@ var SessionManager = class {
     if (!sdkId) {
       throw new Error("\u4F1A\u8BDD\u5DF2\u7ED3\u675F\u4E14\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF0C\u65E0\u6CD5\u6062\u590D\uFF08\u6A21\u578B\u5C1A\u672A\u5B8C\u6210\u521D\u59CB\u5316\uFF09");
     }
+    if (isReinjectionEngine(s.state.engine)) {
+      const old2 = s.agent;
+      s.streamGen++;
+      if (old2 && !old2.ended) void old2.stop().catch(() => {
+      });
+      if (old2?.childPid) void this.watchdogProcs.killTree(old2.childPid).catch(() => {
+      });
+      const cb3 = this.agentCallbacks(s);
+      const agent2 = this.newAgent(s.state.cwd, s.state.model, cb3, firstMessage, {
+        engine: s.state.engine,
+        provider: s.state.engine_provider,
+        role: s.state.engine_role,
+        configHome: this.employeeHome(s.state)
+      });
+      s.agent = agent2;
+      s.state.status = "WORKING";
+      s.state.action_summary = "\u91CD\u65B0\u6CE8\u5165\u4E0A\u4E0B\u6587";
+      s.state.last_error = void 0;
+      s.state.done_reason = void 0;
+      s.state.turn_started_at = Date.now();
+      s.lastProgressAt = Date.now();
+      s.lastProgressKind = "";
+      s.wd.gaveUp = false;
+      s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+      this.emitUpdated(s, true);
+      return;
+    }
     const old = s.agent;
     s.streamGen++;
+    if (old && !old.ended) void old.stop().catch(() => {
+    });
     if (old?.childPid) {
       void this.watchdogProcs.killTree(old.childPid).catch(() => {
       });
     }
     s.resumePending = Date.now();
+    const resumeStart = Date.now();
+    let inited = false;
+    let initTimer = null;
+    const clearInitTimer = () => {
+      if (initTimer) {
+        clearTimeout(initTimer);
+        initTimer = null;
+      }
+    };
+    const baseCb = this.agentCallbacks(s);
+    const cb2 = {
+      ...baseCb,
+      onInit: (id2, model, pm2) => {
+        inited = true;
+        clearInitTimer();
+        baseCb.onInit(id2, model, pm2);
+      },
+      // 审查修正（P1「停了又复活」）：流关闭（用户 STOP / 进程退出）= 本次 resume
+      // 已终局——timer 不撤销的话 45s 后照样开火：首回合分支 fresh spawn 重放用户
+      // 刚停掉的消息（卡面从 DONE 又活了），有记忆分支把 stop 收口的终态覆写成
+      // ERROR。onSessionEnd 与 onInit 双通道都清
+      onSessionEnd: (reason) => {
+        clearInitTimer();
+        baseCb.onSessionEnd(reason);
+      }
+    };
     const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
-      this.agentCallbacks(s),
+      cb2,
       firstMessage,
-      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images }
+      {
+        resume: sdkId,
+        permissionMode: s.state.permission_mode ?? "default",
+        images,
+        configHome: this.employeeHome(s.state),
+        // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
+        // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
+        ...s.state.engine ? { engine: s.state.engine } : {}
+      }
     );
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.historical = false;
     s.state.saved = void 0;
+    s.state.org_parked = void 0;
     s.state.action_summary = "";
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
@@ -43508,6 +46792,66 @@ var SessionManager = class {
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
     s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+    initTimer = setTimeout(() => {
+      initTimer = null;
+      if (inited || s.agent !== agent || agent.ended || this.sessions.get(s.state.session_id) !== s) return;
+      if (agent.childPid) void this.watchdogProcs.killTree(agent.childPid).catch(() => {
+      });
+      void agent.stop().catch(() => {
+      });
+      const hasMemory = s.logs.some((e) => e.kind === "assistant_text") || (s.state.usage?.output_tokens ?? 0) > 0 || // transcriptHasAssistant 读 ~/.claude/projects JSONL（Claude 特性泄漏面）：
+      // codex 的记忆判定只看前两口（logs/usage）
+      s.state.engine !== "codex" && transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state));
+      const waitS = Math.round(resumeInitTimeoutMs() / 1e3);
+      if (!s.state.external && !hasMemory) {
+        const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart);
+        s.unacked = s.unacked.filter((m) => m.ts < resumeStart);
+        if (pendingNow.length > 1) {
+          for (let i = 1; i < pendingNow.length; i++) {
+            const q2 = this.openDispatches.get(s.state.session_id);
+            if (!q2 || q2.length <= 1) break;
+            q2.unshift(q2.pop());
+            this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "todo");
+          }
+        }
+        const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
+        const replayImages = (pendingNow.length ? pendingNow.flatMap((m) => m.images ?? []) : images ?? []).slice(0, 4);
+        s.streamGen++;
+        s.resumePending = Date.now();
+        s.lastProgressAt = Date.now();
+        s.lastProgressKind = "";
+        s.state.status = "WORKING";
+        s.agent = this.newAgent(
+          s.state.cwd,
+          s.state.model,
+          this.agentCallbacks(s),
+          replayText,
+          {
+            permissionMode: s.state.permission_mode ?? "default",
+            images: replayImages.length ? replayImages : void 0,
+            configHome: this.employeeHome(s.state),
+            // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
+            ...s.state.engine ? { engine: s.state.engine } : {}
+          }
+        );
+        this.pushExternalLog(
+          s.state.session_id,
+          "system",
+          `\u6062\u590D\u8D85\u65F6\uFF08${waitS} \u79D2\u65E0\u54CD\u5E94\uFF0C\u8BE5\u4F1A\u8BDD\u65E0\u5DF2\u5B8C\u6210\u56DE\u5408\uFF0C\u7591\u9996\u6B21\u8FD0\u884C\u88AB\u6253\u65AD\u6240\u81F4\uFF09\uFF0C\u5DF2\u81EA\u52A8\u7528\u65B0\u4F1A\u8BDD\u91CD\u53D1\u672C\u6761\u6D88\u606F`
+        );
+        this.emitUpdated(s, true);
+      } else {
+        s.state.status = "ERROR";
+        s.state.last_error = `\u6062\u590D\u5931\u8D25: \u4E0A\u6E38 ${waitS} \u79D2\u65E0\u54CD\u5E94\uFF08\u7591\u6302\u6B7B\uFF09\uFF0C\u5DF2\u4FDD\u7559\u73B0\u573A\u53EF\u91CD\u8BD5`;
+        s.state.saved = true;
+        s.state.action_summary = "\u6062\u590D\u5931\u8D25";
+        s.state.updated_at = Date.now();
+        this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
+        this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+        this.emitUpdated(s, true);
+      }
+    }, resumeInitTimeoutMs());
+    initTimer.unref?.();
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
     this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
@@ -43523,6 +46867,27 @@ var SessionManager = class {
     if (!sdkId) {
       throw new Error("\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF08\u9996\u6B21\u56DE\u5408\u672A\u5B8C\u6210\u5373\u4E2D\u65AD\uFF09\uFF0C\u65E0\u6CD5\u6062\u590D");
     }
+    if (s.state.engine === "codex" || isReinjectionEngine(s.state.engine)) {
+      s.streamGen++;
+      s.resumePending = void 0;
+      s.wd.gaveUp = false;
+      s.agent = null;
+      s.state.saved = void 0;
+      s.state.historical = false;
+      s.state.org_parked = void 0;
+      s.state.status = "DONE";
+      s.state.done_reason = "\u5DF2\u6062\u590D\uFF08\u7B49\u5F85\u8F93\u5165\uFF09";
+      s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u7B49\u5F85\u8F93\u5165";
+      s.state.turn_started_at = void 0;
+      s.state.last_error = void 0;
+      s.state.updated_at = Date.now();
+      s.lastProgressAt = Date.now();
+      s.lastProgressKind = "";
+      s.wd.phase = "idle";
+      this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D Codex \u4F1A\u8BDD\uFF08thread ${sdkId.slice(0, 8)}\u2026\uFF09`);
+      this.emitUpdated(s, true);
+      return;
+    }
     let inited = false;
     let timer = null;
     s.streamGen++;
@@ -43533,6 +46898,9 @@ var SessionManager = class {
       if (inited) return;
       inited = true;
       if (timer) clearTimeout(timer);
+      if (!s.logs.some((e) => e.kind === "assistant_text")) {
+        reason += "\uFF08\u8BE5\u4F1A\u8BDD\u9996\u6B21\u56DE\u5408\u672A\u5B8C\u6210\u5373\u4E2D\u65AD\uFF0C\u76F4\u63A5\u6062\u590D\u8D70\u4E0D\u901A\uFF1B\u7ED9\u4F1A\u8BDD\u53D1\u4E00\u6761\u6D88\u606F\u53EF\u81EA\u52A8\u56DE\u9000\u65B0\u4F1A\u8BDD\u7EED\u547D\uFF09";
+      }
       s.state.status = "ERROR";
       s.state.last_error = `\u6062\u590D\u5931\u8D25: ${reason}`;
       s.state.done_reason = void 0;
@@ -43550,6 +46918,7 @@ var SessionManager = class {
         if (timer) clearTimeout(timer);
         s.state.saved = void 0;
         s.state.historical = false;
+        s.state.org_parked = void 0;
         base.onInit(sdkIdNew, model, permissionMode);
         s.state.status = "DONE";
         s.state.done_reason = "\u5DF2\u6062\u590D\uFF08\u7B49\u5F85\u8F93\u5165\uFF09";
@@ -43574,7 +46943,10 @@ var SessionManager = class {
     timer.unref?.();
     const agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
       resume: sdkId,
-      permissionMode: s.state.permission_mode ?? "default"
+      permissionMode: s.state.permission_mode ?? "default",
+      configHome: this.employeeHome(s.state),
+      // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
+      ...s.state.engine ? { engine: s.state.engine } : {}
     });
     s.agent = agent;
     s.state.status = "WORKING";
@@ -43608,6 +46980,7 @@ var SessionManager = class {
           s.state.action_summary = "\u5DF2\u4FDD\u5B58\uFF0C\u70B9\u51FB\u6062\u590D";
           s.state.last_error = void 0;
           s.state.waiting_request = void 0;
+          s.state.waiting_started_at = void 0;
           saved++;
         }
         if (!was) this.emitUpdated(s, true);
@@ -43618,6 +46991,1219 @@ var SessionManager = class {
     }
     if (keep.length !== file.length) writePinnedSessions(this.cfg.dataDir, keep);
     return { saved };
+  }
+  // ================= #26 矩阵式团队 M1：组织 Leader 常驻化 =================
+  // 设计稿 v3.1 §3.5「逻辑常驻」：常驻 = 固定身份（org.json 锚，独立于 events.ndjson
+  // 压缩与 pinned 双向清理）+ 按需物理拉起（复用休眠卡/pinned/消息驱动 resume 底座）。
+  // 开机 ensureLeader 只保证「卡在、锚准」；除首建带上岗引导 spawn 一次（一次性拿
+  // sdkId——无 sdkId 的会话无法 resume，见 org.ts 引导注释）外零 spawn。
+  isLeaderSession(sessionId) {
+    return this.leaderId === sessionId;
+  }
+  getLeaderSessionId() {
+    return this.leaderId;
+  }
+  ensureLeader() {
+    if (this.leaderEnsured && this.leaderId) {
+      return { ok: true, session_id: this.leaderId, created: false, rebuilt: false };
+    }
+    if (process.env.CCR_NO_LEADER === "1") {
+      return { ok: false, error: "CCR_NO_LEADER \u5DF2\u8BBE\u7F6E\uFF0C\u672C\u8FDB\u7A0B\u4E0D\u7BA1\u7406 Leader\uFF08\u4E0D\u5EFA\u76EE\u5F55\u3001\u4E0D\u62C9\u8D77\u3001\u4E0D\u6536\u517B\uFF09" };
+    }
+    try {
+      ensureOrgDir();
+      ensureOrgClaudeMd();
+      ensureOrgCli();
+    } catch (e) {
+      return { ok: false, error: `org \u76EE\u5F55\u4E0D\u53EF\u7528: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    this.closeHungDispatchRows();
+    const anchor = readOrgAnchor();
+    if (!anchor) return this.createLeaderFirstTime();
+    const s = this.sessions.get(anchor.leader_session_id);
+    if (s && !anchor.leader_sdk_id && !s.state.relay_session_id) {
+      s.state.pinned = void 0;
+      writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== anchor.leader_session_id));
+      if (this.titleOverrides[anchor.leader_session_id]) {
+        delete this.titleOverrides[anchor.leader_session_id];
+        try {
+          writeFileSync12(join17(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+        } catch {
+        }
+      }
+      s.state.title_locked = void 0;
+      if (s.state.title === ORG_LEADER_TITLE) s.state.title = "Leader\uFF08\u9996\u5EFA\u4E2D\u65AD\uFF09";
+      this.emitUpdated(s, true);
+      clearOrgAnchor();
+      return this.createLeaderFirstTime();
+    }
+    if (s) {
+      this.adoptExistingLeader(s, anchor);
+      return { ok: true, session_id: anchor.leader_session_id, created: false, rebuilt: false };
+    }
+    if (!anchor.leader_sdk_id) {
+      clearOrgAnchor();
+      return this.createLeaderFirstTime();
+    }
+    return this.rebuildDormantLeader(anchor);
+  }
+  // 首建：带上岗引导消息 spawn（parked 空 prompt 在真实链路不回 init、拿不到 sdkId，
+  // 见 org.ts ORG_LEADER_BOOTSTRAP_PROMPT 注释），一次性拿 sdkId——此后常驻零 spawn。
+  // 锚紧邻 create 同步落盘（崩溃窗口微秒级；后果=pinned 残卡可手删，下次重建）。
+  createLeaderFirstTime() {
+    let id2;
+    try {
+      id2 = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, "bypassPermissions", false, { skipStickyCwd: true, employee: true });
+    } catch (e) {
+      return { ok: false, error: `Leader \u9996\u5EFA spawn \u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\uFF1Brelay \u5176\u4F59\u529F\u80FD\u4E0D\u53D7\u5F71\u54CD\uFF0C\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5` };
+    }
+    const now = Date.now();
+    if (!writeOrgAnchor({
+      version: 1,
+      leader_session_id: id2,
+      leader_sdk_id: "",
+      // #17 锚记 Leader 落定的家：重启锚重建还原（开关翻转对常驻 Leader 无损）
+      ...this.sessions.get(id2)?.state.employee_home ? { employee_home: this.sessions.get(id2).state.employee_home } : {},
+      created_at: now,
+      updated_at: now
+    })) {
+      return { ok: false, error: "\u56E2\u961F\u951A\u5199\u76D8\u5931\u8D25\uFF08\u76D8\u6EE1/\u6743\u9650\uFF1F\uFF09\uFF0C\u672C\u6B21\u672A\u6807\u8BB0\u5E38\u9A7B\uFF1B\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5" };
+    }
+    const s = this.sessions.get(id2);
+    if (s) {
+      s.state.pinned = true;
+      s.state.title = ORG_LEADER_TITLE;
+      s.state.title_locked = true;
+      this.emitUpdated(s, true);
+    }
+    this.setTitleOverride(id2, ORG_LEADER_TITLE);
+    this.leaderId = id2;
+    this.leaderEnsured = true;
+    this.pinLeaderFile(id2);
+    const bootAgent = s?.agent ?? null;
+    const bootWaitSec = (resumeInitTimeoutMs() / 1e3).toFixed(1);
+    const bootTimer = setTimeout(() => {
+      const cur = this.sessions.get(id2);
+      if (!cur || !bootAgent || cur.agent !== bootAgent) return;
+      if (cur.state.relay_session_id) return;
+      const droppedMsgs = cur.unacked.length;
+      this.closeOpenDispatches(id2, "failed", `\u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD`, true, false, void 0, "todo");
+      if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {
+      });
+      void bootAgent.stop().catch(() => {
+      });
+      this.leaderId = null;
+      this.leaderEnsured = false;
+      clearOrgAnchor();
+      this.deleteSession(id2);
+      if (this.leaderBootRetries < 1) {
+        this.leaderBootRetries++;
+        console.log(`[leader] \u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF0C\u7591 CLI \u6302\u6B7B/\u65E9\u9000\uFF0C\u5F03 ${droppedMsgs} \u6761\u5728\u9014\u6D88\u606F\uFF09\uFF0C\u5DF2\u6E05\u9664\u672C\u6B21\u9996\u5EFA\uFF0C\u81EA\u52A8\u91CD\u5EFA\uFF08\u7B2C ${this.leaderBootRetries}/1 \u6B21\uFF09`);
+        try {
+          this.ensureLeader();
+        } catch (e) {
+          console.log(`[leader] \u81EA\u52A8\u91CD\u5EFA\u629B\u9519\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\uFF0C\u7B49\u4E0B\u6B21 relay \u542F\u52A8\u91CD\u8BD5`);
+        }
+      } else {
+        console.log(`[leader] \u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF0C\u5F03 ${droppedMsgs} \u6761\u5728\u9014\u6D88\u606F\uFF09\uFF0C\u5DF2\u6E05\u9664\u672C\u6B21\u9996\u5EFA\uFF1B\u672C\u8FDB\u7A0B\u5DF2\u91CD\u8BD5 1 \u6B21\u4E0D\u518D\u81EA\u52A8\u91CD\u5EFA\uFF0C\u7B49\u4E0B\u6B21 relay \u542F\u52A8`);
+      }
+    }, resumeInitTimeoutMs());
+    bootTimer.unref?.();
+    return { ok: true, session_id: id2, created: true, rebuilt: false };
+  }
+  // 正常重启路径：会话已由 adopt 从 events 收养（可能已被 applyPinned 标休眠）。
+  // 只做常驻收口：补钉（unpin 过/文件条目被清过都复原——常驻语义）+ 题名 + leaderId。
+  // 不 spawn、不改 status（agent 存活时更不动运行态）。
+  adoptExistingLeader(s, anchor) {
+    const id2 = s.state.session_id;
+    if (!s.state.relay_session_id && anchor?.leader_sdk_id) {
+      s.state.relay_session_id = anchor.leader_sdk_id;
+    } else if (s.state.relay_session_id && anchor && !anchor.leader_sdk_id) {
+      writeOrgAnchor({ ...anchor, leader_sdk_id: s.state.relay_session_id, updated_at: Date.now() });
+    }
+    s.state.pinned = true;
+    if (!s.agent) {
+      s.state.saved = true;
+      if (s.state.status !== "DONE") {
+        s.state.status = "DONE";
+        s.state.done_reason = "\u5DF2\u4FDD\u5B58\uFF08Leader \u4F11\u7720\uFF09";
+      }
+    }
+    this.pinLeaderFile(id2);
+    this.setTitleOverride(id2, ORG_LEADER_TITLE);
+    this.leaderId = id2;
+    this.leaderEnsured = true;
+  }
+  // events 被压缩挤掉（>30 会话）或用户删卡后的重建：从锚合成休眠卡，零 spawn。
+  // 不 emit SESSION_CREATED——锚才是重建权威；开机广播走 emitUpdated（与 applyPinned
+  // 同款），孤儿 UPDATED 行在 reduceHistory 里天然跳过（缺 CREATED）。
+  rebuildDormantLeader(anchor) {
+    const id2 = anchor.leader_session_id;
+    const managed = {
+      agent: null,
+      state: {
+        session_id: id2,
+        relay_session_id: anchor.leader_sdk_id,
+        cwd: orgDir(),
+        initial_prompt: "",
+        title: ORG_LEADER_TITLE,
+        model: this.cfg.model,
+        status: "DONE",
+        done_reason: "\u5DF2\u4FDD\u5B58\uFF08Leader \u4F11\u7720\uFF09",
+        action_summary: "Leader \xB7 \u5F85\u547D",
+        started_at: anchor.created_at || Date.now(),
+        updated_at: anchor.updated_at || Date.now(),
+        stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+        title_locked: true,
+        historical: true,
+        pinned: true,
+        saved: true,
+        // #17 Leader 恒为雇员（边界审查 P1：compactEvents 只保最近 30 会话组，
+        // Leader 最老最闲最先被挤出——锚重建丢标记则开关开启时咨询 resume 恒指
+        // 默认家 → No conversation found 快速失败，常驻通道静默变砖）。
+        // 家按锚记录还原（第二批：老锚无字段 = 默认家，与旧 transcript 实际所在一致）
+        employee: true,
+        ...anchor.employee_home ? { employee_home: anchor.employee_home } : {}
+      },
+      logs: [],
+      lastUpdateEmit: 0,
+      lastProgressAt: 0,
+      lastProgressKind: "",
+      unacked: [],
+      wd: { phase: "idle", recoveries: [], gaveUp: false },
+      streamGen: 0,
+      activitySeq: 0
+    };
+    this.sessions.set(id2, managed);
+    this.pinLeaderFile(id2);
+    this.setTitleOverride(id2, ORG_LEADER_TITLE);
+    this.leaderId = id2;
+    this.leaderEnsured = true;
+    this.emitUpdated(managed, true);
+    return { ok: true, session_id: id2, created: false, rebuilt: true };
+  }
+  // Leader 常驻置顶写穿（去重后追加；cap 50 由 writePinnedSessions 裁）
+  pinLeaderFile(id2) {
+    const ids = readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id2);
+    ids.push(id2);
+    writePinnedSessions(this.cfg.dataDir, ids);
+  }
+  // 题名 override 写穿（跨重启收养/重建时都套用；仿 COMMAND_RENAME 落盘写法）
+  setTitleOverride(id2, title) {
+    this.titleOverrides[id2] = title;
+    try {
+      writeFileSync12(join17(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+    } catch {
+    }
+    const s = this.sessions.get(id2);
+    if (s && !s.state.title_locked) {
+      s.state.title = title;
+      s.state.title_locked = true;
+      s.state.updated_at = Date.now();
+      this.bus.emit(id2, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        title
+      });
+    }
+  }
+  // #26 派单台账收口（M2 泛化全会话）：按会话键从 FIFO 取未收口派单补 done/failed
+  // 行（append-only 状态机，读侧同 id 取最后一行收敛）。all=true 全清（onSessionEnd
+  // 流关闭兜底）；FIFO 空 = 无未收口派单（上岗引导回合等），no-op。
+  // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
+  //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
+  // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
+  pushOpenDispatch(key, e) {
+    const q2 = this.openDispatches.get(key) ?? [];
+    q2.push(e);
+    this.openDispatches.set(key, q2);
+  }
+  // 冲刺 F-02（B1 实测）：worker 纪律模板要求回执末行「结果：…｜改动文件：…」，但
+  // 台账 receipt 只存 CLI turn-end reason（"completed"）——项目组详情「回执流」无可读
+  // 内容（§3.5 回执语义未落到台账字段）。回合收口时从时间线尾部捞最近一条 assistant
+  // 消息里的「结果：」行拼进回执；无此行（咨询档/中断/未按纪律回）保持原 reason。
+  // 只看最近一条 assistant（更早回合的回执不串台）；text 截断时 full 存原文优先取。
+  receiptWithResultLine(key, reason) {
+    const m = this.sessions.get(key);
+    if (!m) return reason;
+    for (let i = m.logs.length - 1; i >= 0; i--) {
+      const e = m.logs[i];
+      if (e.kind !== "assistant_text") continue;
+      const lines = (e.full ?? e.text).split("\n");
+      for (let j2 = lines.length - 1; j2 >= 0; j2--) {
+        const t = lines[j2].trim();
+        if (t.startsWith("\u7ED3\u679C\uFF1A")) return `${reason}\uFF5C${truncate(t, 160)}`;
+      }
+      break;
+    }
+    return reason;
+  }
+  closeOpenDispatches(key, status, receipt, all = false, recordRouting = true, onlyGid, boardTo) {
+    const q2 = this.openDispatches.get(key);
+    if (!q2 || q2.length === 0) return;
+    const es2 = onlyGid ? (() => {
+      const hit = q2.filter((x) => x.gid === onlyGid);
+      for (const x of hit) q2.splice(q2.indexOf(x), 1);
+      return hit;
+    })() : all ? q2.splice(0) : [q2.shift()].filter((x) => !!x);
+    if (q2.length === 0) this.openDispatches.delete(key);
+    for (const e of es2) {
+      appendDispatch({
+        ts: Date.now(),
+        id: e.id,
+        tier: e.tier,
+        target: key === this.leaderId ? "org-leader" : key,
+        status,
+        receipt: truncate(receipt, 200),
+        session_id: key,
+        ...e.anchor ? { project_anchor: e.anchor } : {},
+        ...e.actor ? { actor: e.actor } : {}
+      });
+      this.notifyDispatchClosed(e, status, receipt, key);
+      if (e.gid) {
+        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
+        this.emitBoard(e.gid);
+        if (recordRouting) recordRoutingResult(e.gid, key, status, receipt);
+      }
+    }
+  }
+  // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
+  // 口径 + 通知对账）：上一进程遗留 running/dispatched 悬账各补一行 done 收口（事实
+  // 源先行），板条同步退 todo（中断口径，F-08 实测校准注释随块迁入——auto-revive
+  // 续跑回合不走派单 FIFO、无钩子搬 done → orphan doing 永挂；退 todo 更诚实，真
+  // 交付了由 Leader/用户目测搬 done；gid 不在台账字段里，按 dispatch id 扫现役+挂起
+  // 组的板试搬，板里无此 id 即 no-op，随手办无板条天然豁免，挂起组板冻结由
+  // writableBoard 挡），并统一走 notifyDispatchClosed 落结构化账——done 归 activity
+  // 桶不可操作、无 actor 不注入 Leader（M4 规则天然豁免）。此前补记只写台账，通知
+  // 账与台账不对称、离线端重启后看不到「哪些单被打断」（PM R1 终审 P1-2）。补记
+  // 豁免的只有熟手路由评价（recordRoutingResult 不经此，维持原口径：relay 重启不是
+  // worker 的账）
+  closeHungDispatchRows() {
+    const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
+    if (!hung.length) return;
+    const bySt = listGroupsByStatus();
+    const scanGids = [...bySt.active, ...bySt.parked].map((g2) => g2.id);
+    for (const e of hung) {
+      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD" });
+      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      this.notifyDispatchClosed(
+        { id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} },
+        "done",
+        "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD",
+        e.session_id
+      );
+    }
+  }
+  // #40 M4 派单完成回调（谁派活谁收通知）——#018-R1FIX1 P1-2 后为全系统唯一
+  // dispatch 终态通知策略口：各出口先写事实源（appendDispatch），再统一走此入口。
+  // 协议显式无隐式例外（PM R1 终审 P1-2）：
+  // (a) 端上 push：DISPATCH_DONE 瞬态帧广播（seq:0 不落盘不补发；web/expo 悬浮通知
+  //     + 系统通知，旧端未知类型 switch 自然跳过）。
+  // (b) 结构化通知账（R1c 源③）：stableKey=dispatch:id 一单一行，重复收口事件不双
+  //     发（对账去重口径）；done 归 activity 桶（结果可见即可），failed 归 action 桶
+  //     可操作（重派/换人/放弃要对账决策）。离线端由重连 SNAPSHOT /
+  //     notifications.json 兜底——所有 status=done|failed 终态行都落账，台账与通知
+  //     账对称。五个终态出口（closeOpenDispatches / 重启悬账补记 / 复活后再失败 /
+  //     首次拉起失败 / 看门狗接管 done+上限 failed）全部入账；旧设计「spawn 失败与
+  //     断档补记不发帧」例外只针对在线弹窗通道 (a)（spawn 失败 CLI 同步拿 error 当
+  //     场知道、重启补记用户在场），账面 (b) 不豁免。
+  //     排除项备案（#018-R1FIX2 P3-1 立，R1FIX3 按真实入口重写，一项）：orgAction
+  //     无组 suggest-hold 台账行（:orgAction case "suggest-hold" 的 !id 分支）
+  //     **不入本口**——纯审计台账（auditOrgCommand 同类）。该行有真实线上入口：
+  //     POST /api/org action=suggest-hold 无 id（ws-server ORG_HTTP_ACTIONS 白名单
+  //     放行）同步返回 200 {ok:true,ledgered:true}，非「仅内部漏斗可达」（R1FIX2
+  //     备案此句有误，已删）；N16⑤ HTTP 探针焊死真实入口也排除。判定依据三条：
+  //     ①回执即知晓面：发起者当场收同步回执（HTTP 200/ledgered:true；WS 通道则
+  //     COMMAND_ACK 同内容），「建议暂缓+解除条件」在发起时刻已达在场方，结构化
+  //     通知账的职责是给不在场端补账离线异步事实（派单终态/确认单产生），不是回
+  //     显发起者刚收到的回执；②无决策对象：无 gid、无确认卡、done 即收口、
+  //     receipt=发起者自述理由——后续无任何用户动作可依此通知发起（对照 failed
+  //     行有重派/换人/放弃、org-confirm 有 approve/reject），action 桶的价值在
+  //     「可操作」而该行不可操作；③入账即自扰：三端每端多一张「Leader 自己刚
+  //     记录的备忘」卡片，badge 虚高且无消费路径。N16④-⑦ 断言焊死该排除（内部
+  //     漏斗与 HTTP 真入口两路：台账行在、通知账零新增零帧）。
+  // (c) Leader 会话闭环：仅 failed 单注入回执唤醒（resumeAgent 先例=auto-revive）。
+  //     省 token 口径：每条注入开一个 Leader 回合——done 单用户在端上/任务板可见，
+  //     不打扰；失败是派单方必须当场知道并决策（重派/换人/放弃）的事，值得一个回合。
+  //     咨询档（actor=user，承接方即 Leader 自己）与 actor 缺省（旧数据/看门狗行/
+  //     重启补记行）不注入。注入 try/catch 尽力而为：通知失败绝不阻断收口主路径
+  //    （台账已落，板已搬）。
+  notifyDispatchClosed(e, status, receipt, workerSessionId) {
+    this.bus.emitTransient("DISPATCH_DONE", {
+      dispatch_id: e.id,
+      tier: e.tier,
+      status,
+      receipt: truncate(receipt, 200),
+      worker_session_id: workerSessionId,
+      ...e.gid ? { gid: e.gid } : {},
+      ...e.actor ? { actor: e.actor } : {},
+      ts: Date.now()
+    });
+    this.upsertNotification("dispatch", e.id, void 0, {
+      title: `${e.tier} \u5355${status === "done" ? "\u5B8C\u6210" : "\u5931\u8D25"}`,
+      body: truncate(receipt, 160),
+      severity: status === "done" ? "done" : "error",
+      group: status === "done" ? "activity" : "action",
+      actionable: status !== "done",
+      sessionId: workerSessionId,
+      domain: "dispatch",
+      returnPath: "dispatch"
+    });
+    if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
+    try {
+      this.pushExternalLog(this.leaderId, "system", `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] ${e.tier} \u5355 ${e.id.slice(0, 8)} \u5931\u8D25\uFF1A${truncate(receipt, 160)}`);
+      this.resumeAgent(this.require(this.leaderId), `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] \u4F60\u6D3E\u7684 ${e.tier} \u5355\uFF08${e.id.slice(0, 8)}${e.gid ? ` \xB7 \u7EC4 ${e.gid.slice(0, 8)}` : ""}\uFF09\u5931\u8D25\uFF1A${truncate(receipt, 160)}
+\u8BF7\u51B3\u5B9A\u91CD\u6D3E / \u6362\u4EBA\u63A5\u66FF / \u653E\u5F03\uFF0C\u5E76\u540C\u6B65\u4EFB\u52A1\u677F\u3002`);
+    } catch (err) {
+      console.warn(`[m4] \u6D3E\u5355\u5931\u8D25\u901A\u77E5\u6CE8\u5165 Leader \u5931\u8D25: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  // ---------- #018-R1b org 命令咽喉（用户端 org 命令统一收口） ----------
+  // COMMAND_ORG_ACTION / COMMAND_ORG_CONFIRM 全走这里：权限矩阵判定（B2a fixture
+  // 口径）→ B2a adapter（create→createGroup，needsConfirm 时确认单已落
+  // org/confirms.json）/ confirm-decide 漏斗（决议 + applyConfirmEffects 三态联动）
+  // → dispatch-log 审计一行（复用既有台账通道，不新开文件；行记
+  // actor/device/action/anchor）。ACK data 冻结口径 {group, needsConfirm, confirm?}。
+  orgCommand(actor, device, action, payload) {
+    const perm = evaluateCommandPermission(actor, "org:write", { command_id: `org:${action}` });
+    if (!perm.allowed) {
+      this.auditOrgCommand(actor, device, action, "", "\u968F\u624B\u529E", false, `\u6743\u9650\u62D2\u6536\uFF1A${perm.actor_role} \u65E0 org:write \u80FD\u529B`);
+      return { ok: false, forbidden: perm.ack ?? { command_id: "", ok: false, error: "forbidden", actor_role: actor } };
+    }
+    if (action === "create") {
+      const anchor = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
+      const tier = payload.tier === "\u8F7B\u7ACB\u9879" || payload.tier === "\u6B63\u7ECF\u7ACB\u9879" ? payload.tier : "\u968F\u624B\u529E";
+      const r = adaptOrgAction(payload);
+      if (!r.ok) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, r.error);
+        return { ok: false, error: r.error };
+      }
+      ensureProjectClaudeMd(r.group.anchor_dir, r.group.name);
+      this.emitOrgState();
+      this.auditOrgCommand(
+        actor,
+        device,
+        action,
+        r.group.anchor_dir,
+        r.group.tier,
+        true,
+        r.needsConfirm ? `\u7ACB\u9879\u5F85\u786E\u8BA4\uFF08\u786E\u8BA4\u5355 ${r.confirm?.id.slice(0, 8) ?? ""} \u5DF2\u843D confirms.json\uFF09\uFF1A${r.group.name}` : `\u8F7B\u7ACB\u9879\u4FE1\u4EFB\u76F4\u901A\uFF1A${r.group.name}`
+      );
+      return {
+        ok: true,
+        data: {
+          group: r.group,
+          needsConfirm: r.needsConfirm,
+          ...r.confirm ? { confirm: r.confirm } : {}
+        }
+      };
+    }
+    if (action === "confirm-decide") {
+      const cid = typeof payload.confirm_id === "string" ? payload.confirm_id.trim() : "";
+      if (!cid) {
+        this.auditOrgCommand(actor, device, action, "", "\u968F\u624B\u529E", false, "confirm_id \u5FC5\u586B");
+        return { ok: false, error: "confirm_id \u5FC5\u586B" };
+      }
+      const groupTierOf = (gid) => {
+        const g2 = typeof gid === "string" ? findGroup(gid) : void 0;
+        return { tier: g2?.tier === "\u8F7B\u7ACB\u9879" || g2?.tier === "\u6B63\u7ECF\u7ACB\u9879" ? g2.tier : "\u968F\u624B\u529E", anchor: g2?.anchor_dir ?? "" };
+      };
+      const existing = listConfirms().find((c) => c.id === cid);
+      if (existing && existing.status !== "pending") {
+        const { tier: tier2, anchor: anchor2 } = groupTierOf(existing.payload.gid);
+        this.auditOrgCommand(actor, device, action, anchor2, tier2, true, `\u5E42\u7B49\u91CD\u653E\uFF1A\u786E\u8BA4\u5355 ${cid.slice(0, 8)} \u5DF2\u51B3\u8BAE\uFF08${existing.status}\uFF09\uFF0C\u4E0D\u91CD\u590D\u843D\u8D26`);
+        return { ok: true, data: { confirm: existing } };
+      }
+      const r = this.orgAction("confirm-decide", { confirm_id: cid, approve: payload.approve === true, by: device });
+      const { tier, anchor } = groupTierOf(existing?.payload.gid);
+      this.auditOrgCommand(
+        actor,
+        device,
+        action,
+        anchor,
+        tier,
+        r.ok,
+        r.ok ? `\u51B3\u8BAE\u843D\u8D26\uFF1A\u786E\u8BA4\u5355 ${cid.slice(0, 8)} \u2192 \u786E\u8BA4\u5355\u72B6\u6001\u4E0E\u7EC4\u4E09\u6001\u5DF2\u8054\u52A8` : r.error
+      );
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
+    return { ok: false, error: `unsupported org action: ${action}` };
+  }
+  // org 命令审计行（dispatch-log 台账通道，append-only；org.ts 口径：审计不进
+  // events.ndjson）。status 只用 done/failed——不混入 status 动作的 open 在办清单；
+  // actor 恒 user（命令通道是用户面，也避开 failed+leader 组合的 Leader 失败注入
+  // 误触）；tier 取分诊档位语义（create=项目档位、confirm-decide=组档位，取不到落
+  // 随手办 占位）；device 无专属列，随 receipt 文本留痕（截 200 字由 appendDispatch 收口）
+  auditOrgCommand(actor, device, action, anchor, tier, ok2, receipt) {
+    appendDispatch({
+      ts: Date.now(),
+      id: randomUUID8(),
+      tier,
+      target: "org-command",
+      ...anchor ? { project_anchor: anchor } : {},
+      status: ok2 ? "done" : "failed",
+      receipt: truncate(`org ${action} \xB7 actor=${actor} device=${device}\uFF1A${receipt}`, 200),
+      session_id: this.leaderId ?? "",
+      actor: "user"
+    });
+  }
+  // ---------- #26 M2 分诊引擎（§4 响应四档/第五态 + §6.2 状态机 + 确认门槛） ----------
+  // 单漏斗：Leader CLI（ws-server /api/org HTTP）与用户客户端（COMMAND_ORG_CONFIRM）
+  // 都路由到 orgAction。决议与执行分离：decideConfirm 只记决策，副作用统一
+  // applyConfirmEffects（可审计）。用户是指挥/验收者——Leader 只提案不决议。
+  orgAction(action, p) {
+    const str2 = (k3) => typeof p[k3] === "string" ? p[k3].trim() : "";
+    const bool = (k3) => p[k3] === true;
+    try {
+      switch (action) {
+        case "status": {
+          return {
+            ok: true,
+            data: {
+              groups: listGroups(),
+              pending: listPendingConfirms(),
+              open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20)
+            }
+          };
+        }
+        case "project-create": {
+          const name = str2("name");
+          const anchor = str2("anchor");
+          const tier = str2("tier");
+          if (!name || !anchor) return { ok: false, error: "name/anchor \u5FC5\u586B" };
+          if (!isAbsolute6(anchor)) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+          if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
+          const roleDefaults = {};
+          if (p.role_defaults && typeof p.role_defaults === "object" && !Array.isArray(p.role_defaults)) {
+            for (const [role, raw] of Object.entries(p.role_defaults)) {
+              if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+              const item = raw;
+              if (item.engine !== void 0 && !isSessionEngine(item.engine)) return { ok: false, error: `\u89D2\u8272 ${role} \u7684\u5F15\u64CE\u65E0\u6548` };
+              roleDefaults[role] = {
+                ...item.engine ? { engine: item.engine } : {},
+                ...typeof item.model === "string" && item.model.trim() ? { model: item.model.trim() } : {},
+                ...typeof item.provider === "string" && item.provider.trim() ? { provider: item.provider.trim() } : {}
+              };
+            }
+          }
+          const r = createGroup({ name, anchor_dir: anchor, tier, ...Object.keys(roleDefaults).length > 0 ? { role_defaults: roleDefaults } : {} });
+          if (!r.ok) return r;
+          ensureProjectClaudeMd(anchor, name);
+          this.emitOrgState();
+          return { ok: true, data: { group: r.group, needsConfirm: r.needsConfirm, confirm: r.confirm } };
+        }
+        case "project-status": {
+          const id2 = str2("id");
+          const to2 = str2("to");
+          const note = str2("note");
+          if (!id2 || !to2) return { ok: false, error: "id/to \u5FC5\u586B" };
+          if (!["active", "parked", "archived"].includes(to2)) return { ok: false, error: "to \u5FC5\u987B\u662F active|parked|archived" };
+          const cur = findGroup(id2);
+          if (cur?.status === "pending") {
+            return { ok: false, error: `\u9879\u76EE\u7EC4\u5F85\u786E\u8BA4\uFF08pending\uFF09\uFF0C\u53BB\u7559\u7531\u7528\u6237\u5728\u786E\u8BA4\u5361\u4E0A \u2713/\u2717 \u51B3\u8BAE` };
+          }
+          if (to2 === "archived") {
+            const chk = buildArchiveChecklist(id2);
+            if (!chk) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${id2}` };
+            if (chk.openDispatches.length === 0 && chk.openBoardEntries === 0) {
+              const r2 = setGroupStatus(id2, "archived", note || "\u96F6\u5F02\u5E38\u4E00\u53E5\u8BDD\u5F52\u6863");
+              if (!r2.ok) return r2;
+              this.disbandGroupMembers(r2.group.id);
+              this.emitOrgState();
+              this.emitBoard(r2.group.id);
+              return { ok: true, data: { group: r2.group, archived: true } };
+            }
+            const confirm = addConfirm({
+              kind: "archive",
+              title: `\u7ED3\u9879\u786E\u8BA4\uFF1A${chk.name}`,
+              reason: `\u60AC\u8D26 ${chk.openDispatches.length} \u9879 / \u677F\u672A\u5B8C ${chk.openBoardEntries} \u6761\uFF0C\u9644\u6838\u5BF9\u6E05\u5355\u88C1\u51B3`,
+              payload: { gid: chk.gid, checklist: chk, note }
+            });
+            this.emitOrgState();
+            return { ok: true, data: { needsConfirm: true, confirm, checklist: chk } };
+          }
+          const cur2 = findGroup(id2);
+          if (!cur2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${id2}` };
+          if (!canTransition(cur2.status, to2)) {
+            return { ok: false, error: `\u975E\u6CD5\u72B6\u6001\u8FC1\u79FB: ${cur2.status} \u2192 ${to2}` };
+          }
+          if (to2 === "active" && cur2.status === "archived") {
+            const holder = findGroupByAnchor(cur2.anchor_dir);
+            if (holder && holder.id !== cur2.id) {
+              return { ok: false, error: `\u951A\u70B9\u5DF2\u88AB\u5728\u529E\u7EC4\u300C${holder.name}\u300D\u5360\u7528\uFF0C\u590D\u6D3B\u4F1A\u53CC\u7EC4\u540C\u951A\uFF1B\u8BF7\u4E3A\u65B0\u4F4D\u7F6E\u91CD\u65B0\u7ACB\u9879\uFF08\u6216\u5148\u7ED3\u9879\u5360\u4F4D\u7EC4\uFF09` };
+            }
+          }
+          if (to2 === "parked") this.parkGroupMembers(id2);
+          const r = setGroupStatus(id2, to2, note || void 0);
+          if (!r.ok) return r;
+          if (to2 === "active") {
+            this.reviveGroupMembers(r.group.id);
+            this.reconcileStaleDoing(r.group.id);
+          }
+          this.emitOrgState();
+          this.emitBoard(r.group.id);
+          return { ok: true, data: { group: r.group } };
+        }
+        case "project-tier": {
+          const id2 = str2("id");
+          const to2 = str2("to");
+          const reason = str2("reason");
+          if (!id2) return { ok: false, error: "id \u5FC5\u586B" };
+          if (to2 !== "\u8F7B\u7ACB\u9879" && to2 !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "to \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
+          if (!reason) return { ok: false, error: "\u5347\u964D\u7EA7\u5FC5\u987B\u5E26\u4E00\u53E5\u7406\u7531\uFF08\xA74 \u77EB\u6B63\u901A\u9053\uFF09" };
+          const g2 = findGroup(id2);
+          if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${id2}` };
+          if (g2.status === "pending") return { ok: false, error: "\u9879\u76EE\u7EC4\u5F85\u7ACB\u9879\u786E\u8BA4\uFF08pending\uFF09\uFF0C\u6863\u4F4D\u968F\u7ACB\u9879\u5361\u5B9A\u2014\u2014\u5148 \u2713/\u2717 \u7ACB\u9879\u51B3\u8BAE" };
+          if (g2.status === "archived") return { ok: false, error: "\u7ED3\u9879\u7EC4\u4E0D\u53EF\u6539\u6863\uFF08\u7F16\u5236\u5DF2\u89E3\u6563\uFF1B\u5982\u9700\u91CD\u542F\u8BF7\u91CD\u65B0\u7ACB\u9879\uFF09" };
+          if (g2.tier === to2) return { ok: true, data: { group: g2, noop: true } };
+          const confirm = addConfirm({
+            kind: "tier-change",
+            title: `${to2 === "\u6B63\u7ECF\u7ACB\u9879" ? "\u5347\u7EA7" : "\u964D\u7EA7"}\uFF1A${g2.name}\uFF08${g2.tier} \u2192 ${to2}\uFF09`,
+            reason,
+            payload: { gid: g2.id, to_tier: to2 }
+          });
+          this.emitOrgState();
+          return { ok: true, data: { needsConfirm: true, confirm } };
+        }
+        case "suggest-hold": {
+          const id2 = str2("id");
+          const reason = str2("reason");
+          const condition = str2("condition");
+          if (!reason) return { ok: false, error: "\u5EFA\u8BAE\u6682\u7F13\u5FC5\u987B\u5E26\u4E00\u53E5\u7406\u7531" };
+          if (!id2) {
+            appendDispatch({
+              ts: Date.now(),
+              id: randomUUID8(),
+              tier: "\u6682\u7F13",
+              target: "org-leader",
+              status: "done",
+              receipt: truncate(`${reason}${condition ? `\uFF08\u89E3\u9664\u6761\u4EF6\uFF1A${condition}\uFF09` : ""}`, 200),
+              session_id: this.leaderId ?? ""
+            });
+            return { ok: true, data: { ledgered: true } };
+          }
+          const g2 = findGroup(id2);
+          if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${id2}` };
+          if (g2.status !== "active") return { ok: false, error: `\u9879\u76EE\u7EC4 ${g2.name} \u4E3A ${g2.status}\uFF0C\u65E0\u9700\u5EFA\u8BAE\u6682\u7F13` };
+          const confirm = addConfirm({
+            kind: "suggest-hold",
+            title: `\u5EFA\u8BAE\u6682\u7F13\uFF1A${g2.name}`,
+            reason,
+            payload: { gid: g2.id, ...condition ? { condition } : {} }
+          });
+          markHoldSuggested(g2.id, Date.now());
+          this.emitOrgState();
+          return { ok: true, data: { needsConfirm: true, confirm } };
+        }
+        case "dispatch": {
+          if (p.engine !== void 0 && !isSessionEngine(p.engine)) return { ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(p.engine)}` };
+          return this.dispatchWorker({
+            anchor: str2("anchor"),
+            prompt: typeof p.prompt === "string" ? p.prompt : "",
+            gid: str2("gid") || void 0,
+            title: str2("title") || void 0,
+            skills: Array.isArray(p.skills) ? p.skills.filter((x) => typeof x === "string") : void 0,
+            role: str2("role") || void 0,
+            engine: p.engine,
+            model: str2("model") || void 0,
+            provider: str2("provider") || void 0
+          });
+        }
+        case "board": {
+          const op2 = str2("op");
+          const gid = str2("gid");
+          if (!gid) return { ok: false, error: "gid \u5FC5\u586B" };
+          let r;
+          if (op2 === "upsert") {
+            const text = str2("text");
+            if (!text) return { ok: false, error: "text \u5FC5\u586B" };
+            const status = str2("status");
+            if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+            const u = upsertBoardEntry(gid, {
+              id: str2("entry_id") || void 0,
+              text,
+              ...status ? { status } : {},
+              ...str2("note") ? { note: str2("note") } : {}
+            });
+            r = u.ok ? { ok: true, data: { entry: u.entry } } : u;
+          } else if (op2 === "move") {
+            const st2 = str2("status");
+            if (!["todo", "doing", "done"].includes(st2)) return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+            const m = moveBoardEntry(gid, str2("entry_id"), st2);
+            r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
+          } else if (op2 === "del") {
+            const d2 = removeBoardEntry(gid, str2("entry_id"));
+            r = d2.ok ? { ok: true } : d2;
+          } else {
+            return { ok: false, error: `\u672A\u77E5 board \u64CD\u4F5C: ${op2}` };
+          }
+          if (r.ok) this.emitBoard(gid);
+          return r;
+        }
+        case "project-detail": {
+          const g2 = findGroup(str2("id"));
+          if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${str2("id")}` };
+          const receipts = readDispatchLog().filter((e) => {
+            const a = e.project_anchor ?? "";
+            return a.replace(/\/+$/, "") === g2.anchor_dir.replace(/\/+$/, "");
+          }).slice(-30).reverse();
+          const pool = routingFor(g2.id).map((e) => {
+            const s = this.sessions.get(e.session_id);
+            return {
+              session_id: e.session_id,
+              count: e.count,
+              failed: e.failed,
+              last_ts: e.last_ts,
+              rating: e.rating,
+              tags: e.tags,
+              title: s?.state.title || "",
+              /** 在忙/空闲（运行态，派单时现场口径同 pickVeteran） */
+              busy: !!s && (s.state.status === "WORKING" || s.state.status === "WAITING"),
+              /** 可拉起：在册且有 SDK resume 句柄；false = 退休（只剩路由表档案） */
+              resumable: !!s && !!s.state.relay_session_id,
+              /** 随本组挂起休眠（org_parked 指回本组） */
+              parked: s?.state.org_parked === g2.id
+            };
+          });
+          return { ok: true, data: { group: g2, board: loadBoard(g2.id), receipts, pool } };
+        }
+        // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
+        case "rate": {
+          const gid = str2("gid");
+          const sid = str2("sid");
+          const rating = str2("rating");
+          if (!gid || !sid) return { ok: false, error: "gid/sid \u5FC5\u586B" };
+          if (rating !== "good" && rating !== "bad") return { ok: false, error: "rating \u5FC5\u987B\u662F good|bad" };
+          const r = rateRouting(gid, sid, rating);
+          if (!r.ok) return r;
+          return { ok: true, data: { entry: r.entry } };
+        }
+        case "tag": {
+          const gid = str2("gid");
+          const sid = str2("sid");
+          const tags = Array.isArray(p.tags) ? p.tags.filter((t) => typeof t === "string") : [];
+          if (!gid || !sid) return { ok: false, error: "gid/sid \u5FC5\u586B" };
+          if (tags.length === 0) return { ok: false, error: "tags \u5FC5\u586B\uFF08\u81F3\u5C11\u4E00\u4E2A\uFF09" };
+          const r = tagRouting(gid, sid, tags);
+          if (!r.ok) return r;
+          return { ok: true, data: { entry: r.entry } };
+        }
+        // #26 补章：成员级退休独立触发器（§5 退休/§6.1 worker「退休后只剩路由表
+        // 记录」——此前退休只随组挂起/结项发生，组级覆盖；本通道=对单个编制位提前
+        // 除名）。跨组正交：只收**本组**悬账（他组在跑派单保留，会话不因此停流）；
+        // 台账按中断口径收口（路由表无感——退休是编制决策不是干砸）；路由表档案
+        // 永存。复拉 = member-add 再入编（之后 pickVeteran 编制门重新放行）
+        case "member-retire": {
+          const gid = str2("gid");
+          const sid = str2("sid");
+          const reason = str2("reason");
+          if (!gid || !sid) return { ok: false, error: "gid/sid \u5FC5\u586B" };
+          const g2 = findGroup(gid);
+          if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
+          if (g2.status === "archived") return { ok: false, error: "\u7ED3\u9879\u7EC4\u7F16\u5236\u5DF2\u89E3\u6563\uFF08headcount \u4E3A\u5FEB\u7167\u6863\u6848\uFF09\uFF0C\u65E0\u6210\u5458\u53EF\u9000" };
+          if (!g2.headcount.some((h) => h.session_id === sid)) return { ok: false, error: `\u6210\u5458\u4E0D\u5728\u300C${g2.name}\u300D\u7F16\u5236\u5185\uFF08\u5DF2\u9000\u4F11\u53EA\u5269\u6863\u6848\uFF1F\u590D\u62C9\u8D70 member-add\uFF09` };
+          const s = this.sessions.get(sid);
+          if (s?.state.external) return { ok: false, error: "\u6210\u5458\u4F1A\u8BDD\u4E3A\u5916\u90E8\u4F1A\u8BDD\uFF08\u4E0D\u53EF\u5165\u7F16\uFF0C\u6570\u636E\u5F02\u5E38\uFF09" };
+          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader \u4E0D\u53EF\u9000\u4F11\uFF08\u903B\u8F91\u5E38\u9A7B\uFF0C\u951A\u662F\u6743\u5A01\uFF09" };
+          if ((this.openDispatches.get(sid)?.length ?? 0) > 0) {
+            this.closeOpenDispatches(sid, "failed", reason ? truncate(`\u6210\u5458\u9000\u4F11\uFF1A${reason}`, 200) : "\u6210\u5458\u9000\u4F11\uFF0C\u56DE\u5408\u4E2D\u65AD", false, false, gid);
+          }
+          removeMember(gid, sid);
+          this.emitOrgState();
+          this.emitBoard(gid);
+          if (!s || (this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
+          this.retireSession(s, gid, "retired");
+          return { ok: true, data: { retired: true, halted: true } };
+        }
+        // #26 补章：复拉通道（退休熟手再入编）——编制门之后 pickVeteran 会重新考虑
+        // 该熟手（路由档案一直在）；只对在办组开放（挂起组冻结、结项组只读）
+        case "member-add": {
+          const gid = str2("gid");
+          const sid = str2("sid");
+          const role = str2("role") || "worker";
+          const engineValue = p.engine;
+          if (engineValue !== void 0 && !isSessionEngine(engineValue)) return { ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(engineValue)}` };
+          const selection = {
+            ...engineValue ? { engine: engineValue } : {},
+            ...typeof p.model === "string" && p.model.trim() ? { model: p.model.trim() } : {},
+            ...typeof p.provider === "string" && p.provider.trim() ? { provider: p.provider.trim() } : {}
+          };
+          if (!gid || !sid) return { ok: false, error: "gid/sid \u5FC5\u586B" };
+          const g2 = findGroup(gid);
+          if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
+          if (g2.status !== "active") return { ok: false, error: `\u9879\u76EE\u7EC4 ${g2.name} \u4E3A ${g2.status}\uFF08\u6302\u8D77\u51BB\u7ED3/\u7ED3\u9879\u53EA\u8BFB\uFF09\uFF0C\u4E0D\u53EF\u5165\u7F16` };
+          const s = this.sessions.get(sid);
+          if (!s || s.state.external) return { ok: false, error: "\u6210\u5458\u4F1A\u8BDD\u4E0D\u5728\u518C\uFF08\u590D\u62C9\u9700\u5148\u6709\u4F1A\u8BDD\u5361\uFF09" };
+          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader \u4E0D\u53EF\u5165\u7F16\uFF08\u5206\u8BCA\u8005\u4E0D\u63A5\u6D3B\uFF09" };
+          const r = addMember(gid, sid, role, selection);
+          if (!r.ok) return { ok: false, error: r.error ?? "\u5165\u7F16\u5931\u8D25" };
+          this.emitOrgState();
+          return { ok: true, data: { group: r.group } };
+        }
+        case "confirm-decide": {
+          const cid = str2("confirm_id");
+          if (!cid) return { ok: false, error: "confirm_id \u5FC5\u586B" };
+          if (bool("approve")) {
+            const pend = listConfirms().find((c) => c.id === cid);
+            const pgid = typeof pend?.payload.gid === "string" ? pend.payload.gid : "";
+            if (pend?.kind === "project-create" && pend.status === "pending" && pgid) {
+              const g2 = findGroup(pgid);
+              if (g2?.status === "pending" && listGroupsByStatus().active.length >= maxActiveGroups()) {
+                return { ok: false, error: `\u5728\u529E\u5E76\u884C\u5DF2\u8FBE\u4E0A\u9650\uFF08${maxActiveGroups()}\uFF09\uFF0C\u5148\u6302\u8D77/\u7ED3\u9879\u4E00\u4E2A\u7EC4\u518D\u6279\u51C6\uFF08\u5361\u4FDD\u6301\u5F85\u51B3\uFF09` };
+              }
+            }
+          }
+          const d2 = decideConfirm(cid, bool("approve"), str2("by") || "user");
+          if (!d2.ok) return d2;
+          const eff = this.applyConfirmEffects(d2.confirm);
+          if (!eff.ok) return { ok: false, error: eff.error ?? "\u51B3\u8BAE\u526F\u4F5C\u7528\u6267\u884C\u5931\u8D25" };
+          return { ok: true, data: { confirm: d2.confirm } };
+        }
+        default:
+          return { ok: false, error: `\u672A\u77E5 org action: ${action}` };
+      }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  // 确认单决议副作用（一次决一次执行；这里之外不得有组状态迁移的旁路）。
+  // M1/M2 审查轮：副作用失败必须回传——静默失败会让「卡已 approved、组没动」的
+  // 劈叉态无人知晓（两层联动只做了成员侧）。失败时决议留痕不回滚（decideConfirm
+  // 已落盘），错误带回决议方（卡上可见），用户可走直达通道（project-status）补救。
+  // #018-R1FIX1 P2-2：通知面语义对齐事实——副作用成功后 org-confirm 才转 resolved
+  //（决议 + 执行双落）；失败则原卡同 key 原地转 error 告警面不 resolved（旧序在
+  // 副作用前 resolve，失败时通知显示已决而实际是劈叉态，重连后无结构化告警）
+  applyConfirmEffects(c) {
+    const gid = typeof c.payload.gid === "string" ? c.payload.gid : "";
+    const fail = (what, r) => {
+      this.failConfirmNotification(c, what, r.error ?? "\u672A\u77E5\u539F\u56E0");
+      this.emitOrgState();
+      if (gid) this.emitBoard(gid);
+      return { ok: false, error: `${what}\u5931\u8D25: ${r.error ?? "\u672A\u77E5\u539F\u56E0"}\uFF08\u51B3\u8BAE\u5DF2\u7559\u75D5\uFF0C\u53EF\u7528 org set \u76F4\u8FBE\u901A\u9053\u8865\u6551\uFF09` };
+    };
+    if (c.status === "approved") {
+      switch (c.kind) {
+        case "project-create":
+          if (gid) {
+            const r = setGroupStatus(gid, "active");
+            if (!r.ok) return fail("\u7ACB\u9879\u51B3\u8BAE\u901A\u8FC7\u4F46\u6FC0\u6D3B", r);
+            if (findGroup(gid)?.tier === "\u8F7B\u7ACB\u9879") setLightConfirmTrusted(true);
+          }
+          break;
+        case "tier-change":
+          if (gid && (findGroup(gid)?.status === "active" || findGroup(gid)?.status === "parked")) {
+            const r = setGroupTier(gid, c.payload.to_tier === "\u8F7B\u7ACB\u9879" ? "\u8F7B\u7ACB\u9879" : "\u6B63\u7ECF\u7ACB\u9879");
+            if (!r.ok) return fail("\u6863\u4F4D\u8FC1\u79FB", r);
+          }
+          break;
+        case "suggest-hold":
+          if (gid && findGroup(gid)?.status === "active") {
+            this.parkGroupMembers(gid);
+            const r = setGroupStatus(gid, "parked");
+            if (!r.ok) {
+              this.reviveGroupMembers(gid);
+              return fail("\u6302\u8D77\u8FC1\u79FB", r);
+            }
+          }
+          break;
+        case "archive":
+          if (gid) {
+            const a = setGroupStatus(gid, "archived", typeof c.payload.note === "string" && c.payload.note ? c.payload.note : "\u7ED3\u9879\u786E\u8BA4\u901A\u8FC7\uFF08\u60AC\u8D26/\u672A\u5B8C\u6761\u76EE\u77E5\u60C5\u653E\u884C\uFF09");
+            if (!a.ok) return fail("\u7ED3\u9879\u8FC1\u79FB", a);
+            this.disbandGroupMembers(gid);
+          }
+          break;
+        case "revive":
+          if (gid) {
+            const r = setGroupStatus(gid, "active");
+            if (!r.ok) return fail("\u590D\u6D3B\u8FC1\u79FB", r);
+            this.reviveGroupMembers(gid);
+          }
+          break;
+      }
+    } else if (c.kind === "project-create" && gid) {
+      const r = setGroupStatus(gid, "archived", "\u7ACB\u9879\u786E\u8BA4\u88AB\u5426\u51B3");
+      if (!r.ok) return fail("\u5426\u51B3\u7559\u75D5\u8FC1\u79FB", r);
+    }
+    this.emitOrgState();
+    if (gid) this.emitBoard(gid);
+    this.transitionNotifications((n) => n.kind === "org-confirm" && n.sourceContext.entityId === c.id, "resolved");
+    return { ok: true };
+  }
+  // #26 M2 组织广播（瞬态：在线端实时收敛；离线端由 SNAPSHOT.projects/org_confirms
+  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）
+  emitOrgState() {
+    this.bus.emitTransient("PROJECTS_UPDATED", { groups: listGroups() });
+    this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
+  }
+  emitBoard(gid) {
+    this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
+  }
+  // #26 M2 派单（§4 随手办/项目组任务）：worker 会话承接——M3 起项目组活双来源
+  //（§5 查表：空闲熟手 resume｜新会话+档案注入），随手办仍恒新会话（无组无路由记录）。
+  // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
+  // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
+  // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
+  dispatchWorker(input) {
+    if (!input.prompt.trim()) return { ok: false, error: "prompt \u5FC5\u586B" };
+    if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+    let tier = "\u968F\u624B\u529E";
+    let anchor = input.anchor;
+    let group = input.gid ? findGroup(input.gid) : null;
+    if (input.gid) {
+      const g2 = group;
+      if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${input.gid}` };
+      if (g2.status !== "active") return { ok: false, error: `\u9879\u76EE\u7EC4 ${g2.name} \u4E3A ${g2.status}\uFF0C\u4E0D\u53EF\u6D3E\u5355\uFF08\u6302\u8D77\u51BB\u7ED3/\u7ED3\u9879\u53EA\u8BFB\uFF09` };
+      tier = g2.tier;
+      anchor = g2.anchor_dir;
+    }
+    const role = input.role?.trim() || "worker";
+    if (input.engine !== void 0 && !isSessionEngine(input.engine)) return { ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(input.engine)}` };
+    const roleDefault = group?.role_defaults?.[role];
+    const planned = {
+      engine: input.engine ?? roleDefault?.engine,
+      model: input.model ?? roleDefault?.model,
+      provider: input.provider ?? roleDefault?.provider
+    };
+    let anchorSt;
+    try {
+      anchorSt = statSync4(anchor, { throwIfNoEntry: false });
+    } catch (e) {
+      return { ok: false, error: `\u951A\u76EE\u5F55\u65E0\u6CD5\u8BBF\u95EE: ${anchor}\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u8BF7\u6838\u5BF9\u8DEF\u5F84\u6743\u9650` };
+    }
+    if (!anchorSt) {
+      return { ok: false, error: `\u951A\u76EE\u5F55\u4E0D\u5B58\u5728: ${anchor}\uFF08\u6D3E\u5355\u4E0D\u81EA\u52A8\u5EFA\u76EE\u5F55\u2014\u2014\u5148\u7ACB\u9879\uFF0C\u6216\u6838\u5BF9\u8DEF\u5F84\u62FC\u5199\uFF09` };
+    }
+    if (!anchorSt.isDirectory()) {
+      return { ok: false, error: `\u951A\u8DEF\u5F84\u4E0D\u662F\u76EE\u5F55: ${anchor}\uFF08\u662F\u4E2A\u6587\u4EF6\u2014\u2014\u6D3E\u5355\u9700\u8981\u76EE\u5F55\u951A\uFF0C\u8BF7\u6838\u5BF9\u8DEF\u5F84\u62FC\u5199\uFF09` };
+    }
+    const dispatchId = randomUUID8();
+    let veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
+    if (veteran && (planned.engine || planned.model || planned.provider)) {
+      const veteranState = this.require(veteran).state;
+      if (planned.engine && veteranState.engine !== planned.engine || planned.model && veteranState.model !== planned.model || planned.provider && veteranState.engine_provider !== planned.provider) {
+        veteran = null;
+      }
+    }
+    const actor = input.actor?.trim() || "leader";
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor });
+    let sessionId;
+    if (veteran) {
+      try {
+        this.resumeAgent(this.require(veteran), wrapDispatchPrompt(tier, input.prompt));
+        sessionId = veteran;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.pushExternalLog(veteran, "system", `\u719F\u624B\u590D\u6D3B\u5931\u8D25\uFF0C\u672C\u5355\u964D\u7EA7\u65B0\u4F1A\u8BDD: ${msg}`);
+        try {
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+            skipStickyCwd: true,
+            employee: true,
+            role,
+            ...planned.engine ? { engine: planned.engine } : {},
+            ...planned.model ? { model: planned.model } : {},
+            ...planned.provider ? { provider: planned.provider } : {}
+          });
+        } catch (e2) {
+          const msg2 = e2 instanceof Error ? e2.message : String(e2);
+          const receipt = truncate(`resume \u5931\u8D25(${msg}) \u540E\u65B0\u4F1A\u8BDD\u4EA6\u5931\u8D25: ${msg2}`, 200);
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor });
+          this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          return { ok: false, error: `worker \u62C9\u8D77\u5931\u8D25: ${msg2}` };
+        }
+      }
+    } else {
+      try {
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+          skipStickyCwd: true,
+          employee: true,
+          role,
+          ...planned.engine ? { engine: planned.engine } : {},
+          ...planned.model ? { model: planned.model } : {},
+          ...planned.provider ? { provider: planned.provider } : {}
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const receipt = truncate(msg, 200);
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor });
+        this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+        return { ok: false, error: `worker \u62C9\u8D77\u5931\u8D25: ${msg}` };
+      }
+    }
+    const s = this.sessions.get(sessionId);
+    if (s) {
+      s.state.project_gid = input.gid;
+      s.state.dispatch_tier = tier;
+    }
+    if (input.gid) {
+      const actual = this.sessions.get(sessionId)?.state;
+      addMember(input.gid, sessionId, role, {
+        ...actual?.engine ? { engine: actual.engine } : {},
+        ...actual?.model ? { model: actual.model } : {},
+        ...actual?.engine_provider ? { provider: actual.engine_provider } : {}
+      });
+    }
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor });
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor });
+    if (input.gid) {
+      upsertBoardEntry(input.gid, {
+        text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60),
+        status: "doing",
+        owner_session: sessionId,
+        dispatch_id: dispatchId
+      });
+      this.emitBoard(input.gid);
+    }
+    if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
+    if (s) {
+      this.bus.emit(sessionId, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        ...s.state.project_gid ? { project_gid: s.state.project_gid } : {},
+        dispatch_tier: s.state.dispatch_tier
+      });
+    }
+    this.emitOrgState();
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
+  }
+  // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个
+  // 可承接者。避开名单 = bad 评价｜失败≥2 且多于成功（未手动评 bad 时的兜底——
+  // 「干砸的记一笔，下次避开或加强验收」）；不可承接 = 会话不在册/无 SDK 会话 id
+  //（退休后只剩路由表记录——档案位，等记忆亲和新会话）｜在忙（WORKING/WAITING）｜
+  // resume 互斥窗口（spawn→onInit 双拉风险）｜外部会话（用户终端自管，relay 不得
+  // 抢拉）｜Leader 本人（兼管是分诊不是承接）。historical 不排除：重启收养态正是
+  // resume 的目标形态（与用户消息复活路径同款）。
+  // #26 补章（§5 路由表三维之「技能」臂）：派单可带 skills 标签——先在「标签命中」
+  // 的熟手里按熟练序挑（count/last），全忙或无命中再放宽到全员。技能是偏好不是
+  // 硬约束：宁可用不带标签的本项目熟手（resume 上下文连续），也不为标签冷启动。
+  // 无 skills 参数时行为与此前完全一致（回归口径）。
+  pickVeteran(gid, skills) {
+    const wanted = (skills ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (wanted.length === 0) return this.pickVeteranEligible(gid, null);
+    const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w2) => tags.some((t) => t.toLowerCase() === w2)));
+    return hit ?? this.pickVeteranEligible(gid, null);
+  }
+  // 熟手筛（#26 补章加两道）：① 编制门——路由记录在册但已从组编制除名（成员级
+  // 退休）= 只剩档案，不自动 resume（复拉 = member-add 再入编，§6.1 worker
+  // 「退休后只剩路由表记录」）；② 技能门——tagFilter 命中才入选（null = 不过滤）
+  pickVeteranEligible(gid, tagFilter) {
+    const roster = new Set(findGroup(gid)?.headcount.map((h) => h.session_id) ?? []);
+    for (const e of routingFor(gid)) {
+      if (e.rating === "bad") continue;
+      if (e.failed >= 2 && e.failed > e.count) continue;
+      if (!roster.has(e.session_id)) continue;
+      if (tagFilter && !tagFilter(e.tags ?? [])) continue;
+      const s = this.sessions.get(e.session_id);
+      if (!s || !s.state.relay_session_id) continue;
+      if (s.state.external) continue;
+      if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
+      if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
+      if (this.isLeaderSession(e.session_id)) continue;
+      return e.session_id;
+    }
+    return null;
+  }
+  // ---------- #26 M3 两层联动（§6.2：组挂起 → 成员会话全 parked；恢复 → 路由表拉原班） ----------
+  // 组挂起的成员侧联动：只收**本组**的悬账（审查修正：同一熟手可跨多组，成员为
+  // B 组在跑的回合不随 A 组挂起陪葬——矩阵式「项目×熟手」正交，组间互不越权）；
+  // 本组无在跑派单后才停流退休（在忙他组活的成员跳过休眠，B 组回合自然收口后
+  // 空闲入池）。中断≠干砸：台账 failed + 板退待办 + 路由表不记（挂起是用户决策，
+  // 不写熟手的失败账）。会话留册休眠（org_parked 记来源组）：点开详情/发消息/
+  // 复活后派单都拉得起来（消息路径 resumeAgent 天然复活）。
+  parkGroupMembers(gid) {
+    this.retireMembers(gid, "parked", "\u9879\u76EE\u7EC4\u6302\u8D77\uFF0C\u56DE\u5408\u4E2D\u65AD");
+  }
+  // 组结项的成员侧联动（§2.2「结项 archived：编制解散」，审查修正补落）：本组
+  // 悬账收口（中断口径）+ 停流 + 解除归属（project_gid/dispatch_tier 清空——列表
+  // 归组/徽标随散，M2 注释承诺的「只解除归属」落地）；路由表档案永存（结项后
+  // 熟手池仍可查历史）；编制快照留组内（headcount 不动，结项详情可查）
+  disbandGroupMembers(gid) {
+    this.retireMembers(gid, "disbanded", "\u9879\u76EE\u7EC4\u7ED3\u9879\uFF0C\u7F16\u5236\u89E3\u6563");
+  }
+  // 挂起/结项成员收口共用（审查修正抽取）：reasonText = 中断回执文案
+  retireMembers(gid, mode, reasonText) {
+    const g2 = findGroup(gid);
+    if (!g2) return;
+    for (const h of g2.headcount) {
+      const s = this.sessions.get(h.session_id);
+      if (!s || s.state.external || this.isLeaderSession(h.session_id)) continue;
+      if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) {
+        this.closeOpenDispatches(h.session_id, "failed", reasonText, false, false, gid);
+      }
+      if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) continue;
+      this.retireSession(s, gid, mode);
+    }
+  }
+  // 停流收口（挂起/结项共用）：gen 递增让旧流回调全让位（身份守卫）——停流后的
+  // interrupted/ended 不产生假终态帧、不重复收口；进程树按 pid 补刀
+  haltSessionStream(s) {
+    const old = s.agent;
+    s.streamGen++;
+    if (old && !old.ended) void old.stop().catch(() => {
+    });
+    if (old?.childPid) {
+      void this.watchdogProcs.killTree(old.childPid).catch(() => {
+      });
+    } else if (old) {
+      const sid = s.state.session_id;
+      const gen = s.streamGen;
+      const t = setTimeout(() => {
+        if (this.sessions.get(sid)?.streamGen !== gen) return;
+        if (!old.ended) void old.stop().catch(() => {
+        });
+        if (old.childPid) void this.watchdogProcs.killTree(old.childPid).catch(() => {
+        });
+      }, resumePendingWindowMs() + 1e3);
+      t.unref?.();
+    }
+    s.agent = null;
+  }
+  // 单会话收口（组挂起退休 / 结项解散 / 成员级退休共用）：parked = 留 org_parked
+  // 标记随组休眠（板已冻结只读，卡片归组展示不变）；disbanded = 清归属；retired =
+  // 成员级退休（#26 补章）——清本组归属但**编制门**接管后续调度（pickVeteran 不
+  // 再 resume，只剩路由表档案），且只清指向本组的 org_parked/project_gid（跨组
+  // 正交：他组标记与归属不误伤）。unacked 即弃（中断语义，防复活后看门狗恢复重放挂起前的旧指令）
+  retireSession(s, gid, mode) {
+    this.haltSessionStream(s);
+    if (mode === "parked") {
+      s.state.org_parked = gid;
+    } else if (mode === "disbanded") {
+      if (s.state.org_parked === gid) s.state.org_parked = void 0;
+      s.state.project_gid = void 0;
+      s.state.dispatch_tier = void 0;
+    } else {
+      if (s.state.org_parked === gid) s.state.org_parked = void 0;
+      if (s.state.project_gid === gid) {
+        s.state.project_gid = void 0;
+        s.state.dispatch_tier = void 0;
+      }
+    }
+    s.state.status = "DONE";
+    s.state.done_reason = mode === "parked" ? "\u9879\u76EE\u7EC4\u6302\u8D77\uFF08\u6210\u5458\u9000\u4F11\u8FDB\u719F\u624B\u6C60\uFF09" : mode === "disbanded" ? "\u9879\u76EE\u7EC4\u7ED3\u9879\uFF08\u7F16\u5236\u89E3\u6563\uFF09" : "\u6210\u5458\u9000\u4F11\uFF08\u7F16\u5236\u9664\u540D\uFF0C\u8DEF\u7531\u8868\u6863\u6848\u4FDD\u7559\uFF09";
+    s.state.action_summary = mode === "parked" ? "\u5DF2\u968F\u9879\u76EE\u7EC4\u6302\u8D77" : mode === "disbanded" ? "\u5DF2\u968F\u9879\u76EE\u7EC4\u7ED3\u9879\u89E3\u6563" : "\u5DF2\u9000\u4F11\uFF08\u7F16\u5236\u9664\u540D\uFF09";
+    s.state.waiting_request = void 0;
+    s.state.waiting_started_at = void 0;
+    s.state.last_error = void 0;
+    s.state.updated_at = Date.now();
+    s.unacked = [];
+    s.resumePending = void 0;
+    s.wd.phase = "idle";
+    this.emitUpdated(s, true);
+  }
+  // 复活联动：只清 parked 标记，不主动拉会话——「恢复 = 任务板解冻 + 路由表拉
+  // 原班」：下次派单 pickVeteran 按 count 偏好自然回到熟手（resume），零 eager spawn
+  reviveGroupMembers(gid) {
+    for (const s of this.sessions.values()) {
+      if (s.state.org_parked !== gid) continue;
+      s.state.org_parked = void 0;
+      if (s.state.action_summary === "\u5DF2\u968F\u9879\u76EE\u7EC4\u6302\u8D77") s.state.action_summary = "";
+      s.state.updated_at = Date.now();
+      this.emitUpdated(s, true);
+    }
+  }
+  // 审查修正（挂起残留 doing 对账）：复活时扫板——doing 条目既不在任何在跑派单
+  // FIFO、台账里也无未收口（running/dispatched）行的，是「relay 崩溃×挂起冻结」
+  // 竞态留下的孤儿（断档补记对挂起组的板退被冻结挡住），退 todo 防永挂。手动搬
+  // doing 但无 dispatch_id 的条目不动（Leader 手写板无台账可对）
+  reconcileStaleDoing(gid) {
+    const live = /* @__PURE__ */ new Set();
+    for (const q2 of this.openDispatches.values()) for (const e of q2) live.add(e.id);
+    const open3 = new Set(readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").map((e) => e.id));
+    for (const ent of loadBoard(gid).entries) {
+      if (ent.status !== "doing" || !ent.dispatch_id) continue;
+      if (live.has(ent.dispatch_id) || open3.has(ent.dispatch_id)) continue;
+      moveEntryByDispatch(gid, ent.dispatch_id, "todo");
+    }
+  }
+  // #26 M3 重启重建挂起标记（审查修正）：org_parked 是内存态、不进事件流——重启后
+  // 组仍 parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + auto-
+  // revive 豁免失效）。boot 时按组状态反推补标：零 spawn（流本就不在了），纯标记
+  // 复原；外部会话/Leader/已被消息复活（agent 在）的跳过
+  rehydrateParkedMembers() {
+    let n = 0;
+    for (const g2 of listGroups()) {
+      if (g2.status !== "parked") continue;
+      for (const h of g2.headcount) {
+        const s = this.sessions.get(h.session_id);
+        if (!s || s.state.external || s.state.org_parked || s.agent || this.isLeaderSession(h.session_id)) continue;
+        s.state.org_parked = g2.id;
+        this.emitUpdated(s, true);
+        n++;
+      }
+    }
+    return n;
+  }
+  // #26 补章审查修正：退休成员判定（auto-revive 豁免用）——路由记录在册但不在
+  // 该组编制 = member-retire 除名痕迹（派单必同步入编，生产路径唯一除名通道是
+  // member-retire；结项组 headcount 快照保留不触发）。仍在任一在办组编制 = 现役
+  // 成员（跨组正交：他组在办成员不受本组退休牵连，待办值得续）。纯读 projects/
+  // routing 两本账——重启即可重建判定，无需内存标记（org_parked 式内存态过不了
+  // 重启这一关，这正是 retireSession 清标后必须有独立判定来源的原因）
+  isRetiredMember(sid) {
+    const groups = listGroups();
+    if (groups.some((g2) => g2.status === "active" && g2.headcount.some((h) => h.session_id === sid))) return false;
+    return groups.some(
+      (g2) => g2.status !== "archived" && !g2.headcount.some((h) => h.session_id === sid) && routingFor(g2.id).some((e) => e.session_id === sid)
+    );
+  }
+  // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------
+  // 触发器：boot + 每小时扫描；窗口天数 CCR_ORG_STALE_DAYS 覆盖（默认 14，0=关）。
+  // 幂等：已有待决 suggest-hold 单不重提；否决冷却 = hold_suggested_at 后再等一个
+  // 窗口（手动建议同样戳记）。活度口径纯函数在 projects.ts findStaleGroups（时钟
+  // 注入可单测）；本方法只做决议面（出确认卡——用户点头才挂，Leader 只提案）
+  staleDays() {
+    const raw = process.env.CCR_ORG_STALE_DAYS;
+    if (raw === void 0 || raw === "") return 14;
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 ? v : 14;
+  }
+  autoSuggestHold(now = Date.now()) {
+    const days = this.staleDays();
+    const suggested = [];
+    const skipped = [];
+    if (days <= 0) return { suggested, skipped };
+    const pendingGids = new Set(
+      listPendingConfirms().filter((c) => c.kind === "suggest-hold").map((c) => typeof c.payload.gid === "string" ? c.payload.gid : "")
+    );
+    const cooldown = days * 864e5;
+    const memberActivity = {};
+    for (const s of this.sessions.values()) {
+      const mgid = s.state.project_gid;
+      if (!mgid || s.state.external) continue;
+      if (s.state.updated_at > (memberActivity[mgid] ?? 0)) memberActivity[mgid] = s.state.updated_at;
+    }
+    for (const info of findStaleGroups(now, days, void 0, memberActivity)) {
+      const g2 = findGroup(info.gid);
+      if (!g2) continue;
+      if (pendingGids.has(info.gid) || g2.hold_suggested_at && now - g2.hold_suggested_at < cooldown) {
+        skipped.push(info.gid);
+        continue;
+      }
+      addConfirm({
+        kind: "suggest-hold",
+        title: `\u5EFA\u8BAE\u6682\u7F13\uFF1A${g2.name}`,
+        reason: `${info.idleDays} \u5929\u65E0\u6D3B\u52A8\uFF08\u4E24\u5468\u65E0\u6D3B\u52A8\u89E6\u53D1\u5668\uFF0C\xA75 \u6302\u8D77\u81EA\u52A8\u5316\uFF09\u2014\u2014\u6302\u8D77\u540E\u7EC4\u5458\u9000\u4F11\u8FDB\u719F\u624B\u6C60\u91CA\u653E\u7F16\u5236\uFF0C\u6062\u590D\u65F6\u8DEF\u7531\u8868\u62C9\u56DE\u539F\u73ED`,
+        payload: { gid: info.gid, auto: true }
+      });
+      markHoldSuggested(info.gid, now);
+      suggested.push(info.gid);
+    }
+    if (suggested.length) this.emitOrgState();
+    return { suggested, skipped };
+  }
+  startStaleScan() {
+    if (this.staleTimer || this.staleDays() === 0) return;
+    try {
+      this.autoSuggestHold();
+    } catch {
+    }
+    this.staleTimer = setInterval(() => {
+      try {
+        this.autoSuggestHold();
+      } catch {
+      }
+    }, 36e5);
+    this.staleTimer.unref?.();
   }
   require(sessionId) {
     const s = this.sessions.get(sessionId);
@@ -43639,6 +48225,7 @@ var SessionManager = class {
     if (!s) return;
     s.state.status = "WORKING";
     s.state.waiting_request = void 0;
+    s.state.waiting_started_at = void 0;
     s.state.updated_at = Date.now();
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
@@ -43654,6 +48241,7 @@ var SessionManager = class {
       // 根治③的权威自愈通道：waiting_request 恒随增量帧携带（null = 已清），端上
       // 无论错过哪条 RESOLVED/WAITING，下一帧 UPDATE 即收敛一致
       waiting_request: s.state.waiting_request ?? null,
+      ...s.state.waiting_started_at ? { waiting_started_at: s.state.waiting_started_at } : {},
       stats: { ...s.state.stats },
       ...s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {},
       ...s.state.usage ? { usage: { ...s.state.usage } } : {},
@@ -43803,6 +48391,18 @@ var SessionManager = class {
       "system",
       lane === "ended" ? `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2\u65AD\u5F00\u4E14 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u72B6\u6001\u672A\u6536\u5C3E\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D` : `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u8FDB\u7A0B\u6811 CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D`
     );
+    const takeoverReceipt = truncate(lane === "ended" ? `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u6D41\u5DF2\u65AD\u5F00 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF0C\u81EA\u52A8\u6062\u590D` : `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6740\u6811\u6062\u590D`, 200);
+    const takeoverId = randomUUID8();
+    appendDispatch({
+      ts: Date.now(),
+      id: takeoverId,
+      tier: "\u770B\u95E8\u72D7",
+      target: sid,
+      status: "done",
+      receipt: takeoverReceipt,
+      session_id: sid
+    });
+    this.notifyDispatchClosed({ id: takeoverId, tier: "\u770B\u95E8\u72D7" }, "done", takeoverReceipt, sid);
     try {
       const hourAgo = Date.now() - 36e5;
       s.wd.recoveries = s.wd.recoveries.filter((t) => t > hourAgo);
@@ -43812,6 +48412,7 @@ var SessionManager = class {
         s.state.status = "WAITING";
         s.state.action_summary = "\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650";
         s.state.waiting_request = void 0;
+        s.state.waiting_started_at = void 0;
         s.unacked = [];
         this.pushExternalLog(
           sid,
@@ -43819,10 +48420,24 @@ var SessionManager = class {
           `\u6D41\u4E2D\u65AD\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF081 \u5C0F\u65F6 ${s.wd.recoveries.length} \u6B21\uFF09\uFF0C\u5DF2\u505C\u6B62\u81EA\u6108\u2014\u2014\u8BF7\u5728\u7535\u8111\u7AEF\u68C0\u67E5 CLI\uFF0C\u6216\u624B\u52A8\u53D1\u4E00\u6761\u6D88\u606F\u89E6\u53D1\u6062\u590D\uFF1B\u82E5\u4F1A\u8BDD\u4ECD\u5728\u5DE5\u4F5C\uFF0C\u663E\u793A\u4F1A\u81EA\u52A8\u6062\u590D`
         );
         this.notifyConfirm(sid, `\u4F1A\u8BDD\u300C${s.state.title || sid.slice(0, 8)}\u300D\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u624B\u52A8\u5904\u7406`);
+        const gaveUpReceipt = truncate(`\u770B\u95E8\u72D7\uFF1A1 \u5C0F\u65F6\u5185\u81EA\u6108 ${s.wd.recoveries.length} \u6B21\u8FBE\u4E0A\u9650\uFF0C\u505C\u6B62\u81EA\u52A8\u5E72\u9884`, 200);
+        const gaveUpId = randomUUID8();
+        appendDispatch({
+          ts: Date.now(),
+          id: gaveUpId,
+          tier: "\u770B\u95E8\u72D7",
+          target: sid,
+          status: "failed",
+          receipt: gaveUpReceipt,
+          session_id: sid
+        });
+        this.notifyDispatchClosed({ id: gaveUpId, tier: "\u770B\u95E8\u72D7" }, "failed", gaveUpReceipt, sid);
         this.emitUpdated(s, true);
         s.wd.phase = "idle";
         return;
       }
+      if (agent && !agent.ended) void agent.stop().catch(() => {
+      });
       if (agent?.childPid) {
         await this.watchdogProcs.killTree(agent.childPid);
       }
@@ -43834,16 +48449,28 @@ var SessionManager = class {
         await agent.stop().catch(() => {
         });
       }
+      if (!s.agent || s.state.org_parked) {
+        this.bus.emit(sid, "WATCHDOG", { action: "recover_abandon", lane, detail: "\u4F1A\u8BDD\u5DF2\u968F\u9879\u76EE\u7EC4\u6302\u8D77/\u7ED3\u9879\u6536\u53E3\uFF0C\u653E\u5F03\u6062\u590D" });
+        s.wd.phase = "idle";
+        return;
+      }
       s.wd.recoveries.push(Date.now());
       const pending = s.unacked;
       s.unacked = [];
       const sdkId = s.state.relay_session_id;
       if (!sdkId) throw new Error("\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF08\u9996\u6B21\u56DE\u5408\u672A\u5B8C\u6210\u5373\u4E2D\u65AD\uFF09\uFF0C\u65E0\u6CD5\u81EA\u52A8\u6062\u590D");
       if (pending.length > 0) {
+        for (let i = 1; i < pending.length; i++) {
+          const q2 = this.openDispatches.get(s.state.session_id);
+          if (!q2 || q2.length <= 1) break;
+          q2.unshift(q2.pop());
+          this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "todo");
+        }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
         this.resumeAgent(s, text, images.length ? images : void 0);
       } else {
+        this.closeOpenDispatches(s.state.session_id, "done", "\u6D41\u4E2D\u65AD\u6062\u590D\u5F85\u547D\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
         this.reviveSaved(s);
       }
       s.wd.phase = "idle";
@@ -43858,6 +48485,7 @@ var SessionManager = class {
       s.state.status = "ERROR";
       s.state.last_error = `\u770B\u95E8\u72D7\u6062\u590D\u5931\u8D25: ${msg}`;
       s.state.waiting_request = void 0;
+      s.state.waiting_started_at = void 0;
       this.pushExternalLog(sid, "system", s.state.last_error);
       this.emitUpdated(s, true);
       s.wd.phase = "idle";
@@ -43890,7 +48518,7 @@ var SessionManager = class {
       if (!sid) continue;
       const ltd = s.state.last_task_done;
       if (ltd && Date.now() - ltd.ts > 2 * 36e5) s.state.last_task_done = void 0;
-      const todos = readTaskStoreTodos(sid);
+      const todos = readTaskStoreTodos(sid, this.employeeHome(s.state));
       if (todos === null) continue;
       const hidden = hiddenTodoKeys(s.state.session_id);
       const visible = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
@@ -43931,6 +48559,7 @@ var SessionManager = class {
     const finished = [...this.sessions.values()].filter((s) => (s.state.status === "DONE" || s.state.status === "ERROR") && !s.state.pinned).sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
       if (this.sessions.size < MAX_SESSIONS) break;
+      this.closeOpenDispatches(s.state.session_id, "failed", "\u5BB9\u91CF\u9A71\u9010\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
       void s.agent?.stop();
       this.sessions.delete(s.state.session_id);
       this.lastStoreTodos.delete(s.state.session_id);
@@ -43940,28 +48569,38 @@ var SessionManager = class {
     return JSON.parse(JSON.stringify(s.state));
   }
 };
+function wrapDispatchPrompt(tier, task) {
+  return `[${tier} \u6D3E\u5355]
+${task}
+
+\u2014\u2014 \u6D3E\u5355\u7EAA\u5F8B\uFF08\u77E9\u9635\u5F0F\u56E2\u961F \xA73.5 / \xA74\uFF09\u2014\u2014
+- \u8FC7\u7A0B\u4E0D\u56DE\u704C\uFF0C\u53EA\u6536\u56DE\u6267\uFF1A\u4E0D\u9010\u52A8\u4F5C\u6C47\u62A5\uFF0C\u7ED3\u675F\u624D\u56DE\u3002
+- \u6539\u524D\u8BA4\u9886\uFF1A\u52A8\u6587\u4EF6\u524D\u5148\u4E00\u53E5\u8BF4\u660E\u8981\u6539\u54EA\u4E9B\u6587\u4EF6\uFF1B\u6539\u540E\u62A5 diff \u6458\u8981\uFF08\u6539\u4E86\u4EC0\u4E48\u3001\u51E0\u5904\uFF09\u3002
+- commit \u5F52\u5C5E\uFF1A\u63D0\u4EA4\u4FE1\u606F\u4EE5 [${tier}] \u5F00\u5934\u5E76\u63CF\u8FF0\u4EFB\u52A1\uFF1B\u65E0\u63D0\u4EA4\u73AF\u8282\u7684\u4EFB\u52A1\u53EF\u7701\u7565\u3002
+- \u5B8C\u6210\u56DE\u6267\uFF1A\u6700\u540E\u4E00\u884C\u56FA\u5B9A\u683C\u5F0F\u300C\u7ED3\u679C\uFF1A<\u4E00\u884C\u7ED3\u679C>\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A<\u6587\u4EF6\u5217\u8868\u6216\u65E0>\u300D\u3002
+- \u96F6\u786E\u8BA4\u76F4\u505A\uFF08\u6743\u9650 acceptEdits\uFF09\uFF1B\u53D1\u73B0\u8D85\u8303\u56F4\u4E8B\u9879\uFF0C\u56DE\u62A5\u800C\u975E\u6269\u6743\u3002`;
+}
 
 // src/ws-server.ts
 import { createServer } from "node:http";
-import { randomUUID as randomUUID5 } from "node:crypto";
-import { readFileSync as readFileSync14, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9, existsSync as existsSync9, readdirSync as readdirSync6 } from "node:fs";
-import { join as join14, dirname as dirname6, sep as sep6 } from "node:path";
-import { homedir as homedir11, networkInterfaces as networkInterfaces2 } from "node:os";
+import { randomUUID as randomUUID10 } from "node:crypto";
+import { readFileSync as readFileSync20, writeFileSync as writeFileSync16, mkdirSync as mkdirSync15, existsSync as existsSync14, readdirSync as readdirSync6, statSync as statSync6 } from "node:fs";
+import { join as join21, dirname as dirname9, sep as sep7 } from "node:path";
+import { homedir as homedir12, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/acceptance.ts
-import { readFileSync as readFileSync10, writeFileSync as writeFileSync6, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
-import { join as join11 } from "node:path";
-import { homedir as homedir7 } from "node:os";
+import { readFileSync as readFileSync16, writeFileSync as writeFileSync13, mkdirSync as mkdirSync12, existsSync as existsSync11, readdirSync as readdirSync4 } from "node:fs";
+import { join as join18 } from "node:path";
 var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
 function acceptanceDir() {
-  return process.env.CCR_ACCEPTANCE_DIR || join11(homedir7(), ".cc-deck", "data", "acceptances");
+  return process.env.CCR_ACCEPTANCE_DIR || join18(resolveDataDir(), "acceptances");
 }
 function loadAcceptance(id2) {
   if (!ACCEPTANCE_ID_RE.test(id2)) return null;
-  const file = join11(acceptanceDir(), `${id2}.json`);
-  if (!existsSync6(file)) return null;
+  const file = join18(acceptanceDir(), `${id2}.json`);
+  if (!existsSync11(file)) return null;
   try {
-    const a = JSON.parse(readFileSync10(file, "utf-8"));
+    const a = JSON.parse(readFileSync16(file, "utf-8"));
     if (!a || !Array.isArray(a.rows) || a.rows.length === 0) return null;
     return a;
   } catch {
@@ -43983,7 +48622,7 @@ function rateLimited(id2, limit = 10, windowMs = 6e4) {
   }
   return false;
 }
-function saveResult(id2, payload, ua) {
+function saveResult(id2, payload, ua, ck2) {
   if (typeof payload !== "object" || payload === null) return "bad body";
   const rows = payload.rows;
   if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return "rows \u975E\u6CD5";
@@ -43998,11 +48637,11 @@ function saveResult(id2, payload, ua) {
     clean.push({ i, verdict, note: typeof note === "string" ? note : "" });
   }
   const dir = acceptanceDir();
-  mkdirSync6(dir, { recursive: true });
-  const file = join11(dir, `${id2}.results.json`);
+  mkdirSync12(dir, { recursive: true });
+  const file = join18(dir, `${id2}.results.json`);
   let history = [];
   try {
-    history = JSON.parse(readFileSync10(file, "utf-8")).history ?? [];
+    history = JSON.parse(readFileSync16(file, "utf-8")).history ?? [];
   } catch {
   }
   if (!Array.isArray(history)) history = [];
@@ -44011,8 +48650,9 @@ function saveResult(id2, payload, ua) {
     fail: clean.filter((r) => r.verdict === "fail").length,
     skip: clean.filter((r) => r.verdict === null).length
   };
-  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean });
-  writeFileSync6(file, JSON.stringify({ id: id2, history }, null, 1));
+  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean, ...ck2 ? { ck: ck2 } : {} });
+  if (history.length > 50) history = history.slice(history.length - 50);
+  writeFileSync13(file, JSON.stringify({ id: id2, history }, null, 1));
   return null;
 }
 function listAcceptances(limit = 20) {
@@ -44031,22 +48671,34 @@ function listAcceptances(limit = 20) {
     if (!a) continue;
     let judged = 0;
     let done = false;
+    let submitted = false;
     try {
-      const r = JSON.parse(readFileSync10(join11(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+      const r = JSON.parse(readFileSync16(join18(acceptanceDir(), `${id2}.results.json`), "utf-8"));
       const last = r.history?.[r.history.length - 1];
       if (last?.rows) {
+        submitted = true;
         judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
         done = judged >= a.rows.length;
       }
     } catch {
     }
-    out.push({ id: id2, title: a.title, created_at: a.created_at, total: a.rows.length, judged, done });
+    out.push({
+      id: id2,
+      title: a.title,
+      created_at: a.created_at,
+      total: a.rows.length,
+      judged,
+      submitted,
+      done,
+      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}
+    });
   }
   out.sort((x, y) => y.created_at - x.created_at);
   return out.slice(0, limit);
 }
 function acceptanceHtml(a, apiPath = "/api/acceptance") {
-  const data = JSON.stringify(a).replace(/</g, "\\u003c");
+  const { sheet_key: _sk, ...pub } = a;
+  const data = JSON.stringify(pub).replace(/</g, "\\u003c");
   const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
   const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
   return `<!doctype html>
@@ -44146,10 +48798,14 @@ document.getElementById("submit").onclick = function () {
     rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
   }
   document.getElementById("msg").textContent = "\u63D0\u4EA4\u4E2D\u2026";
+  // #28 \u4E91\u901A\u9053\u9632\u4F2A\u9020\uFF1A\u51FA\u5355\u94FE\u63A5\u4EE5 fragment\uFF08#<key>\uFF09\u643A\u5E26\u6BCF\u5355\u5BC6\u94A5\uFF08\u4E0D\u8FDB\u670D\u52A1\u5668\u65E5\u5FD7/
+  // Referer/\u7F13\u5B58\u952E\uFF09\uFF0C\u63D0\u4EA4\u968F body \u5E26\u56DE\u7531 Worker \u5BF9\u7167\u3002LAN \u7AEF\u70B9\u4E0D\u6821\u9A8C\uFF08\u5BB6\u5EAD\u7F51\u5A01\u80C1
+  // \u6A21\u578B=\u5BB6\u4EBA\uFF0C\u7EF4\u6301\u80FD\u529B\u94FE\u63A5\u53E3\u5F84\uFF09\uFF1B\u4E91\u7248\u9875\u9762\u7F3A fragment \u65F6\u63D0\u4EA4\u4F1A\u88AB 403 \u5E76\u663E\u793A\u539F\u56E0
+  var sheetKey = location.hash.replace(/^#/, "").trim() || undefined;
   fetch(${JSON.stringify(apiPath)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: DATA.id, rows: rows }),
+    body: JSON.stringify({ id: DATA.id, rows: rows, key: sheetKey }),
   }).then(function (r) { return r.json(); }).then(function (j) {
     if (!j.ok) { document.getElementById("msg").textContent = "\u63D0\u4EA4\u5931\u8D25\uFF1A" + (j.error || "\u7A0D\u540E\u518D\u8BD5"); return; }
     var p = 0, f = 0, s = 0;
@@ -44183,11 +48839,13 @@ function serveAcceptancePage(id2, res, apiPath) {
 }
 function applyCloudSubmits(id2, submits) {
   if (!ACCEPTANCE_ID_RE.test(id2)) return [];
+  const seenK = /* @__PURE__ */ new Set();
   const seen = /* @__PURE__ */ new Set();
   try {
-    const h = JSON.parse(readFileSync10(join11(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
+    const h = JSON.parse(readFileSync16(join18(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
     if (Array.isArray(h)) {
       for (const e of h) {
+        if (typeof e.ck === "string") seenK.add(e.ck);
         try {
           seen.add(JSON.stringify(e.rows ?? null));
         } catch {
@@ -44201,9 +48859,10 @@ function applyCloudSubmits(id2, submits) {
   for (const s of submits) {
     if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
     const sig = JSON.stringify(s.rows);
-    if (seen.has(sig)) continue;
+    if (typeof s.k === "string" ? seenK.has(s.k) : seen.has(sig)) continue;
     const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
-    if (saveResult(id2, { rows: s.rows }, ua) === null) {
+    if (saveResult(id2, { rows: s.rows }, ua, typeof s.k === "string" ? s.k : void 0) === null) {
+      if (typeof s.k === "string") seenK.add(s.k);
       seen.add(sig);
       added.push(s);
     }
@@ -44212,19 +48871,19 @@ function applyCloudSubmits(id2, submits) {
 }
 
 // src/models.ts
-import { existsSync as existsSync7, readFileSync as readFileSync11 } from "node:fs";
-import { homedir as homedir8 } from "node:os";
-import { join as join12 } from "node:path";
+import { existsSync as existsSync12, readFileSync as readFileSync17 } from "node:fs";
+import { homedir as homedir9 } from "node:os";
+import { join as join19 } from "node:path";
 var DEFAULT_MODEL = "glm-5.3";
 function readClaudeSettings() {
   try {
-    return JSON.parse(readFileSync11(join12(homedir8(), ".claude", "settings.json"), "utf8"));
+    return JSON.parse(readFileSync17(join19(homedir9(), ".claude", "settings.json"), "utf8"));
   } catch {
     return {};
   }
 }
 function listModels(fallbackDefault) {
-  const s = existsSync7(join12(homedir8(), ".claude", "settings.json")) ? readClaudeSettings() : {};
+  const s = existsSync12(join19(homedir9(), ".claude", "settings.json")) ? readClaudeSettings() : {};
   const env = s.env ?? {};
   const out = [];
   const add = (m) => {
@@ -44244,7 +48903,7 @@ function listModels(fallbackDefault) {
 // src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
+// ../../cc-deck/relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -44256,16 +48915,16 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync13, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync8 } from "node:fs";
-import { homedir as homedir10 } from "node:os";
+import { randomUUID as randomUUID9 } from "node:crypto";
+import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, readFileSync as readFileSync19, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync15 } from "node:fs";
+import { homedir as homedir11 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
-import { spawn as spawn3, execFileSync } from "node:child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync7, appendFileSync as appendFileSync2, readFileSync as readFileSync12, writeFileSync as writeFileSync7, rmSync as rmSync2 } from "node:fs";
-import path4, { join as join13 } from "node:path";
-import { homedir as homedir9, tmpdir } from "node:os";
+import { spawn as spawn5, execFileSync } from "node:child_process";
+import { existsSync as existsSync13, mkdirSync as mkdirSync13, appendFileSync as appendFileSync2, readFileSync as readFileSync18, writeFileSync as writeFileSync14, rmSync as rmSync4 } from "node:fs";
+import path4, { join as join20 } from "node:path";
+import { homedir as homedir10, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path4.dirname(fileURLToPath2(import.meta.url));
 var dataDir = process.env.CCR_DATA_DIR ?? path4.join(here, "..", "data");
@@ -44282,7 +48941,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync12(injectCs, "utf8").includes("--peek");
+    return readFileSync18(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -44294,29 +48953,29 @@ function ensureInjector() {
   if (ready) return true;
   const srcPeek = peekCapableSource();
   try {
-    mkdirSync7(binDir, { recursive: true });
-    if (existsSync8(exe2) && !existsSync8(exe2 + ".v2") && srcPeek) {
+    mkdirSync13(binDir, { recursive: true });
+    if (existsSync13(exe2) && !existsSync13(exe2 + ".v2") && srcPeek) {
       try {
-        rmSync2(exe2, { force: true });
+        rmSync4(exe2, { force: true });
       } catch {
       }
     }
     let compiled = false;
-    if (!existsSync8(exe2)) {
+    if (!existsSync13(exe2)) {
       const src = injectCs.replace(/\//g, "\\");
       execFileSync(CSC, ["-nologo", `-out:${exe2}`, src], { timeout: 3e4, windowsHide: true });
       compiled = true;
     }
     if (compiled && srcPeek) {
       try {
-        writeFileSync7(exe2 + ".v2", "1");
+        writeFileSync14(exe2 + ".v2", "1");
       } catch {
       }
     }
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
-  ready = existsSync8(exe2);
+  ready = existsSync13(exe2);
   if (ready && !peekSupported()) {
     console.warn("[injector] \u9632\u62A2\u53D1\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08inject.exe \u65E0 --peek \u80FD\u529B\uFF1A\u65E7\u7248\u4EA7\u7269\u4FDD\u7559\u6216\u7F16\u8BD1\u5931\u8D25\uFF09\u2014\u2014\u6EDE\u7559\u8865\u53D1\u56DE\u8F66\u5C06\u6309 #180 \u4FDD\u5B88\u8DF3\u8FC7");
   }
@@ -44346,23 +49005,23 @@ var ERR_BY_CODE = {
   6: "peek-fail"
 };
 function run(args) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const fake = process.env.CCR_INJECT_CMD;
-    const child = fake ? spawn3(process.execPath, [fake, ...args], { windowsHide: true }) : spawn3(exe2, args, { windowsHide: true });
+    const child = fake ? spawn5(process.execPath, [fake, ...args], { windowsHide: true }) : spawn5(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve7({ ok: false, error: "timeout" });
+      resolve8({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve7({ ok: false, error: e.message });
+      resolve8({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve7({ ok: true });
-      else resolve7({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
+      if (code === 0) resolve8({ ok: true });
+      else resolve8({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -44394,27 +49053,27 @@ function mapAppleError(stderr) {
   return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : void 0;
 }
 function runAppleScript(script) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn3(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn3("osascript", ["-e", script]);
+    const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve7({ ok: false, error: "timeout" });
+      resolve8({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve7({ ok: false, error: e.message });
+      resolve8({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) return resolve7({ ok: true });
+      if (code === 0) return resolve8({ ok: true });
       try {
-        appendFileSync2(join13(homedir9(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync2(join20(homedir10(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
-      resolve7({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
+      resolve8({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -44456,22 +49115,22 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join13(tmpdir(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
-    writeFileSync7(tmp, body, "utf8");
-    return new Promise((resolve7) => {
-      const child = spawn3("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
+    const tmp = join20(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    writeFileSync14(tmp, body, "utf8");
+    return new Promise((resolve8) => {
+      const child = spawn5("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
         stdio: "ignore"
       });
       child.on("error", (e) => {
         try {
-          rmSync2(tmp, { force: true });
+          rmSync4(tmp, { force: true });
         } catch {
         }
-        resolve7({ ok: false, error: e.message });
+        resolve8({ ok: false, error: e.message });
       });
-      child.on("spawn", () => resolve7({ ok: true }));
+      child.on("spawn", () => resolve8({ ok: true }));
       child.unref?.();
     });
   }
@@ -44531,7 +49190,7 @@ function peekSupported() {
   if (process.env.CCR_INJECT_CMD) return true;
   if (isDarwin()) return true;
   if (process.platform !== "win32") return false;
-  return existsSync8(exe2) && existsSync8(exe2 + ".v2");
+  return existsSync13(exe2) && existsSync13(exe2 + ".v2");
 }
 function buildCaptureScript(pid) {
   return [
@@ -44550,24 +49209,24 @@ function buildCaptureScript(pid) {
   ].join("\n");
 }
 function runAppleScriptOut(script) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn3(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn3("osascript", ["-e", script]);
+    const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let out = "";
     let err = "";
     child.stdout?.on("data", (c) => out += c);
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve7({ ok: false, text: "", error: "timeout" });
+      resolve8({ ok: false, text: "", error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve7({ ok: false, text: "", error: e.message });
+      resolve8({ ok: false, text: "", error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve7({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+      resolve8({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
     });
   });
 }
@@ -44581,18 +49240,18 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join13(tmpdir(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join20(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync12(tmp, "utf8");
+    const text = readFileSync18(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
     return null;
   } finally {
     try {
-      rmSync2(tmp, { force: true });
+      rmSync4(tmp, { force: true });
     } catch {
     }
   }
@@ -44600,12 +49259,12 @@ async function captureConsoleBottom(pid, rows = 20) {
 
 // src/type-guard.ts
 function guardConfig() {
-  const num = (v, def) => Number(v) > 0 ? Number(v) : def;
+  const num2 = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
     enabled: !/^(off|0|false)$/i.test(process.env.CCR_TYPE_GUARD ?? ""),
-    pollMs: num(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
-    stableMs: num(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
-    maxMs: num(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
+    pollMs: num2(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
+    stableMs: num2(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
+    maxMs: num2(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
   };
 }
 var isBorderRow = (l) => {
@@ -44662,7 +49321,7 @@ function removeKnownTexts(s, known) {
 }
 function foreignResidual(box, knownTexts) {
   const stripped = box.map((l, i) => i === 0 ? l.replace(/^\s*❯\s*/, "") : l.replace(/^\s+/, ""));
-  const residuals = ["", " "].map((sep7) => maskNoise(removeKnownTexts(stripped.join(sep7), knownTexts)));
+  const residuals = ["", " "].map((sep9) => maskNoise(removeKnownTexts(stripped.join(sep9), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -44700,7 +49359,7 @@ function pBody(p) {
 function transcriptFirstTs(p) {
   let fd2;
   try {
-    fd2 = openSync2(p, "r");
+    fd2 = openSync3(p, "r");
     const buf = Buffer.alloc(4096);
     const n = readSync2(fd2, buf, 0, 4096, 0);
     const line = buf.toString("utf-8", 0, n).split("\n")[0];
@@ -44711,7 +49370,7 @@ function transcriptFirstTs(p) {
     return 0;
   } finally {
     if (fd2 !== void 0) try {
-      closeSync2(fd2);
+      closeSync3(fd2);
     } catch {
     }
   }
@@ -44721,8 +49380,8 @@ var QUESTION_HOLD_MS = 9e4;
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
-    const f = path5.join(homedir10(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync13(f, "utf-8"));
+    const f = path5.join(homedir11(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync19(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -44730,8 +49389,8 @@ function cliSessionIdle(pid) {
 }
 function cliSessionStatus(pid) {
   try {
-    const f = path5.join(homedir10(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync13(f, "utf-8"));
+    const f = path5.join(homedir11(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync19(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -44869,7 +49528,7 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
-      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir10(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir11(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
       for (const dir of readdirSync5(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
@@ -44940,7 +49599,7 @@ var Bridge = class _Bridge {
   readCwdFromTail(p) {
     let fd2;
     try {
-      fd2 = openSync2(p, "r");
+      fd2 = openSync3(p, "r");
       const size = statSync5(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
@@ -44959,7 +49618,7 @@ var Bridge = class _Bridge {
     } catch {
       return "";
     } finally {
-      if (fd2 !== void 0) closeSync2(fd2);
+      if (fd2 !== void 0) closeSync3(fd2);
     }
   }
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
@@ -44969,14 +49628,14 @@ var Bridge = class _Bridge {
   transcriptHeadHas(p, needle) {
     let fd2;
     try {
-      fd2 = openSync2(p, "r");
+      fd2 = openSync3(p, "r");
       const buf = Buffer.alloc(4096);
       const n = readSync2(fd2, buf, 0, 4096, 0);
       return buf.subarray(0, n).includes(needle);
     } catch {
       return false;
     } finally {
-      if (fd2 !== void 0) closeSync2(fd2);
+      if (fd2 !== void 0) closeSync3(fd2);
     }
   }
   isTitleGenTranscript(p) {
@@ -45008,7 +49667,7 @@ var Bridge = class _Bridge {
   scanOrphanActivity(p) {
     let fd2;
     try {
-      fd2 = openSync2(p, "r");
+      fd2 = openSync3(p, "r");
       const size = statSync5(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
@@ -45038,14 +49697,14 @@ var Bridge = class _Bridge {
     } catch {
       return { adopt: false, size: 0 };
     } finally {
-      if (fd2 !== void 0) closeSync2(fd2);
+      if (fd2 !== void 0) closeSync3(fd2);
     }
   }
   // Relay 重启后内存里的 cli_pid 丢了，而空闲终端不会有新 hook 事件来恢复；
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync13(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync19(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -45062,7 +49721,7 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir10(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir11(), ".claude", "sessions");
       let files;
       try {
         files = readdirSync5(dir);
@@ -45075,7 +49734,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync13(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync19(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -45241,14 +49900,14 @@ var Bridge = class _Bridge {
     try {
       const size = statSync5(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
-      const fd2 = openSync2(p, "r");
+      const fd2 = openSync3(p, "r");
       try {
         readSync2(fd2, buf, 0, buf.length, 0);
         if (size > buf.length) readSync2(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
       } catch {
       } finally {
         try {
-          closeSync2(fd2);
+          closeSync3(fd2);
         } catch {
         }
       }
@@ -45543,7 +50202,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync13(path5.join(homedir10(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync19(path5.join(homedir11(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -45575,10 +50234,16 @@ var Bridge = class _Bridge {
         return { decision: "pass" };
     }
   }
-  // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）
-  resolvePending(sessionId, requestId, decision, reason) {
+  // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）。
+  // #212 rememberScope：allow 的同时落「允许并记住」规则（pattern 从 pending 的
+  // tool+input 重新推导——与下发卡片时的 remember 同源，危险形态自然得 null 不落）
+  resolvePending(sessionId, requestId, decision, reason, rememberScope, by) {
     const p = this.pending.get(sessionId);
     if (!p || p.requestId !== requestId) return false;
+    if (decision === "allow" && rememberScope && this.opts.rules) {
+      const sug = suggestPattern(p.toolName, p.toolInput);
+      if (sug) this.opts.rules.add(p.toolName, sug.pattern, rememberScope, rememberScope === "session" ? sessionId : void 0, by ?? "unknown");
+    }
     clearTimeout(p.timer);
     this.pending.delete(sessionId);
     p.resolve({ decision, reason });
@@ -45704,7 +50369,7 @@ var Bridge = class _Bridge {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(shown, 80)}`);
       return { ok: true };
     }
-    const cwd = state.cwd || homedir10();
+    const cwd = state.cwd || homedir11();
     this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
@@ -45861,9 +50526,9 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync13(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync19(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
-      writeFileSync8(this.pidCacheFile, JSON.stringify(raw));
+      writeFileSync15(this.pidCacheFile, JSON.stringify(raw));
     } catch {
     }
   }
@@ -45921,11 +50586,11 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path5.join(homedir10(), ".claude", "sessions");
+      const dir = path5.join(homedir11(), ".claude", "sessions");
       for (const f of readdirSync5(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync13(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync19(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -45981,11 +50646,11 @@ var Bridge = class _Bridge {
       } else {
         start = prev;
       }
-      const fd2 = openSync2(transcriptPath, "r");
+      const fd2 = openSync3(transcriptPath, "r");
       const len = size - start;
       const buf = Buffer.alloc(len);
       readSync2(fd2, buf, 0, len, start);
-      closeSync2(fd2);
+      closeSync3(fd2);
       const raw = buf.toString("utf-8");
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
@@ -46331,7 +50996,7 @@ var Bridge = class _Bridge {
     const uses = /* @__PURE__ */ new Map();
     try {
       const size = statSync5(path6).size;
-      const fd2 = openSync2(path6, "r");
+      const fd2 = openSync3(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
@@ -46375,7 +51040,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync2(fd2);
+      closeSync3(fd2);
     } catch {
       return;
     }
@@ -46391,7 +51056,7 @@ var Bridge = class _Bridge {
     const creates = /* @__PURE__ */ new Set();
     try {
       const size = statSync5(path6).size;
-      const fd2 = openSync2(path6, "r");
+      const fd2 = openSync3(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
@@ -46411,7 +51076,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync2(fd2);
+      closeSync3(fd2);
     } catch {
       return;
     }
@@ -46521,6 +51186,22 @@ var Bridge = class _Bridge {
     const summary = questions.length ? `\u63D0\u95EE: ${questions.map((q2) => q2.header).join(" / ")}` : summarizeToolUse(ev2.tool_name ?? "tool", input);
     const taskCallId = ev2.tool_name === "TaskCreate" && typeof ev2.tool_use_id === "string" && ev2.tool_use_id ? ev2.tool_use_id : void 0;
     const remote = !!this.mgr.getExternal(id2)?.remote_mode;
+    if (remote && ev2.tool_name && this.opts.gateTools.has(ev2.tool_name) && ev2.permission_mode !== "bypassPermissions") {
+      const hit = this.opts.rules?.match(id2, ev2.tool_name, input);
+      if (hit) {
+        this.mgr.pushExternalLog(id2, "tool_use", summary, ev2.tool_name, {
+          detail: detailToolUse(ev2.tool_name ?? "tool", input),
+          ...taskCallId ? { id: taskCallId } : {}
+        });
+        this.mgr.setExternalStatus(id2, "WORKING", summary);
+        this.mgr.pushExternalLog(
+          id2,
+          "system",
+          `\u5DF2\u6309\u8BB0\u4F4F\u7684\u89C4\u5219\u653E\u884C ${ev2.tool_name}\uFF08${hit.pattern === "*" ? "\u5DE5\u5177\u7EA7" : hit.pattern}\uFF09`
+        );
+        return { decision: "allow" };
+      }
+    }
     const shouldGate = (
       // AskUserQuestion 不是权限决策而是必需输入：不要求 remote_mode，手机在线就下发选项
       (questions.length > 0 || remote && this.opts.gateTools.has(ev2.tool_name ?? "") && ev2.permission_mode !== "bypassPermissions") && // 权限类：终端切到 skip 模式 = 用户显式放弃门控
@@ -46528,7 +51209,7 @@ var Bridge = class _Bridge {
     );
     if (!shouldGate) {
       if (questions.length) {
-        const requestId2 = randomUUID4();
+        const requestId2 = randomUUID9();
         this.mgr.setExternalWaiting(id2, {
           request_id: requestId2,
           tool_name: ev2.tool_name ?? "tool",
@@ -46547,14 +51228,16 @@ var Bridge = class _Bridge {
       });
       return { decision: "pass" };
     }
-    const requestId = randomUUID4();
+    const requestId = randomUUID9();
+    const remember = questions.length ? void 0 : suggestPattern(ev2.tool_name ?? "tool", input);
     const payload = {
       request_id: requestId,
       tool_name: ev2.tool_name ?? "tool",
       input_summary: summary,
       suggestions: [],
       decidable: true,
-      ...questions.length ? { questions } : {}
+      ...questions.length ? { questions } : {},
+      ...remember ? { remember } : {}
     };
     this.mgr.setExternalWaiting(id2, payload);
     this.mgr.pushExternalLog(id2, "tool_use", summary, ev2.tool_name, {
@@ -46562,7 +51245,7 @@ var Bridge = class _Bridge {
       ...taskCallId ? { id: taskCallId } : {}
     });
     const holdMs = questions.length ? this.opts.questionHoldMs ?? QUESTION_HOLD_MS : this.opts.holdMs ?? DEFAULT_HOLD_MS;
-    return new Promise((resolve7) => {
+    return new Promise((resolve8) => {
       const timer = setTimeout(() => {
         this.pending.delete(id2);
         if (questions.length) {
@@ -46571,15 +51254,17 @@ var Bridge = class _Bridge {
           this.mgr.setExternalStatus(id2, "WORKING", summary);
           this.bus.emit(id2, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision: "timeout", by: "relay" });
         }
-        resolve7({ decision: "pass" });
+        resolve8({ decision: "pass" });
       }, holdMs);
       timer.unref();
       this.pending.set(id2, {
         sessionId: id2,
         requestId,
-        resolve: resolve7,
+        resolve: resolve8,
         timer,
-        ...questions.length ? { questions, toolInput: input } : {}
+        toolName: ev2.tool_name ?? "tool",
+        toolInput: input,
+        ...questions.length ? { questions } : {}
       });
     });
   }
@@ -46637,7 +51322,7 @@ var Bridge = class _Bridge {
         return { decision: "pass" };
       }
       this.mgr.setExternalWaiting(id2, {
-        request_id: randomUUID4(),
+        request_id: randomUUID9(),
         tool_name: toolName,
         input_summary: msg,
         suggestions: [],
@@ -46897,7 +51582,7 @@ var Bridge = class _Bridge {
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync13(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync19(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -46916,12 +51601,12 @@ var Bridge = class _Bridge {
     const start = Math.max(0, st2.size - 65536);
     let buf;
     try {
-      const fd2 = openSync2(file, "r");
+      const fd2 = openSync3(file, "r");
       try {
         buf = Buffer.alloc(st2.size - start);
         readSync2(fd2, buf, 0, buf.length, start);
       } finally {
-        closeSync2(fd2);
+        closeSync3(fd2);
       }
     } catch {
       return null;
@@ -47045,6 +51730,7 @@ var Bridge = class _Bridge {
   runVerify(sessionId, text, round) {
     const st2 = this.mgr.getExternal(sessionId);
     if (!st2?.cli_pid) return;
+    if ((this.stuckWatch.get(sessionId)?.tries ?? 0) >= 3) return;
     if (!(st2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
     if (st2.status !== "WORKING" && st2.status !== "DONE" || this.flushing.has(sessionId) || this.stuckGuarding.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
     const pid = st2.cli_pid;
@@ -47091,7 +51777,10 @@ var Bridge = class _Bridge {
         return !(rec && now - rec.ts < 6e4 && rec.ts >= p.ts);
       }).map((p) => pBody(p));
       if (stuckTexts.length === 0) {
-        this.stuckWatch.delete(id2);
+        const pend = s.pending_inputs ?? [];
+        if (pend.length === 0 || pend.every((p) => this.isEnqueued(id2, pBody(p)))) {
+          this.stuckWatch.delete(id2);
+        }
         continue;
       }
       if (!s.cli_pid || s.status !== "WORKING" && s.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0) {
@@ -47115,11 +51804,12 @@ var Bridge = class _Bridge {
   // 真正补发回车（守门通过 / 守门关闭才走到这里——#180 起快照不可用不再 fail-open 盲发）
   fireStuckEnter(id2, pid, msg) {
     const w2 = this.stuckWatch.get(id2);
+    if ((w2?.tries ?? 0) >= 3) return;
     const tries = (w2?.tries ?? 0) + 1;
     this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, blind: 0, given_up: tries >= 3 });
     if (tries === 3) {
       this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
-    } else if (tries < 3) {
+    } else {
       this.mgr.pushExternalLog(id2, "system", msg ?? "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66");
     }
     void injectEnter(pid).then((r) => {
@@ -47178,6 +51868,9 @@ function parseGateTools(raw) {
   return new Set((raw ?? def).split(",").map((s) => s.trim()).filter(Boolean));
 }
 
+// src/types.ts
+var SNAPSHOT_SCHEMA_VERSION = 1;
+
 // src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
@@ -47189,12 +51882,12 @@ function localIps() {
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
 var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
 function pluginConfigPath() {
-  return join14(homedir11(), ".cc-deck", "config.json");
+  return join21(homedir12(), ".cc-deck", "config.json");
 }
 function readPluginConfig() {
   const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
   try {
-    const raw = JSON.parse(readFileSync14(pluginConfigPath(), "utf-8"));
+    const raw = JSON.parse(readFileSync20(pluginConfigPath(), "utf-8"));
     for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
   } catch {
   }
@@ -47232,6 +51925,7 @@ function startAcceptanceCloudPoll(cfg2, mgr2, bus2) {
       let submits = null;
       try {
         const r = await fetch(`${base}/view/acceptance-${s.id}.results.json`, {
+          headers: { authorization: `Bearer ${cfg2.cloudToken}` },
           signal: AbortSignal.timeout(1e4)
         });
         if (r.ok) submits = await r.json();
@@ -47283,7 +51977,20 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_PIN_SESSION",
   "COMMAND_RESUME_SESSION",
   "COMMAND_IMPORT_PUSH",
-  "COMMAND_ARTIFACT_FETCH"
+  "COMMAND_ARTIFACT_FETCH",
+  // #212 允许并记住：设置页规则删除（漏加时 ws 入口白名单拒发 "invalid command
+  // shape"，手机端删除必失败——mgr 的 case 与单测都过，唯独 ws 层挡死，实机首验抓到）
+  "COMMAND_ALLOW_RULE_REMOVE",
+  // #26 M2 组织：确认单决议（用户端确认卡）+ 项目组详情拉取
+  "COMMAND_ORG_CONFIRM",
+  "COMMAND_PROJECT_DETAIL",
+  // #018-R1b：org 命令真链路（立项 create；与云通道同走 mgr.orgCommand 咽喉——
+  // 漏加时 ws 白名单在此拒发，mgr 的 case 与单测都过、唯独 LAN 实机死路，#212 同款坑）
+  "COMMAND_ORG_ACTION",
+  // #018-R1c：通知生命周期 ACK（handled/dismissed；与云通道同走 mgr）
+  "COMMAND_NOTIFICATION_ACK",
+  // #17 第二批：雇员独立家开关切换（三端设置项）
+  "COMMAND_SETTINGS_UPDATE"
 ]);
 var HEARTBEAT_MS = 3e4;
 var HEARTBEAT_MISS_LIMIT = 20;
@@ -47322,7 +52029,7 @@ function listCustomCommands(dir, source) {
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync14(p, "utf-8").slice(0, 400);
+      const head = readFileSync20(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -47334,11 +52041,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join14(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join21(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync6(join14(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join14(dir, e.name, g2)), source });
+        for (const g2 of readdirSync6(join21(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join21(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -47352,11 +52059,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync9(join14(p, "web-console", "index.html"))) ?? webRootCandidates[1];
-  const consoleHtml = join14(webRoot, "web-console", "index.html");
-  const naclJs = join14(webRoot, "web-console", "nacl.js");
-  const qrJs = join14(webRoot, "web-console", "qr.js");
-  const mobileDir = join14(webRoot, "mobile") + sep6;
+  const webRoot = webRootCandidates.find((p) => p && existsSync14(join21(p, "web-console", "index.html"))) ?? webRootCandidates[1];
+  const consoleHtml = join21(webRoot, "web-console", "index.html");
+  const naclJs = join21(webRoot, "web-console", "nacl.js");
+  const qrJs = join21(webRoot, "web-console", "qr.js");
+  const mobileDir = join21(webRoot, "mobile") + sep7;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -47380,18 +52087,25 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const file = mobileDir + rel;
-    if (!existsSync9(file)) {
+    let isFile = false;
+    try {
+      isFile = statSync6(file).isFile();
+    } catch {
+    }
+    if (!isFile) {
       res.writeHead(404).end("not found");
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync14(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync20(file));
     return true;
   };
-  const wss = new import_websocket_server.default({ noServer: true });
+  const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
   const bridge = new Bridge(bus2, mgr2, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg2.dataDir,
+    rules: mgr2.allowRules,
+    // #212 允许并记住：与 AgentSession 同一份规则存储
     // #316 审查修复：待配对手表连接未鉴权，不计入"手机在线"——否则配对连接会让
     // 提问/权限门控误判有手机在场，挂起等一个不存在的审批方
     hasClients: () => [...wss.clients].some((c) => c.readyState === import_websocket.default.OPEN && !c.pairing) || !!opts.cloudHasPhones?.(),
@@ -47407,37 +52121,37 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync9(consoleHtml)) {
+      if (!existsSync14(consoleHtml)) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync14(consoleHtml);
+      const html = readFileSync20(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
-      if (!existsSync9(naclJs)) {
+      if (!existsSync14(naclJs)) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync14(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync20(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
-      if (!existsSync9(qrJs)) {
+      if (!existsSync14(qrJs)) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync14(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync20(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join14(webRoot, "web-console", url.pathname.slice(1));
-      if (!existsSync9(file)) {
+      const file = join21(webRoot, "web-console", url.pathname.slice(1));
+      if (!existsSync14(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync14(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync20(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -47450,10 +52164,15 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (url.pathname === "/api/lan-auth" && req.method === "POST") {
+      if (rateLimited(`lan-auth:${req.socket.remoteAddress ?? "?"}`)) {
+        res.writeHead(429, { "content-type": "application/json" }).end('{"ok":false,"error":"\u592A\u9891\u7E41"}');
+        return;
+      }
       let body = "";
       req.setEncoding("utf8");
       req.on("data", (c) => {
         body += c;
+        if (body.length > 8192) req.destroy();
       });
       req.on("end", () => {
         try {
@@ -47476,11 +52195,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join14(cfg2.dataDir, "relay-name");
+      const file = join21(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync14(file, "utf8").trim().slice(0, 40);
+          name = readFileSync20(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -47500,7 +52219,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
               res.writeHead(400).end('{"error":"\u540D\u79F0\u9700 1-40 \u5B57\u4E14\u4E0D\u542B\u6362\u884C/\u5C16\u62EC\u53F7"}');
               return;
             }
-            writeFileSync9(file, clean, "utf8");
+            writeFileSync16(file, clean, "utf8");
             res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, name: clean }));
           } catch {
             res.writeHead(400).end();
@@ -47521,7 +52240,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       const hostTrusted = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let allowOrigin = "";
       const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb) allowOrigin = origin === "null" ? "*" : origin;
+      if (origin && reqLb && origin === "null") allowOrigin = "*";
       else if (origin) {
         try {
           const u = new URL(origin);
@@ -47572,7 +52291,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let acao = "";
       const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb2) acao = origin === "null" ? "*" : origin;
+      if (origin && reqLb2 && origin === "null") acao = "*";
       else if (origin) {
         try {
           const u = new URL(origin);
@@ -47589,7 +52308,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/notify") {
-      void handleNotify(req, res, mgr2, cfg2, bus2);
+      void handleNotify(req, res, mgr2, cfg2);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/artifacts") {
@@ -47605,7 +52324,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end("unauthorized");
         return;
       }
-      if (!serveArtifact(decodeURIComponent(url.pathname.slice("/artifacts/".length)), res)) {
+      let artName;
+      try {
+        artName = decodeURIComponent(url.pathname.slice("/artifacts/".length));
+      } catch {
+        res.writeHead(400).end("bad encoding");
+        return;
+      }
+      if (!serveArtifact(artName, res)) {
         res.writeHead(404).end("not found");
       }
       return;
@@ -47622,13 +52348,66 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       });
       req.on("end", () => {
         try {
-          const { path: p, cwd } = JSON.parse(body);
+          const { path: p, cwd, session_id: sid } = JSON.parse(body);
           if (typeof p !== "string" || !p.trim()) {
             res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path \u5FC5\u586B"}');
             return;
           }
-          const r = mgr2.deliverByCwd(typeof cwd === "string" && cwd ? cwd : p, p);
-          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
+          const validated = validateDeliverablePath(p);
+          if (!validated.ok) {
+            res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: validated.error }));
+            return;
+          }
+          const c = typeof cwd === "string" && cwd ? cwd : p;
+          const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid) ? mgr2.deliverBySession(sid, c, validated.path, validated) : mgr2.deliverByCwd(c, validated.path, validated);
+          const respBody = r.ok && validated.unverified ? { ...r, unverified: true } : r;
+          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(respBody));
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/org") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 65536) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const { action, ...payload } = JSON.parse(body);
+          if (typeof action !== "string" || !action.trim()) {
+            res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"action \u5FC5\u586B"}');
+            return;
+          }
+          const ORG_HTTP_ACTIONS = /* @__PURE__ */ new Set([
+            "status",
+            "project-create",
+            "project-status",
+            "project-tier",
+            "suggest-hold",
+            "dispatch",
+            "board",
+            "project-detail",
+            "rate",
+            "tag",
+            "member-retire",
+            "member-add"
+            // #26 补章：编制面执行动作（可逆：复拉走 member-add），非决议类
+          ]);
+          if (!ORG_HTTP_ACTIONS.has(action.trim())) {
+            res.writeHead(403, { "content-type": "application/json" }).end(
+              JSON.stringify({ ok: false, error: `action\u300C${action.trim()}\u300D\u4E0D\u5F00\u653E HTTP \u901A\u9053\uFF08\u51B3\u8BAE\u7C7B\u53EA\u8D70\u7528\u6237\u7AEF\u786E\u8BA4\u5361\uFF09` })
+            );
+            return;
+          }
+          const r = mgr2.orgAction(action.trim(), payload);
+          res.writeHead(r.ok ? 200 : 422, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");
         }
@@ -47694,8 +52473,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join14(homedir11(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join14(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join21(homedir12(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join21(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -47772,7 +52551,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       return;
     }
-    const requestId = randomUUID5();
+    const requestId = randomUUID10();
     const name = (url.searchParams.get("name") ?? "\u624B\u8868").slice(0, 24);
     const code = String(Math.floor(1e5 + Math.random() * 9e5));
     const entry = { name, code, ws: ws2, timer: setTimeout(() => resolvePairing(requestId, "timeout"), PAIR_TTL_MS) };
@@ -47825,7 +52604,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
-          homedir: homedir11(),
+          schema_version: SNAPSHOT_SCHEMA_VERSION,
+          homedir: homedir12(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
           platform: process.platform,
@@ -47834,6 +52614,19 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           deliverables: readPluginConfig().deliverables,
           // #137 三步方案②：验收单待填态汇总（云通道 cloud-client 同步携带）
           acceptances: listAcceptances(),
+          // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；
+          // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
+          allow_rules: mgr2.allowRules.list(),
+          // #26 M2 组织：项目组索引 + 待决确认单（cloud-client 云通道快照同步携带，
+          // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
+          projects: listGroups(),
+          org_confirms: listPendingConfirms(),
+          // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
+          // 下发——端上以字段存在性判断能力）
+          notifications: mgr2.notificationsList(),
+          // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
+          // #117 教训）
+          settings: mgr2.employeeHomeState(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -47862,12 +52655,13 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       if (cmd && cmd.t === "ccdeck-import-resp") {
         const raw = JSON.stringify(cmd);
         for (const c of wss.clients) {
-          if (c !== ws2 && c.readyState === import_websocket.default.OPEN) c.send(raw);
+          if (c === ws2 || c.pairing) continue;
+          if (c.readyState === import_websocket.default.OPEN) c.send(raw);
         }
         ws2.send('{"t":"ccdeck-import-resp-ack"}');
         return;
       }
-      if (!cmd || typeof cmd.command_id !== "string" || typeof cmd.type !== "string" || !COMMAND_TYPES.has(cmd.type) || typeof cmd.payload !== "object" || cmd.payload === null) {
+      if (!cmd || typeof cmd.command_id !== "string" || typeof cmd.type !== "string" || typeof cmd.payload !== "object" || cmd.payload === null) {
         ws2.send(
           JSON.stringify({
             type: "COMMAND_ACK",
@@ -47876,6 +52670,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             error: "invalid command shape"
           })
         );
+        return;
+      }
+      if (!COMMAND_TYPES.has(cmd.type)) {
+        ws2.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" }));
         return;
       }
       if (cmd.type === "COMMAND_WATCH_GRANT") {
@@ -47922,11 +52720,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   return {
     port: cfg2.port,
     bridge,
-    close: () => new Promise((resolve7) => {
+    close: () => new Promise((resolve8) => {
       clearInterval(heartbeat);
       unsubscribe();
       for (const client of wss.clients) client.terminate();
-      wss.close(() => server.close(() => resolve7()));
+      wss.close(() => server.close(() => resolve8()));
     })
   };
 }
@@ -47937,7 +52735,7 @@ async function handlePluginConfig(req, res) {
   const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
   let acao = "";
   const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-  if (origin && reqLb) acao = origin === "null" ? "*" : origin;
+  if (origin && reqLb && origin === "null") acao = "*";
   else if (origin) {
     try {
       const u = new URL(origin);
@@ -47985,12 +52783,12 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync14(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync20(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
-      mkdirSync9(dirname6(pluginConfigPath()), { recursive: true });
-      writeFileSync9(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
+      mkdirSync15(dirname9(pluginConfigPath()), { recursive: true });
+      writeFileSync16(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
     } catch {
       res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
       return;
@@ -47998,7 +52796,7 @@ async function handlePluginConfig(req, res) {
   }
   res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
 }
-async function handleNotify(req, res, mgr2, cfg2, bus2) {
+async function handleNotify(req, res, mgr2, cfg2) {
   const url = new URL(req.url ?? "/", "http://localhost");
   if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
     res.writeHead(401).end("unauthorized");
@@ -48022,7 +52820,6 @@ async function handleNotify(req, res, mgr2, cfg2, bus2) {
         return;
       }
       mgr2.notifyConfirm(target2.session_id, text);
-      bus2.emitTransient("USER_NOTE", { text, ts: Date.now() });
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target2.session_id }));
       return;
     }
@@ -48067,32 +52864,32 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync10 } from "node:fs";
-import { join as join15 } from "node:path";
+import { existsSync as existsSync15, readFileSync as readFileSync21, writeFileSync as writeFileSync17 } from "node:fs";
+import { join as join22 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join15(dataDir2, "cloud-keypair.json");
+  const kpPath = join22(dataDir2, "cloud-keypair.json");
   let keypair;
-  if (existsSync10(kpPath)) {
-    keypair = JSON.parse(readFileSync15(kpPath, "utf-8"));
+  if (existsSync15(kpPath)) {
+    keypair = JSON.parse(readFileSync21(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync10(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync17(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join15(dataDir2, "wan-secret");
+  const wanSecretPath = join22(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync10(wanSecretPath)) wanSecret = readFileSync15(wanSecretPath, "utf-8").trim();
+  if (existsSync15(wanSecretPath)) wanSecret = readFileSync21(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
-    writeFileSync10(wanSecretPath, wanSecret, "utf-8");
+    writeFileSync17(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join15(dataDir2, "cloud-peers.json");
+  const peersPath = join22(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
-  if (existsSync10(peersPath)) {
+  if (existsSync15(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync15(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync21(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -48100,7 +52897,7 @@ function loadOrCreateIdentity(dataDir2) {
   const persistPeers = () => {
     const obj = {};
     for (const [k3, v] of peers) obj[k3] = v;
-    writeFileSync10(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+    writeFileSync17(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
   let lastPeerFlush = 0;
   return {
@@ -48150,6 +52947,7 @@ function loadOrCreateIdentity(dataDir2) {
 }
 
 // src/cloud-client.ts
+import { homedir as homedir13 } from "node:os";
 var PEER_META_MAX = 120;
 var SIGHTING_TTL_MS = 18e4;
 var PEER_META_KEYS = ["name", "platform", "ua", "app"];
@@ -48231,8 +53029,8 @@ var CloudClient = class {
   }
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
-    const sep7 = base.includes("?") ? "&" : "?";
-    return `${base}${sep7}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    const sep9 = base.includes("?") ? "&" : "?";
+    return `${base}${sep9}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
   connect() {
     if (this.stopped) return;
@@ -48456,15 +53254,29 @@ var CloudClient = class {
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
         server_time: Date.now(),
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
         acceptances: listAcceptances(),
+        // #212 允许并记住：规则全量（与 ws-server 直连快照同源同步，#117 教训）
+        allow_rules: this.mgr.allowRules.list(),
+        // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
+        // 云桥手机设置页同样要读 source 判锁定态）
+        settings: this.mgr.employeeHomeState(),
+        // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
+        projects: listGroups(),
+        org_confirms: listPendingConfirms(),
+        // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
+        // 通知列表同样靠快照兜底；空数组也下发）
+        notifications: this.mgr.notificationsList(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
+        homedir: homedir13(),
+        models: listModels(this.mgr.cfg.model),
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
         ...this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {},
@@ -48499,6 +53311,14 @@ var CloudClient = class {
       const pr2 = f.data;
       const bc2 = pr2.bc === true;
       const pubkey = typeof pr2.pubkey === "string" ? pr2.pubkey : "";
+      if (!pubkey && !String(pr2.code ?? "")) {
+        this.wbSightings.set(f.from, Date.now());
+        if (this.wbSightings.size > 200) {
+          const sweep = Date.now();
+          for (const [d2, ts2] of this.wbSightings) if (sweep - ts2 > SIGHTING_TTL_MS) this.wbSightings.delete(d2);
+        }
+        return;
+      }
       const clientType = pr2.client_type === "phone" ? "phone" : pr2.client_type === "watch" ? "watch" : "web";
       const prefix = clientType === "phone" ? "ph" : clientType === "watch" ? "wt" : "wb";
       const dev = pubkey ? devId(pubkey, prefix) : "";
@@ -48701,7 +53521,9 @@ var CloudClient = class {
         sessions: this.mgr.snapshot(),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
-        server_time: Date.now()
+        server_time: Date.now(),
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        models: listModels(this.mgr.cfg.model)
       }
     };
     this.sendWan(dev, snapshot);
@@ -48791,23 +53613,23 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync11, readFileSync as readFileSync16, writeFileSync as writeFileSync11 } from "node:fs";
-import { join as join16 } from "node:path";
-import { homedir as homedir12 } from "node:os";
+import { existsSync as existsSync16, readFileSync as readFileSync22, writeFileSync as writeFileSync18 } from "node:fs";
+import { join as join23 } from "node:path";
+import { homedir as homedir14 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join16(homedir12(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join23(homedir14(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
-  if (!existsSync11(dir)) return "skip-no-dir";
-  const file = join16(dir, "settings.json");
+  if (!existsSync16(dir)) return "skip-no-dir";
+  const file = join23(dir, "settings.json");
   let obj;
-  if (!existsSync11(file)) {
+  if (!existsSync16(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync16(file, "utf-8"));
+      obj = JSON.parse(readFileSync22(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -48820,7 +53642,7 @@ function ensureTodoToolsEnv() {
   }
   obj.env = { ...env, [TODO_TOOLS_ENV_KEY]: "1" };
   try {
-    writeFileSync11(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
+    writeFileSync18(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
     return "written";
   } catch {
     return "error";
@@ -48836,10 +53658,16 @@ if (process.env.CCR_PARENT_PID) {
   }
 }
 var cfg = loadConfig();
+process.on("uncaughtException", (err) => {
+  console.error(`[uncaught] ${err instanceof Error ? err.stack : String(err)}`);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
+});
 {
-  const lockPath = join17(cfg.dataDir, "relay.lock");
+  const lockPath = join24(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync17(lockPath, "utf8").trim());
+    const prev = Number(readFileSync23(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -48853,12 +53681,12 @@ var cfg = loadConfig();
     }
   }
   try {
-    writeFileSync12(lockPath, String(process.pid));
+    writeFileSync19(lockPath, String(process.pid));
   } catch {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync17(lockPath, "utf8").trim()) === process.pid) rmSync3(lockPath);
+      if (Number(readFileSync23(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
     } catch {
     }
   };
@@ -48899,7 +53727,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync17(join17(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync23(join24(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -48950,14 +53778,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync3(join17(cfg.dataDir, "relay.log"), "a");
-  const child = spawn4(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
+  const logFd = openSync4(join24(cfg.dataDir, "relay.log"), "a");
+  const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join17(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join24(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -48970,7 +53798,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync12("/proc")) return readFileSync17(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync17("/proc")) return readFileSync23(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -48980,9 +53808,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join17(cfg.dataDir, "relay.pid");
+  const pidFile = join24(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync17(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync23(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -48993,31 +53821,45 @@ if (cliArgs.has("--stop")) {
     console.log("\u672A\u53D1\u73B0\u8FD0\u884C\u4E2D\u7684 CC Deck Relay");
   }
   try {
-    rmSync3(pidFile);
+    rmSync5(pidFile);
   } catch {
   }
   process.exit(0);
 }
-var persistPath = join17(cfg.dataDir, "events.ndjson");
+{
+  const st2 = resolveEmployeeHome(cfg.dataDir, cfg.freshInstall);
+  cfg.employeeConfigDir = st2.value;
+  if (st2.source === "default") writeSettingsFile(cfg.dataDir, { employeeHome: st2.enabled });
+  if (st2.source !== "env" && st2.enabled) {
+    console.log(`[config] \u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u5F00\u542F\uFF08${st2.source === "file" ? "\u8BBE\u7F6E\u9879" : "\u65B0\u88C5\u9ED8\u8BA4"}\uFF09\uFF1A${st2.value}`);
+  }
+}
+var persistPath = join24(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
     for (const f of readdirSync7(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join17(dir, f);
+      const p = join24(dir, f);
       try {
-        if (Date.now() - statSync6(p).mtimeMs > 7 * 864e5) rmSync3(p, { force: true });
+        if (Date.now() - statSync7(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
       }
     }
   } catch {
   }
 }
-var tmpImageDir = join17(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join24(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var prior = loadEvents(persistPath);
 var kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept);
+var eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
+var compactEventsTick = () => {
+  const r = compactEventsFile(persistPath, eventsCompactBytes);
+  if (r) console.log(`[events] \u8FD0\u884C\u671F\u538B\u7F29\uFF1A${(r.before / 1048576).toFixed(1)}MB \u2192 ${(r.after / 1048576).toFixed(1)}MB`);
+};
+setInterval(compactEventsTick, 6 * 36e5).unref?.();
 var replayed = reduceHistory(kept);
 var bus = new EventBus({ preload: kept, persistPath });
 var mgr = new SessionManager(bus, cfg);
@@ -49032,6 +53874,17 @@ for (const s of mgr.snapshot()) {
   });
 }
 var pinned = mgr.applyPinned();
+var leader = mgr.ensureLeader();
+var decisionNotify = new DecisionNotificationWatcher({
+  dataDir: cfg.dataDir,
+  listConfirms,
+  snapshotSessions: () => mgr.snapshot(),
+  leaderSessionId: () => mgr.getLeaderSessionId(),
+  notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text)
+});
+decisionNotify.start();
+var parkedRehydrated = mgr.rehydrateParkedMembers();
+mgr.startStaleScan();
 setTimeout(() => {
   try {
     mgr.autoReviveManaged();
@@ -49068,7 +53921,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync17(join17(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync23(join24(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -49091,7 +53944,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync17(join17(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync23(join24(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -49121,16 +53974,19 @@ startServer(bus, mgr, cfg, {
   },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
-    advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
+    if (process.env.CCR_NO_MDNS !== "1") {
+      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
+    }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync12(join17(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync19(join24(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync12(join17(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join17(homedir13(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync12(hookHome)) {
+    writeFileSync19(join24(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join24(homedir15(), ".cc-deck", "data");
+    const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync17(hookHome)) {
       try {
-        writeFileSync12(join17(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync19(join24(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -49149,7 +54005,13 @@ console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2
 if (pinned.saved > 0) {
   console.log(`  \u7F6E\u9876:   ${pinned.saved} \u4E2A\u4F1A\u8BDD\u5DF2\u4F11\u7720\u767B\u8BB0\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF0C\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join17(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(
+  leader.ok ? `  \u56E2\u961F:   Leader ${leader.created ? "\u9996\u6B21\u521B\u5EFA" : leader.rebuilt ? "\u5DF2\u4ECE\u951A\u91CD\u5EFA" : "\u5728\u7EBF"}\uFF08${orgDir()}\uFF09` : process.env.CCR_NO_LEADER === "1" ? "  \u56E2\u961F:   Leader \u5DF2\u7981\u7528\uFF08CCR_NO_LEADER\uFF0C\u6D4B\u8BD5/\u6C99\u76D2\u6001\uFF09" : `  \u56E2\u961F:   Leader \u672A\u5C31\u7EEA\uFF1A${leader.error}\uFF08\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5\uFF09`
+);
+if (parkedRehydrated > 0) {
+  console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
+}
+console.log(`  \u6865\u63A5:   ${join24(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

@@ -35,6 +35,9 @@ import {
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js";
+import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
+import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
+import type { ActivityKind } from "./types.js";
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -42,6 +45,7 @@ export interface BridgeOptions {
   holdMs?: number;                 // PreToolUse 最长挂起（默认 590s，须 < hook 脚本内部 600s < settings timeout 620s）
   questionHoldMs?: number;         // AskUserQuestion 挂起窗口（默认 90s；超时放行 CLI 本地选择器）
   dataDir: string;                 // pid 缓存所在数据目录（与 hook 单源对齐：插件形态 ~/.cc-deck/data，dev 形态 <repo>/data）
+  rules?: AllowRuleStore;          // #212 允许并记住：命中规则的门控请求直接放行（缺省 = 未启用）
 }
 
 export interface BridgeDecision {
@@ -50,13 +54,61 @@ export interface BridgeDecision {
   updatedInput?: Record<string, unknown>; // allow 时改写工具入参（AskUserQuestion 答案注入）
 }
 
+export const BRIDGE_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: true,
+} as const;
+
+export interface BridgeActivityInput {
+  event?: string;
+  kind?: ActivityKind;
+  text?: string;
+  tool?: string;
+  ts?: number;
+  occurred_at?: number;
+  now?: number;
+  task?: ActivityTaskSources;
+}
+
+/** 将外部 bridge hook/transcript/onLog 记录压成统一 activity 片段。 */
+export function mapBridgeActivity(input: BridgeActivityInput): MappedStatusDock {
+  const event = input.event?.toLowerCase() ?? "";
+  const kind = input.kind
+    ?? (event.includes("pretool") || event.includes("tool_use") ? "tool_use"
+      : event.includes("posttool") || event.includes("tool_result") ? "tool_result"
+        : event.includes("error") ? "system"
+          : event.includes("assistant") || event.includes("transcript") || event.includes("log") ? "assistant_text"
+            : undefined);
+  const terminal = event.includes("sessionend") || event === "done" || event === "stop";
+  const state = event.includes("error") ? "ERROR" : terminal ? "DONE" : "WORKING";
+  const tool = input.tool;
+  const text = input.text?.trim()
+    || (tool && kind === "tool_use" ? `${tool} 执行中` : undefined)
+    || (tool && kind === "tool_result" ? `${tool} 已完成` : undefined);
+  return mapActivityState({
+    state,
+    activityKind: kind,
+    activityText: text,
+    tool,
+    ts: input.ts,
+    occurred_at: input.occurred_at,
+    now: input.now,
+    task: input.task,
+    capabilities: BRIDGE_ACTIVITY_CAPABILITIES,
+    allowWaiting: true,
+  });
+}
+
 interface Pending {
   sessionId: string;
   requestId: string;
   resolve: (d: BridgeDecision) => void;
   timer: NodeJS.Timeout;
+  toolName: string;                        // #212 记规则用（allow 时从 pending 还原 tool+input）
+  toolInput: Record<string, unknown>;      // 原始 tool_input（AskUserQuestion 作答注入 / #212 记规则）
   questions?: AskQuestion[];               // AskUserQuestion：原问题（作答时回显进 updatedInput）
-  toolInput?: Record<string, unknown>;     // AskUserQuestion：原始 tool_input
 }
 
 // transcript 里一次任务工具操作（use 或已配对的 result）
@@ -1046,10 +1098,23 @@ export class Bridge {
     }
   }
 
-  // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）
-  resolvePending(sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string): boolean {
+  // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）。
+  // #212 rememberScope：allow 的同时落「允许并记住」规则（pattern 从 pending 的
+  // tool+input 重新推导——与下发卡片时的 remember 同源，危险形态自然得 null 不落）
+  resolvePending(
+    sessionId: string,
+    requestId: string,
+    decision: "allow" | "deny",
+    reason?: string,
+    rememberScope?: "session" | "global",
+    by?: string,
+  ): boolean {
     const p = this.pending.get(sessionId);
     if (!p || p.requestId !== requestId) return false;
+    if (decision === "allow" && rememberScope && this.opts.rules) {
+      const sug = suggestPattern(p.toolName, p.toolInput);
+      if (sug) this.opts.rules.add(p.toolName, sug.pattern, rememberScope, rememberScope === "session" ? sessionId : undefined, by ?? "unknown");
+    }
     clearTimeout(p.timer);
     this.pending.delete(sessionId);
     p.resolve({ decision, reason });
@@ -2189,6 +2254,31 @@ export class Bridge {
       ev.tool_name === "TaskCreate" && typeof ev.tool_use_id === "string" && ev.tool_use_id ? ev.tool_use_id : undefined;
 
     const remote = !!this.mgr.getExternal(id)?.remote_mode;
+    // #212 允许并记住：命中已记规则 → 直接放行（不弹审批卡，也不等手机在线——
+    // 决定已由用户预存，无需在场）。remote_mode 关 = 用户显式收回远程决定权，规则
+    // 不生效；bypassPermissions = 终端侧显式免门控，同样跳过。日志走 tool_use +
+    // system 两行（与正常路径一致，可解释）
+    if (
+      remote &&
+      ev.tool_name &&
+      this.opts.gateTools.has(ev.tool_name) &&
+      ev.permission_mode !== "bypassPermissions"
+    ) {
+      const hit = this.opts.rules?.match(id, ev.tool_name, input);
+      if (hit) {
+        this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
+          detail: detailToolUse(ev.tool_name ?? "tool", input),
+          ...(taskCallId ? { id: taskCallId } : {}),
+        });
+        this.mgr.setExternalStatus(id, "WORKING", summary);
+        this.mgr.pushExternalLog(
+          id,
+          "system",
+          `已按记住的规则放行 ${ev.tool_name}（${hit.pattern === "*" ? "工具级" : hit.pattern}）`,
+        );
+        return { decision: "allow" };
+      }
+    }
     const shouldGate =
       // AskUserQuestion 不是权限决策而是必需输入：不要求 remote_mode，手机在线就下发选项
       (questions.length > 0 ||
@@ -2223,6 +2313,8 @@ export class Bridge {
 
     // 挂起等远程决定
     const requestId = randomUUID();
+    // #212 可记忆请求带 remember（提问类非权限语义，恒不带）
+    const remember = questions.length ? undefined : suggestPattern(ev.tool_name ?? "tool", input);
     const payload: WaitingPayload = {
       request_id: requestId,
       tool_name: ev.tool_name ?? "tool",
@@ -2230,6 +2322,7 @@ export class Bridge {
       suggestions: [],
       decidable: true,
       ...(questions.length ? { questions } : {}),
+      ...(remember ? { remember } : {}),
     };
     this.mgr.setExternalWaiting(id, payload);
     this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
@@ -2260,7 +2353,9 @@ export class Bridge {
         requestId,
         resolve,
         timer,
-        ...(questions.length ? { questions, toolInput: input } : {}),
+        toolName: ev.tool_name ?? "tool",
+        toolInput: input,
+        ...(questions.length ? { questions } : {}),
       });
     });
   }
@@ -2769,6 +2864,12 @@ export class Bridge {
   private runVerify(sessionId: string, text: string, round: number): void {
     const st = this.mgr.getExternal(sessionId);
     if (!st?.cli_pid) return;
+    // #211 上限闸：真补发已满 3 次（tries≥3）即收手，不再快照/补发/重挂验证轮——
+    // 原实现主动验证链不查计数，慢机上验证轮与看门狗竞争交错时会在第 3 发之后再
+    // 叠发（CI "caps at 3" 断言 got 4 连续复现；本地快机验证链先跑完故恒绿）。
+    // skips 型放弃（框净幻影，tries=0）不经此闸，新滞留消息仍享快验；晋升/交付/
+    // Stop 的 resetStuckWatch 删表后闸自然放行，③段「重置后走快路径」语义不变。
+    if ((this.stuckWatch.get(sessionId)?.tries ?? 0) >= 3) return;
     // 已晋升（UserPromptSubmit 已到）：不是滞留，收工
     if (!(st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
     // 与看门狗同款前置：状态不适合补回车 / 正有 flush 或守门在跑 → 交回看门狗兜底
@@ -2844,7 +2945,16 @@ export class Bridge {
         return !(rec && now - rec.ts < 60_000 && rec.ts >= p.ts);
       }).map((p) => pBody(p));
       if (stuckTexts.length === 0) {
-        this.stuckWatch.delete(id); // 真送达/清空：看门狗全额重置
+        // #211：只对「有归宿」的条目全额重置（pending 空 / 全部已入 CLI 队列）。
+        // 仅剩年轻条目（age≤threshold）是悬而未决，不是滞留结论——原实现无差别
+        // delete 会把 #111 验证链在飞的 tries 清零：验证轮从 1 重数、与看门狗补发
+        // 各数各的，「3 次上限」打穿到 4 发（CI 恒挂本地恒绿＝主循 3s 拍相位是否
+        // 落进注入后快窗 + 慢机把第 4 发拖回断言窗）。保留计数也符合「补发过回长窗」
+        // 的注释原意：快窗内看门狗本就不动手，4s 验证链自管。
+        const pend = s.pending_inputs ?? [];
+        if (pend.length === 0 || pend.every((p) => this.isEnqueued(id, pBody(p)))) {
+          this.stuckWatch.delete(id); // 真送达/清空/全入队：看门狗全额重置
+        }
         continue;
       }
       // 瞬态条件不满足（无定位/状态不适合/flush 中/队列有货）：跳过本轮但保留看门狗
@@ -2880,13 +2990,18 @@ export class Bridge {
   // 真正补发回车（守门通过 / 守门关闭才走到这里——#180 起快照不可用不再 fail-open 盲发）
   private fireStuckEnter(id: string, pid: number, msg?: string): void {
     const w = this.stuckWatch.get(id);
+    // #211 上限闸（收口点）：真补发满 3 次后无论来源（看门狗 sweep / #111 主动验证轮）
+    // 都不得再发——验证链的守门在途期间看门狗第 3 发先行落地置位时，仍在飞的验证轮
+    // 曾在这里叠出第 4 发。与 runVerify 入口闸双保险：本闸覆盖「guard 在途时上限到达」
+    // 的窄窗竞争。tries≥3 只封真回车计数；skips 型放弃（框净幻影，tries=0）不经此闸。
+    if ((w?.tries ?? 0) >= 3) return;
     const tries = (w?.tries ?? 0) + 1;
     this.stuckWatch.set(id, { lastTry: Date.now(), tries, skips: w?.skips ?? 0, blind: 0, given_up: tries >= 3 });
-    // 「暂停自动补发」只在 tries===3 跃迁时打一次：#111 主动验证不查 given_up 门槛，
-    // 后续消息仍会触发本函数（行为有界无害），反复打同款日志会与现实矛盾
+    // 「暂停自动补发」只在 tries===3 跃迁时打一次：入口闸保证 tries 封顶 3、后续不再
+    // 发，日志承诺与实际行为一致（原实现验证轮仍会静默叠发，与之矛盾）
     if (tries === 3) {
       this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
-    } else if (tries < 3) {
+    } else {
       this.mgr.pushExternalLog(id, "system", msg ?? "排队消息疑似滞留输入框，已补发回车");
     }
     void injectEnter(pid).then((r) => {

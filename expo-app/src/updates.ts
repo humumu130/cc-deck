@@ -56,19 +56,13 @@ export interface VersionNote {
   note?: string; // 次要说明（灰字小号次行）：默认值/开启方式等
 }
 // 本版本发布日期（正式版发版日），关于弹窗头行与「已是最新」态展示
-export const VERSION_DATE = "2026-09-26";
+export const VERSION_DATE = "2026-10-02";
 export const VERSION_NOTES: VersionNote[] = [
-  // 新增
-  { group: "new", text: "输出物看板：会话产出的文档报告自动归集成清单，支持手机远程查看与打开", note: "默认开启，设置中可关闭" },
-  { group: "new", text: "向会话发送文件：支持文档、表格、压缩包，会话产出的文件也可拉回手机" },
-  { group: "new", text: "子 Agent 活性可见：卡片角标显示并行数量，点开看每个子 Agent 正在做什么", note: "外部 CLI 会话同样支持" },
   // 优化
-  { group: "improved", text: "无人值守自动恢复：电脑重启后自动恢复托管会话，适合夜间挂机场景" },
-  { group: "improved", text: "远程审批：电脑端的权限确认可转移至手机或网页完成" },
-  { group: "improved", text: "权限模式一屏直选：四档模式带说明并列可选，高危操作需二次确认" },
+  { group: "improved", text: "输出物文件夹行尾改为 ⋯ 菜单，可展开收起、复制目录路径", note: "与文件行的操作样式统一，手机电脑一致" },
   // 修复
-  { group: "fixed", text: "会话卡死自愈：自动检测并恢复流式中断的僵死会话" },
-  { group: "fixed", text: "另修复统计失真、检查更新失败、通知中断、标题乱码等问题" },
+  { group: "fixed", text: "电脑端输出物列表文件夹行与文件行的大小、时间列恢复对齐" },
+  { group: "fixed", text: "多个会话同时工作时，产出文件不再归到别的会话名下" },
 ];
 
 export type UpdateInfo = {

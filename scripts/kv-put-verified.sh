@@ -37,16 +37,27 @@ if ! (cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key put 
     | grep -q '"success":true' || { echo "ERR: KV 上传失败（wrangler 与 curl 代理均失败）"; exit 1; }
 fi
 
-# 回读校验（2026-09-23 #154 加重试）：CF KV 是最终一致——put 成功后立即经
-# cc.humumu.online 回读，边缘可能仍返回旧值 → md5 不匹配被误判「上传失败」
-#（test.28 发布实证：put 实际成功、清单滞留旧版让 App 检查更新拿到旧包）。不匹配
-# 隔 6s 重读最多 4 次；仍不一致才算真失败（坏上传不会被重试掩盖）
-echo "[2/3] 回读校验（KV 最终一致，不匹配重读最多 4 次）"
+# 回读校验（2026-09-23 #154 加重试）：CF KV 是最终一致——put 成功后立即回读，
+# 边缘可能仍返回旧值 → md5 不匹配被误判「上传失败」（test.28 发布实证：put 实际
+# 成功、清单滞留旧版让 App 检查更新拿到旧包）。不匹配隔 6s 重读最多 4 次；仍不
+# 一致才算真失败（坏上传不会被重试掩盖）
+# #28（2026-10-01）回读改走 CF REST API：/dl/ 公网面对验收单密钥键（*.key）与
+# results 键已 404 收窄（防未认证读密钥/结果），/dl/ 回读会让 .key 上传永远
+# 校验失败——API 读与上传同权限同通道（被墙时同走代理），对公网读面零依赖。
+kv_api_read() {
+  # 双路：api.cloudflare.com 直连优先（同 wrangler 主路径），失败回落本地代理
+  #（同上传回落通道；-f 让 4xx/5xx 变非零触发重试，不把错误体当键值比对）
+  curl -sf --max-time 300 -H "Authorization: Bearer $CF_TOKEN" -o "$1" \
+    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY" \
+  || curl -sf --max-time 300 -x "$CF_PROXY" -H "Authorization: Bearer $CF_TOKEN" -o "$1" \
+    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY"
+}
+echo "[2/3] 回读校验（CF API，KV 最终一致，不匹配重读最多 4 次）"
 TMP=$(mktemp /tmp/kv-verify.XXXXXX)
 REMOTE_MD5=""; REMOTE_SIZE=""; VERIFY_OK=0
 for i in 1 2 3 4; do
   # 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
-  if curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"; then
+  if kv_api_read "$TMP"; then
     REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
     if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
   fi
@@ -60,4 +71,8 @@ case "$KEY" in
   *.apk|*.zip) TMP=$(mktemp /tmp/kv-zipt.XXXXXX); curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"; unzip -t "$TMP" >/dev/null || { rm -f "$TMP"; echo "ERR: 回读 zip 损坏"; exit 1; }; rm -f "$TMP"; ;;
 esac
 echo "✅ KV 上传校验通过：$KEY ($LOCAL_MD5, ${LOCAL_SIZE}B)"
-echo "   直链: $DOMAIN/dl/$KEY"
+# #28：.key/.results.json 键 /dl/ 已 404（安全收窄），不打误导直链
+case "$KEY" in
+  *.key|*.results.json) ;;
+  *) echo "   直链: $DOMAIN/dl/$KEY" ;;
+esac
