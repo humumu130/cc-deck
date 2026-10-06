@@ -1110,6 +1110,16 @@
   .notice-row .nr-text { color: var(--dim); font-size: 10.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .notice-row .nr-src { color: var(--faint); font-size: 10px; flex: none; }
   .notice-row.nr-done { opacity: .55; }
+  /* M13-6W 已处理面：行内 resolved 时间戳 + 折叠分区头（已处理 N，点击开合） */
+  .notice-row .nr-time { color: var(--faint); font-size: 10px; flex: none; font-family: var(--mono); }
+  .nr-donezone { margin-top: 2px; }
+  .nr-donehead { display: flex; align-items: center; gap: 5px; padding: 4px 10px; font-size: 10px; color: var(--faint); cursor: pointer; user-select: none; border-radius: 6px; }
+  .nr-donehead:hover { background: var(--q-row-hov, rgba(120,120,128,.12)); }
+  .nr-donehead:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .nrd-chev { font-style: normal; font-size: 9px; }
+  /* M13-6W 回跳聚焦闪烁（1.6s 自撤不残留） */
+  @keyframes jumpFlashKf { 0% { background: rgba(255,159,10,.35); } 100% { background: transparent; } }
+  .jump-flash { animation: jumpFlashKf 1.6s ease-out; border-radius: 6px; }
   /* #018-W1b 通知动作位/错误行/组头可行动计数 */
   .notice-row .nr-ack { flex: none; font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text-strong); cursor: pointer; }
   .notice-row .nr-ack:hover { border-color: var(--done); color: var(--done); }
@@ -5110,7 +5120,10 @@ function orgRenderDrawer() {
     ? pool.map(poolRow).join("")
     : '<div class="od-empty">熟手池为空（首次派单后积累）</div>';
   // 任务板：轻立项单卡简化态平铺（v3.1 §4 渲染降级）；正经立项三栏 todo/doing/done
-  const entHtml = (e) => '<div class="od-ent">' + escapeHtml(e.text || "") +
+  // M13-6W：行挂 data-eid=entry.id——验收回跳 flashOdEnt 反查聚焦锚（无 id 不挂，防御）
+  const entHtml = (e) => '<div class="od-ent"' +
+    (e && typeof e.id === "string" && e.id ? ' data-eid="' + escapeHtml(e.id) + '"' : "") +
+    ">" + escapeHtml(e.text || "") +
     (e.note ? '<div class="od-note">' + escapeHtml(e.note) + "</div>" : "") + "</div>";
   let boardHtml;
   if (!ents.length) boardHtml = '<div class="od-empty">板为空</div>';
@@ -5188,12 +5201,36 @@ document.addEventListener("click", (e) => {
     if (c) notifAck(c, nk.dataset.nackKey);
     return;
   }
+  // M13-6W：已处理分区头开合（折叠密度面；渲染 key 已含开合态，切后重渲生效）
+  const dh = e.target.closest(".nr-donehead");
+  if (dh && dh.dataset.donegroup) {
+    const gk = dh.dataset.donegroup;
+    if (notifDoneOpen.has(gk)) notifDoneOpen.delete(gk);
+    else notifDoneOpen.add(gk);
+    renderNotifications();
+    return;
+  }
   // P58 016 条目 9：通知行整行可点跳转（005 data-notify-jump 整卡语言）——切到该源
-  // 过滤视图；行内按钮（知道了）已在上方分支 return，不双触发
+  // 过滤视图；行内按钮（知道了）已在上方分支 return，不双触发。
+  // M13-6W 验收归因回跳优先：渲染期解析成功的行带 data-jgid（→组织抽屉定位台账卡）
+  // /data-jcf（→组织区确认卡聚焦）；解析失败无该属性=保持原会话跳转（降级路径）
   const jr = e.target.closest(".notice-row.nr-jmp");
   if (jr && jr.dataset.src) {
     const c = ctxs.get(jr.dataset.src);
     if (c) {
+      if (jr.dataset.jgid) {
+        orgOpenDrawer(c, jr.dataset.jgid).then(() => {
+          const d = $("orgdrawer");
+          jumpFlash(d ? d.querySelector('.od-ent[data-eid="' + (window.CSS && CSS.escape ? CSS.escape(jr.dataset.jeid) : jr.dataset.jeid) + '"]') : null);
+        }).catch(() => { /* 拉取失败抽屉自身已示错，聚焦静默 */ });
+        return;
+      }
+      if (jr.dataset.jcf) {
+        const zone = $("orgzone");
+        const btn = zone ? zone.querySelector('[data-org-cf="' + (window.CSS && CSS.escape ? CSS.escape(jr.dataset.jcf) : jr.dataset.jcf) + '"]') : null;
+        jumpFlash(btn ? btn.closest(".org-cf") : null);
+        return;
+      }
       filterSrc = c.cfg.id;
       renderSrcChips();
       if (jr.dataset.sid) select(jr.dataset.sid, c.cfg.id);
@@ -5205,7 +5242,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Enter") return;
   const t = ev.target;
-  if (t && t.classList && t.classList.contains("nr-jmp")) { ev.preventDefault(); t.click(); }
+  if (t && t.classList && (t.classList.contains("nr-jmp") || t.classList.contains("nr-donehead"))) { ev.preventDefault(); t.click(); }
 });
 
 // #306 悬浮清单渲染（key 守卫同 cards 口径：快照流式重渲不重建 DOM；展开态走
@@ -5828,6 +5865,41 @@ function notifErrShow(msg) {
   notifErrTimer = setTimeout(() => { notifErr = ""; renderNotifications(); }, 6000);
   renderNotifications();
 }
+// M13-6W 已处理折叠区展开记忆（组级；默认折叠防长跑堆积，点击分区头开合）
+const notifDoneOpen = new Set();
+
+// M13-6W 验收链接回跳归因解析（纯消费，零协议改动）：sourceContext → 本地落点实体。
+// dispatch 域 entityId=dispatch_id → 扫 ctx.boards 板卡 dispatch_id（M12-7 板卡级归因
+// 映射，BOARD_UPDATED 广播面自然积累）→ {kind:"task",gid,entryId}（台账卡）；org 域
+// entityId=confirm_id → ctx.orgConfirms 在册确认卡 → {kind:"confirm",confirmId}（项目
+// 组确认卡）。归因缺失（旧通知无 domain/entityId、板缓存无此卡=归因未回写或未同步、
+// 确认卡已决议不在册）→ null=降级：行保持原交互（sessionId 会话跳转），不报错不假造。
+function notifJumpTarget(item, boards, orgConfirms) {
+  const sc = item && item.sourceContext && typeof item.sourceContext === "object" ? item.sourceContext : null;
+  if (!sc || typeof sc.domain !== "string" || typeof sc.entityId !== "string" || !sc.entityId) return null;
+  if (sc.domain === "dispatch" && boards instanceof Map) {
+    for (const [gid, board] of boards) {
+      const ent = board && Array.isArray(board.entries)
+        ? board.entries.find((e) => e && e.dispatch_id === sc.entityId)
+        : null;
+      if (ent && typeof ent.id === "string") return { kind: "task", gid, entryId: ent.id };
+    }
+    return null;
+  }
+  if (sc.domain === "org" && Array.isArray(orgConfirms) && orgConfirms.some((c) => c && c.id === sc.entityId)) {
+    return { kind: "confirm", confirmId: sc.entityId };
+  }
+  return null;
+}
+
+// M13-6W 跳转聚焦：scroll+闪烁一次（1.6s 自撤不残留）；找不到元素=静默（不报错）
+function jumpFlash(el) {
+  if (!el) return;
+  try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* 旧引擎无 smooth */ }
+  el.classList.add("jump-flash");
+  setTimeout(() => el.classList.remove("jump-flash"), 1600);
+}
+
 function renderNotifications() {
   const box = $("notifications");
   if (!box) return;
@@ -5843,7 +5915,13 @@ function renderNotifications() {
   // 乐观在飞行（__w1b_pend）即刻消失不渲染——消失只是乐观视图，账面不动（§3.3 通知
   // 不清零：打开/浏览/重连/切视图都不清，权威帧回来按 handled 灰显归位）
   const rows = sources.flatMap((ctx) => (ctx.notifications || []).filter((item) => !item.__w1b_pend).map((item) => ({ ctx, item })));
-  const key = notifErr + "§" + sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|");
+  const groups = new Map();
+  for (const row of rows) {
+    const group = row.item.group || "activity";
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  const key = notifErr + "§" + sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|") + "|dz:" + [...groups.keys()].map((g) => g + ":" + (notifDoneOpen.has(g) ? 1 : 0)).join(",");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = false;
@@ -5853,34 +5931,46 @@ function renderNotifications() {
     box.innerHTML = errHtml + '<div class="notice-empty">暂无通知</div>';
     return;
   }
-  const groups = new Map();
-  for (const row of rows) {
-    const group = row.item.group || "activity";
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(row);
-  }
   box.innerHTML = errHtml + [...groups.entries()].map(([group, groupRows]) => {
     // 组头计数随可行动项（018 计数口径在通知面的对应：只数可行动在办，不数源总数）
     const act = notifActionableOf(groupRows.map((r) => r.item)).length;
+    // M13-6W resolved 分离：未收口行照常平铺；已收口行折叠为「已处理 N」分区头
+    //（默认收起防长跑堆积，点开看灰态行），不清零语义不变——行仍在账面只换密度
+    const undone = groupRows.filter((r) => !doneOf(r.item));
+    const doneRows = groupRows.filter((r) => doneOf(r.item));
+    const doneOpen = notifDoneOpen.has(group);
+    const rowHtml = ({ ctx, item }) => {
+      const src = srcDisplayName(ctx.cfg);
+      // 「知道了」轻动作位（007 B+）：可行动未收口 + 本源未被旧 relay 降级记忆封锁
+      const canAck = item.actionable === true && !doneOf(item) && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
+      // P58 016 条目 9（005 整卡可点语言）：可行动未收口行整行可点跳转——
+      // 优先验收归因回跳（M13-6W：dispatch→台账卡/org→确认卡，渲染期解析冻结进
+      // data-j*），解析不出=保持原会话跳转交互（降级不假造）；已收口/不可行动行
+      // 不可点（005「历史动态 · 无需处理」语义）。跳转是本地动作，不依赖命令能力位
+      const canJmp = item.actionable === true && !doneOf(item);
+      const jmpSid = item.sourceContext && typeof item.sourceContext === "object" && typeof item.sourceContext.sessionId === "string" && item.sourceContext.sessionId ? item.sourceContext.sessionId : "";
+      const tgt = canJmp ? notifJumpTarget(item, ctx.boards, ctx.orgConfirms) : null;
+      // M13-6W 已处理行时间戳（resolved_at 优先，handled/dismissed 兜底；MM-dd HH:mm）
+      const doneTs = doneOf(item) ? (item.resolved_at || item.handled_at || item.dismissed_at) : 0;
+      return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + (canJmp ? " nr-jmp" : "") + '"' +
+        (canJmp ? ' role="button" tabindex="0" data-src="' + escapeHtml(ctx.cfg.id) + '"' + (jmpSid ? ' data-sid="' + escapeHtml(jmpSid) + '"' : "") +
+          (tgt && tgt.kind === "task" ? ' data-jgid="' + escapeHtml(tgt.gid) + '" data-jeid="' + escapeHtml(tgt.entryId) + '"' : "") +
+          (tgt && tgt.kind === "confirm" ? ' data-jcf="' + escapeHtml(tgt.confirmId) + '"' : "") : "") +
+        ' data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + (canJmp ? "&#10;↵ 点按跳转" : "") + '">' +
+        '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
+        (canAck ? '<button class="nr-ack" data-nack-key="' + escapeHtml(item.key) + '" data-src="' + escapeHtml(ctx.cfg.id) + '" title="标记已处理（handled）">知道了</button>' : "") +
+        '<span class="nr-src">' + escapeHtml(src) + "</span>" +
+        (doneTs ? '<span class="nr-time">' + escapeHtml(fmtDT(doneTs)) + "</span>" : "") + "</div>";
+    };
     return '<section class="notice-group" data-group="' + escapeHtml(group) + '">' +
       '<div class="notice-group-head">' + escapeHtml(NOTICE_GROUP_LABEL[group] || group) + (act > 0 ? '<i class="ng-act">' + act + "</i>" : "") + "</div>" +
-      [...groupRows].sort((a, b) => Number(doneOf(a.item)) - Number(doneOf(b.item))) .map(({ ctx, item }) => {
-        const src = srcDisplayName(ctx.cfg);
-        // 「知道了」轻动作位（007 B+）：可行动未收口 + 本源未被旧 relay 降级记忆封锁
-        const canAck = item.actionable === true && !doneOf(item) && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
-        // P58 016 条目 9（005 整卡可点语言）：可行动未收口行整行可点跳转——
-        // 切到该源过滤视图，绑定具体会话（sourceContext.sessionId）时再进会话；
-        // 已收口/不可行动行不可点（005「历史动态 · 无需处理」语义）。跳转是本地
-        // 动作，不依赖命令能力位（与 canAck 刻意不同口径）
-        const canJmp = item.actionable === true && !doneOf(item);
-        const jmpSid = item.sourceContext && typeof item.sourceContext === "object" && typeof item.sourceContext.sessionId === "string" && item.sourceContext.sessionId ? item.sourceContext.sessionId : "";
-        return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + (canJmp ? " nr-jmp" : "") + '"' +
-          (canJmp ? ' role="button" tabindex="0" data-src="' + escapeHtml(ctx.cfg.id) + '"' + (jmpSid ? ' data-sid="' + escapeHtml(jmpSid) + '"' : "") : "") +
-          ' data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + (canJmp ? "&#10;↵ 点按跳转" : "") + '">' +
-          '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
-          (canAck ? '<button class="nr-ack" data-nack-key="' + escapeHtml(item.key) + '" data-src="' + escapeHtml(ctx.cfg.id) + '" title="标记已处理（handled）">知道了</button>' : "") +
-          '<span class="nr-src">' + escapeHtml(src) + "</span></div>";
-      }).join("") +
+      undone.map(rowHtml).join("") +
+      (doneRows.length
+        ? '<div class="nr-donezone">' +
+          '<div class="nr-donehead" role="button" tabindex="0" aria-expanded="' + (doneOpen ? "true" : "false") + '" data-donegroup="' + escapeHtml(group) + '" title="展开/收起已处理通知">已处理 ' + doneRows.length + '<i class="nrd-chev">' + (doneOpen ? "▾" : "▸") + "</i></div>" +
+          (doneOpen ? doneRows.map(rowHtml).join("") : "") +
+          "</div>"
+        : "") +
     "</section>";
   }).join("");
 }
