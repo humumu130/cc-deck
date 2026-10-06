@@ -226,7 +226,15 @@ console.log("== P81-8W permission summary web: static anchors + behavior ==");
 // ---- ⑦ 结构闸（新 id 唯一 + 面板归属 + 既有控制面零重写） ----
 ok(count(html, 'id="permPanel"') === 1 && count(html, 'id="permDetail"') === 1 && count(html, 'id="codexCap"') === 1, "structure: three new ids unique");
 ok(count(html, "function renderPermSummary") === 1 && count(html, "function renderPermDetail") === 1 && count(html, "function updateEngineOpt") === 1 && count(html, "function forbiddenZh") === 1, "structure: four new functions single-defined");
-ok(count(html, "function PERM_LABEL") === 0 && count(html, "const PERM_LABEL") === 1, "structure: existing PERM_LABEL control untouched (single def)");
+// PERM-SYNC（P81-8W 备案⑥裁定执行）：旧 PERM_LABEL 四档词已删，档位人话单一词表源=PERM_MODE_ZH
+//（钉死词表双键同表）。断言收消费/定义形式清零（注释溯源提及「旧 PERM_LABEL 已删」允许存在）；
+// 旧四档词「标准/自动编辑/规划/跳过」清零——「跳过」裸字有合法他用（确认跳过按钮/跳过权限确认
+// checkbox），断言锁引号值形式；forbidden 档呈现「已拒绝」可达，选择面 PERM_CYCLE 四键不含
+// forbidden = 结构性不可选（终态不可切回）。
+ok(count(html, "const PERM_LABEL") === 0 && count(html, "PERM_LABEL[") === 0, "permsync: legacy PERM_LABEL zeroed (no def, no consumer)");
+ok(count(html, "自动编辑") === 0 && count(html, "权限·标准") === 0 && count(html, '"规划"') === 0 && count(html, '"跳过"') === 0, "permsync: legacy four-mode wording zeroed (quoted-value form)");
+ok(/PERM_MODE_ZH\[pm\] \?\? pm/.test(html) && /PERM_MODE_ZH\[m\]/.test(html) && /PERM_MODE_ZH\[s\.permission_mode \?\? "default"\]/.test(html), "permsync: all mode-label consumers route through PERM_MODE_ZH");
+ok(html.includes("权限·每次询问"), "permsync: permBtn initial literal = 钉死词表 default 档");
 ok(count(html, 'id="permBtn"') === 1 && count(html, "const PERM_CYCLE") === 1, "structure: existing #permBtn switch control untouched");
 ok(html.slice(html.indexOf("</html>") + 7).trim() === "", "structure: nothing after </html>");
 

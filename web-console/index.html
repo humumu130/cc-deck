@@ -2860,7 +2860,7 @@
         <span class="spacer"></span>
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
-        <button id="permBtn" class="mini" style="display:none"><span id="permBtnT">权限·标准</span><!-- #117 切换符 ⇄（用户文字描述定形：上右箭头/下左箭头，贴近侧箭头抹除=等号+右上捺+左下捺）；SVG 线稿随状态变色（currentColor），与手机端 permPill 同几何 --><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M16 3l4 4-4 4"/><path d="M4 17h16"/><path d="M8 13l-4 4 4 4"/></svg></button>
+        <button id="permBtn" class="mini" style="display:none"><span id="permBtnT">权限·每次询问</span><!-- #117 切换符 ⇄（用户文字描述定形：上右箭头/下左箭头，贴近侧箭头抹除=等号+右上捺+左下捺）；SVG 线稿随状态变色（currentColor），与手机端 permPill 同几何 --><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M16 3l4 4-4 4"/><path d="M4 17h16"/><path d="M8 13l-4 4 4 4"/></svg></button>
         <!-- #56 外部会话远程审批开关：off=权限确认在终端本地弹框；on=挂起到手机/网页出按钮 -->
         <button id="extModeBtn" class="mini" style="display:none">审批·终端</button>
         <span class="tab-ind" id="tabInd"></span>
@@ -3339,8 +3339,10 @@ function connectServer(cfg) {
 }
 function connectAll() { for (const cfg of servers) connectServer(cfg); }
 
+// #40 权限档切换循环（四档不含 forbidden——终态不可切回，选择面结构性不可达，PERM-SYNC 备案）。
+// 档位人话一律用 PERM_MODE_ZH 钉死词表（P81-8 任务书钉死段；PERM-SYNC 收敛：旧 PERM_LABEL
+// 四档词已删，三端单一词表源，双端词表锚与 specs/081 同段核）
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"];
-const PERM_LABEL = { default: "标准", acceptEdits: "自动编辑", plan: "规划", bypassPermissions: "跳过" };
 // #40 四选一面板描述句：与手机端 DetailScreen PERM_DESC 逐句一致（两端共用词表，改则同步）
 const PERM_DESC = {
   default: "每个命令与文件编辑都需确认",
@@ -6903,15 +6905,15 @@ function renderDetail() {
     permBtn.style.display = "";
     const pm = s.permission_mode ?? "default";
     // #117 文字写进内层 span（textContent 整写会抹掉按钮内的 ⇄ SVG）
-    $("permBtnT").textContent = "权限·" + (PERM_LABEL[pm] ?? pm);
+    $("permBtnT").textContent = "权限·" + (PERM_MODE_ZH[pm] ?? pm); // PERM-SYNC：钉死词表（旧 PERM_LABEL 已删）
     permBtn.classList.toggle("on", pm !== "default");
     // #40 跳过档警示色（对齐手机端 permPillWarn：红只到描边+文字，不用实底）
     permBtn.classList.toggle("warn", pm === "bypassPermissions");
     // #191 外部会话同显（只读状态灯）：relay 逐事件更新并下发 permission_mode，此前
     // 两端对外部会话整体隐藏——plan 模式无任何标识，远程审批照弹被误读成「跳过了还弹」
     permBtn.title = s.external
-      ? "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（外部会话，在电脑终端切换）"
-      : "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
+      ? "权限模式：" + (PERM_MODE_ZH[pm] ?? pm) + "（外部会话，在电脑终端切换）"
+      : "权限模式：" + (PERM_MODE_ZH[pm] ?? pm) + "（点击切换）";
     permBtn.style.cursor = s.external ? "default" : "";
   } else { permBtn.style.display = "none"; permBtn.classList.remove("warn"); }
   renderPermDetail(s, sel.ctx); // P81-8W 面③：详情页权限摘要条（历史/外部会话同显只读档位）
@@ -7175,7 +7177,7 @@ function statsTabHtml(s) {
     ["目录", s.cwd],
     ["模型", s.model || "-"],
     // #191 外部会话同显权限模式（此前恒 "-"，plan 模式无处可辨）
-    ["权限模式", PERM_LABEL[s.permission_mode ?? "default"] ?? s.permission_mode ?? "标准"],
+    ["权限模式", PERM_MODE_ZH[s.permission_mode ?? "default"] ?? s.permission_mode ?? "每次询问"],
     ["开始时间", new Date(s.started_at).toLocaleString("zh-CN", { hour12: false })],
     ["用时", fmtElapsed(sessionElapsed(s))],
     ["修改文件", String(s.stats?.files_changed ?? 0)],
@@ -10012,7 +10014,7 @@ function renderPermPop(cur, arm) {
     const danger = m === "bypassPermissions";
     return (
       '<div class="pp-row' + (m === cur ? " cur" : "") + (danger ? " danger" : "") + (danger && arm ? " arm" : "") + '" data-m="' + m + '">' +
-      '<div class="pp-main"><div class="pp-name">' + PERM_LABEL[m] + (danger ? '<span class="pp-badge">危险</span>' : "") + "</div>" +
+      '<div class="pp-main"><div class="pp-name">' + PERM_MODE_ZH[m] + (danger ? '<span class="pp-badge">危险</span>' : "") + "</div>" +
       '<div class="pp-desc">' + PERM_DESC[m] + "</div></div>" +
       (m === cur ? '<span class="pp-cur">当前</span>' : "") + "</div>"
     );
