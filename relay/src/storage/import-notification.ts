@@ -18,19 +18,15 @@
 //     key+return_path），payload_json 双保险不丢。
 // 范式五要点（C1 定稿）：port 显式传入+事务内聚；JSON 全量源文件级 checkpoint（skip/重扫，offset 恒
 // =lineCount）；失效即域清重灌（两表子先父+按源清旧 loss）；坏行 loss 不阻断；确定性 id 幂等。
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { sha12, statThenRead } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
 import { appendLoss, listLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级 bump→全源失效强制重扫。 */
 export const NOTIFICATION_IMPORT_SCHEMA_VERSION = 1;
-
-function sha12(s: string): string {
-  return createHash("sha1").update(s).digest("hex").slice(0, 12);
-}
 
 export interface NotificationImportCounts {
   notification: number;
@@ -70,14 +66,10 @@ interface MergedNotification {
 
 function observe(file: string, name: string): ObservedSource {
   if (!existsSync(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
-  // stat 先于 read（M11-REVIEW P2-1，import-org.ts observe 定稿同款）：stat 后 read 前文件被改
-  // → 观测旧 mtime+新内容 → checkpoint 记旧 mtime，下次五元组失效重扫（多扫一次，安全侧）。
-  // 反序（read→stat）竞态会记「新 mtime+旧内容」，若后续修改不换行数则漏更新。
-  const mtimeMs = Math.round(statSync(file).mtimeMs);
-  const text = readFileSync(file, "utf8");
-  const lines = text.split("\n");
+  const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）
+  const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { name, file, mtimeMs, lineCount: lines.length, text };
+  return { name, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, text: obs.text };
 }
 
 function countAll(port: StoragePort): NotificationImportCounts {

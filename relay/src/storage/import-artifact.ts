@@ -23,18 +23,15 @@
 // （差集删→UPSERT→按源清旧 loss→落新账→回写 checkpoint，单事务）；坏行 loss 不阻断
 // （整文件坏 JSON=单条 loss+该源差集清空，源间不阻断）；确定性复合键幂等。
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { normalize } from "node:path";
+import { sha12, statThenRead } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
 import { appendLoss, listLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级 bump→全源失效强制重扫。 */
 export const ARTIFACT_IMPORT_SCHEMA_VERSION = 1;
-
-function sha12(s: string): string {
-  return createHash("sha1").update(s).digest("hex").slice(0, 12);
-}
 
 export interface ArtifactImportAttribution {
   project_id?: string | null;
@@ -92,23 +89,22 @@ interface ArtifactRow {
 
 interface PendingLoss { sourceKey: string; lineNo: number; reason: string; excerpt: string }
 
-/** observe（M11-REVIEW P2-1 定稿序）：stat 先于 read——竞态落「多扫一次」安全侧。 */
+/** observe：stat 先于 read 定稿序（权威注释见 import-util.ts）——竞态落「多扫一次」安全侧。 */
 function observeFile(file: string, key: string): ObservedSource {
   if (!existsSync(file)) return { key, file, mtimeMs: 0, lineCount: 0, records: null, badJson: null };
-  const mtimeMs = Math.round(statSync(file).mtimeMs);
-  const text = readFileSync(file, "utf8");
-  const lines = text.split("\n");
+  const obs = statThenRead(file);
+  const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   let records: readonly unknown[] | null = null;
   let badJson: string | null = null;
   try {
-    const parsed = JSON.parse(text) as unknown;
+    const parsed = JSON.parse(obs.text) as unknown;
     if (Array.isArray(parsed)) records = parsed;
     else badJson = "根非数组";
   } catch {
-    badJson = text.slice(0, 200);
+    badJson = obs.text.slice(0, 200);
   }
-  return { key, file, mtimeMs, lineCount: lines.length, records, badJson };
+  return { key, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, records, badJson };
 }
 
 /** 内联源观测：内容指纹（sha1 前 8 hex 作 mtime 位）替代文件 mtime——同内容即快进。 */
@@ -255,7 +251,7 @@ export function importArtifacts(
       obs.records.forEach((raw, idx) => {
         const row = parseRecord(port, raw, resolvedId, src.attribution, idx + 1, obs.key, losses);
         if (row === null) return;
-        const key = `${row.sourceId} ${row.normalizedPath}`;
+        const key = `${row.sourceId} ${row.normalizedPath}`;
         if (seen.has(key)) {
           losses.push({ sourceKey: obs.key, lineNo: idx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ source_id: row.sourceId, path: row.normalizedPath }).slice(0, 200) });
           seen.delete(key);

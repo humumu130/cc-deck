@@ -26,9 +26,9 @@
 //      · blocked 不入 status：tasks 源无 blocked 态，词表外一律拒入+loss（含 blocked）。
 //      · session.status=SessionState 内存枚举词表 WORKING|WAITING|ERROR|DONE 直落（types.ts
 //        SessionStatus，不新造词表）；SESSION_DELETED 落 deleted_at 不删行。
-import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { sha12, statThenRead } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
 import { appendLoss, type LossRecord } from "./loss-report.js";
@@ -52,10 +52,6 @@ const TASK_STATUS_MAP: Record<string, string> = {
 };
 /** session.status 词表（SessionState 内存枚举直落，types.ts SessionStatus）。 */
 const SESSION_STATUS = new Set(["WORKING", "WAITING", "ERROR", "DONE"]);
-
-function sha12(s: string): string {
-  return createHash("sha1").update(s).digest("hex").slice(0, 12);
-}
 
 /**
  * 幂等落账：同 source_path+line_no+reason 已有账则跳过。行级续跑可能重遇断点前已落账的坏行
@@ -106,14 +102,10 @@ interface ObservedNdjson {
 
 function observeNdjson(file: string): ObservedNdjson {
   if (!existsSync(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
-  // 定序：stat 先于 read（C1 observe 同序，efd06ce）——若 stat 后 read 前文件被改，本次拿旧
-  // 内容配旧 mtime 自洽；下一次观测 mtime 变化→checkpoint 失效→多扫一次（安全侧），不倒置
-  // （read 完才 stat 会拿新 mtime 配旧内容，checkpoint 记错位五元组静默续跑=数据错乱）
-  const st = statSync(file);
-  const text = readFileSync(file, "utf8");
-  const lines = text.split("\n");
+  const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）
+  const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { mtimeMs: Math.round(st.mtimeMs), lineCount: lines.length, lines };
+  return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
 }
 
 interface TaskFileRef {

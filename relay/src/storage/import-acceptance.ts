@@ -30,9 +30,9 @@
 // lineCount=文件数，命中=域快进，失效=域清重灌 result→item→sheet 子先父）；失效即域重扫+
 // 按源清旧 loss；坏 sheet/坏行 loss 不阻断其余 sheet；确定性 id 幂等。observe 定序 stat 先于
 // read（M11-REVIEW P2-1）。sha12 私有副本（import-util 共享化 G1 前统一定夺）。
-import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { sha12, statThenRead, type ObservedFile } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
 import { appendLoss, listLoss } from "./loss-report.js";
@@ -45,10 +45,6 @@ export const IMPORT_ACTOR = "import-migration";
 
 const SHEET_ID_RE = /^[0-9a-f]{32}$/;
 const VERDICTS = new Set(["pass", "fail"]);
-
-function sha12(s: string): string {
-  return createHash("sha1").update(s).digest("hex").slice(0, 12);
-}
 
 export interface AcceptanceImportCounts {
   sheet: number;
@@ -96,16 +92,14 @@ function observeAcceptanceDir(dir: string): ObservedDir {
   for (const name of readdirSync(dir).sort()) {
     if (!name.endsWith(".json")) continue;
     const file = join(dir, name);
-    // stat 先于 read（P2-1）：stat 后 read 前被改→旧 mtime 配新内容→下次失效重扫（安全侧）
-    let mtimeMs: number;
-    let raw: string;
+    let obs: ObservedFile;
     try {
-      mtimeMs = Math.round(statSync(file).mtimeMs);
-      raw = readFileSync(file, "utf8");
+      obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）；目录遍历容错 continue
     } catch {
       continue;
     }
-    if (mtimeMs > out.mtimeMs) out.mtimeMs = mtimeMs;
+    const raw = obs.text;
+    if (obs.mtimeMs > out.mtimeMs) out.mtimeMs = obs.mtimeMs;
     out.fileCount++;
     if (name.endsWith(".results.json")) {
       const id = name.slice(0, -13); // ".results.json" 恰 13 字符
