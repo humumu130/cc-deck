@@ -2,6 +2,22 @@
 // 冻结口径：SQLite（better-sqlite3/WAL/FK/CHECK）是实体当前态唯一真相；所有新 durable
 // 写入经 StoragePort。本文件只定端口形状——驱动实现见 sqlite.ts，迁移 runner 见 A2
 // （migrator.ts），DDL/schema 见 B1（schema.ts）；均消费本接口，不绕过直连驱动。
+//
+// ---------- DUTY-BOUNDARY：值守三零边界（M11-E2，规格 specs/019-pm-duty.md） ----------
+// 值守（PM duty）是旁路审计机制，不进 v2 实体库——019 口径：「PM_DUTY_ROUND 是独立日志
+// 条目，写入 CCR_DATA_DIR/duty-rounds.ndjson append-only 文件，不进入 EventBus、
+// EventType union 或 events.ndjson，不参加业务状态机」（§1/§4.3）。三零边界：
+//   零 SQLite 表 —— duty-rounds.ndjson 不落任何 STORAGE_TABLES/IMPORT_LEDGER_TABLES 表，
+//     不新增迁移版本；15+2 表清单是冻结件口径，值守审计不是实体（无外键归属、无投影消费）。
+//   零 EventType 注册 —— types.ts 的 EventType 联合不含任何 duty 事件词；值守轮次不进
+//     events.ndjson 事件流。
+//   零 EventBus 出口 —— leader-duty.ts 零 import event-bus/storage（纯函数文件），值守
+//     判定/回执校验不经总线广播。
+// 理由：值守只保存跨事实源的派生观察、去重和审计（019 §1），消费面是审计追溯而非业务
+// 状态机；入库会把旁路日志升格成实体、引入 FK/迁移/投影连带漂移。护栏测试
+// scripts/test-duty-boundary.ts（npm run test:duty-boundary）静态+运行双面断言本边界——
+// 未来若需破界（duty 入库/入流），先改 019 规格与冻结件，再改注记与测试，三处同步。
+
 
 /** 端口构造参数。dataDir 必须由调用方保证指向受控目录（生产=cfg.dataDir，测试=mkdtemp
  * 临时目录）；本层不读任何 CCR_* 环境变量——环境解析归上层，端口只认显式路径。 */
