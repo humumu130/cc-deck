@@ -87,7 +87,8 @@ import { TRAE_ACTIVITY_CAPABILITIES } from "./agent-trae.js";
 import { QWEN_ACTIVITY_CAPABILITIES } from "./agent-qwen.js";
 import { CODEBUDDY_ACTIVITY_CAPABILITIES } from "./agent-codebuddy.js";
 import { ZCODE_ACTIVITY_CAPABILITIES } from "./agent-zcode.js";
-import { createRegisteredEngine, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
+import { createRegisteredEngine, getEngineDefinition, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
+import { preflightEngine } from "./agent-jsonl.js";
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
   // bypassPermissions 必须在内：① CLI init 回报 skip 会话时据此镜像记录 state（否则
@@ -557,7 +558,7 @@ export class SessionManager {
   // leaderOpenDispatch = 进行中派单 id FIFO（M2 泛化为 openDispatches：按会话键一
   // FIFO——Leader=咨询档同机制复用，worker=派单承接；回合串行，消息数=回合数。
   // 值带收口所需 tier/gid/anchor：收口行写回真实档位，gid 联动任务板搬卡）
-  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }[]>();
+  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string }[]>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -3724,7 +3725,7 @@ export class SessionManager {
   // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
   //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
   // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
-  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }): void {
+  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string }): void {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
@@ -3766,7 +3767,7 @@ export class SessionManager {
         })()
       : all
         ? q.splice(0)
-        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string } => !!x);
+        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
     for (const e of es) {
       appendDispatch({
@@ -3775,6 +3776,11 @@ export class SessionManager {
         status, receipt: truncate(receipt, 200), session_id: key,
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
         ...(e.actor ? { actor: e.actor } : {}),
+        // M12-5 引擎字段同 id 透传（收敛末行不丢——读侧末行赢，收口行不带会把
+        // dispatched/running 行的 engine/provider/model 从收敛视图里洗掉）
+        ...(e.engine ? { engine: e.engine } : {}),
+        ...(e.provider ? { provider: e.provider } : {}),
+        ...(e.model ? { model: e.model } : {}),
       });
       // #40 M4 派单完成回调（谁派活谁收通知）：收口即通知——端上广播帧恒发；
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
@@ -4708,6 +4714,33 @@ export class SessionManager {
     this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
   }
 
+  // M12-5 引擎 preflight（拉起前纯静态检查，失败即 error 拒派）：裁定「派单前 error」
+  // 口径——preflight 是 which/路径/env 级同步探测，纯静态无进程无账可记，dispatched
+  // 行都不落（与 M12-3「先落账再执行」衔接：静态检查在落账前挡；动态失败——spawn
+  // 崩——才走 dispatched→failed 收口边，两口既有兜底保留不动）。分引擎：
+  //   - trae/qwen-code/codebuddy：engine-registry 探针（CLI PATH/绝对路径 X_OK/env
+  //     密钥引用/base_url——preflightEngine 同步静态面）
+  //   - codex：探 CLI 在场（PATH which / CCR_CODEX_PATH 绝对路径——与注册引擎同级
+  //     静态探测，preflightEngine 复用零新增导出）
+  //   - claude：SDK 随进程内嵌（模块 import 即可用性），无可静态探针=恒过
+  //   - zcode：unsupported 主档 fail-closed（settings.preflightEngineProfile 同款裁
+  //     决）——明确 error 不静默回退（与 read-mode 无效值 fail-fast 同哲学）；词表内
+  //     但 registry 无适配器，旧路径跑到 spawn 才炸「未注册引擎」，本口前移到派单前
+  private preflightDispatchEngine(engine: SessionEngine, provider?: string): { ok: true } | { ok: false; error: string } {
+    if (engine === "zcode") {
+      return { ok: false, error: "unsupported engine: zcode（注册引擎词表：claude/codex/trae/qwen-code/codebuddy——zcode 未接适配器，不静默回退）" };
+    }
+    if (engine === "claude") return { ok: true }; // SDK 内嵌，无静态探针
+    if (engine === "codex") {
+      const check = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
+      return check.ok ? { ok: true } : { ok: false, error: `Codex preflight 失败: ${check.errors.join("；")}` };
+    }
+    const def = getEngineDefinition(engine);
+    if (!def) return { ok: false, error: `unsupported engine: ${engine}（注册引擎词表：claude/codex/trae/qwen-code/codebuddy——不静默回退）` };
+    const check = def.preflight(providerProfileFor(engine, provider));
+    return check.ok ? { ok: true } : { ok: false, error: `${def.label} preflight 失败: ${check.errors.join("；")}` };
+  }
+
   // #26 M2 派单（§4 随手办/项目组任务）：worker 会话承接——M3 起项目组活双来源
   //（§5 查表：空闲熟手 resume｜新会话+档案注入），随手办仍恒新会话（无组无路由记录）。
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
@@ -4799,7 +4832,18 @@ export class SessionManager {
     // #40 M4 actor 标注：唯一调用方 /api/org dispatch = Leader CLI → 缺省 "leader"；
     // 台账三行（dispatched/running/终态）同 id 共享 actor，收口通知据此定向
     const actor = input.actor?.trim() || "leader";
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor });
+    // M12-5 引擎 preflight：拉起前纯静态检查，失败即 error 拒派——零 spawn 零台账
+    //（dispatched 行都未落，裁定备案见 preflightDispatchEngine 注释）
+    const engineFields = {
+      ...(planned.engine ? { engine: planned.engine } : {}),
+      ...(planned.provider ? { provider: planned.provider } : {}),
+      ...(planned.model ? { model: planned.model } : {}),
+    };
+    if (planned.engine) {
+      const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
+      if (!pf.ok) return { ok: false, error: pf.error };
+    }
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
       try {
@@ -4823,7 +4867,7 @@ export class SessionManager {
           // P1-2（R1FIX1）出口②复活后再失败：事实源先行，统一通知口（failed →
           // action/error 可操作；actor=leader 按 M4 规则注入派单方）
           const receipt = truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200);
-          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor });
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
           return { ok: false, error: `worker 拉起失败: ${msg2}` };
         }
@@ -4841,7 +4885,7 @@ export class SessionManager {
         // P1-2（R1FIX1）出口③首次拉起失败：同出口②口径（旧「CLI 同步拿 error」
         // 例外只针对在线弹窗通道，账面不豁免）
         const receipt = truncate(msg, 200);
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor });
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
         this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
         return { ok: false, error: `worker 拉起失败: ${msg}` };
       }
@@ -4859,8 +4903,8 @@ export class SessionManager {
         ...(actual?.engine_provider ? { provider: actual.engine_provider } : {}),
       });
     }
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor });
-    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor });
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
         ? // #087 beads：认领模式——前置检查已过，既有卡 todo→doing 挂派单（卡是同一张，依赖关系保留）

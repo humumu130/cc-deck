@@ -15,7 +15,10 @@
 //          closeHungDispatchRows 零悬挂；
 //       C10 beads 接线（M12-4）：依赖完成→ready→可派全链/认领坏引用（幽灵引用）
 //          不误放行/gate 设闸→拒→gate:null 唯一清除→放行/收口 done 自动回流
-//          lesson（结构化模板非内容性经验，actor=system 审计）/failed 零 lesson。
+//          lesson（结构化模板非内容性经验，actor=system 审计）/failed 零 lesson；
+//       C11 引擎编排（M12-5）：选择链三态（显式/角色配置/缺省 Claude）/preflight
+//          失败 error 拒派零 spawn 零台账/zcode unsupported fail-closed/台账行
+//          engine/provider/model 落账（收敛末行不丢）。
 // fixture 缝仿 test-r1b-org（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调 handleCommand）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m12-commands.ts
 import { randomUUID } from "node:crypto";
@@ -26,7 +29,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { COMMAND_TYPES as WS_TYPES } from "../src/ws-server.js";
 import { COMMAND_TYPES as CLOUD_TYPES } from "../src/cloud-client.js";
-import { listGroups, listLessons, loadBoard, removeBoardEntry, setLightConfirmTrusted, upsertBoardEntry } from "../src/projects.js";
+import { createGroup, listGroups, listLessons, loadBoard, removeBoardEntry, setLightConfirmTrusted, upsertBoardEntry } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { RelayConfig } from "../src/config.js";
@@ -39,12 +42,12 @@ function assert(cond: boolean, name: string) {
   else { fail++; console.error(`  ✗ ${name}`); }
 }
 
-type SpawnRec = { prompt: string | undefined; cb: AgentCallbacks };
+type SpawnRec = { prompt: string | undefined; cb: AgentCallbacks; engine?: string };
 const makeFakeFactory = (created: SpawnRec[]) =>
-  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined): AgentLike => {
+  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { engine?: string }): AgentLike => {
     void cwd;
     void model;
-    created.push({ prompt, cb });
+    created.push({ prompt, cb, ...(opts?.engine ? { engine: opts.engine } : {}) });
     const a: AgentLike = {
       id: randomUUID(),
       startedAt: Date.now(),
@@ -85,6 +88,7 @@ try {
   const CWD = mkdtempSync(join(tmpdir(), "ccr-cwd-m12-"));
   const ORG = mkdtempSync(join(tmpdir(), "ccr-org-m12-"));
   const anchor = mkdtempSync(join(tmpdir(), "ccr-anchor-m12-"));
+  const anchor2 = mkdtempSync(join(tmpdir(), "ccr-anchor2-m12-"));
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
   process.env.CCR_ORG_DIR = ORG;
@@ -398,6 +402,52 @@ try {
     const ackGate2 = send(mgr, "c10g2", "COMMAND_DISPATCH", { gid, prompt: "做E", entry_id: idE }, "web-1");
     assert(ackGate2.ok === true, "C10⑪ 清除后认领放行 spawn（gate 语义全链：设闸→拒→人清除→放行）");
     created[created.length - 1]?.cb.onTurnEnd(true, "收尾", 50); // 清在办（防悬账污染）
+
+    // ---------- C11 引擎编排（M12-5）：选择链三态/preflight 失败零 running/unsupported/台账引擎字段 ----------
+    console.log("C11 引擎 profile/preflight 编排");
+    // C11①②③ 显式覆盖（选择链最优先）：engine=codex 派单成功，台账三行同 id 共享引擎字段
+    const baseC11 = created.length;
+    const ackEng = send(mgr, "c11eng", "COMMAND_DISPATCH", { gid, prompt: "引擎单", engine: "codex", provider: "p1", model: "m1" }, "web-1");
+    const engId = (ackEng.data as { dispatch_id?: string }).dispatch_id ?? "";
+    assert(ackEng.ok === true && created[baseC11]?.engine === "codex",
+      "C11① 显式 engine=codex 派单成功（选择链：显式覆盖最优先，factory 收到 engine）");
+    const engRows = readNdjson<Record<string, unknown>>(join(ORG, "dispatch-log.ndjson")).filter((r) => r.id === engId);
+    assert(engRows.length >= 2 && engRows.every((r) => r.engine === "codex" && r.provider === "p1" && r.model === "m1"),
+      "C11② 台账行 engine/provider/model 落账（dispatched+running 同 id 共享，可审计）");
+    created[baseC11]?.cb.onTurnEnd(true, "引擎单收口", 50);
+    const engFinal = readDispatchLog().find((e) => e.id === engId);
+    assert(engFinal?.engine === "codex" && engFinal?.provider === "p1",
+      "C11③ 收口末行 engine 不丢（收敛视图字段保留——closeOpenDispatches 同 id 透传）");
+    // C11④ 角色配置兜底：组 role_defaults.worker.engine=codex，无显式 engine 派单 resolved 到角色配置
+    //（store 层建组——命令面 COMMAND_ORG_ACTION create 经 B2a adaptOrgAction 不透传
+    // role_defaults（HTTP /api/org create 面才支持，:4270 洗刷段），缺口备案回单）
+    const g2r = createGroup({ name: "引擎角色组", anchor_dir: anchor2, tier: "轻立项", role_defaults: { worker: { engine: "codex", model: "role-m" } } });
+    const gid2 = g2r.ok ? g2r.group.id : "";
+    const baseC11b = created.length;
+    const ackRole = send(mgr, "c11role", "COMMAND_DISPATCH", { gid: gid2, prompt: "角色默认单" }, "web-1");
+    assert(g2r.ok && gid2 !== "" && ackRole.ok === true && created[baseC11b]?.engine === "codex",
+      "C11④ 角色配置兜底：role_defaults.worker.engine=codex，无显式 engine 派单 resolved 到角色配置（选择链三态之二）");
+    created[baseC11b]?.cb.onTurnEnd(true, "收口", 50);
+    // C11⑤ preflight 失败零 running：trae CLI 指向不存在绝对路径（accessSync 确定性失败）
+    const prevTrae = process.env.CCR_TRAE_PATH;
+    process.env.CCR_TRAE_PATH = "/nonexistent/ccr-test-trae-cli";
+    const baseC11c = created.length;
+    const ackPf = send(mgr, "c11pf", "COMMAND_DISPATCH", { gid, prompt: "preflight 失败单", engine: "trae" }, "web-1");
+    assert(ackPf.ok === false && String(ackPf.error ?? "").includes("preflight 失败") && created.length === baseC11c,
+      "C11⑤ preflight 失败 error 拒派（零 spawn 零台账——派单前 error 口径，dispatched 行都不落）");
+    if (prevTrae === undefined) delete process.env.CCR_TRAE_PATH;
+    else process.env.CCR_TRAE_PATH = prevTrae;
+    // C11⑥ zcode unsupported：词表内但 registry 无适配器——明确 error 不静默回退
+    const baseC11d = created.length;
+    const ackZc = send(mgr, "c11zc", "COMMAND_DISPATCH", { gid, prompt: "zcode 单", engine: "zcode" }, "web-1");
+    assert(ackZc.ok === false && String(ackZc.error ?? "").includes("unsupported engine: zcode") && created.length === baseC11d,
+      "C11⑥ zcode unsupported 明确拒收（fail-closed 不静默回退，零 spawn 零台账）");
+    // C11⑦ 缺省 Claude：无显式无角色配置 → engine 键缺省（旧行兼容）
+    const baseC11e = created.length;
+    const ackDflt = send(mgr, "c11dflt", "COMMAND_DISPATCH", { gid, prompt: "缺省引擎单" }, "web-1");
+    assert(ackDflt.ok === true && created[baseC11e]?.engine === undefined,
+      "C11⑦ 缺省 Claude：无显式无角色配置 → engine 键缺省不写（台账旧行兼容，选择链三态之三）");
+    created[baseC11e]?.cb.onTurnEnd(true, "收口", 50);
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR;
     else process.env.CCR_ORG_DIR = prevOrg;
@@ -407,6 +457,7 @@ try {
     rmSync(CWD, { recursive: true, force: true });
     rmSync(ORG, { recursive: true, force: true });
     rmSync(anchor, { recursive: true, force: true });
+    rmSync(anchor2, { recursive: true, force: true });
   }
 } catch (e) {
   fail++;

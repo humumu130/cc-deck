@@ -292,6 +292,13 @@ export interface DispatchEntry {
   /** #40 M4 谁派活谁收通知："leader"=Leader CLI 派 / "user"=咨询档（用户消息）/
    *  缺省=旧数据或未标注——读侧缺省不降级（通知仍广播端上，仅不定向注入） */
   actor?: string;
+  /** M12-5 引擎编排面：派单 resolved 引擎/供应商/模型（选择链三态落定值——显式
+   *  覆盖>组角色配置 role_defaults>缺省 Claude；缺省 Claude 不写键=与旧行兼容）。
+   *  同 id 全行共享（dispatched/running/终态行透传同值，读侧收敛末行不丢字段）；
+   *  导入器不消费（未知字段宽容忽略），仅审计面对账用 */
+  engine?: string;
+  provider?: string;
+  model?: string;
 }
 
 export function dispatchLogPath(dir?: string): string {
