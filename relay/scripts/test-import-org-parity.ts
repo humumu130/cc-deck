@@ -4,10 +4,13 @@
 // setGroupStatus/setGroupTier/markHoldSuggested/addConfirm/decideConfirm/upsertBoardEntry，全带
 // dir 注入零生产触达）生成 fixture，等价断言=旧读面读回值对照导入行字段值，不猜值。
 // 双目录结构：
-//   fx1（F1 现状证据小库）：真写路径产出的包裹形 confirms.json（projects.ts:625 {confirms:[…]}）
-//     直接 importOrg——断言现状=整源 bad-json 零导入（发现 F1：import-org.ts:241 只认裸数组）。
+//   fx1（F1 修复验收小库）：真写路径产出的包裹形 confirms.json（projects.ts:625 {confirms:[…]}）
+//     直接 importOrg——C2FIX 反向改：原「现状取证=整源 bad-json 零导入」（发现 F1：
+//     import-org.ts:241 只认裸数组）翻转为「两吃修复后全量导入+逐字段对表」（验收段在文件尾，
+//     importOrg 挪终段防污染 fx2 全库对照面）。
 //   fx2（等价对照主库）：confirms.json 展开为裸数组（格式对齐假设面）后逐单等价对照——
-//     F1 修复后本件即验收件；projects.json 保持真写路径包裹形（import-org.ts:152 读 .groups 正确消费）。
+//     两形（裸数组/包裹形）皆进库即本件验收面；projects.json 保持真写路径包裹形
+//     （import-org.ts:152 读 .groups 正确消费）。
 // 已知差异显式登记（断言在件）：parked_at/archived_at 丢失面（F2）、single_card 不推导（F3）。
 // 范式沿用 C1（mkdtemp+env 钉死+assert 计数+utimesSync 防 mtime 巧合+foreign_key_check 兜底）。
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, utimesSync } from "node:fs";
@@ -56,20 +59,17 @@ const port: StoragePort = createSqlitePort({ dataDir, filename: "parity.sqlite3"
 port.open();
 runMigrations(port, migrations);
 
-// ---------- 1. fx1：F1 现状证据（真写路径包裹形 confirms.json → 现状行为） ----------
-console.log("F1 现状证据（fx1 真包裹形）:");
+// ---------- 1. fx1：真写路径造态+包裹形取证（importOrg 修复验收挪至文件尾终段） ----------
+console.log("fx1 真包裹形造态:");
 setLightConfirmTrusted(true, fx1);
 const f1g = createGroup({ name: "serious", anchor_dir: "/fx1/serious", tier: "正经立项" }, fx1);
 assert(f1g.ok && f1g.confirm !== null, "fx1 真写路径：正经立项出单（confirms.json 落盘）");
 addConfirm({ kind: "suggest-hold", title: "?", reason: "?", payload: { gid: groupOf(f1g).id } }, fx1);
 const rawConfirms = JSON.parse(readFileSync(join(fx1, "confirms.json"), "utf8")) as { confirms: unknown[] };
-assert(!Array.isArray(rawConfirms) && Array.isArray(rawConfirms.confirms) && rawConfirms.confirms.length === 2, "fx1 现场取证：confirms.json 实际格式={confirms:[…]} 包裹形（projects.ts:625 唯一写者）");
+assert(!Array.isArray(rawConfirms) && Array.isArray(rawConfirms.confirms) && rawConfirms.confirms.length === 2, "fx1 现场取证：confirms.json 实际格式={confirms:[…]} 包裹形（projects.ts:625 唯一写者）——两吃消费面");
+const f1Expected = listConfirms(fx1); // 旧读面基准定格（终段对表用）
+assert(f1Expected.length === 2, "fx1 旧读面基准：2 单（立项+suggest-hold）");
 writeFileSync(join(fx1, "org.json"), JSON.stringify({ version: 1, leader_session_id: "s-l", created_at: 1 }, null, 2) + "\n");
-const f1 = importOrg(port, fx1);
-const f1ConfLoss = listLoss(port, join(fx1, "confirms.json"));
-assert(f1.counts.orgConfirm === 0, "F1 现状：真包裹形 confirms.json 进 importOrg → org_confirm 0 行（整源拒）");
-assert(f1ConfLoss.length === 1 && f1ConfLoss[0]?.reason === "bad-json" && (f1ConfLoss[0]?.excerpt ?? "").includes("confirms"), "F1 现状：该源落 bad-json 单账（excerpt=包裹形源文本）——生产格式与导入器脱节，发现清单 F1（P1）");
-assert(f1.counts.group === 1 && f1.counts.project === 1, "F1 邻面：同轮组/project 照常导入（projects.json 包裹形被正确消费，坏源不阻断）");
 
 // ---------- 2. fx2 旧写路径造态（S1 四态+复活边 / S2 tier+hold / S3 board / S4 confirms） ----------
 console.log("旧写路径造态（fx2）:");
@@ -244,7 +244,7 @@ assert(port.query("PRAGMA foreign_key_check").length === 0, "全库零悬空 FK"
 console.log("S6 时间维度:");
 const r2 = importOrg(port, fx2);
 assert(r2.skipped === true && r2.counts.group === 4 && r2.counts.orgConfirm === oldConfirms.length, "同源快进：skipped=true、行数=基准现值（零漂移）");
-assert(listLoss(port).filter((l) => l.sourcePath.startsWith(fx2)).length === lossP.length + lossC.length, "快进零写入：fx2 loss 存量不变（全账另含 fx1 的 F1 证据账）");
+assert(listLoss(port).filter((l) => l.sourcePath.startsWith(fx2)).length === lossP.length + lossC.length, "快进零写入：fx2 loss 存量不变（fx1 未经 importOrg 无账，全账仅 fx2 源）");
 const toActive = setGroupStatus(gP.id, "active", undefined, fx2); // 注意 note?/dir? 位次：fx2 须落 dir 位
 if (!toActive.ok) console.error(`  [诊断] setGroupStatus 失败: ${JSON.stringify(toActive)}`);
 const rpNow = listGroups(fx2).find((g) => g.id === gP.id);
@@ -256,6 +256,30 @@ assert(r3.skipped === false && r3.rescanned.includes(projFile), "源变化失效
 const rowP2 = groupRow(gP.id);
 assert(rowP2 !== undefined && rowP2.status === "active" && rowP2.updated_at === listGroups(fx2).find((g) => g.id === gP.id)?.updated_at, "重扫后导入行追平新读面（status=active、updated_at 同源）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "重扫后仍零悬空 FK");
+
+// ---------- 6. F1 修复验收（C2FIX 反向改授权段：fx1 真包裹形 → 全量导入逐字段对表） ----------
+console.log("F1 修复验收（fx1 包裹形两吃）:");
+const rf1 = importOrg(port, fx1);
+assert(rf1.skipped === false && rf1.counts.orgConfirm === f1Expected.length, `F1 修复：真包裹形 confirms.json → org_confirm 全量导入（${f1Expected.length} 行；原 bad-json 整源拒已翻案）`);
+assert(rf1.counts.group === 1 && rf1.counts.project === 1, "F1 邻面：fx1 同轮组/project 照常导入（projects.json 包裹形被正确消费，坏源不阻断语义保留）");
+assert(listLoss(port, join(fx1, "confirms.json")).length === 0, "F1 修复：该源零 loss（bad-json 账随两吃消失）");
+const f1Leader = memId(`${fx1}@leader@`);
+const f1Rows = port.query<{ id: string; kind: string; group_id: string | null; title: string; reason: string; payload_json: string; status: string; created_at: number; decided_at: number | null; decided_by: string | null }>("SELECT * FROM org_confirm").filter((r) => f1Expected.some((c) => c.id === r.id));
+const f1ValidGroups = port.query<{ id: string }>(`SELECT id FROM "group"`).map((r) => r.id); // fx1 组已随同源导入
+let f1Eq = f1Rows.length === f1Expected.length;
+for (const c of f1Expected) {
+  const row = f1Rows.find((r) => r.id === c.id);
+  if (!row) { f1Eq = false; break; }
+  const gid = typeof (c.payload as Record<string, unknown> | undefined)?.gid === "string" ? (c.payload as Record<string, unknown>).gid as string : null;
+  const wantDecidedBy = c.decided_by === "leader" ? f1Leader : (c.decided_by ?? null);
+  if (row.kind !== c.kind || row.title !== c.title || row.reason !== c.reason || row.status !== c.status
+    || row.created_at !== c.created_at || (row.decided_at ?? null) !== (c.decided_at ?? null)
+    || (row.decided_by ?? null) !== wantDecidedBy
+    || JSON.stringify(JSON.parse(row.payload_json)) !== JSON.stringify(c.payload ?? {})
+    || row.group_id !== (gid !== null && f1ValidGroups.includes(gid) ? gid : null)) { f1Eq = false; break; }
+}
+assert(f1Eq, "F1 修复逐字段对表：真写路径出单→importOrg 行全等（kind/title/reason/status/created_at/decided_at/payload_json 深等/group_id 归因/leader 映射基准=fx1）");
+assert(port.query("PRAGMA foreign_key_check").length === 0, "fx1 导入后仍零悬空 FK");
 
 port.close();
 rmSync(dataDir, { recursive: true, force: true });

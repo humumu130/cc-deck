@@ -142,6 +142,27 @@ const lossAfter = listLoss(port);
 assert(lossAfter.filter((l) => l.sourcePath === pj).length === 0 && lossAfter.filter((l) => l.sourcePath === join(orgDir, "confirms.json")).length === 4, "重扫按源清旧 loss 再落新账：projects.json 转净（0 条）、confirms.json 重灌同 4 条");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "重扫后仍零悬空 FK");
 
+// ---------- 4.5 包裹形两吃（C2FIX）：生产写路径 {confirms:[…]} 形同进 org_confirm ----------
+console.log("包裹形两吃:");
+writeFileSync(join(orgDir, "confirms.json"), JSON.stringify({
+  confirms: [
+    { id: "c-ok", kind: "tier-change", title: "升级 alpha", reason: "忙不过来", payload: { gid: "g-1", to_tier: "正经立项" }, status: "approved", created_at: T + 800, decided_at: T + 900, decided_by: "leader" },
+    { id: "c-bad", kind: "weird-kind", title: "?", reason: "?", payload: { gid: "g-1" }, status: "approved", created_at: T + 810 },
+    { id: "c-badstatus", kind: "archive", title: "?", reason: "?", payload: { gid: "g-1" }, status: "ok", created_at: T + 820 },
+    { id: "c-dang", kind: "archive", title: "结项", reason: "零异常", payload: { gid: "g-nope" }, status: "pending", created_at: T + 830 },
+    { id: "c-noattr", kind: "revive", title: "复活", reason: "又要用", payload: {}, status: "pending", created_at: T + 840 },
+    { id: "c-wrap", kind: "revive", title: "包裹形新单", reason: "两吃后进", payload: { gid: "g-1" }, status: "approved", created_at: T + 850, decided_at: T + 860, decided_by: "leader" },
+  ],
+}, null, 2) + "\n");
+utimesSync(join(orgDir, "confirms.json"), new Date(Date.now() + 15), new Date(Date.now() + 15));
+const rWrap = importOrg(port, orgDir);
+assert(rWrap.skipped === false && rWrap.counts.orgConfirm === 4, `包裹形 confirms.json 进 org_confirm：3 旧合法+包裹形新单=4 行（实测 ${rWrap.counts.orgConfirm}）`);
+const cWrap = port.query<{ kind: string; status: string; group_id: string | null; decided_by: string | null; title: string }>("SELECT kind, status, group_id, decided_by, title FROM org_confirm WHERE id = 'c-wrap'")[0];
+assert(cWrap !== undefined && cWrap.kind === "revive" && cWrap.status === "approved" && cWrap.group_id === "g-1" && cWrap.title === "包裹形新单" && cWrap.decided_by === leader?.id, "包裹形新单逐字段：kind/status/group_id 归因/decided_by leader 映射全正常（两吃后映射链无衰减）");
+const lossWrap = listLoss(port, join(orgDir, "confirms.json"));
+assert(lossWrap.length === 4 && lossWrap.map((l) => l.reason).sort().join() === "bad-field,bad-field,dangling-ref,missing-attribution", `包裹形重扫 loss 对账不变 4 账（清旧落新同单同账，实测 ${lossWrap.length}）`);
+assert(port.query("PRAGMA foreign_key_check").length === 0, "包裹形重扫后仍零悬空 FK");
+
 // ---------- 5. 整文件坏 JSON：该源零导入+落账，其余源照常（范式要点 4） ----------
 console.log("坏 JSON 保护:");
 const confirmsPath = join(orgDir, "confirms.json");

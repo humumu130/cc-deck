@@ -238,8 +238,16 @@ export function importOrg(port: StoragePort, orgDir: string, opts?: { schemaVers
   if (confirmsSrc.text !== null) {
     try {
       const cf = JSON.parse(confirmsSrc.text) as unknown;
-      if (!Array.isArray(cf)) throw new Error("根非数组");
-      (cf as unknown[]).forEach((raw, idx) => {
+      // 格式两吃（C2FIX P1 处置）：裸数组（fixture/历史形）或 {confirms:[…]} 包裹形——后者
+      // 是生产唯一写者 writeConfirms（projects.ts:625）的落盘形，读法同 projects.ts:152 取
+      // .groups；冻结件不格式钦定处从生产现实。其余形状仍拒（bad-json）。
+      const confirmList: unknown[] | null = Array.isArray(cf)
+        ? cf
+        : (cf !== null && typeof cf === "object" && Array.isArray((cf as { confirms?: unknown }).confirms)
+          ? (cf as { confirms: unknown[] }).confirms
+          : null);
+      if (confirmList === null) throw new Error("根非数组且非 {confirms:[…]} 包裹形");
+      confirmList.forEach((raw, idx) => {
         const lineNo = idx + 1;
         const c = raw as Record<string, unknown>;
         const missing = typeof c.id !== "string" || !c.id || typeof c.kind !== "string" || typeof c.status !== "string"
