@@ -261,7 +261,7 @@ async function main(): Promise<void> {
   // 面②：settle 的 forbidden 人话通路 + 成功降级提示 + permission 透传 + 断连收场
   check(modalSrc.includes("forbiddenReasonOf(v.error)"), "settle err 分支 forbidden 人话优先");
   check(modalSrc.includes("effectiveNoteOf(perm)"), "settle ok 分支降级提示通路");
-  check(modalSrc.includes("settle(ackVerdict(r), r.permission)"), "ACK permission 原样透传 settle");
+  check(modalSrc.includes("settle(ackVerdict(r), r.permission, r.engine)"), "ACK permission 原样透传 settle（75-E 起并列透传 ackEngine 供降级比对）");
   check(modalSrc.includes("settle(ackVerdict(null))"), "断连拒发同口径收场（不静默丢单）");
   check(modalSrc.includes("不本地造会话状态"), "ok 分支不造本地会话状态锚（E2c 语义保持）");
   // 面①：权限节在线过滤 + 整节条件渲染（undefined 降级隐藏）

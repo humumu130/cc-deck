@@ -59,12 +59,171 @@ export interface SourceCapabilities {
   // P81-2 权限能力摘要：六注册引擎逐个只读投影（ws-server/cloud-client 两出口同发）。
   // 旧 relay 不发 = undefined（摘要隐藏不白屏）
   permission?: PermissionCapabilitySummary[];
+  // 75-E 引擎目录：源级可用引擎清单（状态/预检/能力/模型），新建会话选择器数据源。
+  // 旧 relay（75-R 未落地）不发 = undefined（选择器降级旧默认路径，见 engineSummaryLine）
+  engine_catalog?: EngineCatalogEntry[];
   // M13-2：relay 支持 v2 delta 投影协议（LAN/phone 双出口同发，WAN 极简集不带）。
   // 缺席/undefined = 旧 relay，UPDATED 帧按覆盖式消费（不认 delta）。注意语义边界：
   // 「支持 v2 协议」≠「值域已迁五态」——消费侧按值分组，值域迁移前后都不出假泳道
   projection_v2?: boolean;
   commands?: string[];
-  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | undefined;
+  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | EngineCatalogEntry[] | undefined;
+}
+
+// ─── 75-E 引擎目录（SNAPSHOT source_capabilities.engine_catalog 载荷，三端同构
+// 契约，与 PM-75 提案 §4.3 / relay 75-R / web 75-W 同形状同词表） ───
+
+export type EngineCatalogState = "ready" | "unavailable" | "unsupported" | "unknown";
+
+export interface EngineCatalogEntry {
+  id: string;
+  label?: string;
+  state: EngineCatalogState;
+  capabilities?: { resume: boolean; approval: boolean; artifacts: boolean };
+  preflight?: { state: "pass" | "fail" | "unknown"; reason?: string };
+  models?: string[];
+  default_for_roles?: string[];
+}
+
+// 三端状态词表（钉死，与 75-W/75-R 逐字一致——勿改字面）
+export const ENGINE_STATE_LABEL: Record<EngineCatalogState, string> = {
+  ready: "可用",
+  unavailable: "未安装或校验未过",
+  unsupported: "不支持 · 不可选",
+  unknown: "状态未知",
+};
+
+// 固定短语（钉死，跨端同词）：摘要行/浮层/降级提示共用
+export const ENGINE_PHRASES = {
+  legacyRelayHint: "升级 relay 可选择更多引擎",
+  onlyAvailable: "仅可用",
+  overrideTag: "已覆盖预置",
+  engineDefaultModel: "使用引擎默认",
+  preflightFail: "预检未通过",
+  basicExec: "基础执行",
+  autoSourceDefault: "自动（源默认）",
+  downgrade: "已降级",
+} as const;
+
+const ENGINE_STATES: readonly EngineCatalogState[] = ["ready", "unavailable", "unsupported", "unknown"];
+
+function normalizeEngineCatalogEntry(value: unknown): EngineCatalogEntry | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.id !== "string" || !value.id) return null;
+  if (typeof value.state !== "string" || !ENGINE_STATES.includes(value.state as EngineCatalogState)) return null;
+  const capsSrc = isRecord(value.capabilities) ? value.capabilities : null;
+  const preSrc = isRecord(value.preflight) ? value.preflight : null;
+  const preState = preSrc !== null && typeof preSrc.state === "string" ? preSrc.state : null;
+  const models = Array.isArray(value.models) && value.models.every((x) => typeof x === "string") && value.models.length
+    ? (value.models as string[])
+    : undefined;
+  const roles = Array.isArray(value.default_for_roles) && value.default_for_roles.every((x) => typeof x === "string") && value.default_for_roles.length
+    ? (value.default_for_roles as string[])
+    : undefined;
+  return {
+    id: value.id,
+    ...(typeof value.label === "string" && value.label ? { label: value.label } : {}),
+    state: value.state as EngineCatalogState,
+    ...(capsSrc
+      ? { capabilities: { resume: capsSrc.resume === true, approval: capsSrc.approval === true, artifacts: capsSrc.artifacts === true } }
+      : {}),
+    ...(preSrc !== null && (preState === "pass" || preState === "fail" || preState === "unknown")
+      ? { preflight: { state: preState, ...(typeof preSrc.reason === "string" && preSrc.reason ? { reason: preSrc.reason } : {}) } }
+      : {}),
+    ...(models ? { models } : {}),
+    ...(roles ? { default_for_roles: roles } : {}),
+  };
+}
+
+/** engine_catalog 鸭子收容（normalizeSourceCapabilities 特判用，permissionSummariesOf
+ * 同一把尺）：非数组/全畸形条目 → undefined（=旧 relay 降级，选择器隐藏不出假清单）；
+ * 混入畸形条目剔除其余透出。字段级宽容：label/capabilities/preflight/models/
+ * default_for_roles 畸形各自降缺省，id+state 合法即收 */
+export function engineCatalogOf(value: unknown): EngineCatalogEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: EngineCatalogEntry[] = [];
+  for (const item of value) {
+    const entry = normalizeEngineCatalogEntry(item);
+    if (entry) out.push(entry);
+  }
+  return out.length ? out : undefined;
+}
+
+/** 引擎名解析（label 缺省回落 id——旧 relay ACK 降级提示等无目录场景 id 原样可读） */
+export function engineLabelOf(entry: Pick<EngineCatalogEntry, "id" | "label">): string {
+  return entry.label ?? entry.id;
+}
+
+/** 引擎可选性判定（NewSessionModal 选择器行灰显+禁选，permission.engineCreateBlock
+ * 同思路；端上零求值只读目录）：unsupported / unavailable → 禁选（preflight.reason
+ * 在场优先显原因——relay 投影把「枚举占位未接入编排」等具体原因也放 reason（75-R
+ * 实测 zcode），无 reason 兜底词表态词）；preflight fail → 原因/固定词；ready /
+ * unknown → 放行（unknown 状态未知不禁——relay 创建时兜底校验，端上不探测不代判） */
+export function engineSelectable(entry: EngineCatalogEntry): string | null {
+  if (entry.state === "unsupported") return entry.preflight?.reason || ENGINE_STATE_LABEL.unsupported;
+  if (entry.state === "unavailable") return entry.preflight?.reason || ENGINE_STATE_LABEL.unavailable;
+  if (entry.preflight?.state === "fail") return entry.preflight.reason || ENGINE_PHRASES.preflightFail;
+  return null;
+}
+
+/** 预置引擎推导（目录读侧，零求值）：default_for_roles 非空的第一个条目 = 预置；
+ * 无 → null（源默认） */
+export function enginePresetOf(catalog: EngineCatalogEntry[]): EngineCatalogEntry | null {
+  for (const e of catalog) {
+    if (Array.isArray(e.default_for_roles) && e.default_for_roles.length) return e;
+  }
+  return null;
+}
+
+/** 摘要行模型（「引擎 / 模型」行渲染输入）：headline 主句 + sub 副行提示 +
+ * overridable 可点开选择器（旧 relay 仍可点——codex 旧偏好取消入口不删，兼容行为
+ * 保留；单引擎不可改） */
+export interface EngineSummaryLine {
+  headline: string;
+  sub: string | null;
+  overridable: boolean;
+}
+
+/** 摘要行三段矩阵（降级面钉死形态，派单作业③）：
+ *   旧 relay（catalog undefined）→「默认引擎 | <记忆引擎 id>」+ 升级提示，可点（取消入口）
+ *   单引擎 →「仅可用：X」不可改（无更改箭头）
+ *   多引擎 auto →「自动（<Role> 预置） · <引擎> · <模型>」/ 无预置 →「自动（源默认）」
+ *   手动覆盖 →「<引擎> · <模型 | 使用引擎默认>」+ 副行「已覆盖预置」
+ */
+export function engineSummaryLine(input: {
+  catalog: EngineCatalogEntry[] | undefined;
+  selected: string; // "auto" | 引擎 id
+  model: string | null;
+}): EngineSummaryLine {
+  const cat = input.catalog;
+  if (!cat || !cat.length) {
+    return { headline: input.selected === "auto" ? "默认引擎" : input.selected, sub: ENGINE_PHRASES.legacyRelayHint, overridable: true };
+  }
+  if (cat.length === 1) {
+    return { headline: `${ENGINE_PHRASES.onlyAvailable}：${engineLabelOf(cat[0])}`, sub: null, overridable: false };
+  }
+  if (input.selected === "auto") {
+    const preset = enginePresetOf(cat);
+    if (preset) {
+      const role = preset.default_for_roles![0];
+      const roleCap = role.charAt(0).toUpperCase() + role.slice(1);
+      const model = preset.models && preset.models.length ? ` · ${preset.models[0]}` : "";
+      return { headline: `自动（${roleCap} 预置） · ${engineLabelOf(preset)}${model}`, sub: null, overridable: true };
+    }
+    return { headline: ENGINE_PHRASES.autoSourceDefault, sub: null, overridable: true };
+  }
+  const sel = cat.find((x) => x.id === input.selected);
+  if (!sel) return { headline: ENGINE_PHRASES.autoSourceDefault, sub: null, overridable: true }; // 失效 id 兜底回自动
+  return { headline: `${engineLabelOf(sel)} · ${input.model ?? ENGINE_PHRASES.engineDefaultModel}`, sub: ENGINE_PHRASES.overrideTag, overridable: true };
+}
+
+/** ACK engine 与请求不一致 → 降级 toast 文案（复用 effectiveNoteOf 的 notifyCmdError
+ * 通道，不静默；派单作业③）。acked 非 string / 空 / 相等 / requested 为 null（自动档
+ * 不指定引擎）→ null 不提示——acked=undefined 是旧 relay ACK（75-R 未落地），字段
+ * 存在性消费不误报。labelOf 供调用方传目录 label 查表（缺省 id 原样） */
+export function engineDowngradeNote(requested: string | null, acked: unknown, labelOf: (id: string) => string = (id) => id): string | null {
+  if (!requested || typeof acked !== "string" || !acked || acked === requested) return null;
+  return `${ENGINE_PHRASES.downgrade}：请求引擎 ${labelOf(requested)}，实际 ${labelOf(acked)}`;
 }
 
 export interface NotificationItem {
@@ -466,6 +625,13 @@ function normalizeSourceCapabilities(value: unknown): SourceCapabilities | undef
       if (perms.length) out.permission = perms;
       continue;
     }
+    // 75-E engine_catalog 特判收容：鸭子校验同 permission 一把尺（engineCatalogOf）；
+    // 非数组/全畸形 → 不设键（=undefined，选择器降级旧默认路径不出假清单）
+    if (key === "engine_catalog") {
+      const cat = engineCatalogOf(entry);
+      if (cat) out.engine_catalog = cat;
+      continue;
+    }
     if (typeof entry === "boolean" || (Array.isArray(entry) && entry.every((item) => typeof item === "string"))) out[key] = entry;
   }
   return out;
@@ -576,6 +742,10 @@ export interface CommandAck {
   // effective≠normalized=请求档被降级（端上显调整提示）；forbidden 拒绝走
   // ok:false+error（"forbidden: <reason 码>"）不带本字段
   permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
+  // 75-E 仅 COMMAND_CREATE 成功 ACK 携带（75-R relay 落地）：实际创建引擎——与请求
+  // engine 不一致 = 降级（端上 engineDowngradeNote 标「已降级」不静默）；旧 relay
+  // 不带 = undefined（不比较不提示，字段存在性消费）
+  engine?: string;
   // #26 M2/M3 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts, pool }
   data?: unknown;
 }

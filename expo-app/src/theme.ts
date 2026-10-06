@@ -116,6 +116,19 @@ export const mix = (a: string, b: string, t: number): string => {
 // 兼容旧引用（静态场景）；组件内请用 useTheme()
 export const C = DARK;
 
+// 75-E 引擎标识色（specs/005-prototype-a.html --engine-* 词表直搬，web/桌面同源，
+// PM-75 §2「沿用同一引擎色/名称体系」）：选择器 badge 色点用。仅标识轴（这是哪个
+// 引擎），与状态轴（可用/未安装/不支持/未知→done/working/error/faint 四主题色）两套
+// 不同轴勿混——状态词徽章配色见 NewSessionModal ENGINE_STATE_COLOR
+export const ENGINE_ACCENT: Record<string, string> = {
+  claude: "#A97A62",
+  codex: "#8DABFF",
+  trae: "#58C9B1",
+  "qwen-code": "#B493FF",
+  codebuddy: "#4BA8F0",
+  zcode: "#E58DB0",
+};
+
 export const STATUS_ZH: Record<string, string> = {
   WORKING: "运行中",
   WAITING: "等待确认",
