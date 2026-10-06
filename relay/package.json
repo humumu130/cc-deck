@@ -52,7 +52,8 @@
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",
     "test:m1-foundation": "tsx scripts/test-m1-foundation.ts",
     "test:duty-boundary": "tsx scripts/test-duty-boundary.ts",
-    "test:m12-commands": "tsx scripts/test-m12-commands.ts"
+    "test:m12-commands": "tsx scripts/test-m12-commands.ts",
+    "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
