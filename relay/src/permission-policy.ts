@@ -2,9 +2,10 @@
 // §4.4「案 A 统一档位外层 + 案 B 引擎原生 detail」+§5「角色/tier 合法组合」+2026-10-06
 // 用户拍板（混编团队新卡缺省请求 bypassPermissions）。
 //
-// **本模块是 P81-1 纯核心，未接线**：接线批=P81-2（摘要投影挂 source_capabilities）、
-// P81-3/4（目录/环境维度）、P81-5（写面）——后续单做。本批只 import type 零依赖，
-// 不碰 relay 既有源（session-manager/types/projects 等他人域）；wire/协议/存储/UI 零碰。
+// **接线状态**：P81-2 已接三入口（SNAPSHOT 摘要/COMMAND_CREATE 闸/dispatchWorker 闸）；
+// P81-3/4（本批）落目录/环境两维输入位+环境闸（§6.1）；余债=P81-5（写面：审计落库经
+// StoragePort+spawn 传值收口+真实 cwd/env 判定接线）。import type 零运行时依赖不变，
+// wire/协议/存储/UI 零碰。
 //
 // 归一四档词表（案 A）：ask < plan < edit-auto < full-auto（保守序单向，只准降不准升）。
 // 输出形=081 :84-95 落库最小结构八字段全齐（requested/normalized/effective/native/
@@ -17,9 +18,9 @@
 //   1. engine 词表验：zcode 恒 forbidden（081 :100「ZCode 永远 fail-closed，不能通过
 //      手工传 native_mode 绕过 preflight」——本模块输入无 native_mode 位，requested 伪装
 //      同样拒）；未知引擎→forbidden。
-//   2. role/tier 验：§5.2 矩阵外 tier（轻立项/看门狗——081 只列咨询/随手办/正经立项/
-//      暂缓冻结四行）→forbidden+reason=tier_not_in_policy_matrix（**备案请裁**：轻立项/
-//      看门狗矩阵行待 P81 后续批补）；未知 role→forbidden。
+//   2. role/tier 验：§5.2 矩阵外 tier→forbidden+reason=tier_not_in_policy_matrix
+//      （轻立项/看门狗两行已随 P81-2 按 Leader 裁定正式入表——现矩阵六 tier 全覆盖）；
+//      未知 role→forbidden。
 //   3. requested 归一：显式 wire 值（归一四档+Claude native 兼容值 default/acceptEdits/
 //      bypassPermissions——§5.3.1 requested 物化形即 bypassPermissions）→归一档；未知值
 //      →forbidden（客户端错/攻击面，不猜）。
@@ -30,16 +31,23 @@
 //      未知 policy_source→ask 保守+reason。
 //   5. ceiling 校验（§5.2「可用上限」）：normalized 高于 (role,tier) 上限→forbidden
 //      above_role_tier_ceiling（不静默降——越权是拒绝面不是降级面）。
+//   5.5 环境闸（§6.1，P81-3/4）：full-auto 显式请求遇 production/unknown→统一
+//      forbidden（*_bypass_denied）；物化请求→安全降 edit-auto+reason 备案（requested
+//      记录不伪装 effective）；unknown×edit-auto→降 ask；ask/plan 只读面不压；双
+//      sandbox 开放（§6.1 沙盒按 tier/capability 开放 full-auto）。两维缺席=未启用。
 //   6. engine×capability 求值 effective（§4.4 :97-99）：confirmed→effective=normalized
 //      （仅 claude 填 native_mode——§4.4「native_mode 只有适配器确认后才填」；JSONL 引擎
 //      native 词表恒空 §7.1，native_mode 恒 null）；unverified→auto 档逐级降保守（full-auto
 //      →edit-auto、edit-auto→ask，reason=native_permission_not_confirmed——「不得将
 //      full-auto 伪装成真实审批绕过」；plan/ask 只读/审批面不受累）；unsupported→auto 档
 //      降 ask（reason=engine_permission_unsupported）；capability 缺失/未知→ask 保守。
-// Claude full-auto→bypassPermissions 须角色+tier+目录+环境四维（§4.4）——**本批只落
-// 角色+tier 两维（ceiling 校验即此），目录/环境留 P81-3/4 补**，输入位不设（防半实现
-// 假放行：本批 claude+confirmed+ceiling 内→native=bypassPermissions 属中间态，接线批
-// 前不得投产，头注钉死）。
+// Claude full-auto→bypassPermissions 须角色+tier+目录+环境四维（§4.4）——四维已全齐
+//（角色+tier 即 ceiling 校验；目录+环境=P81-3/4 环境闸）。**中间态解除（2026-10-06
+// P81-3/4 定案）**：native=bypassPermissions 仅可出自 sandbox×sandbox+ceiling 内+
+// confirmed 全过路径（正式放行）；production/unknown 下 full-auto 恒拒或降，effective
+// ≠full-auto 时 native 恒 null（effectiveFor 结构保证）——「不得创建一个声称已 bypass
+// 的会话状态」（§6.3 审计铁律）由此成立。真实 cwd/env 判定接线=P81-5；两维缺席=未启用
+//（P81-2 接线闸兼容路径），届时判定缺位须显式传 "unknown" 走 fail-closed。
 export type NormalizedMode = "ask" | "plan" | "edit-auto" | "full-auto";
 export type EffectiveMode = NormalizedMode | "forbidden";
 export type CapabilityState = "confirmed" | "unverified" | "unsupported";
@@ -99,6 +107,12 @@ export interface PolicyInput {
   tier: string;
   capability_state?: string | null;
   policy_source?: string | null;
+  /** 目录域（§6.1 会话级）：cwd 所属域。**缺席=环境维未启用**（P81-2 接线闸兼容路径——
+   * P81-5 接真实 cwd 判定后必传，届时判定缺位须显式传 "unknown" 走 fail-closed）；
+   * 显式 "unknown"=判不出→fail-closed 不猜。 */
+  dir_scope?: "production" | "sandbox" | "unknown";
+  /** 运行环境（§6.1 进程级）：relay 运行环境域。缺席语义同 dir_scope（未启用≠unknown）。 */
+  env?: "production" | "sandbox" | "unknown";
 }
 
 /** 081 :84-95 落库最小结构（八字段全齐=审计字段锁）。forbidden=拒绝决策非档位。 */
@@ -205,6 +219,38 @@ export function evaluatePermission(input: PolicyInput): PolicyResult {
       materialized = "mixed_team_default_demoted_to_ceiling";
     } else {
       return denied(requested, input.engine, cap, source, "above_role_tier_ceiling");
+    }
+  }
+
+  // 5.5 环境闸（§6.1 环境护栏，P81-3/4 落地）。两维**缺席=未启用**短路（P81-2 接线闸
+  // 兼容路径，真实 cwd/env 判定接线=P81-5）；显式 "unknown"=fail-closed。威胁优先级
+  // production > unknown > sandbox：任一维 production 按 production 规则**单轮裁决**
+  //（降级后不再叠 unknown 二次降）；否则任一 unknown 同理；双 sandbox 开放不压。
+  //   full-auto 显式请求（非物化）→统一 forbidden（§6.1「显式 bypass 请求若无用户授权
+  //   与生产策略许可，返回统一 forbidden ACK」——本批输入位无授权位=无许可）；
+  //   full-auto 物化请求→记 requested 不伪装 effective（§6.1「混编默认请求可记录为
+  //   requested，但不得伪装为 effective」）→安全降 edit-auto（§5.3.2 降级目标档，生产
+  //   禁列仅 full-auto=生产允许档 edit-auto）；
+  //   edit-auto：production 不压；unknown 降 ask（信息不足连自动编辑也收——显式/物化
+  //   同待遇，§5.3.2「安全降级到 edit-auto/ask」ask 侧）；
+  //   ask/plan 只读面不受环境维压制（§6.1 禁列不含此二者）。
+  const dScope = input.dir_scope ?? null;
+  const eScope = input.env ?? null;
+  if (dScope !== null || eScope !== null) {
+    const prod = dScope === "production" || eScope === "production";
+    const unk = dScope === "unknown" || eScope === "unknown";
+    if (prod || unk) {
+      const threat = prod ? "production" : "env_unknown";
+      if (normalized === "full-auto") {
+        if (materialized === "") {
+          return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
+        }
+        normalized = "edit-auto";
+        materialized = `${threat}_demoted_from_full_auto`;
+      } else if (normalized === "edit-auto" && !prod) {
+        normalized = "ask";
+        materialized = "env_unknown_demoted_from_edit_auto";
+      }
     }
   }
 

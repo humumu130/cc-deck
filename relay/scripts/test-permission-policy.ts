@@ -178,6 +178,63 @@ try {
     assert(aud.requested_mode === "bypassPermissions" && aud.normalized_mode === "full-auto" && aud.effective_mode === "edit-auto", "审计链完整：requested(wire 事实)/normalized(意图)/effective(实际) 三轴分立可查询（§4.3 审计主轴）");
   }
 
+  // ---------- ⑧ 环境维（P81-3/4 目录+环境两维，§6.1 环境护栏） ----------
+  console.log("S8 环境维");
+  {
+    // production 显式 bypass→统一 forbidden（§6.1「显式 bypass 请求若无用户授权与生产
+    // 策略许可，返回统一 forbidden ACK」——本批输入位无授权位=无许可）
+    const p1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "production" });
+    assert(p1.effective_mode === "forbidden" && p1.reason === "production_bypass_denied" && p1.requested_mode === "bypassPermissions", "production×显式 bypass→forbidden（reason 定位+requested 保留审计）");
+    const p2 = evaluatePermission({ ...BASE, requested_mode: "full-auto", env: "production" });
+    assert(p2.effective_mode === "forbidden" && p2.reason === "production_bypass_denied", "env=production×显式 full-auto→forbidden（两维任一命中即压）");
+    // production 物化→requested 记录不伪装 effective→安全降 edit-auto（§5.3.2 降级目标）
+    const p3 = evaluatePermission({ ...BASE, requested_mode: null, policy_source: "mixed_team_default", dir_scope: "production" });
+    assert(p3.requested_mode === "bypassPermissions" && p3.normalized_mode === "edit-auto" && p3.effective_mode === "edit-auto" && p3.native_mode === "acceptEdits" && p3.reason === "production_demoted_from_full_auto", "production×混编物化 bypass：requested 记录+降 edit-auto 不伪装 effective（降后档 native 如实映射）");
+    // production 不压 edit-auto/ask（§6.1 生产禁列仅 full-auto）
+    const p4 = evaluatePermission({ ...BASE, requested_mode: "edit-auto", dir_scope: "production", env: "production" });
+    assert(p4.effective_mode === "edit-auto" && p4.native_mode === "acceptEdits", "production×edit-auto 不压（生产允许档）——native=acceptEdits 保真");
+    const p5 = evaluatePermission({ ...BASE, requested_mode: "ask", dir_scope: "production" });
+    assert(p5.effective_mode === "ask", "production×ask 不压（只读面不受环境维压制）");
+    // 沙盒开放：sandbox×sandbox+ceiling 内+confirmed→native=bypassPermissions（中间态解除定案）
+    const s1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "sandbox", env: "sandbox" });
+    assert(s1.effective_mode === "full-auto" && s1.native_mode === "bypassPermissions" && s1.reason === "ok", "双 sandbox×显式 bypass（ceiling 内）：full-auto 保真+native=bypassPermissions——中间态解除（§6.1 沙盒开放）");
+    // 沙盒仍受 ceiling：环境开放不豁免越权闸（§6.1「按 tier…开放」）
+    const s2 = evaluatePermission({ engine: "claude", role: "worker", tier: "暂缓", requested_mode: "bypassPermissions", capability_state: "confirmed", policy_source: "explicit", dir_scope: "sandbox", env: "sandbox" });
+    assert(s2.effective_mode === "forbidden" && s2.reason === "above_role_tier_ceiling", "双 sandbox×越 ceiling bypass→仍 forbidden（沙盒开放不豁免 tier 闸）");
+    // 沙盒+unverified：环境开放后 capability 闸仍降（链叠加不互豁）
+    const s3 = evaluatePermission({ engine: "qwen-code", role: "worker", tier: "正经立项", requested_mode: "bypassPermissions", capability_state: "unverified", policy_source: "explicit", dir_scope: "sandbox", env: "sandbox" });
+    assert(s3.effective_mode === "edit-auto" && s3.native_mode === null && s3.reason === "native_permission_not_confirmed", "双 sandbox×unverified bypass：环境开放+capability 降级叠加（native 恒 null 不伪装）");
+    // unknown fail-closed：显式 full-auto 拒（判不出环境不猜——与 production 显式同待遇）
+    const u1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "unknown" });
+    assert(u1.effective_mode === "forbidden" && u1.reason === "env_unknown_bypass_denied", "unknown×显式 bypass→forbidden（fail-closed 不猜）");
+    const u2 = evaluatePermission({ ...BASE, requested_mode: "full-auto", env: "unknown" });
+    assert(u2.effective_mode === "forbidden" && u2.reason === "env_unknown_bypass_denied", "env=unknown×显式 full-auto→forbidden 同款");
+    // unknown 物化→降 edit-auto（降级面≠拒绝面，requested 记录）
+    const u3 = evaluatePermission({ ...BASE, requested_mode: null, policy_source: "mixed_team_default", dir_scope: "unknown" });
+    assert(u3.requested_mode === "bypassPermissions" && u3.effective_mode === "edit-auto" && u3.reason === "env_unknown_demoted_from_full_auto", "unknown×混编物化：降 edit-auto+requested 记录（默认请求非显式越权）");
+    // unknown×edit-auto→降 ask（信息不足连自动编辑也收——显式/物化同待遇）
+    const u4 = evaluatePermission({ ...BASE, requested_mode: "edit-auto", env: "unknown" });
+    assert(u4.effective_mode === "ask" && u4.native_mode === "default" && u4.reason === "env_unknown_demoted_from_edit_auto", "unknown×显式 edit-auto→降 ask（fail-closed 逐级）——降后档 native 如实映射");
+    const u5 = evaluatePermission({ ...BASE, requested_mode: null, policy_source: "tier_default", dir_scope: "unknown" });
+    assert(u5.effective_mode === "ask" && u5.reason === "env_unknown_demoted_from_edit_auto", "unknown×tier_default 物化 edit-auto→降 ask 同款（物化路径无豁免）");
+    // 交叉维：production 优先单轮裁决（降 edit-auto 后不再叠 unknown 二次降）
+    const x1 = evaluatePermission({ ...BASE, requested_mode: null, policy_source: "mixed_team_default", dir_scope: "production", env: "unknown" });
+    assert(x1.effective_mode === "edit-auto" && x1.reason === "production_demoted_from_full_auto", "production+unknown 交叉：production 口径优先单轮裁决（不二次叠加）");
+    const x2 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "sandbox", env: "production" });
+    assert(x2.effective_mode === "forbidden", "dir=sandbox+env=production：任一维 production 即压");
+    const x3 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "unknown", env: "sandbox" });
+    assert(x3.effective_mode === "forbidden" && x3.reason === "env_unknown_bypass_denied", "dir=unknown+env=sandbox：任一维 unknown 即压（sandbox 不豁免另一维未知）");
+    // 缺席=未启用（P81-2 接线闸兼容路径）：bypass 恒过如旧——wiring 套件 24 断言零退自证
+    const o1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions" });
+    assert(o1.effective_mode === "full-auto" && o1.native_mode === "bypassPermissions", "两维缺席=未启用：求值结果与 P81-2 全同（兼容路径——缺席≠unknown）");
+    // 幂等回归：带两维输入同参两次深等
+    const i1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "sandbox", env: "sandbox" });
+    const i2 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "sandbox", env: "sandbox" });
+    assert(JSON.stringify(i1) === JSON.stringify(i2), "幂等回归：带环境两维同输入 JSON 深等（纯函数性保持）");
+    // 审计三轴：unknown 物化降级链 requested(物化 wire 值)/normalized(降后)/effective 分立
+    assert(u3.requested_mode === "bypassPermissions" && u3.normalized_mode === "edit-auto" && u3.effective_mode === "edit-auto", "审计三轴分立：unknown 物化降级后 requested/normalized/effective 可查询（§4.3 审计主轴）");
+  }
+
   console.log(`P81-1 permission-policy: ${pass}/${pass + fail} passed`);
   process.exit(fail > 0 ? 1 : 0);
 } catch (err) {
