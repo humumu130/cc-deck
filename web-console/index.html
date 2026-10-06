@@ -1894,6 +1894,24 @@
   #permBtn { display: inline-flex; align-items: center; gap: 4px; }
   #permBtn svg { flex: none; }
 
+  /* P81-8W 权限摘要三面共用件：三态点（confirmed=绿 / unverified=琥珀 / unsupported=红）
+     + 设置域源摘要面板 #permPanel + 详情页档位条 #permDetail + 新建表单引擎能力 chip */
+  .perm-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
+  .perm-dot.confirmed { background: var(--done); }
+  .perm-dot.unverified { background: var(--working); }
+  .perm-dot.unsupported { background: var(--waiting); }
+  #permPanel { display: flex; flex-direction: column; gap: 6px; }
+  #permPanel .pp-row { display: flex; align-items: baseline; gap: 7px; font-size: 12px; min-height: 17px; }
+  #permPanel .pp-row .perm-dot { align-self: center; }
+  #permPanel .pp-eng { min-width: 88px; color: var(--text-strong); font-family: var(--mono); font-size: 11px; }
+  #permPanel .pp-st { color: var(--card-sub); flex: none; }
+  #permPanel .pp-modes { color: var(--faint); font-size: 11px; }
+  #permDetail { display: flex; flex-wrap: wrap; gap: 5px 16px; padding: 8px 18px 0; font-size: 11.5px; color: var(--card-sub); }
+  #permDetail b { color: var(--text-strong); font-weight: 600; }
+  #permDetail .perm-cap { display: inline-flex; align-items: center; gap: 5px; }
+  #codexCap { font-size: 10.5px; color: var(--faint); margin-left: 3px; display: inline-flex; align-items: center; gap: 4px; }
+  label.skip-perm:has(#useCodex:disabled) { opacity: .55; }
+
   /* 工作状态行（类 CLI，置于输入卡上方）：✶ 摘要 · 回合耗时；宽度与时间线会话列对齐 */
   #liverow {
     display: none; align-items: center; gap: 8px;
@@ -2551,7 +2569,7 @@
           <!-- #27 引擎选择（偏好型，本地记忆）：codex = CodexAgentSession（codex exec
                驱动，无审批卡/附图仅首回合；模型接线在 ~/.codex/config.toml）。旧 relay
                忽略未知字段 = 建出 claude 会话，无害 -->
-          <label class="skip-perm" title="勾选：用 Codex CLI 引擎跑这个会话（需 relay 侧装好 codex 并完成接线）。不勾：默认 Claude 引擎。"><input type="checkbox" id="useCodex">用 Codex 引擎</label>
+          <label class="skip-perm" title="勾选：用 Codex CLI 引擎跑这个会话（需 relay 侧装好 codex 并完成接线）。不勾：默认 Claude 引擎。"><input type="checkbox" id="useCodex">用 Codex 引擎<span id="codexCap"></span></label>
           <!-- #23 认知引导（罗嗦文案收进悬浮）：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
           <span class="hint-q" title="此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。">?</span>
         </div>
@@ -2598,6 +2616,9 @@
             <span class="gp-pbadge" id="gpPairBadge" style="display:none"></span>
             <span class="gp-badge" id="gpStatusBadge">未配置</span>
           </div>
+          <!-- P81-8W 面① 源权限摘要（活动源健康视图同源）：六引擎 capability_state+可生效
+               档集三态呈现；旧 relay 无 source_capabilities.permission → 整区隐藏不白屏 -->
+          <div class="panel" id="permPanel" style="display:none"></div>
           <div class="panel" id="connPanel">
             <div id="srvList"></div>
             <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
@@ -2803,6 +2824,10 @@
         <span class="tab-ind" id="tabInd"></span>
       </div>
     </div>
+
+    <!-- P81-8W 面③ 详情页权限摘要：当前 permission_mode 档位人话（三端统一词表）+ 引擎能力
+         （源摘要可用时带三态点；旧 relay 缺摘要只显示档位行） -->
+    <div id="permDetail" style="display:none"></div>
 
     <div id="waitbox">
       <div class="t"><i></i><span id="waitT">等待你的确认</span><span class="wchip" id="waitTool" hidden></span><span id="waitelapsed"></span></div>
@@ -3232,6 +3257,7 @@ function ensureCtx(cfg) {
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
       projectionV2: false, // M13-3 v2 投影协议位（SNAPSHOT source_capabilities.projection_v2；缺省/undefined = 旧 relay → 覆盖式，一切照旧）
+      permCaps: null, // P81-8W 权限能力摘要（SNAPSHOT source_capabilities.permission[]；null = 旧 relay 不发 → 摘要区整体隐藏）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -3278,6 +3304,29 @@ const PERM_DESC = {
   acceptEdits: "文件编辑免审，命令仍需确认",
   plan: "只读规划，先出方案再执行",
   bypassPermissions: "所有命令与编辑免审直接执行",
+};
+
+// ---------- P81-8W 权限摘要三端统一词表（specs/081；字面钉死与 expo 线同段，勿改） ----------
+// capability_state 三态（点色：confirmed=绿 --done / unverified=琥珀 --working / unsupported=红 --waiting）
+const CAP_STATE_LABEL = { confirmed: "完整支持", unverified: "未验证 · 请求档可能降级", unsupported: "不支持 · 不可开卡" };
+// 档位人话：托管词表（session permission_mode 四值 + forbidden 拒绝决策位）与归一词表
+// （SNAPSHOT permission[].modes 的 ask/plan/edit-auto/full-auto）双键同表——两端一套人话
+const PERM_MODE_ZH = {
+  default: "每次询问", acceptEdits: "自动接受编辑", plan: "计划模式", bypassPermissions: "完全自动", forbidden: "已拒绝",
+  ask: "每次询问", "edit-auto": "自动接受编辑", "full-auto": "完全自动",
+};
+// 开卡 forbidden reason 码人话（relay permission-policy denied reason；COMMAND_CREATE ACK
+// 载体 error:"forbidden:<code>"）。未收录码=原文兜底展示，绝不造本地成功状态
+const FORBIDDEN_ZH = {
+  capability_state_missing: "引擎能力未确认，已降为每次询问",
+  unknown_requested_mode: "未知权限档",
+  unknown_engine: "未知引擎",
+  zcode_fail_closed: "该引擎不支持权限控制",
+  above_role_tier_ceiling: "超出岗位权限上限",
+  production_bypass_denied: "生产环境禁止完全自动档",
+  env_unknown_bypass_denied: "环境不明，禁止完全自动档",
+  unknown_role_mapping: "岗位未映射，已拒绝",
+  mixed_engine: "混编引擎，按保守档",
 };
 
 function uuid() {
@@ -4254,6 +4303,65 @@ function renderGpStatus() {
       : { on: "运行中", wait: "连接中", off: "离线", "": "未配置" }[st];
     badge.className = "gp-badge" + (st ? " " + st : "");
   }
+  renderPermSummary(); // P81-8W 面①：随状态卡同源同刷（状态变/快照到/重连都走这里）
+}
+
+// ---------- P81-8W 权限摘要三面（specs/081 §6.3/§7；词表钉死见 CAP_STATE_LABEL/PERM_MODE_ZH/FORBIDDEN_ZH） ----------
+// 面①：设置域源权限摘要（gpStatus 同源=连接健康视图；每引擎 capability_state+可生效档集，
+// 三态点+人话；modes 为归一词表 ask/plan/edit-auto/full-auto，经 PERM_MODE_ZH 映射同表人话）。
+// ctx.permCaps 缺席（旧 relay 不发/离线）→ 整区隐藏，不白屏。纯只读投影零求值零 policy 复制。
+function renderPermSummary() {
+  const el = $("permPanel");
+  if (!el) return;
+  const ctx = gpStatusCtx();
+  const caps = ctx && ctx.status === "online" && Array.isArray(ctx.permCaps) ? ctx.permCaps : null;
+  if (!caps || caps.length === 0) { el.style.display = "none"; el.innerHTML = ""; return; }
+  el.style.display = "";
+  el.innerHTML = '<div class="gp-form-t">引擎权限能力</div>' + caps.map((c) => {
+    if (!c || typeof c.engine !== "string" || !c.engine) return ""; // 畸形条目跳过不白屏
+    const st = CAP_STATE_LABEL[c.capability_state] ?? "能力未知";
+    const modes = Array.isArray(c.modes) ? c.modes.map((m) => PERM_MODE_ZH[m] ?? m).join(" / ") : "";
+    return '<div class="pp-row"><span class="perm-dot ' + escapeHtml(String(c.capability_state)) + '"></span>' +
+      '<span class="pp-eng">' + escapeHtml(c.engine) + '</span>' +
+      '<span class="pp-st">' + escapeHtml(st) + "</span>" +
+      (modes ? '<span class="pp-modes">' + escapeHtml(modes) + "</span>" : "") +
+      "</div>";
+  }).join("");
+}
+// ZCode/unsupported 引擎禁选+原因：当前开卡形态仅 codex 固定开关（无完整引擎选择面——
+// 选择器正式实施归 #75 用户拍板线，此处到顶=unsupported 摘要即禁选+原因；unverified 挂
+// 降级提示）。摘要缺席（旧 relay）= 开关照旧可用，仅不显示能力 chip。
+function updateEngineOpt() {
+  const box = $("useCodex"), cap = $("codexCap");
+  if (!box || !cap) return;
+  const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+  const caps = ctx && Array.isArray(ctx.permCaps) ? ctx.permCaps : null;
+  const c = caps ? caps.find((x) => x && x.engine === "codex") : null;
+  if (!c || !c.capability_state) { cap.textContent = ""; box.disabled = false; return; }
+  cap.innerHTML = '<span class="perm-dot ' + escapeHtml(String(c.capability_state)) + '"></span>' +
+    escapeHtml(CAP_STATE_LABEL[c.capability_state] ?? "");
+  box.disabled = c.capability_state === "unsupported";
+}
+// 面②：开卡 forbidden reason 码人话。ACK 载体 error:"forbidden:<code>"（relay
+// session-manager COMMAND_CREATE 统一拒绝面）；未收录码返回 null=调用方原文兜底。
+function forbiddenZh(error) {
+  const m = typeof error === "string" ? error.match(/^forbidden:\s*(\S+)/) : null;
+  return m ? (FORBIDDEN_ZH[m[1]] ?? null) : null;
+}
+// 面③：详情页权限摘要条——当前 permission_mode 档位人话（三端统一词表）+ 引擎能力
+// （源摘要可用时带三态点与状态人话；旧 relay 缺摘要只显示档位行，不白屏）。
+function renderPermDetail(s, ctx) {
+  const el = $("permDetail");
+  if (!el) return;
+  const pm = PERM_MODE_ZH[s.permission_mode ?? "default"] ?? s.permission_mode ?? "每次询问";
+  const eng = typeof s.engine === "string" && s.engine ? s.engine : "claude";
+  const caps = ctx && Array.isArray(ctx.permCaps) ? ctx.permCaps : null;
+  const c = caps ? caps.find((x) => x && x.engine === eng) : null;
+  el.style.display = "";
+  el.innerHTML = "<span>权限档：<b>" + escapeHtml(pm) + "</b></span>" +
+    '<span class="perm-cap">' + (c
+      ? '<span class="perm-dot ' + escapeHtml(String(c.capability_state)) + '"></span>引擎 ' + escapeHtml(eng) + "：" + escapeHtml(CAP_STATE_LABEL[c.capability_state] ?? "能力未知")
+      : "引擎 " + escapeHtml(eng)) + "</span>";
 }
 // #40web ② 状态卡 ↻ 钮：重试当前指向的源
 $("gpRetryBtn").onclick = () => { const ctx = gpStatusCtx(); if (ctx) manualRetry(ctx); };
@@ -4383,6 +4491,12 @@ function onEvent(ctx, msg) {
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
       ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
       ctx.projectionV2 = msg.payload.source_capabilities?.projection_v2 === true; // M13-3 v2 投影协议位（M13-2：随 SNAPSHOT LAN/phone 双出口下发；缺省=覆盖式，一切照旧）
+      // P81-8W 权限能力摘要（P81-2 只读投影，ws/cloud 双出口同发）：字段存在性判断——
+      // 旧 relay 不发 permission = null → 三面摘要区整体隐藏，不白屏
+      ctx.permCaps = Array.isArray(msg.payload.source_capabilities?.permission) ? msg.payload.source_capabilities.permission : null;
+      renderPermSummary(); // 摘要面板随快照即时收敛（函数内含可见性 gate）
+      updateEngineOpt(); // 新建表单引擎开关能力位跟随（unsupported 禁选+原因）
+      if (selected && selected.src === ctx.cfg.id) renderDetail(); // 详情开着时档位条随摘要翻转即时收敛（旧 relay 降级不挂陈点）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
       ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
@@ -6528,6 +6642,7 @@ function renderDetail() {
       : "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
     permBtn.style.cursor = s.external ? "default" : "";
   } else { permBtn.style.display = "none"; permBtn.classList.remove("warn"); }
+  renderPermDetail(s, sel.ctx); // P81-8W 面③：详情页权限摘要条（历史/外部会话同显只读档位）
   // #56 外部会话远程审批开关（协议就绪：COMMAND_EXT_MODE → relay setRemoteMode 挂起/放行）：
   // 开=Bash/Edit 等门控工具的权限确认挂起到手机/网页出按钮；手机不在线自动回退终端本地弹框
   const extModeBtn = $("extModeBtn");
@@ -8848,7 +8963,12 @@ $("createBtn").onclick = () => {
     ackWaiters.set(id, {
       res: (ack) => {
         clearTimeout(wd);
-        if (ack && !ack.ok) toast("新建会话失败: " + (ack.error || "未知错误"), 6000);
+        if (ack && !ack.ok) {
+          // P81-8W 面②：forbidden reason 码人话（词表钉死，未收录码原文兜底）。
+          // ACK ok:false 绝不造本地成功状态——卡片只由 SESSION_CREATED 帧建立，此处仅提示
+          const zh = forbiddenZh(ack.error);
+          toast(zh ? "新建会话被拒：" + zh : "新建会话失败: " + (ack.error || "未知错误"), 6000);
+        }
       },
       t: wd,
     });
