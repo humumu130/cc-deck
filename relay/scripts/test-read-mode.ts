@@ -174,6 +174,29 @@ try {
   assert(all.every((r) => r.domain !== "group" || r.category !== "value-mismatch" || r.key !== "g-1"), "runShadowCompare 对齐库零 group 值差异（对账面独立于段3人为差异）");
   port.close();
 
+  // ---------- 4b. 长驻场景：portCache 命中分支也快进（READMODE-FIX；P81-6FIX B1 备案裁定修） ----------
+  console.log("段4b 长驻增量可见:");
+  setMode("sqlite");
+  // 模拟长驻进程：不 resetReadModeForTest（端口缓存保持命中态），写侧直接追加 JSON 账——
+  // dispatch-log 追加新单一行+板文件追加一条 lesson（org.ts append-only 写者语义）。
+  // 修复前此处 ensureStore 命中 portCache 直接 return，读面永远停留首建快照（P81-6FIX O10 四红根因）。
+  const dNew = [
+    ...dLines,
+    { ts: T + 60, id: "disp-3", tier: "正经立项", target: "s-w1", status: "dispatched", session_id: "s-leader", actor: "user" },
+  ];
+  writeFileSync(join(orgDir, "dispatch-log.ndjson"), dNew.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  const boardDoc = JSON.parse(readFileSync(join(orgDir, "boards", "g-1.json"), "utf-8")) as { lessons: unknown[] };
+  boardDoc.lessons.push({ id: "l-3", text: "追加经验", tags: ["live"], ts: T + 61 });
+  writeFileSync(join(orgDir, "boards", "g-1.json"), JSON.stringify(boardDoc, null, 2) + "\n");
+  // 同进程二次读（ensureStore 缓存命中→同样跑导入聚合，checkpoint 失效重灌）：新账必须可见
+  const liveDispatch = readDispatchLog(orgDir);
+  assert(liveDispatch.length === 3 && liveDispatch.some((e) => e.id === "disp-3" && e.status === "dispatched"),
+    "长驻二次读见新派单（portCache 命中分支也快进——READMODE-FIX 语义锁）");
+  const liveLessons = listLessons("g-1", undefined, orgDir);
+  assert(liveLessons.length === 3 && liveLessons.some((l) => l.id === "l-3"),
+    "长驻二次读见新经验（boards 追加增量可见，dispatch 失效⇒lesson 联动重灌）");
+  // 注：铁律 2 零写检查在此段不适用——两源 mtime/body 变化是本段模拟写者的合法写入。
+
   // ---------- 5. 无效值 boot 抛错（读入口面） ----------
   console.log("段5 无效值读入口 fail-fast:");
   setMode("jsno");

@@ -130,10 +130,18 @@ export function resolveDirs(override?: Partial<ReadModeDirs>): ReadModeDirs {
 
 const portCache = new Map<string, StoragePort>();
 
-/** 取（或建）dataDir 对应的 store 端口：open→migrate→importAllForShadow（导入器幂等快进）。 */
+/** 取（或建）dataDir 对应的 store 端口：open→migrate→importAllForShadow。每次调用都保证账
+ * 灌到当前（READMODE-FIX）：缓存命中分支同样跑导入聚合——checkpoint 幂等快进（源
+ * mtime/lineCount 未变时仅 observe 成本，近零开销），写侧（org.ts 派单台账/boards 经验回流）
+ * 追加后同进程读面即见新账。缘由注：P81-5 审计写面（permission-audit auditStore）引入首个
+ * 链路中途消费者后，「冷启动一次性灌账」前提失效——端口缓存若跳过导入，长驻进程
+ * sqlite/shadow 档读面将永远停在首建快照（P81-6FIX B1 备案，Leader 裁定修）。 */
 export function ensureStore(dirs: ReadModeDirs): StoragePort {
   const cached = portCache.get(dirs.dataDir);
-  if (cached) return cached;
+  if (cached) {
+    importAllForShadow(cached, dirs); // 铁律 3 读前触发的字面执行：命中缓存≠跳过灌账
+    return cached;
+  }
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
