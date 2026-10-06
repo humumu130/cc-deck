@@ -540,7 +540,7 @@
   #gearPop #srvList { display: flex; flex-direction: column; gap: 7px; }
   #gearPop .srv-row { background: var(--gp-card); border-color: var(--gp-border); border-radius: 10px; }
   #gearPop .srv-row:hover { border-color: rgba(142,163,186,.42); }
-  #gearPop .srv-row.active { border-color: var(--gp-accent); box-shadow: 0 0 0 1px var(--gp-accent); }
+  #gearPop .srv-row.active { border-color: var(--gp-accent); background: var(--q-row-sel); } /* P58 016 条目 8：同上对齐淡底语言 */
   /* #406 行点击即编辑：正在编辑的行铺输入底色，与下方展开的编辑表单卡视觉成对（活动橙边不受影响） */
   #gearPop .srv-row.editing { background: var(--gp-input); }
   #gearPop .srv-row .srv-del:hover { background: var(--gp-input); }
@@ -998,7 +998,7 @@
     border-radius: 2px; pointer-events: none;
   }
   .srv-row:hover { border-color: var(--hov); }
-  .srv-row.active { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+  .srv-row.active { border-color: var(--brand); background: var(--q-row-sel); } /* P58 016 条目 8：对齐 005 source-option 选中淡底语言（原双 ring 描边过重） */
   .srv-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; --sc: var(--error); }
   .srv-row .dot.online { background: var(--done); --sc: var(--done); }
   .srv-row .dot.connecting { background: var(--working); --sc: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
@@ -1391,6 +1391,32 @@
   /* #12 空态提示垂直居中：#cards 为纵排 flex，flex:1 撑满 + justify-content:center 垂直居中 */
   .cards-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
+  /* —— P58 016 记档产品化收口：空/加载/错误三态（对齐 005 demo-empty-state /
+     demo-skeleton-list / demo-error-bar 语言；颜色走 var()+color-mix，零裸色值）—— */
+  /* 空态虚线框（005 demo-empty-state 语言；尺度适配 Web 列表区整体居中布局） */
+  .cards-empty .ce-box { display: grid; justify-items: center; gap: 8px; min-width: 220px; max-width: 340px; padding: 22px 18px; border: 1px dashed var(--border); border-radius: 10px; background: var(--panel); }
+  .cards-empty .ce-box .ce-icon { margin-bottom: 0; }
+  .cards-empty .ce-btn { min-height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2, var(--panel)); color: var(--text-strong); cursor: pointer; font-size: 11.5px; }
+  .cards-empty .ce-btn:hover { border-color: var(--brand); color: var(--brand); }
+  /* 加载骨架（005 demo-skeleton 语言：组头条 + shimmer 三线卡 + aria-label 加载中） */
+  .skel-list { display: grid; gap: 8px; padding: 4px 2px; }
+  .skel-group { width: 38%; height: 10px; margin: 8px 3px 0; border-radius: 4px; background: color-mix(in srgb, var(--border) 55%, transparent); }
+  .skel-card { display: grid; gap: 8px; padding: 11px; border: 1px solid color-mix(in srgb, var(--border) 60%, transparent); border-radius: 10px; background: var(--panel); }
+  .skel-line { height: 9px; border-radius: 5px; background: linear-gradient(90deg, color-mix(in srgb, var(--border) 55%, transparent), var(--panel), color-mix(in srgb, var(--border) 55%, transparent)); background-size: 220% 100%; animation: skel-shimmer 1.6s ease-in-out infinite; }
+  .skel-line.short { width: 58%; }
+  .skel-line.tiny { width: 32%; height: 7px; }
+  @keyframes skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
+  /* 错误横幅（005 demo-error-bar 语言：标题 + 副文 + 动作位，danger 左条） */
+  .errbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 10px; margin: 0 0 10px; border: 1px solid color-mix(in srgb, var(--error) 32%, transparent); border-left: 3px solid var(--error); border-radius: 8px; background: color-mix(in srgb, var(--error) 9%, transparent); font-size: 12px; }
+  .errbar strong { color: var(--error); }
+  .errbar .eb-copy { flex: 1 1 160px; min-width: 0; color: var(--faint); }
+  .errbar .eb-actions { display: flex; margin-left: auto; gap: 6px; }
+  .errbar .eb-actions button { min-height: 24px; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--error) 32%, transparent); border-radius: 6px; background: var(--panel); color: var(--text-strong); cursor: pointer; font-size: 11px; }
+  .errbar .eb-actions button:hover { border-color: var(--error); color: var(--error); }
+  /* 通知行整行可点（016 条目 9，005 整卡可点语言）：hover 淡底 + 键盘焦点环 */
+  .notice-row.nr-jmp { cursor: pointer; }
+  .notice-row.nr-jmp:hover { background: color-mix(in srgb, var(--q-row-sel) 62%, transparent); }
+  .notice-row.nr-jmp:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
   .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40→#67漏项 16 回落 15（用户点单调小） */
   .his-badge {
     font-size: 10px; color: var(--faint); flex: none; font-weight: 500;
@@ -1827,6 +1853,7 @@
   }
 
   .tabs { display: flex; gap: 2px; margin-top: 10px; align-items: center; position: relative; }
+  .tabs .tab-group { display: flex; gap: 2px; align-items: center; }
   .tabs .spacer { flex: 1; }
   .tabs button.tab {
     background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
@@ -2719,13 +2746,18 @@
         </div>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
-        <!-- #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」 -->
-        <button data-tab="activity" class="tab active">对话</button>
-        <button data-tab="todos" class="tab">任务</button>
-        <button data-tab="log" class="tab">全部</button>
-        <button data-tab="artifacts" class="tab">输出物</button>
-        <button data-tab="cron" class="tab">定时</button>
-        <button data-tab="stats" class="tab">统计</button>
+        <!-- P58 016 条目 5 键盘可达：六视图钮收进 tab-group（role=tablist），mini 工具钮
+             不入 tablist（aria tablist 子元素应全为 tab）；roving tabindex + aria-selected
+             由 syncTabsAria/switchTab 维护，←→ 循环沿用 #279③ 键链并补 focus 跟手 -->
+        <div class="tab-group" role="tablist" aria-label="视图切换">
+          <!-- #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」 -->
+          <button data-tab="activity" class="tab active" role="tab" aria-selected="true">对话</button>
+          <button data-tab="todos" class="tab" role="tab" aria-selected="false" tabindex="-1">任务</button>
+          <button data-tab="log" class="tab" role="tab" aria-selected="false" tabindex="-1">全部</button>
+          <button data-tab="artifacts" class="tab" role="tab" aria-selected="false" tabindex="-1">输出物</button>
+          <button data-tab="cron" class="tab" role="tab" aria-selected="false" tabindex="-1">定时</button>
+          <button data-tab="stats" class="tab" role="tab" aria-selected="false" tabindex="-1">统计</button>
+        </div>
         <span class="spacer"></span>
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
@@ -4827,9 +4859,12 @@ async function orgSendConfirm(ctx, confirmId, approve) {
 function orgCreateSrcs() {
   return orgCtxs().filter((c) => !cmdCapBlocked(c.cmdCaps, "COMMAND_ORG_ACTION"));
 }
+// P58 016 条目 5：浮层焦点归还（Esc/✕ 关闭后回到打开前焦点位，tab 键序不丢位）
+let orgFocusBack = null;
 function orgCloseCreate() {
   const d = $("orgnew");
   if (d) d.remove();
+  if (orgFocusBack) { try { orgFocusBack.focus(); } catch {} orgFocusBack = null; }
 }
 async function orgCreateSubmit() {
   const d = $("orgnew");
@@ -4862,6 +4897,7 @@ async function orgCreateSubmit() {
 }
 function orgOpenCreate() {
   orgCloseCreate();
+  orgFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null; // P58 焦点归还锚点
   const srcs = orgCreateSrcs();
   const d = document.createElement("div");
   d.id = "orgnew";
@@ -4941,10 +4977,12 @@ function orgCloseDrawer() {
   const d = $("orgdrawer");
   if (d) d.remove();
   renderOrgZone();
+  if (orgFocusBack) { try { orgFocusBack.focus(); } catch {} orgFocusBack = null; }
 }
 
 async function orgOpenDrawer(ctx, gid) {
   orgDrawer.open = true; orgDrawer.gid = gid; orgDrawer.src = ctx.cfg.id; orgDrawer.data = null;
+  if (!$("orgdrawer")) orgFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null; // P58 焦点归还锚点
   let d = $("orgdrawer");
   if (!d) {
     d = document.createElement("div");
@@ -5070,7 +5108,26 @@ document.addEventListener("click", (e) => {
   if (nk) {
     const c = ctxs.get(nk.dataset.src);
     if (c) notifAck(c, nk.dataset.nackKey);
+    return;
   }
+  // P58 016 条目 9：通知行整行可点跳转（005 data-notify-jump 整卡语言）——切到该源
+  // 过滤视图；行内按钮（知道了）已在上方分支 return，不双触发
+  const jr = e.target.closest(".notice-row.nr-jmp");
+  if (jr && jr.dataset.src) {
+    const c = ctxs.get(jr.dataset.src);
+    if (c) {
+      filterSrc = c.cfg.id;
+      renderSrcChips();
+      if (jr.dataset.sid) select(jr.dataset.sid, c.cfg.id);
+      else render();
+    }
+  }
+});
+// P58 016 条目 5 × 9：可点通知行键盘可达（role=button+tabindex 已挂，Enter 触发）
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  const t = ev.target;
+  if (t && t.classList && t.classList.contains("nr-jmp")) { ev.preventDefault(); t.click(); }
 });
 
 // #306 悬浮清单渲染（key 守卫同 cards 口径：快照流式重渲不重建 DOM；展开态走
@@ -5657,7 +5714,13 @@ function renderSrcChips() {
     relayDev: s.cloud && s.cloud.rd ? s.cloud.rd : "",
     online: !!ctxs.get(s.id) && ctxs.get(s.id).status === "online",
   })));
-  if (filterSrc !== "all" && !groups.some((g) => g.srcIds.indexOf(filterSrc) >= 0)) filterSrc = "all";
+  // P58 016 条目 9：过滤回落只看源存活性——原防呆把「过滤指向暂无会话的源」也
+  // 重置 all，与空态「该源暂无会话」分支（语义上允许过滤无会话源）自相矛盾且不可达；
+  // 通知行跳转（切到通知所属源）依赖该语义。现只在意源被删（ctx 不存在）时回落
+  if (filterSrc !== "all" && !groups.some((g) => g.srcIds.indexOf(filterSrc) >= 0)) {
+    const fAlive = filterSrc.split(",").some((id) => ctxs.get(id));
+    if (!fAlive) filterSrc = "all";
+  }
   const box = $("srcChips");
   if (groups.length <= 1) { box.style.display = "none"; box.dataset.key = ""; box.innerHTML = ""; return; }
   const parts = groups.map((g) => g.key + ":" + g.name + ":" + (g.online ? 1 : 0) + ":" + g.exceptions.join("/") + ":" + g.srcIds.join("+"));
@@ -5727,7 +5790,15 @@ function renderNotifications() {
         const src = srcDisplayName(ctx.cfg);
         // 「知道了」轻动作位（007 B+）：可行动未收口 + 本源未被旧 relay 降级记忆封锁
         const canAck = item.actionable === true && !doneOf(item) && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
-        return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + '" data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + '">' +
+        // P58 016 条目 9（005 整卡可点语言）：可行动未收口行整行可点跳转——
+        // 切到该源过滤视图，绑定具体会话（sourceContext.sessionId）时再进会话；
+        // 已收口/不可行动行不可点（005「历史动态 · 无需处理」语义）。跳转是本地
+        // 动作，不依赖命令能力位（与 canAck 刻意不同口径）
+        const canJmp = item.actionable === true && !doneOf(item);
+        const jmpSid = item.sourceContext && typeof item.sourceContext === "object" && typeof item.sourceContext.sessionId === "string" && item.sourceContext.sessionId ? item.sourceContext.sessionId : "";
+        return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + (canJmp ? " nr-jmp" : "") + '"' +
+          (canJmp ? ' role="button" tabindex="0" data-src="' + escapeHtml(ctx.cfg.id) + '"' + (jmpSid ? ' data-sid="' + escapeHtml(jmpSid) + '"' : "") : "") +
+          ' data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + (canJmp ? "&#10;↵ 点按跳转" : "") + '">' +
           '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
           (canAck ? '<button class="nr-ack" data-nack-key="' + escapeHtml(item.key) + '" data-src="' + escapeHtml(ctx.cfg.id) + '" title="标记已处理（handled）">知道了</button>' : "") +
           '<span class="nr-src">' + escapeHtml(src) + "</span></div>";
@@ -5871,7 +5942,12 @@ function render() {
   // #018-W1a key 含 notifFP（actionable 未决通知数）：通知面变化会改待处理分组归属，
   // 卡片字段不变也要重渲；含 last_task_done 标记同理（acceptance 分组翻转）
   const pendingQids = new Set(q.pending.map((s) => s.__qid));
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + notifFP + "|" + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "") + ":" + (e.s.last_task_done ? "a" : "")).join("|");
+  // P58 016 记档产品化收口：过滤范围内源连接态（错误横幅/加载骨架显隐因子入 key，
+  // 源上下线/连接中翻转时强制重渲，横幅与骨架不残留）
+  const scopeCtxs = filterSrc === "all" ? [...ctxs.values()] : filterSrc.split(",").map((id) => ctxs.get(id)).filter(Boolean);
+  const scopeOff = scopeCtxs.filter((c) => c.status === "offline" || c.status === "reconnecting");
+  const scopeConn = scopeCtxs.filter((c) => c.status === "connecting");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + notifFP + "|" + (scopeOff.length ? "e" + scopeOff.length + "|" : "") + (scopeConn.length ? "c" + scopeConn.length + "|" : "") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "") + ":" + (e.s.last_task_done ? "a" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -5879,18 +5955,50 @@ function render() {
     box.innerHTML = "";
     let pendHeadDone = false; // #018-W1a 两组段头各只出一次
     let othHeadDone = false;
+    // P58 错误横幅（016 条目 4，005 demo-error-bar 语言）：过滤范围内有断连源时
+    // 列表顶常驻——数据真实性不受还原豁免：无手动重连动作不放假「重连」钮，
+    // 只给「打开连接设置」真实入口；自动重连状态如实文案
+    if (scopeOff.length) {
+      const eb = document.createElement("div");
+      eb.className = "errbar";
+      eb.innerHTML = "<strong>" + (scopeOff.length > 1 ? scopeOff.length + " 个服务器未连接" : "服务器未连接") + "</strong>" +
+        '<span class="eb-copy">数据可能过期 · 自动重连中</span>' +
+        '<span class="eb-actions"><button type="button" class="eb-set">打开连接设置</button></span>';
+      eb.querySelector(".eb-set").onclick = () => openPanel("conn");
+      box.appendChild(eb);
+    }
     if (!list.length) {
-      const on = [...ctxs.values()].filter((c) => c.status === "online").length;
-      const total = ctxs.size;
-      const hint = total === 0
-        ? "先点左下 ⚙ 添加服务器"
-        : on === 0
-          ? (collapseIdle ? "空闲会话已折叠" : "服务器未连接，等待自动重连")
-          : (filterSrc !== "all" ? "该源暂无会话" : (collapseIdle ? "空闲会话已折叠" : "暂无会话，点 ＋ 新建或在 PC 上打开 claude"));
-      const d2 = document.createElement("div");
-      d2.className = "cards-empty";
-      d2.innerHTML = '<div class="ce-icon">⚡</div><div>' + escapeHtml(hint) + "</div>";
-      box.appendChild(d2);
+      // P58 加载骨架（016 条目 4，005 demo-skeleton-list 语言）：范围内源在连接中
+      // 且无会话数据——shimmer 骨架替代空态文案（数据未到 ≠ 没有数据）
+      if (!scopeOff.length && scopeConn.length) {
+        const sk = document.createElement("div");
+        sk.className = "skel-list";
+        sk.setAttribute("aria-label", "会话加载中");
+        sk.innerHTML = '<i class="skel-group"></i><div class="skel-card"><i class="skel-line"></i><i class="skel-line short"></i><i class="skel-line tiny"></i></div>' +
+          '<i class="skel-group"></i><div class="skel-card"><i class="skel-line short"></i><i class="skel-line"></i><i class="skel-line tiny"></i></div>';
+        box.appendChild(sk);
+      } else {
+        const on = [...ctxs.values()].filter((c) => c.status === "online").length;
+        const total = ctxs.size;
+        const hint = total === 0
+          ? "先点左下 ⚙ 添加服务器"
+          : on === 0
+            ? (collapseIdle ? "空闲会话已折叠" : "服务器未连接，等待自动重连")
+            : (filterSrc !== "all" ? "该源暂无会话" : (collapseIdle ? "空闲会话已折叠" : "暂无会话，点 ＋ 新建或在 PC 上打开 claude"));
+        // P58 空态虚线框+语境 action（016 条目 4，005 demo-empty-state 语言）：
+        // 无源→打开连接设置；有源在线无会话→新建会话（同 emptyNewBtn 动作链）
+        const d2 = document.createElement("div");
+        d2.className = "cards-empty";
+        const btn = total === 0 ? '<button type="button" class="ce-btn" data-ce="conn">打开连接设置</button>'
+          : (on > 0 && filterSrc === "all" && !collapseIdle ? '<button type="button" class="ce-btn" data-ce="new">新建会话</button>' : "");
+        d2.innerHTML = '<div class="ce-box"><div class="ce-icon">⚡</div><div>' + escapeHtml(hint) + "</div>" + btn + "</div>";
+        const cb = d2.querySelector(".ce-btn");
+        if (cb) cb.onclick = () => {
+          if (cb.dataset.ce === "conn") openPanel("conn");
+          else { if (!$("newform").classList.contains("open")) $("addBtn").click(); setTimeout(() => $("cwd").focus(), 60); }
+        };
+        box.appendChild(d2);
+      }
     }
     for (const { ctx, s } of list) {
       // #018-W1a 组头（待处理/其他会话）：出现在每组首卡前，计数=过滤后实际渲染卡数
@@ -9348,7 +9456,14 @@ window.addEventListener("click", (ev) => {
  }, true);
 function switchTab(name) {
   activeTab = name;
-  document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  // P58 016 条目 5：aria-selected + roving tabindex 随 active 同步（005
+  // wireSegmentTabSemantics 语义；样式仍走 .active 类不变）
+  document.querySelectorAll(".tabs button.tab").forEach((x) => {
+    const on = x.dataset.tab === name;
+    x.classList.toggle("active", on);
+    x.setAttribute("aria-selected", String(on));
+    x.tabIndex = on ? 0 : -1;
+  });
   moveTabInd(); // #279③ 指示条平移到新 active（renderDetail 内也会补一次）
   hideToBottom(); // 回到底部浮钮仅对话 tab 生效，切页即收
   const tl = $("timeline");
@@ -9391,6 +9506,7 @@ document.addEventListener("keydown", (ev) => {
   if (n < 0 || n >= tabs.length) return;
   ev.preventDefault();
   switchTab(tabs[n].dataset.tab);
+  tabs[n].focus(); // P58 016 条目 5：roving focus 跟手（aria tab 模式，005 wireSegmentTabSemantics 同款）
 });
 
 // ===== 回到底部浮钮（对齐手机端形态）：上滑离底 >80px 且滚动停止 ~300ms 后浮现 =====
@@ -10600,12 +10716,21 @@ $("wizLan").onclick = () => {
   setTimeout(() => $("url").focus(), 80);
 };
 $("wizSkip").onclick = closeWiz;
-// Escape 关闭顶层浮层（任务浮卡/向导/扫码登录）
+// Escape 关闭顶层浮层（任务浮卡/向导/扫码登录）——P58 016 条目 5 补齐：立项弹窗/
+// 团队抽屉/源齿轮弹层入链（z 序：模态 orgnew 62 → 抽屉 orgdrawer 61 → 齿轮弹层），
+// 关闭后焦点归还触发钮（016「Esc 关闭/焦点归还」）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   if ($("taskPop").classList.contains("open")) closeTaskPop();
   else if ($("loginQrPop").classList.contains("open")) closeLoginQr();
   else if ($("wizPop").classList.contains("open")) closeWiz();
+  else if ($("orgnew")) orgCloseCreate();
+  else if ($("orgdrawer")) orgCloseDrawer();
+  else if ($("gearPop").classList.contains("open")) {
+    $("gearPop").classList.remove("open");
+    const g = $("gearBtn");
+    if (g) g.focus();
+  }
 });
 
 $("pairBtn").onclick = submitPairCode;
