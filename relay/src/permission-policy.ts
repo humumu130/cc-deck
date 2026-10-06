@@ -53,7 +53,7 @@ export type EffectiveMode = NormalizedMode | "forbidden";
 export type CapabilityState = "confirmed" | "unverified" | "unsupported";
 export type PolicyRole = "team_pm" | "worker" | "review_pm";
 
-import type { PermissionCapabilitySummary } from "./types.js";
+import type { ManagedPermissionMode, PermissionCapabilitySummary } from "./types.js";
 
 /** wire 兼容请求值→归一档（归一四档直过+Claude native 三兼容值——§5.3.1 物化形
  * bypassPermissions 即走此表归一 full-auto）。表外值=未知档位。 */
@@ -69,6 +69,18 @@ const WIRE_TO_NORMALIZED: Record<string, NormalizedMode> = {
 
 /** claude native 映射（§7.1 native_modes；仅 confirmed 且 effective 非 forbidden 时填）。 */
 const NATIVE_CLAUDE: Record<NormalizedMode, string> = {
+  ask: "default",
+  plan: "plan",
+  "edit-auto": "acceptEdits",
+  "full-auto": "bypassPermissions",
+};
+
+/** effective 归一档→spawn 实参（ManagedPermissionMode）映射（P81-5 spawn 传值收口）：
+ * 与 NATIVE_CLAUDE 同构（claude 的 native 即 MANAGED 词表值）——JSONL 引擎 native_mode
+ * 恒 null（适配器未确认），但 spawn 实参仍按 effective 的 CLI 等价档传（降级后 CLI 收
+ * acceptEdits 而非伪装 bypass——「不得将 full-auto 伪装成真实审批绕过」落到实参面）。
+ * 纯数据映射零逻辑。 */
+export const EFFECTIVE_TO_MANAGED: Record<NormalizedMode, ManagedPermissionMode> = {
   ask: "default",
   plan: "plan",
   "edit-auto": "acceptEdits",

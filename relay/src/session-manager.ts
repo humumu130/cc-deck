@@ -17,9 +17,10 @@ import {
   listPendingConfirms, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
-  ensureProjectClaudeMd,
+  ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
-import { engineCapabilityState, evaluatePermission } from "./permission-policy.js";
+import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission } from "./permission-policy.js";
+import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
   type ProjectGroup, type ProjectBoard,
@@ -1871,7 +1872,7 @@ export class SessionManager {
     if (this.isLeaderSession(id)) return false;
     // #25-P2 删卡清挂单：FIFO 残条此前进程内常驻（重启才清）。先收口再删（对齐
     // 退休/挂起联动口径）；bootTimer 开火路径已先行收口，此处幂等 no-op 不双记
-    this.closeOpenDispatches(id, "failed", "会话删除，回合中断", true, false, undefined, "todo");
+    this.closeOpenDispatches(id, "failed", "会话删除，回合中断", true, false, undefined, "backlog");
     this.sessions.delete(id);
     this.lastStoreTodos.delete(id);
     this.allowRules.dropSession(id); // #212 会话删除清 session 级记住规则
@@ -1987,14 +1988,25 @@ export class SessionManager {
           const pm = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : undefined;
           // #208 autoMkdir：客户端创建表单「目录不存在时自动创建」开关（默认关＝旧回落行为）
           const requestedEngine = (cmd.payload as { engine?: unknown }).engine;
+          // P81-5 真实判定接线（§6.1「服务端识别运行环境和工作目录」）：判不出显式回
+          // "unknown"（P81-3/4 头注钉死纪律——判定缺位走 fail-closed，绝不缺席两维）
+          const dirScope = resolveDirScope(cmd.payload.cwd);
+          const envScope = resolveEnvScope(this.cfg.port);
           if (requestedEngine !== undefined && !isSessionEngine(requestedEngine)) {
+            // 未知引擎拒也落审计（§6.3「拒绝也写审计」；B8 修正面）
+            appendPermissionAudit(auditStore(this.cfg.dataDir), {
+              requested_mode: pm ?? null, normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+              capability_state: engineCapabilityState(String(requestedEngine)), engine: String(requestedEngine),
+              reason: "unknown_engine", policy_source: "explicit",
+              environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id: null, command_id: cmd.command_id, created_at: Date.now(),
+            });
             return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine as SessionEngine | undefined;
           // P81-2 开卡求值闸（§6.1 统一拒绝面）：用户自建卡映射 team_pm×随手办（§5.2
-          // 上限 full-auto——bypass 勾选现状恒过=行为零变）；forbidden→ok:false+reason。
-          // 降级回执恒带（effective≠normalized 即降级，端上可显示 badge）。spawn 传值
-          // 维持现状（pm 原样），native_mode 落 spawn=P81-5 收口（偏差备案）。
+          // 上限 full-auto）。P81-5：两维真实判定接入+审计落库（成功与拒绝都落）+
+          // spawn 传值收口（effective→MANAGED 实参——JSONL 降级后 CLI 收 acceptEdits
+          // 而非伪装 bypass；claude 沙盒 bypass 恒等=多数路径零变）。
           const engineForPolicy = engine ?? "claude";
           const perm = evaluatePermission({
             requested_mode: pm ?? null,
@@ -2003,15 +2015,27 @@ export class SessionManager {
             tier: "随手办",
             capability_state: engineCapabilityState(engineForPolicy),
             policy_source: "explicit",
+            dir_scope: dirScope,
+            env: envScope,
           });
+          // 审计落库（§6.3 拒绝也写审计；session_id 拒=null 成功=新会话）
+          const auditBase = {
+            requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode,
+            native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine,
+            reason: perm.reason, policy_source: perm.policy_source,
+            environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by,
+            session_id: null as string | null, command_id: cmd.command_id, created_at: Date.now(),
+          };
           if (perm.effective_mode === "forbidden") {
+            appendPermissionAudit(auditStore(this.cfg.dataDir), auditBase);
             return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
           }
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, {
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
             ...(engine ? { engine } : {}),
             ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
             ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
           });
+          appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
           return {
             command_id: cmd.command_id,
             ok: true,
@@ -3102,7 +3126,7 @@ export class SessionManager {
             // 中断≠交付，换家≠干砸
             !(ok && reason === "interrupted") && !homeLost,
             undefined,
-            delivered ? undefined : "todo");
+            delivered ? undefined : "backlog");
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -3150,7 +3174,7 @@ export class SessionManager {
           // 未开工/被打断），不写熟手 count（含用户停止触发的 pump finally 路径）。
           // M1/M2 审查轮：板去向也按中断口径退 todo——活没交付，台账 done 只写实
           //「流关了」，条目退回待认领（否则结项核对清单看不见未完，绕过知情放行卡）
-          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "todo");
+          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "backlog");
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             managed.state.status = "DONE";
@@ -3318,7 +3342,7 @@ export class SessionManager {
             const q = this.openDispatches.get(s.state.session_id);
             if (!q || q.length <= 1) break;
             q.unshift(q.pop()!);
-            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "todo");
+            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
           }
         }
         const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
@@ -3665,7 +3689,7 @@ export class SessionManager {
       // unacked 随卡弃——首建窗口消息接受可见丢失（CLI 从未收到，console 留条数），
       // 不做跨会话 stash 重放（窗口=45s×挂死×恰有人发言，极窄）
       const droppedMsgs = cur.unacked.length;
-      this.closeOpenDispatches(id, "failed", `首建上岗超时（${bootWaitSec}s 无 init），回合中断`, true, false, undefined, "todo");
+      this.closeOpenDispatches(id, "failed", `首建上岗超时（${bootWaitSec}s 无 init），回合中断`, true, false, undefined, "backlog");
       if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {});
       void bootAgent.stop().catch(() => {});
       this.leaderId = null; // 先卸常驻身份——deleteSession 拒删 Leader 卡
@@ -3831,7 +3855,7 @@ export class SessionManager {
     return reason;
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "todo"): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog"): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     // onlyGid（组挂起/结项联动收口用）：只收**该组**的派单——同一熟手可跨多组在跑，
@@ -3863,7 +3887,7 @@ export class SessionManager {
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       this.notifyDispatchClosed(e, status, receipt, key);
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
+        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
         // 落，本单接 closeOpenDispatches done 边）：worker 派单收口 done 时自动回流
         // 一条结构化账（卡文本摘要+收口态+dispatch 锚），**不生成内容性经验**（不总
@@ -3921,7 +3945,7 @@ export class SessionManager {
     const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
     for (const e of hung) {
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
-      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
         "done", "relay 重启，回合中断", e.session_id,
@@ -4082,11 +4106,11 @@ export class SessionManager {
       const board = loadBoard(g.id);
       const ready = new Map(computeReadySet(board).map((x) => [x.id, x.check.ready] as const));
       for (const e of board.entries) {
-        if (e.status === "todo") {
+        if (e.status === "backlog") {
           if (e.gate) blocked.push({ id: e.id, reason: "external" }); // gate 未过=等人放行
           else if (ready.get(e.id) === true) todos.push({ todo_id: e.id, content: truncate(e.text, 80) });
           else blocked.push({ id: e.id, reason: "external" }); // 依赖未就绪=等外部完成
-        } else if (e.status === "doing" && e.dispatch_id && !openIds.has(e.dispatch_id)
+        } else if (e.status === "claimed" && e.dispatch_id && !openIds.has(e.dispatch_id)
           && now - e.updated_at >= dutyStaleMs()) { // >=：窗口 0（测试缝/即时超窗）恒真；> 同毫秒恒假是坑
           stale.push({ session_id: g.id, doing_ms: now - e.updated_at, dispatch_id: e.dispatch_id });
         }
@@ -4369,9 +4393,9 @@ export class SessionManager {
         this.auditOrgCommand(actor, device, action, "", tier, false, "gid 必填");
         return { ok: false, error: "gid 必填" };
       }
-      if (status && !["todo", "doing", "done"].includes(status)) {
-        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status 必须是 todo|doing|done（得 ${status}）`);
-        return { ok: false, error: "status 必须是 todo|doing|done" };
+      if (status && !BOARD_ENTRY_STATUSES.includes(status as BoardEntryStatus)) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}（得 ${status}）`);
+        return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
       }
       let text = typeof payload.text === "string" ? payload.text.trim() : "";
       if (action === "task-update") {
@@ -4437,7 +4461,7 @@ export class SessionManager {
         if (typeof taskObj !== "object" || Array.isArray(taskObj) || typeof taskObj.text !== "string" || taskObj.text.trim() === "")
           return failAudit("task.text 必填");
         const taskStatus = typeof taskObj.status === "string" ? taskObj.status : "";
-        if (taskStatus && taskStatus !== "todo" && taskStatus !== "doing") return failAudit("task.status 必须是 todo|doing");
+        if (taskStatus && taskStatus !== "backlog" && taskStatus !== "claimed") return failAudit("task.status 必须是 backlog|claimed");
         const taskNote = typeof taskObj.note === "string" ? taskObj.note.trim() : "";
         const taskDeps = Array.isArray(taskObj.depends_on)
           ? taskObj.depends_on.filter((x): x is string => typeof x === "string" && x.trim() !== "")
@@ -4795,7 +4819,7 @@ export class SessionManager {
             const text = str("text");
             if (!text) return { ok: false, error: "text 必填" };
             const status = str("status") as BoardEntryStatus;
-            if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            if (status && !BOARD_ENTRY_STATUSES.includes(status as BoardEntryStatus)) return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
             // M12-2 编排链补透传 #087 两字段（原白名单漏 deps/gate——store 层支持但
             // 漏斗滤掉，卡带不上依赖导致 ready 误放行）；gate 面用户命令须形状守卫：
             // 对象=设闸、null=显式清除（唯一清除口，人决策）、其余形状拒收
@@ -4824,7 +4848,7 @@ export class SessionManager {
             // M1/M2 审查轮：move 与 upsert 同口径校验——store 层不挡非法串，
             // 不校验会把任意字符串写进 BoardEntryStatus 污染三端分区渲染
             const st = str("status");
-            if (!["todo", "doing", "done"].includes(st)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            if (!BOARD_ENTRY_STATUSES.includes(st as BoardEntryStatus)) return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str("entry_id"), st as BoardEntryStatus);
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op === "del") {
@@ -5263,26 +5287,62 @@ export class SessionManager {
     };
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
-      if (!pf.ok) return { ok: false, error: pf.error };
+      if (!pf.ok) {
+        // P81-5：preflight 拒也落审计（§6.3「拒绝也写审计」；B8 修正「与 preflight 拒同记」）
+        appendPermissionAudit(auditStore(this.cfg.dataDir), {
+          requested_mode: "bypassPermissions", normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+          capability_state: engineCapabilityState(planned.engine), engine: planned.engine,
+          reason: "preflight_failed", policy_source: "tier_default",
+          environment: resolveEnvScope(this.cfg.port), dir_scope: resolveDirScope(anchor), tier, actor,
+          session_id: null, command_id: dispatchId, created_at: Date.now(),
+        });
+        return { ok: false, error: pf.error };
+      }
     }
     // P81-2 派单求值闸（§6.1 统一拒绝面，落账前拒=零台账污染与 preflight 同位）：
-    // requested=现状 bypassPermissions 硬编码事实（spawn 传值 P81-5 收口前维持）；
-    // policy_source=tier_default（081 §5.3 组织派单路径）；岗位名→business role 最小
-    // 映射（词表外落 worker 默认——组岗位名≠权限主体）。forbidden（如 review_pm 派单
-    // 显式 bypass 越上限）→统一拒绝 ok:false。
+    // requested=bypassPermissions（§5.3.1 组织派单请求事实）；policy_source：混编标记组
+    // →mixed_team_default（§5.3.1 服务端物化 bypass 写审计），普通组→tier_default。
+    // P81-5：岗位映射收紧（词表外→forbidden unknown_role_mapping——原「落 worker 默认」
+    // 是静默升权口：未知岗位若本该 review_pm（ceiling edit-auto），落 worker（ceiling
+    // full-auto）反升权，违「零静默升权」硬断言）；两维真实判定接入；审计落库（成功与
+    // 拒绝都落）；spawn 传值收口（effective→MANAGED 实参）。
     const engineForPolicy = planned.engine ?? "claude";
-    const bizRole = role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : "worker";
+    const dirScope = resolveDirScope(anchor);
+    const envScope = resolveEnvScope(this.cfg.port);
+    const bizRole = role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const auditRow = (p: {
+      requested_mode: string | null; normalized_mode: string | null; effective_mode: string; native_mode: string | null;
+      capability_state: string | null; engine: string | null; reason: string; policy_source: string | null;
+    }, sid: string | null) => ({
+      ...p, environment: envScope, dir_scope: dirScope, tier, actor, session_id: sid, command_id: dispatchId, created_at: Date.now(),
+    });
+    if (!bizRole) {
+      // 未知岗位收紧拒（P81-5 B3 债：fail-closed 不猜——显性错误优于静默错权）
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow({
+        requested_mode: "bypassPermissions", normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+        capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy,
+        reason: "unknown_role_mapping", policy_source: null,
+      }, null));
+      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm）` };
+    }
     const perm = evaluatePermission({
       requested_mode: "bypassPermissions",
       engine: engineForPolicy,
       role: bizRole,
       tier,
       capability_state: engineCapabilityState(engineForPolicy),
-      policy_source: "tier_default",
+      policy_source: group?.mixed_engine === true ? "mixed_team_default" : "tier_default",
+      dir_scope: dirScope,
+      env: envScope,
     });
     if (perm.effective_mode === "forbidden") {
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));
       return { ok: false, error: `forbidden: ${perm.reason}` };
     }
+    // spawn 传值收口（P81-5）：effective→MANAGED 实参（claude 沙盒 bypass 恒等零变；
+    // JSONL unverified 降 edit-auto 后 CLI 收 acceptEdits 而非伪装 bypass）。veteran
+    // resume 分支不传 pm（resume 面 permission_mode 从 state 继承——P81-6 域）。
+    const spawnMode = EFFECTIVE_TO_MANAGED[perm.effective_mode];
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -5296,7 +5356,7 @@ export class SessionManager {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
             skipStickyCwd: true, employee: true, role,
             ...(planned.engine ? { engine: planned.engine } : {}),
             ...(planned.model ? { model: planned.model } : {}),
@@ -5314,7 +5374,7 @@ export class SessionManager {
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
           skipStickyCwd: true, employee: true, role,
           ...(planned.engine ? { engine: planned.engine } : {}),
           ...(planned.model ? { model: planned.model } : {}),
@@ -5331,6 +5391,11 @@ export class SessionManager {
       }
     }
     const s = this.sessions.get(sessionId);
+    // P81-5 成功面审计落库（承接会话 id 已知后落——session_id=真实承接会话，与
+    // COMMAND_CREATE「成功=新会话 id」对称；create 失败出口不落 audit：权限闸已通过
+    // 非权限事件，appendDispatch failed 行已承载）。物化事实由 requested_mode+
+    // policy_source 双字段承载（reason=ok 即「降级/拒绝事实优先」语义下的正解）。
+    appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, sessionId));
     if (s) {
       s.state.project_gid = input.gid;
       s.state.dispatch_tier = tier;
@@ -5347,9 +5412,9 @@ export class SessionManager {
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
-        ? // #087 beads：认领模式——前置检查已过，既有卡 todo→doing 挂派单（卡是同一张，依赖关系保留）
-          { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId }
-        : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId });
+        ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
+          { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
+        : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
@@ -5538,9 +5603,9 @@ export class SessionManager {
     for (const q of this.openDispatches.values()) for (const e of q) live.add(e.id);
     const open = new Set(readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").map((e) => e.id));
     for (const ent of loadBoard(gid).entries) {
-      if (ent.status !== "doing" || !ent.dispatch_id) continue;
+      if (ent.status !== "claimed" || !ent.dispatch_id) continue;
       if (live.has(ent.dispatch_id) || open.has(ent.dispatch_id)) continue;
-      moveEntryByDispatch(gid, ent.dispatch_id, "todo");
+      moveEntryByDispatch(gid, ent.dispatch_id, "backlog");
     }
   }
 
@@ -5957,7 +6022,7 @@ export class SessionManager {
           const q = this.openDispatches.get(s.state.session_id);
           if (!q || q.length <= 1) break;
           q.unshift(q.pop()!);
-          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "todo");
+          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
@@ -5968,7 +6033,7 @@ export class SessionManager {
         // 口径全清（回执写实；不写路由），否则 org status 挂假账直到下一条消息
         // 冲刺 F-06：板去向同中断口径退 todo（对照 onSessionEnd 兜底 :2240 与多消息
         // 重放 :3657）——活没交付不能停 done，否则结项核对清单看不见未完
-        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "todo");
+        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "backlog");
         this.reviveSaved(s); // 无未回显消息：parked 恢复，停在等待输入
       }
       s.wd.phase = "idle";
@@ -6084,7 +6149,7 @@ export class SessionManager {
       if (this.sessions.size < MAX_SESSIONS) break;
       // #25-P2 容量驱逐同款清挂单：驱逐对象是 DONE/ERROR 理论无在途回合，但多消息
       // FIFO 边缘形态（收口顺序错位）兜底——残留 FIFO 键进程内常驻，重启才清
-      this.closeOpenDispatches(s.state.session_id, "failed", "容量驱逐，回合中断", true, false, undefined, "todo");
+      this.closeOpenDispatches(s.state.session_id, "failed", "容量驱逐，回合中断", true, false, undefined, "backlog");
       void s.agent?.stop(); // 回收 parked 的 CLI 子进程（历史会话无 agent）
       this.sessions.delete(s.state.session_id);
       this.lastStoreTodos.delete(s.state.session_id);

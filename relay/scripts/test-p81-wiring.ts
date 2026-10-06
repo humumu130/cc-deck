@@ -1,22 +1,26 @@
-// P81-2 权限策略接线测试锁（直跑范式）——specs/081 §4/§5/§6.1。
-// 五组断言：①SNAPSHOT 摘要形状锁（六注册引擎/claude confirmed 四档/JSONL unverified
-// 两档/zcode 空集）；②接线映射层锁（COMMAND_CREATE→team_pm×随手办×explicit、组织派单
-// →岗位名映射×tier_default+bypass 事实——与 session-manager 接线点同构造，漂移即红）；
-// ③forbidden ACK 统一拒绝面（COMMAND_CREATE×zcode、dispatchWorker×review_pm 越上限——
-// 闸拒均在 spawn/落账前=直跑安全）；④零台账证据（forbidden 拒单 dispatch-log 恒空）；
-// ⑤硬断言（effective ≤ ceiling 全谱+摘要 modes 上限自洽）。
-// 成功路径（闸过后 spawn）不在直跑范围（spawn 面归 smoke-e2e/test-bridge e2e 层，与
-// m12-commands 同口径）——回执字段形状由 tsc（CommandAckPayload.permission）+②映射锁覆盖。
-// 隔离：mkdtemp 临时目录、env 五清、无端口；生产 8787 与 ~/.cc-deck 零触达。
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+// P81-2/P81-5 权限接线测试锁（直跑范式）——specs/081 §4/§5/§6.1/§6.3。
+// 十组断言：①SNAPSHOT 摘要形状锁；②接线映射层锁（与 session-manager 闸同构造，漂移即红）；
+// ③forbidden ACK 统一拒绝面（闸拒均在 spawn/落账前）；④派单闸与零台账（dispatch-log 口径）；
+// ⑤硬断言（effective ≤ ceiling 全谱+摘要 modes 自洽）；
+// 【P81-5】⑥真实判定三值（resolveDirScope/resolveEnvScope——production/sandbox/unknown
+// 全谱+CCR_ENV 显式压倒）；⑦审计行形状锁（十字段+运维列亲读——成功与拒绝都落 §6.3）；
+// ⑧spawn 传值收口（假 factory 拦截直证实参：claude sandbox bypass 恒等/JSONL 降级
+// acceptEdits 实参变化点/state 继承源）；⑨混编分支（mixed_engine 组→mixed_team_default
+// 物化）；⑩岗位收紧（未知岗位 forbidden unknown_role_mapping——B3 债 fail-closed）。
+// 隔离：mkdtemp 临时目录、env 五清、端口 8795（避 8787 生产与 8792/8793/8798/8799 禁用段）；
+// 生产 8787 与 ~/.cc-deck 零触达。
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { EventBus } from "../src/event-bus.js";
-import { loadConfig } from "../src/config.js";
+import type { RelayConfig } from "../src/config.js";
 import { SessionManager } from "../src/session-manager.js";
 import { engineCapabilityState, evaluatePermission, permissionCapabilitiesSummary } from "../src/permission-policy.js";
+import { auditStore, readPermissionAudit, resolveDirScope, resolveEnvScope } from "../src/permission-audit.js";
 import { readDispatchLog } from "../src/org.js";
 import type { CommandAckPayload, Command, SessionEngine } from "../src/types.js";
+import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import { setLightConfirmTrusted } from "../src/projects.js";
 
 const root = mkdtempSync(join(tmpdir(), "cc-deck-p81-wiring-"));
@@ -41,6 +45,7 @@ try {
   delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
   for (const k of ["CCR_TOKEN", "CCR_PORT", "CCR_STUB_MODE"]) delete process.env[k];
   setLightConfirmTrusted(true); // 轻立项信任直通：create 即 active（组 fixture 用）
+  let gidAudit = ""; // 审计/对照组 id（S7 建，S9/S10 复用——块间提升）
 
   // ---------- ① SNAPSHOT 摘要形状锁 ----------
   console.log("S1 摘要形状");
@@ -83,8 +88,36 @@ try {
     assert(d3.effective_mode === "edit-auto" && d3.reason === "native_permission_not_confirmed", "派单映射×JSONL：降级回执 caller 可见（spawn 传值现状维持，P81-5 收口）");
   }
 
+  // 显式 cfg（port 8795=sandbox 判定；loadConfig 缺省 8787=production 不合测试语境）+
+  // 假 agentFactory 拦 spawn（成功路径实参直测——P81-5 升级，m12-commands 同范式）
+  const mgrCfg: RelayConfig = {
+    port: 8795, token: "t", tokenGenerated: false, defaultCwd: "",
+    model: "test-model", bridgeToken: "bt", dataDir: join(root, "data"),
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+  };
+  const spawned: { cwd: string; prompt: string | undefined; permissionMode: string | undefined; engine?: string }[] = [];
+  const makeFakeFactory = () =>
+    (cwd: string, _model: string, _cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string; engine?: string }): AgentLike => {
+      spawned.push({ cwd, prompt, permissionMode: opts?.permissionMode, ...(opts?.engine ? { engine: opts.engine } : {}) });
+      const a: AgentLike = {
+        id: randomUUID(),
+        startedAt: Date.now(),
+        ended: false,
+        sendMessage: () => {},
+        allow: () => false,
+        deny: () => false,
+        answer: () => false,
+        stop: async () => {
+          a.ended = true;
+        },
+        setPermissionMode: async () => {},
+      };
+      return a;
+    };
   const bus = new EventBus();
-  const mgr = new SessionManager(bus, loadConfig());
+  const mgr = new SessionManager(bus, mgrCfg);
+  mgr.setAgentFactory(makeFakeFactory());
+  const auditPort = () => auditStore(mgrCfg.dataDir);
 
   // ---------- ③ forbidden ACK 统一拒绝面（真实命令面，闸拒在 spawn 前） ----------
   console.log("S3 forbidden ACK");
@@ -148,7 +181,148 @@ try {
     assert(claudeModes.includes(sample.effective_mode), "摘要 modes 与求值自洽：claude full-auto 求值结果在上榜档集内（P75 选择器读数可信）");
   }
 
-  console.log(`P81-2 permission wiring: ${pass}/${pass + fail} passed`);
+  // ---------- ⑥ 真实判定三值（P81-5 判定函数直调） ----------
+  console.log("S6 真实判定");
+  {
+    assert(resolveDirScope(root) === "sandbox", "判定×tmp 临时目录→sandbox（用户项目目录语义）");
+    assert(resolveDirScope(join(root, "sub")) === "sandbox", "判定×tmp 子目录→sandbox 同款");
+    const home = homedir();
+    assert(resolveDirScope(join(home, ".cc-deck")) === "production", "判定×~/.cc-deck→production（组织数据域，§6.1 隔离铁律）");
+    assert(resolveDirScope(join(home, ".cc-deck", "data")) === "production", "判定×~/.cc-deck 深层→production 同款");
+    assert(resolveDirScope(home) === "production", "判定×家目录本体→production（敏感面保守）");
+    assert(resolveDirScope("") === "unknown" && resolveDirScope(null) === "unknown" && resolveDirScope("rel/path") === "unknown", "判定×空/null/相对路径→unknown（判不出显式回 unknown——P81-3/4 纪律，绝不缺席）");
+    assert(resolveEnvScope(8787) === "production", "环境判定×8787→production（生产 relay 缺省端口识别）");
+    assert(resolveEnvScope(8795) === "sandbox", "环境判定×8795→sandbox（测试/开发端口）");
+    assert(resolveEnvScope(null) === "unknown", "环境判定×null→unknown（fail-closed）");
+    const prevEnv = process.env.CCR_ENV;
+    process.env.CCR_ENV = "production";
+    assert(resolveEnvScope(8795) === "production", "CCR_ENV=production 显式压倒 port（测试/演练可控开关）");
+    process.env.CCR_ENV = "sandbox";
+    assert(resolveEnvScope(8787) === "sandbox", "CCR_ENV=sandbox 显式压倒 8787 同款");
+    if (prevEnv === undefined) delete process.env.CCR_ENV;
+    else process.env.CCR_ENV = prevEnv;
+  }
+
+  // ---------- ⑦ 审计行形状锁（成功与拒绝都落，§6.3；十字段+运维列亲读） ----------
+  console.log("S7 审计形状");
+  {
+    const before = readPermissionAudit(auditPort()).length;
+    // production 拒面集成（CCR_ENV 显式——判定函数已直测，闸集成走显式开关最可控）
+    const prevEnv = process.env.CCR_ENV;
+    process.env.CCR_ENV = "production";
+    const ackP = mgr.handleCommand(
+      { command_id: "p81-a1", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "生产 bypass 拒", permissionMode: "bypassPermissions" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    assert(ackP.ok === false && (ackP.error ?? "").includes("production_bypass_denied"), "环境闸集成×production×bypass 勾选→forbidden（旧行为=放行——P81-5 新拒面）");
+    const rowsP = readPermissionAudit(auditPort());
+    assert(rowsP.length === before + 1, "production 拒面审计行落库（拒绝也写审计 §6.3）");
+    const r = rowsP[0];
+    assert(
+      r.requested_mode === "bypassPermissions" && r.normalized_mode === null && r.effective_mode === "forbidden" && r.native_mode === null &&
+      r.capability_state === "confirmed" && r.engine === "claude" && r.reason === "production_bypass_denied" && r.policy_source === "explicit" &&
+      r.environment === "production" && r.dir_scope === "sandbox" && r.tier === "随手办" && r.session_id === null && r.command_id === "p81-a1",
+      "审计行十字段+运维列逐字段亲读（requested/normalized/effective/native/capability_state/engine/reason/policy_source/environment/dir_scope 全对位）",
+    );
+    process.env.CCR_ENV = prevEnv === undefined ? undefined : prevEnv;
+    if (prevEnv === undefined) delete process.env.CCR_ENV;
+
+    // zcode 拒面审计（B8 修正：拒单并入）
+    const beforeZ = readPermissionAudit(auditPort()).length;
+    mgr.handleCommand(
+      { command_id: "p81-a2", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "zcode 审计", permissionMode: "bypassPermissions", engine: "zcode" }, ts: Date.now() },
+      "web-d",
+    );
+    const rowsZ = readPermissionAudit(auditPort());
+    assert(rowsZ.length === beforeZ + 1 && rowsZ[0].reason === "zcode_fail_closed" && rowsZ[0].effective_mode === "forbidden", "zcode 拒面审计行（reason=zcode_fail_closed）——拒绝面审计全覆盖");
+
+    // 未知引擎拒面审计
+    mgr.handleCommand(
+      { command_id: "p81-a3", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "未知引擎审计", engine: "gpt-9" as SessionEngine }, ts: Date.now() },
+      "web-d",
+    );
+    const rowsU = readPermissionAudit(auditPort());
+    assert(rowsU.length === beforeZ + 2 && rowsU[0].reason === "unknown_engine" && rowsU[0].engine === "gpt-9", "未知引擎拒面审计行（词表外 engine 值留审计）");
+
+    // 未知岗位收紧拒面审计（dispatchWorker）——组锚独立目录（一锚一组护栏，root 已被 S4 组占用）
+    const anchorAudit = join(root, "anchor-audit");
+    mkdirSync(anchorAudit, { recursive: true });
+    const ackG = mgr.handleCommand(
+      { command_id: "p81-g2", type: "COMMAND_ORG_ACTION", payload: { action: "create", name: "审计组", anchor_dir: anchorAudit, tier: "轻立项" }, ts: Date.now() },
+      "web-d",
+    ) as { ok: boolean; data?: { group?: { id: string } } };
+    gidAudit = ackG.data?.group?.id ?? "";
+    assert(ackG.ok === true && gidAudit !== "", "前置：审计组建锚独立（一锚一组护栏下建成）");
+    const beforeR = readPermissionAudit(auditPort()).length;
+    const dR = mgr.dispatchWorker({ anchor: root, prompt: "未知岗位收紧", gid: gidAudit, role: "intern" });
+    assert(dR.ok === false && "error" in dR && dR.error.startsWith("forbidden:") && dR.error.includes("unknown_role_mapping"), "岗位收紧集成×intern→forbidden unknown_role_mapping（B3 债：fail-closed 不猜）");
+    const rowsR = readPermissionAudit(auditPort());
+    assert(rowsR.length === beforeR + 1 && rowsR[0].reason === "unknown_role_mapping" && rowsR[0].policy_source === null && rowsR[0].effective_mode === "forbidden", "收紧拒面审计行（policy_source=null——未达 source 裁决步）");
+  }
+
+  // ---------- ⑧ spawn 传值收口（假 factory 直证实参——P81-5 行为面核心） ----------
+  console.log("S8 spawn 收口");
+  {
+    const ackC = mgr.handleCommand(
+      { command_id: "p81-s1", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "claude 沙盒 bypass 收口", permissionMode: "bypassPermissions" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    assert(ackC.ok === true && typeof ackC.session_id === "string" && ackC.permission?.effective === "full-auto" && ackC.permission.native_mode === "bypassPermissions", "claude×sandbox×bypass 勾选：成功 ACK+回执 full-auto 恒等（多数路径行为零变）");
+    const lastC = spawned[spawned.length - 1];
+    assert(lastC.permissionMode === "bypassPermissions", "spawn 实参直证×claude sandbox：bypassPermissions 恒等（收口不改变合法放行）");
+    assert(lastC.cwd === root, "spawn cwd=请求 cwd（锚定不漂）");
+
+    const ackJ = mgr.handleCommand(
+      { command_id: "p81-s2", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "JSONL 降级收口", permissionMode: "bypassPermissions", engine: "codex" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    assert(ackJ.ok === true && ackJ.permission?.effective === "edit-auto" && ackJ.permission.native_mode === null && ackJ.permission.reason === "native_permission_not_confirmed", "JSONL×codex×bypass：降级回执 effective=edit-auto+native null（caller 可见）");
+    const lastJ = spawned[spawned.length - 1];
+    assert(lastJ.permissionMode === "acceptEdits" && lastJ.engine === "codex", "spawn 实参直证×JSONL：acceptEdits（实参变化点——旧=bypassPermissions 伪装审批绕过，收口后 CLI 收降级档）");
+
+    const rowsC = readPermissionAudit(auditPort());
+    const rc = rowsC.find((x) => x.command_id === "p81-s1");
+    const rj = rowsC.find((x) => x.command_id === "p81-s2");
+    assert(rc !== undefined && rc.effective_mode === "full-auto" && rc.session_id === ackC.session_id && rc.environment === "sandbox" && rc.actor === "web-d", "成功路径审计行：session_id 落新会话+environment=sandbox+actor 落值");
+    assert(rj !== undefined && rj.effective_mode === "edit-auto" && rj.native_mode === null, "成功降级审计行：effective=edit-auto 落库（不伪装 bypass）");
+  }
+
+  // ---------- ⑨ 混编分支（mixed_engine 组→mixed_team_default 物化，B4 债） ----------
+  console.log("S9 混编分支");
+  {
+    const anchorMixed = join(root, "anchor-mixed");
+    mkdirSync(anchorMixed, { recursive: true });
+    const ackM = mgr.handleCommand(
+      { command_id: "p81-m1", type: "COMMAND_ORG_ACTION", payload: { action: "create", name: "混编组", anchor_dir: anchorMixed, tier: "轻立项", mixed_engine: true }, ts: Date.now() } as unknown as Command,
+      "web-d",
+    ) as { ok: boolean; data?: { group?: { id: string; mixed_engine?: boolean } } };
+    const gidM = ackM.data?.group?.id ?? "";
+    assert(ackM.ok === true && gidM !== "" && ackM.data?.group?.mixed_engine === true, "混编标记组 fixture 建成（mixed_engine 落库面）");
+
+    const dM = mgr.dispatchWorker({ anchor: root, prompt: "混编派单", gid: gidM });
+    assert(dM.ok === true && "permission" in dM && dM.permission !== undefined, "混编组 worker 派单成功（物化 bypass→sandbox ceiling 内放行）");
+    const rowsM = readPermissionAudit(auditPort());
+    const rm = rowsM.find((x) => x.policy_source === "mixed_team_default");
+    assert(rm !== undefined && rm.reason === "ok" && rm.requested_mode === "bypassPermissions" && rm.effective_mode === "full-auto" && rm.session_id !== null, "混编审计行：policy_source=mixed_team_default（物化由 requested+source 双字段承载 §5.3.1——reason=ok 即降级/拒绝事实优先下的正解）+承接会话 id 落库");
+
+    // 对照：普通组（S7 fixture 审计组）同 worker 派单→tier_default
+    const dT = mgr.dispatchWorker({ anchor: root, prompt: "普通组对照", gid: gidAudit });
+    assert(dT.ok === true && "permission" in dT, "普通组 worker 派单成功（对照面）");
+    const rowsT = readPermissionAudit(auditPort());
+    const rt = rowsT.find((x) => x.policy_source === "tier_default" && x.session_id !== null);
+    assert(rt !== undefined && rt.effective_mode === "full-auto", "普通组审计行：policy_source=tier_default（混编/普通两路分立可查）");
+  }
+
+  // ---------- ⑩ 收紧面已在 S7 集成（unknown_role_mapping）——本节锁 ACK 形状+零台账 ----------
+  console.log("S10 收紧面 ACK");
+  {
+    const before = readDispatchLog().length;
+    const d = mgr.dispatchWorker({ anchor: root, prompt: "收紧 ACK 形状", gid: gidAudit, role: "cto" });
+    assert(d.ok === false && "error" in d && d.error.startsWith("forbidden: unknown_role_mapping"), "收紧 ACK：ok:false+forbidden: unknown_role_mapping 前缀统一拒绝面");
+    assert(readDispatchLog().length === before, "收紧拒单零台账（dispatch-log 不变——权限拒面唯一落点=audit 表）");
+  }
+
+  console.log(`P81-2/P81-5 permission wiring: ${pass}/${pass + fail} passed`);
   process.exit(fail > 0 ? 1 : 0);
 } catch (err) {
   console.error("FATAL", err);
