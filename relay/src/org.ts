@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
 import type { SessionEngine } from "./types.js";
 
 export type CommandRole = "owner" | "operator" | "viewer";
@@ -314,22 +315,30 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
 
 // 回读：逐行 parse 坏行跳过（仿 loadEvents——追加写被中断的半行不炸读侧）；
 // 同 id 去重留最后（append-only 状态机的收敛视图）；返回最后 max 条分单。
+// M11-G1 读入口接线（三档；dispatch 域 sqlite 投影=D2 段链收敛行，target 经 member 归因
+// 映射值域变化——已知有损映射面备案 read-mode.ts 头注；session-manager 三处消费全经此原点）。
 export function readDispatchLog(dir?: string, max = 500): DispatchEntry[] {
-  const p = dispatchLogPath(dir);
-  if (!existsSync(p)) return [];
-  const byId = new Map<string, DispatchEntry>();
-  for (const line of readFileSync(p, "utf-8").split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      const e = JSON.parse(t) as DispatchEntry;
-      if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
-    } catch {
-      // 损坏行跳过
-    }
-  }
-  const all = [...byId.values()];
-  return all.length <= max ? all : all.slice(all.length - max);
+  return viaReadMode("dispatch", {
+    json: () => {
+      const p = dispatchLogPath(dir);
+      if (!existsSync(p)) return [];
+      const byId = new Map<string, DispatchEntry>();
+      for (const line of readFileSync(p, "utf-8").split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          const e = JSON.parse(t) as DispatchEntry;
+          if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
+        } catch {
+          // 损坏行跳过
+        }
+      }
+      const all = [...byId.values()];
+      return all.length <= max ? all : all.slice(all.length - max);
+    },
+    sqlite: (port) => dispatchEntriesFromDb(port, max),
+    dirs: { orgDir: dir },
+  });
 }
 
 // ---------- #26 M2 分诊 CLI（~/.cc-deck/bin/org，Leader 的指令通道） ----------

@@ -16,6 +16,7 @@ import { isAbsolute, join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
+import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb, lessonsFromDb } from "./storage/read-mode.js";
 import type { SessionEngine } from "./types.js";
 
 // ---------- 类型 ----------
@@ -153,16 +154,24 @@ function confirmsFilePath(dir?: string): string {
 // ---------- 项目组索引 ----------
 
 function readProjectsFile(dir?: string): ProjectsFile {
-  try {
-    const raw = JSON.parse(readFileSync(projectsFilePath(dir), "utf-8")) as Partial<ProjectsFile>;
-    return {
-      groups: Array.isArray(raw.groups) ? (raw.groups as ProjectGroup[]) : [],
-      trust_light: raw.trust_light === true,
-    };
-  } catch {
-    // 无文件 / 坏 JSON：空态（读侧防御，同 pinned-sessions 口径）
-    return { groups: [], trust_light: false };
-  }
+  // M11-G1 读入口接线（三档：json 原样 / sqlite 表投影 / shadow 返回值以 JSON 为准+旁路对比）
+  return viaReadMode("group", {
+    json: () => {
+      try {
+        const raw = JSON.parse(readFileSync(projectsFilePath(dir), "utf-8")) as Partial<ProjectsFile>;
+        return {
+          groups: Array.isArray(raw.groups) ? (raw.groups as ProjectGroup[]) : [],
+          trust_light: raw.trust_light === true,
+        };
+      } catch {
+        // 无文件 / 坏 JSON：空态（读侧防御，同 pinned-sessions 口径）
+        return { groups: [], trust_light: false };
+      }
+    },
+    // trust_light 无表列——投影缺省 false（已知限制，备案 read-mode.ts 头注「有损映射面」）
+    sqlite: (port) => ({ groups: projectGroupsFromDb(port), trust_light: false }),
+    dirs: { orgDir: dir },
+  });
 }
 
 function writeProjectsFile(f: ProjectsFile, dir?: string): boolean {
@@ -597,22 +606,36 @@ export function addLesson(
 /** 查询：无 filter 全量（文件序=时间序）；带 tags 为 AND 筛选（任务书注入的下一步消费留
  * 出口——按项目/角色/引擎 tag 挑相关经验，不全量灌 Leader 上下文，009 §4 M2 原文）。 */
 export function listLessons(gid: string, filter?: { tags?: string[] }, dir?: string): LessonEntry[] {
-  const all = loadBoardFile(gid, dir).lessons ?? [];
-  const want = filter?.tags ?? [];
-  if (want.length === 0) return all;
-  return all.filter((l) => want.every((t) => l.tags.includes(t)));
+  // M11-G1 读入口接线（三档；lesson 表按组投影，tags 过滤两侧同谓词）
+  const applyFilter = (all: LessonEntry[]): LessonEntry[] => {
+    const want = filter?.tags ?? [];
+    if (want.length === 0) return all;
+    return all.filter((l) => want.every((t) => l.tags.includes(t)));
+  };
+  return viaReadMode("lesson", {
+    json: () => applyFilter(loadBoardFile(gid, dir).lessons ?? []),
+    sqlite: (port) => applyFilter(lessonsFromDb(port, gid)),
+    dirs: { orgDir: dir },
+  });
 }
 
 // ---------- 确认单（人类决策队列，持久化；不复用 waiting_request——其生命周期与回合强耦合
 // 且多处无条件清空，立项确认是分钟~小时级决策，§4 确认门槛） ----------
 
 function readConfirms(dir?: string): OrgConfirm[] {
-  try {
-    const raw = JSON.parse(readFileSync(confirmsFilePath(dir), "utf-8")) as { confirms?: OrgConfirm[] };
-    return Array.isArray(raw.confirms) ? raw.confirms : [];
-  } catch {
-    return [];
-  }
+  // M11-G1 读入口接线（三档；确认单域=七域外接线域，投影级对账 domain="confirm"）
+  return viaReadMode("confirm", {
+    json: () => {
+      try {
+        const raw = JSON.parse(readFileSync(confirmsFilePath(dir), "utf-8")) as { confirms?: OrgConfirm[] };
+        return Array.isArray(raw.confirms) ? raw.confirms : [];
+      } catch {
+        return [];
+      }
+    },
+    sqlite: (port) => orgConfirmsFromDb(port),
+    dirs: { orgDir: dir },
+  });
 }
 
 function writeConfirms(list: OrgConfirm[], dir?: string): boolean {

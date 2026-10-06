@@ -48,6 +48,7 @@
     "test:import-session-task": "tsx scripts/test-import-session-task.ts",
     "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
     "test:import-artifact": "tsx scripts/test-import-artifact.ts",
+    "test:read-mode": "tsx scripts/test-read-mode.ts",
     "test:duty-boundary": "tsx scripts/test-duty-boundary.ts"
   },
   "dependencies": {
