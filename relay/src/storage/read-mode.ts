@@ -30,7 +30,11 @@
 //     shadow-error       影子侧（读库/对比）本身异常——报告面绝不让异常冒泡进读路径
 //   降级备案（合成键/有损映射域不可直接键集对账，留 G2）：
 //     · notification：导入 id 是跨源归并合成键（E1 sha12 词根），源侧无法独立重算——首期
-//       只做数量口径（源条目数 vs 表行数）。
+//       只做数量口径。M12-8 FIX-1 修正源读法：源=data/notifications.json（{notifications:[…]}
+//       包裹形）+ data/decision-notifications.json（裸数组），json 面=两源合法条目（key/kind/
+//       created_at 三项过验）distinct key 数（对齐 import-notification 的 byKey 归并=表行数来源；
+//       同 key 跨源归并计 1）。此前误读 notifications.ndjson+decision-ledger.ndjson（文件名+
+//       格式双错位，两件不存在→json 面恒 0→有通知场景必报 count-mismatch）。
 //     · artifact：键是 (source_id, normalized_path) 复合键且归一函数未导出——首期只做
 //       数量+按 source_id 分组数量。
 //     · task：键集对账做 tasksDir 文件 stem vs 表 external_task_file_id（task_ref 复合串
@@ -434,10 +438,28 @@ export function compareDomain(domain: ShadowDomain, port: StoragePort, dirs: Rea
       return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
     }
     case "notification": {
-      // 合成键域降级：数量口径（源条目数=投影源+ledger 行数 vs 表行数；备案见头注）
-      const jCount = countNdjsonLines(join(dirs.dataDir, "notifications.ndjson")) + countNdjsonLines(join(dirs.dataDir, "decision-ledger.ndjson"));
-      const sCount = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
+      // 合成键域降级：数量口径（两 JSON 源合法条目 distinct key 数 vs 表行数；备案见头注）。
+      // 读法对齐 import-notification：proj 源取 .notifications 包裹数组、ledger 源取根数组，
+      // 条目三项过验（key 非空串/kind 串/created_at 数）才计入——坏条目与同源重复 key 导入器
+      // 不落行，distinct key 数即行数口径。源缺失/坏 JSON → 该面 0（对齐导入器 text===null 路径）。
       const now = Date.now();
+      const keys = new Set<string>();
+      const addValidKeys = (arr: unknown[]): void => {
+        for (const raw of arr) {
+          const x = raw as { key?: unknown; kind?: unknown; created_at?: unknown };
+          if (typeof x.key === "string" && x.key && typeof x.kind === "string" && typeof x.created_at === "number") keys.add(x.key);
+        }
+      };
+      try {
+        const pf = JSON.parse(readFileSync(join(dirs.dataDir, "notifications.json"), "utf-8")) as { notifications?: unknown };
+        if (Array.isArray(pf.notifications)) addValidKeys(pf.notifications);
+      } catch { /* proj 源缺失/坏 JSON → 投影面 0 */ }
+      try {
+        const lf = JSON.parse(readFileSync(join(dirs.dataDir, "decision-notifications.json"), "utf-8")) as unknown;
+        if (Array.isArray(lf)) addValidKeys(lf);
+      } catch { /* ledger 源缺失/坏 JSON → 账本面 0 */ }
+      const jCount = keys.size;
+      const sCount = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
       return jCount !== sCount
         ? [{ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount }]
         : [];

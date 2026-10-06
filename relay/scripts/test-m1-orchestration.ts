@@ -23,13 +23,10 @@
 // fixture 缝仿 test-m12-commands（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调
 // handleCommand）；CLI 段 spawnSync python3 子进程（env 显式注入，不污染父进程）。
 // **三 worker 编制形态备案**：链路三次认领派单按职能透传不同 role（surveyor/builder/
-// rework，dispatchWorker input.role 命令面原生参数）——同组三条 headcount 同 role+engine
-// 会撞 import-org UNIQUE(group_id,member_id)（identity=sha12(orgDir@role@engine) 不含
-// session 维度，同组多 worker 同 role 必炸 org 域导入整体回滚；生产同 role 多 worker 组
-// 即撞，已实证并回单报告待裁度）——本链路走合法编制形态（不同职能=不同 role）。
-// **两处钉住的既有缺陷（零源件改动，实证断言+回单备案）**：①import-org 同 (role,engine)
-// 聚合缺陷（上述）；②read-mode compareDomain notification 分支文件名错位（.ndjson vs
-// 实际存储 .json → json 面恒 0，有通知场景必报 count-mismatch，O10④ 钉住）。
+// rework，dispatchWorker input.role 命令面原生参数）。M12-8 FIX-1 已修 import-org 聚合缺陷
+// （identity=sha12(orgDir@role@engine@session) 混入 session 维度+关系落库去重）——同组多
+// worker 同 role 同引擎不再撞 UNIQUE(group_id,member_id)，O10 shadow 对账全域零容忍
+//（notification 比对口径缺陷同期已修：read-mode compareDomain 改读两 JSON 源 distinct key）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m1-orchestration.ts
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -293,15 +290,11 @@ try {
     // value-mismatch 行键落此集即合规（点路径形态宽松包含匹配；新未备案词面=红）
     const WHITELIST = ["trust_light", "parked_at", "archived_at", "target"];
     const offRows = shadowRows.filter((r) => r.category === "value-mismatch" && !WHITELIST.some((w) => r.key.includes(w)));
-    // notification 域比对口径缺陷实证（真链路暴露，钉住现状待 Leader 裁度修复单）：比对器
-    // 读 notifications.ndjson+decision-ledger.ndjson（read-mode.ts :438），实际存储是
-    // notifications.json（R1c JSON 对象，session-manager :752；导入器 import-notification
-    // 从 .json 正确导入）——文件名+格式双错位 → json 面恒 0，有通知场景必报 count-mismatch
-    //（本链路实证 3 通知 vs 0）。修复需重写该分支读取口径，超出本单靶面（M11 读侧件）。
-    const notifKnown = shadowRows.filter((r) => r.domain === "notification" && r.category === "count-mismatch");
-    const hardExceptNotif = hardRows.filter((r) => r.domain !== "notification");
-    assert(hardExceptNotif.length === 0 && offRows.length === 0 && notifKnown.length <= 1,
-      `O10④ shadow 六域对账（notification 域口径缺陷实证钉住）：缺失/数量/错误类零行+value-mismatch 全落备案集（实报 ${shadowRows.length} 行=notification count-mismatch ${notifKnown.length}+其余 ${hardExceptNotif.length + offRows.length}）`);
+    // M12-8 FIX-1 已修 notification 比对口径（read-mode compareDomain 改读两 JSON 源 distinct
+    // key 数，对齐 import-notification），全域零容忍恢复：缺失/数量/错误类任何域零行
+    // +value-mismatch 全落备案集。
+    assert(hardRows.length === 0 && offRows.length === 0,
+      `O10④ shadow 六域对账（全域零容忍，notification 口径缺陷已修）：缺失/数量/错误类零行+value-mismatch 全落备案集（实报 ${shadowRows.length} 行）`);
     const before = dispatchEntriesFromDb(port).length;
     importAllForShadow(port, dirs); // 二调：checkpoint 快进幂等（重启续跑不重灌）
     assert(dispatchEntriesFromDb(port).length === before,

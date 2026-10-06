@@ -208,10 +208,13 @@ export function importOrg(port: StoragePort, orgDir: string, opts?: { schemaVers
     projectByAnchor.set(g.anchorDir, { id: `proj-${sha12(g.anchorDir)}`, name: g.name, ts: g.createdAt });
   }
 
-  // member 归并：stable_identity=<orgDir>@<role>@<engine>；跨组历史写 archive_json（落库段）
+  // member 归并：stable_identity=<orgDir>@<role>@<engine>@<session>（M12-8 FIX-1 案 B：identity
+  // 混入 session 维度——两卡同 role 同引擎不再共 member_id，同组 UNIQUE 炸根除、每
+  // (session,role,engine) 一行保真编制；下游勘察 session.member_id 恒 NULL/成员投影走
+  // headcount_json 直还/dispatch 归因走 session.member_id，三面零联动）；跨组历史写 archive_json
   const memberByIdentity = new Map<string, MemberRow>();
   for (const h of headcountRefs) {
-    const identity = `${orgDir}@${h.role}@${h.engine}`;
+    const identity = `${orgDir}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
     const id = `mem-${sha12(identity)}`;
     const seen = memberByIdentity.get(identity);
     if (seen) {
@@ -319,16 +322,23 @@ export function importOrg(port: StoragePort, orgDir: string, opts?: { schemaVers
           validGroups.length > 1 ? JSON.stringify({ groups: validGroups }) : "{}", m.ts],
       );
     }
+    // 关系落库去重（M12-8 FIX-1）：headcount 是快照，同卡重复认领条目（同 gid+session+role+engine）
+    // 是同一认领的多次记录——group_member PK(group_id,member_id) 每 (session,role,engine) 恰一行
+    const seenRef = new Set<string>();
     for (const h of headcountRefs) {
       if (!validGroupIds.has(h.gid)) {
         // 组拒入/组缺 id→关系悬空：不造关联，落账（file:line 指向组行）
         losses.push({ source: projectsSrc, lineNo: groupLineNo.get(h.gid) ?? 0, reason: "dangling-ref", excerpt: JSON.stringify({ gid: h.gid, role: h.role, engine: h.engine }).slice(0, 200) });
         continue;
       }
-      const identity = `${orgDir}@${h.role}@${h.engine}`;
+      const identity = `${orgDir}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
+      const memId = `mem-${sha12(identity)}`;
+      const gmKey = `${h.gid}@${memId}`;
+      if (seenRef.has(gmKey)) continue;
+      seenRef.add(gmKey);
       port.exec(
         "INSERT INTO group_member (group_id, member_id, command_role, task_participation, joined_at, retired_at, archive_json) VALUES (?, ?, ?, NULL, ?, NULL, '{}')",
-        [h.gid, `mem-${sha12(identity)}`, h.role, h.groupCreatedAt],
+        [h.gid, memId, h.role, h.groupCreatedAt],
       );
     }
     for (const c of confirms) {
