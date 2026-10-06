@@ -204,6 +204,18 @@ const t2b = taskByRef(`${S1}/2`);
 assert(t2b !== undefined && t2b.status === "submitted" && t2b.title === "任务二改", "重灌采新内容（completed+验收单→submitted，title 更新）");
 assert(sess(S1)?.status === "WORKING", "task 重灌不碰 session 域（S1 保持）");
 
+// ---------- D2. accDir 失效→段 2 重放（checkpoint 分键后失效响应语义保留——M11-H1 D1 修复回归面） ----------
+console.log("accDir 失效重放:");
+const accSheet = join(acceptDir, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
+utimesSync(accSheet, new Date(statSync(accSheet).mtimeMs + 10), new Date(statSync(accSheet).mtimeMs + 10)); // APFS 同毫秒保护
+const r4b = importSessionTask(port, sources);
+assert(r4b.skipped === false && r4b.eventsProcessed === 0, "accDir 失效→段 2 触发且 events 仍零重放（分键后 events cp 独立）");
+assert(r4b.counts.task === 6, "accDir 失效→task 域重灌行数不增");
+const t3b = taskByRef(`${S1}/2`);
+assert(t3b !== undefined && t3b.review_required === 1 && t3b.status === "submitted", "accDir 失效→review_required 重推（sheet 集重读，submitted 保持）");
+const r4c = importSessionTask(port, sources);
+assert(r4c.skipped === true && r4c.rescanned.length === 0, "分键 checkpoint 命中→快进（#tasks-view 新键稳态，acceptance 域口径互踩消除）");
+
 // ---------- E. events 失效重放（追加行→从 0 重放+task 联动重灌） ----------
 console.log("events 失效重放:");
 {

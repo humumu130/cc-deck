@@ -9,6 +9,8 @@
 //   2. 三源各持 B2 checkpoint 五元组：eventsFile 行级语义（offset=前 offset 行已处理，中断续跑
 //      从 offset+1 起）；tasksDir/acceptDir 目录级语义（虚拟源：mtime=树内最大 mtime、
 //      lineCount=条目数，命中=域快进，失效=域重灌——JSON 树无逐行续跑面，同 C1 文件级）。
+//      acceptDir 的 checkpoint key 加域视图后缀分键（acceptances 目录双导入器共用、观测口径
+//      各异，path=源路径+#tasks-view；分键理由备案见 ACC_DIR_CP_SUFFIX 定义处）。
 //   3. 失效 vs 中断的区分（行级断点的核心语义，与 C1「失效即域重扫」调和）：
 //      · checkpoint 有效+offset<lineCount = 纯中断续跑——不清域，从 offset+1 增量续行（零重复，
 //        零丢失；ndjson append-only，session 域靠 upsert 幂等自愈，永不 DELETE）。
@@ -38,6 +40,21 @@ export const SESSION_TASK_IMPORT_SCHEMA_VERSION = 1;
 
 /** 默认批事务行数（批尾写 checkpoint；批间中断=已完成批已提交，续跑零重复零丢失）。 */
 export const DEFAULT_BATCH_SIZE = 500;
+
+// acceptDir 的 checkpoint 分键后缀（M11-H1 发现 D1 / Leader 裁定分键）：acceptances 目录被本件与
+// import-acceptance.ts 两导入器共用，两域观测口径不同（本件 observeAcceptanceDir 排除
+// *.results.json——review 推断只看 sheet 本体；acceptance 域含 results——四件套计数），同一
+// path 键互写五元组互使对方失效→每轮 ensureStore 两域恒重写（表数据同值无损，但 checkpoint
+// 快进对两域失效+两源 loss 账每次清重落 created_at 失真，轴④ d1Touched 实证）。分键口径：
+// **checkpoint path = 源路径 + 域视图后缀**；loss/rescanned 的 source_path 保持目录原样（账
+// 标识与返回值语义，非 checkpoint key）。不取「统一观测口径」的理由（备案）：
+//   1) 统一须取超集口径（含 results），否则 acceptance 域漏 results-only 变化=漏扫；超集又使
+//      本件在 results-only 变化时也触发段 2 重放=引入行为变化（幂等但多余）；
+//   2) 分键零语义变化——两域各保原判定语义；
+//   3) 统一须新建 per-file 异常域分段目录观测器抽象（import-util.ts 头注豁免备案正是此语义），
+//      工程量大于分键。
+// 一次性成本：分键后新键首判定=失效→段 2 重放一次（幂等 upsert/重灌，无损），之后稳定。
+export const ACC_DIR_CP_SUFFIX = "#tasks-view";
 
 /** task.status 五态词表（DDL CHECK；映射目标面）。 */
 const TASK_STATUS = new Set(["backlog", "claimed", "submitted", "ready_to_install", "done"]);
@@ -459,7 +476,9 @@ export function importSessionTask(
     ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount })
     : null;
   const cpTasks = readCheckpoint(port, sources.tasksDir, { ...current, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count });
-  const cpAccept = readCheckpoint(port, sources.acceptanceDir, { ...current, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count });
+  // accDir checkpoint 分键读（域视图 key；acceptance 域的键仍是原目录 path，两域互不干扰）
+  const accCpKey = `${sources.acceptanceDir}${ACC_DIR_CP_SUFFIX}`;
+  const cpAccept = readCheckpoint(port, accCpKey, { ...current, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count });
 
   // 快进条件：三源全命中 **且 events 已跑完**（offset=lineCount）。offset<lineCount=中断待续态
   // （tasks/accept 账已在、仅 events 段余行）——不得快进，走段 1 从 offset+1 增量续跑。
@@ -590,7 +609,7 @@ export function importSessionTask(
       }
       for (const l of losses.splice(0)) appendLossOnce(port, l);
       writeCheckpoint(port, { path: sources.tasksDir, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count, offset: obsTasks.count, schemaVersion });
-      writeCheckpoint(port, { path: sources.acceptanceDir, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count, offset: obsAccept.count, schemaVersion });
+      writeCheckpoint(port, { path: accCpKey, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count, offset: obsAccept.count, schemaVersion });
       port.commit();
     } catch (err) {
       port.rollback();

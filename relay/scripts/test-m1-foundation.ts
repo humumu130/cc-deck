@@ -357,19 +357,23 @@ try {
   assert(dataAfter === dataBefore, "重启后 15 表全行快照逐字节不变（skipped 路径零重写实证——重放同源同值数据面不变）");
   // 零重写分两层断言。单消费者六源（events/org×3/dispatch/boards/notifications×2/deliverables
   // ——checkpoint 行只归一家导入器读写）loss 含 created_at 逐字节不变=skipped 真·零重写。
-  // tasks/acceptances 双域受发现清单 D1（真缺陷，本件零触碰）：import_checkpoint 的 accDir 行被
-  // 两个导入器共用，而两家的 observeAcceptanceDir 观测口径不同——import-session-task 内部版排除
-  // *.results.json（count=3、mtime 不含 results），import-acceptance 版包含（fileCount=4、mtime
-  // 含 results）→同 path 互写五元组互使对方失效→每次 ensureStore 恒双域重写（表数据同值不变、
-  // loss created_at 被刷）。修复后 D1 断言应翻转为 0。
+  // tasks/acceptances 双域原受发现清单 D1（已修复，M11-D1FIX checkpoint 分键）：import_checkpoint
+  // 的 accDir 行曾被两个导入器共用，而两家的 observeAcceptanceDir 观测口径不同——import-session-task
+  // 内部版排除 *.results.json（count=3），import-acceptance 版包含（fileCount=4）→同 path 互写
+  // 五元组互使对方失效→每次 ensureStore 恒双域重写。分键（session-task 侧 #tasks-view 后缀）后
+  // 两域各保原判定语义、互不干扰——重启幂等对双域恢复。
   const SINGLE_CONSUMER = ["events.ndjson", "org.json", "projects.json", "confirms.json", "dispatch-log.ndjson", "boards", "notifications.json", "decision-notifications.json", "deliverables.json"];
   const inStable = (s: string): boolean => SINGLE_CONSUMER.some((f) => s.includes(`/${f}"`));
   const lossStableBefore = lossTsBefore4.filter(inStable);
   const lossStableAfter = lossWithTs(portR).filter(inStable);
-  const d1Touched = lossWithTs(portR).filter((s) => s.includes(`"${tasksDir}"`) || s.includes(`"${accDir}"`)).length;
+  // D1 位移量=重启后双域账与重启前快照的差集（串含 created_at，清重落即刷新=串变=位移；
+  // 修复前每次重启 3 条全位移，分键后零位移）——账本身持久在库，不能数存量条数
+  const inD1 = (s: string): boolean => s.includes(`"${tasksDir}"`) || s.includes(`"${accDir}"`);
+  const d1After = lossWithTs(portR).filter(inD1);
+  const d1Touched = d1After.filter((s) => !lossTsBefore4.includes(s)).length;
   assert(JSON.stringify(lossStableAfter) === JSON.stringify(lossStableBefore),
     `单消费者六源 loss 含 created_at 逐字节不变（${lossStableAfter.length} 条）——零重写最强证词（被重写即变）`);
-  assert(d1Touched === 3, `发现清单 D1 现象在位：tasks/acceptances 双域账 created_at 被重写（${d1Touched}/3 条位移——accDir checkpoint 双消费者口径互踩实证，修复后翻转为 0）`);
+  assert(d1Touched === 0 && d1After.length > 0, `发现清单 D1 重启幂等恢复：tasks/acceptances 双域账 created_at 零位移（${d1After.length} 条全等——修复前每次重启 3 条位移，checkpoint 分键后双域恒重写消除）`);
 
   // ---------- 轴⑥ loss 台账全生命周期：首跑/断点续跑/断电重试三路径不丢不重 ----------
   console.log("轴⑥ loss 全生命周期:");
