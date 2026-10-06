@@ -31,7 +31,7 @@ import { normalize } from "node:path";
 import { sha12, statThenRead } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
-import { appendLoss, listLoss } from "./loss-report.js";
+import { appendLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级 bump→全源失效强制重扫。 */
 export const ARTIFACT_IMPORT_SCHEMA_VERSION = 1;
@@ -242,7 +242,9 @@ export function importArtifacts(
     return {
       skipped: true,
       counts: { artifact: port.query<{ n: number }>("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: 0 },
-      loss: listLoss(port).filter((l) => sourceKeys.includes(l.sourcePath)).length,
+      // loss 计数走 COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）；
+      // allValid 已保证 sourceKeys 非空（上方 observed.length > 0），IN 占位动态拼安全
+      loss: port.query<{ n: number }>(`SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(", ")})`, sourceKeys)[0]?.n ?? 0,
       rescanned: [],
     };
   }

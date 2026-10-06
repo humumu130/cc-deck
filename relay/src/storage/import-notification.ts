@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { sha12, statThenRead } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
-import { appendLoss, listLoss } from "./loss-report.js";
+import { appendLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级 bump→全源失效强制重扫。 */
 export const NOTIFICATION_IMPORT_SCHEMA_VERSION = 1;
@@ -98,7 +98,8 @@ export function importNotifications(port: StoragePort, dataDir: string, opts?: {
   const current = (s: ObservedSource) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
   if (allValid) {
-    return { skipped: true, counts: countAll(port), loss: listLoss(port).filter((l) => sources.some((s) => s.file === l.sourcePath)).length, rescanned: [] };
+    // loss 计数走 COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）
+    return { skipped: true, counts: countAll(port), loss: port.query<{ n: number }>("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
   }
 
   // ---------- 解析（纯函数段）：按 key 归并两源 + loss 待落账 ----------

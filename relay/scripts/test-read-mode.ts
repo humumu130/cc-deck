@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSqlitePort } from "../src/storage/sqlite.js";
 import { resetReadModeForTest, resolveReadMode, currentReadMode, compareDomain, runShadowCompare, readShadowDiff } from "../src/storage/read-mode.js";
+import { statThenRead } from "../src/storage/import-util.js";
 import { listGroups, findGroup, isLightConfirmTrusted, listConfirms, listLessons } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 
@@ -196,6 +197,32 @@ try {
   assert(liveLessons.length === 3 && liveLessons.some((l) => l.id === "l-3"),
     "长驻二次读见新经验（boards 追加增量可见，dispatch 失效⇒lesson 联动重灌）");
   // 注：铁律 2 零写检查在此段不适用——两源 mtime/body 变化是本段模拟写者的合法写入。
+
+  // ---------- 4c. statThenRead 短路 memo：行为等价+失效对抗+计时塌缩（STAT-SHORTCUT） ----------
+  console.log("段4c stat 短路 memo:");
+  setMode("sqlite");
+  // 独立探针文件（不进导入域）直测 statThenRead memo 面：命中/失效/计时
+  const memoProbe = join(orgDir, "memo-probe.ndjson");
+  writeFileSync(memoProbe, Array.from({ length: 8000 }, (_, i) => `{"i":${i},"pad":"${"y".repeat(120)}"}`).join("\n") + "\n");
+  const m1 = statThenRead(memoProbe);
+  const m2 = statThenRead(memoProbe);
+  assert(m1.text === m2.text && m1.mtimeMs === m2.mtimeMs,
+    "memo 命中：重复 observe 返回值逐字节一致（text+mtimeMs 等价锁）");
+  const tHot = performance.now();
+  for (let i = 0; i < 50; i++) statThenRead(memoProbe);
+  const hotMs = (performance.now() - tHot) / 50;
+  assert(hotMs < 0.1,
+    `memo 命中计时塌缩 ${hotMs.toFixed(4)} ms/次（<0.1 阈值——全文读已跳过的计数锁替身：readFileSync 无 seam，1.4ms 全读 vs 0.0xms 命中有两个数量级分差）`);
+  // 对抗锁：等长覆盖写（内容变 size 相同，writeFileSync 紧跟 observe——同毫秒内写 mtimeMs 不推，
+  // 实锤 ms 粒度误命中，见 memo ns 腿头注）——ns 腿独立失效，size 相同不误短路
+  const before = readFileSync(memoProbe, "utf-8");
+  writeFileSync(memoProbe, before.replace('"i":1,', '"i":9,')); // 1→9 等长替换（值后逗号结尾才匹配，size 不变）
+  const m3 = statThenRead(memoProbe);
+  assert(m3.text !== m2.text && m3.text.includes('"i":9'),
+    "等长覆盖写（size 同 mtime 推）→memo 失效见新内容（对抗锁：size 相同不误短路，ns 腿独立工作）");
+  // memo 未毒化后续：再命中态恢复（mtime/size 稳定后重复 observe 一致）
+  const m4 = statThenRead(memoProbe);
+  assert(m4.text === m3.text, "失效重读后 memo 刷新：再次 observe 与新内容一致");
 
   // ---------- 5. 无效值 boot 抛错（读入口面） ----------
   console.log("段5 无效值读入口 fail-fast:");
