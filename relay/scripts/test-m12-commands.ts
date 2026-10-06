@@ -22,16 +22,22 @@
 //       C12 值守喂活闭环（M12-6）：回合结束喂活（在岗证据）/全 running 放行/异常类
 //          各一 feed（todo/stale_doing/failed——receipt v1 空源备案）/audit 只落
 //          duty-rounds 零 EventBus/注入失败升级通知/K=3 防轰炸/缺省关零波及。
+//       C13 验收回写与归因（M12-7）：收单全过→卡终态 done/fail 行保持/卡态不回转
+//          （D14 改判仅修 result）/NULL 归因零回写零造卡（D18）/悬空引用禁操作
+//          （unknown-target）/closure 四态白盒/receipt 候选真源（待填单进值守注入
+//          且已提交单 reviewed 跳过）/artifact unknown 禁下载/登记面不存在会话零落账。
 // fixture 缝仿 test-r1b-org（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调 handleCommand）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m12-commands.ts
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { COMMAND_TYPES as WS_TYPES } from "../src/ws-server.js";
 import { COMMAND_TYPES as CLOUD_TYPES } from "../src/cloud-client.js";
+import { acceptanceClosure } from "../src/acceptance.js";
+import { listArtifacts, serveArtifact } from "../src/artifacts.js";
 import { createGroup, listGroups, listLessons, loadBoard, removeBoardEntry, setLightConfirmTrusted, upsertBoardEntry } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -599,6 +605,131 @@ try {
       rmSync(ORG2, { recursive: true, force: true });
       rmSync(ORG3, { recursive: true, force: true });
       rmSync(anchor3, { recursive: true, force: true });
+    }
+
+    // ---------- C13 验收回写与归因（M12-7）：收单→卡终态联动/NULL 归因/悬空禁操作/
+    //          卡态不回转/receipt 候选真源/unknown 禁下载/登记面零落账 ----------
+    console.log("C13 验收回写与归因");
+    // 独立 ACC（验收单 tmp——绝不读生产/默认目录）/ART（产物目录）/ORG5+DATA3（receipt
+    // 值守 fixture 隔离）。id 用 32hex（ACCEPTANCE_ID_RE 硬门槛）；sheet/results 手写
+    // fixture（出单 CLI 在生产 ~/.cc-deck/bin，红线不碰——归因字段由测试代出单方写）。
+    const ACC = mkdtempSync(join(tmpdir(), "ccr-acc-m12-"));
+    const ART = mkdtempSync(join(tmpdir(), "ccr-art-m12-"));
+    const ORG5 = mkdtempSync(join(tmpdir(), "ccr-org5-m12-"));
+    const anchor5 = mkdtempSync(join(tmpdir(), "ccr-anchor5-m12-"));
+    const DATA3 = mkdtempSync(join(tmpdir(), "ccr-data3-m12-"));
+    const prevAcc = process.env.CCR_ACCEPTANCE_DIR;
+    const prevArt = process.env.CCR_ARTIFACTS_DIR;
+    const prevDuty13 = process.env.CCR_PM_DUTY;
+    const prevOrg13 = process.env.CCR_ORG_DIR;
+    process.env.CCR_ACCEPTANCE_DIR = ACC;
+    process.env.CCR_ARTIFACTS_DIR = ART;
+    const accId = () => randomUUID().replaceAll("-", ""); // 32 hex 命中 ACCEPTANCE_ID_RE
+    const writeSheet = (id: string, obj: Record<string, unknown>) =>
+      writeFileSync(join(ACC, `${id}.json`), JSON.stringify(obj));
+    const writeResults = (id: string, verdicts: ("pass" | "fail" | null)[]) =>
+      writeFileSync(join(ACC, `${id}.results.json`), JSON.stringify({
+        id,
+        history: [{
+          at: Date.now(), ua: "c13", counts: {
+            pass: verdicts.filter((v) => v === "pass").length,
+            fail: verdicts.filter((v) => v === "fail").length,
+            skip: verdicts.filter((v) => v === null).length,
+          },
+          rows: verdicts.map((v, i) => ({ i, verdict: v, note: "" })),
+        }],
+      }));
+    const entryCount = () => loadBoard(gid).entries.length;
+    try {
+      // 前置：两卡（归因靶）。主台账 ORG（trust_light 直通）+主 mgr 沿用
+      const ackT1 = send(mgr, "c13t1", "COMMAND_TASK_CREATE", { gid, text: "验收回写靶卡一" }, "web-1");
+      const ackT2 = send(mgr, "c13t2", "COMMAND_TASK_CREATE", { gid, text: "验收回写靶卡二" }, "web-1");
+      const entry1 = (ackT1.data as { entity_id?: string }).entity_id ?? "";
+      const entry2 = (ackT2.data as { entity_id?: string }).entity_id ?? "";
+      assert(ackT1.ok === true && entry1 !== "" && entry2 !== "", "C13⓪ 前置：两靶卡就位");
+      // C13① 收单全过→卡终态 done（归因双在场：gid+entry_id，出单方写入 relay 只读）
+      const id1 = accId();
+      writeSheet(id1, { id: id1, title: "靶卡一验收", created_at: Date.now(), gid, entry_id: entry1, rows: [{ task: "#T1①", item: "项一", criteria: "c1" }, { task: "#T1②", item: "项二", criteria: "c2" }] });
+      writeResults(id1, ["pass", "pass"]);
+      const r1 = mgr.settleAcceptanceResult(id1);
+      assert(r1.ok === true && r1.action === "done" && loadBoard(gid).entries.find((e) => e.id === entry1)?.status === "done",
+        "C13① 收单全过→卡终态 done（acceptance result 归因回写板卡，emitBoard 同通道）");
+      // C13② fail 行→卡保持（not-closed；修复卡路径属 D14 派生卡 v2 面不造）
+      const id2 = accId();
+      writeSheet(id2, { id: id2, title: "靶卡二验收", created_at: Date.now(), gid, entry_id: entry2, rows: [{ task: "#T2①", item: "项一", criteria: "c1" }, { task: "#T2②", item: "项二", criteria: "c2" }] });
+      writeResults(id2, ["pass", "fail"]);
+      const r2 = mgr.settleAcceptanceResult(id2);
+      assert(r2.ok === false && r2.reason === "not-closed" && loadBoard(gid).entries.find((e) => e.id === entry2)?.status === "todo",
+        "C13② 有 fail 行→卡保持原态（not-closed 不联动，fail 走既有修复面）");
+      // C13③ 卡态不回转（D14：closed 后改判仅修 result，done 是终态）
+      writeResults(id1, ["pass", "fail"]); // 改判 fail 重提
+      const r3 = mgr.settleAcceptanceResult(id1);
+      assert(r3.ok === true && r3.reason === "already-done" && loadBoard(gid).entries.find((e) => e.id === entry1)?.status === "done",
+        "C13③ 卡态不回转：done 后改判 fail 不回拉（幂等跳过，D14 收口裁定）");
+      // C13④ NULL 归因零回写零造卡（D18：归因缺失记 NULL 不回填不猜）
+      const id3 = accId();
+      writeSheet(id3, { id: id3, title: "旧形态单（无归因）", created_at: Date.now(), rows: [{ task: "#X", item: "项", criteria: "c" }] });
+      writeResults(id3, ["pass"]);
+      const before4 = entryCount();
+      const r4 = mgr.settleAcceptanceResult(id3);
+      assert(r4.ok === false && r4.reason === "no-attribution" && entryCount() === before4,
+        "C13④ NULL 归因：旧单无 gid/entry_id→零回写零造卡（缺归因保 NULL 不造假归因）");
+      // C13⑤ 悬空引用禁操作（unknown-target：归因指向不存在的卡→不回写不造卡）
+      const id4 = accId();
+      writeSheet(id4, { id: id4, title: "悬空归因单", created_at: Date.now(), gid, entry_id: "t-ghost-13", rows: [{ task: "#G", item: "项", criteria: "c" }] });
+      writeResults(id4, ["pass"]);
+      const before5 = entryCount();
+      const r5 = mgr.settleAcceptanceResult(id4);
+      assert(r5.ok === false && r5.reason === "unknown-target" && entryCount() === before5,
+        "C13⑤ 悬空禁操作：entry_id 指向不存在卡→unknown-target 零回写零造卡（D18 artifact unknown 禁操作同哲学）");
+      // C13⑥ closure 四态白盒（收口判定纯函数：submitted/all_pass/fail_count/total）
+      const c2 = acceptanceClosure(id2);
+      const c4 = acceptanceClosure(id4);
+      const id5 = accId();
+      writeSheet(id5, { id: id5, title: "待填单（receipt 候选）", created_at: Date.now(), rows: [{ task: "#W", item: "项", criteria: "c" }] });
+      const c5 = acceptanceClosure(id5);
+      assert(c2?.submitted === true && c2.all_pass === false && c2.fail_count === 1 && c2.total === 2
+        && c4?.all_pass === true && c5?.submitted === false,
+        "C13⑥ closure 四态：fail 单 not-all-pass/全过单 all_pass/待填单 submitted=false（#195 生命周期语义）");
+      // C13⑦ receipt 候选真源黑盒（值守注入含待填单 id；已提交单 reviewed 跳过不催）
+      process.env.CCR_PM_DUTY = "1";
+      process.env.CCR_ORG_DIR = ORG5;
+      setLightConfirmTrusted(true); // ORG5 台账补信任
+      const bus13 = new EventBus({ persistPath: join(DATA3, "events.ndjson") });
+      const mgr13 = new SessionManager(bus13, { ...cfg, dataDir: DATA3 });
+      mgr13.setAgentFactory(makeFakeFactory(created));
+      const ackL13 = mgr13.ensureLeader();
+      const leaderIdx13 = created.length - 1;
+      created[leaderIdx13]?.cb.onInit("sdk-c13-boot", "test-model");
+      const baseC13 = created.length;
+      created[leaderIdx13]?.cb.onTurnEnd(true, "boot", 1);
+      const prompt13 = String(created[baseC13]?.prompt ?? "");
+      assert(ackL13.ok === true && created.length === baseC13 + 1 && prompt13.includes("[值守喂活]") && prompt13.includes(id5.slice(0, 12)) && !prompt13.includes(id4.slice(0, 12)),
+        "C13⑦ receipt 候选真源：待填验收单→值守 receipt 类候选注入（单 id 入候选清单）；已提交单 reviewed 跳过不催（#195）");
+      created[baseC13]?.cb.onInit("sdk-c13-duty", "test-model"); // 清 init timer
+      // C13⑧ artifact unknown 禁下载（文件不在=403/404 天然禁——D18 unknown 禁下载禁预览固化）
+      const stubRes = { writeHead: () => stubRes, end: () => {} } as never;
+      assert(serveArtifact("ghost-c13.png", stubRes) === false && listArtifacts().length === 0,
+        "C13⑧ artifact unknown 禁下载：不存在文件 serve 拒（false）+空产物目录零条目");
+      // C13⑨ 登记面归因 NULL 档：不存在会话零落账（不造会话归因）
+      const r9 = mgr.registerDeliverable("ghost-sid-13", join(ART, "x.txt"));
+      const dlRaw = existsSync(join(DATA, "deliverables.json")) ? readFileSync(join(DATA, "deliverables.json"), "utf-8") : "";
+      assert(r9.ok === false && !dlRaw.includes("ghost-sid-13"),
+        "C13⑨ 登记面零落账：不存在会话→登记拒+deliverables 零造归因行（registerDeliverable 会话门槛）");
+    } finally {
+      if (prevAcc === undefined) delete process.env.CCR_ACCEPTANCE_DIR;
+      else process.env.CCR_ACCEPTANCE_DIR = prevAcc;
+      if (prevArt === undefined) delete process.env.CCR_ARTIFACTS_DIR;
+      else process.env.CCR_ARTIFACTS_DIR = prevArt;
+      if (prevDuty13 === undefined) delete process.env.CCR_PM_DUTY;
+      else process.env.CCR_PM_DUTY = prevDuty13;
+      if (prevOrg13 === undefined) delete process.env.CCR_ORG_DIR;
+      else process.env.CCR_ORG_DIR = prevOrg13;
+      rmSync(ACC, { recursive: true, force: true });
+      rmSync(ART, { recursive: true, force: true });
+      rmSync(ORG5, { recursive: true, force: true });
+      rmSync(anchor5, { recursive: true, force: true });
+      rmSync(DATA3, { recursive: true, force: true });
     }
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR;

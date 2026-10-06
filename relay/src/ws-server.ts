@@ -121,6 +121,7 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
       if (added.length > 0) {
         const acc = loadAcceptance(s.id);
         if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr);
+        mgr.settleAcceptanceResult(s.id); // M12-7 收单归因回写（幂等，与 LAN 提交同口径）
       }
     }
     try {
@@ -745,6 +746,7 @@ export function startServer(
           // #138 回填自动回流：按出单时盖进记录的 cwd 归因到会话推 system 行（详见
           // notifyAcceptanceRefill；与 #175 云回流共用同一条通知路径）
           notifyAcceptanceRefill(acc, rows, mgr);
+          mgr.settleAcceptanceResult(id); // M12-7 收单归因回写（幂等，与云回流同口径）
           // #184 状态即时广播：LAN 提交落盘即推（云回流走 poll tick 的签名对账）
           emitAcceptancesUpdated(bus);
         } catch {

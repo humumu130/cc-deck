@@ -28,6 +28,8 @@ import {
   evaluateLeaderActionableWork, transitionDutyFeedCount,
   type DutyBlockedItem, type DutyFeedCountState, type DutyQueueSnapshot,
 } from "./leader-duty.js";
+// M12-7 验收回写读面（acceptance.ts 零依赖本文件，无环）：收单判定+单读+待填汇总+目录锚
+import { acceptanceClosure, acceptanceDir, listAcceptances, loadAcceptance } from "./acceptance.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
@@ -4014,9 +4016,10 @@ export class SessionManager {
 
   // 值守快照：跨事实源派生观察（019 §1.3 不建第二事实源——全部现读既有事实源）。
   // 四类候选（DutyCandidateKind 词表=019 §2.2 行动位四类）数据源接线现状：
-  //   receipt（待验收回执）——v1 空源：验收状态机属 M12-7（acceptance 面），空数组
-  //     占位，evaluateLeaderActionableWork 对空源天然跳过；正常 done 收口卡已搬走
-  //     不误报（C12 断言）
+  //   receipt（待验收回执）——M12-7 接线：listAcceptances 待填单（submitted=false，
+  //     #195 语义=提交过即已处理不再催）→reviewed:false 候选；reviewed 单天然跳过
+  //     （receiptCandidates filter）。验收目录缺失/读炸=空档尽力而为（值守判定不因
+  //     验收面故障挂）
   //   dispatch（失败/悬挂）——dispatch-log 收敛视图 failed 实态行（hanging 时间窗
   //     判定属 #71；收敛视图=同 id 末行赢，重投已翻 done 的不误报）
   //   todo（已解锁待办）——active 组板 todo 卡 computeReadySet 就绪且无 gate（gate
@@ -4057,7 +4060,7 @@ export class SessionManager {
     }
     return {
       now,
-      pending_receipts: [], // M12-7 验收状态机落位后接线（备案：v1 空源不误报）
+      pending_receipts: this.pendingAcceptanceReceipts(),
       failed_or_hanging_dispatches: failed,
       unlocked_todos: todos,
       stale_doing: stale,
@@ -4162,6 +4165,68 @@ export class SessionManager {
         // 升级通知尽力而为：不吞 pm_unwakeable 审计行（已落），通知面炸不阻断收口
       }
     }
+  }
+
+  // ---------- M12-7 验收回写与 receipt 真源（D14/D18 收口；v1 单级归因） ----------
+  // receipt 候选源（dutySnapshot 消费）：待填验收单=submitted:false（#195 生命周期
+  // 语义——提交过即已处理不再催）。reviewed:false 进候选，receiptCandidates filter
+  // reviewed!==true 天然跳过已处理单。目录缺失/读炸=空档（值守判定不因验收面故障挂）。
+  private pendingAcceptanceReceipts(): { sid: string; receipt_path: string; mtime: number; reviewed: false }[] {
+    try {
+      const dir = acceptanceDir();
+      return listAcceptances(50)
+        .filter((s) => !s.submitted)
+        .map((s) => {
+          const p = join(dir, `${s.id}.json`);
+          let mtime = 0;
+          try { mtime = statSync(p).mtimeMs; } catch { /* 缺文件 mtime 0——age 面退化不影响候选 */ }
+          return { sid: s.id, receipt_path: p, mtime, reviewed: false as const };
+        });
+    } catch {
+      return []; // 验收目录不可读（权限/并发删）——receipt 档空，其余三类候选照算
+    }
+  }
+
+  // 收单归因回写（派单交付物 1/3/4 的 v1 落法）：验收单收口→板卡终态联动。
+  // 调用点=ws-server 两路提交收口后（LAN 直提+云回流），幂等可重入。
+  // 裁定链（回单备案）：
+  //   ①归因 NULL 档——gid/entry_id 双在场才回写（出单方写入 relay 只读不造，D18
+  //     「归因缺失记 NULL 不回填」同源）；缺任一=no-attribution 零写。
+  //   ②unknown 禁操作——归因指向已不存在的组/卡（悬空引用）→不回写不造卡
+  //    （unknown-target）；与 D18 artifact unknown 禁下载禁预览同哲学：悬空即拒。
+  //   ③全过才动——all_pass（最新提交全行 pass）唯一触发卡 done；有 fail 行=保持
+  //     （修复卡路径属 D14 派生卡 v2 面，v1 不造）；未判完/未提交=未收单不动作。
+  //   ④卡态不回转（D14「closed 后改判：卡态不回转」）——卡已 done 幂等跳过；
+  //     重提改判 fail 不把卡拉回（done 是终态，改判只修 result）。
+  //   ⑤板写经 upsertBoardEntry 单口（writableBoard 冻结挡+id 更新分支），广播走
+  //     emitBoard 与 M12-4 收口联动同通道；词表保持三态 todo/doing/done（D18 五态
+  //     一次性迁移属 M1-2 导入线，运行时词表迁移备案不落本单）。
+  settleAcceptanceResult(id: string): { ok: boolean; action?: "done"; reason?: string } {
+    let closure;
+    try {
+      closure = acceptanceClosure(id);
+    } catch {
+      return { ok: false, reason: "read-failed" };
+    }
+    if (!closure) return { ok: false, reason: "sheet-not-found" };
+    const acc = loadAcceptance(id);
+    if (!acc?.gid || !acc.entry_id) return { ok: false, reason: "no-attribution" };
+    const gid = acc.gid;
+    let entry;
+    try {
+      entry = loadBoard(gid).entries.find((e) => e.id === acc.entry_id);
+    } catch {
+      return { ok: false, reason: "unknown-target" }; // 组板不可读=悬空禁操作
+    }
+    if (!entry) return { ok: false, reason: "unknown-target" };
+    // 卡态不回转前置（D14「closed 后改判：卡态不回转」）：done 是终态——任何后续
+    // 提交（全过重复结算/改判 fail）都零动作，先于 not-closed 判定
+    if (entry.status === "done") return { ok: true, reason: "already-done" };
+    if (!closure.submitted || !closure.all_pass) return { ok: false, reason: "not-closed" };
+    const r = upsertBoardEntry(gid, { id: entry.id, text: entry.text, status: "done" });
+    if (!r.ok) return { ok: false, reason: "board-write-failed" };
+    this.emitBoard(gid);
+    return { ok: true, action: "done" };
   }
 
   // ---------- #018-R1b org 命令咽喉（用户端 org 命令统一收口） ----------

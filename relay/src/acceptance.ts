@@ -29,6 +29,14 @@ export interface Acceptance {
   // 同值）。仅随 SNAPSHOT 汇总（key 字段）下发已配对端拼云链接 #key——绝不进
   // 表单页 DATA（云页面 HTML 公开可读，内嵌 key 等于没加）
   sheet_key?: string;
+  // M12-7 卡归因（D18/freeze §4 sheet 级归因的运行时读面）：出单方（CLI/会话）
+  // 写入，relay 只读不造——缺省=NULL 档（不猜不补，同导入器「缺失写 NULL 禁造」
+  // 口径）；收单回写仅在 gid+entry_id 双在场时发生（settleAcceptanceResult）。
+  // 导入映射备案：gid→acceptance_sheet.group_id、entry_id→task_id（现导入器
+  // task_id 恒 NULL/cwd 匹配 group，字段对齐属导入批后续）；表单页 DATA 剥除
+  //（同 sheet_key 口径——云页面公开可读，归因不外泄）
+  gid?: string;
+  entry_id?: string;
 }
 export type Verdict = "pass" | "fail" | null;
 export interface ResultRow {
@@ -182,14 +190,51 @@ export function listAcceptances(limit = 20): AcceptanceSummary[] {
   return out.slice(0, limit);
 }
 
+// ---- 收单闭环判定（M12-7）----
+// 读最新一次提交算收口四态（纯读，无副作用；调用方=SessionManager.settleAcceptanceResult
+// 归因回写板卡）。口径对齐 #195 生命周期语义：
+//   submitted = 有提交（哪怕留空行）——待填消失条件，值守 receipt 候选的 reviewed 依据
+//   all_pass  = 最新提交全部行 pass（0 fail 0 未判）——唯一触发卡 done 的收口信号
+//     （D14「sheet.close 全过」的 v1 信号面：fail/未判完→卡保持+修复卡路径既有；
+//      未提交→未收单不动作）
+//   atrophied 档不设——history append-only，最新行即现值，改判自然覆盖
+export interface AcceptanceClosure {
+  submitted: boolean;
+  all_pass: boolean;
+  fail_count: number;
+  total: number;
+}
+export function acceptanceClosure(id: string): AcceptanceClosure | null {
+  const a = loadAcceptance(id);
+  if (!a) return null;
+  let submitted = false;
+  let all_pass = false;
+  let fail_count = 0;
+  try {
+    const r = JSON.parse(readFileSync(join(acceptanceDir(), `${id}.results.json`), "utf-8")) as {
+      history?: { rows?: { verdict?: string | null }[] }[];
+    };
+    const last = r.history?.[r.history.length - 1];
+    if (last?.rows && Array.isArray(last.rows)) {
+      submitted = true;
+      const pass = last.rows.filter((x) => x.verdict === "pass").length;
+      fail_count = last.rows.filter((x) => x.verdict === "fail").length;
+      // 全行 pass（行数对齐登记行=判完且全过；登记行数以 loadAcceptance 为准）
+      all_pass = pass === a.rows.length && fail_count === 0 && last.rows.length >= a.rows.length;
+    }
+  } catch {}
+  return { submitted, all_pass, fail_count, total: a.rows.length };
+}
+
 // ---- 表单页（自包含单 HTML；勾选交互按用户口径：怎么简单怎么来）----
 // apiPath：提交端点。relay 本体默认 /api/acceptance；ECS 云桥借道版传 /nacl.js
 // （云桥所在 CF tunnel ingress 按 path 白名单分流，只有 / 系白名单路径可达——
 //   POST /nacl.js 方法分支=提交端点：web-console 仅 GET 该路径，无干扰）
 export function acceptanceHtml(a: Acceptance, apiPath = "/api/acceptance"): string {
   // #28：sheet_key 绝不进页面 DATA（云页面 HTML 公开可读，内嵌 key=白加密钥）；
-  // key 只走链接 fragment（#key）由页面 JS 取 location.hash 带回
-  const { sheet_key: _sk, ...pub } = a;
+  // key 只走链接 fragment（#key）由页面 JS 取 location.hash 带回。M12-7：卡归因
+  //（gid/entry_id）同口径剥除——表单页只需要题目与行，归因不进公开页
+  const { sheet_key: _sk, gid: _g, entry_id: _e, ...pub } = a;
   const data = JSON.stringify(pub).replace(/</g, "\\u003c");
   const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
   const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
