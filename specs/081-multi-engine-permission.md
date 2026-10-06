@@ -117,6 +117,8 @@
 | 暂缓/冻结 | `plan` / `plan` | `ask` / `ask` | `plan` / `plan` | 禁止自动执行；只能读、审查和收口 |
 | 混编团队新开卡（PM/worker） | **请求默认 `bypassPermissions`** / 按所在 tier 上限 | **请求默认 `bypassPermissions`** / 按所在 tier 上限 | `plan` / `edit-auto` | **2026-10-06 用户拍板**；服务端仍做 tier、环境、capability、预算裁决，不能由默认值绕过护栏 |
 
+> **矩阵外 tier 裁定注记（2026-10-06 Leader 裁定，P81-1 验收）**：relay 一等 tier「轻立项/看门狗」不在上表——P81-1 纯核心期按 fail-closed 拒面（reason=tier_not_in_policy_matrix）。裁定：**轻立项对齐随手办行、看门狗对齐暂缓行**（轻立项=轻需求免税通道同语义；看门狗=值守自动化无人监督应最保守）。正式矩阵行增补随 P81-2 接线批落（生效时点=接线，当前零消费方拒面无实际影响）。裁定依据见 docs/reviews/2026-10-06-p811-worker-k.md。
+
 ### 5.3 默认值的精确定义
 
 1. 新卡创建时，如果组被标记为 mixed-engine，服务端将缺省 `requested_mode` 物化为 `bypassPermissions`，并写入审计；不能只依赖 web/Expo 是否勾选。
