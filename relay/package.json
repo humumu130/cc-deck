@@ -49,11 +49,14 @@
     "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
     "test:import-artifact": "tsx scripts/test-import-artifact.ts",
     "test:read-mode": "tsx scripts/test-read-mode.ts",
+    "bench:read": "tsx scripts/bench-read-mode.ts",
+    "rehearse:rollback": "tsx scripts/rehearse-cutover-rollback.ts",
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",
     "test:m1-foundation": "tsx scripts/test-m1-foundation.ts",
     "test:duty-boundary": "tsx scripts/test-duty-boundary.ts",
     "test:m12-commands": "tsx scripts/test-m12-commands.ts",
-    "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts"
+    "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts",
+    "test:m13-delta": "tsx scripts/test-delta-projection.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

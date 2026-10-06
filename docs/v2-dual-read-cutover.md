@@ -35,8 +35,8 @@
 2. **parity 全绿**：G2 六域 parity+H1 七轴在切换前 commit 上重跑全绿。
 3. **写者收口**：M12-8 真链路验收通过（task.create→dispatch→执行→回执→验收→lesson 全链 SQLite 账实相符——前半已证，`15172db`）；「旧 JSON 零新写」的完整达成=StoragePort 写切换（M1-3），翻转拍板前须补验。
 4. **冷备份就位**（§5）。
-5. **回退演练**：演练环境执行一次 §6 回退路径并记录耗时与数据零丢失证明。
-6. **性能不回退**：sqlite 档读路径在真实数据量级（当前生产 events 规模）下不慢于 json 档基线（bench 口径：四读函数×1000 次取样）。
+5. **回退演练**：演练环境执行一次 §6 回退路径并记录耗时与数据零丢失证明。✅ **CUT-1（2026-10-06，`npm run rehearse:rollback`）**：mkdtemp 全链四域零丢失断言全过（group/confirm/lesson/dispatch 键集+抽样全等，含 decided 终态面）+§6 第 4 步缺口发现能力实证（shadow-diff 抓被删 confirm 单）；复跑 3 次稳定（worker）+Leader 亲跑复现 PASS。附发现：dispatch 投影 `target`+`session_id` 恒空串（既有备案 target 外新发现有损面，记档待裁）。
+6. **性能不回退**：sqlite 档读路径在真实数据量级（当前生产 events 规模）下不慢于 json 档基线（bench 口径：四读函数×1000 次取样）。⚠️ **CUT-1 取证完成，判定 SLOW 待裁（不擅自改判据）**：m2 实况档（events 1.9 万行）四函数 16~41%（绝对 3~25μs，两域噪声 floor）；synth ×10 放大档 43~103%（绝对 0.03~0.8ms，行级编解码 vs 单次 parse 结构性差不封顶）；翻转一次性 ensureStore 442/771ms。瓶颈定位与三选项（收口/改判据口径/立项优化）见 CUT-1 归档，呈用户拍板。
 
 ## 5. 冷备份口径
 
