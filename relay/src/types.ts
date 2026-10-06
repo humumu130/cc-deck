@@ -646,6 +646,9 @@ export interface ProjectsUpdatedPayload {
   entity_refs?: string[]; // v2：本次变更组 id（端上局部刷新定位；与 delta 同进出）
   delta?: EntityDelta<ProjectGroup>; // v2：增量差分；缺席=首发/mgr 重启后首帧（端上覆盖式兜底）
 }
+// 帧双载（board 全量正文+delta 增量并存）=广播架构定案（M13-REV P3-6）：emitTransient
+// 广播不区分端能力，旧端依赖旧字段（board 覆盖式）新端消费 delta；正文裁剪需 per-conn
+// 能力分流——已裁不做（成本高收益低；WAN 极简集本不带板）。
 export interface BoardUpdatedPayload {
   gid: string;
   board: ProjectBoard; // 旧字段保留：该组全量板（旧端覆盖式零变化）

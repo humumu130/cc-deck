@@ -16,7 +16,7 @@
 //      此处 wire 复证事件帧通道同构。
 // 隔离：mgr 级段直连 EventBus 捕获；wire 段真桥（cloud-bridge 本地件）端口 8792/8793，
 // 临时 dataDir，不触生产 8787、不触 ~/.cc-deck 组织数据。
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -195,6 +195,38 @@ try {
   const bfPark = lastBoardFrame();
   assert(bfPark.delta!.meta.frozen === true && bfPark.board.frozen === true, "冻结翻转经 delta.meta.frozen=true 下发（meta 承载非条目变更）");
   assert(bfPark.delta!.meta.updated_at === bfPark.board.updated_at, "meta.updated_at 与 board.updated_at 同源同值");
+
+  // ---------- 段 2.5：M13-REV P3-2 读失败跳帧（坏板文件→零帧→恢复→下帧照常差分） ----------
+  // 语义：读失败≠空板——外部改板半态/磁盘抖动不得差分出「整板 removes」清板广播
+  //（UI 闪断+半态扩散）；前值缓存不动，文件恢复后下帧照常差分。
+  console.log("S2.5 P3-2 读失败跳帧");
+  {
+    const boardPath = join(root, "org", "boards", `${gid}.json`);
+    const before = boardFrames().length;
+    const goodSnapshot = readFileSync(boardPath, "utf-8"); // 现值快照（恢复用）
+    writeFileSync(boardPath, "{ bad-half-state"); // 外部改板半态（坏 JSON）
+    mgr.emitBoard(gid);
+    assert(boardFrames().length === before, "P3-2 坏板文件：emitBoard 零帧发射（跳帧，不出整板 removes 清板帧）");
+    writeFileSync(boardPath, goodSnapshot); // 文件恢复（外部修好，同值）
+    mgr.emitBoard(gid);
+    assert(boardFrames().length === before + 1, "P3-2 文件恢复后下帧恢复发射");
+    const rec = lastBoardFrame();
+    assert(
+      rec.delta!.entries.upserts.length === 0 && rec.delta!.entries.removes.length === 0 && rec.delta!.lessons.upserts.length === 0 && rec.delta!.lessons.removes.length === 0,
+      "P3-2 前值缓存未被坏读污染：恢复帧 diff 基线=跳帧前成功板（同值空差分，无幽灵 removes/upserts）",
+    );
+    // 反证：恢复文件带真新条目 → 下帧正确差分出该条（跳帧语义不吞真变更）
+    const revived = JSON.parse(goodSnapshot) as ProjectBoard;
+    revived.entries = [...revived.entries, { id: "p32-new", text: "P3-2 恢复后新条目", status: "todo", ts: Date.now(), updated_at: Date.now() } as BoardEntry];
+    revived.updated_at = Date.now();
+    writeFileSync(boardPath, JSON.stringify(revived, null, 2) + "\n");
+    mgr.emitBoard(gid);
+    const rec2 = lastBoardFrame();
+    assert(rec2.delta!.entries.upserts.length === 1 && rec2.delta!.entries.upserts[0]!.id === "p32-new", "P3-2 文件恢复+真变更：下帧正确差分出新增条目（跳帧不吞真变更）");
+    // 恢复文件写回现值（不污染后续段）
+    writeFileSync(boardPath, goodSnapshot);
+    mgr.emitBoard(gid);
+  }
 
   // ---------- 段 3：幂等锁（同帧深等 + merge 二次应用零变化 + merge 链 == 覆盖链） ----------
   console.log("S3 幂等与一致性");

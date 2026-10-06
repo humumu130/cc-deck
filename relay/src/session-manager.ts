@@ -14,7 +14,7 @@ import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import {
   adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
-  listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
+  listPendingConfirms, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
@@ -5058,7 +5058,8 @@ export class SessionManager {
   // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
   // 发帧）；board 旧字段保留全量（不带板正文的只是 delta——M13-1 实体引用裁定沿承）
   emitBoard(gid: string): void {
-    const board = loadBoard(gid);
+    const board = loadBoardFile(gid);
+    if (!board) return; // P3-2 跳帧：读失败≠空板（外部改板半态/磁盘抖动不得差分出「整板 removes」清板广播——UI 闪断+半态扩散）；前值缓存不动，文件恢复后下帧照常差分
     const prev = this.lastBoardBroadcast.get(gid) ?? null;
     this.lastBoardBroadcast.set(gid, board);
     if (!prev) {
@@ -5073,6 +5074,8 @@ export class SessionManager {
     this.bus.emitTransient("BOARD_UPDATED", {
       gid,
       board,
+      // P3-4：refs=提示性定位索引，端上以 delta 本体为准；当前不含 lessons.removes
+      //（lessons append-only 恒空），未来若引入删边须并入 refs。
       entity_refs: [
         ...new Set([...entries.upserts.map((e) => e.id), ...entries.removes, ...lessons.upserts.map((l) => l.id)]),
       ],

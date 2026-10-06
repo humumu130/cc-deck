@@ -397,7 +397,12 @@ export function removeMember(gid: string, sessionId: string, dir?: string): Tran
 
 // ---------- 任务板（跨会话项目组级，M2 待建件） ----------
 
-function loadBoardFile(gid: string, dir?: string): ProjectBoard {
+/** 板文件读取三态：成功=解析归一后的板；ENOENT=空板（板懒创建常态，未写过≠读失败）；
+ * 其余失败（坏 JSON 半态/EACCES/磁盘抖动）=null——读失败≠空板（M13-REV P3-2 定案：catch
+ * 兜底空板会让广播差分出「整板 removes」清板帧，UI 闪断+半态扩散）。消费面分两路：广播链
+ * （session-manager emitBoard）判 null 跳帧，文件恢复后下帧照常差分；读/写消费点（本文件内）
+ * 走 loadBoardOrEmpty 保持「当空板」既有语义（含 ENOENT）。 */
+export function loadBoardFile(gid: string, dir?: string): ProjectBoard | null {
   try {
     const raw = JSON.parse(readFileSync(boardFilePath(gid, dir), "utf-8")) as Partial<ProjectBoard>;
     return {
@@ -407,9 +412,17 @@ function loadBoardFile(gid: string, dir?: string): ProjectBoard {
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0,
     };
-  } catch {
-    return { gid, entries: [], frozen: false, updated_at: 0 };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      return { gid, entries: [], frozen: false, updated_at: 0 }; // 板懒创建常态：未写过=空板（非读失败，emitBoard 照常发空板帧）
+    }
+    return null; // 文件在但读失败（坏 JSON 半态/EACCES/磁盘抖动）→ 广播链跳帧（P3-2）
   }
+}
+
+/** 读失败当空板——既有读/写消费点语义（P3-2 收口前 catch 兜底行为的搬家，行为零变）。 */
+function loadBoardOrEmpty(gid: string, dir?: string): ProjectBoard {
+  return loadBoardFile(gid, dir) ?? { gid, entries: [], frozen: false, updated_at: 0 };
 }
 
 function saveBoardFile(b: ProjectBoard, dir?: string): boolean {
@@ -425,7 +438,7 @@ function saveBoardFile(b: ProjectBoard, dir?: string): boolean {
 }
 
 export function loadBoard(gid: string, dir?: string): ProjectBoard {
-  return loadBoardFile(gid, dir);
+  return loadBoardOrEmpty(gid, dir);
 }
 
 /** 板写入前置校验：组须存在且 active（挂起=冻结保留、结项=归档只读，§2.2） */
@@ -433,13 +446,13 @@ function writableBoard(gid: string, dir?: string): { ok: true; board: ProjectBoa
   const g = listGroups(dir).find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   if (g.status !== "active") return { ok: false, error: `任务板已冻结（项目组 ${g.status}），恢复在办后可写` };
-  const b = loadBoardFile(gid, dir);
+  const b = loadBoardOrEmpty(gid, dir);
   if (b.frozen) return { ok: false, error: "任务板已冻结（frozen 标记）" };
   return { ok: true, board: b };
 }
 
 function freezeBoard(gid: string, frozen: boolean, dir?: string): void {
-  const b = loadBoardFile(gid, dir);
+  const b = loadBoardOrEmpty(gid, dir);
   if (b.frozen === frozen) return;
   b.frozen = frozen;
   b.updated_at = Date.now();
@@ -613,7 +626,7 @@ export function listLessons(gid: string, filter?: { tags?: string[] }, dir?: str
     return all.filter((l) => want.every((t) => l.tags.includes(t)));
   };
   return viaReadMode("lesson", {
-    json: () => applyFilter(loadBoardFile(gid, dir).lessons ?? []),
+    json: () => applyFilter(loadBoardOrEmpty(gid, dir).lessons ?? []),
     sqlite: (port) => applyFilter(lessonsFromDb(port, gid)),
     dirs: { orgDir: dir },
   });
@@ -769,7 +782,7 @@ export function buildArchiveChecklist(gid: string, dir?: string): ArchiveCheckli
       return anchor && anchor.replace(/\/+$/, "") === g.anchor_dir.replace(/\/+$/, "") && (e.status === "running" || e.status === "dispatched");
     })
     .map((e) => ({ id: e.id, tier: e.tier, status: e.status, target: e.target, ts: e.ts }));
-  const b = loadBoardFile(gid, dir);
+  const b = loadBoardOrEmpty(gid, dir);
   const openBoardEntries = b.entries.filter((x) => x.status !== "done").length;
   return { gid: g.id, name: g.name, openDispatches, headcount: g.headcount, openBoardEntries, anchor_dir: g.anchor_dir };
 }
