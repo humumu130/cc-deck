@@ -42,8 +42,12 @@
     "test:storage-schema": "tsx scripts/test-storage-schema.ts",
     "test:storage-checkpoint": "tsx scripts/test-storage-checkpoint.ts",
     "test:import-org": "tsx scripts/test-import-org.ts",
+    "test:import-org-parity": "tsx scripts/test-import-org-parity.ts",
     "test:import-notification": "tsx scripts/test-import-notification.ts",
-    "test:import-session-task": "tsx scripts/test-import-session-task.ts"
+    "test:import-session-task": "tsx scripts/test-import-session-task.ts",
+    "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
+    "test:import-artifact": "tsx scripts/test-import-artifact.ts",
+    "test:duty-boundary": "tsx scripts/test-duty-boundary.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
