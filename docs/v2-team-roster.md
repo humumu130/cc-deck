@@ -1,7 +1,7 @@
 # v2 开发团队编制表（#92，2026-10-06 用户放行开工）
 
 > 依据：`docs/v2-dev-plan.md` 定稿 41 单。工作树=~/dev/cc-deck-m1（feat/matrix-team-m2）。
-> 现编制 4+1（2026-10-06 核验订正：以会话号为准，双代号钉死对应）：
+> 现编制 5+1（2026-10-06 核验订正+L 扩编：以会话号为准，双代号钉死对应）：
 
 | 角色 | 会话号 | 开卡代号 | Leader 惯用代号 | 引擎/模型 |
 |---|---|---|---|---|
@@ -10,12 +10,13 @@
 | relay worker | 5b47be31 | worker E | G | Claude Code CLI / GLM（sonnet 档别名） |
 | 测试/审查 worker | 7b5ffab6 | worker I | J | Claude Code CLI / GLM |
 | 导入线 worker | 3191106b | worker K | K | Claude Code CLI / GLM（2026-10-06 用户拍板扩编） |
+| 前端呈现 worker | a2d9486f | worker L | L | Claude Code CLI / GLM（2026-10-06 用户拍板扩编；Expo/Tauri 域，web-console 仍 H 独占） |
 | Leader | ext-7f5c3601 | — | — | Claude Agent SDK / glm-5.3（核验/代提交/锚单，不下场写 worker 代码） |
 
 > **模型口径订正（2026-10-06 用户澄清）**：全机 Claude Code 未配 Anthropic 自家模型，`ANTHROPIC_BASE_URL` 指向 GLM 兼容端点（bigmodel）；「claude-sonnet-5」等只是 `ANTHROPIC_DEFAULT_*_MODEL` 档位别名，实际后端均为 GLM。所有 Claude Code 卡同引擎同后端——卡间能力差异来自上下文与分工史（如 H 交付 005 主体单的设计语言积累），不来自模型档位。前端还原度实证同理修正：005 主体由 GLM 后端的卡交付且逐单过关，GLM 有「完全还原」级实证。
 
 > 纪律：PM 不下场写 worker 代码（018 §5.7）；worker 不 commit；同靶子锁显式串行；Leader 只做核验/代提交与明确承担的锚单。**开卡权限默认=bypassPermissions**（用户拍板 2026-10-06：新开卡直接跳过模式，防权限确认卡死无人值守流水线；worker 卡的风险面由生产隔离纪律+任务书边界+Leader 核验代提交兜底；J 存量卡已于同日 COMMAND_PERM 切换）。
-> 扩编点：**K 已开卡（2026-10-06，3191106b，用户拍板「扩编」）**＝M11 导入线 D1→E1→F1→F2；L（Expo/Tauri 前端，同 GLM 后端）＝M1-3 呈现线，M1-2 期间开卡。开卡时引导词代号顺延（下一字母），并在本表登记会话号。
+> 扩编点：**K 已开卡（2026-10-06，3191106b）**＝M11 导入线 D1→E1→F1→F2；**L 已开卡（2026-10-06，a2d9486f，用户拍板「M1-3 前扩编」）**＝M13-4/5+P72 Expo 侧（M12-8 收口后 M1-3 开闸派单）。
 
 ## 前端军规（用户拍板 2026-10-06，所有前端单任务书固定段）
 
@@ -42,7 +43,7 @@ G 全串 M12-1→8（session-manager 单写者锁天然串行）；Leader 核验
 |---|---|---|
 | G | M13-1→M13-2、M13-7 | 协议 parity+bundle 构建 |
 | H | M13-3（Web 投影）→M13-6 | 前端军规适用；Web 单文件锁 |
-| L（待开卡，Expo 前端） | M13-4（Expo 投影）、M13-5（Tauri 壳） | **前端军规适用；M1-2 期间开卡即可** |
+| L（已开卡 a2d9486f，Expo 前端） | M13-4（Expo 投影）、M13-5（Tauri 壳） | **前端军规适用** |
 | Leader | M13-8 | 发布闸门矩阵（T3+V1 移交承接） |
 
 ### 并行线（9 单）
@@ -58,7 +59,7 @@ G 全串 M12-1→8（session-manager 单写者锁天然串行）；Leader 核验
 ## 扩编点（两个，均不阻塞启动）
 
 - **K（存储/导入熟手）**：已开卡（3191106b，bypassPermissions 同 G 档）。接 D1/E1/F1/F2 导入线；D1 依赖 M11-C1（importer 范式，G 在途），C1 交付后开工。
-- **L（Expo/Tauri 前端）**：M1-2 期间开卡，接 M13-4/5+P72 Expo 侧。前端军规约束。同 GLM 后端。
+- **L（Expo/Tauri 前端）**：已开卡（a2d9486f，bypassPermissions 同 G/K 档，2026-10-06 用户拍板「M1-3 前扩编」）。接 M13-4/5+P72 Expo 侧。前端军规约束。同 GLM 后端。等派单中（M12-8 收口后 M1-3 开闸）。
 
 ## 在途与衔接
 
