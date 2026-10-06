@@ -36,7 +36,12 @@
     "test:snapshot-parity": "tsx scripts/test-snapshot-parity.ts",
     "test:r1a-activity": "tsx scripts/test-r1a-activity.ts",
     "test:r1b-org": "tsx scripts/test-r1b-org.ts",
-    "test:r1c-notify": "tsx scripts/test-r1c-notify.ts"
+    "test:r1c-notify": "tsx scripts/test-r1c-notify.ts",
+    "test:storage-driver": "tsx scripts/test-storage-driver.ts",
+    "test:storage-migrator": "tsx scripts/test-storage.ts",
+    "test:storage-schema": "tsx scripts/test-storage-schema.ts",
+    "test:storage-checkpoint": "tsx scripts/test-storage-checkpoint.ts",
+    "test:import-org": "tsx scripts/test-import-org.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

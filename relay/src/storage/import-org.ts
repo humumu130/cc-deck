@@ -58,10 +58,14 @@ interface ObservedSource {
 
 function observe(file: string, name: string): ObservedSource {
   if (!existsSync(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
+  // stat 先于 read（M11-REVIEW P2-1）：stat 后 read 前文件被改 → 观测旧 mtime+新内容 →
+  // checkpoint 记旧 mtime，下次五元组失效重扫（多扫一次，安全侧）。反序（read→stat）竞态
+  // 会记「新 mtime+旧内容」，若后续修改不换行数则漏更新。后续导入器照抄此序。
+  const mtimeMs = Math.round(statSync(file).mtimeMs);
   const text = readFileSync(file, "utf8");
   const lines = text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { name, file, mtimeMs: Math.round(statSync(file).mtimeMs), lineCount: lines.length, text };
+  return { name, file, mtimeMs, lineCount: lines.length, text };
 }
 
 // ---------- 中间行模型（解析产物，事务内落库） ----------
