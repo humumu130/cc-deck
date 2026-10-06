@@ -138,10 +138,19 @@ try {
     assert(u2.effective_mode === "forbidden" && u2.reason === "unknown_engine", "未知引擎→forbidden");
     const u3 = evaluatePermission({ ...BASE, role: "intern" as string, requested_mode: "ask" });
     assert(u3.effective_mode === "forbidden" && u3.reason === "unknown_role", "未知角色→forbidden");
-    const u4 = evaluatePermission({ ...BASE, tier: "轻立项" as string, requested_mode: "full-auto" });
-    assert(u4.effective_mode === "forbidden" && u4.reason === "tier_not_in_policy_matrix", "矩阵外 tier（轻立项）→forbidden（081 §5.2 四行外 fail-closed，矩阵行待后续批备案）");
-    const u5 = evaluatePermission({ ...BASE, tier: "看门狗" as string, requested_mode: "ask" });
-    assert(u5.effective_mode === "forbidden" && u5.reason === "tier_not_in_policy_matrix", "矩阵外 tier（看门狗）→forbidden 同款");
+    const u4 = evaluatePermission({ ...BASE, tier: "未知tier" as string, requested_mode: "full-auto" });
+    assert(u4.effective_mode === "forbidden" && u4.reason === "tier_not_in_policy_matrix", "真矩阵外 tier（未知值）→forbidden（fail-closed 覆盖保持——P81-2 矩阵增补后轻立项/看门狗已有行，拒面改用词表外值锁）");
+    const u5 = evaluatePermission({ ...BASE, tier: "" as string, requested_mode: "ask" });
+    assert(u5.effective_mode === "forbidden" && u5.reason === "tier_not_in_policy_matrix", "空串 tier→forbidden 同款（矩阵查表 miss 统一拒）");
+    // P81-2 矩阵增补行（轻立项=随手办值/看门狗=暂缓值，Leader 裁定落地）
+    const n1 = evaluatePermission({ ...BASE, tier: "轻立项", requested_mode: "full-auto" });
+    assert(n1.effective_mode === "full-auto" && n1.reason === "ok", "轻立项×worker×full-auto：上限对齐随手办（full-auto）恒过——矩阵增补行生效");
+    const n2 = evaluatePermission({ engine: "claude", role: "team_pm", tier: "轻立项", requested_mode: null, capability_state: "confirmed", policy_source: "tier_default" });
+    assert(n2.requested_mode === "edit-auto" && n2.effective_mode === "edit-auto", "轻立项×PM tier_default→默认 edit-auto（=随手办行）");
+    const n3 = evaluatePermission({ engine: "claude", role: "worker", tier: "看门狗", requested_mode: null, capability_state: "confirmed", policy_source: "tier_default" });
+    assert(n3.requested_mode === "ask" && n3.effective_mode === "ask", "看门狗×worker tier_default→默认 ask（=暂缓行）");
+    const n4 = evaluatePermission({ engine: "claude", role: "worker", tier: "看门狗", requested_mode: "edit-auto", capability_state: "confirmed", policy_source: "explicit" });
+    assert(n4.effective_mode === "forbidden" && n4.reason === "above_role_tier_ceiling", "看门狗×worker×edit-auto 显式越上限（ceiling=ask）→forbidden——看门狗最保守面");
     const u6 = evaluatePermission({ ...BASE, requested_mode: "ask", capability_state: null });
     assert(u6.effective_mode === "ask" && u6.capability_state === null && u6.reason === "capability_state_missing" && u6.native_mode === null, "capability 缺失→ask 保守+native 恒 null（不猜）");
     const u7 = evaluatePermission({ ...BASE, requested_mode: "ask", capability_state: "half-confirmed" as string });

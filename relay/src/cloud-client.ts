@@ -10,6 +10,7 @@ import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
 import { listGroups, listPendingConfirms } from "./projects.js";
 import { listModels } from "./models.js";
+import { permissionCapabilitiesSummary } from "./permission-policy.js";
 import { SNAPSHOT_SCHEMA_VERSION, type Command, type CommandAckPayload, type Envelope, type PeerMeta } from "./types.js";
 
 interface PhoneState {
@@ -437,7 +438,7 @@ export class CloudClient {
         settings: this.mgr.employeeHomeState(),
         // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
         // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
-        source_capabilities: { projection_v2: true },
+        source_capabilities: { projection_v2: true, permission: permissionCapabilitiesSummary() },
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),

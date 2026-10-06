@@ -45,6 +45,8 @@ export type EffectiveMode = NormalizedMode | "forbidden";
 export type CapabilityState = "confirmed" | "unverified" | "unsupported";
 export type PolicyRole = "team_pm" | "worker" | "review_pm";
 
+import type { PermissionCapabilitySummary } from "./types.js";
+
 /** wire 兼容请求值→归一档（归一四档直过+Claude native 三兼容值——§5.3.1 物化形
  * bypassPermissions 即走此表归一 full-auto）。表外值=未知档位。 */
 const WIRE_TO_NORMALIZED: Record<string, NormalizedMode> = {
@@ -70,18 +72,21 @@ const ROLES: readonly PolicyRole[] = ["team_pm", "worker", "review_pm"];
 const CAPS: readonly CapabilityState[] = ["confirmed", "unverified", "unsupported"];
 const CONSERV: Record<NormalizedMode, number> = { ask: 0, plan: 1, "edit-auto": 2, "full-auto": 3 };
 
-/** §5.2 tier×角色「可用上限」矩阵（081 表四行原样；轻立项/看门狗不在矩阵→fail-closed）。 */
+/** §5.2 tier×角色「可用上限」矩阵（081 表四行原样；轻立项/看门狗两行=P81-2 接线批按
+ * P81-1 验收 Leader 裁定增补——轻立项对齐随手办、看门狗对齐暂缓，裁定溯源
+ * docs/reviews/2026-10-06-p811-worker-k.md「裁定」节，081 §5.2 已同步正式增补）。 */
 const CEILING: Record<PolicyRole, Record<string, NormalizedMode>> = {
-  team_pm: { 咨询: "edit-auto", 随手办: "full-auto", 正经立项: "full-auto", 暂缓: "plan" },
-  worker: { 咨询: "edit-auto", 随手办: "full-auto", 正经立项: "full-auto", 暂缓: "ask" },
-  review_pm: { 咨询: "plan", 随手办: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan" },
+  team_pm: { 咨询: "edit-auto", 随手办: "full-auto", 轻立项: "full-auto", 正经立项: "full-auto", 暂缓: "plan", 看门狗: "plan" },
+  worker: { 咨询: "edit-auto", 随手办: "full-auto", 轻立项: "full-auto", 正经立项: "full-auto", 暂缓: "ask", 看门狗: "ask" },
+  review_pm: { 咨询: "plan", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan", 看门狗: "plan" },
 };
 
-/** §5.2 tier×角色「默认」列（policy_source=tier_default 时物化 requested）。 */
+/** §5.2 tier×角色「默认」列（policy_source=tier_default 时物化 requested；轻立项/看门狗
+ * 两行同 P81-2 裁定增补——轻立项=随手办值、看门狗=暂缓值）。 */
 const TIER_DEFAULT: Record<PolicyRole, Record<string, NormalizedMode>> = {
-  team_pm: { 咨询: "plan", 随手办: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan" },
-  worker: { 咨询: "ask", 随手办: "edit-auto", 正经立项: "edit-auto", 暂缓: "ask" },
-  review_pm: { 咨询: "plan", 随手办: "plan", 正经立项: "plan", 暂缓: "plan" },
+  team_pm: { 咨询: "plan", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan", 看门狗: "plan" },
+  worker: { 咨询: "ask", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "ask", 看门狗: "ask" },
+  review_pm: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" },
 };
 
 export interface PolicyInput {
@@ -220,4 +225,34 @@ export function evaluatePermission(input: PolicyInput): PolicyResult {
     reason,
     policy_source: source,
   };
+}
+
+// ---------- P81-2 只读摘要面（SNAPSHOT source_capabilities.permission 数据源） ----------
+
+/** 引擎→capability_state 静态事实映射（081 §3.1 表+§7.1「必须真实反映当前代码」）：
+ * claude=SDK 内嵌恒 confirmed；JSONL 四引擎 approval=false/native 未确认=unverified；
+ * zcode=未进 Registry 恒 unsupported。纯静态不跑 preflight 动态探测（「从既有面读出，
+ * 不新算」——M12-5 preflight 是 spawn 前检查非 profile 源）。词表外引擎=unsupported 保守。 */
+export function engineCapabilityState(engine: string): CapabilityState {
+  if (engine === "claude") return "confirmed";
+  if (engine === "codex" || engine === "trae" || engine === "qwen-code" || engine === "codebuddy") return "unverified";
+  return "unsupported"; // zcode 及未知引擎（fail-closed 保守标注）
+}
+
+/** 该 capability_state 下保证按请求档生效的归一档集（P75 引擎选择器「上限」读数）：
+ * confirmed=四档全；unverified=auto 档会降级（full-auto→edit-auto、edit-auto→ask）只剩
+ * ask/plan 恒真；unsupported（注册表内仅 zcode，evaluatePermission 恒 forbidden）=空集。 */
+function guaranteedModes(cap: CapabilityState): NormalizedMode[] {
+  if (cap === "confirmed") return ["ask", "plan", "edit-auto", "full-auto"];
+  if (cap === "unverified") return ["ask", "plan"];
+  return []; // unsupported=zcode fail-closed，全拒无可用档
+}
+
+/** 六注册引擎权限能力只读摘要（SNAPSHOT 组装数据源，ws-server :950/cloud-client :440
+ * 两出口同发——#117 双发教训）。零 IO 零动态探测，纯静态表投影。 */
+export function permissionCapabilitiesSummary(): PermissionCapabilitySummary[] {
+  return (ENGINES as readonly string[]).map((engine) => {
+    const cap = engineCapabilityState(engine);
+    return { engine: engine as PermissionCapabilitySummary["engine"], capability_state: cap, modes: guaranteedModes(cap) };
+  });
 }

@@ -82,11 +82,23 @@ export interface StatusDockState {
   updated_at: number;
 }
 
+/** P81-2：每引擎权限能力只读摘要（SNAPSHOT source_capabilities.permission 载荷——
+ * P75 引擎选择器数据源）。modes=该 capability_state 下保证按请求档生效的归一档集
+ *（evaluatePermission 不会降级的档）；纯静态投影（081 §7.1「真实反映当前代码」）。 */
+export interface PermissionCapabilitySummary {
+  engine: SessionEngine;
+  capability_state: "confirmed" | "unverified" | "unsupported";
+  modes: string[];
+}
+
 export interface SourceCapabilities {
   models?: boolean;
   activity?: boolean;
   notifications?: boolean;
   commands?: string[];
+  /** P81-2 权限能力摘要：六注册引擎逐个只读投影（ws-server/cloud-client 两出口同发，
+   * #117 教训）；端上以字段存在性判断能力（旧 relay 不发=选择器降级隐藏摘要）。 */
+  permission?: PermissionCapabilitySummary[];
   /**
    * M13-2 v2 投影协议能力位（v2 投影信号字段，三端消费定案）：true = 本 relay 的
    * PROJECTS_UPDATED/BOARD_UPDATED 携带 entity_refs+delta 增量形状（D18②），端上
@@ -98,7 +110,8 @@ export interface SourceCapabilities {
    * 随 SNAPSHOT 下发：LAN/phone 两出口同发（#117），WAN 手表极简集不带（M13-1 闸）。
    */
   projection_v2?: boolean;
-  [key: string]: boolean | string[] | undefined;
+  // P81-2：值域收容 permission 摘要（未知键宽容索引保留——旧客户端忽略未知键语义不变）
+  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | undefined;
 }
 
 export interface NotificationSourceContext {
@@ -1165,6 +1178,9 @@ export interface CommandAckPayload {
   ok: boolean;
   session_id?: string;   // COMMAND_CREATE 成功时返回
   error?: string;
+  /** P81-2 开卡权限求值回执（COMMAND_CREATE/组织派单成功时携带）：effective≠normalized
+   * 即发生降级（端上可显示 effective badge）；forbidden 拒绝面走 ok:false+error 不带本字段。 */
+  permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
   pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
   peers?: PairedDeviceInfo[]; // 仅 COMMAND_PEERS 成功时携带（议题①）

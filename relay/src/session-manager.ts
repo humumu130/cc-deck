@@ -18,6 +18,9 @@ import {
   moveBoardEntry, moveEntryByDispatch,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
+} from "./projects.js";
+import { engineCapabilityState, evaluatePermission } from "./permission-policy.js";
+import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
   type ProjectGroup, type ProjectBoard,
 } from "./projects.js";
@@ -1985,12 +1988,33 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine as SessionEngine | undefined;
+          // P81-2 开卡求值闸（§6.1 统一拒绝面）：用户自建卡映射 team_pm×随手办（§5.2
+          // 上限 full-auto——bypass 勾选现状恒过=行为零变）；forbidden→ok:false+reason。
+          // 降级回执恒带（effective≠normalized 即降级，端上可显示 badge）。spawn 传值
+          // 维持现状（pm 原样），native_mode 落 spawn=P81-5 收口（偏差备案）。
+          const engineForPolicy = engine ?? "claude";
+          const perm = evaluatePermission({
+            requested_mode: pm ?? null,
+            engine: engineForPolicy,
+            role: "team_pm",
+            tier: "随手办",
+            capability_state: engineCapabilityState(engineForPolicy),
+            policy_source: "explicit",
+          });
+          if (perm.effective_mode === "forbidden") {
+            return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
+          }
           const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, {
             ...(engine ? { engine } : {}),
             ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
             ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
           });
-          return { command_id: cmd.command_id, ok: true, session_id };
+          return {
+            command_id: cmd.command_id,
+            ok: true,
+            session_id,
+            permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason },
+          };
         }
         case "COMMAND_MESSAGE": {
           const s = this.require(cmd.payload.session_id);
@@ -5116,7 +5140,7 @@ export class SessionManager {
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string }):
-    { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
+    { ok: true; dispatch_id: string; session_id: string; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
     // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
@@ -5212,6 +5236,24 @@ export class SessionManager {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
       if (!pf.ok) return { ok: false, error: pf.error };
     }
+    // P81-2 派单求值闸（§6.1 统一拒绝面，落账前拒=零台账污染与 preflight 同位）：
+    // requested=现状 bypassPermissions 硬编码事实（spawn 传值 P81-5 收口前维持）；
+    // policy_source=tier_default（081 §5.3 组织派单路径）；岗位名→business role 最小
+    // 映射（词表外落 worker 默认——组岗位名≠权限主体）。forbidden（如 review_pm 派单
+    // 显式 bypass 越上限）→统一拒绝 ok:false。
+    const engineForPolicy = planned.engine ?? "claude";
+    const bizRole = role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : "worker";
+    const perm = evaluatePermission({
+      requested_mode: "bypassPermissions",
+      engine: engineForPolicy,
+      role: bizRole,
+      tier,
+      capability_state: engineCapabilityState(engineForPolicy),
+      policy_source: "tier_default",
+    });
+    if (perm.effective_mode === "forbidden") {
+      return { ok: false, error: `forbidden: ${perm.reason}` };
+    }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -5293,7 +5335,7 @@ export class SessionManager {
       });
     }
     this.emitOrgState();
-    return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId, permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } };
   }
 
   // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个
