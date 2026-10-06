@@ -48,6 +48,10 @@ export interface SourceCapabilities {
   models?: boolean;
   activity?: boolean;
   notifications?: boolean;
+  // M13-2：relay 支持 v2 delta 投影协议（LAN/phone 双出口同发，WAN 极简集不带）。
+  // 缺席/undefined = 旧 relay，UPDATED 帧按覆盖式消费（不认 delta）。注意语义边界：
+  // 「支持 v2 协议」≠「值域已迁五态」——消费侧按值分组，值域迁移前后都不出假泳道
+  projection_v2?: boolean;
   commands?: string[];
   [key: string]: boolean | string[] | undefined;
 }
@@ -243,10 +247,48 @@ export interface BoardEntry {
   updated_at: number;
 }
 
+// #087 经验回流（009 §4 M2）：board lessons 分区（relay projects.ts 镜像）——收口
+// 回执写入，端上暂无 UI 消费（M13-4 起随 BOARD_UPDATED delta 维护缓存，注入接线后续单）
+export interface LessonEntry {
+  id: string;
+  text: string;
+  /** 项目/角色/引擎 tag（筛选键，AND 语义） */
+  tags: string[];
+  ts: number;
+  /** 来源派单台账 id（可回溯到收口回执） */
+  source_dispatch_id?: string;
+}
+
 export interface ProjectBoard {
   gid: string;
   frozen: boolean;
   entries: BoardEntry[];
+  /** lessons 分区（relay 侧 optional：板升级前旧文件缺省）；append-only，量大了再议归档 */
+  lessons?: LessonEntry[];
+  /** 板级时间戳（relay 必有；expo 缺省容忍——旧形状覆盖式帧原样透传） */
+  updated_at?: number;
+}
+
+// ---------- M13-2 delta 投影形状（relay/src/types.ts 镜像，三端同构） ----------
+// 设计铁律：差分用「带稳定 id 的完整条目」表达增改，端上按 id upsert（整条替换，
+// 不做字段级合并）、removes 忽略未知 id——重复投递二次应用零变化（幂等）。
+// 帧级判定：`payload.delta !== undefined` → 增量 merge；缺席 → 覆盖式消费旧字段
+// （旧 relay / mgr 重启后首帧，零行为变化）。expo 消费门另叠能力信号
+// source_capabilities.projection_v2（见 org-delta.ts）。
+export interface EntityDelta<T extends { id: string }> {
+  /** 变更实体完整条目（整条替换，含未变字段） */
+  upserts: T[];
+  /** 移除实体 id（忽略未知 id=幂等；组域 v1 无删边恒空，编码留位） */
+  removes: string[];
+}
+
+// 板 delta：条目级差分（不带板全量正文）；lessons 按 id upsert（append-only 语义由
+// 端上 ts 排序承载）；meta 承载板级元数据（frozen 翻转/时间戳推进——挂起/结项/复活
+// 边无条目变化也发帧）
+export interface BoardDelta {
+  entries: EntityDelta<BoardEntry>;
+  lessons: EntityDelta<LessonEntry>;
+  meta: { frozen: boolean; updated_at: number };
 }
 
 // 派单台账行（COMMAND_PROJECT_DETAIL.receipts 携带，最近 30 条按 anchor 过滤新在前）

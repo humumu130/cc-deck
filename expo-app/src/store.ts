@@ -7,6 +7,7 @@ import { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifica
 import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, LogEntry, NotificationItem, NotificationsUpdatedPayload, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
 export { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
 import { uuid } from "./fmt";
+import { applyBoardFrame, applyProjectsFrame } from "./org-delta";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 import { fgSupported, notifyAlert, startForegroundService, stopForegroundService } from "./notify";
@@ -103,6 +104,11 @@ export interface SourceConn {
   projects: ProjectGroup[] | null;
   orgConfirms: OrgConfirm[];
   boards: Map<string, ProjectBoard>;
+  // M13-4ADD 板 delta 锚定集：gid 消费过覆盖式全量帧（含重拉 ack）才允许后继 delta
+  // merge；未锚定 delta 一律丢弃+重拉（瞬态帧无缺口检测，差分应用在错误基线=静默错乱）
+  anchoredBoards: Set<string>;
+  // M13-4ADD 重拉防抖：in-flight gid（orgDetail ack 回调必达，Set 必清理）
+  boardResync: Set<string>;
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -898,6 +904,8 @@ class RelayStore {
         projects: null, // #26 M2 SNAPSHOT 覆盖式更新（null = 旧 relay 无团队字段）
         orgConfirms: [],
         boards: new Map(),
+        anchoredBoards: new Set(), // M13-4ADD 板 delta 锚定集（覆盖式帧/重拉 ack 确立）
+        boardResync: new Set(), // M13-4ADD 重拉 in-flight 防抖
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -2215,6 +2223,10 @@ class RelayStore {
         conn.projects = Array.isArray(projs)
           ? projs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name)
           : null;
+        // M13-4ADD：快照不带板——断连期间板 delta 可能丢帧，板基线与 relay 脱节。
+        // 清板锚定：后继首帧 delta → drop+重拉重锚定（基线自愈）；projects 由本段
+        // 覆盖式重置天然重锚，无需处理
+        conn.anchoredBoards.clear();
         const cfs = (msg.payload as { org_confirms?: unknown }).org_confirms;
         conn.orgConfirms = Array.isArray(cfs)
           ? cfs.filter((c): c is OrgConfirm => !!c && typeof (c as OrgConfirm).id === "string" && !!(c as OrgConfirm).kind)
@@ -2497,12 +2509,13 @@ class RelayStore {
         break;
       }
       // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡覆盖式更新（同 SNAPSHOT 口径，
-      // 旧 relay 无事件 = 收不到帧，重连快照兜底）；任务板增量进 boards 缓存
+      // 旧 relay 无事件 = 收到帧，重连快照兜底）；任务板增量进 boards 缓存。
+      // M13-4 delta 投影消费：v2 relay（projection_v2）且帧带 delta → 增量 merge；
+      // M13-4ADD 锚定纪律：projects 锚定=快照/覆盖式消费过（prev 非 null），未锚定
+      // delta 丢弃（SNAPSHOT.projects 天然锚定兜底，无重拉面）；缺席/旧 relay → 覆盖式
       case "PROJECTS_UPDATED": {
-        const gs = (msg.payload as { groups?: unknown }).groups;
-        if (Array.isArray(gs)) {
-          conn.projects = gs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name);
-        }
+        const eff = applyProjectsFrame(conn.projects, msg.payload, conn.sourceCapabilities?.projection_v2 === true);
+        if (eff.projects) conn.projects = eff.projects;
         break;
       }
       case "ORG_CONFIRM_UPDATED": {
@@ -2520,10 +2533,24 @@ class RelayStore {
         if (eh) conn.empHome = eh;
         break;
       }
+      // BOARD_UPDATED：M13-4 delta 投影消费 + M13-4ADD 锚定纪律——delta 仅在锚定后
+      // merge（该 gid 消费过覆盖式全量帧）；未锚定 delta 丢弃+重拉（resyncBoard ack
+      // 回全量重锚定）；覆盖式帧消费成功即锚定。断连重连后 SNAPSHOT 清锚（见 SNAPSHOT
+      // 段）——首帧 delta 触发重拉，基线自愈
       case "BOARD_UPDATED": {
-        const gid = (msg.payload as { gid?: unknown }).gid;
-        const b = (msg.payload as { board?: unknown }).board as ProjectBoard | undefined;
-        if (typeof gid === "string" && b && Array.isArray(b.entries)) conn.boards.set(gid, b);
+        const p = msg.payload as { gid?: unknown };
+        const gid = typeof p.gid === "string" ? p.gid : null;
+        const eff = applyBoardFrame(
+          gid !== null ? conn.boards.get(gid) : undefined,
+          gid !== null && conn.anchoredBoards.has(gid),
+          msg.payload,
+          conn.sourceCapabilities?.projection_v2 === true,
+        );
+        if (eff.board) {
+          conn.boards.set(eff.board.gid, eff.board);
+          if (eff.anchor) conn.anchoredBoards.add(eff.board.gid);
+        }
+        if (eff.resyncGid) this.resyncBoard(conn, eff.resyncGid);
         break;
       }
       // #212 记住规则变更推送（瞬态 seq:0）：删规则后 relay 全量重发——覆盖式更新，
@@ -2808,6 +2835,27 @@ class RelayStore {
       if (!r.ok) { onDone(null); return; }
       onDone((r.data as { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | undefined) ?? null);
     });
+  }
+
+  // M13-4ADD 未锚定板 delta 的重拉重锚定：COMMAND_PROJECT_DETAIL ack 回 board 全量
+  // → 覆盖式消费+锚定（基线确立后继 delta 才可 merge）。in-flight 防抖：同 gid 重拉
+  // 未回期间再收 drop 帧不重复发（send 的 ACK 机制保证回调恒达——成功/失败/超时收摊，
+  // Set 必清理；send 立即失败（未连/排队满）时同步放行防抖位）。失败不锚定——后继
+  // delta 继续丢弃+重拉，防抖挡频率，不自旋
+  private resyncBoard(conn: SourceConn, gid: string) {
+    if (conn.boardResync.has(gid)) return;
+    conn.boardResync.add(gid);
+    const release = () => { conn.boardResync.delete(gid); };
+    const sent = this.orgDetail(conn.id, gid, (r) => {
+      release();
+      const b = r?.board;
+      if (b && Array.isArray(b.entries)) {
+        conn.boards.set(gid, b); // ack 全量 = 覆盖式消费（现状口径原样）
+        conn.anchoredBoards.add(gid); // 基线确立
+      }
+      // 失败/无板：不锚定——后继 delta 帧继续 drop+重拉（防抖挡频率）
+    });
+    if (!sent) release();
   }
 
   // ---------- E3b 通知消费（R1c 面端侧接线） ----------
