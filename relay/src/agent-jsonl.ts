@@ -40,6 +40,15 @@ export interface EngineSpawnOptions {
   env?: NodeJS.ProcessEnv;
   providerProfile?: ProviderProfile;
   label: string;
+  /**
+   * 引擎 JSONL 形态档位（ENGINE_JSONL_PROFILES 键）。#42 收口：流式会话面
+   * （JsonProcessAgentSession）与批量解析面（mapJsonlStream）共用同一档位判定
+   * （profileStructured）——structured=false 引擎（trae）的 stdout 纯文本行一律
+   * 按正文落地，即使以 { 开头也不进 JSON 候选（006 :294「stdout 无结构化事件时
+   * 按纯文本能力位落地，不因通用 parser 存在而虚构 JSONL 事件」）。缺省=保守
+   * JSONL 档（解析失败行进候选/计畸形）。
+   */
+  profileId?: string;
 }
 
 export interface EngineConfig {
@@ -103,6 +112,15 @@ export const ENGINE_JSONL_PROFILES: Record<string, EngineJsonlProfile> = {
     note: "006 §3.3 help 核实 stream-json 实存（Claude 协议同构族）；事件字段真回合冒烟欠账（§3.4），宽容解析",
   },
 };
+
+/**
+ * #42 收口：档位判定唯一入口。未注册/缺省按 JSONL 保守档（structured=true）。
+ * 流式面（JsonProcessAgentSession.handleLine）与批量面（mapJsonlStream）共用，
+ * 保证「纯文本引擎的 stdout 行=合法正文」两条路径口径一致。
+ */
+export function profileStructured(profileId?: string): boolean {
+  return profileId ? ENGINE_JSONL_PROFILES[profileId]?.structured !== false : true;
+}
 
 function numericField(event: Record<string, unknown>, ...keys: string[]): number | undefined {
   for (const key of keys) {
@@ -244,9 +262,7 @@ export interface JsonlStreamOutcome {
 //（trae）纯文本行是合法正文——走 mapJsonlActivity string 分支不计数为畸形。
 // 空行不计（分帧噪声，非事件）。
 export function mapJsonlStream(lines: string[], options: JsonlActivityOptions): JsonlStreamOutcome {
-  const structured = options.profileId
-    ? ENGINE_JSONL_PROFILES[options.profileId]?.structured !== false
-    : true;
+  const structured = profileStructured(options.profileId);
   const docks: MappedStatusDock[] = [];
   let parsed = 0;
   let malformed = 0;
@@ -481,6 +497,9 @@ export abstract class JsonProcessAgentSession implements AgentLike {
   private stderrTail = "";
   private mapper = new GenericJsonEventMapper();
   private jsonCandidateLines: string[] = [];
+  // #42 收口：档位判定与 mapJsonlStream 同源（profileStructured）；structured=false
+  // 引擎（trae）的 stdout 纯文本行一律正文，不进 JSON 候选
+  private readonly structuredProfile: boolean;
   // B1a 畸形行计数：JSONL 档单行解析失败跳过并计数（不中断流）。批量纯函数面
   // mapJsonlStream 同口径供 fixture 直跑断言；此处是流式会话侧的落地
   private malformedLines = 0;
@@ -495,6 +514,7 @@ export abstract class JsonProcessAgentSession implements AgentLike {
 
   constructor(opts: EngineSpawnOptions) {
     this.opts = opts;
+    this.structuredProfile = profileStructured(opts.profileId);
     this.contextPacket = opts.contextPacket ?? `CC Deck context packet\nengine=${opts.label}\ncwd=${opts.cwd}`;
     if (opts.initialPrompt !== undefined) this.execTurn(opts.initialPrompt);
   }
@@ -628,6 +648,13 @@ export abstract class JsonProcessAgentSession implements AgentLike {
     try {
       parsed = JSON.parse(line);
     } catch {
+      // #42 收口：structured=false 档（trae）纯文本行一律正文——即使以 { 开头也
+      // 不进 JSON 候选（此前会被误吞、close 时计畸形丢弃正文；006 :294）
+      if (!this.structuredProfile) {
+        this.opts.cb.onLog("assistant_text", line.slice(0, 400), { full: line });
+        this.opts.cb.onStatusChange("WORKING", "引擎输出中");
+        return;
+      }
       if (this.jsonCandidateLines.length > 0 || line.startsWith("{") || line.startsWith("[")) {
         this.jsonCandidateLines.push(line);
         return;

@@ -25,8 +25,9 @@ export const TRAE_PENDING_SMOKE = [
   "原生 session/resume 能力（第一期固定不启用）",
 ] as const;
 
-export function mapTraeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities"> = {}): MappedStatusDock {
-  return mapJsonlActivity(raw, { ...options, capabilities: TRAE_ACTIVITY_CAPABILITIES });
+export function mapTraeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities" | "profileId"> = {}): MappedStatusDock {
+  // #42 收口：档位钉死 trae（structured=false），批量/流式两面同源，调用方不可覆盖
+  return mapJsonlActivity(raw, { ...options, capabilities: TRAE_ACTIVITY_CAPABILITIES, profileId: "trae" });
 }
 
 export interface TraeSessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
@@ -35,7 +36,8 @@ export interface TraeSessionOptions extends Omit<EngineSpawnOptions, "label" | "
 
 export class TraeAgentSession extends JsonProcessAgentSession {
   constructor(opts: TraeSessionOptions) {
-    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli" });
+    // profileId 钉死 trae 档（structured=false）：纯文本 stdout 行一律正文（#42）
+    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
   }
 
   protected buildArgs(prompt: string): string[] {

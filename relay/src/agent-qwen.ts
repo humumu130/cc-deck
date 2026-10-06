@@ -25,8 +25,9 @@ export const QWEN_PENDING_SMOKE = [
   "provider/base URL/model 参数与鉴权变量名",
 ] as const;
 
-export function mapQwenCodeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities"> = {}): MappedStatusDock {
-  return mapJsonlActivity(raw, { ...options, capabilities: QWEN_ACTIVITY_CAPABILITIES });
+export function mapQwenCodeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities" | "profileId"> = {}): MappedStatusDock {
+  // #42 收口：档位钉死 qwen-code（JSON 单对象基线，JSONL/stream 宽容两吃）
+  return mapJsonlActivity(raw, { ...options, capabilities: QWEN_ACTIVITY_CAPABILITIES, profileId: "qwen-code" });
 }
 
 export interface QwenCodeSessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
@@ -35,7 +36,8 @@ export interface QwenCodeSessionOptions extends Omit<EngineSpawnOptions, "label"
 
 export class QwenCodeAgentSession extends JsonProcessAgentSession {
   constructor(opts: QwenCodeSessionOptions) {
-    super({ ...opts, label: "qwen-code", command: opts.command ?? process.env.CCR_QWEN_PATH ?? "qwen" });
+    // profileId 钉死 qwen-code 档（#42）
+    super({ ...opts, label: "qwen-code", command: opts.command ?? process.env.CCR_QWEN_PATH ?? "qwen", profileId: "qwen-code" });
   }
 
   protected buildArgs(prompt: string): string[] {

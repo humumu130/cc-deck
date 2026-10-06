@@ -25,8 +25,9 @@ export const CODEBUDDY_PENDING_SMOKE = [
   "CI 权限失败退出码与是否存在 decision channel",
 ] as const;
 
-export function mapCodeBuddyActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities"> = {}): MappedStatusDock {
-  return mapJsonlActivity(raw, { ...options, capabilities: CODEBUDDY_ACTIVITY_CAPABILITIES });
+export function mapCodeBuddyActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities" | "profileId"> = {}): MappedStatusDock {
+  // #42 收口：档位钉死 codebuddy（stream-json 同构族宽容解析）
+  return mapJsonlActivity(raw, { ...options, capabilities: CODEBUDDY_ACTIVITY_CAPABILITIES, profileId: "codebuddy" });
 }
 
 export interface CodeBuddySessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
@@ -35,7 +36,8 @@ export interface CodeBuddySessionOptions extends Omit<EngineSpawnOptions, "label
 
 export class CodeBuddyAgentSession extends JsonProcessAgentSession {
   constructor(opts: CodeBuddySessionOptions) {
-    super({ ...opts, label: "codebuddy", command: opts.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code" });
+    // profileId 钉死 codebuddy 档（#42）
+    super({ ...opts, label: "codebuddy", command: opts.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", profileId: "codebuddy" });
   }
 
   protected buildArgs(prompt: string): string[] {
