@@ -34,6 +34,7 @@ import {
 } from "./leader-duty.js";
 // M12-7 验收回写读面（acceptance.ts 零依赖本文件，无环）：收单判定+单读+待填汇总+目录锚
 import { acceptanceClosure, acceptanceDir, listAcceptances, loadAcceptance } from "./acceptance.js";
+import { readPluginConfig } from "./plugin-config.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
@@ -540,11 +541,13 @@ function watchdogDisabled(): boolean {
 }
 
 // ===== M12-6 值守喂活参数（019 §6.1 环境门；env 逐次求值同 watchdogDisabled 范式） =====
-// 有效式接线半边只认环境门两级：CCR_NO_LEADER（测试/沙盒铁律总闸）+ CCR_PM_DUTY
-// （值守显式开）。缺省关=零注入零审计零开销（既有测试/生产行为零波及）；全局总闸
-// plugin_config.duty 与组级 duty_policy.enabled 属 #71 产品面（019 §6.5），本单不接。
-// 备案差异：019 §6.1「关闭时也记录 disabled」落 #71 coordinator 面——环境门关=值守
-// 组件不存在，每回合写 disabled 行是垃圾账，接线半边直接短路零写入。
+// 有效式（019 §6.1 四级）本件落全：环境门 CCR_NO_LEADER（测试/沙盒铁律总闸）+
+// CCR_PM_DUTY（值守显式开）在此判定；全局总闸 plugin_config.duty 与组级
+// duty_policy.enabled 属 #71 产品面（P71 落地）——总闸在 feedPM 产品门（关=disabled
+// 审计不注入），组级在 dutySnapshot（关组不进候选快照）。两级同开才生效（§6.5 拍板）。
+// 环境门缺省关=零注入零审计零开销（既有测试/生产行为零波及）；备案差异维持：环境门
+// 关=值守组件不存在，不写 disabled 行（垃圾账）；产品门关才写 disabled（§6.1「值守
+// 审计仍记录 disabled」）。
 function dutyEnabled(): boolean {
   return process.env.CCR_NO_LEADER !== "1" && process.env.CCR_PM_DUTY === "1";
 }
@@ -3123,9 +3126,16 @@ export class SessionManager {
           this.syncWaitingNotification(managed);
           // M12-6 值守：Leader 回合终态=统一值守检查点（019 §3.2 回合结束拦截——
           // 完成收口/更新终态/发帧后异步位接线，回合正常结束=在岗证据重算行动位）。
-          // worker 回合终态不触发（备案：增量判定需前后快照 diff 属 #71 产品面；failed
-          // 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，双挂会重复轰炸）
-          if (dutyEnabled() && this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+          // P71 扩 worker done 边（019 §3.1 首行「worker SESSION_DONE→新 receipt 可
+          // 验收或依赖变 ready 时喂活」）：worker 交付收口→回单入候选/相邻依赖卡解锁，
+          // 立即喂活值守——不留「worker 干完、Leader 休眠、回单无人验收」的空转窗
+          // （杜绝有活全员闲主链；依赖解锁由收口搬卡后同一次重算覆盖）。failed 边不喂
+          // （备案维持：failed 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，
+          // 双挂会重复轰炸）；WORKING Leader 由 feedPM 内合并门兜住（不追加回合）。
+          if (dutyEnabled()) {
+            if (this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+            else if (ok) this.feedPM("worker_done");
+          }
         },
         onSessionEnd: (reason) => {
           if (!mine()) return;
@@ -4009,7 +4019,7 @@ export class SessionManager {
   // 直接写 notification ledger」），非 EventBus。
   private appendDutyRound(r: {
     feed_id: string; feed_generation: string; trigger: string[];
-    result: "continue" | "sleep" | "pm_unwakeable" | "failed";
+    result: "continue" | "sleep" | "disabled" | "pm_unwakeable" | "failed";
     reason?: string;
     observed?: { actionable_count: number; top_items: { kind: string; id: string; age_ms?: number }[] };
     blocked?: DutyBlockedItem[];
@@ -4065,6 +4075,10 @@ export class SessionManager {
     const openIds = new Set<string>();
     for (const q of this.openDispatches.values()) for (const x of q) openIds.add(x.id);
     for (const g of listGroupsByStatus().active) {
+      // P71 组级开关（019 §6.1 层级语义）：duty_policy.enabled=false=该组不进值守
+      // 快照（todo/stale/blocked 全不产生候选），普通 worker/事实源继续运行不受扰；
+      // 缺省（键缺席）=开——「已有显式 false 的组不被迁移覆盖」（§6.3）
+      if (g.duty_policy?.enabled === false) continue;
       const board = loadBoard(g.id);
       const ready = new Map(computeReadySet(board).map((x) => [x.id, x.check.ready] as const));
       for (const e of board.entries) {
@@ -4101,6 +4115,21 @@ export class SessionManager {
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
   private feedPM(trigger: string, opts?: { continuation?: boolean }): void {
     if (!dutyEnabled() || !this.leaderId) return;
+    // P71 产品门两级之全局总闸（019 §6.1/§6.2）：plugin_config.duty=false=全组停止
+    // 值守 feed——不注入但写 disabled 审计行（§6.1「值守审计仍记录 disabled」；环境门
+    // 关仍走上方短路零写入，备案差异维持——环境门关=值守组件不存在无审计面）
+    if (readPluginConfig().duty === false) {
+      this.appendDutyRound({
+        feed_id: randomUUID(), feed_generation: randomUUID(), trigger: [trigger],
+        result: "disabled", reason: "global_switch", from: Date.now(),
+      });
+      return;
+    }
+    // PM WORKING 合并语义（019 §3.3「PM WORKING 时合并 feed 上下文而不追加回合」
+    // 最小落地）：Leader 在岗干活中不追加值守回合（resumeAgent 会换流打断在途回合）
+    // ——不丢事件：Leader 回合终态必触发 turn_end 重算，届时候选照收。
+    const leader = this.sessions.get(this.leaderId);
+    if (leader?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID();
     const generation = randomUUID();

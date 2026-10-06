@@ -54,6 +54,7 @@
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",
     "test:m1-foundation": "tsx scripts/test-m1-foundation.ts",
     "test:duty-boundary": "tsx scripts/test-duty-boundary.ts",
+    "test:pm-duty-product": "tsx scripts/test-pm-duty-product.ts",
     "test:m12-commands": "tsx scripts/test-m12-commands.ts",
     "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts",
     "test:m13-delta": "tsx scripts/test-delta-projection.ts"

@@ -17,6 +17,7 @@ import { orgDir, readDispatchLog } from "./org.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
 import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb, lessonsFromDb } from "./storage/read-mode.js";
+import type { DutyPolicy } from "./leader-duty.js";
 import type { SessionEngine } from "./types.js";
 
 // ---------- 类型 ----------
@@ -59,6 +60,13 @@ export interface ProjectGroup {
   /** #26 M3 挂起自动化：上次出建议暂缓单的时刻（手动/触发器同戳）——否决冷却
    * 起算点，触发器在窗口期内不重复叨扰 */
   hold_suggested_at?: number;
+  /** P71 组级值守策略（019 §6.3/§6.5 拍板）：enabled=false=该组不进值守 feed
+   * （§6.1 层级语义「当前组不进入值守 feed，但普通 worker/事实源继续运行」）；
+   * 缺省（键缺席/undefined）=开——与 evaluateDutyPolicy 的 enabled===false 才拦
+   * 同语义，「已有显式 false 的组不被迁移覆盖」。其余字段（allowed_playbooks/
+   * 预算/unknown_risk/auto_dispatch_enabled）存储先落，消费面属 D2 自动派活续批。
+   * 全局总闸 plugin_config.duty（plugin-config.ts）关=压倒组级开（两级同开才生效）。 */
+  duty_policy?: DutyPolicy;
 }
 
 // 板状态只定义收口语义：待办 / 进行（派单承接）/ 完成（收口）。v3.1 §6.1 只要求
@@ -390,6 +398,20 @@ export function removeMember(gid: string, sessionId: string, dir?: string): Tran
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   g.headcount = g.headcount.filter((h) => h.session_id !== sessionId);
+  g.updated_at = Date.now();
+  if (!saveGroup(g, dir)) return { ok: false, error: "索引写入失败" };
+  return { ok: true, group: g };
+}
+
+/** P71 组级值守策略写面（019 §6.3 duty_policy）：policy=undefined 清除策略（回缺省开）。
+ * 命令面/设置 UI 接线属后续批；本批消费面=dutySnapshot 组级过滤（session-manager）+
+ * 存储字段落 groups.json（schema owner 串行扩展惯例，与 depends_on/member_archive 同源）。 */
+export function setGroupDutyPolicy(gid: string, policy: DutyPolicy | undefined, dir?: string): TransitionResult {
+  const f = readProjectsFile(dir);
+  const g = f.groups.find((x) => x.id === gid);
+  if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+  if (policy === undefined) delete g.duty_policy;
+  else g.duty_policy = policy;
   g.updated_at = Date.now();
   if (!saveGroup(g, dir)) return { ok: false, error: "索引写入失败" };
   return { ok: true, group: g };

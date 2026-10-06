@@ -514,7 +514,9 @@ try {
       assert(created.length === baseC2 && round2.result === "sleep" && round2.reason === "all_running",
         "C12② 全 running 放行：worker 健康在跑→sleep 零注入（值守防的是有活全员闲，干活中不催——019 §2.2 全 running 反例）");
       // C12③ stale doing 类：worker1 交付收口（running→done 零 failed）+造悬挂 doing 卡
-      //（dispatch 已收口不在 open FIFO+超窗零阈值——019 §5.1 stale 判定确定性数据源）
+      //（dispatch 已收口不在 open FIFO+超窗零阈值——019 §5.1 stale 判定确定性数据源）。
+      // P71：worker done 边即刻触发一次 worker_done 检查（此时无候选→sleep empty 放行；
+      // 断言在 C12④a 行数 5——交付唤醒面的正向用例在 test-pm-duty-product.ts）
       created[baseW1]?.cb.onTurnEnd(true, "干完了", 50);
       upsertBoardEntry(gidD, { text: "悬挂 doing 卡（dispatch 已收口不在途）", status: "doing", dispatch_id: "d-already-closed" });
       const baseC3 = created.length;
@@ -541,10 +543,12 @@ try {
       created[baseC3b]?.cb.onInit("sdk-duty-3", "test-model");
       leaderCb = created[baseC3b]?.cb;
       // C12④ audit 三零：每检查一行审计只落 duty-rounds；events/通知账零值守词
-      //（receipt 类备案：v1 空源不误报——正常 done 收口零注入即证，验收状态机 M12-7 落）
+      //（receipt 类备案：v1 空源不误报——正常 done 收口零注入即证，验收状态机 M12-7 落）。
+      // P71：C12③ worker1 done 边新增一行 worker_done 检查（候选空→sleep——回单面在
+      // C12 时 ACC 未设/台账干净/无卡，empty 放行；触发面见 session-manager onTurnEnd）
       const rounds4 = dutyRounds();
-      assert(rounds4.length === 4 && rounds4.every((r) => r.kind === "PM_DUTY_ROUND"),
-        "C12④a 四类检查四行审计（kind 全一致——一回合至多一检查，feedPM 同步单飞）");
+      assert(rounds4.length === 5 && rounds4.every((r) => r.kind === "PM_DUTY_ROUND"),
+        "C12④a 五次检查五行审计（kind 全一致——一回合至多一检查，feedPM 同步单飞；含 P71 worker_done 边一行）");
       const eventsText = existsSync(join(DATA, "events.ndjson")) ? readFileSync(join(DATA, "events.ndjson"), "utf-8") : "";
       assert(eventsText.length > 0 && !eventsText.includes("PM_DUTY"),
         "C12④b 零 EventBus：events.ndjson 有会话帧但零 PM_DUTY 词（D18 三零边界——值守是内部治理非用户可见事件）");
