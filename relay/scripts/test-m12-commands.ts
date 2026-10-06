@@ -18,7 +18,10 @@
 //          lesson（结构化模板非内容性经验，actor=system 审计）/failed 零 lesson；
 //       C11 引擎编排（M12-5）：选择链三态（显式/角色配置/缺省 Claude）/preflight
 //          失败 error 拒派零 spawn 零台账/zcode unsupported fail-closed/台账行
-//          engine/provider/model 落账（收敛末行不丢）。
+//          engine/provider/model 落账（收敛末行不丢）；
+//       C12 值守喂活闭环（M12-6）：回合结束喂活（在岗证据）/全 running 放行/异常类
+//          各一 feed（todo/stale_doing/failed——receipt v1 空源备案）/audit 只落
+//          duty-rounds 零 EventBus/注入失败升级通知/K=3 防轰炸/缺省关零波及。
 // fixture 缝仿 test-r1b-org（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调 handleCommand）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m12-commands.ts
 import { randomUUID } from "node:crypto";
@@ -448,6 +451,155 @@ try {
     assert(ackDflt.ok === true && created[baseC11e]?.engine === undefined,
       "C11⑦ 缺省 Claude：无显式无角色配置 → engine 键缺省不写（台账旧行兼容，选择链三态之三）");
     created[baseC11e]?.cb.onTurnEnd(true, "收口", 50);
+
+    // ---------- C12 值守喂活闭环（M12-6）：回合结束喂活/全 running 放行/异常类各一
+    //          feed/audit 落 duty-rounds 不进 events/失败升级通知/K=3 防轰炸 ----------
+    console.log("C12 值守喂活闭环");
+    // 值守开+测试缝（stale 零阈值/退避 30ms）。C12 用独立 ORG2（干净台账/板——
+    // C1-C11 段的 failed 行 append-only 不可清，会污染 all_running 场景的候选判定）；
+    // DATA 共用（duty-rounds/events/notifications 断言集中一处，mgr3 复用 DATA2 隔离）。
+    // Leader 值守回合 fixture 链：ensureLeader spawn→onInit 灌 sdkId→onTurnEnd 触发
+    // 值守检查→若注入则新流再 onInit（清 45s init timer，防测试进程悬挂）。
+    const DATA2 = mkdtempSync(join(tmpdir(), "ccr-data2-m12-"));
+    const ORG2 = mkdtempSync(join(tmpdir(), "ccr-org2-m12-"));
+    const ORG3 = mkdtempSync(join(tmpdir(), "ccr-org3-m12-"));
+    const anchor3 = mkdtempSync(join(tmpdir(), "ccr-anchor3-m12-"));
+    const prevDuty = process.env.CCR_PM_DUTY;
+    const prevStale = process.env.CCR_PM_DUTY_STALE_MS;
+    const prevCont = process.env.CCR_PM_DUTY_CONTINUATION_MS;
+    const prevOrgDuty = process.env.CCR_ORG_DIR;
+    process.env.CCR_PM_DUTY = "1";
+    process.env.CCR_PM_DUTY_STALE_MS = "0";
+    process.env.CCR_PM_DUTY_CONTINUATION_MS = "30";
+    process.env.CCR_ORG_DIR = ORG2;
+    setLightConfirmTrusted(true); // ORG2 独立台账补轻立项信任——缺省 needsConfirm 落 pending 板冻结（projects.ts :264）
+    const dutyRounds = () => readNdjson<Record<string, unknown>>(join(DATA, "duty-rounds.ndjson"));
+    try {
+      // 前置：值守专用组+Leader 会话（bootstrap spawn；fake 流零 onInit→手动灌 sdkId）
+      const ackGD = send(mgr, "gd", "COMMAND_ORG_ACTION", { action: "create", name: "值守组", anchor_dir: anchor3, tier: "轻立项" }, "web-1");
+      const gidD = (ackGD.data as { group?: { id: string } } | undefined)?.group?.id ?? "";
+      const baseLeader = created.length;
+      const ackLeader = mgr.ensureLeader();
+      const leaderIdx0 = baseLeader;
+      let leaderCb = created[leaderIdx0]?.cb;
+      assert(ackLeader.ok === true && gidD !== "" && leaderCb !== undefined,
+        "C12⓪ 前置：值守组+Leader 会话（bootstrap spawn）就位");
+      // C12① 回合结束喂活（todo 类）：解锁 todo 卡→Leader 回合终态→检查→注入值守活
+      const ackDC = send(mgr, "c12dc", "COMMAND_TASK_CREATE", { gid: gidD, text: "值守候选卡（解锁待办）" }, "web-1");
+      const dutyCardId = (ackDC.data as { entity_id?: string }).entity_id ?? "";
+      created[leaderIdx0]?.cb.onInit("sdk-duty-boot", "test-model"); // Leader init：灌 sdkId+锚回写
+      const baseC1 = created.length;
+      leaderCb?.onTurnEnd(true, "boot", 1);
+      const dutyPrompt1 = created[baseC1]?.prompt;
+      const round1 = dutyRounds()[dutyRounds().length - 1] ?? {};
+      assert(typeof dutyPrompt1 === "string" && dutyPrompt1.includes("[值守喂活]") && dutyPrompt1.includes("DUTY_RECEIPT") && dutyPrompt1.includes(dutyCardId),
+        "C12① 回合结束喂活：Leader 回合终态=在岗证据→todo 候选→注入自包含值守活（feed 锚+候选 id+DUTY_RECEIPT 协议行，非 worker 派单格式）");
+      assert(round1.kind === "PM_DUTY_ROUND" && round1.result === "continue" && JSON.stringify(round1.trigger) === JSON.stringify(["turn_end"]),
+        "C12①b 值守审计 continue 行（kind=PM_DUTY_ROUND/trigger=turn_end，落 duty-rounds.ndjson）");
+      created[baseC1]?.cb.onInit("sdk-duty-1", "test-model"); // 值守流 init（清 init timer）
+      leaderCb = created[baseC1]?.cb;
+      // C12② 全 running 放行：清 todo 候选+派 worker 单（WORKING）→值守检查→sleep 不催
+      send(mgr, "c12clr", "COMMAND_TASK_UPDATE", { gid: gidD, entry_id: dutyCardId, status: "done" }, "web-1");
+      const baseW1 = created.length;
+      send(mgr, "c12w1", "COMMAND_DISPATCH", { gid: gidD, prompt: "值守期间在跑的单" }, "web-1");
+      const baseC2 = created.length;
+      leaderCb?.onTurnEnd(true, "值守收口", 1);
+      const round2 = dutyRounds()[dutyRounds().length - 1] ?? {};
+      assert(created.length === baseC2 && round2.result === "sleep" && round2.reason === "all_running",
+        "C12② 全 running 放行：worker 健康在跑→sleep 零注入（值守防的是有活全员闲，干活中不催——019 §2.2 全 running 反例）");
+      // C12③ stale doing 类：worker1 交付收口（running→done 零 failed）+造悬挂 doing 卡
+      //（dispatch 已收口不在 open FIFO+超窗零阈值——019 §5.1 stale 判定确定性数据源）
+      created[baseW1]?.cb.onTurnEnd(true, "干完了", 50);
+      upsertBoardEntry(gidD, { text: "悬挂 doing 卡（dispatch 已收口不在途）", status: "doing", dispatch_id: "d-already-closed" });
+      const baseC3 = created.length;
+      leaderCb?.onTurnEnd(true, "值守收口", 1);
+      assert(created.length === baseC3 + 1 && String(created[baseC3]?.prompt ?? "").includes("[值守喂活]"),
+        "C12③ stale doing 触发 feed：doing 卡挂已收口 dispatch（超窗）→悬挂行动位→值守注入");
+      created[baseC3]?.cb.onInit("sdk-duty-2", "test-model");
+      leaderCb = created[baseC3]?.cb;
+      send(mgr, "c12clr2", "COMMAND_TASK_UPDATE", { gid: gidD, entry_id: loadBoard(gidD).entries.find((e) => e.dispatch_id === "d-already-closed")?.id ?? "", status: "done" }, "web-1");
+      // C12③b dispatch failed 类：worker2 撞墙→failed 台账行→既有回执面即时注入 Leader
+      //（notifyDispatchClosed M4 既有面，resumeAgent 换流——值守源码备案「双挂防重复
+      // 轰炸」的分工：回执=告知失败，值守=重算队列）→回执回合结束（Leader 回合终态）
+      //→feedPM 重算→dispatch 候选喂活
+      const baseW2 = created.length;
+      const ackW2 = send(mgr, "c12w2", "COMMAND_DISPATCH", { gid: gidD, prompt: "会失败的单" }, "web-1");
+      const failedId = (ackW2.data as { dispatch_id?: string }).dispatch_id ?? "";
+      created[baseW2]?.cb.onTurnEnd(false, "worker 撞墙", 50);
+      const baseReceipt = created.length - 1; // 派单失败回执注入流（既有面产出，值守不断言它）
+      created[baseReceipt]?.cb.onInit("sdk-receipt", "test-model"); // 清 resumeAgent 45s init timer
+      const baseC3b = created.length;
+      created[baseReceipt]?.cb.onTurnEnd(true, "回执收口", 1); // 回执回合终态=在岗证据→值守检查
+      assert(created.length === baseC3b + 1 && String(created[baseC3b]?.prompt ?? "").includes("[值守喂活]") && String(created[baseC3b]?.prompt ?? "").includes(failedId.slice(0, 12)),
+        "C12③b dispatch failed 触发 feed：失败台账行→回执回合结束→值守重算→注入值守活（候选含失败单 id——四类异常词表 receipt/dispatch/todo/stale_doing 的 dispatch 类）");
+      created[baseC3b]?.cb.onInit("sdk-duty-3", "test-model");
+      leaderCb = created[baseC3b]?.cb;
+      // C12④ audit 三零：每检查一行审计只落 duty-rounds；events/通知账零值守词
+      //（receipt 类备案：v1 空源不误报——正常 done 收口零注入即证，验收状态机 M12-7 落）
+      const rounds4 = dutyRounds();
+      assert(rounds4.length === 4 && rounds4.every((r) => r.kind === "PM_DUTY_ROUND"),
+        "C12④a 四类检查四行审计（kind 全一致——一回合至多一检查，feedPM 同步单飞）");
+      const eventsText = existsSync(join(DATA, "events.ndjson")) ? readFileSync(join(DATA, "events.ndjson"), "utf-8") : "";
+      assert(eventsText.length > 0 && !eventsText.includes("PM_DUTY"),
+        "C12④b 零 EventBus：events.ndjson 有会话帧但零 PM_DUTY 词（D18 三零边界——值守是内部治理非用户可见事件）");
+      const notifText4 = existsSync(join(DATA, "notifications.json")) ? readFileSync(join(DATA, "notifications.json"), "utf-8") : "";
+      assert(!notifText4.includes("PM_DUTY"), "C12④c 通知账零值守审计词（审计只在 duty-rounds.ndjson 独立文件）");
+      // C12⑤⑥ 失败升级+K=3 防轰炸（独立 ORG3：Leader 无 sdkId=resumeAgent 必 throw 场景；
+      // DATA2 隔离 duty-rounds/notifications 断言面）
+      process.env.CCR_ORG_DIR = ORG3;
+      setLightConfirmTrusted(true); // ORG3 同口径补信任（值守升级组 create 直达 active）
+      const bus3 = new EventBus({ persistPath: join(DATA2, "events.ndjson") });
+      const mgr3 = new SessionManager(bus3, { ...cfg, dataDir: DATA2 });
+      mgr3.setAgentFactory(makeFakeFactory(created));
+      const ackL3 = mgr3.ensureLeader();
+      const leaderIdx3 = created.length - 1;
+      const ackGD3 = send(mgr3, "gd3", "COMMAND_ORG_ACTION", { action: "create", name: "值守升级组", anchor_dir: anchor2, tier: "轻立项" }, "web-1");
+      const gidD3 = (ackGD3.data as { group?: { id: string } } | undefined)?.group?.id ?? "";
+      send(mgr3, "c12dc3", "COMMAND_TASK_CREATE", { gid: gidD3, text: "无人处理的卡" }, "web-1");
+      const rounds3 = () => readNdjson<Record<string, unknown>>(join(DATA2, "duty-rounds.ndjson"));
+      created[leaderIdx3]?.cb.onTurnEnd(true, "boot", 1); // 轮1：feed→注入尝试→throw
+      const lastR3 = rounds3()[rounds3().length - 1] ?? {};
+      assert(ackL3.ok === true && lastR3.result === "pm_unwakeable",
+        "C12⑤a 注入失败→pm_unwakeable（保留原回合终态不伪造继续成功，Leader 无 SDK 会话记录）");
+      const notifRaw3 = existsSync(join(DATA2, "notifications.json"))
+        ? (JSON.parse(readFileSync(join(DATA2, "notifications.json"), "utf-8")) as { notifications?: { key?: string; title?: string; group?: string; severity?: string }[] }).notifications ?? []
+        : [];
+      const dutyNotif = notifRaw3.find((n) => String(n.key ?? "").startsWith("system:duty:"));
+      assert(dutyNotif !== undefined && dutyNotif.title === "需要处理：团队值守无法继续" && dutyNotif.group === "action" && dutyNotif.severity === "error",
+        "C12⑤b 失败升级用户：通知账 action 桶升级行（019 §5.2 语义一——值守无法继续请用户接管）");
+      created[leaderIdx3]?.cb.onTurnEnd(true, "boot", 1); // 轮2：再失败（stableKey 防重不双发）
+      const notifCount3 = (existsSync(join(DATA2, "notifications.json"))
+        ? (JSON.parse(readFileSync(join(DATA2, "notifications.json"), "utf-8")) as { notifications?: unknown[] }).notifications ?? []
+        : []).filter((n) => String((n as { key?: string }).key ?? "").startsWith("system:duty:")).length;
+      created[leaderIdx3]?.cb.onTurnEnd(true, "boot", 1); // 轮3：K=3 触顶→sleep 零注入尝试
+      const r3seq = rounds3().map((r) => r.result);
+      const lastR3b = rounds3()[rounds3().length - 1] ?? {};
+      assert(r3seq.join(",") === "pm_unwakeable,pm_unwakeable,sleep" && lastR3b.reason === "k_exhausted",
+        "C12⑥ K=3 防轰炸：连续 feed 三次→第 3 次 shouldSleep 零注入（pm_unwakeable 计入 chain，防对死 Leader 无限重试）");
+      const cont3 = lastR3b.continuation as { delay_ms?: number; once?: boolean } | undefined;
+      assert(cont3?.delay_ms === 30 && cont3?.once === true && notifCount3 === 1,
+        "C12⑥b 退避 continuation 在案（delay_ms=30 env 测试缝/wake_once）+升级通知 stableKey 防重单行");
+      // C12⑦ 缺省关零波及：关开关→Leader 回合终态零检查零注入零审计
+      if (prevDuty === undefined) delete process.env.CCR_PM_DUTY;
+      else process.env.CCR_PM_DUTY = prevDuty;
+      process.env.CCR_ORG_DIR = ORG2;
+      const rounds7 = dutyRounds().length;
+      const baseC7 = created.length;
+      leaderCb?.onTurnEnd(true, "关值守后的回合", 1);
+      assert(created.length === baseC7 && dutyRounds().length === rounds7,
+        "C12⑦ 缺省关零波及：CCR_PM_DUTY 未设→值守零触发（零注入零审计，既有行为逐字节不变）");
+      if (prevStale === undefined) delete process.env.CCR_PM_DUTY_STALE_MS;
+      else process.env.CCR_PM_DUTY_STALE_MS = prevStale;
+      if (prevCont === undefined) delete process.env.CCR_PM_DUTY_CONTINUATION_MS;
+      else process.env.CCR_PM_DUTY_CONTINUATION_MS = prevCont;
+      if (prevOrgDuty === undefined) delete process.env.CCR_ORG_DIR;
+      else process.env.CCR_ORG_DIR = prevOrgDuty;
+    } finally {
+      rmSync(DATA2, { recursive: true, force: true });
+      rmSync(ORG2, { recursive: true, force: true });
+      rmSync(ORG3, { recursive: true, force: true });
+      rmSync(anchor3, { recursive: true, force: true });
+    }
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR;
     else process.env.CCR_ORG_DIR = prevOrg;

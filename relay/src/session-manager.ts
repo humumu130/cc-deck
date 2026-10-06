@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -12,7 +12,7 @@ import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
-  adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, createGroup, decideConfirm,
+  adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
@@ -22,6 +22,12 @@ import {
 } from "./projects.js";
 // #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
 import { rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
+// M12-6 值守喂活闭环（019 D1/D2 relay 接线半边）：leader-duty 纯函数（D18 三零边界
+// ——该文件零 import 纯函数，落盘与注入面在本侧，不回写它）
+import {
+  evaluateLeaderActionableWork, transitionDutyFeedCount,
+  type DutyBlockedItem, type DutyFeedCountState, type DutyQueueSnapshot,
+} from "./leader-duty.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
@@ -525,6 +531,28 @@ function watchdogDisabled(): boolean {
   return process.env.CCR_WATCHDOG_DISABLE === "1";
 }
 
+// ===== M12-6 值守喂活参数（019 §6.1 环境门；env 逐次求值同 watchdogDisabled 范式） =====
+// 有效式接线半边只认环境门两级：CCR_NO_LEADER（测试/沙盒铁律总闸）+ CCR_PM_DUTY
+// （值守显式开）。缺省关=零注入零审计零开销（既有测试/生产行为零波及）；全局总闸
+// plugin_config.duty 与组级 duty_policy.enabled 属 #71 产品面（019 §6.5），本单不接。
+// 备案差异：019 §6.1「关闭时也记录 disabled」落 #71 coordinator 面——环境门关=值守
+// 组件不存在，每回合写 disabled 行是垃圾账，接线半边直接短路零写入。
+function dutyEnabled(): boolean {
+  return process.env.CCR_NO_LEADER !== "1" && process.env.CCR_PM_DUTY === "1";
+}
+// stale doing 判定窗：doing 卡挂的 dispatch 不在 open FIFO 且卡龄超窗才判悬挂
+//（019 §5.1 确认 stale 要时间证据，防重启丢 open FIFO 后全量误报）。缺省 90min。
+function dutyStaleMs(): number {
+  const v = Number(process.env.CCR_PM_DUTY_STALE_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 90 * 60_000;
+}
+// K=3 到顶后的退避续办延迟（019 §3.4 deferred_duty_continuation 5–15min；纯函数给
+// 出的是计划区间，实际退避定值走 env——测试缝）。缺省 5min=continuation.delay_min_ms。
+function dutyContinuationMs(): number {
+  const v = Number(process.env.CCR_PM_DUTY_CONTINUATION_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 5 * 60_000;
+}
+
 // #408 SNAPSHOT 大帧根治（2026-09-09 事故）：客户端 last_seq 落到事件缓冲窗外走
 // 全量 SNAPSHOT，此前 LAN 快照把全部时间线日志塞单帧（随历史线性膨胀，实测 3 会话
 // 0.63MiB）、云通道瘦身后逐条密文流式（数千帧洪峰触发 CF 桥限流踢线 → 重连 →
@@ -559,6 +587,11 @@ export class SessionManager {
   // FIFO——Leader=咨询档同机制复用，worker=派单承接；回合串行，消息数=回合数。
   // 值带收口所需 tier/gid/anchor：收口行写回真实档位，gid 联动任务板搬卡）
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string }[]>();
+  // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
+  // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
+  // chain 起算无对账风险；跨重启持久化属 #71 产品面
+  private dutyFeed: DutyFeedCountState = { consecutive_feeds: 0 };
+  private dutyEpoch = 0;
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -3059,6 +3092,11 @@ export class SessionManager {
           }
           // R1c：终态收口（waiting_request 已清）→ waiting 通知 resolved（统一同步点）
           this.syncWaitingNotification(managed);
+          // M12-6 值守：Leader 回合终态=统一值守检查点（019 §3.2 回合结束拦截——
+          // 完成收口/更新终态/发帧后异步位接线，回合正常结束=在岗证据重算行动位）。
+          // worker 回合终态不触发（备案：增量判定需前后快照 diff 属 #71 产品面；failed
+          // 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，双挂会重复轰炸）
+          if (dutyEnabled() && this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
         },
         onSessionEnd: (reason) => {
           if (!mine()) return;
@@ -3914,6 +3952,215 @@ export class SessionManager {
       this.resumeAgent(this.require(this.leaderId), `[派单失败回执] 你派的 ${e.tier} 单（${e.id.slice(0, 8)}${e.gid ? ` · 组 ${e.gid.slice(0, 8)}` : ""}）失败：${truncate(receipt, 160)}\n请决定重派 / 换人接替 / 放弃，并同步任务板。`);
     } catch (err) {
       console.warn(`[m4] 派单失败通知注入 Leader 失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // ===== M12-6 值守喂活闭环（019 D1/D2 relay 接线半边；#71 产品面策略不动） =====
+  // 挂点唯一：onTurnEnd 尾（Leader 会话限定，回合正常结束=在岗证据——019 §5.1
+  // last_pm_round_at 语义）。喂活单一入口 feedPM（019 §3.3）：回合结束拦截与 K=3
+  // continuation 都进这里，不允许旁路 resumeAgent。与看门狗（#7）的边界：看门狗
+  // 接管防僵死（会话层杀树重拉，M12-3 两行出口语义不动），值守喂活防饿死（队列层
+  // 重算行动位）——互补面零交集，值守检查不杀进程、看门狗不读队列。
+  //
+  // 幂等/防轰炸口径（回单备案）：
+  //   ① 同步单飞——feedPM 全同步（onTurnEnd 回调段内跑完），node 单线程无并发 feed，
+  //     019 §3.4「单飞 feed 未完成时只合并不并发补发」由执行模型天然保证；
+  //   ② K=3 防忙等——连续 3 次 feed（transitionDutyFeedCount）后 shouldSleep：不再
+  //     注入（否则「结束→拦截→无事→结束」token 忙等死循环，019 §2.2 全 running
+  //     反例同源），写退避 continuation 一次延迟喂活（setTimeout wake_once，unref
+  //     不挡进程退出；跨重启不持久备案）；
+  //   ③ 放行即归零——sleep 分支（全 running/blocked/empty）signal=idle 重置 chain
+  //    （019 §3.4「真实自然休眠并完成冷却后重置」）；pm_unwakeable 计入 chain（连续
+  //     注入失败到 3 同样退避，防对死 Leader 无限重试）。
+  //
+  // 审计三零（D18，port.ts DUTY-BOUNDARY 注记同源）：PM_DUTY_ROUND 只落
+  // CCR_DATA_DIR/duty-rounds.ndjson append-only——零 EventBus 广播（本段零 bus.emit/
+  // emitTransient，event-bus.ts 全文零 duty 词的护栏测试在位）、零 EventType 注册、
+  // 零 SQLite 表。升级用户走通知账（upsertNotification 既有面，019 §5.4「值守告警
+  // 直接写 notification ledger」），非 EventBus。
+  private appendDutyRound(r: {
+    feed_id: string; feed_generation: string; trigger: string[];
+    result: "continue" | "sleep" | "pm_unwakeable" | "failed";
+    reason?: string;
+    observed?: { actionable_count: number; top_items: { kind: string; id: string; age_ms?: number }[] };
+    blocked?: DutyBlockedItem[];
+    continuation?: { delay_ms: number; once: boolean };
+    detail?: string;
+    from: number;
+  }): void {
+    try {
+      appendFileSync(join(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
+        kind: "PM_DUTY_ROUND",
+        v: 1,
+        feed_id: r.feed_id,
+        feed_generation: r.feed_generation,
+        pm_turn_epoch: this.dutyEpoch,
+        trigger: r.trigger,
+        observed: r.observed ?? { actionable_count: 0, top_items: [] },
+        // 019 §4.2 回执副作用校验（dispatch/board 对账快照）属 D2 续批——结构先占位
+        acted: { dispatch_ids: [], board_ids: [], receipt_ids: [] },
+        blocked: r.blocked ?? [],
+        result: r.result,
+        ...(r.reason ? { reason: r.reason } : {}),
+        ...(r.continuation ? { continuation: r.continuation } : {}),
+        ...(r.detail ? { detail: truncate(r.detail, 200) } : {}),
+        duration_ms: Date.now() - r.from,
+        ts: Date.now(),
+      })}\n`);
+    } catch {
+      // 尽力而为：审计写失败不阻断主路径（D18 独立文件非业务状态机，onTurnEnd 主流程优先）
+    }
+  }
+
+  // 值守快照：跨事实源派生观察（019 §1.3 不建第二事实源——全部现读既有事实源）。
+  // 四类候选（DutyCandidateKind 词表=019 §2.2 行动位四类）数据源接线现状：
+  //   receipt（待验收回执）——v1 空源：验收状态机属 M12-7（acceptance 面），空数组
+  //     占位，evaluateLeaderActionableWork 对空源天然跳过；正常 done 收口卡已搬走
+  //     不误报（C12 断言）
+  //   dispatch（失败/悬挂）——dispatch-log 收敛视图 failed 实态行（hanging 时间窗
+  //     判定属 #71；收敛视图=同 id 末行赢，重投已翻 done 的不误报）
+  //   todo（已解锁待办）——active 组板 todo 卡 computeReadySet 就绪且无 gate（gate
+  //     卡进 blocked 桶）
+  //   stale_doing（悬挂在办）——doing 卡挂的 dispatch 不在 open FIFO 且卡龄超窗
+  //    （dutyStaleMs；防重启丢 FIFO 全量误报靠时间窗）
+  // blocked 桶：gate 卡+依赖未就绪卡=等外部（DutyBlockedReason 词表 external）——
+  // verdict.reason==="blocked" 分支由此可达（candidates 空+blocked 非空）。
+  private dutySnapshot(now: number): DutyQueueSnapshot {
+    const failed = readDispatchLog()
+      .filter((e) => e.status === "failed")
+      .map((e) => ({ dispatch_id: e.id, status: "failed" as const, source_session_id: e.session_id }));
+    const todos: { todo_id: string; content?: string }[] = [];
+    const stale: { session_id: string; doing_ms: number; dispatch_id?: string }[] = [];
+    const blocked: DutyBlockedItem[] = [];
+    const openIds = new Set<string>();
+    for (const q of this.openDispatches.values()) for (const x of q) openIds.add(x.id);
+    for (const g of listGroupsByStatus().active) {
+      const board = loadBoard(g.id);
+      const ready = new Map(computeReadySet(board).map((x) => [x.id, x.check.ready] as const));
+      for (const e of board.entries) {
+        if (e.status === "todo") {
+          if (e.gate) blocked.push({ id: e.id, reason: "external" }); // gate 未过=等人放行
+          else if (ready.get(e.id) === true) todos.push({ todo_id: e.id, content: truncate(e.text, 80) });
+          else blocked.push({ id: e.id, reason: "external" }); // 依赖未就绪=等外部完成
+        } else if (e.status === "doing" && e.dispatch_id && !openIds.has(e.dispatch_id)
+          && now - e.updated_at >= dutyStaleMs()) { // >=：窗口 0（测试缝/即时超窗）恒真；> 同毫秒恒假是坑
+          stale.push({ session_id: g.id, doing_ms: now - e.updated_at, dispatch_id: e.dispatch_id });
+        }
+      }
+    }
+    const running: { session_id: string; status: "WORKING"; updated_at?: number; last_progress_at?: number }[] = [];
+    for (const s of this.sessions.values()) {
+      if (s.state.external || s.state.historical) continue;
+      if (s.state.status === "WORKING") {
+        running.push({ session_id: s.state.session_id, status: "WORKING", updated_at: s.state.updated_at, last_progress_at: s.lastProgressAt });
+      }
+    }
+    return {
+      now,
+      pending_receipts: [], // M12-7 验收状态机落位后接线（备案：v1 空源不误报）
+      failed_or_hanging_dispatches: failed,
+      unlocked_todos: todos,
+      stale_doing: stale,
+      blocked,
+      running_sessions: running,
+    };
+  }
+
+  // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
+  // （四值 reason：actionable→喂；all_running/blocked/empty→sleep 放行——「全 running
+  // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
+  private feedPM(trigger: string, opts?: { continuation?: boolean }): void {
+    if (!dutyEnabled() || !this.leaderId) return;
+    const from = Date.now();
+    const feedId = randomUUID();
+    const generation = randomUUID();
+    this.dutyEpoch += 1;
+    let verdict;
+    try {
+      verdict = evaluateLeaderActionableWork(this.dutySnapshot(from));
+    } catch (e) {
+      this.appendDutyRound({
+        feed_id: feedId, feed_generation: generation, trigger: [trigger], result: "failed",
+        detail: `值守判定异常: ${e instanceof Error ? e.message : String(e)}`, from,
+      });
+      return;
+    }
+    const observed = {
+      actionable_count: verdict.candidates.length,
+      top_items: verdict.candidates.slice(0, 3).map((c) => ({ kind: c.kind, id: c.id, ...(c.age_ms !== undefined ? { age_ms: c.age_ms } : {}) })),
+    };
+    if (verdict.reason !== "actionable") {
+      // 放行休眠（019 §3.2 第 2 步）：全 running（有活干）/blocked（等依赖·放行）/
+      // empty（空闲）——只写审计不注入，chain 归零（真实休眠重置）
+      this.dutyFeed = transitionDutyFeedCount(this.dutyFeed, "idle").state;
+      this.appendDutyRound({
+        feed_id: feedId, feed_generation: generation, trigger: [trigger],
+        result: "sleep", reason: verdict.reason, blocked: verdict.blocked, observed, from,
+      });
+      return;
+    }
+    const transition = transitionDutyFeedCount(this.dutyFeed, "feed");
+    this.dutyFeed = transition.state;
+    if (transition.shouldSleep) {
+      // K=3 到顶（019 §3.4）：不注入防 token 忙等，退避一次延迟喂活（wake_once）
+      const delay = dutyContinuationMs();
+      this.appendDutyRound({
+        feed_id: feedId, feed_generation: generation, trigger: [trigger],
+        result: "sleep", reason: "k_exhausted", observed, from,
+        continuation: { delay_ms: delay, once: true },
+      });
+      const t = setTimeout(() => {
+        if (dutyEnabled()) this.feedPM(trigger, { continuation: true });
+      }, delay);
+      t.unref?.(); // 不挡进程退出（测试/收尾不悬挂）
+      return;
+    }
+    // 有活可干：注入自包含值守活（pushExternalLog 时间线留痕+resumeAgent 开值守回合，
+    // 先例=notifyDispatchClosed 的派单失败回执注入）。019 §4.1：不伪装 worker 派单、
+    // 不改 worker 纪律；回执协议 DUTY_RECEIPT 行在 prompt 里声明（解析/副作用校验属
+    // D2 续批，接线半边先落协议锚）
+    const top = verdict.candidates[0];
+    const topList = verdict.candidates.slice(0, 3)
+      .map((c) => `${c.kind} ${c.id.slice(0, 12)}${c.age_ms !== undefined ? `（约 ${Math.max(1, Math.round(c.age_ms / 60_000))} 分钟前）` : ""}`)
+      .join("；");
+    const prompt = [
+      `[值守喂活] feed=${feedId.slice(0, 8)} 触发=${trigger}${opts?.continuation ? "（K=3 退避续办）" : ""}`,
+      `队列候选 ${verdict.candidates.length} 项：${topList}。优先处置最老一项。`,
+      ...(verdict.blocked.length ? [`另有 ${verdict.blocked.length} 项阻塞（等依赖/放行），本轮不处置。`] : []),
+      `请验收回执、派发下一批或同步任务板；完成后末行单独输出一行 JSON（不加代码块）：`,
+      `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`,
+    ].join("\n");
+    try {
+      this.pushExternalLog(this.leaderId, "system", `[值守喂活] 发现 ${verdict.candidates.length} 项可处理（最老：${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}）`);
+      this.resumeAgent(this.require(this.leaderId), prompt);
+      this.appendDutyRound({
+        feed_id: feedId, feed_generation: generation, trigger: [trigger],
+        result: "continue", observed, from,
+      });
+    } catch (err) {
+      // 注入失败（019 §3.2 第 4 步）：保留原回合终态不伪造继续成功，记录 pm_unwakeable
+      // 并升级用户（019 §5.2 语义一「需要处理」——通知账 action 桶可操作）。stableKey
+      // 一 Leader 一行：upsertNotification 非 dispatch kind 静默防重，重复失败不刷屏
+      //（升级通知在场即可，防轰炸与 K=3 chain 双保险）
+      const detail = err instanceof Error ? err.message : String(err);
+      this.appendDutyRound({
+        feed_id: feedId, feed_generation: generation, trigger: [trigger],
+        result: "pm_unwakeable", detail, observed, from,
+      });
+      try {
+        this.upsertNotification("system", `duty:${this.leaderId}`, undefined, {
+          title: "需要处理：团队值守无法继续",
+          body: truncate(`值守喂活失败：${detail}；仍有 ${verdict.candidates.length} 项候选待处理，请检查 Leader 会话。`, 160),
+          severity: "error",
+          group: "action",
+          actionable: true,
+          sessionId: this.leaderId ?? undefined,
+          domain: "duty",
+          returnPath: "sessions",
+        });
+      } catch {
+        // 升级通知尽力而为：不吞 pm_unwakeable 审计行（已落），通知面炸不阻断收口
+      }
     }
   }
 
