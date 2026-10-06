@@ -6,7 +6,10 @@
 //          spawn+零新增编排）+坏路径（gid 不存在/prompt 缺失）；
 //       C5 LESSON_APPEND 成功路径（tags 洗刷+listLessons 落盘）+坏路径；
 //       C6 权限拒绝（viewer 无 org:write，四命令全 forbidden+零落账）；
-//       C7 坏 payload（缺 gid/缺 text/缺 entry_id）+未知 org action 统一收口。
+//       C7 坏 payload（缺 gid/缺 text/缺 entry_id）+未知 org action 统一收口；
+//       C8 编排链（M12-2）：payload.task → 先写卡再派——成功链三键/依赖未就绪 blocked
+//          零 spawn/gate 未过/坏引用 error 零写/互斥与词表/中间态 task_ref 重派/prompt
+//          兜底 task.text/M12-1 直派与 entry_id 认领旧路径零回归。
 // fixture 缝仿 test-r1b-org（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调 handleCommand）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m12-commands.ts
 import { randomUUID } from "node:crypto";
@@ -190,6 +193,78 @@ try {
     const r7d = mgr.orgCommand("owner", "web-1", "task-nonsense", {});
     assert(r7d.ok === false && "error" in r7d && String(r7d.error).includes("unsupported org action"),
       "C7② 未知 org action 咽喉 default 统一收口");
+
+    // ---------- C8 编排链（M12-2）：payload.task → 先写卡 → 依赖/gate 检查 → 认领派单 ----------
+    console.log("C8 编排链 task.create→dispatch");
+    const runningRows = () => auditLog().filter((r) => r.target !== "org-command").length; // dispatched/running/failed 台账行（区别 org-command 审计行）
+    // C8① 编排成功链：卡入账（doing+dispatch_id+text 全文）+task_ref 三键+审计两行
+    const before81 = created.length;
+    const audit81Base = auditLog().length;
+    const longText = "交付 parity 报告并核对六域等价性口径——这一段超过六十字符，用来断言编排链 title 保全文不被认领分支截断覆盖。";
+    const ack81 = send(mgr, "c81", "COMMAND_DISPATCH", { gid, prompt: "编排首单", task: { text: longText, note: "编排备注" } }, "web-1");
+    const d81 = ack81.data as { entity_id?: string; task_ref?: string; blocked?: boolean; dispatch_id?: string; session_id?: string } | undefined;
+    const card81 = loadBoard(gid).entries.find((e) => e.id === d81?.entity_id);
+    assert(ack81.ok === true && d81?.blocked === false && d81.task_ref === d81.entity_id
+      && typeof d81.dispatch_id === "string" && d81.dispatch_id !== "" && typeof d81.session_id === "string" && d81.session_id !== "",
+      "C8① 成功链 ACK data{entity_id,task_ref,blocked:false,dispatch_id,session_id}（task_ref≡entity_id）");
+    assert(card81 !== undefined && card81.status === "doing" && card81.dispatch_id === d81?.dispatch_id && card81.text === longText && card81.note === "编排备注",
+      "C8② 卡入账认领：doing+dispatch_id 挂接+text 全文保留（title 兜底防截断）+note 落盘");
+    const audit81 = auditLog().slice(audit81Base);
+    assert(created.length === before81 + 1 && audit81.some((r) => String(r.receipt ?? "").includes("编排建卡"))
+      && audit81.some((r) => String(r.receipt ?? "").includes("编排派单已受理")),
+      "C8③ 审计两行（task-create+dispatch，编排口径 receipt——与 dispatchWorker 台账行同文件穿插）");
+    // C8④ 依赖未就绪：blocked 正常编排态，零 spawn 零 dispatched 台账行，卡保留
+    const depAck = send(mgr, "c84dep", "COMMAND_TASK_CREATE", { gid, text: "依赖前置卡" }, "web-1");
+    const depId = (depAck.data as { entity_id?: string }).entity_id ?? "";
+    const before84 = created.length;
+    const running84 = runningRows();
+    const ack84 = send(mgr, "c84", "COMMAND_DISPATCH", { gid, prompt: "编排受阻单", task: { text: "被依赖卡挡住的活", depends_on: [depId] } }, "web-1");
+    const d84 = ack84.data as { entity_id?: string; task_ref?: string; blocked?: boolean; block_reasons?: string[]; gate_reason?: string | null; dispatch_id?: string } | undefined;
+    assert(ack84.ok === true && d84?.blocked === true && (d84.block_reasons ?? []).some((s) => s.includes("未完成"))
+      && d84.task_ref === d84.entity_id && !("dispatch_id" in (ack84.data as object)),
+      "C8④ 依赖未就绪 → ok:true+blocked:true+block_reasons 可判定（无 dispatch_id 键）");
+    assert(created.length === before84 && runningRows() === running84 && loadBoard(gid).entries.some((e) => e.id === d84?.entity_id),
+      "C8⑤ blocked 零 spawn：worker 会话不建+dispatched 台账零行+卡保留在板（backlog 语义）");
+    // C8⑤ gate 未设过：gate_reason 单列透传
+    const ack85 = send(mgr, "c85", "COMMAND_DISPATCH", { gid, prompt: "闸门单", task: { text: "等人放行的活", gate: { reason: "等用户验收口径" } } }, "web-1");
+    const d85 = ack85.data as { blocked?: boolean; gate_reason?: string | null } | undefined;
+    assert(ack85.ok === true && d85?.blocked === true && d85.gate_reason === "等用户验收口径",
+      "C8⑥ gate 未过 → blocked+gate_reason 单列（编排只设闸，清除走人决策口）");
+    // C8⑥ 坏引用：数据完整性错误 → error 拒收（非 blocked），零写零 spawn
+    const boardCount86 = loadBoard(gid).entries.length;
+    const before86 = created.length;
+    const ack86 = send(mgr, "c86", "COMMAND_DISPATCH", { gid, prompt: "坏引用单", task: { text: "带幽灵依赖", depends_on: ["t-ghost"] } }, "web-1");
+    assert(ack86.ok === false && typeof ack86.error === "string" && ack86.error.includes("依赖卡不存在: t-ghost") && ack86.error.includes("坏引用编排拒收"),
+      "C8⑦ 坏引用 → error fixture（依赖卡不存在: t-ghost），不误放行不误 blocked");
+    assert(loadBoard(gid).entries.length === boardCount86 && created.length === before86,
+      "C8⑧ 坏引用零写零 spawn（板零新卡、worker 会话零建）");
+    // C8⑦ 互斥与词表：task×entry_id 二义性拒收；task.status 词表收窄
+    const ack87 = send(mgr, "c87", "COMMAND_DISPATCH", { gid, prompt: "x", entry_id: "t-anything", task: { text: "二义" } }, "web-1");
+    assert(ack87.ok === false && ack87.error === "task 与 entry_id 互斥（建新卡或认领旧卡二选一）",
+      "C8⑨ task 与 entry_id 互斥 error fixture");
+    const ack88 = send(mgr, "c88", "COMMAND_DISPATCH", { gid, prompt: "x", task: { text: "已完成卡", status: "done" } }, "web-1");
+    assert(ack88.ok === false && ack88.error === "task.status 必须是 todo|doing", "C8⑩ task.status 词表外拒收");
+    // C8⑧ task 建卡成功但 dispatch 失败中间态：卡保留（不回滚）+error 带 task_ref 可重派
+    const before89 = created.length;
+    const ack89 = send(mgr, "c89", "COMMAND_DISPATCH", { gid, prompt: "中间态单", task: { text: "写卡成派单败" }, engine: "bogus" }, "web-1");
+    assert(ack89.ok === false && typeof ack89.error === "string" && ack89.error.includes("未知引擎") && ack89.error.includes("task_ref=") && ack89.error.includes("可带 entry_id 重派"),
+      "C8⑪ dispatch 失败中间态 → ok:false error 带 task_ref 引导重派");
+    const stuckCard = loadBoard(gid).entries.find((e) => e.text === "写卡成派单败");
+    assert(stuckCard !== undefined && created.length === before89,
+      "C8⑫ 卡已入账不回滚（下轮可带 entry_id 重派）+零 spawn");
+    // C8⑨ prompt 缺省兜底 task.text（无 prompt 也能派——卡文本即指令主形态）
+    const ack8a = send(mgr, "c8a", "COMMAND_DISPATCH", { gid, task: { text: "就干这个不需要单独 prompt" } }, "web-1");
+    const d8a = ack8a.data as { blocked?: boolean; task_ref?: string } | undefined;
+    const lastPrompt = created[created.length - 1]?.prompt;
+    assert(ack8a.ok === true && d8a?.blocked === false && typeof lastPrompt === "string" && lastPrompt.includes("就干这个不需要单独 prompt"),
+      "C8⑬ prompt 缺省兜底 task.text 透传进派单模板");
+    // C8⑩ M12-1 旧路径回归：无 task 键直派（entity_id=会话语义）+entry_id 认领既有卡
+    const ack8b = send(mgr, "c8b", "COMMAND_DISPATCH", { gid, prompt: "认领既有卡单", entry_id: depId }, "web-1");
+    const d8b = ack8b.data as { entity_id?: string; dispatch_id?: string } | undefined;
+    const depCard = loadBoard(gid).entries.find((e) => e.id === depId);
+    assert(ack8b.ok === true && typeof d8b?.dispatch_id === "string" && !(d8b as { task_ref?: string }).task_ref
+      && depCard?.status === "doing" && depCard?.dispatch_id === d8b.dispatch_id,
+      "C8⑭ M12-1 旧路径零回归：entry_id 认领（无 task_ref 键=直派/认领语义，卡 doing 挂接）");
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR;
     else process.env.CCR_ORG_DIR = prevOrg;

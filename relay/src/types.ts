@@ -921,7 +921,8 @@ export interface DispatchCommand extends CommandBase {
   payload: {
     gid?: string;
     anchor_dir?: string;                          // gid 缺省时必填（绝对路径）
-    prompt: string;
+    /** M12-2：无 task 时必填（M12-1 语义零变化）；编排链（带 task）可省——缺省兜底 task.text */
+    prompt?: string;
     title?: string;
     entry_id?: string;
     role?: string;
@@ -929,6 +930,16 @@ export interface DispatchCommand extends CommandBase {
     engine?: string;                              // SessionEngine 词表外拒收（store 层校验）
     model?: string;
     provider?: string;
+    /** M12-2 编排链开关：给了就先写卡（task 入账）再派单（认领承接），task.create→dispatch
+     * 自动链。与 entry_id 互斥（既建新卡又认领旧卡属二义性，拒收）。依赖/gate 预检不过
+     * 零写零 spawn 返回 blocked；坏引用（depends_on 指不存在卡）error 拒收非 blocked。 */
+    task?: {
+      text: string;
+      status?: "todo" | "doing";                  // 缺省 todo（done 建卡即完成不收）
+      note?: string;
+      depends_on?: string[];                      // #087 beads：依赖卡 id 引用
+      gate?: { reason: string };                  // #087 gate：编排只设闸，清除仍走人决策口（gate:null 无自动路径）
+    };
   };
 }
 

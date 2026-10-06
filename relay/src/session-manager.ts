@@ -3994,14 +3994,115 @@ export class SessionManager {
     if (action === "dispatch") {
       const gid = typeof payload.gid === "string" ? payload.gid.trim() : "";
       const anchorDir = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
-      const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
       const g = gid ? findGroup(gid) : undefined;
       const tier = g?.tier === "轻立项" || g?.tier === "正经立项" ? g.tier : "随手办";
+      const skills = Array.isArray(payload.skills) ? payload.skills.filter((x): x is string => typeof x === "string") : undefined;
+      // ---------- M12-2 编排链（payload.task 存在时）：task.create→dispatch 自动链 ----------
+      // 计划表 :71：先写 task 再生成 dispatch；依赖/gate 不满足零 spawn；成功返回
+      // command_id/dispatch_id/task_ref。时序五拍：形状校验 → 坏引用预检（零写）→
+      // 写卡（task 入账）→ computeReady 就绪检查（blocked 零 spawn）→ 认领派单。
+      const taskObj = (payload.task ?? undefined) as
+        | { text?: unknown; status?: unknown; note?: unknown; depends_on?: unknown; gate?: unknown }
+        | undefined;
+      if (taskObj !== undefined) {
+        const failAudit = (msg: string): { ok: false; error: string } => {
+          this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, false, msg);
+          return { ok: false, error: msg };
+        };
+        // 形状校验：编排链必绑组（无组无板可写卡）、与 entry_id 互斥（建新卡或认领
+        // 旧卡二选一，二义性拒收）、text 必填、status 词表收窄 todo|doing（done 建卡
+        // 即完成不收）、gate 只设闸（清除走人决策口，#087 红线无自动放行路径）
+        if (!gid) return failAudit("编排链须绑项目组（gid 必填——随手办无板可写卡）");
+        if (typeof payload.entry_id === "string" && payload.entry_id.trim() !== "")
+          return failAudit("task 与 entry_id 互斥（建新卡或认领旧卡二选一）");
+        if (typeof taskObj !== "object" || Array.isArray(taskObj) || typeof taskObj.text !== "string" || taskObj.text.trim() === "")
+          return failAudit("task.text 必填");
+        const taskStatus = typeof taskObj.status === "string" ? taskObj.status : "";
+        if (taskStatus && taskStatus !== "todo" && taskStatus !== "doing") return failAudit("task.status 必须是 todo|doing");
+        const taskNote = typeof taskObj.note === "string" ? taskObj.note.trim() : "";
+        const taskDeps = Array.isArray(taskObj.depends_on)
+          ? taskObj.depends_on.filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          : undefined;
+        const gateRaw = taskObj.gate;
+        const gate = gateRaw !== undefined && gateRaw !== null
+          && typeof gateRaw === "object" && !Array.isArray(gateRaw)
+          && typeof (gateRaw as { reason?: unknown }).reason === "string"
+          && ((gateRaw as { reason: string }).reason.trim() !== "")
+          ? { reason: (gateRaw as { reason: string }).reason } : undefined;
+        if (gateRaw !== undefined && gate === undefined)
+          return failAudit("task.gate 须为 {reason:string}（编排只设闸；gate 清除走人决策口无自动路径）");
+        // 坏引用预检（写卡前）：depends_on 指向不存在卡 = 数据完整性错误 → error 拒收
+        //（区别于「依赖未完成」的正常 blocked 编排态——零写零 spawn 不留脏卡）
+        if (taskDeps && taskDeps.length > 0) {
+          const board0 = loadBoard(gid);
+          const ghost = taskDeps.find((d) => !board0.entries.some((x) => x.id === d));
+          if (ghost) return failAudit(`依赖卡不存在: ${ghost}（坏引用编排拒收——先核板再建卡）`);
+        }
+        // ① 先写卡（单漏斗 orgAction board upsert——deps/note/gate 全落 store 层语义）。
+        //    即使依赖未满足也入账：backlog 语义，卡先进板排队，派不出去另说（不回滚）
+        const w = this.orgAction("board", {
+          op: "upsert",
+          gid,
+          text: taskObj.text.trim(),
+          ...(taskStatus ? { status: taskStatus } : {}),
+          ...(taskNote ? { note: taskNote } : {}),
+          ...(taskDeps && taskDeps.length > 0 ? { depends_on: taskDeps } : {}),
+          ...(gate ? { gate } : {}),
+        });
+        const cardId = w.ok ? ((w.data as { entry?: { id?: string } } | undefined)?.entry?.id ?? "") : "";
+        this.auditOrgCommand(actor, device, "task-create", g?.anchor_dir ?? anchorDir, tier, w.ok,
+          w.ok ? `编排建卡（gid=${gid} entry=${cardId}）` : w.error);
+        if (!w.ok) return { ok: false, error: w.error };
+        // ② 依赖/gate 就绪检查（computeReady 纯函数——与派单前置/UI 同一口径）：
+        //    从板读回刚写的卡判定（deps/gate 以 store 洗刷后的落盘事实为准）。
+        //    未就绪 = 正常编排态 blocked，零 spawn（不建 worker 会话、不落 dispatched/
+        //    running 台账行），卡保留在板等依赖完成或人清 gate
+        const board1 = loadBoard(gid);
+        const card1 = board1.entries.find((x) => x.id === cardId);
+        const ready = card1
+          ? computeReady(card1, board1)
+          : { ready: false, reasons: [`编排建卡后读回失败: ${cardId}（按未就绪保守处理）`], gate_reason: null as string | null };
+        if (!ready.ready) {
+          const reasons = [...ready.reasons, ...(ready.gate_reason ? [`gate 未过: ${ready.gate_reason}`] : [])];
+          this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, true,
+            `编排 blocked 零 spawn（entry=${cardId}）：${reasons.join("；")}`);
+          return { ok: true, data: { entity_id: cardId, gid, task_ref: cardId, blocked: true, block_reasons: ready.reasons, gate_reason: ready.gate_reason } };
+        }
+        // ③ 就绪 → 认领派单：prompt 缺省兜底 task.text（卡文本即指令主形态）；title=
+        //    task.text——dispatchWorker 认领分支以 title||prompt 首行截 60 覆盖卡文本，
+        //    传 title 保全文；deps/note/gate 在认领的条件覆盖下原样保留（只挂
+        //    status=doing/owner_session/dispatch_id）
+        const effPrompt = typeof payload.prompt === "string" && payload.prompt.trim() ? payload.prompt : taskObj.text.trim();
+        const r = this.orgAction("dispatch", {
+          gid,
+          anchor: g?.anchor_dir ?? anchorDir,
+          prompt: effPrompt,
+          entry_id: cardId,
+          title: taskObj.text.trim(),
+          ...(typeof payload.role === "string" && payload.role.trim() ? { role: payload.role.trim() } : {}),
+          ...(skills ? { skills } : {}),
+          ...(payload.engine !== undefined ? { engine: payload.engine } : {}),
+          ...(typeof payload.model === "string" && payload.model.trim() ? { model: payload.model.trim() } : {}),
+          ...(typeof payload.provider === "string" && payload.provider.trim() ? { provider: payload.provider.trim() } : {}),
+        });
+        // orgAction("dispatch") 转调 dispatchWorker，返回裸形 {ok,dispatch_id,session_id}
+        const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string }) : undefined;
+        this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, r.ok,
+          r.ok
+            ? `编排派单已受理（entry=${cardId} dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}）`
+            : `${r.error}（task_ref=${cardId} 已入账，可带 entry_id 重派）`,
+        );
+        if (!r.ok) return { ok: false, error: `${r.error}（task_ref=${cardId} 已入账，可带 entry_id 重派）` };
+        // ACK 编排口径：task_ref=卡 id（≡entity_id，计划表原文键）；blocked 恒带显式
+        // 布尔（消费方免猜），dispatch_id/session_id 仅就绪链携带
+        return { ok: true, data: { entity_id: cardId, gid, task_ref: cardId, blocked: false, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "" } };
+      }
+      // ---------- M12-1 直派路径（无 task 键，行为零变化） ----------
+      const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
       if (!prompt.trim()) {
         this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, false, "prompt 必填");
         return { ok: false, error: "prompt 必填" };
       }
-      const skills = Array.isArray(payload.skills) ? payload.skills.filter((x): x is string => typeof x === "string") : undefined;
       const r = this.orgAction("dispatch", {
         ...(gid ? { gid } : {}),
         anchor: g?.anchor_dir ?? anchorDir,
@@ -4022,8 +4123,8 @@ export class SessionManager {
         r.ok ? `派单已受理（dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}）` : r.error,
       );
       if (!r.ok) return { ok: false, error: r.error };
-      // 编排语义（task.create→dispatch 自动链）是 M12-2 的单——本分支只做命令面
-      // 最小映射，ACK data 按设计稿口径 entity_id=新 worker 会话+并列 dispatch_id
+      // ACK data 按设计稿口径 entity_id=新 worker 会话+并列 dispatch_id（直派无卡，
+      // entity_id 语义=会话；编排链语义=卡——两路径各自自洽，回单备案）
       return { ok: true, data: { entity_id: dr?.session_id ?? "", gid: gid || null, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "" } };
     }
     if (action === "lesson-append") {
@@ -4273,11 +4374,28 @@ export class SessionManager {
             if (!text) return { ok: false, error: "text 必填" };
             const status = str("status") as BoardEntryStatus;
             if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            // M12-2 编排链补透传 #087 两字段（原白名单漏 deps/gate——store 层支持但
+            // 漏斗滤掉，卡带不上依赖导致 ready 误放行）；gate 面用户命令须形状守卫：
+            // 对象=设闸、null=显式清除（唯一清除口，人决策）、其余形状拒收
+            let deps: string[] | undefined;
+            if (p.depends_on !== undefined) {
+              if (!Array.isArray(p.depends_on)) return { ok: false, error: "depends_on 须为字符串数组" };
+              deps = p.depends_on.filter((x): x is string => typeof x === "string" && x.trim() !== "");
+            }
+            let gateVal: { reason: string } | null | undefined;
+            if (p.gate !== undefined) {
+              const g0 = p.gate as { reason?: unknown } | null;
+              if (g0 === null) gateVal = null;
+              else if (typeof g0 === "object" && !Array.isArray(g0) && typeof g0.reason === "string" && g0.reason.trim() !== "") gateVal = { reason: g0.reason };
+              else return { ok: false, error: "gate 须为 {reason:string} 或 null（显式清除）" };
+            }
             const u = upsertBoardEntry(gid, {
               id: str("entry_id") || undefined,
               text,
               ...(status ? { status } : {}),
               ...(str("note") ? { note: str("note") } : {}),
+              ...(deps !== undefined ? { depends_on: deps } : {}),
+              ...(gateVal !== undefined ? { gate: gateVal } : {}),
             });
             r = u.ok ? { ok: true, data: { entry: u.entry } } : u;
           } else if (op === "move") {
