@@ -131,8 +131,12 @@ export function importNotifications(port: StoragePort, dataDir: string, opts?: {
         const handledAt = typeof x.handled_at === "number" ? x.handled_at : (typeof x.dismissed_at === "number" ? x.dismissed_at : null);
         const actionable = x.actionable === true;
         const sc = x.sourceContext ?? {};
-        // per-device 读态（冻结件：read/dismiss 下沉 client state；缺 client_id 记 loss）
-        const clientStates: ClientStateRaw[] = [];
+        // per-device 读态（冻结件：read/dismiss 下沉 client state；缺 client_id 记 loss）。
+        // 同条目重复 client_id：按 PK(notification_id,client_id) 去重后写赢（client_states 是
+        // 当前态投影，后写=该设备较新 read/dismiss 态——与实体域「同源重复保首」不同向）+
+        // duplicate-key 落账留痕；不去重则裸 INSERT 撞 UNIQUE 整域硬失败（M11-REVIEW2 P2-1
+        // 实测），违反范式要点 4「坏行 loss 不阻断」。
+        const clientStates = new Map<string, ClientStateRaw>();
         if (Array.isArray(x.client_states)) {
           (x.client_states as unknown[]).forEach((cs) => {
             const c = cs as Record<string, unknown>;
@@ -140,7 +144,10 @@ export function importNotifications(port: StoragePort, dataDir: string, opts?: {
               losses.push({ source: projSrc, lineNo, reason: "missing-attribution", excerpt: JSON.stringify({ key: x.key, client_state: c }).slice(0, 200) });
               return;
             }
-            clientStates.push({
+            if (clientStates.has(c.client_id)) {
+              losses.push({ source: projSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: x.key, client_id: c.client_id }).slice(0, 200) });
+            }
+            clientStates.set(c.client_id, {
               clientId: c.client_id,
               readAt: typeof c.read_at === "number" ? c.read_at : null,
               dismissedAt: typeof c.dismissed_at === "number" ? c.dismissed_at : null,
@@ -157,7 +164,7 @@ export function importNotifications(port: StoragePort, dataDir: string, opts?: {
           payload: {
             title: x.title ?? "", body: x.body ?? "", actionable, group: x.group ?? null, source_context: sc,
           },
-          handledAt, resolvedAt, conditionKey: x.key, createdAt: x.created_at, clientStates,
+          handledAt, resolvedAt, conditionKey: x.key, createdAt: x.created_at, clientStates: [...clientStates.values()],
         });
       });
     } catch {

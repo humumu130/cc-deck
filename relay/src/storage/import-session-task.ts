@@ -338,7 +338,9 @@ function applyEvent(
     return;
   }
 
-  // 已见 sid：可变字段推进（UPDATED 的 title/model 等 payload 字段宽松合并；status 仅词表内采信）
+  // 已见 sid：仅推进 status/updated_at/runtime_state_json 三列（UPDATED payload 里的 title/model
+  // 均不回写——title 无 DDL 列可落、model 列存在但取首帧 CREATED 值不随 UPDATED 变；status
+  // 仅词表内采信）。非「宽松合并」，列面就这三列。
   if (nextStatus !== null) {
     port.exec("UPDATE session SET status = ?, updated_at = ?, runtime_state_json = ? WHERE id = ?", [
       nextStatus, ts, runtimeJson, sid,
@@ -434,7 +436,8 @@ function parseTaskFile(
  * 会话与任务域导入。三源 checkpoint 联动幂等：
  * · 三源全命中 → skipped（零写入）。
  * · events 段：行级批事务（DEFAULT_BATCH_SIZE 行/批，批尾写 checkpoint）——中断续跑从
- *   offset+1 增量续行；失效从 0 重放（upsert 覆盖；首批事务内清 events 源旧 loss）。
+ *   offset+1 增量续行；失效从 0 重放（upsert 覆盖；段 1 开始前一次性清 events 源旧 loss，
+ *   不进批循环——每批清会误删前批已提交账，见 flushBatch 前注释）。
  * · task 域段（任一源失效才触发）：单事务「清 task 域+tasks/accept 源旧 loss→重灌→回写
  *   两源 checkpoint」——tasks 目录有真实删文件面，DELETE 防残留；accept 失效经重灌重推
  *   review_required。
@@ -481,14 +484,20 @@ export function importSessionTask(
   let eventsProcessed = 0;
   if (obsEvents.lines !== null) {
     const fromLine = cpEvents !== null ? cpEvents.offset : 0; // 失效→0 重放；有效→offset+1 续
+    if (fromLine === 0) {
+      // 重放路径：events 源旧 loss 只在此清一次（段前单次，绝不进批循环）。若放进 flushBatch
+      // 每批执行：批 1 落账 commit→批 2 事务先 DELETE（把批 1 已提交的账删了）→坏行已被
+      // splice 出队永不重落→跨批时只有末批账存活的静默丢账（M11-REVIEW2 P1-1 实测）。
+      // 参照 import-dispatch-lesson.ts 清域单次铁律（cleared 先例）：清域动作与批边界无关，
+      // 段语义动作只做一次。清完即终（autocommit），后续批失败重试时 fromLine 仍为 0（checkpoint
+      // 未推进）→重清重放，自愈无残留。
+      port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.eventsFile]);
+    }
     let batch: { ev: NdjsonEvent | null; lineNo: number }[] = [];
     const flushBatch = (): void => {
       if (batch.length === 0) return;
       port.begin();
       try {
-        if (fromLine === 0) {
-          port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.eventsFile]);
-        }
         let lastLine = fromLine;
         for (const b of batch) {
           if (b.ev !== null) applyEvent(port, b.ev, b.lineNo, sources.eventsFile, groupByAnchor, losses);

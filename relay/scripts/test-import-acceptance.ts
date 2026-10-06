@@ -7,6 +7,8 @@
 //   C 重复 history 不折叠：同 item 两条历史 verdict 全保留多行（vs E1 当前态折叠——备案区分）。
 //   D 坏件不阻断：坏 JSON sheet/非 32hex id/孤儿 results 存在，合法 sheet 照常导入。
 //   E 幂等重跑快进行数不增；失效重扫（sheet 变更）域清重灌不残留。
+//   F 双 PK 冲突保护：同内容 id 双 sheet（案 A 首文件赢）/同 (h,i) 双判定（案 B 保首）不炸域
+//     （M11-REVIEW2 P2-2 回归锁）。
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -220,6 +222,53 @@ const cp3 = port.query<{ line_offset: number }>("SELECT line_offset FROM import_
 assert(cp3 !== undefined, "重灌后 checkpoint 已回写");
 void cp3;
 void ACCEPTANCE_IMPORT_SCHEMA_VERSION;
+
+// ---------- F. 双 PK 冲突保护：同内容 id 双 sheet + 同 (h,i) 双判定（M11-REVIEW2 P2-2 回归锁） ----------
+// 修复缺陷：sheet 裸 INSERT / result 裸 INSERT 撞 UNIQUE → 整域硬失败（修复前本段 rF4 直接
+// 抛异常回滚）。修法：案 A 内容 id 去重首文件赢+duplicate-id 账；案 B 同 (h,i) 二见 duplicate-key
+// 账保首（跨 history 条目不折叠语义不变）。
+console.log("双 PK 冲突保护:");
+const PA = "11111111111111111111111111111111";
+const PB = "22222222222222222222222222222222";
+writeFileSync(join(acceptDir, `${PA}.json`), JSON.stringify({
+  id: PA, title: "双胞胎先到", created_at: 1004, cwd: "/fx/proj-a",
+  rows: [{ task: "#P1", item: "项一", criteria: "c" }],
+}));
+// 案 A：文件名不同、内容 doc.id 相同（doc.id 权威取内容非文件名）→首文件赢（readdir 序 "1111" < "2222"）
+writeFileSync(join(acceptDir, `${PB}.json`), JSON.stringify({
+  id: PA, title: "双胞胎后到", created_at: 1005, cwd: "/fx/proj-a",
+  rows: [{ task: "#P2", item: "项二", criteria: "c" }],
+}));
+// 案 B：同 history 条目 rows 两条 {i:0}（同批次对同 item 双判定的病态源）
+writeFileSync(join(acceptDir, `${PA}.results.json`), JSON.stringify({
+  id: PA, history: [{ at: 4000, ua: "UA-P", rows: [{ i: 0, verdict: "pass", note: "" }, { i: 0, verdict: "fail", note: "重判" }] }],
+}));
+for (const f of [`${PA}.json`, `${PB}.json`, `${PA}.results.json`]) {
+  const p = join(acceptDir, f);
+  utimesSync(p, new Date(Date.now() + 200), new Date(Date.now() + 200)); // APFS 同毫秒保护
+}
+const rF4 = importAcceptance(port, acceptDir);
+assert(rF4.skipped === false, "新增文件→域重扫");
+assert(rF4.counts.sheet === 4, `案 A 去重保首：sheet 3 旧 + 1（后到文件整单拒入，实际 ${rF4.counts.sheet}）`);
+const paSheet = port.query<Record<string, unknown>>("SELECT title FROM acceptance_sheet WHERE id = ?", [PA])[0];
+assert(paSheet?.title === "双胞胎先到" && port.query<{ n: number }>("SELECT COUNT(*) AS n FROM acceptance_sheet WHERE id = ?", [PB])[0]?.n === 0,
+  `案 A 首文件赢：存活行 title=先到件、后到文件 id 零落行（实测 ${String(paSheet?.title)}）`);
+assert(rF4.counts.item === 7 && port.query<{ n: number }>("SELECT COUNT(*) AS n FROM acceptance_item WHERE task = '#P2'")[0]?.n === 0,
+  "案 A 后到文件连同其 items 整单拒入（#P2 零落行）");
+const paItem = port.query<Record<string, unknown>>("SELECT id FROM acceptance_item WHERE sheet_id = ? AND item_index = 1", [PA])[0];
+const paResults = port.query<Record<string, unknown>>("SELECT verdict FROM acceptance_result WHERE item_id = ?", [String(paItem?.id)]);
+assert(paResults.length === 1 && paResults[0]?.verdict === "pass",
+  `案 B 同 (h,i) 二见保首：双判定归一行、首判 pass 存活（实测 ${JSON.stringify(paResults)}）`);
+const fLoss = listLoss(port, acceptDir);
+assert(fLoss.length === 9, `loss 7 旧账重灌重落 + 2 新账（实际 ${fLoss.length}）`);
+const dupIdLoss = fLoss.find((l) => l.reason === "duplicate-id");
+assert(dupIdLoss !== undefined && (dupIdLoss.excerpt as string).includes(PA) && (dupIdLoss.excerpt as string).includes(PB),
+  "案 A duplicate-id 账 excerpt 带两文件名（首/后对号取证）");
+assert(fLoss.filter((l) => l.reason === "duplicate-key").length === 1, "案 B duplicate-key 账恰 1 条");
+assert(port.query("PRAGMA foreign_key_check").length === 0, "双案去重后零悬空 FK");
+const rF5 = importAcceptance(port, acceptDir);
+assert(rF5.skipped === true && rF5.counts.sheet === 4 && rF5.counts.result === 7 && listLoss(port, acceptDir).length === 9,
+  "快进零写入：行数/loss 不增（去重结果幂等）");
 
 port.close();
 rmSync(dataDir, { recursive: true, force: true });

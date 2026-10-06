@@ -2,7 +2,7 @@
 // 范式沿用 test-import-org（mkdtemp+env 全清+assert 计数+两轮连跑）。
 // fixture 布局：notifications.json（投影源 5 条：双 client 读态/resolved/全局 dismissed/缺 key/
 //   缺 created_at）+ decision-notifications.json（ledger 4 条：同 k-1 跨源归并/仅 ledger k-6/
-//   缺 key/k-1 同源重复）。
+//   缺 key/k-1 同源重复）；段 6 重写投影源（重复 client_id 去重保护，P2-1 回归锁）。
 // 注意：loss 的 lineNo = 数组元素序（idx+1），非 JSON 物理行号（与 C1 口径一致）。
 import { mkdtempSync, rmSync, writeFileSync, utimesSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -138,6 +138,31 @@ assert(r4.counts.clientState === 2, "投影源 per-client 读态不受坏源影�
 const badLoss = listLoss(port, ledgerFile);
 assert(badLoss.length === 1 && badLoss[0]?.reason === "bad-json" && badLoss[0]?.lineNo === 1, "坏 JSON 落账恰 1 条（line 1），旧 ledger 账清零");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "坏源重扫后仍零悬空 FK");
+
+// ---------- 6. 同条目重复 client_id：去重后写赢不炸域（M11-REVIEW2 P2-1 回归锁） ----------
+// 修复缺陷：client_state 裸 INSERT PK(notification_id,client_id)，同条目重复 client_id 撞
+// UNIQUE 整域硬失败（修复前本段 importNotifications 直接抛异常）。修法：同条目内按 client_id
+// 去重后写赢（当前态投影：后写=该设备较新 read/dismiss 态）+ duplicate-key 落账。
+console.log("重复 client_id 保护:");
+writeFileSync(projFile, JSON.stringify({
+  notifications: [
+    { key: "k-dup", kind: "system", group: "activity", severity: "info", title: "重复设备", body: "x", sourceContext: { domain: "system", entityId: "e-d1", alertId: "al-d1", returnPath: "" }, actionable: false, created_at: T + 30, client_states: [{ client_id: "phone", read_at: T + 31 }, { client_id: "phone", read_at: T + 32, dismissed_at: T + 33 }] },
+    { key: "k-ok", kind: "system", group: "activity", severity: "info", title: "正常设备", body: "x", sourceContext: { domain: "system", entityId: "e-d2", alertId: "al-d2", returnPath: "" }, actionable: false, created_at: T + 34, client_states: [{ client_id: "tab", read_at: T + 35 }] },
+  ],
+}, null, 2) + "\n");
+utimesSync(projFile, new Date(Date.now() + 100), new Date(Date.now() + 100));
+const r6 = importNotifications(port, dataDir);
+assert(r6.skipped === false && r6.counts.notification === 2, `同条目重复 client_id 不炸域：导入成功实体 2 行（修复前 UNIQUE 抛异常整域回滚，实际 ${r6.counts.notification}）`);
+const dupRows = port.query<{ client_id: string; read_at: number | null; dismissed_at: number | null }>(
+  "SELECT client_id, read_at, dismissed_at FROM notification_client_state WHERE notification_id = ?", [ntfId("k-dup")]);
+assert(dupRows.length === 1 && dupRows[0]?.client_id === "phone" && dupRows[0]?.read_at === T + 32 && dupRows[0]?.dismissed_at === T + 33,
+  `同条目按 client_id 去重后写赢：两条归一行、末条（较新态）生效（实测 ${JSON.stringify(dupRows)}）`);
+assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM notification_client_state WHERE notification_id = ?", [ntfId("k-ok")])[0]?.n === 1,
+  "无重复条目照常落行（k-ok tab 一行）");
+const dupLoss = listLoss(port, projFile);
+assert(dupLoss.length === 1 && dupLoss[0]?.reason === "duplicate-key" && dupLoss[0]?.lineNo === 1 && (dupLoss[0]?.excerpt as string).includes("phone"),
+  "重复 client_id 落 duplicate-key 账恰 1 条（line 1 元素序，excerpt 带 client_id）");
+assert(port.query("PRAGMA foreign_key_check").length === 0, "去重后零悬空 FK");
 
 port.close();
 rmSync(dataDir, { recursive: true, force: true });

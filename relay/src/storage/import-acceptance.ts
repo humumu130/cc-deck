@@ -9,10 +9,12 @@
 //     任务号串，非外键）；group_id←cwd 精确匹配 group.anchor_dir（D1 同款归因链）；cwd 缺失/
 //     匹配不上→NULL+missing-attribution 落账（Leader 派单口径：缺归因落账）；sheet_key 保留
 //     原值（冻结件：不进公开表单正文——线上下发侧自有 32hex 校验，导入层不裁）；preface/notes
-//     DDL 无列丢弃（payload 无处安放，备案）。
+//     DDL 无列丢弃（payload 无处安放，备案）；内容 id 重复（两文件声明同 doc.id）→duplicate-id
+//     首文件赢+后者整单拒入（P2-2 案 A）。
 //   · item：rows[] 数组序→item_index（1-based，冻结件「数组顺序成为 item_index」）；id 确定性
 //     `itm-${sha12(sheetId/index)}`；task/item/criteria 三串必填（异常行拒入+loss，同冻结件）。
-//   · result：history[] 逐条×逐 row 展开——**重复 history 不折叠**（见下区分）；id 确定性
+//   · result：history[] 逐条×逐 row 展开——**重复 history 不折叠**（见下区分）；同 history 内
+//     同 (h,i) 二见→duplicate-key 保首（P2-2 案 B，跨 history 条目不受影响）；id 确定性
 //     `res-${sha12(sheetId/h序/row.i+1)}`；verdict 词表 pass|fail|NULL（词表外拒行）；actor←ua
 //     （缺失→'import-migration' 迁移批 actor，冻结件「原提交元数据缺失由 NULL/迁移批 actor」，
 //     列 NOT NULL 故取后者）；created_at←at；row.i(0-based)→item_index=i+1 定位 item，越界
@@ -29,9 +31,10 @@
 // 范式五要点（C1 定稿）：port 显式传入+事务内聚；目录级 checkpoint 虚拟源（mtime=树内最大、
 // lineCount=文件数，命中=域快进，失效=域清重灌 result→item→sheet 子先父）；失效即域重扫+
 // 按源清旧 loss；坏 sheet/坏行 loss 不阻断其余 sheet；确定性 id 幂等。observe 定序 stat 先于
-// read（M11-REVIEW P2-1）。sha12 私有副本（import-util 共享化 G1 前统一定夺）。
+// read（M11-REVIEW P2-1）。sha12/statThenRead 消费 import-util 共享件（M11-UTIL/UTIL2 已回迁，
+// 无私有副本）。同 id/同 (h,i) 病态面去重保首落账见 P2-2 两案（FIX-A）。
 import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { sha12, statThenRead, type ObservedFile } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
@@ -215,6 +218,7 @@ export function importAcceptance(port: StoragePort, acceptanceDir: string, opts?
   }
 
   // -- sheet 文件：id 校验（线上 ACCEPTANCE_ID_RE 对表）→归因→行模型
+  const sheetIdSeen = new Map<string, string>(); // 内容 id → 首见文件（P2-2 案 A：同 id 双文件去重保首）
   for (const s of obs.sheets) {
     if (s.doc === null) {
       losses.push({ sourcePath: acceptanceDir, lineNo: 1, reason: "bad-json", excerpt: `sheet 文件解析失败：${s.file}`.slice(0, 200) });
@@ -230,6 +234,15 @@ export function importAcceptance(port: StoragePort, acceptanceDir: string, opts?
       losses.push({ sourcePath: acceptanceDir, lineNo: 1, reason: "missing-field", excerpt });
       continue;
     }
+    // 内容 id 重复（doc.id 权威取内容 ：131，两文件可声明同 id）：裸 INSERT 撞 acceptance_sheet.id
+    // UNIQUE 整域硬失败（M11-REVIEW2 P2-2 案 A 实测）——首文件赢（readdir 序确定性），后者连同
+    // 其 items 整单拒入落账（先于归因判重：整单已拒，不再叠 missing-attribution 噪音账）
+    const firstSeen = sheetIdSeen.get(d.id);
+    if (firstSeen !== undefined) {
+      losses.push({ sourcePath: acceptanceDir, lineNo: 1, reason: "duplicate-id", excerpt: JSON.stringify({ id: d.id, first: basename(firstSeen), dup: basename(s.file) }).slice(0, 200) });
+      continue;
+    }
+    sheetIdSeen.set(d.id, s.file);
     // 归因：cwd→group.anchor_dir 精确匹配；缺失/匹配不上→NULL+missing-attribution（零造关联）
     const cwd = typeof d.cwd === "string" && d.cwd ? d.cwd : null;
     const groupId = cwd !== null ? groupByAnchor.get(cwd) ?? null : null;
@@ -282,6 +295,7 @@ export function importAcceptance(port: StoragePort, acceptanceDir: string, opts?
       continue;
     }
     const itemByIndex = new Map(sheetEntry.items.map((it) => [it.itemIndex, it]));
+    const seenResults = new Set<string>(); // (h序,item_index) 去重保首（P2-2 案 B）——跨 history 条目不折叠（事实流语义）
     d.history.forEach((h, hIdx) => {
       const hExcerpt = JSON.stringify({ results_id: d.id, h: hIdx }).slice(0, 200);
       if (typeof h.at !== "number") {
@@ -312,6 +326,15 @@ export function importAcceptance(port: StoragePort, acceptanceDir: string, opts?
           losses.push({ sourcePath: acceptanceDir, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d.id, verdict: row.verdict }).slice(0, 200) });
           continue;
         }
+        // 同 history 同 i 二见（同批次对同 item 双判定的病态源）：res- 确定性 id 同键→裸 INSERT
+        // 撞 acceptance_result.id UNIQUE 整域硬失败（M11-REVIEW2 P2-2 案 B 实测）——保首落行，
+        // 后者 duplicate-key 落账。跨 history 条目（h 序不同）id 天然不同，不折叠
+        const resultKey = `${hIdx}/${itemIndex}`;
+        if (seenResults.has(resultKey)) {
+          losses.push({ sourcePath: acceptanceDir, lineNo: hIdx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ results_id: d.id, h: hIdx, item_index: itemIndex, why: "同批次重复判定保首" }).slice(0, 200) });
+          continue;
+        }
+        seenResults.add(resultKey);
         results.push({
           id: `res-${sha12(`${d.id}/h${hIdx}/i${itemIndex}`)}`,
           itemId: item.id,

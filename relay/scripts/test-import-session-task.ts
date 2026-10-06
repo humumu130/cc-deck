@@ -9,6 +9,7 @@
 //   C 行级断点续跑：回拨 offset 模拟中断→只处理余下行（eventsProcessed=N-offset）零重复。
 //   D task 域重灌：task 文件 mtime 变→域清重灌行数不增（防残留面）。
 //   E events 失效重放：追加行→从 0 重放（upsert 覆盖）+task 域联动重灌。
+//   F 多批重放：batchSize=4 小批×坏行跨批，loss 账不被批间误删（M11-REVIEW2 P1-1 回归锁）。
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, utimesSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -239,6 +240,54 @@ assert(s1Runtime.done_reason === "all-done", "重放 runtime 增量覆盖式收�
 assert(r5.counts.task === 6, "task 域联动重灌行数不增（归因链依赖 session 全量）");
 assert(sess(S2)?.status === "DONE" && sess(S2)?.deleted_at === 1010, "重放对既有行 upsert 覆盖同值（幂等终态）");
 assert(listLoss(port).filter((l) => [eventsFile, tasksDir, acceptDir].includes(l.sourcePath)).length === 6, "重放后 loss 不增（失效路径先清旧账再落，无重复）");
+
+// ---------- F. 多批重放：batchSize=4 小批 × 坏行跨批（M11-REVIEW2 P1-1 回归锁） ----------
+// 修复缺陷：flushBatch 内 `if (fromLine === 0) DELETE loss` 每批执行——批 2 删掉批 1 已提交
+// 的账、坏行已 splice 永不重落→只有末批账存活（修复前本 fixture 三笔账全丢=0 残留）。
+// 修法：DELETE 移出批循环，段 1 开始前一次性执行（参照 D2 清域单次 cleared 先例）。
+console.log("多批重放 loss 不误删:");
+{
+  const rowsF: string[] = [
+    ev(1, "sess-4444", 2001, "SESSION_CREATED", { cwd: "/fx/solo2", model: "glm-5.3" }),
+    ev(2, "sess-4444", 2002, "SESSION_WAITING", {}),
+    '{"broken-3', // 行 3：批 1 坏 JSON（batchSize=4 → 行 1-4 批 1）
+    ev(4, "sess-4444", 2004, "SESSION_DONE", { done_reason: "f" }),
+    ev(5, "sess-5555", 2005, "SESSION_CREATED", { cwd: "/fx/solo3", model: "glm-5.3" }),
+    ev(6, "sess-5555", 2006, "SESSION_LOG", { kind: "tool_use", text: "x", tool: "Read" }),
+    ev(7, "sess-5555", 2007, "SESSION_WAITING", {}),
+    ev(8, "sess-5555", 2008, "SESSION_WAITING_RESOLVED", {}),
+    JSON.stringify({ seq: 9, ts: 2009, type: "SESSION_CREATED", payload: {} }), // 行 9：批 3 缺 session_id
+    ev(10, "sess-5555", 2010, "SESSION_DONE", { done_reason: "g" }),
+    ev(11, "sess-6666", 2011, "SESSION_CREATED", { cwd: "/fx/solo4", model: "glm-5.3" }),
+    ev(12, "sess-6666", 2012, "SESSION_UPDATED", { status: "WORKING" }),
+    ev(13, "sess-6666", 2013, "SESSION_DONE", { done_reason: "h" }),
+    ev(14, "sess-7777", 2014, "SESSION_CREATED", { cwd: "/fx/solo5", model: "glm-5.3" }),
+    '{"broken-15', // 行 15：批 4 坏 JSON
+    ev(16, "sess-7777", 2016, "SESSION_WAITING", {}),
+    ev(17, "sess-7777", 2017, "SESSION_DONE", { done_reason: "i" }),
+    ev(18, "sess-4444", 2018, "SESSION_LOG", { kind: "tool_use", text: "y", tool: "Edit" }),
+    ev(19, "sess-6666", 2019, "SESSION_DELETED", {}),
+    ev(20, "sess-7777", 2020, "SESSION_UPDATED", { status: "ERROR" }),
+  ];
+  writeFileSync(eventsFile, rowsF.join("\n") + "\n");
+  utimesSync(eventsFile, new Date(statSync(eventsFile).mtimeMs + 10), new Date(statSync(eventsFile).mtimeMs + 10)); // APFS 同毫秒保护
+}
+const rF1 = importSessionTask(port, sources, { batchSize: 4 });
+assert(rF1.skipped === false && rF1.eventsProcessed === 20, `多批首跑处理 20 行（batchSize=4×5 批，实际 ${rF1.eventsProcessed}）`);
+const fLoss1 = listLoss(port, eventsFile);
+assert(fLoss1.length === 3 && JSON.stringify(fLoss1.map((l) => `${l.lineNo}:${l.reason}`)) === JSON.stringify(["3:bad-json", "9:missing-field", "15:bad-json"]),
+  `首跑全量坏行账都在（批 1/3/4 各一笔跨批存活，修复前批间互删只剩 0 笔，实际 ${JSON.stringify(fLoss1.map((l) => `${l.lineNo}:${l.reason}`))}）`);
+assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM session")[0]?.n === 6, "session 2 旧 + 4 新（坏行不建行不阻断后续行）");
+// ② 失效重放：mtime 变→从 0 重放（段前清账一次+三批重落），账仍全在同位
+utimesSync(eventsFile, new Date(statSync(eventsFile).mtimeMs + 10), new Date(statSync(eventsFile).mtimeMs + 10));
+const rF2 = importSessionTask(port, sources, { batchSize: 4 });
+assert(rF2.skipped === false && rF2.eventsProcessed === 20, "源变失效→全量重放 20 行");
+const fLoss2 = listLoss(port, eventsFile);
+assert(fLoss2.length === 3 && fLoss2.every((l) => [3, 9, 15].includes(l.lineNo)), `重放后坏行账仍全在（3 笔同位，修复前重放批间互删同病，实际 ${fLoss2.length}）`);
+// ③ 快进不重复
+const rF3 = importSessionTask(port, sources, { batchSize: 4 });
+assert(rF3.skipped === true && rF3.eventsProcessed === 0 && listLoss(port, eventsFile).length === 3, "三源命中→快进零写入，loss 不重复落（仍 3）");
+assert(port.query("PRAGMA foreign_key_check").length === 0, "多批重放后零悬空 FK");
 
 port.close();
 rmSync(dataDir, { recursive: true, force: true });
