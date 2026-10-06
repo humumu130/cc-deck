@@ -695,7 +695,13 @@ export type CommandType =
   | "COMMAND_ORG_ACTION"
   | "COMMAND_NOTIFICATION_ACK"
   | "COMMAND_ENGINE_PROFILE_UPDATE"
-  | "COMMAND_ARTIFACT_GROUP_FETCH";
+  | "COMMAND_ARTIFACT_GROUP_FETCH"
+  // M12-1 四新命令（v2-m10-freeze §3.1 新增候选定岗）：均经 orgCommand 咽喉→orgAction
+  // 单漏斗执行（canonical payload→旧 shape adapter 映射，不建第二事实源）
+  | "COMMAND_TASK_CREATE"
+  | "COMMAND_TASK_UPDATE"
+  | "COMMAND_DISPATCH"
+  | "COMMAND_LESSON_APPEND";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -879,6 +885,65 @@ export interface OrgActionCommand extends CommandBase {
   payload: { action: "create"; name: string; anchor_dir: string; tier: string };
 }
 
+// ---------- M12-1 四新命令（canonical payload 冻结，v2-m10-freeze §3.1 新增候选） ----------
+// 公共约定：ACK ok 路径 data={entity_id, gid}（设计稿 §七口径）；DISPATCH 并列 dispatch_id。
+// 全部经 orgCommand 咽喉（org:write 能力位+审计一行）→orgAction 单漏斗执行。
+
+// 建板卡：映射 orgAction board/op=upsert（无 entry_id=新卡，status 缺省 todo）
+export interface TaskCreateCommand extends CommandBase {
+  type: "COMMAND_TASK_CREATE";
+  payload: {
+    gid: string;                                  // 目标组（板随组落 boards/<gid>.json）
+    text: string;                                 // 卡文本（store 层必填）
+    status?: "todo" | "doing" | "done";           // 缺省 todo
+    note?: string;
+  };
+}
+
+// 改板卡：映射 orgAction board/op=upsert（带 entry_id=更新，status 缺省不动旧值）。
+// text 可选——缺省时 adapter 从现板补旧值（M12-2 编排最常用"只推 status"）
+export interface TaskUpdateCommand extends CommandBase {
+  type: "COMMAND_TASK_UPDATE";
+  payload: {
+    gid: string;
+    entry_id: string;                             // 目标卡（不存在即拒）
+    text?: string;
+    status?: "todo" | "doing" | "done";
+    note?: string;
+  };
+}
+
+// 派单：映射 orgAction dispatch→dispatchWorker（M12-1 只做命令面接线，零新增编排——
+// task.create→dispatch 自动编排语义是 M12-2 的单）。gid 派单锚取自组（anchor_dir 可省）；
+// entry_id 认领既有板卡（触发依赖/gate 前置检查）
+export interface DispatchCommand extends CommandBase {
+  type: "COMMAND_DISPATCH";
+  payload: {
+    gid?: string;
+    anchor_dir?: string;                          // gid 缺省时必填（绝对路径）
+    prompt: string;
+    title?: string;
+    entry_id?: string;
+    role?: string;
+    skills?: string[];
+    engine?: string;                              // SessionEngine 词表外拒收（store 层校验）
+    model?: string;
+    provider?: string;
+  };
+}
+
+// 经验回流：映射 orgAction lesson-append（M12-1 新增最小 action，单漏斗内调 addLesson
+// ——板冻结/文本必填/tags 洗刷语义全在 store 层）
+export interface LessonAppendCommand extends CommandBase {
+  type: "COMMAND_LESSON_APPEND";
+  payload: {
+    gid: string;
+    text: string;
+    tags?: string[];
+    source_dispatch_id?: string;
+  };
+}
+
 export interface NotificationAckCommand extends CommandBase {
   type: "COMMAND_NOTIFICATION_ACK";
   payload: { notification_key: string; action: "handled" | "dismissed" };
@@ -929,7 +994,11 @@ export type Command =
   | OrgActionCommand
   | NotificationAckCommand
   | EngineProfileUpdateCommand
-  | ArtifactGroupFetchCommand;
+  | ArtifactGroupFetchCommand
+  | TaskCreateCommand
+  | TaskUpdateCommand
+  | DispatchCommand
+  | LessonAppendCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
 // bypassPermissions=跳过全部确认——skip 会话被误切后靠此切回）

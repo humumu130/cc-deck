@@ -135,7 +135,10 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
   setInterval(() => void tick(), 60_000).unref?.();
 }
 
-const COMMAND_TYPES = new Set([
+// LAN 入口命令白名单（不在表内拒发 "unsupported command"）。导出供测试与 cloud-client
+// 白名单做逐字一致断言（#117/#212 教训：加命令漏白名单=实机死路，mgr case 与单测全过、
+// 唯独入口层挡死）
+export const COMMAND_TYPES = new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
   "COMMAND_STOP",
@@ -176,6 +179,11 @@ const COMMAND_TYPES = new Set([
   "COMMAND_NOTIFICATION_ACK",
   // #17 第二批：雇员独立家开关切换（三端设置项）
   "COMMAND_SETTINGS_UPDATE",
+  // M12-1 四新命令（v2-m10-freeze §3.1）：经 orgCommand 咽喉→orgAction 单漏斗
+  "COMMAND_TASK_CREATE",
+  "COMMAND_TASK_UPDATE",
+  "COMMAND_DISPATCH",
+  "COMMAND_LESSON_APPEND",
 ]);
 
 const HEARTBEAT_MS = 30_000;

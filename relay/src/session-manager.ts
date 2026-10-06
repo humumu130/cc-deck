@@ -12,7 +12,7 @@ import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
-  adaptOrgAction, addConfirm, addMember, buildArchiveChecklist, canTransition, computeReady, createGroup, decideConfirm,
+  adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, createGroup, decideConfirm,
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
@@ -2513,6 +2513,24 @@ export class SessionManager {
           const r = this.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
         }
+        case "COMMAND_TASK_CREATE":
+        case "COMMAND_TASK_UPDATE":
+        case "COMMAND_DISPATCH":
+        case "COMMAND_LESSON_APPEND": {
+          // M12-1 四新命令（v2-m10-freeze §3.1 新增候选定岗）：LAN/cloud 两入口都经
+          // handleCommand 到这里，同走 orgCommand 咽喉（权限矩阵+审计一行），adapter
+          // 把 canonical payload 映射到 orgAction 旧 shape 再执行——不建第二事实源。
+          // ACK data 冻结口径 {entity_id, gid}（dispatch 并列 dispatch_id/session_id）
+          const m12Action: Record<string, string> = {
+            COMMAND_TASK_CREATE: "task-create",
+            COMMAND_TASK_UPDATE: "task-update",
+            COMMAND_DISPATCH: "dispatch",
+            COMMAND_LESSON_APPEND: "lesson-append",
+          };
+          const r = this.orgCommand("owner", by, m12Action[cmd.type] ?? "", cmd.payload as Record<string, unknown>);
+          if ("forbidden" in r) return r.forbidden;
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+        }
         case "COMMAND_NOTIFICATION_ACK": {
           // #018-R1c 通知生命周期（B0 冻结 action 词表 handled|dismissed；resolved
           // 由来源事件驱动不经此）。幂等：已 resolved 的账 ok 不复活；未知 key 拒收
@@ -3919,6 +3937,120 @@ export class SessionManager {
       );
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // ---------- M12-1 四新命令分支（canonical payload→orgAction 旧 shape adapter） ----------
+    // 权限已由咽喉头部统一 org:write 鉴权；每分支三件套=形状校验→单漏斗执行→审计。
+    // ACK data 冻结 {entity_id, gid}（dispatch 并列 dispatch_id/session_id）。
+    if (action === "task-create" || action === "task-update") {
+      const gid = typeof payload.gid === "string" ? payload.gid.trim() : "";
+      const entryId = typeof payload.entry_id === "string" ? payload.entry_id.trim() : "";
+      const status = typeof payload.status === "string" ? payload.status : "";
+      const tier = findGroup(gid)?.tier === "轻立项" || findGroup(gid)?.tier === "正经立项" ? (findGroup(gid)!.tier as DispatchTier) : "随手办";
+      const anchor = findGroup(gid)?.anchor_dir ?? "";
+      if (!gid) {
+        this.auditOrgCommand(actor, device, action, "", tier, false, "gid 必填");
+        return { ok: false, error: "gid 必填" };
+      }
+      if (status && !["todo", "doing", "done"].includes(status)) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status 必须是 todo|doing|done（得 ${status}）`);
+        return { ok: false, error: "status 必须是 todo|doing|done" };
+      }
+      let text = typeof payload.text === "string" ? payload.text.trim() : "";
+      if (action === "task-update") {
+        if (!entryId) {
+          this.auditOrgCommand(actor, device, action, anchor, tier, false, "entry_id 必填");
+          return { ok: false, error: "entry_id 必填" };
+        }
+        // text 可选：缺省从现板补旧值（M12-2 编排最常用「只推 status」——store 层
+        // upsert 更新分支 text 必填，adapter 层补齐，仍单漏斗）
+        if (!text) {
+          const card = loadBoard(gid).entries.find((x) => x.id === entryId);
+          if (!card) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `板卡不存在: ${entryId}`);
+            return { ok: false, error: `板卡不存在: ${entryId}（先建卡再更新）` };
+          }
+          text = card.text;
+        }
+      } else if (!text) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, "text 必填");
+        return { ok: false, error: "text 必填" };
+      }
+      const note = typeof payload.note === "string" ? payload.note.trim() : "";
+      const r = this.orgAction("board", {
+        op: "upsert",
+        gid,
+        text,
+        ...(action === "task-update" ? { entry_id: entryId } : {}),
+        ...(status ? { status } : {}),
+        ...(note ? { note } : {}),
+      });
+      this.auditOrgCommand(
+        actor, device, action, anchor, tier, r.ok,
+        r.ok ? `板卡已${action === "task-create" ? "建" : "更"}（gid=${gid}${entryId ? ` entry=${entryId}` : ""}）` : r.error,
+      );
+      if (!r.ok) return { ok: false, error: r.error };
+      const entry = (r.data as { entry?: { id?: string } } | undefined)?.entry;
+      return { ok: true, data: { entity_id: entry?.id ?? entryId, gid } };
+    }
+    if (action === "dispatch") {
+      const gid = typeof payload.gid === "string" ? payload.gid.trim() : "";
+      const anchorDir = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
+      const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+      const g = gid ? findGroup(gid) : undefined;
+      const tier = g?.tier === "轻立项" || g?.tier === "正经立项" ? g.tier : "随手办";
+      if (!prompt.trim()) {
+        this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, false, "prompt 必填");
+        return { ok: false, error: "prompt 必填" };
+      }
+      const skills = Array.isArray(payload.skills) ? payload.skills.filter((x): x is string => typeof x === "string") : undefined;
+      const r = this.orgAction("dispatch", {
+        ...(gid ? { gid } : {}),
+        anchor: g?.anchor_dir ?? anchorDir,
+        prompt,
+        ...(typeof payload.title === "string" && payload.title.trim() ? { title: payload.title.trim() } : {}),
+        ...(typeof payload.entry_id === "string" && payload.entry_id.trim() ? { entry_id: payload.entry_id.trim() } : {}),
+        ...(typeof payload.role === "string" && payload.role.trim() ? { role: payload.role.trim() } : {}),
+        ...(skills ? { skills } : {}),
+        ...(payload.engine !== undefined ? { engine: payload.engine } : {}),
+        ...(typeof payload.model === "string" && payload.model.trim() ? { model: payload.model.trim() } : {}),
+        ...(typeof payload.provider === "string" && payload.provider.trim() ? { provider: payload.provider.trim() } : {}),
+      });
+      // orgAction("dispatch") 转调 dispatchWorker，返回的是裸形 {ok,dispatch_id,
+      // session_id}（无 data 包裹——既有咽喉形状，别处照旧消费不因本单改形）
+      const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string }) : undefined;
+      this.auditOrgCommand(
+        actor, device, action, g?.anchor_dir ?? anchorDir, tier, r.ok,
+        r.ok ? `派单已受理（dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}）` : r.error,
+      );
+      if (!r.ok) return { ok: false, error: r.error };
+      // 编排语义（task.create→dispatch 自动链）是 M12-2 的单——本分支只做命令面
+      // 最小映射，ACK data 按设计稿口径 entity_id=新 worker 会话+并列 dispatch_id
+      return { ok: true, data: { entity_id: dr?.session_id ?? "", gid: gid || null, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "" } };
+    }
+    if (action === "lesson-append") {
+      const gid = typeof payload.gid === "string" ? payload.gid.trim() : "";
+      const tier = findGroup(gid)?.tier === "轻立项" || findGroup(gid)?.tier === "正经立项" ? (findGroup(gid)!.tier as DispatchTier) : "随手办";
+      const anchor = findGroup(gid)?.anchor_dir ?? "";
+      const text = typeof payload.text === "string" ? payload.text.trim() : "";
+      if (!gid || !text) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, gid ? "text 必填" : "gid 必填");
+        return { ok: false, error: gid ? "text 必填" : "gid 必填" };
+      }
+      const tags = Array.isArray(payload.tags) ? payload.tags.filter((x): x is string => typeof x === "string") : undefined;
+      const sdi = typeof payload.source_dispatch_id === "string" ? payload.source_dispatch_id.trim() : "";
+      const r = this.orgAction("lesson-append", {
+        gid,
+        text,
+        ...(tags ? { tags } : {}),
+        ...(sdi ? { source_dispatch_id: sdi } : {}),
+      });
+      this.auditOrgCommand(
+        actor, device, action, anchor, tier, r.ok,
+        r.ok ? `经验已回流（gid=${gid}）` : r.error,
+      );
+      if (!r.ok) return { ok: false, error: r.error };
+      const lesson = (r.data as { lesson?: { id?: string } } | undefined)?.lesson;
+      return { ok: true, data: { entity_id: lesson?.id ?? "", gid } };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
 
@@ -4163,6 +4295,20 @@ export class SessionManager {
           }
           if (r.ok) this.emitBoard(gid);
           return r;
+        }
+        case "lesson-append": {
+          // M12-1：lesson 写入口的最小漏斗面（COMMAND_LESSON_APPEND 的执行体）——
+          // 冻结校验/文本必填/tags 洗刷/sdi 语义全在 addLesson store 层，此处只做
+          // 形状分发；广播走 BOARD_UPDATED（lessons 分区随板下发，emitBoard 已覆盖）
+          const gid = str("gid");
+          if (!gid) return { ok: false, error: "gid 必填" };
+          const text = str("text");
+          if (!text) return { ok: false, error: "text 必填" };
+          const tags = Array.isArray(p.tags) ? p.tags.filter((x): x is string => typeof x === "string") : undefined;
+          const sdi = str("source_dispatch_id");
+          const r = addLesson(gid, { text, ...(tags ? { tags } : {}), ...(sdi ? { source_dispatch_id: sdi } : {}) });
+          if (r.ok) this.emitBoard(gid);
+          return r.ok ? { ok: true, data: { lesson: r.lesson } } : r;
         }
         case "project-detail": {
           const g = findGroup(str("id"));

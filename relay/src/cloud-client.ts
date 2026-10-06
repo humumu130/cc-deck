@@ -27,6 +27,50 @@ interface CloudFrame {
 // #42 设备身份元数据校验：pair_req 的 meta 由配对方自报（浏览器 UA 摘要 / App 型号
 // 版本），桥不解析透传，入库前的唯一防线在这里——只认四个已知键，值 trim 后非空且
 // 为字符串才收，超长（>120 字符）截断；全部无效则视为不带 meta（旧客户端等价）
+// 云通道命令白名单（phone 密封/wan 明文两 intake 共用，不在表内拒发 "unsupported
+// command"，与 ws-server LAN 口径同构）。M12-1 立：与 ws-server COMMAND_TYPES 逐字
+// 一致（#117/#212 教训——加命令漏白名单=mgr case 与单测全过、唯独入口层挡死的实机
+// 死路）；test-m12-commands 断言两处列表 diff 为空
+export const COMMAND_TYPES = new Set([
+  "COMMAND_CREATE",
+  "COMMAND_MESSAGE",
+  "COMMAND_STOP",
+  "COMMAND_CONTINUE",
+  "COMMAND_REJECT",
+  "COMMAND_EXT_MODE",
+  "COMMAND_EXT_INPUT",
+  "COMMAND_EXT_STOP",
+  "COMMAND_DELETE",
+  "COMMAND_RENAME",
+  "COMMAND_ANSWER",
+  "COMMAND_PAIR_START",
+  "COMMAND_PAIR_CODE",
+  "COMMAND_LOGIN_GRANT",
+  "COMMAND_WATCH_GRANT",
+  "COMMAND_PEERS",
+  "COMMAND_PEER_KICK",
+  "COMMAND_PEERS_IMPORT",
+  "COMMAND_CLOUD_INFO",
+  "COMMAND_PERM",
+  "COMMAND_MODEL",
+  "COMMAND_REFRESH_TODOS",
+  "COMMAND_TODO_HIDE",
+  "COMMAND_PIN_SESSION",
+  "COMMAND_RESUME_SESSION",
+  "COMMAND_IMPORT_PUSH",
+  "COMMAND_ARTIFACT_FETCH",
+  "COMMAND_ALLOW_RULE_REMOVE",
+  "COMMAND_ORG_CONFIRM",
+  "COMMAND_PROJECT_DETAIL",
+  "COMMAND_ORG_ACTION",
+  "COMMAND_NOTIFICATION_ACK",
+  "COMMAND_SETTINGS_UPDATE",
+  "COMMAND_TASK_CREATE",
+  "COMMAND_TASK_UPDATE",
+  "COMMAND_DISPATCH",
+  "COMMAND_LESSON_APPEND",
+]);
+
 const PEER_META_MAX = 120;
 // 0.4.4 出码端在场证明 TTL：覆盖合并码浮层 120s 生命周期 + 重连空档（180s）
 const SIGHTING_TTL_MS = 180_000;
@@ -606,6 +650,10 @@ export class CloudClient {
       this.sendSealed(f.from, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid command shape" });
       return;
     }
+    if (!COMMAND_TYPES.has(cmd.type)) {
+      this.sendSealed(f.from, { type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" });
+      return;
+    }
     const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `cloud-${f.from}`);
     this.sendSealed(f.from, { type: "COMMAND_ACK", ...ack });
   }
@@ -679,6 +727,10 @@ export class CloudClient {
     }
     const cmd = obj as Command;
     if (typeof cmd === "object" && cmd && typeof cmd.command_id === "string" && typeof cmd.type === "string") {
+      if (!COMMAND_TYPES.has(cmd.type)) {
+        this.sendWan(dev, { type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" });
+        return;
+      }
       const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `wan-${dev}`);
       this.sendWan(dev, { type: "COMMAND_ACK", ...ack });
       return;
