@@ -301,6 +301,42 @@
   .mp-row:hover { background: var(--hov); }
   .mp-row.cur { color: var(--brand); font-weight: 700; }
   .mp-row .mp-cur { color: var(--brand); font-size: 11px; flex: none; }
+  /* #75-W 新建会话引擎选择器：摘要行 + 两层浮层（modelPop 同壳语言；引擎 badge 色对齐
+     specs/005 引擎色词表，JS ENG_COLORS 单表；不引入第二套标识/新域——入口仍在会话域
+     新建表单内，浮层=会话域行语言） */
+  #engSelRow {
+    display: none; align-items: center; gap: 8px; margin: 2px 0 6px;
+    font-size: 12px; color: var(--dim);
+  }
+  #engSelRow .eng-sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #engSelRow .eng-over {
+    flex: none; font-size: 10px; color: var(--working); border: 1px solid var(--working);
+    border-radius: 5px; padding: 0 5px; line-height: 15px; opacity: .85;
+  }
+  #engSelBtn {
+    flex: none; background: none; border: none; cursor: pointer; color: var(--brand);
+    font-size: 12px; padding: 1px 2px;
+  }
+  #engSelPop {
+    display: none; position: fixed; z-index: 60; width: 320px; max-height: 340px; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #engSelPop.open { display: block; }
+  .ep-row {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--text); padding: 7px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .ep-row:hover { background: var(--hov); }
+  .ep-row.cur { color: var(--brand); font-weight: 700; }
+  .ep-row.dis { opacity: .5; cursor: default; }
+  .ep-row.dis:hover { background: none; }
+  .ep-badge { flex: none; font-size: 10px; font-weight: 700; line-height: 16px; padding: 0 6px; border-radius: 5px; color: #fff; }
+  .ep-st { flex: none; min-width: 8em; font-size: 11px; color: var(--dim); } /* 定宽：长短状态词下 capability 三列仍成列（#95 走查采修） */
+  .ep-cap { font-size: 11px; color: var(--faint); }
+  .ep-sub { font-size: 11px; color: var(--faint); flex-basis: 100%; padding-left: 2px; }
+  .ep-cur { color: var(--brand); font-size: 11px; flex: none; margin-left: auto; }
+  .ep-note { font-size: 11px; color: var(--faint); padding: 6px 10px 4px; border-top: 1px solid var(--border); margin-top: 4px; }
   /* #40 权限模式四选一弹层（modelPop 同壳）：每行全称+描述句；当前项整行 tint 底 +
      右缘「当前」（不靠游离符号，对齐手机端 #36 定案）；跳过行危险 badge + 武装态；
      面板底部内嵌确认条（左缘 3px 红从属条 + 取消/确认双按钮）——危险档误触不可达 */
@@ -2516,6 +2552,8 @@
 
 <!-- #40 权限模式四选一弹层：锚在 permBtn 下方（modelPop 同款壳，行文案+跳过二次确认为专属） -->
 <div id="permPop"></div>
+<!-- #75-W 引擎选择浮层（modelPop 同壳：JS innerHTML 填充两层——第一层引擎/第二层模型） -->
+<div id="engSelPop"></div>
 
 <!-- #49 会话卡右键菜单（fixed 定位 JS 设坐标；菜单项 JS 生成——托管/外部会话菜单不同） -->
 <div id="cardMenu"></div>
@@ -2560,6 +2598,10 @@
         </div>
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
+        <!-- #75-W 引擎/模型选择器摘要行：自动=跟随预置/源默认，手动改选显「已覆盖预置」
+             （不回写持久偏好）；旧 relay（无 engine_catalog）降级=「自动 · Claude」+升级提示，
+             无更改入口（checkbox 兼容面在 newopts 原位保留） -->
+        <div id="engSelRow"><span class="eng-sum" id="engSum"></span><span class="eng-over" id="engOver" style="display:none">已覆盖预置</span><span class="ep-cap" id="engUpHint" style="display:none">升级 relay 可选择更多引擎</span><button type="button" id="engSelBtn">更改 ›</button></div>
         <div class="row newopts">
           <!-- 跳过权限 = bypassPermissions：免审全部命令与编辑，仅信任本机环境时勾选 -->
           <label class="skip-perm"><input type="checkbox" id="skipPerm">跳过权限确认</label>
@@ -3258,6 +3300,7 @@ function ensureCtx(cfg) {
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
       projectionV2: false, // M13-3 v2 投影协议位（SNAPSHOT source_capabilities.projection_v2；缺省/undefined = 旧 relay → 覆盖式，一切照旧）
       permCaps: null, // P81-8W 权限能力摘要（SNAPSHOT source_capabilities.permission[]；null = 旧 relay 不发 → 摘要区整体隐藏）
+      engineCatalog: null, // #75-W 引擎目录（SNAPSHOT source_capabilities.engine_catalog；null = 旧 relay 不发 → checkbox 兼容面+降级摘要）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -3328,6 +3371,69 @@ const FORBIDDEN_ZH = {
   unknown_role_mapping: "岗位未映射，已拒绝",
   mixed_engine: "混编引擎，按保守档",
 };
+
+// ---------- #75-W 新建会话引擎选择器（PM-75 提案 §4/§6/§7；词表钉死字面勿改，改必三端同步） ----------
+// 四状态词表（任务书钉死）；四固定文案「已覆盖预置 / 使用引擎默认 / 跟随 <role> 预置 /
+// 升级 relay 可选择更多引擎」以字面散置渲染面（engOver 元素/模型层首行/engSelMigrate 摘要/
+// engUpHint 元素）。引擎 badge 色对齐 specs/005 引擎色词表（--engine-* 六值）。
+const ENG_STATE_LABEL = { ready: "可用", unavailable: "未安装或校验未过", unsupported: "不支持 · 不可选", unknown: "状态未知" };
+const ENG_COLORS = { claude: "#A97A62", codex: "#8DABFF", trae: "#58C9B1", "qwen-code": "#B493FF", codebuddy: "#4BA8F0", zcode: "#E58DB0" };
+const ENG_CAP_LABEL = { resume: "续传", approval: "审批", artifacts: "产物" }; // capability 摘要小标（非钉死词表，紧凑呈现）
+const ENG_ROLE_ZH = { worker: "Worker", lead: "Lead", pm: "PM" }; // 「跟随 <role> 预置」role 段人话
+
+// 选择器状态：engine="" = 自动（跟随预置/源默认）；manual=true 表示用户显式改选——只对本次
+// 创建生效，不回写任何持久偏好（PM §4.1 覆盖关系）。模型 "" = 使用引擎默认（发送省略 model）。
+let engSel = { engine: "", model: "", manual: false };
+let engSelMigrated = false;
+// #75-W 降级对照：session_id → 请求引擎。成功 ACK 记账，SESSION_CREATED 对照实际 engine
+// 不一致标「已降级」（卡片如实显示不隐藏，PM §6.2），取账即删。
+const reqEngBySid = new Map();
+
+// 旧 #27 checkbox 偏好一次性迁移（PM §7.3）：catalog 存在的首次会话把 ccd_use_codex=1
+// 带入 engSel（engine=codex 显式选择）。checkbox 记忆保留不清除（旧 relay 环境原样消费），
+// 迁移标记防重复带入。
+function engSelMigrate() {
+  if (engSelMigrated) return;
+  const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+  if (!ctx || !Array.isArray(ctx.engineCatalog)) return; // 旧 relay：无迁移面，checkbox 照旧
+  engSelMigrated = true;
+  try {
+    if (localStorage.getItem("ccd_use_codex") === "1" && !engSel.manual) {
+      engSel = { engine: "codex", model: "", manual: true }; // 一次性带入=旧开关语义（engine=codex）
+    }
+  } catch {}
+}
+
+// #75-W 引擎选择解析（纯函数，可直跑）：catalog+选择器状态 → 三态。role web 端固定 worker
+// （无团队页开卡路径，gid/role 上下文=接口位备案，团队页发起时随命令携带）：
+//   { ok:true, engine?, model?, selection_source } — 可直接发送（engine 省略 = 源默认 Claude）
+//   { block: reason }                              — 显式选择的引擎不可用，创建前阻止（不造 Claude 伪替代）
+//   { needConfirm: true, fallback }                — 自动档默认引擎不可用，确认后改用 fallback（不静默换引擎）
+function resolveEngChoice(cat, sel, role) {
+  role = role || "worker";
+  const usable = (e) => !!e && e.state === "ready" && !(e.preflight && e.preflight.state === "fail");
+  if (!Array.isArray(cat) || cat.length === 0) return { ok: true, selection_source: "relay_default" };
+  if (sel.manual && sel.engine) {
+    const e = cat.find((x) => x && x.id === sel.engine);
+    if (!usable(e)) {
+      const name = ENGINE_LABEL[sel.engine] || sel.engine;
+      const why = e && e.preflight && e.preflight.state === "fail" && e.preflight.reason
+        ? "：" + e.preflight.reason
+        : "（" + (ENG_STATE_LABEL[e && e.state || "unknown"] || "状态未知") + "）";
+      return { block: name + " 不可用" + why + "，已阻止创建" };
+    }
+    return { ok: true, engine: sel.engine, model: sel.model || undefined, selection_source: "manual" };
+  }
+  const preset = cat.find((e) => e && Array.isArray(e.default_for_roles) && e.default_for_roles.includes(role) && usable(e));
+  if (preset) return { ok: true, engine: preset.id, model: (Array.isArray(preset.models) && preset.models[0]) || undefined, selection_source: "role_default" };
+  const defEng = cat.find((e) => e && e.id === "claude");
+  if (defEng && !usable(defEng)) {
+    const fb = cat.find(usable);
+    if (fb) return { needConfirm: true, fallback: fb.id };
+    return { block: "当前源无可用引擎，已阻止创建" };
+  }
+  return { ok: true, selection_source: "relay_default" }; // 源默认：省略 engine 字段（relay 自默认 Claude）
+}
 
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -4306,6 +4412,162 @@ function renderGpStatus() {
   renderPermSummary(); // P81-8W 面①：随状态卡同源同刷（状态变/快照到/重连都走这里）
 }
 
+// ---------- #75-W 新建会话引擎选择器 UI（摘要行 + 两层浮层；入口=新建表单内，不新开域） ----------
+
+// 摘要行：`自动（Worker 预置） · Trae · glm-5.3 [已覆盖预置] [更改 ›]`。
+// 降级三面：旧 relay（catalog null）=「自动 · Claude」+升级提示、无更改钮（checkbox 兼容面
+// 在 newopts 原位）；单引擎可用=「仅可用：X」无更改钮（无下拉箭头）；离线=整行隐藏。
+function renderEngSelRow() {
+  const row = $("engSelRow");
+  if (!row) return;
+  const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+  const cat = ctx && Array.isArray(ctx.engineCatalog) ? ctx.engineCatalog : null;
+  const sum = $("engSum"), over = $("engOver"), btn = $("engSelBtn"), up = $("engUpHint");
+  if (!ctx || ctx.status !== "online" || !cat) {
+    if (ctx && ctx.status === "online") { // 旧 relay 在线：降级摘要 + 升级提示（无更改入口）
+      row.style.display = "flex";
+      sum.textContent = "自动 · Claude";
+      over.style.display = "none";
+      btn.style.display = "none";
+      up.style.display = "";
+    } else row.style.display = "none";
+    return;
+  }
+  row.style.display = "flex";
+  up.style.display = "none";
+  const usable = (e) => e && e.state === "ready" && !(e.preflight && e.preflight.state === "fail");
+  const readyList = cat.filter(usable);
+  if (engSel.manual && engSel.engine) {
+    sum.textContent = (ENGINE_LABEL[engSel.engine] || engSel.engine) + (engSel.model ? " · " + engSel.model : "");
+    over.style.display = ""; // 已覆盖预置（手动改选只对本次创建生效，不回写 role_defaults）
+  } else {
+    over.style.display = "none";
+    const preset = cat.find((e) => e && Array.isArray(e.default_for_roles) && e.default_for_roles.includes("worker") && usable(e));
+    if (preset) {
+      const pm = Array.isArray(preset.models) && preset.models[0];
+      sum.textContent = "自动（" + ENG_ROLE_ZH.worker + " 预置） · " + (ENGINE_LABEL[preset.id] || preset.id) + (pm ? " · " + pm : "");
+    } else if (readyList.length === 1) {
+      sum.textContent = "仅可用：" + (ENGINE_LABEL[readyList[0].id] || readyList[0].id);
+    } else {
+      sum.textContent = "自动 · Claude"; // 无 worker 预置：源默认
+    }
+  }
+  btn.style.display = readyList.length > 1 ? "" : "none"; // 单引擎环境：无下拉箭头
+}
+
+// 新建表单引擎面同步（SNAPSHOT 到达/源切换/表单开启三时机）：catalog 存在 = checkbox 隐藏
+//（入口被选择器替代，PM §7.4）+一次性迁移+摘要行渲染；旧 relay = checkbox 原位保留
+//（#27 兼容行为零变化）+降级摘要。不并入 updateEngineOpt（P81-8W 直跑面零干扰）。
+function syncEngUI() {
+  engSelMigrate();
+  const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+  const hasCat = !!(ctx && Array.isArray(ctx.engineCatalog) && ctx.engineCatalog.length);
+  const lbl = $("useCodex") && $("useCodex").closest("label");
+  if (lbl) lbl.style.display = hasCat ? "none" : "";
+  renderEngSelRow();
+}
+
+function closeEngSelPop() {
+  const p = $("engSelPop");
+  if (p) { p.classList.remove("open"); p.innerHTML = ""; }
+}
+let engPopView = "root"; // 浮层视图："root"（第一层引擎）| 引擎 id（第二层模型）
+
+// 浮层（modelPop 同壳：innerHTML 填充 + 按钮下方定位 + capture 点击关闭 + 三弹层互斥）。
+// 第一层=「跟随预置」+当前源可用引擎（badge+状态词+capability 摘要；unavailable/unsupported/
+// preflight fail 灰显不可选+原因——展示项≠可选项，PM §5.1）；选定引擎展开第二层模型
+//（「使用引擎默认」首行；引擎无清单=仅默认行；Claude 无清单回落 ctx.models——SNAPSHOT.models
+// 仅作 Claude 回退，不冒充他引擎清单）。
+function renderEngSelPop() {
+  const p = $("engSelPop");
+  if (!p) return;
+  const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+  const cat = ctx && Array.isArray(ctx.engineCatalog) ? ctx.engineCatalog : [];
+  const usable = (e) => e && e.state === "ready" && !(e.preflight && e.preflight.state === "fail");
+  const engName = (id) => ENGINE_LABEL[id] || id;
+  if (engPopView !== "root") { // 第二层：模型（返回头 + 使用引擎默认 + models 逐行）
+    const eng = cat.find((e) => e && e.id === engPopView);
+    let h = '<div class="ep-row" data-act="back">← ' + escapeHtml(engName(engPopView)) + "</div>";
+    const defCur = !(engSel.manual && engSel.engine === engPopView && engSel.model);
+    h += '<div class="ep-row' + (defCur ? " cur" : "") + '" data-act="model" data-m=""><span>使用引擎默认</span>' + (defCur ? '<span class="ep-cur">当前</span>' : "") + "</div>";
+    let models = eng && Array.isArray(eng.models) && eng.models.length > 0 ? eng.models : null; // 空清单=无字段同待遇（回落/仅默认行）
+    if (!models && engPopView === "claude" && ctx && Array.isArray(ctx.models) && ctx.models.length) models = ctx.models;
+    if (models) {
+      for (const m of models) {
+        if (typeof m !== "string") continue;
+        const cur = engSel.manual && engSel.engine === engPopView && engSel.model === m;
+        h += '<div class="ep-row' + (cur ? " cur" : "") + '" data-act="model" data-m="' + encodeURIComponent(m) + '"><span>' + escapeHtml(m) + "</span>" + (cur ? '<span class="ep-cur">当前</span>' : "") + "</div>";
+      }
+    } // 无清单：仅「使用引擎默认」一行，不造占位
+    p.innerHTML = h;
+    return;
+  }
+  const preset = cat.find((e) => e && Array.isArray(e.default_for_roles) && e.default_for_roles.includes("worker") && usable(e));
+  const autoDesc = preset
+    ? "跟随 " + ENG_ROLE_ZH.worker + " 预置 · " + engName(preset.id) + ((Array.isArray(preset.models) && preset.models[0]) ? " · " + preset.models[0] : "")
+    : "跟随源默认（Claude）";
+  let h = '<div class="ep-row' + (!engSel.manual ? " cur" : "") + '" data-act="auto"><span>跟随预置</span><span class="ep-sub">' + escapeHtml(autoDesc) + "</span>" + (!engSel.manual ? '<span class="ep-cur">当前</span>' : "") + "</div>";
+  for (const e of cat) {
+    if (!e || typeof e.id !== "string") continue; // 畸形条目跳过（不白屏）
+    const okUse = usable(e);
+    const st = e.state || "unknown";
+    const caps = e.capabilities && typeof e.capabilities === "object" ? e.capabilities : {};
+    const capBits = ["resume", "approval", "artifacts"].map((k) => (ENG_CAP_LABEL[k] || k) + (caps[k] ? "✓" : "—")).join(" ");
+    const reasonRaw = e.preflight && e.preflight.state === "fail" && e.preflight.reason ? "校验未过：" + e.preflight.reason : (ENG_STATE_LABEL[st] || st);
+    const reason = okUse || reasonRaw === (ENG_STATE_LABEL[st] || st) ? "" : reasonRaw; // 与状态词同文不重复（preflight reason 才续行）
+    h += '<div class="ep-row' + (okUse ? "" : " dis") + (engSel.manual && engSel.engine === e.id ? " cur" : "") + '"' + (okUse ? ' data-act="eng" data-e="' + encodeURIComponent(e.id) + '"' : "") + '><span class="ep-badge" style="background:' + (ENG_COLORS[e.id] || "var(--faint)") + '">' + escapeHtml(engName(e.id)) + '</span><span class="ep-st">' + escapeHtml(ENG_STATE_LABEL[st] || st) + '</span><span class="ep-cap">' + escapeHtml(capBits) + "</span>" + (engSel.manual && engSel.engine === e.id ? '<span class="ep-cur">当前</span>' : "") + (reason ? '<span class="ep-sub">' + escapeHtml(reason) + "</span>" : "") + "</div>";
+  }
+  // 权限衔接（任务书⑤）：只提示策略归属，零权限求值复制（P81-8W 摘要数据不复读）
+  h += '<div class="ep-note">权限档由组织/角色策略决定（创建后可在会话内调整）</div>';
+  p.innerHTML = h;
+}
+function openEngSelPop() {
+  const p = $("engSelPop"), btn = $("engSelBtn");
+  if (!p || !btn) return;
+  closeModelPop(); closePermPop(); // 三弹层互斥防叠加（modelPop 先例）
+  engPopView = "root";
+  renderEngSelPop();
+  p.classList.add("open");
+  const r = btn.getBoundingClientRect();
+  p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - p.offsetWidth - 8)) + "px";
+  p.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - p.offsetHeight - 8)) + "px"; // 底边 clamp（newform 贴视口下部时浮层不溢出）
+}
+$("engSelBtn").onclick = (ev) => {
+  ev.stopPropagation();
+  const p = $("engSelPop");
+  if (p && p.classList.contains("open")) closeEngSelPop(); // 再点收起（浮层开关）
+  else openEngSelPop();
+};
+$("engSelPop").addEventListener("click", (ev) => {
+  const row = ev.target.closest(".ep-row");
+  if (!row) return;
+  const act = row.dataset.act;
+  if (act === "back") { engPopView = "root"; renderEngSelPop(); return; }
+  if (act === "auto") {
+    engSel = { engine: "", model: "", manual: false }; // 回自动 = 清除本次覆盖
+    renderEngSelRow(); closeEngSelPop(); return;
+  }
+  if (act === "eng") {
+    const id = decodeURIComponent(row.dataset.e || "");
+    const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+    const e = ctx && Array.isArray(ctx.engineCatalog) ? ctx.engineCatalog.find((x) => x && x.id === id) : null;
+    engSel = { engine: id, model: "", manual: true };
+    renderEngSelRow();
+    const hasModels = (e && Array.isArray(e.models) && e.models.length > 0) || (id === "claude" && ctx && Array.isArray(ctx.models) && ctx.models.length > 0);
+    if (hasModels) { engPopView = id; renderEngSelPop(); } // 有清单 → 展开第二层
+    else closeEngSelPop(); // 无清单 = 使用引擎默认，直接收
+    return;
+  }
+  if (act === "model") {
+    engSel.model = decodeURIComponent(row.dataset.m || ""); // "" = 使用引擎默认
+    renderEngSelRow(); closeEngSelPop();
+  }
+});
+window.addEventListener("click", (ev) => {
+  const p = $("engSelPop");
+  if (p && p.classList.contains("open") && !p.contains(ev.target) && ev.target !== $("engSelBtn")) closeEngSelPop();
+}, true);
+
 // ---------- P81-8W 权限摘要三面（specs/081 §6.3/§7；词表钉死见 CAP_STATE_LABEL/PERM_MODE_ZH/FORBIDDEN_ZH） ----------
 // 面①：设置域源权限摘要（gpStatus 同源=连接健康视图；每引擎 capability_state+可生效档集，
 // 三态点+人话；modes 为归一词表 ask/plan/edit-auto/full-auto，经 PERM_MODE_ZH 映射同表人话）。
@@ -4496,6 +4758,11 @@ function onEvent(ctx, msg) {
       ctx.permCaps = Array.isArray(msg.payload.source_capabilities?.permission) ? msg.payload.source_capabilities.permission : null;
       renderPermSummary(); // 摘要面板随快照即时收敛（函数内含可见性 gate）
       updateEngineOpt(); // 新建表单引擎开关能力位跟随（unsupported 禁选+原因）
+      // #75-W 引擎目录（SNAPSHOT source_capabilities.engine_catalog；75-R relay 半在途，按
+      // PM-75 提案 §4.3 契约形状先行消费）：字段存在性判断——旧 relay 不发 = null →
+      // checkbox 兼容面 + 降级摘要（P81-8W 同款范式）
+      ctx.engineCatalog = Array.isArray(msg.payload.source_capabilities?.engine_catalog) ? msg.payload.source_capabilities.engine_catalog : null;
+      syncEngUI(); // 摘要行 + checkbox 显隐随快照收敛
       if (selected && selected.src === ctx.cfg.id) renderDetail(); // 详情开着时档位条随摘要翻转即时收敛（旧 relay 降级不挂陈点）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
       ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
@@ -4511,12 +4778,16 @@ function onEvent(ctx, msg) {
       break;
     }
     case "SESSION_CREATED": {
+      const reqEng = reqEngBySid.get(sid); reqEngBySid.delete(sid); // #75-W 降级对照取账即删
       ctx.sessions.set(sid, {
         session_id: sid, cwd: msg.payload.cwd, initial_prompt: msg.payload.initial_prompt,
         title: msg.payload.title || msg.payload.initial_prompt.slice(0, 24),
         model: msg.payload.model, status: "WORKING", action_summary: "启动中",
         external: msg.payload.external || false, remote_mode: false,
         engine: msg.payload.engine, // #27 引擎标记（codex 卡片徽标数据源；claude/缺省=undefined）
+        // #75-W 降级标记：请求引擎与实际创建不一致（relay 降级/旧 relay 忽略字段）→ 卡片如实
+        // 标「已降级」不隐藏（PM §6.2；对照只对标过位，非本端创建无账不标）
+        engine_degraded: !!(reqEng && (msg.payload.engine || "claude") !== reqEng),
         started_at: msg.ts, updated_at: msg.ts, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       });
       ctx.timelines.set(sid, []);
@@ -6366,7 +6637,8 @@ function render() {
       // #164 挂点迁移：不再进标题行（分类信息与源标签/📁 同族）——移 stats 元信息行
       // #171 英文缩写（用户验收批注「最好改成英文缩写，更简洁」）：SAVED/HIST/CLI/SDK，
       // 四态全部带 title 悬停解释（缩写不自解释；bg 的 cursor:help 原先没有配套 title）
-      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : s.engine === "codex" ? '<span class="his-badge bg" title="托管 Codex 会话（codex exec 驱动，无终端窗口）">CODEX</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
+      // #75-W 降级标记：挂分类徽后（琥珀「已降级」，悬停说明；四分类都可能降级故整链外拼）
+      const badges = (dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : s.engine === "codex" ? '<span class="his-badge bg" title="托管 Codex 会话（codex exec 驱动，无终端窗口）">CODEX</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>') + (s.engine_degraded ? ' <span class="his-badge" style="color:var(--working)" title="请求的引擎与实际创建不一致，relay 已降级">已降级</span>' : "");
       // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
       // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
       const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
@@ -8518,6 +8790,7 @@ $("addBtn").onclick = () => {
       }
     }
     syncCwdPick();
+    syncEngUI(); // #75-W：表单打开时摘要行/checkbox 显隐随当前源收敛（源切换后快照未到也兜底）
     $("prompt").focus();
   }
 };
@@ -8529,6 +8802,7 @@ function closeNewForm() {
   $("newform").classList.remove("open");
   $("addBtn").classList.remove("on");
   morphAddBtn(false);
+  closeEngSelPop(); // #75-W：表单收起时浮层随之收（防悬挂）
 }
 // #52 悬浮钮闲置淡出：任意 pointermove/pointerdown/scroll（capture，滚动不冒泡）/
 // wheel/keydown 重置 3s 计时并立即回 1；到点整组加 .idle（CSS 600ms ease 渐至 .35）。
@@ -8943,7 +9217,30 @@ $("createBtn").onclick = () => {
   const autoMkdir = $("autoMkdir").checked;
   // #27 引擎选择（偏好型）：codex 引擎随命令下发（relay 白名单收口，旧 relay 忽略）
   const codex = $("useCodex").checked;
-  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(codex ? { engine: "codex" } : {}) });
+  // #75-W 引擎/模型发送链：catalog 存在 = 选择器驱动（resolveEngChoice 三态解析：block 阻止 /
+  // needConfirm 显式确认 / ok 直发，selection_source 随命令携带 role_default|manual|relay_default）；
+  // 旧 relay（无 catalog）= checkbox 兼容链一字不变（省略 engine 字段）。gid/role 上下文 web 端
+  // 无团队页开卡路径 = 接口位备案（75-R 定义字段，此处缺省不传）
+  const cat75 = ctx && Array.isArray(ctx.engineCatalog) ? ctx.engineCatalog : null;
+  let engField, modelField, selSource;
+  if (cat75) {
+    let choice = resolveEngChoice(cat75, engSel);
+    if (choice.block) { toast(choice.block, 5200); return; }
+    if (choice.needConfirm) {
+      const fbName = ENGINE_LABEL[choice.fallback] || choice.fallback;
+      if (!confirm("默认引擎不可用，改用 " + fbName + " 创建本次会话？")) return; // 不静默换引擎
+      engSel = { engine: choice.fallback, model: "", manual: true }; // 显式确认后才写入本次 engine
+      renderEngSelRow();
+      choice = resolveEngChoice(cat75, engSel);
+      if (choice.block) { toast(choice.block, 5200); return; }
+    }
+    engField = choice.engine; // undefined = 源默认（省略字段）
+    modelField = choice.model;
+    selSource = choice.selection_source;
+  } else {
+    engField = codex ? "codex" : undefined;
+  }
+  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(engField ? { engine: engField } : {}), ...(modelField ? { model: modelField } : {}), ...(selSource ? { selection_source: selSource } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
     // #168 历史目录：按实际建会话的源记最近 5 条历史（pushCwdHist cap 5）+ 双写旧单值键（回滚兼容）
@@ -8963,6 +9260,9 @@ $("createBtn").onclick = () => {
     ackWaiters.set(id, {
       res: (ack) => {
         clearTimeout(wd);
+        // #75-W 降级对照记账：仅成功 ACK 记请求引擎（失败不建卡不变量沿用——卡片只由
+        // SESSION_CREATED 帧建立，此处只记账/提示，零本地会话簿记）
+        if (ack && ack.ok === true && ack.session_id && engField) reqEngBySid.set(ack.session_id, engField);
         if (ack && !ack.ok) {
           // P81-8W 面②：forbidden reason 码人话（词表钉死，未收录码原文兜底）。
           // ACK ok:false 绝不造本地成功状态——卡片只由 SESSION_CREATED 帧建立，此处仅提示
