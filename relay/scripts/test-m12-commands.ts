@@ -12,7 +12,10 @@
 //          兜底 task.text/M12-1 直派与 entry_id 认领旧路径零回归；
 //       C9 生命周期（M12-3）：全状态边（dispatched→running→done/failed）/重投段链
 //          （redispatch_of 同 root id 追加行）/ACK↔台账↔events 三面对账/重启兜底
-//          closeHungDispatchRows 零悬挂。
+//          closeHungDispatchRows 零悬挂；
+//       C10 beads 接线（M12-4）：依赖完成→ready→可派全链/认领坏引用（幽灵引用）
+//          不误放行/gate 设闸→拒→gate:null 唯一清除→放行/收口 done 自动回流
+//          lesson（结构化模板非内容性经验，actor=system 审计）/failed 零 lesson。
 // fixture 缝仿 test-r1b-org（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调 handleCommand）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m12-commands.ts
 import { randomUUID } from "node:crypto";
@@ -23,7 +26,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { COMMAND_TYPES as WS_TYPES } from "../src/ws-server.js";
 import { COMMAND_TYPES as CLOUD_TYPES } from "../src/cloud-client.js";
-import { listGroups, listLessons, loadBoard, setLightConfirmTrusted } from "../src/projects.js";
+import { listGroups, listLessons, loadBoard, removeBoardEntry, setLightConfirmTrusted, upsertBoardEntry } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { RelayConfig } from "../src/config.js";
@@ -328,6 +331,73 @@ try {
       .filter((r) => r.id === hungId).map((r) => r.status);
     assert(hungAfter.length === 0 && hungFixed[hungFixed.length - 1] === "done",
       "C9⑪ 重启兜底：收敛视图 running/dispatched 零残留+悬挂行补 done（receipt=relay 重启，回合中断）");
+
+    // ---------- C10 beads 接线（M12-4）：ready 全链/坏引用认领/gate 清除口/收口 lesson ----------
+    console.log("C10 beads ready/gate/lesson");
+    // 依赖/gate 卡走 store 层 upsertBoardEntry 建（=orgAction board upsert 执行体下游；
+    // 漏斗 deps/gate 透传 C8 段已覆盖——用户命令面咽喉无 board action，本段靶子是
+    // computeReady/认领/gate 清除语义不是再验一遍漏斗）
+    // C10①②③ 依赖完成→ready→可派全链：卡A(todo) ← 卡B(depends_on[A])——B 未就绪拒派，
+    // A 搬 done 后认领放行（#087 就绪链全闭环，认领路径与编排链同一 computeReady 口径）
+    const ackA = send(mgr, "c10a", "COMMAND_TASK_CREATE", { gid, text: "依赖前置卡A" }, "web-1");
+    const idA = (ackA.data as { entity_id?: string }).entity_id ?? "";
+    const cardB = upsertBoardEntry(gid, { text: "依赖后续卡B", depends_on: [idA] });
+    const idB = cardB.ok ? cardB.entry.id : "";
+    assert(ackA.ok === true && cardB.ok && idA !== "" && idB !== "",
+      "C10① 前置：卡A(命令面)+卡B(depends_on[A]，store 层) 已建");
+    const ackDep = send(mgr, "c10dep", "COMMAND_DISPATCH", { gid, prompt: "做B", entry_id: idB }, "web-1");
+    assert(ackDep.ok === false && String(ackDep.error ?? "").includes("未就绪不可派") && String(ackDep.error ?? "").includes(idA),
+      "C10② 依赖未完成认领拒派（error 含未就绪+依赖卡 id 逐条可判定，零 spawn）");
+    send(mgr, "c10mv", "COMMAND_TASK_UPDATE", { gid, entry_id: idA, status: "done" }, "web-1");
+    const ackDep2 = send(mgr, "c10dep2", "COMMAND_DISPATCH", { gid, prompt: "做B", title: "依赖后续卡B", entry_id: idB }, "web-1");
+    assert(ackDep2.ok === true, "C10③ 依赖完成→ready→认领放行 spawn（ready 链闭环；带 title 保卡文本全文——认领挂接以 title||prompt 首行覆盖卡 text 的既有语义）");
+    const bDispatchId = (ackDep2.data as { dispatch_id?: string }).dispatch_id ?? "";
+    // C10④⑤ 收口 lesson 自动回流：B 回合 done → 板 lessons 分区多一条结构化账（非内容性）
+    const lessonsBefore = (loadBoard(gid).lessons ?? []).length;
+    created[created.length - 1]?.cb.onTurnEnd(true, "B 干完了，改动 b.ts", 100);
+    const lessonsAuto = loadBoard(gid).lessons ?? [];
+    const auto1 = lessonsAuto[lessonsAuto.length - 1];
+    assert(lessonsAuto.length === lessonsBefore + 1 && auto1 !== undefined
+      && auto1.text.includes("[派单收口]") && auto1.text.includes("依赖后续卡B") && auto1.text.includes("B 干完了")
+      && auto1.tags.includes("派单收口") && auto1.source_dispatch_id === bDispatchId,
+      "C10④ 收口 done 自动回流 lesson：结构化模板（卡摘要+收口态+dispatch 锚+tag），不生成内容性经验");
+    const sysRows = auditLog().filter((r) => r.actor === "system");
+    const sysLast = sysRows[sysRows.length - 1] ?? {};
+    assert(sysRows.length >= 1 && sysLast.status === "done" && String(sysLast.receipt ?? "").includes("lesson 自动回流")
+      && String(sysLast.receipt ?? "").includes("actor=system"),
+      "C10⑤ 回流审计行 actor=system（dispatch-log 通道，与命令通道 actor=user 口径区分）");
+    // C10⑥ failed 收口零 lesson（收口态不是经验——failed 走通知 action 桶，防垃圾账）
+    const ackF = send(mgr, "c10f", "COMMAND_TASK_CREATE", { gid, text: "失败对照卡" }, "web-1");
+    const idF = (ackF.data as { entity_id?: string }).entity_id ?? "";
+    send(mgr, "c10fd", "COMMAND_DISPATCH", { gid, prompt: "会失败的活", entry_id: idF }, "web-1");
+    const lessonsBeforeF = (loadBoard(gid).lessons ?? []).length;
+    created[created.length - 1]?.cb.onTurnEnd(false, "worker 撞墙", 50);
+    assert((loadBoard(gid).lessons ?? []).length === lessonsBeforeF,
+      "C10⑥ failed 收口零 lesson（不产经验垃圾账）");
+    // C10⑦ 认领坏引用（板演化后幽灵引用）不误放行：卡C dep[卡D]→删 D→认领 C error
+    const ackD = send(mgr, "c10d", "COMMAND_TASK_CREATE", { gid, text: "将被删除的卡D" }, "web-1");
+    const idD = (ackD.data as { entity_id?: string }).entity_id ?? "";
+    const cardC = upsertBoardEntry(gid, { text: "幽灵引用卡C", depends_on: [idD] });
+    const idC = cardC.ok ? cardC.entry.id : "";
+    removeBoardEntry(gid, idD);
+    const ackGhost = send(mgr, "c10ghost", "COMMAND_DISPATCH", { gid, prompt: "做C", entry_id: idC }, "web-1");
+    assert(ackGhost.ok === false && String(ackGhost.error ?? "").includes("依赖卡不存在"),
+      "C10⑦ 幽灵引用认领拒派（computeReady 坏引用=error，与编排链写卡前预检口径对齐，零 spawn）");
+    // C10⑧⑨⑩⑪ gate 清除路径：gate 在场拒派→gate:null 唯一清除口→放行
+    const cardE = upsertBoardEntry(gid, { text: "闸门卡E", gate: { reason: "等用户验收口径" } });
+    const idE = cardE.ok ? cardE.entry.id : "";
+    const ackGate1 = send(mgr, "c10g1", "COMMAND_DISPATCH", { gid, prompt: "做E", entry_id: idE }, "web-1");
+    assert(ackGate1.ok === false && String(ackGate1.error ?? "").includes("gate 未过"),
+      "C10⑧ gate 在场认领拒派（gate 未过 error，无自动放行路径）");
+    const ackBoard = send(mgr, "c10ba", "COMMAND_ORG_ACTION", { action: "board", gid, op: "upsert", text: "x" }, "web-1");
+    const clr = upsertBoardEntry(gid, { id: idE, text: "闸门卡E", gate: null });
+    assert(ackBoard.ok === false && String(ackBoard.error ?? "").includes("unsupported org action: board"),
+      "C10⑨ 用户命令面无 board action（咽喉 unsupported 固化——gate 清除不在用户命令面，人决策经 Leader CLI HTTP /api/org action=board 白名单）");
+    assert(clr.ok && loadBoard(gid).entries.find((x) => x.id === idE)?.gate === undefined,
+      "C10⑩ gate:null 显式清除落盘（board upsert=唯一清除口——确认卡词表五 kind 无 gate，裁定备案）");
+    const ackGate2 = send(mgr, "c10g2", "COMMAND_DISPATCH", { gid, prompt: "做E", entry_id: idE }, "web-1");
+    assert(ackGate2.ok === true, "C10⑪ 清除后认领放行 spawn（gate 语义全链：设闸→拒→人清除→放行）");
+    created[created.length - 1]?.cb.onTurnEnd(true, "收尾", 50); // 清在办（防悬账污染）
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR;
     else process.env.CCR_ORG_DIR = prevOrg;

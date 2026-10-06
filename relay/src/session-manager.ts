@@ -3781,6 +3781,35 @@ export class SessionManager {
       this.notifyDispatchClosed(e, status, receipt, key);
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
+        // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
+        // 落，本单接 closeOpenDispatches done 边）：worker 派单收口 done 时自动回流
+        // 一条结构化账（卡文本摘要+收口态+dispatch 锚），**不生成内容性经验**（不总
+        // 结不提炼防垃圾账）——内容性 lesson 仍走 COMMAND_LESSON_APPEND 人/agent 主
+        // 动回流。只认 done：failed 走通知 action 桶+失败回执（收口态不是经验）；无
+        // gid（随手办/Leader 咨询记账）天然不进此分支；重启兜底 closeHungDispatchRows
+        // 与看门狗行不经此（中断/接管口径非真交付，写了就是垃圾账）。经 orgAction
+        // lesson-append 单漏斗（M12-1 冻结；执行体无审计）——回流处自记审计行
+        // actor=system（自动回流非用户命令面，与 auditOrgCommand 的 actor=user 命令
+        // 通道口径区分；板冻结时 addLesson 拒收照记 failed 审计不炸）
+        if (status === "done") {
+          const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
+          const lr = this.orgAction("lesson-append", {
+            gid: e.gid,
+            text: `[派单收口] ${truncate(card?.text ?? "(无卡承接)", 60)}｜结果：${truncate(receipt, 80)}｜dispatch=${e.id.slice(0, 8)}`,
+            tags: ["派单收口", e.tier],
+            source_dispatch_id: e.id,
+          });
+          appendDispatch({
+            ts: Date.now(), id: randomUUID(), tier: e.tier, target: "org-command",
+            ...(e.anchor ? { project_anchor: e.anchor } : {}),
+            status: lr.ok ? "done" : "failed",
+            receipt: truncate(`lesson 自动回流 · actor=system：${lr.ok
+              ? `已沉淀 ${((lr.data as { lesson?: { id?: string } } | undefined)?.lesson?.id ?? "").slice(0, 12)}`
+              : `失败：${lr.error}`}`, 200),
+            session_id: this.leaderId ?? "",
+            actor: "system",
+          });
+        }
         this.emitBoard(e.gid);
         // #26 M3 路由表记账：项目组派单收口即写熟手底账（次数/上次/回执；断档补记
         // 直接走 appendDispatch 不经此，天然豁免——relay 重启不是 worker 的账）。
