@@ -59,7 +59,8 @@
     "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts",
     "test:m13-delta": "tsx scripts/test-delta-projection.ts",
     "test:m13-web-delta": "tsx scripts/test-m13-web-delta.ts",
-    "test:d18-five-states": "tsx scripts/test-d18-five-states.ts"
+    "test:d18-five-states": "tsx scripts/test-d18-five-states.ts",
+    "test:permission-compat": "tsx scripts/test-permission-compat.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
