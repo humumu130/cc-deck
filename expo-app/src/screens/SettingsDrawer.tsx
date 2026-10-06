@@ -12,6 +12,7 @@ import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggreg
 import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import type { AllowRule } from "../protocol";
+import { PERM_CAP_STATE_LABEL, permissionModesText, permissionSummariesOf, type PermCapState } from "../permission";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
 import Svg, { Path, Rect } from "react-native-svg";
@@ -508,6 +509,18 @@ export default function SettingsDrawer({
     for (const r of s.allowRules) ruleRows.push({ src: s, r });
   }
   const ruleMultiSrc = new Set(ruleRows.map((x) => x.src.id)).size > 1;
+  // P81-8E 源权限摘要（只读呈现，端上零求值零 policy 复制——求值权威在 relay
+  // P81-3/5，这里只做 SNAPSHOT source_capabilities.permission[] 的人话映射）。
+  // 在线源且 permission[] 有有效条目才入列；旧 relay 无该字段（undefined→[]）→
+  // 整节隐藏（E 线 artpool 同款降级范式），不白屏不占位
+  const permSections = snap.sources
+    .filter((s) => s.state === "online" && permissionSummariesOf(s.sourceCapabilities?.permission).length > 0)
+    .map((s) => ({ src: s, sums: permissionSummariesOf(s.sourceCapabilities?.permission) }));
+  const permMultiSrc = permSections.length > 1;
+  // P81-8EFIX：unverified 用 c.working（#FFD60A 琥珀，与 web --working 同值同义）——
+  // 原误用 c.waiting（expo 主题里 waiting=#F0524F 是红！跨端 token 同名异色陷阱，
+  // 三态梯度坍缩成两红）。#95 Leader 亲审甄别
+  const PERM_CAP_STATE_COLOR: Record<PermCapState, string> = { confirmed: c.done, unverified: c.working, unsupported: c.error };
   // 删除两次点按确认（web 端同款 arm 模式，3s 超时复位）
   const [ruleArm, setRuleArm] = useState<string | null>(null);
   const ruleArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -768,6 +781,41 @@ export default function SettingsDrawer({
             })}
           </View>
         )}
+
+        {/* P81-8E 源权限摘要：每在线源每引擎一行——引擎名 + capability_state 三态词
+            （confirmed 绿/unverified 黄/unsupported 红）+ confirmed/unverified 附档集。
+            只读呈现（档位切换面在会话详情权限胶囊，归 #36 既有交互）；unsupported
+            不显档集只显态词。全部在线源无 permission[]（旧 relay）→ 整节隐藏 */}
+        {permSections.length ? (
+          <>
+            <View style={d.secHead}>
+              <Text style={d.secTitleT}>权限</Text>
+              <View style={d.secToggle} />
+            </View>
+            {permSections.map(({ src, sums }) => (
+              <View key={src.id}>
+                {permMultiSrc ? (
+                  <Text style={[d.ruleSrc, { marginBottom: 4 }]} numberOfLines={1}>{src.relayName || src.name}</Text>
+                ) : null}
+                {sums.map((s) => (
+                  <View key={s.engine} style={d.ruleRow}>
+                    <View style={d.ruleHead}>
+                      <Text style={d.ruleTool}>{s.engine}</Text>
+                      <View style={d.ruleScope}>
+                        <Text style={[d.ruleScopeT, { color: PERM_CAP_STATE_COLOR[s.capability_state] }]}>
+                          {PERM_CAP_STATE_LABEL[s.capability_state]}
+                        </Text>
+                      </View>
+                    </View>
+                    {s.capability_state !== "unsupported" && s.modes.length ? (
+                      <Text style={d.rulePat} numberOfLines={2}>{permissionModesText(s.modes)}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ))}
+          </>
+        ) : null}
 
         {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆。
             #130 默认改折叠（低频区让路；存过偏好的老用户不受影响——null 才用默认） */}

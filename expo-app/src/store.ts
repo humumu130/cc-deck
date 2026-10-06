@@ -170,7 +170,15 @@ interface PendingCmd {
   // 断连清场不回调（调用方自带兜底超时）。#79：artifact 仅 COMMAND_ARTIFACT_FETCH
   // 成功 ACK 携带（mime/size，分级预览用）；#26 M2：data 仅 COMMAND_PROJECT_DETAIL
   // 成功 ACK 携带（{ group, board, receipts }）
-  onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown }) => void;
+  onAck?: (r: {
+    ok: boolean;
+    err: string | null;
+    artifact?: { size: number; mime: string };
+    data?: unknown;
+    // P81-5 开卡权限求值回执（COMMAND_CREATE 成功时携带）：effective≠normalized=降级
+    //（端上显调整提示）；forbidden 拒绝走 ok:false+error 不带本字段
+    permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
+  }) => void;
 }
 
 // #79 输出物拉取重组状态（fetchArtifact/artFetches/maybeSettleArtFetch 共用）：
@@ -1732,7 +1740,7 @@ class RelayStore {
       // 其余按 ACK 原样；p 不存在（已被超时收摊）则丢弃
       if (p?.onAck) {
         const dup = !ack.ok && !!ack.error && ack.error.startsWith("duplicate");
-        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}) }); } catch {}
+        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}), ...(ack.permission ? { permission: ack.permission } : {}) }); } catch {}
       }
       if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
@@ -2781,7 +2789,7 @@ class RelayStore {
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
   // relay 幂等去重兜底，不跨源串扰。onAck（0.4.4）：需要结果语义的调用方注入
-  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown }) => void, cmdId?: string): boolean {
+  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } }) => void, cmdId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
     // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
     // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器

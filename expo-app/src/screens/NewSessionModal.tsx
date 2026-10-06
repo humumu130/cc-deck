@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay } from "../store";
+import { effectiveNoteOf, engineCreateBlock, forbiddenReasonOf } from "../permission";
 // E2c：判定门纯函数直用 ListScreen E2B-COMMANDS 锚点段导出（零复制粘贴，W1b/E2b
 // 两端同语义不共享代码口径的 expo 侧复用面——锚点段自包含零 RN 依赖）
 import {
@@ -71,6 +72,18 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     ?? snap.sources[0];
   const relayPlatform = plat?.platform;
   const posixRelay = !!relayPlatform && relayPlatform !== "win32";
+  // P81-8E codex 禁选判定：目标源权限摘要（旧 relay 无 permission 字段 → undefined
+  // → 不设防放行，行为与升级前一致）；unsupported → 词表原因（禁选+原因小字）
+  const permSummaries = (multi ? snap.sources.find((x) => x.id === effTarget) : plat)?.sourceCapabilities?.permission;
+  const codexBlock = engineCreateBlock(permSummaries, "codex");
+  // P81-8E：勾选残留（AsyncStorage 跨次记忆开）且目标源后来 unsupported → 自动熄灭
+  // +记忆回关；不拦提交（摘要缺条目等边缘由 relay forbidden 兜底人话，在 settle）
+  useEffect(() => {
+    if (codexBlock && useCodex) {
+      setUseCodex(false);
+      void AsyncStorage.setItem("ccr_use_codex", "0");
+    }
+  }, [codexBlock, useCodex]);
 
   if (visible && !loadedInit) {
     setLoadedInit(true);
@@ -111,14 +124,18 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
       return;
     }
     setCreateFlight((prev) => new Set(prev).add(fk));
-    const settle = (v: AckVerdict): void => {
+    const settle = (v: AckVerdict, perm?: { normalized: string; effective: string; native_mode: string | null; reason: string }): void => {
       setCreateFlight((prev) => {
         const n = new Set(prev);
         n.delete(fk);
         return n;
       });
       if (v.ok) {
-        // 成功不本地造会话状态（等 SNAPSHOT 权威帧落表），清 prompt+收弹窗
+        // 成功不本地造会话状态（等 SNAPSHOT 权威帧落表），清 prompt+收弹窗。
+        // P81-8E：ACK permission 降级（effective≠normalized）→ 全局 toast 人话——
+        // 会话仍创建成功（权威帧会落表），提示不拦不造本地状态
+        const note = effectiveNoteOf(perm);
+        if (note) store.notifyCmdError(note);
         setPrompt("");
         onClose();
         return;
@@ -128,13 +145,16 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
         setErr(CREATE_CAP_MSG);
         return;
       }
-      setErr(v.error ?? "命令未确认（超时或源未连接），可重试");
+      // P81-8E forbidden 拒绝面：reason 码 → 三端统一词表人话（词表外码兜底
+      // 「已拒绝（<码>）」）；非 forbidden 错误原样透传
+      const fr = forbiddenReasonOf(v.error);
+      setErr(fr ?? v.error ?? "命令未确认（超时或源未连接），可重试");
     };
     const sent = store.send(
       "COMMAND_CREATE",
       { cwd: cc, prompt: "" + p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(useCodex ? { engine: "codex" as const } : {}) },
       multi ? effTarget ?? undefined : undefined,
-      (r) => settle(ackVerdict(r)),
+      (r) => settle(ackVerdict(r), r.permission),
     );
     if (!sent) settle(ackVerdict(null)); // 断连拒发：同 unconfirmed 口径，不静默丢单
   };
@@ -144,7 +164,12 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
       <Pressable style={m.mask} onPress={onClose}>
         {/* Modal 独立窗口 decorFitsSystemWindows=true + adjustResize，原生即可避让键盘 */}
         <View style={{ width: "100%" }}>
-          <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>            <Text style={m.h3}>新建托管会话</Text>
+          <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>
+            {/* P81-8E 修复存量红错（3918bae v0.1.8 滑入）：同行空格串被 JSX 保留为
+                sheet Pressable 的裸文本子节点 → RN「Text strings must be rendered
+                within a <Text>」每次开弹窗必炸（LogBox 栈钉死 167:11 + tsc transform
+                children: ["            ", …] 实证）。含换行的标准缩进才会被 JSX 裁剪 */}
+            <Text style={m.h3}>新建托管会话</Text>
             {multi ? (
               <View style={m.field}>
                 <Text style={m.label}>发送至</Text>
@@ -209,10 +234,16 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
               </View>
               <Text style={m.bypassT}>目录不存在时自动创建</Text>
             </Pressable>
-            {/* #27 引擎选择：同 checkbox 语言 + AsyncStorage 跨次记忆（偏好型） */}
+            {/* #27 引擎选择：同 checkbox 语言 + AsyncStorage 跨次记忆（偏好型）。
+                P81-8E：目标源权限摘要判 codex unsupported → 禁选+原因（词表「不支持 ·
+                不可开卡」）——勾选残留（跨次记忆开）且后来 unsupported 时自动熄灭并
+                记忆回关，不拦提交（relay forbidden 兜底人话在 settle）。claude 为默认
+                引擎无选择面，unsupported 仅源摘要呈现（选择器正式实施归 #75） */}
             <Pressable
-              style={m.bypassRow}
+              style={[m.bypassRow, codexBlock ? { opacity: 0.45 } : null]}
               hitSlop={6}
+              disabled={!!codexBlock}
+              accessibilityLabel={codexBlock ? `用 Codex 引擎，不可选：${codexBlock}` : "用 Codex 引擎"}
               onPress={() =>
                 setUseCodex((v) => {
                   const next = !v;
@@ -224,7 +255,10 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
               <View style={[m.bypassBox, useCodex && m.bypassBoxOn]}>
                 {useCodex ? <Text style={m.bypassCheck}>✓</Text> : null}
               </View>
-              <Text style={m.bypassT}>用 Codex 引擎</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={m.bypassT}>用 Codex 引擎</Text>
+                {codexBlock ? <Text style={[m.bypassT, { color: c.waiting, fontSize: 10.5, fontWeight: "500" }]}>不可用：{codexBlock}</Text> : null}
+              </View>
             </Pressable>
             <Pressable
               style={[m.createBtn, createFlight.size > 0 && m.createBtnBusy]}

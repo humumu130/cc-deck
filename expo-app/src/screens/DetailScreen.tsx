@@ -66,11 +66,13 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
 type PermMode = (typeof PERM_CYCLE)[number];
+// P81-8E 三端统一词表（钉死，与 web 半同段勿改字面）：档位全称对齐——面板行名
+// （「说明书」）与无障碍朗读用全称；PERM_SHORT 两字短标签（#36 状态灯定案）不受影响
 const PERM_LABEL: Record<PermMode, string> = {
-  default: "标准",
-  acceptEdits: "自动编辑",
-  plan: "规划",
-  bypassPermissions: "跳过",
+  default: "每次询问",
+  acceptEdits: "自动接受编辑",
+  plan: "计划模式",
+  bypassPermissions: "完全自动",
 };
 // 胶囊短标签（#36 设计定案）：胶囊是"状态灯"只显两字短标签，全称与描述句只在
 // 四选一面板出现（面板是"说明书"）——「自动」替「自动编辑」为 R2 最坏档省 18px

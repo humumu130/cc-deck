@@ -1,4 +1,6 @@
 // Relay <-> 客户端协议子集（与 relay/src/types.ts 保持同步）
+import { permissionSummariesOf, type PermSummary } from "./permission";
+
 export type SessionStatus = "WORKING" | "WAITING" | "ERROR" | "DONE";
 
 export interface FileChangeStats {
@@ -44,16 +46,25 @@ export interface SessionActivityPayload {
   seq_local: number;
 }
 
+// P81-2 每引擎权限能力只读摘要（SNAPSHOT source_capabilities.permission 载荷）：
+// 端上零求值零 policy 复制——静态投影只呈现（人话映射在 src/permission.ts）。
+// 旧 relay 不发 = undefined，摘要区隐藏（字段存在性降级）。类型别名=permission.ts
+// PermSummary 单口径（鸭子校验/收容同一把尺，防双定义漂移）
+export type PermissionCapabilitySummary = PermSummary;
+
 export interface SourceCapabilities {
   models?: boolean;
   activity?: boolean;
   notifications?: boolean;
+  // P81-2 权限能力摘要：六注册引擎逐个只读投影（ws-server/cloud-client 两出口同发）。
+  // 旧 relay 不发 = undefined（摘要隐藏不白屏）
+  permission?: PermissionCapabilitySummary[];
   // M13-2：relay 支持 v2 delta 投影协议（LAN/phone 双出口同发，WAN 极简集不带）。
   // 缺席/undefined = 旧 relay，UPDATED 帧按覆盖式消费（不认 delta）。注意语义边界：
   // 「支持 v2 协议」≠「值域已迁五态」——消费侧按值分组，值域迁移前后都不出假泳道
   projection_v2?: boolean;
   commands?: string[];
-  [key: string]: boolean | string[] | undefined;
+  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | undefined;
 }
 
 export interface NotificationItem {
@@ -447,6 +458,14 @@ function normalizeSourceCapabilities(value: unknown): SourceCapabilities | undef
   if (!isRecord(value)) return undefined;
   const out: SourceCapabilities = {};
   for (const [key, entry] of Object.entries(value)) {
+    // P81-2 permission[] 特判收容：鸭子校验复用 permission.permissionSummariesOf
+    //（单口径，测试件同一把尺）；全部畸形/非数组 → 不设键（=旧 relay 降级隐藏）。
+    // 其余键维持既有 boolean/string[] 白名单（未知键忽略语义不变）
+    if (key === "permission") {
+      const perms = permissionSummariesOf(entry);
+      if (perms.length) out.permission = perms;
+      continue;
+    }
     if (typeof entry === "boolean" || (Array.isArray(entry) && entry.every((item) => typeof item === "string"))) out[key] = entry;
   }
   return out;
@@ -553,6 +572,10 @@ export interface CommandAck {
   // #79 仅 COMMAND_ARTIFACT_FETCH 成功 ACK 携带：字节数 + 扩展名推导 MIME
   //（分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧，ref=command_id）
   artifact?: { size: number; mime: string };
+  // P81-5 仅 COMMAND_CREATE（组织派单）成功 ACK 携带：开卡权限求值回执——
+  // effective≠normalized=请求档被降级（端上显调整提示）；forbidden 拒绝走
+  // ok:false+error（"forbidden: <reason 码>"）不带本字段
+  permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
   // #26 M2/M3 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts, pool }
   data?: unknown;
 }
