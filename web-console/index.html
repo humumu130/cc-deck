@@ -3182,6 +3182,7 @@ function ensureCtx(cfg) {
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
+      projectionV2: false, // M13-3 v2 投影协议位（SNAPSHOT source_capabilities.projection_v2；缺省/undefined = 旧 relay → 覆盖式，一切照旧）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -4330,6 +4331,7 @@ function onEvent(ctx, msg) {
       ctx.deliverables = msg.payload.deliverables === true && (!ctx.legacyMode || own(msg.payload, "deliverables")); // #71 输出物开关；schema 缺失仍按字段存在性兼容旧 relay
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
       ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
+      ctx.projectionV2 = msg.payload.source_capabilities?.projection_v2 === true; // M13-3 v2 投影协议位（M13-2：随 SNAPSHOT LAN/phone 双出口下发；缺省=覆盖式，一切照旧）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
       ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
@@ -4435,7 +4437,17 @@ function onEvent(ctx, msg) {
     // 快照下发，COMMAND_PROJECT_DETAIL 按需拉后由 BOARD_UPDATED 维护）。重渲染由
     // 末尾统一 render() 收口（renderOrgZone 有 key 守卫，代价极小）
     case "PROJECTS_UPDATED": {
-      if (Array.isArray(msg.payload.groups)) ctx.projects = msg.payload.groups;
+      // M13-3 delta 投影（M13-2 定案）：v2 信号在册且帧级 delta 形状 → 增量 merge；
+      // 其余一切（旧形状帧/旧 relay 能力位缺省）→ 覆盖式旧字段，零行为变化。
+      // M13-3ADD 锚定纪律：projects 域以 SNAPSHOT.projects（或任一覆盖式帧）为锚——
+      // 基线 null = 未锚定，delta 一律丢弃（等下一覆盖式帧锚定）；禁空基线起底 merge
+      const p = msg.payload;
+      if (p && p.delta !== undefined && ctx.projectionV2) {
+        if (!Array.isArray(ctx.projects)) break; // 未锚定：store 不变（SNAPSHOT.projects 天然锚定，无需重拉面）
+        ctx.projects = mergeEntityDelta(ctx.projects, p.delta);
+        break;
+      }
+      if (Array.isArray(p && p.groups)) ctx.projects = p.groups;
       break;
     }
     case "ORG_CONFIRM_UPDATED": {
@@ -4443,10 +4455,23 @@ function onEvent(ctx, msg) {
       break;
     }
     case "BOARD_UPDATED": {
-      if (msg.payload && typeof msg.payload.gid === "string" && msg.payload.board) {
-        ctx.boards.set(msg.payload.gid, msg.payload.board);
-        if (orgDrawer.open && orgDrawer.gid === msg.payload.gid && orgDrawer.data) {
-          orgDrawer.data.board = msg.payload.board;
+      // M13-3 delta 投影：帧级 delta 形状+v2 信号 → 增量 merge（按 id 整条替换/剔除，天然幂等）。
+      // 无在册板跳过缓存写入——板按需拉不随快照，部分基线不污染 Map（抽屉自拉全量，不吃此缓存）
+      const p = msg.payload;
+      if (p && typeof p.gid === "string" && p.delta !== undefined && ctx.projectionV2) {
+        const base = ctx.boards.get(p.gid);
+        if (base) ctx.boards.set(p.gid, applyBoardDelta(base, p.delta));
+        else reanchorBoard(ctx, p.gid); // M13-3ADD 未锚定：丢帧不应用（store 不变）+ 后台重拉全量重新锚定
+        if (orgDrawer.open && orgDrawer.gid === p.gid && orgDrawer.data && orgDrawer.data.board) {
+          orgDrawer.data.board = applyBoardDelta(orgDrawer.data.board, p.delta); // 抽屉拉取全量为基线，增量保实时
+          orgRenderDrawer();
+        }
+        break;
+      }
+      if (p && typeof p.gid === "string" && p.board) {
+        ctx.boards.set(p.gid, p.board);
+        if (orgDrawer.open && orgDrawer.gid === p.gid && orgDrawer.data) {
+          orgDrawer.data.board = p.board;
           orgRenderDrawer();
         }
       }
@@ -4824,8 +4849,50 @@ function confirmReadMap() {
 // 执行分离）；详情按需 COMMAND_PROJECT_DETAIL 拉 { group, board, receipts }——
 // 板不随快照下发（§2.5 分流数据源），确认卡后 PROJECTS_UPDATED 回帧即收敛。
 const ORG_ST = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
+// 任务板泳道词表/定序（M13-3 前向兼容位：分区渲染按值分组——未知状态值原样成列排在已知三态后）
+const BOARD_LANE = { todo: "待办", doing: "进行", done: "完成" };
+const BOARD_LANE_ORD = { todo: 0, doing: 1, done: 2 };
+
+// M13-3 v2 delta 投影消费（M13-2 定案，形状权威 relay/src/types.ts:620-633）：
+// 帧级判定 payload.delta !== undefined（空 delta {} 也是合法增量帧）→ 增量 merge；缺席 → 覆盖式旧字段。
+// 幂等铁律 = 带稳定 id 的完整条目差分（upserts 整条替换、removes 剔除、未知 id 忽略），
+// 无行级补丁无游标 → 同帧重复应用零变化，重连补发/双链收敛（merge 链==覆盖链）天然成立。
+// 纯函数不 mutate 基线（返回新数组/新对象）——W 线 new Function 直跑测试先例可提取。
+function mergeEntityDelta(arr, delta) {
+  const byId = new Map(Array.isArray(arr) ? arr.map((e) => [e.id, e]) : []);
+  const ups = delta && Array.isArray(delta.upserts) ? delta.upserts : [];
+  const rem = delta && Array.isArray(delta.removes) ? delta.removes : [];
+  for (const u of ups) if (u && typeof u.id === "string") byId.set(u.id, u);
+  for (const r of rem) byId.delete(r); // Map.delete 未知 id 静默 = 幂等；组域 v1 无删边恒空（types.ts 留位）
+  return [...byId.values()]; // 已有条目保位、新条目追加——渲染层自带排序，序无语义
+}
+
+function applyBoardDelta(board, delta) {
+  const meta = delta && delta.meta ? delta.meta : {};
+  return Object.assign({}, board, {
+    entries: mergeEntityDelta(board && board.entries, delta && delta.entries),
+    lessons: mergeEntityDelta(board && board.lessons, delta && delta.lessons),
+    frozen: typeof meta.frozen === "boolean" ? meta.frozen : !!(board && board.frozen),
+    updated_at: typeof meta.updated_at === "number" ? meta.updated_at : (board && board.updated_at) || 0,
+  });
+}
 const ORG_CF_KIND = { "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活" };
 const orgDrawer = { open: false, gid: "", src: "", data: null };
+
+// M13-3ADD 板域锚定重拉：未锚定 gid 收到 delta 帧 → 帧丢弃 + 后台重拉 COMMAND_PROJECT_DETAIL，
+// ack 回含 board 全量，消费（入缓存）即重新锚定。in-flight 去重防风暴（delta 连发每帧一拉会
+// 打爆命令面）；fire-and-forget 不阻塞帧循环。冷首帧覆盖式兜底（M13-2 S4）是 relay 侧重锚主路，
+// 本路径兜「relay 热缓存但本端缺基线」窗口（如板帧到达早于本端首拉）。
+const boardReanchorInFlight = new Set();
+function reanchorBoard(ctx, gid) {
+  if (boardReanchorInFlight.has(gid)) return;
+  boardReanchorInFlight.add(gid);
+  commandAck(ctx, "COMMAND_PROJECT_DETAIL", { gid }).then((ack) => {
+    boardReanchorInFlight.delete(gid);
+    const b = ack && ack.ok && ack.data && ack.data.board ? ack.data.board : null;
+    if (b && ctx.boards instanceof Map) ctx.boards.set(gid, b); // 覆盖式全量消费 = 重新锚定
+  }).catch(() => { boardReanchorInFlight.delete(gid); });
+}
 
 // 确认卡决议（#018-W1b ACK 严格判定升级）：COMMAND_ORG_CONFIRM {confirm_id, approve}
 // —— approve 真布尔（relay 咽喉 `payload.approve === true` 严判，字符串 "1" 会判否决）。
@@ -5008,6 +5075,7 @@ async function orgOpenDrawer(ctx, gid) {
     return;
   }
   orgDrawer.data = ack.data;
+  if (ack.data.board) ctx.boards.set(gid, ack.data.board); // M13-3ADD 覆盖式全量入缓存 = 该 gid 锚定（此后 delta 可应用）
   orgRenderDrawer();
 }
 
@@ -5049,11 +5117,21 @@ function orgRenderDrawer() {
   else if (g.tier === "轻立项") boardHtml = '<div class="od-col">' + ents.map(entHtml).join("") + "</div>";
   // 冲刺 #12 视觉审查修复：空列不渲染——430px 抽屉里固定三栏会把卡片挤成 ~128px 窄条
   //（6 行碎字）且空列悬空成死白；flex 布局 + 只渲染非空列，单列全宽/双列对半/三列等宽
-  else boardHtml = '<div class="od-cols3">' + [["todo", "待办"], ["doing", "进行"], ["done", "完成"]]
-    .map(([st, lb]) => ({ lb, list: ents.filter((e) => e.status === st) }))
-    .filter((c) => c.list.length)
-    .map((c) => "<div><h6>" + c.lb + " " + c.list.length + "</h6><div class=\"od-col\">" +
-      c.list.map(entHtml).join("") + "</div></div>").join("") + "</div>";
+  else {
+    // M13-3 前向兼容位：板分区按值分组+非空列（D18 五态未落本单）——已知三态保 todo/doing/done
+    // 序与汉字标；未知状态值原样成列不丢弃、无 status 归 todo。三态数据下与旧固定三栏字节等价
+    const lanes = [], laneIdx = new Map();
+    for (const e of ents) {
+      const st = e.status || "todo";
+      if (!laneIdx.has(st)) { laneIdx.set(st, lanes.length); lanes.push({ st, lb: BOARD_LANE[st] || st, list: [] }); }
+      lanes[laneIdx.get(st)].list.push(e);
+    }
+    lanes.sort((a, b) => (BOARD_LANE_ORD[a.st] ?? 99) - (BOARD_LANE_ORD[b.st] ?? 99) ||
+      laneIdx.get(a.st) - laneIdx.get(b.st));
+    boardHtml = '<div class="od-cols3">' + lanes
+      .map((c) => "<div><h6>" + c.lb + " " + c.list.length + "</h6><div class=\"od-col\">" +
+        c.list.map(entHtml).join("") + "</div></div>").join("") + "</div>";
+  }
   if (board.frozen) boardHtml = '<div class="od-empty">已挂起：板冻结只读</div>' + boardHtml;
   // 回执流（§3.5 只收回执一行）：最近 30 条按 anchor 过滤，新在前
   const recs = orgDrawer.data.receipts || [];
