@@ -1,5 +1,5 @@
 // ---------- 导入工具共享件（M11-UTIL） ----------
-// 六导入器（org/notification/session-task/acceptance/artifact + 后续导入线）共同面的唯一定点。
+// 导入线（org/notification/session-task/acceptance/artifact 五件 + 后续导入线）共同面的唯一定点。
 // 共享面收敛到三导出（领域观测类型不共享，见尾注）：
 //   · sha12：确定性短 id 词根（sha1 前 12 hex）——mem-/proj-/ntf-/task-/itm-/res- 等各域导入 id
 //     的公共词根，幂等重灌同源同键不漂移。
@@ -20,9 +20,8 @@
 // loss 源标识/解析段紧耦合，强行统一必牵动主体逻辑（纯重构超界）。各件保留领域类型，仅观测
 // 内核（本件）共享。
 //
-// 迁移备案：org/notification/session-task/acceptance/artifact 五件已改消费本件；import-org.ts
-// 因 C2FIX 在途（改它）本批未迁——其 observe 与 notification 逐字同构，C2FIX 落地后下批回迁，
-// 届时删其私有 statSync+readFileSync 对并留指引注释（权威注释即本头注）。
+// 迁移备案：六件全数消费本件，私有 sha12/statThenRead 对已清零（M11-UTIL 迁四件 + M11-UTIL2
+// 回迁 import-org.ts，其 observe 即定稿序出处、原处留指引注释指向本头注）。
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 

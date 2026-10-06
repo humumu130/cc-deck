@@ -14,7 +14,8 @@
 //      不造关联不阻断；整文件 JSON.parse 失败=该源单条 loss+零导入，其余源继续。
 //   5. 全部行 id 确定性推导（sha1(稳定键)前 12 位），跨次重跑同源同 id，天然幂等。
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { sha12, statThenRead } from "./import-util.js";
 import { join } from "node:path";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
@@ -28,10 +29,6 @@ const GROUP_STATUS = new Set(["pending", "active", "parked", "archived"]);
 const GROUP_TIER = new Set(["轻立项", "正经立项"]);
 const CONFIRM_KIND = new Set(["project-create", "tier-change", "suggest-hold", "archive", "revive"]);
 const CONFIRM_STATUS = new Set(["pending", "approved", "rejected"]);
-
-function sha12(s: string): string {
-  return createHash("sha1").update(s).digest("hex").slice(0, 12);
-}
 
 export interface OrgImportCounts {
   project: number; group: number; member: number; groupMember: number; orgConfirm: number;
@@ -58,14 +55,10 @@ interface ObservedSource {
 
 function observe(file: string, name: string): ObservedSource {
   if (!existsSync(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
-  // stat 先于 read（M11-REVIEW P2-1）：stat 后 read 前文件被改 → 观测旧 mtime+新内容 →
-  // checkpoint 记旧 mtime，下次五元组失效重扫（多扫一次，安全侧）。反序（read→stat）竞态
-  // 会记「新 mtime+旧内容」，若后续修改不换行数则漏更新。后续导入器照抄此序。
-  const mtimeMs = Math.round(statSync(file).mtimeMs);
-  const text = readFileSync(file, "utf8");
-  const lines = text.split("\n");
+  const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts，本函数是定稿序出处）
+  const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { name, file, mtimeMs, lineCount: lines.length, text };
+  return { name, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, text: obs.text };
 }
 
 // ---------- 中间行模型（解析产物，事务内落库） ----------
