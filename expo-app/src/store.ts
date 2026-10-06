@@ -205,6 +205,11 @@ export interface SourceStatus {
   // 不支持（列表组织区不渲染）；orgConfirms = 待决议确认卡（✓/✗ 决议入口）
   projects?: ProjectGroup[] | null;
   orgConfirms?: OrgConfirm[];
+  // M13-6E 任务板缓存透出（conn.boards 对象化）：通知回跳 dispatch 域归因反查
+  //（dispatch_id → gid+entryId）数据面，与 web 端 ctx.boards 同构。缓存语义=增量
+  // 维护（M13-4 锚定纪律），反查只出「线索」——最终呈现以 GroupModal orgDetail
+  // 现拉全量为准（gid 悬空=打开失败示错，entry 缺=不高亮），不出假数据
+  boards?: Record<string, ProjectBoard>;
   schemaVersion?: number;
   sourceCapabilities?: SourceCapabilities;
   notifications?: NotificationItem[] | null;
@@ -539,6 +544,7 @@ class RelayStore {
       allowRules: c.allowRules, // #212 记住规则（设置抽屉列表 + 按源路由删除）
       projects: c.projects, // #26 M2 项目组（列表组织区 + 组详情）
       orgConfirms: c.orgConfirms, // #26 M2 待决议确认卡
+      boards: Object.fromEntries(c.boards), // M13-6E 板缓存对象化（回跳 dispatch 反查）
       schemaVersion: c.schemaVersion,
       sourceCapabilities: c.sourceCapabilities,
       notifications: c.notifications,
