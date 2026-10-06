@@ -14,7 +14,8 @@
 //        一律不造本地会话状态）
 //   I.   三面源码字面锚（readFileSync）：NewSessionModal settle 的 forbidden
 //        人话通路/降级提示/permission 透传；SettingsDrawer 权限节条件渲染整节
-//        隐藏；DetailScreen PERM_LABEL 四档字面对齐三端统一词表
+//        隐藏；DetailScreen PERM_MODE_ZH 双键八值对齐三端统一词表（PERM-SYNC 后单一
+//        词表源，旧局部 PERM_LABEL 已删）
 //
 // 注意：桩层放行 store.ts（ListScreen 依赖链），其顶层 new RelayStore() 起
 // 5s 巡检 interval——末尾必须 process.exit。
@@ -258,6 +259,9 @@ async function main(): Promise<void> {
   const modalSrc = srcOf("../src/screens/NewSessionModal.tsx");
   const drawerSrc = srcOf("../src/screens/SettingsDrawer.tsx");
   const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
+  // PERM-SYNC 双端同表对照：web-console/index.html:3359 PERM_MODE_ZH（peer 域只读锚定，
+  // 不触碰文件本身）；三端词表逐字一致的第三端（桌面）由 web 半回单覆盖
+  const webSrc = srcOf("../../web-console/index.html");
   // 面②：settle 的 forbidden 人话通路 + 成功降级提示 + permission 透传 + 断连收场
   check(modalSrc.includes("forbiddenReasonOf(v.error)"), "settle err 分支 forbidden 人话优先");
   check(modalSrc.includes("effectiveNoteOf(perm)"), "settle ok 分支降级提示通路");
@@ -271,10 +275,29 @@ async function main(): Promise<void> {
   // expo 主题 waiting=#F0524F 是红（跨端 token 同名异色），误用会把三态梯度坍缩成两红
   check(drawerSrc.includes("unverified: c.working"), "三态色 unverified=working（琥珀，跨端对齐）");
   check(!drawerSrc.includes("unverified: c.waiting"), "三态色禁用 waiting（expo waiting=红，非 web 语义）");
-  // 面③：DetailScreen PERM_LABEL 四档字面对齐三端统一词表（词表钉死）
-  for (const w of ["每次询问", "自动接受编辑", "计划模式", "完全自动"]) {
-    check(detailSrc.includes(`"${w}"`), `DetailScreen PERM_LABEL 字面对齐词表：${w}`);
+  // 面③：DetailScreen PERM_MODE_ZH 双键八值（PERM-SYNC 收敛后单一词表源，词表钉死）
+  // ① 旧局部第二事实源清零负锚（注释溯源提及允许，组件形态不得复活）
+  check(!detailSrc.includes("const PERM_LABEL"), "PERM-SYNC：旧局部 PERM_LABEL 定义已删（第二事实源清零）");
+  check(!detailSrc.includes("PERM_LABEL["), "PERM-SYNC：PERM_LABEL[ 消费形态清零");
+  // ② 路由锚：四消费点全走 PERM_MODE_ZH（含 :2393 外部会话——as Record 强转顺势已去）
+  check(detailSrc.includes("PERM_MODE_ZH[m]"), "PERM-SYNC：四选一面板行名/朗读路由 PERM_MODE_ZH");
+  check((detailSrc.match(/PERM_MODE_ZH\[/g) ?? []).length >= 4, "PERM-SYNC：PERM_MODE_ZH 消费点 ≥4（原局部表四处消费点全改）");
+  check(detailSrc.includes("PERM_MODE_ZH[perm] ?? perm"), "PERM-SYNC：外部会话胶囊 ?? 原文兜底保持（无双键漏词）");
+  check(detailSrc.includes("(PERM_SHORT as Record<string, string>)[perm]"), "PERM-SYNC：PERM_SHORT 两字短标签不动面保持（#36 定案，其既有强转不在本单刀口）");
+  // ③ 钉死词逐字锚：托管五值 + 归一三值（specs/081 钉死段，三端勿改字面）
+  const MODE_ZH_PAIRS: [string, string][] = [
+    ["default", "每次询问"], ["acceptEdits", "自动接受编辑"], ["plan", "计划模式"],
+    ["bypassPermissions", "完全自动"], ["forbidden", "已拒绝"],
+    ["ask", "每次询问"], ["edit-auto", "自动接受编辑"], ["full-auto", "完全自动"],
+  ];
+  for (const [k, w] of MODE_ZH_PAIRS) {
+    // 连字符键（edit-auto/full-auto）在两端源码中均为引号键字面
+    const keyLit = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : `"${k}"`;
+    check(detailSrc.includes(`${keyLit}: "${w}"`), `PERM-SYNC：expo PERM_MODE_ZH 逐字 ${k}: "${w}"`);
+    check(webSrc.includes(`${keyLit}: "${w}"`), `PERM-SYNC：web PERM_MODE_ZH 同表逐字 ${k}: "${w}"`);
   }
+  // forbidden 结构性不可达不变量（档位选择面数据源恒 PERM_CYCLE 四键）
+  check(detailSrc.includes("PERM_CYCLE = ["), "PERM-SYNC：档位选择面数据源 PERM_CYCLE 在位（forbidden 不可达不变量）");
 
   console.log(`\nOK ${tests} assertions`);
   process.exit(0); // 桩层放行的 store.ts 有 5s 巡检 interval，显式退

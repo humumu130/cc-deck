@@ -66,13 +66,22 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
 type PermMode = (typeof PERM_CYCLE)[number];
-// P81-8E 三端统一词表（钉死，与 web 半同段勿改字面）：档位全称对齐——面板行名
-// （「说明书」）与无障碍朗读用全称；PERM_SHORT 两字短标签（#36 状态灯定案）不受影响
-const PERM_LABEL: Record<PermMode, string> = {
+// P81-8W 权限摘要三端统一词表（specs/081 钉死段；与 web-console PERM_MODE_ZH /
+// 桌面端同表逐字一致，勿改字面——三端单一词表源，本表取代旧局部 PERM_LABEL 四键表）：
+// 双键同表——托管词表（session permission_mode 四值 + forbidden 拒绝决策位）与归一词表
+// （SNAPSHOT permission[].modes 的 ask/plan/edit-auto/full-auto）一套人话。四选一面板
+// 数据源恒 PERM_CYCLE 四键（forbidden 结构性不可达，端上不产该决策位）；归一键仅外部
+// 会话/摘要路径只读展示命中。面板行名（「说明书」）与无障碍朗读用全称；PERM_SHORT
+// 两字短标签（#36 状态灯定案）不受影响
+const PERM_MODE_ZH: Record<string, string> = {
   default: "每次询问",
   acceptEdits: "自动接受编辑",
   plan: "计划模式",
   bypassPermissions: "完全自动",
+  forbidden: "已拒绝",
+  ask: "每次询问",
+  "edit-auto": "自动接受编辑",
+  "full-auto": "完全自动",
 };
 // 胶囊短标签（#36 设计定案）：胶囊是"状态灯"只显两字短标签，全称与描述句只在
 // 四选一面板出现（面板是"说明书"）——「自动」替「自动编辑」为 R2 最坏档省 18px
@@ -1137,11 +1146,11 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
                 style={[d.permRow, cur === m && d.permRowCur, danger && arm && d.permRowArm]}
                 android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
                 onPress={() => pick(m)}
-                accessibilityLabel={`${PERM_LABEL[m]}：${PERM_DESC[m]}${cur === m ? "，当前" : ""}`}
+                accessibilityLabel={`${PERM_MODE_ZH[m]}：${PERM_DESC[m]}${cur === m ? "，当前" : ""}`}
               >
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={d.permNameRow}>
-                    <Text style={[d.permName, danger && { color: c.waiting }]}>{PERM_LABEL[m]}</Text>
+                    <Text style={[d.permName, danger && { color: c.waiting }]}>{PERM_MODE_ZH[m]}</Text>
                     {danger ? (
                       <View style={d.permBadge}>
                         <Text style={d.permBadgeT}>危险</Text>
@@ -2332,7 +2341,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
                   onPress={() => setPermPanel(true)}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
+                  accessibilityLabel={`权限模式：${PERM_MODE_ZH[perm] ?? perm}，点按选择`}
                 >
                   <Svg
                     width={10}
@@ -2390,7 +2399,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                       ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
                       : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
                   ]}
-                  accessibilityLabel={`权限模式：${(PERM_LABEL as Record<string, string>)[perm] ?? perm}（外部会话，在电脑终端切换）`}
+                  accessibilityLabel={`权限模式：${PERM_MODE_ZH[perm] ?? perm}（外部会话，在电脑终端切换）`}
                 >
                   <Svg
                     width={10}
