@@ -121,7 +121,7 @@ try {
   const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
   const prevDuty = process.env.CCR_PM_DUTY;
   const prevAcc = process.env.CCR_ACCEPTANCE_DIR;
-  delete process.env.CCR_STORAGE_READ_MODE; // 主链全程 json 档（现状写路径）；SQLite 面走 ensureStore 直调不经读档位
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 主链全程 json 档（现状写路径）；SQLite 面走 ensureStore 直调不经读档位——显式钉档（SQLITE-FLIP 后缺省=sqlite，「delete env=json」旧假设失效）
   delete process.env.CCR_PM_DUTY;           // 值守 O9 才开
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";

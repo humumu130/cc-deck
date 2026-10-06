@@ -77,16 +77,18 @@ const setMode = (m: string | undefined): void => {
 try {
   // ---------- 0. 解析器：缺省/词表/无效值 fail-fast ----------
   console.log("段0 解析器:");
-  assert(resolveReadMode(undefined) === "json" && resolveReadMode("") === "json" && resolveReadMode("  ") === "json", "缺省/空/空白= json（零配置零行为变化）");
-  assert(resolveReadMode("json") === "json" && resolveReadMode(" sqlite ") === "sqlite" && resolveReadMode("shadow") === "shadow", "词表三值 trim 后识别");
+  // 缺省=sqlite（2026-10-06 SQLITE-FLIP 翻转，用户拍板「开干吧」；CUT-1 六闸全绿+读税双清前置）
+  assert(resolveReadMode(undefined) === "sqlite" && resolveReadMode("") === "sqlite" && resolveReadMode("  ") === "sqlite", "缺省/空/空白= sqlite（2026-10-06 翻转，用户拍板）");
+  assert(resolveReadMode("json") === "json", "显式 json 仍解析 json（回滚=env 钉 json，回退通道健在锁）");
+  assert(resolveReadMode(" sqlite ") === "sqlite" && resolveReadMode("shadow") === "shadow", "词表三值 trim 后识别");
   let threw = false;
   try { resolveReadMode("jsno"); } catch { threw = true; }
   assert(threw, "无效值 throw（fail-fast，不静默回退）");
 
-  // ---------- 1. json 档（env 不设）：金值+零 SQLite 参与 ----------
+  // ---------- 1. json 档（显式钉 env）：金值+零 SQLite 参与 ----------
   console.log("段1 json 档:");
-  setMode(undefined);
-  assert(currentReadMode() === "json", "缺省 currentReadMode= json");
+  setMode("json");
+  assert(currentReadMode() === "json", "显式 json 档 currentReadMode= json（回滚档语义原样）");
   const jGroups = listGroups(orgDir);
   assert(jGroups.length === 2 && jGroups[0].id === "g-1" && jGroups[1].parked_at === T + 5 && jGroups[1].archive_note === "暂缓备注", "json 档组列表金值（含可选字段 parked_at/archive_note 原样）");
   assert(isLightConfirmTrusted(orgDir) === true, "json 档 trust_light=true（原样）");
@@ -246,9 +248,9 @@ try {
   resetReadModeForTest();
   listGroups(orgDir); // 新一轮 shadow：投影带 archived→差异落账
   const round2 = readShadowDiff(dataDir);
-  setMode(undefined);
+  setMode("json");
   resetReadModeForTest();
-  listGroups(orgDir); // 回 json 档收尾（零副作用）
+  listGroups(orgDir); // 回 json 档收尾（零副作用；SQLITE-FLIP 后收尾档显式钉 json，不依赖缺省）
   assert(round2.some((r) => r.domain === "group" && r.key === "g-1" && r.category === "value-mismatch" && JSON.stringify(r.sqlite_value) === JSON.stringify({ tier: "正经立项", status: "archived" })), "shadow 二轮新差异落账（g-1 status 改库被抓，双侧值精确）");
 } finally {
   resetReadModeForTest();

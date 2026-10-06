@@ -1,16 +1,18 @@
 // ---------- 读模式三档开关与影子比对引擎（M11-G1） ----------
 // 三端读入口从「只有 JSON」走向「JSON/SQLite 可切换+影子验证期」。三档语义（验收锚）：
-//   json（默认）  现状原样——走旧 JSON 读路径，SQLite 零参与（不建库、不开端口）。
-//   sqlite        读入口改走 SQLite（导入器灌好的表），表直读不经过 JSON。
+//   sqlite（默认） 读入口走 SQLite（导入器灌好的表），表直读不经过 JSON——2026-10-06
+//                 SQLITE-FLIP 翻转（用户拍板；CUT-1 六闸全绿+读税双清 #136/#139 前置）。
+//   json          回滚档：现状原样——走旧 JSON 读路径，SQLite 零参与（不建库、不开端口）。
+//                 显式 CCR_STORAGE_READ_MODE=json 即钉回旧档（回退通道，见 §6 回退路径）。
 //   shadow        返回值以 JSON 为准（三端行为零改变），旁路读 SQLite 对比，差异只报告不修改。
 //
 // 环境承载：CCR_STORAGE_READ_MODE（READ_MODE_ENV）。无效值 fail-fast 抛错（resolveReadMode
-// 在任何档位下都先解析——静默回退 json 会让配置 typo 长期潜伏，派单明确禁止）；缺省=不设
-// env 恒为 json 档（零配置零行为变化）。
+// 在任何档位下都先解析——静默回退会让配置 typo 长期潜伏，派单明确禁止）；缺省=不设
+// env 恒为 sqlite 档（2026-10-06 翻转；env 词表三值与 fail-fast 语义零改动）。
 //
-// 双读截止计划：默认档翻转的闸门判据（shadow 长清零等六条）/冷备份/回退路径唯一权威见
-// docs/v2-dual-read-cutover.md（M11-H2）——缺省保持 json 直到 M1-2 收口 commit，翻转动作
-// 由用户拍板执行，本层不内建任何自动切换。
+// 双读截止计划：闸门判据（shadow 长清零等六条）/冷备份/回退路径唯一权威见
+// docs/v2-dual-read-cutover.md（M11-H2）——缺省已于 2026-10-06 翻转为 sqlite（用户拍板
+// 执行单 SQLITE-FLIP），本层不内建任何自动切换。
 //
 // 三条铁律（违反任一=P1）：
 //   1. shadow 只报告差异不改旧读：shadow 档返回值与 json 档逐字节一致；差异落
@@ -93,9 +95,11 @@ const SHADOW_DIFF_COOLDOWN_MS = 2000;
 /** 单轮单域差异行上限（超大结构的报告面防爆量；超出记一行 truncated 摘要，备案）。 */
 const MAX_DIFF_ROWS_PER_DOMAIN = 200;
 
-/** 解析读模式：undefined/空="json"；词表严格匹配（trim 后）；无效值 fail-fast 抛错。 */
+/** 解析读模式：undefined/空="sqlite"（2026-10-06 SQLITE-FLIP 翻转，用户拍板；回滚=显式
+ * CCR_STORAGE_READ_MODE=json 钉回旧档，回退通道长期健在）；词表严格匹配（trim 后）；
+ * 无效值 fail-fast 抛错。 */
 export function resolveReadMode(raw: string | undefined | null): StorageReadMode {
-  if (raw === undefined || raw === null || raw.trim() === "") return "json";
+  if (raw === undefined || raw === null || raw.trim() === "") return "sqlite";
   const v = raw.trim();
   if ((READ_MODES as readonly string[]).includes(v)) return v as StorageReadMode;
   throw new Error(`[read-mode] 无效 ${READ_MODE_ENV}="${raw}"（有效值：${READ_MODES.join("/")}）——boot fail-fast，不静默回退`);
