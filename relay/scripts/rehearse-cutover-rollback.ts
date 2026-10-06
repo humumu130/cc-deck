@@ -63,7 +63,7 @@ function phaseWrite(fx: string): void {
   }
   // task×3（板条目，组 0 两张+组 1 一张）
   for (let i = 0; i < 3; i++) {
-    const r = upsertBoardEntry(gids[i % 2]!, { text: `rollback task ${i}`, status: "todo" });
+    const r = upsertBoardEntry(gids[i % 2]!, { text: `rollback task ${i}`, status: "backlog" });
     if (!r.ok) throw new Error(`upsertBoardEntry 失败: ${JSON.stringify(r)}`);
   }
   // lesson×3

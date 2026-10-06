@@ -69,11 +69,11 @@ function main() {
     decideConfirm(cg.ok && cg.confirm ? cg.confirm.id : "", true, "u");
     setGroupStatus(gid, "active");
     assert(findGroup(gid)?.status === "active", "B0① 组 active（信任确认路径）");
-    const dep = upsertBoardEntry(gid, { text: "依赖源卡", status: "todo" });
+    const dep = upsertBoardEntry(gid, { text: "依赖源卡", status: "backlog" });
     const depId = dep.ok ? dep.entry.id : "";
-    const main = upsertBoardEntry(gid, { text: "主卡：改造入口", status: "todo", depends_on: [depId] });
+    const main = upsertBoardEntry(gid, { text: "主卡：改造入口", status: "backlog", depends_on: [depId] });
     const wid = main.ok ? main.entry.id : "";
-    const gated = upsertBoardEntry(gid, { text: "gate 卡", status: "todo", gate: { reason: "等用户验收点确认" } });
+    const gated = upsertBoardEntry(gid, { text: "gate 卡", status: "backlog", gate: { reason: "等用户验收点确认" } });
     const g2id = gated.ok ? gated.entry.id : "";
     assert(dep.ok && main.ok && gated.ok && wid !== "" && g2id !== "", "B0② 板卡三张就位（依赖链+gate）");
     const ledgerBase = readDispatchLog().length;
@@ -82,7 +82,7 @@ function main() {
     console.log("B1 依赖未就绪拒派");
     const r1 = mgr.dispatchWorker({ anchor: "", prompt: "干主卡", gid, entry_id: wid });
     assert(r1.ok === false && r1.error.includes("未就绪不可派"), "B1① 认领未就绪卡拒派");
-    assert(r1.ok === false && r1.error.includes(depId) && r1.error.includes("todo"), "B1② 拒因逐条可判定（缺哪张/各自状态）");
+    assert(r1.ok === false && r1.error.includes(depId) && r1.error.includes("backlog"), "B1② 拒因逐条可判定（缺哪张/各自状态）");
     assert(created.length === 0, "B1③ 拒绝发生在 spawn 前（零引擎拉起）");
     assert(readDispatchLog().length === ledgerBase, "B1④ 拒绝零台账行（不落 dispatched 假账）");
 
@@ -105,7 +105,7 @@ function main() {
     assert(ok4 !== null, "B4② 依赖全 done 无 gate → 放行");
     assert(created.length === 1, "B4③ 放行后引擎拉起恰好一次（fake factory）");
     const claimed = loadBoard(gid).entries.find((x) => x.id === wid)!;
-    assert(claimed.status === "doing", "B4④ 认领承接：卡 todo→doing");
+    assert(claimed.status === "claimed", "B4④ 认领承接：卡 todo→doing");
     assert(ok4 !== null && claimed.dispatch_id === ok4.dispatch_id && claimed.owner_session === ok4.session_id,
       "B4⑤ 卡挂 dispatch_id+owner_session（台账↔板卡互证）");
     assert(claimed.depends_on?.length === 1 && claimed.depends_on[0] === depId, "B4⑥ 认领不洗依赖（同一张卡，依赖关系保留）");

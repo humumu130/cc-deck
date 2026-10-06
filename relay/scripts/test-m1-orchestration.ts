@@ -23,6 +23,9 @@
 // fixture 缝仿 test-m12-commands（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调
 // handleCommand）；CLI 段 spawnSync python3 子进程（env 显式注入，不污染父进程）。
 // **三 worker 编制形态备案**：链路三次认领派单按职能透传不同 role（surveyor/builder/
+// rework——D18 时点备案：P81-2 权限主体映射词表（worker/pm/team_pm/review/review_pm）
+// 收窄后 surveyor 非法，最小修=落 worker（勘察属 worker 职能）；builder/rework 实际
+// 未显式传 role（缺省 worker 直通）
 // rework，dispatchWorker input.role 命令面原生参数）。M12-8 FIX-1 已修 import-org 聚合缺陷
 // （identity=sha12(orgDir@role@engine@session) 混入 session 维度+关系落库去重）——同组多
 // worker 同 role 同引擎不再撞 UNIQUE(group_id,member_id)，O10 shadow 对账全域零容忍
@@ -158,16 +161,16 @@ try {
     const mainId = dMain1?.entity_id ?? "";
     assert(mainAck1.ok === true && dMain1?.blocked === true && (dMain1.block_reasons ?? []).some((s) => s.includes("未完成")) && !("dispatch_id" in (mainAck1.data as object)),
       "O2① 主卡依赖未就绪 → blocked:true 零派单（编排 gate，无 dispatch_id 键）");
-    assert(created.length === baseO2 && mainId !== "" && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "todo",
+    assert(created.length === baseO2 && mainId !== "" && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "backlog",
       "O2② 零 spawn+主卡落板 todo（backlog 语义，task_ref≡entity_id）");
 
     // ---------- O3 段②依赖卡先派先收：认领→回合 done→台账 done+卡自动 done+lesson 回流 ----------
     console.log("O3 依赖卡先派先收");
     const baseO3 = created.length;
-    const depDisp = send(mgr, "o3dep", "COMMAND_DISPATCH", { gid, prompt: "勘察走起", title: "依赖前置：环境勘察报告", entry_id: depId, role: "surveyor" }, "web-1");
+    const depDisp = send(mgr, "o3dep", "COMMAND_DISPATCH", { gid, prompt: "勘察走起", title: "依赖前置：环境勘察报告", entry_id: depId, role: "worker" }, "web-1");
     const depDispatchId = (depDisp.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(depDisp.ok === true && depDispatchId !== "" && created.length === baseO3 + 1
-      && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "doing",
+      && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "claimed",
       "O3① 依赖卡认领放行：spawn+卡 doing 挂接 dispatch_id（M12-1 入口）");
     created[baseO3]?.cb.onInit("sdk-orch-dep", "test-model"); // 清 init timer 防悬挂
     created[baseO3]?.cb.onTurnEnd(true, "结果：勘察完成｜改动文件：survey.md", 100);
@@ -184,12 +187,12 @@ try {
     //            认领既有卡必须 entry_id） ----------
     console.log("O4 就绪放行主卡");
     const baseO4 = created.length;
-    const mainAck2 = send(mgr, "o4main", "COMMAND_DISPATCH", { gid, prompt: "主卡活", entry_id: mainId, role: "builder" }, "web-1");
+    const mainAck2 = send(mgr, "o4main", "COMMAND_DISPATCH", { gid, prompt: "主卡活", entry_id: mainId, role: "worker" }, "web-1");
     const dMain2 = mainAck2.data as { entity_id?: string; dispatch_id?: string; session_id?: string } | undefined;
     const hungId = dMain2?.dispatch_id ?? "";
     assert(mainAck2.ok === true && hungId !== "" && created.length === baseO4 + 1,
       "O4① 依赖 done → 认领放行：spawn（M12-2/M12-4 ready 链闭环，认领路径 computeReady 同口径）");
-    assert(loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "doing"
+    assert(loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "claimed"
       && loadBoard(gid).entries.find((e) => e.id === mainId)?.dispatch_id === hungId,
       "O4② 主卡认领 doing 挂接 dispatch_id（零新卡，认领既有 blocked 卡）");
 
@@ -207,13 +210,13 @@ try {
     assert(ackL.ok === true && convView.length === 0 && hungRows[hungRows.length - 1]?.status === "done"
       && String(hungRows[hungRows.length - 1]?.receipt ?? "").includes("relay 重启"),
       "O5① 悬账兜底：收敛视图零 running/dispatched+悬挂行补 done（receipt=relay 重启，回合中断——M12-3 重启出口）");
-    assert(mainAfterRestart?.status === "todo" && (loadBoard(gid).lessons ?? []).length === lessonsAtRestart,
+    assert(mainAfterRestart?.status === "backlog" && (loadBoard(gid).lessons ?? []).length === lessonsAtRestart,
       "O5② 主卡退 todo（中断口径非真交付：不落 done 不写 lesson——垃圾账防线）+板卡状态跨重启可读");
 
     // ---------- O6 段④主卡认领重派+回合收口（重启后链路续走到终态） ----------
     console.log("O6 主卡认领重派+收口");
     const baseO6 = created.length;
-    const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续", title: "交付主活：全链编排验收", entry_id: mainId, role: "rework" }, "web-1");
+    const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续", title: "交付主活：全链编排验收", entry_id: mainId, role: "worker" }, "web-1");
     const mainDispatchId2 = (mainAck3.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(mainAck3.ok === true && mainDispatchId2 !== "" && created.length === baseO6 + 1,
       "O6① 重启后认领重派放行（依赖仍 done，computeReady 同口径；新 dispatch 单非复用悬挂 id）");

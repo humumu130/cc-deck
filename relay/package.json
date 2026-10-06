@@ -57,7 +57,9 @@
     "test:pm-duty-product": "tsx scripts/test-pm-duty-product.ts",
     "test:m12-commands": "tsx scripts/test-m12-commands.ts",
     "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts",
-    "test:m13-delta": "tsx scripts/test-delta-projection.ts"
+    "test:m13-delta": "tsx scripts/test-delta-projection.ts",
+    "test:m13-web-delta": "tsx scripts/test-m13-web-delta.ts",
+    "test:d18-five-states": "tsx scripts/test-d18-five-states.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

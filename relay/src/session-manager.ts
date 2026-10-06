@@ -19,7 +19,7 @@ import {
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
-import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission } from "./permission-policy.js";
+import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode } from "./permission-policy.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
@@ -1861,6 +1861,58 @@ export class SessionManager {
     s.state.permission_mode = mode as ManagedPermissionMode;
   }
 
+  // P81-6 旧值规范化审计（resume/revive 读点专用）：legacy_state_normalized 行——
+  // session_id=被规范化会话、command_id=null（非命令触发，状态迁移）、policy_source=null
+  // （非策略裁决是状态迁移）；native_mode 恒 null（未重新求值不声称 native——§6.3 保守，
+  // 降档后的真实 native 由下次 spawn 实参面自证）。
+  private auditLegacyPermMode(s: ManagedSession, raw: string, mode: ManagedPermissionMode): void {
+    appendPermissionAudit(auditStore(this.cfg.dataDir), {
+      requested_mode: raw,
+      normalized_mode: mode === "acceptEdits" ? "edit-auto" : mode === "plan" ? "plan" : "ask",
+      effective_mode: mode,
+      native_mode: null,
+      capability_state: engineCapabilityState(s.state.engine ?? "claude"),
+      engine: s.state.engine ?? "claude",
+      reason: "legacy_state_normalized",
+      policy_source: null,
+      environment: resolveEnvScope(this.cfg.port),
+      dir_scope: resolveDirScope(s.state.cwd),
+      tier: null,
+      actor: null,
+      session_id: s.state.session_id,
+      command_id: null,
+      created_at: Date.now(),
+    });
+  }
+
+  // P81-6 resume/revive 读 state 权限档统一入口（§5.3.2 旧值映射+§6.3「不得创建声称
+  // 已 bypass 的会话状态」）：三读点（resumeAgent/fresh 回退/reviveSaved）经此收敛——
+  // ①external 卡豁免（CLI 自报 auto/manual/bypass 是镜像事实，bridge 域，P81-6 只管托管卡）；
+  // ②claude（confirmed 族）bypass 保留——native 真实生效过=「当时真实生效档」（§5.3.2）；
+  // ③JSONL/未知引擎 bypass 降 acceptEdits+审计——state 声称从未真实生效（适配器
+  //   setPermissionMode no-op+P81-5 前直传伪装），降档把声称与真实对齐；
+  // ④未知值 fail-closed 回 default+审计（不升权铁断言：词表外绝不映射 bypass）；
+  // ⑤缺字段回 default（与既有 `?? "default"` 逐字节一致——零变零审计）。
+  // 规范化即回写收敛：一次降档后续读点恒等，审计只落一次（emitUpdated 随调用方落新值帧）。
+  private resumePermMode(s: ManagedSession): ManagedPermissionMode {
+    const raw = s.state.permission_mode;
+    if (raw === undefined || raw === null) return "default";
+    if (s.state.external) return raw;
+    const n = normalizeLegacyPermissionMode(raw);
+    if (n.kind === "bypass_demoted") {
+      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    if (n.kind === "unknown_reset") {
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    return n.mode; // identity 恒等 / missing_default（空串——缺字段的字符串形态）
+  }
+
   // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
   // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
   // M1 审查轮：返回 false = 拒删（组织 Leader 卡——锚 org.json 仍指向它，§3.5
@@ -3281,7 +3333,7 @@ export class SessionManager {
       firstMessage,
       {
         resume: sdkId,
-        permissionMode: s.state.permission_mode ?? "default",
+        permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口
         images,
         configHome: this.employeeHome(s.state),
         // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
@@ -3358,7 +3410,7 @@ export class SessionManager {
           this.agentCallbacks(s),
           replayText,
           {
-            permissionMode: s.state.permission_mode ?? "default",
+            permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口（fresh 回退同收敛）
             images: replayImages.length ? replayImages : undefined,
             configHome: this.employeeHome(s.state),
             // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
@@ -3483,7 +3535,7 @@ export class SessionManager {
     timer.unref?.();
     const agent = this.newAgent(s.state.cwd, s.state.model, cb, undefined, {
       resume: sdkId,
-      permissionMode: s.state.permission_mode ?? "default",
+      permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口（parked revive）
       configHome: this.employeeHome(s.state),
       // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
       ...(s.state.engine ? { engine: s.state.engine } : {}),

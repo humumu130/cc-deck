@@ -8,6 +8,7 @@ import { LogoMark, PencilIcon } from "../brand";
 import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
+import { artPoolGate } from "../artpool";
 import { FadeIn, PressScale } from "../motion";
 import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf, notifDoneAt, splitResolvedRows, jumpTargetOf, type NotifJumpTarget } from "../notify-jump";
@@ -29,6 +30,7 @@ interface Props {
   onSetup: () => void;
   onScanServer: () => void; // 抽屉「扫码添加」（#276）：开设置页直接拉起扫码
   onEditServer: (id: string) => void;
+  onOpenArtPool: () => void; // #72 E 线 入口①：产物池常驻胶囊（三重门显隐），App.tsx 开 ArtPoolModal
   ref?: Ref<ListBackHandle>;
 }
 
@@ -1071,14 +1073,14 @@ function GroupModal({ srcId, target, onClose, onOpenSession, highlightEntryId }:
                   <View key={p.session_id}>{body}</View>
                 );
               }) : <Text style={styles.gmEmpty}>熟手池为空（首次派单后积累）</Text>}
-              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=待办/进行/完成三段 */}
+              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=D18 五态段（freeze §1.2） */}
               <Text style={styles.gmSec}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
               {ents.length === 0 ? (
                 <Text style={styles.gmEmpty}>板为空</Text>
               ) : g?.tier === "轻立项" ? (
                 <View style={styles.gmCol}>{ents.map(entRow)}</View>
               ) : (
-                ([["todo", "待办"], ["doing", "进行"], ["done", "完成"]] as const).map(([st, lb]) => (
+                ([["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待复核"], ["ready_to_install", "待装机"], ["done", "完成"]] as const).map(([st, lb]) => (
                   <View key={st} style={styles.gmColGroup}>
                     <Text style={styles.gmColH}>{lb} {ents.filter((e) => e.status === st).length}</Text>
                     <View style={styles.gmCol}>{ents.filter((e) => e.status === st).map(entRow)}</View>
@@ -1104,7 +1106,7 @@ function GroupModal({ srcId, target, onClose, onOpenSession, highlightEntryId }:
   );
 }
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, ref }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, onOpenArtPool, ref }: Props) {
   const { c } = useTheme();
   const { mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -1715,6 +1717,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             accessibilityLabel={`通知中心，${notifPending.length} 项需行动`}
           >
             <Text style={styles.bellT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
+          </Pressable>
+        ) : null}
+        {snap.sources.some(artPoolGate) ? (
+          /* #72 E 线 入口①（常驻钮）：产物池=全局目录视图（与会话账正交的单源），
+             三重门（探测 yes && deliverables && online）任一源过即显——降级=下线不
+             灰置（探测 no/未探明的源整体隐藏，W 线同口径）。bellBtn 同款形制=
+             统计行胶囊既有常驻钮语言 */
+          <Pressable
+            style={styles.bellBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+            onPress={onOpenArtPool}
+            hitSlop={4}
+            accessibilityLabel="打开全局输出物目录"
+          >
+            <Text style={styles.bellT} numberOfLines={1}>输出物</Text>
           </Pressable>
         ) : null}
       </View>

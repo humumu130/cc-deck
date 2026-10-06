@@ -3,9 +3,10 @@
 // 用户拍板（混编团队新卡缺省请求 bypassPermissions）。
 //
 // **接线状态**：P81-2 已接三入口（SNAPSHOT 摘要/COMMAND_CREATE 闸/dispatchWorker 闸）；
-// P81-3/4（本批）落目录/环境两维输入位+环境闸（§6.1）；余债=P81-5（写面：审计落库经
-// StoragePort+spawn 传值收口+真实 cwd/env 判定接线）。import type 零运行时依赖不变，
-// wire/协议/存储/UI 零碰。
+// P81-3/4 落目录/环境两维输入位+环境闸（§6.1）；P81-5 落写面（审计经 StoragePort+spawn
+// 传值收口+真实 cwd/env 判定接线，7ab05ba）；P81-6（本批）落旧值规范化
+// normalizeLegacyPermissionMode（§5.3.2 旧值映射+§6.3 不声称 bypass）。import type 零
+// 运行时依赖不变，wire/协议/存储/UI 零碰。
 //
 // 归一四档词表（案 A）：ask < plan < edit-auto < full-auto（保守序单向，只准降不准升）。
 // 输出形=081 :84-95 落库最小结构八字段全齐（requested/normalized/effective/native/
@@ -86,6 +87,33 @@ export const EFFECTIVE_TO_MANAGED: Record<NormalizedMode, ManagedPermissionMode>
   "edit-auto": "acceptEdits",
   "full-auto": "bypassPermissions",
 };
+
+/** P81-6 旧值规范化类别：identity=新词表内恒等；bypass_demoted=旧 bypass 降档；
+ * unknown_reset=词表外未知值 fail-closed 回 default；missing_default=缺字段安全回退。 */
+export type LegacyPermKind = "identity" | "bypass_demoted" | "unknown_reset" | "missing_default";
+
+export interface LegacyPermNormalization {
+  mode: ManagedPermissionMode;
+  kind: LegacyPermKind;
+}
+
+/** 存量 state.permission_mode 旧值规范化（P81-6，§5.3.2 旧值映射+§6.3「不得创建声称
+ * 已 bypass 的会话状态」）。只降不升铁律：
+ * - 词表内三档（default/acceptEdits/plan）恒等——P81-5 后 create 收口写的就是这些；
+ * - bypassPermissions→acceptEdits（保守降档，与 §5.3.2「安全降级到 edit-auto/ask」及
+ *   环境闸物化降档全库同档）——**调用方须先做 engine 分型**：claude（confirmed 族）
+ *   native 真实生效过（spawn 实参真收了 bypass）应保留本函数不适用；JSONL/未知引擎
+ *   的 state bypass 从未真实生效（适配器 setPermissionMode no-op+旧直传伪装）才降；
+ * - 缺字段/null/空串→default（ask 档语义，native 不设 bypass——映射失败安全回退）；
+ * - 词表外任意串（历史 JSONL 污染/external 自报 auto/manual 混入）→default fail-closed
+ *   （未知值绝不映射到 bypass——不升权铁断言）。
+ * 纯函数零 IO；审计与回写由调用方（session-manager resume 读点）落。 */
+export function normalizeLegacyPermissionMode(value: string | null | undefined): LegacyPermNormalization {
+  if (value === undefined || value === null || value === "") return { mode: "default", kind: "missing_default" };
+  if (value === "default" || value === "acceptEdits" || value === "plan") return { mode: value, kind: "identity" };
+  if (value === "bypassPermissions") return { mode: "acceptEdits", kind: "bypass_demoted" };
+  return { mode: "default", kind: "unknown_reset" };
+}
 
 const ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"] as const;
 const ROLES: readonly PolicyRole[] = ["team_pm", "worker", "review_pm"];

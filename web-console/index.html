@@ -4900,9 +4900,11 @@ function confirmReadMap() {
 // 执行分离）；详情按需 COMMAND_PROJECT_DETAIL 拉 { group, board, receipts }——
 // 板不随快照下发（§2.5 分流数据源），确认卡后 PROJECTS_UPDATED 回帧即收敛。
 const ORG_ST = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
-// 任务板泳道词表/定序（M13-3 前向兼容位：分区渲染按值分组——未知状态值原样成列排在已知三态后）
-const BOARD_LANE = { todo: "待办", doing: "进行", done: "完成" };
-const BOARD_LANE_ORD = { todo: 0, doing: 1, done: 2 };
+// 任务板泳道词表/定序（D18 五态：freeze §1.2 汉字口径 backlog=待认领/claimed=进行中；
+// submitted/ready_to_install 标签为实施裁量——待复核/待装机。M13-3 前向兼容位保留：
+// 分区渲染按值分组，未知状态值原样成列排在已知五态后）
+const BOARD_LANE = { backlog: "待认领", claimed: "进行中", submitted: "待复核", ready_to_install: "待装机", done: "完成" };
+const BOARD_LANE_ORD = { backlog: 0, claimed: 1, submitted: 2, ready_to_install: 3, done: 4 };
 
 // M13-3 v2 delta 投影消费（M13-2 定案，形状权威 relay/src/types.ts:620-633）：
 // 帧级判定 payload.delta !== undefined（空 delta {} 也是合法增量帧）→ 增量 merge；缺席 → 覆盖式旧字段。
@@ -5172,11 +5174,11 @@ function orgRenderDrawer() {
   // 冲刺 #12 视觉审查修复：空列不渲染——430px 抽屉里固定三栏会把卡片挤成 ~128px 窄条
   //（6 行碎字）且空列悬空成死白；flex 布局 + 只渲染非空列，单列全宽/双列对半/三列等宽
   else {
-    // M13-3 前向兼容位：板分区按值分组+非空列（D18 五态未落本单）——已知三态保 todo/doing/done
-    // 序与汉字标；未知状态值原样成列不丢弃、无 status 归 todo。三态数据下与旧固定三栏字节等价
+    // M13-3 前向兼容位：板分区按值分组+非空列（D18 五态已落）——已知五态保 backlog/claimed/
+    // submitted/ready_to_install/done 序与汉字标；未知状态值原样成列不丢弃、无 status 归 backlog
     const lanes = [], laneIdx = new Map();
     for (const e of ents) {
-      const st = e.status || "todo";
+      const st = e.status || "backlog";
       if (!laneIdx.has(st)) { laneIdx.set(st, lanes.length); lanes.push({ st, lb: BOARD_LANE[st] || st, list: [] }); }
       lanes[laneIdx.get(st)].list.push(e);
     }

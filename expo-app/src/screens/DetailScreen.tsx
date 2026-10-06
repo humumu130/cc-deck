@@ -22,6 +22,7 @@ import { withA, STATUS_ZH, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
+import { artPoolGate } from "../artpool";
 import { fromB64, toB64 } from "../e2e";
 // E3a：hasActivityCapability 为值导入（E1 落库面，只消费不修改）；其余仍纯类型
 import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
@@ -169,18 +170,10 @@ function artDirOf(s: SessionState, t: ArtifactItem): string {
   const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
   return i > 0 ? p.slice(0, i) : "";
 }
-function fmtArtSize(n: number | undefined): string {
-  if (typeof n !== "number" || n < 0) return "";
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
-  return (n / 1048576).toFixed(1) + " MB";
-}
-// 输出物时间：#162 套用 #155 微信式分级（当天 HH:mm / 昨天 / 今年 M月d日 / 跨年带
-// 年份，自然日边界）——与卡片最后活跃、web-console 同口径；周X/M/d 旧档位废弃
-function fmtArtTime(ts: number): string {
-  if (!ts) return "";
-  return fmtLastActive(ts);
-}
+// #72 E 线：fmtArtSize/fmtArtTime 迁 artpool.ts（产物池行与会话账行同语言共用），
+// 此处 re-export 既有引用面不变
+export { fmtArtSize, fmtArtTime } from "../artpool";
+import { fmtArtSize, fmtArtTime } from "../artpool";
 // #83 路径显示串断行：/ 与 - 后插零宽空格（U+200B）——Android ICU 断行不会在中文
 // 词内给出断点，长中文路径会被从词中间拆开，ZWSP 提供合法断点。仅用于显示；复制走
 // 按钮的原串（零宽空格进剪贴板=粘到终端的隐性坏路径），故路径 Text 不再开 selectable
@@ -632,18 +625,14 @@ async function openArtExternally(uri: string, mime: string): Promise<string | nu
     return "手机上没有能打开此格式的应用，文件已保存在应用缓存里";
   }
 }
-function decodeUtf8(u8: Uint8Array): string {
-  return new TextDecoder("utf-8", { fatal: false }).decode(u8);
-}
-
 // #79 拉取结果分级：img=内嵌图片；html=WebView 渲染（报告类主格式，看源码没意义）；
 // txt/md=内嵌文本（md 走 MdText）；sys=复杂格式（pdf/office/zip…）落盘后交系统应用打开
-type ArtViewData =
-  | { kind: "img"; name: string; uri: string; size: number }
-  | { kind: "html"; name: string; text: string; size: number }
-  | { kind: "txt"; name: string; text: string; size: number }
-  | { kind: "md"; name: string; text: string; size: number }
-  | { kind: "sys"; name: string; uri: string; mime: string; size: number };
+// #72 E 线：类型与分级路由（decodeUtf8/artDataOf）迁 artpool.ts 纯函数模块——会话账
+// 拉取（本文件 fetchArtView）与产物池 HTTP 直取（ArtPoolModal）共用同一把分级尺，
+// 防双口径漂移；此处 re-export 既有引用面不变
+export { decodeUtf8, artDataOf, type ArtViewData } from "../artpool";
+import { artDataOf } from "../artpool";
+import type { ArtViewData } from "../artpool";
 
 // #79 拉取缓存（晨间反馈：同一份输出物不应每次查看都重拉）：键 = sid|path|last_at，
 // 电脑上文件更新（last_at 变化）键即失效、自动重拉最新——「在线预览的新鲜」与
@@ -743,7 +732,8 @@ function artCachePut(k: string, v: ArtViewData): void {
 // #79 分享文件本体（ArtView 头部与 ArtSheet 共用）：文本类以干净名现落盘；img/sys
 // 的缓存文件带键哈希前缀（防同名碰撞），分享前复制一份干净名——收到的文件名不带
 // 前缀。mime 按分级映射——晨间反馈二轮：分享=文件本身不是路径
-async function shareArtView(v: ArtViewData): Promise<void> {
+// #72 E 线：export 供 ArtPoolModal 产物池行分享复用（禁重写既有分享链）
+export async function shareArtView(v: ArtViewData): Promise<void> {
   const mime =
     v.kind === "sys" ? v.mime
     : v.kind === "img" ? "image/*"
@@ -773,7 +763,8 @@ async function shareArtView(v: ArtViewData): Promise<void> {
 // 晨间反馈补齐：头部「分享」= 文件本体进系统分享面板（存云盘/发微信/存本地一板全收，
 // 就是「下载到本地随用户处理」的系统出口）；HTML 另给「浏览器」按钮交系统浏览器渲染
 // #216 同构修：受控 visible 常驻渲染（v 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
-function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void }) {
+// #72 E 线：export 供 ArtPoolModal 产物池预览复用（禁重写既有预览链）
+export function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [openErr, setOpenErr] = useState<string | null>(null);
@@ -926,18 +917,8 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
     const mime = r.mime || "application/octet-stream";
     const uri = artCacheUri(cacheKey, name);
     await writeArtUri(uri, u8);
-    let data: ArtViewData;
-    if (mime.startsWith("image/")) {
-      data = { kind: "img", name, uri, size: n };
-    } else if (mime === "text/html") {
-      data = { kind: "html", name, text: decodeUtf8(u8), size: n };
-    } else if (mime === "text/markdown") {
-      data = { kind: "md", name, text: decodeUtf8(u8), size: n };
-    } else if (mime.startsWith("text/") || mime === "application/json") {
-      data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
-    } else {
-      data = { kind: "sys", name, uri, mime, size: n };
-    }
+    // #72 E 线：分级路由统一走 artpool.artDataOf（与产物池 HTTP 直取单口径，防双尺漂移）
+    const data = artDataOf(u8, mime, name, uri);
     artCachePut(cacheKey, data);
     return data;
   };
@@ -1551,7 +1532,7 @@ export interface DetailBackHandle {
   requestBack: () => boolean;
 }
 
-export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
+export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; onOpenArtPool?: () => void; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
   // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换。
@@ -1652,6 +1633,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     : undefined;
   const deliverables = srcDeliverables ?? snap.deliverables;
   const VS = deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
+  // #72 E 线 产物池入口②门（本会话所属源过三重门才显示「全局输出物目录」可达行）：
+  // 与 deliverables 同款 per-源取数（s.src 盖章 → 源查找 → 回落活动源）。入口①常驻钮
+  // 在列表页（ListScreen），此处是详情可达语义（web W 线两枚入口镜像）
+  const srcForArt = s?.src ?? snap.activeSourceId;
+  const artPoolSrc = srcForArt ? snap.sources.find((x) => x.id === srcForArt) : undefined;
+  const poolOpenable = artPoolGate(artPoolSrc);
   // 停在被关掉的页（开着「输出物」时关开关/重连到关闭的 relay）→ 回落消息页，防 -1 白屏
   useEffect(() => {
     if (!VS.some((v) => v.k === view)) setView("msg");
@@ -2702,7 +2689,16 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {(s.artifacts?.length ?? 0) === 0 ? (
             /* #49：空态文案不暴露内部机制（原三分提示句移除），只留一句话（与网页端同口径）；
                #51：收录口径收窄为文档类交付物，空态措辞同步 */
-            <Text style={d.empty}>当前会话还没有文档产出</Text>
+            <>
+              <Text style={d.empty}>当前会话还没有文档产出</Text>
+              {poolOpenable && onOpenArtPool ? (
+                /* #72 E 线 入口②（详情可达）：会话产物空 ≠ 池空——全局目录里可能有别的
+                   会话/项目交付的文件（web W 线详情列第四态同语义镜像） */
+                <Pressable hitSlop={6} onPress={onOpenArtPool} accessibilityLabel="查看全局输出物目录">
+                  <Text style={[d.artFoot, { color: c.brandA, paddingVertical: 8, fontSize: 12, fontWeight: "600" }]}>查看全局输出物目录 ›</Text>
+                </Pressable>
+              ) : null}
+            </>
           ) : (() => {
             const arts = s.artifacts!;
             const byRec = (a: ArtifactItem, b: ArtifactItem) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
@@ -2847,6 +2843,13 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
                     #51：补收录口径（文档类交付物），与网页端同句 */}
                 <Text style={d.artFoot}>仅收录文档、表格等交付物 · 点文件可拉取到手机预览</Text>
+                {poolOpenable && onOpenArtPool ? (
+                  /* #72 E 线 入口②（详情可达）：会话账只记本会话交付，全局目录（产物池）
+                     补全机扫描视图——web W 线详情列第四态同语义镜像 */
+                  <Pressable hitSlop={6} onPress={onOpenArtPool} accessibilityLabel="查看全局输出物目录">
+                    <Text style={[d.artFoot, { color: c.brandA, paddingVertical: 8, fontSize: 12, fontWeight: "600" }]}>查看全局输出物目录 ›</Text>
+                  </Pressable>
+                ) : null}
               </>
             );
           })()}

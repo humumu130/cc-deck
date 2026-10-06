@@ -1,5 +1,5 @@
-// P81-2/P81-5 权限接线测试锁（直跑范式）——specs/081 §4/§5/§6.1/§6.3。
-// 十组断言：①SNAPSHOT 摘要形状锁；②接线映射层锁（与 session-manager 闸同构造，漂移即红）；
+// P81-2/P81-5/P81-6 权限接线测试锁（直跑范式）——specs/081 §4/§5/§6.1/§6.3。
+// 十一组断言：①SNAPSHOT 摘要形状锁；②接线映射层锁（与 session-manager 闸同构造，漂移即红）；
 // ③forbidden ACK 统一拒绝面（闸拒均在 spawn/落账前）；④派单闸与零台账（dispatch-log 口径）；
 // ⑤硬断言（effective ≤ ceiling 全谱+摘要 modes 自洽）；
 // 【P81-5】⑥真实判定三值（resolveDirScope/resolveEnvScope——production/sandbox/unknown
@@ -7,6 +7,8 @@
 // ⑧spawn 传值收口（假 factory 拦截直证实参：claude sandbox bypass 恒等/JSONL 降级
 // acceptEdits 实参变化点/state 继承源）；⑨混编分支（mixed_engine 组→mixed_team_default
 // 物化）；⑩岗位收紧（未知岗位 forbidden unknown_role_mapping——B3 债 fail-closed）。
+// 【P81-6】⑪旧值规范化（normalizeLegacy 纯函数矩阵+resume 三面：claude bypass 保留/
+// JSONL 降档+legacy_state_normalized 审计/缺字段 default 零审计/identity 恒等+回写收敛单次性）。
 // 隔离：mkdtemp 临时目录、env 五清、端口 8795（避 8787 生产与 8792/8793/8798/8799 禁用段）；
 // 生产 8787 与 ~/.cc-deck 零触达。
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -16,7 +18,7 @@ import { randomUUID } from "node:crypto";
 import { EventBus } from "../src/event-bus.js";
 import type { RelayConfig } from "../src/config.js";
 import { SessionManager } from "../src/session-manager.js";
-import { engineCapabilityState, evaluatePermission, permissionCapabilitiesSummary } from "../src/permission-policy.js";
+import { engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionCapabilitiesSummary } from "../src/permission-policy.js";
 import { auditStore, readPermissionAudit, resolveDirScope, resolveEnvScope } from "../src/permission-audit.js";
 import { readDispatchLog } from "../src/org.js";
 import type { CommandAckPayload, Command, SessionEngine } from "../src/types.js";
@@ -95,10 +97,9 @@ try {
     model: "test-model", bridgeToken: "bt", dataDir: join(root, "data"),
     cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
   };
-  const spawned: { cwd: string; prompt: string | undefined; permissionMode: string | undefined; engine?: string }[] = [];
+  const spawned: { cwd: string; prompt: string | undefined; permissionMode: string | undefined; engine?: string; cb?: AgentCallbacks; agent?: AgentLike }[] = [];
   const makeFakeFactory = () =>
     (cwd: string, _model: string, _cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string; engine?: string }): AgentLike => {
-      spawned.push({ cwd, prompt, permissionMode: opts?.permissionMode, ...(opts?.engine ? { engine: opts.engine } : {}) });
       const a: AgentLike = {
         id: randomUUID(),
         startedAt: Date.now(),
@@ -112,6 +113,7 @@ try {
         },
         setPermissionMode: async () => {},
       };
+      spawned.push({ cwd, prompt, permissionMode: opts?.permissionMode, ...(opts?.engine ? { engine: opts.engine } : {}), cb: _cb, agent: a });
       return a;
     };
   const bus = new EventBus();
@@ -320,6 +322,87 @@ try {
     const d = mgr.dispatchWorker({ anchor: root, prompt: "收紧 ACK 形状", gid: gidAudit, role: "cto" });
     assert(d.ok === false && "error" in d && d.error.startsWith("forbidden: unknown_role_mapping"), "收紧 ACK：ok:false+forbidden: unknown_role_mapping 前缀统一拒绝面");
     assert(readDispatchLog().length === before, "收紧拒单零台账（dispatch-log 不变——权限拒面唯一落点=audit 表）");
+  }
+
+  // ---------- ⑪ 旧值规范化（P81-6：§5.3.2 旧值映射+§6.3 不声称 bypass——只降不升） ----------
+  console.log("S11 旧值规范化");
+  {
+    // 纯函数矩阵直测：四旧值+缺字段+未知值全谱（不升权铁断言：未知值绝不映射 bypass）
+    assert(normalizeLegacyPermissionMode("default").mode === "default" && normalizeLegacyPermissionMode("default").kind === "identity", "纯函数×default→恒等 identity");
+    assert(normalizeLegacyPermissionMode("acceptEdits").mode === "acceptEdits" && normalizeLegacyPermissionMode("plan").mode === "plan" && normalizeLegacyPermissionMode("plan").kind === "identity", "纯函数×acceptEdits/plan→恒等 identity");
+    const nb = normalizeLegacyPermissionMode("bypassPermissions");
+    assert(nb.mode === "acceptEdits" && nb.kind === "bypass_demoted", "纯函数×bypass→acceptEdits 降档（只降不升——ceiling 内保守档，与 §5.3.2/环境闸降档全库同档）");
+    assert(normalizeLegacyPermissionMode(null).mode === "default" && normalizeLegacyPermissionMode(null).kind === "missing_default" && normalizeLegacyPermissionMode(undefined).kind === "missing_default" && normalizeLegacyPermissionMode("").mode === "default", "纯函数×缺字段/null/空串→default 安全回退（native 不设 bypass）");
+    for (const unknown of ["auto", "manual", "skip", "gibberish"]) {
+      const nu = normalizeLegacyPermissionMode(unknown);
+      assert(nu.mode === "default" && nu.kind === "unknown_reset", `纯函数×未知值 "${unknown}"→default fail-closed（绝不 bypass）`);
+    }
+
+    const legacyBefore = () => readPermissionAudit(auditPort()).filter((r) => r.reason === "legacy_state_normalized").length;
+
+    // a. claude×bypass 保留面（native 真实生效过=「当时真实生效档」§5.3.2——P81-5 后
+    //    create 求值恒等放行的合法卡，resume 不得误伤降级——:111 用户实踩教训同构）
+    const ackA = mgr.handleCommand(
+      { command_id: "p81-r1", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "claude bypass 保留面", permissionMode: "bypassPermissions" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    assert(ackA.ok === true && typeof ackA.session_id === "string", "前置：claude×bypass 卡建成（state=bypass 合法路径）");
+    // state.pm 镜像入口=onInit 第三参（CLI init 回报镜像 :2964——真 CLI 行为模拟）
+    spawned[spawned.length - 1]?.cb?.onInit("sdk-p81r1", "test-model", "bypassPermissions");
+    if (spawned[spawned.length - 1]?.agent) spawned[spawned.length - 1].agent!.ended = true; // 流死→MESSAGE 走 resumeAgent 真路径
+    const lgB = legacyBefore();
+    mgr.handleCommand({ command_id: "p81-r1m", type: "COMMAND_MESSAGE", payload: { session_id: ackA.session_id!, text: "resume 触发" }, ts: Date.now() } as unknown as Command, "web-d");
+    const lastA = spawned[spawned.length - 1];
+    assert(lastA.permissionMode === "bypassPermissions", "claude×bypass resume：spawn 实参保持 bypassPermissions（confirmed 族保留——零误伤）");
+    assert(legacyBefore() === lgB, "claude×bypass resume 零审计（保留面非规范化事件）");
+
+    // b. JSONL 降档面（codex 卡 state=bypass——onInit 镜像=P81-5 前直传时代的残留等价
+    //    制造：state 声称 bypass 而 unverified 下 CLI 从未真实生效）
+    const ackB = mgr.handleCommand(
+      { command_id: "p81-r2", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "codex 旧值卡", engine: "codex" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    assert(ackB.ok === true && typeof ackB.session_id === "string", `前置：codex 旧值卡建成（ok=${ackB.ok} err=${"error" in ackB ? ackB.error : "-"}）`);
+    spawned[spawned.length - 1]?.cb?.onInit("sdk-p81r2", "test-model", "bypassPermissions"); // CLI 回报 bypass=伪装时代镜像（unverified 下 CLI 从未真实生效）
+    if (spawned[spawned.length - 1]?.agent) spawned[spawned.length - 1].agent!.ended = true; // 流死→resumeAgent（codex 非 reinjection 族走主读点）
+    const lgB2 = legacyBefore();
+    mgr.handleCommand({ command_id: "p81-r2m", type: "COMMAND_MESSAGE", payload: { session_id: ackB.session_id!, text: "resume 触发降档" }, ts: Date.now() } as unknown as Command, "web-d");
+    const lastB = spawned[spawned.length - 1];
+    assert(lastB.permissionMode === "acceptEdits" && lastB.engine === "codex", "JSONL×state bypass resume：spawn 实参 acceptEdits（声称从未真实生效——§6.3 降档对齐）");
+    const rowsL = readPermissionAudit(auditPort());
+    const rl = rowsL.find((r) => r.reason === "legacy_state_normalized");
+    assert(rl !== undefined && rl.requested_mode === "bypassPermissions" && rl.effective_mode === "acceptEdits" && rl.normalized_mode === "edit-auto", "降档审计行：requested=bypass/effective=acceptEdits/normalized=edit-auto（旧值留档+新值落位）");
+    assert(rl !== undefined && rl.session_id === ackB.session_id && rl.command_id === null && rl.policy_source === null && rl.native_mode === null, "降档审计行形状：session_id=被规范化会话+command_id/policy_source/native 全 null（状态迁移非策略裁决——§6.3 保守）");
+
+    // c. 缺字段面（COMMAND_CREATE 无 permissionMode→state 无键）：default 零审计零变
+    const ackC = mgr.handleCommand(
+      { command_id: "p81-r3", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "缺字段卡" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    spawned[spawned.length - 1]?.cb?.onInit("sdk-p81r3", "test-model");
+    if (spawned[spawned.length - 1]?.agent) spawned[spawned.length - 1].agent!.ended = true;
+    const lgB3 = legacyBefore();
+    mgr.handleCommand({ command_id: "p81-r3m", type: "COMMAND_MESSAGE", payload: { session_id: ackC.session_id!, text: "resume 触发缺字段" }, ts: Date.now() } as unknown as Command, "web-d");
+    assert(spawned[spawned.length - 1].permissionMode === "default" && legacyBefore() === lgB3, "缺字段卡 resume：spawn default（安全回退与既有 ?? default 逐字节一致）+零审计");
+
+    // d. identity 恒等（plan 卡）：resume 恒等零审计
+    const ackD = mgr.handleCommand(
+      { command_id: "p81-r4", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "plan 卡", permissionMode: "plan" }, ts: Date.now() },
+      "web-d",
+    ) as CommandAckPayload;
+    spawned[spawned.length - 1]?.cb?.onInit("sdk-p81r4", "test-model", "plan");
+    if (spawned[spawned.length - 1]?.agent) spawned[spawned.length - 1].agent!.ended = true;
+    const lgB4 = legacyBefore();
+    mgr.handleCommand({ command_id: "p81-r4m", type: "COMMAND_MESSAGE", payload: { session_id: ackD.session_id!, text: "resume 触发 identity" }, ts: Date.now() } as unknown as Command, "web-d");
+    assert(spawned[spawned.length - 1].permissionMode === "plan" && legacyBefore() === lgB4, "plan 卡 resume：恒等 identity+零审计");
+
+    // e. 降档收敛单次性：b 卡再次 resume（置死复活流）——state 已回写 acceptEdits→
+    //    读点 identity 恒等，审计不再重复落（一次规范化终身收敛）
+    const after1 = legacyBefore();
+    if (lastB.agent) lastB.agent.ended = true; // 置死 b 卡 resume 流（lastB=其 spawn 记录引用）
+    mgr.handleCommand({ command_id: "p81-r2m2", type: "COMMAND_MESSAGE", payload: { session_id: ackB.session_id!, text: "二次 resume 收敛" }, ts: Date.now() } as unknown as Command, "web-d");
+    const lastB2 = spawned[spawned.length - 1];
+    assert(lastB2.permissionMode === "acceptEdits" && lastB2 !== lastB && legacyBefore() === after1, "二次 resume：回写收敛恒等 acceptEdits（真再读 state）+审计只落一次");
   }
 
   console.log(`P81-2/P81-5 permission wiring: ${pass}/${pass + fail} passed`);

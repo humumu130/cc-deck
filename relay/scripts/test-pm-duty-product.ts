@@ -137,7 +137,7 @@ try {
   writeFileSync(pluginConfigPath(), JSON.stringify({ duty: false, unknown_key: 1 }) + "\n");
   assert(readPluginConfig().duty === false,
     "P0④ config duty=false 读回 false（未知键前向兼容不扰）");
-  assert(evaluateDutyPolicy({ kind: "todo", id: "x" }).auto_dispatch_enabled === true,
+  assert(evaluateDutyPolicy({ kind: "todo", id: "x" }).auto_dispatch_enabled === true, // DutyCandidateKind 值守词表（receipt/dispatch/todo/stale_doing）——非板态词表，D18 不动
     "P0⑤ evaluateDutyPolicy 缺省 auto_dispatch_enabled=true（019 §6.3 拍板默认值）");
   rmSync(pluginConfigPath()); // 回到「无 config 文件」基线（P1 起按缺省开跑）
 
@@ -167,13 +167,13 @@ try {
     try {
       const bootIdx = f.ensureLeaderIdx();
       const idA = f.card("依赖前置卡（派单承接）");
-      const bUp = upsertBoardEntry(f.gid, { text: "依赖解锁卡（B 等 A）", status: "todo", depends_on: [idA] });
+      const bUp = upsertBoardEntry(f.gid, { text: "依赖解锁卡（B 等 A）", status: "backlog", depends_on: [idA] });
       const idB = bUp.ok ? bUp.entry.id : "";
       assert(idA !== "" && idB !== "", "P2⓪ 依赖对落卡（A 派单承接/B depends_on[A]）");
       // 先派单承接 A（A=doing 非候选、B 依赖未解锁非候选）→boot 收口时 all_running
       // sleep 清链+Leader 置 DONE（worker done 边过 WORKING 门的前提）
       const w = f.dispatch("干 A 卡的单");
-      upsertBoardEntry(f.gid, { id: idA, text: "依赖前置卡（派单承接）", status: "doing", dispatch_id: w.dispatchId });
+      upsertBoardEntry(f.gid, { id: idA, text: "依赖前置卡（派单承接）", status: "claimed", dispatch_id: w.dispatchId });
       f.created[bootIdx]?.cb.onTurnEnd(true, "boot", 1);
       assert((f.rounds()[f.rounds().length - 1] ?? {}).reason === "blocked",
         "P2⓪b boot 收口：A 在跑 B 等依赖（blocked 判定序先于 all_running，leader-duty :169）→sleep 清链+Leader 归 DONE 态");
@@ -220,7 +220,7 @@ try {
     const f = mkFixture(dirs);
     try {
       const bootIdx = f.ensureLeaderIdx();
-      upsertBoardEntry(f.gid, { text: "等人放行的卡", status: "todo", gate: { reason: "外部等待" } });
+      upsertBoardEntry(f.gid, { text: "等人放行的卡", status: "backlog", gate: { reason: "外部等待" } });
       const base = f.created.length;
       f.created[bootIdx]?.cb.onTurnEnd(true, "boot", 1);
       let last = f.rounds()[f.rounds().length - 1] ?? {};
@@ -276,7 +276,7 @@ try {
         "P5⑤ continuation 触发的检查行（候选未消化→继续退避，非永久静默）");
       // 候选消化→链归零→循环终止
       const board = loadBoard(f.gid);
-      const fuel = board.entries.find((e) => e.status === "todo");
+      const fuel = board.entries.find((e) => e.status === "backlog");
       send(f.mgr, "p5clr", "COMMAND_TASK_UPDATE", { gid: f.gid, entry_id: fuel?.id ?? "", status: "done" }, "web-1");
       await sleep(80); // 消化在途 setTimeout 一发（sleep empty 归零后不再排新 timer）
       const n1 = f.rounds().length;
@@ -313,10 +313,10 @@ try {
     try {
       const bootIdx = f.ensureLeaderIdx(); // Leader spawn 在途=WORKING（不收口）
       const idA = f.card("P7 前置卡");
-      const bUp = upsertBoardEntry(f.gid, { text: "P7 解锁卡", status: "todo", depends_on: [idA] });
+      const bUp = upsertBoardEntry(f.gid, { text: "P7 解锁卡", status: "backlog", depends_on: [idA] });
       const idB = bUp.ok ? bUp.entry.id : "";
       const w = f.dispatch("P7 干 A");
-      upsertBoardEntry(f.gid, { id: idA, text: "P7 前置卡", status: "doing", dispatch_id: w.dispatchId });
+      upsertBoardEntry(f.gid, { id: idA, text: "P7 前置卡", status: "claimed", dispatch_id: w.dispatchId });
       const before = f.created.length;
       const roundsBefore = f.rounds().length;
       f.created[w.workerIdx]?.cb.onTurnEnd(true, "干完了", 50); // worker done→Leader WORKING→合并门静默

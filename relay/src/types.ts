@@ -4,7 +4,7 @@
 import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
 import type { AllowRule } from "./allow-rules.js";
-import type { ProjectGroup, ProjectBoard, OrgConfirm, BoardEntry, LessonEntry } from "./projects.js";
+import type { ProjectGroup, ProjectBoard, OrgConfirm, BoardEntry, LessonEntry, BoardEntryStatus } from "./projects.js";
 
 // ---------- 事件信封 ----------
 
@@ -949,13 +949,13 @@ export interface OrgActionCommand extends CommandBase {
 // 公共约定：ACK ok 路径 data={entity_id, gid}（设计稿 §七口径）；DISPATCH 并列 dispatch_id。
 // 全部经 orgCommand 咽喉（org:write 能力位+审计一行）→orgAction 单漏斗执行。
 
-// 建板卡：映射 orgAction board/op=upsert（无 entry_id=新卡，status 缺省 todo）
+// 建板卡：映射 orgAction board/op=upsert（无 entry_id=新卡，status 缺省 backlog）
 export interface TaskCreateCommand extends CommandBase {
   type: "COMMAND_TASK_CREATE";
   payload: {
     gid: string;                                  // 目标组（板随组落 boards/<gid>.json）
     text: string;                                 // 卡文本（store 层必填）
-    status?: "todo" | "doing" | "done";           // 缺省 todo
+    status?: BoardEntryStatus;                    // D18 五态词表（缺省 backlog）
     note?: string;
   };
 }
@@ -968,7 +968,7 @@ export interface TaskUpdateCommand extends CommandBase {
     gid: string;
     entry_id: string;                             // 目标卡（不存在即拒）
     text?: string;
-    status?: "todo" | "doing" | "done";
+    status?: BoardEntryStatus;                    // D18 五态词表（submitted 受 store 层 R1 资格锁）
     note?: string;
   };
 }
@@ -995,7 +995,7 @@ export interface DispatchCommand extends CommandBase {
      * 零写零 spawn 返回 blocked；坏引用（depends_on 指不存在卡）error 拒收非 blocked。 */
     task?: {
       text: string;
-      status?: "todo" | "doing";                  // 缺省 todo（done 建卡即完成不收）
+      status?: "backlog" | "claimed";             // D18 词表：缺省 backlog（终态/候选态建卡不收，done 建卡即完成不收原则）
       note?: string;
       depends_on?: string[];                      // #087 beads：依赖卡 id 引用
       gate?: { reason: string };                  // #087 gate：编排只设闸，清除仍走人决策口（gate:null 无自动路径）

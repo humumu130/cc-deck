@@ -187,9 +187,9 @@ async function main() {
     // 冲刺 F-05 补锁：派单 title 双写内存态（此前只落盘，重启前后列表标题劈叉）
     assert(w2?.title === "[轻立项] 按钮任务", "派单 title 即时进会话运行态（F-05，含档位前缀，无需重启）");
     assert((listGroups().find((g) => g.id === gidA)?.headcount ?? []).some((h) => h.session_id === wid2), "worker 入编（headcount）");
-    assert(loadBoard(gidA).entries.some((e) => e.dispatch_id === did2 && e.status === "doing"), "板联动：承接条目 doing");
+    assert(loadBoard(gidA).entries.some((e) => e.dispatch_id === did2 && e.status === "claimed"), "板联动：承接条目 doing");
     assert(await waitFor(() => readDispatchLog().filter((e) => e.id === did2).some((e) => e.status === "failed")), "失败回合 → 台账 failed");
-    assert(loadBoard(gidA).entries.find((e) => e.dispatch_id === did2)?.status === "todo", "板联动：failed 退回 todo");
+    assert(loadBoard(gidA).entries.find((e) => e.dispatch_id === did2)?.status === "backlog", "板联动：failed 退回 todo");
     okNext = true;
 
     // ---------- D3 确认门槛与信任累积 ----------
@@ -245,13 +245,13 @@ async function main() {
     const gidD = listGroups().find((g) => g.name === "delta")?.id ?? "";
     mgr.orgAction("confirm-decide", { confirm_id: c5.data?.confirm?.id ?? "", approve: true, by: "u" });
     const b1 = mgr.orgAction("board", { op: "upsert", gid: gidD, text: "任务甲" }) as { ok: boolean; data?: { entry?: { id: string; status: string } } };
-    assert(b1.ok === true && b1.data?.entry?.status === "todo", "板 upsert 默认 todo");
+    assert(b1.ok === true && b1.data?.entry?.status === "backlog", "板 upsert 默认 todo");
     const eid = b1.data?.entry?.id ?? "";
     const b2 = mgr.orgAction("board", { op: "move", gid: gidD, entry_id: eid, status: "done" });
     assert(b2.ok === true && loadBoard(gidD).entries[0]?.status === "done", "板 move");
     const b3 = mgr.orgAction("board", { op: "del", gid: gidD, entry_id: eid });
     assert(b3.ok === true && loadBoard(gidD).entries.length === 0, "板 del");
-    const b4 = mgr.orgAction("board", { op: "move", gid: gidC, entry_id: "nope", status: "todo" });
+    const b4 = mgr.orgAction("board", { op: "move", gid: gidC, entry_id: "nope", status: "backlog" });
     assert(b4.ok === false, "未知操作/归档板拒绝");
     // 冲刺 F-03 补锁：gid 直调不带 anchor 亦可（anchor 校验移到 gid 解析后，
     // gid 派单用组锚）——台账 project_anchor 落组锚
@@ -284,7 +284,7 @@ async function main() {
     }), "utf-8");
     mkdirSync(join(ORG2, "boards"), { recursive: true });
     writeFileSync(join(ORG2, "boards", "g-x.json"), JSON.stringify({
-      entries: [{ id: "e-x", text: "断档在跑", status: "doing", dispatch_id: "dsp-gid" }],
+      entries: [{ id: "e-x", text: "断档在跑", status: "claimed", dispatch_id: "dsp-gid" }],
       frozen: false,
     }), "utf-8");
     writeFileSync(join(ORG2, "routing.json"), JSON.stringify({
@@ -302,7 +302,7 @@ async function main() {
     assert(rej2?.receipt === "relay 重启，回合中断", "补记回执语义");
     assert(log2.filter((e) => e.id === "dsp-gid").some((e) => e.status === "done"), "gid 悬账同样补记 done");
     assert((routingFor("g-x").find((x) => x.session_id === "s-old")?.count ?? -1) === 3, "断档补记不写路由表（count 不动）");
-    assert(loadBoard("g-x").entries[0]?.status === "todo", "断档补记板条退 todo（F-08 中断口径——活没交付不能停 doing）");
+    assert(loadBoard("g-x").entries[0]?.status === "backlog", "断档补记板条退 todo（F-08 中断口径——活没交付不能停 doing）");
     process.env.CCR_ORG_DIR = prevOrg2 ?? ORG;
     rmSync(ORG2, { recursive: true, force: true });
     rmSync(DATA2, { recursive: true, force: true });
@@ -469,10 +469,10 @@ async function main() {
     assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? 0) === 1), "三单正常收口 count=1");
     const cntZ4 = routingFor(gidZ).find((x) => x.session_id === wZ4)!.count;
     hack.openDispatches.set(wZ4, [{ id: "dsp-int-x", tier: "正经立项", gid: gidZ, anchor: projZ }]);
-    upsertBoardEntry(gidZ, { text: "用户手停的活", status: "doing", dispatch_id: "dsp-int-x" });
+    upsertBoardEntry(gidZ, { text: "用户手停的活", status: "claimed", dispatch_id: "dsp-int-x" });
     cbFor(projZ)!.onTurnEnd(true, "interrupted", 5);
     assert(readDispatchLog().some((e) => e.id === "dsp-int-x" && e.status === "done" && e.receipt === "interrupted"), "用户中断收口：台账 done+写实回执");
-    assert(loadBoard(gidZ).entries.find((x) => x.dispatch_id === "dsp-int-x")?.status === "todo", "审查修正：中断板退 todo（半成品不进 done，结项核对可见）——与其余四路径口径统一");
+    assert(loadBoard(gidZ).entries.find((x) => x.dispatch_id === "dsp-int-x")?.status === "backlog", "审查修正：中断板退 todo（半成品不进 done，结项核对可见）——与其余四路径口径统一");
     assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "中断不抬 count（≠交付记账）");
     assert(!hack.openDispatches.has(wZ4), "中断收口 FIFO 清空");
 
@@ -523,10 +523,10 @@ async function main() {
     assert(await waitFor(() => (routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? 0) === 1), "eta 首单收口（前置）");
     hack.sessions.get(wEta)!.state.status = "WORKING";
     hack.openDispatches.set(wEta, [{ id: "dsp-eta-p", tier: "正经立项", gid: gidEta, anchor: etaAnchor }]);
-    upsertBoardEntry(gidEta, { text: "挂起时在跑", status: "doing", dispatch_id: "dsp-eta-p" });
+    upsertBoardEntry(gidEta, { text: "挂起时在跑", status: "claimed", dispatch_id: "dsp-eta-p" });
     const pEta = mgr.orgAction("project-status", { id: gidEta, to: "parked", note: "板退窗口" });
     assert(pEta.ok === true, "eta 挂起");
-    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-p")?.status === "todo", "挂起板退窗口：在跑条目退 todo（不永挂 doing）");
+    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-p")?.status === "backlog", "挂起板退窗口：在跑条目退 todo（不永挂 doing）");
     assert(loadBoard(gidEta).frozen === true, "挂起后板冻结");
     assert(readDispatchLog().some((x) => x.id === "dsp-eta-p" && x.status === "failed" && x.receipt === "项目组挂起，回合中断"), "悬账 failed+写实回执");
 
@@ -536,10 +536,10 @@ async function main() {
     assert(etaD2.ok === true && etaD2.session_id === wEta, "复活后原班承接（前置）");
     assert(await waitFor(() => (routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? 0) === 2), "二单收口（前置）");
     hack.openDispatches.set(wEta, [{ id: "dsp-eta-f", tier: "正经立项", gid: gidEta, anchor: etaAnchor }]);
-    upsertBoardEntry(gidEta, { text: "流死在半路", status: "doing", dispatch_id: "dsp-eta-f" });
+    upsertBoardEntry(gidEta, { text: "流死在半路", status: "claimed", dispatch_id: "dsp-eta-f" });
     cbFor(etaAnchor)!.onSessionEnd("stopped");
     assert(readDispatchLog().some((x) => x.id === "dsp-eta-f" && x.status === "done" && x.receipt === "stopped"), "兜底台账 done（回执写实）");
-    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-f")?.status === "todo", "兜底板退 todo（不虚标 done）");
+    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-f")?.status === "backlog", "兜底板退 todo（不虚标 done）");
 
     // c) 陈旧暂缓卡：出卡后组被直达挂起 → 点头 → 组不动、成员标记不被重打
     const shE = mgr.orgAction("suggest-hold", { id: gidEta, reason: "等等看" }) as { ok: boolean; data?: { confirm?: { id: string } } };
@@ -568,7 +568,7 @@ async function main() {
 
     // e) board move 白名单：非法 status 拒绝（与 upsert 同口径）
     const mvBad = mgr.orgAction("board", { op: "move", gid: gidEta, entry_id: "nope", status: "bogus" }) as { ok: boolean; error?: string };
-    assert(mvBad.ok === false && (mvBad.error ?? "").includes("todo|doing|done"), "board move 非法 status 拒绝");
+    assert(mvBad.ok === false && (mvBad.error ?? "").includes("backlog|claimed"), "board move 非法 status 拒绝");
 
     // f) 复活边锚复查：归档组锚被新组占位 → 拒复活（双组同锚拦截）
     const cTh = mgr.orgAction("project-create", { name: "theta", anchor: join(DATA, "proj-th"), tier: "轻立项" }) as { ok: boolean; data?: { group?: { id: string } } };
@@ -705,11 +705,11 @@ async function main() {
     sEta.unacked = []; // 逼出 no-pending 分支（见上①）
     sEta.agent!.ended = true; // 流已断（见上②）
     hack.openDispatches.set(wEta, [{ id: "dsp-eta-wd", tier: "轻立项", gid: gidEta, anchor: etaAnchor }]);
-    upsertBoardEntry(gidEta, { text: "看门狗接管的活", status: "doing", dispatch_id: "dsp-eta-wd" });
+    upsertBoardEntry(gidEta, { text: "看门狗接管的活", status: "claimed", dispatch_id: "dsp-eta-wd" });
     await (mgr as unknown as { recoverFromStall(s: never, lane: string, stalled: number, cpu: number): Promise<void> })
       .recoverFromStall(hack.sessions.get(wEta) as never, "slow", 1000, 0);
     assert(readDispatchLog().some((x) => x.id === "dsp-eta-wd" && x.status === "done" && x.receipt === "流中断恢复待命，回合中断"), "看门狗接管：无未回显 → 台账 done+写实回执（F-06）");
-    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-wd")?.status === "todo", "板退 todo（F-06：活没交付不能停 done，结项核对可见）");
+    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-wd")?.status === "backlog", "板退 todo（F-06：活没交付不能停 done，结项核对可见）");
     assert((routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? -1) === 3, "中断收口不写路由（count 不动）");
 
     // ---------- D13 补章（skills 定向调度 + 成员级退休/复拉） ----------

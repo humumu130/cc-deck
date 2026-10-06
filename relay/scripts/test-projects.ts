@@ -123,17 +123,17 @@ assert(rm2.ok && rm2.group.headcount.length === 0, "移除成员");
 
 // ---------- 任务板 ----------
 console.log("任务板:");
-const b1 = upsertBoardEntry(gid1, { text: "任务甲：改造入口", status: "todo" }, dir);
-assert(b1.ok && b1.entry.status === "todo", "active 板可写");
+const b1 = upsertBoardEntry(gid1, { text: "任务甲：改造入口", status: "backlog" }, dir);
+assert(b1.ok && b1.entry.status === "backlog", "active 板可写");
 const eid = b1.ok ? b1.entry.id : "";
-const b2 = upsertBoardEntry(gid1, { id: eid, text: "任务甲：改造入口（改）", status: "doing", owner_session: "sess-w1", dispatch_id: "dsp-1" }, dir);
+const b2 = upsertBoardEntry(gid1, { id: eid, text: "任务甲：改造入口（改）", status: "claimed", owner_session: "sess-w1", dispatch_id: "dsp-1" }, dir);
 assert(b2.ok && b2.entry.text.includes("改") && b2.entry.dispatch_id === "dsp-1", "upsert 更新同条目");
 assert(loadBoard(gid1, dir).entries.length === 1, "仍 1 条（无重复）");
 const mv = moveBoardEntry(gid1, eid, "done", dir);
 assert(mv.ok && mv.entry.status === "done", "搬卡 done");
 // 派单联动搬卡（收口失败语义：退回待办）
-moveEntryByDispatch(gid1, "dsp-1", "todo", dir);
-assert(loadBoard(gid1, dir).entries[0]?.status === "todo", "按台账 id 联动搬卡");
+moveEntryByDispatch(gid1, "dsp-1", "backlog", dir);
+assert(loadBoard(gid1, dir).entries[0]?.status === "backlog", "按台账 id 联动搬卡");
 moveEntryByDispatch(gid1, "dsp-none", "done", dir); // 无对应条目 no-op
 assert(loadBoard(gid1, dir).entries.length === 1, "联动 no-op 不炸");
 // 冻结：parked 拒写
@@ -146,7 +146,7 @@ const thawed = upsertBoardEntry(gid1, { text: "恢复后写入" }, dir);
 assert(thawed.ok, "恢复在办后可写");
 // 结项只读
 setGroupStatus(gid1, "archived", "零异常一句话归档", dir);
-const ro = moveBoardEntry(gid1, eid, "todo", dir);
+const ro = moveBoardEntry(gid1, eid, "backlog", dir);
 assert(!ro.ok, "结项板只读");
 // 条目删除
 setGroupStatus(gid1, "active", undefined, dir);
@@ -195,7 +195,7 @@ setGroupStatus(gidC, "active", undefined, dir2);
 appendDispatch({ ts: 1, id: "dsp-open", tier: "随手办", target: "sess-w9", project_anchor: join(dir2, "anchor-chk"), status: "running", session_id: "s-w9" }, dir2);
 appendDispatch({ ts: 2, id: "dsp-closed", tier: "随手办", target: "sess-w9", project_anchor: join(dir2, "anchor-chk"), status: "done", session_id: "s-w9" }, dir2);
 appendDispatch({ ts: 3, id: "dsp-other", tier: "咨询", target: "org-leader", status: "running", session_id: "s-l" }, dir2);
-upsertBoardEntry(gidC, { text: "未完", status: "doing" }, dir2);
+upsertBoardEntry(gidC, { text: "未完", status: "claimed" }, dir2);
 upsertBoardEntry(gidC, { text: "已完", status: "done" }, dir2);
 addMember(gidC, "sess-w9", "worker", dir2);
 const chk = buildArchiveChecklist(gidC, dir2);
@@ -215,9 +215,9 @@ decideConfirm(cb.ok && cb.confirm ? cb.confirm.id : "", true, "u", dirB);
 setGroupStatus(gidB, "active", undefined, dirB);
 assert(findGroup(gidB, dirB)?.status === "active", "beads 组就位 active（独立沙盒）");
 // 依赖字段：写入+洗刷+落盘恢复+空数组清除
-const depSrc = upsertBoardEntry(gidB, { text: "依赖源卡", status: "todo" }, dirB);
+const depSrc = upsertBoardEntry(gidB, { text: "依赖源卡", status: "backlog" }, dirB);
 const depId = depSrc.ok ? depSrc.entry.id : "";
-const wDep = upsertBoardEntry(gidB, { text: "主卡", status: "todo", depends_on: [depId, "", depId, "  "] }, dirB);
+const wDep = upsertBoardEntry(gidB, { text: "主卡", status: "backlog", depends_on: [depId, "", depId, "  "] }, dirB);
 const wid = wDep.ok ? wDep.entry.id : "";
 assert(wDep.ok && wDep.entry.depends_on?.length === 1 && wDep.entry.depends_on[0] === depId, "depends_on 落卡（空串洗刷+去重）");
 assert(loadBoard(gidB, dirB).entries.find((x) => x.id === wid)?.depends_on?.length === 1, "depends_on 落盘恢复");
@@ -230,7 +230,7 @@ assert(freeCheck.ready && freeCheck.reasons.length === 0 && freeCheck.gate_reaso
 upsertBoardEntry(gidB, { id: wid, text: "主卡", depends_on: [depId] }, dirB);
 const blockCard = loadBoard(gidB, dirB).entries.find((x) => x.id === wid)!;
 const rBlock = computeReady(blockCard, loadBoard(gidB, dirB));
-assert(!rBlock.ready && rBlock.reasons.length === 1 && rBlock.reasons[0].includes(depId) && rBlock.reasons[0].includes("todo"), "依赖 todo → not ready（原因含依赖 id+状态可判定）");
+assert(!rBlock.ready && rBlock.reasons.length === 1 && rBlock.reasons[0].includes(depId) && rBlock.reasons[0].includes("backlog"), "依赖 todo → not ready（原因含依赖 id+状态可判定）");
 moveBoardEntry(gidB, depId, "done", dirB);
 assert(computeReady(blockCard, loadBoard(gidB, dirB)).ready === true, "依赖 done → ready（全 done 放行）");
 upsertBoardEntry(gidB, { id: wid, text: "主卡", depends_on: ["t-ghost"] }, dirB);
@@ -252,10 +252,10 @@ const clrCard = loadBoard(gidB, dirB).entries.find((x) => x.id === wid)!;
 assert(computeReady(clrCard, loadBoard(gidB, dirB)).gate_reason === null, "清除后 gate_reason 归 null（清除动作是人做的，无自动放行）");
 const wG2 = upsertBoardEntry(gidB, { text: "gate 卡", gate: { reason: "挂起等外部" } }, dirB);
 const g2id = wG2.ok ? wG2.entry.id : "";
-moveBoardEntry(gidB, g2id, "doing", dirB);
+moveBoardEntry(gidB, g2id, "claimed", dirB);
 const g2After = loadBoard(gidB, dirB).entries.find((x) => x.id === g2id)!;
 assert(g2After.gate?.reason === "挂起等外部", "搬卡不动 gate（无自动关闭路径）");
-assert(g2After.status === "doing" && computeReady(g2After, loadBoard(gidB, dirB)).gate_reason === "挂起等外部", "doing 态 gate 卡仍 blocked（gate 独立于状态机，不自动放行）");
+assert(g2After.status === "claimed" && computeReady(g2After, loadBoard(gidB, dirB)).gate_reason === "挂起等外部", "doing 态 gate 卡仍 blocked（gate 独立于状态机，不自动放行）");
 
 console.log("beads·lessons 回流:");
 const l1 = addLesson(gidB, { text: "T17 教训：spawnSync env 必显式钉 CCR_TOKEN", tags: ["worker-G", "测试", "claude"], source_dispatch_id: "dsp-l1" }, dirB);
@@ -293,7 +293,7 @@ writeFileSync(join(dir3, "projects.json"), JSON.stringify(pfile), "utf-8");
 const st1 = findStaleGroups(now, 14, dir3);
 assert(st1.length === 1 && st1[0].gid === gidF && st1[0].idleDays >= 20, "20 天无活动 → stale（idleDays 写实）");
 // 板活动刷新活度：upsert 后不再 stale
-upsertBoardEntry(gidF, { text: "动了一下", status: "todo" }, dir3);
+upsertBoardEntry(gidF, { text: "动了一下", status: "backlog" }, dir3);
 assert(findStaleGroups(now, 14, dir3).length === 0, "板更新刷新活度");
 // 台账活动
 const p2 = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number }[]; boards?: unknown };

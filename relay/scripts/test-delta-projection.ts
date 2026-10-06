@@ -148,27 +148,27 @@ try {
   const bf1 = lastBoardFrame();
   assert(Array.isArray(bf1.board.entries) && !("delta" in bf1) && !("entity_refs" in bf1), "BOARD 首帧覆盖式：board 全量在场、delta/entity_refs 省略（该 gid 缓存冷）");
 
-  const rA = upsertBoardEntry(gid, { text: "卡A", status: "todo" });
+  const rA = upsertBoardEntry(gid, { text: "卡A", status: "backlog" });
   assert(rA.ok === true, "前置：卡A 落板");
   mgr.emitBoard(gid);
   const bfA = lastBoardFrame();
   const entryA = bfA.delta!.entries.upserts[0]!;
-  assert(bfA.delta!.entries.upserts.length === 1 && entryA.text === "卡A" && entryA.status === "todo", "卡A 帧差分恰一 upsert（完整条目带正文）");
+  assert(bfA.delta!.entries.upserts.length === 1 && entryA.text === "卡A" && entryA.status === "backlog", "卡A 帧差分恰一 upsert（完整条目带正文）");
   assert(bfA.delta!.entries.removes.length === 0 && bfA.delta!.lessons.upserts.length === 0 && bfA.delta!.lessons.removes.length === 0, "无变化域差分为空集（entries/lessons 独立差分）");
   assert(bfA.entity_refs![0] === entryA.id, "BOARD entity_refs 收录条目 id");
   assert(bfA.board.entries.some((e) => e.id === entryA.id), "旧字段 board 仍全量在场");
 
-  const rB = upsertBoardEntry(gid, { text: "卡B", status: "todo" });
+  const rB = upsertBoardEntry(gid, { text: "卡B", status: "backlog" });
   assert(rB.ok === true, "前置：卡B 落板");
   mgr.emitBoard(gid);
   const bfB = lastBoardFrame();
   assert(bfB.delta!.entries.upserts.length === 1 && bfB.delta!.entries.upserts[0]!.text === "卡B", "加卡B 帧：差分只含新卡（已有卡不重复下发）");
 
-  const rMv = moveBoardEntry(gid, entryA.id, "doing");
+  const rMv = moveBoardEntry(gid, entryA.id, "claimed");
   assert(rMv.ok === true, "前置：卡A todo→doing");
   mgr.emitBoard(gid);
   const bfMv = lastBoardFrame();
-  assert(bfMv.delta!.entries.upserts.length === 1 && bfMv.delta!.entries.upserts[0]!.id === entryA.id && bfMv.delta!.entries.upserts[0]!.status === "doing", "改状态帧：upserts 携 A 完整条目新 status（状态迁移=条目级 upsert）");
+  assert(bfMv.delta!.entries.upserts.length === 1 && bfMv.delta!.entries.upserts[0]!.id === entryA.id && bfMv.delta!.entries.upserts[0]!.status === "claimed", "改状态帧：upserts 携 A 完整条目新 status（状态迁移=条目级 upsert）");
 
   const rRm = removeBoardEntry(gid, entryA.id);
   assert(rRm.ok === true, "前置：删除卡A");
@@ -217,7 +217,7 @@ try {
     );
     // 反证：恢复文件带真新条目 → 下帧正确差分出该条（跳帧语义不吞真变更）
     const revived = JSON.parse(goodSnapshot) as ProjectBoard;
-    revived.entries = [...revived.entries, { id: "p32-new", text: "P3-2 恢复后新条目", status: "todo", ts: Date.now(), updated_at: Date.now() } as BoardEntry];
+    revived.entries = [...revived.entries, { id: "p32-new", text: "P3-2 恢复后新条目", status: "backlog", ts: Date.now(), updated_at: Date.now() } as BoardEntry];
     revived.updated_at = Date.now();
     writeFileSync(boardPath, JSON.stringify(revived, null, 2) + "\n");
     mgr.emitBoard(gid);
@@ -368,7 +368,7 @@ try {
   assert(ackG2.ok === true && gid2 !== "", "wire 段前置：建组成功");
   mgr3.emitBoard(gid2); // 预热：该 gid 发射缓存冷的首帧覆盖式（与旧帧同形，双出口也应同收）
   await wait(150);
-  upsertBoardEntry(gid2, { text: "wire 卡", status: "todo" });
+  upsertBoardEntry(gid2, { text: "wire 卡", status: "backlog" });
   mgr3.emitBoard(gid2); // 差分帧
 
   //（filter 在 waitFor 回调内动态求值——固化快照会漏掉轮询间隙到达的帧）
