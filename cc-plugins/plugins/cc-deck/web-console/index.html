@@ -540,7 +540,7 @@
   #gearPop #srvList { display: flex; flex-direction: column; gap: 7px; }
   #gearPop .srv-row { background: var(--gp-card); border-color: var(--gp-border); border-radius: 10px; }
   #gearPop .srv-row:hover { border-color: rgba(142,163,186,.42); }
-  #gearPop .srv-row.active { border-color: var(--gp-accent); box-shadow: 0 0 0 1px var(--gp-accent); }
+  #gearPop .srv-row.active { border-color: var(--gp-accent); background: var(--q-row-sel); } /* P58 016 条目 8：同上对齐淡底语言 */
   /* #406 行点击即编辑：正在编辑的行铺输入底色，与下方展开的编辑表单卡视觉成对（活动橙边不受影响） */
   #gearPop .srv-row.editing { background: var(--gp-input); }
   #gearPop .srv-row .srv-del:hover { background: var(--gp-input); }
@@ -998,7 +998,7 @@
     border-radius: 2px; pointer-events: none;
   }
   .srv-row:hover { border-color: var(--hov); }
-  .srv-row.active { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+  .srv-row.active { border-color: var(--brand); background: var(--q-row-sel); } /* P58 016 条目 8：对齐 005 source-option 选中淡底语言（原双 ring 描边过重） */
   .srv-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; --sc: var(--error); }
   .srv-row .dot.online { background: var(--done); --sc: var(--done); }
   .srv-row .dot.connecting { background: var(--working); --sc: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
@@ -1391,6 +1391,32 @@
   /* #12 空态提示垂直居中：#cards 为纵排 flex，flex:1 撑满 + justify-content:center 垂直居中 */
   .cards-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
+  /* —— P58 016 记档产品化收口：空/加载/错误三态（对齐 005 demo-empty-state /
+     demo-skeleton-list / demo-error-bar 语言；颜色走 var()+color-mix，零裸色值）—— */
+  /* 空态虚线框（005 demo-empty-state 语言；尺度适配 Web 列表区整体居中布局） */
+  .cards-empty .ce-box { display: grid; justify-items: center; gap: 8px; min-width: 220px; max-width: 340px; padding: 22px 18px; border: 1px dashed var(--border); border-radius: 10px; background: var(--panel); }
+  .cards-empty .ce-box .ce-icon { margin-bottom: 0; }
+  .cards-empty .ce-btn { min-height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2, var(--panel)); color: var(--text-strong); cursor: pointer; font-size: 11.5px; }
+  .cards-empty .ce-btn:hover { border-color: var(--brand); color: var(--brand); }
+  /* 加载骨架（005 demo-skeleton 语言：组头条 + shimmer 三线卡 + aria-label 加载中） */
+  .skel-list { display: grid; gap: 8px; padding: 4px 2px; }
+  .skel-group { width: 38%; height: 10px; margin: 8px 3px 0; border-radius: 4px; background: color-mix(in srgb, var(--border) 55%, transparent); }
+  .skel-card { display: grid; gap: 8px; padding: 11px; border: 1px solid color-mix(in srgb, var(--border) 60%, transparent); border-radius: 10px; background: var(--panel); }
+  .skel-line { height: 9px; border-radius: 5px; background: linear-gradient(90deg, color-mix(in srgb, var(--border) 55%, transparent), var(--panel), color-mix(in srgb, var(--border) 55%, transparent)); background-size: 220% 100%; animation: skel-shimmer 1.6s ease-in-out infinite; }
+  .skel-line.short { width: 58%; }
+  .skel-line.tiny { width: 32%; height: 7px; }
+  @keyframes skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
+  /* 错误横幅（005 demo-error-bar 语言：标题 + 副文 + 动作位，danger 左条） */
+  .errbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 10px; margin: 0 0 10px; border: 1px solid color-mix(in srgb, var(--error) 32%, transparent); border-left: 3px solid var(--error); border-radius: 8px; background: color-mix(in srgb, var(--error) 9%, transparent); font-size: 12px; }
+  .errbar strong { color: var(--error); }
+  .errbar .eb-copy { flex: 1 1 160px; min-width: 0; color: var(--faint); }
+  .errbar .eb-actions { display: flex; margin-left: auto; gap: 6px; }
+  .errbar .eb-actions button { min-height: 24px; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--error) 32%, transparent); border-radius: 6px; background: var(--panel); color: var(--text-strong); cursor: pointer; font-size: 11px; }
+  .errbar .eb-actions button:hover { border-color: var(--error); color: var(--error); }
+  /* 通知行整行可点（016 条目 9，005 整卡可点语言）：hover 淡底 + 键盘焦点环 */
+  .notice-row.nr-jmp { cursor: pointer; }
+  .notice-row.nr-jmp:hover { background: color-mix(in srgb, var(--q-row-sel) 62%, transparent); }
+  .notice-row.nr-jmp:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
   .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40→#67漏项 16 回落 15（用户点单调小） */
   .his-badge {
     font-size: 10px; color: var(--faint); flex: none; font-weight: 500;
@@ -1827,6 +1853,7 @@
   }
 
   .tabs { display: flex; gap: 2px; margin-top: 10px; align-items: center; position: relative; }
+  .tabs .tab-group { display: flex; gap: 2px; align-items: center; }
   .tabs .spacer { flex: 1; }
   .tabs button.tab {
     background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
@@ -2719,13 +2746,18 @@
         </div>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
-        <!-- #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」 -->
-        <button data-tab="activity" class="tab active">对话</button>
-        <button data-tab="todos" class="tab">任务</button>
-        <button data-tab="log" class="tab">全部</button>
-        <button data-tab="artifacts" class="tab">输出物</button>
-        <button data-tab="cron" class="tab">定时</button>
-        <button data-tab="stats" class="tab">统计</button>
+        <!-- P58 016 条目 5 键盘可达：六视图钮收进 tab-group（role=tablist），mini 工具钮
+             不入 tablist（aria tablist 子元素应全为 tab）；roving tabindex + aria-selected
+             由 syncTabsAria/switchTab 维护，←→ 循环沿用 #279③ 键链并补 focus 跟手 -->
+        <div class="tab-group" role="tablist" aria-label="视图切换">
+          <!-- #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」 -->
+          <button data-tab="activity" class="tab active" role="tab" aria-selected="true">对话</button>
+          <button data-tab="todos" class="tab" role="tab" aria-selected="false" tabindex="-1">任务</button>
+          <button data-tab="log" class="tab" role="tab" aria-selected="false" tabindex="-1">全部</button>
+          <button data-tab="artifacts" class="tab" role="tab" aria-selected="false" tabindex="-1">输出物</button>
+          <button data-tab="cron" class="tab" role="tab" aria-selected="false" tabindex="-1">定时</button>
+          <button data-tab="stats" class="tab" role="tab" aria-selected="false" tabindex="-1">统计</button>
+        </div>
         <span class="spacer"></span>
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
@@ -3150,6 +3182,7 @@ function ensureCtx(cfg) {
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
+      projectionV2: false, // M13-3 v2 投影协议位（SNAPSHOT source_capabilities.projection_v2；缺省/undefined = 旧 relay → 覆盖式，一切照旧）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -4298,6 +4331,7 @@ function onEvent(ctx, msg) {
       ctx.deliverables = msg.payload.deliverables === true && (!ctx.legacyMode || own(msg.payload, "deliverables")); // #71 输出物开关；schema 缺失仍按字段存在性兼容旧 relay
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
       ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
+      ctx.projectionV2 = msg.payload.source_capabilities?.projection_v2 === true; // M13-3 v2 投影协议位（M13-2：随 SNAPSHOT LAN/phone 双出口下发；缺省=覆盖式，一切照旧）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
       ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
@@ -4403,7 +4437,17 @@ function onEvent(ctx, msg) {
     // 快照下发，COMMAND_PROJECT_DETAIL 按需拉后由 BOARD_UPDATED 维护）。重渲染由
     // 末尾统一 render() 收口（renderOrgZone 有 key 守卫，代价极小）
     case "PROJECTS_UPDATED": {
-      if (Array.isArray(msg.payload.groups)) ctx.projects = msg.payload.groups;
+      // M13-3 delta 投影（M13-2 定案）：v2 信号在册且帧级 delta 形状 → 增量 merge；
+      // 其余一切（旧形状帧/旧 relay 能力位缺省）→ 覆盖式旧字段，零行为变化。
+      // M13-3ADD 锚定纪律：projects 域以 SNAPSHOT.projects（或任一覆盖式帧）为锚——
+      // 基线 null = 未锚定，delta 一律丢弃（等下一覆盖式帧锚定）；禁空基线起底 merge
+      const p = msg.payload;
+      if (p && p.delta !== undefined && ctx.projectionV2) {
+        if (!Array.isArray(ctx.projects)) break; // 未锚定：store 不变（SNAPSHOT.projects 天然锚定，无需重拉面）
+        ctx.projects = mergeEntityDelta(ctx.projects, p.delta);
+        break;
+      }
+      if (Array.isArray(p && p.groups)) ctx.projects = p.groups;
       break;
     }
     case "ORG_CONFIRM_UPDATED": {
@@ -4411,10 +4455,23 @@ function onEvent(ctx, msg) {
       break;
     }
     case "BOARD_UPDATED": {
-      if (msg.payload && typeof msg.payload.gid === "string" && msg.payload.board) {
-        ctx.boards.set(msg.payload.gid, msg.payload.board);
-        if (orgDrawer.open && orgDrawer.gid === msg.payload.gid && orgDrawer.data) {
-          orgDrawer.data.board = msg.payload.board;
+      // M13-3 delta 投影：帧级 delta 形状+v2 信号 → 增量 merge（按 id 整条替换/剔除，天然幂等）。
+      // 无在册板跳过缓存写入——板按需拉不随快照，部分基线不污染 Map（抽屉自拉全量，不吃此缓存）
+      const p = msg.payload;
+      if (p && typeof p.gid === "string" && p.delta !== undefined && ctx.projectionV2) {
+        const base = ctx.boards.get(p.gid);
+        if (base) ctx.boards.set(p.gid, applyBoardDelta(base, p.delta));
+        else reanchorBoard(ctx, p.gid); // M13-3ADD 未锚定：丢帧不应用（store 不变）+ 后台重拉全量重新锚定
+        if (orgDrawer.open && orgDrawer.gid === p.gid && orgDrawer.data && orgDrawer.data.board) {
+          orgDrawer.data.board = applyBoardDelta(orgDrawer.data.board, p.delta); // 抽屉拉取全量为基线，增量保实时
+          orgRenderDrawer();
+        }
+        break;
+      }
+      if (p && typeof p.gid === "string" && p.board) {
+        ctx.boards.set(p.gid, p.board);
+        if (orgDrawer.open && orgDrawer.gid === p.gid && orgDrawer.data) {
+          orgDrawer.data.board = p.board;
           orgRenderDrawer();
         }
       }
@@ -4792,8 +4849,50 @@ function confirmReadMap() {
 // 执行分离）；详情按需 COMMAND_PROJECT_DETAIL 拉 { group, board, receipts }——
 // 板不随快照下发（§2.5 分流数据源），确认卡后 PROJECTS_UPDATED 回帧即收敛。
 const ORG_ST = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
+// 任务板泳道词表/定序（M13-3 前向兼容位：分区渲染按值分组——未知状态值原样成列排在已知三态后）
+const BOARD_LANE = { todo: "待办", doing: "进行", done: "完成" };
+const BOARD_LANE_ORD = { todo: 0, doing: 1, done: 2 };
+
+// M13-3 v2 delta 投影消费（M13-2 定案，形状权威 relay/src/types.ts:620-633）：
+// 帧级判定 payload.delta !== undefined（空 delta {} 也是合法增量帧）→ 增量 merge；缺席 → 覆盖式旧字段。
+// 幂等铁律 = 带稳定 id 的完整条目差分（upserts 整条替换、removes 剔除、未知 id 忽略），
+// 无行级补丁无游标 → 同帧重复应用零变化，重连补发/双链收敛（merge 链==覆盖链）天然成立。
+// 纯函数不 mutate 基线（返回新数组/新对象）——W 线 new Function 直跑测试先例可提取。
+function mergeEntityDelta(arr, delta) {
+  const byId = new Map(Array.isArray(arr) ? arr.map((e) => [e.id, e]) : []);
+  const ups = delta && Array.isArray(delta.upserts) ? delta.upserts : [];
+  const rem = delta && Array.isArray(delta.removes) ? delta.removes : [];
+  for (const u of ups) if (u && typeof u.id === "string") byId.set(u.id, u);
+  for (const r of rem) byId.delete(r); // Map.delete 未知 id 静默 = 幂等；组域 v1 无删边恒空（types.ts 留位）
+  return [...byId.values()]; // 已有条目保位、新条目追加——渲染层自带排序，序无语义
+}
+
+function applyBoardDelta(board, delta) {
+  const meta = delta && delta.meta ? delta.meta : {};
+  return Object.assign({}, board, {
+    entries: mergeEntityDelta(board && board.entries, delta && delta.entries),
+    lessons: mergeEntityDelta(board && board.lessons, delta && delta.lessons),
+    frozen: typeof meta.frozen === "boolean" ? meta.frozen : !!(board && board.frozen),
+    updated_at: typeof meta.updated_at === "number" ? meta.updated_at : (board && board.updated_at) || 0,
+  });
+}
 const ORG_CF_KIND = { "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活" };
 const orgDrawer = { open: false, gid: "", src: "", data: null };
+
+// M13-3ADD 板域锚定重拉：未锚定 gid 收到 delta 帧 → 帧丢弃 + 后台重拉 COMMAND_PROJECT_DETAIL，
+// ack 回含 board 全量，消费（入缓存）即重新锚定。in-flight 去重防风暴（delta 连发每帧一拉会
+// 打爆命令面）；fire-and-forget 不阻塞帧循环。冷首帧覆盖式兜底（M13-2 S4）是 relay 侧重锚主路，
+// 本路径兜「relay 热缓存但本端缺基线」窗口（如板帧到达早于本端首拉）。
+const boardReanchorInFlight = new Set();
+function reanchorBoard(ctx, gid) {
+  if (boardReanchorInFlight.has(gid)) return;
+  boardReanchorInFlight.add(gid);
+  commandAck(ctx, "COMMAND_PROJECT_DETAIL", { gid }).then((ack) => {
+    boardReanchorInFlight.delete(gid);
+    const b = ack && ack.ok && ack.data && ack.data.board ? ack.data.board : null;
+    if (b && ctx.boards instanceof Map) ctx.boards.set(gid, b); // 覆盖式全量消费 = 重新锚定
+  }).catch(() => { boardReanchorInFlight.delete(gid); });
+}
 
 // 确认卡决议（#018-W1b ACK 严格判定升级）：COMMAND_ORG_CONFIRM {confirm_id, approve}
 // —— approve 真布尔（relay 咽喉 `payload.approve === true` 严判，字符串 "1" 会判否决）。
@@ -4827,9 +4926,12 @@ async function orgSendConfirm(ctx, confirmId, approve) {
 function orgCreateSrcs() {
   return orgCtxs().filter((c) => !cmdCapBlocked(c.cmdCaps, "COMMAND_ORG_ACTION"));
 }
+// P58 016 条目 5：浮层焦点归还（Esc/✕ 关闭后回到打开前焦点位，tab 键序不丢位）
+let orgFocusBack = null;
 function orgCloseCreate() {
   const d = $("orgnew");
   if (d) d.remove();
+  if (orgFocusBack) { try { orgFocusBack.focus(); } catch {} orgFocusBack = null; }
 }
 async function orgCreateSubmit() {
   const d = $("orgnew");
@@ -4862,6 +4964,7 @@ async function orgCreateSubmit() {
 }
 function orgOpenCreate() {
   orgCloseCreate();
+  orgFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null; // P58 焦点归还锚点
   const srcs = orgCreateSrcs();
   const d = document.createElement("div");
   d.id = "orgnew";
@@ -4941,10 +5044,12 @@ function orgCloseDrawer() {
   const d = $("orgdrawer");
   if (d) d.remove();
   renderOrgZone();
+  if (orgFocusBack) { try { orgFocusBack.focus(); } catch {} orgFocusBack = null; }
 }
 
 async function orgOpenDrawer(ctx, gid) {
   orgDrawer.open = true; orgDrawer.gid = gid; orgDrawer.src = ctx.cfg.id; orgDrawer.data = null;
+  if (!$("orgdrawer")) orgFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null; // P58 焦点归还锚点
   let d = $("orgdrawer");
   if (!d) {
     d = document.createElement("div");
@@ -4970,6 +5075,7 @@ async function orgOpenDrawer(ctx, gid) {
     return;
   }
   orgDrawer.data = ack.data;
+  if (ack.data.board) ctx.boards.set(gid, ack.data.board); // M13-3ADD 覆盖式全量入缓存 = 该 gid 锚定（此后 delta 可应用）
   orgRenderDrawer();
 }
 
@@ -5011,11 +5117,21 @@ function orgRenderDrawer() {
   else if (g.tier === "轻立项") boardHtml = '<div class="od-col">' + ents.map(entHtml).join("") + "</div>";
   // 冲刺 #12 视觉审查修复：空列不渲染——430px 抽屉里固定三栏会把卡片挤成 ~128px 窄条
   //（6 行碎字）且空列悬空成死白；flex 布局 + 只渲染非空列，单列全宽/双列对半/三列等宽
-  else boardHtml = '<div class="od-cols3">' + [["todo", "待办"], ["doing", "进行"], ["done", "完成"]]
-    .map(([st, lb]) => ({ lb, list: ents.filter((e) => e.status === st) }))
-    .filter((c) => c.list.length)
-    .map((c) => "<div><h6>" + c.lb + " " + c.list.length + "</h6><div class=\"od-col\">" +
-      c.list.map(entHtml).join("") + "</div></div>").join("") + "</div>";
+  else {
+    // M13-3 前向兼容位：板分区按值分组+非空列（D18 五态未落本单）——已知三态保 todo/doing/done
+    // 序与汉字标；未知状态值原样成列不丢弃、无 status 归 todo。三态数据下与旧固定三栏字节等价
+    const lanes = [], laneIdx = new Map();
+    for (const e of ents) {
+      const st = e.status || "todo";
+      if (!laneIdx.has(st)) { laneIdx.set(st, lanes.length); lanes.push({ st, lb: BOARD_LANE[st] || st, list: [] }); }
+      lanes[laneIdx.get(st)].list.push(e);
+    }
+    lanes.sort((a, b) => (BOARD_LANE_ORD[a.st] ?? 99) - (BOARD_LANE_ORD[b.st] ?? 99) ||
+      laneIdx.get(a.st) - laneIdx.get(b.st));
+    boardHtml = '<div class="od-cols3">' + lanes
+      .map((c) => "<div><h6>" + c.lb + " " + c.list.length + "</h6><div class=\"od-col\">" +
+        c.list.map(entHtml).join("") + "</div></div>").join("") + "</div>";
+  }
   if (board.frozen) boardHtml = '<div class="od-empty">已挂起：板冻结只读</div>' + boardHtml;
   // 回执流（§3.5 只收回执一行）：最近 30 条按 anchor 过滤，新在前
   const recs = orgDrawer.data.receipts || [];
@@ -5070,7 +5186,50 @@ document.addEventListener("click", (e) => {
   if (nk) {
     const c = ctxs.get(nk.dataset.src);
     if (c) notifAck(c, nk.dataset.nackKey);
+    return;
   }
+  // M13-6W：已处理分区头开合（折叠密度面；渲染 key 已含开合态，切后重渲生效）
+  const dh = e.target.closest(".nr-donehead");
+  if (dh && dh.dataset.donegroup) {
+    const gk = dh.dataset.donegroup;
+    if (notifDoneOpen.has(gk)) notifDoneOpen.delete(gk);
+    else notifDoneOpen.add(gk);
+    renderNotifications();
+    return;
+  }
+  // P58 016 条目 9：通知行整行可点跳转（005 data-notify-jump 整卡语言）——切到该源
+  // 过滤视图；行内按钮（知道了）已在上方分支 return，不双触发。
+  // M13-6W 验收归因回跳优先：渲染期解析成功的行带 data-jgid（→组织抽屉定位台账卡）
+  // /data-jcf（→组织区确认卡聚焦）；解析失败无该属性=保持原会话跳转（降级路径）
+  const jr = e.target.closest(".notice-row.nr-jmp");
+  if (jr && jr.dataset.src) {
+    const c = ctxs.get(jr.dataset.src);
+    if (c) {
+      if (jr.dataset.jgid) {
+        orgOpenDrawer(c, jr.dataset.jgid).then(() => {
+          const d = $("orgdrawer");
+          jumpFlash(d ? d.querySelector('.od-ent[data-eid="' + (window.CSS && CSS.escape ? CSS.escape(jr.dataset.jeid) : jr.dataset.jeid) + '"]') : null);
+        }).catch(() => { /* 拉取失败抽屉自身已示错，聚焦静默 */ });
+        return;
+      }
+      if (jr.dataset.jcf) {
+        const zone = $("orgzone");
+        const btn = zone ? zone.querySelector('[data-org-cf="' + (window.CSS && CSS.escape ? CSS.escape(jr.dataset.jcf) : jr.dataset.jcf) + '"]') : null;
+        jumpFlash(btn ? btn.closest(".org-cf") : null);
+        return;
+      }
+      filterSrc = c.cfg.id;
+      renderSrcChips();
+      if (jr.dataset.sid) select(jr.dataset.sid, c.cfg.id);
+      else render();
+    }
+  }
+});
+// P58 016 条目 5 × 9：可点通知行键盘可达（role=button+tabindex 已挂，Enter 触发）
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  const t = ev.target;
+  if (t && t.classList && (t.classList.contains("nr-jmp") || t.classList.contains("nr-donehead"))) { ev.preventDefault(); t.click(); }
 });
 
 // #306 悬浮清单渲染（key 守卫同 cards 口径：快照流式重渲不重建 DOM；展开态走
@@ -5657,7 +5816,13 @@ function renderSrcChips() {
     relayDev: s.cloud && s.cloud.rd ? s.cloud.rd : "",
     online: !!ctxs.get(s.id) && ctxs.get(s.id).status === "online",
   })));
-  if (filterSrc !== "all" && !groups.some((g) => g.srcIds.indexOf(filterSrc) >= 0)) filterSrc = "all";
+  // P58 016 条目 9：过滤回落只看源存活性——原防呆把「过滤指向暂无会话的源」也
+  // 重置 all，与空态「该源暂无会话」分支（语义上允许过滤无会话源）自相矛盾且不可达；
+  // 通知行跳转（切到通知所属源）依赖该语义。现只在意源被删（ctx 不存在）时回落
+  if (filterSrc !== "all" && !groups.some((g) => g.srcIds.indexOf(filterSrc) >= 0)) {
+    const fAlive = filterSrc.split(",").some((id) => ctxs.get(id));
+    if (!fAlive) filterSrc = "all";
+  }
   const box = $("srcChips");
   if (groups.length <= 1) { box.style.display = "none"; box.dataset.key = ""; box.innerHTML = ""; return; }
   const parts = groups.map((g) => g.key + ":" + g.name + ":" + (g.online ? 1 : 0) + ":" + g.exceptions.join("/") + ":" + g.srcIds.join("+"));
@@ -5687,6 +5852,41 @@ function notifErrShow(msg) {
   notifErrTimer = setTimeout(() => { notifErr = ""; renderNotifications(); }, 6000);
   renderNotifications();
 }
+// M13-6W 已处理折叠区展开记忆（组级；默认折叠防长跑堆积，点击分区头开合）
+const notifDoneOpen = new Set();
+
+// M13-6W 验收链接回跳归因解析（纯消费，零协议改动）：sourceContext → 本地落点实体。
+// dispatch 域 entityId=dispatch_id → 扫 ctx.boards 板卡 dispatch_id（M12-7 板卡级归因
+// 映射，BOARD_UPDATED 广播面自然积累）→ {kind:"task",gid,entryId}（台账卡）；org 域
+// entityId=confirm_id → ctx.orgConfirms 在册确认卡 → {kind:"confirm",confirmId}（项目
+// 组确认卡）。归因缺失（旧通知无 domain/entityId、板缓存无此卡=归因未回写或未同步、
+// 确认卡已决议不在册）→ null=降级：行保持原交互（sessionId 会话跳转），不报错不假造。
+function notifJumpTarget(item, boards, orgConfirms) {
+  const sc = item && item.sourceContext && typeof item.sourceContext === "object" ? item.sourceContext : null;
+  if (!sc || typeof sc.domain !== "string" || typeof sc.entityId !== "string" || !sc.entityId) return null;
+  if (sc.domain === "dispatch" && boards instanceof Map) {
+    for (const [gid, board] of boards) {
+      const ent = board && Array.isArray(board.entries)
+        ? board.entries.find((e) => e && e.dispatch_id === sc.entityId)
+        : null;
+      if (ent && typeof ent.id === "string") return { kind: "task", gid, entryId: ent.id };
+    }
+    return null;
+  }
+  if (sc.domain === "org" && Array.isArray(orgConfirms) && orgConfirms.some((c) => c && c.id === sc.entityId)) {
+    return { kind: "confirm", confirmId: sc.entityId };
+  }
+  return null;
+}
+
+// M13-6W 跳转聚焦：scroll+闪烁一次（1.6s 自撤不残留）；找不到元素=静默（不报错）
+function jumpFlash(el) {
+  if (!el) return;
+  try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* 旧引擎无 smooth */ }
+  el.classList.add("jump-flash");
+  setTimeout(() => el.classList.remove("jump-flash"), 1600);
+}
+
 function renderNotifications() {
   const box = $("notifications");
   if (!box) return;
@@ -5702,7 +5902,14 @@ function renderNotifications() {
   // 乐观在飞行（__w1b_pend）即刻消失不渲染——消失只是乐观视图，账面不动（§3.3 通知
   // 不清零：打开/浏览/重连/切视图都不清，权威帧回来按 handled 灰显归位）
   const rows = sources.flatMap((ctx) => (ctx.notifications || []).filter((item) => !item.__w1b_pend).map((item) => ({ ctx, item })));
-  const key = notifErr + "§" + sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|");
+  const groups = new Map();
+  for (const row of rows) {
+    const group = row.item.group || "activity";
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  const key = notifErr + "§" + sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|") + "|dz:" + [...groups.keys()].map((g) => g + ":" + (notifDoneOpen.has(g) ? 1 : 0)).join(",");
+  if (box.dataset.key === key) return;
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = false;
@@ -5712,26 +5919,46 @@ function renderNotifications() {
     box.innerHTML = errHtml + '<div class="notice-empty">暂无通知</div>';
     return;
   }
-  const groups = new Map();
-  for (const row of rows) {
-    const group = row.item.group || "activity";
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(row);
-  }
   box.innerHTML = errHtml + [...groups.entries()].map(([group, groupRows]) => {
     // 组头计数随可行动项（018 计数口径在通知面的对应：只数可行动在办，不数源总数）
     const act = notifActionableOf(groupRows.map((r) => r.item)).length;
+    // M13-6W resolved 分离：未收口行照常平铺；已收口行折叠为「已处理 N」分区头
+    //（默认收起防长跑堆积，点开看灰态行），不清零语义不变——行仍在账面只换密度
+    const undone = groupRows.filter((r) => !doneOf(r.item));
+    const doneRows = groupRows.filter((r) => doneOf(r.item));
+    const doneOpen = notifDoneOpen.has(group);
+    const rowHtml = ({ ctx, item }) => {
+      const src = srcDisplayName(ctx.cfg);
+      // 「知道了」轻动作位（007 B+）：可行动未收口 + 本源未被旧 relay 降级记忆封锁
+      const canAck = item.actionable === true && !doneOf(item) && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
+      // P58 016 条目 9（005 整卡可点语言）：可行动未收口行整行可点跳转——
+      // 优先验收归因回跳（M13-6W：dispatch→台账卡/org→确认卡，渲染期解析冻结进
+      // data-j*），解析不出=保持原会话跳转交互（降级不假造）；已收口/不可行动行
+      // 不可点（005「历史动态 · 无需处理」语义）。跳转是本地动作，不依赖命令能力位
+      const canJmp = item.actionable === true && !doneOf(item);
+      const jmpSid = item.sourceContext && typeof item.sourceContext === "object" && typeof item.sourceContext.sessionId === "string" && item.sourceContext.sessionId ? item.sourceContext.sessionId : "";
+      const tgt = canJmp ? notifJumpTarget(item, ctx.boards, ctx.orgConfirms) : null;
+      // M13-6W 已处理行时间戳（resolved_at 优先，handled/dismissed 兜底；MM-dd HH:mm）
+      const doneTs = doneOf(item) ? (item.resolved_at || item.handled_at || item.dismissed_at) : 0;
+      return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + (canJmp ? " nr-jmp" : "") + '"' +
+        (canJmp ? ' role="button" tabindex="0" data-src="' + escapeHtml(ctx.cfg.id) + '"' + (jmpSid ? ' data-sid="' + escapeHtml(jmpSid) + '"' : "") +
+          (tgt && tgt.kind === "task" ? ' data-jgid="' + escapeHtml(tgt.gid) + '" data-jeid="' + escapeHtml(tgt.entryId) + '"' : "") +
+          (tgt && tgt.kind === "confirm" ? ' data-jcf="' + escapeHtml(tgt.confirmId) + '"' : "") : "") +
+        ' data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + (canJmp ? "&#10;↵ 点按跳转" : "") + '">' +
+        '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
+        (canAck ? '<button class="nr-ack" data-nack-key="' + escapeHtml(item.key) + '" data-src="' + escapeHtml(ctx.cfg.id) + '" title="标记已处理（handled）">知道了</button>' : "") +
+        '<span class="nr-src">' + escapeHtml(src) + "</span>" +
+        (doneTs ? '<span class="nr-time">' + escapeHtml(fmtDT(doneTs)) + "</span>" : "") + "</div>";
+    };
     return '<section class="notice-group" data-group="' + escapeHtml(group) + '">' +
       '<div class="notice-group-head">' + escapeHtml(NOTICE_GROUP_LABEL[group] || group) + (act > 0 ? '<i class="ng-act">' + act + "</i>" : "") + "</div>" +
-      [...groupRows].sort((a, b) => Number(doneOf(a.item)) - Number(doneOf(b.item))) .map(({ ctx, item }) => {
-        const src = srcDisplayName(ctx.cfg);
-        // 「知道了」轻动作位（007 B+）：可行动未收口 + 本源未被旧 relay 降级记忆封锁
-        const canAck = item.actionable === true && !doneOf(item) && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
-        return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + '" data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + '">' +
-          '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
-          (canAck ? '<button class="nr-ack" data-nack-key="' + escapeHtml(item.key) + '" data-src="' + escapeHtml(ctx.cfg.id) + '" title="标记已处理（handled）">知道了</button>' : "") +
-          '<span class="nr-src">' + escapeHtml(src) + "</span></div>";
-      }).join("") +
+      undone.map(rowHtml).join("") +
+      (doneRows.length
+        ? '<div class="nr-donezone">' +
+          '<div class="nr-donehead" role="button" tabindex="0" aria-expanded="' + (doneOpen ? "true" : "false") + '" data-donegroup="' + escapeHtml(group) + '" title="展开/收起已处理通知">已处理 ' + doneRows.length + '<i class="nrd-chev">' + (doneOpen ? "▾" : "▸") + "</i></div>" +
+          (doneOpen ? doneRows.map(rowHtml).join("") : "") +
+          "</div>"
+        : "") +
     "</section>";
   }).join("");
 }
@@ -5871,7 +6098,12 @@ function render() {
   // #018-W1a key 含 notifFP（actionable 未决通知数）：通知面变化会改待处理分组归属，
   // 卡片字段不变也要重渲；含 last_task_done 标记同理（acceptance 分组翻转）
   const pendingQids = new Set(q.pending.map((s) => s.__qid));
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + notifFP + "|" + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "") + ":" + (e.s.last_task_done ? "a" : "")).join("|");
+  // P58 016 记档产品化收口：过滤范围内源连接态（错误横幅/加载骨架显隐因子入 key，
+  // 源上下线/连接中翻转时强制重渲，横幅与骨架不残留）
+  const scopeCtxs = filterSrc === "all" ? [...ctxs.values()] : filterSrc.split(",").map((id) => ctxs.get(id)).filter(Boolean);
+  const scopeOff = scopeCtxs.filter((c) => c.status === "offline" || c.status === "reconnecting");
+  const scopeConn = scopeCtxs.filter((c) => c.status === "connecting");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + notifFP + "|" + (scopeOff.length ? "e" + scopeOff.length + "|" : "") + (scopeConn.length ? "c" + scopeConn.length + "|" : "") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "") + ":" + (e.s.last_task_done ? "a" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -5879,18 +6111,50 @@ function render() {
     box.innerHTML = "";
     let pendHeadDone = false; // #018-W1a 两组段头各只出一次
     let othHeadDone = false;
+    // P58 错误横幅（016 条目 4，005 demo-error-bar 语言）：过滤范围内有断连源时
+    // 列表顶常驻——数据真实性不受还原豁免：无手动重连动作不放假「重连」钮，
+    // 只给「打开连接设置」真实入口；自动重连状态如实文案
+    if (scopeOff.length) {
+      const eb = document.createElement("div");
+      eb.className = "errbar";
+      eb.innerHTML = "<strong>" + (scopeOff.length > 1 ? scopeOff.length + " 个服务器未连接" : "服务器未连接") + "</strong>" +
+        '<span class="eb-copy">数据可能过期 · 自动重连中</span>' +
+        '<span class="eb-actions"><button type="button" class="eb-set">打开连接设置</button></span>';
+      eb.querySelector(".eb-set").onclick = () => openPanel("conn");
+      box.appendChild(eb);
+    }
     if (!list.length) {
-      const on = [...ctxs.values()].filter((c) => c.status === "online").length;
-      const total = ctxs.size;
-      const hint = total === 0
-        ? "先点左下 ⚙ 添加服务器"
-        : on === 0
-          ? (collapseIdle ? "空闲会话已折叠" : "服务器未连接，等待自动重连")
-          : (filterSrc !== "all" ? "该源暂无会话" : (collapseIdle ? "空闲会话已折叠" : "暂无会话，点 ＋ 新建或在 PC 上打开 claude"));
-      const d2 = document.createElement("div");
-      d2.className = "cards-empty";
-      d2.innerHTML = '<div class="ce-icon">⚡</div><div>' + escapeHtml(hint) + "</div>";
-      box.appendChild(d2);
+      // P58 加载骨架（016 条目 4，005 demo-skeleton-list 语言）：范围内源在连接中
+      // 且无会话数据——shimmer 骨架替代空态文案（数据未到 ≠ 没有数据）
+      if (!scopeOff.length && scopeConn.length) {
+        const sk = document.createElement("div");
+        sk.className = "skel-list";
+        sk.setAttribute("aria-label", "会话加载中");
+        sk.innerHTML = '<i class="skel-group"></i><div class="skel-card"><i class="skel-line"></i><i class="skel-line short"></i><i class="skel-line tiny"></i></div>' +
+          '<i class="skel-group"></i><div class="skel-card"><i class="skel-line short"></i><i class="skel-line"></i><i class="skel-line tiny"></i></div>';
+        box.appendChild(sk);
+      } else {
+        const on = [...ctxs.values()].filter((c) => c.status === "online").length;
+        const total = ctxs.size;
+        const hint = total === 0
+          ? "先点左下 ⚙ 添加服务器"
+          : on === 0
+            ? (collapseIdle ? "空闲会话已折叠" : "服务器未连接，等待自动重连")
+            : (filterSrc !== "all" ? "该源暂无会话" : (collapseIdle ? "空闲会话已折叠" : "暂无会话，点 ＋ 新建或在 PC 上打开 claude"));
+        // P58 空态虚线框+语境 action（016 条目 4，005 demo-empty-state 语言）：
+        // 无源→打开连接设置；有源在线无会话→新建会话（同 emptyNewBtn 动作链）
+        const d2 = document.createElement("div");
+        d2.className = "cards-empty";
+        const btn = total === 0 ? '<button type="button" class="ce-btn" data-ce="conn">打开连接设置</button>'
+          : (on > 0 && filterSrc === "all" && !collapseIdle ? '<button type="button" class="ce-btn" data-ce="new">新建会话</button>' : "");
+        d2.innerHTML = '<div class="ce-box"><div class="ce-icon">⚡</div><div>' + escapeHtml(hint) + "</div>" + btn + "</div>";
+        const cb = d2.querySelector(".ce-btn");
+        if (cb) cb.onclick = () => {
+          if (cb.dataset.ce === "conn") openPanel("conn");
+          else { if (!$("newform").classList.contains("open")) $("addBtn").click(); setTimeout(() => $("cwd").focus(), 60); }
+        };
+        box.appendChild(d2);
+      }
     }
     for (const { ctx, s } of list) {
       // #018-W1a 组头（待处理/其他会话）：出现在每组首卡前，计数=过滤后实际渲染卡数
@@ -9348,7 +9612,14 @@ window.addEventListener("click", (ev) => {
  }, true);
 function switchTab(name) {
   activeTab = name;
-  document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  // P58 016 条目 5：aria-selected + roving tabindex 随 active 同步（005
+  // wireSegmentTabSemantics 语义；样式仍走 .active 类不变）
+  document.querySelectorAll(".tabs button.tab").forEach((x) => {
+    const on = x.dataset.tab === name;
+    x.classList.toggle("active", on);
+    x.setAttribute("aria-selected", String(on));
+    x.tabIndex = on ? 0 : -1;
+  });
   moveTabInd(); // #279③ 指示条平移到新 active（renderDetail 内也会补一次）
   hideToBottom(); // 回到底部浮钮仅对话 tab 生效，切页即收
   const tl = $("timeline");
@@ -9391,6 +9662,7 @@ document.addEventListener("keydown", (ev) => {
   if (n < 0 || n >= tabs.length) return;
   ev.preventDefault();
   switchTab(tabs[n].dataset.tab);
+  tabs[n].focus(); // P58 016 条目 5：roving focus 跟手（aria tab 模式，005 wireSegmentTabSemantics 同款）
 });
 
 // ===== 回到底部浮钮（对齐手机端形态）：上滑离底 >80px 且滚动停止 ~300ms 后浮现 =====
@@ -10600,12 +10872,21 @@ $("wizLan").onclick = () => {
   setTimeout(() => $("url").focus(), 80);
 };
 $("wizSkip").onclick = closeWiz;
-// Escape 关闭顶层浮层（任务浮卡/向导/扫码登录）
+// Escape 关闭顶层浮层（任务浮卡/向导/扫码登录）——P58 016 条目 5 补齐：立项弹窗/
+// 团队抽屉/源齿轮弹层入链（z 序：模态 orgnew 62 → 抽屉 orgdrawer 61 → 齿轮弹层），
+// 关闭后焦点归还触发钮（016「Esc 关闭/焦点归还」）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   if ($("taskPop").classList.contains("open")) closeTaskPop();
   else if ($("loginQrPop").classList.contains("open")) closeLoginQr();
   else if ($("wizPop").classList.contains("open")) closeWiz();
+  else if ($("orgnew")) orgCloseCreate();
+  else if ($("orgdrawer")) orgCloseDrawer();
+  else if ($("gearPop").classList.contains("open")) {
+    $("gearPop").classList.remove("open");
+    const g = $("gearBtn");
+    if (g) g.focus();
+  }
 });
 
 $("pairBtn").onclick = submitPairCode;

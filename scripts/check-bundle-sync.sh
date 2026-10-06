@@ -11,11 +11,18 @@ cd "$(dirname "$0")/.."
 B1=$( { shasum -a 256 cc-plugins/plugins/cc-deck/scripts/relay.mjs 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 B2=$( { shasum -a 256 desktop-tauri/src-tauri/resources/relay.mjs 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 B3=$( { shasum -a 256 '/Applications/CC Deck.app/Contents/Resources/resources/relay.mjs' 2>/dev/null || echo "not-installed not-installed"; } | awk '{print $1}')
+# 插件 Web 副本对（M13-7 补：此前 sh 面只锁 relay.mjs 两份——web-console/index.html 副本
+# 漂移只有 test-p1-build 锁，而本脚本是发版前必跑闸；副本过期=插件部署网页端 503/旧界面，
+# #150 同坑。源→副本单源复制，一致性=hash 全等）
+W1=$( { shasum -a 256 web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+W2=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
 [ "$B2" = "$B3" ] || { echo "⚠️  desktop-tauri resources ≠ /Applications 已装（Mac app 未热替换最新，构建前可接受，发版前必须替换）"; [ "${1:-}" = "--strict" ] && FAIL=1; }
 [ "$B1" = "MISSING" ] && { echo "❌ cc-plugins bundle 不存在（先跑 build-plugin.mjs）"; FAIL=1; }
+[ "$W1" = "$W2" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
+[ "$W1" = "MISSING" ] && { echo "❌ web-console/index.html 源不存在"; FAIL=1; }
 
 # git 工作区必须干净（发版前未提交改动 = 产物与仓库不一致的风险源）
 if [ -n "$(git status --porcelain)" ]; then
