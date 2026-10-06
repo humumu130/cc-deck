@@ -273,7 +273,13 @@ try {
     // ---------- O10 SQLite 账实段（read-mode 裁定面：全链后重建+投影读回+shadow 对账） ----------
     console.log("O10 SQLite 账实（read-mode 裁定：切换后读 SQLite 不丢账）");
     const dirs = resolveDirs({ dataDir: DATA, orgDir: ORG });
-    const port = ensureStore(dirs); // 建库冷启动：open→migrate→importAllForShadow（全链 JSON 账全量进 SQLite）
+    const port = ensureStore(dirs);
+    // 读前触发灌库（铁律 3；importAllForShadow 幂等快进）。P81-5 起审计写面（permission-audit
+    // auditStore=ensureStore）会在链路中途建库+缓存端口，ensureStore 命中 portCache 零重扫——
+    // 「冷启动全量灌」不再由 ensureStore 保证，显式快进把全链 JSON 账灌到当前再投影/对账。
+    const importFails = importAllForShadow(port, dirs);
+    assert(importFails.length === 0,
+      `O10⓪ 七域导入零失败（快进灌账兜底；实报 ${importFails.length} 域失败）`);
     const dbDispatch = dispatchEntriesFromDb(port);
     const dbDep = dbDispatch.filter((e) => e.id === depDispatchId);
     const dbMain = dbDispatch.filter((e) => e.id === mainDispatchId2);
