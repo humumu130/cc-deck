@@ -940,6 +940,10 @@ export interface DispatchCommand extends CommandBase {
       depends_on?: string[];                      // #087 beads：依赖卡 id 引用
       gate?: { reason: string };                  // #087 gate：编排只设闸，清除仍走人决策口（gate:null 无自动路径）
     };
+    /** M12-3 重投锚：原单 dispatch_id——新台账行沿用原单 root id（同 id 追加行：读侧
+     * 收敛视图末行赢=重投后看到 running；导入侧行序终态切分自动出 <id>#r<N> 段链，
+     * 零改导入器）。原单须已终态（done/failed），在途单拒收防双跑。 */
+    redispatch_of?: string;
   };
 }
 

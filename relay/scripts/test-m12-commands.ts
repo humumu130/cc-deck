@@ -9,7 +9,10 @@
 //       C7 坏 payload（缺 gid/缺 text/缺 entry_id）+未知 org action 统一收口；
 //       C8 编排链（M12-2）：payload.task → 先写卡再派——成功链三键/依赖未就绪 blocked
 //          零 spawn/gate 未过/坏引用 error 零写/互斥与词表/中间态 task_ref 重派/prompt
-//          兜底 task.text/M12-1 直派与 entry_id 认领旧路径零回归。
+//          兜底 task.text/M12-1 直派与 entry_id 认领旧路径零回归；
+//       C9 生命周期（M12-3）：全状态边（dispatched→running→done/failed）/重投段链
+//          （redispatch_of 同 root id 追加行）/ACK↔台账↔events 三面对账/重启兜底
+//          closeHungDispatchRows 零悬挂。
 // fixture 缝仿 test-r1b-org（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调 handleCommand）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m12-commands.ts
 import { randomUUID } from "node:crypto";
@@ -21,6 +24,7 @@ import { SessionManager } from "../src/session-manager.js";
 import { COMMAND_TYPES as WS_TYPES } from "../src/ws-server.js";
 import { COMMAND_TYPES as CLOUD_TYPES } from "../src/cloud-client.js";
 import { listGroups, listLessons, loadBoard, setLightConfirmTrusted } from "../src/projects.js";
+import { readDispatchLog } from "../src/org.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { RelayConfig } from "../src/config.js";
 import type { Command } from "../src/types.js";
@@ -265,6 +269,65 @@ try {
     assert(ack8b.ok === true && typeof d8b?.dispatch_id === "string" && !(d8b as { task_ref?: string }).task_ref
       && depCard?.status === "doing" && depCard?.dispatch_id === d8b.dispatch_id,
       "C8⑭ M12-1 旧路径零回归：entry_id 认领（无 task_ref 键=直派/认领语义，卡 doing 挂接）");
+
+    // ---------- C9 生命周期（M12-3）：全状态边/重投段链/三面对账/重启兜底出口 ----------
+    console.log("C9 dispatch 生命周期与 receipt 对账");
+    // events 面：subscribe 抓 DISPATCH_DONE 瞬态帧（notifyDispatchClosed 唯一终态广播口）
+    const doneFrames: { dispatch_id?: string; status?: string; receipt?: string; worker_session_id?: string }[] = [];
+    bus.subscribe((env) => { if (env.type === "DISPATCH_DONE") doneFrames.push(env.payload as typeof doneFrames[number]); });
+    // C9① 重投段链：首战→failed→重投（同 root id）→running→done——台账五行两段
+    const base91 = created.length;
+    const ack91 = send(mgr, "c91", "COMMAND_DISPATCH", { gid, prompt: "首战失败单" }, "web-1");
+    const rootId = (ack91.data as { dispatch_id?: string }).dispatch_id ?? "";
+    created[base91]?.cb.onTurnEnd(false, "worker 撞墙失败", 100); // 回合终态→closeOpenDispatches failed
+    const allRows = () => readNdjson<Record<string, unknown>>(join(ORG, "dispatch-log.ndjson")).filter((r) => r.id === rootId);
+    const seg1 = allRows();
+    const ack91r = send(mgr, "c91r", "COMMAND_DISPATCH", { gid, prompt: "重投再来", redispatch_of: rootId }, "web-1");
+    const d91r = ack91r.data as { dispatch_id?: string } | undefined;
+    const seg2 = allRows();
+    assert(ack91r.ok === true && d91r?.dispatch_id === rootId,
+      "C9① 重投 ACK dispatch_id≡原单 root id（同 id 追加行，读侧收敛末行赢）");
+    assert(seg1.length === 3 && seg1.map((r) => r.status).join(",") === "dispatched,running,failed",
+      "C9② 段 1 三行状态机 dispatched→running→failed（先落账再执行+回合收口）");
+    assert(seg2.length === 5 && seg2.slice(3).map((r) => r.status).join(",") === "dispatched,running",
+      "C9③ 重投追加段 2 两行（dispatched→running；导入侧行序终态切分出 #r2，运行时零段号）");
+    created[base91 + 1]?.cb.onTurnEnd(true, "结果：这回成了｜改动文件：a.ts", 100);
+    const finalRow = readDispatchLog().find((e) => e.id === rootId); // 收敛视图=末行
+    assert(finalRow?.status === "done" && String(finalRow.receipt ?? "").includes("这回成了"),
+      "C9④ 二回合收口 done：收敛视图（readDispatchLog 同 id 末行）status=done+receipt 含结果行");
+    // C9⑤ 三面对账（同一 rootId）：ACK 面↔台账面↔events 面（DISPATCH_DONE 帧）+通知账
+    const frames91 = doneFrames.filter((f) => f.dispatch_id === rootId);
+    const notifRaw91 = existsSync(join(DATA, "notifications.json"))
+      ? (JSON.parse(readFileSync(join(DATA, "notifications.json"), "utf-8")) as { notifications?: { key?: string; severity?: string; group?: string }[] }).notifications ?? []
+      : [];
+    const notif91 = notifRaw91.filter((n) => (n.key ?? "").includes(rootId));
+    assert(frames91.length === 2 && frames91.map((f) => f.status).join(",") === "failed,done"
+      && frames91.every((f) => f.worker_session_id !== ""),
+      "C9⑤ events 面：DISPATCH_DONE 瞬态帧 failed+done 各一，dispatch_id/worker_session_id 同 id 可查");
+    assert(notif91.length === 1 && notif91[0]?.group === "activity" && notif91[0]?.severity === "done",
+      "C9⑥ 通知账面：stableKey=dispatch:id 一单一行（重投段链 failed→done 同 key 防重收敛末态，与台账收敛视图同哲学）");
+    // C9⑦ 重投坏路径：原单不存在拒；在途单拒（防双跑）
+    const ack92 = send(mgr, "c92", "COMMAND_DISPATCH", { gid, prompt: "x", redispatch_of: "d-nonexist" }, "web-1");
+    assert(ack92.ok === false && String(ack92.error ?? "").includes("重投原单不存在"), "C9⑦ 坏路径：原单不存在拒收（error fixture）");
+    const ack93 = send(mgr, "c93", "COMMAND_DISPATCH", { gid, prompt: "在途单" }, "web-1");
+    const runningId = (ack93.data as { dispatch_id?: string }).dispatch_id ?? "";
+    const ack93r = send(mgr, "c93r", "COMMAND_DISPATCH", { gid, prompt: "y", redispatch_of: runningId }, "web-1");
+    assert(ack93r.ok === false && String(ack93r.error ?? "").includes("仍在途") && String(ack93r.error ?? "").includes("running"),
+      "C9⑧ 坏路径：在途单重投拒收（防双跑同活，error fixture）");
+    created[created.length - 1]?.cb.onTurnEnd(true, "收尾", 50); // 清悬账（防污染 C9⑨ 断言）
+    // C9⑨ 重启兜底出口：closeHungDispatchRows 把 running/dispatched 悬账全补 done——
+    // 悬挂行零残留（会话终局 10 出口+spawn 失败 2 口+看门狗 2 口之外的最后闸）
+    const ack94 = send(mgr, "c94", "COMMAND_DISPATCH", { gid, prompt: "进程暴毙单" }, "web-1");
+    assert(ack94.ok === true, "C9⑩ 前置：暴毙单 running 悬挂中");
+    const hungId = (ack94.data as { dispatch_id?: string }).dispatch_id ?? "";
+    const mgr2 = new SessionManager(bus, cfg); // 模拟重启：新实例读同一台账
+    mgr2.setAgentFactory(makeFakeFactory(created));
+    mgr2.ensureLeader(); // 启动钩子内 closeHungDispatchRows
+    const hungAfter = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched"); // 收敛视图（append-only 原始行不删，历史 running 行合法留存）
+    const hungFixed = readNdjson<Record<string, unknown>>(join(ORG, "dispatch-log.ndjson"))
+      .filter((r) => r.id === hungId).map((r) => r.status);
+    assert(hungAfter.length === 0 && hungFixed[hungFixed.length - 1] === "done",
+      "C9⑪ 重启兜底：收敛视图 running/dispatched 零残留+悬挂行补 done（receipt=relay 重启，回合中断）");
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR;
     else process.env.CCR_ORG_DIR = prevOrg;

@@ -772,7 +772,23 @@ export class SessionManager {
     seed: { title: string; body: string; severity: NotificationSeverity; group: NotificationGroup; actionable: boolean; sessionId?: string; domain: string; returnPath: string },
   ): void {
     const key = stableKey(kind, entityId, revision);
-    if (this.notifications.has(key)) return;
+    const existing = this.notifications.get(key);
+    if (existing) {
+      // M12-3 重投段链特化：dispatch 无 revision（stableKey 一单一行），同 root id 的
+      // 多次终态（failed→重投→done）是状态推进不是重复事件——账面刷新收敛末态，与
+      // 台账收敛视图（readDispatchLog 同 id 末行赢）对齐；生命周期字段（已决议时间）
+      // 不动——已处置的卡只换内容不复活。其余 kind 维持静默防重（重复事件/重放不双发）
+      if (kind !== "dispatch") return;
+      existing.severity = seed.severity;
+      existing.group = seed.group;
+      existing.title = seed.title;
+      existing.body = seed.body;
+      existing.actionable = seed.actionable;
+      if (seed.sessionId) existing.sourceContext = { ...existing.sourceContext, sessionId: seed.sessionId };
+      this.persistNotifications();
+      this.projectNotifications();
+      return;
+    }
     const item: NotificationLifecycleItem = {
       key,
       kind,
@@ -4084,12 +4100,13 @@ export class SessionManager {
           ...(payload.engine !== undefined ? { engine: payload.engine } : {}),
           ...(typeof payload.model === "string" && payload.model.trim() ? { model: payload.model.trim() } : {}),
           ...(typeof payload.provider === "string" && payload.provider.trim() ? { provider: payload.provider.trim() } : {}),
+          ...(typeof payload.redispatch_of === "string" && payload.redispatch_of.trim() ? { redispatch_of: payload.redispatch_of.trim() } : {}),
         });
         // orgAction("dispatch") 转调 dispatchWorker，返回裸形 {ok,dispatch_id,session_id}
         const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string }) : undefined;
         this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, r.ok,
           r.ok
-            ? `编排派单已受理（entry=${cardId} dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}）`
+            ? `编排派单已受理（entry=${cardId} dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}${payload.redispatch_of ? " 重投" : ""}）`
             : `${r.error}（task_ref=${cardId} 已入账，可带 entry_id 重派）`,
         );
         if (!r.ok) return { ok: false, error: `${r.error}（task_ref=${cardId} 已入账，可带 entry_id 重派）` };
@@ -4114,6 +4131,7 @@ export class SessionManager {
         ...(payload.engine !== undefined ? { engine: payload.engine } : {}),
         ...(typeof payload.model === "string" && payload.model.trim() ? { model: payload.model.trim() } : {}),
         ...(typeof payload.provider === "string" && payload.provider.trim() ? { provider: payload.provider.trim() } : {}),
+        ...(typeof payload.redispatch_of === "string" && payload.redispatch_of.trim() ? { redispatch_of: payload.redispatch_of.trim() } : {}),
       });
       // orgAction("dispatch") 转调 dispatchWorker，返回的是裸形 {ok,dispatch_id,
       // session_id}（无 data 包裹——既有咽喉形状，别处照旧消费不因本单改形）
@@ -4362,6 +4380,7 @@ export class SessionManager {
             engine: p.engine as SessionEngine | undefined,
             model: str("model") || undefined,
             provider: str("provider") || undefined,
+            redispatch_of: str("redispatch_of") || undefined, // M12-3 重投锚（段链接续）
           });
         }
         case "board": {
@@ -4665,7 +4684,7 @@ export class SessionManager {
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
@@ -4720,7 +4739,21 @@ export class SessionManager {
     if (!anchorSt.isDirectory()) {
       return { ok: false, error: `锚路径不是目录: ${anchor}（是个文件——派单需要目录锚，请核对路径拼写）` };
     }
-    const dispatchId = randomUUID();
+    // M12-3 重投段链（运行时台账侧）：带 redispatch_of = 同一单再战——新行沿用原单
+    // root id（同 id 追加行：读侧 readDispatchLog 收敛视图末行赢=重投后即见 running；
+    // 导入侧 import-dispatch-lesson 按行序终态切分自动出 <id>#r<N> 段、attempt+1、
+    // parent 指前段——运行时零段号零新字段，两面对齐）。原单须存在且已终态（在途
+    // 单重投=双跑同活，拒收）；段 id 尾（#rN）剥掉归位 root（导入器同款正则口径）
+    let dispatchId: string = randomUUID();
+    if (input.redispatch_of) {
+      const root = input.redispatch_of.trim().replace(/#r\d+$/, "");
+      if (!root) return { ok: false, error: "redispatch_of 必填原单 dispatch_id" };
+      const prev = readDispatchLog().find((e) => e.id === root);
+      if (!prev) return { ok: false, error: `重投原单不存在: ${input.redispatch_of.slice(0, 8)}（核对台账 id）` };
+      if (prev.status !== "done" && prev.status !== "failed")
+        return { ok: false, error: `原单 ${root.slice(0, 8)} 仍在途（${prev.status}），不可重投（等终态或先停单）` };
+      dispatchId = root;
+    }
     // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
     // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
     // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
