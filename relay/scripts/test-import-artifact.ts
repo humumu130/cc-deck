@@ -6,6 +6,8 @@
 //     无 id → 归一 "local"）。
 // 验收 4 灵魂断言：库行 existence_state 与 artifact-view.ts 读侧 evidence 口径逐行互证
 //   （deriveArtifactView 真调，unknown → capabilities.open/download/reveal 全关）。
+// M11-FIX-C 增测：§7 正向差集删分块（deleteChunkSize 注入小值模拟大清单删陈旧）；
+//   §8 去重键 JSON 编码（source_id/path 空格错位组合不撞键，真重复仍后写赢+落账）。
 import { mkdtempSync, rmSync, writeFileSync, utimesSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -157,6 +159,38 @@ assert(r5b.skipped === true && r5b.counts.artifact === 3, "内联源同内容→
 const r5c = importArtifacts(port, [{ id: "inline-x", records: [{ path: "/x/inline.md", first_at: T + 50, last_at: T + 60, exists: false }] }]);
 assert(r5c.skipped === false && r5c.counts.artifact === 3 && rowOf("/x/inline.md")?.existence_state === "missing", "内联源内容变化→UPSERT 同键演进（state exists→missing、行数不增、他源行不受扰）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "内联源重扫后仍零悬空 FK");
+
+// ---------- 7. M11-FIX-C P3-6：正向差集删分块（小上限注入模拟大清单删陈旧） ----------
+console.log("差集删分块:");
+const chunkRecords = (n: number, from: number) =>
+  Array.from({ length: n }, (_, i) => ({ path: `/chunky/p${from + i}`, first_at: T + 100, exists: true }));
+const r7a = importArtifacts(port, [{ id: "chunky", records: chunkRecords(10, 0) }]);
+assert(r7a.skipped === false && r7a.counts.artifact === 13, `块测首轮 10 行入库（3+10=13，实测 ${JSON.stringify(r7a.counts)}）`);
+const r7b = importArtifacts(
+  port,
+  [{ id: "chunky", records: [...chunkRecords(4, 0), ...chunkRecords(3, 10)] }],
+  { deleteChunkSize: 3 },
+);
+assert(r7b.skipped === false && r7b.counts.artifact === 10 && r7b.counts.upserted === 7, `小上限（块=3）差集删：保留 4+新增 3、删 6 行陈旧（13→10，实测 ${JSON.stringify(r7b.counts)}）`);
+assert([0, 1, 2, 3].every((i) => countOf(`/chunky/p${i}`) === 1 && rowOf(`/chunky/p${i}`)?.existence_state === "exists"), "保留集 4 行全存活（分块 NOT IN 的语义错位就是误删他块保留行——本断言即护栏）");
+assert([4, 5, 6, 7, 8, 9].every((i) => countOf(`/chunky/p${i}`) === 0), "陈旧 6 行跨两块（3+3）全删净（只删首块会漏第二块）");
+assert([10, 11, 12].every((i) => countOf(`/chunky/p${i}`) === 1), "新增 3 行导入");
+assert(listLoss(port, "inline:0").length === 0, "块测源零 loss");
+
+// ---------- 8. M11-FIX-C P3-5：去重键 JSON 编码（空格错位组合不撞键） ----------
+console.log("去重键碰撞:");
+const fileC = join(dataDir, "collision.json");
+writeFileSync(fileC, JSON.stringify([
+  { source_id: "x", path: "a b c", first_at: T + 200, exists: true },
+  { source_id: "x a b", path: "c", first_at: T + 201, exists: true },
+  { source_id: "x", path: "a b c", first_at: T + 202, exists: false },
+], null, 2) + "\n");
+const r8 = importArtifacts(port, [{ id: "collision", file: fileC }]);
+assert(r8.skipped === false && r8.counts.artifact === 12 && r8.counts.upserted === 2, `错位组合（x,"a b c"）vs（"x a b",c）不撞键：两行独立入库（10→12；旧空格拼接键下两者同键→duplicate 误判吃掉一行，实测 ${JSON.stringify(r8.counts)}）`);
+assert(countOf("a b c") === 1 && rowOf("a b c")?.source_id === "x" && rowOf("a b c")?.existence_state === "missing", "（x, a b c）行在且真重复走后写赢（exists→missing）");
+assert(countOf("c") === 1 && rowOf("c")?.source_id === "x a b", "（x a b, c）行独立存活（旧键下被并键消失）");
+const cLoss = listLoss(port, fileC);
+assert(cLoss.length === 1 && cLoss[0]?.reason === "duplicate-key" && cLoss[0]?.lineNo === 3, "duplicate-key 恰 1 条且落在真重复行（line3）——错位组合零误判");
 
 port.close();
 rmSync(dataDir, { recursive: true, force: true });

@@ -3,8 +3,11 @@
 // → artifact 表，复合主键 (source_id, normalized_path)。
 //
 // F2 特化（对 C1/E1 快照域清的演进）：artifact 表自带 source_id 列——删除面**可精确清**：
-// 重扫按「本源解析键集」差集删（DELETE WHERE source_id=? AND normalized_path NOT IN (...)），
-// 只动本源行不误伤他源；同键写入走 UPSERT（ON CONFLICT DO UPDATE 全列覆盖）——
+// 重扫按「本源解析键集」正向差集删（现存-保留=应删集，JS 侧算差后按 ARTIFACT_DELETE_CHUNK
+// 一块 DELETE ... WHERE source_id=? AND normalized_path IN (...)；M11-FIX-C P3-6：NOT IN
+// 直删占位符数=保留键数，超 SQLite 变量上限 32766 即炸，分块 NOT IN 又语义错位——每块只
+// 排除本块会误删他块保留行；正向删与保留集规模无关，各规模语义一致），只动本源行不误伤
+// 他源；同键写入走 UPSERT（ON CONFLICT DO UPDATE 全列覆盖）——
 // 「同键新状态覆盖」= exists→missing 演进面（验收 2 核心）。幂等三层=checkpoint 快进×2
 // + UPSERT 不增行 + 差集删残留。
 //
@@ -32,6 +35,9 @@ import { appendLoss, listLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级 bump→全源失效强制重扫。 */
 export const ARTIFACT_IMPORT_SCHEMA_VERSION = 1;
+
+/** 正向差集删单块大小：分块 IN 删避开 SQLite 变量上限（32766）；测试经 opts.deleteChunkSize 注入小值。 */
+export const ARTIFACT_DELETE_CHUNK = 500;
 
 export interface ArtifactImportAttribution {
   project_id?: string | null;
@@ -219,9 +225,10 @@ function parseRecord(
 export function importArtifacts(
   port: StoragePort,
   sources: readonly ArtifactImportSource[],
-  opts?: { schemaVersion?: number },
+  opts?: { schemaVersion?: number; deleteChunkSize?: number },
 ): ArtifactImportResult {
   const schemaVersion = opts?.schemaVersion ?? ARTIFACT_IMPORT_SCHEMA_VERSION;
+  const deleteChunk = Math.max(1, opts?.deleteChunkSize ?? ARTIFACT_DELETE_CHUNK);
   // ---------- 观测（stat 先于 read；内联源内容指纹） ----------
   const observed = sources.map((s, idx) => {
     const resolvedId = normalizedSourceId(s.id, s.sourceId);
@@ -251,7 +258,10 @@ export function importArtifacts(
       obs.records.forEach((raw, idx) => {
         const row = parseRecord(port, raw, resolvedId, src.attribution, idx + 1, obs.key, losses);
         if (row === null) return;
-        const key = `${row.sourceId} ${row.normalizedPath}`;
+        // 去重键=JSON.stringify([source_id, path])（M11-FIX-C P3-5）：两段均可含空格
+        // （source_id 仅 trim 不禁内嵌、path 原样保留），朴素分隔符拼接会错位撞键——
+        // ("a b","c") 与 ("a","b c") 同键→duplicate 误判+后写赢吃行；JSON 编码无歧义免转义。
+        const key = JSON.stringify([row.sourceId, row.normalizedPath]);
         if (seen.has(key)) {
           losses.push({ sourceKey: obs.key, lineNo: idx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ source_id: row.sourceId, path: row.normalizedPath }).slice(0, 200) });
           seen.delete(key);
@@ -281,16 +291,24 @@ export function importArtifacts(
   port.begin();
   try {
     for (const [sourceId, keep] of planMap) {
-      // 差集删：只清该 id 名下已不在最新解析键集的行（源删行残留面）；键集空=全清该 id
+      // 正向差集删（M11-FIX-C P3-6）：现存-保留=应删集，JS 侧算差后分块 IN 删——NOT IN
+      // 直删占位符数=保留键数（超 SQLite 变量上限 32766 即炸），分块 NOT IN 则语义错位
+      // （每块只排除本块，误删他块保留行）。正向删与保留集规模无关，各规模语义一致
+      // =精确删「本源名下不在保留集的行」。键集空=全清该 id（单语句，坏 JSON 源路径）。
       if (keep.size === 0) {
         port.exec("DELETE FROM artifact WHERE source_id = ?", [sourceId]);
       } else {
-        const paths = [...keep];
-        const placeholders = paths.map(() => "?").join(",");
-        port.exec(
-          `DELETE FROM artifact WHERE source_id = ? AND normalized_path NOT IN (${placeholders})`,
-          [sourceId, ...paths],
-        );
+        const stale = port
+          .query<{ normalized_path: string }>("SELECT normalized_path FROM artifact WHERE source_id = ?", [sourceId])
+          .map((r) => r.normalized_path)
+          .filter((p) => !keep.has(p));
+        for (let i = 0; i < stale.length; i += deleteChunk) {
+          const chunk = stale.slice(i, i + deleteChunk);
+          port.exec(
+            `DELETE FROM artifact WHERE source_id = ? AND normalized_path IN (${chunk.map(() => "?").join(",")})`,
+            [sourceId, ...chunk],
+          );
+        }
       }
     }
     for (const { rows } of rowsBySource) {
