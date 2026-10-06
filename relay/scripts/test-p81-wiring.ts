@@ -39,6 +39,7 @@ function assert(cond: boolean, msg: string): void {
 }
 
 try {
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库 dispatchWorker 域九红；75-R 回归发现的漏网连带面）
   process.env.CCR_DATA_DIR = join(root, "data");
   process.env.CCR_ORG_DIR = join(root, "org");
   process.env.CCR_CLOUD_URL = "";

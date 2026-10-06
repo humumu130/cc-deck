@@ -2336,7 +2336,7 @@ var require_bindings = __commonJS({
     var fs = __require("fs");
     var path6 = __require("path");
     var fileURLToPath5 = require_file_uri_to_path();
-    var join32 = path6.join;
+    var join34 = path6.join;
     var dirname10 = path6.dirname;
     var exists = fs.accessSync && function(path7) {
       try {
@@ -2396,7 +2396,7 @@ var require_bindings = __commonJS({
       var requireFunc = typeof __webpack_require__ === "function" ? __non_webpack_require__ : __require;
       var tries = [], i = 0, l = opts.try.length, n, b, err;
       for (; i < l; i++) {
-        n = join32.apply(
+        n = join34.apply(
           null,
           opts.try[i].map(function(p) {
             return opts[p] || p;
@@ -2457,7 +2457,7 @@ var require_bindings = __commonJS({
         if (dir === ".") {
           dir = process.cwd();
         }
-        if (exists(join32(dir, "package.json")) || exists(join32(dir, "node_modules"))) {
+        if (exists(join34(dir, "package.json")) || exists(join34(dir, "node_modules"))) {
           return dir;
         }
         if (prev === dir) {
@@ -2466,7 +2466,7 @@ var require_bindings = __commonJS({
           );
         }
         prev = dir;
-        dir = join32(dir, "..");
+        dir = join34(dir, "..");
       }
     };
   }
@@ -2654,13 +2654,13 @@ var require_backup = __commonJS({
     var runBackup = (backup, handler) => {
       let rate = 0;
       let useDefault = true;
-      return new Promise((resolve8, reject) => {
+      return new Promise((resolve9, reject) => {
         setImmediate(function step() {
           try {
             const progress = backup.transfer(rate);
             if (!progress.remainingPages) {
               backup.close();
-              resolve8(progress);
+              resolve9(progress);
               return;
             }
             if (useDefault) {
@@ -11109,9 +11109,9 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir16, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join31, sep as sep8 } from "node:path";
-import { writeFileSync as writeFileSync20, openSync as openSync4, readFileSync as readFileSync27, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
+import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
+import { join as join33, sep as sep8 } from "node:path";
+import { writeFileSync as writeFileSync20, openSync as openSync4, readFileSync as readFileSync28, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
 import { spawn as spawn6, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -11629,9 +11629,9 @@ var EventBus = class {
 
 // src/session-manager.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { appendFileSync as appendFileSync2, existsSync as existsSync18, mkdirSync as mkdirSync14, readFileSync as readFileSync20, realpathSync as realpathSync3, statSync as statSync7, writeFileSync as writeFileSync14 } from "node:fs";
-import { homedir as homedir9 } from "node:os";
-import { isAbsolute as isAbsolute6, join as join25, resolve as resolve7, sep as sep6 } from "node:path";
+import { appendFileSync as appendFileSync2, existsSync as existsSync19, mkdirSync as mkdirSync14, readFileSync as readFileSync22, realpathSync as realpathSync3, statSync as statSync7, writeFileSync as writeFileSync14 } from "node:fs";
+import { homedir as homedir12 } from "node:os";
+import { isAbsolute as isAbsolute7, join as join28, resolve as resolve8, sep as sep6 } from "node:path";
 
 // src/artifacts.ts
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync as readFileSync4, realpathSync } from "node:fs";
@@ -11928,9 +11928,19 @@ import { readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
 function sha12(s) {
   return createHash("sha1").update(s).digest("hex").slice(0, 12);
 }
+var OBS_MEMO = /* @__PURE__ */ new Map();
+var SIZE_MEMO_MAX_BYTES = 2 * 1024 * 1024;
 function statThenRead(file) {
-  const mtimeMs = Math.round(statSync2(file).mtimeMs);
+  const st2 = statSync2(file);
+  const mtimeMs = Math.round(st2.mtimeMs);
+  const mtimeNs = statSync2(file, { bigint: true }).mtimeNs.toString();
+  const hit = OBS_MEMO.get(file);
+  if (hit !== void 0 && hit.mtimeNs === mtimeNs && hit.size === st2.size) {
+    return { mtimeMs, text: hit.text };
+  }
   const text = readFileSync5(file, "utf8");
+  if (st2.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st2.size, text });
+  else OBS_MEMO.delete(file);
   return { mtimeMs, text };
 }
 
@@ -11947,22 +11957,6 @@ function appendLoss(port, record) {
     "INSERT INTO import_loss (source_path, line_no, reason, excerpt, created_at) VALUES (?, ?, ?, ?, ?)",
     [record.sourcePath, record.lineNo, record.reason, excerpt, Date.now()]
   );
-}
-function listLoss(port, sourcePath) {
-  const rows = sourcePath === void 0 ? port.query(
-    "SELECT id, source_path, line_no, reason, excerpt, created_at FROM import_loss ORDER BY id"
-  ) : port.query(
-    "SELECT id, source_path, line_no, reason, excerpt, created_at FROM import_loss WHERE source_path = ? ORDER BY id",
-    [sourcePath]
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    sourcePath: r.source_path,
-    lineNo: r.line_no,
-    reason: r.reason,
-    excerpt: r.excerpt,
-    createdAt: r.created_at
-  }));
 }
 
 // src/storage/import-org.ts
@@ -11998,7 +11992,7 @@ function importOrg(port, orgDir2, opts) {
   const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
   if (allValid) {
-    return { skipped: true, counts: countAll(port), loss: listLoss(port).filter((l) => sources.some((s) => s.file === l.sourcePath)).length, rescanned: [] };
+    return { skipped: true, counts: countAll(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
   }
   const losses = [];
   const groups = [];
@@ -12285,7 +12279,7 @@ function importNotifications(port, dataDir2, opts) {
   const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
   if (allValid) {
-    return { skipped: true, counts: countAll2(port), loss: listLoss(port).filter((l) => sources.some((s) => s.file === l.sourcePath)).length, rescanned: [] };
+    return { skipped: true, counts: countAll2(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
   }
   const losses = [];
   const byKey = /* @__PURE__ */ new Map();
@@ -12920,7 +12914,7 @@ function importAcceptance(port, acceptanceDir2, opts) {
   const obs = observeAcceptanceDir2(acceptanceDir2);
   const cp2 = readCheckpoint(port, acceptanceDir2, { mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, schemaVersion });
   if (cp2 !== null) {
-    const n = (sql) => port.query(sql)[0]?.n ?? -1;
+    const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
     return {
       skipped: true,
       counts: {
@@ -12928,7 +12922,8 @@ function importAcceptance(port, acceptanceDir2, opts) {
         item: n("SELECT COUNT(*) AS n FROM acceptance_item"),
         result: n("SELECT COUNT(*) AS n FROM acceptance_result")
       },
-      loss: listLoss(port, acceptanceDir2).length,
+      loss: n("SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ?", acceptanceDir2),
+      // COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）
       rescanned: []
     };
   }
@@ -13217,7 +13212,9 @@ function importArtifacts(port, sources, opts) {
     return {
       skipped: true,
       counts: { artifact: port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: 0 },
-      loss: listLoss(port).filter((l) => sourceKeys.includes(l.sourcePath)).length,
+      // loss 计数走 COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）；
+      // allValid 已保证 sourceKeys 非空（上方 observed.length > 0），IN 占位动态拼安全
+      loss: port.query(`SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(", ")})`, sourceKeys)[0]?.n ?? 0,
       rescanned: []
     };
   }
@@ -13751,6 +13748,19 @@ CREATE TABLE import_loss (
   created_at INTEGER NOT NULL
 );
 `;
+var PERMISSION_AUDIT_DDL = `
+CREATE TABLE permission_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requested_mode TEXT, normalized_mode TEXT,
+  effective_mode TEXT NOT NULL, native_mode TEXT,
+  capability_state TEXT, engine TEXT,
+  reason TEXT NOT NULL, policy_source TEXT,
+  environment TEXT, dir_scope TEXT,
+  tier TEXT, actor TEXT, session_id TEXT, command_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_permission_audit_created ON permission_audit(created_at);
+`;
 var migrations = [
   {
     version: 1,
@@ -13761,6 +13771,11 @@ var migrations = [
     version: 2,
     name: "import-ledger",
     up: (p) => p.exec(IMPORT_LEDGER_DDL)
+  },
+  {
+    version: 3,
+    name: "permission-audit",
+    up: (p) => p.exec(PERMISSION_AUDIT_DDL)
   }
 ];
 
@@ -13771,7 +13786,7 @@ var SHADOW_DIFF_FILE = "shadow-diff.ndjson";
 var SHADOW_DIFF_COOLDOWN_MS = 2e3;
 var MAX_DIFF_ROWS_PER_DOMAIN = 200;
 function resolveReadMode(raw) {
-  if (raw === void 0 || raw === null || raw.trim() === "") return "json";
+  if (raw === void 0 || raw === null || raw.trim() === "") return "sqlite";
   const v = raw.trim();
   if (READ_MODES.includes(v)) return v;
   throw new Error(`[read-mode] \u65E0\u6548 ${READ_MODE_ENV}="${raw}"\uFF08\u6709\u6548\u503C\uFF1A${READ_MODES.join("/")}\uFF09\u2014\u2014boot fail-fast\uFF0C\u4E0D\u9759\u9ED8\u56DE\u9000`);
@@ -13790,7 +13805,10 @@ function resolveDirs(override) {
 var portCache = /* @__PURE__ */ new Map();
 function ensureStore(dirs) {
   const cached2 = portCache.get(dirs.dataDir);
-  if (cached2) return cached2;
+  if (cached2) {
+    importAllForShadow(cached2, dirs);
+    return cached2;
+  }
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
@@ -14586,7 +14604,7 @@ function ensureOrgCli() {
 }
 
 // src/projects.ts
-import { existsSync as existsSync13, mkdirSync as mkdirSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync7 } from "node:fs";
+import { copyFileSync, existsSync as existsSync13, mkdirSync as mkdirSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync7 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { isAbsolute as isAbsolute2, join as join13 } from "node:path";
 
@@ -14657,6 +14675,7 @@ function tagRouting(gid, sessionId, tags, dir) {
 }
 
 // src/projects.ts
+var BOARD_ENTRY_STATUSES = ["backlog", "claimed", "submitted", "ready_to_install", "done"];
 function projectsFilePath(dir) {
   return join13(dir ?? orgDir(), "projects.json");
 }
@@ -14754,6 +14773,7 @@ function createGroup(input, dir) {
     tier: input.tier,
     headcount: input.headcount ?? [],
     ...input.role_defaults ? { role_defaults: input.role_defaults } : {},
+    ...input.mixed_engine === true ? { mixed_engine: true } : {},
     single_card: input.tier === "\u8F7B\u7ACB\u9879",
     created_at: now,
     updated_at: now
@@ -14785,7 +14805,7 @@ function handleOrgActionCreate(payload, dir) {
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir \u5FC5\u586B" };
   if (!isAbsolute2(anchor)) return { ok: false, error: "anchor_dir \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
   if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
-  return createGroup({ name, anchor_dir: anchor, tier }, dir);
+  return createGroup({ name, anchor_dir: anchor, tier, ...raw.mixed_engine === true ? { mixed_engine: true } : {} }, dir);
 }
 var adaptOrgAction = handleOrgActionCreate;
 function setGroupStatus(id2, to2, note, dir) {
@@ -14855,16 +14875,37 @@ function removeMember(gid, sessionId, dir) {
   if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
   return { ok: true, group: g2 };
 }
+function migrateBoardStatuses(gid, board, dir) {
+  let moved = 0;
+  for (const e of board.entries) {
+    const st2 = e.status;
+    if (st2 === "todo") {
+      e.status = "backlog";
+      moved++;
+    } else if (st2 === "doing") {
+      e.status = "claimed";
+      moved++;
+    }
+  }
+  if (moved === 0) return board;
+  try {
+    const p = boardFilePath(gid, dir);
+    if (existsSync13(p)) copyFileSync(p, `${p}.pre-d18.json`);
+    saveBoardFile(board, dir);
+  } catch {
+  }
+  return board;
+}
 function loadBoardFile(gid, dir) {
   try {
     const raw = JSON.parse(readFileSync11(boardFilePath(gid, dir), "utf-8"));
-    return {
+    return migrateBoardStatuses(gid, {
       gid,
       entries: Array.isArray(raw.entries) ? raw.entries : [],
       ...Array.isArray(raw.lessons) ? { lessons: raw.lessons } : {},
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0
-    };
+    }, dir);
   } catch (e) {
     if (e.code === "ENOENT") {
       return { gid, entries: [], frozen: false, updated_at: 0 };
@@ -14904,6 +14945,17 @@ function freezeBoard(gid, frozen, dir) {
   b.updated_at = Date.now();
   saveBoardFile(b, dir);
 }
+function resolveStatusTransition(e, to2, rrInput) {
+  if (to2 === "submitted") {
+    if (e.review_required === true || rrInput === true) return { ok: true, status: "submitted", review_required: true };
+    return { ok: false, error: "submitted \u4EC5\u7531\u5B8C\u6210\u5019\u9009\u4E14 review_required=1 \u751F\u6210\uFF08\u5148\u4E3A\u5361\u8BBE review_required\uFF09" };
+  }
+  if (to2 === "done") {
+    if (e.status !== "submitted" && rrInput === true) return { ok: true, status: "submitted", review_required: true };
+    return { ok: true, status: "done", review_required: false };
+  }
+  return { ok: true, status: to2 };
+}
 function upsertBoardEntry(gid, entry, dir) {
   const w2 = writableBoard(gid, dir);
   if (!w2.ok) return w2;
@@ -14912,7 +14964,16 @@ function upsertBoardEntry(gid, entry, dir) {
   let e = entry.id ? w2.board.entries.find((x) => x.id === entry.id) : void 0;
   if (e) {
     e.text = entry.text;
-    if (entry.status) e.status = entry.status;
+    if (entry.status) {
+      const t = resolveStatusTransition(e, entry.status, entry.review_required);
+      if (!t.ok) return { ok: false, error: t.error };
+      e.status = t.status;
+      if (t.review_required === true) e.review_required = true;
+      else if (t.review_required === false) delete e.review_required;
+    } else if (entry.review_required !== void 0) {
+      if (entry.review_required) e.review_required = true;
+      else delete e.review_required;
+    }
     if (entry.owner_session !== void 0) e.owner_session = entry.owner_session;
     if (entry.dispatch_id !== void 0) e.dispatch_id = entry.dispatch_id;
     if (entry.note !== void 0) e.note = entry.note;
@@ -14926,15 +14987,18 @@ function upsertBoardEntry(gid, entry, dir) {
     }
     e.updated_at = now;
   } else {
+    const t = resolveStatusTransition({ status: "backlog" }, entry.status ?? "backlog", entry.review_required);
+    if (!t.ok) return { ok: false, error: t.error };
     e = {
       id: entry.id ?? `t-${randomUUID2().slice(0, 8)}`,
       text: entry.text,
-      status: entry.status ?? "todo",
+      status: t.status,
       owner_session: entry.owner_session,
       dispatch_id: entry.dispatch_id,
       ts: now,
       updated_at: now,
       note: entry.note,
+      ...t.review_required === true ? { review_required: true } : {},
       ...deps && deps.length > 0 ? { depends_on: deps } : {},
       ...entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}
     };
@@ -14949,7 +15013,11 @@ function moveBoardEntry(gid, entryId, to2, dir) {
   if (!w2.ok) return w2;
   const e = w2.board.entries.find((x) => x.id === entryId);
   if (!e) return { ok: false, error: `\u677F\u6761\u76EE\u4E0D\u5B58\u5728: ${entryId}` };
-  e.status = to2;
+  const t = resolveStatusTransition(e, to2);
+  if (!t.ok) return { ok: false, error: t.error };
+  e.status = t.status;
+  if (t.review_required === true) e.review_required = true;
+  else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
   w2.board.updated_at = e.updated_at;
   if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
@@ -15149,393 +15217,214 @@ function findStaleGroups(now, staleDays, dir, memberActivity) {
   return out;
 }
 
-// src/leader-duty.ts
-function receiptCandidates(snapshot, now) {
-  return (snapshot.pending_receipts ?? []).filter((receipt) => receipt.reviewed !== true).map((receipt) => ({
-    kind: "receipt",
-    id: receipt.sid,
-    source_session_id: receipt.sid,
-    age_ms: Math.max(0, now - receipt.mtime)
-  }));
+// src/permission-policy.ts
+var WIRE_TO_NORMALIZED = {
+  ask: "ask",
+  plan: "plan",
+  "edit-auto": "edit-auto",
+  "full-auto": "full-auto",
+  default: "ask",
+  acceptEdits: "edit-auto",
+  bypassPermissions: "full-auto"
+};
+var NATIVE_CLAUDE = {
+  ask: "default",
+  plan: "plan",
+  "edit-auto": "acceptEdits",
+  "full-auto": "bypassPermissions"
+};
+var EFFECTIVE_TO_MANAGED = {
+  ask: "default",
+  plan: "plan",
+  "edit-auto": "acceptEdits",
+  "full-auto": "bypassPermissions"
+};
+function normalizeLegacyPermissionMode(value) {
+  if (value === void 0 || value === null || value === "") return { mode: "default", kind: "missing_default" };
+  if (value === "default" || value === "acceptEdits" || value === "plan") return { mode: value, kind: "identity" };
+  if (value === "bypassPermissions") return { mode: "acceptEdits", kind: "bypass_demoted" };
+  return { mode: "default", kind: "unknown_reset" };
 }
-function dispatchCandidates(snapshot) {
-  return (snapshot.failed_or_hanging_dispatches ?? []).filter((dispatch) => dispatch.status !== "running" || (dispatch.hanging_ms ?? 0) > 0).filter((dispatch) => dispatch.status === "failed" || dispatch.status === "hanging" || dispatch.status === "dispatched" || (dispatch.hanging_ms ?? 0) > 0).map((dispatch) => ({
-    kind: "dispatch",
-    id: dispatch.dispatch_id,
-    source_session_id: dispatch.source_session_id,
-    age_ms: dispatch.hanging_ms,
-    playbook: dispatch.playbook,
-    risk: dispatch.risk,
-    token_estimate: dispatch.token_estimate,
-    time_estimate_ms: dispatch.time_estimate_ms
-  }));
+var ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
+var ROLES = ["team_pm", "worker", "review_pm"];
+var CAPS = ["confirmed", "unverified", "unsupported"];
+var CONSERV = { ask: 0, plan: 1, "edit-auto": 2, "full-auto": 3 };
+var CEILING = {
+  team_pm: { \u54A8\u8BE2: "edit-auto", \u968F\u624B\u529E: "full-auto", \u8F7B\u7ACB\u9879: "full-auto", \u6B63\u7ECF\u7ACB\u9879: "full-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
+  worker: { \u54A8\u8BE2: "edit-auto", \u968F\u624B\u529E: "full-auto", \u8F7B\u7ACB\u9879: "full-auto", \u6B63\u7ECF\u7ACB\u9879: "full-auto", \u6682\u7F13: "ask", \u770B\u95E8\u72D7: "ask" },
+  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+};
+var TIER_DEFAULT = {
+  team_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
+  worker: { \u54A8\u8BE2: "ask", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "ask", \u770B\u95E8\u72D7: "ask" },
+  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "plan", \u8F7B\u7ACB\u9879: "plan", \u6B63\u7ECF\u7ACB\u9879: "plan", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+};
+function denied(requested, engine, cap, source, reason) {
+  return { requested_mode: requested, normalized_mode: null, effective_mode: "forbidden", native_mode: null, capability_state: cap, engine, reason, policy_source: source };
 }
-function todoCandidates(snapshot) {
-  return (snapshot.unlocked_todos ?? []).map((todo) => ({
-    kind: "todo",
-    id: todo.todo_id,
-    source_session_id: todo.source_session_id,
-    playbook: todo.playbook,
-    risk: todo.risk,
-    token_estimate: todo.token_estimate,
-    time_estimate_ms: todo.time_estimate_ms
-  }));
-}
-function staleDoingCandidates(snapshot) {
-  return (snapshot.stale_doing ?? []).map((doing) => ({
-    kind: "stale_doing",
-    id: doing.dispatch_id ?? doing.session_id,
-    source_session_id: doing.session_id,
-    age_ms: doing.doing_ms,
-    playbook: doing.playbook,
-    risk: doing.risk,
-    token_estimate: doing.token_estimate,
-    time_estimate_ms: doing.time_estimate_ms
-  }));
-}
-function hasRecentRunningProgress(session, now, windowMs) {
-  if (session.recent_progress !== void 0) return session.recent_progress;
-  const progressAt = session.last_progress_at ?? session.updated_at;
-  return progressAt !== void 0 && now - progressAt <= windowMs;
-}
-function evaluateLeaderActionableWork(snapshot) {
-  const now = snapshot.now ?? Date.now();
-  const candidates = [
-    ...receiptCandidates(snapshot, now),
-    ...dispatchCandidates(snapshot),
-    ...todoCandidates(snapshot),
-    ...staleDoingCandidates(snapshot)
-  ];
-  const blocked = [...snapshot.blocked ?? []];
-  if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
-  if (blocked.length > 0) return { actionable: false, candidates, reason: "blocked", blocked };
-  const running = (snapshot.running_sessions ?? []).filter((session) => session.status === "running" || session.status === "WORKING");
-  const progressWindow = snapshot.progress_window_ms ?? 60 * 60 * 1e3;
-  if (running.length > 0 && running.every((session) => hasRecentRunningProgress(session, now, progressWindow))) {
-    return { actionable: false, candidates, reason: "all_running", blocked };
+function effectiveFor(engine, cap, normalized) {
+  if (cap === "confirmed") {
+    const native = engine === "claude" ? NATIVE_CLAUDE[normalized] : null;
+    return { effective: normalized, native, reason: "ok" };
   }
-  return { actionable: false, candidates, reason: "empty", blocked };
-}
-function transitionDutyFeedCount(state = { consecutive_feeds: 0 }, signal, k3 = 3) {
-  if (signal === "idle" || signal === "natural_sleep") {
-    return { state: { consecutive_feeds: 0 }, shouldSleep: false };
+  if (cap === "unverified") {
+    if (normalized === "full-auto") return { effective: "edit-auto", native: null, reason: "native_permission_not_confirmed" };
+    if (normalized === "edit-auto") return { effective: "ask", native: null, reason: "native_permission_not_confirmed" };
+    return { effective: normalized, native: null, reason: "ok" };
   }
-  const consecutive = Math.max(0, state.consecutive_feeds) + 1;
-  if (consecutive >= k3) {
-    return {
-      state: { consecutive_feeds: consecutive },
-      shouldSleep: true,
-      continuation: {
-        delay_min_ms: 5 * 60 * 1e3,
-        delay_max_ms: 15 * 60 * 1e3,
-        wake_once: true,
-        auto_renew: false
+  if (normalized === "full-auto" || normalized === "edit-auto") return { effective: "ask", native: null, reason: "engine_permission_unsupported" };
+  return { effective: normalized, native: null, reason: "ok" };
+}
+function evaluatePermission(input) {
+  const requestedRaw = input.requested_mode ?? null;
+  const source = input.policy_source ?? "explicit";
+  const capRaw = input.capability_state ?? null;
+  if (!ENGINES.includes(input.engine)) return denied(requestedRaw, input.engine, null, source, "unknown_engine");
+  if (input.engine === "zcode") return denied(requestedRaw, input.engine, null, source, "zcode_fail_closed");
+  if (!ROLES.includes(input.role)) return denied(requestedRaw, input.engine, null, source, "unknown_role");
+  const ceiling = CEILING[input.role][input.tier];
+  if (!ceiling) return denied(requestedRaw, input.engine, null, source, "tier_not_in_policy_matrix");
+  const cap = capRaw !== null && CAPS.includes(capRaw) ? capRaw : null;
+  if (!["explicit", "tier_default", "mixed_team_default"].includes(source)) {
+    const nUnknown = requestedRaw !== null ? WIRE_TO_NORMALIZED[requestedRaw] ?? null : null;
+    if (requestedRaw !== null && nUnknown === null) return denied(requestedRaw, input.engine, cap, source, "unknown_requested_mode");
+    return { requested_mode: requestedRaw, normalized_mode: nUnknown, effective_mode: "ask", native_mode: null, capability_state: cap, engine: input.engine, reason: "unknown_policy_source", policy_source: source };
+  }
+  let requested = requestedRaw;
+  let normalized;
+  let materialized = "";
+  if (requested === null) {
+    if (source === "mixed_team_default") {
+      if (input.role === "review_pm") {
+        requested = "plan";
+        normalized = "plan";
+        materialized = "mixed_team_default_review_pm_excluded";
+      } else {
+        requested = "bypassPermissions";
+        normalized = "full-auto";
+        materialized = "mixed_team_default_materialized";
       }
-    };
+    } else if (source === "tier_default" || source === "explicit") {
+      if (source === "explicit") {
+        requested = "ask";
+        normalized = "ask";
+        materialized = "explicit_source_missing_request";
+      } else {
+        normalized = TIER_DEFAULT[input.role][input.tier];
+        requested = normalized;
+      }
+    } else {
+      return denied(null, input.engine, cap, source, "unknown_policy_source");
+    }
+  } else {
+    const n = WIRE_TO_NORMALIZED[requested];
+    if (!n) return denied(requested, input.engine, cap, source, "unknown_requested_mode");
+    normalized = n;
   }
-  return { state: { consecutive_feeds: consecutive }, shouldSleep: false };
+  if (CONSERV[normalized] > CONSERV[ceiling]) {
+    if (materialized.startsWith("mixed_team_default")) {
+      normalized = ceiling;
+      materialized = "mixed_team_default_demoted_to_ceiling";
+    } else {
+      return denied(requested, input.engine, cap, source, "above_role_tier_ceiling");
+    }
+  }
+  const dScope = input.dir_scope ?? null;
+  const eScope = input.env ?? null;
+  if (dScope !== null || eScope !== null) {
+    const prod = dScope === "production" || eScope === "production";
+    const unk = dScope === "unknown" || eScope === "unknown";
+    if (prod || unk) {
+      const threat = prod ? "production" : "env_unknown";
+      if (normalized === "full-auto") {
+        if (materialized === "") {
+          return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
+        }
+        normalized = "edit-auto";
+        materialized = `${threat}_demoted_from_full_auto`;
+      } else if (normalized === "edit-auto" && !prod) {
+        normalized = "ask";
+        materialized = "env_unknown_demoted_from_edit_auto";
+      }
+    }
+  }
+  if (cap === null) {
+    return { requested_mode: requested, normalized_mode: normalized, effective_mode: "ask", native_mode: null, capability_state: null, engine: input.engine, reason: "capability_state_missing", policy_source: source };
+  }
+  const ev2 = effectiveFor(input.engine, cap, normalized);
+  const reason = ev2.reason !== "ok" ? ev2.reason : materialized !== "" ? materialized : "ok";
+  return {
+    requested_mode: requested,
+    normalized_mode: normalized,
+    effective_mode: ev2.effective,
+    native_mode: ev2.native,
+    capability_state: cap,
+    engine: input.engine,
+    reason,
+    policy_source: source
+  };
 }
-
-// src/acceptance.ts
-import { readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync9, existsSync as existsSync14, readdirSync as readdirSync6 } from "node:fs";
-import { join as join14 } from "node:path";
-var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
-function acceptanceDir() {
-  return process.env.CCR_ACCEPTANCE_DIR || join14(resolveDataDir(), "acceptances");
+function engineCapabilityState(engine) {
+  if (engine === "claude") return "confirmed";
+  if (engine === "codex" || engine === "trae" || engine === "qwen-code" || engine === "codebuddy") return "unverified";
+  return "unsupported";
 }
-function loadAcceptance(id2) {
-  if (!ACCEPTANCE_ID_RE.test(id2)) return null;
-  const file = join14(acceptanceDir(), `${id2}.json`);
-  if (!existsSync14(file)) return null;
-  try {
-    const a = JSON.parse(readFileSync12(file, "utf-8"));
-    if (!a || !Array.isArray(a.rows) || a.rows.length === 0) return null;
-    return a;
-  } catch {
-    return null;
-  }
+function guaranteedModes(cap) {
+  if (cap === "confirmed") return ["ask", "plan", "edit-auto", "full-auto"];
+  if (cap === "unverified") return ["ask", "plan"];
+  return [];
 }
-var hits = /* @__PURE__ */ new Map();
-function rateLimited(id2, limit = 10, windowMs = 6e4) {
-  const now = Date.now();
-  const arr = (hits.get(id2) ?? []).filter((t) => now - t < windowMs);
-  if (arr.length >= limit) {
-    hits.set(id2, arr);
-    return true;
-  }
-  arr.push(now);
-  hits.set(id2, arr);
-  if (hits.size > 500) {
-    for (const [k3, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k3);
-  }
+function permissionCapabilitiesSummary() {
+  return ENGINES.map((engine) => {
+    const cap = engineCapabilityState(engine);
+    return { engine, capability_state: cap, modes: guaranteedModes(cap) };
+  });
+}
+function permissionPolicyEnabled() {
+  const raw = process.env.CCR_PERMISSION_POLICY;
+  if (raw === void 0 || raw.trim() === "") return true;
+  const v = raw.trim().toLowerCase();
+  if (v === "on" || v === "1" || v === "true") return true;
+  if (v === "off" || v === "0" || v === "false") return false;
+  console.warn(`[p81-kill-switch] CCR_PERMISSION_POLICY \u672A\u77E5\u503C "${raw}"\u2014\u2014\u6309 off\uFF08\u56DE\u9000 P81 \u524D\uFF09\u5904\u7406`);
   return false;
 }
-function saveResult(id2, payload, ua, ck2) {
-  if (typeof payload !== "object" || payload === null) return "bad body";
-  const rows = payload.rows;
-  if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return "rows \u975E\u6CD5";
-  const clean = [];
-  for (const r of rows) {
-    if (typeof r !== "object" || r === null) return "row \u975E\u6CD5";
-    const { i, verdict, note } = r;
-    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i > 1e6) return "\u884C\u53F7\u975E\u6CD5";
-    if (verdict !== "pass" && verdict !== "fail" && verdict !== null) return "\u5224\u5B9A\u503C\u975E\u6CD5";
-    if (note !== void 0 && typeof note !== "string") return "\u5907\u6CE8\u975E\u6CD5";
-    if (typeof note === "string" && note.length > 600) return "\u5907\u6CE8\u8FC7\u957F";
-    clean.push({ i, verdict, note: typeof note === "string" ? note : "" });
-  }
-  const dir = acceptanceDir();
-  mkdirSync9(dir, { recursive: true });
-  const file = join14(dir, `${id2}.results.json`);
-  let history = [];
+
+// src/models.ts
+import { existsSync as existsSync14, readFileSync as readFileSync12 } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+import { join as join14 } from "node:path";
+var DEFAULT_MODEL = "glm-5.3";
+function readClaudeSettings() {
   try {
-    history = JSON.parse(readFileSync12(file, "utf-8")).history ?? [];
+    return JSON.parse(readFileSync12(join14(homedir5(), ".claude", "settings.json"), "utf8"));
   } catch {
+    return {};
   }
-  if (!Array.isArray(history)) history = [];
-  const counts = {
-    pass: clean.filter((r) => r.verdict === "pass").length,
-    fail: clean.filter((r) => r.verdict === "fail").length,
-    skip: clean.filter((r) => r.verdict === null).length
-  };
-  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean, ...ck2 ? { ck: ck2 } : {} });
-  if (history.length > 50) history = history.slice(history.length - 50);
-  writeFileSync8(file, JSON.stringify({ id: id2, history }, null, 1));
-  return null;
 }
-function listAcceptances(limit = 20) {
-  let names;
-  try {
-    names = readdirSync6(acceptanceDir());
-  } catch {
-    return [];
-  }
+function listModels(fallbackDefault) {
+  const s = existsSync14(join14(homedir5(), ".claude", "settings.json")) ? readClaudeSettings() : {};
+  const env = s.env ?? {};
   const out = [];
-  for (const n of names) {
-    if (!n.endsWith(".json") || n.endsWith(".results.json")) continue;
-    const id2 = n.slice(0, -5);
-    if (!ACCEPTANCE_ID_RE.test(id2)) continue;
-    const a = loadAcceptance(id2);
-    if (!a) continue;
-    let judged = 0;
-    let done = false;
-    let submitted = false;
-    try {
-      const r = JSON.parse(readFileSync12(join14(acceptanceDir(), `${id2}.results.json`), "utf-8"));
-      const last = r.history?.[r.history.length - 1];
-      if (last?.rows) {
-        submitted = true;
-        judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
-        done = judged >= a.rows.length;
-      }
-    } catch {
-    }
-    out.push({
-      id: id2,
-      title: a.title,
-      created_at: a.created_at,
-      total: a.rows.length,
-      judged,
-      submitted,
-      done,
-      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}
-    });
-  }
-  out.sort((x, y) => y.created_at - x.created_at);
-  return out.slice(0, limit);
+  const add = (m) => {
+    if (typeof m !== "string") return;
+    const base = m.replace(/\[1m\]$/, "").trim();
+    if (base && !out.includes(base)) out.push(base);
+  };
+  for (const m of (process.env.CCR_MODELS ?? "").split(",")) add(m);
+  add(s.model);
+  add(env.ANTHROPIC_DEFAULT_SONNET_MODEL);
+  add(env.ANTHROPIC_DEFAULT_HAIKU_MODEL);
+  add(env.ANTHROPIC_DEFAULT_OPUS_MODEL);
+  add(fallbackDefault || DEFAULT_MODEL);
+  return out;
 }
-function acceptanceClosure(id2) {
-  const a = loadAcceptance(id2);
-  if (!a) return null;
-  let submitted = false;
-  let all_pass = false;
-  let fail_count = 0;
-  try {
-    const r = JSON.parse(readFileSync12(join14(acceptanceDir(), `${id2}.results.json`), "utf-8"));
-    const last = r.history?.[r.history.length - 1];
-    if (last?.rows && Array.isArray(last.rows)) {
-      submitted = true;
-      const pass = last.rows.filter((x) => x.verdict === "pass").length;
-      fail_count = last.rows.filter((x) => x.verdict === "fail").length;
-      all_pass = pass === a.rows.length && fail_count === 0 && last.rows.length >= a.rows.length;
-    }
-  } catch {
-  }
-  return { submitted, all_pass, fail_count, total: a.rows.length };
-}
-function acceptanceHtml(a, apiPath = "/api/acceptance") {
-  const { sheet_key: _sk, gid: _g2, entry_id: _e, ...pub } = a;
-  const data = JSON.stringify(pub).replace(/</g, "\\u003c");
-  const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
-  const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
-  return `<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(a.title)}</title>
-<style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; margin: 0; }
-  body { background:#0A0E14; color:#E6EDF3; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; padding:20px 14px 120px; }
-  .wrap { max-width: 720px; margin: 0 auto; }
-  h1 { font-size:18px; margin-bottom:10px; }
-  .pf { color:#9BA8B7; font-size:12.5px; margin:4px 0; }
-  .bar { position:sticky; top:0; z-index:5; background:rgba(10,14,20,.92); backdrop-filter:blur(6px);
-    display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #1C2430; margin-bottom:12px; }
-  .bar b { color:#4D9FFF; font-variant-numeric:tabular-nums; }
-  .card { background:#10161F; border:1px solid #1C2430; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
-  .r1 { display:flex; align-items:center; gap:8px; }
-  .task { color:#4D9FFF; font-weight:700; font-size:12px; flex:none; }
-  .item { flex:1; font-weight:600; font-size:14px; }
-  .btns { display:flex; gap:8px; flex:none; }
-  .vb { width:34px; height:34px; border-radius:50%; border:2px solid #2A3644; background:none;
-    color:#5A6B7E; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-  .vb:active { transform:scale(.92); }
-  .vb.on-pass { border-color:#2BD98F; background:#2BD98F; color:#06281B; }
-  .vb.on-fail { border-color:#F0524F; background:#F0524F; color:#2B0A09; }
-  .crit { color:#7E8B9B; font-size:12px; margin-top:6px; }
-  .note { width:100%; margin-top:8px; background:#0A0E14; border:1px solid #1C2430; border-radius:8px;
-    color:#E6EDF3; font:inherit; font-size:12.5px; padding:7px 10px; display:none; }
-  .note.show { display:block; }
-  .foot { position:fixed; left:0; right:0; bottom:0; padding:12px 14px calc(12px + env(safe-area-inset-bottom));
-    background:rgba(10,14,20,.95); border-top:1px solid #1C2430; }
-  .foot .wrap { display:flex; align-items:center; gap:12px; }
-  #submit { flex:1; height:46px; border-radius:12px; border:1px solid #2E5FA3; background:#14314F;
-    color:#4D9FFF; font-size:15px; font-weight:700; cursor:pointer; }
-  #submit:disabled { opacity:.45; }
-  #msg { font-size:12px; color:#9BA8B7; }
-  .done { text-align:center; padding:40px 0; }
-  .done .n { font-size:34px; font-weight:800; }
-  ul.nt { color:#7E8B9B; font-size:12px; margin:12px 0 0 18px; }
-</style>
-</head>
-<body>
-<div class="wrap" id="app"></div>
-<div class="foot"><div class="wrap"><button id="submit">\u63D0\u4EA4</button><span id="msg"></span></div></div>
-<script>
-var DATA = ${data};
-var state = {};  // \u884C\u53F7 -> "pass"|"fail"|undefined\uFF08undefined=\u672A\u6D4B\uFF09
-var app = document.getElementById("app");
-var h = '<h1>' + esc(DATA.title) + '</h1>' + ${JSON.stringify(preface)} +
-  '<div class="bar">\u5DF2\u5224 <b id="cnt">0</b> / ' + DATA.rows.length + '\u3000<span style="color:#5A6B7E;font-size:12px">\u2713 \u901A\u8FC7\u3000\u2717 \u4E0D\u901A\u8FC7\u3000\u4E0D\u70B9=\u672A\u6D4B</span></div>';
-for (var i = 0; i < DATA.rows.length; i++) {
-  var r = DATA.rows[i];
-  h += '<div class="card" id="c' + i + '"><div class="r1">' +
-    '<span class="task">' + esc(r.task) + '</span><span class="item">' + esc(r.item) + '</span>' +
-    '<span class="btns"><button class="vb" data-i="' + i + '" data-v="pass">\u2713</button>' +
-    '<button class="vb" data-i="' + i + '" data-v="fail">\u2717</button></span></div>' +
-    '<div class="crit">' + esc(r.criteria) + '</div>' +
-    '<input class="note" id="n' + i + '" placeholder="\u95EE\u9898/\u73B0\u8C61\uFF08\u9009\u586B\uFF09"></div>';
-}
-if (DATA.notes && DATA.notes.length) h += '<ul class="nt">' + ${JSON.stringify(notes)} + '</ul>';
-app.innerHTML = h;
-function esc(s) {
-  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-  });
-}
-function paint() {
-  var n = 0;
-  document.querySelectorAll(".vb").forEach(function (b) {
-    var on = state[b.dataset.i] === b.dataset.v;
-    b.className = "vb" + (on ? " on-" + b.dataset.v : "");
-    if (on) n++;
-  });
-  document.getElementById("cnt").textContent = n;
-  document.getElementById("submit").textContent = "\u63D0\u4EA4\u9A8C\u6536\uFF08" + n + "/" + DATA.rows.length + "\uFF09";
-  for (var i = 0; i < DATA.rows.length; i++) {
-    var show = state[i] === "fail" || (document.getElementById("n" + i).value || "") !== "";
-    document.getElementById("n" + i).className = "note" + (show ? " show" : "");
-  }
-}
-document.addEventListener("click", function (e) {
-  var b = e.target.closest(".vb");
-  if (!b) return;
-  var i = b.dataset.i;
-  state[i] = state[i] === b.dataset.v ? undefined : b.dataset.v;  // \u518D\u70B9\u4E00\u6B21\u53D6\u6D88
-  if (state[i] === "fail") document.getElementById("n" + i).focus();
-  paint();
-});
-document.addEventListener("input", paint);
-paint();
-document.getElementById("submit").onclick = function () {
-  var rows = [];
-  for (var i = 0; i < DATA.rows.length; i++) {
-    rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
-  }
-  document.getElementById("msg").textContent = "\u63D0\u4EA4\u4E2D\u2026";
-  // #28 \u4E91\u901A\u9053\u9632\u4F2A\u9020\uFF1A\u51FA\u5355\u94FE\u63A5\u4EE5 fragment\uFF08#<key>\uFF09\u643A\u5E26\u6BCF\u5355\u5BC6\u94A5\uFF08\u4E0D\u8FDB\u670D\u52A1\u5668\u65E5\u5FD7/
-  // Referer/\u7F13\u5B58\u952E\uFF09\uFF0C\u63D0\u4EA4\u968F body \u5E26\u56DE\u7531 Worker \u5BF9\u7167\u3002LAN \u7AEF\u70B9\u4E0D\u6821\u9A8C\uFF08\u5BB6\u5EAD\u7F51\u5A01\u80C1
-  // \u6A21\u578B=\u5BB6\u4EBA\uFF0C\u7EF4\u6301\u80FD\u529B\u94FE\u63A5\u53E3\u5F84\uFF09\uFF1B\u4E91\u7248\u9875\u9762\u7F3A fragment \u65F6\u63D0\u4EA4\u4F1A\u88AB 403 \u5E76\u663E\u793A\u539F\u56E0
-  var sheetKey = location.hash.replace(/^#/, "").trim() || undefined;
-  fetch(${JSON.stringify(apiPath)}, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: DATA.id, rows: rows, key: sheetKey }),
-  }).then(function (r) { return r.json(); }).then(function (j) {
-    if (!j.ok) { document.getElementById("msg").textContent = "\u63D0\u4EA4\u5931\u8D25\uFF1A" + (j.error || "\u7A0D\u540E\u518D\u8BD5"); return; }
-    var p = 0, f = 0, s = 0;
-    rows.forEach(function (r) { if (r.verdict === "pass") p++; else if (r.verdict === "fail") f++; else s++; });
-    app.innerHTML = '<div class="done"><div class="n" style="color:#2BD98F">\u2713 ' + p + ' \u901A\u8FC7</div>' +
-      '<div class="n" style="color:#F0524F">' + f + ' \u4E0D\u901A\u8FC7</div>' +
-      '<div class="n" style="color:#5A6B7E">' + s + ' \u672A\u6D4B</div>' +
-      '<p style="color:#9BA8B7;margin-top:16px">\u5DF2\u63D0\u4EA4\uFF08' + new Date().toLocaleTimeString() + '\uFF09\u3002\u9875\u9762\u53EF\u4EE5\u5173\u4E86\u3002</p></div>';
-    document.querySelector(".foot").style.display = "none";
-  }).catch(function () {
-    document.getElementById("msg").textContent = "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u7A0D\u540E\u518D\u8BD5";
-  });
-};
-</script>
-</body>
-</html>`;
-}
-function esc(s) {
-  return String(s ?? "").replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
-  );
-}
-function serveAcceptancePage(id2, res, apiPath) {
-  const a = loadAcceptance(id2);
-  if (!a) return false;
-  const html = acceptanceHtml(a, apiPath);
-  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-  res.end(html);
-  return true;
-}
-function applyCloudSubmits(id2, submits) {
-  if (!ACCEPTANCE_ID_RE.test(id2)) return [];
-  const seenK = /* @__PURE__ */ new Set();
-  const seen = /* @__PURE__ */ new Set();
-  try {
-    const h = JSON.parse(readFileSync12(join14(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
-    if (Array.isArray(h)) {
-      for (const e of h) {
-        if (typeof e.ck === "string") seenK.add(e.ck);
-        try {
-          seen.add(JSON.stringify(e.rows ?? null));
-        } catch {
-        }
-      }
-    }
-  } catch {
-  }
-  const added = [];
-  if (!Array.isArray(submits)) return added;
-  for (const s of submits) {
-    if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
-    const sig = JSON.stringify(s.rows);
-    if (typeof s.k === "string" ? seenK.has(s.k) : seen.has(sig)) continue;
-    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
-    if (saveResult(id2, { rows: s.rows }, ua, typeof s.k === "string" ? s.k : void 0) === null) {
-      if (typeof s.k === "string") seenK.add(s.k);
-      seen.add(sig);
-      added.push(s);
-    }
-  }
-  return added;
-}
+
+// src/agent-jsonl.ts
+import { spawn as spawn3 } from "node:child_process";
+import { accessSync as accessSync2, constants as constants4 } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { randomUUID as randomUUID6 } from "node:crypto";
 
 // node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
@@ -44997,14 +44886,14 @@ function VJ(e, t) {
 // src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { homedir as homedir6 } from "node:os";
+import { homedir as homedir7 } from "node:os";
 import { delimiter as pathDelimiter, join as join21 } from "node:path";
 
 // src/cli-path.ts
 import { accessSync, constants as constants3, existsSync as existsSync16, readFileSync as readFileSync14 } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter as delimiter2, dirname as dirname7, join as join19 } from "node:path";
-import { homedir as homedir5 } from "node:os";
+import { homedir as homedir6 } from "node:os";
 var cached;
 function usable(p) {
   if (!p || !existsSync16(p)) return false;
@@ -45064,7 +44953,7 @@ function cmdToFallbackJs(p) {
   return null;
 }
 function knownLocations() {
-  const home = homedir5();
+  const home = homedir6();
   if (process.platform === "win32") {
     const appdata = process.env.APPDATA ?? join19(home, "AppData", "Roaming");
     return [
@@ -45102,7 +44991,7 @@ function resolveClaudeCliPath() {
 
 // src/allow-rules.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { mkdirSync as mkdirSync11, readFileSync as readFileSync15, writeFileSync as writeFileSync9 } from "node:fs";
+import { mkdirSync as mkdirSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join20 } from "node:path";
 var BASH_TOKEN_DENY = /* @__PURE__ */ new Set([
   "rm",
@@ -45209,8 +45098,8 @@ var AllowRuleStore = class {
   }
   persist() {
     try {
-      mkdirSync11(join20(this.file, ".."), { recursive: true });
-      writeFileSync9(this.file, JSON.stringify(this.rules, null, 2));
+      mkdirSync10(join20(this.file, ".."), { recursive: true });
+      writeFileSync8(this.file, JSON.stringify(this.rules, null, 2));
     } catch {
     }
   }
@@ -45727,13 +45616,13 @@ function taskDoneLabel(t) {
 // src/agent-adapter.ts
 function childEnv(opts) {
   const extra = [
-    join21(homedir6(), "node/bin"),
+    join21(homedir7(), "node/bin"),
     // 用户级 node（本机实证位置）
     "/usr/local/bin",
     // macOS Intel / 惯装位
     "/opt/homebrew/bin",
     // macOS Apple Silicon (homebrew)
-    join21(homedir6(), ".npm-global/bin"),
+    join21(homedir7(), ".npm-global/bin"),
     // npm 全局自定义前缀惯用位
     ...process.env.CCR_EXTRA_PATH ? process.env.CCR_EXTRA_PATH.split(pathDelimiter) : []
   ];
@@ -45799,14 +45688,14 @@ var AsyncQueue = class {
   closed = false;
   push(value) {
     if (this.closed) throw new Error("queue closed");
-    const resolve8 = this.resolvers.shift();
-    if (resolve8) resolve8({ value, done: false });
+    const resolve9 = this.resolvers.shift();
+    if (resolve9) resolve9({ value, done: false });
     else this.values.push(value);
   }
   end() {
     this.closed = true;
-    for (const resolve8 of this.resolvers.splice(0)) {
-      resolve8({ value: void 0, done: true });
+    for (const resolve9 of this.resolvers.splice(0)) {
+      resolve9({ value: void 0, done: true });
     }
   }
   get iterable() {
@@ -45820,7 +45709,7 @@ var AsyncQueue = class {
             if (self2.closed) {
               return Promise.resolve({ value: void 0, done: true });
             }
-            return new Promise((resolve8) => self2.resolvers.push(resolve8));
+            return new Promise((resolve9) => self2.resolvers.push(resolve9));
           }
         };
       }
@@ -46298,14 +46187,14 @@ var AgentSession = class {
       ...remember ? { remember } : {}
     });
     this.cb.onLog("system", questions.length ? summary : `\u7B49\u5F85\u786E\u8BA4: ${summary}`);
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       this.pending.set(requestId, {
         tool: toolName,
         input,
         created_at: Date.now(),
         resolve: (r) => {
           this.pending.delete(requestId);
-          resolve8(r);
+          resolve9(r);
         }
       });
     });
@@ -46407,164 +46296,6 @@ var AgentSession = class {
   }
 };
 
-// src/title-gen.ts
-async function generateTitle(task, model, onSid, cwd, configHome) {
-  const trimmed = task.trim().slice(0, 600);
-  if (!trimmed) return { title: null };
-  let timer;
-  let sidSeen = false;
-  const timeout = new Promise((resolve8) => {
-    timer = setTimeout(() => resolve8({ title: null }), 2e4);
-    timer.unref();
-  });
-  try {
-    const run2 = async () => {
-      const q2 = NUt({
-        prompt: "\u4E3A\u4E0B\u9762\u7684\u4EFB\u52A1\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898\uFF0C\u4E0D\u8D85\u8FC7 12 \u4E2A\u5B57\uFF0C\u76F4\u63A5\u8F93\u51FA\u6807\u9898\u672C\u8EAB\uFF0C\u4E0D\u8981\u5F15\u53F7\u548C\u4EFB\u4F55\u89E3\u91CA\uFF1A\n\n" + trimmed,
-        options: {
-          model,
-          // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
-          // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
-          cwd: cwd ?? process.cwd(),
-          // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
-          ...resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath() } : {},
-          // 防止被全局 bridge hook 注册成外部会话；#17 开关开启时 titlegen 一次性
-          // 会话落独立家（relay 内部工具会话，不区分归属——默认家不再冒 .tmp-titlegen 目录）
-          env: {
-            ...process.env,
-            CCR_RELAY_CHILD: "1",
-            ...configHome ? { CLAUDE_CONFIG_DIR: configHome } : {}
-          },
-          permissionMode: "bypassPermissions",
-          maxTurns: 1
-        }
-      });
-      for await (const msg of q2) {
-        const sid = msg.session_id;
-        if (sid && !sidSeen) {
-          sidSeen = true;
-          onSid?.(sid);
-        }
-        if (msg.type === "result" && !msg.is_error) {
-          const raw = (msg.result ?? "").trim();
-          const t = raw.replace(/^["'「『]|["'」』]$/g, "").split("\n")[0].trim();
-          if (t) return { title: [...t].slice(0, 16).join(""), sid };
-          if (sid) return { title: null, sid };
-        }
-      }
-      return { title: null };
-    };
-    return await Promise.race([run2(), timeout]);
-  } catch {
-    return { title: null };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-// src/cron.ts
-import { readFileSync as readFileSync16 } from "node:fs";
-import { join as join22 } from "node:path";
-var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
-var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
-function tsNum(v) {
-  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
-  if (typeof v === "string" && v.trim()) {
-    const parsed = Date.parse(v);
-    if (Number.isFinite(parsed)) return parsed;
-    const n = Number(v);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return void 0;
-}
-function normalizeTask(raw, fallbackId) {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw;
-  const status = str(o.status);
-  if (status === "deleted") return null;
-  const rawId = str(o.id) ?? str(o.taskId);
-  const prompt = str(o.prompt) ?? str(o.command) ?? str(o.task) ?? str(o.instruction) ?? str(o.message) ?? "";
-  const schedule = str(o.humanSchedule) ?? str(o.schedule) ?? str(o.cron) ?? str(o.interval) ?? str(o.expression) ?? "";
-  const name = str(o.name) ?? str(o.title) ?? str(o.label);
-  if (!prompt && !schedule && !name && !rawId) return null;
-  const paused = o.paused === true || o.enabled === false || o.active === false || status === "paused" || status === "expired";
-  const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
-  if (o.recurring === false && next !== void 0 && next < Date.now() - EXPIRED_ONE_SHOT_GRACE_MS) return null;
-  return {
-    id: rawId ?? fallbackId,
-    name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "\u672A\u547D\u540D\u4EFB\u52A1"),
-    prompt,
-    schedule,
-    ...next !== void 0 ? { next_run_at: next } : {},
-    ...paused ? { paused: true } : {},
-    ...o.recurring === false ? { recurring: false } : {}
-  };
-}
-function readCronTasks(cwd) {
-  let text;
-  try {
-    text = readFileSync16(join22(cwd, ".claude", "scheduled_tasks.json"), "utf8");
-  } catch (e) {
-    return e.code === "ENOENT" ? void 0 : "bad";
-  }
-  let root;
-  try {
-    root = JSON.parse(text);
-  } catch {
-    return "bad";
-  }
-  let entries;
-  if (Array.isArray(root)) {
-    entries = root.map((r, i) => [String(i), r]);
-  } else if (root && typeof root === "object") {
-    const wrapped = root.tasks;
-    entries = Array.isArray(wrapped) ? wrapped.map((r, i) => [String(i), r]) : Object.entries(root);
-  } else {
-    return "bad";
-  }
-  const out = [];
-  for (const [key, raw] of entries) {
-    const t = normalizeTask(raw, key);
-    if (t) out.push(t);
-  }
-  return out;
-}
-function cronTasksKey(tasks) {
-  return JSON.stringify(tasks);
-}
-
-// src/task-store.ts
-import { readdirSync as readdirSync8, readFileSync as readFileSync17, statSync as statSync6 } from "node:fs";
-import { homedir as homedir7 } from "node:os";
-import path from "node:path";
-function readTaskStoreTodos(cliSessionId, base) {
-  const dir = path.join(base ?? path.join(homedir7(), ".claude"), "tasks", cliSessionId);
-  let files;
-  try {
-    files = readdirSync8(dir).filter((f) => f.endsWith(".json"));
-  } catch {
-    return null;
-  }
-  const out = [];
-  for (const f of files) {
-    try {
-      const fp2 = path.join(dir, f);
-      const t = JSON.parse(readFileSync17(fp2, "utf-8"));
-      if (t.status === "deleted") continue;
-      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
-      if (!subject) continue;
-      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
-      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-      const parsed = Number(t.id);
-      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync6(fp2).mtimeMs, ...activeForm });
-    } catch {
-    }
-  }
-  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  return out;
-}
-
 // src/proc-tree.ts
 import { execFile } from "node:child_process";
 function parseCpuTimeMs(s) {
@@ -46605,13 +46336,13 @@ async function snapshotTree() {
   return out;
 }
 function psExec(cmd, args) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     try {
       execFile(cmd, args, { timeout: 1e4, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-        resolve8(err ? "" : String(stdout));
+        resolve9(err ? "" : String(stdout));
       });
     } catch {
-      resolve8("");
+      resolve9("");
     }
   });
 }
@@ -46676,741 +46407,7 @@ async function killTree(root) {
   return "killed";
 }
 
-// src/uploads.ts
-import { mkdirSync as mkdirSync12, writeFileSync as writeFileSync10 } from "node:fs";
-import path2 from "node:path";
-function tmpUploadDir(dataDir2) {
-  return path2.join(dataDir2, "..", "tmp");
-}
-function sidKeyOf(sessionId) {
-  return sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
-}
-function sniffImageExt(head) {
-  if (head[0] === 137 && head[1] === 80) return "png";
-  if (head[0] === 255 && head[1] === 216) return "jpg";
-  if (head[0] === 71 && head[1] === 73) return "gif";
-  if (head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP") return "webp";
-  return "png";
-}
-function safeName(raw) {
-  const base = raw.split(/[\\/]/).pop() ?? "";
-  const cleaned = base.replace(new RegExp("[\\x00-\\x1f\\x7f]", "g"), "").replace(/^\.+/g, "").trim();
-  return cleaned.slice(0, 60) || "file";
-}
-function saveUploadImages(dataDir2, sessionId, images) {
-  if (images.length === 0) return [];
-  const dir = tmpUploadDir(dataDir2);
-  try {
-    mkdirSync12(dir, { recursive: true });
-  } catch {
-  }
-  const sidKey = sidKeyOf(sessionId);
-  const stamp = Date.now();
-  const saved = [];
-  for (let i = 0; i < Math.min(images.length, 4); i++) {
-    const b64 = images[i];
-    const head = Buffer.from(b64.slice(0, 24), "base64");
-    const ext = sniffImageExt(head);
-    const p = path2.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
-    try {
-      writeFileSync10(p, Buffer.from(b64, "base64"));
-      saved.push(p);
-    } catch {
-    }
-  }
-  return saved;
-}
-function saveUploadFiles(dataDir2, sessionId, files) {
-  if (files.length === 0) return [];
-  const dir = tmpUploadDir(dataDir2);
-  try {
-    mkdirSync12(dir, { recursive: true });
-  } catch {
-  }
-  const sidKey = sidKeyOf(sessionId);
-  const stamp = Date.now();
-  const saved = [];
-  for (let i = 0; i < Math.min(files.length, 2); i++) {
-    const f = files[i];
-    const p = path2.join(dir, `file-${sidKey}-${stamp}-${i + 1}-${safeName(f.name)}`);
-    try {
-      writeFileSync10(p, Buffer.from(f.b64, "base64"));
-      saved.push(p);
-    } catch {
-    }
-  }
-  return saved;
-}
-
-// src/todo-hidden.ts
-import { readFileSync as readFileSync18, writeFileSync as writeFileSync11 } from "node:fs";
-import path3 from "node:path";
-import { fileURLToPath } from "node:url";
-var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
-var MAX_PER_SESSION = 200;
-var fileCache = null;
-var keySets = /* @__PURE__ */ new Map();
-function load2() {
-  if (fileCache) return fileCache;
-  try {
-    const raw = JSON.parse(readFileSync18(FILE, "utf-8"));
-    fileCache = {};
-    for (const [k3, v] of Object.entries(raw)) {
-      if (Array.isArray(v)) {
-        const keys = v.filter((x) => typeof x === "string" && !!x);
-        if (keys.length) fileCache[k3] = keys.slice(-MAX_PER_SESSION);
-      }
-    }
-  } catch {
-    fileCache = {};
-  }
-  return fileCache;
-}
-function hiddenTodoKeys(sessionId) {
-  let s = keySets.get(sessionId);
-  if (!s) {
-    s = new Set(load2()[sessionId] ?? []);
-    keySets.set(sessionId, s);
-  }
-  return s;
-}
-function addHiddenTodoKey(sessionId, key) {
-  if (!sessionId || !key) return;
-  const s = hiddenTodoKeys(sessionId);
-  if (s.has(key) && s.size <= MAX_PER_SESSION) return;
-  s.add(key);
-  const capped = [...s].slice(-MAX_PER_SESSION);
-  keySets.set(sessionId, new Set(capped));
-  const disk = load2();
-  disk[sessionId] = capped;
-  fileCache = disk;
-  try {
-    writeFileSync11(FILE, JSON.stringify(disk));
-  } catch {
-  }
-}
-
-// src/decision-notify.ts
-import { mkdirSync as mkdirSync13, readFileSync as readFileSync19, writeFileSync as writeFileSync12 } from "node:fs";
-import { join as join23 } from "node:path";
-var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
-function isDecisionNotificationKind(value) {
-  return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
-}
-function transitionNotification(item, action, at) {
-  const next = { ...item };
-  if (action === "source_succeeded" && next.handled_at === void 0) next.handled_at = at;
-  if (action === "dismissed") {
-    if (next.dismissed_at === void 0) next.dismissed_at = at;
-    if (next.handled_at === void 0) next.handled_at = at;
-  }
-  if (action === "resolved" && next.resolved_at === void 0) next.resolved_at = at;
-  return next;
-}
-function stableKey(kind, entityId, revision) {
-  if (!isDecisionNotificationKind(kind)) throw new Error(`unsupported notification kind: ${String(kind)}`);
-  if (kind === "dispatch") return `${kind}:${entityId}`;
-  if (revision === void 0 || String(revision).length === 0) return `${kind}:${entityId}`;
-  return `${kind}:${entityId}:${String(revision)}`;
-}
-var DEFAULT_WAIT_MIN = 10;
-var DEFAULT_REMIND_HOURS = 24;
-var DEFAULT_INTERVAL_MS = 2e4;
-function numberEnv(name, fallback, min) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value >= min ? value : fallback;
-}
-function enabledEnv() {
-  return process.env.CCR_DECISION_NOTIFY !== "0";
-}
-function ledgerPathOf(options) {
-  const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ?? process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
-  if (override) return override;
-  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join23(process.cwd(), "data");
-  return join23(dataDir2, "decision-notifications.json");
-}
-function defaultNotificationGroup(kind) {
-  return kind === "system" ? "activity" : "action";
-}
-function defaultActionable(kind, group) {
-  return group === "action" && kind !== "system";
-}
-function normalizeSourceContext(value) {
-  if (!value || typeof value !== "object") return void 0;
-  const x = value;
-  if (typeof x.domain !== "string" || !x.domain || typeof x.entityId !== "string" || !x.entityId || typeof x.alertId !== "string" || !x.alertId || typeof x.returnPath !== "string") return void 0;
-  return {
-    domain: x.domain,
-    entityId: x.entityId,
-    alertId: x.alertId,
-    returnPath: x.returnPath,
-    ...typeof x.sessionId === "string" ? { sessionId: x.sessionId } : {},
-    ...typeof x.segment === "string" ? { segment: x.segment } : {}
-  };
-}
-function normalizeDecisionNotification(item) {
-  if (!item || typeof item !== "object") return null;
-  const x = item;
-  if (typeof x.key !== "string" || !isDecisionNotificationKind(x.kind) || typeof x.source_session_id !== "string" || typeof x.created_at !== "number" || typeof x.revision !== "string") return null;
-  const group = x.group === "action" || x.group === "attention" || x.group === "activity" ? x.group : defaultNotificationGroup(x.kind);
-  const sourceContext = normalizeSourceContext(x.source_context);
-  return {
-    key: x.key,
-    kind: x.kind,
-    source_session_id: x.source_session_id,
-    created_at: x.created_at,
-    ...typeof x.first_sent_at === "number" ? { first_sent_at: x.first_sent_at } : {},
-    ...typeof x.reminded_at === "number" ? { reminded_at: x.reminded_at } : {},
-    ...typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {},
-    ...typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {},
-    ...typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {},
-    group,
-    actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
-    revision: x.revision,
-    ...sourceContext ? { source_context: sourceContext } : {}
-  };
-}
-function readDecisionNotificationLedger(path6) {
-  try {
-    const raw = JSON.parse(readFileSync19(path6, "utf-8"));
-    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.notifications) ? raw.notifications : [];
-    const notifications = list.map(normalizeDecisionNotification).filter((item) => item !== null);
-    return { notifications };
-  } catch {
-    return { notifications: [] };
-  }
-}
-function writeDecisionNotificationLedger(path6, ledger) {
-  mkdirSync13(join23(path6, ".."), { recursive: true });
-  writeFileSync12(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
-}
-function confirmRevision(confirm) {
-  const revision = confirm.revision;
-  return typeof revision === "string" || typeof revision === "number" ? String(revision) : String(confirm.created_at);
-}
-function confirmKey(confirm) {
-  return stableKey("org-confirm", confirm.id, confirmRevision(confirm));
-}
-function confirmSourceSession(confirm) {
-  for (const key of ["source_session_id", "session_id", "source_session"]) {
-    const value = confirm.payload?.[key];
-    if (typeof value === "string" && value) return value;
-  }
-  return "";
-}
-function waitingKey(session) {
-  return stableKey("waiting", session.session_id, session.waiting_request.request_id);
-}
-function allowWaiting(session) {
-  const request = session.waiting_request;
-  return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
-}
-function kindLabel(kind) {
-  switch (kind) {
-    case "project-create":
-      return "\u7ACB\u9879\u786E\u8BA4";
-    case "tier-change":
-      return "\u6863\u4F4D\u53D8\u66F4";
-    case "suggest-hold":
-      return "\u6682\u7F13\u5EFA\u8BAE";
-    case "archive":
-      return "\u7ED3\u9879\u786E\u8BA4";
-    case "revive":
-      return "\u590D\u6D3B\u786E\u8BA4";
-  }
-}
-function compact(text, max = 160) {
-  const oneLine = text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}\u2026` : oneLine;
-}
-function confirmText(confirm, sourceSessionId) {
-  const source = sourceSessionId ? ` \xB7 \u6765\u6E90\u4F1A\u8BDD ${sourceSessionId.slice(0, 12)}` : " \xB7 \u6765\u6E90\uFF1ALeader \u63A7\u5236\u4F1A\u8BDD";
-  const summary = confirm.reason ? `\uFF1A${compact(confirm.reason)}` : "";
-  return `[\u62CD\u677F] ${compact(confirm.title, 70)} \xB7 ${kindLabel(confirm.kind)}${source}${summary}`;
-}
-function waitingText(session) {
-  const tool = compact(session.waiting_request?.tool_name || "\u64CD\u4F5C", 60);
-  return `[\u5BA1\u6279] \u5F53\u524D\u4F1A\u8BDD\u7B49\u5F85\u5141\u8BB8 ${tool} \xB7 \u6765\u6E90\u4F1A\u8BDD ${session.session_id.slice(0, 12)}`;
-}
-var DecisionNotificationWatcher = class {
-  path;
-  intervalMs;
-  waitMs;
-  remindMs;
-  enabled;
-  now;
-  options;
-  ledger;
-  timer = null;
-  constructor(options) {
-    this.options = options;
-    this.path = ledgerPathOf(options);
-    this.intervalMs = options.intervalMs ?? numberEnv("CCR_DECISION_NOTIFY_INTERVAL_MS", DEFAULT_INTERVAL_MS, 1e3);
-    this.waitMs = (options.waitMin ?? numberEnv("CCR_DECISION_WAIT_MIN", DEFAULT_WAIT_MIN, 0)) * 6e4;
-    this.remindMs = (options.remindHours ?? numberEnv("CCR_DECISION_REMIND_HOURS", DEFAULT_REMIND_HOURS, 0)) * 36e5;
-    this.enabled = options.enabled ?? enabledEnv();
-    this.now = options.now ?? (() => Date.now());
-    this.ledger = readDecisionNotificationLedger(this.path);
-  }
-  get ledgerPath() {
-    return this.path;
-  }
-  snapshotLedger() {
-    return this.ledger.notifications.map((item) => ({ ...item }));
-  }
-  start() {
-    if (!this.enabled || this.timer) return;
-    this.scan();
-    this.timer = setInterval(() => this.scan(), this.intervalMs);
-    this.timer.unref?.();
-  }
-  stop() {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-  }
-  scan(now = this.now()) {
-    if (!this.enabled) return;
-    const confirms = this.options.listConfirms();
-    const sessions = this.options.snapshotSessions();
-    const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
-    const activeConfirmKeys = /* @__PURE__ */ new Set();
-    const activeWaitingKeys = /* @__PURE__ */ new Set();
-    let changed = false;
-    for (const confirm of confirms) {
-      const key = confirmKey(confirm);
-      const existing = byKey.get(key);
-      if (confirm.status === "pending") {
-        activeConfirmKeys.add(key);
-        const item = existing ?? {
-          key,
-          kind: "org-confirm",
-          source_session_id: confirmSourceSession(confirm),
-          created_at: confirm.created_at,
-          group: "action",
-          actionable: true,
-          revision: confirmRevision(confirm)
-        };
-        if (!existing) {
-          this.ledger.notifications.push(item);
-          byKey.set(key, item);
-          changed = true;
-        }
-        if (!item.source_session_id) {
-          const source = confirmSourceSession(confirm);
-          if (source) item.source_session_id = source;
-        }
-        const target = this.targetSession(item.source_session_id, sessions);
-        if (!item.first_sent_at && target && this.options.notify(target, confirmText(confirm, target))) {
-          item.source_session_id = target;
-          item.first_sent_at = now;
-          changed = true;
-        } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && target && this.options.notify(target, confirmText(confirm, target))) {
-          item.reminded_at = now;
-          changed = true;
-        }
-      } else if (existing && !existing.resolved_at) {
-        existing.resolved_at = confirm.decided_at ?? now;
-        changed = true;
-      }
-    }
-    for (const session of sessions) {
-      if (!allowWaiting(session)) continue;
-      const key = waitingKey(session);
-      activeWaitingKeys.add(key);
-      const existing = byKey.get(key);
-      const item = existing ?? {
-        key,
-        kind: "waiting",
-        source_session_id: session.session_id,
-        created_at: session.waiting_started_at ?? session.updated_at,
-        group: "action",
-        actionable: true,
-        revision: session.waiting_request.request_id
-      };
-      if (!existing) {
-        this.ledger.notifications.push(item);
-        byKey.set(key, item);
-        changed = true;
-      }
-      const startedAt = session.waiting_started_at ?? session.updated_at;
-      if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
-        item.first_sent_at = now;
-        changed = true;
-      } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && this.options.notify(session.session_id, waitingText(session))) {
-        item.reminded_at = now;
-        changed = true;
-      }
-    }
-    for (const item of this.ledger.notifications) {
-      if (item.resolved_at) continue;
-      if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
-        item.resolved_at = now;
-        changed = true;
-      }
-      if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
-        item.resolved_at = now;
-        changed = true;
-      }
-    }
-    if (changed) writeDecisionNotificationLedger(this.path, this.ledger);
-  }
-  targetSession(preferred, sessions) {
-    if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
-    const leader2 = this.options.leaderSessionId();
-    if (leader2 && sessions.some((session) => session.session_id === leader2)) return leader2;
-    return sessions[0]?.session_id ?? null;
-  }
-};
-
-// src/agent-codex.ts
-import { spawn as spawn3 } from "node:child_process";
-import { randomUUID as randomUUID6 } from "node:crypto";
-import { existsSync as existsSync17, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync13 } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter as delimiter3, dirname as dirname8, join as join24 } from "node:path";
-var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
-var CODEX_ACTIVITY_CAPABILITIES = {
-  native_status: true,
-  operation_summary: true,
-  native_elapsed: false,
-  approval: false
-};
-var CodexEventMapper = class {
-  /** 当前回合起始时刻（turn.started 记，回合收口事件算时长用；测试可注入 now 定值） */
-  turnStartMs = 0;
-  /** 上个回合是否已收口（turn.completed/turn.failed）。会话侧判「进程退出但回合
-   *  未收口」用——true 时退出码不再补发 onTurnEnd（防双发） */
-  turnTerminal = true;
-  /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
-  lastThreadId;
-  handle(raw, cb2, now = Date.now()) {
-    if (!raw || typeof raw !== "object") return;
-    const ev2 = raw;
-    switch (ev2.type) {
-      case "thread.started": {
-        const tid = typeof ev2.thread_id === "string" ? ev2.thread_id : "";
-        this.lastThreadId = tid || this.lastThreadId;
-        cb2.onInit(tid, "codex");
-        break;
-      }
-      case "turn.started":
-        this.turnStartMs = now;
-        this.turnTerminal = false;
-        cb2.onStatusChange("WORKING", "\u6267\u884C\u4E2D");
-        break;
-      case "item.started": {
-        const it2 = ev2.item;
-        if (it2?.type === "command_execution") {
-          cb2.onLog("tool_use", truncate(it2.command ?? "(\u547D\u4EE4)", 200) || "(\u547D\u4EE4)", {
-            tool: "command",
-            id: it2.id,
-            full: capDetail(it2.command ?? "")
-          });
-        }
-        break;
-      }
-      case "item.completed": {
-        const it2 = ev2.item;
-        if (!it2) break;
-        if (it2.type === "agent_message") {
-          cb2.onLog("assistant_text", it2.text ?? "", { id: it2.id });
-        } else if (it2.type === "command_execution") {
-          const exit = it2.exit_code ?? null;
-          const ok2 = it2.status === "failed" || exit !== null && exit !== 0 ? false : true;
-          const head = (it2.aggregated_output ?? "").trim().split("\n")[0] ?? "";
-          cb2.onLog("tool_result", ok2 ? head || `\u9000\u51FA\u7801 ${exit ?? "?"}` : `\u5931\u8D25\uFF08\u9000\u51FA\u7801 ${exit ?? "?"}\uFF09`, {
-            tool: "command",
-            id: it2.id,
-            full: capDetail(it2.aggregated_output ?? "")
-          });
-        }
-        break;
-      }
-      case "turn.completed": {
-        const u = ev2.usage ?? {};
-        cb2.onUsage({
-          input_tokens: num(u.input_tokens),
-          output_tokens: num(u.output_tokens),
-          cache_read_input_tokens: num(u.cached_input_tokens),
-          cache_creation_input_tokens: num(u.cache_write_input_tokens)
-        });
-        cb2.onTurnEnd(true, "success", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
-        this.turnTerminal = true;
-        break;
-      }
-      case "turn.failed": {
-        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
-        cb2.onTurnEnd(false, truncate(msg ?? "\u56DE\u5408\u5931\u8D25", 200) || "\u56DE\u5408\u5931\u8D25", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
-        this.turnTerminal = true;
-        break;
-      }
-      case "error": {
-        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
-        cb2.onLog("system", `codex \u9519\u8BEF\uFF1A${truncate(msg ?? "(\u65E0\u4FE1\u606F)", 200)}`);
-        break;
-      }
-      default:
-        break;
-    }
-  }
-};
-var cachedBin;
-function resolveCodexCliPath() {
-  if (cachedBin !== void 0) return cachedBin;
-  const fromEnv = process.env.CCR_CODEX_PATH;
-  if (fromEnv === "__none__") {
-    cachedBin = null;
-    return null;
-  }
-  if (fromEnv && existsSync17(fromEnv)) {
-    cachedBin = fromEnv;
-    return cachedBin;
-  }
-  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex.bat", "codex"] : ["codex"];
-  const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
-  for (const d2 of dirs) {
-    for (const n of names) {
-      const p = join24(d2, n);
-      if (existsSync17(p)) {
-        cachedBin = p;
-        return p;
-      }
-    }
-  }
-  cachedBin = null;
-  return null;
-}
-function materializeImages(images) {
-  if (!images || images.length === 0) return [];
-  const dir = mkdtempSync(join24(tmpdir(), "ccr-codex-img-"));
-  const out = [];
-  images.forEach((b64, i) => {
-    if (typeof b64 !== "string" || b64.length === 0) return;
-    try {
-      const p = join24(dir, `${i}.img`);
-      writeFileSync13(p, Buffer.from(b64, "base64"));
-      out.push(p);
-    } catch {
-    }
-  });
-  return out;
-}
-var CodexAgentSession = class {
-  id = randomUUID6();
-  startedAt = Date.now();
-  stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
-  ended = false;
-  cb;
-  cwd;
-  bin;
-  threadId;
-  mapper = new CodexEventMapper();
-  proc = null;
-  pid;
-  // 排队消息带图绑定（#63）：文本与该条的临时图路径一起入队，merge 时图拼接；
-  // 队列元素里的图路径在落盘时已持久，消费回合结束才清理
-  queued = [];
-  // 本回合消费的图所在目录（回合收口清理；排队中未消费的不在此列）
-  turnImageDirs = /* @__PURE__ */ new Set();
-  stopping = false;
-  stderrTail = "";
-  get childPid() {
-    return this.pid;
-  }
-  constructor(cwd, _model, cb2, initialPrompt, opts) {
-    this.cwd = cwd;
-    this.cb = cb2;
-    this.threadId = opts?.resume;
-    const bin = resolveCodexCliPath();
-    if (!bin) {
-      throw new Error("codex CLI \u672A\u627E\u5230\uFF08\u5B89\u88C5 codex \u6216\u8BBE CCR_CODEX_PATH\uFF09");
-    }
-    this.bin = bin;
-    if (initialPrompt !== void 0) this.execTurn(initialPrompt, materializeImages(opts?.images));
-  }
-  sendMessage(text, images, echo) {
-    if (this.ended) {
-      console.warn("[codex] \u4F1A\u8BDD\u5DF2\u7ED3\u675F\uFF0C\u6D88\u606F\u4E22\u5F03");
-      return;
-    }
-    const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
-    if (echo !== void 0) {
-      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
-    } else {
-      const full = fullText(text, 200);
-      this.cb.onLog("user_message", truncate(text, 200) + marker, {
-        full: full === void 0 ? void 0 : full + marker
-      });
-    }
-    if (images && images.length > 0) {
-      const paths = materializeImages(images);
-      if (this.proc) {
-        if (this.queued.length >= 50) {
-          this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
-          return;
-        }
-        this.queued.push({ text, images: paths.length > 0 ? paths : void 0 });
-        return;
-      }
-      this.execTurn(text, paths);
-      return;
-    }
-    if (this.proc) {
-      if (this.queued.length >= 50) {
-        this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
-        return;
-      }
-      this.queued.push({ text });
-      return;
-    }
-    this.execTurn(text);
-  }
-  // headless 无审批通道（WAITING 形态 P0 不做）——三口恒 false，端上不出现审批卡
-  allow(_requestId, _by, _rememberScope) {
-    return false;
-  }
-  deny(_requestId, _reason, _by) {
-    return false;
-  }
-  answer(_requestId, _answers, _by) {
-    return false;
-  }
-  hasPending() {
-    return false;
-  }
-  async setPermissionMode(_mode) {
-  }
-  async stop() {
-    if (this.ended) return;
-    this.stopping = true;
-    this.ended = true;
-    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname8(p))));
-    this.queued = [];
-    this.cleanupTurnImages(queuedDirs);
-    const child = this.proc;
-    this.proc = null;
-    this.pid = void 0;
-    this.cb.onSessionEnd("stopped");
-    if (child?.pid) void killTree(child.pid).catch(() => {
-    });
-  }
-  // -- 内部 -------------------------------------------------------------
-  execTurn(prompt, images = []) {
-    const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
-    if (this.threadId) args.push("resume", this.threadId);
-    for (const p of images) args.push("--image", p);
-    args.push("-");
-    this.turnImageDirs = new Set(images.map((p) => dirname8(p)));
-    this.mapper.turnTerminal = false;
-    this.mapper.turnStartMs = Date.now();
-    let child;
-    try {
-      child = spawn3(this.bin, args, {
-        stdio: ["pipe", "pipe", "pipe"],
-        cwd: this.cwd,
-        env: childEnv()
-      });
-    } catch (e) {
-      this.failTurn(`codex \u542F\u52A8\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`);
-      return;
-    }
-    this.proc = child;
-    this.pid = child.pid;
-    this.stderrTail = "";
-    this.cb.onStatusChange("WORKING", "\u542F\u52A8\u4E2D");
-    let pending = Buffer.alloc(0);
-    child.stdout.on("data", (d2) => {
-      pending = Buffer.concat([pending, d2]);
-      let i;
-      while ((i = pending.indexOf(10)) >= 0) {
-        const line = pending.subarray(0, i).toString("utf-8").trim();
-        pending = pending.subarray(i + 1);
-        if (line) this.onLine(line);
-      }
-    });
-    child.stderr.on("data", (d2) => {
-      this.stderrTail = (this.stderrTail + d2.toString("utf-8")).slice(-500);
-    });
-    child.on("error", (e) => {
-      this.cb.onLog("system", `codex \u8FDB\u7A0B\u9519\u8BEF\uFF1A${truncate(e.message, 200)}`);
-    });
-    child.on("close", (code) => this.onClose(code));
-    child.stdin.on("error", () => {
-    });
-    child.stdin.end(prompt, "utf-8");
-  }
-  onLine(line) {
-    let parsed;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      this.cb.onLog("system", `codex \u8F93\u51FA\u975E JSON\uFF1A${truncate(line, 120)}`);
-      return;
-    }
-    const ev2 = parsed;
-    if (ev2?.type === "thread.started" && typeof ev2.thread_id === "string" && ev2.thread_id) {
-      this.threadId = ev2.thread_id;
-    }
-    this.mapper.handle(parsed, this.cb);
-  }
-  onClose(code) {
-    this.proc = null;
-    this.pid = void 0;
-    this.cleanupTurnImages();
-    if (this.stopping) return;
-    if (!this.mapper.turnTerminal) {
-      this.mapper.turnTerminal = true;
-      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
-      const why = code === null ? "\u8FDB\u7A0B\u88AB\u4FE1\u53F7\u7EC8\u6B62" : `\u9000\u51FA\u7801 ${code}`;
-      this.cb.onTurnEnd(false, `codex ${why}${this.stderrTail ? `\uFF1A${truncate(this.stderrTail.trim().split("\n").at(-1) ?? "", 160)}` : ""}`, dur);
-      if (!this.threadId) {
-        this.ended = true;
-        this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
-        return;
-      }
-    }
-    if (this.queued.length > 0 && !this.ended) {
-      const merged = this.queued.map((q2) => q2.text).join("\n\n");
-      const imgs = this.queued.flatMap((q2) => q2.images ?? []);
-      this.queued = [];
-      this.execTurn(merged, imgs);
-    }
-  }
-  /** 回合收口清理本回合消费的临时图目录；extraDirs=会话终止时排队未消费的 */
-  cleanupTurnImages(extraDirs) {
-    const dirs = this.turnImageDirs;
-    this.turnImageDirs = /* @__PURE__ */ new Set();
-    for (const d2 of extraDirs ?? []) dirs.add(d2);
-    for (const d2 of dirs) {
-      try {
-        rmSync3(d2, { recursive: true, force: true });
-      } catch {
-      }
-    }
-  }
-  /** spawn 同步失败收口（onClose 崩溃分支的同款语义，无进程版） */
-  failTurn(why) {
-    this.proc = null;
-    this.pid = void 0;
-    if (this.stopping || this.ended) return;
-    this.cleanupTurnImages();
-    if (!this.mapper.turnTerminal) {
-      this.mapper.turnTerminal = true;
-      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
-      this.cb.onTurnEnd(false, truncate(why, 300), dur);
-    }
-    if (!this.threadId) {
-      this.ended = true;
-      this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
-    }
-  }
-};
-
 // src/agent-jsonl.ts
-import { spawn as spawn4 } from "node:child_process";
-import { accessSync as accessSync2, constants as constants4 } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { randomUUID as randomUUID7 } from "node:crypto";
 var ENGINE_JSONL_PROFILES = {
   trae: {
     structured: false,
@@ -47629,7 +46626,7 @@ function preflightEngine(config) {
   return { ok: errors.length === 0, command: config.command, errors, warnings };
 }
 var JsonProcessAgentSession = class {
-  id = randomUUID7();
+  id = randomUUID6();
   startedAt = Date.now();
   stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   ended = false;
@@ -47717,7 +46714,7 @@ ${text}`;
     };
     let child;
     try {
-      child = spawn4(command, args, { cwd: this.opts.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+      child = spawn3(command, args, { cwd: this.opts.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     } catch (error) {
       this.fail(`\u542F\u52A8\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
       return;
@@ -47832,8 +46829,8 @@ ${text}`;
   }
 };
 
-// src/agent-trae.ts
-var TRAE_CAPABILITIES = {
+// src/agent-codebuddy.ts
+var CODEBUDDY_CAPABILITIES = {
   resume: false,
   reinjection: true,
   approval: false,
@@ -47843,25 +46840,25 @@ var TRAE_CAPABILITIES = {
   artifacts: false,
   streaming: false
 };
-var TRAE_ACTIVITY_CAPABILITIES = {
+var CODEBUDDY_ACTIVITY_CAPABILITIES = {
   native_status: false,
   operation_summary: true,
   native_elapsed: false,
   approval: false
 };
-var TraeAgentSession = class extends JsonProcessAgentSession {
+var CodeBuddyAgentSession = class extends JsonProcessAgentSession {
   constructor(opts) {
-    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
+    super({ ...opts, label: "codebuddy", command: opts.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", profileId: "codebuddy" });
   }
   buildArgs(prompt) {
-    return ["run", prompt];
+    return ["--print", prompt, "--output-format", "stream-json"];
   }
 };
-function preflightTrae(config) {
-  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
+function preflightCodeBuddy(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", provider: config?.provider });
 }
-function createTraeAgent(opts) {
-  return new TraeAgentSession(opts);
+function createCodeBuddyAgent(opts) {
+  return new CodeBuddyAgentSession(opts);
 }
 
 // src/agent-qwen.ts
@@ -47896,8 +46893,8 @@ function createQwenCodeAgent(opts) {
   return new QwenCodeAgentSession(opts);
 }
 
-// src/agent-codebuddy.ts
-var CODEBUDDY_CAPABILITIES = {
+// src/agent-trae.ts
+var TRAE_CAPABILITIES = {
   resume: false,
   reinjection: true,
   approval: false,
@@ -47907,34 +46904,26 @@ var CODEBUDDY_CAPABILITIES = {
   artifacts: false,
   streaming: false
 };
-var CODEBUDDY_ACTIVITY_CAPABILITIES = {
+var TRAE_ACTIVITY_CAPABILITIES = {
   native_status: false,
   operation_summary: true,
   native_elapsed: false,
   approval: false
 };
-var CodeBuddyAgentSession = class extends JsonProcessAgentSession {
+var TraeAgentSession = class extends JsonProcessAgentSession {
   constructor(opts) {
-    super({ ...opts, label: "codebuddy", command: opts.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", profileId: "codebuddy" });
+    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
   }
   buildArgs(prompt) {
-    return ["--print", prompt, "--output-format", "stream-json"];
+    return ["run", prompt];
   }
 };
-function preflightCodeBuddy(config) {
-  return preflightEngine({ command: config?.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", provider: config?.provider });
+function preflightTrae(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
 }
-function createCodeBuddyAgent(opts) {
-  return new CodeBuddyAgentSession(opts);
+function createTraeAgent(opts) {
+  return new TraeAgentSession(opts);
 }
-
-// src/agent-zcode.ts
-var ZCODE_ACTIVITY_CAPABILITIES = {
-  native_status: false,
-  operation_summary: false,
-  native_elapsed: false,
-  approval: false
-};
 
 // src/engine-registry.ts
 function profileFor(engine, provider) {
@@ -47990,6 +46979,1425 @@ function providerProfileFor(engine, provider) {
   return profileFor(engine, provider);
 }
 
+// src/engine-catalog.ts
+var SIX_ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
+function engineCatalogSummary(claudeModelFallback = "") {
+  const rolesByEngine = /* @__PURE__ */ new Map();
+  try {
+    for (const g2 of listGroups()) {
+      for (const [role, dflt] of Object.entries(g2.role_defaults ?? {})) {
+        const e = dflt?.engine;
+        if (!e) continue;
+        const list = rolesByEngine.get(e) ?? [];
+        if (!list.includes(role)) list.push(role);
+        rolesByEngine.set(e, list);
+      }
+    }
+  } catch {
+  }
+  const rolesFor = (e) => rolesByEngine.get(e) ?? [];
+  return SIX_ENGINES.map((id2) => {
+    const roles = rolesFor(id2);
+    if (id2 === "claude") {
+      return {
+        id: id2,
+        label: "Claude",
+        state: "ready",
+        capabilities: { resume: true, approval: true, artifacts: true },
+        preflight: { state: "pass", reason: "" },
+        models: listModels(claudeModelFallback),
+        default_for_roles: roles
+      };
+    }
+    if (id2 === "codex") {
+      const pf2 = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
+      return {
+        id: id2,
+        label: "Codex",
+        state: pf2.ok ? "ready" : "unavailable",
+        capabilities: { resume: true, approval: false, artifacts: false },
+        preflight: pf2.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf2.errors.join("\uFF1B") },
+        models: [],
+        // codex 无源级模型清单——端上显示「使用引擎默认」，不冒充
+        default_for_roles: roles
+      };
+    }
+    if (id2 === "zcode") {
+      return {
+        id: id2,
+        label: "ZCode",
+        state: "unsupported",
+        capabilities: { resume: false, approval: false, artifacts: false },
+        preflight: { state: "unknown", reason: "\u679A\u4E3E\u5360\u4F4D\u672A\u63A5\u5165\u7F16\u6392\uFF08\u4E0D\u53EF\u9009\uFF09" },
+        models: [],
+        default_for_roles: roles
+      };
+    }
+    const def = getEngineDefinition(id2);
+    if (!def) {
+      return { id: id2, label: id2, state: "unknown", capabilities: { resume: false, approval: false, artifacts: false }, preflight: { state: "unknown", reason: "\u6CE8\u518C\u8868\u7F3A\u5B9A\u4E49" }, models: [], default_for_roles: roles };
+    }
+    const pf = def.preflight();
+    return {
+      id: id2,
+      label: def.label,
+      state: pf.ok ? "ready" : "unavailable",
+      capabilities: {
+        resume: def.capabilities?.resume ?? false,
+        approval: def.capabilities?.approval ?? false,
+        artifacts: def.capabilities?.artifacts ?? false
+      },
+      preflight: pf.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf.errors.join("\uFF1B") },
+      models: [],
+      default_for_roles: roles
+    };
+  });
+}
+function catalogReadyEngines() {
+  return new Set(engineCatalogSummary().filter((e) => e.state === "ready").map((e) => e.id));
+}
+
+// src/permission-audit.ts
+import { isAbsolute as isAbsolute6, join as join22, resolve as resolve7 } from "node:path";
+import { homedir as homedir8 } from "node:os";
+function resolveDirScope(cwd) {
+  if (!cwd || typeof cwd !== "string") return "unknown";
+  let abs;
+  try {
+    if (!isAbsolute6(cwd)) return "unknown";
+    abs = resolve7(cwd);
+  } catch {
+    return "unknown";
+  }
+  const home = homedir8();
+  const orgRoot = resolve7(home, ".cc-deck");
+  if (abs === orgRoot || abs.startsWith(orgRoot + "/")) return "production";
+  if (abs === home) return "production";
+  return "sandbox";
+}
+function resolveEnvScope(port) {
+  const explicit = process.env.CCR_ENV;
+  if (explicit === "production" || explicit === "sandbox") return explicit;
+  if (explicit === "unknown") return "unknown";
+  if (port === void 0 || port === null || !Number.isFinite(port) || port <= 0) return "unknown";
+  return port === 8787 ? "production" : "sandbox";
+}
+function auditStore(dataDir2) {
+  return ensureStore({ dataDir: dataDir2, orgDir: orgDir(), tasksDir: join22(dataDir2, "tasks") });
+}
+function appendPermissionAudit(port, row) {
+  try {
+    port.exec(
+      `INSERT INTO permission_audit (requested_mode, normalized_mode, effective_mode, native_mode, capability_state, engine, reason, policy_source, environment, dir_scope, tier, actor, session_id, command_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [row.requested_mode, row.normalized_mode, row.effective_mode, row.native_mode, row.capability_state, row.engine, row.reason, row.policy_source, row.environment, row.dir_scope, row.tier, row.actor, row.session_id, row.command_id, row.created_at]
+    );
+  } catch (e) {
+    console.warn(`[permission-audit] \u5BA1\u8BA1\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// src/leader-duty.ts
+function receiptCandidates(snapshot, now) {
+  return (snapshot.pending_receipts ?? []).filter((receipt) => receipt.reviewed !== true).map((receipt) => ({
+    kind: "receipt",
+    id: receipt.sid,
+    source_session_id: receipt.sid,
+    age_ms: Math.max(0, now - receipt.mtime)
+  }));
+}
+function dispatchCandidates(snapshot) {
+  return (snapshot.failed_or_hanging_dispatches ?? []).filter((dispatch) => dispatch.status !== "running" || (dispatch.hanging_ms ?? 0) > 0).filter((dispatch) => dispatch.status === "failed" || dispatch.status === "hanging" || dispatch.status === "dispatched" || (dispatch.hanging_ms ?? 0) > 0).map((dispatch) => ({
+    kind: "dispatch",
+    id: dispatch.dispatch_id,
+    source_session_id: dispatch.source_session_id,
+    age_ms: dispatch.hanging_ms,
+    playbook: dispatch.playbook,
+    risk: dispatch.risk,
+    token_estimate: dispatch.token_estimate,
+    time_estimate_ms: dispatch.time_estimate_ms
+  }));
+}
+function todoCandidates(snapshot) {
+  return (snapshot.unlocked_todos ?? []).map((todo) => ({
+    kind: "todo",
+    id: todo.todo_id,
+    source_session_id: todo.source_session_id,
+    playbook: todo.playbook,
+    risk: todo.risk,
+    token_estimate: todo.token_estimate,
+    time_estimate_ms: todo.time_estimate_ms
+  }));
+}
+function staleDoingCandidates(snapshot) {
+  return (snapshot.stale_doing ?? []).map((doing) => ({
+    kind: "stale_doing",
+    id: doing.dispatch_id ?? doing.session_id,
+    source_session_id: doing.session_id,
+    age_ms: doing.doing_ms,
+    playbook: doing.playbook,
+    risk: doing.risk,
+    token_estimate: doing.token_estimate,
+    time_estimate_ms: doing.time_estimate_ms
+  }));
+}
+function hasRecentRunningProgress(session, now, windowMs) {
+  if (session.recent_progress !== void 0) return session.recent_progress;
+  const progressAt = session.last_progress_at ?? session.updated_at;
+  return progressAt !== void 0 && now - progressAt <= windowMs;
+}
+function evaluateLeaderActionableWork(snapshot) {
+  const now = snapshot.now ?? Date.now();
+  const candidates = [
+    ...receiptCandidates(snapshot, now),
+    ...dispatchCandidates(snapshot),
+    ...todoCandidates(snapshot),
+    ...staleDoingCandidates(snapshot)
+  ];
+  const blocked = [...snapshot.blocked ?? []];
+  if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
+  if (blocked.length > 0) return { actionable: false, candidates, reason: "blocked", blocked };
+  const running = (snapshot.running_sessions ?? []).filter((session) => session.status === "running" || session.status === "WORKING");
+  const progressWindow = snapshot.progress_window_ms ?? 60 * 60 * 1e3;
+  if (running.length > 0 && running.every((session) => hasRecentRunningProgress(session, now, progressWindow))) {
+    return { actionable: false, candidates, reason: "all_running", blocked };
+  }
+  return { actionable: false, candidates, reason: "empty", blocked };
+}
+function transitionDutyFeedCount(state = { consecutive_feeds: 0 }, signal, k3 = 3) {
+  if (signal === "idle" || signal === "natural_sleep") {
+    return { state: { consecutive_feeds: 0 }, shouldSleep: false };
+  }
+  const consecutive = Math.max(0, state.consecutive_feeds) + 1;
+  if (consecutive >= k3) {
+    return {
+      state: { consecutive_feeds: consecutive },
+      shouldSleep: true,
+      continuation: {
+        delay_min_ms: 5 * 60 * 1e3,
+        delay_max_ms: 15 * 60 * 1e3,
+        wake_once: true,
+        auto_renew: false
+      }
+    };
+  }
+  return { state: { consecutive_feeds: consecutive }, shouldSleep: false };
+}
+
+// src/acceptance.ts
+import { readFileSync as readFileSync16, writeFileSync as writeFileSync9, mkdirSync as mkdirSync11, existsSync as existsSync17, readdirSync as readdirSync7 } from "node:fs";
+import { join as join23 } from "node:path";
+var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
+function acceptanceDir() {
+  return process.env.CCR_ACCEPTANCE_DIR || join23(resolveDataDir(), "acceptances");
+}
+function loadAcceptance(id2) {
+  if (!ACCEPTANCE_ID_RE.test(id2)) return null;
+  const file = join23(acceptanceDir(), `${id2}.json`);
+  if (!existsSync17(file)) return null;
+  try {
+    const a = JSON.parse(readFileSync16(file, "utf-8"));
+    if (!a || !Array.isArray(a.rows) || a.rows.length === 0) return null;
+    return a;
+  } catch {
+    return null;
+  }
+}
+var hits = /* @__PURE__ */ new Map();
+function rateLimited(id2, limit = 10, windowMs = 6e4) {
+  const now = Date.now();
+  const arr = (hits.get(id2) ?? []).filter((t) => now - t < windowMs);
+  if (arr.length >= limit) {
+    hits.set(id2, arr);
+    return true;
+  }
+  arr.push(now);
+  hits.set(id2, arr);
+  if (hits.size > 500) {
+    for (const [k3, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k3);
+  }
+  return false;
+}
+function saveResult(id2, payload, ua, ck2) {
+  if (typeof payload !== "object" || payload === null) return "bad body";
+  const rows = payload.rows;
+  if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return "rows \u975E\u6CD5";
+  const clean = [];
+  for (const r of rows) {
+    if (typeof r !== "object" || r === null) return "row \u975E\u6CD5";
+    const { i, verdict, note } = r;
+    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i > 1e6) return "\u884C\u53F7\u975E\u6CD5";
+    if (verdict !== "pass" && verdict !== "fail" && verdict !== null) return "\u5224\u5B9A\u503C\u975E\u6CD5";
+    if (note !== void 0 && typeof note !== "string") return "\u5907\u6CE8\u975E\u6CD5";
+    if (typeof note === "string" && note.length > 600) return "\u5907\u6CE8\u8FC7\u957F";
+    clean.push({ i, verdict, note: typeof note === "string" ? note : "" });
+  }
+  const dir = acceptanceDir();
+  mkdirSync11(dir, { recursive: true });
+  const file = join23(dir, `${id2}.results.json`);
+  let history = [];
+  try {
+    history = JSON.parse(readFileSync16(file, "utf-8")).history ?? [];
+  } catch {
+  }
+  if (!Array.isArray(history)) history = [];
+  const counts = {
+    pass: clean.filter((r) => r.verdict === "pass").length,
+    fail: clean.filter((r) => r.verdict === "fail").length,
+    skip: clean.filter((r) => r.verdict === null).length
+  };
+  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean, ...ck2 ? { ck: ck2 } : {} });
+  if (history.length > 50) history = history.slice(history.length - 50);
+  writeFileSync9(file, JSON.stringify({ id: id2, history }, null, 1));
+  return null;
+}
+function listAcceptances(limit = 20) {
+  let names;
+  try {
+    names = readdirSync7(acceptanceDir());
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const n of names) {
+    if (!n.endsWith(".json") || n.endsWith(".results.json")) continue;
+    const id2 = n.slice(0, -5);
+    if (!ACCEPTANCE_ID_RE.test(id2)) continue;
+    const a = loadAcceptance(id2);
+    if (!a) continue;
+    let judged = 0;
+    let done = false;
+    let submitted = false;
+    try {
+      const r = JSON.parse(readFileSync16(join23(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+      const last = r.history?.[r.history.length - 1];
+      if (last?.rows) {
+        submitted = true;
+        judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
+        done = judged >= a.rows.length;
+      }
+    } catch {
+    }
+    out.push({
+      id: id2,
+      title: a.title,
+      created_at: a.created_at,
+      total: a.rows.length,
+      judged,
+      submitted,
+      done,
+      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}
+    });
+  }
+  out.sort((x, y) => y.created_at - x.created_at);
+  return out.slice(0, limit);
+}
+function acceptanceClosure(id2) {
+  const a = loadAcceptance(id2);
+  if (!a) return null;
+  let submitted = false;
+  let all_pass = false;
+  let fail_count = 0;
+  try {
+    const r = JSON.parse(readFileSync16(join23(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+    const last = r.history?.[r.history.length - 1];
+    if (last?.rows && Array.isArray(last.rows)) {
+      submitted = true;
+      const pass = last.rows.filter((x) => x.verdict === "pass").length;
+      fail_count = last.rows.filter((x) => x.verdict === "fail").length;
+      all_pass = pass === a.rows.length && fail_count === 0 && last.rows.length >= a.rows.length;
+    }
+  } catch {
+  }
+  return { submitted, all_pass, fail_count, total: a.rows.length };
+}
+function acceptanceHtml(a, apiPath = "/api/acceptance") {
+  const { sheet_key: _sk, gid: _g2, entry_id: _e, ...pub } = a;
+  const data = JSON.stringify(pub).replace(/</g, "\\u003c");
+  const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
+  const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(a.title)}</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background:#0A0E14; color:#E6EDF3; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; padding:20px 14px 120px; }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size:18px; margin-bottom:10px; }
+  .pf { color:#9BA8B7; font-size:12.5px; margin:4px 0; }
+  .bar { position:sticky; top:0; z-index:5; background:rgba(10,14,20,.92); backdrop-filter:blur(6px);
+    display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #1C2430; margin-bottom:12px; }
+  .bar b { color:#4D9FFF; font-variant-numeric:tabular-nums; }
+  .card { background:#10161F; border:1px solid #1C2430; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .r1 { display:flex; align-items:center; gap:8px; }
+  .task { color:#4D9FFF; font-weight:700; font-size:12px; flex:none; }
+  .item { flex:1; font-weight:600; font-size:14px; }
+  .btns { display:flex; gap:8px; flex:none; }
+  .vb { width:34px; height:34px; border-radius:50%; border:2px solid #2A3644; background:none;
+    color:#5A6B7E; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .vb:active { transform:scale(.92); }
+  .vb.on-pass { border-color:#2BD98F; background:#2BD98F; color:#06281B; }
+  .vb.on-fail { border-color:#F0524F; background:#F0524F; color:#2B0A09; }
+  .crit { color:#7E8B9B; font-size:12px; margin-top:6px; }
+  .note { width:100%; margin-top:8px; background:#0A0E14; border:1px solid #1C2430; border-radius:8px;
+    color:#E6EDF3; font:inherit; font-size:12.5px; padding:7px 10px; display:none; }
+  .note.show { display:block; }
+  .foot { position:fixed; left:0; right:0; bottom:0; padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+    background:rgba(10,14,20,.95); border-top:1px solid #1C2430; }
+  .foot .wrap { display:flex; align-items:center; gap:12px; }
+  #submit { flex:1; height:46px; border-radius:12px; border:1px solid #2E5FA3; background:#14314F;
+    color:#4D9FFF; font-size:15px; font-weight:700; cursor:pointer; }
+  #submit:disabled { opacity:.45; }
+  #msg { font-size:12px; color:#9BA8B7; }
+  .done { text-align:center; padding:40px 0; }
+  .done .n { font-size:34px; font-weight:800; }
+  ul.nt { color:#7E8B9B; font-size:12px; margin:12px 0 0 18px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="foot"><div class="wrap"><button id="submit">\u63D0\u4EA4</button><span id="msg"></span></div></div>
+<script>
+var DATA = ${data};
+var state = {};  // \u884C\u53F7 -> "pass"|"fail"|undefined\uFF08undefined=\u672A\u6D4B\uFF09
+var app = document.getElementById("app");
+var h = '<h1>' + esc(DATA.title) + '</h1>' + ${JSON.stringify(preface)} +
+  '<div class="bar">\u5DF2\u5224 <b id="cnt">0</b> / ' + DATA.rows.length + '\u3000<span style="color:#5A6B7E;font-size:12px">\u2713 \u901A\u8FC7\u3000\u2717 \u4E0D\u901A\u8FC7\u3000\u4E0D\u70B9=\u672A\u6D4B</span></div>';
+for (var i = 0; i < DATA.rows.length; i++) {
+  var r = DATA.rows[i];
+  h += '<div class="card" id="c' + i + '"><div class="r1">' +
+    '<span class="task">' + esc(r.task) + '</span><span class="item">' + esc(r.item) + '</span>' +
+    '<span class="btns"><button class="vb" data-i="' + i + '" data-v="pass">\u2713</button>' +
+    '<button class="vb" data-i="' + i + '" data-v="fail">\u2717</button></span></div>' +
+    '<div class="crit">' + esc(r.criteria) + '</div>' +
+    '<input class="note" id="n' + i + '" placeholder="\u95EE\u9898/\u73B0\u8C61\uFF08\u9009\u586B\uFF09"></div>';
+}
+if (DATA.notes && DATA.notes.length) h += '<ul class="nt">' + ${JSON.stringify(notes)} + '</ul>';
+app.innerHTML = h;
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function paint() {
+  var n = 0;
+  document.querySelectorAll(".vb").forEach(function (b) {
+    var on = state[b.dataset.i] === b.dataset.v;
+    b.className = "vb" + (on ? " on-" + b.dataset.v : "");
+    if (on) n++;
+  });
+  document.getElementById("cnt").textContent = n;
+  document.getElementById("submit").textContent = "\u63D0\u4EA4\u9A8C\u6536\uFF08" + n + "/" + DATA.rows.length + "\uFF09";
+  for (var i = 0; i < DATA.rows.length; i++) {
+    var show = state[i] === "fail" || (document.getElementById("n" + i).value || "") !== "";
+    document.getElementById("n" + i).className = "note" + (show ? " show" : "");
+  }
+}
+document.addEventListener("click", function (e) {
+  var b = e.target.closest(".vb");
+  if (!b) return;
+  var i = b.dataset.i;
+  state[i] = state[i] === b.dataset.v ? undefined : b.dataset.v;  // \u518D\u70B9\u4E00\u6B21\u53D6\u6D88
+  if (state[i] === "fail") document.getElementById("n" + i).focus();
+  paint();
+});
+document.addEventListener("input", paint);
+paint();
+document.getElementById("submit").onclick = function () {
+  var rows = [];
+  for (var i = 0; i < DATA.rows.length; i++) {
+    rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
+  }
+  document.getElementById("msg").textContent = "\u63D0\u4EA4\u4E2D\u2026";
+  // #28 \u4E91\u901A\u9053\u9632\u4F2A\u9020\uFF1A\u51FA\u5355\u94FE\u63A5\u4EE5 fragment\uFF08#<key>\uFF09\u643A\u5E26\u6BCF\u5355\u5BC6\u94A5\uFF08\u4E0D\u8FDB\u670D\u52A1\u5668\u65E5\u5FD7/
+  // Referer/\u7F13\u5B58\u952E\uFF09\uFF0C\u63D0\u4EA4\u968F body \u5E26\u56DE\u7531 Worker \u5BF9\u7167\u3002LAN \u7AEF\u70B9\u4E0D\u6821\u9A8C\uFF08\u5BB6\u5EAD\u7F51\u5A01\u80C1
+  // \u6A21\u578B=\u5BB6\u4EBA\uFF0C\u7EF4\u6301\u80FD\u529B\u94FE\u63A5\u53E3\u5F84\uFF09\uFF1B\u4E91\u7248\u9875\u9762\u7F3A fragment \u65F6\u63D0\u4EA4\u4F1A\u88AB 403 \u5E76\u663E\u793A\u539F\u56E0
+  var sheetKey = location.hash.replace(/^#/, "").trim() || undefined;
+  fetch(${JSON.stringify(apiPath)}, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: DATA.id, rows: rows, key: sheetKey }),
+  }).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j.ok) { document.getElementById("msg").textContent = "\u63D0\u4EA4\u5931\u8D25\uFF1A" + (j.error || "\u7A0D\u540E\u518D\u8BD5"); return; }
+    var p = 0, f = 0, s = 0;
+    rows.forEach(function (r) { if (r.verdict === "pass") p++; else if (r.verdict === "fail") f++; else s++; });
+    app.innerHTML = '<div class="done"><div class="n" style="color:#2BD98F">\u2713 ' + p + ' \u901A\u8FC7</div>' +
+      '<div class="n" style="color:#F0524F">' + f + ' \u4E0D\u901A\u8FC7</div>' +
+      '<div class="n" style="color:#5A6B7E">' + s + ' \u672A\u6D4B</div>' +
+      '<p style="color:#9BA8B7;margin-top:16px">\u5DF2\u63D0\u4EA4\uFF08' + new Date().toLocaleTimeString() + '\uFF09\u3002\u9875\u9762\u53EF\u4EE5\u5173\u4E86\u3002</p></div>';
+    document.querySelector(".foot").style.display = "none";
+  }).catch(function () {
+    document.getElementById("msg").textContent = "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u7A0D\u540E\u518D\u8BD5";
+  });
+};
+</script>
+</body>
+</html>`;
+}
+function esc(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}
+function serveAcceptancePage(id2, res, apiPath) {
+  const a = loadAcceptance(id2);
+  if (!a) return false;
+  const html = acceptanceHtml(a, apiPath);
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+  res.end(html);
+  return true;
+}
+function applyCloudSubmits(id2, submits) {
+  if (!ACCEPTANCE_ID_RE.test(id2)) return [];
+  const seenK = /* @__PURE__ */ new Set();
+  const seen = /* @__PURE__ */ new Set();
+  try {
+    const h = JSON.parse(readFileSync16(join23(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
+    if (Array.isArray(h)) {
+      for (const e of h) {
+        if (typeof e.ck === "string") seenK.add(e.ck);
+        try {
+          seen.add(JSON.stringify(e.rows ?? null));
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  const added = [];
+  if (!Array.isArray(submits)) return added;
+  for (const s of submits) {
+    if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
+    const sig = JSON.stringify(s.rows);
+    if (typeof s.k === "string" ? seenK.has(s.k) : seen.has(sig)) continue;
+    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
+    if (saveResult(id2, { rows: s.rows }, ua, typeof s.k === "string" ? s.k : void 0) === null) {
+      if (typeof s.k === "string") seenK.add(s.k);
+      seen.add(sig);
+      added.push(s);
+    }
+  }
+  return added;
+}
+
+// src/plugin-config.ts
+import { readFileSync as readFileSync17 } from "node:fs";
+import { homedir as homedir9 } from "node:os";
+import { join as join24 } from "node:path";
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty"];
+function pluginConfigPath() {
+  return process.env.CCR_CONFIG_FILE ?? join24(homedir9(), ".cc-deck", "config.json");
+}
+function readPluginConfig() {
+  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true };
+  try {
+    const raw = JSON.parse(readFileSync17(pluginConfigPath(), "utf-8"));
+    for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
+  } catch {
+  }
+  return out;
+}
+
+// src/title-gen.ts
+async function generateTitle(task, model, onSid, cwd, configHome) {
+  const trimmed = task.trim().slice(0, 600);
+  if (!trimmed) return { title: null };
+  let timer;
+  let sidSeen = false;
+  const timeout = new Promise((resolve9) => {
+    timer = setTimeout(() => resolve9({ title: null }), 2e4);
+    timer.unref();
+  });
+  try {
+    const run2 = async () => {
+      const q2 = NUt({
+        prompt: "\u4E3A\u4E0B\u9762\u7684\u4EFB\u52A1\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898\uFF0C\u4E0D\u8D85\u8FC7 12 \u4E2A\u5B57\uFF0C\u76F4\u63A5\u8F93\u51FA\u6807\u9898\u672C\u8EAB\uFF0C\u4E0D\u8981\u5F15\u53F7\u548C\u4EFB\u4F55\u89E3\u91CA\uFF1A\n\n" + trimmed,
+        options: {
+          model,
+          // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
+          // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
+          cwd: cwd ?? process.cwd(),
+          // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
+          ...resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath() } : {},
+          // 防止被全局 bridge hook 注册成外部会话；#17 开关开启时 titlegen 一次性
+          // 会话落独立家（relay 内部工具会话，不区分归属——默认家不再冒 .tmp-titlegen 目录）
+          env: {
+            ...process.env,
+            CCR_RELAY_CHILD: "1",
+            ...configHome ? { CLAUDE_CONFIG_DIR: configHome } : {}
+          },
+          permissionMode: "bypassPermissions",
+          maxTurns: 1
+        }
+      });
+      for await (const msg of q2) {
+        const sid = msg.session_id;
+        if (sid && !sidSeen) {
+          sidSeen = true;
+          onSid?.(sid);
+        }
+        if (msg.type === "result" && !msg.is_error) {
+          const raw = (msg.result ?? "").trim();
+          const t = raw.replace(/^["'「『]|["'」』]$/g, "").split("\n")[0].trim();
+          if (t) return { title: [...t].slice(0, 16).join(""), sid };
+          if (sid) return { title: null, sid };
+        }
+      }
+      return { title: null };
+    };
+    return await Promise.race([run2(), timeout]);
+  } catch {
+    return { title: null };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// src/cron.ts
+import { readFileSync as readFileSync18 } from "node:fs";
+import { join as join25 } from "node:path";
+var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
+var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
+function tsNum(v) {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+  if (typeof v === "string" && v.trim()) {
+    const parsed = Date.parse(v);
+    if (Number.isFinite(parsed)) return parsed;
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return void 0;
+}
+function normalizeTask(raw, fallbackId) {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw;
+  const status = str(o.status);
+  if (status === "deleted") return null;
+  const rawId = str(o.id) ?? str(o.taskId);
+  const prompt = str(o.prompt) ?? str(o.command) ?? str(o.task) ?? str(o.instruction) ?? str(o.message) ?? "";
+  const schedule = str(o.humanSchedule) ?? str(o.schedule) ?? str(o.cron) ?? str(o.interval) ?? str(o.expression) ?? "";
+  const name = str(o.name) ?? str(o.title) ?? str(o.label);
+  if (!prompt && !schedule && !name && !rawId) return null;
+  const paused = o.paused === true || o.enabled === false || o.active === false || status === "paused" || status === "expired";
+  const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
+  if (o.recurring === false && next !== void 0 && next < Date.now() - EXPIRED_ONE_SHOT_GRACE_MS) return null;
+  return {
+    id: rawId ?? fallbackId,
+    name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "\u672A\u547D\u540D\u4EFB\u52A1"),
+    prompt,
+    schedule,
+    ...next !== void 0 ? { next_run_at: next } : {},
+    ...paused ? { paused: true } : {},
+    ...o.recurring === false ? { recurring: false } : {}
+  };
+}
+function readCronTasks(cwd) {
+  let text;
+  try {
+    text = readFileSync18(join25(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+  } catch (e) {
+    return e.code === "ENOENT" ? void 0 : "bad";
+  }
+  let root;
+  try {
+    root = JSON.parse(text);
+  } catch {
+    return "bad";
+  }
+  let entries;
+  if (Array.isArray(root)) {
+    entries = root.map((r, i) => [String(i), r]);
+  } else if (root && typeof root === "object") {
+    const wrapped = root.tasks;
+    entries = Array.isArray(wrapped) ? wrapped.map((r, i) => [String(i), r]) : Object.entries(root);
+  } else {
+    return "bad";
+  }
+  const out = [];
+  for (const [key, raw] of entries) {
+    const t = normalizeTask(raw, key);
+    if (t) out.push(t);
+  }
+  return out;
+}
+function cronTasksKey(tasks) {
+  return JSON.stringify(tasks);
+}
+
+// src/task-store.ts
+import { readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync6 } from "node:fs";
+import { homedir as homedir10 } from "node:os";
+import path from "node:path";
+function readTaskStoreTodos(cliSessionId, base) {
+  const dir = path.join(base ?? path.join(homedir10(), ".claude"), "tasks", cliSessionId);
+  let files;
+  try {
+    files = readdirSync8(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  const out = [];
+  for (const f of files) {
+    try {
+      const fp2 = path.join(dir, f);
+      const t = JSON.parse(readFileSync19(fp2, "utf-8"));
+      if (t.status === "deleted") continue;
+      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
+      if (!subject) continue;
+      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
+      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
+      const parsed = Number(t.id);
+      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync6(fp2).mtimeMs, ...activeForm });
+    } catch {
+    }
+  }
+  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  return out;
+}
+
+// src/uploads.ts
+import { mkdirSync as mkdirSync12, writeFileSync as writeFileSync10 } from "node:fs";
+import path2 from "node:path";
+function tmpUploadDir(dataDir2) {
+  return path2.join(dataDir2, "..", "tmp");
+}
+function sidKeyOf(sessionId) {
+  return sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
+}
+function sniffImageExt(head) {
+  if (head[0] === 137 && head[1] === 80) return "png";
+  if (head[0] === 255 && head[1] === 216) return "jpg";
+  if (head[0] === 71 && head[1] === 73) return "gif";
+  if (head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP") return "webp";
+  return "png";
+}
+function safeName(raw) {
+  const base = raw.split(/[\\/]/).pop() ?? "";
+  const cleaned = base.replace(new RegExp("[\\x00-\\x1f\\x7f]", "g"), "").replace(/^\.+/g, "").trim();
+  return cleaned.slice(0, 60) || "file";
+}
+function saveUploadImages(dataDir2, sessionId, images) {
+  if (images.length === 0) return [];
+  const dir = tmpUploadDir(dataDir2);
+  try {
+    mkdirSync12(dir, { recursive: true });
+  } catch {
+  }
+  const sidKey = sidKeyOf(sessionId);
+  const stamp = Date.now();
+  const saved = [];
+  for (let i = 0; i < Math.min(images.length, 4); i++) {
+    const b64 = images[i];
+    const head = Buffer.from(b64.slice(0, 24), "base64");
+    const ext = sniffImageExt(head);
+    const p = path2.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
+    try {
+      writeFileSync10(p, Buffer.from(b64, "base64"));
+      saved.push(p);
+    } catch {
+    }
+  }
+  return saved;
+}
+function saveUploadFiles(dataDir2, sessionId, files) {
+  if (files.length === 0) return [];
+  const dir = tmpUploadDir(dataDir2);
+  try {
+    mkdirSync12(dir, { recursive: true });
+  } catch {
+  }
+  const sidKey = sidKeyOf(sessionId);
+  const stamp = Date.now();
+  const saved = [];
+  for (let i = 0; i < Math.min(files.length, 2); i++) {
+    const f = files[i];
+    const p = path2.join(dir, `file-${sidKey}-${stamp}-${i + 1}-${safeName(f.name)}`);
+    try {
+      writeFileSync10(p, Buffer.from(f.b64, "base64"));
+      saved.push(p);
+    } catch {
+    }
+  }
+  return saved;
+}
+
+// src/todo-hidden.ts
+import { readFileSync as readFileSync20, writeFileSync as writeFileSync11 } from "node:fs";
+import path3 from "node:path";
+import { fileURLToPath } from "node:url";
+var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
+var MAX_PER_SESSION = 200;
+var fileCache = null;
+var keySets = /* @__PURE__ */ new Map();
+function load2() {
+  if (fileCache) return fileCache;
+  try {
+    const raw = JSON.parse(readFileSync20(FILE, "utf-8"));
+    fileCache = {};
+    for (const [k3, v] of Object.entries(raw)) {
+      if (Array.isArray(v)) {
+        const keys = v.filter((x) => typeof x === "string" && !!x);
+        if (keys.length) fileCache[k3] = keys.slice(-MAX_PER_SESSION);
+      }
+    }
+  } catch {
+    fileCache = {};
+  }
+  return fileCache;
+}
+function hiddenTodoKeys(sessionId) {
+  let s = keySets.get(sessionId);
+  if (!s) {
+    s = new Set(load2()[sessionId] ?? []);
+    keySets.set(sessionId, s);
+  }
+  return s;
+}
+function addHiddenTodoKey(sessionId, key) {
+  if (!sessionId || !key) return;
+  const s = hiddenTodoKeys(sessionId);
+  if (s.has(key) && s.size <= MAX_PER_SESSION) return;
+  s.add(key);
+  const capped = [...s].slice(-MAX_PER_SESSION);
+  keySets.set(sessionId, new Set(capped));
+  const disk = load2();
+  disk[sessionId] = capped;
+  fileCache = disk;
+  try {
+    writeFileSync11(FILE, JSON.stringify(disk));
+  } catch {
+  }
+}
+
+// src/decision-notify.ts
+import { mkdirSync as mkdirSync13, readFileSync as readFileSync21, writeFileSync as writeFileSync12 } from "node:fs";
+import { join as join26 } from "node:path";
+var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
+function isDecisionNotificationKind(value) {
+  return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
+}
+function transitionNotification(item, action, at) {
+  const next = { ...item };
+  if (action === "source_succeeded" && next.handled_at === void 0) next.handled_at = at;
+  if (action === "dismissed") {
+    if (next.dismissed_at === void 0) next.dismissed_at = at;
+    if (next.handled_at === void 0) next.handled_at = at;
+  }
+  if (action === "resolved" && next.resolved_at === void 0) next.resolved_at = at;
+  return next;
+}
+function stableKey(kind, entityId, revision) {
+  if (!isDecisionNotificationKind(kind)) throw new Error(`unsupported notification kind: ${String(kind)}`);
+  if (kind === "dispatch") return `${kind}:${entityId}`;
+  if (revision === void 0 || String(revision).length === 0) return `${kind}:${entityId}`;
+  return `${kind}:${entityId}:${String(revision)}`;
+}
+var DEFAULT_WAIT_MIN = 10;
+var DEFAULT_REMIND_HOURS = 24;
+var DEFAULT_INTERVAL_MS = 2e4;
+function numberEnv(name, fallback, min) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= min ? value : fallback;
+}
+function enabledEnv() {
+  return process.env.CCR_DECISION_NOTIFY !== "0";
+}
+function ledgerPathOf(options) {
+  const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ?? process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
+  if (override) return override;
+  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join26(process.cwd(), "data");
+  return join26(dataDir2, "decision-notifications.json");
+}
+function defaultNotificationGroup(kind) {
+  return kind === "system" ? "activity" : "action";
+}
+function defaultActionable(kind, group) {
+  return group === "action" && kind !== "system";
+}
+function normalizeSourceContext(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const x = value;
+  if (typeof x.domain !== "string" || !x.domain || typeof x.entityId !== "string" || !x.entityId || typeof x.alertId !== "string" || !x.alertId || typeof x.returnPath !== "string") return void 0;
+  return {
+    domain: x.domain,
+    entityId: x.entityId,
+    alertId: x.alertId,
+    returnPath: x.returnPath,
+    ...typeof x.sessionId === "string" ? { sessionId: x.sessionId } : {},
+    ...typeof x.segment === "string" ? { segment: x.segment } : {}
+  };
+}
+function normalizeDecisionNotification(item) {
+  if (!item || typeof item !== "object") return null;
+  const x = item;
+  if (typeof x.key !== "string" || !isDecisionNotificationKind(x.kind) || typeof x.source_session_id !== "string" || typeof x.created_at !== "number" || typeof x.revision !== "string") return null;
+  const group = x.group === "action" || x.group === "attention" || x.group === "activity" ? x.group : defaultNotificationGroup(x.kind);
+  const sourceContext = normalizeSourceContext(x.source_context);
+  return {
+    key: x.key,
+    kind: x.kind,
+    source_session_id: x.source_session_id,
+    created_at: x.created_at,
+    ...typeof x.first_sent_at === "number" ? { first_sent_at: x.first_sent_at } : {},
+    ...typeof x.reminded_at === "number" ? { reminded_at: x.reminded_at } : {},
+    ...typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {},
+    ...typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {},
+    ...typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {},
+    group,
+    actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
+    revision: x.revision,
+    ...sourceContext ? { source_context: sourceContext } : {}
+  };
+}
+function readDecisionNotificationLedger(path6) {
+  try {
+    const raw = JSON.parse(readFileSync21(path6, "utf-8"));
+    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.notifications) ? raw.notifications : [];
+    const notifications = list.map(normalizeDecisionNotification).filter((item) => item !== null);
+    return { notifications };
+  } catch {
+    return { notifications: [] };
+  }
+}
+function writeDecisionNotificationLedger(path6, ledger) {
+  mkdirSync13(join26(path6, ".."), { recursive: true });
+  writeFileSync12(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
+}
+function confirmRevision(confirm) {
+  const revision = confirm.revision;
+  return typeof revision === "string" || typeof revision === "number" ? String(revision) : String(confirm.created_at);
+}
+function confirmKey(confirm) {
+  return stableKey("org-confirm", confirm.id, confirmRevision(confirm));
+}
+function confirmSourceSession(confirm) {
+  for (const key of ["source_session_id", "session_id", "source_session"]) {
+    const value = confirm.payload?.[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
+}
+function waitingKey(session) {
+  return stableKey("waiting", session.session_id, session.waiting_request.request_id);
+}
+function allowWaiting(session) {
+  const request = session.waiting_request;
+  return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
+}
+function kindLabel(kind) {
+  switch (kind) {
+    case "project-create":
+      return "\u7ACB\u9879\u786E\u8BA4";
+    case "tier-change":
+      return "\u6863\u4F4D\u53D8\u66F4";
+    case "suggest-hold":
+      return "\u6682\u7F13\u5EFA\u8BAE";
+    case "archive":
+      return "\u7ED3\u9879\u786E\u8BA4";
+    case "revive":
+      return "\u590D\u6D3B\u786E\u8BA4";
+  }
+}
+function compact(text, max = 160) {
+  const oneLine = text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}\u2026` : oneLine;
+}
+function confirmText(confirm, sourceSessionId) {
+  const source = sourceSessionId ? ` \xB7 \u6765\u6E90\u4F1A\u8BDD ${sourceSessionId.slice(0, 12)}` : " \xB7 \u6765\u6E90\uFF1ALeader \u63A7\u5236\u4F1A\u8BDD";
+  const summary = confirm.reason ? `\uFF1A${compact(confirm.reason)}` : "";
+  return `[\u62CD\u677F] ${compact(confirm.title, 70)} \xB7 ${kindLabel(confirm.kind)}${source}${summary}`;
+}
+function waitingText(session) {
+  const tool = compact(session.waiting_request?.tool_name || "\u64CD\u4F5C", 60);
+  return `[\u5BA1\u6279] \u5F53\u524D\u4F1A\u8BDD\u7B49\u5F85\u5141\u8BB8 ${tool} \xB7 \u6765\u6E90\u4F1A\u8BDD ${session.session_id.slice(0, 12)}`;
+}
+var DecisionNotificationWatcher = class {
+  path;
+  intervalMs;
+  waitMs;
+  remindMs;
+  enabled;
+  now;
+  options;
+  ledger;
+  timer = null;
+  constructor(options) {
+    this.options = options;
+    this.path = ledgerPathOf(options);
+    this.intervalMs = options.intervalMs ?? numberEnv("CCR_DECISION_NOTIFY_INTERVAL_MS", DEFAULT_INTERVAL_MS, 1e3);
+    this.waitMs = (options.waitMin ?? numberEnv("CCR_DECISION_WAIT_MIN", DEFAULT_WAIT_MIN, 0)) * 6e4;
+    this.remindMs = (options.remindHours ?? numberEnv("CCR_DECISION_REMIND_HOURS", DEFAULT_REMIND_HOURS, 0)) * 36e5;
+    this.enabled = options.enabled ?? enabledEnv();
+    this.now = options.now ?? (() => Date.now());
+    this.ledger = readDecisionNotificationLedger(this.path);
+  }
+  get ledgerPath() {
+    return this.path;
+  }
+  snapshotLedger() {
+    return this.ledger.notifications.map((item) => ({ ...item }));
+  }
+  start() {
+    if (!this.enabled || this.timer) return;
+    this.scan();
+    this.timer = setInterval(() => this.scan(), this.intervalMs);
+    this.timer.unref?.();
+  }
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+  scan(now = this.now()) {
+    if (!this.enabled) return;
+    const confirms = this.options.listConfirms();
+    const sessions = this.options.snapshotSessions();
+    const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
+    const activeConfirmKeys = /* @__PURE__ */ new Set();
+    const activeWaitingKeys = /* @__PURE__ */ new Set();
+    let changed = false;
+    for (const confirm of confirms) {
+      const key = confirmKey(confirm);
+      const existing = byKey.get(key);
+      if (confirm.status === "pending") {
+        activeConfirmKeys.add(key);
+        const item = existing ?? {
+          key,
+          kind: "org-confirm",
+          source_session_id: confirmSourceSession(confirm),
+          created_at: confirm.created_at,
+          group: "action",
+          actionable: true,
+          revision: confirmRevision(confirm)
+        };
+        if (!existing) {
+          this.ledger.notifications.push(item);
+          byKey.set(key, item);
+          changed = true;
+        }
+        if (!item.source_session_id) {
+          const source = confirmSourceSession(confirm);
+          if (source) item.source_session_id = source;
+        }
+        const target = this.targetSession(item.source_session_id, sessions);
+        if (!item.first_sent_at && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.source_session_id = target;
+          item.first_sent_at = now;
+          changed = true;
+        } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.reminded_at = now;
+          changed = true;
+        }
+      } else if (existing && !existing.resolved_at) {
+        existing.resolved_at = confirm.decided_at ?? now;
+        changed = true;
+      }
+    }
+    for (const session of sessions) {
+      if (!allowWaiting(session)) continue;
+      const key = waitingKey(session);
+      activeWaitingKeys.add(key);
+      const existing = byKey.get(key);
+      const item = existing ?? {
+        key,
+        kind: "waiting",
+        source_session_id: session.session_id,
+        created_at: session.waiting_started_at ?? session.updated_at,
+        group: "action",
+        actionable: true,
+        revision: session.waiting_request.request_id
+      };
+      if (!existing) {
+        this.ledger.notifications.push(item);
+        byKey.set(key, item);
+        changed = true;
+      }
+      const startedAt = session.waiting_started_at ?? session.updated_at;
+      if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.first_sent_at = now;
+        changed = true;
+      } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.reminded_at = now;
+        changed = true;
+      }
+    }
+    for (const item of this.ledger.notifications) {
+      if (item.resolved_at) continue;
+      if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+      if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+    }
+    if (changed) writeDecisionNotificationLedger(this.path, this.ledger);
+  }
+  targetSession(preferred, sessions) {
+    if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
+    const leader2 = this.options.leaderSessionId();
+    if (leader2 && sessions.some((session) => session.session_id === leader2)) return leader2;
+    return sessions[0]?.session_id ?? null;
+  }
+};
+
+// src/agent-codex.ts
+import { spawn as spawn4 } from "node:child_process";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { existsSync as existsSync18, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync13 } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter as delimiter3, dirname as dirname8, join as join27 } from "node:path";
+var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+var CODEX_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var CodexEventMapper = class {
+  /** 当前回合起始时刻（turn.started 记，回合收口事件算时长用；测试可注入 now 定值） */
+  turnStartMs = 0;
+  /** 上个回合是否已收口（turn.completed/turn.failed）。会话侧判「进程退出但回合
+   *  未收口」用——true 时退出码不再补发 onTurnEnd（防双发） */
+  turnTerminal = true;
+  /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
+  lastThreadId;
+  handle(raw, cb2, now = Date.now()) {
+    if (!raw || typeof raw !== "object") return;
+    const ev2 = raw;
+    switch (ev2.type) {
+      case "thread.started": {
+        const tid = typeof ev2.thread_id === "string" ? ev2.thread_id : "";
+        this.lastThreadId = tid || this.lastThreadId;
+        cb2.onInit(tid, "codex");
+        break;
+      }
+      case "turn.started":
+        this.turnStartMs = now;
+        this.turnTerminal = false;
+        cb2.onStatusChange("WORKING", "\u6267\u884C\u4E2D");
+        break;
+      case "item.started": {
+        const it2 = ev2.item;
+        if (it2?.type === "command_execution") {
+          cb2.onLog("tool_use", truncate(it2.command ?? "(\u547D\u4EE4)", 200) || "(\u547D\u4EE4)", {
+            tool: "command",
+            id: it2.id,
+            full: capDetail(it2.command ?? "")
+          });
+        }
+        break;
+      }
+      case "item.completed": {
+        const it2 = ev2.item;
+        if (!it2) break;
+        if (it2.type === "agent_message") {
+          cb2.onLog("assistant_text", it2.text ?? "", { id: it2.id });
+        } else if (it2.type === "command_execution") {
+          const exit = it2.exit_code ?? null;
+          const ok2 = it2.status === "failed" || exit !== null && exit !== 0 ? false : true;
+          const head = (it2.aggregated_output ?? "").trim().split("\n")[0] ?? "";
+          cb2.onLog("tool_result", ok2 ? head || `\u9000\u51FA\u7801 ${exit ?? "?"}` : `\u5931\u8D25\uFF08\u9000\u51FA\u7801 ${exit ?? "?"}\uFF09`, {
+            tool: "command",
+            id: it2.id,
+            full: capDetail(it2.aggregated_output ?? "")
+          });
+        }
+        break;
+      }
+      case "turn.completed": {
+        const u = ev2.usage ?? {};
+        cb2.onUsage({
+          input_tokens: num(u.input_tokens),
+          output_tokens: num(u.output_tokens),
+          cache_read_input_tokens: num(u.cached_input_tokens),
+          cache_creation_input_tokens: num(u.cache_write_input_tokens)
+        });
+        cb2.onTurnEnd(true, "success", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
+        this.turnTerminal = true;
+        break;
+      }
+      case "turn.failed": {
+        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
+        cb2.onTurnEnd(false, truncate(msg ?? "\u56DE\u5408\u5931\u8D25", 200) || "\u56DE\u5408\u5931\u8D25", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
+        this.turnTerminal = true;
+        break;
+      }
+      case "error": {
+        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
+        cb2.onLog("system", `codex \u9519\u8BEF\uFF1A${truncate(msg ?? "(\u65E0\u4FE1\u606F)", 200)}`);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+};
+var cachedBin;
+function resolveCodexCliPath() {
+  if (cachedBin !== void 0) return cachedBin;
+  const fromEnv = process.env.CCR_CODEX_PATH;
+  if (fromEnv === "__none__") {
+    cachedBin = null;
+    return null;
+  }
+  if (fromEnv && existsSync18(fromEnv)) {
+    cachedBin = fromEnv;
+    return cachedBin;
+  }
+  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex.bat", "codex"] : ["codex"];
+  const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
+  for (const d2 of dirs) {
+    for (const n of names) {
+      const p = join27(d2, n);
+      if (existsSync18(p)) {
+        cachedBin = p;
+        return p;
+      }
+    }
+  }
+  cachedBin = null;
+  return null;
+}
+function materializeImages(images) {
+  if (!images || images.length === 0) return [];
+  const dir = mkdtempSync(join27(tmpdir(), "ccr-codex-img-"));
+  const out = [];
+  images.forEach((b64, i) => {
+    if (typeof b64 !== "string" || b64.length === 0) return;
+    try {
+      const p = join27(dir, `${i}.img`);
+      writeFileSync13(p, Buffer.from(b64, "base64"));
+      out.push(p);
+    } catch {
+    }
+  });
+  return out;
+}
+var CodexAgentSession = class {
+  id = randomUUID7();
+  startedAt = Date.now();
+  stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  ended = false;
+  cb;
+  cwd;
+  bin;
+  threadId;
+  mapper = new CodexEventMapper();
+  proc = null;
+  pid;
+  // 排队消息带图绑定（#63）：文本与该条的临时图路径一起入队，merge 时图拼接；
+  // 队列元素里的图路径在落盘时已持久，消费回合结束才清理
+  queued = [];
+  // 本回合消费的图所在目录（回合收口清理；排队中未消费的不在此列）
+  turnImageDirs = /* @__PURE__ */ new Set();
+  stopping = false;
+  stderrTail = "";
+  get childPid() {
+    return this.pid;
+  }
+  constructor(cwd, _model, cb2, initialPrompt, opts) {
+    this.cwd = cwd;
+    this.cb = cb2;
+    this.threadId = opts?.resume;
+    const bin = resolveCodexCliPath();
+    if (!bin) {
+      throw new Error("codex CLI \u672A\u627E\u5230\uFF08\u5B89\u88C5 codex \u6216\u8BBE CCR_CODEX_PATH\uFF09");
+    }
+    this.bin = bin;
+    if (initialPrompt !== void 0) this.execTurn(initialPrompt, materializeImages(opts?.images));
+  }
+  sendMessage(text, images, echo) {
+    if (this.ended) {
+      console.warn("[codex] \u4F1A\u8BDD\u5DF2\u7ED3\u675F\uFF0C\u6D88\u606F\u4E22\u5F03");
+      return;
+    }
+    const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
+    if (echo !== void 0) {
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+    } else {
+      const full = fullText(text, 200);
+      this.cb.onLog("user_message", truncate(text, 200) + marker, {
+        full: full === void 0 ? void 0 : full + marker
+      });
+    }
+    if (images && images.length > 0) {
+      const paths = materializeImages(images);
+      if (this.proc) {
+        if (this.queued.length >= 50) {
+          this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
+          return;
+        }
+        this.queued.push({ text, images: paths.length > 0 ? paths : void 0 });
+        return;
+      }
+      this.execTurn(text, paths);
+      return;
+    }
+    if (this.proc) {
+      if (this.queued.length >= 50) {
+        this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
+        return;
+      }
+      this.queued.push({ text });
+      return;
+    }
+    this.execTurn(text);
+  }
+  // headless 无审批通道（WAITING 形态 P0 不做）——三口恒 false，端上不出现审批卡
+  allow(_requestId, _by, _rememberScope) {
+    return false;
+  }
+  deny(_requestId, _reason, _by) {
+    return false;
+  }
+  answer(_requestId, _answers, _by) {
+    return false;
+  }
+  hasPending() {
+    return false;
+  }
+  async setPermissionMode(_mode) {
+  }
+  async stop() {
+    if (this.ended) return;
+    this.stopping = true;
+    this.ended = true;
+    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname8(p))));
+    this.queued = [];
+    this.cleanupTurnImages(queuedDirs);
+    const child = this.proc;
+    this.proc = null;
+    this.pid = void 0;
+    this.cb.onSessionEnd("stopped");
+    if (child?.pid) void killTree(child.pid).catch(() => {
+    });
+  }
+  // -- 内部 -------------------------------------------------------------
+  execTurn(prompt, images = []) {
+    const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
+    if (this.threadId) args.push("resume", this.threadId);
+    for (const p of images) args.push("--image", p);
+    args.push("-");
+    this.turnImageDirs = new Set(images.map((p) => dirname8(p)));
+    this.mapper.turnTerminal = false;
+    this.mapper.turnStartMs = Date.now();
+    let child;
+    try {
+      child = spawn4(this.bin, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: this.cwd,
+        env: childEnv()
+      });
+    } catch (e) {
+      this.failTurn(`codex \u542F\u52A8\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    this.proc = child;
+    this.pid = child.pid;
+    this.stderrTail = "";
+    this.cb.onStatusChange("WORKING", "\u542F\u52A8\u4E2D");
+    let pending = Buffer.alloc(0);
+    child.stdout.on("data", (d2) => {
+      pending = Buffer.concat([pending, d2]);
+      let i;
+      while ((i = pending.indexOf(10)) >= 0) {
+        const line = pending.subarray(0, i).toString("utf-8").trim();
+        pending = pending.subarray(i + 1);
+        if (line) this.onLine(line);
+      }
+    });
+    child.stderr.on("data", (d2) => {
+      this.stderrTail = (this.stderrTail + d2.toString("utf-8")).slice(-500);
+    });
+    child.on("error", (e) => {
+      this.cb.onLog("system", `codex \u8FDB\u7A0B\u9519\u8BEF\uFF1A${truncate(e.message, 200)}`);
+    });
+    child.on("close", (code) => this.onClose(code));
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(prompt, "utf-8");
+  }
+  onLine(line) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      this.cb.onLog("system", `codex \u8F93\u51FA\u975E JSON\uFF1A${truncate(line, 120)}`);
+      return;
+    }
+    const ev2 = parsed;
+    if (ev2?.type === "thread.started" && typeof ev2.thread_id === "string" && ev2.thread_id) {
+      this.threadId = ev2.thread_id;
+    }
+    this.mapper.handle(parsed, this.cb);
+  }
+  onClose(code) {
+    this.proc = null;
+    this.pid = void 0;
+    this.cleanupTurnImages();
+    if (this.stopping) return;
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      const why = code === null ? "\u8FDB\u7A0B\u88AB\u4FE1\u53F7\u7EC8\u6B62" : `\u9000\u51FA\u7801 ${code}`;
+      this.cb.onTurnEnd(false, `codex ${why}${this.stderrTail ? `\uFF1A${truncate(this.stderrTail.trim().split("\n").at(-1) ?? "", 160)}` : ""}`, dur);
+      if (!this.threadId) {
+        this.ended = true;
+        this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
+        return;
+      }
+    }
+    if (this.queued.length > 0 && !this.ended) {
+      const merged = this.queued.map((q2) => q2.text).join("\n\n");
+      const imgs = this.queued.flatMap((q2) => q2.images ?? []);
+      this.queued = [];
+      this.execTurn(merged, imgs);
+    }
+  }
+  /** 回合收口清理本回合消费的临时图目录；extraDirs=会话终止时排队未消费的 */
+  cleanupTurnImages(extraDirs) {
+    const dirs = this.turnImageDirs;
+    this.turnImageDirs = /* @__PURE__ */ new Set();
+    for (const d2 of extraDirs ?? []) dirs.add(d2);
+    for (const d2 of dirs) {
+      try {
+        rmSync3(d2, { recursive: true, force: true });
+      } catch {
+      }
+    }
+  }
+  /** spawn 同步失败收口（onClose 崩溃分支的同款语义，无进程版） */
+  failTurn(why) {
+    this.proc = null;
+    this.pid = void 0;
+    if (this.stopping || this.ended) return;
+    this.cleanupTurnImages();
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      this.cb.onTurnEnd(false, truncate(why, 300), dur);
+    }
+    if (!this.threadId) {
+      this.ended = true;
+      this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
+    }
+  }
+};
+
+// src/agent-zcode.ts
+var ZCODE_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: false,
+  native_elapsed: false,
+  approval: false
+};
+
 // src/session-manager.ts
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
@@ -48035,8 +48443,8 @@ function sanitizeImportPushEntry(raw) {
   return { kind, wsUrl, ...token ? { token } : {}, ...cloud ? { cloud } : {} };
 }
 function expandHome(p) {
-  if (p === "~") return homedir9();
-  if (p.startsWith("~/")) return join25(homedir9(), p.slice(2));
+  if (p === "~") return homedir12();
+  if (p.startsWith("~/")) return join28(homedir12(), p.slice(2));
   return p;
 }
 function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
@@ -48060,7 +48468,7 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const def = expandHome((defaultCwd || "").trim());
   let mkdirFailed = false;
   if (wanted) {
-    const abs = resolve7(wanted);
+    const abs = resolve8(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
     if (autoMkdir) {
       if (tryMkdir(abs)) {
@@ -48070,15 +48478,15 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
     }
   }
   if (def) {
-    const abs = resolve7(def);
+    const abs = resolve8(def);
     if (isUsableDir(abs)) {
-      const note = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
+      const note = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
       return { cwd: abs, fallbackNote: note };
     }
   }
-  const home = homedir9();
-  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve7(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
-  const wantedDesc = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C${defDesc}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
+  const home = homedir12();
+  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve8(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const wantedDesc = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C${defDesc}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
   const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
@@ -48117,7 +48525,7 @@ function sanitizeFiles(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48128,13 +48536,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync14(join25(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync14(join28(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48145,14 +48553,14 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync14(join25(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync14(join28(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 var DELIVERABLES_CAP = 300;
 function readDeliverables(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "deliverables.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "deliverables.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter(
       (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
     ) : [];
@@ -48164,13 +48572,13 @@ function appendDeliverable(dataDir2, e) {
   const list = readDeliverables(dataDir2).filter((x) => !(x.sid === e.sid && x.path === e.path));
   list.push(e);
   try {
-    writeFileSync14(join25(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    writeFileSync14(join28(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
   } catch {
   }
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -48183,11 +48591,11 @@ function readTitleOverrides(dataDir2) {
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
-  return join25(dataDir2, "pinned-sessions.json");
+  return join28(dataDir2, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(pinnedSessionsPath(dataDir2), "utf-8"));
+    const raw = JSON.parse(readFileSync22(pinnedSessionsPath(dataDir2), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48261,9 +48669,9 @@ function resumeInitTimeoutMs() {
 function transcriptHasAssistant(cwd, sdkId, configHome) {
   try {
     const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-    const base = configHome ?? join25(homedir9(), ".claude");
-    const p = join25(base, "projects", slug, `${sdkId}.jsonl`);
-    return readFileSync20(p, "utf-8").includes('"type":"assistant"');
+    const base = configHome ?? join28(homedir12(), ".claude");
+    const p = join28(base, "projects", slug, `${sdkId}.jsonl`);
+    return readFileSync22(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
   }
@@ -48430,7 +48838,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 与 M4 DISPATCH_DONE / ORG_CONFIRM_UPDATED 等既有瞬时通道并存：那些管在线弹，
   // 这边持久落账管离线兜底与列表沉淀（任务书对账：不双发靠 stableKey 一单一行）。
   notificationsPath() {
-    return join25(this.cfg.dataDir, "notifications.json");
+    return join28(this.cfg.dataDir, "notifications.json");
   }
   // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
   // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
@@ -48440,7 +48848,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
   loadNotifications() {
     try {
-      const raw = JSON.parse(readFileSync20(this.notificationsPath(), "utf-8"));
+      const raw = JSON.parse(readFileSync22(this.notificationsPath(), "utf-8"));
       const list = Array.isArray(raw.notifications) ? raw.notifications : [];
       for (const item of list) {
         if (item && typeof item.key === "string" && item.key) this.notifications.set(item.key, item);
@@ -48654,11 +49062,11 @@ provider=${opts.provider ?? "default"}` : void 0,
   // P2-6 把「读失败」伪装成「空清单」再放行批量收口的通道，闸门处必须区分「读不
   // 出来」与「真的没有」（只读消费 confirms.json 文件本身，projects.ts 结构不动）
   readConfirmsForReconcile() {
-    const path6 = join25(orgDir(), "confirms.json");
-    if (!existsSync18(path6)) return null;
+    const path6 = join28(orgDir(), "confirms.json");
+    if (!existsSync19(path6)) return null;
     let raw;
     try {
-      raw = readFileSync20(path6, "utf-8");
+      raw = readFileSync22(path6, "utf-8");
     } catch {
       return null;
     }
@@ -48685,7 +49093,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join25(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join28(this.cfg.dataDir, ".tmp-titlegen");
     try {
       mkdirSync14(titleCwd, { recursive: true });
     } catch {
@@ -49060,8 +49468,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!item.path || item.path === "(\u672A\u77E5\u6587\u4EF6)") return;
     const cwd = s.state.cwd || "";
     let p = item.path;
-    if (!isAbsolute6(p) && cwd) p = resolve7(cwd, p);
-    const adir = resolve7(artifactsDir()).toLowerCase();
+    if (!isAbsolute7(p) && cwd) p = resolve8(cwd, p);
+    const adir = resolve8(artifactsDir()).toLowerCase();
     if (!p.toLowerCase().startsWith(adir + sep6)) return;
     const key = p.toLowerCase();
     const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
@@ -49132,7 +49540,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   registerDeliverable(sessionId, rawPath, snapshot) {
     const s = this.sessions.get(sessionId);
     if (!s) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
-    const p = resolve7(rawPath.trim());
+    const p = resolve8(rawPath.trim());
     let size;
     let exists = true;
     let unverified = false;
@@ -49198,7 +49606,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 回填），循环内逐会话归一的代价可忽略
   matchSessionByCwd(cwd) {
     const norm = (x) => {
-      const r = resolve7(x || ".");
+      const r = resolve8(x || ".");
       try {
         return realpathSync3(r);
       } catch {
@@ -49382,6 +49790,57 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!s || !s.state.external || !EXTERNAL_PERM_MODES.has(mode)) return;
     s.state.permission_mode = mode;
   }
+  // P81-6 旧值规范化审计（resume/revive 读点专用）：legacy_state_normalized 行——
+  // session_id=被规范化会话、command_id=null（非命令触发，状态迁移）、policy_source=null
+  // （非策略裁决是状态迁移）；native_mode 恒 null（未重新求值不声称 native——§6.3 保守，
+  // 降档后的真实 native 由下次 spawn 实参面自证）。
+  auditLegacyPermMode(s, raw, mode) {
+    appendPermissionAudit(auditStore(this.cfg.dataDir), {
+      requested_mode: raw,
+      normalized_mode: mode === "acceptEdits" ? "edit-auto" : mode === "plan" ? "plan" : "ask",
+      effective_mode: mode,
+      native_mode: null,
+      capability_state: engineCapabilityState(s.state.engine ?? "claude"),
+      engine: s.state.engine ?? "claude",
+      reason: "legacy_state_normalized",
+      policy_source: null,
+      environment: resolveEnvScope(this.cfg.port),
+      dir_scope: resolveDirScope(s.state.cwd),
+      tier: null,
+      actor: null,
+      session_id: s.state.session_id,
+      command_id: null,
+      created_at: Date.now()
+    });
+  }
+  // P81-6 resume/revive 读 state 权限档统一入口（§5.3.2 旧值映射+§6.3「不得创建声称
+  // 已 bypass 的会话状态」）：三读点（resumeAgent/fresh 回退/reviveSaved）经此收敛——
+  // ①external 卡豁免（CLI 自报 auto/manual/bypass 是镜像事实，bridge 域，P81-6 只管托管卡）；
+  // ②claude（confirmed 族）bypass 保留——native 真实生效过=「当时真实生效档」（§5.3.2）；
+  // ③JSONL/未知引擎 bypass 降 acceptEdits+审计——state 声称从未真实生效（适配器
+  //   setPermissionMode no-op+P81-5 前直传伪装），降档把声称与真实对齐；
+  // ④未知值 fail-closed 回 default+审计（不升权铁断言：词表外绝不映射 bypass）；
+  // ⑤缺字段回 default（与既有 `?? "default"` 逐字节一致——零变零审计）。
+  // 规范化即回写收敛：一次降档后续读点恒等，审计只落一次（emitUpdated 随调用方落新值帧）。
+  resumePermMode(s) {
+    const raw = s.state.permission_mode;
+    if (raw === void 0 || raw === null) return "default";
+    if (s.state.external) return raw;
+    if (!permissionPolicyEnabled()) return raw;
+    const n = normalizeLegacyPermissionMode(raw);
+    if (n.kind === "bypass_demoted") {
+      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    if (n.kind === "unknown_reset") {
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    return n.mode;
+  }
   // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
   // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
   // M1 审查轮：返回 false = 拒删（组织 Leader 卡——锚 org.json 仍指向它，§3.5
@@ -49391,7 +49850,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s) return true;
     if (this.isLeaderSession(id2)) return false;
-    this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
+    this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
     this.sessions.delete(id2);
     this.lastStoreTodos.delete(id2);
     this.allowRules.dropSession(id2);
@@ -49484,16 +49943,115 @@ provider=${opts.provider ?? "default"}` : void 0,
         case "COMMAND_CREATE": {
           const pm2 = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : void 0;
           const requestedEngine = cmd.payload.engine;
+          const dirScope = resolveDirScope(cmd.payload.cwd);
+          const envScope = resolveEnvScope(this.cfg.port);
           if (requestedEngine !== void 0 && !isSessionEngine(requestedEngine)) {
+            if (permissionPolicyEnabled()) {
+              appendPermissionAudit(auditStore(this.cfg.dataDir), {
+                requested_mode: pm2 ?? null,
+                normalized_mode: null,
+                effective_mode: "forbidden",
+                native_mode: null,
+                capability_state: engineCapabilityState(String(requestedEngine)),
+                engine: String(requestedEngine),
+                reason: "unknown_engine",
+                policy_source: "explicit",
+                environment: envScope,
+                dir_scope: dirScope,
+                tier: "\u968F\u624B\u529E",
+                actor: by,
+                session_id: null,
+                command_id: cmd.command_id,
+                created_at: Date.now()
+              });
+            }
             return { command_id: cmd.command_id, ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine;
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2, cmd.payload.autoMkdir === true, {
-            ...engine ? { engine } : {},
-            ...cmd.payload.model ? { model: cmd.payload.model } : {},
-            ...cmd.payload.provider ? { provider: cmd.payload.provider } : {}
+          const selPayload = cmd.payload;
+          const selSource = selPayload.selection_source;
+          if (selSource !== void 0 && selSource !== "role_default" && selSource !== "manual" && selSource !== "relay_default") {
+            return { command_id: cmd.command_id, ok: false, error: `\u65E0\u6548 selection_source: ${String(selSource)}\uFF08\u6709\u6548\u503C\uFF1Arole_default/manual/relay_default\uFF09` };
+          }
+          const selGid = typeof selPayload.gid === "string" ? selPayload.gid.trim() : "";
+          const selRole = typeof selPayload.role === "string" ? selPayload.role.trim() : "";
+          let degraded = false;
+          let degradedReason = "";
+          let engineResolved = engine;
+          if (!engineResolved && selGid && selRole) {
+            const preset = findGroup(selGid)?.role_defaults?.[selRole]?.engine;
+            if (preset) {
+              if (catalogReadyEngines().has(preset)) {
+                engineResolved = preset;
+              } else {
+                degraded = true;
+                degradedReason = `\u89D2\u8272\u9884\u7F6E\u5F15\u64CE ${preset} \u4E0D\u53EF\u7528\uFF08catalog \u975E ready\uFF09\uFF0C\u5DF2\u56DE\u9000\u9ED8\u8BA4\u5F15\u64CE`;
+              }
+            }
+          }
+          if (!permissionPolicyEnabled()) {
+            const session_id2 = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2, cmd.payload.autoMkdir === true, {
+              ...engineResolved ? { engine: engineResolved } : {},
+              ...cmd.payload.model ? { model: cmd.payload.model } : {},
+              ...cmd.payload.provider ? { provider: cmd.payload.provider } : {},
+              ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
+            });
+            return {
+              command_id: cmd.command_id,
+              ok: true,
+              session_id: session_id2,
+              ...engineResolved ? { engine: engineResolved } : {},
+              ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
+            };
+          }
+          const engineForPolicy = engineResolved ?? "claude";
+          const perm = evaluatePermission({
+            requested_mode: pm2 ?? null,
+            engine: engineForPolicy,
+            role: "team_pm",
+            tier: "\u968F\u624B\u529E",
+            capability_state: engineCapabilityState(engineForPolicy),
+            policy_source: "explicit",
+            dir_scope: dirScope,
+            env: envScope
           });
-          return { command_id: cmd.command_id, ok: true, session_id };
+          const auditBase = {
+            requested_mode: perm.requested_mode,
+            normalized_mode: perm.normalized_mode,
+            effective_mode: perm.effective_mode,
+            native_mode: perm.native_mode,
+            capability_state: perm.capability_state,
+            engine: perm.engine,
+            reason: perm.reason,
+            policy_source: perm.policy_source,
+            environment: envScope,
+            dir_scope: dirScope,
+            tier: "\u968F\u624B\u529E",
+            actor: by,
+            session_id: null,
+            command_id: cmd.command_id,
+            created_at: Date.now()
+          };
+          if (perm.effective_mode === "forbidden") {
+            appendPermissionAudit(auditStore(this.cfg.dataDir), auditBase);
+            return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
+          }
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
+            ...engineResolved ? { engine: engineResolved } : {},
+            ...cmd.payload.model ? { model: cmd.payload.model } : {},
+            ...cmd.payload.provider ? { provider: cmd.payload.provider } : {},
+            ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
+          });
+          appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
+          return {
+            command_id: cmd.command_id,
+            ok: true,
+            session_id,
+            // #75 实际引擎回显+降级显式标记（端上据此显示降级徽标，不静默——提案 §6.2）
+            ...engineResolved ? { engine: engineResolved } : {},
+            ...degraded ? { degraded: true, degraded_reason: degradedReason } : {},
+            permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason }
+          };
         }
         case "COMMAND_MESSAGE": {
           const s = this.require(cmd.payload.session_id);
@@ -49743,7 +50301,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           s.state.updated_at = Date.now();
           this.titleOverrides[s.state.session_id] = title;
           try {
-            writeFileSync14(join25(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+            writeFileSync14(join28(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
           } catch {
           }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
@@ -49926,7 +50484,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         }
         case "COMMAND_ARTIFACT_FETCH": {
           const s = this.require(cmd.payload.session_id);
-          const key = resolve7(String(cmd.payload.path ?? "")).toLowerCase();
+          const key = resolve8(String(cmd.payload.path ?? "")).toLowerCase();
           const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
           if (!hit) {
             return { command_id: cmd.command_id, ok: false, error: "\u8DEF\u5F84\u672A\u767B\u8BB0\u5728\u8BE5\u4F1A\u8BDD\u7684\u8F93\u51FA\u7269\u6E05\u5355\u91CC\uFF0C\u65E0\u6743\u62C9\u53D6" };
@@ -49943,7 +50501,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
           const ref = cmd.command_id;
           try {
-            const buf = readFileSync20(hit.path);
+            const buf = readFileSync22(hit.path);
             const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
             for (let seq = 0; seq < total; seq++) {
               this.bus.emitTransient(
@@ -50029,10 +50587,10 @@ provider=${opts.provider ?? "default"}` : void 0,
   create(rawCwd, prompt, permissionMode, autoMkdir = false, opts) {
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
     if (!cwd) throw new Error(fallbackNote);
-    if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir9()) {
+    if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir12()) {
       this.cfg.defaultCwd = cwd;
       try {
-        writeFileSync14(join25(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+        writeFileSync14(join28(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
       } catch {
       }
     }
@@ -50105,7 +50663,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       ...managed.state.employee ? { employee: true } : {},
       ...managed.state.employee_home ? { employee_home: managed.state.employee_home } : {},
       // #27 引擎随首帧下发（端上徽标 + 重启回放还原分叉依据）
-      ...managed.state.engine ? { engine: managed.state.engine } : {}
+      ...managed.state.engine ? { engine: managed.state.engine } : {},
+      // #75 预置降级显式标记（提案 §6.2「标记已降级不隐藏差异」；仅 COMMAND_CREATE
+      // gid/role 预置回退场景携带，其余创建路径恒不带）
+      ...opts?.degraded ? { degraded: true, degraded_reason: opts.degraded_reason ?? "" } : {}
     });
     if (fallbackNote) {
       const entry = { ts: Date.now(), kind: "system", text: fallbackNote };
@@ -50400,7 +50961,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           // 中断≠交付，换家≠干砸
           !(ok2 && reason === "interrupted") && !homeLost,
           void 0,
-          delivered ? void 0 : "todo"
+          delivered ? void 0 : "backlog"
         );
         managed.state.updated_at = Date.now();
         managed.state.duration_ms = durationMs;
@@ -50420,13 +50981,16 @@ provider=${opts.provider ?? "default"}` : void 0,
           this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason });
         }
         this.syncWaitingNotification(managed);
-        if (dutyEnabled() && this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+        if (dutyEnabled()) {
+          if (this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+          else if (ok2) this.feedPM("worker_done");
+        }
       },
       onSessionEnd: (reason) => {
         if (!mine()) return;
         managed.pendingInitial = void 0;
         if (managed.wd.phase === "recovering") return;
-        this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, void 0, "todo");
+        this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, void 0, "backlog");
         managed.wd.phase = "idle";
         if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
           managed.state.status = "DONE";
@@ -50518,7 +51082,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       firstMessage,
       {
         resume: sdkId,
-        permissionMode: s.state.permission_mode ?? "default",
+        permissionMode: this.resumePermMode(s),
+        // P81-6 旧值规范化统一入口
         images,
         configHome: this.employeeHome(s.state),
         // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
@@ -50559,7 +51124,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             const q2 = this.openDispatches.get(s.state.session_id);
             if (!q2 || q2.length <= 1) break;
             q2.unshift(q2.pop());
-            this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "todo");
+            this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "backlog");
           }
         }
         const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
@@ -50575,7 +51140,8 @@ provider=${opts.provider ?? "default"}` : void 0,
           this.agentCallbacks(s),
           replayText,
           {
-            permissionMode: s.state.permission_mode ?? "default",
+            permissionMode: this.resumePermMode(s),
+            // P81-6 旧值规范化统一入口（fresh 回退同收敛）
             images: replayImages.length ? replayImages : void 0,
             configHome: this.employeeHome(s.state),
             // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
@@ -50691,7 +51257,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     timer.unref?.();
     const agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
       resume: sdkId,
-      permissionMode: s.state.permission_mode ?? "default",
+      permissionMode: this.resumePermMode(s),
+      // P81-6 旧值规范化统一入口（parked revive）
       configHome: this.employeeHome(s.state),
       // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
       ...s.state.engine ? { engine: s.state.engine } : {}
@@ -50775,7 +51342,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (this.titleOverrides[anchor.leader_session_id]) {
         delete this.titleOverrides[anchor.leader_session_id];
         try {
-          writeFileSync14(join25(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+          writeFileSync14(join28(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
         } catch {
         }
       }
@@ -50835,7 +51402,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (!cur || !bootAgent || cur.agent !== bootAgent) return;
       if (cur.state.relay_session_id) return;
       const droppedMsgs = cur.unacked.length;
-      this.closeOpenDispatches(id2, "failed", `\u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD`, true, false, void 0, "todo");
+      this.closeOpenDispatches(id2, "failed", `\u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD`, true, false, void 0, "backlog");
       if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {
       });
       void bootAgent.stop().catch(() => {
@@ -50940,7 +51507,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   setTitleOverride(id2, title) {
     this.titleOverrides[id2] = title;
     try {
-      writeFileSync14(join25(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+      writeFileSync14(join28(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
     } catch {
     }
     const s = this.sessions.get(id2);
@@ -51014,7 +51581,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       });
       this.notifyDispatchClosed(e, status, receipt, key);
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
+        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         if (status === "done") {
           const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
           const lr2 = this.orgAction("lesson-append", {
@@ -51058,7 +51625,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const scanGids = [...bySt.active, ...bySt.parked].map((g2) => g2.id);
     for (const e of hung) {
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD" });
-      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} },
         "done",
@@ -51156,7 +51723,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 直接写 notification ledger」），非 EventBus。
   appendDutyRound(r) {
     try {
-      appendFileSync2(join25(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
+      appendFileSync2(join28(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
         kind: "PM_DUTY_ROUND",
         v: 1,
         feed_id: r.feed_id,
@@ -51200,14 +51767,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     const openIds = /* @__PURE__ */ new Set();
     for (const q2 of this.openDispatches.values()) for (const x of q2) openIds.add(x.id);
     for (const g2 of listGroupsByStatus().active) {
+      if (g2.duty_policy?.enabled === false) continue;
       const board = loadBoard(g2.id);
       const ready2 = new Map(computeReadySet(board).map((x) => [x.id, x.check.ready]));
       for (const e of board.entries) {
-        if (e.status === "todo") {
+        if (e.status === "backlog") {
           if (e.gate) blocked.push({ id: e.id, reason: "external" });
           else if (ready2.get(e.id) === true) todos.push({ todo_id: e.id, content: truncate(e.text, 80) });
           else blocked.push({ id: e.id, reason: "external" });
-        } else if (e.status === "doing" && e.dispatch_id && !openIds.has(e.dispatch_id) && now - e.updated_at >= dutyStaleMs()) {
+        } else if (e.status === "claimed" && e.dispatch_id && !openIds.has(e.dispatch_id) && now - e.updated_at >= dutyStaleMs()) {
           stale.push({ session_id: g2.id, doing_ms: now - e.updated_at, dispatch_id: e.dispatch_id });
         }
       }
@@ -51234,6 +51802,19 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
   feedPM(trigger, opts) {
     if (!dutyEnabled() || !this.leaderId) return;
+    if (readPluginConfig().duty === false) {
+      this.appendDutyRound({
+        feed_id: randomUUID8(),
+        feed_generation: randomUUID8(),
+        trigger: [trigger],
+        result: "disabled",
+        reason: "global_switch",
+        from: Date.now()
+      });
+      return;
+    }
+    const leader2 = this.sessions.get(this.leaderId);
+    if (leader2?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID8();
     const generation = randomUUID8();
@@ -51344,7 +51925,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     try {
       const dir = acceptanceDir();
       return listAcceptances(50).filter((s) => !s.submitted).map((s) => {
-        const p = join25(dir, `${s.id}.json`);
+        const p = join28(dir, `${s.id}.json`);
         let mtime = 0;
         try {
           mtime = statSync7(p).mtimeMs;
@@ -51474,9 +52055,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.auditOrgCommand(actor, device, action, "", tier, false, "gid \u5FC5\u586B");
         return { ok: false, error: "gid \u5FC5\u586B" };
       }
-      if (status && !["todo", "doing", "done"].includes(status)) {
-        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status \u5FC5\u987B\u662F todo|doing|done\uFF08\u5F97 ${status}\uFF09`);
-        return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+      if (status && !BOARD_ENTRY_STATUSES.includes(status)) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}\uFF08\u5F97 ${status}\uFF09`);
+        return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
       }
       let text = typeof payload.text === "string" ? payload.text.trim() : "";
       if (action === "task-update") {
@@ -51536,7 +52117,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (typeof taskObj !== "object" || Array.isArray(taskObj) || typeof taskObj.text !== "string" || taskObj.text.trim() === "")
           return failAudit("task.text \u5FC5\u586B");
         const taskStatus = typeof taskObj.status === "string" ? taskObj.status : "";
-        if (taskStatus && taskStatus !== "todo" && taskStatus !== "doing") return failAudit("task.status \u5FC5\u987B\u662F todo|doing");
+        if (taskStatus && taskStatus !== "backlog" && taskStatus !== "claimed") return failAudit("task.status \u5FC5\u987B\u662F backlog|claimed");
         const taskNote = typeof taskObj.note === "string" ? taskObj.note.trim() : "";
         const taskDeps = Array.isArray(taskObj.depends_on) ? taskObj.depends_on.filter((x) => typeof x === "string" && x.trim() !== "") : void 0;
         const gateRaw = taskObj.gate;
@@ -51716,7 +52297,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           const anchor = str2("anchor");
           const tier = str2("tier");
           if (!name || !anchor) return { ok: false, error: "name/anchor \u5FC5\u586B" };
-          if (!isAbsolute6(anchor)) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+          if (!isAbsolute7(anchor)) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
           if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
           const roleDefaults = {};
           if (p.role_defaults && typeof p.role_defaults === "object" && !Array.isArray(p.role_defaults)) {
@@ -51867,7 +52448,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             const text = str2("text");
             if (!text) return { ok: false, error: "text \u5FC5\u586B" };
             const status = str2("status");
-            if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+            if (status && !BOARD_ENTRY_STATUSES.includes(status)) return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
             let deps;
             if (p.depends_on !== void 0) {
               if (!Array.isArray(p.depends_on)) return { ok: false, error: "depends_on \u987B\u4E3A\u5B57\u7B26\u4E32\u6570\u7EC4" };
@@ -51891,7 +52472,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             r = u.ok ? { ok: true, data: { entry: u.entry } } : u;
           } else if (op2 === "move") {
             const st2 = str2("status");
-            if (!["todo", "doing", "done"].includes(st2)) return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+            if (!BOARD_ENTRY_STATUSES.includes(st2)) return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str2("entry_id"), st2);
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op2 === "del") {
@@ -52260,8 +52841,71 @@ provider=${opts.provider ?? "default"}` : void 0,
     };
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
-      if (!pf.ok) return { ok: false, error: pf.error };
+      if (!pf.ok) {
+        appendPermissionAudit(auditStore(this.cfg.dataDir), {
+          requested_mode: "bypassPermissions",
+          normalized_mode: null,
+          effective_mode: "forbidden",
+          native_mode: null,
+          capability_state: engineCapabilityState(planned.engine),
+          engine: planned.engine,
+          reason: "preflight_failed",
+          policy_source: "tier_default",
+          environment: resolveEnvScope(this.cfg.port),
+          dir_scope: resolveDirScope(anchor),
+          tier,
+          actor,
+          session_id: null,
+          command_id: dispatchId,
+          created_at: Date.now()
+        });
+        return { ok: false, error: pf.error };
+      }
     }
+    const engineForPolicy = planned.engine ?? "claude";
+    const dirScope = resolveDirScope(anchor);
+    const envScope = resolveEnvScope(this.cfg.port);
+    const policyOn = permissionPolicyEnabled();
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const auditRow = (p, sid) => ({
+      ...p,
+      environment: envScope,
+      dir_scope: dirScope,
+      tier,
+      actor,
+      session_id: sid,
+      command_id: dispatchId,
+      created_at: Date.now()
+    });
+    if (policyOn && !bizRole) {
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow({
+        requested_mode: "bypassPermissions",
+        normalized_mode: null,
+        effective_mode: "forbidden",
+        native_mode: null,
+        capability_state: engineCapabilityState(engineForPolicy),
+        engine: engineForPolicy,
+        reason: "unknown_role_mapping",
+        policy_source: null
+      }, null));
+      return { ok: false, error: `forbidden: unknown_role_mapping\uFF08\u672A\u77E5\u5C97\u4F4D\u540D ${role}\u2014\u2014\u6743\u9650\u4E3B\u4F53\u6620\u5C04\u8BCD\u8868 worker/pm/team_pm/review/review_pm\uFF09` };
+    }
+    const perm = policyOn ? evaluatePermission({
+      requested_mode: "bypassPermissions",
+      engine: engineForPolicy,
+      role: bizRole ?? "worker",
+      // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
+      tier,
+      capability_state: engineCapabilityState(engineForPolicy),
+      policy_source: group?.mixed_engine === true ? "mixed_team_default" : "tier_default",
+      dir_scope: dirScope,
+      env: envScope
+    }) : null;
+    if (perm && perm.effective_mode === "forbidden") {
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));
+      return { ok: false, error: `forbidden: ${perm.reason}` };
+    }
+    const spawnMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : "bypassPermissions";
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId;
     if (veteran) {
@@ -52272,7 +52916,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `\u719F\u624B\u590D\u6D3B\u5931\u8D25\uFF0C\u672C\u5355\u964D\u7EA7\u65B0\u4F1A\u8BDD: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
             skipStickyCwd: true,
             employee: true,
             role,
@@ -52290,7 +52934,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
           skipStickyCwd: true,
           employee: true,
           role,
@@ -52307,6 +52951,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
     const s = this.sessions.get(sessionId);
+    if (perm) appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, sessionId));
     if (s) {
       s.state.project_gid = input.gid;
       s.state.dispatch_tier = tier;
@@ -52323,9 +52968,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id ? (
-        // #087 beads：认领模式——前置检查已过，既有卡 todo→doing 挂派单（卡是同一张，依赖关系保留）
-        { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId }
-      ) : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId });
+        // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
+        { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
+      ) : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
@@ -52338,7 +52983,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       });
     }
     this.emitOrgState();
-    return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId, ...perm ? { permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } } : {} };
   }
   // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个
   // 可承接者。避开名单 = bad 评价｜失败≥2 且多于成功（未手动评 bad 时的兜底——
@@ -52484,9 +53129,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     for (const q2 of this.openDispatches.values()) for (const e of q2) live.add(e.id);
     const open3 = new Set(readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").map((e) => e.id));
     for (const ent of loadBoard(gid).entries) {
-      if (ent.status !== "doing" || !ent.dispatch_id) continue;
+      if (ent.status !== "claimed" || !ent.dispatch_id) continue;
       if (live.has(ent.dispatch_id) || open3.has(ent.dispatch_id)) continue;
-      moveEntryByDispatch(gid, ent.dispatch_id, "todo");
+      moveEntryByDispatch(gid, ent.dispatch_id, "backlog");
     }
   }
   // #26 M3 重启重建挂起标记（审查修正）：org_parked 是内存态、不进事件流——重启后
@@ -52838,13 +53483,13 @@ provider=${opts.provider ?? "default"}` : void 0,
           const q2 = this.openDispatches.get(s.state.session_id);
           if (!q2 || q2.length <= 1) break;
           q2.unshift(q2.pop());
-          this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "todo");
+          this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "backlog");
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
         this.resumeAgent(s, text, images.length ? images : void 0);
       } else {
-        this.closeOpenDispatches(s.state.session_id, "done", "\u6D41\u4E2D\u65AD\u6062\u590D\u5F85\u547D\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
+        this.closeOpenDispatches(s.state.session_id, "done", "\u6D41\u4E2D\u65AD\u6062\u590D\u5F85\u547D\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
         this.reviveSaved(s);
       }
       s.wd.phase = "idle";
@@ -52933,7 +53578,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const finished = [...this.sessions.values()].filter((s) => (s.state.status === "DONE" || s.state.status === "ERROR") && !s.state.pinned).sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
       if (this.sessions.size < MAX_SESSIONS) break;
-      this.closeOpenDispatches(s.state.session_id, "failed", "\u5BB9\u91CF\u9A71\u9010\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
+      this.closeOpenDispatches(s.state.session_id, "failed", "\u5BB9\u91CF\u9A71\u9010\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
       void s.agent?.stop();
       this.sessions.delete(s.state.session_id);
       this.lastStoreTodos.delete(s.state.session_id);
@@ -52958,41 +53603,9 @@ ${task}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { readFileSync as readFileSync24, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
-import { join as join28, dirname as dirname9, sep as sep7 } from "node:path";
-import { homedir as homedir13, networkInterfaces as networkInterfaces2 } from "node:os";
-
-// src/models.ts
-import { existsSync as existsSync19, readFileSync as readFileSync21 } from "node:fs";
-import { homedir as homedir10 } from "node:os";
-import { join as join26 } from "node:path";
-var DEFAULT_MODEL = "glm-5.3";
-function readClaudeSettings() {
-  try {
-    return JSON.parse(readFileSync21(join26(homedir10(), ".claude", "settings.json"), "utf8"));
-  } catch {
-    return {};
-  }
-}
-function listModels(fallbackDefault) {
-  const s = existsSync19(join26(homedir10(), ".claude", "settings.json")) ? readClaudeSettings() : {};
-  const env = s.env ?? {};
-  const out = [];
-  const add = (m) => {
-    if (typeof m !== "string") return;
-    const base = m.replace(/\[1m\]$/, "").trim();
-    if (base && !out.includes(base)) out.push(base);
-  };
-  for (const m of (process.env.CCR_MODELS ?? "").split(",")) add(m);
-  add(s.model);
-  add(env.ANTHROPIC_DEFAULT_SONNET_MODEL);
-  add(env.ANTHROPIC_DEFAULT_HAIKU_MODEL);
-  add(env.ANTHROPIC_DEFAULT_OPUS_MODEL);
-  add(fallbackDefault || DEFAULT_MODEL);
-  return out;
-}
-
-// src/ws-server.ts
+import { readFileSync as readFileSync25, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
+import { join as join30, dirname as dirname9, sep as sep7 } from "node:path";
+import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/ws/wrapper.mjs
@@ -53008,15 +53621,15 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, readFileSync as readFileSync23, readdirSync as readdirSync9, statSync as statSync8, writeFileSync as writeFileSync16 } from "node:fs";
-import { homedir as homedir12 } from "node:os";
+import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, readFileSync as readFileSync24, readdirSync as readdirSync9, statSync as statSync8, writeFileSync as writeFileSync16 } from "node:fs";
+import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn5, execFileSync } from "node:child_process";
-import { existsSync as existsSync20, mkdirSync as mkdirSync15, appendFileSync as appendFileSync3, readFileSync as readFileSync22, writeFileSync as writeFileSync15, rmSync as rmSync4 } from "node:fs";
-import path4, { join as join27 } from "node:path";
-import { homedir as homedir11, tmpdir as tmpdir2 } from "node:os";
+import { existsSync as existsSync20, mkdirSync as mkdirSync15, appendFileSync as appendFileSync3, readFileSync as readFileSync23, writeFileSync as writeFileSync15, rmSync as rmSync4 } from "node:fs";
+import path4, { join as join29 } from "node:path";
+import { homedir as homedir13, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path4.dirname(fileURLToPath2(import.meta.url));
 var dataDir = process.env.CCR_DATA_DIR ?? path4.join(here, "..", "data");
@@ -53033,7 +53646,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync22(injectCs, "utf8").includes("--peek");
+    return readFileSync23(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -53097,23 +53710,23 @@ var ERR_BY_CODE = {
   6: "peek-fail"
 };
 function run(args) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const fake = process.env.CCR_INJECT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, ...args], { windowsHide: true }) : spawn5(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve8({ ok: false, error: "timeout" });
+      resolve9({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve8({ ok: false, error: e.message });
+      resolve9({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve8({ ok: true });
-      else resolve8({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
+      if (code === 0) resolve9({ ok: true });
+      else resolve9({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -53145,27 +53758,27 @@ function mapAppleError(stderr) {
   return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : void 0;
 }
 function runAppleScript(script) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve8({ ok: false, error: "timeout" });
+      resolve9({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve8({ ok: false, error: e.message });
+      resolve9({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) return resolve8({ ok: true });
+      if (code === 0) return resolve9({ ok: true });
       try {
-        appendFileSync3(join27(homedir11(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync3(join29(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
-      resolve8({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
+      resolve9({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -53207,9 +53820,9 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join27(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    const tmp = join29(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync15(tmp, body, "utf8");
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       const child = spawn5("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
@@ -53220,9 +53833,9 @@ async function resumeSession(cwd, sessionId, text, permMode) {
           rmSync4(tmp, { force: true });
         } catch {
         }
-        resolve8({ ok: false, error: e.message });
+        resolve9({ ok: false, error: e.message });
       });
-      child.on("spawn", () => resolve8({ ok: true }));
+      child.on("spawn", () => resolve9({ ok: true }));
       child.unref?.();
     });
   }
@@ -53301,7 +53914,7 @@ function buildCaptureScript(pid) {
   ].join("\n");
 }
 function runAppleScriptOut(script) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let out = "";
@@ -53310,15 +53923,15 @@ function runAppleScriptOut(script) {
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve8({ ok: false, text: "", error: "timeout" });
+      resolve9({ ok: false, text: "", error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve8({ ok: false, text: "", error: e.message });
+      resolve9({ ok: false, text: "", error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve8({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+      resolve9({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
     });
   });
 }
@@ -53332,11 +53945,11 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join27(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join29(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync22(tmp, "utf8");
+    const text = readFileSync23(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
@@ -53472,8 +54085,8 @@ var QUESTION_HOLD_MS = 9e4;
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
-    const f = path5.join(homedir12(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync23(f, "utf-8"));
+    const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync24(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -53481,8 +54094,8 @@ function cliSessionIdle(pid) {
 }
 function cliSessionStatus(pid) {
   try {
-    const f = path5.join(homedir12(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync23(f, "utf-8"));
+    const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync24(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -53620,7 +54233,7 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
-      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir12(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir14(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
       for (const dir of readdirSync9(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
@@ -53796,7 +54409,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync23(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync24(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -53813,7 +54426,7 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir12(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir14(), ".claude", "sessions");
       let files;
       try {
         files = readdirSync9(dir);
@@ -53826,7 +54439,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync23(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync24(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -54294,7 +54907,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync23(path5.join(homedir12(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync24(path5.join(homedir14(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -54461,7 +55074,7 @@ var Bridge = class _Bridge {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(shown, 80)}`);
       return { ok: true };
     }
-    const cwd = state.cwd || homedir12();
+    const cwd = state.cwd || homedir14();
     this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
@@ -54618,7 +55231,7 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync23(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync24(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
       writeFileSync16(this.pidCacheFile, JSON.stringify(raw));
     } catch {
@@ -54678,11 +55291,11 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path5.join(homedir12(), ".claude", "sessions");
+      const dir = path5.join(homedir14(), ".claude", "sessions");
       for (const f of readdirSync9(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync23(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync24(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -55337,7 +55950,7 @@ var Bridge = class _Bridge {
       ...taskCallId ? { id: taskCallId } : {}
     });
     const holdMs = questions.length ? this.opts.questionHoldMs ?? QUESTION_HOLD_MS : this.opts.holdMs ?? DEFAULT_HOLD_MS;
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       const timer = setTimeout(() => {
         this.pending.delete(id2);
         if (questions.length) {
@@ -55346,13 +55959,13 @@ var Bridge = class _Bridge {
           this.mgr.setExternalStatus(id2, "WORKING", summary);
           this.bus.emit(id2, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision: "timeout", by: "relay" });
         }
-        resolve8({ decision: "pass" });
+        resolve9({ decision: "pass" });
       }, holdMs);
       timer.unref();
       this.pending.set(id2, {
         sessionId: id2,
         requestId,
-        resolve: resolve8,
+        resolve: resolve9,
         timer,
         toolName: ev2.tool_name ?? "tool",
         toolInput: input,
@@ -55674,7 +56287,7 @@ var Bridge = class _Bridge {
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync23(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync24(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -55972,19 +56585,6 @@ function localIps() {
   return out;
 }
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
-var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
-function pluginConfigPath() {
-  return join28(homedir13(), ".cc-deck", "config.json");
-}
-function readPluginConfig() {
-  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
-  try {
-    const raw = JSON.parse(readFileSync24(pluginConfigPath(), "utf-8"));
-    for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
-  } catch {
-  }
-  return out;
-}
 function notifyAcceptanceRefill(acc, rows, mgr2) {
   try {
     const cwd = acc.cwd;
@@ -56127,7 +56727,7 @@ function listCustomCommands(dir, source) {
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync24(p, "utf-8").slice(0, 400);
+      const head = readFileSync25(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -56139,11 +56739,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join28(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join30(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync10(join28(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join28(dir, e.name, g2)), source });
+        for (const g2 of readdirSync10(join30(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join30(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -56157,11 +56757,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync21(join28(p, "web-console", "index.html"))) ?? webRootCandidates[1];
-  const consoleHtml = join28(webRoot, "web-console", "index.html");
-  const naclJs = join28(webRoot, "web-console", "nacl.js");
-  const qrJs = join28(webRoot, "web-console", "qr.js");
-  const mobileDir = join28(webRoot, "mobile") + sep7;
+  const webRoot = webRootCandidates.find((p) => p && existsSync21(join30(p, "web-console", "index.html"))) ?? webRootCandidates[1];
+  const consoleHtml = join30(webRoot, "web-console", "index.html");
+  const naclJs = join30(webRoot, "web-console", "nacl.js");
+  const qrJs = join30(webRoot, "web-console", "qr.js");
+  const mobileDir = join30(webRoot, "mobile") + sep7;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -56195,7 +56795,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync24(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync25(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
@@ -56223,7 +56823,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync24(consoleHtml);
+      const html = readFileSync25(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
@@ -56232,7 +56832,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync24(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync25(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
@@ -56240,16 +56840,16 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync24(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync25(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join28(webRoot, "web-console", url.pathname.slice(1));
+      const file = join30(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync21(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync24(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync25(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -56293,11 +56893,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join28(cfg2.dataDir, "relay-name");
+      const file = join30(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync24(file, "utf8").trim().slice(0, 40);
+          name = readFileSync25(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -56572,8 +57172,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join28(homedir13(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join28(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join30(homedir15(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join30(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -56704,7 +57304,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
-          homedir: homedir13(),
+          homedir: homedir15(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
           platform: process.platform,
@@ -56729,7 +57329,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
           // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
           // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
-          source_capabilities: { projection_v2: true },
+          // P81-9 kill-switch off：permission 摘要停发（端上经 P81-8 双端 undefined
+          // 降级面自动隐藏=三端自动还原）；engine_catalog 属 #75 线不受开关影响
+          source_capabilities: { projection_v2: true, ...permissionPolicyEnabled() ? { permission: permissionCapabilitiesSummary() } : {}, engine_catalog: engineCatalogSummary(mgr2.cfg.model) },
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -56823,11 +57425,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   return {
     port: cfg2.port,
     bridge,
-    close: () => new Promise((resolve8) => {
+    close: () => new Promise((resolve9) => {
       clearInterval(heartbeat);
       unsubscribe();
       for (const client of wss.clients) client.terminate();
-      wss.close(() => server.close(() => resolve8()));
+      wss.close(() => server.close(() => resolve9()));
     })
   };
 }
@@ -56886,7 +57488,7 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync24(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync25(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
@@ -56967,32 +57569,32 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync22, readFileSync as readFileSync25, writeFileSync as writeFileSync18 } from "node:fs";
-import { join as join29 } from "node:path";
+import { existsSync as existsSync22, readFileSync as readFileSync26, writeFileSync as writeFileSync18 } from "node:fs";
+import { join as join31 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join29(dataDir2, "cloud-keypair.json");
+  const kpPath = join31(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync22(kpPath)) {
-    keypair = JSON.parse(readFileSync25(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync26(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
     writeFileSync18(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join29(dataDir2, "wan-secret");
+  const wanSecretPath = join31(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync22(wanSecretPath)) wanSecret = readFileSync25(wanSecretPath, "utf-8").trim();
+  if (existsSync22(wanSecretPath)) wanSecret = readFileSync26(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
     writeFileSync18(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join29(dataDir2, "cloud-peers.json");
+  const peersPath = join31(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync22(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync25(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync26(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -57050,7 +57652,7 @@ function loadOrCreateIdentity(dataDir2) {
 }
 
 // src/cloud-client.ts
-import { homedir as homedir14 } from "node:os";
+import { homedir as homedir16 } from "node:os";
 var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -57410,7 +58012,9 @@ var CloudClient = class {
         settings: this.mgr.employeeHomeState(),
         // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
         // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
-        source_capabilities: { projection_v2: true },
+        // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，
+        // #117 教训）；engine_catalog 属 #75 线不受开关影响
+        source_capabilities: { projection_v2: true, ...permissionPolicyEnabled() ? { permission: permissionCapabilitiesSummary() } : {}, engine_catalog: engineCatalogSummary(this.mgr.cfg.model) },
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
@@ -57420,7 +58024,7 @@ var CloudClient = class {
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
-        homedir: homedir14(),
+        homedir: homedir16(),
         models: listModels(this.mgr.cfg.model),
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
@@ -57766,23 +58370,23 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync23, readFileSync as readFileSync26, writeFileSync as writeFileSync19 } from "node:fs";
-import { join as join30 } from "node:path";
-import { homedir as homedir15 } from "node:os";
+import { existsSync as existsSync23, readFileSync as readFileSync27, writeFileSync as writeFileSync19 } from "node:fs";
+import { join as join32 } from "node:path";
+import { homedir as homedir17 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join30(homedir15(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join32(homedir17(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync23(dir)) return "skip-no-dir";
-  const file = join30(dir, "settings.json");
+  const file = join32(dir, "settings.json");
   let obj;
   if (!existsSync23(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync26(file, "utf-8"));
+      obj = JSON.parse(readFileSync27(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -57818,9 +58422,9 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join31(cfg.dataDir, "relay.lock");
+  const lockPath = join33(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync27(lockPath, "utf8").trim());
+    const prev = Number(readFileSync28(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -57839,7 +58443,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync27(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
+      if (Number(readFileSync28(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
     } catch {
     }
   };
@@ -57880,7 +58484,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync27(join31(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync28(join33(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -57931,14 +58535,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync4(join31(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync4(join33(cfg.dataDir, "relay.log"), "a");
   const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join31(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join33(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -57951,7 +58555,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync24("/proc")) return readFileSync27(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync24("/proc")) return readFileSync28(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -57961,9 +58565,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join31(cfg.dataDir, "relay.pid");
+  const pidFile = join33(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync27(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync28(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -57987,12 +58591,12 @@ if (cliArgs.has("--stop")) {
     console.log(`[config] \u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u5F00\u542F\uFF08${st2.source === "file" ? "\u8BBE\u7F6E\u9879" : "\u65B0\u88C5\u9ED8\u8BA4"}\uFF09\uFF1A${st2.value}`);
   }
 }
-var persistPath = join31(cfg.dataDir, "events.ndjson");
+var persistPath = join33(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
     for (const f of readdirSync11(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join31(dir, f);
+      const p = join33(dir, f);
       try {
         if (Date.now() - statSync10(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
@@ -58001,7 +58605,7 @@ function sweepTmpImages(dir) {
   } catch {
   }
 }
-var tmpImageDir = join31(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join33(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var prior = loadEvents(persistPath);
@@ -58074,7 +58678,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync27(join31(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync28(join33(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -58097,7 +58701,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync27(join31(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync28(join33(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -58131,15 +58735,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync20(join31(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync20(join33(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync20(join31(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join31(homedir16(), ".cc-deck", "data");
+    writeFileSync20(join33(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join33(homedir18(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
     if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync24(hookHome)) {
       try {
-        writeFileSync20(join31(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync20(join33(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -58164,7 +58768,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join31(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join33(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

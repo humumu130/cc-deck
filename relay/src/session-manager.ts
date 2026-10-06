@@ -19,7 +19,7 @@ import {
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
-import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode } from "./permission-policy.js";
+import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionPolicyEnabled } from "./permission-policy.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
@@ -1899,6 +1899,11 @@ export class SessionManager {
     const raw = s.state.permission_mode;
     if (raw === undefined || raw === null) return "default";
     if (s.state.external) return raw;
+    // P81-9 kill-switch off（§8.1 显式存量 permission_mode 原样保留/resume 继续用该值）：
+    // 旧卡续跑原值直读——不降档、不审计、不回写（§6.3「不得创建声称已 bypass 的会话
+    // 状态」仅在新 policy 生效期有效，回退契约优先；缺字段 `?? "default"` 是 P81 前
+    // 既有惯例，上方两行本就是它，不属回退面）
+    if (!permissionPolicyEnabled()) return raw;
     const n = normalizeLegacyPermissionMode(raw);
     if (n.kind === "bypass_demoted") {
       if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
@@ -2046,13 +2051,16 @@ export class SessionManager {
           const dirScope = resolveDirScope(cmd.payload.cwd);
           const envScope = resolveEnvScope(this.cfg.port);
           if (requestedEngine !== undefined && !isSessionEngine(requestedEngine)) {
-            // 未知引擎拒也落审计（§6.3「拒绝也写审计」；B8 修正面）
-            appendPermissionAudit(auditStore(this.cfg.dataDir), {
-              requested_mode: pm ?? null, normalized_mode: null, effective_mode: "forbidden", native_mode: null,
-              capability_state: engineCapabilityState(String(requestedEngine)), engine: String(requestedEngine),
-              reason: "unknown_engine", policy_source: "explicit",
-              environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id: null, command_id: cmd.command_id, created_at: Date.now(),
-            });
+            // 未知引擎拒也落审计（§6.3「拒绝也写审计」；B8 修正面）。P81-9 off：恢复
+            // P81 前口径——拒保留（isSessionEngine 校验非 P81 线），审计不落（新面不写）
+            if (permissionPolicyEnabled()) {
+              appendPermissionAudit(auditStore(this.cfg.dataDir), {
+                requested_mode: pm ?? null, normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+                capability_state: engineCapabilityState(String(requestedEngine)), engine: String(requestedEngine),
+                reason: "unknown_engine", policy_source: "explicit",
+                environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id: null, command_id: cmd.command_id, created_at: Date.now(),
+              });
+            }
             return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine as SessionEngine | undefined;
@@ -2082,6 +2090,27 @@ export class SessionManager {
                 degradedReason = `角色预置引擎 ${preset} 不可用（catalog 非 ready），已回退默认引擎`;
               }
             }
+          }
+          // P81-9 kill-switch off（§8.2.4 回退契约）：完整回 P81 前行为——pm 走旧直通
+          //（:2041 本就是旧形态），引擎/角色/ceiling/环境四闸跳过、forbidden 面缺席、
+          // 不落新 P81 审计（「回退不删除任何事实源」=既有审计照旧，新面不写）；ACK 回
+          // P81 前三键形态（无 permission 键——端上 P81-8 降级面见 undefined 自动隐藏）。
+          // #75 selection 面（引擎预置/degraded 标记）与未知引擎校验保留（非 P81 线，
+          // 75-R 交付已验收；校验拒不落审计=恢复 P81 前口径）。
+          if (!permissionPolicyEnabled()) {
+            const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, {
+              ...(engineResolved ? { engine: engineResolved } : {}),
+              ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
+              ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
+              ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
+            });
+            return {
+              command_id: cmd.command_id,
+              ok: true,
+              session_id,
+              ...(engineResolved ? { engine: engineResolved } : {}),
+              ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
+            };
           }
           // P81-2 开卡求值闸（§6.1 统一拒绝面）：用户自建卡映射 team_pm×随手办（§5.2
           // 上限 full-auto）。P81-5：两维真实判定接入+审计落库（成功与拒绝都落）+
@@ -5396,14 +5425,18 @@ export class SessionManager {
     const engineForPolicy = planned.engine ?? "claude";
     const dirScope = resolveDirScope(anchor);
     const envScope = resolveEnvScope(this.cfg.port);
-    const bizRole = role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    // P81-9 kill-switch off（§8.2.4 回退契约）：完整回 P81 前行为——岗位映射不拒
+    //（bizRole 占位 "worker" 不消费）、求值/forbidden/审计全跳、spawnMode 硬传 bypass
+    //（恢复 P81 前两处 create 硬传点原样）
+    const policyOn = permissionPolicyEnabled();
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
     const auditRow = (p: {
       requested_mode: string | null; normalized_mode: string | null; effective_mode: string; native_mode: string | null;
       capability_state: string | null; engine: string | null; reason: string; policy_source: string | null;
     }, sid: string | null) => ({
       ...p, environment: envScope, dir_scope: dirScope, tier, actor, session_id: sid, command_id: dispatchId, created_at: Date.now(),
     });
-    if (!bizRole) {
+    if (policyOn && !bizRole) {
       // 未知岗位收紧拒（P81-5 B3 债：fail-closed 不猜——显性错误优于静默错权）
       appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow({
         requested_mode: "bypassPermissions", normalized_mode: null, effective_mode: "forbidden", native_mode: null,
@@ -5412,24 +5445,25 @@ export class SessionManager {
       }, null));
       return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm）` };
     }
-    const perm = evaluatePermission({
+    // P81-9 off：perm=null 跳过求值与 forbid 面；spawnMode 恢复 P81 前硬传 bypass
+    const perm = policyOn ? evaluatePermission({
       requested_mode: "bypassPermissions",
       engine: engineForPolicy,
-      role: bizRole,
+      role: bizRole ?? "worker", // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
       tier,
       capability_state: engineCapabilityState(engineForPolicy),
       policy_source: group?.mixed_engine === true ? "mixed_team_default" : "tier_default",
       dir_scope: dirScope,
       env: envScope,
-    });
-    if (perm.effective_mode === "forbidden") {
+    }) : null;
+    if (perm && perm.effective_mode === "forbidden") {
       appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));
       return { ok: false, error: `forbidden: ${perm.reason}` };
     }
     // spawn 传值收口（P81-5）：effective→MANAGED 实参（claude 沙盒 bypass 恒等零变；
     // JSONL unverified 降 edit-auto 后 CLI 收 acceptEdits 而非伪装 bypass）。veteran
     // resume 分支不传 pm（resume 面 permission_mode 从 state 继承——P81-6 域）。
-    const spawnMode = EFFECTIVE_TO_MANAGED[perm.effective_mode];
+    const spawnMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : "bypassPermissions";
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -5482,7 +5516,8 @@ export class SessionManager {
     // COMMAND_CREATE「成功=新会话 id」对称；create 失败出口不落 audit：权限闸已通过
     // 非权限事件，appendDispatch failed 行已承载）。物化事实由 requested_mode+
     // policy_source 双字段承载（reason=ok 即「降级/拒绝事实优先」语义下的正解）。
-    appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, sessionId));
+    // P81-9 off：回退态不落新 P81 审计（「回退不删除任何事实源」=既有照旧，新面不写）。
+    if (perm) appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, sessionId));
     if (s) {
       s.state.project_gid = input.gid;
       s.state.dispatch_tier = tier;
@@ -5516,7 +5551,9 @@ export class SessionManager {
       });
     }
     this.emitOrgState();
-    return { ok: true, dispatch_id: dispatchId, session_id: sessionId, permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } };
+    // P81-9 off：permission 回显键停发——旧 relay ACK 无此键（三态矩阵「新客户端×旧
+    // relay」wire 基准），conditional spread 与 SNAPSHOT 摘要出口同口径
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId, ...(perm ? { permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } } : {}) };
   }
 
   // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个

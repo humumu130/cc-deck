@@ -342,3 +342,22 @@ export function permissionCapabilitiesSummary(): PermissionCapabilitySummary[] {
     return { engine: engine as PermissionCapabilitySummary["engine"], capability_state: cap, modes: guaranteedModes(cap) };
   });
 }
+
+// ---------- P81-9 kill-switch（specs/081 §8.2.4 发布闸门与回滚） ----------
+
+/** P81 权限策略总开关（env 单点，CCR_* 惯例）。回退契约 §8.2.4「P81 实施失败：保留
+ * 现有四档 wire 契约，关闭新 normalized policy 入口」——off = 完整回 P81 前行为：
+ * 开卡求值走旧直通、四闸跳过、forbidden 面缺席、SNAPSHOT 摘要停发（端上经 P81-8
+ * 双端 undefined 降级面自动隐藏=三端自动还原）、旧卡续跑原值直读。
+ * 词表：未设/空/on/1/true（大小写不敏感）=开；off/0/false=关；**未知值 fail-safe
+ * 当关**并 console.warn——回退场景宁可多退，不可该退没退成。默认=开（新 policy 生效）。
+ * 纯函数零副作用（warn 除外），每求值点现读 env——测试可逐断言翻转。 */
+export function permissionPolicyEnabled(): boolean {
+  const raw = process.env.CCR_PERMISSION_POLICY;
+  if (raw === undefined || raw.trim() === "") return true;
+  const v = raw.trim().toLowerCase();
+  if (v === "on" || v === "1" || v === "true") return true;
+  if (v === "off" || v === "0" || v === "false") return false;
+  console.warn(`[p81-kill-switch] CCR_PERMISSION_POLICY 未知值 "${raw}"——按 off（回退 P81 前）处理`);
+  return false;
+}
