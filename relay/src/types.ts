@@ -100,6 +100,12 @@ export interface SourceCapabilities {
    * #117 教训）；端上以字段存在性判断能力（旧 relay 不发=选择器降级隐藏摘要）。 */
   permission?: PermissionCapabilitySummary[];
   /**
+   * #75 引擎目录（PM-75 提案 §4.3 契约钉死，75-R relay 半）：源级引擎选择器数据源，
+   * 六枚举全覆盖投影（不另建事实源）。旧 relay 不发=选择器降级「默认 Claude+Codex 兼容
+   * 开关」；旧客户端忽略未知键零感知（既有索引签名宽容语义）。
+   */
+  engine_catalog?: EngineCatalogEntry[];
+  /**
    * M13-2 v2 投影协议能力位（v2 投影信号字段，三端消费定案）：true = 本 relay 的
    * PROJECTS_UPDATED/BOARD_UPDATED 携带 entity_refs+delta 增量形状（D18②），端上
    * 可启用五态渲染与 delta merge 分支。语义边界：此位表达「支持 v2 投影协议」，
@@ -111,7 +117,29 @@ export interface SourceCapabilities {
    */
   projection_v2?: boolean;
   // P81-2：值域收容 permission 摘要（未知键宽容索引保留——旧客户端忽略未知键语义不变）
-  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | undefined;
+  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | EngineCatalogEntry[] | undefined;
+}
+
+/**
+ * #75 引擎目录条目（PM-75 提案 §4.3 契约钉死——75-W web 半按此形状先行开发，改形状须
+ * 三端同步）。六枚举全覆盖：
+ *   ready        可选（preflight 过/自证可用）
+ *   unavailable  不可选（CLI 未装/校验未过——preflight.fail+reason）
+ *   unsupported  不可选（枚举占位未接入编排，如 zcode——灰显给原因）
+ *   unknown      状态未知（投影兜底，理论上不出现——六枚举全有确定分支）
+ * capabilities 三键是 catalog 静态投影（源级能力，非会话级运行时配置——codex 的
+ * remoteDecisionChannel 会话位不在此反映，备案）。models=该引擎源级可用清单，没有
+ * 清单的引擎恒空数组（端上显示「使用引擎默认」——严禁拿 Claude 的 SNAPSHOT.models
+ * 冒充他引擎清单，提案 §5.2 红线）。
+ */
+export interface EngineCatalogEntry {
+  id: SessionEngine;
+  label: string;
+  state: "ready" | "unavailable" | "unsupported" | "unknown";
+  capabilities: { resume: boolean; approval: boolean; artifacts: boolean };
+  preflight: { state: "pass" | "fail" | "unknown"; reason: string };
+  models: string[];
+  default_for_roles: string[];
 }
 
 export interface NotificationSourceContext {
@@ -1178,6 +1206,12 @@ export interface CommandAckPayload {
   ok: boolean;
   session_id?: string;   // COMMAND_CREATE 成功时返回
   error?: string;
+  /** #75 仅 COMMAND_CREATE 成功：实际引擎回显（缺省=claude 旧语义）；与请求引擎不一致
+   * 时 degraded=true+degraded_reason 显式标记（提案 §6.2「标记已降级不隐藏差异」——
+   * 端上据此显示降级徽标，不静默换引擎）。 */
+  engine?: SessionEngine;
+  degraded?: boolean;
+  degraded_reason?: string;
   /** P81-2 开卡权限求值回执（COMMAND_CREATE/组织派单成功时携带）：effective≠normalized
    * 即发生降级（端上可显示 effective badge）；forbidden 拒绝面走 ok:false+error 不带本字段。 */
   permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };

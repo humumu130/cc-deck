@@ -46,6 +46,10 @@ function groupOf(r: { ok: boolean; group?: ProjectGroup }): ProjectGroup {
 }
 
 // ---------- 0. 纪律 ----------
+// 本件语义=「旧 json 读面 ↔ sqlite 导入行」双源对表——旧读面必须走 json 档读 fixture。
+// 显式钉档（SQLITE-FLIP 后缺省=sqlite，本件 fixture 是 json 形态，缺省读空库八红；
+// 75-R 回归时发现的 SQLITE-FLIP 漏网连带面，与 test-m1-orchestration :124 同口径）
+process.env.CCR_STORAGE_READ_MODE = "json";
 const dataDir = mkdtempSync(join(tmpdir(), "cc-deck-parity-db-"));
 process.env.CCR_DATA_DIR = dataDir;
 const fx1 = mkdtempSync(join(tmpdir(), "cc-deck-parity-org1-")); // F1 现状证据

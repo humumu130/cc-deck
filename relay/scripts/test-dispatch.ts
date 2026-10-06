@@ -86,6 +86,7 @@ async function main() {
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
   const prevCwdEnv = process.env.CCR_CWD;
   const prevInitMs = process.env.CCR_RESUME_INIT_MS; // 提到 try 外：finally 恢复用（审查修正）
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   delete process.env.CCR_CWD;

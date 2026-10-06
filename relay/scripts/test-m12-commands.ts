@@ -100,6 +100,7 @@ try {
   const anchor2 = mkdtempSync(join(tmpdir(), "ccr-anchor2-m12-"));
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   try {

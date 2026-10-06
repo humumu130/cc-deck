@@ -13,6 +13,11 @@ import {
   computeReady, computeReadySet, addLesson, listLessons,
 } from "../src/projects.js";
 
+// 显式钉 json 档（SQLITE-FLIP 后缺省=sqlite，本件直测 projects.ts json 读写面 fixture——
+// 缺省读空库全件语义崩；必须先于第一个读面调用，放护栏段已晚——前段坏状态会延续；
+// 75-R 回归发现的漏网连带面，环境注入版 99/99 佐证钉档位置是唯一变量）
+process.env.CCR_STORAGE_READ_MODE = "json";
+
 let pass = 0;
 let fail = 0;
 function assert(cond: boolean, name: string) {

@@ -27,6 +27,7 @@ function assert(cond: boolean, name: string): void {
 
 // ---------- 0. 纪律 ----------
 const dataDir = mkdtempSync(join(tmpdir(), "cc-deck-d2-db-"));
+process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
 process.env.CCR_DATA_DIR = dataDir;
 const fx = mkdtempSync(join(tmpdir(), "cc-deck-d2-org-"));
 console.log("临时目录纪律:");

@@ -102,6 +102,7 @@ try {
   // ---------- 段 1：mgr 级 PROJECTS_UPDATED 形状 + 差分正确性 ----------
   console.log("S1 PROJECTS_UPDATED delta 形状");
   const dataDir = join(root, "data");
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_DATA_DIR = dataDir;
   process.env.CCR_ORG_DIR = join(root, "org"); // 组织域数据（groups/boards）注入临时目录
   process.env.CCR_CLOUD_URL = "";

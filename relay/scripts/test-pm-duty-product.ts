@@ -75,6 +75,8 @@ function mkFixture(dirs: string[]) {
   const ANCHOR = mkdtempSync(join(tmpdir(), `ccr-p71-anchor-${seq}-`));
   dirs.push(DATA, ORG, ANCHOR);
   const prevOrg = process.env.CCR_ORG_DIR;
+  const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_ORG_DIR = ORG;
   setLightConfirmTrusted(true); // 轻立项信任直通：create 即 active（板可写，M13-2 探针同缝）
   const cfg: RelayConfig = {
@@ -107,6 +109,7 @@ function mkFixture(dirs: string[]) {
   };
   return { mgr, created, rounds, gid, card, dispatch, ensureLeaderIdx, cleanup: () => {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
+    if (prevReadMode === undefined) delete process.env.CCR_STORAGE_READ_MODE; else process.env.CCR_STORAGE_READ_MODE = prevReadMode;
   } };
 }
 

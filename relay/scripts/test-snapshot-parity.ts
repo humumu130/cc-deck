@@ -296,6 +296,14 @@ try {
   // M13-2 v2 投影信号字段：LAN/phone 同发（#117），WAN 手表极简集不带
   assert(lanP.source_capabilities?.projection_v2 === true && phoneP.source_capabilities?.projection_v2 === true, "source_capabilities.projection_v2 双出口同发（v2 投影信号定案）");
   assert(!("source_capabilities" in wanP), "WAN 极简集不带 source_capabilities（手表无投影消费）");
+  // #75 引擎目录：LAN/phone 双出口同发同源（#117 纪律——两处 inline 组装漂移即红）；
+  // WAN 随 source_capabilities 整体不带（上一断言已锁，不另设）
+  const lanCat = lanP.source_capabilities?.engine_catalog;
+  const phoneCat = phoneP.source_capabilities?.engine_catalog;
+  assert(Array.isArray(lanCat) && Array.isArray(phoneCat) && JSON.stringify(lanCat) === JSON.stringify(phoneCat), "#75 engine_catalog 双出口深等（同参 engineCatalogSummary 组装）");
+  assert(Array.isArray(lanCat) && lanCat.length === 6 && JSON.stringify(lanCat.map((e: { id: string }) => e.id)) === JSON.stringify(["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"]), "#75 engine_catalog 六枚举全覆盖 id 序（真快照链路锚）");
+  const cl0 = (lanCat as { id: string; state: string; capabilities: { resume: boolean; approval: boolean } }[] | undefined)?.find((e) => e.id === "claude");
+  assert(cl0?.state === "ready" && cl0.capabilities.resume === true && cl0.capabilities.approval === true, "#75 claude 条目真快照投影 ready+resume/approval 真（非空壳）");
 
   // ⑤ 实体引用裁定断言：板不随快照；汇总引用不带全量正文；转录走预算装配
   assert(!("boards" in lanP) && !("boards" in phoneP) && !("boards" in wanP), "三出口零 boards 键（板不随快照，按需 COMMAND_PROJECT_DETAIL）");

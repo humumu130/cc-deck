@@ -20,6 +20,7 @@ import {
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode } from "./permission-policy.js";
+import { catalogReadyEngines } from "./engine-catalog.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
@@ -2055,11 +2056,38 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine as SessionEngine | undefined;
+          // #75 开卡选择上下文（PM-75 提案 §3/§7.2）：可选 selection_source（选择来源
+          // 词表）+gid/role（组上下文）。求值序与派单口一致（显式输入优先既有语义零
+          // 改动）：payload.engine 显式值 > 组 role_defaults[role].engine 预置 > relay
+          // 默认（claude）。预置引擎不在 catalog ready 态 ⇒ 回退默认+degraded 显式标记
+          //（提案 §6.1「不静默换引擎」红线）；显式手动选择不经降级（P81 闸+preflight
+          // 拒绝面既有语义，未选/选错都会被拒而非回落）。
+          const selPayload = cmd.payload as unknown as { selection_source?: unknown; gid?: unknown; role?: unknown };
+          const selSource = selPayload.selection_source;
+          if (selSource !== undefined && selSource !== "role_default" && selSource !== "manual" && selSource !== "relay_default") {
+            return { command_id: cmd.command_id, ok: false, error: `无效 selection_source: ${String(selSource)}（有效值：role_default/manual/relay_default）` };
+          }
+          const selGid = typeof selPayload.gid === "string" ? selPayload.gid.trim() : "";
+          const selRole = typeof selPayload.role === "string" ? selPayload.role.trim() : "";
+          let degraded = false;
+          let degradedReason = "";
+          let engineResolved = engine;
+          if (!engineResolved && selGid && selRole) {
+            const preset = findGroup(selGid)?.role_defaults?.[selRole]?.engine;
+            if (preset) {
+              if (catalogReadyEngines().has(preset)) {
+                engineResolved = preset; // 预置引擎可用：role_default 缺省生效
+              } else {
+                degraded = true; // 预置不可用（未装/unsupported）：回退 claude+显式降级
+                degradedReason = `角色预置引擎 ${preset} 不可用（catalog 非 ready），已回退默认引擎`;
+              }
+            }
+          }
           // P81-2 开卡求值闸（§6.1 统一拒绝面）：用户自建卡映射 team_pm×随手办（§5.2
           // 上限 full-auto）。P81-5：两维真实判定接入+审计落库（成功与拒绝都落）+
           // spawn 传值收口（effective→MANAGED 实参——JSONL 降级后 CLI 收 acceptEdits
           // 而非伪装 bypass；claude 沙盒 bypass 恒等=多数路径零变）。
-          const engineForPolicy = engine ?? "claude";
+          const engineForPolicy = engineResolved ?? "claude";
           const perm = evaluatePermission({
             requested_mode: pm ?? null,
             engine: engineForPolicy,
@@ -2083,15 +2111,19 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
           }
           const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
-            ...(engine ? { engine } : {}),
+            ...(engineResolved ? { engine: engineResolved } : {}),
             ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
             ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
+            ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
           });
           appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
           return {
             command_id: cmd.command_id,
             ok: true,
             session_id,
+            // #75 实际引擎回显+降级显式标记（端上据此显示降级徽标，不静默——提案 §6.2）
+            ...(engineResolved ? { engine: engineResolved } : {}),
+            ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
             permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason },
           };
         }
@@ -2714,7 +2746,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine; model?: string; provider?: string; role?: string }): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine; model?: string; provider?: string; role?: string; /** #75 预置降级标记（COMMAND_CREATE gid/role 面）——随 SESSION_CREATED 下发端上显示 */ degraded?: boolean; degraded_reason?: string }): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
     // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
@@ -2801,6 +2833,9 @@ export class SessionManager {
       ...(managed.state.employee_home ? { employee_home: managed.state.employee_home } : {}),
       // #27 引擎随首帧下发（端上徽标 + 重启回放还原分叉依据）
       ...(managed.state.engine ? { engine: managed.state.engine } : {}),
+      // #75 预置降级显式标记（提案 §6.2「标记已降级不隐藏差异」；仅 COMMAND_CREATE
+      // gid/role 预置回退场景携带，其余创建路径恒不带）
+      ...(opts?.degraded ? { degraded: true, degraded_reason: opts.degraded_reason ?? "" } : {}),
     });
     // 目录回落说明进时间线：手机端能看到会话为何落在用户主目录，relay 日志同步留痕
     if (fallbackNote) {
