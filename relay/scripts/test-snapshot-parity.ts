@@ -293,6 +293,9 @@ try {
   assert(JSON.stringify(lanP.models) === JSON.stringify(phoneP.models) && JSON.stringify(phoneP.models) === JSON.stringify(wanP.models), "models 三出口深等");
   assert(lanP.acceptances?.some((a) => a.id === accId) === true && phoneP.acceptances?.some((a) => a.id === accId) === true, "种子验收单 LAN/phone 同步携带（#117 同步面）");
   assert(lanP.relay_dev === identity.relayDev && phoneP.relay_dev === identity.relayDev, "relay_dev 双出口同源（LAN 经 opts 回调 / phone 经 identity）");
+  // M13-2 v2 投影信号字段：LAN/phone 同发（#117），WAN 手表极简集不带
+  assert(lanP.source_capabilities?.projection_v2 === true && phoneP.source_capabilities?.projection_v2 === true, "source_capabilities.projection_v2 双出口同发（v2 投影信号定案）");
+  assert(!("source_capabilities" in wanP), "WAN 极简集不带 source_capabilities（手表无投影消费）");
 
   // ⑤ 实体引用裁定断言：板不随快照；汇总引用不带全量正文；转录走预算装配
   assert(!("boards" in lanP) && !("boards" in phoneP) && !("boards" in wanP), "三出口零 boards 键（板不随快照，按需 COMMAND_PROJECT_DETAIL）");

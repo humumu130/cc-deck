@@ -944,6 +944,10 @@ export function startServer(
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr.employeeHomeState(),
+          // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
+          // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
+          // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
+          source_capabilities: { projection_v2: true },
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置

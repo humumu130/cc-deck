@@ -1,1 +1,12 @@
-{"schema_version":1,"models":["glm-5.3"],"sessions":[],"logs":{},"server_time":1791158400000}
+{
+ "schema_version": 1,
+ "models": [
+  "glm-5.3"
+ ],
+ "sessions": [],
+ "logs": {},
+ "server_time": 1791158400000,
+ "source_capabilities": {
+  "projection_v2": true
+ }
+}

@@ -19,6 +19,7 @@ import {
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
+  type ProjectGroup, type ProjectBoard,
 } from "./projects.js";
 // #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
 import { rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
@@ -86,6 +87,8 @@ import type {
   NotificationKind,
   NotificationGroup,
   NotificationSeverity,
+  BoardDelta,
+  EntityDelta,
 } from "./types.js";
 // #018-R1c 决策通知账（B3a 纯函数层，只消费不改）：stableKey 防重 + 生命周期迁移
 import { stableKey, transitionNotification } from "./decision-notify.js";
@@ -5015,15 +5018,66 @@ export class SessionManager {
     return { ok: true };
   }
 
+  // ── M13-2 delta 投影：上次发射状态缓存（发射侧单点 diff，25 处调用点零改）──
+  // 重启后缓存空=首帧省略 delta（端上覆盖式消费旧字段兜底，与旧 relay 帧同形）；
+  // 此后每帧带 entity_refs+delta。缓存只作 diff 基线，不参与任何业务判定。
+  private lastProjectsBroadcast: ProjectGroup[] | null = null;
+  private lastBoardBroadcast = new Map<string, ProjectBoard>();
+
+  // 按 id 深比差分：无前值返回 null（调用方省略 delta 走覆盖式）；有前值时
+  // upserts=新增或内容变化条目（JSON 深等，updated_at 推进即判变）、removes=前有今无。
+  private diffById<T extends { id: string }>(prev: T[] | null, next: T[]): EntityDelta<T> | null {
+    if (!prev) return null;
+    const prevJson = new Map(prev.map((x) => [x.id, JSON.stringify(x)]));
+    const nextIds = new Set(next.map((x) => x.id));
+    const upserts = next.filter((x) => prevJson.get(x.id) !== JSON.stringify(x));
+    const removes = prev.filter((x) => !nextIds.has(x.id)).map((x) => x.id);
+    return { upserts, removes };
+  }
+
   // #26 M2 组织广播（瞬态：在线端实时收敛；离线端由 SNAPSHOT.projects/org_confirms
-  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）
+  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）。
+  // M13-2：payload 扩 entity_refs+delta（旧字段 groups 保留全量，旧端覆盖式零变化；
+  // D18② 帧级判定=payload.delta 键存在性）
   emitOrgState(): void {
-    this.bus.emitTransient("PROJECTS_UPDATED", { groups: listGroups() });
+    const groups = listGroups();
+    const delta = this.diffById(this.lastProjectsBroadcast, groups);
+    this.lastProjectsBroadcast = groups;
+    this.bus.emitTransient("PROJECTS_UPDATED", {
+      groups,
+      ...(delta
+        ? {
+            entity_refs: [...new Set([...delta.upserts.map((g) => g.id), ...delta.removes])],
+            delta,
+          }
+        : {}),
+    });
     this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
   }
 
+  // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
+  // 发帧）；board 旧字段保留全量（不带板正文的只是 delta——M13-1 实体引用裁定沿承）
   emitBoard(gid: string): void {
-    this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
+    const board = loadBoard(gid);
+    const prev = this.lastBoardBroadcast.get(gid) ?? null;
+    this.lastBoardBroadcast.set(gid, board);
+    if (!prev) {
+      this.bus.emitTransient("BOARD_UPDATED", { gid, board });
+      return;
+    }
+    const entries = this.diffById(prev.entries, board.entries) ?? { upserts: [], removes: [] };
+    // 前值 lessons undefined（板升级前旧文件）视为空表，首次出现=全量 upserts
+    const lessons = this.diffById(prev.lessons ?? [], board.lessons ?? []) ?? { upserts: [], removes: [] };
+    const metaChanged = prev.frozen !== board.frozen || prev.updated_at !== board.updated_at;
+    const delta: BoardDelta = { entries, lessons, meta: { frozen: board.frozen, updated_at: board.updated_at } };
+    this.bus.emitTransient("BOARD_UPDATED", {
+      gid,
+      board,
+      entity_refs: [
+        ...new Set([...entries.upserts.map((e) => e.id), ...entries.removes, ...lessons.upserts.map((l) => l.id)]),
+      ],
+      delta,
+    });
   }
 
   // M12-5 引擎 preflight（拉起前纯静态检查，失败即 error 拒派）：裁定「派单前 error」

@@ -4,7 +4,7 @@
 import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
 import type { AllowRule } from "./allow-rules.js";
-import type { ProjectGroup, ProjectBoard, OrgConfirm } from "./projects.js";
+import type { ProjectGroup, ProjectBoard, OrgConfirm, BoardEntry, LessonEntry } from "./projects.js";
 
 // ---------- 事件信封 ----------
 
@@ -87,6 +87,17 @@ export interface SourceCapabilities {
   activity?: boolean;
   notifications?: boolean;
   commands?: string[];
+  /**
+   * M13-2 v2 投影协议能力位（v2 投影信号字段，三端消费定案）：true = 本 relay 的
+   * PROJECTS_UPDATED/BOARD_UPDATED 携带 entity_refs+delta 增量形状（D18②），端上
+   * 可启用五态渲染与 delta merge 分支。语义边界：此位表达「支持 v2 投影协议」，
+   * 不等于「板值域已迁五态」（D18① 三态→五态一次性迁移独立单落）——端上渲染按值
+   * 自适应（按值分组+非空泳道才渲染，v2-system-design :100），三态值只占
+   * backlog/claimed/done 不会出假五泳道。旧 relay 不发 source_capabilities 整体
+   * （undefined=能力降级，expo 既有判定）/ 旧客户端忽略未知键，双向兼容。
+   * 随 SNAPSHOT 下发：LAN/phone 两出口同发（#117），WAN 手表极简集不带（M13-1 闸）。
+   */
+  projection_v2?: boolean;
   [key: string]: boolean | string[] | undefined;
 }
 
@@ -600,13 +611,38 @@ export interface AllowRulesUpdatedPayload {
   rules: AllowRule[];
 }
 
+// M13-2 delta 投影形状（D18②：PROJECTS_UPDATED/BOARD_UPDATED 扩 payload，旧字段
+// 保留旧端天然兼容）。设计铁律：全部差分用「带稳定 id 的完整条目」表达增改，端上
+// 按 id upsert、removes 忽略未知 id——重复投递（同状态重复发射/双端各收一份）二次
+// 应用零变化（幂等规格，test-delta-projection 锁）。帧级判定（三端照此实现）：
+// `payload.delta !== undefined` → 增量 merge；缺席 → 覆盖式消费旧字段（旧 relay /
+// mgr 重启后首帧，零行为变化）。
+export interface EntityDelta<T extends { id: string }> {
+  /** 变更实体完整条目（整条替换，含未变字段——端上不做字段级合并） */
+  upserts: T[];
+  /** 移除实体 id（忽略未知 id=幂等；组域 v1 无删边恒空，编码留位） */
+  removes: string[];
+}
+// 板 delta：条目级差分（不带板全量正文——M13-1 实体引用裁定沿承，板变更通知继续
+// 走 emitBoard 专通道）；lessons 按 id upsert（append-only 语义由端上 ts 排序承载）；
+// meta 承载板级元数据（frozen 翻转/时间戳推进——挂起/结项/复活边无条目变化也发帧）。
+export interface BoardDelta {
+  entries: EntityDelta<BoardEntry>;
+  lessons: EntityDelta<LessonEntry>;
+  meta: { frozen: boolean; updated_at: number };
+}
+
 // #26 M2 组织推送载荷（与 SNAPSHOT 同源同构）
 export interface ProjectsUpdatedPayload {
-  groups: ProjectGroup[]; // listGroups() 全量（小表，写穿全量）
+  groups: ProjectGroup[]; // 旧字段保留：listGroups() 全量（小表，写穿全量；旧端覆盖式零变化）
+  entity_refs?: string[]; // v2：本次变更组 id（端上局部刷新定位；与 delta 同进出）
+  delta?: EntityDelta<ProjectGroup>; // v2：增量差分；缺席=首发/mgr 重启后首帧（端上覆盖式兜底）
 }
 export interface BoardUpdatedPayload {
   gid: string;
-  board: ProjectBoard; // 该组全量板（单组小表）
+  board: ProjectBoard; // 旧字段保留：该组全量板（旧端覆盖式零变化）
+  entity_refs?: string[]; // v2：本次变更条目/lesson id
+  delta?: BoardDelta; // v2：增量差分；缺席语义同上
 }
 export interface OrgConfirmUpdatedPayload {
   pending: OrgConfirm[]; // listPendingConfirms()
