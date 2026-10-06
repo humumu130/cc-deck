@@ -40,6 +40,7 @@
 //      source_dispatch_id 非空悬空 →NULL+dangling-ref；task_id 源无 →NULL 恒。
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { statThenRead } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
 import { appendLoss, type LossRecord } from "./loss-report.js";
@@ -85,13 +86,10 @@ interface ObservedNdjson {
 
 function observeNdjson(file: string): ObservedNdjson {
   if (!existsSync(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
-  // 定序：stat 先于 read（C1 observe 同序、D1 同款，efd06ce 定序）——stat 后 read 前文件被改，
-  // 本次拿旧内容配旧 mtime 自洽；下一次观测 mtime 变化→checkpoint 失效→多扫一次（安全侧）。
-  const st = statSync(file);
-  const text = readFileSync(file, "utf8");
-  const lines = text.split("\n");
+  const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）
+  const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { mtimeMs: Math.round(st.mtimeMs), lineCount: lines.length, lines };
+  return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
 }
 
 interface BoardFileRef {
@@ -189,6 +187,7 @@ function applyDispatchLine(
   segs: Map<string, DispatchSeg>,
   groupByAnchor: Map<string, string>,
   sessionMember: Map<string, string | null>,
+  dispatchIds: Set<string>,
   losses: PendingLoss[],
 ): void {
   const src = srcPath;
@@ -240,12 +239,19 @@ function applyDispatchLine(
       [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts],
     );
     segs.set(e.id, { segId: e.id, attemptNo: 1, terminal: TERMINAL_STATUS.has(e.status) });
+    dispatchIds.add(e.id);
     return;
   }
   if (seg.terminal) {
     // 重投：前段固化（终态保留不删），新段 id 派生、attempt+1、parent 指前段
     const nextAttempt = seg.attemptNo + 1;
     const segId = `${e.id}#r${nextAttempt}`;
+    if (dispatchIds.has(segId)) {
+      // 派生 id 撞既有行（源 id 恰带 "#rN" 尾与重投派生撞名）：拒行落账不 INSERT——段状态保持，
+      // 后续同 root 行仍按当前段终态处理；范式「坏行 loss 不阻断」（M11-REVIEW3 P2-1 修复）
+      losses.push({ sourcePath: src, lineNo, reason: "duplicate-id", excerpt });
+      return;
+    }
     port.exec(
       `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
          status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at)
@@ -253,6 +259,7 @@ function applyDispatchLine(
       [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts],
     );
     segs.set(e.id, { segId, attemptNo: nextAttempt, terminal: TERMINAL_STATUS.has(e.status) });
+    dispatchIds.add(segId);
     return;
   }
   // 当前段推进：status/归因列末行覆盖；created_at 不动（=首行 ts）；receipt 只被非空覆盖
@@ -393,6 +400,9 @@ export function importDispatchLesson(
     );
     // 重投链状态：重放从零重建（域将清）；续跑从 dispatch 表恢复（前批段已在库）
     const segs = replay ? new Map<string, DispatchSeg>() : restoreSegs(port);
+    // 开段撞名预检集：续跑态从表预载（与 restoreSegs 同源）；重放态必须从空集自建——
+    // 域将被首批 DELETE，预载旧 id 会残留在内存集里，重放中派生 id 撞「已删行」误报拒行
+    const dispatchIds = replay ? new Set<string>() : new Set(port.query<{ id: string }>("SELECT id FROM dispatch").map((r) => r.id));
 
     let batch: { ev: DispatchLine | null; lineNo: number }[] = [];
     let cleared = false; // 清域单次：重放首修批清，后续批只增量（每批清会把前批灌的父行删掉，
@@ -411,7 +421,7 @@ export function importDispatchLesson(
         let lastLine = fromLine;
         for (const b of batch) {
           if (b.ev !== null) {
-            applyDispatchLine(port, b.ev, b.lineNo, sources.dispatchLogFile, segs, groupByAnchor, sessionMember, losses);
+            applyDispatchLine(port, b.ev, b.lineNo, sources.dispatchLogFile, segs, groupByAnchor, sessionMember, dispatchIds, losses);
           }
           lastLine = b.lineNo;
         }
@@ -457,7 +467,9 @@ export function importDispatchLesson(
         throw new Error(`import-dispatch-lesson: 空 dispatch-log checkpoint 写入失败——${err instanceof Error ? err.message : String(err)}`);
       }
     }
-    rescanned.push(sources.dispatchLogFile);
+    // 条件报扫：重放（域清重灌）或实际续跑处理了行才报——跑完态+他源失效时零处理不虚报
+    // （M11-REVIEW3 P3-5：原无条件 push 在 boards 失效轮虚报 dispatch 重扫）
+    if (replay || dispatchProcessed > 0) rescanned.push(sources.dispatchLogFile);
   }
 
   // ---- 段 2：lesson 域（boards 失效 OR dispatch 失效才触发——dispatch 集变化联动悬空面重算） ----

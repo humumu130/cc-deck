@@ -70,17 +70,24 @@ appendDispatch({ ts: 1100, id: "d-retry", tier: "随手办", target: "org-leader
 appendDispatch({ ts: 1200, id: "d-retry", tier: "随手办", target: "org-leader", status: "failed", receipt: "首次失败", session_id: "", actor: "leader" }, fx);
 appendDispatch({ ts: 1300, id: "d-retry", tier: "随手办", target: "org-leader", status: "dispatched", session_id: "", actor: "leader" }, fx);
 appendDispatch({ ts: 1400, id: "d-retry", tier: "随手办", target: "org-leader", status: "failed", receipt: "再败", session_id: "", actor: "leader" }, fx);
-// 归因边角（单行单）
+// 归因边角（单行单）——排位在复现块之前：r3 续跑窗口（offset 快进线后）不得含终态行
+// （行序状态机语义：重遇终态行=再现行=重投推进），watchdog（done）故殿后至行16
 appendDispatch({ ts: 4100, id: "d-anchor-ghost", tier: "正经立项", target: "org-leader", status: "dispatched", session_id: "s-relay-1", project_anchor: "/px/ghost", actor: "leader" }, fx);
 appendDispatch({ ts: 4200, id: "d-sess-ghost", tier: "咨询", target: "org-leader", status: "running", session_id: "s-ghost", actor: "user" }, fx);
-appendDispatch({ ts: 4300, id: "d-watchdog", tier: "看门狗", target: "org-leader", status: "done", receipt: "自愈动作", session_id: "", actor: "leader" }, fx);
 appendDispatch({ ts: 4400, id: "d-noactor", tier: "随手办", target: "org-leader", status: "running", session_id: "" }, fx); // 旧数据无 actor
 appendDispatch({ ts: 4500, id: "d-badactor", tier: "随手办", target: "org-leader", status: "running", session_id: "", actor: 123 as unknown as string }, fx); // actor 类型坏
+// 派生段 id 撞名复现（REVIEW3 P2-1 / FIX-B ①）：行12 独立 root id 恰带 "#r2" 尾开段；
+// 行13/14 root x 常态收敛 done；行15 x 终态后再现行=重投 → 派生 "x#r2" 撞行12 → duplicate-id 账拒行
+appendDispatch({ ts: 5, id: "x#r2", tier: "咨询", target: "x", status: "dispatched", session_id: "" }, fx);
+appendDispatch({ ts: 6, id: "x", tier: "咨询", target: "x", status: "dispatched", session_id: "" }, fx);
+appendDispatch({ ts: 7, id: "x", tier: "咨询", target: "x", status: "done", session_id: "" }, fx);
+appendDispatch({ ts: 8, id: "x", tier: "咨询", target: "x", status: "dispatched", session_id: "" }, fx);
+appendDispatch({ ts: 4300, id: "d-watchdog", tier: "看门狗", target: "org-leader", status: "done", receipt: "自愈动作", session_id: "", actor: "leader" }, fx);
 // 脏行手搓（真写路径不可产）：bad-json / 缺 id / status 词表外
 appendFileSync(logFile, "这不是json\n", "utf8");
 appendFileSync(logFile, JSON.stringify({ ts: 1, tier: "咨询", target: "x", status: "running", session_id: "" }) + "\n", "utf8"); // 缺 id
 appendFileSync(logFile, JSON.stringify({ ts: 2, id: "d-flying", tier: "咨询", target: "x", status: "flying", session_id: "" }) + "\n", "utf8"); // status 越词表
-assert(existsSync(logFile) && readFileSync(logFile, "utf8").split("\n").filter((l) => l.trim() !== "").length === 15, "dispatch-log fixture：15 行落盘（12 真+3 脏）");
+assert(existsSync(logFile) && readFileSync(logFile, "utf8").split("\n").filter((l) => l.trim() !== "").length === 19, "dispatch-log fixture：19 行落盘（12 真+3 脏+4 复现）");
 
 // ---------- 3. boards lessons 造态 ----------
 console.log("boards lessons 造态:");
@@ -113,7 +120,7 @@ const dRows = port.query<{ id: string; group_id: string | null; tier: string; ta
   source_session_id: string | null; actor: string; status: string; receipt: string | null;
   attempt_no: number; parent_dispatch_id: string | null; created_at: number; updated_at: number }>(
   "SELECT * FROM dispatch ORDER BY id, attempt_no");
-assert(dRows.length === 8, `dispatch 行数=8（7 id，d-retry 拆 2 段）——实测 ${dRows.length}`);
+assert(dRows.length === 10, `dispatch 行数=10（9 id，d-retry 拆 2 段）——实测 ${dRows.length}`);
 const row = (id: string, attempt = 1) => dRows.find((r) => r.id === id && r.attempt_no === attempt)!;
 
 // S1 常态链收敛：一行状态机（终态行收敛、首末 ts、receipt 末个非空、归因全列）
@@ -146,12 +153,23 @@ assert(na.actor === "" && ba.actor === "" && row("d-watchdog").tier === "看门�
 assert(row("d-sess-ghost").target_member_id === null && row("d-retry").target_member_id === null,
   "S3 target 占位符（org-leader）非会话 id→target_member_id NULL 不落账");
 
-// S4 坏行 loss 对号（dispatch 源：bad-json 1 + missing-field 2（缺 id/actor 类型坏）+ bad-field 1（status 词表外）+ dangling-ref 2（anchor/session 悬空））
+// S4 坏行 loss 对号（dispatch 源：bad-json 1 + missing-field 2（缺 id/actor 类型坏）+ bad-field 1（status 词表外）+ dangling-ref 2（anchor/session 悬空）+ duplicate-id 1（行15 派生撞行12））
 const lossLog = listLoss(port, logFile);
 const reasonsLog = lossLog.map((l) => `${l.lineNo}:${l.reason}`).sort().join();
-assert(lossLog.length === 6 && reasonsLog === ["8:dangling-ref", "9:dangling-ref", "13:bad-json", "14:missing-field", "12:missing-field", "15:bad-field"].sort().join(),
-  `S4 dispatch 源 6 账对号（bad-json/missing-field×2/bad-field/dangling-ref×2，物理行号）——实测 ${reasonsLog}`);
+assert(lossLog.length === 7 && reasonsLog === ["8:dangling-ref", "9:dangling-ref", "17:bad-json", "18:missing-field", "11:missing-field", "19:bad-field", "15:duplicate-id"].sort().join(),
+  `S4 dispatch 源 7 账对号（bad-json/missing-field×2/bad-field/dangling-ref×2/duplicate-id，物理行号）——实测 ${reasonsLog}`);
 assert((lossLog.find((l) => l.reason === "bad-json")?.excerpt ?? "").includes("这不是"), "S4 bad-json excerpt=行原文截 200");
+const dupLoss = lossLog.find((l) => l.reason === "duplicate-id");
+assert(dupLoss !== undefined && dupLoss.lineNo === 15 && (dupLoss.excerpt ?? "").includes('"id":"x"'),
+  "P2 复现：行15 派生 id 撞既有行 → duplicate-id 账拒行（excerpt 带涉事行 root id，不炸批不阻断）");
+
+// P2-1 复现断言（FIX-B ①）：撞名拒行后域导入完成、行12/14 各归其位
+const xr2 = row("x#r2");
+assert(xr2 !== undefined && xr2.attempt_no === 1 && xr2.status === "dispatched" && xr2.parent_dispatch_id === null,
+  "P2 复现：行12 x#r2 独立段原样在库（attempt=1 parent=NULL，未被行15 派生覆盖）");
+const xRoot = row("x");
+assert(xRoot !== undefined && xRoot.status === "done" && xRoot.attempt_no === 1 && xRoot.parent_dispatch_id === null,
+  "P2 复现：行13/14 x 常态收敛 done（行15 重投被拒后段状态保持终态不推进）");
 
 // S5 lesson 面
 const lRows = port.query<{ id: string; group_id: string | null; task_id: string | null; text: string;
@@ -183,42 +201,43 @@ assert(cps.length === 2 && cps.every((c) => c.line_offset === c.line_count), "�
 // ---------- 5. 幂等快进 / 中断续跑 / 失效重放不残留 ----------
 console.log("幂等与时间维度:");
 const r2 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
-assert(r2.skipped === true && r2.counts.dispatch === 8 && r2.counts.lesson === 6 && r2.dispatchProcessed === 0,
+assert(r2.skipped === true && r2.counts.dispatch === 10 && r2.counts.lesson === 6 && r2.dispatchProcessed === 0,
   "同源重跑快进：skipped=true、行数不增、零处理");
 
-// 续跑：构造真实批间崩现场——先追加 d-ok 重投两行（17 行），再把 checkpoint 拨回批间态
-// （mtime=当前观测、line_count=17、line_offset=10：五元组自洽仅 offset 落后=崩在批 2 尾）。
-// 直接 append 不拨 cp 会因 lineCount 变化失效重放——那是「源变」语义（D1 设计），续跑专测
-// 批间中断。余行 11-17 含脏行重遇（dup 守卫）+d-ok 重投轨迹（恢复段状态开段 2）。
+// 续跑：构造真实批间崩现场——先追加 d-ok 重投两行（21 行），再把 checkpoint 拨回批间态
+// （mtime=当前观测、line_count=21、line_offset=16：五元组自洽仅 offset 落后=崩在批尾）。
+// offset 快进线（16）刻意罩住全部终态行（行序状态机语义：重遇终态行=再现行=重投推进，
+// 快进线后不得有终态行）——余行 17-21 = 脏行重遇（dup 守卫不叠）+d-ok 重投轨迹（恢复段
+// 状态开段 2）。直接 append 不拨 cp 会因 lineCount 变化失效重放——那是「源变」语义。
 appendDispatch({ ts: 3100, id: "d-ok", tier: "轻立项", target: "s-relay-1", status: "dispatched", session_id: "s-relay-1", project_anchor: "/px/g1", actor: "leader" }, fx);
 appendDispatch({ ts: 3200, id: "d-ok", tier: "轻立项", target: "s-relay-1", status: "failed", receipt: "重投失败", session_id: "s-relay-1", project_anchor: "/px/g1", actor: "leader" }, fx);
-port.exec("UPDATE import_checkpoint SET mtime_ms = ?, line_count = 17, line_offset = 10 WHERE path = ?",
+port.exec("UPDATE import_checkpoint SET mtime_ms = ?, line_count = 21, line_offset = 16 WHERE path = ?",
   [Math.round(statSync(logFile).mtimeMs), logFile]);
 const r3 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
-assert(r3.skipped === false && r3.dispatchProcessed === 7 && r3.rescanned.length === 1,
-  "批间中断续跑：cp 有效+余 7 行→仅续 7 行（boards 不重扫，rescanned 单源）");
+assert(r3.skipped === false && r3.dispatchProcessed === 5 && r3.rescanned.length === 1,
+  "批间中断续跑：cp 有效+余 5 行→仅续 5 行（boards 不重扫，rescanned 单源）");
 const ok2 = port.query<{ id: string; attempt_no: number; parent_dispatch_id: string | null; status: string; receipt: string | null }>(
   "SELECT id, attempt_no, parent_dispatch_id, status, receipt FROM dispatch WHERE id = 'd-ok#r2'")[0];
 assert(ok2 !== undefined && ok2.attempt_no === 2 && ok2.parent_dispatch_id === "d-ok" && ok2.status === "failed" && ok2.receipt === "重投失败",
   "续跑重投链：恢复段状态（段 1 已终态）→开段 2 attempt=2 parent 指父");
-assert(r3.counts.dispatch === 9 && listLoss(port, logFile).length === 6,
-  "续跑零重复零叠加：已导行 UPDATE 幂等（8+#r2=9）、脏行重遇 dup 守卫 loss 不叠（仍 6）");
+assert(r3.counts.dispatch === 11 && listLoss(port, logFile).length === 7,
+  "续跑零重复零叠加：已导行 UPDATE 幂等（10+#r2=11）、脏行/撞名行重遇 dup 守卫 loss 不叠（仍 7）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "续跑后仍零悬空 FK");
 
 // 失效重放：mtime 推进（源变语义）→两域联动重灌、行数不残留
 utimesSync(logFile, new Date(Date.now() + 5), new Date(Date.now() + 5));
 const r4 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
-assert(r4.skipped === false && r4.rescanned.length === 2 && r4.counts.dispatch === 9 && r4.counts.lesson === 6,
+assert(r4.skipped === false && r4.rescanned.length === 2 && r4.counts.dispatch === 11 && r4.counts.lesson === 6,
   "dispatch 失效重放：两域联动重灌、行数与重放前一致（确定性重建不残留）");
 assert(port.query<{ id: string }>("SELECT id FROM dispatch WHERE id = 'd-ok#r2' AND attempt_no = 2 AND parent_dispatch_id = 'd-ok'").length === 1,
   "重放后重投链确定性重建（同输入同输出，幂等）");
-assert(listLoss(port, logFile).length === 6 && listLoss(port, boardsDir).length === 7, "重放后两源 loss 重建同数（先清后灌不叠加）");
+assert(listLoss(port, logFile).length === 7 && listLoss(port, boardsDir).length === 7, "重放后两源 loss 重建同数（先清后灌不叠加）");
 
 // 小批事务：batchSize=2 逐批 flush（重放清域单次+跨批段链父行保留）——批间边界正确性
 utimesSync(logFile, new Date(Date.now() + 10), new Date(Date.now() + 10)); // 先失效（r4 后 cp 已命中，否则快进）
 const r5 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir }, { batchSize: 2 });
-assert(r5.counts.dispatch === 9 && r5.counts.lesson === 6 && r5.dispatchProcessed === 17,
-  "小批重放（batchSize=2，17 行/9 批）：批间 flush 行数不变（批事务边界+清域单次正确）");
+assert(r5.counts.dispatch === 11 && r5.counts.lesson === 6 && r5.dispatchProcessed === 21,
+  "小批重放（batchSize=2，21 行/11 批）：批间 flush 行数不变（批事务边界+清域单次正确）");
 
 // 残留面：ndjson 截断重写（源变短）→失效重放→dispatch 域收敛到新内容；boards 删坏文件→其账消失
 const cpB2 = port.query<{ mtime_ms: number }>("SELECT mtime_ms FROM import_checkpoint WHERE path = ?", [logFile])[0]!.mtime_ms;
@@ -230,6 +249,8 @@ unlinkSync(join(boardsDir, "bad.json"));
 const r7 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
 assert(r7.counts.lesson === 6 && !listLoss(port, boardsDir).some((l) => l.reason === "bad-json"),
   "boards 删坏文件→count 变失效→重灌后坏板账消失、lesson 行数不变");
+assert(r7.rescanned.length === 1 && r7.rescanned[0] === boardsDir,
+  "boards 失效轮 rescanned 单源：dispatch 跑完态零处理不虚报（P3-5 条件 push）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "终态零悬空 FK");
 
 port.close();

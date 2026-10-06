@@ -20,8 +20,14 @@
 // loss 源标识/解析段紧耦合，强行统一必牵动主体逻辑（纯重构超界）。各件保留领域类型，仅观测
 // 内核（本件）共享。
 //
-// 迁移备案：六件全数消费本件，私有 sha12/statThenRead 对已清零（M11-UTIL 迁四件 + M11-UTIL2
-// 回迁 import-org.ts，其 observe 即定稿序出处、原处留指引注释指向本头注）。
+// 迁移备案（M11-UTIL/UTIL2/FIX-B 如实口径）：六导入器中五件消费本件（org/notification/
+// session-task/acceptance/artifact，M11-UTIL 迁四件 + M11-UTIL2 回迁 import-org.ts，其 observe
+// 即定稿序出处、原处留指引注释指向本头注），dispatch-lesson 于 M11-FIX-B 入面（observeNdjson）。
+// 领域特化豁免（有意不迁，非遗漏）：
+//   · session-task observeTasksDir：只 stat 不读内容（行数走 wc 面），无 read 半边可共享；
+//   · acceptance observeAcceptanceDir：stat 失败跳件 vs read 失败落账，异常域分段，骨架单层
+//     裸调无法表达（头注「容错边界」所引先例即此）；
+//   · artifact observeInline：内容指纹替代 mtime，无 stat 面可共享。
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 
