@@ -1102,6 +1102,9 @@
                 const WS_BASE = location.protocol.startsWith("http") ? (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws" : "";
                 let TOKEN = b2Params.get("token") || "";
                 if (WS_BASE) { try { if (TOKEN) localStorage.setItem("cc-deck-005-token", TOKEN); else TOKEN = localStorage.getItem("cc-deck-005-token") || ""; } catch (_) {} }
+                // B批补 DV6g-9：云形态借道（__ccDeck005CloudUI 挂钩）——云在线时凭证=配对身份而非
+                // LAN token，空态措辞不得落「?token=」分支（pair_ack 后主区仍误导未连接，Playwright 实证）
+                const cloudLaneOn = () => { try { const u = window.__ccDeck005CloudUI; return !!(u && u.stateLabel && /已连接/.test(u.stateLabel())); } catch (_) { return false; } };
 
                 const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["CodeBuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
                 const VERIFY_RE = /[〔\[【]\s*待验证\s*[〕\]】]/;   // #85 待验证档：in_progress + 前缀约定独立分组
@@ -1591,7 +1594,7 @@
                     UI.title.textContent = "会话";
                     UI.statusTag.textContent = "未选择"; UI.statusTag.className = "tag";
                     UI.identity.innerHTML = '<span class="source-badge">' + esc(S.relayName) + '</span>';
-                    UI.sub.textContent = !WS_BASE ? "请通过 relay 同源 HTTP 页面连接" : !TOKEN ? "请通过带 ?token= 的 relay 链接连接" : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…";
+                    UI.sub.textContent = !WS_BASE ? "请通过 relay 同源 HTTP 页面连接" : (!TOKEN && !cloudLaneOn()) ? "请通过带 ?token= 的 relay 链接连接" : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…";
                     return;
                   }
                   UI.title.textContent = s.title || s.initial_prompt || s.session_id;
@@ -1711,7 +1714,7 @@
                   if (!pane) return;
                   pane.textContent = "";
                   const s = curSession();
-                  if (!s) { pane.appendChild(noteNode(!WS_BASE ? "请通过 relay 同源 HTTP 页面连接" : !TOKEN ? "请通过带 ?token= 的 relay 链接连接" : "从左侧选择会话查看对话")); return; }
+                  if (!s) { pane.appendChild(noteNode(!WS_BASE ? "请通过 relay 同源 HTTP 页面连接" : (!TOKEN && !cloudLaneOn()) ? "请通过带 ?token= 的 relay 链接连接" : "从左侧选择会话查看对话")); return; }
                   const trunc = S.logsTruncated.get(s.session_id) || 0;
                   if (trunc > 0) pane.appendChild(noteNode("更早的 " + trunc + " 条已截断 · 仅显示最近记录"));
                   const list = S.timelines.get(s.session_id) || [];

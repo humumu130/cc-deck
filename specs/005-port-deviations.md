@@ -110,3 +110,4 @@ B2 无独立 report（worker 交付短式提交），已知持久偏差在此补
 2. DV-ARCH 收敛完成 ✓（#150 R0-R3 提交链 a1c8822/1d676e7/2830005/98e8904，2026-10-07）——出包闸放行；
 3. B4 report 补写（⑥e，f2e19c6）后 DV4 系列指向迁移 ✓；
 4. 本文档随每批更新，新偏差先入表后合入 ✓。
+- **DV6g-9 云形态空态措辞借道（P0 急救，Leader 直修）**：B2 对话域头部/面板空态三元链 `!TOKEN` 分支先于 `hasSnapshot`，云形态 TOKEN 恒空 → pair_ack 后主区仍显示「请通过带 ?token= 的 relay 链接连接」误导未连接（Playwright 线上实证，截图 shot-A3）。修=新增 `cloudLaneOn()`（经 `__ccDeck005CloudUI.stateLabel()` 含「已连接」判云在线）豁免 `!TOKEN` 分支，云在线空态回落「从左侧选择一个会话/从左侧选择会话查看对话」。LAN/桌面形态行为不变。
