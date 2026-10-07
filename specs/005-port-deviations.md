@@ -80,6 +80,19 @@ B2 无独立 report（worker 交付短式提交），已知持久偏差在此补
 - **DV6f-2 服务面双路由**：LAN relay `/` = 旧壳、`GET /app2` = 005 新壳（ws-server.ts，consoleHtml005 缺失时 503 明示「未随包」）；CF `/app` = 旧壳（assets 根 index.html）、`/app2`（含子路径透传，同 /app 口径）= index-005.html（worker.ts）。PWA 子资源经透传共用根路径资产。**部署面（本批实发）**：仅 CF——/app 界面不变（同 legacy UI），关于页版本号 0.6.4-test.2→0.7.0-test.2 随版本统一纪律走；LAN `/app2` 需待下版 relay bundle 部署后生效（源码已备）；桌面壳维持 0.6.4-test.2 旧壳，待用户在 /app2 验收通过后再议换壳出包。
 - **DV6f-3 版本工具链双落点**：version.mjs 增 `web-console-005 CONSOLE_VERSION` 落点（两壳同刷）；release-guard web-console 语法闸门扩双壳（index.html 3 段+index-005.html 6 段逐段 node --check）；check-bundle-sync 扩双壳对比；build-plugin 白名单增拷 index-005.html（否则重建 bundle 后包内 /app2 503）。
 
+## ⑥g 公网云桥配对链批（DV6g-，2026-10-07，B批施工）
+
+> 背景：DV6e-3 记档的已知缺口（公网 https 形态云配对链未移植）本批收口——/app2 经 CF Worker 出面后 loopback `ws://` 被混合内容策略掐死，云桥（CF 桥 wss /cloud + /cloud-poll 长轮询兜底 + tweetnacl 全帧密封）为公网形态唯一通路。移植源=旧壳 index.html 云链锚点（3642-4415 一带），成对移植不重造。
+
+- **DV6g-1 形态分流（缝合点 a）**：`cloudMode = location.protocol === "https:" && !shellProbe`——仅 https 公网页面走 `bootstrapCloud()`；http LAN / tauri 桌面壳维持原探测链（?token= > localStorage > probe_local > /local-info）逐字不动。云 URL 由页面域名推导（`wss://<host>/cloud`），手填 https URL 归一 wss（混合内容硬约束）。
+- **DV6g-2 命令面 shim（缝合点 c，005 特有）**：旧壳多源多 socket，005 单活动源单页连接。云链以 `cloudCmdShim`（readyState 动态 getter + send→密封上行）接管 `window.__ccDeck005MainWs` 与 `ctx.ws`——B2 sendCmd / B4 bridge.sendCommand / Team sendCommand 零改动借道；ACK 一律按 command_id 从帧总线结算（COMMAND_ACK 双口：Team.onAck + 总线 emit），不锚具体 socket，防跨链串台。
+- **DV6g-3 下行总线（缝合点 b）**：解密封后的内层帧 `emit({kind:"frame",frame})`、连接态变化 `emit({kind:"ws",state})` 与地基 LAN 链同口；地基 onEvent(cloudCtx, frame) 聚合会话（SNAPSHOT 全量 + 增量），B2 照常 b2Owned 接管列表。last_seq 落 005 自有键 `cc-deck-005-lastseq`；hello 语义维持旧壳「内存无会话即 0 走全量 SNAPSHOT」（SNAPSHOT 单帧预算由 relay 侧有界化——每会话 50 条 + 512KB 帧预算，页面不自建拉全量，1MiB CF 帧限由源头保证）。
+- **DV6g-4 共享身份 read-shared（决策 1，跨壳互通）**：005 与旧壳同源共存（/app 与 /app2），读 `ccd_servers`（localStorage+sessionStorage 冗余）+ `ccr_cloud_kp`（浏览器 box 身份）——旧壳已配对浏览器开 /app2 免配对直连。**写纪律**：仅 pair_ack 成功后 upsert 自身云源条目（按 id+kind 匹配，绝不删条目/绝不碰 lan 源/不移植 migrateLegacy 写路）；读得损坏(null)一律跳写并 warn 一次（红线：宁可不写，绝不污染旧壳数据）。活动源偏好键 005 自有（`cc-deck-005-active-cloud`），不与旧壳 `ccd_active` 纠缠。代价（记档）：RELAYS 换代否定（已配对身份失效）只改内存不回写共享库——旧壳条目至多滞留旧身份，等下次成功配对覆盖，无结构损坏路径。
+- **DV6g-5 配对面裁剪**：入=深链（`#bt/rd/rk/pc` fragment 捕获后 history.replaceState 抹除）+ 8 位码手输（#d-settings connections 面板与移动端「连接与设备」详情双挂载，6 位管理员过渡码放行）；出=QR 登录/分享二维码/导入/设备清单管理/disc 发现 UI（多 relay 凭码定位的协议路径保留，仅无 QR 入口不会触达）。pair_req 现行口径（#29 C-P0-1 带码携 pubkey；#42 meta 自报 UA 摘要）；安全校验零裁剪（ack rd 比对 / 广播态候选清单核验 / RELAYS 候选 rk 自洽 devId(rk,"rl")===dev / 看门狗 8s×3 + 退避 30s→15min）。
+- **DV6g-6 传输与自愈**：握手 8s 无响应 / 握手被拒 / ws 闪断 x2 → 切 /cloud-poll 长轮询（POST 上行 + GET wait=20 长挂下行；401 自愈丢弃自定义桥 token 回退烘焙值重建；帧级异常隔离不杀 pollLoop）；20s 密封 ping + 45s 无 pong 判死；重连 3s→30s 指数退避（云链独立节奏，与地基 LAN 1s 起步互不影响）+ 1Hz 倒计时文案；真未配对 5min 静默慢速重试；visibilitychange 回前台 ping-resume + 8s 半开探测强断重连。
+- **DV6g-7 UI 挂载（缝合点 d）**：桌面 #d-settings connections 面板云形态整块换云链渲染（云桥状态行+本页设备行+输码表单+重试钮；非云形态维持原静态三行观感）；地基连接 chip 云形态前缀「云桥 」（setConn 按 cfg.kind 分支）；B4 waitingText / 移动端 lane / 移动端列表副文案经只读挂钩 `window.__ccDeck005CloudUI` 借道（域脚本帧路由零改动）；移动端输入框显式 14px 防 iOS 聚焦缩放、输入中跳过重渲、Enter IME 守卫（005 军规同款）。
+- **DV6g-8 测试面**：`test-005-cloud.ts`（新，test:005-cloud）——005 壳内密封层按标记段抽取在 Node 直跑（壳内实现被改即红）+ 真本地桥协议全流程（密封层与 relay/src/e2e.ts 双向互操作 → 输码配对 → hello/SNAPSHOT → 密封命令 ACK → last_seq 恰量补发 → 未配对仅明文 nack）；本地测试桥仅 WS（无 /cloud-poll），轮询降级路径由 `test-005-parity.ts` 新增 C 段静态锚锁定（C1-C12：分流/写纪律/安全校验/心跳/退避/shim/总线/深链/混合内容/LAN 防回退/六块语法门）。DV6e-3 缺口条目就此关闭。
+
 
 
 - **DV-ARCH 双连接过渡形态（历史备案，已收敛）**：地基与 B2 各持一条 ws + 三套命令等待表 + WebSocket 劫持桥并存（994547a A-1 止血后用户可见面无已知缺陷）。**终态已于 #150 收敛线达成**（2026-10-07，R0-R3 提交链：a1c8822 勘察 / 1d676e7 R1 帧总线+桥去劫持 / 2830005 R2 B2 并轨 / 98e8904 R3 收口）：

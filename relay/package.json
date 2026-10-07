@@ -15,6 +15,7 @@
     "test:todo-env": "tsx scripts/test-todo-env.ts",
     "test:waiting-deadlock": "tsx scripts/test-waiting-deadlock.ts",
     "test:cloud": "tsx scripts/test-cloud.ts",
+    "test:005-cloud": "tsx scripts/test-005-cloud.ts",
     "test:watchdog": "tsx scripts/test-watchdog.ts",
     "test:acceptance": "tsx scripts/test-acceptance.ts",
     "test:org": "tsx scripts/test-org.ts",
