@@ -1125,7 +1125,7 @@
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div></div></aside>
             <script>
               // #143-B2 会话域迁移：本块只存在于 #d-session 区间内，不触碰 <style> 与底部地基脚本。
-              // 数据通道为 B2 自开的第二条 WS（SNAPSHOT+增量+COMMAND，见报告偏差 B2-D1/契约请求）。
+              // 数据通道订阅地基帧总线（#150 R2 并轨：全页唯一 WS，SNAPSHOT+增量+COMMAND_ACK 同源）。
               (() => {
                 "use strict";
                 const b2Params = new URLSearchParams(location.search);
@@ -1142,7 +1142,7 @@
                 const DOCK_STATE = { WORKING: ["running", "运行中"], WAITING: ["waiting", "等待确认"], ERROR: ["suspended", "错误"], DONE: ["closing", "已完成"] };
 
                 const S = {
-                  ws: null, status: "offline", retryMs: 1000, retryTimer: 0, stopped: false,
+                  status: "offline", stopped: false,
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
@@ -1206,30 +1206,17 @@
                 function shortTitle(s) { return String(s.title || s.initial_prompt || s.session_id || "").slice(0, 24); }
                 function shortPath(p) { const v = String(p || ""); if (S.homedir && v.startsWith(S.homedir)) return "~" + v.slice(S.homedir.length); return v; }
 
-                // ---------- B2 数据通道（自开 WS；地基脚本不动，见契约请求 C1/C2） ----------
-                function connectB2() {
-                  if (!WS_BASE || !TOKEN) return;
-                  clearTimeout(S.retryTimer);
-                  try { S.ws && S.ws.close(); } catch (_) {}
-                  const w = new WebSocket(WS_BASE + "?token=" + encodeURIComponent(TOKEN));
-                  S.ws = w;
-                  const hs = setTimeout(() => { if (S.ws !== w || w.readyState !== WebSocket.CONNECTING) return; try { w.close(); } catch (_) {} }, 8000);
-                  w.onopen = () => { if (S.ws !== w) return; clearTimeout(hs); S.status = "online"; S.retryMs = 1000; };
-                  w.onclose = () => {
-                    if (S.ws !== w) return; clearTimeout(hs); S.status = "offline";
-                    for (const v of S.ackWaiters.values()) { clearTimeout(v.t); try { v.res(null); } catch {} } // #143 盲评R-1：断线飞行命令立即判未达（原各等 8s 超时死反馈）
-                    S.ackWaiters.clear();
-                    if (!S.stopped) scheduleB2Retry();
-                  };
-                  w.onerror = () => {};
-                  w.onmessage = (ev) => { if (S.ws !== w) return; let m; try { m = JSON.parse(ev.data); } catch (_) { return; } handleFrame(m); };
+                // ---------- B2 数据通道（#150 R2 并轨：退役自开 WS 与重连/握手超时，改订阅地基帧总线） ----------
+                function failB2Flights() { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
+                  for (const v of S.ackWaiters.values()) { clearTimeout(v.t); try { v.res(null); } catch {} }
+                  S.ackWaiters.clear();
                 }
-                function scheduleB2Retry() { clearTimeout(S.retryTimer); const jitter = S.retryMs * (0.8 + Math.random() * 0.4); S.retryTimer = setTimeout(connectB2, jitter); S.retryMs = Math.min(S.retryMs * 2, 30000); } // #143 盲评A-3：±20% 抖动防多端同步重连风暴
 
-                function sendCmd(type, payload) {
-                  if (!S.ws || S.ws.readyState !== WebSocket.OPEN) { b2Toast("relay 未连接，命令未发送"); return null; }
+                function sendCmd(type, payload) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算
+                  const w = window.__ccDeck005MainWs;
+                  if (!w || w.readyState !== 1) { b2Toast("relay 未连接，命令未发送"); return null; }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
-                  S.ws.send(JSON.stringify(cmd));
+                  w.send(JSON.stringify(cmd));
                   return cmd.command_id;
                 }
                 function commandAck(type, payload, timeoutMs = 8000) {
@@ -1264,6 +1251,26 @@
                     case "SESSION_LOG": onLog(sid, m.payload); break;
                   }
                 }
+
+                // #150 R2 并轨：B2 退役自持 ws，订阅地基帧总线（帧语义原样；断线 fail-fast 保持）。
+                // 本 IIFE 早于桥（#d-project）解析——总线判空幂等创建，桥侧复用同一实例。
+                if (!window.__ccDeck005Frames) {
+                  window.__ccDeck005Frames = (() => {
+                    const subs = new Set();
+                    return {
+                      subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+                      emit(ev) { for (const fn of subs) { try { fn(ev); } catch (_) {} } }, // ev = {kind:"frame",frame} | {kind:"ws",state:"connecting"|"open"|"close"}
+                    };
+                  })();
+                }
+                window.__ccDeck005Frames.subscribe((ev) => {
+                  if (ev.kind === "ws") {
+                    S.status = ev.state === "open" ? "online" : "offline"; // 原 onopen/onclose 同款映射（列表 data-connection 语义不变；connecting 归 offline 同旧握手期）
+                    if (ev.state === "close") failB2Flights();
+                    return;
+                  }
+                  if (ev.kind === "frame") handleFrame(ev.frame);
+                });
 
                 // ---------- 事件处理（v1 onEvent 的 B2 子集） ----------
                 function onSnapshot(p) {
@@ -1364,7 +1371,8 @@
                     af.ackSeen = true; maybeSettleArt(ack.command_id);
                     return;
                   }
-                  if (ack.ok === false && !(typeof ack.error === "string" && ack.error.startsWith("duplicate"))) b2Toast("命令失败: " + (ack.error || "未知错误"));
+                  // #150 R2 并轨：总线让 B2 看到全部 ACK（team-*/桥 uuid 等外来回执）——无主直接
+                  // 静默（与地基 Team.onAck 同口径），不再 toast「命令失败」误报；有主结算见上两分支。
                 }
                 function onArtifactChunk(p) {
                   const st = S.artFetches.get(p.ref);
@@ -2499,11 +2507,7 @@
                     });
                   }, 1000);
 
-                  window.addEventListener("pagehide", () => {
-                    S.stopped = true;
-                    clearTimeout(S.retryTimer);
-                    if (S.ws) { S.ws.onclose = null; try { S.ws.close(); } catch (_) {} }
-                  });
+                  window.addEventListener("pagehide", () => { S.stopped = true; }); // #150 R2：无自持 ws，仅保留停走标记
                 }
 
                 // ---------- 启动（地基 setupStubTabs 已在解析期跑完 → 此处收编占位 pane） ----------
@@ -2546,7 +2550,6 @@
                   if (UI.listTools) UI.listTools.dataset.stub = "B2b";
                   bindEvents();
                   renderAll();
-                  connectB2();
                 }
                 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
                 else ready();
@@ -3050,7 +3053,7 @@
                 window.__ccDeck005Frames.subscribe((ev) => {
                   if (!ev || typeof ev !== "object") return;
                   if (ev.kind === "ws") {
-                    bridge.connection = ev.state === "open" ? "online" : "offline";
+                    bridge.connection = ev.state === "open" ? "online" : ev.state === "connecting" ? "connecting" : "offline"; // #150 R2：补 connecting 三态（R1 遗留修正——重连窗口曾显未连接）
                     for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
                     return;
                   }
@@ -3887,6 +3890,7 @@ function connectLan(ctx) {
   const w = new WebSocket(url);
   ctx.ws = w;
   window.__ccDeck005MainWs = w; // #143 盲评A-1 止血：主连接标记——B4 桥命令通道固定走此 socket（ACK 回主连接，不再借道 B2 串台弹错）
+  window.__ccDeck005Frames.emit({ kind: "ws", state: "connecting" }); // #150 R2：建连即广播 connecting（桥恢复 connecting/online/offline 三态，消除 R1 遗留重连窗口显未连接）
   clearTimeout(ctx.lanHsTimer);
   ctx.lanHsTimer = setTimeout(() => {
     ctx.lanHsTimer = 0;
