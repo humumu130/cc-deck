@@ -1212,11 +1212,16 @@
                   S.ws = w;
                   const hs = setTimeout(() => { if (S.ws !== w || w.readyState !== WebSocket.CONNECTING) return; try { w.close(); } catch (_) {} }, 8000);
                   w.onopen = () => { if (S.ws !== w) return; clearTimeout(hs); S.status = "online"; S.retryMs = 1000; };
-                  w.onclose = () => { if (S.ws !== w) return; clearTimeout(hs); S.status = "offline"; if (!S.stopped) scheduleB2Retry(); };
+                  w.onclose = () => {
+                    if (S.ws !== w) return; clearTimeout(hs); S.status = "offline";
+                    for (const v of S.ackWaiters.values()) { clearTimeout(v.t); try { v.res(null); } catch {} } // #143 盲评R-1：断线飞行命令立即判未达（原各等 8s 超时死反馈）
+                    S.ackWaiters.clear();
+                    if (!S.stopped) scheduleB2Retry();
+                  };
                   w.onerror = () => {};
                   w.onmessage = (ev) => { if (S.ws !== w) return; let m; try { m = JSON.parse(ev.data); } catch (_) { return; } handleFrame(m); };
                 }
-                function scheduleB2Retry() { clearTimeout(S.retryTimer); S.retryTimer = setTimeout(connectB2, S.retryMs); S.retryMs = Math.min(S.retryMs * 2, 30000); }
+                function scheduleB2Retry() { clearTimeout(S.retryTimer); const jitter = S.retryMs * (0.8 + Math.random() * 0.4); S.retryTimer = setTimeout(connectB2, jitter); S.retryMs = Math.min(S.retryMs * 2, 30000); } // #143 盲评A-3：±20% 抖动防多端同步重连风暴
 
                 function sendCmd(type, payload) {
                   if (!S.ws || S.ws.readyState !== WebSocket.OPEN) { b2Toast("relay 未连接，命令未发送"); return null; }
@@ -1429,6 +1434,7 @@
                   if (!UI) return;
                   const list = UI.sessionList;
                   if (!S.hasSnapshot) return; // 连接中的占位由地基渲染，不抢
+                  list.dataset.b2Owned = "1"; // #143 盲评A-1 止血：接管标记——地基据此让位列表渲染与走秒，防陈旧快照回盖
                   list.dataset.relayState = "snapshot";
                   list.dataset.connection = S.status;
                   list.dataset.sessionCount = String(S.sessions.size);
@@ -2167,7 +2173,9 @@
                       if (miss) renderMyList();
                     }
                   });
-                  mo.observe(UI.sessionList, { childList: true, subtree: true });
+                  // #143 盲评A-1 止血配套：补 attributes 监听——地基让位重渲后，选中改为地基点改 class，
+                  // 无此监听则 S.selected 不再跟随（原只观察 childList）。走秒改 textContent 不触发。
+                  mo.observe(UI.sessionList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
                   // 域内委托（在冒泡到地基 document 监听之前截住需要接管的面）
                   UI.section.addEventListener("click", (ev) => {
@@ -2773,7 +2781,10 @@
                   subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
                   sendCommand(type, payload, timeoutMs = 8000) {
                     return new Promise((resolve) => {
-                      const socket = [...sockets].find((item) => item.readyState === 1) || null;
+                      // #143 盲评A-1 止血：优先走地基主连接（window.__ccDeck005MainWs）——ACK 回到主连接
+                      // 由本桥 message 监听先结算，不再随机借道 B2 socket 造成「无主 ACK」串台弹错
+                      const mainWs = window.__ccDeck005MainWs;
+                      const socket = (mainWs && mainWs.readyState === 1 ? mainWs : null) || [...sockets].find((item) => item.readyState === 1) || null;
                       if (!socket) { resolve(null); return; }
                       const command_id = uuid();
                       const timer = setTimeout(() => { ackWaiters.delete(command_id); resolve(null); }, timeoutMs);
@@ -2998,7 +3009,7 @@
                     ? "<p>" + escapeHtml(entry.group.name) + " · " + (Array.isArray(entry.group.headcount) ? entry.group.headcount.length : 0) + " 编制</p><p>" + (entry.group.status === "active" ? "进行中" : entry.group.status === "pending" ? "待确认立项" : "已挂起/归档") + "</p>"
                     : "<p>该目录未立项</p><p>立项确认在团队域发起</p>";
                   const artifactLines = artifacts.slice(0, 2).map((a) => "<p>" + escapeHtml(basename(a.path)) + " · " + escapeHtml(relTime(a.last_at)) + '</p><div class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div>").join("") || "<p>暂无输出物</p>";
-                  const accLines = bridge.accepts.slice(0, 2).map((a) => "<p>" + escapeHtml(a.title) + " · " + (a.submitted ? "回填 " + a.judged + "/" + a.total : "待填 " + a.total + " 项") + "</p>").join("") || "<p>暂无验收单</p>";
+                  const accLines = bridge.accepts.slice(0, 2).map((a) => "<p>" + escapeHtml(a.title) + " · " + (a.submitted ? "回填 " + (Number(a.judged) || 0) + "/" + (Number(a.total) || 0) : "待填 " + (Number(a.total) || 0) + " 项") + "</p>").join("") || "<p>暂无验收单</p>";
                   return '<div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div>'
                     + '<div class="project-overview"><div class="metric"><b>' + entry.sessions.length + '</b><span>会话</span></div><div class="metric"><b>' + (entry.group ? 1 : 0) + '</b><span>活跃团队</span></div><div class="metric"><b>' + artifacts.length + '</b><span>输出物</span></div><div class="metric"><b>' + actions.length + '</b><span>需行动</span></div></div>'
                     + '<div class="aggregate-grid">'
@@ -3038,7 +3049,7 @@
 
                 function acceptancesTabMarkup() {
                   if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>';
-                  const rows = bridge.accepts.map((a) => '<div class="queue-card" data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + a.total + " 项 · 已回填 " + a.judged + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
+                  const rows = bridge.accepts.map((a) => '<div class="queue-card" data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + (Number(a.total) || 0) + " 项 · 已回填 " + (Number(a.judged) || 0) + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
                   return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows;
                 }
 
@@ -3455,20 +3466,22 @@
 
       function ensureThemeSymbols() {
         const sprite = document.querySelector(".icon-sprite");
+        // #143 盲评S-2：页面有两个 .icon-sprite，只查第一个会误判缺失重复注入同名 symbol（无效 HTML）；
+        // 判重一律走 document.getElementById 全文档口径（<use href> 按文档序取第一个，行为不变）
         if (!sprite) return;
-        if (!sprite.querySelector("#icon-sun")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol>');
-        if (!sprite.querySelector("#icon-moon")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>');
-        if (!sprite.querySelector("#icon-server")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"></rect><rect x="3" y="14" width="18" height="6" rx="1"></rect><line x1="7" y1="7" x2="7.01" y2="7"></line><line x1="7" y1="17" x2="7.01" y2="17"></line></symbol>');
-        if (!sprite.querySelector("#icon-layers")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 21 7 12 12 3 7 12 2"></polygon><polyline points="3 12 12 17 21 12"></polyline><polyline points="3 17 12 22 21 17"></polyline></symbol>');
-        if (!sprite.querySelector("#icon-sliders")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="10" cy="18" r="2"></circle></symbol>');
-        if (!sprite.querySelector("#icon-package")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol>');
-        if (!sprite.querySelector("#icon-file-text")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><line x1="8" y1="9" x2="10" y2="9"></line></symbol>');
-        if (!sprite.querySelector("#icon-code")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></symbol>');
-        if (!sprite.querySelector("#icon-archive")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 6h18v14H3Z"></path><path d="M3 6l2-3h14l2 3M8 10h8M10 14h4"></path></symbol>');
-        if (!sprite.querySelector("#icon-keyboard")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol>');
-        if (!sprite.querySelector("#icon-image")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></symbol>');
-        if (!sprite.querySelector("#icon-clock")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></symbol>');
-        const info = sprite.querySelector("#icon-info");
+        if (!document.getElementById("#icon-sun")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol>');
+        if (!document.getElementById("#icon-moon")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>');
+        if (!document.getElementById("#icon-server")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"></rect><rect x="3" y="14" width="18" height="6" rx="1"></rect><line x1="7" y1="7" x2="7.01" y2="7"></line><line x1="7" y1="17" x2="7.01" y2="17"></line></symbol>');
+        if (!document.getElementById("#icon-layers")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 21 7 12 12 3 7 12 2"></polygon><polyline points="3 12 12 17 21 12"></polyline><polyline points="3 17 12 22 21 17"></polyline></symbol>');
+        if (!document.getElementById("#icon-sliders")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="10" cy="18" r="2"></circle></symbol>');
+        if (!document.getElementById("#icon-package")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol>');
+        if (!document.getElementById("#icon-file-text")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><line x1="8" y1="9" x2="10" y2="9"></line></symbol>');
+        if (!document.getElementById("#icon-code")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></symbol>');
+        if (!document.getElementById("#icon-archive")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 6h18v14H3Z"></path><path d="M3 6l2-3h14l2 3M8 10h8M10 14h4"></path></symbol>');
+        if (!document.getElementById("#icon-keyboard")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol>');
+        if (!document.getElementById("#icon-image")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></symbol>');
+        if (!document.getElementById("#icon-clock")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></symbol>');
+        const info = document.getElementById("#icon-info");
         if (info) info.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>';
       }
 
@@ -3663,6 +3676,7 @@ function connectLan(ctx) {
   try { ctx.ws && ctx.ws.close(); } catch {}
   const w = new WebSocket(url);
   ctx.ws = w;
+  window.__ccDeck005MainWs = w; // #143 盲评A-1 止血：主连接标记——B4 桥命令通道固定走此 socket（ACK 回主连接，不再借道 B2 串台弹错）
   clearTimeout(ctx.lanHsTimer);
   ctx.lanHsTimer = setTimeout(() => {
     ctx.lanHsTimer = 0;
@@ -3799,6 +3813,9 @@ function connectLan(ctx) {
       }
 
       function renderSessionList() {
+        // #143 盲评A-1 止血：B2 已接管会话列表（打 b2Owned 标）后地基让位——不再用陈旧快照
+        // 覆盖 B2 的新鲜渲染（地基只吃 SNAPSHOT、增量全忽略，重连窗口内必陈旧）。dataset 同步归 B2。
+        if (sessionList.dataset.b2Owned === "1") return;
         sessionList.dataset.relayState = ctx.hasSnapshot ? "snapshot" : ctx.status;
         sessionList.dataset.connection = ctx.status;
         sessionList.dataset.sessionCount = String(ctx.sessions.size);
@@ -3847,7 +3864,8 @@ function connectLan(ctx) {
       function scheduleReconnect(context) {
         if (context.stopped) return;
         clearTimeout(context.reconnectTimer);
-        context.reconnectTimer = setTimeout(() => connectLan(context), context.reconnectDelay);
+        const jitter = context.reconnectDelay * (0.8 + Math.random() * 0.4); // #143 盲评A-3：±20% 抖动防多端同步重连风暴
+        context.reconnectTimer = setTimeout(() => connectLan(context), jitter);
         context.reconnectDelay = Math.min(context.reconnectDelay * 2, 30000);
       }
 
@@ -3892,9 +3910,11 @@ function connectLan(ctx) {
           if (!message || typeof message.type !== "string") return;
           if (message.type === "SNAPSHOT") {
             const p = message.payload || {};
-            this.anchored = true; this.boardAnchored = new Set();
-            this.projects = Array.isArray(p.projects) ? p.projects.slice() : [];
+            // #143 盲评C-3：缺 projects = relay 不支持团队域（B3-C1），不锚定——后续 PROJECTS delta 丢弃，绝不空基线起底 merge
+            this.anchored = Array.isArray(p.projects); this.boardAnchored = new Set();
+            this.projects = this.anchored ? p.projects.slice() : [];
             this.boards = new Map((Array.isArray(p.boards) ? p.boards : []).filter((b) => b && typeof b.gid === "string").map((b) => [b.gid, b]));
+            for (const gid of this.boards.keys()) this.boardAnchored.add(gid); // #143 盲评C-2：快照板登记锚定集，后续 BOARD delta 才可投影
             const api = this.api(); if (api) { try { api.snapshot(p, { relayName: this.ctxName(context) }); } catch {} }
             return;
           }
@@ -3929,6 +3949,8 @@ function connectLan(ctx) {
           if (message.type === "BOARD_UPDATED" && p.delta === undefined && typeof p.gid === "string" && p.board && Array.isArray(p.board.entries)) {
             this.boardAnchored.add(p.gid); this.boards.set(p.gid, p.board); // 覆盖式=锚定帧
           }
+          // ORG_CONFIRM_UPDATED 只有全量形态（types.ts OrgConfirmUpdatedPayload{pending}，无 delta 字段），透传原文即正确；
+          // B3 侧对缺 pending 的帧返回 false 属防线而非缺陷（#143 盲评C-4 记档）
           this.feed(api, teamContext, message.type, p); // 覆盖式帧透传（B3 吃全量）
         },
       };
@@ -3969,6 +3991,13 @@ function connectLan(ctx) {
         if (card) {
           if (target.closest(".srow-cta")) { showToast("处理会话 · 待 B2 迁移"); return; }
           ctx.selectedSessionId = card.dataset.sessionCard;
+          if (sessionList.dataset.b2Owned === "1") {
+            // #143 盲评A-1 止血：B2 接管后地基不重渲列表，选中态由地基点改 class
+            //（B2 的 MutationObserver 监听 class 变化同步工作区，renderMyList 同按 S.selected 打标，口径一致）
+            sessionList.querySelectorAll(".queue-card.selected").forEach((el) => el.classList.remove("selected"));
+            card.classList.add("selected");
+            return;
+          }
           renderSessionList();
           return;
         }
@@ -3983,6 +4012,7 @@ function connectLan(ctx) {
       });
       window.addEventListener("pagehide", () => {
         ctx.stopped = true;
+        Team.bind(false); Team.failFlights(); // #143 盲评C-5：离线三态完备（onclose/pagehide 双口都告知 B3）
         clearTimeout(ctx.reconnectTimer);
         clearTimeout(ctx.lanHsTimer);
         if (ctx.ws) {
@@ -4005,6 +4035,7 @@ function connectLan(ctx) {
       renderSessionList();
       connectLan(ctx);
       setInterval(() => {
+        if (sessionList.dataset.b2Owned === "1") return; // #143 盲评A-2：B2 自有走秒定时器，双写互覆盖让位
         sessionList.querySelectorAll(".queue-card").forEach((card) => {
           const session = ctx.sessions.get(card.dataset.sessionCard);
           const elapsed = card.querySelector(".srow-sec");
