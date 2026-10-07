@@ -1098,7 +1098,7 @@
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
-            <button class="rail-btn" data-domain="team" title="团队"><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg><span class="badge" data-stub="B3" aria-label="团队有 1 项需处理" title="团队 · 1 项需处理">1</span></button>
+            <button class="rail-btn" data-domain="team" title="团队"><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg><span class="badge" data-team-badge aria-label="团队有 0 项需处理" title="团队 · 0 项需处理" hidden>0</span></button>
             <button class="rail-btn" data-domain="project" title="项目"><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></button>
             <div class="rail-spring"></div>
             <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" data-stub="B5" data-notify-badge aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
@@ -1123,9 +1123,250 @@
           </section>
 
           <section class="desktop-screen" id="d-team" data-stub="B3">
-            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action">1</span></h2><button class="icon-btn">＋</button></div><div class="queue-group">待确认 · 1</div><div class="queue-card selected"><div class="row"><i class="status-dot waiting"></i><strong>cc-deck M1 攻坚团</strong><span class="tag action">编制</span></div><p>6 成员 · 4 进行中 · 2 待收单</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="queue-group">进行中 · 1</div><div class="queue-card"><div class="row"><i class="status-dot done"></i><strong>v0.5.2 双端发版团</strong></div><p>归档准备 · 09-18</p><div class="identity-cluster"><span class="source-badge">家里 iMac</span></div><div class="queue-card-meta">双端 · test 通道 · 待收单</div></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><i class="status-dot done"></i><h2>cc-deck M1 攻坚团</h2><span class="tag action">待你确认</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">6 成员 · 4 进行中 · 2 待收单 · PM：glm-5.3</div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button></div></header><div class="workspace-body"><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>2</span></div><div class="task-card"><strong>T-21 导入码迁移</strong><p>等待 worker-web</p><div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div><span class="tag">待派单</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>4</span></div><div class="task-card"><strong>T-12 relay 事件流</strong><p>worker-relay · 48%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div><span class="tag info">运行中</span></div><div class="task-card"><strong>T-15 手机列表</strong><p>worker-mobile · 72%</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag info">运行中</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>2</span></div><div class="task-card"><strong>T-13 更新通道隔离</strong><p>独立出包已完成</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><span><b>worker-web · 执行者</b> Claude · 公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>2</span></div><div class="task-card"><strong>T-14 验收槽</strong><p>回填 2/3</p><div class="task-assignee"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><span><b>PM · 编排</b> Trae · 公司电脑</span></div><span class="tag action">待收单</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>1</span></div><div class="task-card"><strong>T-10 版本同步</strong><p>已合并 main</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div><span class="tag done">完成</span></div></div></div></div><footer class="workspace-footer"><button class="primary-btn">确认编制方案</button></footer></section>
-            <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>PM 建议编制</span><span>待确认</span></div><div class="member-list"><div class="member-card"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><div><strong>PM <span class="role-label pm-label">PM</span></strong><p>glm-5.3 · 调度 <span class="engine-badge trae">Trae</span></p></div></div><div class="member-card"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>claude · 开发 <span class="engine-badge claude">Claude</span></p></div></div><div class="member-card"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 需接替 <span class="engine-badge qwen">Qwen Code</span></p></div></div><div class="member-card"><span class="avatar qa">QA<i class="avatar-engine-dot codex"></i></span><div><strong>验收槽</strong><p>独立厂商 · claude <span class="engine-badge codex">Codex</span></p></div></div></div></div><div class="inspector-block"><div class="inspector-title"><span>停留告警</span><span class="tag action">1</span></div><div class="inspector-copy">worker-mobile 25 分钟无日志；已通知 PM。</div><button class="danger-btn" style="margin-top:9px">换厂商接替</button></div><div class="inspector-block"><div class="inspector-title"><span>团队确认</span><span>1 项</span></div><div class="inspector-copy">3 开发 + 独立验收 + 1 调研</div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
+            <section class="workspace">
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="workspace-sub" data-team-sub>尚未收到团队快照</div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button></div></header>
+              <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
+              <footer class="workspace-footer"><div data-team-actions></div><div class="readonly-banner" data-team-feedback role="status" aria-live="polite">决议仅由你点击确认或否决后发起。</div></footer>
+            </section>
+            <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>待你确认</span></div><div data-team-confirms><div class="readonly-banner">暂无待确认事项</div></div></div><div class="inspector-block"><div class="inspector-title"><span>团队编制</span><span data-team-member-count>0</span></div><div class="member-list" data-team-members><div class="readonly-banner">暂无编制数据</div></div></div><div class="inspector-block"><div class="inspector-title"><span>最近派单回执</span></div><div class="team-activity" data-team-activity><div class="readonly-banner">暂无派单回执</div></div></div></aside>
+            <script data-team-script>
+              (() => {
+                const root = document.querySelector("#d-team");
+                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
+                const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
+                const groupStatuses = new Map([["pending", "待确认"], ["active", "在办"], ["parked", "已挂起"], ["archived", "已结项"]]);
+                const confirmKinds = new Map([["project-create", "正经立项"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
+                const engines = new Map([["claude", ["Claude", "claude"]], ["codex", ["Codex", "codex"]], ["trae", ["Trae", "trae"]], ["qwen-code", ["Qwen Code", "qwen"]], ["codebuddy", ["CodeBuddy", "codebuddy"]], ["zcode", ["ZCode", "zcode"]]]);
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set() };
+                const query = (selector) => root.querySelector(selector);
+                const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+                const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
+                const entities = (items) => [...new Map((Array.isArray(items) ? items : []).filter((item) => item && typeof item.id === "string" && item.id).map((item) => [item.id, item])).values()];
+                const feedback = (text) => { query("[data-team-feedback]").textContent = text; };
+                const group = () => state.projects?.find((item) => item.id === state.selected);
+                const engine = (key) => engines.get(key) || [key || "引擎未知", ""];
+                const engineBadge = (key) => { const value = engine(key); return '<span class="engine-badge ' + value[1] + '">' + escape(value[0]) + "</span>"; };
+                const sourceBadge = () => '<span class="source-badge">' + escape(state.source) + "</span>";
+                const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
+                function memberInfo(member) {
+                  const session = state.sessions.get(member.session_id) || {};
+                  return { name: session.title || member.session_id, role: member.role || "角色未标注", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "" };
+                }
+                function memberMarkup(member) {
+                  const info = memberInfo(member);
+                  const roleClass = /^(pm|leader)$/i.test(info.role) ? "pm" : /^(qa|reviewer|验收)$/i.test(info.role) ? "qa" : "worker";
+                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + "</div></div></div>";
+                }
+                function taskMarkup(task, project) {
+                  const member = members(project).find((item) => item.session_id === task.owner_session);
+                  const info = memberInfo(member || { session_id: task.owner_session || "未指派", role: "执行者" });
+                  const status = legacyStatuses.get(task.status) || task.status;
+                  const label = lanes.find((lane) => lane[0] === status)?.[1] || "未知状态：" + String(task.status ?? "未标注");
+                  const tagClass = status === "done" ? "done" : status === "claimed" ? "info" : "action";
+                  return '<div class="task-card" data-team-task="' + escape(task.id) + '"><strong>' + escape(task.text || task.id) + '</strong><p>' + escape(task.note || "") + '</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><span><b>' + escape(info.name) + " · " + escape(info.role) + "</b> " + escape(engine(info.engine)[0]) + " · " + escape(state.source) + '</span></div><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + '<span class="tag ' + tagClass + '">' + escape(label) + '</span></div>' + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + "</div>";
+                }
+                function boardMarkup(project) {
+                  const board = state.boards.get(project?.id);
+                  const tasks = entities(board?.entries);
+                  const loading = state.loads.get(project?.id);
+                  const empty = !project ? state.projects === null ? "团队数据通道尚未接入，或来源尚不支持团队" : "暂无项目组" : board ? tasks.length ? "" : "任务板暂无任务" : loading === "loading" ? "正在加载任务板…" : loading && loading !== "ready" ? loading : "尚未取得任务板，请接入详情命令通道或点击刷新详情。";
+                  const columns = lanes.map(([status, label]) => {
+                    const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
+                    return '<div class="lane"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + items.map((task) => taskMarkup(task, project)).join("") + "</div>";
+                  }).join("");
+                  const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
+                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + '<div class="board">' + columns + "</div>" + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
+                }
+                function activityMarkup(project) {
+                  const receipts = state.receipts.get(project?.id);
+                  if (!receipts) return banner("尚未取得派单回执，请加载项目详情。");
+                  if (!receipts.length) return banner("暂无派单回执");
+                  const statuses = new Map([["dispatched", "已派单"], ["running", "运行中"], ["done", "完成"], ["failed", "失败"]]);
+                  return '<div class="team-activity">' + receipts.map((entry) => {
+                    const timestamp = Number(entry.ts);
+                    const date = Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp) : null;
+                    const validDate = date && Number.isFinite(date.getTime());
+                    const time = validDate ? String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") : "时间未知";
+                    const session = state.sessions.get(entry.session_id);
+                    return '<div class="activity-row"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i aria-hidden="true"></i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
+                  }).join("") + "</div>";
+                }
+                function render() {
+                  if (!state.mounted) return;
+                  if (!group()) state.selected = state.projects?.[0]?.id || null;
+                  const project = group();
+                  const count = state.confirms.length;
+                  const badge = document.querySelector('[data-domain="team"] [data-team-badge]');
+                  badge.textContent = String(count);
+                  badge.hidden = count === 0;
+                  badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
+                  badge.setAttribute("title", "团队 · " + count + " 项需处理");
+                  query("[data-team-count]").textContent = String(count);
+                  query("[data-team-projects]").innerHTML = state.projects?.length ? state.projects.map((item) => {
+                    const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
+                    return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><i class="status-dot ' + (item.status === "pending" ? "waiting" : item.status === "active" ? "done" : "") + '"></i><strong>' + escape(item.name || item.id) + '</strong><span class="tag">' + escape(groupStatuses.get(item.status) || item.status) + '</span></div><p>' + members(item).length + " 个编制席位 · " + pending + ' 项待确认</p><div class="identity-cluster">' + sourceBadge() + "</div></div>";
+                  }).join("") : banner(state.projects === null ? "团队数据通道尚未接入，或来源尚不支持团队" : "暂无项目组");
+                  query("[data-team-title]").textContent = project?.name || "团队";
+                  query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? "等待数据" : "暂无项目组";
+                  query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
+                  query("[data-team-source]").textContent = state.source;
+                  query("[data-team-sub]").textContent = project ? [project.tier, project.anchor_dir, members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。";
+                  const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
+                  const activityHtml = activityMarkup(project);
+                  query("[data-team-member-count]").textContent = String(members(project).length);
+                  query("[data-team-members]").innerHTML = memberHtml;
+                  query("[data-team-activity]").innerHTML = activityHtml;
+                  const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
+                  panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
+                  panes[1].innerHTML = boardMarkup(project);
+                  panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>";
+                  panes[3].innerHTML = activityHtml;
+                  const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
+                  if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
+                  const decisionButtons = (confirm) => {
+                    const disabled = !state.command || !state.online || state.flights.has(confirm.id) || state.accepted.has(confirm.id) || state.unsupported.has("COMMAND_ORG_CONFIRM");
+                    return '<div class="identity-cluster"><button type="button" class="primary-btn" data-team-decision="' + escape(confirm.id) + '" data-approve="true"' + (disabled ? " disabled" : "") + '>确认</button><button type="button" class="danger-btn" data-team-decision="' + escape(confirm.id) + '" data-approve="false"' + (disabled ? " disabled" : "") + ">否决</button></div>";
+                  };
+                  const confirmCards = count ? state.confirms.map((confirm) => {
+                    const owner = state.projects?.find((item) => item.id === confirm.payload?.gid);
+                    return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + escape(confirmKinds.get(confirm.kind) || confirm.kind) + " · " + escape(confirm.title) + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div><p>" + escape(confirm.reason) + (owner ? " · " + escape(owner.name || owner.id) : "") + '</p><div class="inspector-copy">' + escape(JSON.stringify(confirm.payload || {})) + '</div><button type="button" class="secondary-btn" data-team-pick-confirm="' + escape(confirm.id) + '">查看并决议</button></div>';
+                  }).join("") : banner("暂无待确认事项");
+                  query("[data-team-confirms]").innerHTML = confirmCards;
+                  panes[1].innerHTML += '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>";
+                  const selectedConfirm = state.confirms.find((confirm) => confirm.id === state.confirmSelected);
+                  query("[data-team-actions]").innerHTML = (project ? '<button type="button" class="secondary-btn" data-team-refresh' + (!canDetail || state.loads.get(project.id) === "loading" ? " disabled" : "") + ">刷新详情</button>" : "") + (selectedConfirm ? '<div class="inspector-title"><strong>' + escape(confirmKinds.get(selectedConfirm.kind) || selectedConfirm.kind) + " · " + escape(selectedConfirm.title) + '</strong><span class="tag action">' + (state.accepted.has(selectedConfirm.id) ? "等待权威更新" : state.flights.has(selectedConfirm.id) ? "提交中" : "待你确认") + "</span></div>" + decisionButtons(selectedConfirm) : banner("暂无待确认事项")) + (!state.command || !state.online ? banner("决议命令通道未接入或来源离线；确认按钮不可用。") : state.unsupported.has("COMMAND_ORG_CONFIRM") ? banner("当前来源不支持团队决议命令。") : "");
+                  root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
+                }
+                function updateConfirms(items) {
+                  state.confirms = entities(items).filter((confirm) => confirm.status === "pending");
+                  for (const id of state.accepted) if (!state.confirms.some((confirm) => confirm.id === id)) state.accepted.delete(id);
+                }
+                function updateProjects(items) {
+                  state.projects = Array.isArray(items) ? entities(items) : null;
+                  if (!group()) state.selected = state.projects?.[0]?.id || null;
+                  const ids = new Set(state.projects?.map((item) => item.id));
+                  for (const cache of [state.boards, state.receipts, state.loads]) for (const id of cache.keys()) if (!ids.has(id)) cache.delete(id);
+                }
+                function detail(gid, data) {
+                  if (!state.projects?.some((item) => item.id === gid) || !data || data.group?.id !== gid || data.board?.gid !== gid || !Array.isArray(data.board.entries) || !Array.isArray(data.receipts)) return false;
+                  state.projects = state.projects.map((item) => item.id === gid ? data.group : item);
+                  state.boards.set(gid, data.board);
+                  state.receipts.set(gid, entities(data.receipts).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  state.loads.set(gid, "ready");
+                  render();
+                  return true;
+                }
+                function verdict(ack) {
+                  const error = typeof ack?.error === "string" ? ack.error.trim() : "";
+                  return { ok: ack?.ok === true && !error, error: error || "未收到明确成功的命令回执" };
+                }
+                function rememberUnsupported(type, error) {
+                  if (/invalid command shape|unknown.?command|unsupported|未知命令|不支持/i.test(error)) state.unsupported.add(type);
+                }
+                async function requestDetail(gid, force = false) {
+                  if (!state.command || !state.online || state.unsupported.has("COMMAND_PROJECT_DETAIL") || !state.projects?.some((item) => item.id === gid) || state.loads.get(gid) === "loading" || (!force && state.loads.get(gid) === "ready")) return false;
+                  const epoch = state.epoch;
+                  const projectAtRequest = state.projects.find((item) => item.id === gid);
+                  const boardAtRequest = state.boards.get(gid);
+                  state.loads.set(gid, "loading");
+                  render();
+                  try {
+                    const ack = await state.command("COMMAND_PROJECT_DETAIL", { gid });
+                    if (epoch !== state.epoch || !state.projects?.some((item) => item.id === gid)) return false;
+                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid); return false; }
+                    const result = verdict(ack);
+                    if (!result.ok) { rememberUnsupported("COMMAND_PROJECT_DETAIL", result.error); throw new Error(result.error); }
+                    if (!detail(gid, ack.data)) throw new Error("项目详情回执缺少匹配的 group / board / receipts");
+                    return true;
+                  } catch (error) {
+                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) { state.loads.set(gid, "详情加载失败：" + String(error?.message || error)); feedback(state.loads.get(gid)); render(); }
+                    return false;
+                  }
+                }
+                async function decide(id, approve) {
+                  if (typeof approve !== "boolean" || !state.confirms.some((confirm) => confirm.id === id) || !state.command || !state.online || state.flights.has(id) || state.accepted.has(id) || state.unsupported.has("COMMAND_ORG_CONFIRM")) return false;
+                  const epoch = state.epoch;
+                  state.flights.add(id);
+                  render();
+                  try {
+                    const result = verdict(await state.command("COMMAND_ORG_CONFIRM", { confirm_id: id, approve }));
+                    if (epoch !== state.epoch) return false;
+                    if (!result.ok) { rememberUnsupported("COMMAND_ORG_CONFIRM", result.error); throw new Error(result.error); }
+                    if (state.confirms.some((confirm) => confirm.id === id)) state.accepted.add(id);
+                    feedback(approve ? "已同意，等待来源权威更新。" : "已否决，等待来源权威更新。");
+                    return true;
+                  } catch (error) {
+                    if (epoch === state.epoch) feedback("决议失败：" + String(error?.message || error));
+                    return false;
+                  } finally {
+                    if (epoch === state.epoch) { state.flights.delete(id); render(); }
+                  }
+                }
+                function snapshot(payload = {}, context = {}) {
+                  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+                  state.epoch += 1;
+                  state.boards.clear(); state.receipts.clear(); state.loads.clear(); state.flights.clear(); state.accepted.clear();
+                  state.source = context?.relayName || payload.relay_name || "当前来源";
+                  state.sessions = new Map((Array.isArray(payload.sessions) ? payload.sessions : []).filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
+                  updateProjects(payload.projects);
+                  updateConfirms(payload.org_confirms);
+                  for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
+                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  render();
+                  if (state.selected) void requestDetail(state.selected);
+                  return true;
+                }
+                function onEvent(context, message) {
+                  const payload = message?.payload;
+                  if (message?.type === "SNAPSHOT") return snapshot(payload, context);
+                  if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups) && payload.delta === undefined) { updateProjects(payload.groups); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
+                  if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(payload.pending); render(); return true; }
+                  if (message?.type === "BOARD_UPDATED" && payload?.delta === undefined && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  return false;
+                }
+                function bind({ command = null, online = false } = {}) {
+                  state.epoch += 1;
+                  state.command = typeof command === "function" ? command : null;
+                  state.online = online === true;
+                  state.flights.clear(); state.loads.clear(); state.accepted.clear(); state.unsupported.clear();
+                  render();
+                  if (state.selected) void requestDetail(state.selected);
+                }
+                function select(gid) {
+                  if (!state.projects?.some((item) => item.id === gid)) return false;
+                  state.selected = gid;
+                  state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === gid)?.id || null;
+                  render();
+                  void requestDetail(gid);
+                  return true;
+                }
+                function mount() {
+                  if (state.mounted) return;
+                  const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
+                  if (panes.length !== 4) return;
+                  panes.forEach((pane) => pane.removeAttribute("data-stub"));
+                  root.removeAttribute("data-stub");
+                  state.mounted = true;
+                  root.addEventListener("click", (event) => {
+                    const decision = event.target.closest("[data-team-decision]");
+                    if (decision) { event.preventDefault(); if (decision.dataset.approve === "true" || decision.dataset.approve === "false") void decide(decision.dataset.teamDecision, decision.dataset.approve === "true"); return; }
+                    const project = event.target.closest("[data-team-project]");
+                    if (project) { select(project.dataset.teamProject); return; }
+                    const confirm = event.target.closest("[data-team-pick-confirm]");
+                    if (confirm) { state.confirmSelected = confirm.dataset.teamPickConfirm; render(); return; }
+                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true);
+                  });
+                  root.addEventListener("keydown", (event) => {
+                    if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-team-project]")) { event.preventDefault(); select(event.target.dataset.teamProject); }
+                  });
+                  render();
+                }
+                window.ccDeckTeam = Object.freeze({ mount, bind, snapshot, onEvent, detail, select });
+                if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount, { once: true });
+                else mount();
+              })();
+            </script>
           </section>
 
           <section class="desktop-screen" id="d-project" data-stub="B4">
