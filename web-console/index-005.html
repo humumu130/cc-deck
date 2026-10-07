@@ -2836,6 +2836,19 @@
                 // #143-B4 项目域（只读聚合）域内脚本：声明 WS 只读分接桥（B4-D2）+ SNAPSHOT/
                 // 增量帧本地聚合 + 只读渲染。边界：只操作 #d-project 内部 DOM 与共享桥全局；
                 // 不改 <style>、不改底部地基脚本（偏差与契约见 specs/005-port-B4-report.md）。
+
+                // #150 R1 帧总线：本 IIFE 是全页最早需要总线的脚本，在此幂等创建并挂 window——
+                // 地基脚本（文件更靠后）持唯一主连接，经总线 fan-out 原始帧与 ws 事件；域脚本
+                // 一律订阅总线取帧，不再劫持 window.WebSocket。B2 并轨（R2）时同样判空复用本实例。
+                if (!window.__ccDeck005Frames) {
+                  window.__ccDeck005Frames = (() => {
+                    const subs = new Set();
+                    return {
+                      subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+                      emit(ev) { for (const fn of subs) { try { fn(ev); } catch (_) {} } }, // ev = {kind:"frame", frame} | {kind:"ws", state:"open"|"close"}
+                    };
+                  })();
+                }
                 const section = document.getElementById("d-project");
                 if (!section) return;
 
@@ -2877,12 +2890,12 @@
                   };
                 })();
 
-                // ---------- WS 只读分接 + 共享桥（#d-notify 域脚本消费同一实例） ----------
-                const NativeWebSocket = window.WebSocket;
-                const sockets = new Set();
+                // ---------- 帧总线订阅 + 共享桥（#d-notify 域脚本消费同一实例） ----------
+                // #150 R1：#143 B4-D2 的 window.WebSocket 劫持面退役（分接类/sockets 集合/
+                // activeSocket/原生构造捕获全删），桥改订阅地基帧总线取帧（订阅在本段文末），
+                // 此处只留桥自身状态。sendCommand 收紧为仅走地基主连接（见下）。
                 const subscribers = new Set();
                 const ackWaiters = new Map();
-                let activeSocket = null;
 
                 const doneOfNotification = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
                 const normalizeNotification = (item) => {
@@ -2955,10 +2968,11 @@
                   subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
                   sendCommand(type, payload, timeoutMs = 8000) {
                     return new Promise((resolve) => {
-                      // #143 盲评A-1 止血：优先走地基主连接（window.__ccDeck005MainWs）——ACK 回到主连接
-                      // 由本桥 message 监听先结算，不再随机借道 B2 socket 造成「无主 ACK」串台弹错
+                      // #150 R1 收紧（承 #143 盲评A-1 口径）：劫持拆除后无 sockets 借道面，命令只走
+                      // 地基主连接（window.__ccDeck005MainWs，readyState===1），ACK 经帧总线回本桥结算；
+                      // 无可用连接 resolve(null)——消费域按未送达处理（B4/notify 同口径）
                       const mainWs = window.__ccDeck005MainWs;
-                      const socket = (mainWs && mainWs.readyState === 1 ? mainWs : null) || [...sockets].find((item) => item.readyState === 1) || null;
+                      const socket = mainWs && mainWs.readyState === 1 ? mainWs : null;
                       if (!socket) { resolve(null); return; }
                       const command_id = uuid();
                       const timer = setTimeout(() => { ackWaiters.delete(command_id); resolve(null); }, timeoutMs);
@@ -3030,34 +3044,18 @@
                   if (changed) for (const fn of subscribers) { try { fn(frame.type); } catch (_) {} }
                 }
 
-                class TappedWebSocket extends NativeWebSocket {
-                  constructor(...args) {
-                    super(...args);
-                    sockets.add(this);
-                    activeSocket = this;
-                    bridge.connection = "connecting";
-                    this.addEventListener("message", (event) => {
-                      let frame = null;
-                      try { frame = JSON.parse(event.data); } catch (_) { return; }
-                      handleFrame(frame);
-                    });
-                    this.addEventListener("open", () => {
-                      if (activeSocket === this) bridge.connection = "online";
-                      for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
-                    });
-                    const settle = () => {
-                      sockets.delete(this);
-                      if (activeSocket === this) {
-                        activeSocket = null;
-                        bridge.connection = "offline";
-                        for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
-                      }
-                    };
-                    this.addEventListener("close", settle);
-                    this.addEventListener("error", settle);
+                // #150 R1：window.WebSocket 分接劫持退役，桥订阅地基帧总线——地基 connectLan 持唯一主
+                // 连接，onmessage 已 parse，总线直传帧对象（本桥不再 JSON.parse）；ws 事件维持
+                // connection 状态机（open→online / close→offline）并照旧 fan-out 订阅者。
+                window.__ccDeck005Frames.subscribe((ev) => {
+                  if (!ev || typeof ev !== "object") return;
+                  if (ev.kind === "ws") {
+                    bridge.connection = ev.state === "open" ? "online" : "offline";
+                    for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
+                    return;
                   }
-                }
-                window.WebSocket = TappedWebSocket;
+                  if (ev.kind === "frame") handleFrame(ev.frame);
+                });
 
                 // ---------- 项目域聚合与渲染 ----------
                 const els = {
@@ -3903,12 +3901,14 @@ function connectLan(ctx) {
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     setConn(ctx, "online", "已连接");
     Team.bind(true); // #143 Leader 接线（B3-C3）：注入命令 Promise 通道
+    window.__ccDeck005Frames.emit({ kind: "ws", state: "open" }); // #150 R1：总线广播连接事件（桥 connection→online）
   };
   w.onclose = () => {
     if (ctx.ws !== w) return;
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     setConn(ctx, "offline", "已断开", "transport");
     Team.bind(false); Team.failFlights(); // #143 Leader 接线：离线禁决议 + 飞行中命令判未达（可重试）
+    window.__ccDeck005Frames.emit({ kind: "ws", state: "close" }); // #150 R1：先广播断开（订阅者先结算飞行命令），再排重连
     scheduleReconnect(ctx);
   };
   w.onerror = () => {};
@@ -3916,9 +3916,12 @@ function connectLan(ctx) {
     if (ctx.ws !== w) return;
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.type === "COMMAND_ACK") { Team.onAck(msg.payload || msg); return; } // #143 Leader 接线（B3-C4）：ACK 消费
-    if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
-    onEvent(ctx, msg);
+    if (msg.type === "COMMAND_ACK") Team.onAck(msg.payload || msg); // #143 Leader 接线（B3-C4）：ACK 消费；#150 R1 不再 return——ACK 同帧进总线，桥侧 ackWaiters 在总线结算
+    else {
+      if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+      onEvent(ctx, msg);
+    }
+    window.__ccDeck005Frames.emit({ kind: "frame", frame: msg }); // #150 R1 帧总线：地基唯一持连，原始帧（含 COMMAND_ACK）统一 fan-out，域脚本不再各自分接
   };
 }
 
