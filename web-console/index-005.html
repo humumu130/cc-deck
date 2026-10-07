@@ -1142,7 +1142,7 @@
                 const DOCK_STATE = { WORKING: ["running", "运行中"], WAITING: ["waiting", "等待确认"], ERROR: ["suspended", "错误"], DONE: ["closing", "已完成"] };
 
                 const S = {
-                  status: "offline", stopped: false,
+                  status: "offline",
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
@@ -2101,6 +2101,9 @@
                   const payload = Object.assign({ session_id: s.session_id, text }, imgs.length ? { images: imgs } : {}, files.length ? { files } : {});
                   const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", payload);
                   if (id) {
+                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) b2Toast("发送失败: " + v.error); }; // #150 R3：自发命令失败回执（R2 删无主 toast 后补漏——超时 null/ok:false 才 toast，成功静默；输入框清空维持现状不并入 waiter）
+                    const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
+                    S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
                     if (text) histPush(text);
                     S.hist.idx = -1;
@@ -2506,8 +2509,6 @@
                       if (el && s && s.status === "WORKING") el.textContent = myCardItem(s).workSecs + "s";
                     });
                   }, 1000);
-
-                  window.addEventListener("pagehide", () => { S.stopped = true; }); // #150 R2：无自持 ws，仅保留停走标记
                 }
 
                 // ---------- 启动（地基 setupStubTabs 已在解析期跑完 → 此处收编占位 pane） ----------
@@ -2836,9 +2837,9 @@
             <script>
               (() => {
                 "use strict";
-                // #143-B4 项目域（只读聚合）域内脚本：声明 WS 只读分接桥（B4-D2）+ SNAPSHOT/
-                // 增量帧本地聚合 + 只读渲染。边界：只操作 #d-project 内部 DOM 与共享桥全局；
-                // 不改 <style>、不改底部地基脚本（偏差与契约见 specs/005-port-B4-report.md）。
+                // #143-B4 项目域（只读聚合）域内脚本：订阅地基帧总线（#150 R1 去 B4-D2 劫持，
+                // R2 B2 并轨，全页唯一 WS）+ SNAPSHOT/增量帧本地聚合 + 只读渲染。边界：只操作
+                // #d-project 内部 DOM 与共享桥全局；不改 <style>、不改底部地基脚本（偏差与契约见 specs/005-port-B4-report.md）。
 
                 // #150 R1 帧总线：本 IIFE 是全页最早需要总线的脚本，在此幂等创建并挂 window——
                 // 地基脚本（文件更靠后）持唯一主连接，经总线 fan-out 原始帧与 ws 事件；域脚本
@@ -2848,7 +2849,7 @@
                     const subs = new Set();
                     return {
                       subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
-                      emit(ev) { for (const fn of subs) { try { fn(ev); } catch (_) {} } }, // ev = {kind:"frame", frame} | {kind:"ws", state:"open"|"close"}
+                      emit(ev) { for (const fn of subs) { try { fn(ev); } catch (_) {} } }, // ev = {kind:"frame", frame} | {kind:"ws", state:"connecting"|"open"|"close"}
                     };
                   })();
                 }
@@ -2991,7 +2992,7 @@
                   const p = payload && typeof payload === "object" ? payload : {};
                   bridge.sessions = new Map();
                   for (const session of Array.isArray(p.sessions) ? p.sessions : []) {
-                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, session);
+                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, { ...session }); // #150 R3：桥持会话浅拷贝，与 B2/地基切断共享别名（R3b P2——桥 merge 以信封 ts 覆写 updated_at 不得越权污染他域）
                   }
                   bridge.notifications = Array.isArray(p.notifications) ? p.notifications.map(normalizeNotification).filter(Boolean) : [];
                   bridge.notificationsSupported = Object.prototype.hasOwnProperty.call(p, "notifications");
