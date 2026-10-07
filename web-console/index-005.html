@@ -910,6 +910,9 @@
     .row-menu button:hover { background: var(--hover); color: var(--text-strong); }
     .row-menu button.danger { color: var(--danger); }
     .row-menu button.danger:hover { background: var(--danger-bg); }
+    .row-menu button:disabled { opacity: .45; cursor: default; }
+    .row-menu button:disabled:hover { background: transparent; color: var(--text); }
+    .row-menu button:disabled.danger:hover { color: var(--danger); }
     /* 行内改名输入（菜单「重命名」→ 标题原位替换，Enter/失焦回写数据重渲） */
     .row-rename-input { flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
     /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */
@@ -1114,7 +1117,7 @@
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
                 <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
-                <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
+                <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
               </div>
               <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div>
               <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></footer>
@@ -1142,7 +1145,7 @@
                   ws: null, status: "offline", retryMs: 1000, retryTimer: 0, stopped: false,
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
-                  engineCatalog: null, models: [],
+                  engineCatalog: null, models: [], projects: [],
                   selected: "", staged: [], engineChoice: "",
                   ackWaiters: new Map(), artFetches: new Map(),
                   hist: { sid: null, list: [], idx: -1, draft: "" },
@@ -1272,6 +1275,7 @@
                   S.relayName = p.relay_name || location.host;
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
+                  S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
                   if (!S.sessions.has(S.selected)) S.selected = "";
@@ -1430,6 +1434,15 @@
                 function myCardMarkup(item) {
                   return '<div class="queue-card' + (item.selected ? " selected" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.tag || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.tag ? '<span class="tag ' + item.tagClass + '">' + item.tag + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
+                function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
+                  const cwd = String(session.cwd || "").replace(/\/+$/, "");
+                  const projects = Array.isArray(S.projects) ? S.projects : [];
+                  if (cwd) {
+                    const hit = projects.find((p) => p && typeof p.anchor_dir === "string" && (p.anchor_dir.replace(/\/+$/, "") === cwd || cwd.startsWith(p.anchor_dir.replace(/\/+$/, "") + "/")));
+                    if (hit && hit.name) return String(hit.name);
+                  }
+                  return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
+                }
                 function renderMyList() {
                   if (!UI) return;
                   const list = UI.sessionList;
@@ -1448,12 +1461,147 @@
                     return;
                   }
                   const sessions = [...S.sessions.values()].sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
-                  const pending = sessions.filter((x) => x.status === "WAITING" || x.status === "ERROR");
-                  const other = sessions.filter((x) => x.status !== "WAITING" && x.status !== "ERROR");
+                  const pending = sessions.filter((x) => x.status === "WAITING" || x.status === "ERROR").slice(0, 3); // ⑥a-2 待处理封顶 3（置顶优先已在排序内），溢出回落其他组
+                  const pendingIds = new Set(pending.map((x) => x.session_id));
+                  const other = sessions.filter((x) => !pendingIds.has(x.session_id));
                   const groupMarkup = (group, title, entries) => '<div class="session-group" data-session-group="' + group + '"><div class="queue-group"><span>' + title + '</span> · <span data-session-group-count>' + entries.length + '</span></div>' + entries.map((x) => myCardMarkup(myCardItem(x))).join("") + '</div>';
+                  // ⑥a-2 其他组语义=外层组头 + 内嵌项目子分组（跟随原型 renderSessionQueue）
+                  const projectNames = [...new Set(other.map((x) => getSessionProject(x)))];
+                  const otherMarkup = other.length
+                    ? '<div class="session-group" data-session-group="other"><div class="queue-group"><span>其他会话</span> · <span data-session-group-count>' + other.length + '</span></div>'
+                      + projectNames.map((name) => {
+                        const inProject = other.filter((x) => getSessionProject(x) === name);
+                        return '<div class="session-group" data-session-group="project" data-session-project="' + esc(name) + '"><div class="queue-group"><span>' + esc(name) + '</span> · <span data-session-group-count>' + inProject.length + '</span></div>' + inProject.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div>";
+                      }).join("")
+                      + "</div>"
+                    : "";
                   const template = document.createElement("template");
-                  template.innerHTML = groupMarkup("pending", "待处理", pending) + groupMarkup("other", "其他会话", other);
+                  template.innerHTML = groupMarkup("pending", "待处理", pending) + otherMarkup;
                   list.replaceChildren(template.content);
+                }
+
+                // ---------- ⑥a-1 右键行菜单整链（置顶/重命名/复制ID/删除，走 B2 命令通道） ----------
+                let rowMenu = null;
+                function closeRowMenu() {
+                  if (rowMenu) { rowMenu.remove(); rowMenu = null; }
+                }
+                function startRowRename(card, session) {
+                  const titleEl = card.querySelector(".srow-r1 strong");
+                  if (!titleEl || card.querySelector(".row-rename-input")) return;
+                  const original = String(session.title || session.initial_prompt || session.session_id);
+                  const input = document.createElement("input");
+                  input.className = "row-rename-input";
+                  input.type = "text";
+                  input.value = original;
+                  input.maxLength = 40;
+                  input.setAttribute("aria-label", "会话重命名");
+                  titleEl.replaceWith(input);
+                  input.focus();
+                  input.select();
+                  let done = false;
+                  const commit = async (submit) => {
+                    if (done) return;
+                    done = true;
+                    const next = input.value.trim().slice(0, 40);
+                    input.replaceWith(titleEl);
+                    if (!submit || !next || next === original) return; // Escape/空值/未变更：还原不发送
+                    const ack = await commandAck("COMMAND_RENAME", { session_id: session.session_id, title: next });
+                    const v = ackVerdict(ack);
+                    if (v.ok) {
+                      session.title = next;
+                      session.title_locked = true;
+                      renderMyList();
+                      b2Toast("已重命名");
+                    } else b2Toast(v.error);
+                  };
+                  input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") { e.preventDefault(); commit(true); }
+                    else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+                    e.stopPropagation(); // 不外泄给全局快捷键
+                  });
+                  input.addEventListener("blur", () => commit(true));
+                }
+                async function copySessionId(sid) {
+                  try { await navigator.clipboard.writeText(sid); b2Toast("会话 ID 已复制"); }
+                  catch { // 剪贴板 API 不可用（非安全上下文等）：textarea 兜底
+                    const ta = document.createElement("textarea");
+                    ta.value = sid;
+                    ta.style.position = "fixed";
+                    ta.style.opacity = "0";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand("copy"); b2Toast("会话 ID 已复制"); } catch { b2Toast("复制失败，请手动复制：" + sid); }
+                    ta.remove();
+                  }
+                }
+                function setupRowMenu() {
+                  if (!UI || !UI.sessionList || UI.sessionList.dataset.rowMenuBound) return;
+                  UI.sessionList.dataset.rowMenuBound = "1";
+                  // 关闭五路：Escape / 外部 pointerdown（capture）/ 滚动（capture）/ 窗口失焦 / 尺寸变化
+                  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRowMenu(); }, true);
+                  document.addEventListener("pointerdown", (e) => { if (rowMenu && !rowMenu.contains(e.target)) closeRowMenu(); }, true);
+                  window.addEventListener("scroll", closeRowMenu, true);
+                  window.addEventListener("blur", closeRowMenu);
+                  window.addEventListener("resize", closeRowMenu);
+                  UI.sessionList.addEventListener("contextmenu", (e) => {
+                    const card = e.target.closest("[data-session-card]");
+                    if (!card) return;
+                    e.preventDefault();
+                    const sid = card.getAttribute("data-session-card");
+                    const session = S.sessions.get(sid);
+                    if (!session) return;
+                    closeRowMenu();
+                    const writable = canCmd(session); // 历史托管会话只读：命令项置灰（relay 侧亦拦，双保险）
+                    const running = session.status === "WORKING" || session.status === "WAITING";
+                    rowMenu = document.createElement("div");
+                    rowMenu.className = "row-menu";
+                    rowMenu.setAttribute("role", "menu");
+                    rowMenu.dataset.targetCard = sid;
+                    rowMenu.innerHTML =
+                      '<button type="button" role="menuitem" data-row-action="pin"' + (writable ? "" : " disabled") + ">" + (session.pinned ? "取消置顶" : "置顶") + "</button>"
+                      + '<button type="button" role="menuitem" data-row-action="rename"' + (writable ? "" : " disabled") + ">重命名</button>"
+                      + '<button type="button" role="menuitem" data-row-action="copyid">复制 ID</button>'
+                      + '<button type="button" role="menuitem" class="danger" data-row-action="del"' + (writable ? "" : " disabled") + ">删除</button>";
+                    rowMenu.addEventListener("click", async (ev) => {
+                      const btn = ev.target.closest("button[data-row-action]");
+                      if (!btn) return;
+                      const id = rowMenu.dataset.targetCard;
+                      const s = S.sessions.get(id);
+                      closeRowMenu();
+                      if (!s) return;
+                      const action = btn.dataset.rowAction;
+                      if (action === "pin") {
+                        const ack = await commandAck("COMMAND_PIN_SESSION", { session_id: s.session_id, pinned: s.pinned !== true });
+                        const v = ackVerdict(ack);
+                        if (v.ok) {
+                          s.pinned = s.pinned !== true;
+                          renderMyList(); // UPDATED 帧亦会回显，此处乐观归位防双帧间隙
+                          b2Toast(s.pinned ? "已置顶 · 组内排最前" : "已取消置顶");
+                        } else b2Toast(v.error);
+                      } else if (action === "rename") {
+                        const target = UI.sessionList.querySelector('[data-session-card="' + cssEsc(s.session_id) + '"]');
+                        if (target) startRowRename(target, s);
+                      } else if (action === "copyid") {
+                        copySessionId(s.session_id);
+                      } else if (action === "del") {
+                        if (s.status === "WORKING" || s.status === "WAITING") { b2Toast("会话运行中，不能删除"); return; } // 前端预拦，relay 同规则
+                        const ack = await commandAck("COMMAND_DELETE", { session_id: s.session_id });
+                        const v = ackVerdict(ack);
+                        if (v.ok) {
+                          S.sessions.delete(s.session_id);
+                          if (S.selected === s.session_id) S.selected = "";
+                          renderMyList();
+                          b2Toast("会话已删除");
+                        } else b2Toast(v.error);
+                      }
+                    });
+                    document.body.appendChild(rowMenu);
+                    const rect = rowMenu.getBoundingClientRect();
+                    const x = Math.min(e.clientX, window.innerWidth - rect.width - 8);
+                    const y = Math.min(e.clientY, window.innerHeight - rect.height - 8);
+                    rowMenu.style.left = Math.max(8, x) + "px";
+                    rowMenu.style.top = Math.max(8, y) + "px";
+                  });
                 }
 
                 // ---------- 渲染：头部 / dock / 检查器 ----------
@@ -2390,6 +2538,7 @@
                     UI.convPane = cp;
                   }
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }
+                  setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
                   // 占位标记收编：已绑定面移除 data-stub；搜索/筛选拨给 B2b
                   UI.queueHead.removeAttribute("data-stub");
                   UI.workspace.removeAttribute("data-stub");
@@ -2434,12 +2583,20 @@
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
                   const session = state.sessions.get(member.session_id) || {};
-                  return { name: session.title || member.session_id, role: member.role || "角色未标注", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "" };
+                  return { name: session.title || member.session_id, role: member.role || "角色未标注", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit };
+                }
+                function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
+                  const used = Number(info.context_usage) || 0;
+                  const limit = Number(info.context_limit) || 0;
+                  if (!used || !limit || limit <= 0) return "";
+                  const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
+                  const tone = pct >= 85 ? "critical" : pct >= 60 ? "attention" : "safe";
+                  return '<div class="mini-context-meter ' + tone + '" data-context-waterline><i><b style="width:' + pct + '%"></b></i><span>' + pct + "%</span></div>";
                 }
                 function memberMarkup(member) {
                   const info = memberInfo(member);
                   const roleClass = /^(pm|leader)$/i.test(info.role) ? "pm" : /^(qa|reviewer|验收)$/i.test(info.role) ? "qa" : "worker";
-                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + "</div></div></div>";
+                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + "</div>" + memberCtxMeter(info) + "</div></div>";
                 }
                 function taskMarkup(task, project) {
                   const member = members(project).find((item) => item.session_id === task.owner_session);
@@ -2654,8 +2811,8 @@
 
           <section class="desktop-screen" id="d-project">
             <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起立项 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="tag action" data-project-action-tag style="display:none">需行动 0</span><span class="source-badge" data-project-source></span></div><div class="workspace-sub" data-project-sub>等待 relay SNAPSHOT…</div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">项目不产生第二写面 · 所有动作回原域</span></footer></section>
-            <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="source-badge" data-project-source></span></div><div class="workspace-sub" data-project-sub>等待 relay SNAPSHOT…</div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
+            <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block" data-project-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
             <script>
               (() => {
                 "use strict";
@@ -2889,7 +3046,6 @@
                 const els = {
                   queue: section.querySelector("[data-project-queue]"),
                   name: section.querySelector("[data-project-name]"),
-                  actionTag: section.querySelector("[data-project-action-tag]"),
                   source: section.querySelector("[data-project-source]"),
                   sub: section.querySelector("[data-project-sub]"),
                   body: section.querySelector("[data-project-body]"),
@@ -2897,6 +3053,7 @@
                   riskCopy: section.querySelector("[data-project-risk-copy]"),
                   artifactCount: section.querySelector("[data-project-artifact-count]"),
                   artifactRows: section.querySelector("[data-project-artifact-rows]"),
+                  waterline: section.querySelector("[data-project-waterline]"),
                 };
                 let selectedKey = "";
 
@@ -2989,14 +3146,9 @@
 
                 function renderHead(entry) {
                   els.name.textContent = entry ? entry.name : "项目";
-                  const actions = projectActionItems(entry);
-                  if (entry && actions.length > 0) {
-                    els.actionTag.style.display = "";
-                    els.actionTag.textContent = "需行动 " + actions.length;
-                  } else els.actionTag.style.display = "none";
                   els.source.textContent = bridge.relayName;
                   if (entry) {
-                    els.sub.textContent = "目录 " + shortenDir(entry.anchor) + " · realpath 已归一 · " + entry.sessions.length + " 会话 · " + (entry.group ? 1 : 0) + " 团队 · 输出物 " + artifactsOf(entry).length;
+                    els.sub.textContent = "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"; // ⑥a-5 终态：追加计数已收口进总览指标
                   } else els.sub.textContent = "—";
                 }
 
@@ -3010,12 +3162,15 @@
                     : "<p>该目录未立项</p><p>立项确认在团队域发起</p>";
                   const artifactLines = artifacts.slice(0, 2).map((a) => "<p>" + escapeHtml(basename(a.path)) + " · " + escapeHtml(relTime(a.last_at)) + '</p><div class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div>").join("") || "<p>暂无输出物</p>";
                   const accLines = bridge.accepts.slice(0, 2).map((a) => "<p>" + escapeHtml(a.title) + " · " + (a.submitted ? "回填 " + (Number(a.judged) || 0) + "/" + (Number(a.total) || 0) : "待填 " + (Number(a.total) || 0) + " 项") + "</p>").join("") || "<p>暂无验收单</p>";
+                  const metric = (icon, label, num) => icon
+                    ? '<div class="metric"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg><span>' + label + " " + num + "</span></div>"
+                    : '<div class="metric"><span>' + label + " " + num + "</span></div>"; // ⑥a-3 原型终态：icon 行内式替代大数字（需行动项无 icon，随原型）
                   return '<div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div>'
-                    + '<div class="project-overview"><div class="metric"><b>' + entry.sessions.length + '</b><span>会话</span></div><div class="metric"><b>' + (entry.group ? 1 : 0) + '</b><span>活跃团队</span></div><div class="metric"><b>' + artifacts.length + '</b><span>输出物</span></div><div class="metric"><b>' + actions.length + '</b><span>需行动</span></div></div>'
+                    + '<div class="project-overview">' + metric("chat", "会话", entry.sessions.length) + metric("users", "团队", entry.group ? 1 : 0) + metric("package", "输出物", artifacts.length) + metric("", "需行动", actions.length) + "</div>"
                     + '<div class="aggregate-grid">'
                     + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话</h4>' + sessionLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (sessions[0] ? ' data-jump-session="' + escapeHtml(sessions[0].session_id) + '"' : "") + '>在会话中查看</button></div>'
                     + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队</h4>' + teamLines + '<button class="secondary-btn" type="button" data-domain-jump="team">在团队中查看</button></div>'
-                    + '<div class="aggregate-card"><h4>▣ 输出物</h4>' + artifactLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (artifacts[0] ? ' data-jump-session="' + escapeHtml(artifacts[0].session.session_id) + '"' : "") + '>查看来源</button></div>'
+                    + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物</h4>' + artifactLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (artifacts[0] ? ' data-jump-session="' + escapeHtml(artifacts[0].session.session_id) + '"' : "") + '>查看来源</button></div>'
                     + '<div class="aggregate-card"><h4>✓ 验收单</h4>' + accLines + '<button class="secondary-btn" type="button" data-domain-jump="notify">在原域处理</button></div>'
                     + "</div>";
                 }
@@ -3066,6 +3221,21 @@
                   const artifacts = artifactsOf(entry);
                   els.artifactCount.textContent = String(artifacts.length);
                   els.artifactRows.replaceChildren(nodesFrom(artifacts.slice(0, 4).map((a) => '<div class="artifact-row">' + escapeHtml(basename(a.path)) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>").join("")));
+                  // ⑥a-4 最活跃会话水位块：项目内 context 用量占比最高会话（原型 data-context-waterline 终态）
+                  if (els.waterline) {
+                    const withCtx = (entry ? entry.sessions : []).filter((s) => Number(s && s.context_usage) > 0 && Number(s && s.context_limit) > 0);
+                    const busiest = withCtx.sort((a, b) => Number(b.context_usage) / Number(b.context_limit) - Number(a.context_usage) / Number(a.context_limit))[0];
+                    if (busiest) {
+                      const pct = Math.max(1, Math.min(100, Math.round((Number(busiest.context_usage) / Number(busiest.context_limit)) * 100)));
+                      els.waterline.hidden = false;
+                      els.waterline.innerHTML = '<div class="inspector-title"><span>最活跃会话水位</span><span>' + pct + "%</span></div>"
+                        + '<div class="mini-context-meter"><i><b style="width:' + pct + '%"></b></i><span>聚合水位</span></div>'
+                        + '<div class="inspector-copy">' + escapeHtml(busiest.title || busiest.initial_prompt || busiest.session_id) + " · 当前会话上下文</div>";
+                    } else {
+                      els.waterline.hidden = true;
+                      els.waterline.textContent = "";
+                    }
+                  }
                 }
 
                 function bodyPanes() {
@@ -3091,7 +3261,6 @@
                   if (waiting) {
                     els.queue.replaceChildren(bannerNode(waiting));
                     els.name.textContent = "项目";
-                    els.actionTag.style.display = "none";
                     els.source.textContent = bridge.relayName;
                     els.sub.textContent = waiting;
                     setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
@@ -3145,7 +3314,7 @@
           <section class="desktop-screen" id="d-notify">
             <aside class="queue" data-notification-queue data-relay-state="loading"></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>0 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list" data-notification-list><div class="readonly-banner" data-notify-state role="status">等待 relay SNAPSHOT…</div></div></div></section>
-            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>0</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
+            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>0</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block" data-notify-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
             <script>
               (() => {
                 "use strict";
@@ -3311,6 +3480,26 @@
                   }
                 }
 
+                // ⑥a-4 来源会话水位块：首个需行动行的来源会话 context 用量（原型 data-context-waterline 终态）
+                function syncWaterline(rows) {
+                  const block = section.querySelector("[data-notify-waterline]");
+                  if (!block) return;
+                  const withSession = rows.find((r) => r.active && r.sessionId);
+                  const session = withSession ? bridge.sessions.get(withSession.sessionId) : null;
+                  const used = Number(session && session.context_usage) || 0;
+                  const limit = Number(session && session.context_limit) || 0;
+                  if (!session || !used || !limit || limit <= 0) {
+                    block.hidden = true;
+                    block.textContent = "";
+                    return;
+                  }
+                  const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
+                  block.hidden = false;
+                  block.innerHTML = '<div class="inspector-title"><span>来源会话水位</span><span>' + pct + "%</span></div>"
+                    + '<div class="mini-context-meter"><i><b style="width:' + pct + '%"></b></i></div>'
+                    + '<div class="inspector-copy">来源会话：' + escapeHtml(session.title || session.initial_prompt || session.session_id) + "</div>";
+                }
+
                 function render() {
                   const waiting = bridge.waitingText();
                   const state = bridge.hasSnapshot ? "snapshot" : bridge.connection;
@@ -3320,12 +3509,14 @@
                     queue.replaceChildren(bridge.bannerOf(waiting));
                     list.replaceChildren(bridge.bannerOf(waiting));
                     syncCounts(0);
+                    syncWaterline([]);
                     return;
                   }
                   if (!bridge.notificationsSupported) {
                     queue.replaceChildren(nodesFrom('<div class="queue-head"><h2>通知</h2></div>'), bridge.bannerOf("该 relay 未下发 notifications 字段（旧版本）· 通知中心不可用"));
                     list.replaceChildren(bridge.bannerOf("该 relay 未下发 notifications 字段 · 无法显示通知账"));
                     syncCounts(0);
+                    syncWaterline([]);
                     return;
                   }
                   const rows = buildRows();
@@ -3333,6 +3524,7 @@
                   if (!rows.length) list.replaceChildren(emptyState("暂无需要你行动的通知"));
                   else list.replaceChildren(nodesFrom(listMarkup(rows)));
                   syncCounts(rows.filter((r) => r.active).length);
+                  syncWaterline(rows);
                 }
 
                 // #018-W1b 轻动作：COMMAND_NOTIFICATION_ACK{notification_key, action:"handled"}。
@@ -3391,7 +3583,7 @@
           </section>
 
           <section class="desktop-screen" id="d-settings" data-stub="B6">
-            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接与设备</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div><p>relay 在线 · 3 台设备 · 1 异常</p></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div><p>Claude/Codex 已接 · 4 待装</p></div><div class="queue-card"><div class="row"><span class="avatar">◌</span><strong>通用与快捷键</strong></div><p>⌘K 搜索 · ⌘N 新建会话</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div><p>5 个角色 · 开团时可覆盖</p></div><div class="queue-card"><div class="row"><span class="avatar">▦</span><strong>扩展</strong></div><p>验收 · 登记 · 产物</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div><p>v0.6.0-test · test 通道</p></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接管理</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div><p>relay 在线 · 3 台设备 · 1 异常</p></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div><p>Claude/Codex 已接 · 4 待装</p></div><div class="queue-card"><div class="row"><span class="avatar">◌</span><strong>通用与快捷键</strong></div><p>⌘K 搜索 · ⌘N 新建会话</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div><p>5 个角色 · 开团时可覆盖</p></div><div class="queue-card"><div class="row"><span class="avatar">▦</span><strong>扩展</strong></div><p>验收 · 登记 · 产物</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div><p>v0.6.0-test · test 通道</p></div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">连接状态</span><h2>连接与设备</h2></div><div class="workspace-sub">relay · 云桥 · 已配设备 · 异常项单独处理</div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · 已连接</strong><p>端口 8787 · 事件流自动补发 · 最后心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · 已连接</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 重试中 · 09-18 起</p></div><button class="danger-btn">重配对</button></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
             <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>v0.6.0-test</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
           </section>
@@ -3415,7 +3607,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small id="mobile-detail-sub">~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
-              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="message-ai"><div class="message-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">调度</span></div><div class="message-body">独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div></div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 0.6.0-test.19.apk <span>1h</span></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
+              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="message-ai"><div class="message-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">调度</span></div><div class="message-body">独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div></div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 0.6.0-test.19.apk <span>1h</span></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
@@ -3437,8 +3629,8 @@
         <div class="mobile-screen" id="m-project" data-mobile-root="project">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
-          <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span><button class="icon-btn">＋</button></header>
-          <div class="mobile-content"><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck</h3><p>~/dev/cc-deck</p><span class="tag action">需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw</h3><p>~/dev/windclaw · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> docs/release-check.md · 刚刚<br><span class="muted">查看来源 →</span></div></div></div>
+          <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span></header>
+          <div class="mobile-content"><div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck</h3><p>~/dev/cc-deck</p><span class="tag action">需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw</h3><p>~/dev/windclaw · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 ›</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 ›</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> docs/release-check.md · 刚刚<br><span class="muted">查看来源 ›</span></div></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
