@@ -55,6 +55,10 @@ pkg.version = ver;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 const wcPath = join(root, "web-console", "index.html");
 writeFileSync(wcPath, readFileSync(wcPath, "utf-8").replace(/(CONSOLE_VERSION\s*=\s*)"[^"]*"/, `$1"${ver}"`));
+// 双壳同刷（新旧壳共存，2026-10-07 用户拍板）：/app2 的 005 新壳也是在线服务面，
+// 版本回写两处都做，防主/副壳版本号各说各话
+const wc005Path = join(root, "web-console", "index-005.html");
+writeFileSync(wc005Path, readFileSync(wc005Path, "utf-8").replace(/(CONSOLE_VERSION\s*=\s*)"[^"]*"/, `$1"${ver}"`));
 
 // 3. 静态资源：网页控制台 + 移动端 PWA 壳 + APK + 注入器源码 + bridge hook（单源复制，防双份漂移）
 // ⚠ 此清单与 desktop-tauri/src-tauri/tauri.conf.json 的 resources 映射需同步维护
@@ -65,6 +69,9 @@ const copy = (from, to) => {
   cpSync(from, to, { recursive: true });
 };
 copy(join(root, "web-console", "index.html"), join(out, "web-console", "index.html"));
+// 005 新壳（新旧壳共存，2026-10-07 用户拍板）：relay /app2 对照入口的伺服文件——
+// 白名单漏拷 = 插件包内 /app2 恒 503
+copy(join(root, "web-console", "index-005.html"), join(out, "web-console", "index-005.html"));
 copy(join(root, "web-console", "nacl.js"), join(out, "web-console", "nacl.js"));
 // qr.js（扫码登录编码器）：#150 补——此前漏拷，插件部署的网页端点扫码按钮静默抛错（#325 同坑）
 copy(join(root, "web-console", "qr.js"), join(out, "web-console", "qr.js"));

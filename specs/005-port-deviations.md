@@ -21,6 +21,7 @@
 | ⑥c-3 m-detail 五 tab | 28d9970 | DV6c-4、DV6c-6 | 本文（派单模式首批：worker 实施，Leader 核验代提交） |
 | #150 收敛线 R1-R3 | 1d676e7 / 2830005 / 98e8904 | DV-ARCH 终态达成（本批不改用户可见面） | 005-arch-convergence-survey.md + 本文 DV-ARCH 节 |
 | ⑥d 出包切换 | a4f2593 | DV6d-1…DV6d-5（005 落位 index.html+定版 0.7.0-test.2） | 本文（派单模式：worker 实施，Leader 核验代提交） |
+| ⑥f 新旧壳共存 | （本批） | DV6f-1…DV6f-3（用户否决单点切换，改共存布局） | 本文（派单模式：worker 实施，Leader 核验代提交） |
 
 ## B2 会话域补录（DV2-）
 
@@ -70,6 +71,14 @@ B2 无独立 report（worker 交付短式提交），已知持久偏差在此补
 - **DV6e-2 视口切换自动化**：原型手动点按钮切桌面/手机视口 → 成品 `matchMedia("(max-width: 720px)")` 自动切换+change 监听（老 Safari addListener 回退）；手机脚本 jumpDesktop 经 `bridge.jumpMode` 借道（行为等价原按钮）。
 - **DV6e-3 连接层接线（对齐旧壳，非原型语义）**：原型无连接概念（演示数据）；成品 bootstrapConnection 探测链=URL ?token= > localStorage > 桌面壳 invoke `probe_local`（main.rs 注入面 `window.ccDeck.probeLocal` 优先，`__TAURI__.core.invoke` 兜底；wsUrl 覆写 `ws://127.0.0.1:<探测端口>/ws`——tauri.localhost 源非 relay）> loopback `/local-info`（1.5s 超时）。探测期「正在探测本机 relay…」占位态；全败回落 unconfigured 引导。已知缺口：**公网 https 形态（cc.humumu.online/app 手机浏览器）云配对链未移植**——005 壳当前适用 LAN/桌面形态，公网配对属 B7/后续域；localStorage 旧 token 无自愈（data/token 持久不轮换，风险极低，记档）。
 - **DV6e-4 演示数据中性化**：stub 提示词（「原型占位，待 X 迁移」→「此面板即将开放」）、静态初始 HTML（「0.6.0-test.19 出包」「公司电脑」「M1 攻坚团」等→「会话/加载中/当前源/团队」）。残留（记档不修）：第三列检查器内容级演示块（验收进度 2/3、用量 84k/200k 等）B2 ready 接管前短暂闪现；手机屏顶部 9:41 假状态栏（牵动五屏头部布局，B7 迁移时一并处理）。
+
+## ⑥f 新旧壳共存批（DV6f-，2026-10-07）
+
+> 背景：0.7.0-test.2 直接替换 /app 的上线方式被用户否决（「你弄个和旧版的共存不就好了吗」）——⑥d 的单点切换布局无对照/无共存面。本批改共存：旧版稳定壳继续主路径服务，005 新壳挂独立入口对照体验。施工=worker（含补单 build-plugin/check-bundle-sync），Leader 核验代提交。
+
+- **DV6f-1 共存布局（DV6d-1 旧口径作废）**：`web-console/index.html` = 旧版稳定壳（自 `web-console-legacy/index-legacy.html` 拷回，版本常量随 version.mjs 与新壳同刷——同一产品版本下的两个界面，防版本漂移各说各话）；`web-console/index-005.html` = 005 新壳（git mv R100 自 ⑥d 落位的 index.html，逐字节一致 md5 6ec82535）。DV6d-1「施工载体 index-005 退役防双源漂移」作废——用户共存拍板优先；双源漂移风险改由 version.mjs 双落点+release-guard 双壳同查兜底。既定代价：双壳均进 CF assets 上传与 Tauri frontendDist（+约 1.2MB）。`web-console-legacy/` 留档仍冻结 0.7.0-test.1 不动（历史考据用，不参与任何一致性口径）。
+- **DV6f-2 服务面双路由**：LAN relay `/` = 旧壳、`GET /app2` = 005 新壳（ws-server.ts，consoleHtml005 缺失时 503 明示「未随包」）；CF `/app` = 旧壳（assets 根 index.html）、`/app2`（含子路径透传，同 /app 口径）= index-005.html（worker.ts）。PWA 子资源经透传共用根路径资产。**部署面（本批实发）**：仅 CF——/app 界面不变（同 legacy UI），关于页版本号 0.6.4-test.2→0.7.0-test.2 随版本统一纪律走；LAN `/app2` 需待下版 relay bundle 部署后生效（源码已备）；桌面壳维持 0.6.4-test.2 旧壳，待用户在 /app2 验收通过后再议换壳出包。
+- **DV6f-3 版本工具链双落点**：version.mjs 增 `web-console-005 CONSOLE_VERSION` 落点（两壳同刷）；release-guard web-console 语法闸门扩双壳（index.html 3 段+index-005.html 6 段逐段 node --check）；check-bundle-sync 扩双壳对比；build-plugin 白名单增拷 index-005.html（否则重建 bundle 后包内 /app2 503）。
 
 
 

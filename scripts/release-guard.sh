@@ -40,17 +40,20 @@ echo "✅ bundle 同步"
 # 这类错 tsc 一秒逮住，但 release 构建不跑 tsc 就直接出包）
 (cd expo-app && ./node_modules/.bin/tsc --noEmit >/dev/null 2>&1) || { echo "❌ expo tsc 未过（未定义引用/类型错误）"; (cd expo-app && ./node_modules/.bin/tsc --noEmit 2>&1 | head -5); exit 1; }
 echo "✅ expo tsc 通过"
-# web-console 闸门：内联脚本语法 + nacl.js/qr.js 同目录在（桌面 UI 的全部家当）
+# web-console 闸门：内联脚本语法 + nacl.js/qr.js 同目录在（桌面 UI 的全部家当）。
+# 新旧壳共存（2026-10-07 用户拍板）：/app2 的 005 新壳（index-005.html）也是在线
+# 服务面，语法闸门双查——主/副壳任一内联脚本语法错都不该出包
 python3 - <<'PYEOF' || { echo "❌ web-console 闸门未过"; exit 1; }
 import re, subprocess, sys, os
-html = open('web-console/index.html', encoding='utf-8').read()
-scripts = re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S)
-for i, s in enumerate(scripts):
-    p = f'/tmp/guard-wc-{i}.js'
-    open(p, 'w', encoding='utf-8').write(s)
-    r = subprocess.run(['node', '--check', p], capture_output=True)
-    if r.returncode != 0:
-        print(f'block {i}: ' + r.stderr.decode()[:200]); sys.exit(1)
+for wc in ('web-console/index.html', 'web-console/index-005.html'):
+    html = open(wc, encoding='utf-8').read()
+    scripts = re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S)
+    for i, s in enumerate(scripts):
+        p = f'/tmp/guard-wc-{i}.js'
+        open(p, 'w', encoding='utf-8').write(s)
+        r = subprocess.run(['node', '--check', p], capture_output=True)
+        if r.returncode != 0:
+            print(f'{wc} block {i}: ' + r.stderr.decode()[:200]); sys.exit(1)
 for f in ('nacl.js', 'qr.js'):
     if not os.path.exists(f'web-console/{f}'):
         print(f'missing web-console/{f}'); sys.exit(1)

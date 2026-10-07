@@ -36,6 +36,15 @@ const targets = [
       s.replace(/^([ \t]*)const CONSOLE_VERSION = "(?:.+?)";/m, `$1const CONSOLE_VERSION = "${canonical}";`),
   },
   {
+    // 新旧壳共存（用户拍板，2026-10-07）：/app2 的 005 新壳也是在线服务面（relay /app2、
+    // CF /app2），版本统一纪律两处都刷，防主/副壳版本漂移各说各话
+    name: "web-console-005 CONSOLE_VERSION",
+    file: "web-console/index-005.html",
+    get: (s) => /^[ \t]*const CONSOLE_VERSION = "(.+?)";/m.exec(s)?.[1],
+    set: (s) =>
+      s.replace(/^([ \t]*)const CONSOLE_VERSION = "(?:.+?)";/m, `$1const CONSOLE_VERSION = "${canonical}";`),
+  },
+  {
     name: "expo-app app.json expo.version",
     file: "expo-app/app.json",
     get: (s) => /"version":\s*"(.+?)"/.exec(s)?.[1],

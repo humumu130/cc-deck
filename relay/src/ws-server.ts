@@ -295,6 +295,8 @@ export function startServer(
     webRootCandidates.find((p) => p && existsSync(join(p, "web-console", "index.html"))) ??
     webRootCandidates[1]!;
   const consoleHtml = join(webRoot, "web-console", "index.html");
+  // 新旧壳共存（用户拍板，2026-10-07）：`/` 主路径 = 旧版稳定壳，`/app2` = 005 新壳对照体验
+  const consoleHtml005 = join(webRoot, "web-console", "index-005.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
   const qrJs = join(webRoot, "web-console", "qr.js");
   const mobileDir = join(webRoot, "mobile") + sep;
@@ -373,6 +375,16 @@ export function startServer(
       // no-store：控制台是单文件全量替换（无哈希资产名），浏览器启发式缓存会
       // 让 relay 升级后的 LAN 用户一直看旧页（token 换代 → 莫名 401）
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
+      return;
+    }
+    // 005 新壳对照入口（新旧壳共存，2026-10-07 用户拍板）：主路径 `/` 服务旧版稳定壳，
+    // `/app2` 服务 005 新壳；两壳各自独立文件，互不影响。no-store 理由同上。
+    if (req.method === "GET" && url.pathname === "/app2") {
+      if (!existsSync(consoleHtml005)) {
+        res.writeHead(503).end("web-console/index-005.html 不存在（005 新壳未生成/未随包）");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {

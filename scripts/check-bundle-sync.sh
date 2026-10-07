@@ -14,8 +14,12 @@ B3=$( { shasum -a 256 '/Applications/CC Deck.app/Contents/Resources/resources/re
 # 插件 Web 副本对（M13-7 补：此前 sh 面只锁 relay.mjs 两份——web-console/index.html 副本
 # 漂移只有 test-p1-build 锁，而本脚本是发版前必跑闸；副本过期=插件部署网页端 503/旧界面，
 # #150 同坑。源→副本单源复制，一致性=hash 全等）
+# 双壳两对（新旧壳共存，2026-10-07 用户拍板）：/app2 的 005 新壳（index-005.html）同样
+# 进插件包，副本漂移=插件 /app2 503 或旧界面，同口径同查
 W1=$( { shasum -a 256 web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 W2=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+W3=$( { shasum -a 256 web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+W4=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
@@ -23,6 +27,8 @@ FAIL=0
 [ "$B1" = "MISSING" ] && { echo "❌ cc-plugins bundle 不存在（先跑 build-plugin.mjs）"; FAIL=1; }
 [ "$W1" = "$W2" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
 [ "$W1" = "MISSING" ] && { echo "❌ web-console/index.html 源不存在"; FAIL=1; }
+[ "$W3" = "$W4" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index-005.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
+[ "$W3" = "MISSING" ] && { echo "❌ web-console/index-005.html 源不存在"; FAIL=1; }
 
 # git 工作区必须干净（发版前未提交改动 = 产物与仓库不一致的风险源）
 if [ -n "$(git status --porcelain)" ]; then
