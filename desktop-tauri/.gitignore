@@ -1,3 +1,6 @@
 node_modules/
 src-tauri/target/
 src-tauri/gen/schemas/
+
+# better-sqlite3 外置闭包（#142）：随仓库分发，桌面打包从此取
+!src-tauri/resources/node_modules/

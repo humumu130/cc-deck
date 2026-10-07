@@ -41,3 +41,8 @@ docs-internal/
 !.env.example
 .cc-deck/
 .tmp-043/
+
+# better-sqlite3 外置闭包（#142）：bundle 同目录 node_modules 是发布形态的一部分，
+# 插件市场 add 本地目录 / 桌面 tauri 打包都从这里取——必须随仓库走
+!cc-plugins/plugins/cc-deck/scripts/node_modules/
+!desktop-tauri/src-tauri/resources/node_modules/

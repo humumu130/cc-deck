@@ -30,7 +30,9 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": [
-      "nsis", "dmg", "app"
+      "nsis",
+      "dmg",
+      "app"
     ],
     "icon": [
       "icons/32x32.png",
@@ -39,7 +41,6 @@
       "icons/icon.png",
       "icons/icon.icns"
     ],
-    "createUpdaterArtifacts": true,
     "resources": {
       "resources/relay.mjs": "resources/relay.mjs",
       "resources/bin/inject.cs": "resources/bin/inject.cs",
@@ -55,7 +56,8 @@
       "../../mobile/manifest.webmanifest": "mobile/manifest.webmanifest",
       "../../mobile/sw.js": "mobile/sw.js",
       "../../mobile/icon-192.png": "mobile/icon-192.png",
-      "../../mobile/icon-512.png": "mobile/icon-512.png"
+      "../../mobile/icon-512.png": "mobile/icon-512.png",
+      "resources/node_modules": "resources/node_modules"
     },
     "windows": {
       "nsis": {

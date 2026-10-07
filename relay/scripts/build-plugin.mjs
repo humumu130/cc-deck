@@ -35,7 +35,28 @@ await build({
   logLevel: "info",
 });
 
-// 2. 静态资源：网页控制台 + 移动端 PWA 壳 + APK + 注入器源码 + bridge hook（单源复制，防双份漂移）
+// 2. 版本同步（单一版本源）：plugin.json 为源，回写三线——marketplace.json、
+//    desktop-tauri/package.json（App 壳版本，tauri.conf.json version 引用它）、
+//    web-console CONSOLE_VERSION。0.7.0 起三线统一，一处 bump 全线同步
+//    （杜绝「App 0.6.4 > 控制台 0.6.2 却内容更旧」的撞名再现）。
+//    ⚠ 必须在静态资源拷贝之前跑：拷贝从 root/web-console 取源，晚于此步
+//    产物会带上旧版本号（0.7.0-test.1 首跑实锤，git status 无 diff 即症状）
+const pluginJson = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf-8"));
+const ver = pluginJson.version;
+const mktPath = join(root, ".claude-plugin", "marketplace.json");
+const mkt = JSON.parse(readFileSync(mktPath, "utf-8"));
+for (const p of mkt.plugins) {
+  if (p.name === pluginJson.name) p.version = ver;
+}
+writeFileSync(mktPath, JSON.stringify(mkt, null, 2) + "\n");
+const pkgPath = join(root, "desktop-tauri", "package.json");
+const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+pkg.version = ver;
+writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+const wcPath = join(root, "web-console", "index.html");
+writeFileSync(wcPath, readFileSync(wcPath, "utf-8").replace(/(CONSOLE_VERSION\s*=\s*)"[^"]*"/, `$1"${ver}"`));
+
+// 3. 静态资源：网页控制台 + 移动端 PWA 壳 + APK + 注入器源码 + bridge hook（单源复制，防双份漂移）
 // ⚠ 此清单与 desktop-tauri/src-tauri/tauri.conf.json 的 resources 映射需同步维护
 //   （#150：桌面打包漏 web-console/mobile → relay 网页端 503；qr.js 此处未拷，桌面打包有）
 const copy = (from, to) => {
@@ -65,14 +86,24 @@ copy(join(relayRoot, "hooks", "bridge-hook.mjs"), join(out, "scripts", "hook.mjs
 // 2026-10-05 补此步）。产物同步清单与 tauri.conf.json resources 映射呼应（见 :32 ⚠）
 copy(join(out, "scripts", "relay.mjs"), join(root, "desktop-tauri", "src-tauri", "resources", "relay.mjs"));
 
-// 3. 版本同步：plugin.json 为源，写回 marketplace.json（防两处手改漂移）
-const pluginJson = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf-8"));
-const mktPath = join(root, ".claude-plugin", "marketplace.json");
-const mkt = JSON.parse(readFileSync(mktPath, "utf-8"));
-for (const p of mkt.plugins) {
-  if (p.name === pluginJson.name) p.version = pluginJson.version;
-}
-writeFileSync(mktPath, JSON.stringify(mkt, null, 2) + "\n");
+// 2b. native 闭包汇集（better-sqlite3 external 的发布面）：bundle 同目录须有
+// node_modules/{better-sqlite3,bindings,file-uri-to-path}（见 external 注释）。
+// better-sqlite3 只带运行时最小集（lib + build/Release/*.node + package.json，
+// 不带 deps/src 编译料，26M→约 2M）；bindings/file-uri-to-path 纯 JS 整包。
+// 两发布形态同源汇集：插件 scripts/node_modules + 桌面 resources/node_modules
+const nmSrc = join(relayRoot, "node_modules");
+const gatherClosure = (nmOut) => {
+  rmSync(nmOut, { recursive: true, force: true });
+  const bs = join(nmOut, "better-sqlite3");
+  mkdirSync(join(bs, "build", "Release"), { recursive: true });
+  copy(join(nmSrc, "better-sqlite3", "lib"), join(bs, "lib"));
+  copy(join(nmSrc, "better-sqlite3", "build", "Release", "better_sqlite3.node"), join(bs, "build", "Release", "better_sqlite3.node"));
+  copy(join(nmSrc, "better-sqlite3", "package.json"), join(bs, "package.json"));
+  copy(join(nmSrc, "bindings"), join(nmOut, "bindings"));
+  copy(join(nmSrc, "file-uri-to-path"), join(nmOut, "file-uri-to-path"));
+};
+gatherClosure(join(out, "scripts", "node_modules"));
+gatherClosure(join(root, "desktop-tauri", "src-tauri", "resources", "node_modules"));
 
 console.log(`\n插件已打包到: ${out}`);
 console.log("本地验证: claude plugin marketplace add <此目录绝对路径> && claude plugin install cc-deck@cc-deck-plugins");
