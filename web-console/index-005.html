@@ -2550,6 +2550,23 @@
                 }
                 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
                 else ready();
+
+                // ⑥c-3 导出面：005-mobile IIFE 复用 B2 会话数据 / 历史只读判定 / 发送链（DV 备案预授权）
+                // sendMessage 强耦合桌面 composer（读 UI.input 值），此处导出 sid+text 包装；
+                // 命令类型与 sendMessage 同源：COMMAND_MESSAGE（托管）/ COMMAND_EXT_INPUT（external 会话）
+                window.__ccDeck005B2 = {
+                  S,
+                  canCmd,
+                  sendPrompt(sid, text) {
+                    const s = S.sessions.get(sid);
+                    if (!s) return { sent: false, error: "会话不存在或未同步" };
+                    if (!canCmd(s)) return { sent: false, error: "历史会话只读" };
+                    const body = String(text ?? "").trim();
+                    if (!body) return { sent: false, error: "空输入" };
+                    const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", { session_id: s.session_id, text: body });
+                    return id ? { sent: true } : { sent: false, error: "relay 未连接，命令未发送" };
+                  },
+                };
               })();
             </script>
           </section>
@@ -3607,7 +3624,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small id="mobile-detail-sub">~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
-              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="message-ai"><div class="message-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">调度</span></div><div class="message-body">独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div></div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 0.6.0-test.19.apk <span>1h</span></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
+              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
@@ -4426,6 +4443,7 @@ function connectLan(ctx) {
         if (!target) return;
         const active = document.querySelector(".mobile-screen.active");
         if (active && active.id !== "m-detail") { const root = active.id.replace("m-", ""); mobileReturn = ["inbox", "team", "project", "settings", "notify"].includes(root) ? root : "inbox"; }
+        detailSid = sid; // ⑥c-3：五 tab 真数据锚定
         const s = bridge.sessions.get(sid);
         const titleEl = document.querySelector("#mobile-detail-title");
         if (titleEl && titleEl.firstChild) titleEl.firstChild.textContent = s ? sessionTitle(s) : "会话详情";
@@ -4436,6 +4454,8 @@ function connectLan(ctx) {
         const tag = target.querySelector(".mobile-head .tag.action");
         if (tag) { const [w] = s ? stTag(s) : ["详情", "info"]; tag.textContent = s && needAction(s) ? "待处理" : w; }
         setSingleActive(target);
+        renderMobileDetail(sid); // ⑥c-3：五 pane + 状态坞真数据
+        document.querySelector("#m-detail .mobile-detail-tabs button")?.click(); // 回到「对话」tab（原型开屏形态；tab wire 由地基持有）
         const back = document.querySelector("[data-mobile-back]");
         if (back) back.textContent = mobileReturn === "notify" ? "‹ 通知" : "‹";
       }
@@ -4456,6 +4476,220 @@ function connectLan(ctx) {
         if (ack && ack.ok === true) mToast("已标记已读 · 权威账面同步中");
         else mToast("通知处理失败" + (ack && ack.error ? "：" + ack.error : "（未连接或超时）"));
         refreshMobile();
+      }
+
+      // ---------- ⑥c-3 m-detail 五 tab 真数据（对话/任务/输出物/用量/⋯；B2 数据面 + 桌面口径复刻） ----------
+      let detailSid = "";
+      let detailBase = null; // { content, convHost, conv, tasks, arts, usage, more }
+      const b2Api = () => window.__ccDeck005B2 || null;
+      const DETAIL_TL_MAX = 30;
+      const VERIFY_RE_M = /[〔\[【]\s*待验证\s*[〕\]】]/; // 与 B2 任务 tab 四组制同口径（#85 待验证档）
+      const M_DOCK_STATE = { WORKING: ["running", "执行中"], WAITING: ["waiting", "已暂停"], ERROR: ["suspended", "出错"], DONE: ["closing", "已完成"] }; // 态位与 CSS/B2 DOCK_STATE 同集
+      const mTokStr = (n) => { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(n); };
+      const mCtxPct = (s) => (!s || !s.context_usage) ? 0 : Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100));
+      const mCtxTone = (pct) => (pct >= 85 ? "critical" : pct >= 60 ? "attention" : "safe");
+      const mRelTime = (ts) => {
+        if (!ts) return "";
+        const m = Math.floor((Date.now() - ts) / 60000);
+        if (m <= 0) return "刚刚";
+        if (m < 60) return m + " 分钟前";
+        const h = Math.floor(m / 60);
+        if (h < 24) return h + " 小时前";
+        if (h < 48) return "昨天";
+        const d = new Date(ts), now = new Date();
+        const md = d.getMonth() + 1 + "月" + d.getDate() + "日";
+        return d.getFullYear() === now.getFullYear() ? md : d.getFullYear() + "年" + md;
+      };
+      const mFmtHM = (ts) => { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+      const mDayKey = (ts) => { const d = new Date(ts); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); };
+      const mDayLabel = (ts) => {
+        if (!ts) return "";
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        if (ts >= start) return "今天";
+        if (ts >= start - 86400e3) return "昨天";
+        const t = new Date(ts);
+        const md = t.getMonth() + 1 + "月" + t.getDate() + "日";
+        return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
+      };
+      const mNlBr = (t) => esc(t).replace(/\r?\n/g, "<br>");
+      const mToolIcon = (t) => /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t || "") ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t || "") ? "▤" : "⚙";
+      const mArtIcon = (name) => {
+        const ext = String(name || "").toLowerCase().split(".").pop();
+        if (["md", "txt", "rst", "adoc"].includes(ext)) return "file-text";
+        if (["js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "c", "h", "cpp", "cc", "css", "html", "vue", "sh"].includes(ext)) return "code";
+        if (["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"].includes(ext)) return "archive";
+        if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext)) return "image";
+        if (["apk", "ipa", "dmg", "exe", "msi"].includes(ext)) return "package";
+        if (["json", "toml", "yaml", "yml", "ini", "env"].includes(ext)) return "gear";
+        return "clip";
+      };
+      function sliceTimeline(list, max) { // 对话只取最近 max 条（截断标记供顶部 timeline-note）
+        const all = Array.isArray(list) ? list : [];
+        const total = all.length;
+        const items = total > max ? all.slice(total - max) : all.slice();
+        return { items, total, truncated: total > items.length };
+      }
+      function groupTodos(todos, now) { // B2 renderTasks 四组制复刻：已完成 24h 窗口 + 最近 15 条 / 进行中 / 待验证(VERIFY_RE) / 待办
+        now = now || Date.now();
+        const doneAll = todos.filter((t) => t.status === "completed");
+        const doneWindow = doneAll.length && doneAll.every((t) => typeof t.updated_at === "number") ? doneAll.filter((t) => (t.updated_at || 0) >= now - 86400e3) : doneAll;
+        const doneList = doneWindow.slice(-15);
+        const open = todos.filter((t) => t.status !== "completed");
+        const ipAll = open.filter((t) => t.status === "in_progress");
+        const verify = ipAll.filter((t) => VERIFY_RE_M.test(t.content || ""));
+        const run = ipAll.filter((t) => !VERIFY_RE_M.test(t.content || ""));
+        const pending = open.filter((t) => t.status === "pending");
+        return { doneAll, doneList, run, verify, pending };
+      }
+      function mWaitCardHtml(w) { // 移动端仅浏览验证的产品口径：视觉 + 点击引导，真审批链在桌面会话域
+        return '<div class="wait-card" data-wait-card><strong class="wait-title">' + esc("等待你的确认 · " + (w.tool_name || "工具调用")) + '</strong><p class="wait-copy">' + esc(w.input_summary || "") + '</p><div class="wait-actions"><button type="button" data-mobile-wait-deny>拒绝并说明</button><button type="button" class="allow" data-mobile-wait-allow>允许一次</button></div></div>';
+      }
+      function mEntryHtml(e, s) { // B2 entryNode 移动形态：user=bubble / assistant=message-ai / thinking 折叠（偏差 B2-D5 同口径）/ 工具与结果=timeline-note
+        if (e.kind === "user_message") return '<div class="bubble me">' + mNlBr(e.full ?? e.text) + "</div>";
+        if (e.kind === "assistant_text") {
+          const eng = ENGINE_SHORT[(s && s.engine) || "claude"] || (s && s.engine) || "Claude";
+          return '<div class="message-ai"><div class="message-author"><strong>' + esc(eng) + "</strong>" + (e.ts ? "<time>" + mFmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' + mNlBr(e.text) + (e.streaming && s && s.status === "WORKING" ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") + "</div></div>";
+        }
+        if (e.kind === "thinking") return "";
+        if (e.kind === "tool_use") return '<div class="timeline-note"><span>' + esc(mToolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</span></div>";
+        if (e.kind === "tool_result") return '<div class="timeline-note"><span>↳ ' + esc(oneLine(e.text)) + "</span></div>";
+        return '<div class="timeline-note">' + esc(oneLine(e.text)) + "</div>";
+      }
+      function mConversationHtml(sid, s) {
+        const api = b2Api();
+        let list = [];
+        try { const tl = api && api.S && api.S.timelines ? api.S.timelines.get(sid) : null; if (Array.isArray(tl)) list = tl; } catch (_) {}
+        const cut = sliceTimeline(list, DETAIL_TL_MAX);
+        let html = s && s.waiting_request ? mWaitCardHtml(s.waiting_request) : "";
+        if (!cut.items.length) return html + '<div class="readonly-banner">暂无对话记录</div>';
+        if (cut.truncated) html += '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>";
+        let prevDay = "";
+        for (const e of cut.items) {
+          const dk = e.ts ? mDayKey(e.ts) : "";
+          if (dk && dk !== prevDay) { html += '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"; prevDay = dk; }
+          html += mEntryHtml(e, s);
+        }
+        return html;
+      }
+      function mTasksHtml(s) {
+        if (!s) return '<div class="readonly-banner">未选择会话</div>';
+        const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
+        if (!todos.length) return '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>';
+        const g = groupTodos(todos);
+        const row = (sym, t) => '<div class="mobile-task">' + sym + " " + esc((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</div>";
+        const lane = (label, items, sym) => items.length ? '<div class="mobile-lane"><div class="mobile-lane-head"><span>' + label + "</span><span>" + items.length + '</span></div>' + items.map((t) => row(sym, t)).join("") + "</div>" : "";
+        let html = '<div class="pane-summary">任务进度 ' + g.doneAll.length + "/" + todos.length + "</div>";
+        html += lane("已完成", g.doneList, "✓");
+        html += lane("进行中", g.run, "◐");
+        html += lane("待验证", g.verify, "◇");
+        html += lane("待办", g.pending, "○");
+        if (g.doneList.length < g.doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + g.doneAll.length + " 条）</div>";
+        return html;
+      }
+      function mArtifactsHtml(s) {
+        if (!s) return '<div class="readonly-banner">未选择会话</div>';
+        const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
+        if (!arts.length) return '<div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>';
+        const sorted = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
+        return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = String(a.path).split("/").pop(); return '<div class="artifact-row">' + svg(mArtIcon(name)) + " " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
+      }
+      function mUsageHtml(s) { // B2 ctxMeterHtml 同构（12 格 band + tone 分级），mobile 形态加 mobile-context-meter
+        if (!s) return '<div class="readonly-banner">未选择会话</div>';
+        if (!s.context_usage) return '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
+        const pct = mCtxPct(s);
+        const tone = mCtxTone(pct);
+        const grade = { safe: "安全", attention: "注意", critical: "拥挤" }[tone];
+        const note = { safe: "余量充足，可继续当前任务", attention: "上下文偏高，留意即将压缩", critical: "上下文接近上限，建议收口或压缩" }[tone];
+        const lim = s.context_limit || 1e6;
+        const on = Math.round((pct / 100) * 12);
+        const eng = ENGINE_SHORT[s.engine || "claude"] || s.engine || "Claude";
+        const model = s.model ? String(s.model).split(/[/:]/).pop() : mTokStr(lim) + " 上限";
+        return '<div class="context-meter ' + tone + ' mobile-context-meter"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">' + esc(eng + " · " + model) + '</strong></div><span class="context-meter-grade">' + grade + '</span></div><div class="context-meter-band" aria-label="上下文已使用 ' + pct + '%">' + Array.from({ length: 12 }, (_, i) => "<i" + (i < on ? ' class="on"' : "") + "></i>").join("") + '</div><div class="context-meter-stats"><span><b class="context-meter-used">' + mTokStr(s.context_usage) + '</b> <span class="context-meter-limit">/ ' + mTokStr(lim) + ' tokens</span></span><strong class="context-meter-pct">' + pct + '%</strong></div><div class="context-meter-note">' + note + "</div></div>";
+      }
+      function mMoreHtml() { // 原型 :2207 形态：当前 relay · 来源返回栈
+        const stack = { inbox: "待处理收件箱", team: "团队行动", project: "项目", settings: "设置", notify: "通知中心" }[mobileReturn] || "待处理收件箱";
+        return '<div class="readonly-banner">当前 relay：' + esc(bridge.relayName || location.host) + " · 来源返回栈：" + stack + "</div>";
+      }
+      function ensureDetailBase() {
+        const content = document.querySelector("#m-detail .mobile-content");
+        if (!content) return null;
+        let panes = [...content.querySelectorAll(":scope > .workspace-pane")];
+        let convHost = null;
+        if (panes.length === 5) {
+          // 地基 setupStubTabs 解析期已收编五 pane 并 wireSegmentTabs——同 B2 桌面 ready() 只清占位标记
+          panes.forEach((p) => p.removeAttribute("data-stub"));
+          convHost = panes[0].querySelector("[data-mobile-detail-content]");
+          if (!convHost) { convHost = document.createElement("div"); convHost.dataset.mobileDetailContent = ""; panes[0].textContent = ""; panes[0].appendChild(convHost); }
+        } else {
+          // 兜底：地基未接管时自建五 pane + 简版 tab wire（⑥c-3 任务书授权）
+          const keep = content.querySelector("[data-mobile-detail-content]");
+          content.textContent = "";
+          panes = Array.from({ length: 5 }, () => { const p = document.createElement("div"); p.className = "workspace-pane"; content.appendChild(p); return p; });
+          convHost = keep || document.createElement("div");
+          convHost.dataset.mobileDetailContent = "";
+          panes[0].appendChild(convHost);
+          const btns = [...document.querySelectorAll("#m-detail .mobile-detail-tabs button")];
+          btns.forEach((b, i) => b.addEventListener("click", () => {
+            btns.forEach((x, j) => x.classList.toggle("active", i === j));
+            panes.forEach((p, j) => p.classList.toggle("active", i === j));
+          }));
+        }
+        return { content, convHost, conv: panes[0], tasks: panes[1], arts: panes[2], usage: panes[3], more: panes[4] };
+      }
+      function updateMobileDetailDock(s) {
+        const dock = document.querySelector("#mobile-detail-state-dock");
+        if (!dock) return;
+        const task = dock.querySelector("[data-session-state-task]");
+        const label = dock.querySelector("[data-session-state-label]");
+        const elapsed = dock.querySelector("[data-session-state-elapsed]");
+        if (!s) {
+          dock.dataset.sessionState = "waiting";
+          if (task) task.textContent = "当前任务 · 无挂起";
+          if (label) label.textContent = "未选择";
+          if (elapsed) elapsed.textContent = "";
+          return;
+        }
+        const [state, stateLabel] = M_DOCK_STATE[s.status] || ["closing", "已完成"];
+        dock.dataset.sessionState = state;
+        const w = s.waiting_request;
+        const taskText = w ? "等待确认 · " + (w.tool_name || "工具调用") : (s.action_summary || "无挂起");
+        if (task) task.textContent = ("当前任务 · " + String(taskText)).slice(0, 60);
+        if (label) label.textContent = stateLabel;
+        if (elapsed) elapsed.textContent = mRelTime(s.updated_at || s.started_at);
+      }
+      function renderMobileDetail(sid) {
+        const base = detailBase || (detailBase = ensureDetailBase());
+        if (!base) return;
+        const s = bridge.sessions.get(sid) || null;
+        const keepScroll = base.content.scrollTop;
+        base.convHost.innerHTML = mConversationHtml(sid, s);
+        base.tasks.innerHTML = mTasksHtml(s);
+        base.arts.innerHTML = mArtifactsHtml(s);
+        base.usage.innerHTML = mUsageHtml(s);
+        base.more.innerHTML = mMoreHtml();
+        updateMobileDetailDock(s);
+        base.content.scrollTop = keepScroll;
+      }
+      function mobileSend() {
+        if (!detailSid) { mToast("先从会话列表进入详情"); return; }
+        const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
+        const text = String((input && input.value) || "").trim();
+        if (!text) return; // 空输入忽略
+        const api = b2Api();
+        if (!api || typeof api.sendPrompt !== "function") { mToast("发送链路未就绪"); return; }
+        const s = bridge.sessions.get(detailSid) || (api.S && api.S.sessions ? api.S.sessions.get(detailSid) : null);
+        if (s && typeof api.canCmd === "function" && !api.canCmd(s)) { mToast("历史会话只读"); return; }
+        const r = api.sendPrompt(detailSid, text) || {};
+        if (r.sent) { if (input) input.value = ""; mToast("已发送"); }
+        else mToast(String(r.error || "发送失败"));
+      }
+      function setupMobileDetail() {
+        detailBase = ensureDetailBase();
+        const send = document.querySelector('#m-detail [data-composer-send]');
+        if (send) send.addEventListener("click", () => mobileSend());
+        const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
+        if (input) input.addEventListener("keydown", (ev) => { if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return; ev.preventDefault(); mobileSend(); }); // IME 组词期 Enter 不发送
       }
 
       // ---------- 四屏渲染 ----------
@@ -4642,12 +4876,18 @@ function connectLan(ctx) {
         const settingsRow = target.closest("#m-settings .mobile-settings .settings-row");
         if (settingsRow && !settingsRow.matches("[data-theme-toggle]")) { settingsRow.closest(".mobile-content")?._renderSettingsDetail?.(settingsRow.querySelector("strong")?.textContent.trim()); return; }
         if (target.closest("[data-update-check]")) { mToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+        if (target.closest("[data-mobile-wait-deny]") || target.closest("[data-mobile-wait-allow]")) { mToast("审批操作请在桌面会话域完成"); return; } // ⑥c-3 产品口径：移动端仅浏览验证
         const openDetail = target.closest("[data-open-detail]");
         if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
       });
 
-      function refreshMobile() { renderInbox(); renderNotify(); renderTeam(); renderProject(); renderSettingsRows(); }
+      function refreshMobile() {
+        renderInbox(); renderNotify(); renderTeam(); renderProject(); renderSettingsRows();
+        const detail = screenOf("detail"); // ⑥c-3：详情屏活跃时随桥事件刷新五 tab + 状态坞（保持滚动位）
+        if (detail && detail.classList.contains("active") && detailSid) renderMobileDetail(detailSid);
+      }
       setupMobileSettings();
+      setupMobileDetail(); // ⑥c-3：收编五 pane + composer 发送接线
       refreshMobile();
       bridge.subscribe(() => refreshMobile());
     })();
