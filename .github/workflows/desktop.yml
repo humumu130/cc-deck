@@ -61,6 +61,8 @@ jobs:
           V="${GITHUB_REF_NAME#v}"
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          # 005 新壳（0.7.0-test.3 起桌面主页面）同烙：其关于页无 __shellVer 壳注入，CONSOLE_VERSION 即显示源
+          sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index-005.html
           # #119 test 通道在线更新：endpoint 烙成 test 专用清单，通道隔离在编译期
           # 锁定——test 包永远查不到正式清单，semver 天然按 test.N 序号递增判更新
           # （build-test-desktop.sh 产出该清单）。
@@ -82,6 +84,7 @@ jobs:
           V=$(node -e "console.log(require('./package.json').version)")-dev.${{ github.run_number }}
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index-005.html
           echo "stamped: $V"
 
       - name: Build NSIS
@@ -168,6 +171,9 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
           rm -f ../web-console/index.html.bak
+          # 005 新壳同烙（同 Windows job：无 __shellVer 壳注入，CONSOLE_VERSION 即显示源）
+          sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index-005.html
+          rm -f ../web-console/index-005.html.bak
           # #119 同 Windows job：test tag 烙 test 专用 updater 清单（Mac test 包虽被
           # UPDATER_BLOCKED 拦住不发请求，endpoint 同改保持一致，放开只需清单加 mac 条目）
           # #122 同 Windows job 教训：endpoint 只能 https（ECS http 兜底会让 exe 启动即 panic）
@@ -188,6 +194,8 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
           rm -f ../web-console/index.html.bak
+          sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index-005.html
+          rm -f ../web-console/index-005.html.bak
           echo "stamped: $V"
 
       - name: Build dmg
