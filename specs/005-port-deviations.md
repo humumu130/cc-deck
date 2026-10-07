@@ -62,7 +62,16 @@ B2 无独立 report（worker 交付短式提交），已知持久偏差在此补
 - **DV6d-5 旧移动壳 /m 与 nacl.js/qr.js 暂留**（⑥d）：新壳不引用 nacl/qr（005 零外部 script），relay 三条留置路由（/nacl.js /qr.js /m）无害保留——旧移动壳 mobile/ 与 PWA 资产原位不动，旧版退役节奏后续另议（用户拍板项）。
 - **版本工具链口径更新（随批，非偏差）**：version.mjs 三处正则（VERSION 格式闸门放行 `-test.N/-snap.N` 预发段·四段号仍禁；CONSOLE_VERSION 落点前导空白容忍；主页三处预发段对称）+ release-guard 烙印检查通道感知（预发=参数与 VERSION 全等+expo 预发段全等防残留；正式版=一刀切禁令原样）。动因：0.7.0 起三线统一，预发通道版本进单一事实源（plugin.json 源内 0.7.0-test.1 为既成事实）。
 
-## 架构级（DV-ARCH）
+## ⑥e P0 事故修复批（DV6e-，d00f263）
+
+> 背景：0.7.0-test.2 上线后两处 P0（连接层缺失+原型外围漏剥）全线回滚，本批源头修复。施工=H 线 worker，Leader 独立核验代提交。
+
+- **DV6e-1 原型工具部件退役**：topbar（「cc-deck · A 指挥桥 Command Bridge」标题/「视觉稿级可点击原型…」说明词/SPEC 004·PROTOTYPE 005 角标）、mode-switcher 视口切换工具条、stage-note 说明词、mobile-notch、桌面/手机画框装饰（16px/30px 圆角+外框线+投影）整体删除。原型这些部件是**展示工具**而非产品 UI（军规「完全还原原型」不含原型工具件——本批事故定性：B1 骨架照抄未剥，属施工缺陷非有意偏差）。
+- **DV6e-2 视口切换自动化**：原型手动点按钮切桌面/手机视口 → 成品 `matchMedia("(max-width: 720px)")` 自动切换+change 监听（老 Safari addListener 回退）；手机脚本 jumpDesktop 经 `bridge.jumpMode` 借道（行为等价原按钮）。
+- **DV6e-3 连接层接线（对齐旧壳，非原型语义）**：原型无连接概念（演示数据）；成品 bootstrapConnection 探测链=URL ?token= > localStorage > 桌面壳 invoke `probe_local`（main.rs 注入面 `window.ccDeck.probeLocal` 优先，`__TAURI__.core.invoke` 兜底；wsUrl 覆写 `ws://127.0.0.1:<探测端口>/ws`——tauri.localhost 源非 relay）> loopback `/local-info`（1.5s 超时）。探测期「正在探测本机 relay…」占位态；全败回落 unconfigured 引导。已知缺口：**公网 https 形态（cc.humumu.online/app 手机浏览器）云配对链未移植**——005 壳当前适用 LAN/桌面形态，公网配对属 B7/后续域；localStorage 旧 token 无自愈（data/token 持久不轮换，风险极低，记档）。
+- **DV6e-4 演示数据中性化**：stub 提示词（「原型占位，待 X 迁移」→「此面板即将开放」）、静态初始 HTML（「0.6.0-test.19 出包」「公司电脑」「M1 攻坚团」等→「会话/加载中/当前源/团队」）。残留（记档不修）：第三列检查器内容级演示块（验收进度 2/3、用量 84k/200k 等）B2 ready 接管前短暂闪现；手机屏顶部 9:41 假状态栏（牵动五屏头部布局，B7 迁移时一并处理）。
+
+
 
 - **DV-ARCH 双连接过渡形态（历史备案，已收敛）**：地基与 B2 各持一条 ws + 三套命令等待表 + WebSocket 劫持桥并存（994547a A-1 止血后用户可见面无已知缺陷）。**终态已于 #150 收敛线达成**（2026-10-07，R0-R3 提交链：a1c8822 勘察 / 1d676e7 R1 帧总线+桥去劫持 / 2830005 R2 B2 并轨 / 98e8904 R3 收口）：
   - 地基 `connectLan` 为全页唯一物理连接（`new WebSocket` 恰 1 处），挂 `window.__ccDeck005MainWs`；
