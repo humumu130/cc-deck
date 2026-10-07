@@ -3582,9 +3582,9 @@
             </script>
           </section>
 
-          <section class="desktop-screen" id="d-settings" data-stub="B6">
+          <section class="desktop-screen" id="d-settings">
             <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接管理</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div><p>relay 在线 · 3 台设备 · 1 异常</p></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div><p>Claude/Codex 已接 · 4 待装</p></div><div class="queue-card"><div class="row"><span class="avatar">◌</span><strong>通用与快捷键</strong></div><p>⌘K 搜索 · ⌘N 新建会话</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div><p>5 个角色 · 开团时可覆盖</p></div><div class="queue-card"><div class="row"><span class="avatar">▦</span><strong>扩展</strong></div><p>验收 · 登记 · 产物</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div><p>v0.6.0-test · test 通道</p></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">连接状态</span><h2>连接与设备</h2></div><div class="workspace-sub">relay · 云桥 · 已配设备 · 异常项单独处理</div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · 已连接</strong><p>端口 8787 · 事件流自动补发 · 最后心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · 已连接</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 重试中 · 09-18 起</p></div><button class="danger-btn">重配对</button></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2>连接与设备</h2></div><div class="workspace-sub">relay · 云桥 · 已配设备 · 异常项单独处理</div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>端口 8787 · 事件流自动补发</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云桥连接详情</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token 已就绪</p></div><span class="tag done">在线</span></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
             <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>v0.6.0-test</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
           </section>
           <div class="toast" id="toast" role="status"></div>
@@ -3655,6 +3655,8 @@
       const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
       let mobileReturn = "inbox";
       let toastTimer = null;
+      // ⑥c-1：005 壳版本（⑥d 切主文件出包时统一为 0.7.0-test.2）
+      const CONSOLE_VERSION_005 = "0.7.0-test.2-pre";
 
       function ensureThemeSymbols() {
         const sprite = document.querySelector(".icon-sprite");
@@ -3918,6 +3920,7 @@ function connectLan(ctx) {
 
       function setupStubTabs() {
         document.querySelectorAll(".segment-bar, .mobile-detail-tabs, .mobile-team-tabs").forEach((bar) => {
+          if (bar.closest(".settings-panel")) return; // ⑥c-1：设置域已由 setupSettingsDomain 重建六面板，不让位 stub
           const buttons = [...bar.querySelectorAll("button")];
           const host = bar.closest(".workspace, .mobile-screen");
           const body = host?.querySelector(".workspace-body, .mobile-content");
@@ -3940,6 +3943,127 @@ function connectLan(ctx) {
           body.replaceChildren(...panes);
           wireSegmentTabs(buttons, panes, initialIndex);
         });
+      }
+
+      // ---------- ⑥c-1 设置域 B6：六面板装配（原型 setupSettingsContent 同构）+ 真数据经 B4 桥 ----------
+      const SETTINGS_PANELS = ["connections", "provider", "general", "identity", "extensions", "about"];
+      const SETTINGS_TITLES = ["连接与设备", "Agent 引擎", "通用与快捷键", "团队身份模板", "扩展", "关于"];
+      const SETTINGS_SUBS = {
+        connections: "relay · 云桥 · 已配设备 · 异常项单独处理",
+        provider: "六引擎接入 · 状态取自 relay 引擎目录",
+        general: "全局搜索 · 新建会话 · 通知与提醒",
+        identity: "角色缺省引擎 · 开团时可逐成员覆盖",
+        extensions: "验收 · 登记 · 产物",
+        about: "版本 · 检查更新 · 手机 App",
+      };
+      function settingsToggleState(key) {
+        try { return localStorage.getItem("cc-deck-005-" + (key === "sound" ? "notify-sound" : "desktop-notify")) !== "0"; } catch (_) { return true; }
+      }
+      function setupSettingsDomain() {
+        const section = document.querySelector("#d-settings");
+        const queue = section?.querySelector(".queue");
+        const body = section?.querySelector(".workspace-body");
+        if (!section || !queue || !body || body.dataset.settingsReady) return;
+        queue.classList.add("settings-nav");
+        const pairBanner = '<div class="readonly-banner">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>';
+        body.innerHTML = `
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">⌘K</span><div><strong>全局搜索</strong><p>⌘K</p></div></div><div class="settings-row"><span class="avatar">⌘N</span><div><strong>新建会话</strong><p>⌘N</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">未设置</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">⌘ + ↑↓</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">⌘ + ←→</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button">开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button">开</button></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 005 换壳 · 零外部资源</p></div><span class="tag info" data-settings-version-tag>v${CONSOLE_VERSION_005} · preview</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
+        wireCardDensityControls(body);
+        body.dataset.settingsReady = "1";
+        const panels = [...body.querySelectorAll("[data-settings-panel]")];
+        const cards = [...queue.querySelectorAll(".queue-card")];
+        const title = section.querySelector(".workspace-head h2");
+        const subtitle = section.querySelector(".workspace-sub");
+        const segmentBar = section.querySelector(".workspace-head .segment-bar");
+        const activateSettings = (index) => {
+          const key = SETTINGS_PANELS[index] || "connections";
+          panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === key));
+          cards.forEach((card, cardIndex) => card.classList.toggle("selected", cardIndex === index));
+          if (title) title.textContent = SETTINGS_TITLES[index] || "设置";
+          if (subtitle) subtitle.textContent = SETTINGS_SUBS[key] || "";
+          if (segmentBar) segmentBar.style.display = key === "connections" ? "flex" : "none";
+        };
+        cards.forEach((card, index) => { card.dataset.settingsIndex = String(index); });
+        queue.addEventListener("click", (event) => {
+          const card = event.target.closest(".queue-card[data-settings-index]");
+          if (card) activateSettings(Number(card.dataset.settingsIndex));
+        });
+        const connectionPanes = [...body.querySelectorAll('[data-settings-panel="connections"] > .settings-connection-tabs')];
+        wireSegmentTabs([...section.querySelectorAll(".workspace-head .segment-bar button")], connectionPanes);
+        body.addEventListener("click", (event) => {
+          const toggle = event.target.closest("[data-settings-toggle]");
+          if (toggle) {
+            const next = !toggle.classList.contains("active");
+            toggle.classList.toggle("active", next);
+            toggle.textContent = next ? "开" : "关";
+            try { localStorage.setItem("cc-deck-005-" + (toggle.dataset.settingsToggle === "sound" ? "notify-sound" : "desktop-notify"), next ? "1" : "0"); } catch (_) {}
+            showToast((toggle.dataset.settingsToggle === "sound" ? "通知声音" : "桌面通知") + "已" + (next ? "开启" : "关闭"));
+            return;
+          }
+          if (event.target.closest("[data-settings-pair]")) { showToast("配对新设备 · 分享本页同款带 token 的链接即可加入"); return; }
+          if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
+          if (event.target.closest("[data-update-check]")) { showToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+        });
+        activateSettings(0);
+      }
+      function initSettingsLiveData() {
+        const bridge = window.__ccDeck005B4;
+        if (!bridge) return;
+        const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+        const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
+        const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
+        const render = () => {
+          const section = document.querySelector("#d-settings");
+          const bodyEl = section?.querySelector(".workspace-body");
+          if (!section || !bodyEl?.dataset.settingsReady) return;
+          const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {};
+          const caps = snap.source_capabilities || {};
+          const catalog = Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
+          const connState = bridge.hasSnapshot ? "online" : bridge.connection;
+          const stateText = connState === "online" ? "在线" : connState === "connecting" ? "连接中" : "未连接";
+          const connLive = section.querySelector('[data-settings-live="connections"]');
+          if (connLive) connLive.innerHTML =
+            `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${location.port || "8787"} · 事件流自动补发</p></div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
+            `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>` +
+            `<div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token ${connState === "unconfigured" ? "未配置" : "已就绪"}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
+          const devLive = section.querySelector('[data-settings-live="devices"]');
+          if (devLive) devLive.innerHTML = '<div class="readonly-banner">当前 relay 未下发已配设备清单 · 设备管理在桌面端完成。</div>';
+          const provLive = section.querySelector('[data-settings-live="provider"]');
+          if (provLive) {
+            if (!catalog) provLive.innerHTML = '<div class="readonly-banner">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>';
+            else provLive.innerHTML = catalog.map((e) => {
+              if (!e || typeof e.id !== "string") return "";
+              const ok = e.state === "ready";
+              const label = esc(e.label) || esc(ENGINE_SHORT[e.id]) || esc(e.id);
+              const copy = ok
+                ? (Array.isArray(e.models) && e.models.length ? `已接 · ${e.models.length} 个模型` : "已接 · 使用引擎默认模型")
+                : esc(e.preflight && e.preflight.reason) || (e.state === "unsupported" ? "枚举占位 · 未接入编排" : "适配器待安装");
+              const tag = ok ? '<span class="tag done">已接</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
+              return `<div class="settings-row engine-row"><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}</strong><p>${copy}</p></div>${tag}</div>`;
+            }).join("");
+          }
+          const idLive = section.querySelector('[data-settings-live="identity"]');
+          if (idLive) {
+            const roleMap = new Map();
+            (catalog || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((role) => { if (role && !roleMap.has(role)) roleMap.set(role, e); }));
+            idLive.innerHTML = roleMap.size
+              ? [...roleMap.entries()].map(([role, e]) => `<div class="member-card"><span class="avatar">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div><strong>${esc(role)}</strong><p>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省引擎</p></div></div>`).join("")
+              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>';
+          }
+          const cards = [...section.querySelectorAll(".queue .queue-card")];
+          const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
+          setSub(0, "relay " + stateText + " · 本页即已配设备");
+          const readyN = catalog ? catalog.filter((e) => e && e.state === "ready").length : 0;
+          setSub(1, catalog ? readyN + " 引擎已接 · " + (catalog.length - readyN) + " 待装/未接入" : "引擎目录未下发");
+          setSub(5, "v" + CONSOLE_VERSION_005 + " · preview");
+        };
+        bridge.subscribe(() => render());
+        render();
       }
 
       const params = new URLSearchParams(location.search);
@@ -4217,6 +4341,7 @@ function connectLan(ctx) {
       let savedCardDensity = "standard";
       try { savedCardDensity = localStorage.getItem("cc-deck-card-density") || "standard"; } catch (_) {}
       ensureThemeSymbols();
+      setupSettingsDomain(); // ⑥c-1：先建六面板（含连接三子 tab），setupStubTabs 对 settings 域让位
       setupStubTabs();
       wireCardDensityControls();
       applyTheme(savedTheme);
@@ -4224,6 +4349,7 @@ function connectLan(ctx) {
       const modeButton = modeButtons.find((button) => button.classList.contains("active"));
       if (modeButton) { setMode(modeButton.dataset.mode); }
       initInspectors();
+      initSettingsLiveData();
       renderSessionList();
       connectLan(ctx);
       setInterval(() => {
