@@ -78,10 +78,12 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
       return env.ASSETS.fetch(new Request("https://assets.local" + inner + url.search, req));
     }
     // 005 新壳对照入口（新旧壳共存，2026-10-07 用户拍板）：/app 主路径 = 旧版稳定壳
-    //（assets 根 index.html），/app2 = web-console/index-005.html；子路径透传同 /app 口径
+    //（assets 根 index.html），/app2 = web-console/index-005.html；子路径透传同 /app 口径。
+    // 默认走无扩展 /index-005——带 .html 会被 assets 默认 html_handling（pretty URL）
+    // 307 规范化到 /index-005 多跳一跳透传客户端（线上 /app2 首跳 307 实测，2026-10-07）
     if (url.pathname === "/app2" || url.pathname.startsWith("/app2/")) {
       if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
-      const inner = url.pathname.slice(5).replace(/^\/+/, "") || "index-005.html";
+      const inner = url.pathname.slice(5).replace(/^\/+/, "") || "index-005";
       return env.ASSETS.fetch(new Request("https://assets.local/" + inner + url.search, req));
     }
     // #36 URL 正名：/download/ 为规范路径，/dl/ 保留为永久别名（已烘进 0.3.33 各端的旧链接零破坏）
