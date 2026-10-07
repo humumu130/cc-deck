@@ -192,7 +192,8 @@ ok(cloudZone.includes("if (!window.nacl)") && cloudZone.includes("加密组件�
 // C11 LAN 探测链防回退（云链合入不得伤及既有形态）
 ok(shell.includes("function connectLan") && shell.includes("function probeLocalRelay") && shell.includes("/local-info") && shell.includes("probe_local"), "C11 LAN/桌面探测链锚 intact");
 ok(shell.includes('localStorage.getItem("cc-deck-005-token")') && shell.includes("connectLan(ctx);"), "C11 ?token=/localStorage 探测链原样");
-ok(shell.includes('CONSOLE_VERSION = "0.7.0-test.2"'), "C11 版本常量未动（0.7.0-test.2）");
+const VER = readFileSync(new URL("../../VERSION", import.meta.url), "utf8").trim(); // 发版单一事实源（0.7.0-test.3 批去硬编码）
+ok(shell.includes(`CONSOLE_VERSION = "${VER}"`), `C11 版本常量与 VERSION 一致（${VER}）`);
 ok(shell.includes("if (cloudMode) cloudDisconnect();"), "C11 pagehide 云链卸载");
 // C12 语法门：六内联块 node --check（B批施工的主回归门）
 {
