@@ -1,0 +1,1693 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cc-deck · A 指挥桥视觉原型</title>
+  <style>
+    :root {
+      --bg0: #07111D;
+      --bg1: #0B1624;
+      --surface1: #101E2F;
+      --surface2: #15273B;
+      --hover: #1D344D;
+      --line: #2A4058;
+      --line-soft: #203247;
+      --text-strong: #E8EFF8;
+      --text: #C4D0DE;
+      --dim: #9AABBE;
+      --faint: #7188A0;
+      --progress-fill: #7793AE;
+      --brand: #E2855E;
+      --brand-hover: #F0A06A;
+      --brand-strong: #B85B38;
+      --brand-soft: #3A251F;
+      --done: #4BCB91;
+      --working: #E9B84C;
+      --error: #EC7472;
+      --info: #7EAFE8;
+      --ctx-safe: #4BCB91;
+      --ctx-attention: #E9B84C;
+      --ctx-critical: #EC7472;
+      --ctx-safe-fill: #79E3B4;
+      --ctx-attention-fill: #F4C95F;
+      --ctx-critical-fill: #FF8A87;
+      --ctx-track: #3A5570;
+      --source: #8F9DB1;
+      --chrome: #070D15;
+      --rail: #06101B;
+      --queue-deep: #0E1B2B;
+      --workspace-top: #0B1726;
+      --footer: #0E1B2B;
+      --inspector-top: #0F2031;
+      --phone-frame: #02060A;
+      --glow-brand: rgba(226,133,94,.14);
+      --glow-blue: rgba(41,94,137,.08);
+      --surface-veil: rgba(16,30,47,.9);
+      --source-switcher-bg: #101E2F;
+      --frame-line: rgba(103,137,170,.34);
+      --frame-highlight: rgba(255,255,255,.035);
+      --window-dot: #36414D;
+      --rail-shadow: rgba(1,8,16,.16);
+      --panel-shadow: rgba(1,8,16,.1);
+      --card-border: rgba(71,101,132,.48);
+      --card-veil: rgba(21,39,59,.78);
+      --border-strong: #4E6D8E;
+      --selected-line: #AFC0D2;
+      --selected-bg: rgba(232,239,248,.08);
+      --shadow-hover: 0 10px 24px rgba(1,8,16,.28);
+      --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
+      --status-done-glow: rgba(75,203,145,.35);
+      --status-error-glow: rgba(236,116,114,.25);
+      --status-working-glow: rgba(233,184,76,.35);
+      --q-row-hov: rgba(148,163,190,.07);
+      --q-row-sel: rgba(148,163,190,.14);
+      --tag-border: rgba(111,139,166,.18);
+      --tag-bg: rgba(83,103,126,.19);
+      --tag-ink: #D7E3EF;
+      --action-bg: rgba(226,133,94,.16);
+      --done-bg: rgba(75,203,145,.12);
+      --info-bg: rgba(126,175,232,.13);
+      --me-bg: #15273B;
+      --me-line: #4E6D8E;
+      --action-ink: #211B0E;
+      --done-ink: #082116;
+      --badge-ink: #FFFFFF;
+      --wait-bg: rgba(233,184,76,.08);
+      --wait-line: rgba(233,184,76,.5);
+      --allowed-bg: rgba(75,203,145,.08);
+      --allowed-line: rgba(75,203,145,.45);
+      --lane-bg: rgba(13,24,38,.72);
+      --notice-icon-bg: rgba(236,116,114,.13);
+      --readonly-bg: rgba(126,175,232,.07);
+      --readonly-line: rgba(126,175,232,.38);
+      --mobile-head-bg: rgba(11,22,36,.82);
+      --mobile-nav-bg: rgba(16,30,47,.96);
+      --mobile-active-bg: rgba(226,133,94,.08);
+      --composer-bg: #0E1B2B;
+      --scroll-track: rgba(4,12,21,.22);
+      --scroll-thumb: rgba(120,146,173,.34);
+      --scroll-thumb-hover: rgba(143,170,198,.55);
+      --source-bg: rgba(143,157,177,.08);
+      --source-line: rgba(143,157,177,.24);
+      --identity-bg: rgba(143,157,177,.1);
+      --identity-line: rgba(143,157,177,.34);
+      --identity-ink: #B9C8D8;
+      --source-company: #3B7C68;
+      --source-company-bg: rgba(75,203,145,.16);
+      --source-company-ink: #9AE2C2;
+      --source-home: #5B8FA8;
+      --source-home-bg: rgba(91,143,168,.16);
+      --source-home-ink: #A8D6EA;
+      --engine-claude: #A97A62;
+      --engine-codex: #8DABFF;
+      --engine-trae: #58C9B1;
+      --engine-qwen: #B493FF;
+      --engine-codebuddy: #4BA8F0;
+      --engine-zcode: #E58DB0;
+      --avatar-worker-bg: #243C59;
+      --avatar-worker-text: #9FC4F4;
+      --avatar-architect-bg: #3A3157;
+      --avatar-architect-text: #C9B6FF;
+      --avatar-qa-bg: #24493F;
+      --avatar-qa-text: #9AE2C2;
+      --pm-ink: #24140F;
+      --on-brand: #FFFAF6;
+      --brand-highlight: rgba(255,255,255,.18);
+      --brand-shadow: rgba(226,133,94,.25);
+      --focus-ring: rgba(226,133,94,.13);
+      --danger-line: rgba(236,116,114,.4);
+      --danger-bg: rgba(236,116,114,.12);
+      --frame-shadow: rgba(137,164,190,.2);
+      --notch-shadow: rgba(0,0,0,.4);
+      --connection-warn-bg: rgba(233,184,76,.13);
+      --connection-error-bg: rgba(236,116,114,.13);
+      --toast-line: #4E6D8E;
+      --toast-bg-top: #15273B;
+      --toast-bg-bottom: #101E2F;
+      --toast-highlight: rgba(255,255,255,.06);
+      --shadow: 0 26px 80px rgba(0, 0, 0, .42);
+      --small-shadow: 0 12px 30px rgba(0, 0, 0, .28);
+      --card-shadow: 0 8px 22px rgba(1, 8, 16, .2);
+      --artifact-group-bg: rgba(16, 30, 47, .62);
+      --artifact-group-line: rgba(103, 137, 170, .34);
+      --artifact-muted-bg: rgba(83, 103, 126, .12);
+      --artifact-failed-bg: rgba(236, 116, 114, .12);
+      --artifact-failed-line: rgba(236, 116, 114, .42);
+      --artifact-complete-bg: rgba(75, 203, 145, .1);
+      --artifact-sheet-backdrop: rgba(1, 8, 16, .56);
+      --radius: 10px;
+      --radius-sm: 7px;
+      --radius-lg: 14px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg0: #F1F5F8;
+      --bg1: #F8FAFC;
+      --surface1: #E8EFF5;
+      --surface2: #FFFFFF;
+      --hover: #DDE8F1;
+      --line: #C6D3DF;
+      --line-soft: #DCE5EC;
+      --text-strong: #15283D;
+      --text: #30465B;
+      --dim: #334B61;
+      --faint: #4B6278;
+      --progress-fill: #607D99;
+      --brand: #C86440;
+      --brand-hover: #D9754D;
+      --brand-strong: #A94725;
+      --brand-soft: #FBE7DE;
+      --done: #168D60;
+      --working: #A56D00;
+      --error: #C84C51;
+      --info: #3978B8;
+      --ctx-safe: #168D60;
+      --ctx-attention: #A56D00;
+      --ctx-critical: #C84C51;
+      --ctx-safe-fill: #168D60;
+      --ctx-attention-fill: #A56D00;
+      --ctx-critical-fill: #C84C51;
+      --ctx-track: #C6D3DF;
+      --source: #6E8194;
+      --chrome: #E5ECF2;
+      --rail: #EDF3F7;
+      --queue-deep: #E3EBF2;
+      --workspace-top: #F8FBFD;
+      --footer: #E8EFF5;
+      --inspector-top: #EDF3F7;
+      --phone-frame: #172636;
+      --glow-brand: rgba(200,100,64,.1);
+      --glow-blue: rgba(58,120,184,.08);
+      --surface-veil: rgba(232,239,245,.92);
+      --source-switcher-bg: #E8EFF5;
+      --frame-line: #B8C8D6;
+      --frame-highlight: rgba(255,255,255,.8);
+      --window-dot: #A5B5C3;
+      --rail-shadow: rgba(50,74,96,.08);
+      --panel-shadow: rgba(50,74,96,.08);
+      --card-border: #C6D3DF;
+      --card-veil: #FFFFFF;
+      --border-strong: #7895AE;
+      --selected-line: #7895AE;
+      --selected-bg: #F3F7FA;
+      --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
+      --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
+      --status-done-glow: rgba(22,141,96,.24);
+      --status-error-glow: rgba(200,76,81,.2);
+      --status-working-glow: rgba(165,109,0,.22);
+      --q-row-hov: rgba(16,24,40,.05);
+      --q-row-sel: rgba(16,24,40,.09);
+      --tag-border: rgba(96,117,138,.24);
+      --tag-bg: rgba(132,151,169,.16);
+      --tag-ink: #2D4358;
+      --action-bg: rgba(200,100,64,.14);
+      --done-bg: rgba(22,141,96,.11);
+      --info-bg: rgba(57,120,184,.11);
+      --me-bg: #FFFFFF;
+      --me-line: #C6D3DF;
+      --action-ink: #3C2600;
+      --done-ink: #073C27;
+      --badge-ink: #FFFFFF;
+      --wait-bg: rgba(165,109,0,.1);
+      --wait-line: rgba(165,109,0,.42);
+      --allowed-bg: rgba(22,141,96,.09);
+      --allowed-line: rgba(22,141,96,.34);
+      --lane-bg: #EDF3F7;
+      --notice-icon-bg: rgba(200,76,81,.1);
+      --readonly-bg: rgba(57,120,184,.08);
+      --readonly-line: rgba(57,120,184,.34);
+      --mobile-head-bg: rgba(248,250,252,.94);
+      --mobile-nav-bg: rgba(232,239,245,.97);
+      --mobile-active-bg: rgba(200,100,64,.08);
+      --composer-bg: #E8EFF5;
+      --scroll-track: rgba(96,117,138,.12);
+      --scroll-thumb: rgba(96,117,138,.34);
+      --scroll-thumb-hover: rgba(96,117,138,.52);
+      --source-bg: rgba(110,129,148,.1);
+      --source-line: rgba(110,129,148,.3);
+      --identity-bg: #F3F6F8;
+      --identity-line: #B8C8D6;
+      --identity-ink: #40566B;
+      --source-company: #20735B;
+      --source-company-bg: rgba(22,141,96,.14);
+      --source-company-ink: #146044;
+      --source-home: #2D718B;
+      --source-home-bg: rgba(45,113,139,.14);
+      --source-home-ink: #245D73;
+      --engine-claude: #B85232;
+      --engine-codex: #4B6FCA;
+      --engine-trae: #168C78;
+      --engine-qwen: #7652C4;
+      --engine-codebuddy: #2679B5;
+      --engine-zcode: #B14E77;
+      --avatar-worker-bg: #DCEAF7;
+      --avatar-worker-text: #315D88;
+      --avatar-architect-bg: #EEE8FF;
+      --avatar-architect-text: #624CA4;
+      --avatar-qa-bg: #DDF3EA;
+      --avatar-qa-text: #247456;
+      --pm-ink: #3A2117;
+      --on-brand: #FFFFFF;
+      --brand-highlight: rgba(255,255,255,.28);
+      --brand-shadow: rgba(200,100,64,.2);
+      --focus-ring: rgba(200,100,64,.14);
+      --danger-line: rgba(200,76,81,.36);
+      --danger-bg: rgba(200,76,81,.1);
+      --frame-shadow: rgba(50,74,96,.2);
+      --notch-shadow: rgba(18,35,52,.28);
+      --connection-warn-bg: rgba(165,109,0,.11);
+      --connection-error-bg: rgba(200,76,81,.1);
+      --toast-line: #C6D3DF;
+      --toast-bg-top: #FFFFFF;
+      --toast-bg-bottom: #F1F5F8;
+      --toast-highlight: rgba(255,255,255,.7);
+      --shadow: 0 24px 62px rgba(50, 74, 96, .18);
+      --small-shadow: 0 10px 24px rgba(50, 74, 96, .16);
+      --card-shadow: 0 6px 16px rgba(50, 74, 96, .1);
+      --artifact-group-bg: #F7FAFC;
+      --artifact-group-line: #C6D3DF;
+      --artifact-muted-bg: #EEF3F7;
+      --artifact-failed-bg: #FCEBEC;
+      --artifact-failed-line: #C84C51;
+      --artifact-complete-bg: #E8F5EF;
+      --artifact-sheet-backdrop: rgba(50, 74, 96, .28);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0);
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button { font: inherit; }
+    .page { width: min(1540px, calc(100% - 38px)); margin: 0 auto; padding: 26px 0 58px; }
+    .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 18px; }
+    .topbar h1 { margin: 0; color: var(--text-strong); font-size: 23px; letter-spacing: -.03em; }
+    .topbar p { margin: 5px 0 0; color: var(--dim); }
+    .build { color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
+    .mode-switcher { display: flex; gap: 7px; padding: 7px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-veil); box-shadow: var(--card-shadow); }
+    .mode-btn { flex: 1; min-height: 42px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--dim); cursor: pointer; }
+    .mode-btn:hover { color: var(--text); background: var(--hover); }
+    .mode-btn.active { color: var(--on-brand); background: linear-gradient(180deg, var(--brand-hover), var(--brand)); border-color: var(--brand-hover); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 5px 18px var(--brand-shadow); }
+    .mode-btn b { display: block; font-size: 12px; }
+    .mode-btn span { display: block; margin-top: 1px; font-size: 10px; opacity: .82; }
+    .mode-stage { display: none; }
+    .mode-stage.active { display: block; }
+    .stage-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 10px; color: var(--dim); font-size: 11px; }
+    .stage-note b { color: var(--text); }
+    .desktop-frame { position: relative; overflow: hidden; width: 100%; border: 1px solid var(--frame-line); border-radius: 16px; background: var(--bg1); box-shadow: var(--shadow), inset 0 1px 0 var(--frame-highlight); transition: width .18s ease; }
+    .desktop-frame.inspector-collapsed { width: calc(100% - 278px); }
+    .windowbar { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    .window-dots { display: flex; gap: 6px; }
+    .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
+    .window-title { flex: 1; color: var(--faint); font-size: 11px; }
+    .window-link { color: var(--dim); font-size: 10px; }
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
+    .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-inline use[href="#icon-users"], .icon-status use[href="#icon-users"] { fill: currentColor; stroke: none; }
+    .source-switcher { position: relative; z-index: 5; border-radius: 8px; background: var(--source-switcher-bg); }
+    .windowbar .source-switcher { margin-right: 2px; }
+    .source-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: 10px; }
+    .source-trigger:hover { border-color: var(--brand); background: var(--hover); }
+    .source-trigger.source-company { border-color: var(--source-company); background: var(--source-company-bg); }
+    .source-trigger.source-home { border-color: var(--source-home); background: var(--source-home-bg); }
+    .source-trigger .source-trigger-summary { color: var(--dim); font: 10px var(--mono); }
+    .source-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
+    .source-dot.status-reconnecting { background: var(--working); color: var(--working); }
+    .source-dot.status-disconnected { background: var(--error); color: var(--error); }
+    .source-menu { position: absolute; top: calc(100% + 8px); right: 0; display: none; width: 276px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .source-menu.open { display: block; }
+    .source-menu-head { padding: 4px 6px 7px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+    .source-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+    .source-option:hover { background: var(--hover); }
+    .source-option.active { background: var(--selected-bg); }
+    .source-option[data-source-choice="office"] { border-left: 2px solid var(--source-company); }
+    .source-option[data-source-choice="home"] { border-left: 2px solid var(--source-home); }
+    .source-option.active[data-source-choice="office"], .source-option.active[data-source-choice="home"] { border-left: 3px solid var(--brand); }
+    .source-option strong { flex: 1; color: var(--text-strong); font-size: 10px; }
+    .source-option small { color: var(--dim); font: 10px var(--mono); }
+    .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
+    .source-mode button { flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .source-mode button.active { border-color: var(--selected-line); background: var(--selected-bg); color: var(--text-strong); }
+    .source-manage { display: block; padding: 7px 6px 3px; color: var(--info); font-size: 10px; text-decoration: none; }
+    /* #df2-A 顶栏唯一胶囊：connection-capsule 整链退役（:337-356），连接摘要+统计并入 source-trigger；重连按钮迁入 source-menu（.connection-reconnect 保留复用） */
+    .source-option .connection-reconnect { min-width: 34px; min-height: 22px; padding: 2px 7px; margin-left: auto; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; white-space: nowrap; }
+    .source-group-bar { display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: 10px var(--mono); }
+    .source-group-bar span { padding: 3px 5px; border-radius: 4px; }
+    .source-group-bar .company { background: var(--source-company-bg); color: var(--source-company); }
+    .source-group-bar .home { background: var(--source-home-bg); color: var(--source-home); }
+    html[data-source-mode="aggregate"] .source-group-bar { display: flex; }
+    .source-filter-cta { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 9px; margin: 8px 0 4px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); cursor: pointer; text-align: left; font-size: 10px; }
+    .source-filter-cta[hidden] { display: none; }
+    .source-filter-cta:hover { border-color: var(--info); background: var(--hover); color: var(--text); }
+    .source-filter-cta strong { flex: 0 0 auto; color: var(--info); font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .desktop-shell { display: flex; min-width: min(1122px, 100%); height: 780px; }
+    .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
+    .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
+    .rail-btn:hover { color: var(--text); background: var(--hover); }
+    .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
+    .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--selected-line); }
+    .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 10px/15px var(--mono); text-align: center; }
+    .rail-spring { flex: 1; }
+    .theme-toggle { margin-top: 7px; margin-bottom: 0; color: var(--dim); }
+    .theme-toggle:hover { color: var(--brand-hover); }
+    .theme-toggle-icon { display: block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
+    .desktop-screen { display: none; flex: 1; min-width: 0; }
+    .desktop-screen.active { display: grid; grid-template-columns: 296px minmax(0, 1fr) 320px; }
+    .desktop-screen.inspector-collapsed { grid-template-columns: 296px minmax(0, 1fr) 42px; }
+    .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
+    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+    .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
+    .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+    .icon-btn::before { content: ""; position: absolute; inset: -7px; }
+    .icon-btn:hover { color: var(--text); background: var(--hover); }
+    .session-list-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 10px var(--sans); }
+    .session-list-tools input::placeholder { color: var(--faint); }
+    .session-list-tools span { flex: 0 0 auto; color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
+    .session-list-tools button { min-height: 28px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font: 10px var(--mono); white-space: nowrap; }
+    /* header 补偿（用户直馈 2026-10-05：「会话」贴边+工具行太挤）：列表满宽是故意的（通栏行语言），
+       但标题/工具行与行内容同起点（14px）才有域内自洽——团队/项目域 12px 属卡域语言不混用 */
+    #d-session .queue-head, #d-session .session-list-tools { padding-left: 14px; padding-right: 14px; }
+    .session-list-tools input:focus { border-color: var(--brand); outline: none; }
+    .session-list-tools button[data-session-filter] { border: 0; padding: 0 9px; border-radius: 999px; background: var(--surface2); }
+    .session-list-tools button[data-session-filter]:hover { background: var(--hover); color: var(--text); }
+    .session-list-tools button:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
+    .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 2px; }
+    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
+    .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .queue-card .row { display: flex; align-items: center; gap: 7px; }
+    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-card p { overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
+    .queue-card .tag { margin-top: 0; }
+    .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+    .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
+    .status-dot.waiting { background: var(--working); }
+    .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
+    .status-dot.working { background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+    @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: 10px; white-space: nowrap; }
+    .tag.action { background: var(--action-bg); color: var(--brand-strong); }
+    .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
+    .tag.done { background: var(--done-bg); color: var(--done); }
+    .tag.info { background: var(--info-bg); color: var(--info); }
+    .workspace { display: flex; min-width: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
+    .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
+    .workspace-title-row { display: flex; align-items: center; gap: 8px; }
+    .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+    .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
+    .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
+    .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
+    .segment-bar button:hover { color: var(--text); }
+    .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
+    .segment-bar .faint, .metric b, .mobile-summary b { font-variant-numeric: tabular-nums; }
+    .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
+    .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
+    .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
+    .composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 11px; }
+    .composer:focus-within { border-color: var(--brand); }
+    .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
+    .composer-input::placeholder { color: var(--faint); }
+    .composer-clip { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
+    .composer-clip:hover, .composer-clip:focus-visible { background: var(--hover); color: var(--text-strong); }
+    .composer-clip .icon-inline { width: 15px; height: 15px; }
+    .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
+    .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
+    .primary-btn.composer-secondary-action { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: none; }
+    .primary-btn.composer-secondary-action:hover { background: var(--hover); filter: none; box-shadow: none; }
+    /* #79 输入栏补全：附件暂存架（composer 内 wrap 换行承载；空架不渲染）+ 拖入高亮 + 停止钮 + 生成中点动波 + 已停止标记——全走既有 token，暗亮双主题自动 */
+    .composer-tray { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 0 100%; margin: 6px 0 8px; padding-top: 6px; border-top: 1px dashed var(--line-soft); }
+    .composer-tray-item { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 4px 2px 5px; border: 1px solid var(--tag-border); border-radius: var(--radius-sm); background: var(--tag-bg); color: var(--text); font-size: 10px; }
+    .composer-tray-thumb { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; border: 1px solid var(--line-soft); }
+    .composer-tray-item .icon-inline { width: 13px; height: 13px; color: var(--dim); }
+    .composer-tray-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+    .composer-tray-x { display: grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; }
+    .composer-tray-x:hover, .composer-tray-x:focus-visible { background: var(--hover); color: var(--text-strong); }
+    .composer.dragover { border-color: var(--brand); background: var(--focus-ring); }
+    .bubble-atts { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+    .bubble-att { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border: 1px solid var(--card-border); border-radius: var(--radius-sm); background: var(--surface2); font-size: 10px; }
+    .bubble-att img { width: 26px; height: 26px; border-radius: 4px; object-fit: cover; }
+    .bubble-att .icon-inline { width: 13px; height: 13px; color: var(--dim); }
+    .primary-btn.composer-stop { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: none; }
+    .primary-btn.composer-stop:hover { background: var(--hover); filter: none; box-shadow: none; }
+    .primary-btn.composer-stop .icon-inline { width: 11px; height: 11px; }
+    .stream-dots { display: inline-flex; align-items: center; gap: 4px; }
+    .stream-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); animation: stream-bounce 1.1s ease-in-out infinite; }
+    .stream-dots i:nth-child(2) { animation-delay: .15s; }
+    .stream-dots i:nth-child(3) { animation-delay: .3s; }
+    @keyframes stream-bounce { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+    .stopped-mark { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 10px; }
+    .stopped-mark::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--dim); }
+    .primary-btn:disabled, .secondary-btn:disabled, .danger-btn:disabled, .artifact-group-action:disabled { opacity: .52; cursor: not-allowed; filter: none; transform: none; box-shadow: none; }
+    .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
+    .secondary-btn:hover { background: var(--hover); }
+    .danger-btn { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
+    .inspector { position: relative; overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); transition: background .18s ease, padding .18s ease; }
+    .inspector h3 { margin: 0 0 14px; color: var(--text-strong); font-size: 12px; }
+    .inspector-toggle { position: absolute; top: 11px; right: 10px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--dim); cursor: pointer; font-size: 12px; transition: color .18s ease, background .18s ease, border-color .18s ease; }
+    .inspector-toggle:hover { color: var(--text); background: var(--hover); }
+    .inspector.collapsed { overflow: hidden; padding: 12px 6px; }
+    .inspector.collapsed > :not(.inspector-toggle) { display: none; }
+    .inspector.collapsed .inspector-toggle { position: static; width: 100%; height: 34px; background: transparent; }
+    .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
+    .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
+    .inspector-title { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 700; }
+    .inspector-copy { color: var(--dim); font-size: 10px; }
+    .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
+    .progress i { display: block; height: 100%; border-radius: inherit; background: var(--progress-fill); }
+    .progress.done i { background: var(--done); }
+    .progress.critical i { background: var(--ctx-critical); }
+    .mini-context-meter { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; min-width: 0; margin-top: 6px; color: var(--dim); font: 10px var(--mono); font-variant-numeric: tabular-nums; }
+    .mini-context-meter > span { min-width: 0; white-space: nowrap; }
+    .mini-context-meter > i { display: block; height: 5px; overflow: hidden; border-radius: 999px; background: var(--ctx-track); }
+    .mini-context-meter > i b { display: block; height: 100%; border-radius: inherit; background: var(--ctx-safe-fill); }
+    .mini-context-meter.attention > i b { background: var(--ctx-attention-fill); }
+    .mini-context-meter.critical > i b { background: var(--ctx-critical-fill); }
+    .context-meter { padding: 0 0 10px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
+    .context-meter-head, .context-meter-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .context-meter-kicker { color: var(--faint); font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+    .context-meter-model { display: block; margin-top: 2px; color: var(--text-strong); font-size: 10px; font-weight: 700; }
+    .context-meter-grade { padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--ctx-safe) 42%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--ctx-safe) 12%, transparent); color: var(--ctx-safe); font: 700 10px var(--mono); white-space: nowrap; }
+    .context-meter.attention .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-attention) 42%, transparent); background: color-mix(in srgb, var(--ctx-attention) 12%, transparent); color: var(--ctx-attention); }
+    .context-meter.critical .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-critical) 42%, transparent); background: color-mix(in srgb, var(--ctx-critical) 12%, transparent); color: var(--ctx-critical); }
+    .context-meter-band { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 11px 0 8px; }
+    .context-meter-band i { display: block; height: 7px; border-radius: 3px; background: var(--ctx-track); }
+    .context-meter.safe .context-meter-band i.on { background: var(--ctx-safe-fill); }
+    .context-meter.attention .context-meter-band i.on { background: var(--ctx-attention-fill); }
+    .context-meter.critical .context-meter-band i.on { background: var(--ctx-critical-fill); }
+    .context-meter-used { color: var(--text-strong); font: 700 15px var(--mono); }
+    .context-meter-limit { color: var(--dim); font: 10px var(--mono); }
+    .context-meter-pct { color: var(--ctx-safe); font: 700 11px var(--mono); }
+    .context-meter.attention .context-meter-pct { color: var(--ctx-attention); }
+    .context-meter.critical .context-meter-pct { color: var(--ctx-critical); }
+    .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 10px; }
+    .usage-summary { padding: 12px 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
+    .usage-summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .usage-summary-number { color: var(--text-strong); font: 700 17px var(--mono); font-variant-numeric: tabular-nums; }
+    .usage-summary-limit, .usage-summary-copy { color: var(--dim); font-size: 10px; }
+    .usage-summary-pct { color: var(--ctx-safe); font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
+    .usage-summary-hint { display: inline-block; margin-top: 8px; color: var(--info); font-size: 10px; }
+    .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
+    .check-row b { color: var(--done); }
+    /* 任务面板四态分区（旧版 :6543 排序语义：已完成→进行中→待审查→待办；「待验证」旧词随 2026-10-05 泳道词表退役为「待审查」）符号色 */
+    .check-row b.run { color: var(--working); }
+    .check-row b.verify { color: var(--brand); }
+    .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 11px; }
+    .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+    .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
+    .bubble strong { color: var(--text-strong); }
+    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 11px; }
+    .message-author { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--text-strong); }
+    .message-author strong { font-size: 10px; }
+    .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
+    .message-author time { margin-left: auto; color: var(--faint); font: 9px var(--mono); }
+    .message-body { min-width: 0; line-height: 1.55; }
+    .message-body pre, .message-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 10px var(--mono); }
+    .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
+    .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
+    .wait-card strong { display: block; color: var(--working); font-size: 11px; }
+    .wait-card.allowed strong { color: var(--done); }
+    .wait-card p { margin: 5px 0 10px; color: var(--dim); font-size: 10px; }
+    .wait-actions { display: flex; justify-content: flex-end; gap: 7px; }
+    .wait-actions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
+    .wait-actions button:hover { border-color: var(--text); background: var(--hover); transform: translateY(-1px); }
+    .wait-actions button:focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
+    .wait-actions button.allow { border-color: transparent; background: var(--brand-strong); color: var(--on-brand); font-weight: 700; }
+    .wait-actions button.allow:hover { background: var(--brand); }
+    .wait-card.allowed .wait-actions button.allow { background: var(--done); color: var(--done-ink); }
+    .session-state-dock { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 8px 16px; border-top: 1px solid var(--line-soft); border-left: 2px solid var(--session-state-color); color: var(--dim); font: 10px var(--mono); }
+    .session-state-dock[data-session-state="waiting"] { --session-state-color: var(--working); }
+    .session-state-dock[data-session-state="running"] { --session-state-color: var(--done); }
+    .session-state-dock[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
+    .session-state-dock[data-session-state="suspended"] { --session-state-color: var(--error); }
+    .session-state-task { min-width: 0; overflow: hidden; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; }
+    .session-state-activity { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; margin-left: auto; color: var(--text); white-space: nowrap; }
+    .session-state-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--session-state-color); }
+    .session-state-label { color: var(--text-strong); font-weight: 700; }
+    .session-state-operation { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
+    .artifact-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--info); }
+    .artifact-row-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+    .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
+    .artifact-browser { display: grid; gap: 10px; }
+    .artifact-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 2px; color: var(--dim); font-size: 10px; }
+    .artifact-summary strong { color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
+    .artifact-summary small { color: var(--faint); font: 10px var(--mono); }
+    .artifact-summary-path { overflow: hidden; max-width: 48%; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-group, .artifact-loose { border-top: 1px solid var(--artifact-group-line); border-bottom: 1px solid var(--artifact-group-line); border-radius: 0; background: transparent; box-shadow: none; }
+    .artifact-group { border-left: 2px solid transparent; border-right: 0; }
+    .artifact-group:not(.collapsed) { border-left-color: var(--artifact-group-line); }
+    .artifact-group-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+    .artifact-group.collapsed .artifact-group-head { border-bottom-color: transparent; }
+    .artifact-group.collapsed .artifact-files, .artifact-group.collapsed .artifact-batch { display: none; }
+    .artifact-group-title { min-width: 0; flex: 1; }
+    .artifact-group-title strong { display: block; overflow: hidden; color: var(--text-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-group-title small { display: block; margin-top: 2px; color: var(--dim); font: 10px var(--mono); }
+    .artifact-folder-icon { color: var(--brand-hover); font-size: 15px; }
+    .artifact-group-action { min-height: 28px; padding: 0 9px; }
+    .artifact-menu-wrap { position: relative; }
+    .artifact-menu-button { width: 28px; height: 28px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+    .artifact-menu-button:hover { border-color: var(--line); background: var(--hover); color: var(--text); }
+    .artifact-menu { position: absolute; top: calc(100% + 5px); right: 0; z-index: 6; display: none; min-width: 165px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .artifact-menu.open { display: grid; }
+    .artifact-menu button { padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 10px; }
+    .artifact-menu button:hover { background: var(--hover); }
+    .artifact-files { padding: 0 10px; }
+    .artifact-file { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 7px; min-height: 42px; border-bottom: 1px solid var(--line-soft); }
+    .artifact-file:last-child { border-bottom: 0; }
+    .artifact-file.failed { margin: 0 -4px; padding: 0 4px; border-radius: 5px; background: var(--artifact-failed-bg); color: var(--error); }
+    .artifact-file-icon { color: var(--info); font-size: 13px; text-align: center; }
+    .artifact-file-icon .icon-inline, .artifact-folder-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+    .artifact-file-main { min-width: 0; }
+    .artifact-file-name { display: block; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-file-dir { display: block; overflow: hidden; margin-top: 1px; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-file-meta { color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
+    .artifact-file-error { display: none; color: var(--error); font-size: 10px; white-space: nowrap; }
+    .artifact-file.failed .artifact-file-error { display: inline; }
+    .artifact-file-anomaly { padding: 2px 4px; border: 1px solid var(--danger-line); border-radius: 4px; color: var(--error); font: 700 10px var(--mono); white-space: nowrap; }
+    .artifact-file-retry { display: none; min-height: 24px; padding: 0 6px; border: 1px solid var(--danger-line); border-radius: 5px; background: transparent; color: var(--error); cursor: pointer; font-size: 10px; }
+    .artifact-file.failed .artifact-file-retry { display: inline-flex; align-items: center; }
+    .artifact-file.downloading { background: var(--artifact-muted-bg); }
+    .artifact-file.downloading .artifact-file-meta { color: var(--brand); }
+    .artifact-file-retry:focus-visible, .artifact-file-retry:hover { border-color: var(--error); background: var(--danger-bg); }
+    .artifact-batch { padding: 0 10px 9px; }
+    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 10px var(--mono); }
+    .artifact-batch-state.complete { background: var(--artifact-complete-bg); color: var(--done); }
+    .artifact-batch-state.partial { background: var(--artifact-failed-bg); color: var(--error); }
+    .artifact-batch-state button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; }
+    .artifact-batch-progress { display: inline-block; width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); vertical-align: middle; }
+    .artifact-batch-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand); transition: width .25s ease; }
+    .artifact-loose { padding: 0 10px; }
+    .artifact-source { display: grid; gap: 8px; padding: 8px 0 8px 9px; border-left: 2px solid var(--source); }
+    .artifact-source.source-company-group { border-left-color: var(--source-company); }
+    .artifact-source.source-home-group { border-left-color: var(--source-home); }
+    .artifact-source-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-strong); font-size: 11px; }
+    .artifact-source-head small { color: var(--dim); font: 10px var(--mono); }
+    .artifact-source-unreachable { padding: 10px; border: 1px dashed var(--danger-line); border-radius: 8px; background: var(--danger-bg); color: var(--error); font-size: 10px; }
+    .artifact-source-link { border: 0; background: transparent; color: var(--info); cursor: pointer; font-size: 10px; }
+    .artifact-source-copy { color: var(--faint); font: 10px var(--mono); }
+    .artifact-sheet-backdrop { position: fixed; inset: 0; z-index: 30; display: none; align-items: flex-end; background: var(--artifact-sheet-backdrop); }
+    .artifact-sheet-backdrop.open { display: flex; }
+    .artifact-sheet { width: 100%; padding: 10px 13px calc(13px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; background: var(--surface2); box-shadow: var(--shadow); }
+    .artifact-sheet h3 { margin: 0 0 8px; color: var(--text-strong); font-size: 12px; }
+    .artifact-sheet button { display: block; width: 100%; min-height: 42px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 11px; }
+    .artifact-sheet button:last-child { border-bottom: 0; color: var(--dim); }
+    .mobile-screen .artifact-browser { gap: 8px; }
+    .mobile-screen .artifact-summary { display: block; line-height: 1.6; }
+    .mobile-screen .artifact-summary-path { display: block; max-width: 100%; margin-top: 2px; }
+    .mobile-screen .artifact-group-action, .mobile-screen .artifact-menu-wrap { display: none; }
+    .mobile-screen .artifact-group-head { cursor: pointer; }
+    .segment-bar .faint, .inspector-title > span:last-child, .metric b, .mobile-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .source-trigger .source-trigger-summary, .source-menu-head, .source-option small, .source-mode button, .source-manage, .source-group-bar, .rail-btn .badge, .tag, .context-meter-grade, .context-meter-note, .artifact-group-title small, .artifact-file-dir, .artifact-file-meta, .artifact-file-error, .artifact-batch-state, .artifact-source-head small, .task-card p, .task-assignee, .member-card p, .mobile-summary span, .engine-badge, .source-badge, .activity-row time, .task-flag, .toggle-control { font-size: 10px; }
+    .context-meter-kicker { font-size: 9px; }
+    .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
+    .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
+    .lane-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: 10px; font-weight: 700; }
+    .task-card { min-width: 0; padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+    .task-card strong, .task-card p { display: block; min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    .task-card p { margin: 5px 0 0; color: var(--dim); }
+    .task-card .tag { margin-top: 7px; }
+    .task-assignee { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 7px; overflow: hidden; color: var(--dim); font-size: 10px; white-space: nowrap; }
+    .task-assignee > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .task-assignee .assignee-meta { color: var(--dim); font-weight: 400; }
+    .task-assignee b { color: var(--text); font-weight: 600; }
+    .queue-card-meta { display: block; height: 18px; min-width: 0; overflow: hidden; margin: 2px 0 0 14px; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 18px; }
+    .member-list { display: grid; grid-template-columns: 1fr; gap: 0; min-width: 0; }
+    .member-card { display: flex; min-width: 0; gap: 8px; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; overflow: hidden; }
+    .member-card > div { min-width: 0; }
+    .member-card .identity-cluster { min-width: 0; flex-wrap: wrap; }
+    .avatar { position: relative; display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid transparent; border-radius: 8px; background: var(--hover); color: var(--text); font: 700 11px/1 var(--mono); }
+    .avatar.worker { background: var(--avatar-worker-bg); color: var(--avatar-worker-text); }
+    .avatar.architect { background: var(--avatar-architect-bg); color: var(--avatar-architect-text); }
+    .avatar.qa { background: var(--avatar-qa-bg); color: var(--avatar-qa-text); }
+    .avatar.pm { border: 1px solid var(--brand); border-radius: 8px; background: var(--brand-soft); color: var(--brand-hover); box-shadow: none; font-size: 11px; }
+    .avatar-engine-dot { position: absolute; right: -4px; bottom: -3px; width: 9px; height: 9px; border: 2px solid var(--surface2); border-radius: 50%; background: var(--engine-color); }
+    .avatar-engine-dot.trae { --engine-color: var(--engine-trae); }
+    .avatar-engine-dot.claude { --engine-color: var(--engine-claude); }
+    .avatar-engine-dot.qwen { --engine-color: var(--engine-qwen); }
+    .avatar-engine-dot.codex { --engine-color: var(--engine-codex); }
+    .avatar-engine-dot.zcode { --engine-color: var(--engine-zcode); }
+    .avatar-engine-dot.codebuddy { --engine-color: var(--engine-codebuddy); }
+    .role-label { display: inline-flex; align-items: center; padding: 2px 5px; border-radius: 999px; font: 700 8px/1 var(--mono); letter-spacing: .02em; }
+    .pm-label { border: 1px solid var(--selected-line); background: var(--brand-soft); color: var(--brand-hover); }
+    .member-card strong { display: block; color: var(--text-strong); font-size: 10px; }
+    .member-card p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
+    .member-card p .engine-badge { vertical-align: 1px; margin-left: 2px; }
+    .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 0; margin-bottom: 15px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+    .metric { min-width: 0; padding: 10px 12px; border: 0; border-left: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .metric:first-child { border-left: 0; }
+    .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
+    .metric span { color: var(--dim); font-size: 10px; }
+    .readonly-banner { padding: 8px 10px; margin-bottom: 14px; border: 1px dashed var(--readonly-line); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: 10px; }
+    .aggregate-grid { display: grid; gap: 0; }
+    .aggregate-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .aggregate-card h4 { grid-column: 1; margin: 0; color: var(--text-strong); font-size: 11px; }
+    .aggregate-card p { grid-column: 1; margin: 2px 0 0; color: var(--dim); font-size: 10px; }
+    .aggregate-card p + p { margin-top: 1px; }
+    .aggregate-card button { grid-column: 2; grid-row: 1 / span 3; margin-top: 0; }
+    .notice { display: flex; gap: 9px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; cursor: pointer; }
+    .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
+    .notice strong { display: block; color: var(--text-strong); font-size: 11px; }
+    .notice p { margin: 4px 0 0; color: var(--dim); font-size: 10px; }
+    .notice .tag { margin-top: 7px; }
+    .notify-source-list { display: grid; gap: 0; }
+    /* #80b 通知项行化基础（srow 同律：无框通栏/瞬淡底/零圆角/零分隔线/行内容起点 14px） */
+    .notify-source-card { display: flex; position: relative; align-items: flex-start; gap: 11px; min-width: 0; padding: 10px 14px; border: 0; border-radius: 0; background: none; box-shadow: none; transition: background .06s linear, opacity .18s ease; cursor: default; }
+    .notify-source-card:hover { background: var(--q-row-hov); }
+    .notify-source-card.resolved { border-color: transparent; background: transparent; opacity: .58; }
+    .notify-source-card.resolved:hover { background: var(--q-row-hov); opacity: .85; }
+    .notify-row-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+    .notify-source-kicker { color: var(--dim); font: 10px var(--mono); }
+    .notify-source-kicker .icon-inline { width: 12px; height: 12px; vertical-align: -2px; margin-right: 3px; }
+    [data-session-source-label] { display: inline-flex; align-items: center; gap: 5px; }
+    [data-session-source-label] .icon-inline { width: 13px; height: 13px; }
+    .notify-source-card[data-notify-active="false"] .notice-icon, .mobile-notify-card .avatar:has(.icon-info) { color: var(--dim); background: var(--surface2); }
+    section.artifact-source .source-badge::before { display: none; }
+    section.artifact-source .source-badge.unreachable { color: var(--working); border-color: var(--working); background: transparent; }
+    .notify-source-card .notice-icon { flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--error) 13%, var(--surface2)); }
+    .notify-source-card .notice-icon .icon-inline { width: 16px; height: 16px; }
+    .nrow-r1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .nrow-r1 h3 { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); text-overflow: ellipsis; white-space: nowrap; }
+    .nrow-r1 .tag { flex: none; margin-top: 0; }
+    .nrow-time { flex: none; margin-left: auto; color: var(--faint); font: 10px var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear; }
+    #d-notify .notify-source-card:hover .nrow-time, #d-notify .notify-source-card:focus-within .nrow-time { opacity: 0; }
+    .nrow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; margin-top: 2px; color: var(--faint); font-size: var(--srow-badge-size); line-height: 14px; }
+    .nrow-r3 .identity-cluster { margin: 0; }
+    .notify-source-card h3 { color: var(--text-strong); }
+    .notify-source-card p { margin: 5px 0 0; color: var(--dim); font-size: 11px; line-height: 1.55; }
+    .notify-facts { display: grid; gap: 4px; margin-top: 7px; }
+    .notify-fact { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 7px; min-width: 0; align-items: baseline; font-size: 10px; line-height: 1.35; }
+    .notify-fact-label { color: var(--faint); }
+    .notify-fact-value { min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+    .notify-fact-value strong { color: var(--text-strong); font-weight: 700; }
+    .mobile-notify-card .notify-facts { margin: 6px 0 0 35px; }
+    .mobile-notify-card .notify-fact { grid-template-columns: 34px minmax(0, 1fr); gap: 5px; }
+    .notify-source-card .identity-cluster { margin-top: 0; }
+    /* 通知动作组：桌面 #d-notify 浮层化（srow-cta 同律扩展到组，见域块）；手机卡常驻右对齐（插播 8） */
+    .notify-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+    .notify-actions .primary-btn, .notify-actions .secondary-btn { min-height: 32px; }
+    .notify-light-action { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .notify-light-action:hover, .notify-light-action:focus-visible { border-color: var(--border-strong); background: var(--hover); color: var(--text-strong); }
+    .notify-light-action:disabled { color: var(--faint); cursor: default; text-decoration: none; }
+    .notify-state { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
+    .notify-source-summary { padding: 11px 12px; border: 1px solid var(--readonly-line); border-radius: var(--radius-sm); background: var(--readonly-bg); color: var(--info); font-size: 10px; }
+    /* #005-UI 通知源分组头+统计 → #80b 满宽 sticky 行化：组头钉顶实底盖穿行淡底（#d-session 组头同律），
+       组间留白分段；摘要行结构化三段保留竖排（信息密度高于会话行，单行 ellipsis 会截断「等什么」段） */
+    .notify-source-group + .notify-source-group { margin-top: 18px; }
+    .notify-source-group-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: baseline; gap: 8px; padding: 8px 14px 6px; border-top: 0; background: var(--bg1); }
+    .notify-source-group:first-child .notify-source-group-head { padding-top: 2px; }
+    .notify-source-group-name { color: var(--text-strong); font-size: 11px; font-weight: 600; }
+    .notify-source-group-stat { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
+    .notify-source-group-stat b { color: var(--brand); font-weight: 700; }
+    .notify-copy { display: grid; gap: 2px; margin: 5px 0 0; }
+    .notify-copy-row { color: var(--dim); font-size: 11px; line-height: 1.5; }
+    .notify-copy-row b { color: var(--text); font-weight: 600; }
+    /* ===== #80b 通知域行化域块（2026-10-05）：#d-notify 迁会话域满宽行语言 =====
+       列满宽 padding 16px 0（#d-session .queue 同律）+标题/工具行 14px 补偿（插播 10 同律）；
+       队列卡拆分隔线瞬淡底；通知中心 workspace-body 域内下沉；轻动作组浮层化（srow-cta 扩展），
+       实底防透字（组宽盖 copy 行尾属瞬态，同会话 CTA 盖时间）；resolved 满宽淡化已上移基础块 */
+    #d-notify .queue { padding: 16px 0; }
+    #d-notify .queue-head { padding-left: 14px; padding-right: 14px; }
+    #d-notify .queue .queue-group { position: sticky; top: 0; z-index: 2; margin: 10px 0 6px; padding: 2px 14px; background: var(--surface1); }
+    #d-notify .queue .notice { border-bottom: 0; background: transparent; transition: background .06s linear; }
+    #d-notify .queue .notice:hover { background: var(--q-row-hov); }
+    #d-notify .queue .notice.selected { background: var(--q-row-sel); }
+    #d-notify .queue .notice .notice-icon { border-radius: 9px; }
+    #d-notify .workspace-body { padding: 16px 0; }
+    #d-notify .notify-source-summary { margin: 0 14px 12px; }
+    #d-notify .notify-source-list { padding: 0 0 16px; }
+    #d-notify .notify-source-card:hover .notify-actions, #d-notify .notify-source-card:focus-within .notify-actions { display: flex; }
+    #d-notify .notify-actions { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: none; flex-wrap: nowrap; margin: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); box-shadow: var(--shadow-hover); }
+    #d-notify .notify-state { margin-left: 0; }
+    .mobile-notify-screen .mobile-content { padding-bottom: 18px; }
+    .mobile-notify-card { cursor: pointer; }
+    .mobile-notify-card .notify-actions { margin-top: 10px; }
+    .mobile-notify-card .notify-actions .primary-btn { flex: 1; }
+    .mobile-notify-detail { display: grid; flex: 1; align-content: start; gap: 12px; padding: 14px 13px 18px; }
+    .mobile-notify-detail[hidden] { display: none; }
+    .mobile-notify-detail h3 { margin: 0; color: var(--text-strong); font-size: 15px; }
+    .mobile-notify-detail p { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.55; }
+    .settings-list { display: grid; gap: 8px; }
+    .settings-row { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    button.settings-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
+    .theme-setting:hover { border-color: var(--brand); }
+    .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); }
+    .settings-row .setting-icon svg, .settings-nav .avatar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .theme-setting .chev::after { content: "›"; margin-left: 4px; color: var(--faint); }
+    .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
+    .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
+    .settings-row .chev { margin-left: auto; color: var(--faint); }
+    .mobile-frame { position: relative; width: 390px; max-width: 100%; margin: 0 auto; overflow: hidden; border: 8px solid var(--phone-frame); border-radius: 30px; background: var(--bg1); box-shadow: var(--shadow), 0 0 0 1px var(--frame-shadow); }
+    .mobile-notch { position: relative; z-index: 1; width: 126px; height: 20px; margin: -1px auto 0; border-radius: 0 0 14px 14px; background: var(--phone-frame); box-shadow: 0 2px 5px var(--notch-shadow); }
+    .mobile-screen { display: none; min-height: 735px; }
+    .mobile-screen.active { display: flex; flex-direction: column; }
+    .mobile-status { display: flex; justify-content: space-between; padding: 7px 15px 2px; color: var(--dim); font: 10px var(--mono); }
+    .mobile-sourcebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 29px; padding: 2px 13px; border-bottom: 1px solid transparent; background: transparent; }
+    .mobile-sourcebar .source-switcher { flex: 1; }
+    .mobile-sourcebar .source-trigger { width: 100%; justify-content: space-between; min-height: 25px; }
+    .mobile-sourcebar .source-menu { top: calc(100% + 5px); right: 0; left: 0; width: auto; }
+    .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); box-shadow: 0 7px 16px var(--panel-shadow); }
+    .mobile-head h2 { flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: 15px; }
+    .mobile-head h2 small { display: block; overflow: hidden; margin-top: 3px; color: var(--dim); font-size: 10px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+    #m-detail .mobile-head h2 small { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+    .mobile-detail-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mobile-detail-time { flex: 0 0 auto; color: var(--text); white-space: nowrap; }
+    .mobile-content { flex: 1; overflow: auto; padding: 14px 13px 78px; }
+    .mobile-content.no-bottom { padding-bottom: 18px; }
+    .mobile-nav { display: flex; flex: 0 0 62px; border-top: 1px solid var(--line-soft); background: var(--mobile-nav-bg); box-shadow: 0 -10px 20px var(--rail-shadow); }
+    .mobile-nav button { position: relative; flex: 1; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; transition: color .18s ease, background .18s ease, border-color .18s ease; }
+    .mobile-nav button b { display: block; height: 18px; margin-bottom: 3px; color: var(--text); font-size: 17px; line-height: 18px; }
+    .mobile-nav button b .icon-nav { width: 18px; height: 18px; }
+    .mobile-nav button.active { color: var(--text-strong); border-bottom-color: var(--brand); background: linear-gradient(180deg, var(--mobile-active-bg), transparent); }
+    .mobile-nav button.active b { color: var(--brand-hover); }
+    .mobile-notify { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin: -7px -4px; border: 0; border-radius: 10px; color: var(--text); }
+    .mobile-notify::before { content: ""; position: absolute; inset: -2px; }
+    .mobile-notify:hover, .mobile-notify:focus-visible { background: var(--hover); }
+    .mobile-notify .notify-count { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 8px/14px var(--mono); }
+    .connection-chip { gap: 5px; }
+    .connection-chip.status-reconnecting { color: var(--working); background: var(--connection-warn-bg); }
+    .connection-chip.status-disconnected { color: var(--error); background: var(--connection-error-bg); }
+    .mini-signal { display: inline-flex; align-items: end; gap: 2px; width: 12px; height: 11px; color: currentColor; }
+    .mini-signal i { display: block; width: 2px; border-radius: 2px; background: currentColor; }
+    .mini-signal i:nth-child(1) { height: 4px; }
+    .mini-signal i:nth-child(2) { height: 7px; }
+    .mini-signal i:nth-child(3) { height: 10px; }
+    .mobile-summary { display: flex; align-items: center; gap: 10px; min-height: 25px; margin-bottom: 11px; padding: 0 2px; }
+    .mobile-summary div { display: inline-flex; align-items: baseline; gap: 4px; padding: 0; color: var(--dim); }
+    .mobile-summary b { color: var(--text-strong); font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
+    .mobile-summary span { color: var(--dim); font-size: 10px; }
+    .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .mobile-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .mobile-card.primary { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    /* #80b 手机通知行化：44px 行口径（#82）+14px 行内容起点+零分隔线瞬淡底 */
+    .mobile-notify-card { padding: 8px 14px; margin-bottom: 0; min-height: 44px; border: 0; border-radius: 0; background: transparent; box-shadow: none; transition: background .06s linear; }
+    .mobile-notify-card:hover { background: var(--q-row-hov); transform: none; box-shadow: none; }
+    .mobile-card .row { display: flex; align-items: center; gap: 7px; }
+    .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
+    .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
+    .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); }
+    .icon-status { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .mobile-detail-tabs { display: flex; gap: 17px; overflow-x: auto; overflow-y: hidden; padding: 0 14px; border-right: 0; border-bottom: 1px solid var(--line-soft); box-shadow: none; scrollbar-width: none; }
+    .mobile-detail-tabs::-webkit-scrollbar { display: none; }
+    .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .mobile-detail-tabs button.active { color: var(--text-strong); font-weight: 700; }
+    .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--brand); }
+    #m-detail .mobile-detail-head-main { flex: 1; min-width: 0; }
+    #m-detail .mobile-head { align-items: flex-start; }
+    .mobile-board { display: grid; gap: 9px; }
+    .mobile-lane { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface1); }
+    .mobile-lane-head { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: 10px; font-weight: 700; }
+    .mobile-task { padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: 10px; }
+    .mobile-task + .mobile-task { margin-top: 6px; }
+    .mobile-project-card { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 11px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .mobile-project-card h3 { margin: 0; color: var(--text-strong); font-size: 12px; }
+    .mobile-project-card p { grid-column: 2; margin: 2px 0 0; color: var(--dim); font-size: 10px; }
+    .mobile-project-card > .tag { grid-column: 3; grid-row: 1 / span 2; }
+    .mobile-project-summary { display: flex; gap: 10px; overflow: auto; padding: 3px 0 10px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
+    .mobile-project-summary span { flex: 0 0 auto; }
+    .mobile-settings { display: grid; gap: 8px; }
+    .mobile-settings .settings-row { padding: 12px; }
+    #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .04em; }
+    .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
+    .mobile-back:hover { background: var(--hover); color: var(--text); }
+    .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
+    .mobile-detail-composer .composer { min-height: 34px; }
+    .mobile-detail-composer .primary-btn { padding: 0 10px; }
+    #m-detail .session-state-dock { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; padding: 8px 12px; border-left: 0; }
+    #m-detail .session-state-task { grid-column: 1 / -1; }
+    #m-detail .session-state-activity { grid-column: 1 / -1; justify-content: flex-start; margin-left: 0; }
+    #m-detail .session-state-operation { max-width: 46%; }
+    .toast { position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+    .mobile-frame .toast { right: 12px; bottom: 74px; max-width: calc(100% - 24px); }
+    .toast.show { opacity: 1; transform: none; }
+    .desktop-only-note, .stage-note-tip { color: var(--faint); font-size: 10px; }
+    .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; line-height: 1; }
+    .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
+    .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
+    .engine-badge:has(.engine-icon)::before { display: none; }
+    .engine-badge .engine-icon { width: 12px; height: 12px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .engine-badge.claude { --engine-color: var(--engine-claude); }
+    .engine-badge.codex { --engine-color: var(--engine-codex); }
+    .engine-badge.trae { --engine-color: var(--engine-trae); }
+    .engine-badge.qwen { --engine-color: var(--engine-qwen); }
+    .engine-badge.codebuddy { --engine-color: var(--engine-codebuddy); }
+    .engine-badge.zcode { --engine-color: var(--engine-zcode); }
+    .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
+    .source-badge .icon-inline { width: 12px; height: 12px; }
+    .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
+    .source-badge.source-home { border-color: var(--source-home); background: var(--source-home-bg); color: var(--source-home-ink); }
+    .source-badge.source-company::before, .source-badge.source-home::before { color: currentColor; }
+    .source-badge::before { content: "↗"; color: var(--faint); font-size: 10px; }
+    .identity-cluster { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; flex-wrap: nowrap; }
+    body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 54px; }
+    body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 48px; }
+    body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 62px; }
+    /* ---------- #005-UI 会话列微信式通栏行（参照旧版 #78 拍板演进移植，005 命名体系
+       srow-* 前缀，勿搬旧版 q-*）：无框通栏、行间零分隔线（纯留白分行）；三段式骨架 =
+       srow-ava（源色淡化头像 + 状态灯叠角）/ srow-main 三行制（用户直馈 2026-10-05：
+       r1 标题行=标题全宽+行尾时间；r2 摘要行=摘要+行尾走秒；r3 徽章行=tag/引擎/源徽
+       小号淡色一档，三徽全空整行不渲染——标题不再被徽章族挤压截断）/
+       srow-cta「处理」浮层按钮（绝对定位挂卡不占文档流；未读数角标已按用户拍板删除）。
+       hover .06s 瞬时淡底（扫过即现即逝）、选中持续淡底，走 --q-row-* 暗亮双值 ---------- */
+    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: 12.5px; --srow-sub-size: 10.5px; --srow-badge-size: 9.5px; }
+    /* 满宽行（用户直馈 2026-10-05：「左右都浪费横向空间」——蒙版贯穿整列去卡感；
+       radius 拍板归零：「既然蒙版贯穿整行了，还需要圆角吗？微信上没有圆角」）：
+       会话域列容器水平 padding 归零（.queue 通用类不动，team/project/settings 卡片域零触碰）；
+       行零圆角矩形蒙版条、背景/hover/selected 满宽贯穿；组头文字对齐行内容起点（14px） */
+    #d-session .queue { padding: 16px 0; }
+    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; --srow-name-size: 12px; --srow-sub-size: 10px; --srow-badge-size: 9px; }
+    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; --srow-name-size: 13px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
+    #d-session .queue-card { display: flex; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 14px; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
+    /* 行形态 display:flex 会压过 [hidden] 的 UA display:none——源筛选/搜索隐藏链（card.hidden）保真 */
+    #d-session .queue-card[hidden] { display: none; }
+    /* 微信电脑端「扫过见底」：hover 瞬时淡底；选中持续淡底（原描边/悬浮抬升档废止） */
+    #d-session .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
+    #d-session .queue-card.selected { border-color: transparent; background: var(--q-row-sel); box-shadow: none; }
+    /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
+    #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
+    #d-session .queue-card[data-session-card="mobile"]:hover { background: var(--danger-bg); }
+    #d-session .srow-ava { position: relative; display: grid; place-items: center; flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--srow-ava-c, var(--source)) 16%, var(--surface2)); color: var(--srow-ava-c, var(--text-strong)); font: 700 var(--srow-ava-font)/1 var(--mono); user-select: none; }
+    #d-session .srow-ava .status-dot { position: absolute; right: -3px; bottom: -3px; box-shadow: 0 0 0 2px var(--bg1); }
+    #d-session .srow-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--srow-gap); }
+    #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); text-overflow: ellipsis; white-space: nowrap; }
+    /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
+       hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
+    #d-session .srow-time { flex: none; margin-left: auto; color: var(--faint); font: 10px var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear; }
+    #d-session .queue-card:hover .srow-time, #d-session .queue-card:focus-within .srow-time { opacity: 0; }
+    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); font-size: var(--srow-sub-size); line-height: 16px; }
+    #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
+    /* r3 徽章行：footnote 级（用户直馈二次微调：高度再降一档——字号/行高/徽章 padding
+       整体压缩，比摘要行明显更小更淡）；三徽全空整行不渲染（高度自适应不虚胖） */
+    #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: 12px; }
+    #d-session .srow-r3 > * { flex: none; margin-top: 0; }
+    #d-session .srow-r3 .tag { padding: 1px 5px; font-size: var(--srow-badge-size); }
+    #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .source-badge { padding: 1px 4px; font-size: var(--srow-badge-size); }
+    #d-session .srow-r3 .engine-icon { width: 9px; height: 9px; }
+    /* srow-cta「处理」浮层化（用户直馈 2026-10-05 两轮坐实：side 容器 min-width:22px 占文档流宽，
+       待处理组时间右缘整体左移 22px 与普通组不齐——CTA 改绝对定位挂卡，出现/消失零布局位移；
+       未读数角标 srow-n 已按用户拍板删除，需行动统计由通知域源分组头承载，行内不重复） */
+    #d-session .srow-cta { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: none; min-height: 22px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--q-row-hov); color: var(--text-strong); cursor: pointer; font-size: 10px; align-items: center; }
+    #d-session .srow-cta:hover { border-color: var(--brand); color: var(--brand); }
+    #d-session .queue-card:hover .srow-cta, #d-session .queue-card:focus-within .srow-cta { display: inline-flex; }
+    /* 行右键菜单（旧版语义 ：6093-6122 借来：置顶/重命名/复制 ID/删除+运行中拦截；浮层语义） */
+    .row-menu { position: fixed; z-index: 60; min-width: 132px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--card-shadow); display: flex; flex-direction: column; }
+    .row-menu[hidden] { display: none; }
+    .row-menu button { display: flex; align-items: center; min-height: 26px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text); cursor: pointer; font-size: 10px; text-align: left; }
+    .row-menu button:hover { background: var(--hover); color: var(--text-strong); }
+    .row-menu button.danger { color: var(--danger); }
+    .row-menu button.danger:hover { background: var(--danger-bg); }
+    /* 行内改名输入（菜单「重命名」→ 标题原位替换，Enter/失焦回写数据重渲） */
+    .row-rename-input { flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
+    /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */
+    #d-session .srow-r3 .tag.pin-flag { background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--brand); }
+    /* 文档级拖入蒙层（旧版 :8706-8740 语义：拖文件进窗口任意处即亮，防浏览器默认打开文件白屏） */
+    body.file-drag-over::after { content: "松开把文件加进输入栏"; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; z-index: 80; border: 2px dashed var(--brand); border-radius: 14px; background: color-mix(in srgb, var(--brand) 7%, transparent); color: var(--brand); font: 600 13px var(--sans); letter-spacing: .02em; pointer-events: none; }
+    /* 回到底按钮（旧版 :9404-9420 语义：离底 >80px 停 300ms 复核浮现+滚动中先收+平滑回底） */
+    #d-session .workspace { position: relative; }
+    .back-to-bottom { position: fixed; right: 18px; bottom: 64px; z-index: 20; min-height: 26px; padding: 0 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface2); color: var(--text-strong); cursor: pointer; font-size: 10px; box-shadow: var(--card-shadow); }
+    .back-to-bottom[hidden] { display: none; }
+    .back-to-bottom:hover { border-color: var(--brand); color: var(--brand); }
+    /* 行变量三档语义（原 --density-card-* 卡变量改造为行变量；档位循环与设置键不变）：
+       紧凑=压缩两行（头像 26px/字号降档，对齐手机「简洁列表」）——见上方 body 三条 */
+    /* 组头 sticky（旧版 #78 同拍板）：滚动时组名钉在列表顶，底色盖住穿行的行淡底 */
+    #d-session .session-list .queue-group { position: sticky; top: 0; z-index: 2; margin: 10px 0 6px; padding: 2px 14px; background: var(--surface1); }
+    #d-team .queue-card, #d-project .queue-card, #d-settings .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
+    #d-notify .notice { block-size: var(--density-notice-block-size); overflow: hidden; }
+    /* order6：队列行瘦身配套——紧凑档卡高压到 48px，块向 padding 同步收一档防内容裁切；
+       标题行与 tag 同排（tag 的 margin-top:7px 是旧独立行排布的遗留） */
+    body[data-card-density="compact"] #d-notify .notice { padding-block: 8px; }
+    .notice .notice-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .notice .notice-title-row strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notice .notice-title-row .tag { flex: none; margin-top: 0; }
+    .notice .notify-line { margin: 4px 0 0; color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notice .notify-line strong { color: var(--text); font-weight: 600; display: inline; }
+    .workspace-title-row .identity-cluster { flex: 0 0 auto; }
+    .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
+    .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .member-card, .notice, .metric, .aggregate-card { box-shadow: none; }
+    .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .team-member-large { background: transparent; }
+    .task-card:hover { border-color: var(--border-strong); background: var(--hover); transform: none; box-shadow: none; }
+    .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
+    .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
+    .mobile-card .identity-cluster { margin: 6px 0 0 35px; }
+    .mobile-content .source-filter-cta { margin: 10px 0 4px; }
+    body[data-card-density="relaxed"] .mobile-card { padding: 13px; }
+    body[data-card-density="relaxed"] .mobile-card p { margin-top: 8px; }
+    body[data-card-density="relaxed"] .mobile-card .identity-cluster { margin-top: 9px; }
+    body[data-source-mode="single"] #d-session .queue-card .source-badge, body[data-source-mode="single"] #m-inbox .mobile-card .source-badge { display: none; }
+    .density-control { display: inline-flex; gap: 3px; padding: 3px; margin-left: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); }
+    .density-control button { padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .density-control button.active { background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
+    .density-detail { display: grid; gap: 10px; }
+    .density-detail p { margin: 0; color: var(--dim); font-size: 10px; }
+    .density-detail .density-control { width: max-content; margin-left: 0; }
+    .mobile-nav .tag { position: absolute; top: 5px; right: 11px; padding: 2px 5px; font-size: 8px; }
+    .workspace-pane { display: none; min-height: 100%; }
+    .workspace-pane.active { display: block; }
+    .pane-summary { margin-bottom: 10px; color: var(--text-strong); font-size: 11px; font-weight: 700; }
+    .workspace-pane.team-conversation-pane.active { display: flex; flex-direction: column; min-height: calc(100% + 20px); margin-bottom: -20px; }
+    .team-chat { display: grid; align-content: start; gap: 8px; max-width: 720px; }
+    .team-conversation-pane .team-chat { flex: 1; min-height: 0; overflow: auto; width: 100%; max-width: 720px; margin: 0 auto; }
+    .team-chat .bubble { max-width: 92%; margin-bottom: 0; }
+    .team-chat .bubble.me { margin-left: 0; }
+    .team-composer-row { display: flex; gap: 8px; max-width: 720px; margin-top: 8px; }
+    .team-conversation-pane .team-composer-row { flex: 0 0 auto; width: 100%; max-width: 720px; padding-top: 12px; margin: 8px auto 0; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
+    .team-composer-row .composer { min-width: 0; }
+    .team-members-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; }
+    .team-member-large { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface2); }
+    .team-member-large strong { display: block; color: var(--text-strong); font-size: 12px; }
+    .team-member-large p { margin: 3px 0 6px; color: var(--dim); font-size: 10px; }
+    .team-activity { display: grid; gap: 0; max-width: 720px; }
+    .activity-row { display: grid; grid-template-columns: 70px 16px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 42px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font-size: 10px; }
+    .activity-row time { color: var(--faint); font: 10px var(--mono); }
+    .activity-row i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
+    .task-flag { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--brand-hover); font-size: 10px; }
+    .demo-state-badge { position: absolute; z-index: 18; top: 42px; right: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface2); color: var(--dim); font: 700 9px var(--mono); pointer-events: none; }
+    .mobile-frame .demo-state-badge { top: 12px; right: 12px; }
+    .demo-empty-state { display: grid; place-items: center; gap: 8px; min-height: 120px; padding: 22px 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface1); color: var(--dim); text-align: center; }
+    .demo-empty-state p { margin: 0; color: var(--text-strong); font-size: 12px; }
+    .demo-empty-state button { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--info); cursor: pointer; font-size: 10px; }
+    .demo-empty-state button:hover { border-color: var(--info); background: var(--hover); }
+    .demo-skeleton-list { display: grid; gap: 8px; }
+    .demo-skeleton-group { width: 38%; height: 10px; margin: 8px 3px 0; border-radius: 4px; background: var(--line-soft); }
+    .demo-skeleton-card { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--surface1); }
+    .demo-skeleton-line { height: 9px; border-radius: 5px; background: linear-gradient(90deg, var(--line-soft), var(--surface2), var(--line-soft)); background-size: 220% 100%; animation: demo-shimmer 1.6s ease-in-out infinite; }
+    .demo-skeleton-line.short { width: 58%; }
+    .demo-skeleton-line.tiny { width: 32%; height: 7px; }
+    .demo-skeleton-head { display: grid; gap: 8px; padding: 2px 0 12px; }
+    .demo-skeleton-timeline { display: grid; gap: 12px; max-width: 720px; }
+    .demo-skeleton-timeline .demo-skeleton-card { min-height: 42px; }
+    .demo-error-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 10px; margin: 0 0 12px; border: 1px solid var(--danger-line); border-left: 3px solid var(--error); border-radius: 8px; background: var(--danger-bg); color: var(--text); font-size: 10px; }
+    .demo-error-bar strong { color: var(--error); }
+    .demo-error-copy { flex: 1 1 160px; min-width: 0; }
+    .demo-error-actions { display: flex; margin-left: auto; gap: 6px; }
+    .demo-error-actions button { padding: 4px 7px; border: 1px solid var(--danger-line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; }
+    .demo-error-actions button:hover { border-color: var(--error); }
+    @keyframes demo-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
+    .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; border-radius: 0; transition: background .06s linear; }
+    .settings-nav .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
+    .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--brand); }
+    /* #df2-E 面板底部动作右下角：panel 尾按钮右靠 + workspace-footer 全线右对齐（composer 场景 flex:1 不受影响） */
+    .settings-panel > button.primary-btn, .settings-panel > button.secondary-btn, .settings-panel .settings-connection-tabs > button.primary-btn { display: block; margin-left: auto; }
+    .workspace-footer { justify-content: flex-end; }
+    /* #df2-B 关于页二维码占位（tag 底色系克制风） */
+    .qr-placeholder { display: inline-flex; align-items: center; justify-content: center; width: 54px; height: 54px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface2); color: var(--faint); font-size: 9px; text-align: center; }
+    .settings-panel .settings-row { border-color: transparent; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
+    /* #df3-F 引擎列表三列对齐：badge 定宽列文本居中 | 名称·状态块左对齐 | 状态 tag 右缘对齐 */
+    .settings-row.engine-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; }
+    .settings-row.engine-row .engine-badge { justify-content: center; width: 100%; box-sizing: border-box; }
+    /* #df3-I panel 行尾元素同一右缘线：描述块吃满剩余宽，尾 tag/toggle/按钮推到右缘（engine-row 走 grid 第三列同一垂直线） */
+    .settings-panel .settings-row > div { flex: 1; min-width: 0; }
+    /* #df3-H 快捷键键值 chip（tag 底色系克制风） */
+    .kbd-chip { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface2); color: var(--dim); font: 700 10px var(--mono); white-space: nowrap; }
+    .settings-panel .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .toggle-control { min-width: 34px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); cursor: pointer; font: 700 10px var(--mono); }
+    .toggle-control.active { border-color: var(--done); background: var(--done-bg); color: var(--done); }
+    .mobile-settings .settings-row { border-color: transparent; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
+    .mobile-settings .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .notice { border-right: 0; border-top: 0; border-bottom: 1px solid var(--line-soft); border-left: 0; border-radius: 0; background: var(--surface2); box-shadow: none; }
+    .notice:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .queue-card[data-session-card="mobile"], .mobile-card[data-session-card="mobile"] { border-color: var(--danger-line); background: var(--danger-bg); }
+    .queue-card[data-session-card="mobile"]:hover, .mobile-card[data-session-card="mobile"]:hover { border-color: var(--error); background: var(--danger-bg); }
+    .mobile-settings-detail { padding-top: 3px; }
+    .mobile-settings-detail h3 { margin: 12px 0; color: var(--text-strong); font-size: 15px; }
+    .settings-detail-back { margin-bottom: 4px; }
+    body[data-source-mode="single"] #d-session .workspace-title-row .source-badge, body[data-source-mode="single"] #d-project .workspace-title-row .source-badge, body[data-source-mode="single"] #m-detail .mobile-head .source-badge { display: none; }
+    html[data-source-mode="aggregate"] .identity-cluster { flex-direction: row-reverse; justify-content: flex-end; }
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-track { background: var(--scroll-track); }
+    ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--scroll-thumb); background-clip: padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: padding-box; }
+    #d-team .queue .source-badge, #d-team .task-card .source-badge, #d-team .member-card .source-badge, #m-team .mobile-content .source-badge { display: none; }
+    #d-team .task-card > .tag { display: none; }
+    :focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+    .mobile-screen .wait-actions button, .mobile-screen .connection-reconnect, .mobile-screen .notify-light-action { min-height: 44px; }
+    .mobile-notify-card .notify-light-action { padding: 0 11px; }
+    .mobile-card .avatar.status-ok { color: var(--done); }
+    .mobile-card .avatar.status-alert { color: var(--error); }
+    .mobile-card .avatar.status-action { color: var(--brand-strong); }
+    .mobile-card .avatar.status-neutral { color: var(--dim); }
+    .muted { color: var(--dim); }
+    .mobile-sourcebar + .mobile-head .connection-chip.status-connected { display: none; }
+    #m-detail .mobile-head { padding-left: 13px; }
+    #m-detail .mobile-head h2 { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+    #m-detail .mobile-head .identity-cluster { gap: 2px; }
+    #m-detail .mobile-head .engine-badge, #m-detail .mobile-head .source-badge, #m-detail .mobile-head > .tag { padding: 2px 4px; font-size: 8px; }
+    #m-detail .mobile-detail-tabs { padding-left: 13px; }
+    html[data-theme="light"] body { background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0); }
+    html[data-theme="light"] .window-dots i { background: var(--window-dot); }
+    html[data-theme="light"] .window-title { color: var(--faint); }
+    html[data-theme="light"] .domain-rail, html[data-theme="light"] .windowbar { box-shadow: 5px 0 20px var(--rail-shadow); }
+    html[data-theme="light"] .mobile-status { color: var(--dim); }
+    @media (max-width: 980px) {
+      .page { width: min(100% - 22px, 760px); }
+      .desktop-frame { overflow-x: auto; }
+      .desktop-frame .windowbar, .desktop-shell { min-width: 1120px; }
+    }
+    @media (max-width: 560px) {
+      .topbar { display: block; }
+      .build { display: block; margin-top: 9px; }
+      .mode-switcher { display: grid; grid-template-columns: 1fr 1fr; }
+      .mode-btn:last-child { grid-column: 1 / -1; }
+      .stage-note { display: block; }
+      .stage-note span { display: block; margin-top: 4px; }
+    }
+  </style>
+</head>
+<body data-card-density="standard" data-source-mode="single">
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol></svg>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <h1>cc-deck · A 指挥桥 Command Bridge</h1>
+        <p>视觉稿级可点击原型：先处理行动，再核对证据；桌面与手机使用同一信息架构。</p>
+      </div>
+      <div class="build">SPEC 004 · PROTOTYPE 005 · NO EXTERNAL ASSETS</div>
+    </header>
+
+    <nav class="mode-switcher" aria-label="原型视口切换">
+      <button class="mode-btn active" data-mode="desktop" aria-pressed="true"><b>桌面宽屏</b><span>1440 基准 · 五个工作面</span></button>
+      <button class="mode-btn" data-mode="mobile" aria-pressed="false"><b>手机</b><span>390 外框 · root / 详情</span></button>
+    </nav>
+
+    <section class="mode-stage active" id="stage-desktop">
+      <div class="stage-note"><span><b>桌面宽屏 1440 基准</b> · 域栏切换工作面，第二栏展示当前域队列，中央和右侧联动。</span><span class="desktop-only-note">提示：窗口较窄时横向滚动查看完整四层结构。</span></div>
+        <div class="desktop-frame">
+        <div class="windowbar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">CC Deck · Command Bridge</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span class="source-trigger-summary" data-current-summary>6 会话 · 2 行动</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="window-link">⌘K 全局搜索</span></div>
+        <div class="desktop-shell">
+          <nav class="domain-rail" aria-label="桌面域栏">
+            <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
+            <button class="rail-btn" data-domain="team" title="团队"><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg><span class="badge" data-stub="B3" aria-label="团队有 1 项需处理" title="团队 · 1 项需处理">1</span></button>
+            <button class="rail-btn" data-domain="project" title="项目"><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></button>
+            <div class="rail-spring"></div>
+            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" data-stub="B5" data-notify-badge aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
+            <button class="rail-btn" data-domain="settings" title="设置"><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></button>
+            <button class="theme-toggle rail-btn" type="button" data-theme-toggle title="切换浅色主题" aria-label="切换浅色主题"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></button>
+          </nav>
+
+          <section class="desktop-screen active" id="d-session">
+            <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><input type="search" placeholder="搜索" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter aria-label="筛选会话 · 当前全部">全部</button><span data-session-source-label title="当前源 · 公司电脑"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
+            <section class="workspace" data-stub="B2">
+              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div></header>
+              <div class="workspace-body" id="session-body">
+                <div class="timeline-note">今天 10:42 · 验收上下文</div>
+                <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
+                <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
+                <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
+              </div>
+              <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></footer>
+            </section>
+            <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-team" data-stub="B3">
+            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action">1</span></h2><button class="icon-btn">＋</button></div><div class="queue-group">待确认 · 1</div><div class="queue-card selected"><div class="row"><i class="status-dot waiting"></i><strong>cc-deck M1 攻坚团</strong><span class="tag action">编制</span></div><p>6 成员 · 4 进行中 · 2 待收单</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="queue-group">进行中 · 1</div><div class="queue-card"><div class="row"><i class="status-dot done"></i><strong>v0.5.2 双端发版团</strong></div><p>归档准备 · 09-18</p><div class="identity-cluster"><span class="source-badge">家里 iMac</span></div><div class="queue-card-meta">双端 · test 通道 · 待收单</div></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><i class="status-dot done"></i><h2>cc-deck M1 攻坚团</h2><span class="tag action">待你确认</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">6 成员 · 4 进行中 · 2 待收单 · PM：glm-5.3</div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button></div></header><div class="workspace-body"><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>2</span></div><div class="task-card"><strong>T-21 导入码迁移</strong><p>等待 worker-web</p><div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div><span class="tag">待派单</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>4</span></div><div class="task-card"><strong>T-12 relay 事件流</strong><p>worker-relay · 48%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div><span class="tag info">运行中</span></div><div class="task-card"><strong>T-15 手机列表</strong><p>worker-mobile · 72%</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag info">运行中</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>2</span></div><div class="task-card"><strong>T-13 更新通道隔离</strong><p>独立出包已完成</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><span><b>worker-web · 执行者</b> Claude · 公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>2</span></div><div class="task-card"><strong>T-14 验收槽</strong><p>回填 2/3</p><div class="task-assignee"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><span><b>PM · 编排</b> Trae · 公司电脑</span></div><span class="tag action">待收单</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>1</span></div><div class="task-card"><strong>T-10 版本同步</strong><p>已合并 main</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div><span class="tag done">完成</span></div></div></div></div><footer class="workspace-footer"><button class="primary-btn">确认编制方案</button></footer></section>
+            <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>PM 建议编制</span><span>待确认</span></div><div class="member-list"><div class="member-card"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><div><strong>PM <span class="role-label pm-label">PM</span></strong><p>glm-5.3 · 调度 <span class="engine-badge trae">Trae</span></p></div></div><div class="member-card"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>claude · 开发 <span class="engine-badge claude">Claude</span></p></div></div><div class="member-card"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 需接替 <span class="engine-badge qwen">Qwen Code</span></p></div></div><div class="member-card"><span class="avatar qa">QA<i class="avatar-engine-dot codex"></i></span><div><strong>验收槽</strong><p>独立厂商 · claude <span class="engine-badge codex">Codex</span></p></div></div></div></div><div class="inspector-block"><div class="inspector-title"><span>停留告警</span><span class="tag action">1</span></div><div class="inspector-copy">worker-mobile 25 分钟无日志；已通知 PM。</div><button class="danger-btn" style="margin-top:9px">换厂商接替</button></div><div class="inspector-block"><div class="inspector-title"><span>团队确认</span><span>1 项</span></div><div class="inspector-copy">3 开发 + 独立验收 + 1 调研</div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-project" data-stub="B4">
+            <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn">＋</button></div><div class="queue-group">活跃项目 · 2</div><div class="queue-card selected"><div class="row"><i class="status-dot done"></i><strong>cc-deck</strong><span class="tag action">需行动 2</span></div><p>~/dev/cc-deck · 6 会话 · 1 团队</p></div><div class="queue-card"><div class="row"><i class="status-dot waiting"></i><strong>windclaw-qclaw</strong></div><p>~/dev/windclaw · 1 会话 · 等构建</p></div><div class="queue-group">已隐藏 · 1</div><div class="queue-card" data-hidden-project title="右键恢复显示"><div class="row"><i class="status-dot"></i><strong>legacy-scripts</strong></div><p>右键恢复 · 3 天前活跃</p></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2>cc-deck</h2><span class="tag action">需行动 2</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">目录 ~/dev/cc-deck · realpath 已归一 · 6 会话 · 1 团队 · 输出物 46</div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body"><div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div><div class="project-overview"><div class="metric"><b>6</b><span>会话</span></div><div class="metric"><b>1</b><span>活跃团队</span></div><div class="metric"><b>46</b><span>输出物</span></div><div class="metric"><b>2</b><span>需行动</span></div></div><div class="aggregate-grid"><div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话</h4><p>0.6.0-test.19 出包 · 待收单</p><p>ui-review 走查 · 刚刚活跃</p><button class="secondary-btn">在会话中查看</button></div><div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队</h4><p>cc-deck M1 攻坚团 · 6 成员</p><p>4 进行中 · 2 待收单</p><button class="secondary-btn">在团队中查看</button></div><div class="aggregate-card"><h4>▣ 输出物</h4><p>docs/release-check.md · 刚刚</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><p>0.6.0-test.19.apk · 1 小时前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><button class="secondary-btn">查看来源</button></div><div class="aggregate-card"><h4>✓ 验收单</h4><p>0.6.0-test.19 · 回填 2/3</p><p>0.6.0-test.18 · 修复中</p><button class="secondary-btn">在原域处理</button></div></div></div><footer class="workspace-footer"><span class="desktop-only-note">项目不产生第二写面 · 所有动作回原域</span></footer></section>
+            <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action">需行动 2</span></div><div class="inspector-copy">0.6.0-test.19 待收单<br>worker-mobile 失联需接替</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span>46</span></div><div class="artifact-row">release-check.md <span>会话</span></div><div class="artifact-row">test.19.apk <span>会话</span></div></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-notify" data-stub="B5">
+            <aside class="queue" data-notification-queue></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>2 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list" data-notification-list></div></div></section>
+            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>2</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-settings" data-stub="B6">
+            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接与设备</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div><p>relay 在线 · 3 台设备 · 1 异常</p></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div><p>Claude/Codex 已接 · 4 待装</p></div><div class="queue-card"><div class="row"><span class="avatar">◌</span><strong>通用与快捷键</strong></div><p>⌘K 搜索 · ⌘N 新建会话</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div><p>5 个角色 · 开团时可覆盖</p></div><div class="queue-card"><div class="row"><span class="avatar">▦</span><strong>扩展</strong></div><p>验收 · 登记 · 产物</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div><p>v0.6.0-test · test 通道</p></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">连接状态</span><h2>连接与设备</h2></div><div class="workspace-sub">relay · 云桥 · 已配设备 · 异常项单独处理</div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · 已连接</strong><p>端口 8787 · 事件流自动补发 · 最后心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · 已连接</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 重试中 · 09-18 起</p></div><button class="danger-btn">重配对</button></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
+            <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>v0.6.0-test</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
+          </section>
+          <div class="toast" id="toast" role="status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mode-stage" id="stage-mobile" data-stub="B7">
+      <div class="stage-note"><span><b>手机 390 外框</b> · root 使用四 Tab；进入详情后底栏隐藏，返回沿来源栈回到原页面。</span><span class="stage-note-tip">点击底栏、卡片和等待动作探索。</span></div>
+      <div class="mobile-frame">
+        <div class="mobile-notch"></div>
+        <div class="mobile-screen active" id="m-inbox" data-mobile-root="inbox">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <header class="mobile-head"><h2>待我处理<small>会话行动与状态</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
+          <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待审查</span></div></div><div data-mobile-session-list></div></div>
+          <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
+        </div>
+        <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small id="mobile-detail-sub">~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
+          <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
+              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="message-ai"><div class="message-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">调度</span></div><div class="message-body">独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div></div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 0.6.0-test.19.apk <span>1h</span></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
+        </div>
+        <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
+            <div class="mobile-content" data-notify-center>
+            <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。</div>
+            <div data-mobile-notification-list></div>
+          </div>
+          <div class="mobile-notify-detail" data-notify-source-detail hidden><button class="mobile-back" type="button" data-notify-detail-back>‹ 返回通知中心</button><h3 data-notify-detail-title>来源详情</h3><p data-notify-detail-copy>从通知进入的来源上下文。</p><div class="notify-source-summary">当前只定位来源；验收与团队写操作仍在原域完成。</div><button class="primary-btn" type="button" data-notify-detail-jump>回来源域处理</button></div>
+        </div>
+        <div class="mobile-screen" id="m-team" data-mobile-root="team">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><h2>团队行动<small>cc-deck M1 攻坚团</small></h2><span class="tag action">1 待确认</span><button class="icon-btn">＋</button></header>
+          <div class="mobile-content"><div class="mobile-card primary"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>编制方案待确认</strong><span class="tag action">确认</span></div><p>3 开发 + 独立验收 + 1 调研 · PM glm-5.3</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="mobile-detail-tabs"><button class="active" data-team-tab="todo">待办</button><button data-team-tab="board">看板</button><button data-team-tab="members">成员</button></div><div data-team-pane="todo"><div class="mobile-lane"><div class="mobile-lane-head"><span>待收单</span><span>2</span></div><div class="mobile-task"><b>T-13 更新通道隔离</b><br><span class="muted">回填 2/3 · 待确认收单</span><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><br><span class="tag action">验收单</span></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>停留告警</span><span class="tag action">1</span></div><div class="mobile-task"><b>worker-mobile 失联</b><br><span class="muted">25 分钟无日志 · 换厂商接替</span><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div></div><div data-team-pane="board" style="display:none"><div class="mobile-board"><div class="mobile-lane"><div class="mobile-lane-head"><span>待认领</span><span>2</span></div><div class="mobile-task">T-21 导入码迁移<div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>进行中</span><span>4</span></div><div class="mobile-task">T-12 relay 事件流 · 48%<div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-task">T-15 手机列表 · 72%<div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>待审查</span><span>2</span></div><div class="mobile-task">T-13 更新通道隔离<div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div></div></div><div data-team-pane="members" style="display:none"><div class="member-list"><div class="member-card"><span class="avatar">P</span><div><strong>PM</strong><p>glm-5.3 · 调度</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar">W</span><div><strong>worker-web</strong><p>claude · 开发</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar">M</span><div><strong>worker-mobile</strong><p>失联 · 接替</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div><div class="member-card"><span class="avatar">QA</span><div><strong>验收槽</strong><p>独立厂商</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div></div></div></div></div></div>
+          <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button class="active" data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
+        </div>
+
+        <div class="mobile-screen" id="m-project" data-mobile-root="project">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span><button class="icon-btn">＋</button></header>
+          <div class="mobile-content"><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck</h3><p>~/dev/cc-deck</p><span class="tag action">需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw</h3><p>~/dev/windclaw · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> docs/release-check.md · 刚刚<br><span class="muted">查看来源 →</span></div></div></div>
+          <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
+        </div>
+
+        <div class="mobile-screen" id="m-settings" data-mobile-root="settings">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done connection-chip status-connected"><span class="mini-signal" aria-hidden="true"><i></i><i></i><i></i></span>relay 在线</span><button class="icon-btn">⋯</button></header>
+          <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>Agent 引擎</strong><p>6 引擎 · 2 已接 · 浏览态</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px">扫码添加新设备</button></div>
+          <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button class="active" data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const desktopScreens = [...document.querySelectorAll(".desktop-screen")];
+      const railButtons = [...document.querySelectorAll(".rail-btn")];
+      const modeButtons = [...document.querySelectorAll(".mode-btn")];
+      const stages = { desktop: document.querySelector("#stage-desktop"), mobile: document.querySelector("#stage-mobile") };
+      const toast = document.querySelector("#toast");
+      const connectionChips = [...document.querySelectorAll(".connection-chip")];
+      const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
+      let mobileReturn = "inbox";
+      let toastTimer = null;
+
+      function ensureThemeSymbols() {
+        const sprite = document.querySelector(".icon-sprite");
+        if (!sprite) return;
+        if (!sprite.querySelector("#icon-sun")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol>');
+        if (!sprite.querySelector("#icon-moon")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>');
+        if (!sprite.querySelector("#icon-server")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"></rect><rect x="3" y="14" width="18" height="6" rx="1"></rect><line x1="7" y1="7" x2="7.01" y2="7"></line><line x1="7" y1="17" x2="7.01" y2="17"></line></symbol>');
+        if (!sprite.querySelector("#icon-layers")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 21 7 12 12 3 7 12 2"></polygon><polyline points="3 12 12 17 21 12"></polyline><polyline points="3 17 12 22 21 17"></polyline></symbol>');
+        if (!sprite.querySelector("#icon-sliders")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="10" cy="18" r="2"></circle></symbol>');
+        if (!sprite.querySelector("#icon-package")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol>');
+        if (!sprite.querySelector("#icon-file-text")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><line x1="8" y1="9" x2="10" y2="9"></line></symbol>');
+        if (!sprite.querySelector("#icon-code")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></symbol>');
+        if (!sprite.querySelector("#icon-archive")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 6h18v14H3Z"></path><path d="M3 6l2-3h14l2 3M8 10h8M10 14h4"></path></symbol>');
+        if (!sprite.querySelector("#icon-keyboard")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol>');
+        if (!sprite.querySelector("#icon-image")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></symbol>');
+        if (!sprite.querySelector("#icon-clock")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></symbol>');
+        const info = sprite.querySelector("#icon-info");
+        if (info) info.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>';
+      }
+
+      function applyTheme(theme, announce = false) {
+        const next = theme === "light" ? "light" : "dark";
+        document.documentElement.dataset.theme = next;
+        try { localStorage.setItem("cc-deck-theme", next); } catch (_) {}
+        themeToggles.forEach((toggle) => {
+          const icon = toggle.querySelector(".theme-toggle-icon");
+          const label = toggle.querySelector("[data-theme-label]");
+          const value = toggle.querySelector("[data-theme-value]");
+          const target = next === "light" ? "深色" : "浅色";
+          if (icon) icon.innerHTML = `<use href="#icon-${next === "light" ? "moon" : "sun"}"></use>`;
+          if (label) label.textContent = `${next === "light" ? "浅色" : "深色"}主题 · 点击切换${target}`;
+          if (value) value.textContent = next === "light" ? "浅色" : "深色";
+          toggle.title = `切换${target}主题`;
+          toggle.setAttribute("aria-label", toggle.title);
+        });
+        if (announce) showToast(`已切换到${next === "light" ? "浅色" : "深色"}主题`);
+      }
+
+      function applyCardDensity(density, announce = false) {
+        const next = ["compact", "standard", "relaxed"].includes(density) ? density : "standard";
+        document.body.dataset.cardDensity = next;
+        try { localStorage.setItem("cc-deck-card-density", next); } catch (_) {}
+        document.querySelectorAll("[data-card-density-option]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.cardDensityOption === next);
+          button.setAttribute("aria-pressed", String(button.dataset.cardDensityOption === next));
+        });
+        if (announce) showToast(`卡片密度：${({ compact: "紧凑", standard: "标准", relaxed: "宽松" })[next]}`);
+      }
+
+      function wireCardDensityControls(root = document) {
+        root.querySelectorAll("[data-card-density-option]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.cardDensityOption === document.body.dataset.cardDensity));
+        });
+      }
+
+      let tablistSequence = 0;
+
+      function wireSegmentTabSemantics(buttons, panes) {
+        const tablist = buttons[0]?.parentElement;
+        if (!tablist || tablist.dataset.ariaTabsReady) return;
+        tablist.dataset.ariaTabsReady = "1";
+        tablist.setAttribute("role", "tablist");
+        const prefix = `tablist-${++tablistSequence}`;
+        buttons.forEach((button, index) => {
+          const pane = panes[index];
+          const tabId = button.id || `${prefix}-tab-${index + 1}`;
+          const panelId = pane?.id || `panel-${prefix}-${index + 1}`;
+          button.id = tabId;
+          button.setAttribute("role", "tab");
+          button.setAttribute("aria-controls", panelId);
+          button.tabIndex = -1;
+          if (pane) {
+            pane.id = panelId;
+            pane.setAttribute("role", "tabpanel");
+            pane.setAttribute("aria-labelledby", tabId);
+          }
+        });
+        buttons.forEach((button, index) => {
+          button.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+            event.preventDefault();
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            const nextIndex = (index + direction + buttons.length) % buttons.length;
+            buttons[nextIndex].click();
+            buttons[nextIndex].focus();
+          });
+        });
+        function activateTab(index) {
+          buttons.forEach((button, buttonIndex) => {
+            const active = buttonIndex === index;
+            button.setAttribute("aria-selected", String(active));
+            button.tabIndex = active ? 0 : -1;
+          });
+          panes.forEach((pane, paneIndex) => pane?.setAttribute("aria-hidden", String(paneIndex !== index)));
+        }
+        return activateTab;
+      }
+
+      function wireSegmentTabs(buttons, panes, activeIndex = 0) {
+        const activateAriaTab = wireSegmentTabSemantics(buttons, panes);
+        const activate = (index) => {
+          buttons.forEach((button, buttonIndex) => button.classList.toggle("active", buttonIndex === index));
+          panes.forEach((pane, paneIndex) => pane.classList.toggle("active", paneIndex === index));
+          activateAriaTab?.(index);
+        };
+        buttons.forEach((button, index) => button.addEventListener("click", () => activate(index)));
+        activate(activeIndex);
+      }
+
+      function setInspectorCollapsed(screen, collapsed) {
+        const inspector = screen.querySelector(".inspector");
+        const button = inspector?.querySelector(".inspector-toggle");
+        if (!inspector || !button) return;
+        screen.classList.toggle("inspector-collapsed", collapsed);
+        inspector.classList.toggle("collapsed", collapsed);
+        const frame = screen.closest(".desktop-frame");
+        if (frame && screen.classList.contains("active")) frame.classList.toggle("inspector-collapsed", collapsed && !window.matchMedia("(max-width: 980px)").matches);
+        button.textContent = collapsed ? "›" : "‹";
+        button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
+        button.setAttribute("aria-label", button.title);
+      }
+
+      function applyInspectorBreakpoint() {
+        const narrow = window.matchMedia("(max-width: 1279px)").matches;
+        desktopScreens.forEach((screen) => {
+          if (narrow) {
+            setInspectorCollapsed(screen, true);
+          } else if (screen.dataset.inspectorManual) {
+            setInspectorCollapsed(screen, screen.dataset.inspectorManual === "collapsed");
+          } else {
+            setInspectorCollapsed(screen, false);
+          }
+        });
+      }
+
+      function initInspectors() {
+        desktopScreens.forEach((screen) => {
+          const inspector = screen.querySelector(".inspector");
+          if (!inspector) return;
+          const button = document.createElement("button");
+          button.className = "inspector-toggle";
+          button.type = "button";
+          button.dataset.inspectorToggle = "true";
+          inspector.prepend(button);
+        });
+        applyInspectorBreakpoint();
+        window.addEventListener("resize", applyInspectorBreakpoint);
+      }
+
+
+      function showToast(message) {
+        const mode = document.querySelector("#stage-mobile.active") ? "mobile" : "desktop";
+        const host = document.querySelector(mode === "mobile" ? ".mobile-frame" : ".desktop-frame");
+        if (host && toast.parentElement !== host) host.append(toast);
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+
+      function setMode(mode) {
+        closeTransientOverlays();
+        modeButtons.forEach((button) => {
+          const active = button.dataset.mode === mode;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+        Object.entries(stages).forEach(([key, stage]) => stage.classList.toggle("active", key === mode));
+        const host = document.querySelector(mode === "mobile" ? ".mobile-frame" : ".desktop-frame");
+        if (host && toast.parentElement !== host) host.append(toast);
+      }
+
+      function setDesktopDomain(domain) {
+        closeTransientOverlays();
+        const screen = document.querySelector(`#d-${domain}`);
+        if (!screen) return;
+        desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
+        railButtons.forEach((button) => button.classList.toggle("active", button.dataset.domain === domain));
+        const frame = screen.closest(".desktop-frame");
+        if (frame) frame.classList.toggle("inspector-collapsed", screen.classList.contains("inspector-collapsed") && !window.matchMedia("(max-width: 980px)").matches);
+        showToast(`已切换到${({ session: "会话", team: "团队", project: "项目", notify: "通知", settings: "设置" })[domain]}域`);
+      }
+
+      function openMobileRoot(root) {
+        const target = document.querySelector(`#m-${root}`);
+        if (!target) return;
+        mobileReturn = root;
+        document.querySelectorAll(".mobile-screen").forEach((screen) => screen.classList.toggle("active", screen === target));
+        document.querySelectorAll(".mobile-nav [data-mobile-root]").forEach((button) => button.classList.toggle("active", button.dataset.mobileRoot === root));
+        if (root === "inbox") {
+          const list = target.querySelector(".mobile-content");
+          if (list) list.scrollTop = 0;
+        }
+      }
+
+      const engineIconFor = (engineClass = "") => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
+      const engineBadgeMarkup = (item) => `<span class="engine-badge ${item.engineClass}"><svg class="engine-icon" aria-hidden="true"><use href="#icon-${engineIconFor(item.engineClass)}"></use></svg>${item.engine}</span>`;
+
+      const sessionSourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
+      const sessionCtaMarkup = (item) => item.tagClass === "action" || item.tagClass === "danger" ? `<button type="button" class="srow-cta">处理</button>` : "";
+      const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong></div><p>${item.summary}</p><div class="identity-cluster">${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}<span class="source-badge">${item.source}</span></div></div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><span class="srow-ava" style="--srow-ava-c:${sessionSourceColor(item.source)}">${(item.title || "·").trim().charAt(0).toUpperCase()}<i class="status-dot ${item.status}"></i></span><span class="srow-main"><span class="srow-r1"><strong title="${item.title}">${item.title}</strong>${item.time ? `<time class="srow-time">${item.time}</time>` : ""}</span><span class="srow-r2"><span class="srow-r2-t">${item.summary}</span>${item.status === "working" ? `<span class="srow-sec" data-work-sec="${item.workSecs || 0}">${item.workSecs || 0}s</span>` : ""}</span>${item.tag || item.engine || item.source || item.pinned ? `<span class="srow-r3">${item.pinned ? `<span class="tag pin-flag">置顶</span>` : ""}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}<span class="source-badge">${item.source}</span></span>` : ""}</span>${sessionCtaMarkup(item)}</div>`;
+
+function connectLan(ctx) {
+  const cfg = ctx.cfg;
+  if (!cfg.wsUrl || !cfg.token) { ctx.status = "offline"; ctx.statusText = "未配置"; ctx.failKind = "none"; setConn(ctx, "offline", "未配置"); return; }
+  clearTimeout(ctx.reconnectTimer);
+  const url = cfg.wsUrl + "?token=" + encodeURIComponent(cfg.token);
+  setConn(ctx, "connecting", "连接中");
+  try { ctx.ws && ctx.ws.close(); } catch {}
+  const w = new WebSocket(url);
+  ctx.ws = w;
+  clearTimeout(ctx.lanHsTimer);
+  ctx.lanHsTimer = setTimeout(() => {
+    ctx.lanHsTimer = 0;
+    if (ctx.ws !== w || w.readyState !== WebSocket.CONNECTING) return;
+    try { w.close(); } catch {}
+    setConn(ctx, "offline", "连接超时", "transport");
+    scheduleReconnect(ctx);
+  }, 8000);
+  w.onopen = () => {
+    if (ctx.ws !== w) return;
+    clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
+    ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
+    setConn(ctx, "online", "已连接");
+  };
+  w.onclose = () => {
+    if (ctx.ws !== w) return;
+    clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
+    setConn(ctx, "offline", "已断开", "transport");
+    scheduleReconnect(ctx);
+  };
+  w.onerror = () => {};
+  w.onmessage = (ev) => {
+    if (ctx.ws !== w) return;
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type === "COMMAND_ACK") return;
+    if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+    onEvent(ctx, msg);
+  };
+}
+
+
+      function closeRowMenu() {
+        document.querySelector("#row-menu")?.classList.remove("open");
+      }
+
+      function closeTransientOverlays() {
+        closeRowMenu();
+        document.querySelectorAll(".artifact-sheet-backdrop.open, .source-menu.open, .artifact-menu.open").forEach((overlay) => {
+          overlay.classList.remove("open");
+          overlay.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+        });
+        document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+      }
+
+      function setupStubTabs() {
+        document.querySelectorAll(".segment-bar, .mobile-detail-tabs, .mobile-team-tabs").forEach((bar) => {
+          const buttons = [...bar.querySelectorAll("button")];
+          const host = bar.closest(".workspace, .mobile-screen");
+          const body = host?.querySelector(".workspace-body, .mobile-content");
+          if (!body || !buttons.length) return;
+          const initialIndex = Math.max(0, buttons.findIndex((button) => button.classList.contains("active")));
+          const originalPane = document.createElement("div");
+          originalPane.className = "workspace-pane";
+          originalPane.append(...body.childNodes);
+          const panes = buttons.map((button, index) => {
+            if (index === initialIndex) return originalPane;
+            const pane = document.createElement("div");
+            pane.className = "workspace-pane";
+            pane.dataset.stub = host.closest("[data-stub]")?.dataset.stub || "B7";
+            const placeholder = document.createElement("div");
+            placeholder.className = "readonly-banner";
+            placeholder.textContent = button.textContent.trim() + " · 原型占位，待 " + pane.dataset.stub + " 迁移";
+            pane.append(placeholder);
+            return pane;
+          });
+          body.replaceChildren(...panes);
+          wireSegmentTabs(buttons, panes, initialIndex);
+        });
+      }
+
+      const params = new URLSearchParams(location.search);
+      const wsUrl = location.protocol.startsWith("http")
+        ? (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws"
+        : "";
+      let relayToken = params.get("token") || "";
+      if (wsUrl) {
+        try {
+          if (relayToken) localStorage.setItem("cc-deck-005-token", relayToken);
+          else relayToken = localStorage.getItem("cc-deck-005-token") || "";
+        } catch (_) {}
+      }
+      if (params.get("token") && location.protocol.startsWith("http")) {
+        const cleanUrl = new URL(location.href);
+        cleanUrl.searchParams.delete("token");
+        history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+      }
+      const RETRY_BASE_MS = 1000;
+      const sessionList = document.querySelector("#d-session [data-session-list]");
+      const ctx = {
+        cfg: { wsUrl, token: relayToken },
+        ws: null,
+        sessions: new Map(),
+        lastSeq: 0,
+        status: "offline",
+        statusText: "未连接",
+        reconnectDelay: RETRY_BASE_MS,
+        reconnectTimer: null,
+        lanHsTimer: null,
+        stopped: false,
+        hasSnapshot: false,
+        selectedSessionId: null,
+        relayName: location.host,
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+      }
+
+      function sessionItem(session) {
+        const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "done";
+        const engineKey = session.engine || "claude";
+        const engine = ({ claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["CodeBuddy", "codebuddy"], zcode: ["ZCode", "zcode"] })[engineKey] || [engineKey, ""];
+        const activityTime = Number(session.updated_at || session.started_at || 0);
+        const ageMinutes = Math.max(0, Math.floor((Date.now() - activityTime) / 60000));
+        const turnStart = Number(session.turn_started_at || session.started_at || Date.now());
+        return {
+          id: escapeHtml(session.session_id),
+          title: escapeHtml(session.title || session.initial_prompt || session.session_id),
+          summary: escapeHtml(session.action_summary || session.last_error || session.cwd || "暂无活动摘要"),
+          status,
+          tag: ({ working: "运行中", waiting: "待处理", error: "错误", done: "完成" })[status],
+          tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
+          engine: escapeHtml(engine[0]),
+          engineClass: engine[1],
+          source: escapeHtml(ctx.relayName),
+          time: activityTime ? (ageMinutes === 0 ? "刚刚" : ageMinutes + " 分钟前") : "",
+          selected: session.session_id === ctx.selectedSessionId,
+          pinned: session.pinned === true,
+          workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
+        };
+      }
+
+      function renderSessionList() {
+        sessionList.dataset.relayState = ctx.hasSnapshot ? "snapshot" : ctx.status;
+        sessionList.dataset.connection = ctx.status;
+        sessionList.dataset.sessionCount = String(ctx.sessions.size);
+        if (!ctx.hasSnapshot || !ctx.sessions.size) {
+          const message = !ctx.cfg.wsUrl ? "请通过 relay 同源 HTTP 页面连接" : !ctx.cfg.token ? "请通过带 ?token= 的 relay 链接连接" : !ctx.hasSnapshot ? (ctx.status === "online" ? "等待 relay SNAPSHOT…" : "relay " + ctx.statusText) : "暂无会话 · relay SNAPSHOT 已同步";
+          const placeholder = document.createElement("div");
+          placeholder.className = "readonly-banner";
+          placeholder.dataset.sessionEmpty = "true";
+          placeholder.setAttribute("role", "status");
+          placeholder.textContent = message;
+          sessionList.replaceChildren(placeholder);
+          return;
+        }
+        const sessions = [...ctx.sessions.values()].sort((first, second) => Number(second.pinned === true) - Number(first.pinned === true) || Number(second.updated_at || 0) - Number(first.updated_at || 0));
+        const pending = sessions.filter((session) => session.status === "WAITING" || session.status === "ERROR");
+        const other = sessions.filter((session) => session.status !== "WAITING" && session.status !== "ERROR");
+        const groupMarkup = (group, title, entries) => '<div class="session-group" data-session-group="' + group + '"><div class="queue-group"><span>' + title + '</span> · <span data-session-group-count>' + entries.length + '</span></div>' + entries.map((session) => renderSessionCard(sessionItem(session), "desktop")).join("") + '</div>';
+        const template = document.createElement("template");
+        template.innerHTML = groupMarkup("pending", "待处理", pending) + groupMarkup("other", "其他会话", other);
+        template.content.querySelectorAll(".srow-cta").forEach((button) => {
+          button.dataset.stub = "B2";
+          button.setAttribute("aria-label", "处理会话 · 待 B2 迁移");
+        });
+        sessionList.replaceChildren(template.content);
+      }
+
+      function setConn(context, status, text, failKind = "none") {
+        context.status = status;
+        context.statusText = text;
+        context.failKind = failKind;
+        const className = status === "online" ? "status-connected" : status === "connecting" ? "status-reconnecting" : "status-disconnected";
+        connectionChips.forEach((chip) => {
+          chip.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
+          chip.classList.add(className);
+          chip.setAttribute("aria-label", "连接状态 · " + text);
+          const textNode = [...chip.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+          if (textNode) textNode.nodeValue = "relay " + text;
+        });
+        document.querySelectorAll("[data-source-dot]").forEach((dot) => {
+          dot.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
+          dot.classList.add(className);
+        });
+        renderSessionList();
+      }
+
+      function scheduleReconnect(context) {
+        if (context.stopped) return;
+        clearTimeout(context.reconnectTimer);
+        context.reconnectTimer = setTimeout(() => connectLan(context), context.reconnectDelay);
+        context.reconnectDelay = Math.min(context.reconnectDelay * 2, 30000);
+      }
+
+      function onEvent(context, message) {
+        if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
+        context.sessions = new Map(message.payload.sessions.filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
+        context.hasSnapshot = true;
+        context.relayName = message.payload.relay_name || location.host;
+        if (!context.sessions.has(context.selectedSessionId)) context.selectedSessionId = null;
+        renderSessionList();
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        const modeButton = target.closest(".mode-btn[data-mode]");
+        if (modeButton) { setMode(modeButton.dataset.mode); return; }
+        const railButton = target.closest(".rail-btn[data-domain]");
+        if (railButton) { setDesktopDomain(railButton.dataset.domain); return; }
+        const themeToggle = target.closest("[data-theme-toggle]");
+        if (themeToggle) { applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true); return; }
+        const mobileRoot = target.closest("[data-mobile-root]");
+        if (mobileRoot) { openMobileRoot(mobileRoot.dataset.mobileRoot); return; }
+        if (target.closest(".mobile-notify")) { openMobileRoot("notify"); return; }
+        const inspectorToggle = target.closest("[data-inspector-toggle]");
+        if (inspectorToggle) {
+          const screen = inspectorToggle.closest(".desktop-screen");
+          const narrow = window.matchMedia("(max-width: 1279px)").matches;
+          const collapsed = screen.classList.contains("inspector-collapsed");
+          if (narrow && collapsed) { showToast("窗口过窄，暂时无法展开检查器"); return; }
+          const nextCollapsed = !collapsed;
+          screen.dataset.inspectorManual = nextCollapsed ? "collapsed" : "expanded";
+          setInspectorCollapsed(screen, nextCollapsed);
+          return;
+        }
+        const card = target.closest("#d-session [data-session-card]");
+        if (card) {
+          if (target.closest(".srow-cta")) { showToast("处理会话 · 待 B2 迁移"); return; }
+          ctx.selectedSessionId = card.dataset.sessionCard;
+          renderSessionList();
+          return;
+        }
+        const stubButton = target.closest("[data-stub] button, [data-stub] a");
+        if (stubButton) {
+          event.preventDefault();
+          showToast("原型占位 · 待 " + stubButton.closest("[data-stub]").dataset.stub + " 迁移");
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeTransientOverlays();
+      });
+      window.addEventListener("pagehide", () => {
+        ctx.stopped = true;
+        clearTimeout(ctx.reconnectTimer);
+        clearTimeout(ctx.lanHsTimer);
+        if (ctx.ws) {
+          ctx.ws.onclose = null;
+          ctx.ws.close();
+        }
+      });
+      let savedTheme = "dark";
+      try { savedTheme = localStorage.getItem("cc-deck-theme") || "dark"; } catch (_) {}
+      let savedCardDensity = "standard";
+      try { savedCardDensity = localStorage.getItem("cc-deck-card-density") || "standard"; } catch (_) {}
+      ensureThemeSymbols();
+      setupStubTabs();
+      wireCardDensityControls();
+      applyTheme(savedTheme);
+      applyCardDensity(savedCardDensity);
+      const modeButton = modeButtons.find((button) => button.classList.contains("active"));
+      if (modeButton) { setMode(modeButton.dataset.mode); }
+      initInspectors();
+      renderSessionList();
+      connectLan(ctx);
+      setInterval(() => {
+        sessionList.querySelectorAll(".queue-card").forEach((card) => {
+          const session = ctx.sessions.get(card.dataset.sessionCard);
+          const elapsed = card.querySelector(".srow-sec");
+          if (elapsed && session) elapsed.textContent = sessionItem(session).workSecs + "s";
+        });
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>
