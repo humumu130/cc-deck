@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/tweetnacl/nacl-fast.js
+// relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// node_modules/ws/lib/constants.js
+// relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "node_modules/ws/lib/constants.js"(exports, module) {
+  "relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/ws/lib/buffer-util.js
+// relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// node_modules/ws/lib/limiter.js
+// relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "node_modules/ws/lib/limiter.js"(exports, module) {
+  "relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// node_modules/ws/lib/permessage-deflate.js
+// relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// node_modules/ws/lib/validation.js
+// relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "node_modules/ws/lib/validation.js"(exports, module) {
+  "relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ws/lib/receiver.js
+// relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "node_modules/ws/lib/receiver.js"(exports, module) {
+  "relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// node_modules/ws/lib/sender.js
+// relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "node_modules/ws/lib/sender.js"(exports, module) {
+  "relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// node_modules/ws/lib/event-target.js
+// relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "node_modules/ws/lib/event-target.js"(exports, module) {
+  "relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// node_modules/ws/lib/extension.js
+// relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "node_modules/ws/lib/extension.js"(exports, module) {
+  "relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket.js
+// relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "node_modules/ws/lib/websocket.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// node_modules/ws/lib/stream.js
+// relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "node_modules/ws/lib/stream.js"(exports, module) {
+  "relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// node_modules/ws/lib/subprotocol.js
+// relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket-server.js
+// relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num2, shift) {
       if (num2.length === void 0) {
@@ -6053,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/index.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/lib/main.js
+// relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/dns-txt.js
+// relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service-types.js
+// relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service.js
+// relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/registry.js
+// relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// node_modules/dns-packet/types.js
+// relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "node_modules/dns-packet/types.js"(exports) {
+  "relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/dns-packet/rcodes.js
+// relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "node_modules/dns-packet/rcodes.js"(exports) {
+  "relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/opcodes.js
+// relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "node_modules/dns-packet/opcodes.js"(exports) {
+  "relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/classes.js
+// relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "node_modules/dns-packet/classes.js"(exports) {
+  "relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/optioncodes.js
+// relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "node_modules/dns-packet/optioncodes.js"(exports) {
+  "relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// node_modules/@leichtgewicht/ip-codec/index.cjs
+// relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// node_modules/dns-packet/index.js
+// relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "node_modules/dns-packet/index.js"(exports) {
+  "relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// node_modules/thunky/index.js
+// relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "node_modules/thunky/index.js"(exports, module) {
+  "relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// node_modules/multicast-dns/index.js
+// relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "node_modules/multicast-dns/index.js"(exports, module) {
+  "relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/es6/index.js
+// relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/mdns-server.js
+// relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/browser.js
+// relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/bonjour.js
+// relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/index.js
+// relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -10275,10 +10275,10 @@ var require_dist = __commonJS({
   }
 });
 
-// src/index.ts
+// relay/src/index.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 
-// src/e2e.ts
+// relay/src/e2e.ts
 var import_tweetnacl = __toESM(require_nacl_fast(), 1);
 var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 function toB64(b) {
@@ -10336,20 +10336,20 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
   return JSON.parse(new TextDecoder().decode(opened));
 }
 
-// src/index.ts
+// relay/src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
 import { join as join33, sep as sep8 } from "node:path";
 import { writeFileSync as writeFileSync20, openSync as openSync4, readFileSync as readFileSync28, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
 import { spawn as spawn6, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
-// src/config.ts
+// relay/src/config.ts
 import { randomUUID } from "node:crypto";
 import { existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { isAbsolute, join as join2, resolve } from "node:path";
 import { homedir } from "node:os";
 
-// src/settings.ts
+// relay/src/settings.ts
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 var SETTINGS_FILE = "settings.json";
@@ -10414,7 +10414,7 @@ function resolveEmployeeHome(dataDir2, freshInstall) {
   };
 }
 
-// src/config.ts
+// relay/src/config.ts
 function parseEmployeeConfigDir(v, dataDir2) {
   const t = (v ?? "").trim();
   if (t === "auto") {
@@ -10485,7 +10485,7 @@ function loadConfig() {
   };
 }
 
-// src/lan-ip.ts
+// relay/src/lan-ip.ts
 import * as os from "node:os";
 var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
 var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
@@ -10513,11 +10513,11 @@ function detectLanIp(interfaces = os.networkInterfaces()) {
   return "";
 }
 
-// src/history.ts
+// relay/src/history.ts
 import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, existsSync as existsSync3, mkdirSync as mkdirSync3, statSync, renameSync as renameSync2 } from "node:fs";
 import { dirname } from "node:path";
 
-// src/context-limit.ts
+// relay/src/context-limit.ts
 var CONTEXT_LIMIT_DEFAULT = 2e5;
 function envOverride() {
   const raw = process.env.CCR_CONTEXT_LIMIT;
@@ -10538,7 +10538,7 @@ function contextLimitOf(model) {
 }
 var REPLAY_CONTEXT_MAX = 15e5;
 
-// src/history.ts
+// relay/src/history.ts
 var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 300;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
@@ -10781,7 +10781,7 @@ function deriveTitle(prompt) {
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
 }
 
-// src/event-bus.ts
+// relay/src/event-bus.ts
 var EventBus = class {
   constructor(opts = {}) {
     this.opts = opts;
@@ -10855,13 +10855,13 @@ var EventBus = class {
   }
 };
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { appendFileSync as appendFileSync2, existsSync as existsSync19, mkdirSync as mkdirSync14, readFileSync as readFileSync22, realpathSync as realpathSync3, statSync as statSync7, writeFileSync as writeFileSync14 } from "node:fs";
 import { homedir as homedir12 } from "node:os";
 import { isAbsolute as isAbsolute7, join as join28, resolve as resolve8, sep as sep6 } from "node:path";
 
-// src/artifacts.ts
+// relay/src/artifacts.ts
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync as readFileSync4, realpathSync } from "node:fs";
 import { dirname as dirname2, extname, join as join3, normalize, relative, resolve as resolve2, sep } from "node:path";
 import { homedir as homedir2 } from "node:os";
@@ -11000,17 +11000,17 @@ function serveArtifact(name, res) {
   }
 }
 
-// src/org.ts
+// relay/src/org.ts
 import { readFileSync as readFileSync9, writeFileSync as writeFileSync5, existsSync as existsSync11, mkdirSync as mkdirSync6, rmSync, chmodSync } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { dirname as dirname3, join as join11 } from "node:path";
 
-// src/storage/read-mode.ts
+// relay/src/storage/read-mode.ts
 import { existsSync as existsSync10, mkdirSync as mkdirSync5, readFileSync as readFileSync8, readdirSync as readdirSync5, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 import { basename as basename2, join as join10 } from "node:path";
 
-// src/storage/sqlite.ts
+// relay/src/storage/sqlite.ts
 import { mkdirSync as mkdirSync4 } from "node:fs";
 import { join as join4 } from "node:path";
 import Database from "better-sqlite3";
@@ -11077,7 +11077,7 @@ function createSqlitePort(options) {
   return new SqliteStorage(options.dataDir, options.filename ?? DEFAULT_DB_FILENAME);
 }
 
-// src/storage/migrator.ts
+// relay/src/storage/migrator.ts
 function currentVersion(port) {
   const row = port.query("PRAGMA user_version")[0];
   const v = row?.user_version;
@@ -11117,7 +11117,7 @@ function runMigrations(port, migrations2) {
   return { from, to: currentVersion(port), applied };
 }
 
-// src/storage/checkpoint.ts
+// relay/src/storage/checkpoint.ts
 function writeCheckpoint(port, key) {
   if (!Number.isInteger(key.offset) || key.offset < 0 || key.offset > key.lineCount) {
     throw new Error(`checkpoint.writeCheckpoint: offset(${key.offset}) \u8D8A\u754C [0, lineCount(${key.lineCount})]\u2014\u2014\u7F16\u7A0B\u9519\u8BEF`);
@@ -11150,7 +11150,7 @@ function readCheckpoint(port, path6, current) {
   return checkpoint;
 }
 
-// src/storage/import-util.ts
+// relay/src/storage/import-util.ts
 import { createHash } from "node:crypto";
 import { readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
 function sha12(s) {
@@ -11172,12 +11172,12 @@ function statThenRead(file) {
   return { mtimeMs, text };
 }
 
-// src/storage/import-org.ts
+// relay/src/storage/import-org.ts
 import { createHash as createHash2 } from "node:crypto";
 import { existsSync as existsSync4 } from "node:fs";
 import { join as join5 } from "node:path";
 
-// src/storage/loss-report.ts
+// relay/src/storage/loss-report.ts
 var EXCERPT_MAX = 512;
 function appendLoss(port, record) {
   const excerpt = record.excerpt.length > EXCERPT_MAX ? `${record.excerpt.slice(0, EXCERPT_MAX - 1)}\u2026` : record.excerpt;
@@ -11187,7 +11187,7 @@ function appendLoss(port, record) {
   );
 }
 
-// src/storage/import-org.ts
+// relay/src/storage/import-org.ts
 var ORG_IMPORT_SCHEMA_VERSION = 1;
 var GROUP_STATUS = /* @__PURE__ */ new Set(["pending", "active", "parked", "archived"]);
 var GROUP_TIER = /* @__PURE__ */ new Set(["\u8F7B\u7ACB\u9879", "\u6B63\u7ECF\u7ACB\u9879"]);
@@ -11477,7 +11477,7 @@ function importOrg(port, orgDir2, opts) {
   return { skipped: false, counts: countAll(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
 }
 
-// src/storage/import-notification.ts
+// relay/src/storage/import-notification.ts
 import { existsSync as existsSync5 } from "node:fs";
 import { join as join6 } from "node:path";
 var NOTIFICATION_IMPORT_SCHEMA_VERSION = 1;
@@ -11668,7 +11668,7 @@ function importNotifications(port, dataDir2, opts) {
   return { skipped: false, counts: countAll2(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
 }
 
-// src/storage/import-session-task.ts
+// relay/src/storage/import-session-task.ts
 import { existsSync as existsSync6, readdirSync as readdirSync2, readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
 import { join as join7 } from "node:path";
 var SESSION_TASK_IMPORT_SCHEMA_VERSION = 1;
@@ -12072,7 +12072,7 @@ function importSessionTask(port, sources, opts) {
   };
 }
 
-// src/storage/import-acceptance.ts
+// relay/src/storage/import-acceptance.ts
 import { existsSync as existsSync7, readdirSync as readdirSync3 } from "node:fs";
 import { basename, join as join8 } from "node:path";
 var ACCEPTANCE_IMPORT_SCHEMA_VERSION = 1;
@@ -12324,7 +12324,7 @@ function importAcceptance(port, acceptanceDir2, opts) {
   };
 }
 
-// src/storage/import-artifact.ts
+// relay/src/storage/import-artifact.ts
 import { createHash as createHash3 } from "node:crypto";
 import { existsSync as existsSync8 } from "node:fs";
 import { normalize as normalize2 } from "node:path";
@@ -12527,7 +12527,7 @@ function importArtifacts(port, sources, opts) {
   };
 }
 
-// src/storage/import-dispatch-lesson.ts
+// relay/src/storage/import-dispatch-lesson.ts
 import { existsSync as existsSync9, readdirSync as readdirSync4, readFileSync as readFileSync7, statSync as statSync4 } from "node:fs";
 import { join as join9 } from "node:path";
 var DISPATCH_LESSON_IMPORT_SCHEMA_VERSION = 1;
@@ -12851,7 +12851,7 @@ function importDispatchLesson(port, sources, opts) {
   };
 }
 
-// src/storage/schema.ts
+// relay/src/storage/schema.ts
 var BASELINE_15_TABLES_DDL = `
 CREATE TABLE project (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, dir_fingerprint TEXT NOT NULL UNIQUE,
@@ -13007,7 +13007,7 @@ var migrations = [
   }
 ];
 
-// src/storage/read-mode.ts
+// relay/src/storage/read-mode.ts
 var READ_MODE_ENV = "CCR_STORAGE_READ_MODE";
 var READ_MODES = ["json", "sqlite", "shadow"];
 var SHADOW_DIFF_FILE = "shadow-diff.ndjson";
@@ -13455,7 +13455,7 @@ function diffProjection(domain, jsonVal, sqliteVal) {
   return rows;
 }
 
-// src/org.ts
+// relay/src/org.ts
 var COMMAND_CAPABILITY_MATRIX = {
   owner: ["org:write", "profile:write", "artifact:read"],
   operator: ["org:write", "profile:write", "artifact:read"],
@@ -13831,12 +13831,12 @@ function ensureOrgCli() {
   }
 }
 
-// src/projects.ts
+// relay/src/projects.ts
 import { copyFileSync, existsSync as existsSync13, mkdirSync as mkdirSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync7 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { isAbsolute as isAbsolute2, join as join13 } from "node:path";
 
-// src/routing.ts
+// relay/src/routing.ts
 import { existsSync as existsSync12, mkdirSync as mkdirSync7, readFileSync as readFileSync10, writeFileSync as writeFileSync6 } from "node:fs";
 import { join as join12 } from "node:path";
 function routingPath(dir) {
@@ -13902,7 +13902,7 @@ function tagRouting(gid, sessionId, tags, dir) {
   return { ok: true, entry: e };
 }
 
-// src/projects.ts
+// relay/src/projects.ts
 var BOARD_ENTRY_STATUSES = ["backlog", "claimed", "submitted", "ready_to_install", "done"];
 function projectsFilePath(dir) {
   return join13(dir ?? orgDir(), "projects.json");
@@ -14445,7 +14445,7 @@ function findStaleGroups(now, staleDays, dir, memberActivity) {
   return out;
 }
 
-// src/permission-policy.ts
+// relay/src/permission-policy.ts
 var WIRE_TO_NORMALIZED = {
   ask: "ask",
   plan: "plan",
@@ -14618,7 +14618,7 @@ function permissionPolicyEnabled() {
   return false;
 }
 
-// src/models.ts
+// relay/src/models.ts
 import { existsSync as existsSync14, readFileSync as readFileSync12 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import { join as join14 } from "node:path";
@@ -14648,13 +14648,13 @@ function listModels(fallbackDefault) {
   return out;
 }
 
-// src/agent-jsonl.ts
+// relay/src/agent-jsonl.ts
 import { spawn as spawn3 } from "node:child_process";
 import { accessSync as accessSync2, constants as constants4 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
-// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -44111,13 +44111,13 @@ function VJ(e, t) {
   return null;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { homedir as homedir7 } from "node:os";
 import { delimiter as pathDelimiter, join as join21 } from "node:path";
 
-// src/cli-path.ts
+// relay/src/cli-path.ts
 import { accessSync, constants as constants3, existsSync as existsSync16, readFileSync as readFileSync14 } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter as delimiter2, dirname as dirname7, join as join19 } from "node:path";
@@ -44217,7 +44217,7 @@ function resolveClaudeCliPath() {
   return null;
 }
 
-// src/allow-rules.ts
+// relay/src/allow-rules.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { mkdirSync as mkdirSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join20 } from "node:path";
@@ -44380,7 +44380,7 @@ var AllowRuleStore = class {
   }
 };
 
-// src/summarizer.ts
+// relay/src/summarizer.ts
 var MAX_SUMMARY = 80;
 function basename5(p) {
   if (typeof p !== "string") return "";
@@ -44841,7 +44841,7 @@ function taskDoneLabel(t) {
   return typeof t.id === "number" ? `#${t.id} ${t.content}` : t.content;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 function childEnv(opts) {
   const extra = [
     join21(homedir7(), "node/bin"),
@@ -45524,7 +45524,7 @@ var AgentSession = class {
   }
 };
 
-// src/proc-tree.ts
+// relay/src/proc-tree.ts
 import { execFile } from "node:child_process";
 function parseCpuTimeMs(s) {
   const raw = (s || "").trim();
@@ -45635,7 +45635,7 @@ async function killTree(root) {
   return "killed";
 }
 
-// src/agent-jsonl.ts
+// relay/src/agent-jsonl.ts
 var ENGINE_JSONL_PROFILES = {
   trae: {
     structured: false,
@@ -46057,7 +46057,7 @@ ${text}`;
   }
 };
 
-// src/agent-codebuddy.ts
+// relay/src/agent-codebuddy.ts
 var CODEBUDDY_CAPABILITIES = {
   resume: false,
   reinjection: true,
@@ -46089,7 +46089,7 @@ function createCodeBuddyAgent(opts) {
   return new CodeBuddyAgentSession(opts);
 }
 
-// src/agent-qwen.ts
+// relay/src/agent-qwen.ts
 var QWEN_CODE_CAPABILITIES = {
   resume: false,
   reinjection: true,
@@ -46121,7 +46121,7 @@ function createQwenCodeAgent(opts) {
   return new QwenCodeAgentSession(opts);
 }
 
-// src/agent-trae.ts
+// relay/src/agent-trae.ts
 var TRAE_CAPABILITIES = {
   resume: false,
   reinjection: true,
@@ -46153,7 +46153,7 @@ function createTraeAgent(opts) {
   return new TraeAgentSession(opts);
 }
 
-// src/engine-registry.ts
+// relay/src/engine-registry.ts
 function profileFor(engine, provider) {
   if (!provider) return void 0;
   const key = engine.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
@@ -46207,7 +46207,7 @@ function providerProfileFor(engine, provider) {
   return profileFor(engine, provider);
 }
 
-// src/engine-catalog.ts
+// relay/src/engine-catalog.ts
 var SIX_ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
 function engineCatalogSummary(claudeModelFallback = "") {
   const rolesByEngine = /* @__PURE__ */ new Map();
@@ -46285,7 +46285,7 @@ function catalogReadyEngines() {
   return new Set(engineCatalogSummary().filter((e) => e.state === "ready").map((e) => e.id));
 }
 
-// src/permission-audit.ts
+// relay/src/permission-audit.ts
 import { isAbsolute as isAbsolute6, join as join22, resolve as resolve7 } from "node:path";
 import { homedir as homedir8 } from "node:os";
 function resolveDirScope(cwd) {
@@ -46324,7 +46324,7 @@ function appendPermissionAudit(port, row) {
   }
 }
 
-// src/leader-duty.ts
+// relay/src/leader-duty.ts
 function receiptCandidates(snapshot, now) {
   return (snapshot.pending_receipts ?? []).filter((receipt) => receipt.reviewed !== true).map((receipt) => ({
     kind: "receipt",
@@ -46411,7 +46411,7 @@ function transitionDutyFeedCount(state = { consecutive_feeds: 0 }, signal, k3 = 
   return { state: { consecutive_feeds: consecutive }, shouldSleep: false };
 }
 
-// src/acceptance.ts
+// relay/src/acceptance.ts
 import { readFileSync as readFileSync16, writeFileSync as writeFileSync9, mkdirSync as mkdirSync11, existsSync as existsSync17, readdirSync as readdirSync7 } from "node:fs";
 import { join as join23 } from "node:path";
 var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
@@ -46712,7 +46712,7 @@ function applyCloudSubmits(id2, submits) {
   return added;
 }
 
-// src/plugin-config.ts
+// relay/src/plugin-config.ts
 import { readFileSync as readFileSync17 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
 import { join as join24 } from "node:path";
@@ -46730,7 +46730,7 @@ function readPluginConfig() {
   return out;
 }
 
-// src/title-gen.ts
+// relay/src/title-gen.ts
 async function generateTitle(task, model, onSid, cwd, configHome) {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
@@ -46785,7 +46785,7 @@ async function generateTitle(task, model, onSid, cwd, configHome) {
   }
 }
 
-// src/cron.ts
+// relay/src/cron.ts
 import { readFileSync as readFileSync18 } from "node:fs";
 import { join as join25 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
@@ -46856,7 +46856,7 @@ function cronTasksKey(tasks) {
   return JSON.stringify(tasks);
 }
 
-// src/task-store.ts
+// relay/src/task-store.ts
 import { readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync6 } from "node:fs";
 import { homedir as homedir10 } from "node:os";
 import path from "node:path";
@@ -46888,7 +46888,7 @@ function readTaskStoreTodos(cliSessionId, base) {
   return out;
 }
 
-// src/uploads.ts
+// relay/src/uploads.ts
 import { mkdirSync as mkdirSync12, writeFileSync as writeFileSync10 } from "node:fs";
 import path2 from "node:path";
 function tmpUploadDir(dataDir2) {
@@ -46954,7 +46954,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
   return saved;
 }
 
-// src/todo-hidden.ts
+// relay/src/todo-hidden.ts
 import { readFileSync as readFileSync20, writeFileSync as writeFileSync11 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47002,7 +47002,7 @@ function addHiddenTodoKey(sessionId, key) {
   }
 }
 
-// src/decision-notify.ts
+// relay/src/decision-notify.ts
 import { mkdirSync as mkdirSync13, readFileSync as readFileSync21, writeFileSync as writeFileSync12 } from "node:fs";
 import { join as join26 } from "node:path";
 var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
@@ -47274,7 +47274,7 @@ var DecisionNotificationWatcher = class {
   }
 };
 
-// src/agent-codex.ts
+// relay/src/agent-codex.ts
 import { spawn as spawn4 } from "node:child_process";
 import { randomUUID as randomUUID7 } from "node:crypto";
 import { existsSync as existsSync18, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync13 } from "node:fs";
@@ -47618,7 +47618,7 @@ var CodexAgentSession = class {
   }
 };
 
-// src/agent-zcode.ts
+// relay/src/agent-zcode.ts
 var ZCODE_ACTIVITY_CAPABILITIES = {
   native_status: false,
   operation_summary: false,
@@ -47626,7 +47626,7 @@ var ZCODE_ACTIVITY_CAPABILITIES = {
   approval: false
 };
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
@@ -52828,7 +52828,7 @@ ${task}
 - \u96F6\u786E\u8BA4\u76F4\u505A\uFF08\u6743\u9650 acceptEdits\uFF09\uFF1B\u53D1\u73B0\u8D85\u8303\u56F4\u4E8B\u9879\uFF0C\u56DE\u62A5\u800C\u975E\u6269\u6743\u3002`;
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID10 } from "node:crypto";
 import { readFileSync as readFileSync25, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
@@ -52836,7 +52836,7 @@ import { join as join30, dirname as dirname9, sep as sep7 } from "node:path";
 import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// node_modules/ws/wrapper.mjs
+// relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -52847,13 +52847,13 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
-// src/bridge.ts
+// relay/src/bridge.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, readFileSync as readFileSync24, readdirSync as readdirSync9, statSync as statSync8, writeFileSync as writeFileSync16 } from "node:fs";
 import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
-// src/injector.ts
+// relay/src/injector.ts
 import { spawn as spawn5, execFileSync } from "node:child_process";
 import { existsSync as existsSync20, mkdirSync as mkdirSync15, appendFileSync as appendFileSync3, readFileSync as readFileSync23, writeFileSync as writeFileSync15, rmSync as rmSync4 } from "node:fs";
 import path4, { join as join29 } from "node:path";
@@ -53190,7 +53190,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
 }
 
-// src/type-guard.ts
+// relay/src/type-guard.ts
 function guardConfig() {
   const num2 = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
@@ -53285,7 +53285,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
-// src/bridge.ts
+// relay/src/bridge.ts
 function pBody(p) {
   return p.body ?? p.text;
 }
@@ -55801,10 +55801,10 @@ function parseGateTools(raw) {
   return new Set((raw ?? def).split(",").map((s) => s.trim()).filter(Boolean));
 }
 
-// src/types.ts
+// relay/src/types.ts
 var SNAPSHOT_SCHEMA_VERSION = 1;
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -55987,6 +55987,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   ];
   const webRoot = webRootCandidates.find((p) => p && existsSync21(join30(p, "web-console", "index.html"))) ?? webRootCandidates[1];
   const consoleHtml = join30(webRoot, "web-console", "index.html");
+  const consoleHtml005 = join30(webRoot, "web-console", "index-005.html");
   const naclJs = join30(webRoot, "web-console", "nacl.js");
   const qrJs = join30(webRoot, "web-console", "qr.js");
   const mobileDir = join30(webRoot, "mobile") + sep7;
@@ -56053,6 +56054,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const html = readFileSync25(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/app2") {
+      if (!existsSync21(consoleHtml005)) {
+        res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync25(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -56796,7 +56805,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 }
 var connectionCounter = 0;
 
-// src/cloud-identity.ts
+// relay/src/cloud-identity.ts
 import { existsSync as existsSync22, readFileSync as readFileSync26, writeFileSync as writeFileSync18 } from "node:fs";
 import { join as join31 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
@@ -56879,7 +56888,7 @@ function loadOrCreateIdentity(dataDir2) {
   };
 }
 
-// src/cloud-client.ts
+// relay/src/cloud-client.ts
 import { homedir as homedir16 } from "node:os";
 var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
@@ -57522,7 +57531,7 @@ var CloudClient = class {
   }
 };
 
-// src/pairing.ts
+// relay/src/pairing.ts
 import { randomInt } from "node:crypto";
 var TTL_FLOOR_MS = 6e4;
 var TTL_CEIL_MS = 30 * 6e4;
@@ -57565,7 +57574,7 @@ function createPairingCodes(ttlMs) {
   };
 }
 
-// src/qr.ts
+// relay/src/qr.ts
 var import_qrcode_terminal = __toESM(require_main(), 1);
 function printQr(text, label) {
   console.log(`
@@ -57573,7 +57582,7 @@ ${label}`);
   import_qrcode_terminal.default.generate(text, { small: true });
 }
 
-// src/mdns.ts
+// relay/src/mdns.ts
 var import_bonjour_service = __toESM(require_dist(), 1);
 function advertiseRelay(port, name) {
   try {
@@ -57597,7 +57606,7 @@ function advertiseRelay(port, name) {
   }
 }
 
-// src/todo-tools-env.ts
+// relay/src/todo-tools-env.ts
 import { existsSync as existsSync23, readFileSync as readFileSync27, writeFileSync as writeFileSync19 } from "node:fs";
 import { join as join32 } from "node:path";
 import { homedir as homedir17 } from "node:os";
@@ -57634,7 +57643,7 @@ function ensureTodoToolsEnv() {
   }
 }
 
-// src/index.ts
+// relay/src/index.ts
 if (process.env.CCR_PARENT_PID) {
   const ts2 = () => (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19) + " ";
   for (const m of ["log", "error", "warn"]) {
