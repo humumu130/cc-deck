@@ -20,6 +20,7 @@
 | ⑥c-2 移动端四屏 | c38224c | DV6c-5 | 本文 |
 | ⑥c-3 m-detail 五 tab | 28d9970 | DV6c-4、DV6c-6 | 本文（派单模式首批：worker 实施，Leader 核验代提交） |
 | #150 收敛线 R1-R3 | 1d676e7 / 2830005 / 98e8904 | DV-ARCH 终态达成（本批不改用户可见面） | 005-arch-convergence-survey.md + 本文 DV-ARCH 节 |
+| ⑥d 出包切换 | a4f2593 | DV6d-1…DV6d-5（005 落位 index.html+定版 0.7.0-test.2） | 本文（派单模式：worker 实施，Leader 核验代提交） |
 
 ## B2 会话域补录（DV2-）
 
@@ -51,6 +52,15 @@ B2 无独立 report（worker 交付短式提交），已知持久偏差在此补
 - **DV6c-4 B2 导出面**（c3）：B2 IIFE 尾挂 `window.__ccDeck005B2 = { S, canCmd, sendPrompt }` 供 005-mobile IIFE 复用会话状态、只读判定与发送链（sendMessage 强耦合桌面 composer，导出 sid+text 包装，命令类型同源 COMMAND_MESSAGE/COMMAND_EXT_INPUT）。属 DV-ARCH 双连接过渡形态的延展——域间数据通道从 B4 桥单通道扩为 B2+B4 双导出面；终态收敛（地基唯一持连+域订阅 API）时一并拆除。
 - **DV6c-5 移动端演示数据→真数据授权清单式总备案**（c2）：m-inbox/m-notify/m-team/m-project/m-settings 六屏静态演示替换为 B4 桥真渲染（导航栈/待处理3+项目子分组/通知三键/三 tab/摘要四数/设置行真数字），整面替换不逐条备案，以 ⑥c 任务书为授权清单（同 DV2-3 口径）。
 - **DV6c-6 移动端审批仅浏览验证**（c3）：m-detail wait-card 真数据视觉（标题/摘要取 waiting_request），两按钮（拒绝并说明/允许一次）点击 toast 引导「审批操作请在桌面会话域完成」。产品口径：移动端不做真审批命令链（误触风险+确认场景需要完整上下文），非能力缺失。
+
+## ⑥d 出包切换批（DV6d-）
+
+- **DV6d-1 旧版留档路径**（⑥d，a4f2593）：旧版 12,477 行移至 `web-console-legacy/index-legacy.html`（非 web-console/ 内）——避免被 CF assets 整目录上传与 Tauri frontendDist 烙进二进制（+776KB 死重）。留档保持 0.7.0-test.1 原样（含其版本常量），不参与任何 grep 一致性口径；施工载体 index-005.html 退役（git 历史可考，防双源漂移）。五服务面（LAN relay `/`、ECS 云桥、CF `/app`、Tauri 壳、Electron）全部硬编码认 index.html 文件名——内容替换即单点切换，零服务层改动。
+- **DV6d-2 PWA 头补齐**（⑥d）：005 原型无 PWA 头（原型无「加主屏」诉求）；成品从旧版移植 manifest/apple-touch-icon link（注释口径同 Legacy），保住移动端加主屏既有能力。属产品能力延续而非视觉偏差；manifest/start_url 与旧版同源，已装 PWA 快捷方式无感。
+- **DV6d-3 title 定版**（⑥d）：原型 title「cc-deck · A 指挥桥视觉原型」为原型期口径；成品 title=「CC Deck」（旧版同值）。
+- **DV6d-4 关于页版本口径**（⑥d）：005 原型无版本显示；成品关于页（桌面 tag+setSub+移动 IIFE 三处）统一 `window.__shellVer || CONSOLE_VERSION`——对齐旧版桌面壳版本优先逻辑（Tauri 注入 __shellVer 时显示壳版本，CI 烙印随 tag 走）。「005 换壳 · preview」等预发角标文案随定版退役。
+- **DV6d-5 旧移动壳 /m 与 nacl.js/qr.js 暂留**（⑥d）：新壳不引用 nacl/qr（005 零外部 script），relay 三条留置路由（/nacl.js /qr.js /m）无害保留——旧移动壳 mobile/ 与 PWA 资产原位不动，旧版退役节奏后续另议（用户拍板项）。
+- **版本工具链口径更新（随批，非偏差）**：version.mjs 三处正则（VERSION 格式闸门放行 `-test.N/-snap.N` 预发段·四段号仍禁；CONSOLE_VERSION 落点前导空白容忍；主页三处预发段对称）+ release-guard 烙印检查通道感知（预发=参数与 VERSION 全等+expo 预发段全等防残留；正式版=一刀切禁令原样）。动因：0.7.0 起三线统一，预发通道版本进单一事实源（plugin.json 源内 0.7.0-test.1 为既成事实）。
 
 ## 架构级（DV-ARCH）
 
