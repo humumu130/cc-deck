@@ -19,7 +19,14 @@ await build({
   format: "esm",
   target: "node18", // #17（2026-09-10）：内嵌 relay 真实下限=18（源码用 top-level await + 全局 fetch，node14 转译救不了）；老 Node 由壳侧 err 引导升级（见 main.rs EMBEDDED_RELAY_ERR）
   outfile: join(out, "scripts", "relay.mjs"),
-  external: ["bufferutil", "utf-8-validate"],
+  // better-sqlite3 是原生模块（.node 二进制）不可内联：bundle 进 ESM 后其运行时依赖
+  // bindings 包的 __filename 在 ESM 语境未定义 → 任何环境首次 boot 即 ReferenceError
+  // （2026-10-07 部署单沙盒首 boot 实锤，此前测试全走 tsx 源码未踩中）。运行时从
+  // bundle 同目录 node_modules 解析——插件/桌面两形态发布都须随包携带
+  // node_modules 内 better-sqlite3 完整运行时 require 闭包：bindings、
+  // file-uri-to-path（缺 file-uri-to-path 同样 boot 必崩，2026-10-07 沙盒
+  // 二度实锤；含 build/Release 原生二进制）
+  external: ["bufferutil", "utf-8-validate", "better-sqlite3"],
   define: { "process.env.CC_DECK_PLUGIN": '"1"' },
   // banner 里不声明 createRequire 标识符——源码（如 cli-path.ts）静态 import { createRequire }
   // 时 esbuild 会原样保留该 import，banner 再 import 一份 = 重复声明 SyntaxError，
