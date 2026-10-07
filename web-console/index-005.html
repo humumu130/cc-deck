@@ -1101,7 +1101,7 @@
             <button class="rail-btn" data-domain="team" title="团队"><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg><span class="badge" data-team-badge aria-label="团队有 0 项需处理" title="团队 · 0 项需处理" hidden>0</span></button>
             <button class="rail-btn" data-domain="project" title="项目"><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></button>
             <div class="rail-spring"></div>
-            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" data-stub="B5" data-notify-badge aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
+            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" data-notify-badge hidden aria-label="通知有 0 项需行动" title="通知 · 0 项需行动">0</span></button>
             <button class="rail-btn" data-domain="settings" title="设置"><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></button>
             <button class="theme-toggle rail-btn" type="button" data-theme-toggle title="切换浅色主题" aria-label="切换浅色主题"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></button>
           </nav>
@@ -2644,16 +2644,739 @@
             </script>
           </section>
 
-          <section class="desktop-screen" id="d-project" data-stub="B4">
-            <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn">＋</button></div><div class="queue-group">活跃项目 · 2</div><div class="queue-card selected"><div class="row"><i class="status-dot done"></i><strong>cc-deck</strong><span class="tag action">需行动 2</span></div><p>~/dev/cc-deck · 6 会话 · 1 团队</p></div><div class="queue-card"><div class="row"><i class="status-dot waiting"></i><strong>windclaw-qclaw</strong></div><p>~/dev/windclaw · 1 会话 · 等构建</p></div><div class="queue-group">已隐藏 · 1</div><div class="queue-card" data-hidden-project title="右键恢复显示"><div class="row"><i class="status-dot"></i><strong>legacy-scripts</strong></div><p>右键恢复 · 3 天前活跃</p></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2>cc-deck</h2><span class="tag action">需行动 2</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">目录 ~/dev/cc-deck · realpath 已归一 · 6 会话 · 1 团队 · 输出物 46</div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body"><div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div><div class="project-overview"><div class="metric"><b>6</b><span>会话</span></div><div class="metric"><b>1</b><span>活跃团队</span></div><div class="metric"><b>46</b><span>输出物</span></div><div class="metric"><b>2</b><span>需行动</span></div></div><div class="aggregate-grid"><div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话</h4><p>0.6.0-test.19 出包 · 待收单</p><p>ui-review 走查 · 刚刚活跃</p><button class="secondary-btn">在会话中查看</button></div><div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队</h4><p>cc-deck M1 攻坚团 · 6 成员</p><p>4 进行中 · 2 待收单</p><button class="secondary-btn">在团队中查看</button></div><div class="aggregate-card"><h4>▣ 输出物</h4><p>docs/release-check.md · 刚刚</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><p>0.6.0-test.19.apk · 1 小时前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><button class="secondary-btn">查看来源</button></div><div class="aggregate-card"><h4>✓ 验收单</h4><p>0.6.0-test.19 · 回填 2/3</p><p>0.6.0-test.18 · 修复中</p><button class="secondary-btn">在原域处理</button></div></div></div><footer class="workspace-footer"><span class="desktop-only-note">项目不产生第二写面 · 所有动作回原域</span></footer></section>
-            <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action">需行动 2</span></div><div class="inspector-copy">0.6.0-test.19 待收单<br>worker-mobile 失联需接替</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span>46</span></div><div class="artifact-row">release-check.md <span>会话</span></div><div class="artifact-row">test.19.apk <span>会话</span></div></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
+          <section class="desktop-screen" id="d-project">
+            <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起立项 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="tag action" data-project-action-tag style="display:none">需行动 0</span><span class="source-badge" data-project-source></span></div><div class="workspace-sub" data-project-sub>等待 relay SNAPSHOT…</div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">项目不产生第二写面 · 所有动作回原域</span></footer></section>
+            <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
+            <script>
+              (() => {
+                "use strict";
+                // #143-B4 项目域（只读聚合）域内脚本：声明 WS 只读分接桥（B4-D2）+ SNAPSHOT/
+                // 增量帧本地聚合 + 只读渲染。边界：只操作 #d-project 内部 DOM 与共享桥全局；
+                // 不改 <style>、不改底部地基脚本（偏差与契约见 specs/005-port-B4-report.md）。
+                const section = document.getElementById("d-project");
+                if (!section) return;
+
+                // ---------- 通用工具（转义/相对时间/引擎徽标/toast 均按地基同款口径） ----------
+                const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+                const relTime = (ts) => {
+                  const t = Number(ts || 0);
+                  if (!t) return "";
+                  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+                  if (sec < 60) return "刚刚";
+                  const min = Math.floor(sec / 60);
+                  if (min < 60) return min + " 分钟前";
+                  const hr = Math.floor(min / 60);
+                  if (hr < 24) return hr + " 小时前";
+                  const day = Math.floor(hr / 24);
+                  if (day < 30) return day + " 天前";
+                  const dt = new Date(t);
+                  return String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+                };
+                const uuid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : "cmd-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10));
+                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["CodeBuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
+                const engineIcon = (cls) => cls === "claude" ? "chat" : cls === "codex" ? "code" : cls === "trae" ? "sliders" : "server";
+                const engineBadge = (engineKey) => {
+                  const key = engineKey || "claude";
+                  const pair = ENGINES[key] || [key, ""];
+                  return '<span class="engine-badge ' + escapeHtml(pair[1]) + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + engineIcon(pair[1]) + '"></use></svg>' + escapeHtml(pair[0]) + "</span>";
+                };
+                const toast = (() => {
+                  const node = document.getElementById("toast");
+                  let timer = null;
+                  return (message) => {
+                    if (!node) return;
+                    const host = document.querySelector("#stage-mobile.active") ? document.querySelector(".mobile-frame") : document.querySelector(".desktop-frame");
+                    if (host && node.parentElement !== host) host.append(node);
+                    node.textContent = message;
+                    node.classList.add("show");
+                    clearTimeout(timer);
+                    timer = setTimeout(() => node.classList.remove("show"), 2200);
+                  };
+                })();
+
+                // ---------- WS 只读分接 + 共享桥（#d-notify 域脚本消费同一实例） ----------
+                const NativeWebSocket = window.WebSocket;
+                const sockets = new Set();
+                const subscribers = new Set();
+                const ackWaiters = new Map();
+                let activeSocket = null;
+
+                const doneOfNotification = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
+                const normalizeNotification = (item) => {
+                  if (!item || typeof item !== "object" || typeof item.key !== "string" || !item.key) return null;
+                  return {
+                    key: item.key,
+                    kind: typeof item.kind === "string" ? item.kind : "system",
+                    group: item.group === "action" || item.group === "attention" || item.group === "activity" ? item.group : "activity",
+                    severity: typeof item.severity === "string" ? item.severity : "info",
+                    title: typeof item.title === "string" && item.title ? item.title : (item.kind || "通知"),
+                    body: typeof item.body === "string" ? item.body : "",
+                    sourceContext: item.sourceContext && typeof item.sourceContext === "object" ? item.sourceContext : {},
+                    actionable: item.actionable === true,
+                    created_at: Number(item.created_at) || 0,
+                    resolved_at: item.resolved_at,
+                    handled_at: item.handled_at,
+                    dismissed_at: item.dismissed_at,
+                  };
+                };
+
+                const guessToken = (() => {
+                  try { return new URLSearchParams(location.search).get("token") || localStorage.getItem("cc-deck-005-token") || ""; } catch (_) { return ""; }
+                })();
+                const bridge = {
+                  hasSnapshot: false,
+                  snapshot: null,
+                  sessions: new Map(),
+                  notifications: [],
+                  notificationsSupported: false,
+                  pendingConfirms: [],
+                  accepts: [],
+                  projects: [],
+                  relayName: location.host || "relay",
+                  homedir: "",
+                  connection: !location.protocol.startsWith("http") ? "unconfigured" : guessToken ? "connecting" : "unconfigured",
+                  notifyAckUnsupported: false,
+                  escapeHtml, relTime, toast, engineBadge, doneOfNotification,
+                  waitingText() {
+                    if (this.connection === "unconfigured") return "未配置 · 请通过带 ?token= 的 relay 同源链接打开";
+                    if (this.hasSnapshot) return "";
+                    if (this.connection === "online") return "已连接 · 等待 relay SNAPSHOT…";
+                    if (this.connection === "connecting") return "连接 relay 中…";
+                    return "relay 已断开 · 等待地基重连后同步快照";
+                  },
+                  railJump(domain) {
+                    const safe = String(domain || "").replace(/[^a-z-]/g, "");
+                    const button = safe && document.querySelector('.rail-btn[data-domain="' + safe + '"]');
+                    if (button) button.click();
+                  },
+                  clickTab(selector, label) {
+                    const bar = document.querySelector(selector);
+                    if (!bar) return;
+                    [...bar.querySelectorAll("button")].find((button) => button.textContent.includes(label))?.click();
+                  },
+                  selectSessionCard(sessionId) {
+                    const sid = String(sessionId || "");
+                    if (!sid) return;
+                    const card = document.querySelector('#d-session [data-session-card="' + (window.CSS && CSS.escape ? CSS.escape(sid) : sid.replace(/"/g, '\\"')) + '"]');
+                    if (card) card.click();
+                    else toast("来源会话不在当前列表");
+                  },
+                  openAcceptance(id) {
+                    const safe = String(id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+                    if (!safe) return;
+                    const url = new URL("/acceptance/" + safe, location.baseURI);
+                    const opened = window.open(url.href, "_blank", "noopener");
+                    if (!opened) toast("弹窗被浏览器拦截 · 请允许后重试");
+                  },
+                  bannerOf(text) { return bannerNode(text); },
+                  subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
+                  sendCommand(type, payload, timeoutMs = 8000) {
+                    return new Promise((resolve) => {
+                      const socket = [...sockets].find((item) => item.readyState === 1) || null;
+                      if (!socket) { resolve(null); return; }
+                      const command_id = uuid();
+                      const timer = setTimeout(() => { ackWaiters.delete(command_id); resolve(null); }, timeoutMs);
+                      ackWaiters.set(command_id, { resolve, timer });
+                      try { socket.send(JSON.stringify({ command_id, type, ts: Date.now(), payload })); }
+                      catch (_) { clearTimeout(timer); ackWaiters.delete(command_id); resolve(null); }
+                    });
+                  },
+                };
+                window.__ccDeck005B4 = bridge;
+
+                function applySnapshot(payload) {
+                  const p = payload && typeof payload === "object" ? payload : {};
+                  bridge.sessions = new Map();
+                  for (const session of Array.isArray(p.sessions) ? p.sessions : []) {
+                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, session);
+                  }
+                  bridge.notifications = Array.isArray(p.notifications) ? p.notifications.map(normalizeNotification).filter(Boolean) : [];
+                  bridge.notificationsSupported = Object.prototype.hasOwnProperty.call(p, "notifications");
+                  bridge.pendingConfirms = Array.isArray(p.org_confirms) ? p.org_confirms.filter((c) => c && typeof c.id === "string") : [];
+                  bridge.accepts = Array.isArray(p.acceptances) ? p.acceptances.filter((a) => a && typeof a.id === "string") : [];
+                  bridge.projects = Array.isArray(p.projects) ? p.projects.filter((g) => g && typeof g.id === "string") : [];
+                  bridge.relayName = typeof p.relay_name === "string" && p.relay_name ? p.relay_name : (location.host || "relay");
+                  bridge.homedir = typeof p.homedir === "string" ? p.homedir : "";
+                  bridge.snapshot = p;
+                  bridge.hasSnapshot = true;
+                  const version = typeof p.schema_version === "number" ? p.schema_version : 0;
+                  if (version >= 1) bridge.notifyAckUnsupported = false;
+                }
+
+                const SESSION_MERGE_TYPES = new Set(["SESSION_UPDATED", "SESSION_HEARTBEAT", "SESSION_DONE", "SESSION_ERROR", "SESSION_WAITING", "SESSION_WAITING_RESOLVED"]);
+                function handleFrame(frame) {
+                  if (!frame || typeof frame.type !== "string") return;
+                  if (frame.type === "COMMAND_ACK") {
+                    const waiter = ackWaiters.get(frame.command_id);
+                    if (waiter) { ackWaiters.delete(frame.command_id); clearTimeout(waiter.timer); waiter.resolve(frame); }
+                    return;
+                  }
+                  let changed = false;
+                  if (frame.type === "SNAPSHOT") { applySnapshot(frame.payload); changed = true; }
+                  else if (frame.type === "NOTIFICATIONS_UPDATED") {
+                    const items = frame.payload && Array.isArray(frame.payload.items) ? frame.payload.items : [];
+                    bridge.notifications = items.map(normalizeNotification).filter(Boolean);
+                    bridge.notificationsSupported = true;
+                    changed = true;
+                  } else if (frame.type === "ORG_CONFIRM_UPDATED") {
+                    bridge.pendingConfirms = frame.payload && Array.isArray(frame.payload.pending) ? frame.payload.pending.filter((c) => c && typeof c.id === "string") : [];
+                    changed = true;
+                  } else if (frame.type === "ACCEPTANCES_UPDATED") {
+                    bridge.accepts = frame.payload && Array.isArray(frame.payload.acceptances) ? frame.payload.acceptances.filter((a) => a && typeof a.id === "string") : [];
+                    changed = true;
+                  } else if (frame.type === "PROJECTS_UPDATED") {
+                    bridge.projects = frame.payload && Array.isArray(frame.payload.groups) ? frame.payload.groups.filter((g) => g && typeof g.id === "string") : [];
+                    changed = true;
+                  } else if (frame.type === "SESSION_DELETED") {
+                    if (typeof frame.session_id === "string" && bridge.sessions.delete(frame.session_id)) changed = true;
+                  } else if (frame.type === "SESSION_CREATED") {
+                    if (typeof frame.session_id === "string" && !bridge.sessions.has(frame.session_id) && frame.payload && typeof frame.payload === "object") {
+                      bridge.sessions.set(frame.session_id, { ...frame.payload, session_id: frame.session_id, started_at: frame.ts, updated_at: frame.ts, status: frame.payload.status || "WORKING" });
+                      changed = true;
+                    }
+                  } else if (SESSION_MERGE_TYPES.has(frame.type)) {
+                    const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
+                    if (session && frame.payload && typeof frame.payload === "object") {
+                      Object.assign(session, frame.payload, { session_id: frame.session_id, updated_at: frame.ts || session.updated_at });
+                      changed = true;
+                    }
+                  }
+                  if (changed) for (const fn of subscribers) { try { fn(frame.type); } catch (_) {} }
+                }
+
+                class TappedWebSocket extends NativeWebSocket {
+                  constructor(...args) {
+                    super(...args);
+                    sockets.add(this);
+                    activeSocket = this;
+                    bridge.connection = "connecting";
+                    this.addEventListener("message", (event) => {
+                      let frame = null;
+                      try { frame = JSON.parse(event.data); } catch (_) { return; }
+                      handleFrame(frame);
+                    });
+                    this.addEventListener("open", () => {
+                      if (activeSocket === this) bridge.connection = "online";
+                      for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
+                    });
+                    const settle = () => {
+                      sockets.delete(this);
+                      if (activeSocket === this) {
+                        activeSocket = null;
+                        bridge.connection = "offline";
+                        for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
+                      }
+                    };
+                    this.addEventListener("close", settle);
+                    this.addEventListener("error", settle);
+                  }
+                }
+                window.WebSocket = TappedWebSocket;
+
+                // ---------- 项目域聚合与渲染 ----------
+                const els = {
+                  queue: section.querySelector("[data-project-queue]"),
+                  name: section.querySelector("[data-project-name]"),
+                  actionTag: section.querySelector("[data-project-action-tag]"),
+                  source: section.querySelector("[data-project-source]"),
+                  sub: section.querySelector("[data-project-sub]"),
+                  body: section.querySelector("[data-project-body]"),
+                  riskCount: section.querySelector("[data-project-risk-count]"),
+                  riskCopy: section.querySelector("[data-project-risk-copy]"),
+                  artifactCount: section.querySelector("[data-project-artifact-count]"),
+                  artifactRows: section.querySelector("[data-project-artifact-rows]"),
+                };
+                let selectedKey = "";
+
+                const normDir = (dir) => String(dir || "").replace(/\/+$/, "");
+                const underAnchor = (cwd, anchor) => { const c = normDir(cwd), a = normDir(anchor); return !!a && (c === a || c.startsWith(a + "/")); };
+                const shortenDir = (dir) => {
+                  const d = normDir(dir), h = normDir(bridge.homedir);
+                  if (h && (d === h || d.startsWith(h + "/"))) return "~" + d.slice(h.length);
+                  return d || "/";
+                };
+                const basename = (path) => String(path || "").split("/").filter(Boolean).pop() || String(path || "");
+                const STATUS_WORD = { WORKING: "运行中", WAITING: "待处理", ERROR: "错误", DONE: "完成" };
+                const STATUS_DOT = { WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" };
+                const STATUS_TAG = { WORKING: "info", WAITING: "action", ERROR: "danger", DONE: "done" };
+
+                function deriveEntries() {
+                  const sessions = [...bridge.sessions.values()].filter((s) => s && typeof s.session_id === "string" && typeof s.cwd === "string");
+                  const entries = bridge.projects.map((group) => ({ key: "g:" + group.id, group, name: String(group.name || group.id), anchor: String(group.anchor_dir || ""), sessions: sessions.filter((s) => underAnchor(s.cwd, group.anchor_dir)) }));
+                  const matched = new Set(sessions.filter((s) => entries.some((e) => underAnchor(s.cwd, e.anchor))).map((s) => s.session_id));
+                  const byCwd = new Map();
+                  for (const session of sessions) {
+                    if (matched.has(session.session_id)) continue;
+                    const dir = normDir(session.cwd) || "/";
+                    if (!byCwd.has(dir)) byCwd.set(dir, []);
+                    byCwd.get(dir).push(session);
+                  }
+                  for (const [dir, list] of byCwd) entries.push({ key: "c:" + dir, group: null, name: basename(dir) || dir, anchor: dir, sessions: list });
+                  const latest = (entry) => Math.max(0, ...entry.sessions.map((s) => Number(s.updated_at) || 0));
+                  return entries.sort((a, b) => latest(b) - latest(a) || (Number(b.group?.updated_at) || 0) - (Number(a.group?.updated_at) || 0));
+                }
+
+                function projectActionItems(entry) {
+                  const items = [];
+                  if (!entry) return items;
+                  const sids = new Set(entry.sessions.map((s) => s.session_id));
+                  for (const n of bridge.notifications) {
+                    if (doneOfNotification(n) || n.actionable !== true) continue;
+                    if (n.sourceContext && sids.has(n.sourceContext.sessionId)) items.push(n.title || n.kind);
+                  }
+                  if (entry.group) {
+                    for (const confirm of bridge.pendingConfirms) {
+                      if (!confirm.payload || confirm.payload.gid !== entry.group.id) continue;
+                      const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOfNotification(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
+                      if (!covered) items.push(confirm.title || "组织确认单");
+                    }
+                  }
+                  return items;
+                }
+
+                function artifactsOf(entry) {
+                  if (!entry) return [];
+                  const seen = new Map();
+                  const ordered = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                  for (const session of ordered) {
+                    for (const artifact of Array.isArray(session.artifacts) ? session.artifacts : []) {
+                      if (!artifact || typeof artifact.path !== "string" || artifact.exists === false) continue;
+                      if (!seen.has(artifact.path)) seen.set(artifact.path, { path: artifact.path, last_at: Number(artifact.last_at) || Number(artifact.first_at) || 0, session });
+                    }
+                  }
+                  return [...seen.values()].sort((a, b) => b.last_at - a.last_at);
+                }
+
+                function bannerNode(text) {
+                  const node = document.createElement("div");
+                  node.className = "readonly-banner";
+                  node.setAttribute("role", "status");
+                  node.textContent = text;
+                  return node;
+                }
+                function nodesFrom(markup) {
+                  const template = document.createElement("template");
+                  template.innerHTML = markup;
+                  return template.content;
+                }
+
+                function renderQueue(entries) {
+                  const activeList = entries.filter((e) => !e.group || e.group.status === "active");
+                  const pendingList = entries.filter((e) => e.group && e.group.status === "pending");
+                  const parkedList = entries.filter((e) => e.group && (e.group.status === "parked" || e.group.status === "archived"));
+                  const card = (entry) => {
+                    const hot = entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR");
+                    const dot = entry.sessions.length === 0 ? "" : hot ? "waiting" : "done";
+                    const actions = projectActionItems(entry).length;
+                    return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + "</div><p>" + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未立项") + "</p></div>";
+                  };
+                  const group = (label, list) => list.length ? '<div class="queue-group">' + escapeHtml(label) + " · " + list.length + "</div>" + list.map(card).join("") : "";
+                  const markup = group("活跃项目", activeList) + group("待确认立项", pendingList) + group("挂起/归档", parkedList);
+                  els.queue.replaceChildren(nodesFrom(markup));
+                }
+
+                function renderHead(entry) {
+                  els.name.textContent = entry ? entry.name : "项目";
+                  const actions = projectActionItems(entry);
+                  if (entry && actions.length > 0) {
+                    els.actionTag.style.display = "";
+                    els.actionTag.textContent = "需行动 " + actions.length;
+                  } else els.actionTag.style.display = "none";
+                  els.source.textContent = bridge.relayName;
+                  if (entry) {
+                    els.sub.textContent = "目录 " + shortenDir(entry.anchor) + " · realpath 已归一 · " + entry.sessions.length + " 会话 · " + (entry.group ? 1 : 0) + " 团队 · 输出物 " + artifactsOf(entry).length;
+                  } else els.sub.textContent = "—";
+                }
+
+                function overviewMarkup(entry) {
+                  const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                  const artifacts = artifactsOf(entry);
+                  const actions = projectActionItems(entry);
+                  const sessionLines = sessions.slice(0, 2).map((s) => "<p>" + escapeHtml(s.title || s.initial_prompt || s.session_id) + " · " + (STATUS_WORD[s.status] || "完成") + "</p>").join("") || "<p>暂无会话</p>";
+                  const teamLines = entry.group
+                    ? "<p>" + escapeHtml(entry.group.name) + " · " + (Array.isArray(entry.group.headcount) ? entry.group.headcount.length : 0) + " 编制</p><p>" + (entry.group.status === "active" ? "进行中" : entry.group.status === "pending" ? "待确认立项" : "已挂起/归档") + "</p>"
+                    : "<p>该目录未立项</p><p>立项确认在团队域发起</p>";
+                  const artifactLines = artifacts.slice(0, 2).map((a) => "<p>" + escapeHtml(basename(a.path)) + " · " + escapeHtml(relTime(a.last_at)) + '</p><div class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div>").join("") || "<p>暂无输出物</p>";
+                  const accLines = bridge.accepts.slice(0, 2).map((a) => "<p>" + escapeHtml(a.title) + " · " + (a.submitted ? "回填 " + a.judged + "/" + a.total : "待填 " + a.total + " 项") + "</p>").join("") || "<p>暂无验收单</p>";
+                  return '<div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div>'
+                    + '<div class="project-overview"><div class="metric"><b>' + entry.sessions.length + '</b><span>会话</span></div><div class="metric"><b>' + (entry.group ? 1 : 0) + '</b><span>活跃团队</span></div><div class="metric"><b>' + artifacts.length + '</b><span>输出物</span></div><div class="metric"><b>' + actions.length + '</b><span>需行动</span></div></div>'
+                    + '<div class="aggregate-grid">'
+                    + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话</h4>' + sessionLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (sessions[0] ? ' data-jump-session="' + escapeHtml(sessions[0].session_id) + '"' : "") + '>在会话中查看</button></div>'
+                    + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队</h4>' + teamLines + '<button class="secondary-btn" type="button" data-domain-jump="team">在团队中查看</button></div>'
+                    + '<div class="aggregate-card"><h4>▣ 输出物</h4>' + artifactLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (artifacts[0] ? ' data-jump-session="' + escapeHtml(artifacts[0].session.session_id) + '"' : "") + '>查看来源</button></div>'
+                    + '<div class="aggregate-card"><h4>✓ 验收单</h4>' + accLines + '<button class="secondary-btn" type="button" data-domain-jump="notify">在原域处理</button></div>'
+                    + "</div>";
+                }
+
+                function sessionsTabMarkup(entry) {
+                  if (!entry.sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>';
+                  const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || s.cwd || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div></div>").join("");
+                  return '<div class="queue-group">会话 · ' + entry.sessions.length + "</div>" + rows;
+                }
+
+                function teamTabMarkup(entry) {
+                  if (entry.group) return '<div class="readonly-banner">团队视图与任务板在团队域维护 · 组 ' + escapeHtml(entry.group.name) + " · 编制 " + (Array.isArray(entry.group.headcount) ? entry.group.headcount.length : 0) + ' 人。项目页不复制团队状态。</div><button class="secondary-btn" type="button" data-domain-jump="team">在团队中查看</button>';
+                  return '<div class="readonly-banner">该目录未立项。立项确认在团队域发起（组织命令），项目页不产生第二写面。</div><button class="secondary-btn" type="button" data-domain-jump="team">去团队域</button>';
+                }
+
+                function taskTabMarkup() {
+                  return '<div class="readonly-banner">任务板随团队域维护（按需经 COMMAND_PROJECT_DETAIL 拉取），项目页不复制任务状态。</div><button class="secondary-btn" type="button" data-domain-jump="team">在团队看板处理</button>';
+                }
+
+                function artifactsTabMarkup(entry) {
+                  const artifacts = artifactsOf(entry);
+                  if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>';
+                  const anchor = normDir(entry.anchor);
+                  const rows = artifacts.map((a) => {
+                    const rel = a.path !== anchor && a.path.startsWith(anchor + "/") ? a.path.slice(anchor.length + 1) : basename(a.path);
+                    return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></span></div>";
+                  }).join("");
+                  return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows;
+                }
+
+                function acceptancesTabMarkup() {
+                  if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>';
+                  const rows = bridge.accepts.map((a) => '<div class="queue-card" data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + a.total + " 项 · 已回填 " + a.judged + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
+                  return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows;
+                }
+
+                function renderInspector(entry) {
+                  const actions = projectActionItems(entry);
+                  if (actions.length) {
+                    els.riskCount.style.display = "";
+                    els.riskCount.textContent = "需行动 " + actions.length;
+                    els.riskCopy.innerHTML = actions.slice(0, 3).map((line) => escapeHtml(line)).join("<br>");
+                  } else {
+                    els.riskCount.style.display = "none";
+                    els.riskCopy.textContent = entry ? "无待行动项" : "—";
+                  }
+                  const artifacts = artifactsOf(entry);
+                  els.artifactCount.textContent = String(artifacts.length);
+                  els.artifactRows.replaceChildren(nodesFrom(artifacts.slice(0, 4).map((a) => '<div class="artifact-row">' + escapeHtml(basename(a.path)) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>").join("")));
+                }
+
+                function bodyPanes() {
+                  const panes = els.body ? [...els.body.querySelectorAll(":scope > .workspace-pane")] : [];
+                  return panes.length >= 6 ? panes : null;
+                }
+                function setPaneContents(markups) {
+                  if (!els.body) return;
+                  const panes = bodyPanes();
+                  if (panes) {
+                    markups.forEach((markup, index) => {
+                      const pane = panes[index];
+                      if (!pane) return;
+                      pane.replaceChildren(nodesFrom(markup));
+                      delete pane.dataset.stub;
+                    });
+                  } else els.body.replaceChildren(nodesFrom(markups[0] || ""));
+                }
+
+                function render() {
+                  const waiting = bridge.waitingText();
+                  els.queue.dataset.relayState = bridge.hasSnapshot ? "snapshot" : bridge.connection;
+                  if (waiting) {
+                    els.queue.replaceChildren(bannerNode(waiting));
+                    els.name.textContent = "项目";
+                    els.actionTag.style.display = "none";
+                    els.source.textContent = bridge.relayName;
+                    els.sub.textContent = waiting;
+                    setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
+                    els.riskCount.style.display = "none";
+                    els.riskCopy.textContent = waiting;
+                    els.artifactCount.textContent = "0";
+                    els.artifactRows.replaceChildren();
+                    return;
+                  }
+                  const entries = deriveEntries();
+                  if (!selectedKey || !entries.some((e) => e.key === selectedKey)) {
+                    const hot = entries.find((e) => projectActionItems(e).length > 0) || entries[0];
+                    selectedKey = hot ? hot.key : "";
+                  }
+                  renderQueue(entries);
+                  const entry = entries.find((e) => e.key === selectedKey) || null;
+                  renderHead(entry);
+                  if (!entry) {
+                    setPaneContents(['<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>']);
+                    renderInspector(null);
+                    return;
+                  }
+                  setPaneContents([overviewMarkup(entry), sessionsTabMarkup(entry), teamTabMarkup(entry), taskTabMarkup(), artifactsTabMarkup(entry), acceptancesTabMarkup()]);
+                  renderInspector(entry);
+                }
+
+                section.addEventListener("click", (event) => {
+                  const target = event.target;
+                  if (target.closest("[data-project-create]")) {
+                    bridge.railJump("team");
+                    toast("立项确认在团队域发起 · 项目页只读聚合");
+                    return;
+                  }
+                  const open = target.closest("[data-open-acceptance]");
+                  if (open) { bridge.openAcceptance(open.dataset.openAcceptance); return; }
+                  const queueCard = target.closest("[data-project-key]");
+                  if (queueCard) { selectedKey = queueCard.dataset.projectKey || ""; render(); return; }
+                  const jump = target.closest("[data-domain-jump]");
+                  if (jump) {
+                    bridge.railJump(jump.dataset.domainJump);
+                    if (jump.dataset.jumpSession) bridge.selectSessionCard(jump.dataset.jumpSession);
+                  }
+                });
+
+                bridge.subscribe(() => render());
+                setTimeout(render, 0);
+              })();
+            </script>
           </section>
 
-          <section class="desktop-screen" id="d-notify" data-stub="B5">
-            <aside class="queue" data-notification-queue></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>2 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list" data-notification-list></div></div></section>
-            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>2</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
+          <section class="desktop-screen" id="d-notify">
+            <aside class="queue" data-notification-queue data-relay-state="loading"></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>0 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list" data-notification-list><div class="readonly-banner" data-notify-state role="status">等待 relay SNAPSHOT…</div></div></div></section>
+            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>0</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
+            <script>
+              (() => {
+                "use strict";
+                // #143-B4 通知域脚本：消费 #d-project 域声明的共享桥（window.__ccDeck005B4）
+                // 渲染通知中心。口径：badge=全部需行动（含验收/确认）；resolved/unresolved
+                // 分离；轻动作=COMMAND_NOTIFICATION_ACK(handled)，重流程 rail 跳原域。
+                const bridge = window.__ccDeck005B4;
+                const section = document.getElementById("d-notify");
+                if (!bridge || !section) return;
+                const escapeHtml = bridge.escapeHtml;
+                const relTime = bridge.relTime;
+                const toast = bridge.toast;
+                const engineBadge = bridge.engineBadge;
+                const doneOf = bridge.doneOfNotification;
+                const queue = section.querySelector("[data-notification-queue]");
+                const list = section.querySelector("[data-notification-list]");
+                const railBadge = document.querySelector('.rail-btn[data-domain="notify"] [data-notify-badge]');
+                const countNodes = [...section.querySelectorAll("[data-notify-action-count]")];
+                const flight = new Set();
+
+                const KIND_LABEL = { waiting: "待处理", "org-confirm": "确认", dispatch: "派单", acceptance: "验收", system: "系统" };
+                const sessionOf = (item) => {
+                  const sid = item.sourceContext && typeof item.sourceContext.sessionId === "string" ? item.sourceContext.sessionId : "";
+                  return sid ? bridge.sessions.get(sid) || null : null;
+                };
+
+                // 行合成：通知账（权威）+ 待决确认单兜底（无在册通知的补行，按 entityId 去重）
+                // + 验收单行（relay 暂无 acceptance 通知产生源 → 端上本地合成，契约请求 B4-C3）。
+                function buildRows() {
+                  const rows = [];
+                  for (const n of bridge.notifications) {
+                    if (flight.has(n.key)) continue;
+                    const session = sessionOf(n);
+                    rows.push({
+                      synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: n.created_at,
+                      unresolved: !doneOf(n), active: !doneOf(n) && n.actionable === true, actionable: n.actionable === true,
+                      source: n, engine: session ? session.engine : "", sessionTitle: session ? (session.title || session.initial_prompt || "") : "",
+                      sessionId: n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "",
+                      segment: n.sourceContext && typeof n.sourceContext.segment === "string" ? n.sourceContext.segment : "",
+                    });
+                  }
+                  for (const confirm of bridge.pendingConfirms) {
+                    const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOf(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
+                    if (covered) continue;
+                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: Number(confirm.created_at) || 0, unresolved: true, active: true, actionable: false, source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                  }
+                  const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
+                  if (!hasAcceptanceChannel) {
+                    for (const acceptance of bridge.accepts) {
+                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : " · 打开表单页回填"), ts: Number(acceptance.created_at) || 0, unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                    }
+                  }
+                  rows.sort((a, b) => Number(b.active) - Number(a.active) || b.ts - a.ts);
+                  return rows;
+                }
+
+                function jumpOf(row) {
+                  if (!row.active) return null;
+                  if (row.kind === "waiting") return row.sessionId ? { domain: "session", session: row.sessionId, segment: row.segment, label: "去会话处理" } : null;
+                  if (row.kind === "dispatch") return row.sessionId ? { domain: "session", session: row.sessionId, segment: row.segment, label: "去会话查看" } : null;
+                  if (row.kind === "org-confirm") return { domain: "team", teamAction: "confirm", label: "去团队确认" };
+                  if (row.kind === "system") return row.sessionId ? { domain: "session", session: row.sessionId, segment: row.segment, label: "去会话查看" } : null;
+                  if (row.kind === "acceptance") return { acceptance: row.source.id, label: "打开验收单" };
+                  return null;
+                }
+                const jumpAttrs = (jump) => jump
+                  ? (jump.acceptance
+                    ? ' data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '"'
+                    : ' data-notify-jump data-notify-domain="' + escapeHtml(jump.domain) + '"'
+                      + (jump.session ? ' data-notify-session="' + escapeHtml(jump.session) + '"' : "")
+                      + (jump.segment ? ' data-notify-segment="' + escapeHtml(jump.segment) + '"' : "")
+                      + (jump.teamAction ? ' data-notify-team-action="' + escapeHtml(jump.teamAction) + '"' : ""))
+                  : "";
+
+                function queueMarkup(rows) {
+                  const actionRows = rows.filter((r) => r.active);
+                  const attentionRows = rows.filter((r) => !r.active && r.unresolved);
+                  const dynamicRows = rows.filter((r) => !r.unresolved);
+                  const notice = (row, groupKey, selected) => {
+                    const jump = jumpOf(row);
+                    return '<div class="notice' + (selected ? " selected" : "") + '" data-notify-card data-notify-active="' + (row.active ? "true" : "false") + '" data-notify-group="' + groupKey + '"' + jumpAttrs(jump)
+                      + ' title="' + (row.active ? "整卡可点 · " + (jump ? jump.label : "处理") : "历史动态 · 无需处理") + '">'
+                      + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + (row.active ? "alert" : "info") + '"></use></svg></span>'
+                      + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + (row.active ? '<span class="tag action">' + escapeHtml(KIND_LABEL[row.kind] || "需处理") + "</span>" : "") + "</div>"
+                      + '<p class="notify-line">' + (row.body ? escapeHtml(row.body) : "无补充详情") + "</p></div></div>";
+                  };
+                  const group = (label, groupKey, items, selectedFirst) => items.length
+                    ? '<div class="queue-group">' + escapeHtml(label) + ' · <span data-notify-group-count="' + groupKey + '">' + items.length + "</span></div>" + items.map((row, index) => notice(row, groupKey, selectedFirst && index === 0)).join("")
+                    : "";
+                  return '<div class="queue-head"><h2>通知</h2><button class="icon-btn" type="button" data-notify-clear aria-label="通知不清零说明">×</button></div>'
+                    + group("需你行动", "action", actionRows, true)
+                    + group("注意", "attention", attentionRows, false)
+                    + group("动态", "dynamic", dynamicRows, false);
+                }
+
+                function copyRowsOf(row) {
+                  const text = row.kind === "org-confirm" ? "理由：" + (row.body || "—")
+                    : row.kind === "acceptance" ? row.body
+                    : row.body ? "详情：" + row.body : "";
+                  return String(text).split(" · ").filter(Boolean).map((seg) => {
+                    const at = seg.indexOf("：");
+                    return '<div class="notify-copy-row">' + (at > 0 ? "<b>" + escapeHtml(seg.slice(0, at + 1)) + "</b>" + escapeHtml(seg.slice(at + 1)) : escapeHtml(seg)) + "</div>";
+                  }).join("");
+                }
+
+                function sourceCard(row) {
+                  const jump = jumpOf(row);
+                  const kicker = row.kind === "org-confirm" ? "来源团队 · 组织确认"
+                    : row.kind === "acceptance" ? "来源 · 验收单"
+                    : row.sessionTitle ? "来源会话 · " + row.sessionTitle
+                    : row.kind === "dispatch" ? "来源 · 派单回执"
+                    : "来源 · 中枢";
+                  const kickerIcon = kicker.startsWith("来源团队") ? "users" : "chat";
+                  const stateLabel = row.active ? "需行动" : row.unresolved ? "需关注" : "历史动态";
+                  const doneTs = !row.unresolved && row.source ? (row.source.resolved_at || row.source.handled_at || row.source.dismissed_at || row.ts) : row.ts;
+                  const canAck = !row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported;
+                  const light = canAck ? '<button class="notify-light-action" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
+                  const lightDone = !row.synth && !row.unresolved ? '<button class="notify-light-action" type="button" disabled>已处理</button>' : "";
+                  const jumpButton = jump ? (jump.acceptance
+                    ? '<button class="primary-btn" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + "</button>"
+                    : '<button class="primary-btn" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + "</button>") : "";
+                  const actions = light || lightDone || jumpButton ? '<div class="notify-actions">' + light + lightDone + jumpButton + "</div>" : "";
+                  return '<article class="notify-source-card' + (row.unresolved ? "" : " resolved") + '" data-notify-card data-notify-active="' + (row.active ? "true" : "false") + '">'
+                    + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + (row.active ? "alert" : "info") + '"></use></svg></span>'
+                    + '<div class="notify-row-main"><div class="nrow-r1"><h3>' + escapeHtml(row.title) + '</h3><span class="nrow-time">' + escapeHtml(relTime(doneTs)) + "</span></div>"
+                    + '<span class="notify-source-kicker"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + kickerIcon + '"></use></svg>' + escapeHtml(kicker.replace(/^来源会话 · /, "").replace(/^来源团队 · /, "")) + "</span>"
+                    + '<div class="notify-copy">' + copyRowsOf(row) + "</div>"
+                    + '<div class="nrow-r3">' + (row.engine ? engineBadge(row.engine) : "") + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span>" + '<span class="notify-state" data-notify-status>' + stateLabel + "</span></div></div>"
+                    + actions + "</article>";
+                }
+
+                function listMarkup(rows) {
+                  const live = rows.filter((r) => r.unresolved);
+                  const history = rows.filter((r) => !r.unresolved);
+                  const groupHead = (name, items) => '<div class="notify-source-group-head"><span class="notify-source-group-name">' + escapeHtml(name) + "</span>" + '<span class="notify-source-group-stat">' + (items.some((r) => r.active) ? "<b>" + items.filter((r) => r.active).length + "</b> 项需行动 · " : "无待办 · ") + items.length + " 条动态</span></div>";
+                  let markup = "";
+                  if (live.length) markup += '<div class="notify-source-group">' + groupHead(bridge.relayName, live) + live.map(sourceCard).join("") + "</div>";
+                  if (history.length) markup += '<div class="notify-source-group">' + groupHead("历史动态", history) + history.map(sourceCard).join("") + "</div>";
+                  return markup;
+                }
+
+                function nodesFrom(markup) {
+                  const template = document.createElement("template");
+                  template.innerHTML = markup;
+                  return template.content;
+                }
+                function emptyState(message) {
+                  const state = document.createElement("div");
+                  state.className = "demo-empty-state";
+                  const copy = document.createElement("p");
+                  copy.textContent = message;
+                  state.append(copy);
+                  return state;
+                }
+
+                function syncCounts(count) {
+                  countNodes.forEach((node) => { node.textContent = node.closest(".workspace-title-row") ? count + " 项需行动" : String(count); });
+                  if (railBadge) {
+                    railBadge.textContent = String(count);
+                    railBadge.hidden = count === 0;
+                    railBadge.setAttribute("aria-label", "通知有 " + count + " 项需行动");
+                    railBadge.setAttribute("title", "通知 · " + count + " 项需行动");
+                  }
+                }
+
+                function render() {
+                  const waiting = bridge.waitingText();
+                  const state = bridge.hasSnapshot ? "snapshot" : bridge.connection;
+                  queue.dataset.relayState = state;
+                  list.dataset.relayState = state;
+                  if (waiting) {
+                    queue.replaceChildren(bridge.bannerOf(waiting));
+                    list.replaceChildren(bridge.bannerOf(waiting));
+                    syncCounts(0);
+                    return;
+                  }
+                  if (!bridge.notificationsSupported) {
+                    queue.replaceChildren(nodesFrom('<div class="queue-head"><h2>通知</h2></div>'), bridge.bannerOf("该 relay 未下发 notifications 字段（旧版本）· 通知中心不可用"));
+                    list.replaceChildren(bridge.bannerOf("该 relay 未下发 notifications 字段 · 无法显示通知账"));
+                    syncCounts(0);
+                    return;
+                  }
+                  const rows = buildRows();
+                  queue.replaceChildren(nodesFrom(queueMarkup(rows)));
+                  if (!rows.length) list.replaceChildren(emptyState("暂无需要你行动的通知"));
+                  else list.replaceChildren(nodesFrom(listMarkup(rows)));
+                  syncCounts(rows.filter((r) => r.active).length);
+                }
+
+                // #018-W1b 轻动作：COMMAND_NOTIFICATION_ACK{notification_key, action:"handled"}。
+                // 乐观行即刻消失（flight 过滤）→ ACK ok 等权威 NOTIFICATIONS_UPDATED 归位为
+                // 历史动态；失败回滚（行回来+toast）；旧 relay 未知命令 → 能力位记忆隐藏动作位。
+                const unknownCommandText = (err) => typeof err === "string" && /invalid command shape|^unsupported command|unsupported org action/.test(err);
+                async function ackNotification(key) {
+                  if (flight.has(key)) return;
+                  flight.add(key);
+                  render();
+                  const ack = await bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: key, action: "handled" });
+                  flight.delete(key);
+                  if (ack && ack.ok === true) toast("已标记已读 · 权威账面同步中");
+                  else if (ack && unknownCommandText(ack.error)) {
+                    bridge.notifyAckUnsupported = true;
+                    toast("该 relay 不支持通知已读命令 · 动作位已隐藏");
+                  } else toast("通知处理失败" + (ack && ack.error ? "：" + ack.error : "（未连接或超时）") + " · 行已还原");
+                  render();
+                }
+
+                function focusSource(el) {
+                  if (el.hasAttribute("data-notify-open-acceptance")) { bridge.openAcceptance(el.dataset.notifyOpenAcceptance); return; }
+                  const domain = el.dataset.notifyDomain;
+                  if (domain === "session") {
+                    bridge.railJump("session");
+                    if (el.dataset.notifySession) bridge.selectSessionCard(el.dataset.notifySession);
+                    if (el.dataset.notifySegment === "tasks") bridge.clickTab("#d-session .segment-bar", "任务");
+                    toast("已定位来源会话 · 写操作在原域完成");
+                  } else if (domain === "team") {
+                    bridge.railJump("team");
+                    bridge.clickTab("#d-team .segment-bar", el.dataset.notifyTeamAction === "confirm" ? "看板" : "成员");
+                    toast("已定位来源团队 · 确认/接替在原域完成");
+                  }
+                }
+
+                section.addEventListener("click", (event) => {
+                  const target = event.target;
+                  const ackButton = target.closest("[data-notify-ack]");
+                  if (ackButton) { ackNotification(ackButton.dataset.notifyAck); return; }
+                  if (target.closest("[data-notify-clear]")) { toast("通知不清零 · 需行动项处理后自动归档为历史动态"); return; }
+                  const open = target.closest("[data-notify-open-acceptance]");
+                  if (open) { bridge.openAcceptance(open.dataset.openAcceptance); return; }
+                  const jump = target.closest("[data-notify-jump]");
+                  if (jump) { focusSource(jump); return; }
+                  const card = target.closest("[data-notify-card]");
+                  if (card && !target.closest("button")) {
+                    if (card.dataset.notifyActive === "true" && (card.hasAttribute("data-notify-jump") || card.hasAttribute("data-notify-open-acceptance"))) focusSource(card);
+                    else if (card.dataset.notifyActive !== "true") toast("历史动态 · 已归档，无需处理");
+                  }
+                });
+
+                bridge.subscribe(() => render());
+                setTimeout(render, 0);
+              })();
+            </script>
           </section>
 
           <section class="desktop-screen" id="d-settings" data-stub="B6">
