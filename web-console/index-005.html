@@ -3592,7 +3592,7 @@
       </div>
     </section>
 
-    <section class="mode-stage" id="stage-mobile" data-stub="B7">
+    <section class="mode-stage" id="stage-mobile">
       <div class="stage-note"><span><b>手机 390 外框</b> · root 使用四 Tab；进入详情后底栏隐藏，返回沿来源栈回到原页面。</span><span class="stage-note-tip">点击底栏、卡片和等待动作探索。</span></div>
       <div class="mobile-frame">
         <div class="mobile-notch"></div>
@@ -3622,7 +3622,7 @@
         <div class="mobile-screen" id="m-team" data-mobile-root="team">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><h2>团队行动<small>cc-deck M1 攻坚团</small></h2><span class="tag action">1 待确认</span><button class="icon-btn">＋</button></header>
-          <div class="mobile-content"><div class="mobile-card primary"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>编制方案待确认</strong><span class="tag action">确认</span></div><p>3 开发 + 独立验收 + 1 调研 · PM glm-5.3</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="mobile-detail-tabs"><button class="active" data-team-tab="todo">待办</button><button data-team-tab="board">看板</button><button data-team-tab="members">成员</button></div><div data-team-pane="todo"><div class="mobile-lane"><div class="mobile-lane-head"><span>待收单</span><span>2</span></div><div class="mobile-task"><b>T-13 更新通道隔离</b><br><span class="muted">回填 2/3 · 待确认收单</span><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><br><span class="tag action">验收单</span></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>停留告警</span><span class="tag action">1</span></div><div class="mobile-task"><b>worker-mobile 失联</b><br><span class="muted">25 分钟无日志 · 换厂商接替</span><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div></div><div data-team-pane="board" style="display:none"><div class="mobile-board"><div class="mobile-lane"><div class="mobile-lane-head"><span>待认领</span><span>2</span></div><div class="mobile-task">T-21 导入码迁移<div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>进行中</span><span>4</span></div><div class="mobile-task">T-12 relay 事件流 · 48%<div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-task">T-15 手机列表 · 72%<div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>待审查</span><span>2</span></div><div class="mobile-task">T-13 更新通道隔离<div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div></div></div><div data-team-pane="members" style="display:none"><div class="member-list"><div class="member-card"><span class="avatar">P</span><div><strong>PM</strong><p>glm-5.3 · 调度</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar">W</span><div><strong>worker-web</strong><p>claude · 开发</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar">M</span><div><strong>worker-mobile</strong><p>失联 · 接替</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div><div class="member-card"><span class="avatar">QA</span><div><strong>验收槽</strong><p>独立厂商</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div></div></div></div></div></div>
+          <div class="mobile-content"><div data-team-confirm-slot hidden></div><div class="mobile-detail-tabs"><button class="active" data-team-tab="todo">待办</button><button data-team-tab="board">看板</button><button data-team-tab="members">成员</button></div><div data-team-pane="todo"></div><div data-team-pane="board" style="display:none"></div><div data-team-pane="members" style="display:none"></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button class="active" data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
@@ -3630,7 +3630,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span></header>
-          <div class="mobile-content"><div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck</h3><p>~/dev/cc-deck</p><span class="tag action">需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw</h3><p>~/dev/windclaw · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 ›</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 ›</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> docs/release-check.md · 刚刚<br><span class="muted">查看来源 ›</span></div></div></div>
+          <div class="mobile-content"><div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div><div data-mobile-project-cards></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div data-mobile-project-lane></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
@@ -3657,6 +3657,7 @@
       let toastTimer = null;
       // ⑥c-1：005 壳版本（⑥d 切主文件出包时统一为 0.7.0-test.2）
       const CONSOLE_VERSION_005 = "0.7.0-test.2-pre";
+      window.__ccDeck005Version = CONSOLE_VERSION_005; // ⑥c-2：移动端 IIFE 单一版本源
 
       function ensureThemeSymbols() {
         const sprite = document.querySelector(".icon-sprite");
@@ -4360,6 +4361,295 @@ function connectLan(ctx) {
           if (elapsed && session) elapsed.textContent = sessionItem(session).workSecs + "s";
         });
       }, 1000);
+    })();
+  </script>
+  <script>
+    (() => {
+      // ---------- ⑥c-2 移动端 B7：四屏真数据 + 导航栈（原型 openMobileRoot/openMobileDetail/closeMobileDetail 同构） ----------
+      const bridge = window.__ccDeck005B4;
+      if (!bridge) return;
+      const VERSION = window.__ccDeck005Version || "";
+      const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+      const oneLine = (t) => { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 60 ? v.slice(0, 60) + "…" : v; };
+      const svg = (name) => `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
+      const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
+      const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
+      const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
+      const stTag = (s) => STATUS_TAG[s.status] || ["完成", "done"];
+      const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
+      const allSessions = () => [...bridge.sessions.values()];
+      const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
+      const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
+      const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
+      const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
+      const sourceBadge = () => `<span class="source-badge">${esc(bridge.relayName || location.host)}</span>`;
+      const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
+      const getSessionProject = (s) => {
+        const cwd = String((s && s.cwd) || "").replace(/\/+$/, "");
+        const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
+        if (cwd) {
+          const hit = projects.find((p) => p && typeof p.anchor_dir === "string" && (p.anchor_dir.replace(/\/+$/, "") === cwd || cwd.startsWith(p.anchor_dir.replace(/\/+$/, "") + "/")));
+          if (hit && hit.name) return hit.name;
+        }
+        return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
+      };
+      const mobileCard = (s) => {
+        const [w, cls] = stTag(s);
+        const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
+        const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(s.cwd) || w)}</p><div class="identity-cluster"><span class="tag ${cls}">${w}</span>${engineBadge(s)}${sourceBadge()}</div></div>`;
+      };
+
+      // ---------- 导航栈 ----------
+      let mobileReturn = "inbox";
+      const screenOf = (root) => document.querySelector(`#m-${root}`);
+      const setSingleActive = (el) => document.querySelectorAll(".mobile-screen").forEach((sc) => sc.classList.toggle("active", sc === el));
+      function openMobileRoot(root) {
+        const target = screenOf(root);
+        if (!target) return;
+        mobileReturn = root;
+        setSingleActive(target);
+        document.querySelectorAll(".mobile-nav [data-mobile-root]").forEach((b) => b.classList.toggle("active", b.dataset.mobileRoot === root));
+        if (root === "inbox") { const list = target.querySelector(".mobile-content"); if (list) list.scrollTop = 0; }
+      }
+      function hideNotifyDetail() { const d = document.querySelector("[data-notify-source-detail]"); if (d) d.hidden = true; }
+      function openMobileNotify() {
+        const target = screenOf("notify");
+        if (!target) return;
+        const active = document.querySelector(".mobile-screen.active");
+        if (active && active.id !== "m-notify" && active.id !== "m-detail") mobileReturn = ["inbox", "team", "project", "settings"].includes(active.id.replace("m-", "")) ? active.id.replace("m-", "") : "inbox";
+        hideNotifyDetail();
+        setSingleActive(target);
+      }
+      function openMobileDetail(sid) {
+        const target = screenOf("detail");
+        if (!target) return;
+        const active = document.querySelector(".mobile-screen.active");
+        if (active && active.id !== "m-detail") { const root = active.id.replace("m-", ""); mobileReturn = ["inbox", "team", "project", "settings", "notify"].includes(root) ? root : "inbox"; }
+        const s = bridge.sessions.get(sid);
+        const titleEl = document.querySelector("#mobile-detail-title");
+        if (titleEl && titleEl.firstChild) titleEl.firstChild.textContent = s ? sessionTitle(s) : "会话详情";
+        const sub = document.querySelector("#mobile-detail-sub");
+        if (sub) sub.textContent = s ? (String(s.cwd || "") || "目录未记录") : "";
+        const idn = document.querySelector("#mobile-detail-identity");
+        if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge();
+        const tag = target.querySelector(".mobile-head .tag.action");
+        if (tag) { const [w] = s ? stTag(s) : ["详情", "info"]; tag.textContent = s && needAction(s) ? "待处理" : w; }
+        setSingleActive(target);
+        const back = document.querySelector("[data-mobile-back]");
+        if (back) back.textContent = mobileReturn === "notify" ? "‹ 通知" : "‹";
+      }
+      function closeMobileDetail() {
+        const detail = screenOf("detail");
+        if (detail) detail.classList.remove("active");
+        if (mobileReturn === "notify") { openMobileNotify(); const back = document.querySelector("[data-mobile-back]"); if (back) back.textContent = "‹"; return; }
+        const home = screenOf(mobileReturn);
+        if (home) home.classList.add("active");
+      }
+      function jumpDesktop(domain) {
+        document.querySelector('.mode-btn[data-mode="desktop"]')?.click();
+        bridge.railJump(domain || "session");
+        mToast("已切桌面 · 定位" + (domain === "team" ? "团队" : domain === "project" ? "项目" : "会话") + "域");
+      }
+      async function mobileAckNotify(key) {
+        const ack = await bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: key, action: "handled" });
+        if (ack && ack.ok === true) mToast("已标记已读 · 权威账面同步中");
+        else mToast("通知处理失败" + (ack && ack.error ? "：" + ack.error : "（未连接或超时）"));
+        refreshMobile();
+      }
+
+      // ---------- 四屏渲染 ----------
+      function renderInbox() {
+        const list = document.querySelector("#m-inbox [data-mobile-session-list]");
+        if (!list) return;
+        const sessions = allSessions().sort(byPinnedUpdated);
+        const pend = sessions.filter(needAction).slice(0, 3);
+        const pendIds = new Set(pend.map((s) => s.session_id));
+        const other = sessions.filter((s) => !pendIds.has(s.session_id));
+        const groups = [...new Set(other.map(getSessionProject))];
+        const otherMarkup = groups.map((g) => {
+          const items = other.filter((s) => getSessionProject(s) === g);
+          return `<div class="session-group" data-session-group="project"><div class="queue-group"><span>${esc(g)}</span> · <span data-session-group-count>${items.length}</span></div>${items.map(mobileCard).join("")}</div>`;
+        }).join("");
+        list.innerHTML = `<div class="session-group" data-session-group="pending"><div class="queue-group"><span>待处理</span> · <span data-session-group-count>${pend.length}</span></div>${pend.map(mobileCard).join("")}</div><div class="session-group" data-session-group="other"><div class="queue-group"><span>其他会话</span> · <span data-session-group-count>${other.length}</span></div>${otherMarkup}</div>`;
+        const act = sessions.filter(needAction).length;
+        const work = sessions.filter((s) => s.status === "WORKING").length;
+        const done = sessions.filter((s) => s.status === "DONE").length;
+        const sums = document.querySelectorAll("#m-inbox .mobile-summary > div > b");
+        if (sums.length >= 3) { sums[0].textContent = String(act); sums[1].textContent = String(work); sums[2].textContent = String(done); }
+        const badge = document.querySelector("#m-inbox .mobile-notify");
+        if (badge) { badge.style.display = act ? "" : "none"; const n = badge.querySelector("span:not([class])") || badge.querySelector("span:last-child"); if (n) n.textContent = String(act); }
+      }
+      function renderNotify() {
+        const items = Array.isArray(bridge.notifications) ? bridge.notifications : [];
+        const isDone = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
+        const activeN = items.filter((n) => !isDone(n)).length;
+        const countEl = document.querySelector("[data-notify-action-count]");
+        if (countEl) countEl.textContent = String(activeN);
+        const list = document.querySelector("#m-notify [data-mobile-notification-list]");
+        if (!list) return;
+        list.innerHTML = items.length ? items.map((n) => {
+          const act = !isDone(n);
+          const sid = n.sourceContext && n.sourceContext.sessionId;
+          const domain = n.sourceContext && n.sourceContext.domain;
+          const mainBtn = !act ? "" : sid
+            ? `<button class="primary-btn" type="button" data-notify-mobile-jump="${esc(sid)}">回会话处理</button>`
+            : domain ? `<button class="primary-btn" type="button" data-notify-jump-domain="${esc(domain)}">回${domain === "team" ? "团队" : domain === "project" ? "项目" : "会话"}域处理</button>` : "";
+          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="tag ${act ? "action" : ""}">${act ? (n.group === "action" ? "需行动" : "注意") : "历史"}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}</div></article>`;
+        }).join("") : '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>';
+      }
+      function renderTeam() {
+        const screen = screenOf("team");
+        if (!screen) return;
+        const sessions = allSessions();
+        const confirms = Array.isArray(bridge.pendingConfirms) ? bridge.pendingConfirms : [];
+        const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
+        const head = screen.querySelector(".mobile-head h2 small");
+        if (head) head.textContent = (projects[0] && projects[0].name) || "暂无团队编制";
+        document.querySelectorAll(".mobile-nav .tag.action").forEach((tag) => { if (confirms.length) tag.textContent = String(confirms.length); else tag.remove(); });
+        const slot = screen.querySelector("[data-team-confirm-slot]");
+        if (slot) {
+          if (confirms.length) { slot.hidden = false; slot.innerHTML = `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`; }
+          else { slot.hidden = true; slot.textContent = ""; }
+        }
+        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(s.cwd) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
+        const lane = (label, items, mapper) => `<div class="mobile-lane"><div class="mobile-lane-head"><span>${label}</span><span>${items.length}</span></div>${items.map(mapper).join("") || '<div class="mobile-task"><span class="muted">暂无</span></div>'}</div>`;
+        const todo = screen.querySelector('[data-team-pane="todo"]');
+        if (todo) todo.innerHTML = lane("需行动", sessions.filter(needAction).sort(byPinnedUpdated), taskRow) + (confirms.length ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>组织确认</span><span class="tag action">${confirms.length}</span></div><div class="mobile-task"><b>确认事项待处理</b><br><span class="muted">回桌面团队域确认</span></div></div>` : "");
+        const board = screen.querySelector('[data-team-pane="board"]');
+        if (board) board.innerHTML = `<div class="mobile-board">${lane("运行中", sessions.filter((s) => s.status === "WORKING"), taskRow)}${lane("需行动", sessions.filter(needAction), taskRow)}${lane("已完成", sessions.filter((s) => s.status === "DONE"), taskRow)}</div>`;
+        const members = screen.querySelector('[data-team-pane="members"]');
+        if (members) {
+          const engineMap = new Map();
+          sessions.forEach((s) => { const eng = s.engine || "unknown"; if (!engineMap.has(eng)) engineMap.set(eng, []); engineMap.get(eng).push(s); });
+          members.innerHTML = `<div class="member-list">${[...engineMap.entries()].map(([eng, arr]) => `<div class="member-card"><span class="avatar">${esc(String(ENGINE_SHORT[eng] || eng).charAt(0))}</span><div><strong>${esc(ENGINE_SHORT[eng] || eng)}</strong><p>${arr.length} 个会话</p><div class="identity-cluster"><span class="engine-badge ${ENGINE_BADGE[eng] || ""}">${esc(ENGINE_SHORT[eng] || eng)}</span>${sourceBadge()}</div></div></div>`).join("") || '<div class="readonly-banner">暂无成员 · 会话接入后按引擎聚合。</div>'}</div>`;
+        }
+      }
+      function renderProject() {
+        const screen = screenOf("project");
+        if (!screen) return;
+        const sessions = allSessions();
+        const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
+        const actN = sessions.filter(needAction).length;
+        const artifactsN = sessions.reduce((n, s) => n + (Array.isArray(s.artifacts) ? s.artifacts.length : 0), 0);
+        const sums = screen.querySelectorAll(".mobile-project-summary > span");
+        if (sums.length >= 4) {
+          sums[0].innerHTML = `${svg("chat")} 会话 ${sessions.length}`;
+          sums[1].innerHTML = `${svg("users")} 团队 ${projects.length}`;
+          sums[2].innerHTML = `${svg("package")} 输出物 ${artifactsN}`;
+          sums[3].textContent = `需行动 ${actN}`;
+        }
+        const headTag = screen.querySelector(".mobile-head .tag.action");
+        if (headTag) { headTag.style.display = actN ? "" : "none"; const n = headTag.querySelector("span"); if (n) n.textContent = String(actN); }
+        const cards = screen.querySelector("[data-mobile-project-cards]");
+        if (cards) cards.innerHTML = projects.length ? projects.map((p) => {
+          const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
+          const [word, cls] = p.status === "active" ? ["活跃", "done"] : p.status === "parked" ? ["挂起", ""] : ["归档", ""];
+          return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(p.anchor_dir || "")}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
+        }).join("") : '<div class="readonly-banner">暂无项目组 · 立项后在组织侧同步。</div>';
+        const laneHost = screen.querySelector("[data-mobile-project-lane]");
+        if (laneHost) laneHost.innerHTML = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`;
+      }
+      function renderSettingsRows() {
+        const screen = screenOf("settings");
+        if (!screen) return;
+        const rows = [...screen.querySelectorAll(".mobile-settings .settings-row")];
+        if (!rows.length) return;
+        const cat = catalog();
+        const stateText = bridge.hasSnapshot ? "在线" : bridge.connection === "connecting" ? "连接中" : "未连接";
+        const byTitle = (t) => rows.find((r) => r.querySelector("strong")?.textContent.trim() === t);
+        const setP = (title, text) => { const p = byTitle(title)?.querySelector("p"); if (p) p.textContent = text; };
+        setP("连接与设备", `relay ${stateText} · 本页设备`);
+        const readyN = cat ? cat.filter((e) => e && e.state === "ready").length : 0;
+        setP("Agent 引擎", cat ? `${readyN}/${cat.length} 引擎就绪 · 浏览态` : "引擎目录未下发 · 浏览态");
+        const roleSet = new Set();
+        (cat || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((r) => roleSet.add(r)));
+        setP("团队身份模板", `${roleSet.size} 个角色 · 开团时逐成员覆盖`);
+        setP("关于", VERSION ? `v${VERSION} · preview` : "版本待定");
+        const connTag = byTitle("连接与设备")?.querySelector(".tag");
+        const actN = allSessions().filter(needAction).length;
+        if (connTag) { if (actN) connTag.textContent = String(actN); else connTag.remove(); }
+        const chip = screen.querySelector(".connection-chip");
+        if (chip) { const last = chip.lastChild; if (last && last.nodeType === 3) last.textContent = " relay " + stateText; }
+      }
+      function setupMobileSettings() {
+        const screen = screenOf("settings");
+        const content = screen?.querySelector(".mobile-content");
+        const list = content?.querySelector(".mobile-settings");
+        if (!content || !list || content.dataset.settingsReady) return;
+        list.insertAdjacentHTML("beforeend", '<div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-sliders"></use></svg></span><div><strong>通用与快捷键</strong><p>快捷键、通知与卡片密度</p></div><span class="chev">›</span></div>');
+        const detail = document.createElement("div");
+        detail.className = "mobile-settings-detail";
+        detail.hidden = true;
+        content.append(detail);
+        content._renderSettingsDetail = (name) => {
+          if (!name || name === "主题") return;
+          const cat = catalog();
+          const stateText = bridge.hasSnapshot ? "在线" : bridge.connection === "connecting" ? "连接中" : "未连接";
+          const roleSet = new Map();
+          (cat || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((r) => { if (r && !roleSet.has(r)) roleSet.set(r, e); }));
+          const html = name === "关于" ? `<div class="readonly-banner">cc-deck ${VERSION ? "v" + VERSION + " · preview" : "版本待定"}<br>Command Bridge · 005 换壳 · 零外部资源</div><div class="mobile-task" role="button" tabindex="0" data-update-check>检查更新 · 当前已是最新版本</div>`
+            : name === "连接与设备" ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${bridge.hasSnapshot ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(bridge.relayName || "")}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
+            : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
+            : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 桌面设置域配置</div>`
+            : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
+            : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>'
+            : '<div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 桌面设置域配置</div>';
+          list.hidden = true;
+          content.querySelector(".primary-btn")?.setAttribute("hidden", "true");
+          detail.hidden = false;
+          detail.innerHTML = `<button class="mobile-back settings-detail-back" data-settings-detail-back type="button">‹ 设置</button><h3>${esc(name)}</h3>${html}`;
+          detail.querySelectorAll("[data-card-density-option]").forEach((btn) => btn.addEventListener("click", () => {
+            const desktopBtn = document.querySelector(`#d-settings [data-settings-panel="general"] [data-card-density-option="${btn.dataset.cardDensityOption}"]`);
+            if (desktopBtn) desktopBtn.click();
+            else mToast("密度控制在桌面设置域");
+          }));
+        };
+        content.dataset.settingsReady = "1";
+      }
+
+      // ---------- 事件分发（仅限移动端 stage 内） ----------
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!target.closest("#stage-mobile")) return;
+        const navBtn = target.closest(".mobile-nav [data-mobile-root]");
+        if (navBtn) { openMobileRoot(navBtn.dataset.mobileRoot); return; }
+        if (target.closest("[data-mobile-back]")) { closeMobileDetail(); return; }
+        if (target.closest(".mobile-notify")) { openMobileNotify(); return; }
+        if (target.closest("[data-notify-center-close]")) { openMobileRoot(["team", "project", "settings"].includes(mobileReturn) ? mobileReturn : "inbox"); return; }
+        if (target.closest("[data-notify-detail-back]")) { hideNotifyDetail(); return; }
+        if (target.closest("[data-notify-detail-close]")) { hideNotifyDetail(); openMobileRoot("inbox"); return; }
+        if (target.closest("[data-notify-detail-jump]")) { jumpDesktop("session"); return; }
+        const ackBtn = target.closest("[data-mobile-notify-ack]");
+        if (ackBtn) { mobileAckNotify(ackBtn.dataset.mobileNotifyAck); return; }
+        const jumpSession = target.closest("[data-notify-mobile-jump]");
+        if (jumpSession) { if (jumpSession.dataset.notifyMobileJump) openMobileDetail(jumpSession.dataset.notifyMobileJump); return; }
+        const jumpDomain = target.closest("[data-notify-jump-domain]");
+        if (jumpDomain) { jumpDesktop(jumpDomain.dataset.notifyJumpDomain); return; }
+        const teamTab = target.closest("[data-team-tab]");
+        if (teamTab) {
+          document.querySelectorAll("[data-team-tab]").forEach((b) => b.classList.toggle("active", b === teamTab));
+          document.querySelectorAll("#m-team [data-team-pane]").forEach((p) => { p.style.display = p.dataset.teamPane === teamTab.dataset.teamTab ? "block" : "none"; });
+          return;
+        }
+        if (target.closest("[data-settings-detail-back]")) {
+          const content = target.closest("#m-settings .mobile-content");
+          const list = content?.querySelector(".mobile-settings");
+          const detail = content?.querySelector(".mobile-settings-detail");
+          if (content && list && detail) { detail.hidden = true; list.hidden = false; content.querySelector(".primary-btn")?.removeAttribute("hidden"); }
+          return;
+        }
+        const settingsRow = target.closest("#m-settings .mobile-settings .settings-row");
+        if (settingsRow && !settingsRow.matches("[data-theme-toggle]")) { settingsRow.closest(".mobile-content")?._renderSettingsDetail?.(settingsRow.querySelector("strong")?.textContent.trim()); return; }
+        if (target.closest("[data-update-check]")) { mToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+        const openDetail = target.closest("[data-open-detail]");
+        if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
+      });
+
+      function refreshMobile() { renderInbox(); renderNotify(); renderTeam(); renderProject(); renderSettingsRows(); }
+      setupMobileSettings();
+      refreshMobile();
+      bridge.subscribe(() => refreshMobile());
     })();
   </script>
 </body>
