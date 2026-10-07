@@ -40,7 +40,7 @@ await build({
 //    web-console CONSOLE_VERSION。0.7.0 起三线统一，一处 bump 全线同步
 //    （杜绝「App 0.6.4 > 控制台 0.6.2 却内容更旧」的撞名再现）。
 //    ⚠ 必须在静态资源拷贝之前跑：拷贝从 root/web-console 取源，晚于此步
-//    产物会带上旧版本号（0.7.0-test.1 首跑实锤，git status 无 diff 即症状）
+//    产物会带上旧版本号（test.1 预发首跑实锤，git status 无 diff 即症状）
 const pluginJson = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf-8"));
 const ver = pluginJson.version;
 const mktPath = join(root, ".claude-plugin", "marketplace.json");
