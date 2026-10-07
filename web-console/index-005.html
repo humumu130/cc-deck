@@ -3676,11 +3676,13 @@ function connectLan(ctx) {
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     setConn(ctx, "online", "已连接");
+    Team.bind(true); // #143 Leader 接线（B3-C3）：注入命令 Promise 通道
   };
   w.onclose = () => {
     if (ctx.ws !== w) return;
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     setConn(ctx, "offline", "已断开", "transport");
+    Team.bind(false); Team.failFlights(); // #143 Leader 接线：离线禁决议 + 飞行中命令判未达（可重试）
     scheduleReconnect(ctx);
   };
   w.onerror = () => {};
@@ -3688,7 +3690,7 @@ function connectLan(ctx) {
     if (ctx.ws !== w) return;
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.type === "COMMAND_ACK") return;
+    if (msg.type === "COMMAND_ACK") { Team.onAck(msg.payload || msg); return; } // #143 Leader 接线（B3-C4）：ACK 消费
     if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
     onEvent(ctx, msg);
   };
@@ -3849,7 +3851,90 @@ function connectLan(ctx) {
         context.reconnectDelay = Math.min(context.reconnectDelay * 2, 30000);
       }
 
+      // ---------- #143 Leader 合流接线：团队域通道（B3-C1~C4，B3 报告遗留项 1/2 的接线侧）----------
+      // B3 团队域只吃覆盖式全量帧 + bind({command, online})；delta 投影与锚定纪律（M13-2：
+      // 未锚定收到 delta=丢弃——PROJECTS 域随 SNAPSHOT 自愈、BOARD 域由 COMMAND_PROJECT_DETAIL
+      // 按需重拉，绝不空集起底 merge）由本层承接。命令走 ctx.ws 的 COMMAND/COMMAND_ACK
+      //（#018-W1b 三态：ok===true 才算送达；断线/超时 resolve(null) 由 B3 verdict 判可重试）。
+      const Team = {
+        anchored: false, boardAnchored: new Set(), projects: [], boards: new Map(),
+        ackWaiters: new Map(), cmdSeq: 0,
+        api() { const api = window.ccDeckTeam; return api && typeof api.onEvent === "function" && typeof api.bind === "function" ? api : null; },
+        ctxName(context) { return (context && context.relayName) || location.host; },
+        bind(online) {
+          const api = this.api(); if (!api) return;
+          try { api.bind({ command: (type, payload, timeoutMs) => this.sendCommand(type, payload, timeoutMs), online: online === true }); } catch {}
+        },
+        sendCommand(type, payload, timeoutMs = 8000) {
+          return new Promise((resolve) => {
+            const ws = ctx.ws;
+            if (!ws || ws.readyState !== WebSocket.OPEN) { resolve(null); return; }
+            const commandId = "team-" + Date.now().toString(36) + "-" + String(++this.cmdSeq);
+            const timer = setTimeout(() => { this.ackWaiters.delete(commandId); resolve(null); }, timeoutMs);
+            this.ackWaiters.set(commandId, { resolve, timer });
+            try { ws.send(JSON.stringify({ command_id: commandId, type, payload, ts: Date.now() })); }
+            catch { clearTimeout(timer); this.ackWaiters.delete(commandId); resolve(null); }
+          });
+        },
+        onAck(ack) {
+          if (!ack || typeof ack.command_id !== "string") return;
+          // 详情 ACK 顺带锚定本层板投影：后续该 gid 的 BOARD delta 才可应用（M13-2 锚定纪律）
+          if (ack.ok === true && ack.data && ack.data.board && typeof ack.data.board.gid === "string" && Array.isArray(ack.data.board.entries)) {
+            this.boardAnchored.add(ack.data.board.gid); this.boards.set(ack.data.board.gid, ack.data.board);
+          }
+          const waiter = this.ackWaiters.get(ack.command_id);
+          if (!waiter) return;
+          this.ackWaiters.delete(ack.command_id); clearTimeout(waiter.timer); waiter.resolve(ack);
+        },
+        failFlights() { for (const waiter of this.ackWaiters.values()) { clearTimeout(waiter.timer); waiter.resolve(null); } this.ackWaiters.clear(); },
+        feed(api, context, type, payload) { try { api.onEvent(context, { type, payload }); } catch {} },
+        onFrame(context, message) {
+          if (!message || typeof message.type !== "string") return;
+          if (message.type === "SNAPSHOT") {
+            const p = message.payload || {};
+            this.anchored = true; this.boardAnchored = new Set();
+            this.projects = Array.isArray(p.projects) ? p.projects.slice() : [];
+            this.boards = new Map((Array.isArray(p.boards) ? p.boards : []).filter((b) => b && typeof b.gid === "string").map((b) => [b.gid, b]));
+            const api = this.api(); if (api) { try { api.snapshot(p, { relayName: this.ctxName(context) }); } catch {} }
+            return;
+          }
+          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED") return;
+          const api = this.api(); if (!api) return;
+          const p = message.payload || {};
+          const teamContext = { relayName: this.ctxName(context) };
+          if (message.type === "PROJECTS_UPDATED" && p.delta !== undefined) {
+            if (!this.anchored) return; // 未锚定丢弃：随下一帧 SNAPSHOT 自愈
+            const byId = new Map(this.projects.map((group) => [group.id, group]));
+            for (const group of (Array.isArray(p.delta.upserts) ? p.delta.upserts : [])) if (group && typeof group.id === "string") byId.set(group.id, group);
+            for (const id of (Array.isArray(p.delta.removes) ? p.delta.removes : [])) byId.delete(String(id));
+            this.projects = [...byId.values()];
+            this.feed(api, teamContext, "PROJECTS_UPDATED", { groups: this.projects });
+            return;
+          }
+          if (message.type === "BOARD_UPDATED" && p.delta !== undefined) {
+            if (typeof p.gid !== "string" || !this.boardAnchored.has(p.gid) || !this.boards.has(p.gid)) return; // 未锚定丢弃：详情按需重拉
+            const board = this.boards.get(p.gid);
+            const entries = new Map((Array.isArray(board.entries) ? board.entries : []).map((entry) => [entry.id, entry]));
+            const lessons = new Map((Array.isArray(board.lessons) ? board.lessons : []).map((lesson) => [lesson.id, lesson]));
+            const entryDelta = p.delta.entries || {}, lessonDelta = p.delta.lessons || {};
+            for (const entry of (Array.isArray(entryDelta.upserts) ? entryDelta.upserts : [])) if (entry && typeof entry.id === "string") entries.set(entry.id, entry);
+            for (const id of (Array.isArray(entryDelta.removes) ? entryDelta.removes : [])) entries.delete(String(id));
+            for (const lesson of (Array.isArray(lessonDelta.upserts) ? lessonDelta.upserts : [])) if (lesson && typeof lesson.id === "string") lessons.set(lesson.id, lesson);
+            for (const id of (Array.isArray(lessonDelta.removes) ? lessonDelta.removes : [])) lessons.delete(String(id));
+            const projected = Object.assign({}, board, p.delta.meta || {}, { entries: [...entries.values()], lessons: [...lessons.values()] });
+            this.boards.set(p.gid, projected);
+            this.feed(api, teamContext, "BOARD_UPDATED", { gid: p.gid, board: projected });
+            return;
+          }
+          if (message.type === "BOARD_UPDATED" && p.delta === undefined && typeof p.gid === "string" && p.board && Array.isArray(p.board.entries)) {
+            this.boardAnchored.add(p.gid); this.boards.set(p.gid, p.board); // 覆盖式=锚定帧
+          }
+          this.feed(api, teamContext, message.type, p); // 覆盖式帧透传（B3 吃全量）
+        },
+      };
+
       function onEvent(context, message) {
+        Team.onFrame(context, message); // #143 Leader 接线：团队域帧（SNAPSHOT 团队字段/三事件）
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
         context.sessions = new Map(message.payload.sessions.filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
         context.hasSnapshot = true;
