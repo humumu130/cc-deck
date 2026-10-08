@@ -622,18 +622,51 @@
     .conv-mini.on { border-color: color-mix(in srgb, var(--done) 40%, transparent); background: var(--done-bg); color: var(--done); }
     /* #164 ⑂N 后台子 Agent 徽标（旧壳 .bg-badge 形制：黄描边小胶囊 = 「在跑」语义色） */
     .bg-badge { font-size: 10px; color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); padding: 1px 6px; border-radius: 999px; flex: none; font-weight: 600; }
-    .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
+    /* #166 wait-card：双态分离 + 三级按钮 + remember 范围选择 + 焦点感提升 */
+    .wait-card { padding: 14px 16px; margin: 14px 0; border-radius: 10px; }
+    /* 提问态（ask）：中性 + 品牌 1px 描边（提问 ≠ 风险，不用警示色） */
+    .wait-card.ask { border: 1px solid var(--brand); background: var(--panel); }
+    /* 审批态（默认）：黄 tint 警示（旧壳口径保持） */
+    .wait-card:not(.ask) { border: 1px solid var(--wait-line); background: var(--wait-bg); }
     .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
-    .wait-card strong { display: block; color: var(--working); font-size: 11px; }
+    .wait-card.denied { border-color: var(--error); background: color-mix(in srgb, var(--error) 8%, transparent); }
+    /* 标题行：字号提升至 13px + elapsed 计时 + 呼吸点动画 */
+    .wait-card strong { display: flex; align-items: center; gap: 7px; color: var(--working); font-size: 13px; font-weight: 700; line-height: 1.4; }
+    .wait-card.ask strong { color: var(--brand); }
     .wait-card.allowed strong { color: var(--done); }
-    .wait-card p { margin: 5px 0 10px; color: var(--dim); font-size: 10px; }
-    .wait-actions { display: flex; justify-content: flex-end; gap: 7px; }
-    .wait-actions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
-    .wait-actions button:hover { border-color: var(--text); background: var(--hover); transform: translateY(-1px); }
+    .wait-card.denied strong { color: var(--error); }
+    .wait-card .wait-elapsed { margin-left: auto; color: var(--dim); font: 11px var(--mono); font-variant-numeric: tabular-nums; font-weight: 400; }
+    .wait-card .wait-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--working); animation: wait-pulse 2s ease-in-out infinite; }
+    .wait-card.ask .wait-dot { background: var(--brand); }
+    @keyframes wait-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    /* 内容：字号提升至 13px（与正文同档） */
+    .wait-card p { margin: 8px 0 12px; color: var(--text); font-size: 13px; line-height: 1.65; }
+    /* 审批命令全文：mono + pre-wrap + max-height 40vh 卡内滚动 */
+    .wait-card:not(.ask) .wait-detail {
+      margin: 8px 0 12px; padding: 10px 12px; border-radius: 8px;
+      background: var(--code-bg); color: var(--text);
+      font: 12px var(--mono); white-space: pre-wrap; word-break: break-all;
+      max-height: 40vh; overflow-y: auto;
+    }
+    .wait-card:not(.ask) .wait-detail::before { content: "$ "; color: var(--done); font-weight: 700; }
+    /* 三级按钮：允许=唯一实心主钮，拒绝=次级，允许并记住=第三钮 */
+    .wait-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .wait-actions button { min-height: 36px; padding: 0 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .18s ease; }
     .wait-actions button:focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
-    .wait-actions button.allow { border-color: transparent; background: var(--brand-strong); color: var(--on-brand); font-weight: 700; }
-    .wait-actions button.allow:hover { background: var(--brand); }
+    /* 允许：实心主钮（唯一高亮） */
+    .wait-actions button.allow { border: 1px solid transparent; background: var(--brand-strong); color: var(--on-brand); }
+    .wait-actions button.allow:hover { background: var(--brand); transform: translateY(-1px); }
+    /* 拒绝：次级钮（描边） */
+    .wait-actions button.deny { border: 1px solid var(--border-strong); background: transparent; color: var(--text); }
+    .wait-actions button.deny:hover { border-color: var(--text); background: var(--hover); }
+    /* 允许并记住：第三钮（同拒绝档次但语义正向） */
+    .wait-actions button.remember { border: 1px solid var(--border-strong); background: transparent; color: var(--text); }
+    .wait-actions button.remember:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); color: var(--brand); }
     .wait-card.allowed .wait-actions button.allow { background: var(--done); color: var(--done-ink); }
+    /* remember 范围两选：展开后的选项行 */
+    .remember-scope { display: flex; gap: 8px; margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--surface2); }
+    .remember-scope button { flex: 1; min-height: 36px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; font-size: 12px; transition: all .18s ease; }
+    .remember-scope button:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, transparent); color: var(--brand); }
     .session-state-dock { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 8px 16px; border-top: 1px solid var(--line-soft); border-left: 2px solid var(--session-state-color); color: var(--dim); font: 10px var(--mono); }
     .session-state-dock[data-session-state="waiting"] { --session-state-color: var(--working); }
     .session-state-dock[data-session-state="running"] { --session-state-color: var(--done); }
@@ -1166,7 +1199,11 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
     }
-    .mobile-screen .wait-actions button, .mobile-screen .connection-reconnect, .mobile-screen .notify-light-action { min-height: 44px; }
+    /* #166 手机端 wait-card：仅浏览模式（按钮禁用 + 引导文案） */
+    .mobile-screen .wait-card { padding: 14px 16px; }
+    .mobile-screen .wait-actions button { min-height: 44px; opacity: 0.5; cursor: not-allowed; }
+    .mobile-screen .wait-card .wait-readonly-hint { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--surface2); color: var(--dim); font-size: 11px; text-align: center; }
+    .mobile-screen .connection-reconnect, .mobile-screen .notify-light-action { min-height: 44px; }
     .mobile-notify-card .notify-light-action { padding: 0 11px; }
     .mobile-card .avatar.status-ok { color: var(--done); }
     .mobile-card .avatar.status-alert { color: var(--error); }
@@ -2325,62 +2362,113 @@
                   const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
                   if (force || near) el.scrollTop = el.scrollHeight;
                 }
-                // 等待行动卡（v1 waitbox → 005 wait-card 形态）
+                // #166 等待行动卡（双态分离 + 三级按钮 + remember 范围选择 + elapsed 计时 + 焦点感提升）
+                let waitElapsedTimer = null;
                 function syncWaitCard(force) {
                   const pane = UI.convPane;
                   const s = curSession();
                   const has = !!(s && s.status === "WAITING" && s.waiting_request && !s.historical);
                   let card = pane.querySelector(".wait-card[data-b2-wait]");
-                  if (!has) { if (card) card.remove(); return; }
+                  if (!has) { if (card) { card.remove(); if (waitElapsedTimer) { clearInterval(waitElapsedTimer); waitElapsedTimer = null; } } return; }
                   if (card && !force) { pane.appendChild(card); return; } // 新日志到达时保持在末尾
                   if (card) card.remove();
                   const w = s.waiting_request;
                   const passive = w.decidable === false;
                   const isAsk = Array.isArray(w.questions) && w.questions.length > 0;
                   const single = isAsk && w.questions.length === 1 && !w.questions[0].multi;
-                  let title, copy = "", actions = "";
+                  const waitStart = w.request_started_at || Date.now();
+                  let title, content = "", actions = "";
                   if (isAsk) {
                     title = "等待你的回答 · " + (w.questions[0].header || w.tool_name || "提问");
-                    copy = w.questions.map((q) => q.question || "").join(" ／ ");
+                    content = w.questions.map((q) => q.question || "").join(" ／ ");
                   } else {
                     title = "等待你的确认 · " + (w.tool_name || "工具调用");
-                    copy = w.input_summary || "";
-                    if (Array.isArray(w.suggestions) && w.suggestions.length) copy += (copy ? "\n" : "") + "建议：" + w.suggestions.join(" / ");
+                    // 审批态：命令全文走 wait-detail mono 块，input_summary 作补充描述
+                    content = w.input_summary || "";
+                    if (Array.isArray(w.suggestions) && w.suggestions.length) content += (content ? "\n" : "") + "建议：" + w.suggestions.join(" / ");
                   }
                   if (passive) {
-                    copy += "\n（CLI 正在本地等待确认，请在电脑上处理）";
+                    content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
                   } else if (isAsk) {
                     if (single) {
-                      actions = '<div class="wait-actions">' + (w.questions[0].options || []).map((o, i) => '<button data-wait-answer="' + i + '">' + esc(o.label) + "</button>").join("") + '<button data-wait-deny>取消提问</button></div>';
+                      actions = '<div class="wait-actions">' + (w.questions[0].options || []).map((o, i) => '<button data-wait-answer="' + i + '">' + esc(o.label) + "</button>").join("") + '<button class="deny" data-wait-deny>取消提问</button></div>';
                     } else {
-                      copy += "\n（多问题/多选作答待 B2b，可先取消）";
-                      actions = '<div class="wait-actions"><button data-wait-deny>取消提问</button></div>';
+                      content += "\n（多问题/多选作答待 B2b，可先取消）";
+                      actions = '<div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button></div>';
                     }
                   } else {
-                    actions = '<div class="wait-actions"><button data-wait-deny>拒绝并说明</button>' + (w.remember ? '<button data-wait-remember>允许并记住</button>' : "") + '<button class="allow" data-wait-allow>允许一次</button></div>';
+                    // 三级按钮：允许（主）、拒绝（次）、允许并记住（第三，点击展开范围选择）
+                    actions = '<div class="wait-actions"><button class="deny" data-wait-deny>拒绝并说明</button>' +
+                      (w.remember ? '<button class="remember" data-wait-remember>允许并记住</button>' : "") +
+                      '<button class="allow" data-wait-allow>允许一次</button></div>';
                   }
                   card = document.createElement("div");
-                  card.className = "wait-card";
+                  card.className = "wait-card" + (isAsk ? " ask" : "");
                   card.dataset.b2Wait = "1";
                   card.dataset.sid = s.session_id;
                   card.dataset.rid = w.request_id || "";
-                  card.innerHTML = '<strong class="wait-title">' + esc(title) + '</strong><p class="wait-copy">' + esc(copy).replace(/\n/g, "<br>") + "</p>" + actions;
+                  card.dataset.waitStart = String(waitStart);
+                  // 标题行：title + 呼吸点 + elapsed
+                  const elapsed = Math.floor((Date.now() - waitStart) / 1000);
+                  const titleHtml = '<strong class="wait-title">' + esc(title) + '<span class="wait-dot"></span><span class="wait-elapsed" data-wait-elapsed>' + elapsed + 's</span></strong>';
+                  // 内容：审批态用 wait-detail mono 块展示命令全文，提问态用 p
+                  let bodyHtml = "";
+                  if (isAsk) {
+                    bodyHtml = content ? '<p class="wait-copy">' + esc(content).replace(/\n/g, "<br>") + "</p>" : "";
+                  } else {
+                    const cmdFull = w.command_text || w.input_summary || "";
+                    bodyHtml = (cmdFull ? '<div class="wait-detail">' + esc(cmdFull) + "</div>" : "") +
+                      (content && content !== cmdFull ? '<p class="wait-copy">' + esc(content).replace(/\n/g, "<br>") + "</p>" : "");
+                  }
+                  card.innerHTML = titleHtml + bodyHtml + actions;
                   pane.appendChild(card);
+                  // elapsed 走秒
+                  if (waitElapsedTimer) clearInterval(waitElapsedTimer);
+                  waitElapsedTimer = setInterval(() => {
+                    const c = pane.querySelector(".wait-card[data-b2-wait]");
+                    if (!c || !c.dataset.waitStart) { clearInterval(waitElapsedTimer); waitElapsedTimer = null; return; }
+                    const el = c.querySelector("[data-wait-elapsed]");
+                    if (el) el.textContent = Math.floor((Date.now() - Number(c.dataset.waitStart)) / 1000) + "s";
+                  }, 1000);
                 }
                 function markWaitCardDone(card, denied) {
                   card.classList.add(denied ? "denied" : "allowed");
                   const t = card.querySelector(".wait-title");
                   if (t) t.textContent = denied ? "已拒绝 · 等待会话处理" : "已允许 · 会话继续中";
                   card.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+                  if (waitElapsedTimer) { clearInterval(waitElapsedTimer); waitElapsedTimer = null; }
                 }
                 function handleWaitVerdict(btn, kind) {
                   const card = btn.closest("[data-b2-wait]");
                   if (!card || card.dataset.busy) return;
                   const sid = card.dataset.sid, rid = card.dataset.rid;
                   if (!sid || !rid) return;
+                  // remember 点击：展开范围选择（本次会话 / 所有会话）
+                  if (kind === "remember") {
+                    const existing = card.querySelector(".remember-scope");
+                    if (existing) { existing.remove(); return; } // 再次点击收起
+                    const scope = document.createElement("div");
+                    scope.className = "remember-scope";
+                    scope.innerHTML = '<button data-remember-scope="session">本次会话</button><button data-remember-scope="global">所有会话</button>';
+                    scope.addEventListener("click", (ev) => {
+                      const s = ev.target.closest("[data-remember-scope]");
+                      if (!s) return;
+                      card.dataset.busy = "1";
+                      const type = "COMMAND_CONTINUE";
+                      const extra = { remember_scope: s.dataset.rememberScope };
+                      commandAck(type, Object.assign({ session_id: sid, request_id: rid }, extra)).then((ack) => {
+                        const v = ackVerdict(ack);
+                        if (v.ok) markWaitCardDone(card, false);
+                        else { delete card.dataset.busy; b2Toast("等待处理未确认：" + v.error); }
+                      });
+                    });
+                    const actions = card.querySelector(".wait-actions");
+                    if (actions) actions.parentNode.insertBefore(scope, actions.nextSibling);
+                    return;
+                  }
                   card.dataset.busy = "1";
                   const type = kind === "deny" ? "COMMAND_REJECT" : "COMMAND_CONTINUE";
-                  const extra = kind === "remember" ? { remember_scope: "session" } : {};
+                  const extra = {};
                   commandAck(type, Object.assign({ session_id: sid, request_id: rid }, extra)).then((ack) => {
                     const v = ackVerdict(ack);
                     if (v.ok) { markWaitCardDone(card, kind === "deny"); if (kind === "deny") b2Toast("已拒绝 · 可在输入栏补充说明"); }
@@ -6544,8 +6632,14 @@ function connectLan(ctx) {
         const pending = open.filter((t) => t.status === "pending");
         return { doneAll, doneList, run, verify, pending };
       }
-      function mWaitCardHtml(w) { // 移动端仅浏览验证的产品口径：视觉 + 点击引导，真审批链在桌面会话域
-        return '<div class="wait-card" data-wait-card><strong class="wait-title">' + esc("等待你的确认 · " + (w.tool_name || "工具调用")) + '</strong><p class="wait-copy">' + esc(w.input_summary || "") + '</p><div class="wait-actions"><button type="button" data-mobile-wait-deny>拒绝并说明</button><button type="button" class="allow" data-mobile-wait-allow>允许一次</button></div></div>';
+      function mWaitCardHtml(w) { // #166 手机端仅浏览模式：按钮禁用态 + 引导文案
+        const isAsk = Array.isArray(w.questions) && w.questions.length > 0;
+        const title = isAsk ? "等待你的回答 · " + (w.questions[0]?.header || w.tool_name || "提问") : "等待你的确认 · " + (w.tool_name || "工具调用");
+        const copy = isAsk ? w.questions.map((q) => q.question || "").join(" ／ ") : (w.input_summary || "");
+        const actions = isAsk
+          ? '<div class="wait-actions"><button type="button" disabled>取消提问</button></div>'
+          : '<div class="wait-actions"><button type="button" disabled>拒绝并说明</button><button type="button" class="allow" disabled>允许一次</button></div>';
+        return '<div class="wait-card' + (isAsk ? " ask" : "") + '" data-wait-card><strong class="wait-title">' + esc(title) + '</strong><p class="wait-copy">' + esc(copy) + "</p>" + actions + '<div class="wait-readonly-hint">手机端仅浏览 · 请在电脑上处理等待请求</div></div>';
       }
       function mEntryHtml(e, s) { // #164 与桌面 entryHtml 同一渲染路径（MD/思考卡/工具行/diff/折叠全量对齐）；B2 未就绪时回落 esc+br
         const api = b2Api();
