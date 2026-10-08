@@ -2265,6 +2265,37 @@
                   if (e.state === "unsupported") return "不支持 · " + ((e.preflight && e.preflight.reason) || "占位");
                   return "不可用 · " + oneLine((e.preflight && e.preflight.reason) || "未探测到");
                 }
+                // #368（旧壳 8781-8794 口径）：cwd 预填「上次创建用的目录」优先，无记忆回落
+                // 活动源用户根目录。005 单源——单键记忆（不与旧壳 ccr_cwd@id 多源键纠缠）
+                const CWD_LAST_KEY = "cc-deck-005-last-cwd";
+                function lastCreateCwd() { try { return localStorage.getItem(CWD_LAST_KEY) || ""; } catch (_) { return ""; } }
+                // #158-批3 桌面壳原生目录选择（旧壳 8760-8778 范式）：dialog 插件在场且当前源
+                // 是本机 loopback relay 才给浏览钮（远程源选本机目录无意义，隐藏）
+                function createCwdBrowseable() {
+                  return !!(window.__TAURI__ && window.__TAURI__.dialog
+                    && typeof window.__ccDeck005LocalRelayLoopback === "function" && window.__ccDeck005LocalRelayLoopback());
+                }
+                async function pickCreateCwd() {
+                  if (!(window.__TAURI__ && window.__TAURI__.dialog)) return;
+                  if (!(typeof window.__ccDeck005LocalRelayLoopback === "function" && window.__ccDeck005LocalRelayLoopback())) {
+                    b2Toast("当前新建目标是其他电脑的源，请直接输入那台电脑上的路径");
+                    return;
+                  }
+                  try {
+                    const menu = document.getElementById("b2-create-menu");
+                    const input = menu && menu.querySelector("[data-create-field='cwd']");
+                    const cur = input ? input.value.trim() : "";
+                    const dir = await window.__TAURI__.dialog.open({
+                      directory: true, multiple: false, title: "选择工作目录",
+                      ...(cur ? { defaultPath: cur } : {}),
+                    });
+                    if (typeof dir === "string" && dir) {
+                      if (input) input.value = dir;
+                      const p = menu && menu.querySelector("[data-create-field='prompt']");
+                      if (p) p.focus();
+                    }
+                  } catch (e) { b2Toast("打开目录选择器失败: " + ((e && e.message) || e)); }
+                }
                 function buildCreateHtml() {
                   const chosen = S.engineChoice || defaultEngineId();
                   let html = '<div class="source-menu-head">新建会话 · 选择引擎</div>';
@@ -2273,7 +2304,11 @@
                     const dis = e.state !== "ready";
                     html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '"' + (dis ? " disabled style=\"opacity:.5\"" : "") + '><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(engineStateText(e)) + "</small></button>";
                   }
-                  html += '<input class="composer-input" data-create-field="prompt" placeholder="初始指令（必填）" aria-label="初始指令" style="width:100%;margin:8px 0 6px"><input class="composer-input" data-create-field="cwd" placeholder="工作目录" aria-label="工作目录" value="' + esc(S.homedir || "") + '" style="width:100%;margin:0 0 8px"><button class="primary-btn" type="button" data-create-submit style="width:100%">创建会话</button>';
+                  html += '<input class="composer-input" data-create-field="prompt" placeholder="初始指令（必填）" aria-label="初始指令" style="width:100%;margin:8px 0 6px">';
+                  // #368 预填优先级：上次创建用的目录 > 源用户根目录；桌面+本机源时附原生目录浏览钮
+                  html += '<div style="display:flex;gap:6px;margin:0 0 8px;align-items:stretch"><input class="composer-input" data-create-field="cwd" placeholder="工作目录" aria-label="工作目录" value="' + esc(lastCreateCwd() || S.homedir || "") + '" style="flex:1;min-width:0">'
+                    + (createCwdBrowseable() ? '<button class="ghost-btn" type="button" data-create-browse style="flex:none;white-space:nowrap">浏览…</button>' : "") + '</div>';
+                  html += '<button class="primary-btn" type="button" data-create-submit style="width:100%">创建会话</button>';
                   return html;
                 }
                 function openCreateMenu(anchor) {
@@ -2286,6 +2321,14 @@
                     menu.style.zIndex = "80";
                     menu.style.width = "276px";
                     document.body.appendChild(menu);
+                    // 菜单挂 body，UI.section 的委托点不到——菜单自带 click 委托
+                    // （批3 实测修复：此前引擎选择/创建按钮鼠标点全哑，仅 Enter 键路径活着）
+                    menu.addEventListener("click", (ev) => {
+                      const engine = ev.target.closest("[data-engine-choice]");
+                      if (engine) { pickEngine(engine); return; }
+                      if (ev.target.closest("[data-create-browse]")) { void pickCreateCwd(); return; }
+                      if (ev.target.closest("[data-create-submit]")) { submitCreate(); return; }
+                    });
                     menu.addEventListener("keydown", (ev) => {
                       if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.createField) { ev.preventDefault(); submitCreate(); }
                     });
@@ -2325,6 +2368,8 @@
                   if (eng && eng !== "claude") payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）
                   const id = sendCmd("COMMAND_CREATE", payload);
                   if (!id) return;
+                  // #368：创建已受理即记忆本次 cwd，下次新建预填
+                  if (cwd) { try { localStorage.setItem(CWD_LAST_KEY, cwd); } catch (_) {} }
                   closeCreateMenu();
                   const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
@@ -4388,6 +4433,14 @@ function connectLan(ctx) {
         hasSnapshot: false,
         selectedSessionId: null,
         relayName: location.host,
+      };
+      // #158-批3 B2 新建表单浏览钮判定（旧壳 activeIsLocalRelay 8748-8758 口径的 005 简化）：
+      // 当前源 ws 指向回环——目录对话框选的是这台电脑的文件系统，远程源该路径不存在
+      window.__ccDeck005LocalRelayLoopback = () => {
+        try {
+          const h = new URL(String(ctx.cfg.wsUrl || "").replace(/^ws/i, "http")).hostname;
+          return h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
+        } catch (_) { return false; }
       };
 
       function escapeHtml(value) {
