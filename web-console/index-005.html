@@ -3724,6 +3724,27 @@
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
       const CONSOLE_VERSION = "0.7.0-test.3";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
+      // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
+      // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
+      // 到位后刷新已渲染的消费点（关于面板 tag / 设置队列卡副行）；浏览器无壳 reject/无
+      // core——回落 CONSOLE_VERSION（那才是它的身份）。移动端经 ccdeck:shellver 事件重渲
+      if (!window.__shellVerTried) {
+        window.__shellVerTried = true;
+        try {
+          const core = window.__TAURI__ && window.__TAURI__.core;
+          if (core && typeof core.invoke === "function") {
+            void core.invoke("app_version").then((v) => {
+              if (typeof v !== "string" || !v.trim()) return;
+              window.__shellVer = v;
+              const tag = document.querySelector("[data-settings-version-tag]");
+              if (tag) tag.textContent = v + " 通道";
+              const cardP = document.querySelectorAll("#d-settings .queue .queue-card")[5]?.querySelector("p");
+              if (cardP) cardP.textContent = "v" + v + " · 通道";
+              try { window.dispatchEvent(new CustomEvent("ccdeck:shellver")); } catch (_) {}
+            }, () => {});
+          }
+        } catch (_) {}
+      }
       // #158-⌘文案 Windows 显示 Ctrl+：启动时全树替换静态 ⌘ 文案（windowbar ⌘K 全局搜索/设置卡 ⌘K 搜索 · ⌘N 新建会话）；
       // 动态模板走 MOD_KEY 分支。只改命中 text node，禁对容器整体 textContent 赋值——会摧毁子树
       if (!IS_MAC) {
@@ -4218,10 +4239,11 @@ function connectLan(ctx) {
               // 探测命中端口（tauri.localhost 的 location.port 是空，8787 硬编会误导多端口变体）
               const shellDiag = !!(window.ccDeck && typeof window.ccDeck.relayStatus === "function");
               const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
+              const desktopForm = !!(window.__TAURI__ || window.ccDeck);
               connLive.innerHTML =
                 `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
                 `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>` +
-                `<div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token ${connState === "unconfigured" ? "未配置" : "已就绪"}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
+                `<div class="settings-row"><span class="avatar">▣</span><div><strong>${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}</strong><p>${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
               if (shellDiag) void refreshRelayDiag();
             }
           }
@@ -5986,7 +6008,7 @@ function connectLan(ctx) {
         const roleSet = new Set();
         (cat || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((r) => roleSet.add(r)));
         setP("团队身份模板", `${roleSet.size} 个角色 · 开团时逐成员覆盖`);
-        setP("关于", VERSION ? `${VERSION} 通道` : "版本待定");
+        setP("关于", VER_NOW() ? `${VER_NOW()} 通道` : "版本待定");
         const connTag = byTitle("连接与设备")?.querySelector(".tag");
         const actN = allSessions().filter(needAction).length;
         if (connTag) { if (actN) connTag.textContent = String(actN); else connTag.remove(); }
@@ -6103,6 +6125,8 @@ function connectLan(ctx) {
       setupMobileDetail(); // ⑥c-3：收编五 pane + composer 发送接线
       refreshMobile();
       bridge.subscribe(() => refreshMobile());
+      // #158-批3：桌面壳版本异步回填完成（app_version invoke）后刷「关于」版本行
+      window.addEventListener("ccdeck:shellver", () => refreshMobile());
     })();
   </script>
 </body>
