@@ -569,6 +569,8 @@
     .message-body > :first-child { margin-top: 0; }
     .message-body > :last-child { margin-bottom: 0; }
     .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 11px var(--mono); }
+    /* B2 批2 A0-2b：手机对话顶部「⑂N 子任务运行中 · 最近工具」单行（左对齐、warn 色、超长省略） */
+    .timeline-note.subagent-live { padding-left: 14px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--working); }
     /* 用户气泡长文折叠（旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文） */
     .bubble.me .ub { white-space: pre-wrap; word-break: break-word; }
     .bubble.me .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
@@ -705,6 +707,13 @@
     .session-state-label { color: var(--text-strong); font-weight: 700; }
     .session-state-operation { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    /* B2 批2 A0-1/B#133：running 态呼吸点（复用 dot-breathe，glow 随态位换绿）+ token 内联 + 终端实时行防双计 + 终态收口 */
+    .session-state-dock[data-session-state="running"] .session-state-dot { --status-working-glow: color-mix(in srgb, var(--done) 40%, transparent); animation: dot-breathe 2.4s ease-in-out infinite; }
+    .session-state-tokens { flex: 0 0 auto; color: var(--dim); font-variant-numeric: tabular-nums; }
+    .session-state-dock[data-live-line] .session-state-tokens, .session-state-dock[data-live-line] .session-state-elapsed { display: none; }
+    .session-state-dock { max-height: 44px; transition: max-height .45s cubic-bezier(.4, 0, .2, 1), padding .45s cubic-bezier(.4, 0, .2, 1), opacity .5s ease .1s, border-color .5s ease; }
+    #m-detail .session-state-dock { max-height: 60px; }
+    .session-state-dock.terminal-fade { max-height: 0; padding-block: 0; border-top-color: transparent; opacity: 0; overflow: hidden; pointer-events: none; }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
     .artifact-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--info); }
     .artifact-row-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
@@ -1063,6 +1072,9 @@
     #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); font-size: var(--srow-sub-size); line-height: 16px; }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
+    /* B2 批2 A#bg-live：r2 走秒行 warn 呼吸点 + ⑂N tag（task-ref chip 形制；bgCount>0 恒显，含 WORKING 态） */
+    #d-session .srow-live-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+    #d-session .srow-r2 .tag.bg-live-tag { flex: none; padding: 1px 6px; font-size: var(--srow-badge-size); font-weight: 600; border-color: color-mix(in srgb, var(--working) 45%, transparent); background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
     /* r3 徽章行：footnote 级（用户直馈二次微调：高度再降一档——字号/行高/徽章 padding
        整体压缩，比摘要行明显更小更淡）；三徽全空整行不渲染（高度自适应不虚胖） */
     #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: 12px; }
@@ -1282,7 +1294,7 @@
                 <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
               </div>
-              <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div>
+              <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation>—</span><span class="session-state-tokens" data-session-state-tokens hidden></span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div>
               <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附加文件（最多 2 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 4 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"><div class="composer-hint">支持拖入 / 粘贴即附 · 图片 ≤4 张 · 文件 ≤2 个 · ↑↓ 翻阅历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
@@ -1952,8 +1964,9 @@
                 const b2EngineBadge = (item) => '<span class="engine-badge ' + item.engineClass + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>' + item.engine + "</span>";
                 const b2SourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
                 function myCardMarkup(item) {
-                  // #164 r3：状态文字标签退役，新增 ⑂N 后台徽标（旧壳 .bg-badge 形制）；置顶/引擎/来源保留
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned || item.bg ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.bg ? '<span class="bg-badge" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
+                  // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -2161,30 +2174,50 @@
                   const task = dock.querySelector("[data-session-state-task]");
                   const label = dock.querySelector("[data-session-state-label]");
                   const op = dock.querySelector("[data-session-state-operation]");
+                  const tok = dock.querySelector("[data-session-state-tokens]");
                   if (!s) {
                     dock.dataset.sessionState = "waiting";
                     task.textContent = "当前任务 · —"; label.textContent = "未选择";
                     op.textContent = ""; op.hidden = true;
                     dock.querySelector("[data-session-state-elapsed]").textContent = "";
+                    if (tok) tok.hidden = true;
+                    dockTerminalWatch(dock, null);
                     return;
                   }
                   const [state, stateLabel] = DOCK_STATE[s.status] || ["closing", "已完成"];
                   dock.dataset.sessionState = state;
+                  const live = dockLiveLine(s); // A0-1：终端实时行（relay ​ 零宽前缀约定）→ 隐藏自家走秒/token 防双计
+                  if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
                   const w = s.waiting_request;
                   const taskText = w ? "等待确认 · " + (w.tool_name || "工具调用") : (s.action_summary || "—");
                   task.textContent = "当前任务 · " + String(taskText).slice(0, 60);
-                  label.textContent = stateLabel;
+                  label.textContent = (s.status === "DONE" ? "✓ " : s.status === "ERROR" ? "⚠ " : "") + stateLabel; // B#133 终态符号
                   const opText = s.status === "WORKING" ? (s.action_summary || "") : w ? (w.input_summary || "") : "";
                   op.textContent = opText ? String(opText).slice(0, 80) : "—";
                   op.hidden = !opText;
+                  if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? "· " + tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「· 34k/200k」
                   tickDockElapsed();
+                  dockTerminalWatch(dock, s);
+                }
+                function dockLiveLine(s) { return !!s && s.status === "WORKING" && String(s.action_summary || "").startsWith("\u200B"); }
+                // B#133 终态收口：DONE ✓ 停留 8s 后整条淡出收起（高度+透明动画）；ERROR ⚠ 常驻不收。
+                // 键 = sid+status：同一终态的后续心跳/重渲不重启计时、不闪复原。
+                let dockTermKey = "";
+                let dockTermT = 0;
+                function dockTerminalWatch(dock, s) {
+                  const key = s ? s.session_id + ":" + s.status : "";
+                  if (key === dockTermKey) return;
+                  dockTermKey = key;
+                  clearTimeout(dockTermT);
+                  dock.classList.remove("terminal-fade");
+                  if (s && s.status === "DONE") dockTermT = setTimeout(() => dock.classList.add("terminal-fade"), 8000);
                 }
                 function tickDockElapsed() {
                   if (!UI || !UI.dock) return;
                   const el = UI.dock.querySelector("[data-session-state-elapsed]");
                   const s = curSession();
                   if (!el) return;
-                  if (!s) { el.textContent = ""; return; }
+                  if (!s || UI.dock.hasAttribute("data-live-line")) { el.textContent = ""; return; }
                   if (s.status === "DONE" && s.duration_ms) { el.textContent = fmtDur(s.duration_ms); return; }
                   const base = s.status === "WORKING" ? (s.turn_started_at || s.started_at) : (s.waiting_started_at || s.updated_at || s.started_at);
                   el.textContent = base ? fmtDur(Math.max(0, Date.now() - base)) : "";
@@ -4518,7 +4551,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">会话<small id="mobile-detail-sub">加载中…</small></h2><span class="identity-cluster" id="mobile-detail-identity"></span><span class="tag action">加载中</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div>
-              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附加文件（最多 2 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 4 张，也可直接粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"><div class="composer-hint">拖入 / 粘贴即附 · 图 ≤4 · 文件 ≤2 · ↑↓ 历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div>
+              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-tokens" data-session-state-tokens hidden></span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附加文件（最多 2 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 4 张，也可直接粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"><div class="composer-hint">拖入 / 粘贴即附 · 图 ≤4 · 文件 ≤2 · ↑↓ 历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div>
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
@@ -6723,12 +6756,19 @@ function connectLan(ctx) {
         const proc = st("proc"), think = st("think");
         return '<div class="conv-ctrl' + (proc ? "" : " proc-off") + '"><button type="button" class="conv-mini' + (proc ? " on" : "") + '" data-conv-toggle="proc">⚙ 过程 ·' + (proc ? "开" : "关") + '</button><button type="button" class="conv-mini' + (think ? " on" : "") + '" data-conv-toggle="think">✦ 思考 ·' + (think ? "开" : "关") + "</button></div>";
       }
+      function mSubagentNoteHtml(s) { // B2 批2 A0-2b：有活跃子任务时顶部单行「⑂N 子任务运行中 · 最近工具」（最近 = 末位活跃条的 desc/kind）
+        const act = (s && Array.isArray(s.subagents) ? s.subagents : []).filter((a) => a && !a.ended_at);
+        if (!act.length) return "";
+        const last = act[act.length - 1];
+        return '<div class="timeline-note subagent-live">⑂' + act.length + " 子任务运行中 · " + esc(oneLine(last.desc || last.kind || "")) + "</div>";
+      }
       function mConversationHtml(sid, s) {
         const api = b2Api();
         let list = [];
         try { const tl = api && api.S && api.S.timelines ? api.S.timelines.get(sid) : null; if (Array.isArray(tl)) list = tl; } catch (_) {}
         const cut = sliceTimeline(list, DETAIL_TL_MAX);
         let html = s && s.waiting_request ? mWaitCardHtml(s.waiting_request) : "";
+        html += mSubagentNoteHtml(s);
         if (!cut.items.length) return html + '<div class="readonly-banner">暂无对话记录</div>';
         html += mConvCtrlHtml();
         if (cut.truncated) html += '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>";
@@ -6861,20 +6901,38 @@ function connectLan(ctx) {
         const task = dock.querySelector("[data-session-state-task]");
         const label = dock.querySelector("[data-session-state-label]");
         const elapsed = dock.querySelector("[data-session-state-elapsed]");
+        const tok = dock.querySelector("[data-session-state-tokens]");
         if (!s) {
           dock.dataset.sessionState = "waiting";
           if (task) task.textContent = "当前任务 · 无挂起";
           if (label) label.textContent = "未选择";
           if (elapsed) elapsed.textContent = "";
+          if (tok) tok.hidden = true;
+          mDockTerminalWatch(dock, null);
           return;
         }
         const [state, stateLabel] = M_DOCK_STATE[s.status] || ["closing", "已完成"];
         dock.dataset.sessionState = state;
+        const live = !!s.action_summary && s.status === "WORKING" && String(s.action_summary).startsWith("\u200B"); // A0-1 终端实时行防双计（与桌面 dockLiveLine 同口径）
+        if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
         const w = s.waiting_request;
         const taskText = w ? "等待确认 · " + (w.tool_name || "工具调用") : (s.action_summary || "无挂起");
         if (task) task.textContent = ("当前任务 · " + String(taskText)).slice(0, 60);
-        if (label) label.textContent = stateLabel;
+        if (label) label.textContent = (s.status === "DONE" ? "✓ " : s.status === "ERROR" ? "⚠ " : "") + stateLabel; // B#133 终态符号
         if (elapsed) elapsed.textContent = mRelTime(s.updated_at || s.started_at);
+        if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? "· " + mTokStr(u) + "/" + mTokStr(s.context_limit || 1e6) : ""; }
+        mDockTerminalWatch(dock, s);
+      }
+      // B#133 手机同口径：DONE ✓ 8s 淡出收起、ERROR ⚠ 常驻（键 = sid+status 防心跳重启）
+      let mDockTermKey = "";
+      let mDockTermT = 0;
+      function mDockTerminalWatch(dock, s) {
+        const key = s ? s.session_id + ":" + s.status : "";
+        if (key === mDockTermKey) return;
+        mDockTermKey = key;
+        clearTimeout(mDockTermT);
+        dock.classList.remove("terminal-fade");
+        if (s && s.status === "DONE") mDockTermT = setTimeout(() => dock.classList.add("terminal-fade"), 8000);
       }
       function renderMobileDetail(sid) {
         const base = detailBase || (detailBase = ensureDetailBase());
