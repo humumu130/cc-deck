@@ -1122,7 +1122,30 @@
                 // LAN token，空态措辞不得落「?token=」分支（pair_ack 后主区仍误导未连接，Playwright 实证）
                 const cloudLaneOn = () => { try { const u = window.__ccDeck005CloudUI; return !!(u && u.stateLabel && /已连接/.test(u.stateLabel())); } catch (_) { return false; } };
 
-                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["CodeBuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
+                // ---------- #158-批4a 路径展示/比较共享助手（本 IIFE 是文档序最早的内联脚本，在此幂等挂
+                // window；后续 team/B4/notify/地基/mobile 各 IIFE 解析期就要取别名，不重复定义） ----------
+                // Windows 桌面形态用户应看到 C:\Users\x 而非 C:/Users/x：displayPath 只管展示——桌面
+                // Windows 形态（非 Mac UA 且壳桥在场）把 / 显示为 \；逻辑比较一律走 normPath
+                // （两侧统一 / 再比，1:1 替换保序，切片索引天然对齐）
+                if (!window.__ccDeck005PathUi) {
+                  const winShellForm = () => {
+                    try {
+                      if (/Mac/i.test(navigator.userAgent)) return false;
+                      if (window.__TAURI__ || window.ccDeck) return true;
+                      return document.documentElement.classList.contains("win-tauri");
+                    } catch (_) { return false; }
+                  };
+                  window.__ccDeck005PathUi = {
+                    displayPath: (p) => { const v = String(p ?? ""); return v && winShellForm() ? v.replace(/\//g, "\\") : v; },
+                    normPath: (p) => String(p ?? "").replace(/[\\/]/g, "/"),
+                    baseName: (p) => { const n = String(p ?? "").replace(/[\\/]/g, "/").replace(/\/+$/, ""); const i = n.lastIndexOf("/"); return i >= 0 ? n.slice(i + 1) : (n || String(p ?? "")); },
+                    dirOf: (p) => { const v = String(p ?? ""); const i = Math.max(v.lastIndexOf("/"), v.lastIndexOf("\\")); return i > 0 ? v.slice(0, i) : ""; },
+                  };
+                }
+                const displayPath = window.__ccDeck005PathUi.displayPath;
+                const baseName = window.__ccDeck005PathUi.baseName;
+
+                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
                 const VERIFY_RE = /[〔\[【]\s*待验证\s*[〕\]】]/;   // #85 待验证档：in_progress + 前缀约定独立分组
                 const HIST_PREFIX = "cc.input.hist.";               // #95 按会话分桶的输入历史
                 const HIST_MAX = 200;
@@ -1193,7 +1216,16 @@
                   return "clip";
                 }
                 function shortTitle(s) { return String(s.title || s.initial_prompt || s.session_id || "").slice(0, 24); }
-                function shortPath(p) { const v = String(p || ""); if (S.homedir && v.startsWith(S.homedir)) return "~" + v.slice(S.homedir.length); return v; }
+                // #158-批4a：homedir 前缀归一比较（Windows 数据 \ 与代码拼 / 不匹配会让 ~ 缩短失效），
+                // 输出走 displayPath（桌面 Windows 形态显示反斜杠）；1:1 替换保序，切片索引对齐
+                function shortPath(p) {
+                  const v = String(p || "");
+                  if (!v || !S.homedir) return displayPath(v);
+                  const n = (s) => s.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                  const vN = n(v), hN = n(S.homedir);
+                  if (hN && (vN === hN || vN.startsWith(hN + "/"))) return "~" + displayPath(v.slice(S.homedir.length));
+                  return displayPath(v);
+                }
 
                 // ---------- B2 数据通道（#150 R2 并轨：退役自开 WS 与重连/握手超时，改订阅地基帧总线） ----------
                 function failB2Flights() { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
@@ -1431,7 +1463,7 @@
                   return {
                     id: esc(session.session_id),
                     title: esc(session.title || session.initial_prompt || session.session_id),
-                    summary: esc(session.action_summary || session.last_error || session.cwd || "暂无活动摘要"),
+                    summary: esc(session.action_summary || session.last_error || displayPath(session.cwd) || "暂无活动摘要"),
                     status,
                     tag: ({ working: "运行中", waiting: "待处理", error: "错误", done: "完成" })[status],
                     tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
@@ -1452,10 +1484,15 @@
                   return '<div class="queue-card' + (item.selected ? " selected" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.tag || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.tag ? '<span class="tag ' + item.tagClass + '">' + item.tag + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
-                  const cwd = String(session.cwd || "").replace(/\/+$/, "");
+                  // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
+                  const cwd = String(session.cwd || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
                   const projects = Array.isArray(S.projects) ? S.projects : [];
                   if (cwd) {
-                    const hit = projects.find((p) => p && typeof p.anchor_dir === "string" && (p.anchor_dir.replace(/\/+$/, "") === cwd || cwd.startsWith(p.anchor_dir.replace(/\/+$/, "") + "/")));
+                    const hit = projects.find((p) => {
+                      if (!(p && typeof p.anchor_dir === "string" && p.anchor_dir)) return false;
+                      const a = p.anchor_dir.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                      return a === cwd || cwd.startsWith(a + "/");
+                    });
                     if (hit && hit.name) return String(hit.name);
                   }
                   return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
@@ -1703,7 +1740,7 @@
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
                     if (arts.length) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
-                      html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = String(a.path).split("/").pop(); return '<div class="artifact-row">' + svgUse(artifactIconFor(name)) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
+                      html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + svgUse(artifactIconFor(name)) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
                     }
                   }
                   UI.inspector.innerHTML = html;
@@ -1924,12 +1961,15 @@
                 }
 
                 // ---------- 渲染：输出物 tab（目录分组 + 批量下载） ----------
-                function artDirOf(a) { const p = String(a.path || ""); const i = p.lastIndexOf("/"); return i > 0 ? p.slice(0, i) : ""; }
+                // #158-批4a：目录切分兼容 \ 分隔（Windows 原生路径 lastIndexOf("/") 为 -1 会让整串
+                // 落散列/目录截尾错位）；relDir 前缀比较归一化（1:1 替换保序，切片索引对齐），输出走 displayPath
+                function artDirOf(a) { return window.__ccDeck005PathUi.dirOf(a.path); }
                 function relDir(dir, cwd) {
                   if (!dir) return "";
-                  const c = String(cwd || "").replace(/\/+$/, "");
-                  if (c && dir.startsWith(c + "/")) return dir.slice(c.length + 1);
-                  return dir;
+                  const n = (s) => String(s || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                  const d = n(dir), c = n(cwd);
+                  if (c && d.startsWith(c + "/")) return displayPath(dir.slice(c.length + 1));
+                  return displayPath(dir);
                 }
                 function artLayoutItems(artifacts) { // v1 同款：同目录 ≥2 文件成组，其余散列
                   const items = (artifacts || []).filter((a) => a && a.path).slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
@@ -1941,12 +1981,12 @@
                   return { groups, loose, files: items };
                 }
                 function artFileNode(a, cwd) {
-                  const name = String(a.path).split("/").pop();
+                  const name = baseName(a.path);
                   const div = document.createElement("div");
                   div.className = "artifact-file";
                   div.dataset.artifactFile = name;
                   div.dataset.path = a.path;
-                  div.title = a.path;
+                  div.title = displayPath(a.path);
                   div.innerHTML = '<span class="artifact-file-icon">' + svgUse(artifactIconFor(name)) + '</span><div class="artifact-file-main"><span class="artifact-file-name">' + esc(name) + '</span><span class="artifact-file-dir">' + esc(relDir(artDirOf(a), cwd) || "当前工作目录") + '</span></div><span class="artifact-file-meta" data-artifact-meta>' + sizeStr(a.size) + " · " + relTime(a.last_at || a.first_at) + "</span>" + (a.exists === false ? '<span class="artifact-file-anomaly">已不在磁盘</span>' : "");
                   return div;
                 }
@@ -1972,7 +2012,7 @@
                   const layout = artLayoutItems(arts);
                   const wrap = document.createElement("div");
                   wrap.className = "artifact-browser";
-                  wrap.innerHTML = '<div class="artifact-summary"><span><strong>' + layout.files.length + "</strong> 个文件 · " + layout.groups.length + " 个目录" + (s.artifacts_truncated ? '<small> · 清单曾被截断</small>' : "") + '</span><span class="artifact-summary-path" title="' + esc(s.cwd || "") + '">cwd · ' + esc(shortPath(s.cwd)) + "</span></div>";
+                  wrap.innerHTML = '<div class="artifact-summary"><span><strong>' + layout.files.length + "</strong> 个文件 · " + layout.groups.length + " 个目录" + (s.artifacts_truncated ? '<small> · 清单曾被截断</small>' : "") + '</span><span class="artifact-summary-path" title="' + esc(displayPath(s.cwd || "")) + '">cwd · ' + esc(shortPath(s.cwd)) + "</span></div>";
                   layout.groups.forEach((g, i) => wrap.appendChild(artGroupNode(g, s.cwd, i === 0)));
                   if (layout.loose.length) {
                     const loose = document.createElement("div");
@@ -2455,10 +2495,11 @@
                         artAct.textContent = group.classList.contains("collapsed") ? "展开目录" : "收起目录";
                       } else if (artAct.dataset.artifactAction === "reveal" && group) {
                         // #158-批3 桌面壳「在文件夹中定位」：先探后开——不在本机（远程会话产物）
-                        // 明确提示不给 openPath 弹「路径没有文件」报错（旧壳 11047-11051 口径）
+                        // 明确提示不给 openPath 弹「路径没有文件」报错（旧壳 11047-11051 口径）；
+                        // #158-批4a 目录切分兼容 \（openPath/probePath 吃原生路径，不 display 化）
                         const first = group.querySelector(".artifact-file");
                         const p0 = first ? String(first.dataset.path || "") : "";
-                        const dir = p0.slice(0, p0.lastIndexOf("/")) || p0;
+                        const dir = window.__ccDeck005PathUi.dirOf(p0) || p0;
                         if (!dir || !window.ccDeck || !window.ccDeck.openPath) { b2Toast("无目录可定位"); return; }
                         shellHasLocal(dir).then((local) => {
                           if (!local) { b2Toast("目录不在本机（远程会话产物），无法定位", 3500); return; }
@@ -2467,9 +2508,9 @@
                       } else if (artAct.dataset.artifactAction === "copy-path" && group) {
                         const first = group.querySelector(".artifact-file");
                         const p = first ? String(first.dataset.path || "") : "";
-                        const dir = p.slice(0, p.lastIndexOf("/")) || p;
+                        const dir = window.__ccDeck005PathUi.dirOf(p) || p;
                         try { navigator.clipboard && navigator.clipboard.writeText(dir); } catch (_) {}
-                        b2Toast("已复制路径 · " + dir);
+                        b2Toast("已复制路径 · " + displayPath(dir));
                       }
                       return;
                     }
@@ -2775,7 +2816,7 @@
                   query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? "等待数据" : "暂无项目组";
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = state.source;
-                  query("[data-team-sub]").textContent = project ? [project.tier, project.anchor_dir, members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。";
+                  query("[data-team-sub]").textContent = project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。";
                   const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
@@ -2876,7 +2917,7 @@
                   updateProjects(payload.projects);
                   updateConfirms(payload.org_confirms);
                   for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
-                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   render();
                   if (state.selected) void requestDetail(state.selected);
                   return true;
@@ -3182,14 +3223,17 @@
                 };
                 let selectedKey = "";
 
-                const normDir = (dir) => String(dir || "").replace(/\/+$/, "");
+                // #158-批4a：目录归一比较兼容 \ 分隔（Windows 数据 \ 与拼 / 不匹配会让项目前缀
+                // 归组/子目录匹配失效）；展示输出统一 displayPath（桌面 Windows 形态反斜杠）
+                const displayPath = window.__ccDeck005PathUi.displayPath;
+                const normDir = (dir) => String(dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
                 const underAnchor = (cwd, anchor) => { const c = normDir(cwd), a = normDir(anchor); return !!a && (c === a || c.startsWith(a + "/")); };
                 const shortenDir = (dir) => {
                   const d = normDir(dir), h = normDir(bridge.homedir);
-                  if (h && (d === h || d.startsWith(h + "/"))) return "~" + d.slice(h.length);
-                  return d || "/";
+                  if (h && (d === h || d.startsWith(h + "/"))) return "~" + displayPath(d.slice(h.length));
+                  return displayPath(d) || "/";
                 };
-                const basename = (path) => String(path || "").split("/").filter(Boolean).pop() || String(path || "");
+                const basename = (path) => window.__ccDeck005PathUi.baseName(path);
                 const STATUS_WORD = { WORKING: "运行中", WAITING: "待处理", ERROR: "错误", DONE: "完成" };
                 const STATUS_DOT = { WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" };
                 const STATUS_TAG = { WORKING: "info", WAITING: "action", ERROR: "danger", DONE: "done" };
@@ -3303,7 +3347,7 @@
                 function sessionsTabMarkup(entry) {
                   if (!entry.sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>';
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || s.cwd || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div></div>").join("");
+                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || displayPath(s.cwd) || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div></div>").join("");
                   return '<div class="queue-group">会话 · ' + entry.sessions.length + "</div>" + rows;
                 }
 
@@ -3321,7 +3365,9 @@
                   if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>';
                   const anchor = normDir(entry.anchor);
                   const rows = artifacts.map((a) => {
-                    const rel = a.path !== anchor && a.path.startsWith(anchor + "/") ? a.path.slice(anchor.length + 1) : basename(a.path);
+                    // #158-批4a：前缀比较归一化（a.path 原生 \ 与 anchor 归一 / 不匹配会整串显示）
+                    const pN = normDir(a.path);
+                    const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
                     return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></span></div>";
                   }).join("");
                   return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows;
@@ -4492,7 +4538,7 @@ function connectLan(ctx) {
         return {
           id: escapeHtml(session.session_id),
           title: escapeHtml(session.title || session.initial_prompt || session.session_id),
-          summary: escapeHtml(session.action_summary || session.last_error || session.cwd || "暂无活动摘要"),
+          summary: escapeHtml(session.action_summary || session.last_error || window.__ccDeck005PathUi.displayPath(session.cwd) || "暂无活动摘要"),
           status,
           tag: ({ working: "运行中", waiting: "待处理", error: "错误", done: "完成" })[status],
           tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
@@ -5683,6 +5729,9 @@ function connectLan(ctx) {
       // #158-⌘文案：与 foundation IIFE 作用域不通，独立定义同款常量
       const IS_MAC = /Mac/i.test(navigator.userAgent);
       const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
+      // #158-批4a：B2 IIFE 挂的全页共享路径助手（展示 \ 化 / 归一比较 / 跨分隔符基名）
+      const displayPath = window.__ccDeck005PathUi.displayPath;
+      const baseName = window.__ccDeck005PathUi.baseName;
       const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
       const oneLine = (t) => { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 60 ? v.slice(0, 60) + "…" : v; };
       const svg = (name) => `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
@@ -5698,11 +5747,15 @@ function connectLan(ctx) {
       const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
       const sourceBadge = () => `<span class="source-badge">${esc(bridge.relayName || location.host)}</span>`;
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
-      const getSessionProject = (s) => {
-        const cwd = String((s && s.cwd) || "").replace(/\/+$/, "");
+      const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
+        const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         if (cwd) {
-          const hit = projects.find((p) => p && typeof p.anchor_dir === "string" && (p.anchor_dir.replace(/\/+$/, "") === cwd || cwd.startsWith(p.anchor_dir.replace(/\/+$/, "") + "/")));
+          const hit = projects.find((p) => {
+            if (!(p && typeof p.anchor_dir === "string" && p.anchor_dir)) return false;
+            const a = p.anchor_dir.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+            return a === cwd || cwd.startsWith(a + "/");
+          });
           if (hit && hit.name) return hit.name;
         }
         return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
@@ -5711,7 +5764,7 @@ function connectLan(ctx) {
         const [w, cls] = stTag(s);
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(s.cwd) || w)}</p><div class="identity-cluster"><span class="tag ${cls}">${w}</span>${engineBadge(s)}${sourceBadge()}</div></div>`;
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster"><span class="tag ${cls}">${w}</span>${engineBadge(s)}${sourceBadge()}</div></div>`;
       };
 
       // ---------- 导航栈 ----------
@@ -5745,7 +5798,7 @@ function connectLan(ctx) {
         const titleEl = document.querySelector("#mobile-detail-title");
         if (titleEl && titleEl.firstChild) titleEl.firstChild.textContent = s ? sessionTitle(s) : "会话详情";
         const sub = document.querySelector("#mobile-detail-sub");
-        if (sub) sub.textContent = s ? (String(s.cwd || "") || "目录未记录") : "";
+        if (sub) sub.textContent = s ? (displayPath(s.cwd) || "目录未记录") : "";
         const idn = document.querySelector("#mobile-detail-identity");
         if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge();
         const tag = target.querySelector(".mobile-head .tag.action");
@@ -5889,7 +5942,7 @@ function connectLan(ctx) {
         const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
         if (!arts.length) return '<div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>';
         const sorted = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
-        return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = String(a.path).split("/").pop(); return '<div class="artifact-row">' + svg(mArtIcon(name)) + " " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
+        return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + svg(mArtIcon(name)) + " " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
       }
       function mUsageHtml(s) { // B2 ctxMeterHtml 同构（12 格 band + tone 分级），mobile 形态加 mobile-context-meter
         if (!s) return '<div class="readonly-banner">未选择会话</div>';
@@ -6043,7 +6096,7 @@ function connectLan(ctx) {
           if (confirms.length) { slot.hidden = false; slot.innerHTML = `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`; }
           else { slot.hidden = true; slot.textContent = ""; }
         }
-        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(s.cwd) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
+        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
         const lane = (label, items, mapper) => `<div class="mobile-lane"><div class="mobile-lane-head"><span>${label}</span><span>${items.length}</span></div>${items.map(mapper).join("") || '<div class="mobile-task"><span class="muted">暂无</span></div>'}</div>`;
         const todo = screen.querySelector('[data-team-pane="todo"]');
         if (todo) todo.innerHTML = lane("需行动", sessions.filter(needAction).sort(byPinnedUpdated), taskRow) + (confirms.length ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>组织确认</span><span class="tag action">${confirms.length}</span></div><div class="mobile-task"><b>确认事项待处理</b><br><span class="muted">回桌面团队域确认</span></div></div>` : "");
@@ -6076,7 +6129,7 @@ function connectLan(ctx) {
         if (cards) cards.innerHTML = projects.length ? projects.map((p) => {
           const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
           const [word, cls] = p.status === "active" ? ["活跃", "done"] : p.status === "parked" ? ["挂起", ""] : ["归档", ""];
-          return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(p.anchor_dir || "")}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
+          return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(displayPath(p.anchor_dir || ""))}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
         }).join("") : '<div class="readonly-banner">暂无项目组 · 立项后在组织侧同步。</div>';
         const laneHost = screen.querySelector("[data-mobile-project-lane]");
         if (laneHost) laneHost.innerHTML = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`;
