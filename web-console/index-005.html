@@ -428,15 +428,29 @@
     .composer:focus-within { border-color: var(--brand); }
     .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
     .composer-input::placeholder { color: var(--faint); }
-    .composer-clip { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
-    .composer-clip:hover, .composer-clip:focus-visible { background: var(--hover); color: var(--text-strong); }
-    .composer-clip .icon-inline { width: 15px; height: 15px; }
+    .composer-clip, .composer-img { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
+    .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); }
+    .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
+    /* #169 输入栏五点：能力提示小字（旧壳 #179 attachHint 同语义，005 化为 composer 内换行行）。
+       min-width:0 必备——nowrap 长文的 min-content 会把 flex 行撑出手机屏（发送钮被推出右缘） */
+    .composer-hint { flex: 1 0 100%; min-width: 0; padding: 0 2px 7px; color: var(--faint); font-size: 10.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* #169 发送常驻（旧壳 #48 sendBtn 形态 005 化：中性面板+描边+品牌色➤，不做实底大色块） */
+    .composer-sendbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); color: var(--brand); cursor: pointer; }
+    .composer-sendbtn:hover:not(:disabled) { background: var(--hover); border-color: var(--brand); }
+    .composer-sendbtn:disabled { opacity: .4; cursor: default; }
+    .composer-sendbtn .icon-inline { width: 16px; height: 16px; }
+    /* #169 停止独立（旧壳 #124 stopBtn 34×34 红调图标钮，与发送并存不互斥） */
+    .composer-stopbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid rgba(236,116,114,.4); border-radius: 8px; background: rgba(236,116,114,.1); color: var(--error); cursor: pointer; }
+    .composer-stopbtn:hover { background: rgba(236,116,114,.18); border-color: rgba(236,116,114,.55); }
+    .composer-stopbtn .icon-inline { width: 14px; height: 14px; }
+    .composer-stopbtn[hidden] { display: none; }
     .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
     .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
     .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
     .primary-btn.composer-secondary-action { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: none; }
     .primary-btn.composer-secondary-action:hover { background: var(--hover); filter: none; box-shadow: none; }
-    /* #79 输入栏补全：附件暂存架（composer 内 wrap 换行承载；空架不渲染）+ 拖入高亮 + 停止钮 + 生成中点动波 + 已停止标记——全走既有 token，暗亮双主题自动 */
+    /* #79 输入栏补全：附件暂存架（composer 内 wrap 换行承载；空架不渲染）+ 拖入高亮 + 生成中点动波 + 已停止标记——全走既有 token，暗亮双主题自动。
+       #169 起停止钮改独立 .composer-stopbtn（发送不再 morph），旧 .primary-btn.composer-stop 规则随之退役 */
     .composer-tray { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 0 100%; margin: 6px 0 8px; padding-top: 6px; border-top: 1px dashed var(--line-soft); }
     .composer-tray-item { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 4px 2px 5px; border: 1px solid var(--tag-border); border-radius: var(--radius-sm); background: var(--tag-bg); color: var(--text); font-size: 10px; }
     .composer-tray-thumb { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; border: 1px solid var(--line-soft); }
@@ -449,9 +463,6 @@
     .bubble-att { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border: 1px solid var(--card-border); border-radius: var(--radius-sm); background: var(--surface2); font-size: 10px; }
     .bubble-att img { width: 26px; height: 26px; border-radius: 4px; object-fit: cover; }
     .bubble-att .icon-inline { width: 13px; height: 13px; color: var(--dim); }
-    .primary-btn.composer-stop { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: none; }
-    .primary-btn.composer-stop:hover { background: var(--hover); filter: none; box-shadow: none; }
-    .primary-btn.composer-stop .icon-inline { width: 11px; height: 11px; }
     .stream-dots { display: inline-flex; align-items: center; gap: 4px; }
     .stream-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); animation: stream-bounce 1.1s ease-in-out infinite; }
     .stream-dots i:nth-child(2) { animation-delay: .15s; }
@@ -1180,7 +1191,7 @@
   </style>
 </head>
 <body data-card-density="standard" data-source-mode="single">
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol></svg>
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
@@ -1208,7 +1219,7 @@
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
               </div>
               <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div>
-              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></footer>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附加文件（最多 2 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 4 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"><div class="composer-hint">支持拖入 / 粘贴即附 · 图片 ≤4 张 · 文件 ≤2 个 · ↑↓ 翻阅历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
             <script>
@@ -2650,25 +2661,18 @@
                   syncComposerState();
                 }
 
-                // ---------- 输入栏（发送/停止/历史/附件） ----------
+                // ---------- 输入栏（发送/停止/历史/附件）——#169：发送常驻+停止独立，WORKING 双钮并存 ----------
                 function syncComposerState() {
                   const s = curSession();
-                  const running = !!(s && canCmd(s) && (s.status === "WORKING" || s.status === "WAITING"));
-                  UI.sendBtn.classList.toggle("composer-stop", running);
-                  if (running) {
-                    UI.sendBtn.innerHTML = svgUse("stop") + "停止";
-                    UI.sendBtn.title = "停止生成";
-                    UI.sendBtn.setAttribute("aria-label", "停止生成");
-                    UI.sendBtn.disabled = false;
-                  } else {
-                    UI.sendBtn.textContent = "发送";
-                    UI.sendBtn.title = "";
-                    UI.sendBtn.removeAttribute("aria-label");
-                    UI.sendBtn.disabled = !(UI.input.value.trim() || S.staged.length);
-                  }
                   const editable = !!(s && canCmd(s));
+                  const running = !!(editable && (s.status === "WORKING" || s.status === "WAITING"));
+                  if (UI.stopBtn) UI.stopBtn.hidden = !running; // 停止只在运行中出现（旧壳 #124 语义），不再占用发送钮
+                  UI.sendBtn.disabled = !editable || !(UI.input.value.trim() || S.staged.length); // 常驻判空：运行中有内容仍可发（排队链）
+                  UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
                   UI.input.disabled = !editable;
                   UI.input.placeholder = editable ? "给会话发消息…" : s ? "历史会话只读 · 恢复待 B2b" : "先选择会话";
+                  const hint = UI.composer.querySelector(".composer-hint");
+                  if (hint) hint.style.display = editable ? "" : "none"; // 旧壳 #179 同口径：只读态按钮都藏了别孤挂小字
                 }
                 function sendMessage() {
                   const s = curSession();
@@ -2779,8 +2783,8 @@
                     r.readAsDataURL(file);
                   });
                 }
-                async function stageFiles(files) {
-                  const s = curSession();
+                async function stageFiles(files, sidHint) { // #169 sidHint：手机路径借道（桌面文档级拖放在手机态无 S.selected）
+                  const s = (sidHint && S.sessions.get(sidHint)) || curSession();
                   if (!s || !canCmd(s)) { b2Toast("当前会话不支持附件"); return; }
                   for (const f of [...(files || [])].filter(Boolean)) {
                     const isImg = /^image\//.test(f.type || "");
@@ -2797,19 +2801,23 @@
                   }
                   renderTray();
                   syncComposerState();
+                  try { window.dispatchEvent(new Event("ccdeck:staged")); } catch (_) {} // #169 手机路径监听同步发送态
                 }
                 function renderTray() {
-                  const composer = UI.composer;
-                  let tray = composer.querySelector(".composer-tray");
-                  if (!S.staged.length) { tray && tray.remove(); return; }
-                  if (!tray) {
-                    tray = document.createElement("div");
-                    tray.className = "composer-tray";
-                    tray.setAttribute("role", "list");
-                    tray.setAttribute("aria-label", "待发送附件");
-                    composer.appendChild(tray);
+                  // #169 双宿主：桌面与手机 composer 各渲染一份暂存架（同一 S.staged 数据源）
+                  const hosts = [UI.composer, document.querySelector('[data-composer="mobile"]')].filter(Boolean);
+                  for (const composer of hosts) {
+                    let tray = composer.querySelector(".composer-tray");
+                    if (!S.staged.length) { tray && tray.remove(); continue; }
+                    if (!tray) {
+                      tray = document.createElement("div");
+                      tray.className = "composer-tray";
+                      tray.setAttribute("role", "list");
+                      tray.setAttribute("aria-label", "待发送附件");
+                      composer.appendChild(tray);
+                    }
+                    tray.innerHTML = S.staged.map((f, i) => '<span class="composer-tray-item" role="listitem">' + (f.isImg && f.url ? '<img class="composer-tray-thumb" src="' + f.url + '" alt="">' : svgUse("clip")) + '<span class="composer-tray-name">' + esc(f.name) + '</span><button class="composer-tray-x" type="button" data-tray-remove="' + i + '" title="移除附件" aria-label="移除附件 ' + esc(f.name) + '">×</button></span>').join("");
                   }
-                  tray.innerHTML = S.staged.map((f, i) => '<span class="composer-tray-item" role="listitem">' + (f.isImg && f.url ? '<img class="composer-tray-thumb" src="' + f.url + '" alt="">' : svgUse("clip")) + '<span class="composer-tray-name">' + esc(f.name) + '</span><button class="composer-tray-x" type="button" data-tray-remove="' + i + '" title="移除附件" aria-label="移除附件 ' + esc(f.name) + '">×</button></span>').join("");
                 }
 
                 // ---------- 「+」新建：#75 引擎选择菜单 ----------
@@ -3078,7 +3086,8 @@
                   });
 
                   // composer：发送/停止/历史/IME
-                  UI.sendBtn.addEventListener("click", () => { if (UI.sendBtn.classList.contains("composer-stop")) stopSession(); else sendMessage(); });
+                  UI.sendBtn.addEventListener("click", sendMessage);
+                  if (UI.stopBtn) UI.stopBtn.addEventListener("click", stopSession);
                   let composing = false, commitLockUntil = 0;
                   UI.input.addEventListener("compositionstart", () => { composing = true; });
                   UI.input.addEventListener("compositionend", () => { composing = false; commitLockUntil = Date.now() + 150; });
@@ -3111,12 +3120,23 @@
                   if (clip) {
                     const fileInput = document.createElement("input");
                     fileInput.type = "file";
-                    fileInput.multiple = true;
-                    fileInput.accept = "image/*,.pdf,.md,.txt,.zip,.json,.csv";
+                    fileInput.multiple = true; // 任意类型（旧壳 #92 文件入口口径；图片走独立相机钮）
                     fileInput.hidden = true;
                     document.body.appendChild(fileInput);
                     fileInput.addEventListener("change", () => { stageFiles(fileInput.files); fileInput.value = ""; });
                     clip.addEventListener("click", (ev) => { ev.stopPropagation(); fileInput.click(); UI.input.focus(); });
+                  }
+                  // #169 图片独立入口（旧壳 #279 imgBtn：image/* 选择器，压缩/限额走既有 stageFiles）
+                  const imgBtn = composer.querySelector("[data-composer-img]");
+                  if (imgBtn) {
+                    const imgInput = document.createElement("input");
+                    imgInput.type = "file";
+                    imgInput.multiple = true;
+                    imgInput.accept = "image/*";
+                    imgInput.hidden = true;
+                    document.body.appendChild(imgInput);
+                    imgInput.addEventListener("change", () => { stageFiles(imgInput.files); imgInput.value = ""; });
+                    imgBtn.addEventListener("click", (ev) => { ev.stopPropagation(); imgInput.click(); UI.input.focus(); });
                   }
 
                   // 文档级拖入蒙层（#79：拖文件无反应的真因——depth 计数 + preventDefault）
@@ -3130,8 +3150,12 @@
                     dragDepth = 0;
                     document.body.classList.remove("file-drag-over");
                     if (ev.target.closest && ev.target.closest("[data-composer]")) return; // composer 内已由专属 handler 接管
+                    // #169 B#15：蒙层亮起时任意处松手即收件（旧壳 #179 全窗拖放语义，收窄回 toast 是回归）
                     const dt = ev.dataTransfer;
-                    if (dt && dt.files && dt.files.length) b2Toast("把文件拖到输入栏即可作为附件发送");
+                    if (dt && dt.files && dt.files.length) {
+                      const mobSid = document.querySelector("#stage-mobile.active") && window.__ccDeck005B4 && typeof window.__ccDeck005B4.currentDetail === "function" ? window.__ccDeck005B4.currentDetail() : null;
+                      stageFiles(dt.files, mobSid);
+                    }
                     else if (dt && (dt.getData("text/uri-list") || dt.getData("text/plain"))) b2Toast("网页内容请在输入栏粘贴发送");
                   });
                   window.addEventListener("blur", () => { dragDepth = 0; document.body.classList.remove("file-drag-over"); });
@@ -3196,6 +3220,7 @@
                     dock: $id("session-state-dock"),
                     composer: section.querySelector('[data-composer="session"]'),
                     sendBtn: section.querySelector("[data-composer-send]"),
+                    stopBtn: section.querySelector("[data-composer-stop]"),
                     input: section.querySelector('[data-composer="session"] .composer-input'),
                     inspector: section.querySelector(".inspector"),
                     queueHead: section.querySelector(".queue-head"),
@@ -3262,10 +3287,21 @@
                     if (!s) return { sent: false, error: "会话不存在或未同步" };
                     if (!canCmd(s)) return { sent: false, error: "历史会话只读" };
                     const body = String(text ?? "").trim();
-                    if (!body) return { sent: false, error: "空输入" };
-                    const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", { session_id: s.session_id, text: body });
-                    return id ? { sent: true } : { sent: false, error: "relay 未连接，命令未发送" };
+                    const imgs = S.staged.filter((f) => f.isImg).map((f) => f.b64); // #169 手机路径同样可带附件（与桌面 sendMessage 同构）
+                    const files = S.staged.filter((f) => !f.isImg).map((f) => ({ name: f.name, b64: f.b64 }));
+                    if (!body && !imgs.length && !files.length) return { sent: false, error: "空输入" };
+                    if (imgs.length > IMG_MAX || files.length > FILE_MAX) return { sent: false, error: "附件超限（图 " + IMG_MAX + " / 文件 " + FILE_MAX + "）" };
+                    const payload = Object.assign({ session_id: s.session_id, text: body }, imgs.length ? { images: imgs } : {}, files.length ? { files } : {});
+                    const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", payload);
+                    if (id) { S.staged = []; renderTray(); return { sent: true }; }
+                    return { sent: false, error: "relay 未连接，命令未发送" };
                   },
+                  stopPrompt(sid) { // #169 手机停止钮（与桌面 stopSession 同命令面）
+                    const s = S.sessions.get(sid);
+                    if (!s) return false;
+                    return commandAck(s.external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: s.session_id });
+                  },
+                  stageFiles, // #169 手机图片/附件入口复用（压缩/限额逻辑不重写）
                 };
               })();
             </script>
@@ -4331,7 +4367,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">会话<small id="mobile-detail-sub">加载中…</small></h2><span class="identity-cluster" id="mobile-detail-identity"></span><span class="tag action">加载中</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
-              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
+              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附加文件（最多 2 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 4 张，也可直接粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"><div class="composer-hint">拖入 / 粘贴即附 · 图 ≤4 · 文件 ≤2 · ↑↓ 历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div>
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
@@ -6446,6 +6482,8 @@ function connectLan(ctx) {
       let detailSid = "";
       let detailBase = null; // { content, convHost, conv, tasks, arts, usage, more }
       const b2Api = () => window.__ccDeck005B2 || null;
+      // #169 手机详情当前会话暴露（桌面文档级拖放收件时借道定位 sid，替代桌面 S.selected）
+      if (window.__ccDeck005B4) window.__ccDeck005B4.currentDetail = () => detailSid;
       const DETAIL_TL_MAX = 30;
       const VERIFY_RE_M = /[〔\[【]\s*待验证\s*[〕\]】]/; // 与 B2 任务 tab 四组制同口径（#85 待验证档）
       const M_DOCK_STATE = { WORKING: ["running", "执行中"], WAITING: ["waiting", "已暂停"], ERROR: ["suspended", "出错"], DONE: ["closing", "已完成"] }; // 态位与 CSS/B2 DOCK_STATE 同集
@@ -6657,27 +6695,71 @@ function connectLan(ctx) {
         base.usage.innerHTML = mUsageHtml(s);
         base.more.innerHTML = mMoreHtml();
         updateMobileDetailDock(s);
+        syncMobileComposer(); // #169 输入栏随会话态同步（停止钮可见性/发送禁用/提示小字）
         base.content.scrollTop = keepScroll;
       }
       function mobileSend() {
         if (!detailSid) { mToast("先从会话列表进入详情"); return; }
         const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
         const text = String((input && input.value) || "").trim();
-        if (!text) return; // 空输入忽略
         const api = b2Api();
+        const staged = (api && api.S && api.S.staged) || [];
+        if (!text && !staged.length) return; // 空输入且无附件忽略（#169 附件可单独发）
         if (!api || typeof api.sendPrompt !== "function") { mToast("发送链路未就绪"); return; }
         const s = bridge.sessions.get(detailSid) || (api.S && api.S.sessions ? api.S.sessions.get(detailSid) : null);
         if (s && typeof api.canCmd === "function" && !api.canCmd(s)) { mToast("历史会话只读"); return; }
         const r = api.sendPrompt(detailSid, text) || {};
         if (r.sent) { if (input) input.value = ""; mToast("已发送"); }
         else mToast(String(r.error || "发送失败"));
+        syncMobileComposer();
+      }
+      // #169 手机输入栏同步：发送常驻判空禁用 + 停止钮运行中出现 + 提示小字只读态隐藏
+      function syncMobileComposer() {
+        const send = document.querySelector('#m-detail [data-composer-send]');
+        const stop = document.querySelector('#m-detail [data-composer-stop]');
+        const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
+        const hint = document.querySelector('#m-detail .composer-hint');
+        const api = b2Api();
+        const s = detailSid ? (bridge.sessions.get(detailSid) || (api && api.S && api.S.sessions ? api.S.sessions.get(detailSid) : null)) : null;
+        const editable = !!(s && (!api || !api.canCmd || api.canCmd(s)));
+        const staged = (api && api.S && api.S.staged) || [];
+        if (send) send.disabled = !editable || !((input && input.value.trim()) || staged.length);
+        if (stop) stop.hidden = !(editable && s && (s.status === "WORKING" || s.status === "WAITING"));
+        if (hint) hint.style.display = editable ? "" : "none";
       }
       function setupMobileDetail() {
         detailBase = ensureDetailBase();
         const send = document.querySelector('#m-detail [data-composer-send]');
         if (send) send.addEventListener("click", () => mobileSend());
+        const stop = document.querySelector('#m-detail [data-composer-stop]');
+        if (stop) stop.addEventListener("click", () => { // #169 手机停止（与桌面同命令面）
+          if (!detailSid) { mToast("先从会话列表进入详情"); return; }
+          const api = b2Api();
+          if (api && typeof api.stopPrompt === "function") { api.stopPrompt(detailSid); mToast("已请求停止"); }
+        });
         const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
-        if (input) input.addEventListener("keydown", (ev) => { if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return; ev.preventDefault(); mobileSend(); }); // IME 组词期 Enter 不发送
+        if (input) {
+          input.addEventListener("keydown", (ev) => { if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return; ev.preventDefault(); mobileSend(); }); // IME 组词期 Enter 不发送
+          input.addEventListener("input", () => syncMobileComposer()); // #169 发送禁用态随输入同步
+        }
+        // #169 图片/文件双入口（旧壳 imgBtn/fileBtn 语义；压缩/限额走 B2 stageFiles 不重写）
+        const pickHost = '[data-composer="mobile"]';
+        const wirePicker = (btnSel, accept) => {
+          const btn = document.querySelector(btnSel);
+          if (!btn) return;
+          const inp = document.createElement("input");
+          inp.type = "file";
+          inp.multiple = true;
+          if (accept) inp.accept = accept;
+          inp.hidden = true;
+          document.body.appendChild(inp);
+          inp.addEventListener("change", () => { const api = b2Api(); if (api && typeof api.stageFiles === "function") api.stageFiles(inp.files, detailSid); inp.value = ""; }); // #169 带手机详情 sid 借道
+          btn.addEventListener("click", (ev) => { ev.stopPropagation(); inp.click(); });
+        };
+        wirePicker('#m-detail ' + pickHost + ' .composer-img', "image/*");
+        wirePicker('#m-detail ' + pickHost + ' .composer-clip', "");
+        window.addEventListener("ccdeck:staged", () => syncMobileComposer()); // 暂存变化（含桌面拖入/粘贴）同步发送态
+        syncMobileComposer();
       }
 
       // ---------- 四屏渲染 ----------
