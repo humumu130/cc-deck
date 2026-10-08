@@ -3109,9 +3109,12 @@
                   openAcceptance(id) {
                     const safe = String(id || "").replace(/[^a-zA-Z0-9_-]/g, "");
                     if (!safe) return;
-                    const url = new URL("/acceptance/" + safe, location.baseURI);
-                    const opened = window.open(url.href, "_blank", "noopener");
-                    if (!opened) toast("弹窗被浏览器拦截 · 请允许后重试");
+                    // #158-批4a：绝对地址基于 relay 实连信息推导（桌面形态 location 是 tauri.localhost、
+                    // 云通道是 cc.humumu.online 代理——相对解析/硬编码端口在这些形态必断链）；
+                    // 地基维护 __ccDeck005HttpOrigin()（wsUrl→http origin，推导不出回落 location.origin）
+                    const origin = (typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin;
+                    const url = String(origin).replace(/\/+$/, "") + "/acceptance/" + safe;
+                    void window.__ccDeck005OpenUrl(url); // 统一 Promise 化打开链：桌面 openExternal / 浏览器被拦降级复制+toast
                   },
                   bannerOf(text) { return bannerNode(text); },
                   subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
@@ -4551,6 +4554,18 @@ function connectLan(ctx) {
           const h = new URL(String(ctx.cfg.wsUrl || "").replace(/^ws/i, "http")).hostname;
           return h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
         } catch (_) { return false; }
+      };
+      // #158-批4a：验收单等页内生成链接的绝对地址源——按当前实连 ws 地址换 http origin（云形态
+      // wss://cc.humumu.online/cloud → https://cc.humumu.online；桌面 ws://127.0.0.1:port/ws →
+      // http://127.0.0.1:port，替代 location 推导——桌面形态 location 是 tauri.localhost 必断链）。
+      // 推导不出（file://、未配置）回落 location.origin（浏览器形态两者本就一致）
+      window.__ccDeck005HttpOrigin = () => {
+        try {
+          const raw = String((typeof cloudMode !== "undefined" && cloudMode ? cloudCtx.cfg.wsUrl : ctx.cfg.wsUrl) || "");
+          const u = new URL(raw.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
+          if (u.protocol === "http:" || u.protocol === "https:") return u.origin;
+        } catch (_) {}
+        return location.origin;
       };
 
       function escapeHtml(value) {
