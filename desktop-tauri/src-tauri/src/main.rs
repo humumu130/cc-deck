@@ -1225,8 +1225,12 @@ fn main() {
             // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
             //（窗口样式仍带 WS_CAPTION），此处显式去框兜底；标题栏职责移交网页自绘。
             // #74 mac 例外：走 tauri.macos.conf 的 Overlay（系统红黄绿 + 内容全幅），
-            // 这里再 set false 会把圆点一起扒掉——mac 跳过
-            if !cfg!(target_os = "macos") {
+            // 这里再 set false 会把圆点一起扒掉——mac 跳过。
+            // W15 Windows 例外（用户拍板「系统标准标题栏，最稳」）：tauri.windows.conf.json
+            // 覆盖 decorations=true，此处不再去框——无框窗在 Windows 的拖拽/缩放边/贴边
+            // 快照各有一堆边角（0.7.0-test.3 装机实测拖不动+顶栏残留），系统标题栏一并
+            // 根治；网页侧 windowbar 退化为工具条（win 按钮与 mac 圆点都不再显示）
+            if cfg!(not(any(target_os = "macos", target_os = "windows"))) {
                 let _ = win.set_decorations(false);
             }
             // #74 第七轮：红黄绿圆点离窗口角（用户两轮反馈「太靠左上」）——系统默认

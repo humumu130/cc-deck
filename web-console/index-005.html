@@ -327,7 +327,11 @@
     .windowbar-winbtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
     html.mac-tauri .windowbar { padding-left: 78px; }
     html.mac-tauri .window-dots, html.win-tauri .window-dots { display: none; }
-    html.win-tauri .windowbar-winbtns { display: flex; }
+    /* W15：Windows 走系统标准标题栏（tauri.windows.conf decorations=true），自绘三钮
+       退役（windowbar-winbtns 维持基础 display:none）——win-tauri 下 windowbar 纯工具条；
+       标题让位（系统标题栏已示名），原 flex:1 间隔职责移交 source-switcher 的 auto 右距 */
+    html.win-tauri .window-title { display: none; }
+    html.win-tauri .source-switcher { margin-right: auto; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
     .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -5101,17 +5105,11 @@
       const toast = document.querySelector("#toast");
       const connectionChips = [...document.querySelectorAll(".connection-chip")];
       const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
-      // #158-②③ 桌面壳平台化：Tauri 内真拖拽+窗口钮；class 兼供字号档/⌘文案分支（浏览器不加 class）
+      // #158-②③ 桌面壳平台化：class 供 mac 圆点让位/⌘文案/路径展示分支（浏览器不加 class）。
+      // W15：Windows 改系统标准标题栏后自绘三钮退役（winbtns 常隐），此处只挂平台 class
       const IS_MAC = /Mac/i.test(navigator.userAgent);
       if (window.__TAURI__?.window) {
         document.documentElement.classList.add(IS_MAC ? "mac-tauri" : "win-tauri");
-        if (!IS_MAC) {
-          const win = window.__TAURI__.window.getCurrentWindow();
-          const btn = (name, fn) => document.querySelector(`[data-win-btns] [data-w="${name}"]`)?.addEventListener("click", () => { try { fn(); } catch {} });
-          btn("min", () => win.minimize());
-          btn("max", () => win.toggleMaximize());
-          btn("close", () => win.close());
-        }
       }
       const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
       let mobileReturn = "inbox";
