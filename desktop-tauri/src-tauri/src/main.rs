@@ -1177,6 +1177,11 @@ fn main() {
             }
             // #334 启动自动启用：本地无 relay 在服务就静默拉起内嵌 relay（已有则让位），
             // 等端口就绪再建窗口，保证页面首次探测（/local-info）即命中——用户全程无感
+            // W15 让位分支补 WANT：启动时端口已有 relay（0.6.3 旧版壳/插件托管——nova 与
+            // 旧版双装并排的常态）只直接连不另起；但旧版退出会带走 relay，WANT 不置真
+            // 则监督线程判「别添乱」永不接管，壳当场掉线直到手动重启。置真后让位逻辑
+            // 不变（端口在服务=need_spawn false 零动作），端口空出才补起内嵌实例
+            //（与 #76 relay_service 停用回退同语义）
             if !port_listening(relay_port()) {
                 match spawn_embedded_relay(app.handle()) {
                     // #17 首启预算 4s→9s：全新安装机器上 Defender 冷扫描 2MB relay.mjs
@@ -1198,6 +1203,9 @@ fn main() {
                         *EMBEDDED_RELAY_ERR.lock().unwrap() = Some(e);
                     }
                 }
+            } else {
+                RELAY_WANTED.store(true, Ordering::SeqCst);
+                println!("[embedded-relay] port {} already serving at boot - takeover armed", relay_port());
             }
             // #66 子进程监督常驻（WANT 门控：从未启用/用户手动停时静默空转）
             supervise_embedded_relay(app.handle().clone());
