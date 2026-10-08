@@ -68,6 +68,10 @@ const targets = [
     // 预发通道容忍（2026-10-07 ⑥d）：canonical 带 -test.N 预发段时 `[\d.]+` 只吃到
     // 主干（v0.7.0-test.2 取到 0.7.0 ≠ canonical），version --check 永远红、闸门连环挂；
     // 三处取值/回写统一带可选预发段（正式版三段号行为不变）
+    // 官网只认正式版（用户口径 2026-10-08）：test 是自测通道不该上门面——canonical
+    // 带预发段时本落点整体跳过（不读不写不报红），主页停留在最近正式版；0.7.0-test.3
+    // 批曾把主页刷成 test 号线上公开可见，回退 0.6.3 并加此豁免根治
+    stableOnly: true,
     name: "cloudflare homepage version",
     file: "web-console/site/index.html",
     get: (s) => /<i class="pulse"><\/i>v([\d.]+(?:-[\w.]+)?)/.exec(s)?.[1],
@@ -82,6 +86,10 @@ const targets = [
 const mode = process.argv[2] ?? "";
 let mismatch = false;
 for (const t of targets) {
+  if (t.stableOnly && /-/.test(canonical)) {
+    console.log(`↷ ${t.name}: 预发版不刷官网门面（停留最近正式版）`);
+    continue;
+  }
   const raw = read(t.file);
   const cur = t.get(raw);
   const ok = cur === canonical;
