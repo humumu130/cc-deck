@@ -21,6 +21,7 @@ import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 import { orgDir } from "./org.js";
 import { listConfirms } from "./projects.js";
 import { DecisionNotificationWatcher } from "./decision-notify.js";
+import { probeSqliteDriverAtBoot } from "./storage/read-mode.js";
 
 // 内嵌模式（桌面壳 CCR_PARENT_PID 标记）：日志加时间戳——embedded-relay.log 此前
 // 全是裸行，云桥翻动/断连这类时序问题无从对表排障（2026-09-18 电脑端排查之痛）
@@ -248,6 +249,14 @@ if (cliArgs.has("--stop")) {
     console.log(`[config] 雇员独立家已开启（${st.source === "file" ? "设置项" : "新装默认"}）：${st.value}`);
   }
 }
+
+// #158 批1（2026-10-08）：sqlite 原生驱动 boot 探测——0.7.0-test.3 Windows 包实锤
+// resources 闭包里的 better_sqlite3.node 是 darwin-arm64，win32 上加载即 dlopen 抛
+// ERR_DLOPEN_FAILED，启动序列（rehydrateParkedMembers→listGroups→new Database）被炸断、
+// 8787 永不监听。驱动已改可失败动态加载（storage/sqlite.ts）+ 读面降级 json 档
+//（read-mode.ts viaReadMode），这里 boot 即探测：降级发生时横幅必出现在启动日志最前
+//（不等首个读入口触发）；正常路径零输出、零行为变化（mac sqlite 档照常）。
+probeSqliteDriverAtBoot();
 
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");

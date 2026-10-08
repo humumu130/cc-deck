@@ -50,6 +50,7 @@
     "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
     "test:import-artifact": "tsx scripts/test-import-artifact.ts",
     "test:read-mode": "tsx scripts/test-read-mode.ts",
+    "test:sqlite-resilience": "tsx scripts/test-sqlite-resilience.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",
     "rehearse:rollback": "tsx scripts/rehearse-cutover-rollback.ts",
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",

@@ -66,7 +66,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { StoragePort } from "./port.js";
-import { createSqlitePort } from "./sqlite.js";
+import { createSqlitePort, loadSqliteDriver, resetSqliteDriverForTest } from "./sqlite.js";
 import { runMigrations } from "./migrator.js";
 import { readCheckpoint } from "./checkpoint.js";
 import { statThenRead } from "./import-util.js";
@@ -128,6 +128,43 @@ export function resolveDirs(override?: Partial<ReadModeDirs>): ReadModeDirs {
     orgDir: override?.orgDir ?? process.env.CCR_ORG_DIR ?? join(homedir(), ".cc-deck", "org"),
     tasksDir: override?.tasksDir ?? join(dataDir, "tasks"),
   };
+}
+
+// ---------- sqlite 可用性降级（#158 批1 纵深防御） ----------
+// 根因背景见 sqlite.ts 头注（Windows 包携 darwin-arm64 二进制 → dlopen 失败炸进程）。
+// 降级语义：CCR_STORAGE_READ_MODE 三档语义零改（json 仍钉旧档、无效值仍 fail-fast）——
+// 仅当配置要求 sqlite/shadow 而原生驱动加载失败（或建库/迁移失败）时，读面自动落回
+// json 档并打一次醒目告警（含原因/错误码/平台），进程不因存储层伤而 boot 失败或
+// 僵尸化（8787 必须照常监听）。写面（org/projects 落盘）本就走 JSON，不受影响。
+
+let degradationNotified = false;
+
+/** 降级告警（每进程一次，防读入口高频触发刷屏）：醒目横幅含原因/错误码/平台/配置档位。 */
+function warnSqliteDegradedOnce(reason: string, code: string | null, context: string): void {
+  if (degradationNotified) return;
+  degradationNotified = true;
+  console.error(`[read-mode] ⚠️  sqlite 不可用，已降级 json 档（${context}；错误码 ${code ?? "无"}；平台 ${process.platform}-${process.arch}）`);
+  console.error(`[read-mode] ⚠️  原因: ${reason}`);
+  console.error(`[read-mode] 读面行为同 CCR_STORAGE_READ_MODE=json，relay 继续启动（8787 照常监听）——修复原生二进制后自动恢复 sqlite 档`);
+}
+
+/**
+ * boot 期驱动探测（index.ts 启动序列调用，#158 批1）：sqlite/shadow 档下驱动加载失败
+ * 即先打降级横幅（不等首个读入口触发，启动日志必见）；json 档零 SQLite 参与直接跳过；
+ * 正常路径零输出（mac sqlite 档行为零变化）。无效模式值在此 fail-fast（与读入口同语义，
+ * 只是提前到 boot 最前）。
+ */
+export function probeSqliteDriverAtBoot(): void {
+  const mode = currentReadMode();
+  if (mode === "json") return;
+  const driver = loadSqliteDriver();
+  if (driver.ok) return;
+  warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `boot 探测：配置档位 ${mode}，驱动加载失败`);
+}
+
+/** 测试面：降级告警是否已触发（一次性标志的可观测锚）。 */
+export function isSqliteDegradationNotifiedForTest(): boolean {
+  return degradationNotified;
 }
 
 // ---------- store 惰性单例：open + migrate + 灌库（铁律 3 读前触发） ----------
@@ -625,12 +662,27 @@ const shadowCooldown = new Map<ShadowDomain, number>();
  *   shadow → io.json() 为准 + 旁路 io.sqlite(port) 投影对比，差异落 shadow-diff.ndjson
  *            （节流 SHADOW_DIFF_COOLDOWN_MS/域；对比侧异常落 shadow-error 行，绝不冒泡）。
  * 无效模式值在任何档位下 fail-fast 抛错（currentReadMode 内 resolve）。
+ * #158 批1 降级（纵深防御）：sqlite/shadow 档下驱动加载失败或 ensureStore（建库/迁移/
+ * 灌库聚合入口的 org 联动作废段）抛错时，返回 io.json() 并打一次降级告警——读入口绝不
+ * 因存储层伤把异常冒泡进启动序列（8787 必须照常监听）。正常路径（驱动可载+建库成功）
+ * 行为零变化。
  */
 export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
   const mode = currentReadMode();
   if (mode === "json") return io.json();
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `配置档位 ${mode}，读域 ${domain} 触发`);
+    return io.json();
+  }
   const dirs = resolveDirs(io.dirs);
-  const port = ensureStore(dirs);
+  let port: StoragePort;
+  try {
+    port = ensureStore(dirs);
+  } catch (err) {
+    warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `配置档位 ${mode}，读域 ${domain}，sqlite 建库/迁移失败`);
+    return io.json();
+  }
   if (mode === "sqlite") return io.sqlite(port);
   // ---- shadow 档：返回值以 JSON 为准，旁路对比只报告 ----
   const jsonVal = io.json();
@@ -693,11 +745,13 @@ export function diffProjection<T>(domain: ShadowDomain, jsonVal: T, sqliteVal: T
   return rows;
 }
 
-/** 测试隔离：清 port 单例与节流缓存（关开库）。生产勿调。 */
+/** 测试隔离：清 port 单例与节流缓存（关开库）+ 降级告警标志 + 驱动加载缓存/注入。生产勿调。 */
 export function resetReadModeForTest(): void {
   for (const port of portCache.values()) {
     try { if (port.isOpen) port.close(); } catch { /* 已关则跳过 */ }
   }
   portCache.clear();
   shadowCooldown.clear();
+  degradationNotified = false;
+  resetSqliteDriverForTest(); // 清测试注入与驱动缓存（下次按真实环境重载）
 }
