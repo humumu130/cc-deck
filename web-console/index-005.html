@@ -517,18 +517,100 @@
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
     .bubble strong { color: var(--text-strong); }
+    /* ---------- #164 对话流域：旧壳消息生态全量移植（MD 渲染/语法着色/过程组/思考卡/工具行） ---------- */
     .message-ai { margin: 0 0 15px; color: var(--text); font-size: 13px; }
-    .message-author { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--text-strong); }
+    .message-author { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; color: var(--text-strong); }
+    /* 旧壳 ai-ava ✻ 形态贴 005 token：28px 中性圆，头像在前、署名行与头像同行 */
+    .message-author .ai-ava { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; }
     .message-author strong { font-size: 12px; }
     .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
     .message-author time { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
-    .message-body { min-width: 0; padding-left: 14px; line-height: 1.55; }
-    .message-body pre, .message-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* #164 头像列基线（旧壳 ai-body 37px 同构）：正文与过程消息共用同一左基线 = 头像列右侧小缩进
+       （28px 头像 + 9px 间隙）；工具行 .tico 图标列同宽 28px、其左缘即该基线 */
+    .message-body { min-width: 0; padding-left: 37px; line-height: 1.55; }
+    .message-body > :first-child { margin-top: 0; }
+    .message-body > :last-child { margin-bottom: 0; }
     .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 11px var(--mono); }
-    /* #162-F2 工具/结果行：timeline-note 是给日期分隔/截断提示这类短居中分隔符设计的；真链路
-       工具命令/结果是最长 120 字符的单行（oneLine 截断），居中渲染成两端毛边的文字墙——改左对齐、
-       与正文同缩进、margin 收紧，超长单行省略（title 悬停有全文）；日期分隔/提示行维持居中不动 */
-    .timeline-note.timeline-tool { margin: 4px 0 10px; padding-left: 14px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 用户气泡长文折叠（旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文） */
+    .bubble.me .ub { white-space: pre-wrap; word-break: break-word; }
+    .bubble.me .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
+    .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; margin-top: 5px; }
+    .x-full:hover { text-decoration: underline; }
+    .bubble.me .x-full { display: block; text-align: right; margin: 5px 2px 0 0; }
+    .message-body .x-full { margin: 7px 0 0 2px; }
+    /* 轻量 Markdown（旧壳 md-* 体系贴 005 token；assistant 正文无卡片直接排版） */
+    .message-body .md-p, .th-body .md-p { white-space: pre-wrap; margin: 9px 0; }
+    .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 15px 0 6px; }
+    .md-h1 { font-size: 1.18em; } .md-h2 { font-size: 1.1em; } .md-h3 { font-size: 1.03em; } .md-h4 { font-size: 1em; }
+    .message-body code, .th-body code { background: rgba(148,163,190,.14); border-radius: 4px; padding: 1px 5px; font-family: var(--mono); font-size: .88em; }
+    .message-body a, .th-body a { color: var(--brand); text-decoration: underline; word-break: break-all; }
+    /* #NNN 任务号可点段（对话域内联形态；.tag 胶囊留给列表/任务 tab） */
+    .task-ref { color: var(--brand); font-weight: 600; cursor: pointer; border-bottom: 1px dashed color-mix(in srgb, var(--brand) 55%, transparent); }
+    .task-ref:hover { border-bottom-style: solid; }
+    /* 绝对路径可点段（点击复制——旧壳浮窗三键未随移植，偏差备案） */
+    .fpath { color: var(--dim); cursor: pointer; word-break: break-all; border-bottom: 1px dashed color-mix(in srgb, var(--dim) 45%, transparent); }
+    .fpath:hover { color: var(--text); }
+    .md-code-wrap { position: relative; margin: 10px 0; }
+    .md-code-wrap .copy-btn { position: absolute; right: 8px; top: 7px; z-index: 2; }
+    .md-code { background: rgba(148,163,190,.07); border: 1px solid var(--line-soft); border-radius: 10px; padding: 11px 13px; margin: 0; max-width: 100%; overflow-x: auto; white-space: pre; font-family: var(--mono); font-size: 12px; line-height: 1.6; }
+    /* #141 语言小徽标（Typora 式）：码块右下角，非空 lang 即显示 */
+    .md-lang { position: absolute; right: 8px; bottom: 7px; font-size: 10px; color: var(--faint); letter-spacing: .4px; text-transform: lowercase; pointer-events: none; }
+    /* #141 语法高亮 token 色（旧壳暗色盘直移；add/del 借 done/error 与 diff 行同色语言） */
+    .md-code .s-com { color: #8B949E; }
+    .md-code .s-kw { color: #FF7B72; }
+    .md-code .s-str { color: #A5D6FF; }
+    .md-code .s-num { color: #79C0FF; }
+    .md-code .s-tag { color: #7EE787; }
+    .md-code .s-attr { color: #FFA657; }
+    .md-code .s-add { color: var(--done); }
+    .md-code .s-del { color: var(--error); }
+    .md-li { margin: 5px 0; white-space: pre-wrap; }
+    .md-bul { color: var(--faint); }
+    .md-quote { border-left: 3px solid var(--brand); padding: 3px 12px; color: var(--faint); margin: 9px 0; }
+    .md-hr { border-top: 1px solid var(--line-soft); margin: 10px 0; }
+    .md-table-wrap { overflow-x: auto; margin: 10px 0; max-width: 100%; }
+    table.md-table { border-collapse: collapse; font-size: .88em; }
+    .md-table th, .md-table td { border: 1px solid var(--line-soft); padding: 5px 9px; text-align: left; vertical-align: top; word-break: break-word; max-width: 360px; white-space: normal; }
+    .md-table th { background: rgba(148,163,190,.12); font-weight: 600; }
+    .copy-btn { opacity: 0; cursor: pointer; color: var(--dim); font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface1); flex: none; transition: opacity .12s ease; }
+    .trow:hover .copy-btn, .copy-btn:hover, .md-code-wrap:hover .copy-btn { opacity: 1; }
+    /* 思考过程折叠卡（旧壳 .think：默认收起；左缘 37px 与正文/过程行共基线） */
+    .think { margin: 8px 0 10px 37px; background: var(--surface1); border: 1px solid var(--line-soft); border-radius: 10px; padding: 8px 11px; font-size: 12px; opacity: .88; }
+    .think .th-head { color: var(--faint); font-weight: 600; cursor: pointer; font-size: 11px; user-select: none; }
+    .think .th-head:hover { color: var(--dim); }
+    .think .th-body { margin-top: 7px; color: var(--dim); font-size: 12px; line-height: 1.55; }
+    /* 工具行（过程消息：图标 + 名称 + 摘要 + 展开/复制；#162-F2 的 timeline-tool 形态随之退役） */
+    .trow { margin: 4px 0; font-size: 12px; opacity: .9; min-width: 0; }
+    .tline { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; color: var(--dim); border-radius: 8px; padding: 3px 0; }
+    .tline:hover { background: rgba(148,163,190,.07); }
+    .tline .tico { flex: none; color: var(--faint); width: 28px; text-align: center; }
+    .tline .tname { font-weight: 600; color: var(--dim); flex: none; }
+    .tres { color: var(--faint); min-width: 0; word-break: break-word; }
+    .tline .tsum { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
+    .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
+    .tdetail { font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--dim); white-space: pre-wrap; word-break: break-all; margin: 4px 0 2px; max-height: 360px; overflow: auto; background: rgba(148,163,190,.07); border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; }
+    .diff { margin-top: 5px; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+    .diff div { font-family: var(--mono); font-size: 11px; line-height: 1.55; padding: 0 8px; white-space: pre; }
+    .diff .a { color: var(--done); background: rgba(75,203,145,.07); }
+    .diff .d { color: var(--error); background: rgba(236,116,114,.06); }
+    .diff .h { color: var(--working); background: rgba(233,184,76,.06); }
+    .diff .c { color: var(--faint); }
+    /* 过程组：连续工具/结果行合并为一条可折叠组（组头步数，默认收起）；总开关关 = 整组隐藏 */
+    .procgrp { padding-left: 37px; margin: 2px 0 10px; }
+    .proc-head { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; color: var(--faint); font: 11px var(--mono); cursor: pointer; user-select: none; border: 1px solid transparent; }
+    .proc-head:hover { color: var(--dim); border-color: var(--tag-border); background: var(--tag-bg); }
+    .proc-body { display: none; }
+    .procgrp.open .proc-body { display: block; }
+    .conversation-pane.proc-off .procgrp, .proc-off .procgrp { display: none; }
+    /* 对话 pane 顶部 mini 开关（过程/思考；桌面 sticky 吸顶，手机静态置顶） */
+    .conv-ctrl { position: sticky; top: -20px; z-index: 4; display: flex; gap: 8px; padding: 2px 0 10px; background: var(--bg1); }
+    #m-detail .conv-ctrl { position: static; background: transparent; padding: 0 0 8px; }
+    .conv-mini { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--faint); font: 10px var(--mono); cursor: pointer; transition: color .18s ease, border-color .18s ease, background .18s ease; }
+    .conv-mini:hover { color: var(--dim); border-color: var(--border-strong); }
+    .conv-mini.on { border-color: color-mix(in srgb, var(--done) 40%, transparent); background: var(--done-bg); color: var(--done); }
+    /* #164 ⑂N 后台子 Agent 徽标（旧壳 .bg-badge 形制：黄描边小胶囊 = 「在跑」语义色） */
+    .bg-badge { font-size: 10px; color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); padding: 1px 6px; border-radius: 999px; flex: none; font-weight: 600; }
     .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
     .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
     .wait-card strong { display: block; color: var(--working); font-size: 11px; }
@@ -1222,9 +1304,281 @@
                 function sizeStr(n) { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; }
                 function ctxPct(s) { if (!s || !s.context_usage) return 0; return Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100)); }
                 function oneLine(t) { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 120 ? v.slice(0, 120) + "…" : v; }
-                function textBodyHtml(t) { return esc(t).replace(/\r?\n/g, "<br>"); }
+                // #164 textBodyHtml（esc+br）退役：对话域正文一律走 mdHtml（任务 tab 的 taskRefHtml 保留 .tag 胶囊形态）
                 function taskRefHtml(text) { return esc(text).replace(/#(\d{1,4})(?!\w)/g, '<span class="tag" data-task-ref="$1" style="cursor:pointer" title="定位任务清单">#$1</span>'); }
                 function toolIcon(t) { return /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t || "") ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t || "") ? "▤" : "⚙"; }
+                // ---------- #164 轻量 Markdown + 语法高亮 + 链接化（旧壳 :7548-7845 全量移植，escapeHtml→esc） ----------
+                // 任务号口径与 005 既有 taskRefHtml 一致（#NNN 1~4 位），渲染成 .task-ref 可点段
+                //（旧壳 .task-ref 形态；005 列表/任务 tab 的 .tag 胶囊不复用到正文行内）。
+                const FPATH_RE = /\b[A-Za-z]:[\\/][\w.\-\\/]+|\/(?:home|Users|root|mnt|opt|tmp|var)\/[\w.\-\\/]+/g;
+                function fpathHtml(t) {
+                  const s = String(t ?? "");
+                  let out = "", last = 0;
+                  for (const m of s.matchAll(FPATH_RE)) {
+                    const i = m.index ?? 0;
+                    out += esc(s.slice(last, i));
+                    const p = m[0].replace(/[.,;:!?'"）】》]+$/, ""); // 尾随标点不属路径
+                    out += '<span class="fpath" data-p="' + esc(p) + '">' + esc(p) + "</span>";
+                    if (p.length < m[0].length) out += esc(m[0].slice(p.length));
+                    last = i + m[0].length;
+                  }
+                  return out + esc(s.slice(last));
+                }
+                function linkifyEscaped(escaped) {
+                  return escaped.replace(/\bhttps?:\/\/[^\s<>"')\]]+/g, (u) =>
+                    '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + "</a>");
+                }
+                function userMsgHtml(t) {
+                  const s = String(t ?? "");
+                  if (!/#\d{1,4}(?!\w)/.test(s)) return linkifyEscaped(esc(s));
+                  return s.split(/#(\d{1,4})(?!\w)/g).map((p, i) =>
+                    i % 2 === 1 ? '<span class="task-ref" data-task-ref="' + p + '" title="定位任务清单">#' + p + "</span>" : linkifyEscaped(esc(p))
+                  ).join("");
+                }
+                function taskRefRow(t) { // 工具/结果行文本：#NNN 可点 + 绝对路径可点（旧壳 taskRefHtml 口径）
+                  const s = String(t ?? "");
+                  if (!/#\d{1,4}(?!\w)/.test(s)) return fpathHtml(s);
+                  return s.split(/#(\d{1,4})(?!\w)/g).map((p, i) =>
+                    i % 2 === 1 ? '<span class="task-ref" data-task-ref="' + p + '" title="定位任务清单">#' + p + "</span>" : fpathHtml(p)
+                  ).join("");
+                }
+                const MD_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+                const mdSplitRow = (l) => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+                function mdBlocks(src) {
+                  const out = [];
+                  const lines = String(src).split(/\r?\n/);
+                  let para = [], inCode = false, code = [], tableBuf = [], lang = "";
+                  const flush = () => { if (para.length) { out.push({ t: "p", text: para.join("\n") }); para = []; } };
+                  const flushTable = () => {
+                    if (!tableBuf.length) return;
+                    if (tableBuf.length >= 2 && MD_DELIM_RE.test(tableBuf[1])) {
+                      out.push({ t: "table", head: mdSplitRow(tableBuf[0]), rows: tableBuf.slice(2).map(mdSplitRow) });
+                    } else out.push({ t: "p", text: tableBuf.join("\n") });
+                    tableBuf = [];
+                  };
+                  for (const raw of lines) {
+                    if (inCode) {
+                      if (/^\s*```/.test(raw)) { out.push({ t: "code", lang, text: code.join("\n") }); code = []; lang = ""; inCode = false; }
+                      else code.push(raw);
+                      continue;
+                    }
+                    const mdFence = /^\s*```([\w+#.-]*)/.exec(raw);
+                    if (mdFence) { flush(); inCode = true; lang = mdFence[1].trim().toLowerCase(); continue; }
+                    if (/^\s*\|/.test(raw)) { flush(); tableBuf.push(raw); continue; }
+                    flushTable();
+                    const h = /^(#{1,4})\s+(.*)$/.exec(raw);
+                    if (h) { flush(); out.push({ t: "h", level: h[1].length, text: h[2] }); continue; }
+                    if (/^\s*([-*_]\s*){3,}$/.test(raw)) { flush(); out.push({ t: "hr" }); continue; }
+                    const li = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(raw);
+                    if (li) { flush(); out.push({ t: "li", depth: Math.min(2, Math.floor(li[1].length / 2)), ord: /\d/.test(li[2]) ? li[2].replace(/[.)]/, "") : null, text: li[3] }); continue; }
+                    const q = /^>\s?(.*)$/.exec(raw);
+                    if (q) { flush(); out.push({ t: "quote", text: q[1] }); continue; }
+                    if (!raw.trim()) flush();
+                    else para.push(raw);
+                  }
+                  if (inCode && code.length) out.push({ t: "code", lang, text: code.join("\n") }); // 截断码块兜底
+                  flushTable();
+                  flush();
+                  return out;
+                }
+                const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n\s]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()\[\]{}一-鿿぀-ヿ]+|[A-Za-z]:[\\/][\w.\-\\/]+|\/(?:home|Users|root|mnt|opt|tmp|var)\/[\w.\-\\/]+|#\d{1,4}\b)/g;
+                const URL_TRAIL_PUNCT = /[.,;:!?"']+$/;
+                const HTTP_RE = /^https?:\/\//i;
+                const FPATH_START_RE = /^(?:[A-Za-z]:[\\/]|\/(?:home|Users|root|mnt|opt|tmp|var)\/)/;
+                function mdInline(text) {
+                  let out = "", last = 0;
+                  for (const m of String(text).matchAll(MD_INLINE_RE)) {
+                    const tok = m[0], i = m.index ?? 0;
+                    out += esc(text.slice(last, i));
+                    if (tok.startsWith("**") || tok.startsWith("__")) out += "<b>" + esc(tok.slice(2, -2)) + "</b>";
+                    else if (tok.startsWith("`")) out += "<code>" + esc(tok.slice(1, -1)) + "</code>";
+                    else if (tok.startsWith("[")) {
+                      // [标题](url)：仅 http(s) 可成为链接，防 javascript: 注入（旧壳口径）
+                      const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
+                      out += mm && HTTP_RE.test(mm[2])
+                        ? '<a href="' + esc(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + esc(mm[1]) + "</a>"
+                        : esc(tok);
+                    } else if (tok.startsWith("http")) {
+                      const url = tok.replace(URL_TRAIL_PUNCT, "");
+                      out += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + "</a>";
+                      if (url.length < tok.length) out += esc(tok.slice(url.length));
+                    } else if (FPATH_START_RE.test(tok)) {
+                      const p = tok.replace(/[.,;:!?'"）】》]+$/, "");
+                      out += '<span class="fpath" data-p="' + esc(p) + '">' + esc(p) + "</span>";
+                      if (p.length < tok.length) out += esc(tok.slice(p.length));
+                    } else if (tok.charAt(0) === "#") {
+                      out += '<span class="task-ref" data-task-ref="' + tok.slice(1) + '" title="定位任务清单">#' + tok.slice(1) + "</span>";
+                    }
+                    else out += "<i>" + esc(tok.slice(1, -1)) + "</i>";
+                    last = i + tok.length;
+                  }
+                  return out + esc(text.slice(last));
+                }
+                // ---------- #141 语法高亮 tokenizer（旧壳 :7686-7823 原样移植：SYN_ALIAS 归一语言族 →
+                // 规则集单趟 matchAll 收集候选 → 按区间吸收去重叠 → 分段转义包 span；>100KB 降级纯文本） ----------
+                const SYN_ALIAS = {
+                  xml: "xml", html: "xml", svg: "xml", vue: "xml", xsd: "xml", xsl: "xml", xslt: "xml", plist: "xml", axml: "xml",
+                  json: "json", jsonc: "json", json5: "json",
+                  py: "py", python: "py", python3: "py",
+                  sh: "sh", bash: "sh", shell: "sh", zsh: "sh", console: "sh", terminal: "sh",
+                  sql: "sql", mysql: "sql", mariadb: "sql", plsql: "sql", psql: "sql", postgres: "sql", postgresql: "sql", sqlite: "sql",
+                  js: "js", javascript: "js", jsx: "js", mjs: "js", cjs: "js", node: "js",
+                  ts: "ts", typescript: "ts", tsx: "ts",
+                  css: "css", scss: "css", sass: "css", less: "css",
+                  yaml: "yaml", yml: "yaml",
+                  diff: "diff", patch: "diff",
+                  java: "clike", kotlin: "clike", kt: "clike", swift: "clike", objectivec: "clike", objc: "clike",
+                  go: "clike", golang: "clike", rust: "clike", rs: "clike",
+                  c: "clike", cpp: "clike", "c++": "clike", cc: "clike", cxx: "clike", h: "clike", hpp: "clike", hh: "clike",
+                  cs: "clike", csharp: "clike", php: "clike", dart: "clike", scala: "clike",
+                };
+                function synLangOf(tag) {
+                  const k = (tag || "").trim().toLowerCase();
+                  return k && Object.prototype.hasOwnProperty.call(SYN_ALIAS, k) ? SYN_ALIAS[k] : null;
+                }
+                const synKwRe = (words, ci) => new RegExp("\\b(?:" + words + ")\\b", ci ? "gi" : "g");
+                const SYN_SQL_KW = "select|from|where|insert|into|values|update|set|delete|create|drop|alter|rename|truncate|table|database|schema|view|index|key|join|left|right|full|inner|outer|cross|natural|straight_join|on|using|as|and|or|not|in|is|null|like|ilike|rlike|regexp|between|exists|union|all|distinct|case|when|then|else|end|primary|foreign|references|constraint|unique|check|default|auto_increment|on duplicate|engine|charset|character|collate|if|begin|commit|rollback|transaction|trigger|procedure|function|declare|return|call|grant|revoke|partition|over|window|order|group|by|having|limit|offset|asc|desc|with|recursive|interval|day|hour|minute|month|year|now|current_timestamp|count|sum|avg|min|max|cast|convert|dual";
+                const SYN_JS_KW = "var|let|const|function|return|if|else|for|while|do|switch|case|default|break|continue|new|class|extends|super|this|typeof|instanceof|in|of|try|catch|finally|throw|async|await|yield|import|export|from|as|null|undefined|true|false|void|delete|static|get|set";
+                const SYN_TS_KW = SYN_JS_KW + "|interface|type|enum|implements|private|public|protected|readonly|namespace|declare|abstract|keyof|infer|satisfies|is|string|number|boolean|any|unknown|never|symbol|bigint";
+                const SYN_PY_KW = "def|class|return|if|elif|else|for|while|break|continue|pass|import|from|as|with|try|except|finally|raise|lambda|yield|global|nonlocal|assert|del|in|is|not|and|or|None|True|False|async|await|self|cls";
+                const SYN_SH_KW = "if|then|else|elif|fi|for|in|do|done|while|until|case|esac|function|return|exit|local|export|source|alias|shift|read|declare|unset|set|trap|exec|eval|echo|printf|cd|pushd|popd|sudo";
+                const SYN_CLIKE_KW = "abstract|alias|and|as|assert|async|await|base|bool|boolean|break|byte|case|catch|chan|char|class|const|constructor|continue|crate|data|defer|default|delegate|delete|do|double|dyn|else|enum|event|explicit|extern|false|final|finally|fn|for|foreach|func|function|get|go|goto|if|impl|implements|import|in|include|init|inline|instanceof|int|interface|internal|is|let|lock|long|match|mod|module|mut|namespace|new|nil|null|nullptr|object|operator|or|override|package|private|protected|pub|public|raise|readonly|ref|register|require|return|sealed|self|set|short|signed|sizeof|static|str|string|struct|super|switch|synchronized|template|this|throw|throws|trait|transient|true|try|type|typedef|typename|typeof|union|unsafe|unsigned|use|using|val|var|virtual|void|volatile|when|where|while|with|yield";
+                const SYN_RULES = {
+                  xml: [
+                    { c: "com", re: /<!--[\s\S]*?-->/g },
+                    { c: "tag", re: /<(?:\?[\w.:-]+|![A-Z][\w.:-]*|\/?[\w.:-]+)/g },
+                    { c: "attr", re: /[\w.:-]+(?==)/g },
+                    { c: "str", re: /"[^"]*"|'[^']*'/g },
+                  ],
+                  sql: [
+                    { c: "com", re: /--[^\n]*|\/\*[\s\S]*?\*\//g },
+                    { c: "str", re: /'(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.)*"|`[^`\n]*`/g },
+                    { c: "kw", re: synKwRe(SYN_SQL_KW, true) },
+                    { c: "num", re: /\b\d+(?:\.\d+)?\b/g },
+                  ],
+                  js: [
+                    { c: "com", re: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+                    { c: "str", re: /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g },
+                    { c: "kw", re: synKwRe(SYN_JS_KW) },
+                    { c: "num", re: /\b0[xXbB][0-9a-fA-F_]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+                  ],
+                  ts: [
+                    { c: "com", re: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+                    { c: "str", re: /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g },
+                    { c: "kw", re: synKwRe(SYN_TS_KW) },
+                    { c: "num", re: /\b0[xXbB][0-9a-fA-F_]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+                  ],
+                  json: [
+                    { c: "attr", re: /"(?:[^"\\]|\\.)*"(?=\s*:)/g },
+                    { c: "str", re: /"(?:[^"\\]|\\.)*"/g },
+                    { c: "kw", re: /\b(?:true|false|null)\b/g },
+                    { c: "num", re: /-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+                  ],
+                  py: [
+                    { c: "com", re: /#[^\n]*/g },
+                    { c: "str", re: /[rRfFbB]{0,2}(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")/g },
+                    { c: "kw", re: synKwRe(SYN_PY_KW) },
+                    { c: "num", re: /\b0[xX][0-9a-fA-F]+\b|\b\d+(?:\.\d+)?\b/g },
+                  ],
+                  sh: [
+                    { c: "com", re: /(?:^|\s)#[^\n]*/g },
+                    { c: "str", re: /"(?:[^"\\]|\\.)*"|'[^']*'/g },
+                    { c: "kw", re: synKwRe(SYN_SH_KW) },
+                    { c: "attr", re: /\$\{[^}\n]*\}|\$[\w@#?*!-]+/g },
+                    { c: "num", re: /\b\d+\b/g },
+                  ],
+                  clike: [
+                    { c: "com", re: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+                    { c: "str", re: /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)'|`(?:[^`\\]|\\.)*`/g },
+                    { c: "attr", re: /#\[[^\]\n]*\]|@\w+|#\w+(?=[^\w(])/g },
+                    { c: "kw", re: synKwRe(SYN_CLIKE_KW) },
+                    { c: "num", re: /\b0[xXbB][0-9a-fA-F_]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]{0,3}\b/g },
+                  ],
+                  css: [
+                    { c: "com", re: /\/\*[\s\S]*?\*\//g },
+                    { c: "str", re: /"[^"\n]*"|'[^'\n]*'/g },
+                    { c: "kw", re: /@[\w-]+|!important\b/g },
+                    { c: "tag", re: /[.#][\w-]+|::?[\w-]+(?=[\s,{):>+~[])/g },
+                    { c: "attr", re: /[-a-zA-Z]+(?=[ \t]*:)/g },
+                    { c: "num", re: /#[0-9a-fA-F]{3,8}\b|\b\d+(?:\.\d+)?(?:px|em|rem|vh|vw|vmin|vmax|s|ms|fr|deg|ch|pt|%)?/g },
+                  ],
+                  yaml: [
+                    { c: "com", re: /(?:^|\s)#[^\n]*/g },
+                    { c: "attr", re: /^[ \t]*(?:- )?[ \t]*[\w.$-]+(?=[ \t]*:)/gm },
+                    { c: "str", re: /"(?:[^"\\]|\\.)*"|'[^']*'/g },
+                    { c: "kw", re: /\b(?:true|false|null|yes|no|on|off)\b/g },
+                    { c: "num", re: /\b\d+(?:\.\d+)?\b/g },
+                  ],
+                  diff: [
+                    { c: "add", re: /^\+[^\n]*/gm },
+                    { c: "del", re: /^-[^\n]*/gm },
+                    { c: "kw", re: /^@@[^\n]*/gm },
+                    { c: "attr", re: /^(?:diff |index |new file mode|deleted file mode|rename )/gim },
+                  ],
+                };
+                const SYN_MAX_BYTES = 100000;
+                function synTokenize(code, fam) {
+                  if (!code || code.length > SYN_MAX_BYTES) return null;
+                  const rules = SYN_RULES[fam];
+                  if (!rules) return null;
+                  const cands = [];
+                  for (let r = 0; r < rules.length; r++)
+                    for (const m of String(code).matchAll(rules[r].re)) {
+                      if (m[0]) cands.push({ s: m.index ?? 0, e: (m.index ?? 0) + m[0].length, c: rules[r].c, r });
+                    }
+                  cands.sort((a, b) => a.s - b.s || a.r - b.r);
+                  const toks = [];
+                  let pos = 0;
+                  for (const t of cands) {
+                    if (t.s < pos) continue; // 落在已消费区间内：丢弃（注释里的字符串不重复着色）
+                    const last = toks[toks.length - 1];
+                    if (last && last.c === t.c && last.e === t.s) last.e = t.e; // 相邻同类合并
+                    else toks.push({ s: t.s, e: t.e, c: t.c });
+                    pos = t.e;
+                  }
+                  return toks;
+                }
+                function synHtml(code, fam) {
+                  const toks = synTokenize(code, fam);
+                  if (!toks) return null;
+                  let out = "", pos = 0;
+                  for (const t of toks) {
+                    if (t.s > pos) out += esc(code.slice(pos, t.s));
+                    out += '<span class="s-' + t.c + '">' + esc(code.slice(t.s, t.e)) + "</span>";
+                    pos = t.e;
+                  }
+                  if (pos < code.length) out += esc(code.slice(pos));
+                  return out;
+                }
+                function mdHtml(src) {
+                  let html = "";
+                  for (const b of mdBlocks(src)) {
+                    if (b.t === "h") html += '<div class="md-h' + b.level + '">' + mdInline(b.text) + "</div>";
+                    else if (b.t === "code") {
+                      const fam = synLangOf(b.lang);
+                      const body = fam ? (synHtml(b.text, fam) ?? esc(b.text)) : esc(b.text);
+                      html += '<div class="md-code-wrap"><span class="copy-btn" data-copy="' + esc(b.text) + '" title="复制代码">⧉ 复制</span><pre class="md-code">' + body +
+                        (b.lang ? '<span class="md-lang">' + esc(b.lang) + "</span>" : "") + "</pre></div>";
+                    }
+                    else if (b.t === "li") html += '<div class="md-li" style="padding-left:' + (14 + b.depth * 14) + 'px"><span class="md-bul">' + (b.ord ? b.ord + "." : "•") + "</span> " + mdInline(b.text) + "</div>";
+                    else if (b.t === "quote") html += '<div class="md-quote">' + mdInline(b.text) + "</div>";
+                    else if (b.t === "table") html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' +
+                      b.head.map((c) => "<th>" + mdInline(c) + "</th>").join("") + "</tr></thead><tbody>" +
+                      b.rows.map((r) => "<tr>" + b.head.map((_, j) => "<td>" + mdInline(r[j] ?? "") + "</td>").join("") + "</tr>").join("") +
+                      "</tbody></table></div>";
+                    else if (b.t === "hr") html += '<div class="md-hr"></div>';
+                    else html += '<div class="md-p">' + mdInline(b.text) + "</div>";
+                  }
+                  return html;
+                }
+                const diffLine = (l) => '<div class="' + (l.startsWith("@@") ? "h" : l.startsWith("+") ? "a" : l.startsWith("-") ? "d" : "c") + '">' + esc(l || " ") + "</div>";
+                // 展开态（旧壳 expanded Set + eKey 兜底口径：无 id 条目用 ts|kind|len，跨重渲稳定）
+                const expanded = new Set();
+                const eKey = (e) => e.id || (e.ts + "|" + e.kind + "|" + (e.text || "").length);
+                // #164 过程/思考开关：过程默认开、思考默认关；localStorage 持久化（ccd_proc_show /
+                // ccd_think_show——旧壳思考开关不落盘，005 按任务书补持久化，偏差备案）
+                let procShow = (() => { try { return localStorage.getItem("ccd_proc_show") !== "0"; } catch (_) { return true; } })();
+                let thinkShown = (() => { try { return localStorage.getItem("ccd_think_show") === "1"; } catch (_) { return false; } })();
                 function artifactIconFor(name) {
                   const ext = String(name || "").toLowerCase().split(".").pop();
                   if (["md", "txt", "rst", "adoc"].includes(ext)) return "file-text";
@@ -1484,6 +1838,7 @@
                 { let raw = null; try { raw = localStorage.getItem("ccd_idle_dim_min"); } catch (_) {} const v = raw === null || raw === "" ? NaN : Number(raw); if (Number.isFinite(v)) idleDimMin = v; }
                 const idleDimMs = () => (idleDimMin < 0 ? Infinity : idleDimMin * 60000);
                 const bgRunning = (s) => (s.subagents ?? []).some((a) => !a.ended_at);
+                const bgCount = (s) => (s.subagents ?? []).filter((a) => !a.ended_at).length; // #164 ⑂N 徽标数据
                 function idleDimmed(s) {
                   return (s.status === "DONE" || s.status === "ERROR") && !bgRunning(s)
                     && Date.now() - (s.updated_at ?? s.started_at) > idleDimMs();
@@ -1504,8 +1859,9 @@
                     title: esc(session.title || session.initial_prompt || session.session_id),
                     summary: esc(session.action_summary || session.last_error || displayPath(session.cwd) || "暂无活动摘要"),
                     status,
-                    tag: ({ working: "运行中", waiting: "待处理", error: "错误", done: "完成" })[status],
+                    // #164 状态文字标签退役（头像角标状态点已表达状态）；tagClass 仅供 CTA 判定保留
                     tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
+                    bg: bgCount(session), // #164 后台子 Agent 在跑数（⑂N 徽标）
                     engine: esc(engine[0]), engineClass: engine[1],
                     source: esc(S.relayName),
                     time: activityTime ? (ageMinutes === 0 ? "刚刚" : ageMinutes + " 分钟前") : "",
@@ -1521,7 +1877,8 @@
                 const b2EngineBadge = (item) => '<span class="engine-badge ' + item.engineClass + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>' + item.engine + "</span>";
                 const b2SourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
                 function myCardMarkup(item) {
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.tag || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.tag ? '<span class="tag ' + item.tagClass + '">' + item.tag + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  // #164 r3：状态文字标签退役，新增 ⑂N 后台徽标（旧壳 .bg-badge 形制）；置顶/引擎/来源保留
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned || item.bg ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.bg ? '<span class="bg-badge" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -1790,55 +2147,160 @@
                 function isStreaming(e, s) { return !!e.streaming && !!s && s.status === "WORKING"; }
                 function daySepNode(ts) { const d = document.createElement("div"); d.className = "timeline-note"; d.textContent = "── " + dayLabel(ts) + " ──"; return d; }
                 function noteNode(text) { const d = document.createElement("div"); d.className = "timeline-note"; d.textContent = text; return d; }
-                function entryNode(e, s) {
+                // #164 单条消息 HTML（桌面/手机同一渲染路径；返回 "" = 该类开关关闭不渲染）
+                function entryHtml(e, s) {
                   const role = msgRoleOf(e.kind);
-                  if (role === "ai-think") return null; // v1 默认折叠思考块；B2 暂不渲染（偏差 B2-D5）
-                  const d = document.createElement("div");
-                  if (e.id) d.dataset.x = e.id;
+                  const k = eKey(e);
+                  const ke = esc(k); // data-x 属性安全
+                  const open = expanded.has(k);
                   if (role === "user") {
-                    d.className = "bubble me";
-                    d.innerHTML = textBodyHtml(e.full ?? e.text);
-                    return d;
+                    // 旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文；任务号/裸 URL 链接化
+                    const src = String(e.full ?? e.text ?? "");
+                    const long = src.length > 100;
+                    return '<div class="bubble me" data-x="' + ke + '"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" +
+                      (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
-                    d.className = "message-ai";
                     const eng = ENGINES[(s && s.engine) || "claude"] || ["Claude"];
-                    d.innerHTML = '<div class="message-author"><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' + textBodyHtml(e.text) + (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") + "</div>";
-                    return d;
+                    const full = e.full ? String(e.full) : "";
+                    return '<div class="message-ai" data-x="' + ke + '"><div class="message-author"><span class="ai-ava">✻</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
+                      mdHtml(open ? String(e.full ?? e.text ?? "") : String(e.text ?? "")) +
+                      (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") +
+                      (full ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + full.length + " 字 ▾") + "</span>" : "") +
+                      "</div></div>";
+                  }
+                  if (role === "ai-think") {
+                    if (!thinkShown) return ""; // #164 思考折叠卡：默认收起，pane 顶部开关控制显隐（B2-D5 就此闭合）
+                    const src = String(e.full ?? e.text ?? "");
+                    return '<div class="think" data-x="' + ke + '"><div class="th-head" data-x="' + ke + '">' +
+                      (open ? "▾ 思考过程" : "▸ 思考过程 · " + src.length + " 字") + (e.ts ? " · " + fmtHM(e.ts) : "") + "</div>" +
+                      (open ? '<div class="th-body">' + mdHtml(src) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-tool") {
-                    d.className = "timeline-note timeline-tool"; // #162-F2 长单行左对齐省略，不复用居中分隔符样式
-                    d.title = String(e.text || "");
-                    d.innerHTML = "<span>" + esc(toolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</span>";
-                    return d;
+                    const t = e.tool || "";
+                    const isTaskTool = /^Task/.test(t); // Task* 行：摘要单行省略 + 展开看任务描述（旧壳 #204 口径）
+                    return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">' + toolIcon(t) + '</span><span class="tname">' + esc(t || "tool") + '</span><span' + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefRow(e.text) + "</span>" +
+                      (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + esc(e.text || "") + '" title="复制命令">⧉</span>' : "") +
+                      (e.detail ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开 ▾") + "</span>" : "") +
+                      "</div>" + (open && e.detail ? '<div class="tdetail">' + esc(e.detail) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-result") {
-                    d.className = "timeline-note timeline-tool"; // #162-F2 同上
-                    d.title = String(e.text || "");
-                    d.innerHTML = "<span>↳ " + taskRefHtml(oneLine(e.text)) + "</span>";
-                    return d;
+                    if (e.diff && e.diff.length) { // 工具结果 diff：±计数折叠 + 行级着色（旧壳口径）
+                      const plus = e.diff.filter((l) => String(l).startsWith("+")).length;
+                      const minus = e.diff.filter((l) => String(l).startsWith("-")).length;
+                      return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">✎</span><span class="tres x-full" data-x="' + ke + '">' +
+                        (open ? "收起变更 ▴" : "变更 <span class='ds-add'>+" + plus + "</span> <span class='ds-del'>-" + minus + "</span> ▾") + "</span></div>" +
+                        (open ? '<div class="diff">' + e.diff.map(diffLine).join("") + "</div>" : "") + "</div>";
+                    }
+                    if (e.detail) {
+                      return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefRow(e.text) + '</span> <span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开 ▾") + "</span></div>" +
+                        (open ? '<div class="tdetail">' + esc(e.detail) + "</div>" : "") + "</div>";
+                    }
+                    return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefRow(e.text) + "</span></div></div>";
                   }
-                  d.className = "timeline-note";
-                  d.textContent = oneLine(e.text);
-                  return d;
+                  return '<div class="timeline-note">' + esc(oneLine(e.text)) + "</div>";
                 }
+                function entryNode(e, s) {
+                  const html = entryHtml(e, s);
+                  if (!html) return null;
+                  const t = document.createElement("template");
+                  t.innerHTML = html;
+                  return t.content.firstElementChild;
+                }
+                function copyText(t) { try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t); } catch (_) {} }
+                // 展开/收起（旧壳事件委托口径：切 expanded Set 后原地重建该条目，组内/流内位置不变）
+                function toggleExpand(k) {
+                  if (expanded.has(k)) expanded.delete(k); else expanded.add(k);
+                  const s = curSession();
+                  const list = s ? (S.timelines.get(s.session_id) || []) : [];
+                  const e = list.find((x) => eKey(x) === k);
+                  if (!e || !s || !UI || !UI.convPane) return;
+                  const n = entryNode(e, s);
+                  const old = UI.convPane.querySelector('[data-x="' + cssEsc(k) + '"]');
+                  if (old && n) old.replaceWith(n);
+                }
+                // 对话 pane 顶部 mini 开关（过程/思考）：sticky 吸顶，随 renderConversation 重建
+                function ensureConvCtrl() {
+                  const pane = UI.convPane;
+                  if (!pane) return;
+                  let ctrl = pane.querySelector(".conv-ctrl");
+                  if (!ctrl) {
+                    ctrl = document.createElement("div");
+                    ctrl.className = "conv-ctrl";
+                    ctrl.innerHTML = '<button type="button" class="conv-mini" data-conv-toggle="proc"></button><button type="button" class="conv-mini" data-conv-toggle="think"></button>';
+                    pane.appendChild(ctrl);
+                  }
+                  updateConvCtrl();
+                }
+                function updateConvCtrl() {
+                  const pane = UI.convPane;
+                  if (!pane) return;
+                  pane.classList.toggle("proc-off", !procShow);
+                  pane.querySelectorAll(".conv-ctrl .conv-mini").forEach((x) => {
+                    const isProc = x.dataset.convToggle === "proc";
+                    const on = isProc ? procShow : thinkShown;
+                    x.classList.toggle("on", on);
+                    x.textContent = (isProc ? "⚙ 过程 ·" : "✦ 思考 ·") + (on ? "开" : "关");
+                  });
+                }
+                function toggleConv(name) {
+                  if (name === "proc") {
+                    procShow = !procShow;
+                    try { localStorage.setItem("ccd_proc_show", procShow ? "1" : "0"); } catch (_) {}
+                    updateConvCtrl(); // 组隐藏走 CSS（.proc-off），无重建
+                  } else if (name === "think") {
+                    thinkShown = !thinkShown;
+                    try { localStorage.setItem("ccd_think_show", thinkShown ? "1" : "0"); } catch (_) {}
+                    updateConvCtrl();
+                    renderConversation(); // 思考卡增删需重建时间线
+                  }
+                }
+                // #164 过程组：连续 tool/result 条目合并为一条可折叠组（组头「过程 · N 步」，
+                // 默认收起；展开态记 expanded Set 的 "proc:"+eKey，跨重渲稳定）
+                function procHeadUpdate(g) {
+                  const head = g.querySelector(".proc-head");
+                  if (head) head.textContent = (g.classList.contains("open") ? "▾" : "▸") + " 过程 · " + g.querySelectorAll(".proc-body > .trow").length + " 步";
+                }
+                function procGroupNode(key) {
+                  const g = document.createElement("div");
+                  g.className = "procgrp";
+                  g.dataset.proc = key;
+                  if (expanded.has("proc:" + key)) g.classList.add("open");
+                  const head = document.createElement("div");
+                  head.className = "proc-head";
+                  head.dataset.procToggle = key;
+                  const body = document.createElement("div");
+                  body.className = "proc-body";
+                  g.append(head, body);
+                  procHeadUpdate(g);
+                  return g;
+                }
+                let openProcGrp = null; // 增量追加时的活动过程组（renderConversation 重建清零）
                 function renderConversation() {
                   const pane = UI.convPane;
                   if (!pane) return;
+                  openProcGrp = null;
                   pane.textContent = "";
                   const s = curSession();
                   if (!s) { pane.appendChild(noteNode(!WS_BASE ? "请通过 relay 同源 HTTP 页面连接" : (!TOKEN && !cloudLaneOn()) ? "请通过带 ?token= 的 relay 链接连接" : "从左侧选择会话查看对话")); return; }
+                  ensureConvCtrl();
                   const trunc = S.logsTruncated.get(s.session_id) || 0;
                   if (trunc > 0) pane.appendChild(noteNode("更早的 " + trunc + " 条已截断 · 仅显示最近记录"));
                   const list = S.timelines.get(s.session_id) || [];
                   const frag = document.createDocumentFragment();
                   let prevDay = "";
+                  let grp = null;
                   for (const e of list) {
                     const dk = e.ts ? dayKey(e.ts) : "";
-                    if (dk && dk !== prevDay) { frag.appendChild(daySepNode(e.ts)); prevDay = dk; }
+                    if (dk && dk !== prevDay) { frag.appendChild(daySepNode(e.ts)); prevDay = dk; grp = null; } // 日期分隔断组
                     const n = entryNode(e, s);
-                    if (n) frag.appendChild(n);
+                    if (!n) continue; // 开关关闭的条目（思考）不断组也不占位
+                    if (n.dataset.role === "proc") {
+                      if (!grp) { grp = procGroupNode(eKey(e)); frag.appendChild(grp); }
+                      grp.querySelector(".proc-body").appendChild(n);
+                    } else { frag.appendChild(n); grp = null; } // 正文/气泡断组
                   }
+                  frag.querySelectorAll(".procgrp").forEach(procHeadUpdate);
                   pane.appendChild(frag);
                   if (s.status === "DONE" && s._terminal === "interrupted") pane.appendChild(noteNode("已停止 · 生成在此中断"));
                   if (s.status === "ERROR" && s.last_error) pane.appendChild(noteNode("⚠ " + oneLine(s.last_error)));
@@ -1929,7 +2391,26 @@
                     else { delete card.dataset.busy; b2Toast("作答未确认：" + v.error); }
                   });
                 }
-                // 增量 LOG → DOM（同 id 原地替换 / 追加；天分隔与流式收口）
+                // #164 增量追加统一入口：过程条目续入活动组（组头步数递增）、非过程条目断组；
+                // 插入位保持在 wait-card 之前（syncWaitCard 随后会把卡挪回末尾）
+                function appendEntryNode(pane, n, dayNode) {
+                  const wait = pane.querySelector(".wait-card[data-b2-wait]");
+                  const ins = (node) => { if (wait && wait.parentNode === pane) pane.insertBefore(node, wait); else pane.appendChild(node); };
+                  if (dayNode) { ins(dayNode); openProcGrp = null; } // 新的一天：断组
+                  if (!n) return;
+                  if (n.dataset.role === "proc") {
+                    if (!(openProcGrp && openProcGrp.isConnected && openProcGrp.parentElement === pane)) {
+                      openProcGrp = procGroupNode(n.dataset.x || "");
+                      ins(openProcGrp);
+                    }
+                    openProcGrp.querySelector(".proc-body").appendChild(n);
+                    procHeadUpdate(openProcGrp);
+                  } else {
+                    ins(n);
+                    openProcGrp = null;
+                  }
+                }
+                // 增量 LOG → DOM（同 id 原地替换 / 追加；天分隔与流式收口；过程条目归组）
                 function applyDomLog(sid, outcome, entryId) {
                   const pane = UI.convPane;
                   const s = curSession();
@@ -1939,20 +2420,17 @@
                     for (const p of list.slice(0, -1)) if (p.streaming) { p.streaming = false; if (p.id) { const old = pane.querySelector('[data-x="' + cssEsc(p.id) + '"]'); if (old) old.replaceWith(entryNode(p, s)); } }
                     const e = list[list.length - 1];
                     const prev = list[list.length - 2];
-                    if (prev && dayKey(prev.ts) !== dayKey(e.ts)) pane.appendChild(daySepNode(e.ts));
-                    const n = entryNode(e, s);
-                    if (n) pane.appendChild(n);
+                    appendEntryNode(pane, entryNode(e, s), prev && dayKey(prev.ts) !== dayKey(e.ts) ? daySepNode(e.ts) : null);
                   } else {
                     if (!entryId) return;
                     const e = list.find((x) => x.id === entryId);
                     if (!e) return;
                     const old = pane.querySelector('[data-x="' + cssEsc(e.id) + '"]');
                     const n = entryNode(e, s);
-                    if (old && n) old.replaceWith(n);
+                    if (old && n) old.replaceWith(n); // 组内条目原位更新（detail/diff 后到）
                     else if (n) {
                       const prev = list[list.indexOf(e) - 1];
-                      if (prev && dayKey(prev.ts) !== dayKey(e.ts)) pane.appendChild(daySepNode(e.ts));
-                      pane.appendChild(n);
+                      appendEntryNode(pane, n, prev && dayKey(prev.ts) !== dayKey(e.ts) ? daySepNode(e.ts) : null);
                     }
                   }
                   syncWaitCard(false);
@@ -2486,6 +2964,24 @@
 
                   // 域内委托（在冒泡到地基 document 监听之前截住需要接管的面）
                   UI.section.addEventListener("click", (ev) => {
+                    // #164 对话域交互：开关钮 / 过程组头 / 复制 / 路径 / 展开收起（旧壳事件委托口径）
+                    const convTgl = ev.target.closest("[data-conv-toggle]");
+                    if (convTgl) { ev.stopPropagation(); toggleConv(convTgl.dataset.convToggle); return; }
+                    const procTgl = ev.target.closest("[data-proc-toggle]");
+                    if (procTgl) {
+                      ev.stopPropagation();
+                      const key = "proc:" + procTgl.dataset.procToggle;
+                      if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
+                      const g = procTgl.closest(".procgrp");
+                      if (g) { g.classList.toggle("open", expanded.has(key)); procHeadUpdate(g); }
+                      return;
+                    }
+                    const cpy = ev.target.closest(".copy-btn");
+                    if (cpy) { ev.stopPropagation(); copyText(cpy.dataset.copy || ""); b2Toast("已复制"); return; }
+                    const fp = ev.target.closest(".fpath");
+                    if (fp) { ev.stopPropagation(); copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || "")); return; }
+                    const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x]");
+                    if (xEl) { ev.stopPropagation(); toggleExpand(xEl.dataset.x); return; }
                     const cta = ev.target.closest(".srow-cta");
                     if (cta) {
                       ev.stopPropagation();
@@ -2758,6 +3254,9 @@
                 window.__ccDeck005B2 = {
                   S,
                   canCmd,
+                  // #164 手机渲染路径同源复用：MD/消息 HTML/展开态/开关（桌面与手机同一渲染器）
+                  mdHtml, userMsgHtml, taskRefRow, entryHtml, eKey, expanded,
+                  convCtl: { proc: () => procShow, think: () => thinkShown, toggle: toggleConv, refresh: updateConvCtrl },
                   sendPrompt(sid, text) {
                     const s = S.sessions.get(sid);
                     if (!s) return { sent: false, error: "会话不存在或未同步" };
@@ -5873,11 +6372,13 @@ function connectLan(ctx) {
         }
         return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
       };
+      const mBgCount = (s) => (s.subagents ?? []).filter((a) => !a.ended_at).length; // #164 ⑂N 徽标数据
       const mobileCard = (s) => {
-        const [w, cls] = stTag(s);
+        const [w] = stTag(s); // w 仅作摘要兜底文案；状态文字标签退役（头像图标/角色已表达状态）
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster"><span class="tag ${cls}">${w}</span>${engineBadge(s)}${sourceBadge()}</div></div>`;
+        const bg = mBgCount(s);
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
       };
 
       // ---------- 导航栈 ----------
@@ -6008,16 +6509,24 @@ function connectLan(ctx) {
       function mWaitCardHtml(w) { // 移动端仅浏览验证的产品口径：视觉 + 点击引导，真审批链在桌面会话域
         return '<div class="wait-card" data-wait-card><strong class="wait-title">' + esc("等待你的确认 · " + (w.tool_name || "工具调用")) + '</strong><p class="wait-copy">' + esc(w.input_summary || "") + '</p><div class="wait-actions"><button type="button" data-mobile-wait-deny>拒绝并说明</button><button type="button" class="allow" data-mobile-wait-allow>允许一次</button></div></div>';
       }
-      function mEntryHtml(e, s) { // B2 entryNode 移动形态：user=bubble / assistant=message-ai / thinking 折叠（偏差 B2-D5 同口径）/ 工具与结果=timeline-note
+      function mEntryHtml(e, s) { // #164 与桌面 entryHtml 同一渲染路径（MD/思考卡/工具行/diff/折叠全量对齐）；B2 未就绪时回落 esc+br
+        const api = b2Api();
+        if (api && typeof api.entryHtml === "function") return api.entryHtml(e, s);
         if (e.kind === "user_message") return '<div class="bubble me">' + mNlBr(e.full ?? e.text) + "</div>";
         if (e.kind === "assistant_text") {
           const eng = ENGINE_SHORT[(s && s.engine) || "claude"] || (s && s.engine) || "Claude";
           return '<div class="message-ai"><div class="message-author"><strong>' + esc(eng) + "</strong>" + (e.ts ? "<time>" + mFmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' + mNlBr(e.text) + (e.streaming && s && s.status === "WORKING" ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") + "</div></div>";
         }
         if (e.kind === "thinking") return "";
-        if (e.kind === "tool_use") return '<div class="timeline-note timeline-tool"><span>' + esc(mToolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</span></div>"; // #162-F2 与桌面 entryNode 同口径
-        if (e.kind === "tool_result") return '<div class="timeline-note timeline-tool"><span>↳ ' + esc(oneLine(e.text)) + "</span></div>";
+        if (e.kind === "tool_use") return '<div class="timeline-note">' + esc(mToolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</div>";
+        if (e.kind === "tool_result") return '<div class="timeline-note">↳ ' + esc(oneLine(e.text)) + "</div>";
         return '<div class="timeline-note">' + esc(oneLine(e.text)) + "</div>";
+      }
+      function mConvCtrlHtml() { // #164 手机对话顶部开关（与桌面共用 convCtl 状态与持久化键）
+        const api = b2Api();
+        const st = (n) => api && api.convCtl ? (n === "proc" ? api.convCtl.proc() : api.convCtl.think()) : n === "proc";
+        const proc = st("proc"), think = st("think");
+        return '<div class="conv-ctrl' + (proc ? "" : " proc-off") + '"><button type="button" class="conv-mini' + (proc ? " on" : "") + '" data-conv-toggle="proc">⚙ 过程 ·' + (proc ? "开" : "关") + '</button><button type="button" class="conv-mini' + (think ? " on" : "") + '" data-conv-toggle="think">✦ 思考 ·' + (think ? "开" : "关") + "</button></div>";
       }
       function mConversationHtml(sid, s) {
         const api = b2Api();
@@ -6026,13 +6535,28 @@ function connectLan(ctx) {
         const cut = sliceTimeline(list, DETAIL_TL_MAX);
         let html = s && s.waiting_request ? mWaitCardHtml(s.waiting_request) : "";
         if (!cut.items.length) return html + '<div class="readonly-banner">暂无对话记录</div>';
+        html += mConvCtrlHtml();
         if (cut.truncated) html += '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>";
         let prevDay = "";
+        let procBuf = null, procKey = ""; // #164 连续工具/结果行 → 过程组（与桌面 renderConversation 同口径）
+        const flushProc = () => {
+          if (procBuf && procBuf.length) {
+            const open = !!(api && api.expanded && api.expanded.has("proc:" + procKey));
+            html += '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>";
+          }
+          procBuf = null;
+        };
         for (const e of cut.items) {
           const dk = e.ts ? mDayKey(e.ts) : "";
-          if (dk && dk !== prevDay) { html += '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"; prevDay = dk; }
-          html += mEntryHtml(e, s);
+          if (dk && dk !== prevDay) { flushProc(); html += '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"; prevDay = dk; }
+          const eh = mEntryHtml(e, s);
+          if (!eh) continue;
+          if (eh.startsWith('<div class="trow')) {
+            if (!procBuf) { procBuf = []; procKey = api && api.eKey ? api.eKey(e) : String(e.ts || ""); }
+            procBuf.push(eh);
+          } else { flushProc(); html += eh; }
         }
+        flushProc();
         return html;
       }
       function mTasksHtml(s) {
@@ -6127,6 +6651,7 @@ function connectLan(ctx) {
         const s = bridge.sessions.get(sid) || null;
         const keepScroll = base.content.scrollTop;
         base.convHost.innerHTML = mConversationHtml(sid, s);
+        { const api = b2Api(); base.convHost.classList.toggle("proc-off", !(api && api.convCtl && api.convCtl.proc())); } // #164 过程总开关（host 级类，innerHtml 重建不丢）
         base.tasks.innerHTML = mTasksHtml(s);
         base.arts.innerHTML = mArtifactsHtml(s);
         base.usage.innerHTML = mUsageHtml(s);
@@ -6365,6 +6890,44 @@ function connectLan(ctx) {
           return;
         }
         if (target.closest("[data-mobile-wait-deny]") || target.closest("[data-mobile-wait-allow]")) { mToast("审批操作请在桌面会话域完成"); return; } // ⑥c-3 产品口径：移动端仅浏览验证
+        // #164 手机对话域交互（与桌面同一 expanded/convCtl 状态面）：开关 / 组头 / 展开 / 复制 / 任务号
+        const mConvTgl = target.closest("[data-conv-toggle]");
+        if (mConvTgl) {
+          const api = b2Api();
+          if (api && api.convCtl) api.convCtl.toggle(mConvTgl.dataset.convToggle);
+          if (detailSid) renderMobileDetail(detailSid);
+          return;
+        }
+        const mProcTgl = target.closest("[data-proc-toggle]");
+        if (mProcTgl) {
+          const api = b2Api();
+          const key = "proc:" + mProcTgl.dataset.procToggle;
+          if (api && api.expanded) { if (api.expanded.has(key)) api.expanded.delete(key); else api.expanded.add(key); }
+          const g = mProcTgl.closest(".procgrp");
+          if (g) {
+            g.classList.toggle("open");
+            const head = g.querySelector(".proc-head");
+            if (head) head.textContent = (g.classList.contains("open") ? "▾" : "▸") + " 过程 · " + g.querySelectorAll(".proc-body > .trow").length + " 步";
+          }
+          return;
+        }
+        const mX = target.closest(".x-full[data-x], .th-head[data-x]");
+        if (mX) {
+          const api = b2Api();
+          const k = mX.dataset.x;
+          if (api && api.expanded) { if (api.expanded.has(k)) api.expanded.delete(k); else api.expanded.add(k); }
+          if (detailSid) renderMobileDetail(detailSid);
+          return;
+        }
+        const mCopy = target.closest(".copy-btn");
+        if (mCopy) { try { navigator.clipboard && navigator.clipboard.writeText(mCopy.dataset.copy || ""); } catch (_) {} mToast("已复制"); return; }
+        const mFp = target.closest(".fpath");
+        if (mFp) { try { navigator.clipboard && navigator.clipboard.writeText(mFp.dataset.p || ""); } catch (_) {} mToast("已复制路径 · " + (mFp.dataset.p || "")); return; }
+        const mRef = target.closest("[data-task-ref]");
+        if (mRef) { // 正文/工具行 #NNN：跳「任务」tab（桌面 jumpToTask 的手机形态）
+          document.querySelectorAll("#m-detail .mobile-detail-tabs button")[1]?.click();
+          return;
+        }
         const openDetail = target.closest("[data-open-detail]");
         if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
       });
