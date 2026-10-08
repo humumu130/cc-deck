@@ -144,14 +144,14 @@
       --artifact-failed-line: rgba(236, 116, 114, .42);
       --artifact-complete-bg: rgba(75, 203, 145, .1);
       --artifact-sheet-backdrop: rgba(1, 8, 16, .56);
-      /* #B3-15 输出物六类分色 token（#168 原型）：doc 紫 / sheet 琥珀 / code=info / image=done /
-         pkg 中性 / accept=brand-hover——除 doc 外全走既有语义 var，暗亮双主题自动换档 */
-      --art-doc: #B18CFF;
-      --art-sheet: var(--working);
-      --art-code: var(--info);
-      --art-image: var(--done);
-      --art-pkg: var(--dim);
-      --art-accept: var(--brand-hover);
+      /* #168 输出物六类分色 token（v3 定稿原型直值，只染瓦片）：doc 紫 / sheet 琥珀 /
+         code=info / image=done / pkg 中性 / accept=brand 系——暗亮双主题各配直值 */
+      --art-doc: #B7A5F0;
+      --art-sheet: #E9B84C;
+      --art-code: #7EAFE8;
+      --art-image: #4BCB91;
+      --art-pkg: #A9BCD1;
+      --art-accept: #F0A06A;
       --radius: 10px;
       --radius-sm: 7px;
       --radius-lg: 14px;
@@ -290,8 +290,13 @@
       --artifact-failed-line: #C84C51;
       --artifact-complete-bg: #E8F5EF;
       --artifact-sheet-backdrop: rgba(50, 74, 96, .28);
-      /* #B3-15 浅色档：紫降一档深（其余引用 var 自动换） */
-      --art-doc: #6F3FC4;
+      /* #168 浅色档：六类直值同步换深 */
+      --art-doc: #6D5BD8;
+      --art-sheet: #A56D00;
+      --art-code: #3978B8;
+      --art-image: #168D60;
+      --art-pkg: #5B7186;
+      --art-accept: #C86440;
     }
     * { box-sizing: border-box; }
     html, body { min-width: 320px; min-height: 100%; }
@@ -731,21 +736,67 @@
     .artifact-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--info); }
     .artifact-row-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
     .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
-    .artifact-browser { display: grid; gap: 10px; }
-    .artifact-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 2px; color: var(--dim); font-size: 10px; }
-    .artifact-summary strong { color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
-    .artifact-summary small { color: var(--faint); font: 10px var(--mono); }
-    .artifact-summary-path { overflow: hidden; max-width: 48%; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-group, .artifact-loose { border-top: 1px solid var(--artifact-group-line); border-bottom: 1px solid var(--artifact-group-line); border-radius: 0; background: transparent; box-shadow: none; }
-    .artifact-group { border-left: 2px solid transparent; border-right: 0; }
-    .artifact-group:not(.collapsed) { border-left-color: var(--artifact-group-line); }
-    .artifact-group-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
-    .artifact-group.collapsed .artifact-group-head { border-bottom-color: transparent; }
-    .artifact-group.collapsed .artifact-files, .artifact-group.collapsed .artifact-batch { display: none; }
-    .artifact-group-title { min-width: 0; flex: 1; }
-    .artifact-group-title strong { display: block; overflow: hidden; color: var(--text-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-group-title small { display: block; margin-top: 2px; color: var(--dim); font: 10px var(--mono); }
-    .artifact-folder-icon { color: var(--brand-hover); font-size: 15px; }
+    /* ===== #168 输出物面板（v3 定稿原型落壳）：行二层 / 文件夹行 / 六类瓦片分色 ===== */
+    .k-doc { --tk: var(--art-doc); } .k-sheet { --tk: var(--art-sheet); } .k-code { --tk: var(--art-code); }
+    .k-image { --tk: var(--art-image); } .k-pkg { --tk: var(--art-pkg); } .k-accept { --tk: var(--art-accept); }
+    .k-dir { --tk: var(--brand); }
+    .artifact-browser { display: block; }
+    .af-cap { margin: 0 0 12px; color: var(--dim); font-size: 10px; }
+    .af-sum { display: flex; align-items: center; gap: 12px; padding: 2px 2px 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .af-sum-n { color: var(--text-strong); font: 700 13px var(--sans); font-variant-numeric: tabular-nums; }
+    .af-sum-n small { margin-left: 4px; color: var(--dim); font: 10px var(--mono); font-weight: 400; }
+    .af-sum-sp { flex: 1; }
+    .af-sum .secondary-btn { display: inline-flex; align-items: center; gap: 6px; }
+    .af-trunc { padding: 0 2px 10px; color: var(--working); font-size: 10.5px; }
+    .af-foot { padding: 16px 2px 6px; margin-top: 4px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 10px; text-align: center; }
+    /* 行骨架：类型瓦片(26px 分色) + 名/徽章主行 + 「目录 · 尺寸 · 时间」灰字次行；无分隔线，gap + hover 淡底 */
+    .art-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 8px 10px; border-radius: 8px; background: transparent; cursor: pointer; transition: background .12s ease; }
+    .art-row:hover { background: var(--q-row-hov); }
+    .art-row:focus-visible { outline: 2px solid var(--brand-hover); outline-offset: -2px; }
+    .art-tile { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 7px; background: color-mix(in srgb, var(--tk) 14%, transparent); color: var(--tk); }
+    .art-tile .icon-inline { width: 14px; height: 14px; }
+    .art-thumb { flex: 0 0 40px; width: 40px; height: 30px; overflow: hidden; border: 1px solid var(--card-border); border-radius: 5px; background: var(--surface1); }
+    .art-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .art-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .art-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .art-name { overflow: hidden; color: var(--text-strong); font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+    .art-badge { flex: none; padding: 1px 6px; border-radius: 4px; font-size: 10px; line-height: 1.5; white-space: nowrap; }
+    .b-new { background: color-mix(in srgb, var(--done) 13%, transparent); color: var(--done); }
+    .b-mod { background: var(--tag-bg); color: var(--dim); }
+    .b-dead { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+    .b-out { background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
+    .b-cnt { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); font-weight: 700; }
+    .art-meta { display: flex; align-items: center; gap: 8px; color: var(--faint); font: 10px var(--mono); font-variant-numeric: tabular-nums; }
+    .art-meta .dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .art-meta .dir.rtl { direction: rtl; text-align: left; } /* #168 超长绝对路径 rtl 截断保根 */
+    .art-acts { display: flex; flex: none; align-items: center; gap: 3px; opacity: 0; transition: opacity .14s ease; }
+    .art-row:hover .art-acts, .art-row:focus-within .art-acts { opacity: 1; }
+    .art-act { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+    .art-act:hover { border-color: var(--line); background: var(--hover); color: var(--text); }
+    .art-act .icon-inline { width: 14px; height: 14px; }
+    .art-row.dead .art-name { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 55%, transparent); }
+    .art-row.dead .art-tile { opacity: .55; }
+    .art-row.downloading { background: var(--artifact-muted-bg); }
+    .art-row.downloading .art-meta { color: var(--brand); }
+    .art-row.failed { background: var(--artifact-failed-bg); }
+    .art-err { flex: none; color: var(--error); font-size: 10px; white-space: nowrap; }
+    .art-retry { flex: none; min-height: 24px; padding: 0 8px; border: 1px solid var(--danger-line); border-radius: 6px; background: transparent; color: var(--error); cursor: pointer; font-size: 10px; }
+    .art-retry:hover { background: var(--danger-bg); border-color: var(--error); }
+    /* 文件夹行：折叠箭头 + 品牌瓦片 + ×N 计数；次行「目录 · 尺寸 · 最近」；组间距 16px */
+    .art-group { margin-top: 16px; }
+    .artifact-browser .art-group:first-of-type { margin-top: 8px; }
+    .af-frow { display: flex; align-items: center; gap: 4px; }
+    .art-folder { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; min-height: 50px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; transition: background .12s ease; }
+    .art-folder:hover { background: var(--q-row-hov); }
+    .art-folder .art-name { font-weight: 650; }
+    .art-chev { flex: none; width: 12px; color: var(--brand); font-size: 11px; line-height: 1; transition: transform .16s ease; }
+    .art-group:not(.collapsed) .art-chev { transform: rotate(90deg); }
+    .art-kids { display: grid; gap: 2px; margin: 0 0 4px 13px; border-left: 1px solid var(--line-soft); padding-left: 6px; }
+    .art-group.collapsed .art-kids, .art-group.collapsed .art-batch { display: none; }
+    .art-kids .art-row { min-height: 46px; padding: 6px 10px; }
+    .art-loose { display: grid; gap: 2px; margin: 14px 0 0 6px; border-left: 1px dashed var(--line-soft); padding-left: 6px; }
+    /* 组级批量下载条（色档沿用 artifact-batch-state） */
+    .art-batch { margin: 2px 0 6px 13px; }
     .artifact-group-action { min-height: 28px; padding: 0 9px; }
     .artifact-menu-wrap { position: relative; }
     .artifact-menu-button { width: 28px; height: 28px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
@@ -754,32 +805,28 @@
     .artifact-menu.open { display: grid; }
     .artifact-menu button { padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 10px; }
     .artifact-menu button:hover { background: var(--hover); }
-    .artifact-files { padding: 0 10px; }
-    .artifact-file { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 7px; min-height: 42px; border-bottom: 1px solid var(--line-soft); }
-    .artifact-file:last-child { border-bottom: 0; }
-    .artifact-file.failed { margin: 0 -4px; padding: 0 4px; border-radius: 5px; background: var(--artifact-failed-bg); color: var(--error); }
-    .artifact-file-icon { color: var(--info); font-size: 13px; text-align: center; }
-    .artifact-file-icon .icon-inline, .artifact-folder-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
-    .artifact-file-main { min-width: 0; }
-    .artifact-file-name { display: block; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-file-dir { display: block; overflow: hidden; margin-top: 1px; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-file-meta { color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
-    .artifact-file-error { display: none; color: var(--error); font-size: 10px; white-space: nowrap; }
-    .artifact-file.failed .artifact-file-error { display: inline; }
-    .artifact-file-anomaly { padding: 2px 4px; border: 1px solid var(--danger-line); border-radius: 4px; color: var(--error); font: 700 10px var(--mono); white-space: nowrap; }
-    .artifact-file-retry { display: none; min-height: 24px; padding: 0 6px; border: 1px solid var(--danger-line); border-radius: 5px; background: transparent; color: var(--error); cursor: pointer; font-size: 10px; }
-    .artifact-file.failed .artifact-file-retry { display: inline-flex; align-items: center; }
-    .artifact-file.downloading { background: var(--artifact-muted-bg); }
-    .artifact-file.downloading .artifact-file-meta { color: var(--brand); }
-    .artifact-file-retry:focus-visible, .artifact-file-retry:hover { border-color: var(--error); background: var(--danger-bg); }
-    .artifact-batch { padding: 0 10px 9px; }
+    /* #168 artViewer 桌面在线预览浮层：顶栏(名+尺寸+定位/下载/✕) + 分级内容，Esc / 遮罩关闭 */
+    .av-backdrop { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; padding: 28px; background: var(--artifact-sheet-backdrop); }
+    .av-backdrop.open { display: flex; }
+    .av-panel { display: flex; flex-direction: column; width: min(880px, 94vw); max-height: min(660px, 88vh); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: var(--shadow); }
+    .av-bar { display: flex; align-items: center; gap: 10px; flex: none; padding: 11px 14px; border-bottom: 1px solid var(--line-soft); background: var(--surface1); }
+    .av-name { overflow: hidden; color: var(--text-strong); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .av-sub { flex: none; color: var(--faint); font: 10px var(--mono); }
+    .av-body { flex: 1; min-height: 0; overflow: auto; padding: 22px 26px; }
+    .av-load { color: var(--dim); font: 11px var(--mono); text-align: center; padding: 60px 0; }
+    .av-md { max-width: 680px; margin: 0 auto; font-size: 12.5px; }
+    .av-pre { margin: 0; color: var(--text); font: 11px/1.7 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .av-imgwrap { display: grid; place-items: center; min-height: 340px; }
+    .av-img { max-width: 100%; max-height: 480px; border: 1px solid var(--card-border); border-radius: 10px; }
+    .av-fb { display: grid; justify-items: center; gap: 10px; margin: 90px auto 0; max-width: 340px; color: var(--dim); text-align: center; font-size: 11px; }
+    .av-fb .ok { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 999px; background: var(--done-bg); color: var(--done); font-size: 22px; }
+    .av-fb .ok.err { background: var(--artifact-failed-bg); color: var(--error); }
     .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 11px var(--mono); }
     .artifact-batch-state.complete { background: var(--artifact-complete-bg); color: var(--done); }
     .artifact-batch-state.partial { background: var(--artifact-failed-bg); color: var(--error); }
     .artifact-batch-state button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; }
     .artifact-batch-progress { display: inline-block; width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); vertical-align: middle; }
     .artifact-batch-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand); transition: width .25s ease; }
-    .artifact-loose { padding: 0 10px; }
     .artifact-source { display: grid; gap: 8px; padding: 8px 0 8px 9px; border-left: 2px solid var(--source); }
     .artifact-source.source-company-group { border-left-color: var(--source-company); }
     .artifact-source.source-home-group { border-left-color: var(--source-home); }
@@ -794,13 +841,38 @@
     .artifact-sheet h3 { margin: 0 0 8px; color: var(--text-strong); font-size: 12px; }
     .artifact-sheet button { display: block; width: 100%; min-height: 42px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 11px; }
     .artifact-sheet button:last-child { border-bottom: 0; color: var(--dim); }
-    .mobile-screen .artifact-browser { gap: 8px; }
-    .mobile-screen .artifact-summary { display: block; line-height: 1.6; }
-    .mobile-screen .artifact-summary-path { display: block; max-width: 100%; margin-top: 2px; }
-    .mobile-screen .artifact-group-action, .mobile-screen .artifact-menu-wrap { display: none; }
-    .mobile-screen .artifact-group-head { cursor: pointer; }
+    /* #168 输出物面板 · 手机行同构：汇总条 + 文件夹行(×N 折叠) + 行二层 + 六类 chip 分色 */
+    .m-sum { display: flex; align-items: baseline; gap: 10px; padding: 2px 2px 10px; }
+    .m-sum-n { color: var(--text-strong); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .m-sum-n small { margin-left: 4px; color: var(--dim); font: 10px var(--mono); font-weight: 400; }
+    .m-trunc { padding: 0 2px 10px; color: var(--working); font-size: 11px; }
+    #m-detail .art-group { margin-top: 10px; }
+    .m-frow { display: flex; align-items: center; gap: 2px; }
+    .m-row { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 54px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 8px; background: transparent; color: inherit; cursor: default; text-align: left; font: inherit; }
+    .m-row:last-child { border-bottom-color: transparent; }
+    .m-chip { display: grid; place-items: center; flex: 0 0 auto; min-width: 34px; height: 22px; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--tk) 45%, transparent); border-radius: 6px; color: var(--tk); font: 700 9.5px var(--mono); letter-spacing: .02em; }
+    .m-chip .icon-inline { width: 13px; height: 13px; }
+    .k-dir .m-chip { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+    .m-thumb { flex: 0 0 46px; width: 46px; height: 46px; overflow: hidden; border: 1px solid var(--card-border); border-radius: 9px; background: var(--surface1); }
+    .m-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .m-main { flex: 1; min-width: 0; }
+    .m-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .m-name { overflow: hidden; color: var(--text-strong); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+    .m-meta { overflow: hidden; margin-top: 2px; color: var(--faint); font: 11px var(--mono); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+    .m-row.dead .m-name { color: var(--dim); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--dim) 55%, transparent); }
+    .m-row.dead .m-chip { opacity: .55; }
+    .m-folder { min-height: 50px; width: auto; flex: 1; min-width: 0; cursor: pointer; }
+    .m-folder:active { background: var(--q-row-sel); }
+    .m-folder .m-name { font-size: 12.5px; font-weight: 700; }
+    .m-chev { flex: none; width: 11px; color: var(--brand); font-size: 10px; line-height: 1; transition: transform .16s ease; }
+    .art-group.open .m-chev { transform: rotate(90deg); }
+    .m-kids { display: none; margin: 0 0 2px 14px; border-left: 1px solid var(--line-soft); padding-left: 8px; }
+    .art-group.open .m-kids { display: grid; gap: 1px; }
+    .m-kids .m-row { min-height: 46px; }
+    .m-kids-loose { display: grid; margin-left: 2px; border-left: 1px dashed var(--line-soft); }
+    .m-foot { padding: 18px 4px 4px; margin-top: 8px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 10.5px; text-align: center; }
     .segment-bar .faint, .inspector-title > span:last-child, .metric b, .mobile-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
-    .source-trigger .source-trigger-summary, .source-menu-head, .source-option small, .source-mode button, .source-manage, .source-group-bar, .rail-btn .badge, .tag, .context-meter-grade, .context-meter-note, .artifact-group-title small, .artifact-file-dir, .artifact-file-meta, .artifact-file-error, .artifact-batch-state, .artifact-source-head small, .task-card p, .task-assignee, .member-card p, .mobile-summary span, .engine-badge, .source-badge, .activity-row time, .task-flag, .toggle-control { font-size: 10px; }
+    .source-trigger .source-trigger-summary, .source-menu-head, .source-option small, .source-mode button, .source-manage, .source-group-bar, .rail-btn .badge, .tag, .context-meter-grade, .context-meter-note, .artifact-batch-state, .artifact-source-head small, .task-card p, .task-assignee, .member-card p, .mobile-summary span, .engine-badge, .source-badge, .activity-row time, .task-flag, .toggle-control { font-size: 10px; }
     .context-meter-kicker { font-size: 9px; }
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
@@ -1287,7 +1359,7 @@
     .pend-chip:hover { border-color: var(--working); }
     .pend-chip.open { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
     .pend-caret { flex: none; font-size: 9px; }
-    /* #B3-15 输出物六类分色：瓦片着色单点（桌面 artifact-file-icon / inspector / 手机 artifact-row 共用） */
+    /* #B3-15 输出物六类分色：图标着色单点（inspector 迷你行/输出物面板瓦片 .k-* --tk 体系共用一处 token） */
     .art-ico.k-doc { color: var(--art-doc); }
     .art-ico.k-sheet { color: var(--art-sheet); }
     .art-ico.k-code { color: var(--art-code); }
@@ -1338,7 +1410,7 @@
 </head>
 <body data-card-density="standard" data-source-mode="single">
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol></svg>
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
@@ -1751,15 +1823,11 @@
                 // ccd_think_show——旧壳思考开关不落盘，005 按任务书补持久化，偏差备案）
                 let procShow = (() => { try { return localStorage.getItem("ccd_proc_show") !== "0"; } catch (_) { return true; } })();
                 let thinkShown = (() => { try { return localStorage.getItem("ccd_think_show") === "1"; } catch (_) { return false; } })();
+                // #168 图标随六类分型（sheet=table / accept=accept 不再落 gear/clip）；pkg 内安装包细分 package
                 function artifactIconFor(name) {
-                  const ext = String(name || "").toLowerCase().split(".").pop();
-                  if (["md", "txt", "rst", "adoc"].includes(ext)) return "file-text";
-                  if (["js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "c", "h", "cpp", "cc", "css", "html", "vue", "sh"].includes(ext)) return "code";
-                  if (["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"].includes(ext)) return "archive";
-                  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext)) return "image";
-                  if (["apk", "ipa", "dmg", "exe", "msi"].includes(ext)) return "package";
-                  if (["json", "toml", "yaml", "yml", "ini", "env"].includes(ext)) return "gear";
-                  return "clip";
+                  const k = artifactKindFor(name);
+                  if (k === "pkg") return ["apk", "ipa", "dmg", "exe", "msi"].includes(String(name || "").toLowerCase().split(".").pop()) ? "package" : "archive";
+                  return ({ doc: "file-text", sheet: "table", code: "code", image: "image", accept: "accept" })[k] || "clip";
                 }
                 // #B3-15 输出物六类分色（#168 原型 token 落地）：doc 紫 / sheet 琥珀 / code=info /
                 // image=done / pkg 中性 / accept=brand-hover。判定=文件名含验收语义优先，其次扩展名
@@ -2819,28 +2887,67 @@
                   groups.sort((a, b) => Math.max(...b.list.map((x) => x.last_at || 0)) - Math.max(...a.list.map((x) => x.last_at || 0)));
                   return { groups, loose, files: items };
                 }
-                function artFileNode(a, cwd) {
+                // #168 行徽章（至多一枚，优先级 死档 > cwd 外 > 组内新建/修改；分色只在瓦片，徽章走语义色）
+                function artBadgeHtml(a, inGroup) {
+                  if (a.exists === false) return '<span class="art-badge b-dead">已不在磁盘</span>';
+                  if (a.origin === "outside") return '<span class="art-badge b-out">cwd 外</span>';
+                  if (inGroup && a.op) return a.op === "create" ? '<span class="art-badge b-new">新建</span>' : '<span class="art-badge b-mod">修改</span>';
+                  return "";
+                }
+                // #168 行二层：瓦片(26px 分色/图片缩略) + 名/徽章主行 + 「目录 · 尺寸 · 时间」灰字次行
+                function artFileNode(a, cwd, inGroup) {
                   const name = baseName(a.path);
+                  const kind = artifactKindFor(name);
+                  // #168 目录显示：cwd 本体 →「（工作目录）」；cwd 外绝对路径 → rtl 截断保根
+                  const nzp = (x) => String(x || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                  const rawDir = artDirOf(a);
+                  const isRoot = !inGroup && nzp(rawDir) === nzp(cwd);
+                  const dir = inGroup ? "" : (isRoot || !relDir(rawDir, cwd) ? "（工作目录）" : relDir(rawDir, cwd));
+                  const absDir = !inGroup && !isRoot && dir !== "（工作目录）" && (a.origin === "outside" || /^[~/]|^[A-Za-z]:[\\/]/.test(dir));
+                  const metaParts = [];
+                  if (dir) metaParts.push('<span class="dir' + (absDir ? " rtl" : "") + '">' + esc(dir) + "</span>");
+                  if (a.size != null) metaParts.push("<span>" + sizeStr(a.size) + "</span>");
+                  metaParts.push("<span>" + relTime(a.last_at || a.first_at) + "</span>");
+                  const tile = kind === "image" && a.thumb
+                    ? '<span class="art-thumb"><img src="' + esc(a.thumb) + '" alt=""></span>'
+                    : '<span class="art-tile k-' + kind + '">' + svgUse(artifactIconFor(name)) + "</span>";
                   const div = document.createElement("div");
-                  div.className = "artifact-file";
+                  div.className = "art-row k-" + kind + (a.exists === false ? " dead" : "");
                   div.dataset.artifactFile = name;
                   div.dataset.path = a.path;
-                  div.title = displayPath(a.path);
-                  div.innerHTML = '<span class="artifact-file-icon art-ico k-' + artifactKindFor(name) + '">' + svgUse(artifactIconFor(name)) + '</span><div class="artifact-file-main"><span class="artifact-file-name">' + esc(name) + '</span><span class="artifact-file-dir">' + esc(relDir(artDirOf(a), cwd) || "当前工作目录") + '</span></div><span class="artifact-file-meta" data-artifact-meta>' + sizeStr(a.size) + " · " + relTime(a.last_at || a.first_at) + "</span>" + (a.exists === false ? '<span class="artifact-file-anomaly">已不在磁盘</span>' : "");
+                  div.setAttribute("role", "button");
+                  div.tabIndex = 0;
+                  div.title = "预览 " + displayPath(a.path);
+                  div.innerHTML = tile + '<span class="art-main"><span class="art-name-row"><span class="art-name">' + esc(name) + "</span>" + artBadgeHtml(a, inGroup) + '</span><span class="art-meta" data-artifact-meta>' + metaParts.join("") + "</span></span>" +
+                    '<span class="art-acts"><button class="art-act" type="button" data-af-view="' + esc(a.path) + '" title="在线预览" aria-label="在线预览 ' + esc(name) + '">' + svgUse("eye") + '</button><button class="art-act" type="button" data-af-dl="' + esc(a.path) + '" title="下载" aria-label="下载 ' + esc(name) + '">' + svgUse("download") + "</button></span>";
                   return div;
                 }
+                // #168 文件夹行：折叠箭头 + 品牌瓦片 + ×N 计数；次行「目录 · 尺寸 · 最近」；批量下载与 ⋯ 菜单随行
                 function artGroupNode(g, cwd, open) {
                   const sec = document.createElement("section");
-                  sec.className = "artifact-group" + (open ? "" : " collapsed");
+                  sec.className = "art-group" + (open ? "" : " collapsed");
                   sec.dataset.artifactGroup = g.dir;
                   const total = sizeStr(g.list.reduce((t, a) => t + (Number(a.size) || 0), 0));
                   const recent = relTime(Math.max(...g.list.map((a) => a.last_at || 0)));
+                  const dirDisp = relDir(g.dir, cwd) || "工作目录";
+                  const leaf = dirDisp.split(/[\\/]/).filter(Boolean).pop() || dirDisp;
                   // #158-批3 桌面壳专属：先探后开（probePath）再「在文件夹中定位」（openPath reveal）
                   const shellReveal = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
-                  sec.innerHTML = '<div class="artifact-group-head"><span class="artifact-folder-icon">' + svgUse("folder") + '</span><div class="artifact-group-title"><strong>' + esc(relDir(g.dir, cwd) || "工作目录") + "</strong><small>" + g.list.length + " 个文件 · " + total + " · 最近 " + recent + '</small></div><button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button><div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu"><button type="button" data-artifact-action="toggle">收起目录</button>' + (shellReveal ? '<button type="button" data-artifact-action="reveal">在文件夹中定位</button>' : "") + '<button type="button" data-artifact-action="copy-path">复制路径</button></div></div></div><div class="artifact-files"></div><div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>';
-                  const files = sec.querySelector(".artifact-files");
-                  for (const a of g.list) files.appendChild(artFileNode(a, cwd));
+                  sec.innerHTML = '<div class="af-frow"><button class="art-folder" type="button" data-af-toggle aria-expanded="' + open + '"><span class="art-chev">▸</span><span class="art-tile k-dir">' + svgUse("folder") + '</span><span class="art-main"><span class="art-name-row"><span class="art-name">' + esc(leaf) + '</span><span class="art-badge b-cnt">×' + g.list.length + '</span></span><span class="art-meta"><span class="dir">' + esc(dirDisp) + "</span><span>" + total + "</span><span>最近 " + recent + '</span></span></span></button><button class="secondary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button><div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu"><button type="button" data-artifact-action="toggle">' + (open ? "收起目录" : "展开目录") + '</button>' + (shellReveal ? '<button type="button" data-artifact-action="reveal">在文件夹中定位</button>' : "") + '<button type="button" data-artifact-action="copy-path">复制路径</button></div></div></div><div class="art-kids"></div><div class="art-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内文件</div></div>';
+                  const kids = sec.querySelector(".art-kids");
+                  for (const a of g.list) kids.appendChild(artFileNode(a, cwd, true));
                   return sec;
+                }
+                // #168 组开合态跨重渲记忆（会话切换重置；首轮默认展开第一组）
+                let artOpenDirs = new Set(), artOpenSid = "", artOpenInit = false;
+                function toggleArtGroup(grp) {
+                  grp.classList.toggle("collapsed");
+                  const open = !grp.classList.contains("collapsed");
+                  if (open) artOpenDirs.add(grp.dataset.artifactGroup); else artOpenDirs.delete(grp.dataset.artifactGroup);
+                  const tgl = grp.querySelector("[data-af-toggle]");
+                  if (tgl) tgl.setAttribute("aria-expanded", open);
+                  const mi = grp.querySelector('[data-artifact-action="toggle"]');
+                  if (mi) mi.textContent = open ? "收起目录" : "展开目录";
                 }
                 function renderArtifacts() {
                   const pane = UI.panes[2];
@@ -2848,17 +2955,23 @@
                   if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
                   const arts = Array.isArray(s.artifacts) ? s.artifacts : [];
                   if (!arts.length) { pane.innerHTML = '<div class="pane-summary">输出物</div><div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>'; return; }
+                  if (artOpenSid !== s.session_id) { artOpenDirs = new Set(); artOpenSid = s.session_id; artOpenInit = false; }
                   const layout = artLayoutItems(arts);
+                  if (!artOpenInit && layout.groups.length) { artOpenDirs.add(layout.groups[0].dir); artOpenInit = true; }
                   const wrap = document.createElement("div");
                   wrap.className = "artifact-browser";
-                  wrap.innerHTML = '<div class="artifact-summary"><span><strong>' + layout.files.length + "</strong> 个文件 · " + layout.groups.length + " 个目录" + (s.artifacts_truncated ? '<small> · 清单曾被截断</small>' : "") + '</span><span class="artifact-summary-path" title="' + esc(displayPath(s.cwd || "")) + '">cwd · ' + esc(shortPath(s.cwd)) + "</span></div>";
-                  layout.groups.forEach((g, i) => wrap.appendChild(artGroupNode(g, s.cwd, i === 0)));
+                  // #168 汇总条简化：N 文件 · M 文件夹 + 全部下载（cwd 已在 workspace 头，不再挂 chip）
+                  wrap.innerHTML = '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>' +
+                    '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>" +
+                    (s.artifacts_truncated ? '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>' : "");
+                  layout.groups.forEach((g) => wrap.appendChild(artGroupNode(g, s.cwd, artOpenDirs.has(g.dir))));
                   if (layout.loose.length) {
                     const loose = document.createElement("div");
-                    loose.className = "artifact-loose";
-                    for (const a of layout.loose) loose.appendChild(artFileNode(a, s.cwd));
+                    loose.className = "art-loose";
+                    for (const a of layout.loose) loose.appendChild(artFileNode(a, s.cwd, false));
                     wrap.appendChild(loose);
                   }
+                  wrap.insertAdjacentHTML("beforeend", '<div class="af-foot">仅收录文档、表格、图片与安装包等交付物 · ' + layout.files.length + " 项已登记 · 清单来自来源会话实时同步</div>");
                   pane.textContent = "";
                   pane.appendChild(wrap);
                 }
@@ -2878,7 +2991,7 @@
                   const viaShell = !!(window.ccDeck && typeof window.ccDeck.saveArtifact === "function");
                   if (viaShell && shellArtBusy) { b2Toast("上一个输出物还在下载中…"); return Promise.resolve(); }
                   const meta = fileEl.querySelector("[data-artifact-meta]");
-                  const prev = meta ? meta.textContent : "";
+                  const prev = meta ? meta.innerHTML : ""; // #168 次行是复合 span 结构，innerHTML 保真还原
                   if (meta) meta.textContent = "下载中…";
                   if (viaShell) shellArtBusy = true;
                   return fetchArtifact(sid, path).then(async (res) => {
@@ -2891,40 +3004,163 @@
                     } finally { shellArtBusy = false; }
                   }).catch((err) => {
                     if (viaShell) shellArtBusy = false;
-                    if (meta) meta.textContent = prev;
+                    if (meta) meta.innerHTML = prev;
                     fileEl.classList.add("failed");
-                    const old = fileEl.querySelector(".artifact-file-error");
-                    if (!old) fileEl.insertAdjacentHTML("beforeend", '<span class="artifact-file-error">' + esc(String(err.message || err)) + '</span><button class="artifact-file-retry" type="button" data-artifact-file-retry>重试</button>');
+                    // #168 失败≠删除：只加错误项+重试，不套 dead 删除线（两态分离）
+                    const old = fileEl.querySelector(".art-err");
+                    if (!old) fileEl.querySelector(".art-acts").insertAdjacentHTML("beforebegin", '<span class="art-err" title="' + esc(String(err.message || err)) + '">拉取失败</span><button class="art-retry" type="button" data-artifact-file-retry>重试</button>');
                     throw err;
                   });
                 }
+                // #168 runBatch 返回 Promise（全部下载按组串接）；组开合与重渲后 DOM 失效由调用方兜
                 function runBatch(group) {
-                  if (!group || group.dataset.batchRunning === "1") return;
+                  if (!group || group.dataset.batchRunning === "1") return Promise.resolve();
                   group.classList.remove("collapsed");
                   group.dataset.batchRunning = "1";
-                  const files = [...group.querySelectorAll(".artifact-file")];
+                  const files = [...group.querySelectorAll(".art-row")];
                   const total = files.length;
                   const btn = group.querySelector("[data-artifact-batch]");
                   if (btn) { btn.disabled = true; btn.textContent = "下载中…"; }
-                  files.forEach((f) => { f.classList.remove("failed"); const e = f.querySelector(".artifact-file-error"), r = f.querySelector(".artifact-file-retry"); if (e) e.remove(); if (r) r.remove(); });
+                  files.forEach((f) => { f.classList.remove("failed"); const e = f.querySelector(".art-err"), r = f.querySelector(".art-retry"); if (e) e.remove(); if (r) r.remove(); });
                   setBatchState(group, "queued", 0, 0, total);
                   const sid = S.selected;
-                  let idx = 0, done = 0;
-                  const advance = () => {
-                    if (idx >= files.length) {
-                      const failed = group.querySelectorAll(".artifact-file.failed").length;
-                      setBatchState(group, failed ? "partial" : "complete", 100, done, total);
-                      group.dataset.batchRunning = "0";
-                      if (btn) { btn.disabled = false; btn.textContent = "批量下载"; }
-                      b2Toast(failed ? "已下载 " + done + " 个 · " + failed + " 个失败可重试" : "已下载 " + total + " 个文件");
+                  return new Promise((finish) => {
+                    let idx = 0, done = 0;
+                    const advance = () => {
+                      if (idx >= files.length) {
+                        const failed = group.querySelectorAll(".art-row.failed").length;
+                        setBatchState(group, failed ? "partial" : "complete", 100, done, total);
+                        group.dataset.batchRunning = "0";
+                        if (btn) { btn.disabled = false; btn.textContent = "批量下载"; }
+                        b2Toast(failed ? "已下载 " + done + " 个 · " + failed + " 个失败可重试" : "已下载 " + total + " 个文件");
+                        finish();
+                        return;
+                      }
+                      const f = files[idx];
+                      f.classList.add("downloading");
+                      setBatchState(group, "downloading", Math.round((idx / total) * 100), done, total);
+                      downloadNode(f, sid).then(() => { done++; }).catch(() => {}).finally(() => { f.classList.remove("downloading"); idx++; advance(); });
+                    };
+                    advance();
+                  });
+                }
+                // #168 全部下载：组按序批量 + 散件串行；心跳重渲换 DOM，每步从 pane 现查
+                let artAllDlRunning = false;
+                function runAllDownloads() {
+                  const pane = UI.panes[2];
+                  if (!pane || artAllDlRunning) return;
+                  artAllDlRunning = true;
+                  const btn = pane.querySelector("[data-af-all-dl]");
+                  if (btn) btn.disabled = true;
+                  const groupsStep = (i) => {
+                    const gs = [...pane.querySelectorAll("[data-artifact-group]")];
+                    if (i >= gs.length) { looseStep(0); return; }
+                    runBatch(gs[i]).then(() => groupsStep(i + 1));
+                  };
+                  const looseStep = (j) => {
+                    const loose = [...pane.querySelectorAll(".art-loose .art-row")];
+                    if (j >= loose.length) {
+                      artAllDlRunning = false;
+                      const b2 = pane.querySelector("[data-af-all-dl]");
+                      if (b2) b2.disabled = false;
+                      b2Toast("全部下载完成");
                       return;
                     }
-                    const f = files[idx];
-                    f.classList.add("downloading");
-                    setBatchState(group, "downloading", Math.round((idx / total) * 100), done, total);
-                    downloadNode(f, sid).then(() => { done++; }).catch(() => {}).finally(() => { f.classList.remove("downloading"); idx++; advance(); });
+                    downloadNode(loose[j], S.selected).catch(() => {}).finally(() => looseStep(j + 1));
                   };
-                  advance();
+                  groupsStep(0);
+                }
+
+                // ---------- #168 artViewer 桌面在线预览浮层：点行打开；md/文本渲染、图片直显、其他落下载提示 ----------
+                const AV_MD_EXT = new Set(["md", "markdown"]);
+                const AV_TEXT_EXTRA = new Set(["txt", "text", "log", "rst", "adoc", "asciidoc"]);
+                let avPath = "", avCur = null, avObjUrl = "";
+                function ensureArtViewer() {
+                  let bd = document.getElementById("av-backdrop");
+                  if (bd) return bd;
+                  bd = document.createElement("div");
+                  bd.className = "av-backdrop";
+                  bd.id = "av-backdrop";
+                  bd.setAttribute("role", "dialog");
+                  bd.setAttribute("aria-modal", "true");
+                  bd.setAttribute("aria-label", "输出物预览");
+                  bd.innerHTML = '<div class="av-panel"><div class="av-bar"><span class="art-tile" id="av-tile"></span><span class="av-name" id="av-name"></span><span class="av-sub" id="av-sub"></span><span style="flex:1"></span><button class="secondary-btn" type="button" data-av-act="locate">在文件夹中定位</button><button class="primary-btn" type="button" data-av-act="download">下载</button><button class="icon-btn" type="button" data-av-act="close" aria-label="关闭预览">' + svgUse("x") + '</button></div><div class="av-body" id="av-body"></div></div>';
+                  bd.addEventListener("click", (ev) => {
+                    if (ev.target === bd) { closeArtViewer(); return; }
+                    const retry = ev.target.closest("[data-av-retry]");
+                    if (retry) { ev.stopPropagation(); loadAvContent(avCur); return; }
+                    const act = ev.target.closest("[data-av-act]");
+                    if (!act) return;
+                    ev.stopPropagation();
+                    if (act.dataset.avAct === "close") closeArtViewer();
+                    else if (act.dataset.avAct === "download") {
+                      const row = UI.panes[2] && UI.panes[2].querySelector('.art-row[data-path="' + cssEsc(avPath) + '"]');
+                      if (row) downloadNode(row, S.selected).catch(() => {});
+                    } else if (act.dataset.avAct === "locate") {
+                      const dir = window.__ccDeck005PathUi.dirOf(avPath) || avPath;
+                      if (!dir) { b2Toast("无目录可定位"); return; }
+                      shellHasLocal(dir).then((local) => {
+                        if (!local) { b2Toast("目录不在本机（远程会话产物），无法定位", 3500); return; }
+                        window.ccDeck.openPath(dir, true).catch((er) => b2Toast(String((er && er.message) || er).slice(0, 80), 3500));
+                      });
+                    }
+                  });
+                  UI.section.appendChild(bd);
+                  return bd;
+                }
+                function closeArtViewer() {
+                  const bd = document.getElementById("av-backdrop");
+                  if (bd) bd.classList.remove("open");
+                  avPath = ""; avCur = null;
+                  if (avObjUrl) { URL.revokeObjectURL(avObjUrl); avObjUrl = ""; }
+                }
+                function openArtViewer(path) {
+                  const s = curSession();
+                  if (!s) return;
+                  const a = (Array.isArray(s.artifacts) ? s.artifacts : []).find((x) => x && x.path === path);
+                  if (!a) { b2Toast("文件不在当前清单"); return; }
+                  const bd = ensureArtViewer();
+                  const name = baseName(path);
+                  const kind = artifactKindFor(name);
+                  avPath = path; avCur = a;
+                  const tile = bd.querySelector("#av-tile");
+                  tile.className = "art-tile k-" + kind;
+                  tile.innerHTML = svgUse(artifactIconFor(name));
+                  bd.querySelector("#av-name").textContent = name;
+                  bd.querySelector("#av-sub").textContent = (a.size != null ? sizeStr(a.size) + " · " : "") + relTime(a.last_at || a.first_at);
+                  bd.querySelector('[data-av-act="locate"]').style.display = (window.ccDeck && typeof window.ccDeck.openPath === "function") ? "" : "none";
+                  bd.querySelector("#av-body").innerHTML = '<div class="av-load">拉取中…</div>';
+                  bd.classList.add("open");
+                  loadAvContent(a);
+                }
+                function loadAvContent(a) {
+                  if (!a || avPath !== a.path) return;
+                  const body = document.getElementById("av-body");
+                  const name = baseName(a.path);
+                  const ext = String(name || "").toLowerCase().split(".").pop();
+                  const kind = artifactKindFor(name);
+                  const asMd = AV_MD_EXT.has(ext);
+                  const asImg = kind === "image";
+                  const asText = asMd || AV_TEXT_EXTRA.has(ext) || kind === "doc" || kind === "sheet" || kind === "code";
+                  const fb = (msg, withDl) => '<div class="av-fb"><span class="ok">' + svgUse("download") + "</span><span>" + esc(msg) + "</span>" + (withDl ? '<button class="primary-btn" type="button" data-av-act="download">下载到本机查看</button>' : "") + "</div>";
+                  if (!asImg && !asText) { body.innerHTML = fb("此格式暂不支持在线预览（" + (ext || "无扩展名") + "）", true); return; }
+                  if (a.size != null && a.size > 20 * 1048576) { body.innerHTML = fb("文件较大（" + sizeStr(a.size) + "），请下载后查看", true); return; }
+                  fetchArtifact(S.selected, a.path).then((res) => {
+                    if (avPath !== a.path) return; // 已切文件/关闭，弃置本轮回包
+                    const bytes = artifactBytes(res);
+                    if (asImg) {
+                      if (avObjUrl) URL.revokeObjectURL(avObjUrl);
+                      avObjUrl = URL.createObjectURL(new Blob([bytes], { type: res.mime || "image/" + ext }));
+                      body.innerHTML = '<div class="av-imgwrap"><img class="av-img" src="' + avObjUrl + '" alt="预览 ' + esc(name) + '"></div>';
+                    } else {
+                      let text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+                      if (text.length > 200000) text = text.slice(0, 200000) + "\n…（预览截断，完整内容请下载）";
+                      body.innerHTML = asMd ? '<div class="av-md">' + mdHtml(text) + "</div>" : '<pre class="av-pre">' + esc(text) + "</pre>";
+                    }
+                  }).catch((err) => {
+                    if (avPath !== a.path) return;
+                    body.innerHTML = '<div class="av-fb"><span class="ok err">✕</span><span>拉取失败：' + esc(String(err.message || err)).slice(0, 120) + '</span><button class="secondary-btn" type="button" data-av-retry>重试</button></div>';
+                  });
                 }
 
                 // ---------- 渲染：更多 tab（用量 + 统计键值行，四 tab 制：追加令3 合并原用量/更多） ----------
@@ -3392,10 +3628,23 @@
                     const artRetry = ev.target.closest("[data-artifact-file-retry]");
                     if (artRetry) {
                       ev.stopPropagation();
-                      const f = artRetry.closest(".artifact-file");
+                      const f = artRetry.closest(".art-row");
                       if (f) downloadNode(f, S.selected).catch(() => {});
                       return;
                     }
+                    const afTgl = ev.target.closest("[data-af-toggle]"); // #168 文件夹行折叠箭头
+                    if (afTgl) {
+                      ev.stopPropagation();
+                      const grp = afTgl.closest("[data-artifact-group]");
+                      if (grp) toggleArtGroup(grp);
+                      return;
+                    }
+                    const afView = ev.target.closest("[data-af-view]");
+                    if (afView) { ev.stopPropagation(); openArtViewer(afView.dataset.afView); return; }
+                    const afDl = ev.target.closest("[data-af-dl]");
+                    if (afDl) { ev.stopPropagation(); const row = afDl.closest(".art-row"); if (row) downloadNode(row, S.selected).catch(() => {}); return; }
+                    const afAll = ev.target.closest("[data-af-all-dl]");
+                    if (afAll) { ev.stopPropagation(); runAllDownloads(); return; }
                     const menuBtn = ev.target.closest("[data-artifact-menu-button]");
                     if (menuBtn) {
                       ev.stopPropagation();
@@ -3411,13 +3660,12 @@
                       const menu = artAct.closest(".artifact-menu");
                       if (menu) menu.classList.remove("open");
                       if (artAct.dataset.artifactAction === "toggle" && group) {
-                        group.classList.toggle("collapsed");
-                        artAct.textContent = group.classList.contains("collapsed") ? "展开目录" : "收起目录";
+                        toggleArtGroup(group); // #168 与折叠箭头同源（开合态记忆+aria 同步）
                       } else if (artAct.dataset.artifactAction === "reveal" && group) {
                         // #158-批3 桌面壳「在文件夹中定位」：先探后开——不在本机（远程会话产物）
                         // 明确提示不给 openPath 弹「路径没有文件」报错（旧壳 11047-11051 口径）；
                         // #158-批4a 目录切分兼容 \（openPath/probePath 吃原生路径，不 display 化）
-                        const first = group.querySelector(".artifact-file");
+                        const first = group.querySelector(".art-row");
                         const p0 = first ? String(first.dataset.path || "") : "";
                         const dir = window.__ccDeck005PathUi.dirOf(p0) || p0;
                         if (!dir || !window.ccDeck || !window.ccDeck.openPath) { b2Toast("无目录可定位"); return; }
@@ -3426,7 +3674,7 @@
                           window.ccDeck.openPath(dir, true).catch((er) => b2Toast(String((er && er.message) || er).slice(0, 80), 3500));
                         });
                       } else if (artAct.dataset.artifactAction === "copy-path" && group) {
-                        const first = group.querySelector(".artifact-file");
+                        const first = group.querySelector(".art-row");
                         const p = first ? String(first.dataset.path || "") : "";
                         const dir = window.__ccDeck005PathUi.dirOf(p) || p;
                         try { navigator.clipboard && navigator.clipboard.writeText(dir); } catch (_) {}
@@ -3436,8 +3684,8 @@
                     }
                     const batch = ev.target.closest("[data-artifact-batch]");
                     if (batch) { ev.stopPropagation(); runBatch(batch.closest("[data-artifact-group]")); return; }
-                    const artFile = ev.target.closest("#session-body .artifact-file");
-                    if (artFile && !artFile.closest("[data-batch-running]")) { downloadNode(artFile, S.selected).catch(() => {}); return; }
+                    const artRow = ev.target.closest("#session-body .art-row"); // #168 点行=在线预览（下载走行尾钮/浮层）
+                    if (artRow) { openArtViewer(String(artRow.dataset.path || "")); return; }
                     const del = ev.target.closest("[data-session-delete]");
                     if (del) { ev.stopPropagation(); confirmDelete(); return; }
                     const kvCopy = ev.target.closest(".kv-copy-btn");
@@ -3494,7 +3742,7 @@
                     if (!ev.target.closest(".artifact-menu-wrap")) document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open"));
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreateMenu(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreateMenu(); closeArtViewer(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
                   });
 
                   // composer：发送/停止/历史/IME
@@ -3715,6 +3963,7 @@
                   // #164 手机渲染路径同源复用：MD/消息 HTML/展开态/开关（桌面与手机同一渲染器）
                   mdHtml, userMsgHtml, taskRefRow, entryHtml, eKey, expanded,
                   artifactKindFor, // #B3-15 输出物六类分色（手机 mArtifactsHtml 同一判定）
+                  artLayoutItems, relDir, artBadgeHtml, // #168 手机行同构复用（分组投影/目录缩略/徽章）
                   convCtl: { proc: () => procShow, think: () => thinkShown, toggle: toggleConv, refresh: updateConvCtrl },
                   sendPrompt(sid, text) {
                     const s = S.sessions.get(sid);
@@ -6987,16 +7236,6 @@ function connectLan(ctx) {
       };
       const mNlBr = (t) => esc(t).replace(/\r?\n/g, "<br>");
       const mToolIcon = (t) => /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t || "") ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t || "") ? "▤" : "⚙";
-      const mArtIcon = (name) => {
-        const ext = String(name || "").toLowerCase().split(".").pop();
-        if (["md", "txt", "rst", "adoc"].includes(ext)) return "file-text";
-        if (["js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "c", "h", "cpp", "cc", "css", "html", "vue", "sh"].includes(ext)) return "code";
-        if (["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"].includes(ext)) return "archive";
-        if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(ext)) return "image";
-        if (["apk", "ipa", "dmg", "exe", "msi"].includes(ext)) return "package";
-        if (["json", "toml", "yaml", "yml", "ini", "env"].includes(ext)) return "gear";
-        return "clip";
-      };
       function sliceTimeline(list, max) { // 对话只取最近 max 条（截断标记供顶部 timeline-note）
         const all = Array.isArray(list) ? list : [];
         const total = all.length;
@@ -7098,14 +7337,55 @@ function connectLan(ctx) {
         if (g.doneList.length < g.doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + g.doneAll.length + " 条）</div>";
         return html;
       }
+      // #168 手机输出物行同构（v3 原型 mobile 形态）：汇总条/文件夹行(×N 折叠)/行二层/六类 chip/死档态
+      let mArtOpen = new Set(), mArtOpenSid = "", mArtOpenInit = false;
+      const mSizeStr = (n) => { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; };
+      const mRelDir = (dir, cwd) => {
+        if (!dir) return "";
+        const nz = (x) => String(x || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+        const d = nz(dir), c = nz(cwd);
+        if (c && d.startsWith(c + "/")) return displayPath(dir.slice(c.length + 1));
+        return displayPath(dir);
+      };
       function mArtifactsHtml(s) {
         if (!s) return '<div class="readonly-banner">未选择会话</div>';
         const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
         if (!arts.length) return '<div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>';
         const api = b2Api();
         const kindOf = api && typeof api.artifactKindFor === "function" ? api.artifactKindFor : () => "pkg"; // #B3-15 双端同判定（B2 未就绪回落中性档）
-        const sorted = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
-        return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = baseName(a.path); return '<div class="artifact-row"><span class="art-ico k-' + kindOf(name) + '">' + svg(mArtIcon(name)) + "</span> " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
+        const badgeOf = api && typeof api.artBadgeHtml === "function" ? api.artBadgeHtml : () => "";
+        const lay = api && typeof api.artLayoutItems === "function" ? api.artLayoutItems(arts) : { groups: [], loose: arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)) };
+        if (mArtOpenSid !== s.session_id) { mArtOpen = new Set(); mArtOpenSid = s.session_id; mArtOpenInit = false; }
+        if (!mArtOpenInit && lay.groups.length) { mArtOpen.add(lay.groups[0].dir); mArtOpenInit = true; }
+        let h = '<div class="m-sum"><span class="m-sum-n">' + arts.length + ' 个文件<small>· ' + lay.groups.length + " 个文件夹</small></span></div>" + (s.artifacts_truncated ? '<div class="m-trunc">清单曾被 relay 截断</div>' : "");
+        const rowHtml = (a, inGroup) => {
+          const name = baseName(a.path);
+          const kind = kindOf(name);
+          const nzp = (x) => String(x || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+          const rawDir = window.__ccDeck005PathUi.dirOf(a.path);
+          const isRoot = !inGroup && nzp(rawDir) === nzp(s.cwd);
+          const dir = inGroup ? "" : (isRoot || !mRelDir(rawDir, s.cwd) ? "工作目录" : mRelDir(rawDir, s.cwd));
+          const meta = [dir, a.size != null ? mSizeStr(a.size) : "", mRelTime(a.last_at || a.first_at)].filter(Boolean).join(" · ");
+          const chip = kind === "image" && a.thumb
+            ? '<span class="m-thumb"><img src="' + esc(a.thumb) + '" alt=""></span>'
+            : '<span class="m-chip k-' + kind + '">' + esc(String(name).toLowerCase().split(".").pop().slice(0, 4) || "·") + "</span>";
+          return '<div class="m-row k-' + kind + (a.exists === false ? " dead" : "") + '" data-path="' + esc(a.path) + '">' + chip + '<span class="m-main"><span class="m-name-row"><span class="m-name">' + esc(name) + "</span>" + badgeOf(a, inGroup) + '</span><span class="m-meta">' + esc(meta) + "</span></span></div>";
+        };
+        for (const g of lay.groups) {
+          const open = mArtOpen.has(g.dir);
+          const dirDisp = mRelDir(g.dir, s.cwd) || "工作目录";
+          const leaf = dirDisp.split(/[\\/]/).filter(Boolean).pop() || dirDisp;
+          const total = mSizeStr(g.list.reduce((t, a) => t + (Number(a.size) || 0), 0));
+          h += '<div class="art-group' + (open ? " open" : "") + '"><div class="m-frow">' +
+            '<button class="m-row m-folder k-dir" type="button" data-af-toggle="' + esc(g.dir) + '" aria-expanded="' + open + '" aria-label="文件夹 ' + esc(leaf) + "，" + g.list.length + ' 个文件">' +
+            '<span class="m-chev">▸</span><span class="m-chip k-dir">' + svg("folder") + '</span>' +
+            '<span class="m-main"><span class="m-name-row"><span class="m-name">' + esc(leaf) + '</span><span class="art-badge b-cnt">×' + g.list.length + '</span></span>' +
+            '<span class="m-meta">' + esc([dirDisp, total, mRelTime(Math.max(...g.list.map((a) => a.last_at || 0)))].filter(Boolean).join(" · ")) + "</span></span></button></div>" +
+            '<div class="m-kids">' + g.list.map((a) => rowHtml(a, true)).join("") + "</div></div>";
+        }
+        if (lay.loose.length) h += '<div class="art-group open"><div class="m-kids m-kids-loose">' + lay.loose.map((a) => rowHtml(a, false)).join("") + "</div></div>";
+        h += '<div class="m-foot">仅收录文档、表格、图片与安装包等交付物</div>';
+        return h;
       }
       function mCtxMeterHtml(s) { // B2 ctxMeterHtml 同构（12 格 band + tone 分级），mobile 形态加 mobile-context-meter；#169 追加令3 起由 mMoreHtml 调用（原 mUsageHtml 用量 tab 退役）
         const pct = mCtxPct(s);
@@ -7557,6 +7837,13 @@ function connectLan(ctx) {
         const mRef = target.closest("[data-task-ref]");
         if (mRef) { // 正文/工具行 #NNN：跳「任务」tab（桌面 jumpToTask 的手机形态）
           document.querySelectorAll("#m-detail .mobile-detail-tabs button")[1]?.click();
+          return;
+        }
+        const mAfTgl = target.closest("#m-detail [data-af-toggle]"); // #168 手机文件夹行开合
+        if (mAfTgl) {
+          const dir = mAfTgl.dataset.afToggle;
+          if (mArtOpen.has(dir)) mArtOpen.delete(dir); else mArtOpen.add(dir);
+          if (detailSid) renderMobileDetail(detailSid);
           return;
         }
         const openDetail = target.closest("[data-open-detail]");
