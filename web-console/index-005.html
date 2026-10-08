@@ -1389,15 +1389,35 @@
                   st.resolve({ parts: st.parts, mime: st.mime, size: st.size });
                 }
                 function failArt(id, err) { const st = S.artFetches.get(id); if (!st) return; clearTimeout(st.timer); S.artFetches.delete(id); st.reject(err); }
-                function downloadArtifact(path, res) {
+                function artifactBytes(res) { // res.parts b64 分块 → 单 Uint8Array（Blob 链与壳落盘链共用）
                   const chunks = res.parts.map((b) => { const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; });
                   const out = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
                   let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
-                  const url = URL.createObjectURL(new Blob([out], { type: res.mime }));
+                  return out;
+                }
+                function downloadArtifact(path, res) { // 浏览器形态：Blob + a.download 原链（保留）
+                  const url = URL.createObjectURL(new Blob([artifactBytes(res)], { type: res.mime }));
                   const a = document.createElement("a");
                   a.href = url; a.download = String(path).split(/[\\/]/).pop() || "artifact";
                   document.body.appendChild(a); a.click(); a.remove();
                   setTimeout(() => URL.revokeObjectURL(url), 4000);
+                }
+                // #158-批3 产物下载桌面链（旧壳 downloadAndOpenArtifact 10434-10470 范式）：mac 桌面
+                // 点下载无反应的根因——WKWebView 对 Blob+a.download 支持不稳。桌面壳改 ccDeck.
+                // saveArtifact 落系统「下载」目录（重名自增）→ ccDeck.openPath 系统默认应用打开；
+                // 打开失败不算下载失败（路径已 toast，用户可自取）。busy 锁防 20MB 级拉取在途时
+                // 连点并发第二份。分片 btoa 防 apply 栈溢出（旧壳 bytesToB64 同款）
+                let shellArtBusy = false;
+                function bytesToB64(u8) { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+                function saveArtifactViaShell(path, res) {
+                  const name = String(path).split(/[\\/]/).pop() || "输出物";
+                  return window.ccDeck.saveArtifact(name, bytesToB64(artifactBytes(res)));
+                }
+                // #106 先探后开范式（旧壳 shellHasLocal 10452）：probePath 微秒级 stat 判路径在不在
+                // 本机；旧壳无 probePath（升级窗口期）按「在」处理回落 openPath→catch 链
+                function shellHasLocal(p) {
+                  if (window.ccDeck && typeof window.ccDeck.probePath === "function") return window.ccDeck.probePath(p).catch(() => true);
+                  return Promise.resolve(true);
                 }
 
                 // ---------- 左列会话列表（地基 renderSessionList 同构；增量会话由本端补齐） ----------
@@ -1936,7 +1956,9 @@
                   sec.dataset.artifactGroup = g.dir;
                   const total = sizeStr(g.list.reduce((t, a) => t + (Number(a.size) || 0), 0));
                   const recent = relTime(Math.max(...g.list.map((a) => a.last_at || 0)));
-                  sec.innerHTML = '<div class="artifact-group-head"><span class="artifact-folder-icon">' + svgUse("folder") + '</span><div class="artifact-group-title"><strong>' + esc(relDir(g.dir, cwd) || "工作目录") + "</strong><small>" + g.list.length + " 个文件 · " + total + " · 最近 " + recent + '</small></div><button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button><div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu"><button type="button" data-artifact-action="toggle">收起目录</button><button type="button" data-artifact-action="copy-path">复制路径</button></div></div></div><div class="artifact-files"></div><div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>';
+                  // #158-批3 桌面壳专属：先探后开（probePath）再「在文件夹中定位」（openPath reveal）
+                  const shellReveal = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
+                  sec.innerHTML = '<div class="artifact-group-head"><span class="artifact-folder-icon">' + svgUse("folder") + '</span><div class="artifact-group-title"><strong>' + esc(relDir(g.dir, cwd) || "工作目录") + "</strong><small>" + g.list.length + " 个文件 · " + total + " · 最近 " + recent + '</small></div><button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button><div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu"><button type="button" data-artifact-action="toggle">收起目录</button>' + (shellReveal ? '<button type="button" data-artifact-action="reveal">在文件夹中定位</button>' : "") + '<button type="button" data-artifact-action="copy-path">复制路径</button></div></div></div><div class="artifact-files"></div><div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>';
                   const files = sec.querySelector(".artifact-files");
                   for (const a of g.list) files.appendChild(artFileNode(a, cwd));
                   return sec;
@@ -1971,13 +1993,25 @@
                   if (state === "complete") node.innerHTML = "<span>已下载 " + total + " 个文件</span>";
                 }
                 function downloadNode(fileEl, sid) {
+                  const path = fileEl.dataset.path || "";
+                  // #158-批3 桌面/浏览器分支显式：壳桥在场走 saveArtifact→openPath 落盘链，
+                  // 否则保留 Blob+a.download；busy 占用直接拒绝（不进 catch 的失败态标记）
+                  const viaShell = !!(window.ccDeck && typeof window.ccDeck.saveArtifact === "function");
+                  if (viaShell && shellArtBusy) { b2Toast("上一个输出物还在下载中…"); return Promise.resolve(); }
                   const meta = fileEl.querySelector("[data-artifact-meta]");
                   const prev = meta ? meta.textContent : "";
                   if (meta) meta.textContent = "下载中…";
-                  return fetchArtifact(sid, fileEl.dataset.path || "").then((res) => {
-                    downloadArtifact(fileEl.dataset.path, res);
-                    if (meta) meta.textContent = "已下载";
+                  if (viaShell) shellArtBusy = true;
+                  return fetchArtifact(sid, path).then(async (res) => {
+                    if (!viaShell) { downloadArtifact(path, res); if (meta) meta.textContent = "已下载"; return; }
+                    try {
+                      const saved = await saveArtifactViaShell(path, res);
+                      try { await window.ccDeck.openPath(saved, false); } catch (_) {} // 打开失败不算下载失败——路径已 toast
+                      b2Toast("已下载并打开：" + saved);
+                      if (meta) meta.textContent = "已下载";
+                    } finally { shellArtBusy = false; }
                   }).catch((err) => {
+                    if (viaShell) shellArtBusy = false;
                     if (meta) meta.textContent = prev;
                     fileEl.classList.add("failed");
                     const old = fileEl.querySelector(".artifact-file-error");
@@ -2374,6 +2408,17 @@
                       if (artAct.dataset.artifactAction === "toggle" && group) {
                         group.classList.toggle("collapsed");
                         artAct.textContent = group.classList.contains("collapsed") ? "展开目录" : "收起目录";
+                      } else if (artAct.dataset.artifactAction === "reveal" && group) {
+                        // #158-批3 桌面壳「在文件夹中定位」：先探后开——不在本机（远程会话产物）
+                        // 明确提示不给 openPath 弹「路径没有文件」报错（旧壳 11047-11051 口径）
+                        const first = group.querySelector(".artifact-file");
+                        const p0 = first ? String(first.dataset.path || "") : "";
+                        const dir = p0.slice(0, p0.lastIndexOf("/")) || p0;
+                        if (!dir || !window.ccDeck || !window.ccDeck.openPath) { b2Toast("无目录可定位"); return; }
+                        shellHasLocal(dir).then((local) => {
+                          if (!local) { b2Toast("目录不在本机（远程会话产物），无法定位", 3500); return; }
+                          window.ccDeck.openPath(dir, true).catch((er) => b2Toast(String((er && er.message) || er).slice(0, 80), 3500));
+                        });
                       } else if (artAct.dataset.artifactAction === "copy-path" && group) {
                         const first = group.querySelector(".artifact-file");
                         const p = first ? String(first.dataset.path || "") : "";
