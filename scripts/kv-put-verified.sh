@@ -22,7 +22,7 @@ FILE=$(cd "$(dirname "$FILE")" && pwd)/$(basename "$FILE")  # wrangler 在 cloud
 case "$FILE" in
   *.apk|*.zip) unzip -t "$FILE" >/dev/null || { echo "ERR: 本地 zip 已损坏，禁止上传"; exit 1; } ;;
 esac
-LOCAL_MD5=$(md5 -q "$FILE")
+LOCAL_MD5=$(/sbin/md5 -q "$FILE")
 LOCAL_SIZE=$(stat -f%z "$FILE")
 FN=$(basename "$FILE")
 
@@ -58,7 +58,7 @@ REMOTE_MD5=""; REMOTE_SIZE=""; VERIFY_OK=0
 for i in 1 2 3 4; do
   # 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
   if kv_api_read "$TMP"; then
-    REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
+    REMOTE_MD5=$(/sbin/md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
     if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
   fi
   [ "$i" = "4" ] || { echo "    第 $i 次回读未一致（remote=$REMOTE_MD5），6s 后重读"; sleep 6; }

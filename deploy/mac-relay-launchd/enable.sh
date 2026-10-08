@@ -21,7 +21,7 @@ INJECT_CS="${APP_RELAY%resources/*}resources/bin/inject.cs"
 
 # 过渡闸门：端口已有 relay 在服务（壳子进程/手动实例）时不硬上——
 # 硬上=launchd 实例 EADDRINUSE 崩溃循环。先退壳再启用，或 FORCE=1 预埋。
-if [[ "${FORCE:-}" != "1" ]] && lsof -ti ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+if [[ "${FORCE:-}" != "1" ]] && /usr/sbin/lsof -ti ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "✗ 端口 $PORT 已有 relay 在服务（桌面壳子进程或手动实例），启用会撞端口。"
   echo "  过渡顺序：① 退出 CC Deck 桌面端（壳会带走内嵌 relay）② 再跑本脚本。"
   echo "  或 FORCE=1 ./enable.sh 只注册不抢占——等壳下次退出后 KeepAlive 自动接管。"
@@ -83,7 +83,7 @@ launchctl enable "gui/$UID_N/$LABEL"
 if [[ "${FORCE:-}" != "1" ]]; then
   launchctl kickstart -k "gui/$UID_N/$LABEL"
   sleep 2
-  if lsof -ti ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  if /usr/sbin/lsof -ti ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "✓ relay 服务已上线（端口 $PORT），日志：$LOG"
   else
     echo "… 端口 $PORT 尚未就绪，看日志：tail -50 $LOG"

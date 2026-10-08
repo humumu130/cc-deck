@@ -89,7 +89,7 @@ echo "    $(basename "$EXE") ($(stat -f%z "$EXE")B)"
 
 echo "[3/5] exe 双源上传…"
 $SCP -q "$EXE" "$ECS_HOST:$ECS_DIR/$EXE_KEY"
-LOCAL_MD5=$(md5 -q "$EXE")
+LOCAL_MD5=$(/sbin/md5 -q "$EXE")
 ECS_MD5=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/$EXE_KEY" | awk '{print $1}')
 [ "$LOCAL_MD5" = "$ECS_MD5" ] || { echo "ERR: ECS exe md5 不一致 local=$LOCAL_MD5 remote=$ECS_MD5"; exit 1; }
 echo "    ECS md5 校验一致"

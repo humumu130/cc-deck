@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# 哈希工具用 shasum -a 256（P1b 修复，2026-10-05）：Mac 无 PATH 内 md5（原 md5 -q
+# 哈希工具用 shasum -a 256（P1b 修复，2026-10-05）：Mac 无 PATH 内 md5（原 /sbin/md5 -q
 # 两处全落 MISSING → B1=MISSING=B2 假通过，真漂移检不出+误报「bundle 不存在」）；
 # shasum macOS 自带且 Linux 通用（md5sum 语法跨平台不一致），256 位与 P1a 核验口径
 # 统一。shasum 失败时输出 "MISSING MISSING" 经 awk 取 $1 仍得 MISSING，保持原哨兵语义
