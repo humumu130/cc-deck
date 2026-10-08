@@ -388,6 +388,10 @@
     .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    /* #160 空闲置灰（旧壳 #96 同口径）：DONE/ERROR 静默超阈值分钟降透明度退后，
+       hover 回一档便于辨认操作；后台子 Agent 在跑豁免（不加 idle 类） */
+    .queue-card.idle { opacity: .55; }
+    .queue-card.idle:hover { opacity: .8; }
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
     .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card p { overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1457,6 +1461,23 @@
                 }
 
                 // ---------- 左列会话列表（地基 renderSessionList 同构；增量会话由本端补齐） ----------
+                // #160 空闲置灰（旧壳 #96/#121 同口径移植）：DONE/ERROR 且静默超阈值分钟降透明度
+                // 退后（CSS .queue-card.idle），刚完成的保持鲜亮；后台子 Agent 在跑豁免（旧 #100：
+                // 等孩子 ≠ 死会话）。时长存 localStorage(ccd_idle_dim_min)——沿用旧壳键，跨壳迁移
+                // 用户设置不丢；默认 30，负数 = 永不（Infinity 让 > 比较恒 false，判定零分支）。
+                // 设置面板（地基段）改值走 __ccDeck005IdleDim 钩子回写本闭包并立即重渲。
+                let idleDimMin = 30;
+                { let v = NaN; try { v = Number(localStorage.getItem("ccd_idle_dim_min")); } catch (_) {} if (Number.isFinite(v)) idleDimMin = v; }
+                const idleDimMs = () => (idleDimMin < 0 ? Infinity : idleDimMin * 60000);
+                const bgRunning = (s) => (s.subagents ?? []).some((a) => !a.ended_at);
+                function idleDimmed(s) {
+                  return (s.status === "DONE" || s.status === "ERROR") && !bgRunning(s)
+                    && Date.now() - (s.updated_at ?? s.started_at) > idleDimMs();
+                }
+                window.__ccDeck005IdleDim = {
+                  get: () => idleDimMin,
+                  set: (v) => { idleDimMin = v; renderMyList(); },
+                };
                 function myCardItem(session) {
                   const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "done";
                   const engineKey = session.engine || "claude";
@@ -1477,6 +1498,7 @@
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
+                    idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
                   };
                 }
                 // 与地基 renderSessionCard(desktop) 逐字节同构（含引擎小图标/来源配色/条件 r3），
@@ -1485,7 +1507,7 @@
                 const b2EngineBadge = (item) => '<span class="engine-badge ' + item.engineClass + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>' + item.engine + "</span>";
                 const b2SourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
                 function myCardMarkup(item) {
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.tag || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.tag ? '<span class="tag ' + item.tagClass + '">' + item.tag + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.tag || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.tag ? '<span class="tag ' + item.tagClass + '">' + item.tag + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -2633,6 +2655,19 @@
                       if (el && s && s.status === "WORKING") el.textContent = myCardItem(s).workSecs + "s";
                     });
                   }, 1000);
+
+                  // #160 置灰看门狗（旧壳 #96 同机制）：renderMyList 纯事件驱动——DONE/ERROR
+                  // 会话静默超阈值后不再有事件触发重渲，idleDimmed 判定再对 .idle 也挂不上。
+                  // 60s 逐行对账：DOM 行的 .idle 与重算结果不符才整列重渲——过滤/分组口径
+                  // 天然对齐（不在 DOM 的行不参与），稳态零开销；跨过阈值的时刻本就无交互。
+                  setInterval(() => {
+                    if (!S.hasSnapshot) return;
+                    for (const card of UI.sessionList.querySelectorAll(".queue-card[data-session-card]")) {
+                      const s = S.sessions.get(card.dataset.sessionCard);
+                      if (!s) continue; // 删除竞态中的孤儿行交给 onDeleted/observer 收口
+                      if (card.classList.contains("idle") !== idleDimmed(s)) { renderMyList(); return; }
+                    }
+                  }, 60000);
                 }
 
                 // ---------- 启动（地基 setupStubTabs 已在解析期跑完 → 此处收编占位 pane） ----------
