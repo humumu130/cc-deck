@@ -4,6 +4,15 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      nova:
+        # W15 双装变体（用户拍板硬要求）：CC Deck Nova + 独立 identifier
+        # online.humumu.ccdeck.nova，与已装正式版并排互不覆盖（安装目录/开始菜单/单实例
+        # 锁按 identifier 天然隔离；relay 8787 探测复用——旧版在跑直接连）。默认 false：
+        # 不勾 = 生产配置零改动
+        description: "Nova 双装变体（独立产品名/identifier，updater 指向 nova 专用清单）"
+        type: boolean
+        default: false
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -128,7 +137,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          npx tauri build --bundles nsis
+          CONFIG_ARGS=""
+          if [ "${{ inputs.nova }}" = "true" ]; then
+            CONFIG_ARGS="--config src-tauri/tauri.nova.conf.json"
+            echo "nova variant: overlay tauri.nova.conf.json active（productName/identifier/updater）"
+          fi
+          npx tauri build --bundles nsis $CONFIG_ARGS
           # 不再改名：updater 的 latest.json 按原始产物名（CC Deck Tauri_<v>_x64-setup.exe）寻址
 
       - name: Artifact name suffix（分支名含 / 会炸 upload-artifact）
@@ -138,7 +152,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Deck-Desktop-Tauri-${{ env.REF_SLUG }}
+          name: CC-Deck-Desktop-Tauri${{ inputs.nova && '-Nova' || '' }}-${{ env.REF_SLUG }}
           path: |
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig

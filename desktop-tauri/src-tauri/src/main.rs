@@ -390,7 +390,13 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     TrayIconBuilder::with_id("cc-deck-tray")
         .icon(icon)
         .icon_as_template(cfg!(target_os = "macos"))
-        .tooltip("CC Deck")
+        // W15 双装：tooltip 随构建变体（CC Deck / CC Deck Nova）——同图标双托盘可分辨
+        .tooltip(
+            app.config()
+                .product_name
+                .clone()
+                .unwrap_or_else(|| "CC Deck".into()),
+        )
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
