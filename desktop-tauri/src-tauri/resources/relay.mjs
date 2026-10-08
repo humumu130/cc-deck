@@ -11024,7 +11024,13 @@ function loadSqliteDriver() {
   try {
     const mod = requireCjs("better-sqlite3");
     const ctor = typeof mod === "function" ? mod : mod.default;
-    driverCache = typeof ctor === "function" ? { ok: true, ctor, error: null, code: null } : { ok: false, ctor: null, error: "better-sqlite3 \u5BFC\u51FA\u5F62\u6001\u5F02\u5E38\uFF08\u975E\u6784\u9020\u51FD\u6570\uFF09", code: null };
+    if (typeof ctor !== "function") {
+      driverCache = { ok: false, ctor: null, error: "better-sqlite3 \u5BFC\u51FA\u5F62\u6001\u5F02\u5E38\uFF08\u975E\u6784\u9020\u51FD\u6570\uFF09", code: null };
+    } else {
+      const throwaway = new ctor(":memory:");
+      throwaway.close();
+      driverCache = { ok: true, ctor, error: null, code: null };
+    }
   } catch (err) {
     const code = err.code ?? null;
     driverCache = { ok: false, ctor: null, error: err instanceof Error ? err.message : String(err), code };

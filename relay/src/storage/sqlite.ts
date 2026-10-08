@@ -40,6 +40,11 @@ let driverOverride: SqliteDriverLoad | undefined;
  * 同步动态加载 better-sqlite3（成败一次缓存，永不抛）：dev/tsx 从 relay/node_modules
  * 解析；bundle 从同目录 node_modules 闭包解析（build-plugin.mjs 汇集）。原生二进制
  * 缺失/平台不匹配在此变成可消费的失败结果，而非进程级异常。
+ *
+ * 注意 v11 的原生 addon 是**构造器内惰性 require**（lib/database.js 的 DEFAULT_ADDON）
+ * ——require 成功≠二进制可载，dlopen 失败（Windows 携 Mach-O 的真实失败点）要到
+ * new Database 才现形。故成功路径补 :memory: 开合一次实测 dlopen：ok=true 从此=
+ * 「已验证可载」。正常路径一次性毫秒级开销、零副作用（内存库不留文件）。
  */
 export function loadSqliteDriver(): SqliteDriverLoad {
   if (driverOverride !== undefined) return driverOverride;
@@ -48,9 +53,13 @@ export function loadSqliteDriver(): SqliteDriverLoad {
     const mod: unknown = requireCjs("better-sqlite3");
     // CJS class-export（module.exports = Database）为主；兼容 interop 带 .default 的形态
     const ctor = (typeof mod === "function" ? mod : (mod as { default?: unknown }).default) as SqliteConstructor | undefined;
-    driverCache = typeof ctor === "function"
-      ? { ok: true, ctor, error: null, code: null }
-      : { ok: false, ctor: null, error: "better-sqlite3 导出形态异常（非构造函数）", code: null };
+    if (typeof ctor !== "function") {
+      driverCache = { ok: false, ctor: null, error: "better-sqlite3 导出形态异常（非构造函数）", code: null };
+    } else {
+      const throwaway = new ctor(":memory:");
+      throwaway.close();
+      driverCache = { ok: true, ctor, error: null, code: null };
+    }
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code ?? null;
     driverCache = { ok: false, ctor: null, error: err instanceof Error ? err.message : String(err), code };
