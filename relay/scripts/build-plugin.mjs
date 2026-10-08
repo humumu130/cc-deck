@@ -98,6 +98,14 @@ copy(join(out, "scripts", "relay.mjs"), join(root, "desktop-tauri", "src-tauri",
 // better-sqlite3 只带运行时最小集（lib + build/Release/*.node + package.json，
 // 不带 deps/src 编译料，26M→约 2M）；bindings/file-uri-to-path 纯 JS 整包。
 // 两发布形态同源汇集：插件 scripts/node_modules + 桌面 resources/node_modules
+//
+// ⚠ 平台来源（#158，2026-10-08）：build/Release/better_sqlite3.node 拷自本机
+// relay/node_modules——即**当前构建机的平台二进制**（dev 机 = darwin-arm64）。
+// 汇集产物【不跨平台】：mac 发布（dmg）恰好正确；Windows 发布必须由 CI
+// （.github/workflows/desktop.yml 的 prebuild-install 步）在 Windows runner 上
+// 现场重拉 win32-x64 覆盖——0.7.0-test.3 就是闭包携 Mach-O 进 Windows 包，
+// 内嵌 relay dlopen 即炸（8787 永不监听）。下方日志按魔数实测明示，防后人
+// 误以为汇集产物跨平台；本地直出 Windows 包 = 必炸，勿省 CI 步。
 const nmSrc = join(relayRoot, "node_modules");
 const gatherClosure = (nmOut) => {
   rmSync(nmOut, { recursive: true, force: true });
@@ -111,6 +119,19 @@ const gatherClosure = (nmOut) => {
 };
 gatherClosure(join(out, "scripts", "node_modules"));
 gatherClosure(join(root, "desktop-tauri", "src-tauri", "resources", "node_modules"));
+
+// 闭包内原生二进制实测告示（魔数判型：PE/Mach-O/ELF）——汇集即打，见上 ⚠ 平台来源
+const nativeMagic = (file) => {
+  const hex = readFileSync(file).subarray(0, 4).toString("hex");
+  if (hex === "cffaedfe") return "Mach-O arm64 (darwin)";
+  if (hex === "feedfacf") return "Mach-O x64 (darwin)";
+  if (hex === "cafebabe") return "Mach-O fat (darwin)";
+  if (hex.startsWith("4d5a")) return "PE (win32)";
+  if (hex.startsWith("7f45")) return "ELF (linux)";
+  return `unknown (${hex})`;
+};
+const nativeKind = nativeMagic(join(out, "scripts", "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node"));
+console.warn(`[native] 闭包 better_sqlite3.node = ${nativeKind}——只保证 ${process.platform}-${process.arch} 可载；Windows 发布须由 CI desktop.yml 的 prebuild-install 步覆盖为 win32-x64（#158）`);
 
 console.log(`\n插件已打包到: ${out}`);
 console.log("本地验证: claude plugin marketplace add <此目录绝对路径> && claude plugin install cc-deck@cc-deck-plugins");

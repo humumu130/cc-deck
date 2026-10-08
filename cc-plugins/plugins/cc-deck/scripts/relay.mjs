@@ -11013,8 +11013,30 @@ import { basename as basename2, join as join10 } from "node:path";
 // src/storage/sqlite.ts
 import { mkdirSync as mkdirSync4 } from "node:fs";
 import { join as join4 } from "node:path";
-import Database from "better-sqlite3";
+import { createRequire } from "node:module";
 var DEFAULT_DB_FILENAME = "cc-deck.sqlite3";
+var requireCjs = createRequire(import.meta.url);
+var driverCache;
+var driverOverride;
+function loadSqliteDriver() {
+  if (driverOverride !== void 0) return driverOverride;
+  if (driverCache !== void 0) return driverCache;
+  try {
+    const mod = requireCjs("better-sqlite3");
+    const ctor = typeof mod === "function" ? mod : mod.default;
+    if (typeof ctor !== "function") {
+      driverCache = { ok: false, ctor: null, error: "better-sqlite3 \u5BFC\u51FA\u5F62\u6001\u5F02\u5E38\uFF08\u975E\u6784\u9020\u51FD\u6570\uFF09", code: null };
+    } else {
+      const throwaway = new ctor(":memory:");
+      throwaway.close();
+      driverCache = { ok: true, ctor, error: null, code: null };
+    }
+  } catch (err) {
+    const code = err.code ?? null;
+    driverCache = { ok: false, ctor: null, error: err instanceof Error ? err.message : String(err), code };
+  }
+  return driverCache;
+}
 var SqliteStorage = class {
   constructor(dir, filename) {
     this.dir = dir;
@@ -11032,8 +11054,12 @@ var SqliteStorage = class {
   }
   open() {
     if (this._open) throw new Error(`StoragePort.open: \u5DF2\u6253\u5F00\uFF08${this._path}\uFF09\u2014\u2014\u91CD\u590D open \u5C5E\u7F16\u7A0B\u9519\u8BEF`);
+    const driver = loadSqliteDriver();
+    if (!driver.ok || driver.ctor === null) {
+      throw new Error(`StoragePort.open: better-sqlite3 \u4E0D\u53EF\u7528\uFF08${driver.code ?? "\u65E0\u9519\u8BEF\u7801"}\uFF1A${driver.error}\uFF09\u2014\u2014\u539F\u751F\u4E8C\u8FDB\u5236\u7F3A\u5931\u6216\u5E73\u53F0\u4E0D\u5339\u914D\uFF0C\u8BFB\u9762\u5E94\u964D\u7EA7 json \u6863`);
+    }
     mkdirSync4(this.dir, { recursive: true });
-    this.db = new Database(this._path);
+    this.db = new driver.ctor(this._path);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("synchronous = NORMAL");
@@ -13030,6 +13056,21 @@ function resolveDirs(override) {
     tasksDir: override?.tasksDir ?? join10(dataDir2, "tasks")
   };
 }
+var degradationNotified = false;
+function warnSqliteDegradedOnce(reason, code, context) {
+  if (degradationNotified) return;
+  degradationNotified = true;
+  console.error(`[read-mode] \u26A0\uFE0F  sqlite \u4E0D\u53EF\u7528\uFF0C\u5DF2\u964D\u7EA7 json \u6863\uFF08${context}\uFF1B\u9519\u8BEF\u7801 ${code ?? "\u65E0"}\uFF1B\u5E73\u53F0 ${process.platform}-${process.arch}\uFF09`);
+  console.error(`[read-mode] \u26A0\uFE0F  \u539F\u56E0: ${reason}`);
+  console.error(`[read-mode] \u8BFB\u9762\u884C\u4E3A\u540C CCR_STORAGE_READ_MODE=json\uFF0Crelay \u7EE7\u7EED\u542F\u52A8\uFF088787 \u7167\u5E38\u76D1\u542C\uFF09\u2014\u2014\u4FEE\u590D\u539F\u751F\u4E8C\u8FDB\u5236\u540E\u81EA\u52A8\u6062\u590D sqlite \u6863`);
+}
+function probeSqliteDriverAtBoot() {
+  const mode = currentReadMode();
+  if (mode === "json") return;
+  const driver = loadSqliteDriver();
+  if (driver.ok) return;
+  warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `boot \u63A2\u6D4B\uFF1A\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u9A71\u52A8\u52A0\u8F7D\u5931\u8D25`);
+}
 var portCache = /* @__PURE__ */ new Map();
 function ensureStore(dirs) {
   const cached2 = portCache.get(dirs.dataDir);
@@ -13394,8 +13435,19 @@ var shadowCooldown = /* @__PURE__ */ new Map();
 function viaReadMode(domain, io2) {
   const mode = currentReadMode();
   if (mode === "json") return io2.json();
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain} \u89E6\u53D1`);
+    return io2.json();
+  }
   const dirs = resolveDirs(io2.dirs);
-  const port = ensureStore(dirs);
+  let port;
+  try {
+    port = ensureStore(dirs);
+  } catch (err) {
+    warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain}\uFF0Csqlite \u5EFA\u5E93/\u8FC1\u79FB\u5931\u8D25`);
+    return io2.json();
+  }
   if (mode === "sqlite") return io2.sqlite(port);
   const jsonVal = io2.json();
   const now = Date.now();
@@ -44119,7 +44171,7 @@ import { delimiter as pathDelimiter, join as join21 } from "node:path";
 
 // src/cli-path.ts
 import { accessSync, constants as constants3, existsSync as existsSync16, readFileSync as readFileSync14 } from "node:fs";
-import { createRequire } from "node:module";
+import { createRequire as createRequire2 } from "node:module";
 import { delimiter as delimiter2, dirname as dirname7, join as join19 } from "node:path";
 import { homedir as homedir6 } from "node:os";
 var cached;
@@ -44141,7 +44193,7 @@ function fromPlatformPackage() {
   }
   for (const pkg of pkgs) {
     try {
-      const p = createRequire(import.meta.url).resolve(`${pkg}/${exe3}`);
+      const p = createRequire2(import.meta.url).resolve(`${pkg}/${exe3}`);
       if (usable(p)) return p;
     } catch {
     }
@@ -46311,9 +46363,26 @@ function resolveEnvScope(port) {
   return port === 8787 ? "production" : "sandbox";
 }
 function auditStore(dataDir2) {
-  return ensureStore({ dataDir: dataDir2, orgDir: orgDir(), tasksDir: join22(dataDir2, "tasks") });
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnAuditSkipped(`${driver.code ?? "\u65E0\u9519\u8BEF\u7801"}: ${driver.error ?? "unknown"}`);
+    return null;
+  }
+  try {
+    return ensureStore({ dataDir: dataDir2, orgDir: orgDir(), tasksDir: join22(dataDir2, "tasks") });
+  } catch (e) {
+    warnAuditSkipped(e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+var auditSkipNotified = false;
+function warnAuditSkipped(reason) {
+  if (auditSkipNotified) return;
+  auditSkipNotified = true;
+  console.warn(`[permission-audit] \u26A0\uFE0F  sqlite \u4E0D\u53EF\u7528\uFF0C\u5BA1\u8BA1\u843D\u5E93\u8DF3\u8FC7\uFF08\u5C3D\u529B\u800C\u4E3A\u9762\uFF0C\u4E0D\u963B\u65AD\u4E3B\u8DEF\u5F84\uFF09\u3002\u539F\u56E0: ${reason}\uFF1B\u5E73\u53F0 ${process.platform}-${process.arch}`);
 }
 function appendPermissionAudit(port, row) {
+  if (port === null) return;
   try {
     port.exec(
       `INSERT INTO permission_audit (requested_mode, normalized_mode, effective_mode, native_mode, capability_state, engine, reason, policy_source, environment, dir_scope, tier, actor, session_id, command_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -57828,6 +57897,7 @@ if (cliArgs.has("--stop")) {
     console.log(`[config] \u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u5F00\u542F\uFF08${st2.source === "file" ? "\u8BBE\u7F6E\u9879" : "\u65B0\u88C5\u9ED8\u8BA4"}\uFF09\uFF1A${st2.value}`);
   }
 }
+probeSqliteDriverAtBoot();
 var persistPath = join33(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {

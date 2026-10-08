@@ -9,6 +9,7 @@
 import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { ensureStore } from "./storage/read-mode.js";
+import { loadSqliteDriver } from "./storage/sqlite.js";
 import { orgDir } from "./org.js";
 import type { StoragePort } from "./storage/port.js";
 
@@ -74,14 +75,36 @@ export interface PermissionAuditRow {
 }
 
 /** 审计端口（ensureStore 端口缓存复用——热写零快进税；tasksDir 缺省 <dataDir>/tasks
- * 与 resolveDirs 缺省口径一致）。 */
-export function auditStore(dataDir: string): StoragePort {
-  return ensureStore({ dataDir, orgDir: orgDir(), tasksDir: join(dataDir, "tasks") });
+ * 与 resolveDirs 缺省口径一致）。#158 批1：sqlite 驱动不可用（原生二进制缺失/平台
+ * 不匹配）或建库失败时返回 null——审计是尽力而为面（§6.3 绝不阻断主路径），调用方
+ * 拿 null 即跳过落库（appendPermissionAudit/readPermissionAudit 已 null 容忍）。 */
+export function auditStore(dataDir: string): StoragePort | null {
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnAuditSkipped(`${driver.code ?? "无错误码"}: ${driver.error ?? "unknown"}`);
+    return null;
+  }
+  try {
+    return ensureStore({ dataDir, orgDir: orgDir(), tasksDir: join(dataDir, "tasks") });
+  } catch (e) {
+    warnAuditSkipped(e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+/** 审计跳过告警（每进程一次）：降级可观测——审计静默丢失比抛错更难排障。 */
+let auditSkipNotified = false;
+function warnAuditSkipped(reason: string): void {
+  if (auditSkipNotified) return;
+  auditSkipNotified = true;
+  console.warn(`[permission-audit] ⚠️  sqlite 不可用，审计落库跳过（尽力而为面，不阻断主路径）。原因: ${reason}；平台 ${process.platform}-${process.arch}`);
 }
 
 /** 尽力而为落一行（成功与拒绝都落——§6.3「拒绝也写审计」；B8 修正：拒单审计面并入，
- * 含 preflight 拒/未知引擎拒）。写失败只 warn 不抛（审计绝不阻断主路径）。 */
-export function appendPermissionAudit(port: StoragePort, row: PermissionAuditRow): void {
+ * 含 preflight 拒/未知引擎拒）。写失败只 warn 不抛（审计绝不阻断主路径）。port=null
+ * （#158 批1 驱动降级）静默跳过——跳过原因已由 auditStore 一次性告警。 */
+export function appendPermissionAudit(port: StoragePort | null, row: PermissionAuditRow): void {
+  if (port === null) return;
   try {
     port.exec(
       `INSERT INTO permission_audit (requested_mode, normalized_mode, effective_mode, native_mode, capability_state, engine, reason, policy_source, environment, dir_scope, tier, actor, session_id, command_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -92,8 +115,10 @@ export function appendPermissionAudit(port: StoragePort, row: PermissionAuditRow
   }
 }
 
-/** 审计回读（created_at 倒序 max 行；测试锁+审计查询面）。 */
-export function readPermissionAudit(port: StoragePort, max = 100): PermissionAuditRow[] {
+/** 审计回读（created_at 倒序 max 行；测试锁+审计查询面）。port=null（#158 批1 驱动降级）
+ * 返回空——查询面无账可读即空态，不抛。 */
+export function readPermissionAudit(port: StoragePort | null, max = 100): PermissionAuditRow[] {
+  if (port === null) return [];
   return port
     .query<Record<string, unknown>>(`SELECT * FROM permission_audit ORDER BY id DESC LIMIT ?`, [max])
     .map((r) => ({
