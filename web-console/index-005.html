@@ -4127,6 +4127,36 @@ function connectLan(ctx) {
         document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
       }
 
+      // ---------- #158-批4a 外链兜底收口（改动 3）：全文件外链点击统一走此 helper ----------
+      // 桌面→ccDeck.openExternal（失败 catch 降级复制）；浏览器→window.open 探路，被拦（返回 null）
+      // 再合成 a[target=_blank noopener noreferrer] 点击并复制链接兜底——弹窗拦截器吞掉时用户至少
+      // 拿到「链接已复制」反馈。幂等挂 window，消费点（B4 验收单/地基更新与诊断/mobile 下载）点击期解析。
+      if (!window.__ccDeck005OpenUrl) {
+        const sharedToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(sharedToast._t); sharedToast._t = setTimeout(() => t.classList.remove("show"), 2600); };
+        const copyLink = async (url) => {
+          try { await navigator.clipboard.writeText(url); sharedToast("链接已复制 · 可粘贴到浏览器打开"); return true; }
+          catch (_) { sharedToast("打开被拦截 · 链接：" + url); return false; }
+        };
+        window.__ccDeck005OpenUrl = async function openExternalUrl(url) {
+          const u = String(url || "");
+          if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接"); return false; }
+          if (window.ccDeck && typeof window.ccDeck.openExternal === "function") {
+            try { await window.ccDeck.openExternal(u); return true; }
+            catch (_) { return copyLink(u); }
+          }
+          let opened = null;
+          try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (_) { opened = null; }
+          if (opened) { try { opened.opener = null; } catch (_) {} return true; }
+          // window.open 被拦：合成 a 点击（沙箱禁 window.open 但放行锚点导航的场景）+ 复制兜底
+          const a = document.createElement("a");
+          a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
+          document.body.appendChild(a);
+          try { a.click(); } catch (_) {}
+          a.remove();
+          return copyLink(u);
+        };
+      }
+
       function setupStubTabs() {
         document.querySelectorAll(".segment-bar, .mobile-detail-tabs, .mobile-team-tabs").forEach((bar) => {
           if (bar.closest(".settings-panel")) return; // ⑥c-1：设置域已由 setupSettingsDomain 重建六面板，不让位 stub
@@ -4223,8 +4253,7 @@ function connectLan(ctx) {
           if (status) status.textContent = "检查更新失败";
           if (/超时|timeout|network|fetch/i.test(msg)) {
             showToast("检查超时（网络受限），可手动下载新版本", 6000);
-            if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://cc.humumu.online/dl/").catch(() => {});
-            else { try { window.open("https://cc.humumu.online/dl/", "_blank"); } catch (_) {} }
+            void window.__ccDeck005OpenUrl("https://cc.humumu.online/dl/"); // #158-批4a：外链统一兜底链（被拦降级复制+toast）
           } else {
             showToast("检查更新失败：" + msg);
           }
@@ -4330,9 +4359,9 @@ function connectLan(ctx) {
             showToast("配对新设备 · 分享本页同款带 token 的链接即可加入"); return;
           }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
-          // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导
+          // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导（批4a 走统一外链兜底链）
           const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
-          if (diagRow) { if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://nodejs.org/zh-cn").catch(() => {}); return; }
+          if (diagRow) { void window.__ccDeck005OpenUrl("https://nodejs.org/zh-cn"); return; }
           if (event.target.closest("[data-update-check]")) { void manualCheckUpdate(); return; }
         });
         activateSettings(0);
@@ -6245,8 +6274,7 @@ function connectLan(ctx) {
               const msg = e && e.message ? e.message : String(e);
               if (/超时|timeout|network|fetch/i.test(msg)) {
                 mToast("检查超时（网络受限），可手动下载新版本", 4000);
-                if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://cc.humumu.online/dl/").catch(() => {});
-                else { try { window.open("https://cc.humumu.online/dl/", "_blank"); } catch (_) {} }
+                void window.__ccDeck005OpenUrl("https://cc.humumu.online/dl/"); // #158-批4a：外链统一兜底链
               } else mToast("检查更新失败：" + msg, 4000);
             } finally { row.style.opacity = ""; }
           })();
