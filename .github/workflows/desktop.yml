@@ -37,6 +37,39 @@ jobs:
         working-directory: desktop-tauri
         run: npm ci --no-audit --no-fund
 
+      - name: Replace better-sqlite3 binary with win32-x64 prebuilt
+        # #158（2026-10-08）：resources/node_modules 闭包由 dev 机（macOS arm64）经
+        # relay/scripts/build-plugin.mjs 汇集，better_sqlite3.node 是 darwin-arm64
+        # Mach-O——0.7.0-test.3 Windows 包实锤：内嵌 relay 启动即 dlopen
+        # ERR_DLOPEN_FAILED，8787 永不监听。此步在 Windows runner 上按闭包内
+        # package.json 的版本重拉 win32-x64 prebuilt 覆盖（better-sqlite3 官方发
+        # prebuilt，prebuild-install 按 runner 的 node ABI 自动选包）；mac job 不需
+        # 此步——dev 机汇集的 arm64 恰为 mac 目标形态（两平台来源注记见 mac job）。
+        # relay 侧已加纵深防御（驱动可失败加载+读面降级 json 档），此步是根修。
+        working-directory: desktop-tauri/src-tauri/resources/node_modules/better-sqlite3
+        shell: bash
+        run: |
+          # 主路：闭包目录内直接 prebuild-install（闭包含 package.json，name/version 足其选包）
+          if ! npx --yes prebuild-install; then
+            # 回落：临时目录整包安装（npm install 自动跑包内 install 脚本=prebuild-install），
+            # 再拷二进制——闭包被裁过（无 deps/src），prebuild-install 缺文件时兜底
+            echo "prebuild-install 直跑失败，回落临时目录整包安装"
+            VER=$(node -p "require('./package.json').version")
+            TMP=$(mktemp -d)
+            (cd "$TMP" && npm install --no-audit --no-fund --no-save "better-sqlite3@$VER")
+            cp "$TMP/node_modules/better-sqlite3/build/Release/better_sqlite3.node" build/Release/better_sqlite3.node
+            rm -rf "$TMP"
+          fi
+          # 验证：PE 头两字节必须 4D 5A（"MZ"）——非 win32 PE 即 fail-fast，杜绝 Mach-O/ELF 再进包
+          node -e '
+            const b = require("fs").readFileSync("build/Release/better_sqlite3.node");
+            if (b[0] !== 0x4d || b[1] !== 0x5a) {
+              console.error(`better_sqlite3.node 非 win32 PE（头字节 ${b[0].toString(16)} ${b[1].toString(16)}），中止构建`);
+              process.exit(1);
+            }
+            console.log(`better_sqlite3.node = win32 PE（${(b.length / 1024 / 1024).toFixed(1)} MB）`);
+          '
+
       - name: Regenerate icons from desktop/build/icon.png
         # 图标生成物已提交（src-tauri/icons/），此处幂等重生成，源图更新后 CI 自动跟上
         working-directory: desktop-tauri
@@ -199,6 +232,10 @@ jobs:
           echo "stamped: $V"
 
       - name: Build dmg
+        # #158 两平台二进制来源注记：resources/node_modules 的 better_sqlite3.node 由
+        # dev 机（macOS arm64）汇集，对 mac dmg 目标恰好正确，故本 job 无需替换步；
+        # Windows job（上方 build-tauri）由 prebuild-install 步现场重拉 win32-x64 覆盖。
+        # 改动汇集逻辑（relay/scripts/build-plugin.mjs 2b）时两平台都要顾。
         working-directory: desktop-tauri
         shell: bash
         env:
