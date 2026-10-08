@@ -3987,6 +3987,59 @@ function connectLan(ctx) {
       function settingsToggleState(key) {
         try { return localStorage.getItem("cc-deck-005-" + (key === "sound" ? "notify-sound" : "desktop-notify")) !== "0"; } catch (_) { return true; }
       }
+      // ---------- #158-批3 检查更新真实现（旧壳 8597-8655 范式） ----------
+      // 浏览器形态（无 __TAURI__.updater）返回 null——网页端确实随 relay 部署更新，假文案
+      // 对该形态是正确的。Mac / snap / dev 通道门控（UPDATER_BLOCKED）：tauri-latest 清单
+      // 无 mac 条目，check 判有更新而下载必炸；test 包 endpoint 构建期烙 test 清单可在线升
+      const UPDATER_BLOCKED = /Mac/i.test(navigator.platform || navigator.userAgent)
+        || /-(snap|dev)\./i.test(CONSOLE_VERSION);
+      async function shellCheckUpdate() {
+        const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("网络超时")), ms))]);
+        if (!(window.__TAURI__ && window.__TAURI__.updater)) return null; // 浏览器：无更新通道（随 relay 部署更新），先于门控判定
+        if (UPDATER_BLOCKED) return { blocked: true };
+        const u = await withTimeout(window.__TAURI__.updater.check(), 10000); // #385 网络黑洞：check 无内置超时，外层 race 兜底
+        if (u && u.available) {
+          await withTimeout(u.downloadAndInstall(), 120000);
+          return { available: true, version: u.version, current: u.currentVersion, installed: true };
+        }
+        return { available: false, version: u && u.currentVersion };
+      }
+      window.__ccDeck005Updater = { check: shellCheckUpdate, blocked: () => UPDATER_BLOCKED }; // 手机 IIFE 复用同一链
+      // 手动检查（设置页关于面板）：状态行驱动 + 超时给手动下载入口（exe 更新 endpoint 在
+      // GitHub，国内/公司网常连不上）；浏览器形态保持原 toast 文案不动
+      async function manualCheckUpdate() {
+        const status = document.querySelector('[data-settings-panel="about"] [data-update-status]');
+        const btn = document.querySelector('[data-settings-panel="about"] [data-update-check]');
+        if (status) status.textContent = "检查中…";
+        if (btn) btn.disabled = true;
+        try {
+          const r = await shellCheckUpdate();
+          if (r && r.blocked) {
+            if (status) status.textContent = "此版本请手动更新（Mac / 快照与开发通道不走在线升级）";
+            showToast("此版本请手动更新（Mac / 快照与开发通道不走在线升级）", 5000);
+          } else if (r === null) {
+            if (status) status.textContent = "当前已是最新版本";
+            showToast("当前已是最新版本 · 网页端随 relay 部署更新");
+          } else if (r.available) {
+            if (status) status.textContent = r.installed ? "新版已下载 · 重启后生效" : "发现新版 → v" + r.version;
+            showToast(r.installed ? "新版本已就绪，重启 CC Deck 后生效" : "发现新版 v" + r.version + "，下载中…");
+          } else {
+            if (status) status.textContent = "已是最新 v" + (r.version || "");
+          }
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          if (status) status.textContent = "检查更新失败";
+          if (/超时|timeout|network|fetch/i.test(msg)) {
+            showToast("检查超时（网络受限），可手动下载新版本", 6000);
+            if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://cc.humumu.online/dl/").catch(() => {});
+            else { try { window.open("https://cc.humumu.online/dl/", "_blank"); } catch (_) {} }
+          } else {
+            showToast("检查更新失败：" + msg);
+          }
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
       // ---------- #158-批3 连接诊断（桌面形态，旧壳 relayStatus 11917-11959 消费范式） ----------
       // relayStatus 透出 { port:端口在听, embedded, node, err }——err（Node 过旧/spawn 失败）
       // 优先直出；缺 node 给安装引导（点击 openExternal nodejs.org）；端口在听显示运行端口。
@@ -4046,7 +4099,7 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">未设置</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button">开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button">开</button></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
         wireCardDensityControls(body);
         body.dataset.settingsReady = "1";
         const panels = [...body.querySelectorAll("[data-settings-panel]")];
@@ -4085,10 +4138,10 @@ function connectLan(ctx) {
             showToast("配对新设备 · 分享本页同款带 token 的链接即可加入"); return;
           }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
-          if (event.target.closest("[data-update-check]")) { showToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
           // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导
           const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
           if (diagRow) { if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://nodejs.org/zh-cn").catch(() => {}); return; }
+          if (event.target.closest("[data-update-check]")) { void manualCheckUpdate(); return; }
         });
         activateSettings(0);
       }
@@ -5436,6 +5489,17 @@ function connectLan(ctx) {
           }
         }, 6000);
       }
+      // #158-批3 桌面壳启动静默检查更新（旧壳 8643-8653 范式）：5s 后台查一次，有新版直接
+      // 下载安装（退出时生效不打扰）；UPDATER_BLOCKED 门控（Mac/snap/dev 不走在线升级）
+      setTimeout(() => {
+        try {
+          if (!UPDATER_BLOCKED && window.__TAURI__ && window.__TAURI__.updater) {
+            window.__TAURI__.updater.check().then((u) => {
+              if (u && u.available) u.downloadAndInstall().then(() => showToast("新版本已就绪，重启后生效")).catch(() => {});
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      }, 5000);
       setInterval(() => {
         if (sessionList.dataset.b2Owned === "1") return; // #143 盲评A-2：B2 自有走秒定时器，双写互覆盖让位
         sessionList.querySelectorAll(".queue-card").forEach((card) => {
@@ -5956,7 +6020,30 @@ function connectLan(ctx) {
         }
         const settingsRow = target.closest("#m-settings .mobile-settings .settings-row");
         if (settingsRow && !settingsRow.matches("[data-theme-toggle]")) { settingsRow.closest(".mobile-content")?._renderSettingsDetail?.(settingsRow.querySelector("strong")?.textContent.trim()); return; }
-        if (target.closest("[data-update-check]")) { mToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+        if (target.closest("[data-update-check]")) {
+          // #158-批3：走 foundation 的真更新链（桌面/门控/超时口径与设置页一致）；浏览器形态保留原文案
+          const upd = window.__ccDeck005Updater;
+          if (!upd || !(window.__TAURI__ || window.ccDeck)) { mToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+          const row = target.closest("[data-update-check]");
+          row.style.opacity = ".6";
+          void (async () => {
+            try {
+              const r = await upd.check();
+              if (r && r.blocked) mToast("此版本请手动更新（Mac / 快照与开发通道不走在线升级）", 4000);
+              else if (!r) mToast("当前已是最新版本 · 网页端随 relay 部署更新");
+              else if (r.available) mToast(r.installed ? "新版本已就绪，重启 CC Deck 后生效" : "发现新版 v" + r.version + "，下载中…", 4000);
+              else mToast("已是最新 v" + (r.version || "?"));
+            } catch (e) {
+              const msg = e && e.message ? e.message : String(e);
+              if (/超时|timeout|network|fetch/i.test(msg)) {
+                mToast("检查超时（网络受限），可手动下载新版本", 4000);
+                if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://cc.humumu.online/dl/").catch(() => {});
+                else { try { window.open("https://cc.humumu.online/dl/", "_blank"); } catch (_) {} }
+              } else mToast("检查更新失败：" + msg, 4000);
+            } finally { row.style.opacity = ""; }
+          })();
+          return;
+        }
         if (target.closest("[data-mobile-wait-deny]") || target.closest("[data-mobile-wait-allow]")) { mToast("审批操作请在桌面会话域完成"); return; } // ⑥c-3 产品口径：移动端仅浏览验证
         const openDetail = target.closest("[data-open-detail]");
         if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
