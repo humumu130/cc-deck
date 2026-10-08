@@ -1472,7 +1472,9 @@
                 // 用户设置不丢；默认 30，负数 = 永不（Infinity 让 > 比较恒 false，判定零分支）。
                 // 设置面板（地基段）改值走 __ccDeck005IdleDim 钩子回写本闭包并立即重渲。
                 let idleDimMin = 30;
-                { let v = NaN; try { v = Number(localStorage.getItem("ccd_idle_dim_min")); } catch (_) {} if (Number.isFinite(v)) idleDimMin = v; }
+                // 缺失/空串回落默认 30（Number(null)=0 会把缺省吃成 0——立即置灰，与「默认
+                // 30 分钟」意图相悖；旧壳 #121 直拷 Number(lsGet) 存在此暗坑，这里按文案口径修正）
+                { let raw = null; try { raw = localStorage.getItem("ccd_idle_dim_min"); } catch (_) {} const v = raw === null || raw === "" ? NaN : Number(raw); if (Number.isFinite(v)) idleDimMin = v; }
                 const idleDimMs = () => (idleDimMin < 0 ? Infinity : idleDimMin * 60000);
                 const bgRunning = (s) => (s.subagents ?? []).some((a) => !a.ended_at);
                 function idleDimmed(s) {
