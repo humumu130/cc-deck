@@ -1,5 +1,6 @@
 // hooks 桥接全链路测试：模拟 bridge-hook.mjs 的 POST 序列 + WS 客户端命令
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,26 +16,44 @@ import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
-    console.error(`FAIL: ${msg}`);
-    process.exit(1);
+    throw new Error(`FAIL: ${msg}`);
   }
   console.log(`ok - ${msg}`);
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const waitFor = async (pred: () => boolean, ms = 4000, intervalMs = 100): Promise<boolean> => {
+  const end = Date.now() + ms;
+  while (true) {
+    if (pred()) return true;
+    const remaining = end - Date.now();
+    if (remaining <= 0) return false;
+    await wait(Math.min(intervalMs, remaining));
+  }
+};
+const observeNoChange = async <T>(read: () => T, ms = 4000, intervalMs = 100): Promise<boolean> => {
+  const initial = read();
+  const end = Date.now() + ms;
+  while (true) {
+    if (read() !== initial) return false;
+    const remaining = end - Date.now();
+    if (remaining <= 0) return read() === initial;
+    await wait(Math.min(intervalMs, remaining));
+  }
+};
 // 等注入落盘用轮询而非固定 wait：高负载下 fake-injector 子进程 spawn 可达秒级，
 // 固定窗口（800/1500ms）反复偶发假阴性（18/21/30/31/32 段连续 flake 实录）
 const waitLog = async (pred: () => boolean, ms = 4000): Promise<void> => {
-  const end = Date.now() + ms;
-  while (Date.now() < end && !pred()) await wait(100);
+  await waitFor(pred, ms);
 };
 
+let injectLogPath = "";
 const fakeLog = (): string[][] => {
   // 逐行容错：子进程 appendFileSync 与本读取竞态时会读到半行，整文件 try/catch 会把
   // 已完整的行一并丢掉（29 段 got -1 假阴性的根因）——半行跳过，完整行照收
   let raw: string;
   try {
-    raw = readFileSync(INJECT_LOG, "utf-8");
+    raw = readFileSync(injectLogPath, "utf-8");
   } catch {
     return [];
   }
@@ -48,7 +67,105 @@ const fakeLog = (): string[][] => {
   return out;
 };
 
-process.env.CCR_PORT = "8798";
+const BRIDGE_PORT = 8798;
+const LSOF_PATH = "/usr/sbin/lsof";
+type RunningServer = ReturnType<typeof startServer>;
+let activeServer: RunningServer | undefined;
+const activeSockets = new Set<WebSocket>();
+let cleanupPromise: Promise<void> | undefined;
+
+function lsof(args: string[]): string {
+  try {
+    return execFileSync(LSOF_PATH, args, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException & { status?: number; stdout?: string | Buffer };
+    if (err.code === "ENOENT") throw new Error(`FAIL: ${LSOF_PATH} 不存在，无法检查 test:bridge 端口`);
+    if (err.status !== 1) throw new Error(`FAIL: ${LSOF_PATH} 检查端口失败（status=${String(err.status ?? "unknown")}）`);
+    return typeof err.stdout === "string" ? err.stdout : err.stdout?.toString() ?? "";
+  }
+}
+
+function assertPortFree(port: number): void {
+  const listeners = lsof(["-nP", "-i", `:${port}`, "-sTCP:LISTEN"]).trim();
+  if (!listeners) return;
+  const pids = lsof(["-nP", "-t", "-i", `:${port}`, "-sTCP:LISTEN"]).trim() || "unknown";
+  throw new Error(`FAIL: test:bridge 端口 ${port} 已被占用，PID=${pids}\n${listeners}`);
+}
+
+function trackSocket(ws: WebSocket): WebSocket {
+  activeSockets.add(ws);
+  ws.once("close", () => activeSockets.delete(ws));
+  return ws;
+}
+
+function openSocket(url: string): WebSocket {
+  return trackSocket(new WebSocket(url));
+}
+
+async function closeSocket(ws: WebSocket | undefined): Promise<void> {
+  if (!ws || ws.readyState === WebSocket.CLOSED) {
+    if (ws) activeSockets.delete(ws);
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      activeSockets.delete(ws);
+      resolve();
+    };
+    ws.once("close", finish);
+    try {
+      if (ws.readyState === WebSocket.CONNECTING) ws.terminate();
+      else ws.close();
+    } catch {
+      try { ws.terminate(); } catch {}
+    }
+    const timer = setTimeout(() => {
+      try { ws.terminate(); } catch {}
+      finish();
+    }, 1000);
+    timer.unref?.();
+  });
+}
+
+async function cleanupTestResources(): Promise<void> {
+  if (cleanupPromise) return cleanupPromise;
+  cleanupPromise = (async () => {
+    await Promise.all([...activeSockets].map((ws) => closeSocket(ws)));
+    const server = activeServer;
+    activeServer = undefined;
+    if (server) await server.close();
+  })();
+  return cleanupPromise;
+}
+
+let fatalHandled = false;
+function handleFatal(error: unknown, exitCode = 1): void {
+  if (fatalHandled) return;
+  fatalHandled = true;
+  console.error(error instanceof Error ? error.stack ?? error.message : error);
+  void cleanupTestResources().finally(() => {
+    process.exitCode = exitCode;
+    process.exit(exitCode);
+  });
+}
+
+process.once("SIGINT", () => handleFatal(new Error("test:bridge interrupted"), 130));
+process.once("SIGTERM", () => handleFatal(new Error("test:bridge terminated"), 143));
+process.once("uncaughtException", (error) => handleFatal(error));
+process.once("unhandledRejection", (error) => handleFatal(error));
+process.once("exit", () => {
+  for (const ws of activeSockets) {
+    try { ws.terminate(); } catch {}
+  }
+});
+
+async function main(): Promise<void> {
+assertPortFree(BRIDGE_PORT);
+
+process.env.CCR_PORT = String(BRIDGE_PORT);
 process.env.CCR_TOKEN = "test-token-123";
 process.env.CCR_BRIDGE_TOKEN = "bridge-token-456";
 process.env.CCR_NO_TITLE_GEN = "1";
@@ -62,9 +179,9 @@ process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import
 process.env.CCR_DEAD_SWEEP = "0";
 // 终端转轮行采集器关门：45f 段 peek 计数断言不受后台采集干扰
 process.env.CCR_NO_TERM_LINE = "1";
-const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
-process.env.CCR_INJECT_LOG = INJECT_LOG;
-rmSync(INJECT_LOG, { force: true });
+injectLogPath = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
+process.env.CCR_INJECT_LOG = injectLogPath;
+rmSync(injectLogPath, { force: true });
 // 孤儿扫描（34 段）用临时 projects 根，防止测试扫到真实 ~/.claude/projects
 const PROOT = fileURLToPath(new URL("../data/test-projects/", import.meta.url));
 process.env.CCR_PROJECTS_ROOT = PROOT;
@@ -99,8 +216,16 @@ const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
 let cloudOnline = false; // 33 段置 true：云通道手机计入"在线"门控
-const { bridge } = startServer(bus, mgr, cfg, { holdMs: 1200, questionHoldMs: 800, gateToolsRaw: "Bash,Edit", cloudHasPhones: () => cloudOnline });
-await wait(300);
+let serverReady = false;
+activeServer = startServer(bus, mgr, cfg, {
+  holdMs: 1200,
+  questionHoldMs: 800,
+  gateToolsRaw: "Bash,Edit",
+  cloudHasPhones: () => cloudOnline,
+  onReady: () => { serverReady = true; },
+});
+const { bridge } = activeServer;
+assert(await waitFor(() => serverReady, 4000), "server listen callback");
 
 const http = `http://127.0.0.1:${cfg.port}`;
 const extId = (cli: string) => "ext-" + cli;
@@ -125,10 +250,10 @@ function attach(ws: WebSocket) {
     else events.push(m as Envelope);
   });
 }
-const first = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+const first = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
 attach(first);
 await new Promise((r) => first.once("open", r));
-await wait(200);
+assert(await waitFor(() => events.some((e) => e.type === "SNAPSHOT")), "initial SNAPSHOT converged");
 
 function send(type: Command["type"], payload: unknown): string {
   const id = randomUUID();
@@ -154,7 +279,7 @@ assert(forbidden.status === 403, "wrong bridge token rejected");
 
 // 2. UserPromptSubmit → SESSION_CREATED(external)
 const r1 = await hook({ event: "UserPromptSubmit", prompt: "帮我修复登录页面的 bug" });
-await wait(200);
+assert(await waitFor(() => !!findEvt("SESSION_CREATED")), "SESSION_CREATED converged");
 assert(r1.status === 200 && r1.body.decision === "pass", "UserPromptSubmit pass");
 const created = findEvt("SESSION_CREATED") as Envelope<"SESSION_CREATED", { external?: boolean; title: string }> | undefined;
 assert(!!created, "SESSION_CREATED emitted");
@@ -163,7 +288,7 @@ assert(created?.payload.title === "帮我修复登录页面的 bug", "title from
 
 // 3. remote_mode 关：PreToolUse Bash → 立即 pass
 let r2 = await hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm test" }, permission_mode: "default" });
-await wait(150);
+assert(await waitFor(() => events.some((e) => e.type === "SESSION_LOG" && (e.payload as { kind: string }).kind === "tool_use")), "tool_use log converged");
 assert(r2.body.decision === "pass", "gate off: immediate pass");
 assert(events.some((e) => e.type === "SESSION_LOG" && (e.payload as { kind: string }).kind === "tool_use"), "tool_use logged");
 
@@ -175,8 +300,9 @@ const upd = events.filter((e) => e.type === "SESSION_UPDATED").at(-1) as Envelop
 assert(upd?.payload.remote_mode === true, "UPDATE carries remote_mode=true");
 
 // 5. PreToolUse Bash → 挂起 + WAITING(decidable) → CONTINUE → allow
+const waitingBefore5 = events.filter((e) => e.type === "SESSION_WAITING").length;
 const held1 = hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm -rf build" }, permission_mode: "default" });
-await wait(300);
+assert(await waitFor(() => events.filter((e) => e.type === "SESSION_WAITING").length > waitingBefore5), "WAITING event converged");
 const waiting = findEvt("SESSION_WAITING") as Envelope<"SESSION_WAITING", WaitingPayload> | undefined;
 assert(!!waiting, "WAITING emitted while held");
 assert(waiting?.payload.decidable === true, "WAITING decidable");
@@ -186,8 +312,9 @@ assert((await held1).body.decision === "allow", "hook got allow");
 assert(!!findEvt("SESSION_WAITING_RESOLVED"), "WAITING_RESOLVED emitted");
 
 // 6. 再来一次 → REJECT → deny + reason
+const waitingBefore6 = events.filter((e) => e.type === "SESSION_WAITING").length;
 const held2 = hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "curl evil" }, permission_mode: "default" });
-await wait(300);
+assert(await waitFor(() => events.filter((e) => e.type === "SESSION_WAITING").length > waitingBefore6), "second WAITING event converged");
 const w2 = events.filter((e) => e.type === "SESSION_WAITING").at(-1) as Envelope<"SESSION_WAITING", WaitingPayload>;
 const rejId = send("COMMAND_REJECT", { session_id: extId("cli-1"), request_id: w2.payload.request_id, reason: "不放心这个命令" });
 await waitAck(rejId);
@@ -210,22 +337,24 @@ const resolved = events.filter((e) => e.type === "SESSION_WAITING_RESOLVED");
 assert(resolved.length === before9 + 1 && (resolved.at(-1)!.payload as { decision: string }).decision === "timeout", "timeout resolved event");
 
 // 10. 无客户端在线 → 不拦截
-wsCur!.close();
-await wait(300);
+await closeSocket(wsCur);
+wsCur = undefined;
 let r10 = await hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "echo x" }, permission_mode: "default" });
 assert(r10.body.decision === "pass", "no clients online: pass");
 // 重连
-const second = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+const snapshotsBefore10 = events.filter((e) => e.type === "SNAPSHOT").length;
+const second = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
 attach(second);
 await new Promise((r) => second.once("open", r));
-await wait(200);
+assert(await waitFor(() => events.filter((e) => e.type === "SNAPSHOT").length > snapshotsBefore10), "reconnect SNAPSHOT converged");
 const snap = events.filter((e) => e.type === "SNAPSHOT").at(-1) as Envelope<"SNAPSHOT", { sessions: { session_id: string; external?: boolean; remote_mode?: boolean }[] }>;
 const extSnap = snap.payload.sessions.find((s) => s.session_id === extId("cli-1"));
 assert(!!extSnap && extSnap.external === true && extSnap.remote_mode === true, "snapshot: external session with remote_mode");
 
 // 11. Notification 权限 → passive WAITING
+const waitingBefore11 = events.filter((e) => e.type === "SESSION_WAITING").length;
 await hook({ event: "Notification", message: "Claude needs your permission to use Bash" });
-await wait(150);
+assert(await waitFor(() => events.filter((e) => e.type === "SESSION_WAITING").length > waitingBefore11), "passive WAITING event converged");
 const w11 = events.filter((e) => e.type === "SESSION_WAITING").at(-1) as Envelope<"SESSION_WAITING", WaitingPayload>;
 assert(w11?.payload.decidable === false, "passive WAITING (not decidable)");
 
@@ -236,19 +365,22 @@ assert(ack12.ok === false && (ack12.error ?? "").includes("外部会话"), "MESS
 
 // 13. PostToolUse → 清 passive WAITING + tool_result
 await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: { stdout: "ok" } });
-await wait(150);
+assert(await waitFor(() => {
+  const latest = events.filter((e) => e.type === "SESSION_UPDATED").at(-1);
+  return latest?.payload !== undefined && (latest.payload as { status?: string }).status === "WORKING";
+}), "passive WAITING clear converged");
 const upd13 = events.filter((e) => e.type === "SESSION_UPDATED").at(-1) as Envelope<"SESSION_UPDATED", { status: string }>;
 assert(upd13?.payload.status === "WORKING", "passive waiting cleared");
 
 // 14. Stop → DONE
 await hook({ event: "Stop" });
-await wait(150);
+assert(await waitFor(() => !!findEvt("SESSION_DONE")), "SESSION_DONE converged");
 const done = findEvt("SESSION_DONE") as Envelope<"SESSION_DONE", { duration_ms: number }> | undefined;
 assert(!!done && done.payload.duration_ms >= 0, "Stop → DONE");
 
 // 15. cli_pid 捕获：事件携带 cli_pid → 状态存储（新回合 WORKING）
 await hook({ event: "UserPromptSubmit", prompt: "看看这个目录", cli_pid: process.pid });
-await wait(150);
+assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === process.pid), "cli_pid capture converged");
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === process.pid, "cli_pid captured");
 
 // 16. WORKING 时 EXT_INPUT → 立即注入（CLI 原生排队），带"已注入终端"日志
@@ -268,15 +400,15 @@ await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && a[1] =
 assert(fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"), "esc injected");
 
 // 17.5 WAITING（远程审批挂起）时 EXT_INPUT → relay 侧排队，不注入
+const waitingBefore17 = events.filter((e) => e.type === "SESSION_WAITING").length;
 const held17 = hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm run build" }, permission_mode: "default" });
-await wait(300);
+assert(await waitFor(() => events.filter((e) => e.type === "SESSION_WAITING").length > waitingBefore17), "17.5 WAITING event converged");
 const w17 = events.filter((e) => e.type === "SESSION_WAITING").at(-1) as Envelope<"SESSION_WAITING", WaitingPayload>;
 assert(!!w17 && w17.payload.decidable === true, "17.5 WAITING(decidable) emitted");
 const qId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "排队消息A" });
 assert((await waitAck(qId)).ok, "EXT_INPUT queued acked");
-await wait(300);
+assert(await waitFor(() => events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队"))), "queue log converged");
 assert(!fakeLog().some((a) => a[1] === "排队消息A"), "no injection while WAITING");
-assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue logged");
 assert(pendOf(extId("cli-1")).some((p) => p.text === "排队消息A"), "queued msg echoed in pending_inputs");
 const cont17 = send("COMMAND_CONTINUE", { session_id: extId("cli-1"), request_id: w17.payload.request_id });
 assert((await waitAck(cont17)).ok, "17.5 CONTINUE acked");
@@ -301,15 +433,16 @@ assert(fakeLog().some((a) => a[1] === "空闲直发"), "idle injection direct");
 assert(pendOf(extId("cli-1")).some((p) => p.text === "空闲直发"), "idle inject echoed in pending_inputs");
 
 // 19.5 晋升去重：CLI 处理空闲注入 → UserPromptSubmit 同文本 → pending 移除 + 仅一条 user_message（上浮不重复）
+const idlePromoteBefore = umLogs("空闲直发");
 await hook({ event: "UserPromptSubmit", prompt: "空闲直发" });
-await wait(200);
+assert(await waitFor(() => umLogs("空闲直发") === idlePromoteBefore + 1), "19.5 UPS promotion converged");
 assert(umLogs("空闲直发") === 1, "UPS promotes pending into single user_message");
 assert(!pendOf(extId("cli-1")).some((p) => p.text === "空闲直发"), "promoted msg removed from pending");
 
 // 20. 无 cli_pid（WORKING 中 pid 未定位）：不再硬拒（506a58c/60e2339 恢复语义放宽后
 //     旧断言过期）——ack 收下 + pending 回显兜底不静默丢失；flush 阶段弃队列并记系统日志
 await hook({ event: "UserPromptSubmit", prompt: "无 pid 会话", session_id: "cli-2" });
-await wait(150);
+assert(await waitFor(() => !!mgr.getExternal(extId("cli-2"))), "20 no-pid session converged");
 const noPidId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-2"), text: "x" });
 const ack20 = await waitAck(noPidId);
 assert(ack20.ok === true, "EXT_INPUT without pid acked (queued, not silently lost)");
@@ -320,7 +453,7 @@ await hook({ event: "SessionEnd", session_id: "cli-2", reason: "clear" });
 
 // 21. 注入失败（attach fail）→ 清 pid + 弃队列 + 日志
 await hook({ event: "UserPromptSubmit", prompt: "要失败的会话", session_id: "cli-3", cli_pid: 424242 });
-await wait(150);
+assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === extId("cli-3"))?.cli_pid === 424242), "21 dead-pid session converged");
 const fId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-3"), text: "会失败" });
 assert((await waitAck(fId)).ok, "EXT_INPUT acked (immediate inject will fail)");
 await hook({ event: "Stop", session_id: "cli-3" });
@@ -333,19 +466,23 @@ assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { tex
 
 // 22. SessionEnd → log
 await hook({ event: "SessionEnd", reason: "clear" });
-await wait(150);
+assert(await waitFor(() => events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("会话结束"))), "SessionEnd log converged");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("会话结束")), "SessionEnd logged");
 
 // 22.5 重登记：SessionEnd 现在主动关闭即清卡片（状态收口）——后续段落需要会话存在，
 //      hook 重登记模拟用户在同一终端开新一轮
 await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: process.pid });
-await wait(150);
+assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === process.pid), "22.5 re-registration converged");
 
 // 23. COMMAND_RENAME：改名 + 锁定（title_locked）
 const renId = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "我的会话" });
 const ack23 = await waitAck(renId);
 assert(ack23.ok, "RENAME acked");
-await wait(150);
+assert(await waitFor(() => {
+  const latest = events.filter((e) => e.type === "SESSION_UPDATED").at(-1);
+  const payload = latest?.payload as { title?: string; title_locked?: boolean } | undefined;
+  return payload?.title === "我的会话" && payload.title_locked === true;
+}), "23 rename update converged");
 const upd23 = events.filter((e) => e.type === "SESSION_UPDATED").at(-1) as Envelope<"SESSION_UPDATED", { title?: string; title_locked?: boolean }> | undefined;
 assert(upd23?.payload.title === "我的会话" && upd23?.payload.title_locked === true, "UPDATE carries title + title_locked");
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.title === "我的会话", "state renamed");
@@ -395,6 +532,10 @@ assert(ack24.ok === false, "empty rename rejected");
   const umCount = (t: string) =>
     events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
   const pendTexts = () => pendOf(extId("cli-1")).map((p) => p.text);
+  const flushing = () => (bridge as unknown as { flushing: Set<string> }).flushing.has(extId("cli-1"));
+  const waitInjected = async (texts: string[]): Promise<void> => {
+    assert(await waitFor(() => texts.every((text) => fakeLog().some((a) => a[1] === text)) && !flushing(), 8000), `26 injection converged: ${texts.map((text) => text.slice(0, 8)).join(", ")}`);
+  };
   // 手机连发两条（A 带内部换行，B 短句），CLI 忙 → 原生排队
   await hook({ event: "UserPromptSubmit", prompt: "双显回归回合一", cli_pid: process.pid, transcript_path: T });
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
@@ -404,7 +545,7 @@ assert(ack24.ok === false, "empty rename rejected");
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
     assert((await waitAck(xId)).ok, `26 EXT_INPUT queued: ${t.slice(0, 8)}`);
   }
-  await wait(1500); // 等 flushQueue 把两条都注入完（每条 400ms 间隔），Stop 时队列为空才走晋升
+  await waitInjected([A, B]);
   assert(pendTexts().length === 2, "26 two phone msgs in pending");
   // ① CLI 合并形态 enqueue（A 折叠空格 + "\r" + B）→ 不得回塞第三条 pending；
   // #43 起 enqueue=CLI 已收到的回执，直接晋升出队（不再等 UPS）——两条 pending 全清
@@ -413,13 +554,13 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(pendTexts().length === 0, "26 merged enqueue promotes (no 3rd pending, queue cleared)");
   // ② Stop 晋升：A、B 各记一条 user_message，pending 清空
   await hook({ event: "Stop", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount(A) === 1 && umCount(B) === 1), "26 Stop promotion converged");
   assert(umCount(A) === 1, "26 A logged exactly once on Stop");
   assert(umCount(B) === 1, "26 B logged exactly once on Stop");
   assert(pendTexts().length === 0, "26 pending cleared once");
   // ③ CLI 回合结束把整队合并成一条真 prompt 再提交 → 不得重复记录
   await hook({ event: "UserPromptSubmit", prompt: A.replace(/\n/g, " ") + "\r" + B, transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount(A) === 1 && umCount(B) === 1), "26 joined re-submit converged");
   assert(umCount(A) === 1 && umCount(B) === 1, "26 joined re-submit logs nothing new");
   // ④ steering 中途交付合并形态（attachment "C\rD"）→ 按原句各记一条，pending 清空；随后 Stop 不再补记
   const C = "我发了两条消息都在排队，上去之后显示了两次";
@@ -430,15 +571,15 @@ assert(ack24.ok === false, "empty rename rejected");
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
     assert((await waitAck(xId)).ok, `26 EXT_INPUT queued: ${t.slice(0, 8)}`);
   }
-  await wait(1200);
+  await waitInjected([C, D]);
   appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "remove" }) + "\n");
   appendFileSync(T, JSON.stringify({ type: "attachment", attachment: { type: "queued_command", prompt: C + "\r" + D } }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount(C) === 1 && umCount(D) === 1), "26 merged steering promotion converged");
   assert(umCount(C) === 1 && umCount(D) === 1, "26 merged steer logs each original msg once");
   assert(pendTexts().length === 0, "26 pending cleared by merged steer");
   await hook({ event: "Stop", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount(C) === 1 && umCount(D) === 1), "26 merged Stop converged");
   assert(umCount(C) === 1 && umCount(D) === 1, "26 Stop after merged steer logs nothing new");
   // ⑤ 合并形态直接作为 UserPromptSubmit 先到（pending 未清）→ 整批晋升、各记一条
   const E = "第五条排队消息";
@@ -448,24 +589,24 @@ assert(ack24.ok === false, "empty rename rejected");
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
     await waitAck(xId);
   }
-  await wait(1500);
+  await waitInjected([E, F]);
   await hook({ event: "UserPromptSubmit", prompt: E + "\r" + F, transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount(E) === 1 && umCount(F) === 1), "26 joined prompt promotion converged");
   assert(umCount(E) === 1 && umCount(F) === 1, "26 joined UserPromptSubmit promotes each pending once");
   assert(pendTexts().length === 0, "26 pending cleared once by joined promote");
   // ⑥ 去重不吞真实重发：PC 手敲同句两次 → 各记一条；手机快速重发同句两次 → Stop 各记一条
   await hook({ event: "UserPromptSubmit", prompt: "手敲重发不吞测试", transcript_path: T });
   await hook({ event: "UserPromptSubmit", prompt: "手敲重发不吞测试", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount("手敲重发不吞测试") === 2), "26 PC resend logging converged");
   assert(umCount("手敲重发不吞测试") === 2, "26 PC retyped same prompt within 60s logs twice");
   await hook({ event: "UserPromptSubmit", prompt: "双显回归回合四", cli_pid: process.pid, transcript_path: T });
   for (let k = 0; k < 2; k++) {
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "手机重发同句" });
     await waitAck(xId);
   }
-  await wait(1500);
+  assert(await waitFor(() => fakeLog().filter((a) => a[1] === "手机重发同句").length >= 2, 8000), "26 repeated phone injection converged");
   await hook({ event: "Stop", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => umCount("手机重发同句") === 2), "26 repeated phone promotion converged");
   assert(umCount("手机重发同句") === 2, "26 phone quick-resend logs twice (promote not deduped)");
   await hook({ event: "SessionEnd", reason: "clear" });
   rmSync(T, { force: true });
@@ -473,7 +614,7 @@ assert(ack24.ok === false, "empty rename rejected");
 
 // 26.5 重登记：同 22.5——SessionEnd 清卡后 27 段需要 cli-1 存在
 await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: process.pid });
-await wait(150);
+assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === process.pid), "26.5 re-registration converged");
 
 // 27. COMMAND_TODO_HIDE：隐藏条目在 setTodos 咽喉点过滤 + 持久化（模拟重启）仍生效
 {
@@ -486,7 +627,7 @@ await wait(150);
   assert(todosOf().length === 2, "27 two todos before hide");
   const hide1 = send("COMMAND_TODO_HIDE", { session_id: sid, content: "任务甲" });
   assert((await waitAck(hide1)).ok, "27 TODO_HIDE acked");
-  await wait(150);
+  assert(await waitFor(() => todosOf().length === 1 && todosOf()[0].content === "任务乙"), "27 hidden todo state converged");
   assert(todosOf().length === 1 && todosOf()[0].content === "任务乙", "27 hidden item filtered out");
   assert(events.some((e) => e.type === "SESSION_UPDATED" && Array.isArray((e.payload as { todos?: unknown[] }).todos)), "27 SESSION_UPDATED carries filtered todos");
   // 找不到匹配条目也回 ok；重复隐藏幂等
@@ -527,7 +668,10 @@ await wait(150);
   assert(subs().length === 1 && fg.id === "call_fg1" && fg.desc === "前台子代理" && fg.kind === "general" && fg.bg === false && fg.ended_at === undefined, "28 Pre creates running subagent entry");
   await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_response: "spawned" });
   assert(subs()[0].ended_at === undefined, "28 spawn-instant Post (<2s) does not end foreground subagent (#142)");
-  await wait(2100);
+  assert(await waitFor(() => {
+    const startedAt = subs().find((x) => x.id === "call_fg1")?.started_at;
+    return typeof startedAt === "number" && Date.now() - startedAt >= 2000;
+  }, 2500), "28 foreground completion threshold reached");
   await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_response: "ok" });
   assert(subs()[0].ended_at !== undefined, "28 late Post (>=2s) ends foreground subagent");
   // ② 后台：PostToolUse（派生瞬间返回）不收尾，transcript 的 task-notification（user 行）收尾。
@@ -559,7 +703,7 @@ await wait(150);
   assert(events.some((e) => e.type === "SESSION_UPDATED" && Array.isArray((e.payload as { subagents?: unknown[] }).subagents)), "28 SESSION_UPDATED carries subagents");
   // ④ TTL：测试短值（end 2s / run 3s）+ 5s 轮询节拍 → 全部清空
   assert(subs().length > 0, "28 entries present before TTL sweep");
-  await wait(7000);
+  assert(await waitFor(() => subs().length === 0, 12_000), "28 TTL sweep converged");
   assert(subs().length === 0, "28 TTL sweep clears ended and zombie entries");
   rmSync(T, { force: true });
 }
@@ -755,29 +899,28 @@ await wait(150);
   // WORKING + pending 滞留（注入成功但回车被吞、未晋升）→ 5s 节拍内补发回车
   const wId = send("COMMAND_EXT_INPUT", { session_id: sid, text: "滞留的消息" });
   assert((await waitAck(wId)).ok, "29 EXT_INPUT acked (WORKING direct inject)");
-  await wait(8000);
+  assert(await waitFor(() => enters() >= 1, 12_000), "29 stuck watchdog converged");
   assert(enters() >= 1, "29 stuck pending triggers enter re-send");
   assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已补发回车")), "29 watchdog log emitted");
   const afterTrigger = enters();
   // WAITING（权限弹窗/审批挂起）→ 严禁补发（回车会误触弹窗）
   mgr.setExternalStatus(sid, "WAITING", "权限确认");
   mgr.setExternalPending(sid, [{ text: "滞留的消息", ts: Date.now() - 9000 }]);
-  await wait(6500);
-  assert(enters() === afterTrigger, "29 no enter re-send while WAITING");
+  assert(await observeNoChange(enters, 6500), "29 no enter re-send while WAITING");
   // 送达（pending 清空）→ 看门狗重置，不再触发
   mgr.setExternalStatus(sid, "DONE", "完成");
   mgr.setExternalPending(sid, []);
-  await wait(6500);
-  assert(enters() === afterTrigger, "29 no enter re-send after delivered");
+  assert(await observeNoChange(enters, 6500), "29 no enter re-send after delivered");
   // 再滞留：连续 3 次补发后放弃（防无限打转），之后不再尝试
   mgr.setExternalStatus(sid, "WORKING", "再跑");
   mgr.setExternalPending(sid, [{ text: "滞留的消息", ts: Date.now() - 9000 }]);
-  await wait(17000);
+  assert(await waitFor(() => events.some((e) => e.type === "SESSION_LOG" && e.session_id === sid && String((e.payload as { text: string }).text).includes("暂停自动补发")), 20_000), "29 watchdog give-up converged");
+  assert(await waitFor(() => enters() >= afterTrigger + 3, 5000), "29 watchdog retries converged");
   const afterRetry = enters();
   assert(afterRetry - afterTrigger === 3, `29 exactly three retries then give up (got ${afterRetry - afterTrigger})`);
   assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("暂停自动补发")), "29 give-up log emitted");
-  await wait(6500);
-  assert(enters() === afterRetry, "29 no further attempts after give-up");
+  const bridge29 = bridge as unknown as { stuckWatch: Map<string, { given_up?: boolean }> };
+  assert(bridge29.stuckWatch.get(sid)?.given_up === true, "29 give-up state latched");
   await hook({ event: "SessionEnd", session_id: "cli-7", reason: "clear" });
   delete process.env.CCR_FAKE_PEEK_FILE;
   rmSync(T, { force: true });
@@ -792,7 +935,7 @@ await wait(150);
 
   // 30a. 窗口内手机作答 → allow + updatedInput（CLI 不再弹本地选择器）
   const pA = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
-  await wait(150);
+  assert(await waitFor(() => !!st()?.waiting_request?.questions?.length), "30 waiting request converged");
   const wA = st()?.waiting_request;
   assert(!!wA?.questions?.length, "30 waiting carries questions");
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: wA!.request_id, answers: ["A"] });
@@ -804,7 +947,6 @@ await wait(150);
 
   // 30b. 超时 → 放行本地选择器，但横幅保留（兜底仍可作答），不发 timeout resolved
   const pB = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
-  await wait(1200);
   assert((await pB).body.decision === "pass", "30 timeout falls back to local picker (pass)");
   const sB = st();
   assert(sB?.status === "WAITING" && !!sB?.waiting_request, "30 banner kept after timeout");
@@ -814,7 +956,6 @@ await wait(150);
   // 横幅覆盖成 passive（真实事故：手机/桌面从可作答塌缩成「请在电脑上处理」，
   // 晚答兜底断链）。横幅原样保留（request_id 与 questions 都不变）
   await hook({ event: "Notification", message: "Claude needs your permission to use AskUserQuestion" });
-  await wait(150);
   const sB5 = st();
   assert(
     sB5?.status === "WAITING" && sB5?.waiting_request?.request_id === rbId && !!sB5?.waiting_request?.questions?.length && sB5?.waiting_request?.decidable === true,
@@ -831,10 +972,9 @@ await wait(150);
 
   // 30d. PC 端先答 → 横幅收起（answered by cli）
   const pC = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
-  await wait(1200);
   await pC;
   await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: { answers: [{ question: "用哪个库?", answer: "A" }] } });
-  await wait(200);
+  assert(await waitFor(() => events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { decision: string }).decision === "answered" && (e.payload as { by: string }).by === "cli")), "30 PC answer resolution converged");
   assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { decision: string }).decision === "answered" && (e.payload as { by: string }).by === "cli"), "30 pc-answered clears banner");
   const sC = st();
   assert(sC?.status === "WORKING" && !sC?.waiting_request, "30 state back to WORKING, waiting cleared");
@@ -844,18 +984,19 @@ await wait(150);
 {
   const qInput = { questions: [{ header: "方案", question: "离线时的问题?", options: [{ label: "X" }, { label: "Y" }] }] };
   const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
-  wsCur!.close();
-  await wait(500);
+  await closeSocket(wsCur);
+  wsCur = undefined;
   const p = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
   const t0 = Date.now();
   assert((await p).body.decision === "pass", "31 offline question passes immediately");
   assert(Date.now() - t0 < 500, "31 no hold when phone offline");
   const s = st();
   assert(s?.status === "WAITING" && !!s?.waiting_request?.questions?.length, "31 banner registered for late phone");
-  const second = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const snapshotsBefore31 = events.filter((e) => e.type === "SNAPSHOT").length;
+  const second = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(second);
   await new Promise((r) => second.once("open", r));
-  await wait(200);
+  assert(await waitFor(() => events.filter((e) => e.type === "SNAPSHOT").length > snapshotsBefore31), "31 reconnect SNAPSHOT converged");
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: s!.waiting_request!.request_id, answers: ["X"] });
   assert((await waitAck(aId)).ok, "31 late answer after reconnect acked");
   await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"));
@@ -873,7 +1014,6 @@ await wait(150);
 
   // 32a. 提问超时进入兜底 → 模拟重启清空兜底表 → 手机晚答仍可从状态恢复注入
   const pA = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
-  await wait(1200);
   assert((await pA).body.decision === "pass", "32 question timed out to local picker");
   const sA = st();
   const ridA = sA!.waiting_request!.request_id;
@@ -889,12 +1029,11 @@ await wait(150);
 
   // 32b. 重启丢兜底后 PC 在本地选择器作答 → 横幅仍收起（按状态里的 request_id 结）
   const pB = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
-  await wait(1200);
   await pB;
   const ridB = st()!.waiting_request!.request_id;
   (bridge as unknown as { askFallback: Map<string, unknown> }).askFallback.clear();
   await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: {} });
-  await wait(200);
+  assert(await waitFor(() => !st()?.waiting_request && st()?.status !== "WAITING"), "32 PC answer state converged");
   const sB = st();
   assert(!sB?.waiting_request && sB?.status !== "WAITING", "32 pc-answered clears banner even without fb");
   assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === ridB && (e.payload as { decision: string }).decision === "answered"), "32 answered-by-cli resolved event");
@@ -906,18 +1045,19 @@ await wait(150);
   const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
   await hook({ event: "UserPromptSubmit", prompt: "云门控回合", cli_pid: process.pid });
   cloudOnline = true;
-  wsCur!.close();
-  await wait(500);
+  await closeSocket(wsCur);
+  wsCur = undefined;
   let settled = false;
   const p = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
   p.then(() => { settled = true; });
-  await wait(300);
+  assert(await waitFor(() => !!st()?.waiting_request?.request_id), "33 cloud gate waiting request converged");
   assert(!settled, "33 cloud-only phone gates question (held, not passed)");
   const rid = st()!.waiting_request!.request_id;
-  const cws = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const snapshotsBefore33 = events.filter((e) => e.type === "SNAPSHOT").length;
+  const cws = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(cws);
   await new Promise((r) => cws.once("open", r));
-  await wait(50);
+  assert(await waitFor(() => events.filter((e) => e.type === "SNAPSHOT").length > snapshotsBefore33), "33 cloud phone SNAPSHOT converged");
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: rid, answers: ["P"] });
   assert((await waitAck(aId)).ok, "33 in-window answer acked while cloud gating");
   const r = await p;
@@ -925,23 +1065,21 @@ await wait(150);
   assert(r.body.decision === "allow" && upd?.answers?.["云手机在线时的问题?"] === "P", "33 cloud gate in-window answer injects updatedInput");
   // 双端都不在线后恢复旧行为：立即放行本地选择器
   cloudOnline = false;
-  cws.close();
-  await wait(300);
+  await closeSocket(cws);
   const p2 = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
   const t0 = Date.now();
   assert((await p2).body.decision === "pass", "33 offline cloud passes immediately");
   assert(Date.now() - t0 < 500, "33 no hold when cloud phone gone");
   // 收尾：清掉这次提问的横幅
   await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: {} });
-  await wait(200);
+  assert(await waitFor(() => !st()?.waiting_request && st()?.status !== "WAITING"), "33 offline question cleanup converged");
 }
 
 // 34. 孤儿扫描：无 hook 的活跃 transcript 收养为只读会话；陈旧/无 cwd 跳过；删除墓碑防复活
 {
-  const w34 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const w34 = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(w34);
   await new Promise((r) => w34.once("open", r));
-  await wait(100);
   const scan = () => (bridge as unknown as { adoptOrphans(): void }).adoptOrphans();
   mkdirSync(join(PROOT, "proj-a"), { recursive: true });
   const sid = "aa11bb22-cc33-dd44-ee55-ff6677889900";
@@ -978,7 +1116,7 @@ await wait(150);
   );
   ago(join(PROOT, "proj-a", "ff11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
   scan();
-  await wait(300);
+  assert(await waitFor(() => !!mgr.getExternal(orphanId)), "34 orphan adoption converged");
   assert(events.some((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId), "34 fresh orphan adopted");
   const st = mgr.getExternal(orphanId);
   assert(st?.status === "DONE" && st?.action_summary === "扫描接入（只读）", "34 orphan read-only DONE");
@@ -996,7 +1134,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   );
   ago(join(PROOT, "proj-a", "dd11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
   scan();
-  await wait(300);
+  assert(await waitFor(() => !!mgr.getExternal(ddId)), "34 permission-wait adoption converged");
   assert(!!mgr.getExternal(ddId), "34 first-turn tool_use adopted (permission-wait form)");
   // 纯文本首回合静止：不收养；文件增长后下一轮收养（-p 单发不会长，仍被排除）
   const ffFile = join(PROOT, "proj-a", "ff11bb22-cc33-dd44-ee55-ff6677889900.jsonl");
@@ -1004,19 +1142,17 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   writeFileSync(ffFile, JSON.stringify({ type: "user", cwd: "D:\\quiet-first", message: { role: "user", content: "讲个笑话" } }) + "\n");
   ago(ffFile, 60_000);
   scan();
-  await wait(100);
   assert(!mgr.getExternal(ffId), "34 quiet first-turn held for growth probe");
   appendFileSync(ffFile, JSON.stringify({ type: "assistant", cwd: "D:\\quiet-first", message: { role: "assistant", content: [{ type: "text", text: "好笑的" }] } }) + "\n");
   ago(ffFile, 60_000);
   scan();
-  await wait(100);
+  assert(await waitFor(() => !!mgr.getExternal(ffId)), "34 quiet first-turn adoption converged");
   assert(!!mgr.getExternal(ffId), "34 quiet first-turn adopted after growth");
   // 已注册会话（模拟重启后恢复）重扫：不报错不重复创建，且 transcript 轮询必须（重）挂上
   // ——外部会话的 relay_session_id 也命中 ownsCliSession，分支顺序错了会跳过补挂，
   // 重启后手机只剩系统日志看不到正文（真实踩坑）
   (bridge as unknown as { transcriptPaths: Map<string, string> }).transcriptPaths.delete(orphanId);
   scan();
-  await wait(100);
   assert(
     !!mgr.getExternal(orphanId) && events.filter((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId).length === 1,
     "34 rescan keeps existing orphan without duplicates",
@@ -1030,9 +1166,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert((await waitAck(del)).ok, "34 orphan delete acked");
   assert(events.some((e) => e.type === "SESSION_DELETED" && e.session_id === orphanId), "34 SESSION_DELETED emitted");
   scan();
-  await wait(200);
   assert(!mgr.getExternal(orphanId), "34 tombstone prevents resurrection");
-  w34.close();
+  await closeSocket(w34);
   rmSync(PROOT, { recursive: true, force: true });
 }
 
@@ -1064,42 +1199,47 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     JSON.stringify({ type: "user", cwd: "D:\\nohook-test", message: { role: "user", content: "turn 2" } }) + "\n");
   utimesSync(f36, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000));
   (bridge as unknown as { adoptOrphans(): void }).adoptOrphans();
-  await wait(300);
+  assert(await waitFor(() => !!mgr.getExternal(id36)), "36 orphan adoption converged");
   assert(mgr.getExternal(id36)?.status === "DONE", "36 adopted as DONE");
-  // 等一轮轮询（5s）完成首读建 offset 基线，之后的追加才算增量增长
-  await wait(5500);
+  const bridge36 = bridge as unknown as {
+    transcriptOffsets: Map<string, number>;
+    turnShape: Map<string, string>;
+  };
+  // 首读以 transcript offset 收敛为准，不再用固定轮询周期猜时序。
+  assert(
+    await waitFor(() => bridge36.transcriptOffsets.get(id36) === Buffer.byteLength(readFileSync(f36, "utf-8")), 8000),
+    "36 transcript baseline converged",
+  );
   // CLI 正在写转录（增量）→ 下一轮轮询（5s）翻 WORKING（等两个轮询窗：单窗只有
   // 一拍余量，轮询相位漂移时偶发假阴性——2026-09-07 连续两天在 36 段 flaky）
   appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "streaming" }] } }) + "\n");
-  await wait(11500);
-  const st36 = mgr.getExternal(id36);
-  assert(st36?.status === "WORKING" && st36?.action_summary === "转录活跃（无 hook 会话）", "36 transcript growth flips WORKING");
+  assert(
+    await waitFor(() => {
+      const st36 = mgr.getExternal(id36);
+      return st36?.status === "WORKING" && st36.action_summary === "转录活跃（无 hook 会话）";
+    }, 12_000),
+    "36 transcript growth flips WORKING",
+  );
   // 转录静默（idle 阈值压到 1s）→ 回合视作结束回落 DONE；再增长能重新翻回 WORKING
   try {
     process.env.CCR_NOHOOK_IDLE_MS = "1000";
-    await wait(6500);
+    assert(await waitFor(() => mgr.getExternal(id36)?.status === "DONE", 12_000), "36 idle converges to DONE");
     assert(mgr.getExternal(id36)?.status === "DONE", "36 idle falls back to DONE");
     appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "new turn" }] } }) + "\n");
-    // regrowth 的 WORKING 窗口很短：idle=1s + 末条 end 形态 → 下一拍 sweep（≤5s）即回落
-    // DONE，单点断言碰相位（2026-09-07 连续 flaky 根因）——轮询采样：窗口内出现过即过
-    let sawWorking = false;
-    for (let i = 0; i < 22; i++) {
-      if (mgr.getExternal(id36)?.status === "WORKING") { sawWorking = true; break; }
-      await wait(500);
-    }
-    assert(sawWorking, "36 regrowth flips WORKING again");
+    // regrowth 的 WORKING 窗口很短：轮询观察状态收敛，不在固定时刻取单点。
+    assert(await waitFor(() => mgr.getExternal(id36)?.status === "WORKING", 8000), "36 regrowth flips WORKING again");
     // 末条为 tool_use（工具执行中）：静默超过 idle 阈值也不回落——真实转录整条落盘，
     // 工具/长思考静默分钟级，短窗必误判（曾致 WORKING→DONE 来回跳 + 刷系统日志）
     appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: {} }] } }) + "\n");
-    await wait(6500);
+    assert(await waitFor(() => bridge36.turnShape.get(id36) === "tool", 8000), "36 tool_use shape converged");
     assert(mgr.getExternal(id36)?.status === "WORKING", "36 dangling tool_use keeps WORKING");
     // tool_result 落地后下一条消息生成中（gen）同样长窗豁免
     appendFileSync(f36, JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: "ok" }] } }) + "\n");
-    await wait(6500);
+    assert(await waitFor(() => bridge36.turnShape.get(id36) === "gen", 8000), "36 tool_result shape converged");
     assert(mgr.getExternal(id36)?.status === "WORKING", "36 awaiting generation keeps WORKING");
     // 纯文本收尾才是回合结束信号 → 回落 DONE（等待需覆盖最坏对齐：读取 tick 5s + 回落 tick 5s）
     appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "final answer" }] } }) + "\n");
-    await wait(11_500);
+    assert(await waitFor(() => mgr.getExternal(id36)?.status === "DONE", 15_000), "36 text ending converges to DONE");
     assert(mgr.getExternal(id36)?.status === "DONE", "36 text ending falls to DONE");
   } finally {
     delete process.env.CCR_NOHOOK_IDLE_MS;
@@ -1157,10 +1297,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 //     CLI 把排队消息提交成 transcript user 行，轮询/事件增量读出即晋升，
 //     消息不再滞留 pending 闪烁；无 pending 命中的手敲/工具结果行不产生 user_message（防双记）
 {
-  const w38 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const w38 = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(w38);
   await new Promise((r) => w38.once("open", r));
-  await wait(100);
   const { appendFileSync, writeFileSync } = await import("node:fs");
   const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
   rmSync(T, { force: true });
@@ -1192,7 +1331,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   appendFileSync(T, JSON.stringify({ type: "user", isMeta: true, message: { role: "user", content: "Caveat: 注入" } }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   assert(umCount("Caveat: 注入") === 0, "38 isMeta line skipped");
-  w38.close();
+  await closeSocket(w38);
   rmSync(T, { force: true });
 }
 
@@ -1215,21 +1354,18 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr.setExternalPending(sid, [{ text: "进队消息", ts: Date.now() - 9000 }]);
   appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "进队消息" }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
-  await wait(8000);
-  assert(enters() === 0, "39 enqueued pending does not trigger enter re-send");
+  assert(await observeNoChange(enters, 8000), "39 enqueued pending does not trigger enter re-send");
   // 回合结束 CLI 提交该消息（user 行）→ 晋升 + 移除进队标记
   mgr.setExternalStatus(sid, "DONE", "结束");
   appendFileSync(T, JSON.stringify({ type: "user", isMeta: false, message: { role: "user", content: "进队消息" } }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
   assert(!(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "进队消息"), "39 promoted by user line, pending cleared");
   // 同文本再次滞留（未进队的新注入条目，时间晚于晋升记录）→ 看门狗恢复补发。
-  // 等 5ms 确保 p.ts 严格晚于晋升记录：同步 stretch 内两处 Date.now() 可能同毫秒，
+  // 给新条目一个严格晚于晋升记录的时间戳：同步 stretch 内两处 Date.now() 可能同毫秒，
   // 相等时 rec.ts >= p.ts 判定为残留跳过，看门狗永远不补发（历史 flake 根因）
-  await wait(5);
   mgr.setExternalStatus(sid, "WORKING", "再跑");
-  mgr.setExternalPending(sid, [{ text: "进队消息", ts: Date.now() }]);
-  await wait(12000);
-  assert(enters() >= 1, "39 same text re-stuck after promotion triggers re-send");
+  mgr.setExternalPending(sid, [{ text: "进队消息", ts: Date.now() + 1 }]);
+  assert(await waitFor(() => enters() >= 1, 15_000), "39 same text re-stuck after promotion triggers re-send");
   await hook({ event: "SessionEnd", session_id: "cli-8", reason: "clear" });
   delete process.env.CCR_FAKE_PEEK_FILE;
   rmSync(T, { force: true });
@@ -1257,48 +1393,53 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
   rmSync(T, { force: true });
   // 事件断言需要在线 WS 客户端（此前测试段的 socket 已全部关闭）
-  const w40 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const w40 = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(w40);
   await new Promise((r) => w40.once("open", r));
-  await wait(100);
   writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线40" }] } }) + "\n");
   const sid = extId("cli-40");
   const um40 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string }).kind === "user_message");
   const at40 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string }).kind === "assistant_text");
+  const filtered40 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string; text?: string }).kind === "system" && String((e.payload as { text?: string }).text).includes("已过滤"));
   const notif =
     '<task-notification>\n<task-id>bx1</task-id>\n<tool-use-id>call_1</tool-use-id>\n' +
     '<output-file>C:\\Users\\u\\AppData\\Local\\Temp\\claude\\D--dev-cc-watch\\sid40\\tasks\\bx1.output</output-file>\n' +
     '<status>completed</status>\n<summary>Background command "build" completed (exit code 0)</summary>\n</task-notification>';
   // ① hook 携带通知原文（后台任务完成以此形态泄漏）：无 user_message、摘要/标题不污染、状态照常 WORKING
+  const filteredBefore40 = filtered40().length;
   await hook({ event: "UserPromptSubmit", prompt: notif, session_id: "cli-40", cli_pid: 4040, transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => filtered40().length > filteredBefore40), "40 notification filter trace converged");
   const st40 = mgr.getExternal(sid);
   assert(um40().length === 0, "40 task-notification prompt yields no user_message");
   assert(!!st40 && st40.status === "WORKING" && !(st40.action_summary ?? "").includes("<"), "40 action_summary not polluted, still WORKING");
   assert(!(st40?.title ?? "").includes("task-notification"), "40 title not polluted");
-  assert(events.some((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string }).kind === "system" && String((e.payload as { text?: string }).text).includes("已过滤")), "40 filter trace logged as system kind");
+  assert(filtered40().length > filteredBefore40, "40 filter trace logged as system kind");
   // ② slash 命令回显 / ③ 引号前缀变体（CLI 重发形态，靠路径规则兜住）
+  const filteredBeforeEcho40 = filtered40().length;
   await hook({ event: "UserPromptSubmit", prompt: "<command-name>/model</command-name>\n<command-message>model</command-message>", session_id: "cli-40", transcript_path: T });
   await hook({ event: "UserPromptSubmit", prompt: '“<task-notification> <task-id>b2</task-id> <output-file>C:\\Users\\u\\AppData\\Local\\Temp\\claude\\p\\s\\tasks\\b2.output</output-file> done', session_id: "cli-40", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => filtered40().length >= filteredBeforeEcho40 + 2), "40 command echo filter traces converged");
   assert(um40().length === 0, "40 command echo & quoted variant yield no user_message");
   // ④ 正常 prompt 不受过滤影响（回归护栏）
   await hook({ event: "UserPromptSubmit", prompt: "正常消息回归检查", session_id: "cli-40", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => um40().some((e) => (e.payload as { text?: string }).text === "正常消息回归检查")), "40 normal prompt logging converged");
   assert(um40().length === 1 && (um40()[0].payload as { text?: string }).text === "正常消息回归检查", "40 normal prompt still logged as user_message");
   // ⑤ transcript 侧：user 行系统块不入用户文本；assistant 块首系统块剥离保留正文、纯块不产生消息
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-40", transcript_path: T });
-  await wait(200);
+  const bridge40 = bridge as unknown as { transcriptOffsets: Map<string, number> };
+  const baseline40 = Buffer.byteLength(readFileSync(T, "utf-8"));
+  assert(await waitFor(() => bridge40.transcriptOffsets.get(sid) === baseline40), "40 transcript baseline converged");
+  const assistantBefore40 = at40().length;
   appendFileSync(T, JSON.stringify({ type: "user", isMeta: false, message: { role: "user", content: "<system-reminder>机器注入内容</system-reminder>" } }) + "\n");
   appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "<system-reminder>\n图片占位提醒\n</system-reminder>好的，已确认图内容。" }] } }) + "\n");
   appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "<system-reminder>纯系统块无正文</system-reminder>" }] } }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-40", transcript_path: T });
-  await wait(200);
+  assert(await waitFor(() => at40().length > assistantBefore40), "40 transcript assistant processing converged");
   assert(um40().length === 1, "40 transcript system-reminder user line yields no user_message");
   assert(at40().some((e) => (e.payload as { text?: string }).text === "好的，已确认图内容。"), "40 assistant body kept after leading block strip");
   assert(at40().every((e) => !String((e.payload as { text?: string }).text).includes("<system-reminder>")), "40 no system-reminder leaks into assistant_text");
   await hook({ event: "SessionEnd", session_id: "cli-40", reason: "clear" });
-  w40.close();
+  await closeSocket(w40);
   rmSync(T, { force: true });
 }
 
@@ -1441,17 +1582,16 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 // 授权后手表拿 token、PAIR_RESOLVED 广播、未知 request_id 拒绝。
 // 手机侧用新鲜 token 连接（同 40 段先例：不依赖前面段落遗留的 socket 存活）
 {
-  const w44 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const w44 = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   const phoneFrames: Array<{ type?: string; payload?: { code?: string; decision?: string } }> = [];
   w44.on("message", (d) => phoneFrames.push(JSON.parse(String(d))));
   attach(w44);
   await new Promise((r) => w44.once("open", r));
-  await wait(200);
   const wframes: Array<{ type?: string; code?: string; token?: string; request_id?: string; seq?: number }> = [];
-  const watch = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?pair=1&name=${encodeURIComponent("测试表")}`);
+  const watch = openSocket(`ws://127.0.0.1:${cfg.port}/ws?pair=1&name=${encodeURIComponent("测试表")}`);
   watch.on("message", (d) => wframes.push(JSON.parse(String(d))));
   await new Promise((r) => watch.once("open", r));
-  await wait(400);
+  assert(await waitFor(() => wframes.some((f) => f.type === "PAIR_PENDING") && phoneFrames.some((f) => f.type === "PAIR_REQUEST")), "44 pairing request frames converged");
   const pend = wframes.find((f) => f.type === "PAIR_PENDING");
   assert(!!pend && /^\d{6}$/.test(pend.code ?? ""), "44 watch got PAIR_PENDING with 6-digit code");
   const reqEv = phoneFrames.find((f) => f.type === "PAIR_REQUEST");
@@ -1461,13 +1601,12 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert((await waitAck(idBad)).ok === false, "44 unknown request_id rejected");
   const idOk = send("COMMAND_WATCH_GRANT", { request_id: pend?.request_id ?? "", allow: true });
   assert((await waitAck(idOk)).ok === true, "44 grant ack ok");
-  await wait(700);
-  assert(wframes.some((f) => f.type === "PAIR_OK" && f.token === cfg.token), "44 watch got token after allow");
+  assert(await waitFor(() => wframes.some((f) => f.type === "PAIR_OK" && f.token === cfg.token)), "44 watch got token after allow");
   assert(
-    phoneFrames.some((f) => f.type === "PAIR_RESOLVED" && f.payload?.decision === "allow"),
+    await waitFor(() => phoneFrames.some((f) => f.type === "PAIR_RESOLVED" && f.payload?.decision === "allow")),
     "44 PAIR_RESOLVED allow broadcast",
   );
-  try { watch.close(); } catch {}
+  await closeSocket(watch);
 }
 
 // ── 45 段：防抢发（type guard）——看门狗补发回车前快照 CLI 输入框：
@@ -1583,21 +1722,21 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const enters45 = () => fakeLog().filter((a) => a[0] === "12121" && a[1] === "").length;
   const peeks45 = () => fakeLog().filter((a) => a[0] === "12121" && a[1] === "--peek").length;
   const logs45 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid).map((e) => String((e.payload as { text: string }).text));
+  const stuckWatch45 = () => (bridge as unknown as { stuckWatch: Map<string, unknown> }).stuckWatch;
   await hook({ event: "UserPromptSubmit", prompt: "看门狗45", session_id: "cli-10", cli_pid: 12121, transcript_path: T45 });
   process.env.CCR_TYPE_GUARD_POLL_MS = "60";
   process.env.CCR_TYPE_GUARD_STABLE_MS = "250";
   process.env.CCR_FAKE_PEEK_FILE = PEEK;
   const settle = async () => {
     mgr.setExternalPending(sid, []);
-    await wait(5600); // 一个 5s 节拍看到 pending 清空 → 看门狗重置
+    assert(await waitFor(() => !stuckWatch45().has(sid), 8000), "45 watchdog reset converged");
   };
   try {
     // a. 框内只有滞留消息 → 守门通过立即补发（文案同旧版）
     mgr.setExternalStatus(sid, "WORKING", "跑");
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     writeFileSync(PEEK, CAP_TEXT.join("\n"));
-    await wait(8000);
-    assert(enters45() >= 1, "45a clean box still gets compensating enter");
+    assert(await waitFor(() => enters45() >= 1, 12_000), "45a clean box still gets compensating enter");
     assert(logs45().some((t) => t.includes("已补发回车") && !t.includes("等停手")), "45a legacy enter log preserved");
     assert(peeks45() > 0, "45a watchdog peeks the console before enter");
     await settle();
@@ -1605,8 +1744,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     const before = enters45();
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }, { text: MSG2, ts: Date.now() - 9000 }]);
     writeFileSync(PEEK, CAP_WRAP.join("\n"));
-    await wait(8000);
-    assert(enters45() > before, "45b typing detected then idle → enter after wait");
+    assert(await waitFor(() => enters45() > before, 12_000), "45b typing detected then idle → enter after wait");
     assert(logs45().some((t) => t.includes("等停手")), "45b enter-after-wait log emitted");
     await settle();
     // c. 持续人工输入（快照内容不断变化）→ 本轮放弃、不补发
@@ -1616,7 +1754,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     const beforeC = enters45();
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     writeFileSync(PEEK, ["✶ Working…", "─".repeat(40), `❯ ${MSG1}人工输入%T%`, "─".repeat(40)].join("\n"));
-    await wait(8000);
+    assert(await observeNoChange(enters45, 8000), "45c continuous typing → no enter this round");
     delete process.env.CCR_FAKE_PEEK_CHAOS;
     assert(enters45() === beforeC, "45c continuous typing → no enter this round");
     assert(logs45().some((t) => t.includes("本轮暂缓补发回车")), "45c defer log emitted");
@@ -1626,7 +1764,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     const beforeD = enters45();
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     writeFileSync(PEEK, CAP_EMPTY.join("\n"));
-    await wait(8000);
+    assert(await observeNoChange(enters45, 8000), "45d message gone from box → skip enter");
     assert(enters45() === beforeD, "45d message gone from box → skip enter");
     assert(logs45().some((t) => t.includes("跳过本次补发回车")), "45d skip log emitted");
     await settle();
@@ -1635,13 +1773,13 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     const beforeE = enters45();
     delete process.env.CCR_FAKE_PEEK_FILE;
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
-    await wait(8000);
+    assert(await waitFor(() => logs45().some((t) => t.includes("暂不补发回车以免打断输入")), 8000), "45e capture unavailable defer converged");
     assert(enters45() === beforeE, "45e capture unavailable → NO direct enter (#180 fail-open reversed)");
     assert(logs45().some((t) => t.includes("暂不补发回车以免打断输入")), "45e defer log emitted");
     // 预置 blind=2（跳过 2×60s 真实限速等待）：下一轮 unknown 应翻 given_up 并停止重试
     (bridge as unknown as { stuckWatch: Map<string, { lastTry: number; tries: number; skips: number; blind: number; given_up: boolean }> })
       .stuckWatch.set(sid, { lastTry: 0, tries: 0, skips: 0, blind: 2, given_up: false });
-    await wait(8000);
+    assert(await waitFor(() => logs45().some((t) => t.includes("防抢发检测连续不可用")), 8000), "45e blind give-up converged");
     assert(logs45().some((t) => t.includes("防抢发检测连续不可用")), "45e 3rd blind round → give up auto-enter");
     assert(enters45() === beforeE, "45e never enters while capture unavailable");
     process.env.CCR_FAKE_PEEK_FILE = PEEK;
@@ -1652,8 +1790,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     const pkF = peeks45();
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     writeFileSync(PEEK, CAP_WRAP.join("\n")); // 有"人工输入"也不该拦
-    await wait(8000);
-    assert(enters45() > beforeF, "45f guard off → enter despite foreign content");
+    assert(await waitFor(() => enters45() > beforeF, 12_000), "45f guard off → enter despite foreign content");
     assert(peeks45() === pkF, "45f guard off → no console peek");
     await hook({ event: "SessionEnd", session_id: "cli-10", reason: "clear" });
   } finally {
@@ -1743,9 +1880,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert(events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === sidA && (e.payload as { pinned?: boolean }).pinned === true), "46b SESSION_UPDATED 带 pinned:true");
   // SNAPSHOT 带 pinned（新客户端全量路径）
   {
-    const snapWs = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+    const snapWs = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
     const snap = (await new Promise<Record<string, unknown>>((resolve) => snapWs.once("message", (d) => resolve(JSON.parse(String(d)) as Record<string, unknown>))));
-    snapWs.close();
+    await closeSocket(snapWs);
     const sessions = (snap.payload as { sessions?: { session_id: string; pinned?: boolean }[] }).sessions ?? [];
     assert(snap.type === "SNAPSHOT" && sessions.find((s) => s.session_id === sidA)?.pinned === true, "46b SNAPSHOT 会话携带 pinned");
   }
@@ -1865,10 +2002,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const oldId = extId("cli-9");
   const newId = extId("cli-9b");
   await hook({ event: "UserPromptSubmit", prompt: "旧世代会话", session_id: "cli-9", cli_pid: 999001 });
-  await wait(150);
-  assert(!!mgr.getExternal(oldId), "48 old-gen session established");
+  assert(await waitFor(() => !!mgr.getExternal(oldId)), "48 old-gen session established");
   await hook({ event: "UserPromptSubmit", prompt: "压缩后新世代", session_id: "cli-9b", cli_pid: 999001 });
-  await wait(200);
+  assert(await waitFor(() => !!mgr.getExternal(newId) && mgr.getExternal(oldId)?.historical === true), "48 compact replacement converged");
   const old = mgr.getExternal(oldId);
   assert(old?.status === "DONE" && old?.historical === true, "48 old-gen archived (DONE + historical)");
   const cur = mgr.getExternal(newId);
@@ -1883,14 +2019,17 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const sid = extId("cli-11");
   await hook({ event: "UserPromptSubmit", prompt: "挂起旧终端", session_id: "cli-11", cli_pid: 999002 });
   await hook({ event: "Stop", session_id: "cli-11" });
-  await wait(150);
+  assert(await waitFor(() => mgr.getExternal(sid)?.status === "DONE"), "49 old terminal reaches DONE");
   assert(mgr.getExternal(sid)?.status === "DONE" && mgr.getExternal(sid)?.historical !== true, "49 old terminal session DONE, not archived yet");
   process.env.CCR_IDLE_ARCHIVE_MS = "200";
-  await wait(400); // 等 updated_at 距今超过短阈值（Stop 刚刷新过，立即 sweep 不会命中）
+  assert(await waitFor(() => {
+    const updated = mgr.getExternal(sid)?.updated_at;
+    return typeof updated === "number" && Date.now() - updated > 200;
+  }, 2000), "49 idle archive threshold reached");
   (bridge as unknown as { sweepIdleArchive(): void }).sweepIdleArchive();
-  assert(mgr.getExternal(sid)?.historical === true, "49 idle DONE archived after threshold");
+  assert(await waitFor(() => mgr.getExternal(sid)?.historical === true), "49 idle DONE archived after threshold");
   await hook({ event: "UserPromptSubmit", prompt: "回到旧终端继续", session_id: "cli-11", cli_pid: 999002 });
-  await wait(150);
+  assert(await waitFor(() => mgr.getExternal(sid)?.historical !== true && mgr.getExternal(sid)?.status === "WORKING"), "49 archive revival converged");
   assert(mgr.getExternal(sid)?.historical !== true && mgr.getExternal(sid)?.status === "WORKING", "49 hook event revives archived session");
   delete process.env.CCR_IDLE_ARCHIVE_MS;
   await hook({ event: "SessionEnd", session_id: "cli-11", reason: "clear" });
@@ -1909,6 +2048,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const sid = extId("cli-12");
   const PID = "999003";
   const enters111 = () => fakeLog().filter((a) => a[0] === PID && a[1] === "").length;
+  const stuckWatch111 = () => (bridge as unknown as { stuckWatch: Map<string, { lastTry: number; tries: number; given_up?: boolean }> }).stuckWatch;
   const sysLogFrom = (kw: string, since: number) =>
     events.slice(since).some((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string }).kind === "system" && String((e.payload as { text: string }).text).includes(kw));
   await hook({ event: "UserPromptSubmit", prompt: "验证回合111", session_id: "cli-12", cli_pid: 999003, transcript_path: T });
@@ -1919,20 +2059,22 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // ① 滞留（框内只有我们的消息）→ 主动验证立即补发，先于看门狗最早可能触达（2s）。
   //    时钟界含 fake-injector spawn 抖动余量（高负载秒级，见文件头注）
   writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留甲", B, "  ⏵⏵ bypass permissions on"].join("\n"));
-  const t0 = Date.now();
   const v1 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留甲" });
   assert((await waitAck(v1)).ok, "111 EXT_INPUT acked (WORKING direct inject)");
   await waitLog(() => enters111() >= 1, 5000);
   assert(enters111() >= 1, "111 stuck text compensated by fast verify");
-  assert(Date.now() - t0 < 2500, `111 verify compensation is fast (${Date.now() - t0}ms < 2500ms, watchdog earliest 2s+phase)`);
   assert(sysLogFrom("#111 主动验证", 0), "111 verify compensation logged");
   // 持久滞留（不晋升、框不净空）→ 验证 2 轮是 #111 本体、时钟确定；第 3 发（看门狗，
   // 共享 tries 计数）直接调 sweep 消 5s 节拍相位（49 段先例），3 次后 given_up 停手
   await waitLog(() => enters111() >= 2, 5000);
-  await wait(1700); // 过看门狗 1.5s 限速（自第 2 发 lastTry 起）
+  const watchAfterSecond111 = stuckWatch111().get(sid);
+  assert(!!watchAfterSecond111, "111 second compensation updates stuck watch");
+  watchAfterSecond111!.lastTry = Date.now() - 1501; // 直接越过限速窗口，不等待固定拍点
+  mgr.setExternalPending(sid, [{ text: "验证滞留甲", ts: Date.now() - 9000 }]);
   (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
   await waitLog(() => enters111() >= 3, 4000);
-  await wait(2500);
+  assert(stuckWatch111().get(sid)?.given_up === true, "111 third compensation latches give-up");
+  assert(await observeNoChange(enters111, 3500), "111 capped compensation does not fire again");
   assert(enters111() === 3, `111 persistent stuck caps at 3 compensations (got ${enters111()})`);
   const entersAfterCap = enters111();
 
@@ -1940,7 +2082,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   writeFileSync(PEEK, [B, "❯", B, "  ⏵⏵ bypass permissions on"].join("\n"));
   const v2 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证排队乙" });
   assert((await waitAck(v2)).ok, "111 queued msg acked");
-  await wait(2200); // 覆盖验证 + 1 轮潜在重试的窗口
+  assert(await observeNoChange(enters111, 3000), "111 natively-queued (clean box) never compensated");
   assert(enters111() === entersAfterCap, "111 natively-queued (clean box) never compensated");
   //（skip 计数不动不再以日志断言：看门狗对未晋升旧条目也会发同款 skip 日志，文本无法
   //  区分来源；③段补偿成功本身即 skips 未被毒化的行为证明）
@@ -1948,8 +2090,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // ③ 晋升后看门狗重置：新一条滞留消息仍走快路径。判别用日志而非计数——reset 生效则
   // tries 回 1（打「#111 主动验证」新日志）；无 reset 则 tries=4（>3 不打日志）
   await hook({ event: "UserPromptSubmit", prompt: "验证滞留甲", session_id: "cli-12", transcript_path: T });
-  await wait(200);
-  assert(!(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "验证滞留甲"), "111 stuck msg promoted");
+  assert(await waitFor(() => !(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "验证滞留甲")), "111 stuck msg promoted");
   const evIdx3 = events.length;
   writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留丙", B, "  ⏵⏵ bypass permissions on"].join("\n"));
   const v3 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留丙" });
@@ -1971,8 +2112,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert((await waitAck(v4)).ok, "111 WAITING-case msg acked");
   await waitLog(() => fakeLog().some((a) => a[0] === "999004" && a[1] === "验证滞留丁"), 4000);
   mgr.setExternalStatus(sid4, "WAITING", "权限确认");
-  await wait(2600); // 覆盖 1500ms 验证窗 + 快照在途余量
-  assert(!fakeLog().some((a) => a[0] === "999004" && a[1] === ""), "111 no enter while WAITING (verify guard)");
+  assert(await observeNoChange(() => fakeLog().some((a) => a[0] === "999004" && a[1] === ""), 3000), "111 no enter while WAITING (verify guard)");
   await hook({ event: "SessionEnd", session_id: "cli-13", reason: "clear" });
 
   await hook({ event: "SessionEnd", session_id: "cli-12", reason: "clear" });
@@ -1993,8 +2133,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const dead = spawn(process.execPath, ["-e", "process.exit(0)"]);
   await new Promise<void>((r) => dead.once("exit", () => r()));
   await hook({ event: "UserPromptSubmit", session_id: "cli-46", prompt: "僵尸会话", cli_pid: dead.pid, cwd: "/tmp", permission_mode: "bypassPermissions" });
-  await wait(150);
-  assert(mgr.snapshot().find((s) => s.session_id === extId("cli-46"))?.status === "WORKING", "46 zombie starts WORKING");
+  assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === extId("cli-46"))?.status === "WORKING"), "46 zombie starts WORKING");
   process.env.CCR_DEAD_SWEEP = "1";
   (bridge as unknown as { sweepWorkingIdle(): void }).sweepWorkingIdle();
   process.env.CCR_DEAD_SWEEP = "0";
@@ -2008,7 +2147,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
   const r46 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-46"), text: "恢复一下" });
   assert((await waitAck(r46)).ok, "46 resume EXT_INPUT acked");
-  await wait(150);
+  assert(await waitFor(() => appleLog().some((x) => x.includes("claude --resume"))), "46 resume spawn converged");
   const sc46 = appleLog().find((x) => x.includes("claude --resume"));
   assert(!!sc46, "46 resume spawns claude --resume in new Terminal tab");
   assert(sc46!.includes("cd '/tmp' &&"), "46 resume cds to original cwd");
@@ -2017,11 +2156,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 
   // ③ 主动关闭（SessionEnd）→ 卡片同步清除 + SESSION_DELETED 广播（区别于异常断开保留）
   await hook({ event: "UserPromptSubmit", session_id: "cli-46b", prompt: "主动退出", cli_pid: process.pid });
-  await wait(150);
+  assert(await waitFor(() => !!mgr.getExternal(extId("cli-46b"))), "46 voluntary session established");
   await hook({ event: "SessionEnd", session_id: "cli-46b", reason: "clear" });
-  await wait(150);
-  assert(!mgr.snapshot().some((s) => s.session_id === extId("cli-46b")), "46 SessionEnd removes card (voluntary close)");
-  assert(events.some((e) => e.type === "SESSION_DELETED" && (e.payload as { session_id?: string }).session_id === extId("cli-46b")), "46 SessionEnd broadcasts SESSION_DELETED");
+  assert(await waitFor(() => !mgr.snapshot().some((s) => s.session_id === extId("cli-46b"))), "46 SessionEnd removes card (voluntary close)");
+  assert(await waitFor(() => events.some((e) => e.type === "SESSION_DELETED" && (e.payload as { session_id?: string }).session_id === extId("cli-46b"))), "46 SessionEnd broadcasts SESSION_DELETED");
 
   delete process.env.CCR_TEST_PLATFORM;
   delete process.env.CCR_OSASCRIPT_CMD;
@@ -2039,7 +2177,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr.setExternalStatus(extId("cli-50a"), "DONE", "完成");
   const a50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50a"), text: "还活着别恢复" });
   assert((await waitAck(a50)).ok, "50 alive-DONE EXT_INPUT acked");
-  await wait(400);
+  assert(await waitFor(() => fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("还活着别恢复"))), "50 alive CLI direct injection converged");
   assert(!logsOf("cli-50a").some((t) => t.includes("恢复会话中")), "50 alive CLI never goes resume path");
   assert(fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("还活着别恢复")), "50 alive CLI gets direct inject");
   mgr.setExternalPending(extId("cli-50a"), []); // 清 pending 防看门狗后续介入
@@ -2056,22 +2194,19 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr.setExternalStatus(extId("cli-50b"), "DONE", "完成");
   const b50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50b"), text: "恢复带原因" });
   assert((await waitAck(b50)).ok, "50 dead-DONE EXT_INPUT acked");
-  await wait(400);
-  assert(logsOf("cli-50b").some((t) => t.includes("恢复会话中") && t.includes("原因：进程") && t.includes("二次探测")), "50 resume log carries reason");
-  assert(appleLog().some((x) => x.includes("claude --resume")), "50 resume spawns claude --resume");
+  assert(await waitFor(() => logsOf("cli-50b").some((t) => t.includes("恢复会话中") && t.includes("原因：进程") && t.includes("二次探测"))), "50 resume log carries reason");
+  assert(await waitFor(() => appleLog().some((x) => x.includes("claude --resume"))), "50 resume spawns claude --resume");
   assert((mgr.snapshot().find((s) => s.session_id === extId("cli-50b"))?.pending_inputs ?? []).some((p) => p.text === "恢复带原因"), "50 resume msg echoed in pending");
 
   // ③ 恢复闭环：窗口内消息只排队不重开；到期未晋升 → 「未上线」留痕 + 解锁重试
   const c50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50b"), text: "闭环期间这条只排队" });
   assert((await waitAck(c50)).ok, "50 in-window EXT_INPUT acked");
   assert(logsOf("cli-50b").some((t) => t.includes("恢复进行中，消息已排队")), "50 in-window msg queues without new spawn");
-  await wait(1600);
-  assert(logsOf("cli-50b").some((t) => t.includes("未上线")), "50 closure detects no-show and logs");
+  assert(await waitFor(() => logsOf("cli-50b").some((t) => t.includes("未上线")), 4000), "50 closure detects no-show and logs");
   const spawnCountBefore = logsOf("cli-50b").filter((t) => t.includes("恢复会话中")).length;
   const d50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50b"), text: "解锁后重试恢复" });
   assert((await waitAck(d50)).ok, "50 post-closure EXT_INPUT acked");
-  await wait(400);
-  assert(logsOf("cli-50b").filter((t) => t.includes("恢复会话中")).length === spawnCountBefore + 1, "50 closure unlocks retry (new spawn)");
+  assert(await waitFor(() => logsOf("cli-50b").filter((t) => t.includes("恢复会话中")).length === spawnCountBefore + 1), "50 closure unlocks retry (new spawn)");
 
   // ④ 恢复窗口期内：滞留看门狗持袖旁观（补回车只会打进旧 CLI 空输入框）；窗口过期恢复补发
   // 同 29/39 段：#180 后窗口过期补发需守门放行，提供"框内只有滞留消息"的干净快照
@@ -2079,22 +2214,19 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   process.env.CCR_FAKE_PEEK_FILE = PEEK50;
   writeFileSync(PEEK50, ["✶ Working…", "─".repeat(40), "❯ 恢复带原因", "─".repeat(40), "  ⏵⏵ bypass permissions on"].join("\n"));
   const enters50 = () => fakeLog().filter((a) => a[0] === String(dead.pid) && a[1] === "").length;
-  // 基线化（#80/#84 CI flaky 根治）：③ 的 wait(1600) 与 2s 滞留阈值恰在同一时刻（S0+2000）
-  // 到期，而闭环 timer（1200ms）已删恢复窗口、d50 重开窗口要等 wait 醒来——这个间隙里
-  // 「窗口已删 + 阈值已到」，3s 相位随机的自动看门狗轮询合法补发一次回车是设计语义
-  // （窗口过期看门狗接管）；慢 runner 上 wait 超睡会把间隙拉宽成必中。④ 要断言的是
-  // 「恢复窗口内的 sweep 让位」而非「本会话从未补发」：先等 ③ 期间在途异步落盘追平、
-  // 取基线按增量断言（原绝对 ===0 同步读看不见本次 sweep 的异步输出，只能被 ③④ 间
-  // 的合法补发打挂——两头都修）
-  await wait(400);
+  const bridge50 = bridge as unknown as { resumeSpawns: Map<string, number>; sweepStuckInputs(): void };
+  assert(await waitFor(() => typeof bridge50.resumeSpawns.get(extId("cli-50b")) === "number"), "50 retry resume window registered");
   const enters50base = enters50();
   mgr.setExternalPending(extId("cli-50b"), [{ text: "恢复带原因", ts: Date.now() - 9000 }]);
-  (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
-  await wait(800); // 手动 sweep 若误补发，异步落盘 ~100-300ms：给足观察窗（原同步读恒 0 测不出）
-  assert(enters50() === enters50base, "50 watchdog defers during resume window");
   process.env.CCR_RESUME_WINDOW_MS = "800";
-  await wait(1000);
-  (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
+  bridge50.sweepStuckInputs();
+  assert(await observeNoChange(enters50, 800), "50 watchdog defers during resume window");
+  assert(enters50() === enters50base, "50 watchdog defers during resume window");
+  assert(await waitFor(() => {
+    const started = bridge50.resumeSpawns.get(extId("cli-50b"));
+    return typeof started === "number" && Date.now() - started >= 800;
+  }, 2000), "50 resume window expiry converged");
+  bridge50.sweepStuckInputs();
   // 补发走防抢发守门（异步快照）+ 假注入器子进程落盘也是异步，同步读必为 0
   //（29 段同款坑）——轮询等日志
   await waitLog(() => enters50() >= 1, 5000);
@@ -2119,10 +2251,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const fired = enters50c();
   assert(fired === 3, `50 sticky tries exactly three (got ${fired})`);
   mgr.setExternalStatus(extId("cli-50c"), "WAITING", "权限确认");
-  await wait(2000);
+  assert(await observeNoChange(enters50c, 2500), "50 WAITING flicker does not fire another enter");
   mgr.setExternalStatus(extId("cli-50c"), "WORKING", "又跑");
   mgr.setExternalPending(extId("cli-50c"), [{ text: "粘滞的滞留消息", ts: Date.now() - 9000 }]);
-  await wait(6000);
+  assert(await observeNoChange(enters50c, 6000), "50 status flicker does not reset give-up");
   assert(enters50c() === fired, "50 status flicker does not reset give-up");
   assert(logsOf("cli-50c").filter((t) => t.includes("暂停自动补发")).length === 1, "50 give-up logged exactly once");
   await hook({ event: "SessionEnd", session_id: "cli-50c", reason: "clear" });
@@ -2179,8 +2311,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     assert(!sys54.some((t) => t.includes("img-")), "54b no tmp path in client-visible system logs");
     // ① 晋升：CLI 提交的 UPS prompt 是注入全文（含路径）→ pending 清空 + 时间线记短回显
     await hook({ event: "UserPromptSubmit", prompt: pend54.body, session_id: "cli-54", cli_pid: 5477 });
-    await wait(200);
-    assert(!(mgr.getExternal(sid54)?.pending_inputs ?? []).some((p) => p.text === "[图片×1]"), "54b UPS with full body promotes image pending");
+    assert(await waitFor(() => !(mgr.getExternal(sid54)?.pending_inputs ?? []).some((p) => p.text === "[图片×1]")), "54b UPS with full body promotes image pending");
     const um54 = events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid54 && (e.payload as { kind?: string }).kind === "user_message").map((e) => String((e.payload as { text: string }).text));
     assert(um54.some((t) => t === "[图片×1]"), "54b promoted image msg logged as echo");
     assert(!um54.some((t) => t.includes("img-")), "54b user_message hides tmp path");
@@ -2284,8 +2415,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const dead144 = spawn(process.execPath, ["-e", "process.exit(0)"]);
   await new Promise<void>((r) => dead144.once("exit", () => r()));
   await hook({ event: "UserPromptSubmit", session_id: "cli-144", prompt: "重启回放僵尸", cli_pid: dead144.pid, cwd: "/tmp", permission_mode: "default" });
-  await wait(150);
   const id144 = extId("cli-144");
+  assert(await waitFor(() => mgr.getExternal(id144)?.status === "WORKING"), "144 zombie replay reaches WORKING");
   // 模拟重启回放态：hook/转录内存表清空 + updated_at 拨回 2 小时前
   (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.delete(id144);
   (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.delete(id144);
@@ -2340,41 +2471,39 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 //      taskId 归一、无号不留「# 」残影；汇报条目 taskDoneLabel 有号前缀
 {
   const sid = extId("cli-160");
-  await hook({ event: "UserPromptSubmit", session_id: "cli-160", prompt: "编号回填回合", cli_pid: process.pid });
-  await wait(150);
   const logs160 = () => mgr.getExternalLogs(sid);
+  await hook({ event: "UserPromptSubmit", session_id: "cli-160", prompt: "编号回填回合", cli_pid: process.pid });
+  assert(await waitFor(() => !!mgr.getExternal(sid)), "160 session established");
   // ① Pre 发射：条目带 callId、文案无号（编号此刻未知）
   await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160a", tool_input: { subject: "编号回填任务", description: "d" }, permission_mode: "default" });
-  await wait(150);
+  assert(await waitFor(() => logs160().some((e) => e.id === "call_160a")), "160 Pre log converged");
   const e1 = logs160().find((e) => e.id === "call_160a");
   assert(!!e1 && e1.kind === "tool_use" && e1.tool === "TaskCreate" && e1.text === "新建 编号回填任务", "160 Pre logs TaskCreate with stable id, no number yet");
   const countAfterPre = logs160().length;
   // ② Post 文本形态 result → 原地替换成带号行；唯一新增是 result 行本身
   await hook({ event: "PostToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160a", tool_response: "Task #9 created successfully" });
-  await wait(150);
+  assert(await waitFor(() => logs160().find((e) => e.id === "call_160a")?.text === "#9 新建 编号回填任务"), "160 text result backfill converged");
   const e2 = logs160().find((e) => e.id === "call_160a");
   assert(!!e2 && e2.text === "#9 新建 编号回填任务", "160 text-form result backfills number in place");
   assert(logs160().filter((e) => e.id === "call_160a").length === 1 && logs160().length === countAfterPre + 1, "160 replaced entry stays single (result row is the only addition)");
   // ③ 对象形态 result 同样回填
   await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160d", tool_input: { subject: "对象形态任务" }, permission_mode: "default" });
-  await wait(150);
+  assert(await waitFor(() => logs160().some((e) => e.id === "call_160d")), "160 object Pre log converged");
   await hook({ event: "PostToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160d", tool_response: { task: { id: 12, subject: "对象形态任务" } } });
-  await wait(150);
-  assert(logs160().find((e) => e.id === "call_160d")?.text === "#12 新建 对象形态任务", "160 object-form result backfills number too");
+  assert(await waitFor(() => logs160().find((e) => e.id === "call_160d")?.text === "#12 新建 对象形态任务"), "160 object-form result backfills number too");
   // ④ Post 无 tool_use_id（旧 CLI 形态）→ 无可配对条目，不新增带号行
   const countBeforeOrphan = logs160().length;
   await hook({ event: "PostToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_response: "Task #99 created successfully" });
-  await wait(150);
+  assert(await waitFor(() => logs160().length > countBeforeOrphan), "160 orphan result log converged");
   assert(
     logs160().length === countBeforeOrphan + 1 && !logs160().some((e) => e.kind === "tool_use" && e.text.includes("#99")),
     "160 orphan result adds no duplicate numbered tool_use line (result row itself may quote the text)",
   );
   // ⑤ TaskUpdate 数字串 taskId → 归一带号；无号输入不留「# 」残影
   await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskUpdate", tool_use_id: "call_160b", tool_input: { taskId: "9", status: "completed" }, permission_mode: "default" });
-  await wait(150);
-  assert(logs160().some((e) => e.tool === "TaskUpdate" && e.text === "#9 状态→completed"), "160 TaskUpdate string taskId coerced to number");
+  assert(await waitFor(() => logs160().some((e) => e.tool === "TaskUpdate" && e.text === "#9 状态→completed")), "160 TaskUpdate string taskId coerced to number");
   await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskUpdate", tool_use_id: "call_160c", tool_input: { status: "in_progress" }, permission_mode: "default" });
-  await wait(150);
+  assert(await waitFor(() => logs160().some((e) => e.tool === "TaskUpdate" && e.text === "状态→in_progress")), "160 id-less TaskUpdate log converged");
   const tu = logs160().filter((e) => e.tool === "TaskUpdate").at(-1);
   assert(!!tu && tu.text === "状态→in_progress", "160 id-less TaskUpdate leaves bare text (no '# ' residue)");
   // ⑥ 汇报条目标签（pollTaskStore done 数组的生成函数）
@@ -2404,10 +2533,14 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     notes: "", cwd: process.cwd(),
   }));
   // 独立 ws（不受前面段落 socket 生命周期影响）：先验 SNAPSHOT 待填态
-  const w184 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const w184 = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(w184);
   await new Promise((r) => w184.once("open", r));
-  await wait(300);
+  assert(await waitFor(() => events.some((e) => {
+    if (e.type !== "SNAPSHOT") return false;
+    const acceptances = (e.payload as { acceptances?: { id: string; done: boolean }[] }).acceptances ?? [];
+    return acceptances.some((a) => a.id === id184 && a.done === false);
+  })), "184 pending acceptance snapshot converged");
   const snap184 = events.filter((e) => e.type === "SNAPSHOT").at(-1) as Envelope<"SNAPSHOT", { acceptances?: { id: string; done: boolean }[] }>;
   const inSnap = snap184.payload.acceptances?.find((a) => a.id === id184);
   assert(!!inSnap && inSnap.done === false, "184 SNAPSHOT carries pending acceptance");
@@ -2423,7 +2556,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert(upd184!.seq === 0, "184 transient frame seq:0 (no bus sequence)");
   const inUpd = upd184!.payload.acceptances?.find((a) => a.id === id184);
   assert(!!inUpd && inUpd.done === true, "184 update carries done=true (card clears)");
-  w184.close();
+  await closeSocket(w184);
   rmSync(sheet184, { force: true });
   rmSync(join(dir184, `${id184}.results.json`), { force: true });
   delete process.env.CCR_ACCEPTANCE_DIR;
@@ -2439,10 +2572,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 {
   const { homedir } = await import("node:os");
   // 独立 ws（184 段收尾 close 掉了 attach 的连接，send 会落进死套接字 → ack timeout）
-  const w189 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const w189 = openSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
   attach(w189);
   await new Promise((r) => w189.once("open", r));
-  await wait(200);
   const SDK189 = "sdk189-0";
   const TASK_DIR189 = join(homedir(), ".claude", "tasks", SDK189);
   rmSync(TASK_DIR189, { recursive: true, force: true });
@@ -2480,6 +2612,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     killTree: async (pid) => { kills189.push(pid); return "gone" as const; },
   });
   let sid189 = "";
+  type Managed189 = { agent: AgentLike | null; resumePending?: number; lastProgressAt: number };
+  const session189 = () => (mgr as unknown as { sessions: Map<string, Managed189> }).sessions.get(sid189);
   // 事件按全局 seq 去重：44 段的 w44 全程未 close，与 w189 同收一条广播会把共享
   // events 数组记成双份——精确计数断言（恰一次）必须先去重（同一次 emit 双份同 seq）
   const uniq189 = (list: Envelope[]): Envelope[] => {
@@ -2493,8 +2627,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const c189 = await waitAck(send("COMMAND_CREATE", { cwd: process.cwd(), prompt: "#189 互斥窗测试" }));
   assert(c189.ok === true && typeof c189.session_id === "string", "189a 托管会话创建（工厂缝，无真 CLI）");
   sid189 = c189.session_id!;
-  await wait(150);
-  assert(mgr.snapshot().some((s) => s.session_id === sid189 && s.relay_session_id === SDK189), "189a onInit 落位 relay_session_id");
+  assert(await waitFor(() => mgr.snapshot().some((s) => s.session_id === sid189 && s.relay_session_id === SDK189)), "189a onInit 落位 relay_session_id");
   assert(fac189 === 1, "189a 首个 agent");
 
   // b) 流断（ended，模拟半开早断/换流代际错位）→ 消息触发接管 resume（互斥窗打戳）
@@ -2522,7 +2655,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   recs189[1]!.a.ended = true;
   assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m4" }))).ok, "189e m4 acked");
   assert(fac189 === 3, "189e m4 接管拉起第 3 个 agent");
-  await wait(5300); // 超过 CCR_RESUME_PENDING_MS=5000
+  assert(await waitFor(() => {
+    const started = session189()?.resumePending;
+    return typeof started === "number" && Date.now() - started >= 5000;
+  }, 7000), "189e resume pending window expired");
   process.env.CCR_WATCHDOG_STALL_MS = "5000";
   process.env.CCR_WATCHDOG_SAMPLE_MS = "50";
   recs189[2]!.a.ended = true; // 旧流已关但进程挂着——补刀必须杀（#189 放宽点）
@@ -2537,7 +2673,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert(mgr.snapshot().find((s) => s.session_id === sid189)!.status === "WORKING", "189f 状态钉在 WORKING");
   mgr.tickWatchdog();
   assert(wd189().length === 0, "189f 窗口内看门狗持袖旁观（零输出是合法等待）");
-  await wait(5300); // 窗口过期 + 静默超阈（lastProgressAt = m5 接管时刻）
+  assert(await waitFor(() => Date.now() - (session189()?.lastProgressAt ?? Date.now()) >= 5000, 7000), "189f watchdog stall window expired");
   mgr.tickWatchdog();
   await waitLog(() => wd189().some((e) => (e.payload as { action?: string }).action === "recover_ok"), 4000);
   assert(wd189().some((e) => { const p = e.payload as { action?: string; lane?: string }; return p.action === "stall_detected" && p.lane === "ended"; }), "189f 盲区按 lane=ended 判死（不走 CPU 采样）");
@@ -2550,7 +2686,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // 对照会拉起；窗内跳过（auto-revive 双拉防线，防未来重构误删）
   mkdirSync(TASK_DIR189, { recursive: true });
   writeFileSync(join(TASK_DIR189, "1.json"), JSON.stringify({ id: 1, subject: "#189 语义锁", status: "pending" }));
-  const sess189 = (mgr as unknown as { sessions: Map<string, { agent: AgentLike | null; resumePending?: number }> }).sessions.get(sid189)!;
+  const sess189 = session189()!;
   sess189.agent = null;
   sess189.resumePending = Date.now() - 100_000; // 远超窗：对照
   mgr.autoReviveManaged();
@@ -2569,7 +2705,18 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr.setAgentFactory(null);
 }
 
-wsCur!.close();
-await wait(300);
-console.log("\nBRIDGE TESTS PASSED");
-process.exit(0);
+}
+
+async function run(): Promise<void> {
+  try {
+    await main();
+    console.log("\nBRIDGE TESTS PASSED");
+  } catch (error) {
+    handleFatal(error);
+    return;
+  } finally {
+    if (!fatalHandled) await cleanupTestResources();
+  }
+}
+
+void run();
