@@ -753,6 +753,10 @@
     .theme-setting .chev::after { content: "›"; margin-left: 4px; color: var(--faint); }
     .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
     .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
+    /* #158-批3 连接诊断小字（桌面形态）：err/缺 Node 可点跳 nodejs.org，ok 态绿字 */
+    .settings-row p.relay-diag { margin-top: 2px; line-height: 1.45; }
+    .settings-row p.relay-diag[data-diag="err"], .settings-row p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .settings-row p.relay-diag[data-diag="ok"] { color: var(--done); }
     .settings-row .chev { margin-left: auto; color: var(--faint); }
     .mobile-frame { position: relative; width: 100%; overflow: hidden; background: var(--bg1); }
     .mobile-screen { display: none; min-height: 735px; }
@@ -3983,6 +3987,52 @@ function connectLan(ctx) {
       function settingsToggleState(key) {
         try { return localStorage.getItem("cc-deck-005-" + (key === "sound" ? "notify-sound" : "desktop-notify")) !== "0"; } catch (_) { return true; }
       }
+      // ---------- #158-批3 连接诊断（桌面形态，旧壳 relayStatus 11917-11959 消费范式） ----------
+      // relayStatus 透出 { port:端口在听, embedded, node, err }——err（Node 过旧/spawn 失败）
+      // 优先直出；缺 node 给安装引导（点击 openExternal nodejs.org）；端口在听显示运行端口。
+      // fetch 带 6s 陈旧窗（帧事件高频重渲不刷屏 invoke）；结果只进小字行不动主行
+      let relayDiag = null, relayDiagAt = 0, relayDiagBusy = false;
+      function paintRelayDiagRow(host) {
+        const d = relayDiag;
+        if (!d) { if (host) host.textContent = ""; return; }
+        if (d.err) {
+          host.textContent = String(d.err).slice(0, 64) + " · 点击查看安装方法";
+          host.title = String(d.err);
+          host.dataset.diag = "err";
+        } else if (d.node === false) {
+          host.textContent = "缺少 Node.js 运行时 · 点击查看安装方法";
+          host.title = "内置 relay 需要 Node.js（Claude Code 的 VS Code 扩展不算——它自带运行时不进系统 PATH）";
+          host.dataset.diag = "node";
+        } else if (d.port) {
+          host.textContent = "内置服务运行中 · 端口 " + ((localRelayInfo && localRelayInfo.port) || relayPortOfCfg());
+          host.title = "";
+          host.dataset.diag = "ok";
+        } else {
+          host.textContent = "未检测到本机 relay 服务";
+          host.title = "";
+          host.dataset.diag = "none";
+        }
+      }
+      function paintRelayDiag() { document.querySelectorAll("[data-relay-diag]").forEach((el) => paintRelayDiagRow(el)); }
+      async function refreshRelayDiag() {
+        paintRelayDiag();
+        if (relayDiagBusy) return;
+        if (relayDiag && Date.now() - relayDiagAt < 6000) return;
+        if (!(window.ccDeck && typeof window.ccDeck.relayStatus === "function")) return;
+        relayDiagBusy = true;
+        try {
+          const st = await window.ccDeck.relayStatus();
+          relayDiag = st && typeof st === "object" ? { port: st.port === true, node: st.node, err: typeof st.err === "string" ? st.err : "" } : null;
+          relayDiagAt = Date.now();
+        } catch (_) { /* 保留上次结果 */ }
+        finally { relayDiagBusy = false; }
+        paintRelayDiag();
+      }
+      function relayPortOfCfg() {
+        try { return String(ctx.cfg.wsUrl || "").match(/:(\d+)\//)?.[1] || (location.port || "8787"); } catch (_) { return location.port || "8787"; }
+      }
+      // 自测/排障钩子：绕过 6s 陈旧窗强刷诊断行（正常运行不消费）
+      window.__ccDeck005RelayDiag = { refresh: refreshRelayDiag, stale: () => { relayDiagAt = 0; } };
       function setupSettingsDomain() {
         const section = document.querySelector("#d-settings");
         const queue = section?.querySelector(".queue");
@@ -4036,6 +4086,9 @@ function connectLan(ctx) {
           }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
           if (event.target.closest("[data-update-check]")) { showToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+          // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导
+          const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
+          if (diagRow) { if (window.ccDeck && window.ccDeck.openExternal) window.ccDeck.openExternal("https://nodejs.org/zh-cn").catch(() => {}); return; }
         });
         activateSettings(0);
       }
@@ -4052,7 +4105,9 @@ function connectLan(ctx) {
           const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {};
           const caps = snap.source_capabilities || {};
           const catalog = Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
-          const connState = bridge.hasSnapshot ? "online" : bridge.connection;
+          // #158-批3 状态遮蔽修复（审查 R4）：快照只在连接层仍在线/连接中时兜底「在线」——
+          // WS 已断（offline/unconfigured）时曾收过 SNAPSHOT 也显示实际态，不再假「在线」
+          const connState = bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured" ? "online" : bridge.connection;
           const stateText = connState === "online" ? "在线" : connState === "connecting" ? "连接中" : "未连接";
           const connLive = section.querySelector('[data-settings-live="connections"]');
           if (connLive) {
@@ -4061,10 +4116,15 @@ function connectLan(ctx) {
               connLive.innerHTML = '<div data-cloud-settings-slot></div>';
               renderCloudUI();
             } else {
+              // #158-批3：桌面形态加 relay 诊断小字行（relayStatus 病因透出）；端口行优先取
+              // 探测命中端口（tauri.localhost 的 location.port 是空，8787 硬编会误导多端口变体）
+              const shellDiag = !!(window.ccDeck && typeof window.ccDeck.relayStatus === "function");
+              const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
               connLive.innerHTML =
-                `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${location.port || "8787"} · 事件流自动补发</p></div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
+                `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
                 `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>` +
                 `<div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token ${connState === "unconfigured" ? "未配置" : "已就绪"}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
+              if (shellDiag) void refreshRelayDiag();
             }
           }
           const devLive = section.querySelector('[data-settings-live="devices"]');
@@ -4147,6 +4207,17 @@ function connectLan(ctx) {
           return j && j.ok && j.token ? { port: Number(j.port) || Number(port), token: String(j.token) } : null;
         } catch (_) { return null; }
       }
+      // #158-批3 探测命中统一落库：token 无条件写最新（#21 教训：relay 换代/令牌轮换后旧
+      // token 被 401 拒且永不自愈——不等缓存空）；探测结果留 localRelayInfo 供诊断行消费
+      let localRelayInfo = null;
+      function applyLocalProbe(probed) {
+        localRelayInfo = { port: probed.port, token: probed.token };
+        if (shellProbe) ctx.cfg.wsUrl = "ws://127.0.0.1:" + probed.port + "/ws";
+        relayToken = probed.token;
+        ctx.cfg.token = relayToken;
+        try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
+      }
+      let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后交给 6s 周期自愈）
       async function bootstrapConnection() {
         // 缝合点 a：https 公网页面（/app2 经 CF Worker 出面）走云桥链——loopback ws:// 被混合
         // 内容策略掐死、桌面探测链不适配公网形态；tauri / http LAN 形态保持原探测链不动。
@@ -4155,18 +4226,26 @@ function connectLan(ctx) {
         // 页面即 relay 同源服务，wsUrl 维持 location 推导不变。探测全败不炸——回落未配置引导。
         if (shellProbe || (isHttpPage && !relayToken)) {
           const probed = await probeLocalRelay();
-          if (probed) {
-            if (shellProbe) ctx.cfg.wsUrl = "ws://127.0.0.1:" + probed.port + "/ws";
-            if (!relayToken) {
-              relayToken = probed.token;
-              ctx.cfg.token = relayToken;
-              try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
-            }
-          }
+          if (probed) applyLocalProbe(probed);
         }
         ctx.probing = false;
         connectLan(ctx);
         if (!ctx.cfg.wsUrl || !ctx.cfg.token) {
+          // 桌面形态首探落空 2.5s 补试一次（旧壳 12316-12343 模式）：壳拉起内嵌 relay 有冷启动
+          // 竞态（Defender 冷扫描可让 relay 起过壳的就绪窗口），补试命中即落库重走连接链
+          if (shellProbe && !bootProbeRetried) {
+            bootProbeRetried = true;
+            setTimeout(async () => {
+              if (ctx.stopped) return;
+              const again = await probeLocalRelay();
+              if (again) {
+                applyLocalProbe(again);
+                ctx.probing = false;
+                connectLan(ctx);
+                renderSessionList();
+              }
+            }, 2500);
+          }
           const b4 = window.__ccDeck005B4;
           if (b4 && typeof b4.markUnconfigured === "function") b4.markUnconfigured();
           renderSessionList();
@@ -5337,6 +5416,26 @@ function connectLan(ctx) {
       initSettingsLiveData();
       renderSessionList();
       bootstrapConnection();
+      // #158-批3 桌面壳周期自愈（旧壳 12400-12410 的 90s/6s 窗口，升级为真重连）：连接
+      // offline/unconfigured 且桌面形态时每 6s 重探本机 relay——Defender 冷扫描让 relay 晚起、
+      // 或 token 轮换后旧 token 401 永不自愈（#21），重探命中即刷 token 重走连接链。
+      // online/connecting 不动作（ws 层自带退避重连）；15 次未果（约 90s）停表
+      if (shellProbe) {
+        let healTries = 0;
+        const healTimer = setInterval(async () => {
+          if (ctx.stopped) { clearInterval(healTimer); return; }
+          const conn = window.__ccDeck005B4 ? window.__ccDeck005B4.connection : ctx.status;
+          if (conn === "online" || conn === "connecting") { clearInterval(healTimer); return; }
+          if (++healTries > 15) { clearInterval(healTimer); return; }
+          const again = await probeLocalRelay();
+          if (again) {
+            applyLocalProbe(again);
+            ctx.probing = false;
+            connectLan(ctx);
+            clearInterval(healTimer); // 连接链接管后续重试
+          }
+        }, 6000);
+      }
       setInterval(() => {
         if (sessionList.dataset.b2Owned === "1") return; // #143 盲评A-2：B2 自有走秒定时器，双写互覆盖让位
         sessionList.querySelectorAll(".queue-card").forEach((card) => {
@@ -5352,7 +5451,16 @@ function connectLan(ctx) {
       // ---------- ⑥c-2 移动端 B7：四屏真数据 + 导航栈（原型 openMobileRoot/openMobileDetail/closeMobileDetail 同构） ----------
       const bridge = window.__ccDeck005B4;
       if (!bridge) return;
-      const VERSION = window.__shellVer || window.__ccDeck005Version || ""; // ⑥d：对齐桌面壳版本优先口径
+      // ⑥d：桌面壳版本优先（foundation invoke app_version 异步回填后才就位，改为读时取值）
+      const VER_NOW = () => window.__shellVer || window.__ccDeck005Version || "";
+      // #158-批3 状态遮蔽（R4 同款口径）：曾收 SNAPSHOT 但连接已 offline/unconfigured 时
+      // 不再谎报「在线」，显示连接实际态
+      const connStateText = () => {
+        const c = bridge.connection;
+        if (bridge.hasSnapshot && c !== "offline" && c !== "unconfigured") return "在线";
+        return c === "connecting" ? "连接中" : c === "unconfigured" ? "未配置" : "未连接";
+      };
+      const connMaskedOk = () => bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured";
       // #158-⌘文案：与 foundation IIFE 作用域不通，独立定义同款常量
       const IS_MAC = /Mac/i.test(navigator.userAgent);
       const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
@@ -5760,7 +5868,7 @@ function connectLan(ctx) {
         const rows = [...screen.querySelectorAll(".mobile-settings .settings-row")];
         if (!rows.length) return;
         const cat = catalog();
-        const stateText = bridge.hasSnapshot ? "在线" : bridge.connection === "connecting" ? "连接中" : "未连接";
+        const stateText = connStateText();
         const byTitle = (t) => rows.find((r) => r.querySelector("strong")?.textContent.trim() === t);
         const setP = (title, text) => { const p = byTitle(title)?.querySelector("p"); if (p) p.textContent = text; };
         setP("连接与设备", (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active()) ? `云桥 ${window.__ccDeck005CloudUI.stateLabel()} · 本页设备` : `relay ${stateText} · 本页设备`);
@@ -5789,14 +5897,14 @@ function connectLan(ctx) {
         content._renderSettingsDetail = (name) => {
           if (!name || name === "主题") return;
           const cat = catalog();
-          const stateText = bridge.hasSnapshot ? "在线" : bridge.connection === "connecting" ? "连接中" : "未连接";
+          const stateText = connStateText();
           const roleSet = new Map();
           (cat || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((r) => { if (r && !roleSet.has(r)) roleSet.set(r, e); }));
-          const html = name === "关于" ? `<div class="readonly-banner">cc-deck ${VERSION ? VERSION + " 通道" : "版本待定"}<br>Command Bridge · 零外部资源</div><div class="mobile-task" role="button" tabindex="0" data-update-check>检查更新 · 当前已是最新版本</div>`
+          const html = name === "关于" ? `<div class="readonly-banner">cc-deck ${VER_NOW() ? VER_NOW() + " 通道" : "版本待定"}<br>Command Bridge · 零外部资源</div><div class="mobile-task" role="button" tabindex="0" data-update-check>检查更新 · 当前已是最新版本</div>`
             : name === "连接与设备"
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
-                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${bridge.hasSnapshot ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(bridge.relayName || "")}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
+                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(bridge.relayName || "")}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
             : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 桌面设置域配置</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
