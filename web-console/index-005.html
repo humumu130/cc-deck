@@ -522,9 +522,13 @@
     .message-author strong { font-size: 12px; }
     .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
     .message-author time { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
-    .message-body { min-width: 0; line-height: 1.55; }
+    .message-body { min-width: 0; padding-left: 14px; line-height: 1.55; }
     .message-body pre, .message-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
     .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 11px var(--mono); }
+    /* #162-F2 工具/结果行：timeline-note 是给日期分隔/截断提示这类短居中分隔符设计的；真链路
+       工具命令/结果是最长 120 字符的单行（oneLine 截断），居中渲染成两端毛边的文字墙——改左对齐、
+       与正文同缩进、margin 收紧，超长单行省略（title 悬停有全文）；日期分隔/提示行维持居中不动 */
+    .timeline-note.timeline-tool { margin: 4px 0 10px; padding-left: 14px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
     .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
     .wait-card strong { display: block; color: var(--working); font-size: 11px; }
@@ -1803,13 +1807,13 @@
                     return d;
                   }
                   if (role === "ai-tool") {
-                    d.className = "timeline-note";
+                    d.className = "timeline-note timeline-tool"; // #162-F2 长单行左对齐省略，不复用居中分隔符样式
                     d.title = String(e.text || "");
                     d.innerHTML = "<span>" + esc(toolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</span>";
                     return d;
                   }
                   if (role === "ai-result") {
-                    d.className = "timeline-note";
+                    d.className = "timeline-note timeline-tool"; // #162-F2 同上
                     d.title = String(e.text || "");
                     d.innerHTML = "<span>↳ " + taskRefHtml(oneLine(e.text)) + "</span>";
                     return d;
@@ -6011,8 +6015,8 @@ function connectLan(ctx) {
           return '<div class="message-ai"><div class="message-author"><strong>' + esc(eng) + "</strong>" + (e.ts ? "<time>" + mFmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' + mNlBr(e.text) + (e.streaming && s && s.status === "WORKING" ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") + "</div></div>";
         }
         if (e.kind === "thinking") return "";
-        if (e.kind === "tool_use") return '<div class="timeline-note"><span>' + esc(mToolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</span></div>";
-        if (e.kind === "tool_result") return '<div class="timeline-note"><span>↳ ' + esc(oneLine(e.text)) + "</span></div>";
+        if (e.kind === "tool_use") return '<div class="timeline-note timeline-tool"><span>' + esc(mToolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</span></div>"; // #162-F2 与桌面 entryNode 同口径
+        if (e.kind === "tool_result") return '<div class="timeline-note timeline-tool"><span>↳ ' + esc(oneLine(e.text)) + "</span></div>";
         return '<div class="timeline-note">' + esc(oneLine(e.text)) + "</div>";
       }
       function mConversationHtml(sid, s) {
