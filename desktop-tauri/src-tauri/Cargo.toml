@@ -35,7 +35,8 @@ tauri-plugin-decorum = "1"
 # NSEvent 走 NSApp sendEvent 派发（app 内部派发无 TCC 权限问题）
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
-objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSEvent", "NSWindow"] }
+# NSResponder/NSGraphicsContext：sharedApplication/sendEvent 与 NSEvent 构造器的 feature 门
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSEvent", "NSWindow", "NSResponder", "NSGraphicsContext"] }
 
 [profile.release]
 # 换壳动机是体积（Electron 106MB → ~10MB），按 Tauri 官方体积优化档配置

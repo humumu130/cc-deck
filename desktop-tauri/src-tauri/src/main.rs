@@ -295,6 +295,7 @@ fn app_version(app: tauri::AppHandle) -> String {
 fn ime_click(window: tauri::WebviewWindow, x: f64, y: f64) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        use objc2::MainThreadMarker;
         use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSWindow};
         use objc2_foundation::NSPoint;
         if !window.is_focused().unwrap_or(false) {
@@ -305,17 +306,20 @@ fn ime_click(window: tauri::WebviewWindow, x: f64, y: f64) -> Result<(), String>
         // WebView CSS px（左上原点）→ NSEvent 窗口本地坐标（内容区左下原点）：仅 y 翻转
         let loc = NSPoint::new(x, h_pts - y);
         unsafe {
-            let app = NSApplication::sharedApplication();
+            // 同步 command 跑在主线程；万一不在（非主线程调用），返回 Err 让 JS 回落 focus
+            let mtm = MainThreadMarker::new().ok_or("ime_click 不在主线程")?;
+            let app = NSApplication::sharedApplication(mtm);
             let win_num = (window.ns_window().map_err(|e| e.to_string())?
                 as *mut NSWindow)
                 .as_ref()
                 .map(|w| w.windowNumber())
                 .unwrap_or(0);
             for ty in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
-                let ev = NSEvent::mouseEventWithType(
-                    ty, loc, NSEventModifierFlags::empty(), 0.0, win_num, None, 0, 1, 1.0,
-                )
-                .ok_or("NSEvent 构造失败")?;
+                let ev =
+                    NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                        ty, loc, NSEventModifierFlags::empty(), 0.0, win_num, None, 0, 1, 1.0,
+                    )
+                    .ok_or("NSEvent 构造失败")?;
                 app.sendEvent(&ev);
             }
         }
