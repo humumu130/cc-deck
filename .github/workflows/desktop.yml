@@ -131,10 +131,14 @@ jobs:
           npx tauri build --bundles nsis
           # 不再改名：updater 的 latest.json 按原始产物名（CC Deck Tauri_<v>_x64-setup.exe）寻址
 
+      - name: Artifact name suffix（分支名含 / 会炸 upload-artifact）
+        shell: bash
+        run: echo "REF_SLUG=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Deck-Desktop-Tauri-${{ github.ref_name }}
+          name: CC-Deck-Desktop-Tauri-${{ env.REF_SLUG }}
           path: |
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
@@ -244,10 +248,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --bundles dmg --target aarch64-apple-darwin
 
+      - name: Artifact name suffix（分支名含 / 会炸 upload-artifact）
+        shell: bash
+        run: echo "REF_SLUG=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Deck-Desktop-Tauri-Mac-${{ github.ref_name }}
+          name: CC-Deck-Desktop-Tauri-Mac-${{ env.REF_SLUG }}
           path: |
             desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg.sig
