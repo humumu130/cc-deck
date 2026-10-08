@@ -388,6 +388,15 @@
     .session-list-tools button:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
     .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 2px; }
     .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 11px var(--mono); letter-spacing: .04em; }
+    /* #169 追加令1：任务 tab 四组分组标题——无横线分隔，改左侧 3px 状态色条（进行中黄/已完成绿/待验证蓝/待办中性灰）。
+       只作用于任务明细列表（detail-panel-list）内的组标题，会话列表/通知中心等其它 queue-group 不动 */
+    .detail-panel-list > .queue-group { position: relative; margin: 14px 3px 6px; padding-left: 10px; }
+    .detail-panel-list > .queue-group::before { content: ""; position: absolute; left: 0; top: 1px; bottom: 1px; width: 3px; border-radius: 2px; background: var(--faint); }
+    .detail-panel-list > .queue-group.group-working::before { background: var(--working); }
+    .detail-panel-list > .queue-group.group-done::before { background: var(--done); }
+    .detail-panel-list > .queue-group.group-verify::before { background: var(--info); }
+    /* 组内明细行相对组标题缩进一档，对齐标题文字起点（色条 3px + 缩进 10px） */
+    .detail-panel-list > .check-row { margin-left: 10px; }
     .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
@@ -513,6 +522,16 @@
     .context-meter.attention .context-meter-pct { color: var(--ctx-attention); }
     .context-meter.critical .context-meter-pct { color: var(--ctx-critical); }
     .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 10px; }
+    /* #169 追加令2/3：「更多」tab 统计键值行——行级无常驻分隔线（军规②），hover 淡底；分组只靠间距+小节标题（军规③） */
+    .kv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 6px; border-radius: 6px; }
+    .kv-row:hover { background: var(--hover); }
+    .kv-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
+    .kv-row span { flex: 0 0 auto; color: var(--dim); font-size: 10px; }
+    .kv-row-copy { position: relative; padding-right: 34px; }
+    .kv-copy-btn { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface2); color: var(--dim); cursor: pointer; font-size: 11px; }
+    .kv-copy-btn:hover { background: var(--hover); color: var(--text); border-color: var(--brand); }
+    .more-section { margin-top: 18px; }
+    .more-section-title { margin: 0 0 4px; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
     .usage-summary { padding: 12px 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .usage-summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .usage-summary-number { color: var(--text-strong); font: 700 17px var(--mono); font-variant-numeric: tabular-nums; }
@@ -1053,10 +1072,10 @@
     .notice .notify-line strong { color: var(--text); font-weight: 600; display: inline; }
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
-    .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
-    .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .member-card, .notice, .metric, .aggregate-card { box-shadow: none; }
-    .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .member-card, .task-card, .notice, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .member-card:hover, .notice:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .member-card, .notice, .aggregate-card { box-shadow: none; }
+    .member-card:hover, .notice:hover, .aggregate-card:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .team-member-large { background: transparent; }
     .task-card:hover { border-color: var(--border-strong); background: var(--hover); transform: none; box-shadow: none; }
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
@@ -1211,7 +1230,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><input type="search" placeholder="搜索" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter aria-label="筛选会话 · 当前全部">全部</button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span></div><div class="workspace-sub" id="session-sub">加载中…</div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span></div><div class="workspace-sub" id="session-sub">加载中…</div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -1983,19 +2002,24 @@
                   });
                   input.addEventListener("blur", () => commit(true));
                 }
-                async function copySessionId(sid) {
-                  try { await navigator.clipboard.writeText(sid); b2Toast("会话 ID 已复制"); }
+                async function copyWithFallback(t, okMsg) { // #169 追加令2：copySessionId 兜底链抽公共——clipboard → textarea execCommand → 手动复制提示
+                  try { await navigator.clipboard.writeText(t); b2Toast(okMsg); return true; }
                   catch { // 剪贴板 API 不可用（非安全上下文等）：textarea 兜底
                     const ta = document.createElement("textarea");
-                    ta.value = sid;
+                    ta.value = t;
                     ta.style.position = "fixed";
                     ta.style.opacity = "0";
                     document.body.appendChild(ta);
                     ta.select();
-                    try { document.execCommand("copy"); b2Toast("会话 ID 已复制"); } catch { b2Toast("复制失败，请手动复制：" + sid); }
+                    let ok = false;
+                    try { ok = document.execCommand("copy"); } catch { ok = false; }
                     ta.remove();
+                    b2Toast(ok ? okMsg : "复制失败，请手动复制：" + t);
+                    return ok;
                   }
                 }
+                async function copySessionId(sid) { return copyWithFallback(sid, "会话 ID 已复制"); }
+                window.__ccDeck005CopyUi = { copyWithFallback }; // 跨 IIFE 共享（手机「更多」复制钮同链，同 __ccDeck005PathUi 口径）
                 function setupRowMenu() {
                   if (!UI || !UI.sessionList || UI.sessionList.dataset.rowMenuBound) return;
                   UI.sessionList.dataset.rowMenuBound = "1";
@@ -2464,14 +2488,14 @@
                   const ip = ipAll.filter((t) => !VERIFY_RE.test(t.content || ""));
                   const pd = open.filter((t) => t.status === "pending");
                   let html = '<div class="pane-summary">任务进度 ' + doneAll.length + "/" + todos.length + '</div><div class="detail-panel-list">';
-                  const emit = (label, items, mk) => {
+                  const emit = (label, items, mk, groupClass) => {
                     if (!items.length) return;
-                    html += '<div class="queue-group">' + label + "</div>";
+                    html += '<div class="queue-group' + (groupClass ? " " + groupClass : "") + '">' + label + "</div>";
                     for (const t of items) html += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + ">" + mk(t) + "<span>" + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span></div>";
                   };
-                  emit("已完成 · " + doneList.length + "/" + doneAll.length, doneList, () => "<b>✓</b>");
-                  emit("进行中 · " + ip.length, ip, () => '<b class="run">◐</b>');
-                  emit("待验证 · " + vf.length, vf, () => '<b class="verify">◇</b>');
+                  emit("已完成 · " + doneList.length + "/" + doneAll.length, doneList, () => "<b>✓</b>", "group-done");
+                  emit("进行中 · " + ip.length, ip, () => '<b class="run">◐</b>', "group-working");
+                  emit("待验证 · " + vf.length, vf, () => '<b class="verify">◇</b>', "group-verify");
                   emit("待办 · " + pd.length, pd, () => "<span>○</span>");
                   html += "</div>";
                   if (doneList.length < doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + doneAll.length + " 条）</div>";
@@ -2617,26 +2641,51 @@
                   advance();
                 }
 
-                // ---------- 渲染：用量 tab / 更多 tab ----------
-                function renderUsage() {
+                // ---------- 渲染：更多 tab（用量 + 统计键值行，四 tab 制：追加令3 合并原用量/更多） ----------
+                function renderMore() {
                   const pane = UI.panes[3];
                   const s = curSession();
                   if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
-                  if (!s.context_usage) { pane.innerHTML = '<div class="pane-summary">用量</div><div class="readonly-banner">暂无用量数据（回合结束后由 relay 下发）</div>'; return; }
-                  let html = '<div class="detail-panel-list">' + ctxMeterHtml(s);
-                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="metric"><b>' + fmtDur(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
+                  let html = '<div class="detail-panel-list">';
+                  // 上部：ctxMeter 水位计
+                  if (s.context_usage) html += ctxMeterHtml(s);
+                  else html += '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
+                  // 本回合时长 + 输入输出 tokens（原 .metric 改普通键值行）
+                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + fmtDur(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
                   const u = s.usage;
-                  if (u && (u.input_tokens || u.output_tokens)) html += '<div class="metric"><b>' + tokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + tokStr(u.input_tokens || 0) + " · 出 " + tokStr(u.output_tokens || 0) + "）</span></div>";
-                  html += "</div>";
-                  pane.innerHTML = html;
-                }
-                function renderMore() {
-                  const pane = UI.panes[4];
-                  const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + tokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + tokStr(u.input_tokens || 0) + " · 出 " + tokStr(u.output_tokens || 0) + "）</span></div>";
+                  html += "</div>"; // 关闭 detail-panel-list
+                  // 下部：统计键值行全量（追加令2 新增字段）
+                  html += '<div class="more-section"><h4 class="more-section-title">会话信息</h4>';
+                  const statusLabel = { WORKING: "运行中", WAITING: "等待确认", DONE: "已完成", ERROR: "错误", CLOSING: "结束中" }[s.status] || s.status || "—";
+                  html += '<div class="kv-row"><b>' + esc(statusLabel) + "</b><span>状态</span></div>";
+                  html += '<div class="kv-row"><b>' + esc(shortPath(s.cwd) || "—") + "</b><span>目录</span></div>";
                   const eng = ENGINES[s.engine || "claude"] || ["Claude"];
-                  let html = '<div class="readonly-banner">会话 ' + esc(s.session_id) + "<br>引擎 " + esc(eng[0]) + (s.model ? " · 模型 " + esc(s.model) : "") + "<br>目录 " + esc(shortPath(s.cwd) || "—") + "<br>来源 " + esc(S.relayName) + (s.relay_session_id ? "<br>SDK 会话 " + esc(s.relay_session_id) : "") + "</div>";
-                  if (s.status === "DONE" || s.status === "ERROR") html += '<button class="danger-btn" type="button" data-session-delete style="margin-top:10px">删除会话</button>';
+                  html += '<div class="kv-row"><b>' + esc(eng[0]) + (s.model ? " · " + esc(s.model) : "") + "</b><span>引擎·模型</span></div>";
+                  const permMode = s.permission_mode || "—";
+                  html += '<div class="kv-row"><b>' + esc(permMode) + "</b><span>权限模式</span></div>";
+                  if (s.started_at) html += '<div class="kv-row"><b>' + relTime(s.started_at) + "</b><span>开始时间</span></div>";
+                  if (s.finished_at && s.started_at) html += '<div class="kv-row"><b>' + fmtDur(s.finished_at - s.started_at) + "</b><span>用时</span></div>";
+                  html += "</div>"; // 关闭会话信息节
+                  html += '<div class="more-section"><h4 class="more-section-title">用量统计</h4>';
+                  const changes = s.file_changes || {};
+                  const fileCount = (changes.added || 0) + (changes.modified || 0);
+                  if (fileCount > 0) html += '<div class="kv-row"><b>' + fileCount + "</b><span>修改文件数</span></div>";
+                  const lineAdd = changes.lines_added || 0, lineDel = changes.lines_deleted || 0;
+                  if (lineAdd || lineDel) html += '<div class="kv-row"><b>+' + lineAdd + " / −" + lineDel + "</b><span>增删行数</span></div>";
+                  const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
+                  if (todos.length) html += '<div class="kv-row"><b>' + todos.length + " 项</b><span>任务清单</span></div>";
+                  if (u && (u.input_tokens || u.output_tokens)) {
+                    html += '<div class="kv-row"><b>' + tokStr(u.input_tokens || 0) + " / " + tokStr(u.output_tokens || 0) + "</b><span>输入 / 输出 token</span></div>";
+                    if (u.cache_read_tokens || u.cache_creation_tokens) html += '<div class="kv-row"><b>' + tokStr(u.cache_read_tokens || 0) + " / " + tokStr(u.cache_creation_tokens || 0) + "</b><span>缓存读 / 写</span></div>";
+                  }
+                  if (s.finish_reason) html += '<div class="kv-row"><b>' + esc(s.finish_reason) + "</b><span>结束原因</span></div>";
+                  html += "</div>"; // 关闭用量统计节
+                  html += '<div class="more-section"><h4 class="more-section-title">标识</h4>';
+                  html += '<div class="kv-row kv-row-copy" data-copy-session-id="' + esc(s.session_id) + '"><b>' + esc(String(s.session_id || "").slice(0, 16)) + '…</b><span>Session ID</span><button class="kv-copy-btn" type="button" title="复制 Session ID" aria-label="复制 Session ID">⧉</button></div>';
+                  if (s.relay_session_id) html += '<div class="kv-row kv-row-copy" data-copy-relay-session-id="' + esc(s.relay_session_id) + '"><b>' + esc(String(s.relay_session_id).slice(0, 16)) + '…</b><span>SDK 会话</span><button class="kv-copy-btn" type="button" title="复制 SDK 会话 ID" aria-label="复制 SDK 会话 ID">⧉</button></div>';
+                  html += "</div>"; // 关闭标识节
+                  if (s.status === "DONE" || s.status === "ERROR") html += '<button class="danger-btn" type="button" data-session-delete style="margin-top:14px">删除会话</button>';
                   pane.innerHTML = html;
                 }
                 function confirmDelete() {
@@ -2655,7 +2704,6 @@
                   renderConversation();
                   renderTasks();
                   renderArtifacts();
-                  renderUsage();
                   renderMore();
                   renderInspector();
                   syncComposerState();
@@ -3064,6 +3112,13 @@
                     if (artFile && !artFile.closest("[data-batch-running]")) { downloadNode(artFile, S.selected).catch(() => {}); return; }
                     const del = ev.target.closest("[data-session-delete]");
                     if (del) { ev.stopPropagation(); confirmDelete(); return; }
+                    const kvCopy = ev.target.closest(".kv-copy-btn");
+                    if (kvCopy) {
+                      ev.stopPropagation();
+                      const row = kvCopy.closest("[data-copy-session-id], [data-copy-relay-session-id]");
+                      if (row) copyWithFallback(row.dataset.copySessionId || row.dataset.copyRelaySessionId || "", "已复制");
+                      return;
+                    }
                     const trayX = ev.target.closest("[data-tray-remove]");
                     if (trayX) { ev.stopPropagation(); S.staged.splice(Number(trayX.dataset.trayRemove), 1); renderTray(); syncComposerState(); return; }
                     const engOpt = ev.target.closest("[data-engine-choice]");
@@ -4366,7 +4421,7 @@
         <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">会话<small id="mobile-detail-sub">加载中…</small></h2><span class="identity-cluster" id="mobile-detail-identity"></span><span class="tag action">加载中</span></header>
-          <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
+          <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div>
               <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附加文件（最多 2 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 4 张，也可直接粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"><div class="composer-hint">拖入 / 粘贴即附 · 图 ≤4 · 文件 ≤2 · ↑↓ 历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div>
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
@@ -6602,13 +6657,15 @@ function connectLan(ctx) {
         const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
         if (!todos.length) return '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>';
         const g = groupTodos(todos);
-        const row = (sym, t) => '<div class="mobile-task">' + sym + " " + esc((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</div>";
-        const lane = (label, items, sym) => items.length ? '<div class="mobile-lane"><div class="mobile-lane-head"><span>' + label + "</span><span>" + items.length + '</span></div>' + items.map((t) => row(sym, t)).join("") + "</div>" : "";
-        let html = '<div class="pane-summary">任务进度 ' + g.doneAll.length + "/" + todos.length + "</div>";
-        html += lane("已完成", g.doneList, "✓");
-        html += lane("进行中", g.run, "◐");
-        html += lane("待验证", g.verify, "◇");
-        html += lane("待办", g.pending, "○");
+        // #169 追加令1：与桌面 renderTasks 同构——组标题 3px 状态色条 + 明细缩进一档（mobile-lane 盒状容器在此退役）
+        const row = (sym, t) => '<div class="check-row">' + sym + "<span>" + esc((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span></div>";
+        const lane = (cls, label, items, sym) => items.length ? '<div class="queue-group' + (cls ? " " + cls : "") + '">' + label + " · " + items.length + "</div>" + items.map((t) => row(sym, t)).join("") : "";
+        let html = '<div class="pane-summary">任务进度 ' + g.doneAll.length + "/" + todos.length + '</div><div class="detail-panel-list">';
+        html += lane("group-done", "已完成", g.doneList, "<b>✓</b>");
+        html += lane("group-working", "进行中", g.run, '<b class="run">◐</b>');
+        html += lane("group-verify", "待验证", g.verify, '<b class="verify">◇</b>');
+        html += lane("", "待办", g.pending, "<span>○</span>");
+        html += "</div>";
         if (g.doneList.length < g.doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + g.doneAll.length + " 条）</div>";
         return html;
       }
@@ -6619,9 +6676,7 @@ function connectLan(ctx) {
         const sorted = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
         return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + svg(mArtIcon(name)) + " " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
       }
-      function mUsageHtml(s) { // B2 ctxMeterHtml 同构（12 格 band + tone 分级），mobile 形态加 mobile-context-meter
-        if (!s) return '<div class="readonly-banner">未选择会话</div>';
-        if (!s.context_usage) return '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
+      function mCtxMeterHtml(s) { // B2 ctxMeterHtml 同构（12 格 band + tone 分级），mobile 形态加 mobile-context-meter；#169 追加令3 起由 mMoreHtml 调用（原 mUsageHtml 用量 tab 退役）
         const pct = mCtxPct(s);
         const tone = mCtxTone(pct);
         const grade = { safe: "安全", attention: "注意", critical: "拥挤" }[tone];
@@ -6632,25 +6687,61 @@ function connectLan(ctx) {
         const model = s.model ? String(s.model).split(/[/:]/).pop() : mTokStr(lim) + " 上限";
         return '<div class="context-meter ' + tone + ' mobile-context-meter"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">' + esc(eng + " · " + model) + '</strong></div><span class="context-meter-grade">' + grade + '</span></div><div class="context-meter-band" aria-label="上下文已使用 ' + pct + '%">' + Array.from({ length: 12 }, (_, i) => "<i" + (i < on ? ' class="on"' : "") + "></i>").join("") + '</div><div class="context-meter-stats"><span><b class="context-meter-used">' + mTokStr(s.context_usage) + '</b> <span class="context-meter-limit">/ ' + mTokStr(lim) + ' tokens</span></span><strong class="context-meter-pct">' + pct + '%</strong></div><div class="context-meter-note">' + note + "</div></div>";
       }
-      function mMoreHtml() { // 原型 :2207 形态：当前 relay · 来源返回栈
-        const stack = { inbox: "待处理收件箱", team: "团队行动", project: "项目", settings: "设置", notify: "通知中心" }[mobileReturn] || "待处理收件箱";
-        return '<div class="readonly-banner">当前 relay：' + esc(bridge.relayName || location.host) + " · 来源返回栈：" + stack + "</div>";
+      function mDurText(ms) { const m = Math.floor(ms / 60000); return m >= 60 ? Math.floor(m / 60) + "h" + (m % 60) + "m" : m > 0 ? m + "m" : Math.floor(ms / 1000) + "s"; }
+      function mMoreHtml(s) { // #169 追加令3：手机「更多」合并用量+统计键值行（与桌面 renderMore 同构）
+        if (!s) return '<div class="readonly-banner">未选择会话</div>';
+        let html = "";
+        // 上部：ctxMeter 水位计 + 本回合时长/tokens（原「用量」tab 迁入，.metric 左线形态退役改键值行）
+        if (s.context_usage) html += mCtxMeterHtml(s);
+        else html += '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
+        if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + mDurText(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
+        const u = s.usage;
+        if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + mTokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + mTokStr(u.input_tokens || 0) + " · 出 " + mTokStr(u.output_tokens || 0) + "）</span></div>";
+        // 下部：统计键值行全量（与桌面 renderMore 同字段；目录/引擎用手机作用域助手 displayPath/ENGINE_SHORT）
+        html += '<div class="more-section"><h4 class="more-section-title">会话信息</h4>';
+        const statusLabel = { WORKING: "运行中", WAITING: "等待确认", DONE: "已完成", ERROR: "错误", CLOSING: "结束中" }[s.status] || s.status || "—";
+        html += '<div class="kv-row"><b>' + esc(statusLabel) + "</b><span>状态</span></div>";
+        html += '<div class="kv-row"><b>' + esc(oneLine(displayPath(s.cwd)) || "—") + "</b><span>目录</span></div>";
+        html += '<div class="kv-row"><b>' + esc(ENGINE_SHORT[s.engine || "claude"] || s.engine || "Claude") + (s.model ? " · " + esc(s.model) : "") + "</b><span>引擎·模型</span></div>";
+        html += '<div class="kv-row"><b>' + esc(s.permission_mode || "—") + "</b><span>权限模式</span></div>";
+        if (s.started_at) html += '<div class="kv-row"><b>' + mRelTime(s.started_at) + "</b><span>开始时间</span></div>";
+        if (s.finished_at && s.started_at) html += '<div class="kv-row"><b>' + mDurText(s.finished_at - s.started_at) + "</b><span>用时</span></div>";
+        html += "</div>"; // 关闭会话信息节
+        html += '<div class="more-section"><h4 class="more-section-title">用量统计</h4>';
+        const changes = s.file_changes || {};
+        const fileCount = (changes.added || 0) + (changes.modified || 0);
+        if (fileCount > 0) html += '<div class="kv-row"><b>' + fileCount + "</b><span>修改文件数</span></div>";
+        const lineAdd = changes.lines_added || 0, lineDel = changes.lines_deleted || 0;
+        if (lineAdd || lineDel) html += '<div class="kv-row"><b>+' + lineAdd + " / −" + lineDel + "</b><span>增删行数</span></div>";
+        const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
+        if (todos.length) html += '<div class="kv-row"><b>' + todos.length + " 项</b><span>任务清单</span></div>";
+        if (u && (u.input_tokens || u.output_tokens)) {
+          html += '<div class="kv-row"><b>' + mTokStr(u.input_tokens || 0) + " / " + mTokStr(u.output_tokens || 0) + "</b><span>输入 / 输出 token</span></div>";
+          if (u.cache_read_tokens || u.cache_creation_tokens) html += '<div class="kv-row"><b>' + mTokStr(u.cache_read_tokens || 0) + " / " + mTokStr(u.cache_creation_tokens || 0) + "</b><span>缓存读 / 写</span></div>";
+        }
+        if (s.finish_reason) html += '<div class="kv-row"><b>' + esc(s.finish_reason) + "</b><span>结束原因</span></div>";
+        html += "</div>"; // 关闭用量统计节
+        html += '<div class="more-section"><h4 class="more-section-title">标识</h4>';
+        html += '<div class="kv-row kv-row-copy" data-copy-session-id="' + esc(s.session_id) + '"><b>' + esc(String(s.session_id || "").slice(0, 24)) + '…</b><span>Session ID</span><button class="kv-copy-btn" type="button" title="复制 Session ID" aria-label="复制 Session ID">⧉</button></div>';
+        if (s.relay_session_id) html += '<div class="kv-row kv-row-copy" data-copy-relay-session-id="' + esc(s.relay_session_id) + '"><b>' + esc(String(s.relay_session_id).slice(0, 24)) + '…</b><span>SDK 会话</span><button class="kv-copy-btn" type="button" title="复制 SDK 会话 ID" aria-label="复制 SDK 会话 ID">⧉</button></div>';
+        html += "</div>"; // 关闭标识节
+        return html;
       }
       function ensureDetailBase() {
         const content = document.querySelector("#m-detail .mobile-content");
         if (!content) return null;
         let panes = [...content.querySelectorAll(":scope > .workspace-pane")];
         let convHost = null;
-        if (panes.length === 5) {
-          // 地基 setupStubTabs 解析期已收编五 pane 并 wireSegmentTabs——同 B2 桌面 ready() 只清占位标记
+        if (panes.length === 4) {
+          // 地基 setupStubTabs 解析期已收编四 pane 并 wireSegmentTabs——同 B2 桌面 ready() 只清占位标记
           panes.forEach((p) => p.removeAttribute("data-stub"));
           convHost = panes[0].querySelector("[data-mobile-detail-content]");
           if (!convHost) { convHost = document.createElement("div"); convHost.dataset.mobileDetailContent = ""; panes[0].textContent = ""; panes[0].appendChild(convHost); }
         } else {
-          // 兜底：地基未接管时自建五 pane + 简版 tab wire（⑥c-3 任务书授权）
+          // 兜底：地基未接管时自建四 pane + 简版 tab wire（⑥c-3 任务书授权）
           const keep = content.querySelector("[data-mobile-detail-content]");
           content.textContent = "";
-          panes = Array.from({ length: 5 }, () => { const p = document.createElement("div"); p.className = "workspace-pane"; content.appendChild(p); return p; });
+          panes = Array.from({ length: 4 }, () => { const p = document.createElement("div"); p.className = "workspace-pane"; content.appendChild(p); return p; });
           convHost = keep || document.createElement("div");
           convHost.dataset.mobileDetailContent = "";
           panes[0].appendChild(convHost);
@@ -6660,7 +6751,7 @@ function connectLan(ctx) {
             panes.forEach((p, j) => p.classList.toggle("active", i === j));
           }));
         }
-        return { content, convHost, conv: panes[0], tasks: panes[1], arts: panes[2], usage: panes[3], more: panes[4] };
+        return { content, convHost, conv: panes[0], tasks: panes[1], arts: panes[2], more: panes[3] };
       }
       function updateMobileDetailDock(s) {
         const dock = document.querySelector("#mobile-detail-state-dock");
@@ -6692,8 +6783,7 @@ function connectLan(ctx) {
         { const api = b2Api(); base.convHost.classList.toggle("proc-off", !(api && api.convCtl && api.convCtl.proc())); } // #164 过程总开关（host 级类，innerHtml 重建不丢）
         base.tasks.innerHTML = mTasksHtml(s);
         base.arts.innerHTML = mArtifactsHtml(s);
-        base.usage.innerHTML = mUsageHtml(s);
-        base.more.innerHTML = mMoreHtml();
+        base.more.innerHTML = mMoreHtml(s);
         updateMobileDetailDock(s);
         syncMobileComposer(); // #169 输入栏随会话态同步（停止钮可见性/发送禁用/提示小字）
         base.content.scrollTop = keepScroll;
@@ -6919,6 +7009,16 @@ function connectLan(ctx) {
       document.addEventListener("click", (event) => {
         const target = event.target;
         if (!target.closest("#stage-mobile")) return;
+        const kvCopyM = target.closest(".kv-copy-btn"); // #169 追加令2：手机「更多」Session ID / SDK 会话复制钮（B2 copyWithFallback 同链）
+        if (kvCopyM) {
+          const rowM = kvCopyM.closest("[data-copy-session-id], [data-copy-relay-session-id]");
+          if (rowM) {
+            const fn = window.__ccDeck005CopyUi && window.__ccDeck005CopyUi.copyWithFallback;
+            if (fn) fn(rowM.dataset.copySessionId || rowM.dataset.copyRelaySessionId || "", "已复制");
+            else mToast("复制组件未就绪");
+          }
+          return;
+        }
         const navBtn = target.closest(".mobile-nav [data-mobile-root]");
         if (navBtn) { openMobileRoot(navBtn.dataset.mobileRoot); return; }
         if (target.closest("[data-mobile-back]")) { closeMobileDetail(); return; }
