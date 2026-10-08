@@ -420,7 +420,9 @@
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
     .tag.info { background: var(--info-bg); color: var(--info); }
-    .workspace { display: flex; min-width: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
+    /* #172-F1 高度链：workspace 是 column flex 容器（grid 子项），缺 min-height:0 时内容撑开会把
+       footer(composer) 推出视口——补 min-height:0 放行收缩（与 #162 同族，162 修 desktop-screen 级） */
+    .workspace { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
     .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
     .workspace-title-row { display: flex; align-items: center; gap: 8px; }
     .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
@@ -433,12 +435,16 @@
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
+    /* #172-F2 焦点环：外层 focus-within 圆角描边 + 内部元素 focus-visible 默认 outline 叠加成双重轮廓
+       （用户实测「橙色方框很丑」，codex 盲评同样点名）——统一只留外层 border-color 变化，内部所有聚焦
+       元素的 outline 全部禁用（键盘导航提示由外层圆角边框承载，符合卡片整体聚焦的语义） */
     .composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 13px; }
     .composer:focus-within { border-color: var(--brand); }
     .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
+    .composer-input:focus-visible { outline: none; }
     .composer-input::placeholder { color: var(--faint); }
     .composer-clip, .composer-img { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
-    .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); }
+    .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
     .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
     /* #169 输入栏五点：能力提示小字（旧壳 #179 attachHint 同语义，005 化为 composer 内换行行）。
        min-width:0 必备——nowrap 长文的 min-content 会把 flex 行撑出手机屏（发送钮被推出右缘） */
@@ -446,11 +452,13 @@
     /* #169 发送常驻（旧壳 #48 sendBtn 形态 005 化：中性面板+描边+品牌色➤，不做实底大色块） */
     .composer-sendbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); color: var(--brand); cursor: pointer; }
     .composer-sendbtn:hover:not(:disabled) { background: var(--hover); border-color: var(--brand); }
+    .composer-sendbtn:focus-visible { outline: none; }
     .composer-sendbtn:disabled { opacity: .4; cursor: default; }
     .composer-sendbtn .icon-inline { width: 16px; height: 16px; }
     /* #169 停止独立（旧壳 #124 stopBtn 34×34 红调图标钮，与发送并存不互斥） */
     .composer-stopbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid rgba(236,116,114,.4); border-radius: 8px; background: rgba(236,116,114,.1); color: var(--error); cursor: pointer; }
     .composer-stopbtn:hover { background: rgba(236,116,114,.18); border-color: rgba(236,116,114,.55); }
+    .composer-stopbtn:focus-visible { outline: none; }
     .composer-stopbtn .icon-inline { width: 14px; height: 14px; }
     .composer-stopbtn[hidden] { display: none; }
     .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
