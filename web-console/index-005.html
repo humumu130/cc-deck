@@ -22,7 +22,7 @@
       --text-strong: #E8EFF8;
       --text: #C4D0DE;
       --dim: #9AABBE;
-      --faint: #7188A0;
+      --faint: #8298B0;
       --progress-fill: #7793AE;
       --brand: #E2855E;
       --brand-hover: #F0A06A;
@@ -145,7 +145,8 @@
       --radius: 10px;
       --radius-sm: 7px;
       --radius-lg: 14px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Microsoft YaHei", monospace;
+      --sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     }
     html[data-theme="light"] {
       color-scheme: light;
@@ -286,15 +287,14 @@
       margin: 0;
       color: var(--text);
       background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0);
-      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     }
     button { font: inherit; }
     .page { width: 100%; margin: 0; padding: 0; }
     .mode-stage { display: none; }
     .mode-stage.active { display: block; }
-    .desktop-frame { position: relative; overflow: hidden; width: 100%; background: var(--bg1); transition: width .18s ease; }
-    .desktop-frame.inspector-collapsed { width: calc(100% - 278px); }
-    .windowbar { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    .desktop-frame { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100%; height: 100vh; background: var(--bg1); }
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
     .window-dots { display: flex; gap: 6px; }
     .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
     .window-title { flex: 1; color: var(--faint); font-size: 11px; }
@@ -339,7 +339,7 @@
     .source-filter-cta[hidden] { display: none; }
     .source-filter-cta:hover { border-color: var(--info); background: var(--hover); color: var(--text); }
     .source-filter-cta strong { flex: 0 0 auto; color: var(--info); font-size: 10px; font-weight: 700; white-space: nowrap; }
-    .desktop-shell { display: flex; min-width: min(1122px, 100%); height: 780px; }
+    .desktop-shell { display: flex; min-width: min(960px, 100%); flex: 1; min-height: 0; }
     .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
     .rail-btn:hover { color: var(--text); background: var(--hover); }
@@ -360,7 +360,7 @@
     .icon-btn::before { content: ""; position: absolute; inset: -7px; }
     .icon-btn:hover { color: var(--text); background: var(--hover); }
     .session-list-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 10px var(--sans); }
+    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 12px var(--sans); }
     .session-list-tools input::placeholder { color: var(--faint); }
     .session-list-tools span { flex: 0 0 auto; color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
     .session-list-tools button { min-height: 28px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font: 10px var(--mono); white-space: nowrap; }
@@ -372,12 +372,12 @@
     .session-list-tools button[data-session-filter]:hover { background: var(--hover); color: var(--text); }
     .session-list-tools button:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
     .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 2px; }
-    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
+    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 11px var(--mono); letter-spacing: .04em; }
     .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
-    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card p { overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
     .queue-card .tag { margin-top: 0; }
@@ -405,7 +405,7 @@
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
-    .composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 11px; }
+    .composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 13px; }
     .composer:focus-within { border-color: var(--brand); }
     .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
     .composer-input::placeholder { color: var(--faint); }
@@ -494,18 +494,18 @@
     /* 任务面板四态分区（旧版 :6543 排序语义：已完成→进行中→待审查→待办；「待验证」旧词随 2026-10-05 泳道词表退役为「待审查」）符号色 */
     .check-row b.run { color: var(--working); }
     .check-row b.verify { color: var(--brand); }
-    .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 11px; }
+    .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 13px; }
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
     .bubble strong { color: var(--text-strong); }
-    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 11px; }
+    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 13px; }
     .message-author { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--text-strong); }
-    .message-author strong { font-size: 10px; }
+    .message-author strong { font-size: 12px; }
     .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
-    .message-author time { margin-left: auto; color: var(--faint); font: 9px var(--mono); }
+    .message-author time { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
     .message-body { min-width: 0; line-height: 1.55; }
     .message-body pre, .message-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 10px var(--mono); }
+    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 11px var(--mono); }
     .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
     .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
     .wait-card strong { display: block; color: var(--working); font-size: 11px; }
@@ -575,7 +575,7 @@
     .artifact-file.downloading .artifact-file-meta { color: var(--brand); }
     .artifact-file-retry:focus-visible, .artifact-file-retry:hover { border-color: var(--error); background: var(--danger-bg); }
     .artifact-batch { padding: 0 10px 9px; }
-    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 10px var(--mono); }
+    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 11px var(--mono); }
     .artifact-batch-state.complete { background: var(--artifact-complete-bg); color: var(--done); }
     .artifact-batch-state.partial { background: var(--artifact-failed-bg); color: var(--error); }
     .artifact-batch-state button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; }
@@ -787,7 +787,7 @@
     .mobile-notify-card { padding: 8px 14px; margin-bottom: 0; min-height: 44px; border: 0; border-radius: 0; background: transparent; box-shadow: none; transition: background .06s linear; }
     .mobile-notify-card:hover { background: var(--q-row-hov); transform: none; box-shadow: none; }
     .mobile-card .row { display: flex; align-items: center; gap: 7px; }
-    .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
+    .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 12px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
     .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); }
     .icon-status { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -811,7 +811,7 @@
     .mobile-project-summary span { flex: 0 0 auto; }
     .mobile-settings { display: grid; gap: 8px; }
     .mobile-settings .settings-row { padding: 12px; }
-    #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .04em; }
+    #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 11px var(--mono); letter-spacing: .04em; }
     .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
     .mobile-back:hover { background: var(--hover); color: var(--text); }
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
@@ -854,14 +854,14 @@
        小号淡色一档，三徽全空整行不渲染——标题不再被徽章族挤压截断）/
        srow-cta「处理」浮层按钮（绝对定位挂卡不占文档流；未读数角标已按用户拍板删除）。
        hover .06s 瞬时淡底（扫过即现即逝）、选中持续淡底，走 --q-row-* 暗亮双值 ---------- */
-    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: 12.5px; --srow-sub-size: 10.5px; --srow-badge-size: 9.5px; }
+    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: 13px; --srow-sub-size: 12px; --srow-badge-size: 11px; }
     /* 满宽行（用户直馈 2026-10-05：「左右都浪费横向空间」——蒙版贯穿整列去卡感；
        radius 拍板归零：「既然蒙版贯穿整行了，还需要圆角吗？微信上没有圆角」）：
        会话域列容器水平 padding 归零（.queue 通用类不动，team/project/settings 卡片域零触碰）；
        行零圆角矩形蒙版条、背景/hover/selected 满宽贯穿；组头文字对齐行内容起点（14px） */
     #d-session .queue { padding: 16px 0; }
-    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; --srow-name-size: 12px; --srow-sub-size: 10px; --srow-badge-size: 9px; }
-    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; --srow-name-size: 13px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
+    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; --srow-name-size: 12px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
+    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; --srow-name-size: 14px; --srow-sub-size: 13px; --srow-badge-size: 12px; }
     #d-session .queue-card { display: flex; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 14px; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
     /* 行形态 display:flex 会压过 [hidden] 的 UA display:none——源筛选/搜索隐藏链（card.hidden）保真 */
     #d-session .queue-card[hidden] { display: none; }
@@ -1055,9 +1055,9 @@
     html[data-theme="light"] .window-title { color: var(--faint); }
     html[data-theme="light"] .domain-rail, html[data-theme="light"] .windowbar { box-shadow: 5px 0 20px var(--rail-shadow); }
     html[data-theme="light"] .mobile-status { color: var(--dim); }
-    @media (max-width: 980px) {
+    @media (max-width: 959px) {
       .desktop-frame { overflow-x: auto; }
-      .desktop-frame .windowbar, .desktop-shell { min-width: 1120px; }
+      .desktop-frame .windowbar, .desktop-shell { min-width: 960px; }
     }
   </style>
 </head>
@@ -3767,8 +3767,6 @@
         if (!inspector || !button) return;
         screen.classList.toggle("inspector-collapsed", collapsed);
         inspector.classList.toggle("collapsed", collapsed);
-        const frame = screen.closest(".desktop-frame");
-        if (frame && screen.classList.contains("active")) frame.classList.toggle("inspector-collapsed", collapsed && !window.matchMedia("(max-width: 980px)").matches);
         button.textContent = collapsed ? "›" : "‹";
         button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
         button.setAttribute("aria-label", button.title);
@@ -3825,8 +3823,6 @@
         if (!screen) return;
         desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
         railButtons.forEach((button) => button.classList.toggle("active", button.dataset.domain === domain));
-        const frame = screen.closest(".desktop-frame");
-        if (frame) frame.classList.toggle("inspector-collapsed", screen.classList.contains("inspector-collapsed") && !window.matchMedia("(max-width: 980px)").matches);
         showToast(`已切换到${({ session: "会话", team: "团队", project: "项目", notify: "通知", settings: "设置" })[domain]}域`);
       }
 
