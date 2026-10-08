@@ -22,7 +22,7 @@
       --text-strong: #E8EFF8;
       --text: #C4D0DE;
       --dim: #9AABBE;
-      --faint: #7188A0;
+      --faint: #8298B0;
       --progress-fill: #7793AE;
       --brand: #E2855E;
       --brand-hover: #F0A06A;
@@ -145,7 +145,8 @@
       --radius: 10px;
       --radius-sm: 7px;
       --radius-lg: 14px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Microsoft YaHei", monospace;
+      --sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     }
     html[data-theme="light"] {
       color-scheme: light;
@@ -286,19 +287,30 @@
       margin: 0;
       color: var(--text);
       background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0);
-      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     }
     button { font: inherit; }
     .page { width: 100%; margin: 0; padding: 0; }
     .mode-stage { display: none; }
     .mode-stage.active { display: block; }
-    .desktop-frame { position: relative; overflow: hidden; width: 100%; background: var(--bg1); transition: width .18s ease; }
-    .desktop-frame.inspector-collapsed { width: calc(100% - 278px); }
-    .windowbar { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    .desktop-frame { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100%; height: 100vh; background: var(--bg1); }
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
     .window-dots { display: flex; gap: 6px; }
     .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
     .window-title { flex: 1; color: var(--faint); font-size: 11px; }
     .window-link { color: var(--dim); font-size: 10px; }
+    /* #158-②③ windowbar 桌面化：Tauri 壳内真拖拽区+Windows 三钮（浏览器保持原型装饰零变化） */
+    .windowbar { user-select: none; -webkit-user-select: none; }
+    .windowbar-winbtns { display: none; align-items: stretch; flex: none; margin: 0 -13px 0 6px; }
+    .windowbar-winbtns button {
+      display: grid; place-items: center; width: 44px; height: 34px; border: 0; border-radius: 0;
+      background: transparent; color: var(--dim); cursor: default; font-size: 11px; line-height: 1;
+    }
+    .windowbar-winbtns button:hover { background: var(--hover); color: var(--text); }
+    .windowbar-winbtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
+    html.mac-tauri .windowbar { padding-left: 78px; }
+    html.mac-tauri .window-dots, html.win-tauri .window-dots { display: none; }
+    html.win-tauri .windowbar-winbtns { display: flex; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
     .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -339,7 +351,7 @@
     .source-filter-cta[hidden] { display: none; }
     .source-filter-cta:hover { border-color: var(--info); background: var(--hover); color: var(--text); }
     .source-filter-cta strong { flex: 0 0 auto; color: var(--info); font-size: 10px; font-weight: 700; white-space: nowrap; }
-    .desktop-shell { display: flex; min-width: min(1122px, 100%); height: 780px; }
+    .desktop-shell { display: flex; min-width: min(960px, 100%); flex: 1; min-height: 0; }
     .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
     .rail-btn:hover { color: var(--text); background: var(--hover); }
@@ -360,7 +372,7 @@
     .icon-btn::before { content: ""; position: absolute; inset: -7px; }
     .icon-btn:hover { color: var(--text); background: var(--hover); }
     .session-list-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 10px var(--sans); }
+    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 12px var(--sans); }
     .session-list-tools input::placeholder { color: var(--faint); }
     .session-list-tools span { flex: 0 0 auto; color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
     .session-list-tools button { min-height: 28px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font: 10px var(--mono); white-space: nowrap; }
@@ -372,12 +384,12 @@
     .session-list-tools button[data-session-filter]:hover { background: var(--hover); color: var(--text); }
     .session-list-tools button:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
     .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 2px; }
-    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
+    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 11px var(--mono); letter-spacing: .04em; }
     .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
-    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card p { overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
     .queue-card .tag { margin-top: 0; }
@@ -405,7 +417,7 @@
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
-    .composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 11px; }
+    .composer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 13px; }
     .composer:focus-within { border-color: var(--brand); }
     .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
     .composer-input::placeholder { color: var(--faint); }
@@ -494,18 +506,18 @@
     /* 任务面板四态分区（旧版 :6543 排序语义：已完成→进行中→待审查→待办；「待验证」旧词随 2026-10-05 泳道词表退役为「待审查」）符号色 */
     .check-row b.run { color: var(--working); }
     .check-row b.verify { color: var(--brand); }
-    .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 11px; }
+    .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 13px; }
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
     .bubble strong { color: var(--text-strong); }
-    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 11px; }
+    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 13px; }
     .message-author { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--text-strong); }
-    .message-author strong { font-size: 10px; }
+    .message-author strong { font-size: 12px; }
     .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
-    .message-author time { margin-left: auto; color: var(--faint); font: 9px var(--mono); }
+    .message-author time { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
     .message-body { min-width: 0; line-height: 1.55; }
     .message-body pre, .message-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 10px var(--mono); }
+    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 11px var(--mono); }
     .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
     .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
     .wait-card strong { display: block; color: var(--working); font-size: 11px; }
@@ -575,7 +587,7 @@
     .artifact-file.downloading .artifact-file-meta { color: var(--brand); }
     .artifact-file-retry:focus-visible, .artifact-file-retry:hover { border-color: var(--error); background: var(--danger-bg); }
     .artifact-batch { padding: 0 10px 9px; }
-    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 10px var(--mono); }
+    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 11px var(--mono); }
     .artifact-batch-state.complete { background: var(--artifact-complete-bg); color: var(--done); }
     .artifact-batch-state.partial { background: var(--artifact-failed-bg); color: var(--error); }
     .artifact-batch-state button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; }
@@ -741,6 +753,10 @@
     .theme-setting .chev::after { content: "›"; margin-left: 4px; color: var(--faint); }
     .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
     .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
+    /* #158-批3 连接诊断小字（桌面形态）：err/缺 Node 可点跳 nodejs.org，ok 态绿字 */
+    .settings-row p.relay-diag { margin-top: 2px; line-height: 1.45; }
+    .settings-row p.relay-diag[data-diag="err"], .settings-row p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .settings-row p.relay-diag[data-diag="ok"] { color: var(--done); }
     .settings-row .chev { margin-left: auto; color: var(--faint); }
     .mobile-frame { position: relative; width: 100%; overflow: hidden; background: var(--bg1); }
     .mobile-screen { display: none; min-height: 735px; }
@@ -787,7 +803,7 @@
     .mobile-notify-card { padding: 8px 14px; margin-bottom: 0; min-height: 44px; border: 0; border-radius: 0; background: transparent; box-shadow: none; transition: background .06s linear; }
     .mobile-notify-card:hover { background: var(--q-row-hov); transform: none; box-shadow: none; }
     .mobile-card .row { display: flex; align-items: center; gap: 7px; }
-    .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
+    .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 12px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
     .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); }
     .icon-status { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -811,7 +827,7 @@
     .mobile-project-summary span { flex: 0 0 auto; }
     .mobile-settings { display: grid; gap: 8px; }
     .mobile-settings .settings-row { padding: 12px; }
-    #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .04em; }
+    #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 11px var(--mono); letter-spacing: .04em; }
     .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
     .mobile-back:hover { background: var(--hover); color: var(--text); }
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
@@ -854,14 +870,14 @@
        小号淡色一档，三徽全空整行不渲染——标题不再被徽章族挤压截断）/
        srow-cta「处理」浮层按钮（绝对定位挂卡不占文档流；未读数角标已按用户拍板删除）。
        hover .06s 瞬时淡底（扫过即现即逝）、选中持续淡底，走 --q-row-* 暗亮双值 ---------- */
-    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: 12.5px; --srow-sub-size: 10.5px; --srow-badge-size: 9.5px; }
+    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: 13px; --srow-sub-size: 12px; --srow-badge-size: 11px; }
     /* 满宽行（用户直馈 2026-10-05：「左右都浪费横向空间」——蒙版贯穿整列去卡感；
        radius 拍板归零：「既然蒙版贯穿整行了，还需要圆角吗？微信上没有圆角」）：
        会话域列容器水平 padding 归零（.queue 通用类不动，team/project/settings 卡片域零触碰）；
        行零圆角矩形蒙版条、背景/hover/selected 满宽贯穿；组头文字对齐行内容起点（14px） */
     #d-session .queue { padding: 16px 0; }
-    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; --srow-name-size: 12px; --srow-sub-size: 10px; --srow-badge-size: 9px; }
-    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; --srow-name-size: 13px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
+    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; --srow-name-size: 12px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
+    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; --srow-name-size: 14px; --srow-sub-size: 13px; --srow-badge-size: 12px; }
     #d-session .queue-card { display: flex; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 14px; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
     /* 行形态 display:flex 会压过 [hidden] 的 UA display:none——源筛选/搜索隐藏链（card.hidden）保真 */
     #d-session .queue-card[hidden] { display: none; }
@@ -1015,6 +1031,10 @@
     .settings-panel .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .toggle-control { min-width: 34px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); cursor: pointer; font: 700 10px var(--mono); }
     .toggle-control.active { border-color: var(--done); background: var(--done-bg); color: var(--done); }
+    /* #158-批4a 未接线假开关置灰：disabled + 行尾灰字「即将支持」，防用户操作后零反馈被当 bug 报 */
+    .toggle-control:disabled { opacity: .5; cursor: not-allowed; }
+    .toggle-control:disabled.active { border-color: var(--line); background: var(--surface1); color: var(--dim); }
+    .settings-row .coming-soon { flex: 0 0 auto; color: var(--faint); font-size: 10px; white-space: nowrap; }
     .mobile-settings .settings-row { border-color: transparent; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .mobile-settings .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .notice { border-right: 0; border-top: 0; border-bottom: 1px solid var(--line-soft); border-left: 0; border-radius: 0; background: var(--surface2); box-shadow: none; }
@@ -1055,9 +1075,9 @@
     html[data-theme="light"] .window-title { color: var(--faint); }
     html[data-theme="light"] .domain-rail, html[data-theme="light"] .windowbar { box-shadow: 5px 0 20px var(--rail-shadow); }
     html[data-theme="light"] .mobile-status { color: var(--dim); }
-    @media (max-width: 980px) {
+    @media (max-width: 959px) {
       .desktop-frame { overflow-x: auto; }
-      .desktop-frame .windowbar, .desktop-shell { min-width: 1120px; }
+      .desktop-frame .windowbar, .desktop-shell { min-width: 960px; }
     }
   </style>
 </head>
@@ -1067,7 +1087,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">CC Deck · Command Bridge</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span class="source-trigger-summary" data-current-summary>—</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="window-link">⌘K 全局搜索</span></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title" data-tauri-drag-region>CC Deck · Command Bridge</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span class="source-trigger-summary" data-current-summary>—</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="window-link">⌘K 全局搜索</span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -1106,7 +1126,30 @@
                 // LAN token，空态措辞不得落「?token=」分支（pair_ack 后主区仍误导未连接，Playwright 实证）
                 const cloudLaneOn = () => { try { const u = window.__ccDeck005CloudUI; return !!(u && u.stateLabel && /已连接/.test(u.stateLabel())); } catch (_) { return false; } };
 
-                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["CodeBuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
+                // ---------- #158-批4a 路径展示/比较共享助手（本 IIFE 是文档序最早的内联脚本，在此幂等挂
+                // window；后续 team/B4/notify/地基/mobile 各 IIFE 解析期就要取别名，不重复定义） ----------
+                // Windows 桌面形态用户应看到 C:\Users\x 而非 C:/Users/x：displayPath 只管展示——桌面
+                // Windows 形态（非 Mac UA 且壳桥在场）把 / 显示为 \；逻辑比较一律走 normPath
+                // （两侧统一 / 再比，1:1 替换保序，切片索引天然对齐）
+                if (!window.__ccDeck005PathUi) {
+                  const winShellForm = () => {
+                    try {
+                      if (/Mac/i.test(navigator.userAgent)) return false;
+                      if (window.__TAURI__ || window.ccDeck) return true;
+                      return document.documentElement.classList.contains("win-tauri");
+                    } catch (_) { return false; }
+                  };
+                  window.__ccDeck005PathUi = {
+                    displayPath: (p) => { const v = String(p ?? ""); return v && winShellForm() ? v.replace(/\//g, "\\") : v; },
+                    normPath: (p) => String(p ?? "").replace(/[\\/]/g, "/"),
+                    baseName: (p) => { const n = String(p ?? "").replace(/[\\/]/g, "/").replace(/\/+$/, ""); const i = n.lastIndexOf("/"); return i >= 0 ? n.slice(i + 1) : (n || String(p ?? "")); },
+                    dirOf: (p) => { const v = String(p ?? ""); const i = Math.max(v.lastIndexOf("/"), v.lastIndexOf("\\")); return i > 0 ? v.slice(0, i) : ""; },
+                  };
+                }
+                const displayPath = window.__ccDeck005PathUi.displayPath;
+                const baseName = window.__ccDeck005PathUi.baseName;
+
+                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
                 const VERIFY_RE = /[〔\[【]\s*待验证\s*[〕\]】]/;   // #85 待验证档：in_progress + 前缀约定独立分组
                 const HIST_PREFIX = "cc.input.hist.";               // #95 按会话分桶的输入历史
                 const HIST_MAX = 200;
@@ -1177,7 +1220,16 @@
                   return "clip";
                 }
                 function shortTitle(s) { return String(s.title || s.initial_prompt || s.session_id || "").slice(0, 24); }
-                function shortPath(p) { const v = String(p || ""); if (S.homedir && v.startsWith(S.homedir)) return "~" + v.slice(S.homedir.length); return v; }
+                // #158-批4a：homedir 前缀归一比较（Windows 数据 \ 与代码拼 / 不匹配会让 ~ 缩短失效），
+                // 输出走 displayPath（桌面 Windows 形态显示反斜杠）；1:1 替换保序，切片索引对齐
+                function shortPath(p) {
+                  const v = String(p || "");
+                  if (!v || !S.homedir) return displayPath(v);
+                  const n = (s) => s.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                  const vN = n(v), hN = n(S.homedir);
+                  if (hN && (vN === hN || vN.startsWith(hN + "/"))) return "~" + displayPath(v.slice(S.homedir.length));
+                  return displayPath(v);
+                }
 
                 // ---------- B2 数据通道（#150 R2 并轨：退役自开 WS 与重连/握手超时，改订阅地基帧总线） ----------
                 function failB2Flights() { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
@@ -1373,15 +1425,35 @@
                   st.resolve({ parts: st.parts, mime: st.mime, size: st.size });
                 }
                 function failArt(id, err) { const st = S.artFetches.get(id); if (!st) return; clearTimeout(st.timer); S.artFetches.delete(id); st.reject(err); }
-                function downloadArtifact(path, res) {
+                function artifactBytes(res) { // res.parts b64 分块 → 单 Uint8Array（Blob 链与壳落盘链共用）
                   const chunks = res.parts.map((b) => { const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; });
                   const out = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
                   let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
-                  const url = URL.createObjectURL(new Blob([out], { type: res.mime }));
+                  return out;
+                }
+                function downloadArtifact(path, res) { // 浏览器形态：Blob + a.download 原链（保留）
+                  const url = URL.createObjectURL(new Blob([artifactBytes(res)], { type: res.mime }));
                   const a = document.createElement("a");
                   a.href = url; a.download = String(path).split(/[\\/]/).pop() || "artifact";
                   document.body.appendChild(a); a.click(); a.remove();
                   setTimeout(() => URL.revokeObjectURL(url), 4000);
+                }
+                // #158-批3 产物下载桌面链（旧壳 downloadAndOpenArtifact 10434-10470 范式）：mac 桌面
+                // 点下载无反应的根因——WKWebView 对 Blob+a.download 支持不稳。桌面壳改 ccDeck.
+                // saveArtifact 落系统「下载」目录（重名自增）→ ccDeck.openPath 系统默认应用打开；
+                // 打开失败不算下载失败（路径已 toast，用户可自取）。busy 锁防 20MB 级拉取在途时
+                // 连点并发第二份。分片 btoa 防 apply 栈溢出（旧壳 bytesToB64 同款）
+                let shellArtBusy = false;
+                function bytesToB64(u8) { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+                function saveArtifactViaShell(path, res) {
+                  const name = String(path).split(/[\\/]/).pop() || "输出物";
+                  return window.ccDeck.saveArtifact(name, bytesToB64(artifactBytes(res)));
+                }
+                // #106 先探后开范式（旧壳 shellHasLocal 10452）：probePath 微秒级 stat 判路径在不在
+                // 本机；旧壳无 probePath（升级窗口期）按「在」处理回落 openPath→catch 链
+                function shellHasLocal(p) {
+                  if (window.ccDeck && typeof window.ccDeck.probePath === "function") return window.ccDeck.probePath(p).catch(() => true);
+                  return Promise.resolve(true);
                 }
 
                 // ---------- 左列会话列表（地基 renderSessionList 同构；增量会话由本端补齐） ----------
@@ -1395,7 +1467,7 @@
                   return {
                     id: esc(session.session_id),
                     title: esc(session.title || session.initial_prompt || session.session_id),
-                    summary: esc(session.action_summary || session.last_error || session.cwd || "暂无活动摘要"),
+                    summary: esc(session.action_summary || session.last_error || displayPath(session.cwd) || "暂无活动摘要"),
                     status,
                     tag: ({ working: "运行中", waiting: "待处理", error: "错误", done: "完成" })[status],
                     tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
@@ -1416,10 +1488,15 @@
                   return '<div class="queue-card' + (item.selected ? " selected" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.tag || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.tag ? '<span class="tag ' + item.tagClass + '">' + item.tag + "</span>" : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
-                  const cwd = String(session.cwd || "").replace(/\/+$/, "");
+                  // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
+                  const cwd = String(session.cwd || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
                   const projects = Array.isArray(S.projects) ? S.projects : [];
                   if (cwd) {
-                    const hit = projects.find((p) => p && typeof p.anchor_dir === "string" && (p.anchor_dir.replace(/\/+$/, "") === cwd || cwd.startsWith(p.anchor_dir.replace(/\/+$/, "") + "/")));
+                    const hit = projects.find((p) => {
+                      if (!(p && typeof p.anchor_dir === "string" && p.anchor_dir)) return false;
+                      const a = p.anchor_dir.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                      return a === cwd || cwd.startsWith(a + "/");
+                    });
                     if (hit && hit.name) return String(hit.name);
                   }
                   return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
@@ -1667,7 +1744,7 @@
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
                     if (arts.length) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
-                      html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = String(a.path).split("/").pop(); return '<div class="artifact-row">' + svgUse(artifactIconFor(name)) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
+                      html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + svgUse(artifactIconFor(name)) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
                     }
                   }
                   UI.inspector.innerHTML = html;
@@ -1888,12 +1965,15 @@
                 }
 
                 // ---------- 渲染：输出物 tab（目录分组 + 批量下载） ----------
-                function artDirOf(a) { const p = String(a.path || ""); const i = p.lastIndexOf("/"); return i > 0 ? p.slice(0, i) : ""; }
+                // #158-批4a：目录切分兼容 \ 分隔（Windows 原生路径 lastIndexOf("/") 为 -1 会让整串
+                // 落散列/目录截尾错位）；relDir 前缀比较归一化（1:1 替换保序，切片索引对齐），输出走 displayPath
+                function artDirOf(a) { return window.__ccDeck005PathUi.dirOf(a.path); }
                 function relDir(dir, cwd) {
                   if (!dir) return "";
-                  const c = String(cwd || "").replace(/\/+$/, "");
-                  if (c && dir.startsWith(c + "/")) return dir.slice(c.length + 1);
-                  return dir;
+                  const n = (s) => String(s || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                  const d = n(dir), c = n(cwd);
+                  if (c && d.startsWith(c + "/")) return displayPath(dir.slice(c.length + 1));
+                  return displayPath(dir);
                 }
                 function artLayoutItems(artifacts) { // v1 同款：同目录 ≥2 文件成组，其余散列
                   const items = (artifacts || []).filter((a) => a && a.path).slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
@@ -1905,12 +1985,12 @@
                   return { groups, loose, files: items };
                 }
                 function artFileNode(a, cwd) {
-                  const name = String(a.path).split("/").pop();
+                  const name = baseName(a.path);
                   const div = document.createElement("div");
                   div.className = "artifact-file";
                   div.dataset.artifactFile = name;
                   div.dataset.path = a.path;
-                  div.title = a.path;
+                  div.title = displayPath(a.path);
                   div.innerHTML = '<span class="artifact-file-icon">' + svgUse(artifactIconFor(name)) + '</span><div class="artifact-file-main"><span class="artifact-file-name">' + esc(name) + '</span><span class="artifact-file-dir">' + esc(relDir(artDirOf(a), cwd) || "当前工作目录") + '</span></div><span class="artifact-file-meta" data-artifact-meta>' + sizeStr(a.size) + " · " + relTime(a.last_at || a.first_at) + "</span>" + (a.exists === false ? '<span class="artifact-file-anomaly">已不在磁盘</span>' : "");
                   return div;
                 }
@@ -1920,7 +2000,9 @@
                   sec.dataset.artifactGroup = g.dir;
                   const total = sizeStr(g.list.reduce((t, a) => t + (Number(a.size) || 0), 0));
                   const recent = relTime(Math.max(...g.list.map((a) => a.last_at || 0)));
-                  sec.innerHTML = '<div class="artifact-group-head"><span class="artifact-folder-icon">' + svgUse("folder") + '</span><div class="artifact-group-title"><strong>' + esc(relDir(g.dir, cwd) || "工作目录") + "</strong><small>" + g.list.length + " 个文件 · " + total + " · 最近 " + recent + '</small></div><button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button><div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu"><button type="button" data-artifact-action="toggle">收起目录</button><button type="button" data-artifact-action="copy-path">复制路径</button></div></div></div><div class="artifact-files"></div><div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>';
+                  // #158-批3 桌面壳专属：先探后开（probePath）再「在文件夹中定位」（openPath reveal）
+                  const shellReveal = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
+                  sec.innerHTML = '<div class="artifact-group-head"><span class="artifact-folder-icon">' + svgUse("folder") + '</span><div class="artifact-group-title"><strong>' + esc(relDir(g.dir, cwd) || "工作目录") + "</strong><small>" + g.list.length + " 个文件 · " + total + " · 最近 " + recent + '</small></div><button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button><div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu"><button type="button" data-artifact-action="toggle">收起目录</button>' + (shellReveal ? '<button type="button" data-artifact-action="reveal">在文件夹中定位</button>' : "") + '<button type="button" data-artifact-action="copy-path">复制路径</button></div></div></div><div class="artifact-files"></div><div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>';
                   const files = sec.querySelector(".artifact-files");
                   for (const a of g.list) files.appendChild(artFileNode(a, cwd));
                   return sec;
@@ -1934,7 +2016,7 @@
                   const layout = artLayoutItems(arts);
                   const wrap = document.createElement("div");
                   wrap.className = "artifact-browser";
-                  wrap.innerHTML = '<div class="artifact-summary"><span><strong>' + layout.files.length + "</strong> 个文件 · " + layout.groups.length + " 个目录" + (s.artifacts_truncated ? '<small> · 清单曾被截断</small>' : "") + '</span><span class="artifact-summary-path" title="' + esc(s.cwd || "") + '">cwd · ' + esc(shortPath(s.cwd)) + "</span></div>";
+                  wrap.innerHTML = '<div class="artifact-summary"><span><strong>' + layout.files.length + "</strong> 个文件 · " + layout.groups.length + " 个目录" + (s.artifacts_truncated ? '<small> · 清单曾被截断</small>' : "") + '</span><span class="artifact-summary-path" title="' + esc(displayPath(s.cwd || "")) + '">cwd · ' + esc(shortPath(s.cwd)) + "</span></div>";
                   layout.groups.forEach((g, i) => wrap.appendChild(artGroupNode(g, s.cwd, i === 0)));
                   if (layout.loose.length) {
                     const loose = document.createElement("div");
@@ -1955,13 +2037,25 @@
                   if (state === "complete") node.innerHTML = "<span>已下载 " + total + " 个文件</span>";
                 }
                 function downloadNode(fileEl, sid) {
+                  const path = fileEl.dataset.path || "";
+                  // #158-批3 桌面/浏览器分支显式：壳桥在场走 saveArtifact→openPath 落盘链，
+                  // 否则保留 Blob+a.download；busy 占用直接拒绝（不进 catch 的失败态标记）
+                  const viaShell = !!(window.ccDeck && typeof window.ccDeck.saveArtifact === "function");
+                  if (viaShell && shellArtBusy) { b2Toast("上一个输出物还在下载中…"); return Promise.resolve(); }
                   const meta = fileEl.querySelector("[data-artifact-meta]");
                   const prev = meta ? meta.textContent : "";
                   if (meta) meta.textContent = "下载中…";
-                  return fetchArtifact(sid, fileEl.dataset.path || "").then((res) => {
-                    downloadArtifact(fileEl.dataset.path, res);
-                    if (meta) meta.textContent = "已下载";
+                  if (viaShell) shellArtBusy = true;
+                  return fetchArtifact(sid, path).then(async (res) => {
+                    if (!viaShell) { downloadArtifact(path, res); if (meta) meta.textContent = "已下载"; return; }
+                    try {
+                      const saved = await saveArtifactViaShell(path, res);
+                      try { await window.ccDeck.openPath(saved, false); } catch (_) {} // 打开失败不算下载失败——路径已 toast
+                      b2Toast("已下载并打开：" + saved);
+                      if (meta) meta.textContent = "已下载";
+                    } finally { shellArtBusy = false; }
                   }).catch((err) => {
+                    if (viaShell) shellArtBusy = false;
                     if (meta) meta.textContent = prev;
                     fileEl.classList.add("failed");
                     const old = fileEl.querySelector(".artifact-file-error");
@@ -2215,6 +2309,37 @@
                   if (e.state === "unsupported") return "不支持 · " + ((e.preflight && e.preflight.reason) || "占位");
                   return "不可用 · " + oneLine((e.preflight && e.preflight.reason) || "未探测到");
                 }
+                // #368（旧壳 8781-8794 口径）：cwd 预填「上次创建用的目录」优先，无记忆回落
+                // 活动源用户根目录。005 单源——单键记忆（不与旧壳 ccr_cwd@id 多源键纠缠）
+                const CWD_LAST_KEY = "cc-deck-005-last-cwd";
+                function lastCreateCwd() { try { return localStorage.getItem(CWD_LAST_KEY) || ""; } catch (_) { return ""; } }
+                // #158-批3 桌面壳原生目录选择（旧壳 8760-8778 范式）：dialog 插件在场且当前源
+                // 是本机 loopback relay 才给浏览钮（远程源选本机目录无意义，隐藏）
+                function createCwdBrowseable() {
+                  return !!(window.__TAURI__ && window.__TAURI__.dialog
+                    && typeof window.__ccDeck005LocalRelayLoopback === "function" && window.__ccDeck005LocalRelayLoopback());
+                }
+                async function pickCreateCwd() {
+                  if (!(window.__TAURI__ && window.__TAURI__.dialog)) return;
+                  if (!(typeof window.__ccDeck005LocalRelayLoopback === "function" && window.__ccDeck005LocalRelayLoopback())) {
+                    b2Toast("当前新建目标是其他电脑的源，请直接输入那台电脑上的路径");
+                    return;
+                  }
+                  try {
+                    const menu = document.getElementById("b2-create-menu");
+                    const input = menu && menu.querySelector("[data-create-field='cwd']");
+                    const cur = input ? input.value.trim() : "";
+                    const dir = await window.__TAURI__.dialog.open({
+                      directory: true, multiple: false, title: "选择工作目录",
+                      ...(cur ? { defaultPath: cur } : {}),
+                    });
+                    if (typeof dir === "string" && dir) {
+                      if (input) input.value = dir;
+                      const p = menu && menu.querySelector("[data-create-field='prompt']");
+                      if (p) p.focus();
+                    }
+                  } catch (e) { b2Toast("打开目录选择器失败: " + ((e && e.message) || e)); }
+                }
                 function buildCreateHtml() {
                   const chosen = S.engineChoice || defaultEngineId();
                   let html = '<div class="source-menu-head">新建会话 · 选择引擎</div>';
@@ -2223,7 +2348,11 @@
                     const dis = e.state !== "ready";
                     html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '"' + (dis ? " disabled style=\"opacity:.5\"" : "") + '><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(engineStateText(e)) + "</small></button>";
                   }
-                  html += '<input class="composer-input" data-create-field="prompt" placeholder="初始指令（必填）" aria-label="初始指令" style="width:100%;margin:8px 0 6px"><input class="composer-input" data-create-field="cwd" placeholder="工作目录" aria-label="工作目录" value="' + esc(S.homedir || "") + '" style="width:100%;margin:0 0 8px"><button class="primary-btn" type="button" data-create-submit style="width:100%">创建会话</button>';
+                  html += '<input class="composer-input" data-create-field="prompt" placeholder="初始指令（必填）" aria-label="初始指令" style="width:100%;margin:8px 0 6px">';
+                  // #368 预填优先级：上次创建用的目录 > 源用户根目录；桌面+本机源时附原生目录浏览钮
+                  html += '<div style="display:flex;gap:6px;margin:0 0 8px;align-items:stretch"><input class="composer-input" data-create-field="cwd" placeholder="工作目录" aria-label="工作目录" value="' + esc(lastCreateCwd() || S.homedir || "") + '" style="flex:1;min-width:0">'
+                    + (createCwdBrowseable() ? '<button class="ghost-btn" type="button" data-create-browse style="flex:none;white-space:nowrap">浏览…</button>' : "") + '</div>';
+                  html += '<button class="primary-btn" type="button" data-create-submit style="width:100%">创建会话</button>';
                   return html;
                 }
                 function openCreateMenu(anchor) {
@@ -2236,6 +2365,14 @@
                     menu.style.zIndex = "80";
                     menu.style.width = "276px";
                     document.body.appendChild(menu);
+                    // 菜单挂 body，UI.section 的委托点不到——菜单自带 click 委托
+                    // （批3 实测修复：此前引擎选择/创建按钮鼠标点全哑，仅 Enter 键路径活着）
+                    menu.addEventListener("click", (ev) => {
+                      const engine = ev.target.closest("[data-engine-choice]");
+                      if (engine) { pickEngine(engine); return; }
+                      if (ev.target.closest("[data-create-browse]")) { void pickCreateCwd(); return; }
+                      if (ev.target.closest("[data-create-submit]")) { submitCreate(); return; }
+                    });
                     menu.addEventListener("keydown", (ev) => {
                       if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.createField) { ev.preventDefault(); submitCreate(); }
                     });
@@ -2275,6 +2412,8 @@
                   if (eng && eng !== "claude") payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）
                   const id = sendCmd("COMMAND_CREATE", payload);
                   if (!id) return;
+                  // #368：创建已受理即记忆本次 cwd，下次新建预填
+                  if (cwd) { try { localStorage.setItem(CWD_LAST_KEY, cwd); } catch (_) {} }
                   closeCreateMenu();
                   const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
@@ -2358,12 +2497,24 @@
                       if (artAct.dataset.artifactAction === "toggle" && group) {
                         group.classList.toggle("collapsed");
                         artAct.textContent = group.classList.contains("collapsed") ? "展开目录" : "收起目录";
+                      } else if (artAct.dataset.artifactAction === "reveal" && group) {
+                        // #158-批3 桌面壳「在文件夹中定位」：先探后开——不在本机（远程会话产物）
+                        // 明确提示不给 openPath 弹「路径没有文件」报错（旧壳 11047-11051 口径）；
+                        // #158-批4a 目录切分兼容 \（openPath/probePath 吃原生路径，不 display 化）
+                        const first = group.querySelector(".artifact-file");
+                        const p0 = first ? String(first.dataset.path || "") : "";
+                        const dir = window.__ccDeck005PathUi.dirOf(p0) || p0;
+                        if (!dir || !window.ccDeck || !window.ccDeck.openPath) { b2Toast("无目录可定位"); return; }
+                        shellHasLocal(dir).then((local) => {
+                          if (!local) { b2Toast("目录不在本机（远程会话产物），无法定位", 3500); return; }
+                          window.ccDeck.openPath(dir, true).catch((er) => b2Toast(String((er && er.message) || er).slice(0, 80), 3500));
+                        });
                       } else if (artAct.dataset.artifactAction === "copy-path" && group) {
                         const first = group.querySelector(".artifact-file");
                         const p = first ? String(first.dataset.path || "") : "";
-                        const dir = p.slice(0, p.lastIndexOf("/")) || p;
+                        const dir = window.__ccDeck005PathUi.dirOf(p) || p;
                         try { navigator.clipboard && navigator.clipboard.writeText(dir); } catch (_) {}
-                        b2Toast("已复制路径 · " + dir);
+                        b2Toast("已复制路径 · " + displayPath(dir));
                       }
                       return;
                     }
@@ -2528,6 +2679,30 @@
                 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
                 else ready();
 
+                // ---------- 呼出/窗口焦点链 + IME（#240 旧壳 8356-8386 范式，桌面形态才挂） ----------
+                // 窗口被全局呼出键/任务栏唤回时：60ms 后回焦 composer；mac 走原生合成点击
+                // 激活输入法（ccDeck.imeClick），失败/被遮蔽回落 JS focus。
+                if (window.ccDeck || window.__TAURI__) {
+                  const IME_MAC = /Mac/i.test(navigator.userAgent);
+                  const focusComposer = () => {
+                    const el = UI && UI.input;
+                    if (!el || el.disabled || !S.selected) return;
+                    if (IME_MAC && window.ccDeck && typeof window.ccDeck.imeClick === "function") {
+                      try {
+                        const r = el.getBoundingClientRect();
+                        const x = Math.max(4, Math.min(r.left + Math.min(r.width / 2, 60), window.innerWidth - 4));
+                        const y = Math.max(4, Math.min(r.top + r.height / 2, window.innerHeight - 4));
+                        if (document.elementFromPoint(x, y) === el) {
+                          window.ccDeck.imeClick(x, y).catch(() => { try { el.focus({ preventScroll: true }); } catch (_) {} });
+                          return;
+                        }
+                      } catch (_) { /* 坐标计算异常走 JS focus */ }
+                    }
+                    try { el.focus({ preventScroll: true }); } catch (_) {}
+                  };
+                  window.addEventListener("focus", () => setTimeout(focusComposer, 60));
+                }
+
                 // ⑥c-3 导出面：005-mobile IIFE 复用 B2 会话数据 / 历史只读判定 / 发送链（DV 备案预授权）
                 // sendMessage 强耦合桌面 composer（读 UI.input 值），此处导出 sid+text 包装；
                 // 命令类型与 sendMessage 同源：COMMAND_MESSAGE（托管）/ COMMAND_EXT_INPUT（external 会话）
@@ -2645,7 +2820,7 @@
                   query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? "等待数据" : "暂无项目组";
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = state.source;
-                  query("[data-team-sub]").textContent = project ? [project.tier, project.anchor_dir, members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。";
+                  query("[data-team-sub]").textContent = project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。";
                   const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
@@ -2746,7 +2921,7 @@
                   updateProjects(payload.projects);
                   updateConfirms(payload.org_confirms);
                   for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
-                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   render();
                   if (state.selected) void requestDetail(state.selected);
                   return true;
@@ -2938,9 +3113,12 @@
                   openAcceptance(id) {
                     const safe = String(id || "").replace(/[^a-zA-Z0-9_-]/g, "");
                     if (!safe) return;
-                    const url = new URL("/acceptance/" + safe, location.baseURI);
-                    const opened = window.open(url.href, "_blank", "noopener");
-                    if (!opened) toast("弹窗被浏览器拦截 · 请允许后重试");
+                    // #158-批4a：绝对地址基于 relay 实连信息推导（桌面形态 location 是 tauri.localhost、
+                    // 云通道是 cc.humumu.online 代理——相对解析/硬编码端口在这些形态必断链）；
+                    // 地基维护 __ccDeck005HttpOrigin()（wsUrl→http origin，推导不出回落 location.origin）
+                    const origin = (typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin;
+                    const url = String(origin).replace(/\/+$/, "") + "/acceptance/" + safe;
+                    void window.__ccDeck005OpenUrl(url); // 统一 Promise 化打开链：桌面 openExternal / 浏览器被拦降级复制+toast
                   },
                   bannerOf(text) { return bannerNode(text); },
                   subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
@@ -3052,14 +3230,17 @@
                 };
                 let selectedKey = "";
 
-                const normDir = (dir) => String(dir || "").replace(/\/+$/, "");
+                // #158-批4a：目录归一比较兼容 \ 分隔（Windows 数据 \ 与拼 / 不匹配会让项目前缀
+                // 归组/子目录匹配失效）；展示输出统一 displayPath（桌面 Windows 形态反斜杠）
+                const displayPath = window.__ccDeck005PathUi.displayPath;
+                const normDir = (dir) => String(dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
                 const underAnchor = (cwd, anchor) => { const c = normDir(cwd), a = normDir(anchor); return !!a && (c === a || c.startsWith(a + "/")); };
                 const shortenDir = (dir) => {
                   const d = normDir(dir), h = normDir(bridge.homedir);
-                  if (h && (d === h || d.startsWith(h + "/"))) return "~" + d.slice(h.length);
-                  return d || "/";
+                  if (h && (d === h || d.startsWith(h + "/"))) return "~" + displayPath(d.slice(h.length));
+                  return displayPath(d) || "/";
                 };
-                const basename = (path) => String(path || "").split("/").filter(Boolean).pop() || String(path || "");
+                const basename = (path) => window.__ccDeck005PathUi.baseName(path);
                 const STATUS_WORD = { WORKING: "运行中", WAITING: "待处理", ERROR: "错误", DONE: "完成" };
                 const STATUS_DOT = { WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" };
                 const STATUS_TAG = { WORKING: "info", WAITING: "action", ERROR: "danger", DONE: "done" };
@@ -3173,7 +3354,7 @@
                 function sessionsTabMarkup(entry) {
                   if (!entry.sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>';
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || s.cwd || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div></div>").join("");
+                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || displayPath(s.cwd) || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div></div>").join("");
                   return '<div class="queue-group">会话 · ' + entry.sessions.length + "</div>" + rows;
                 }
 
@@ -3191,7 +3372,9 @@
                   if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>';
                   const anchor = normDir(entry.anchor);
                   const rows = artifacts.map((a) => {
-                    const rel = a.path !== anchor && a.path.startsWith(anchor + "/") ? a.path.slice(anchor.length + 1) : basename(a.path);
+                    // #158-批4a：前缀比较归一化（a.path 原生 \ 与 anchor 归一 / 不匹配会整串显示）
+                    const pN = normDir(a.path);
+                    const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
                     return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></span></div>";
                   }).join("");
                   return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows;
@@ -3645,11 +3828,54 @@
       const toast = document.querySelector("#toast");
       const connectionChips = [...document.querySelectorAll(".connection-chip")];
       const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
+      // #158-②③ 桌面壳平台化：Tauri 内真拖拽+窗口钮；class 兼供字号档/⌘文案分支（浏览器不加 class）
+      const IS_MAC = /Mac/i.test(navigator.userAgent);
+      if (window.__TAURI__?.window) {
+        document.documentElement.classList.add(IS_MAC ? "mac-tauri" : "win-tauri");
+        if (!IS_MAC) {
+          const win = window.__TAURI__.window.getCurrentWindow();
+          const btn = (name, fn) => document.querySelector(`[data-win-btns] [data-w="${name}"]`)?.addEventListener("click", () => { try { fn(); } catch {} });
+          btn("min", () => win.minimize());
+          btn("max", () => win.toggleMaximize());
+          btn("close", () => win.close());
+        }
+      }
+      const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.3";
+      const CONSOLE_VERSION = "0.7.0-test.4";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
+      // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
+      // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
+      // 到位后刷新已渲染的消费点（关于面板 tag / 设置队列卡副行）；浏览器无壳 reject/无
+      // core——回落 CONSOLE_VERSION（那才是它的身份）。移动端经 ccdeck:shellver 事件重渲
+      if (!window.__shellVerTried) {
+        window.__shellVerTried = true;
+        try {
+          const core = window.__TAURI__ && window.__TAURI__.core;
+          if (core && typeof core.invoke === "function") {
+            void core.invoke("app_version").then((v) => {
+              if (typeof v !== "string" || !v.trim()) return;
+              window.__shellVer = v;
+              const tag = document.querySelector("[data-settings-version-tag]");
+              if (tag) tag.textContent = v + " 通道";
+              const cardP = document.querySelectorAll("#d-settings .queue .queue-card")[5]?.querySelector("p");
+              if (cardP) cardP.textContent = "v" + v + " · 通道";
+              try { window.dispatchEvent(new CustomEvent("ccdeck:shellver")); } catch (_) {}
+            }, () => {});
+          }
+        } catch (_) {}
+      }
+      // #158-⌘文案 Windows 显示 Ctrl+：启动时全树替换静态 ⌘ 文案（windowbar ⌘K 全局搜索/设置卡 ⌘K 搜索 · ⌘N 新建会话）；
+      // 动态模板走 MOD_KEY 分支。只改命中 text node，禁对容器整体 textContent 赋值——会摧毁子树
+      if (!IS_MAC) {
+        const swap = (s) => s.replaceAll("⌘K", "Ctrl+K").replaceAll("⌘N", "Ctrl+N").replaceAll("⌘", "Ctrl+");
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          if (n.textContent.includes("⌘")) n.textContent = swap(n.textContent);
+        }
+      }
 
       function ensureThemeSymbols() {
         const sprite = document.querySelector(".icon-sprite");
@@ -3767,8 +3993,6 @@
         if (!inspector || !button) return;
         screen.classList.toggle("inspector-collapsed", collapsed);
         inspector.classList.toggle("collapsed", collapsed);
-        const frame = screen.closest(".desktop-frame");
-        if (frame && screen.classList.contains("active")) frame.classList.toggle("inspector-collapsed", collapsed && !window.matchMedia("(max-width: 980px)").matches);
         button.textContent = collapsed ? "›" : "‹";
         button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
         button.setAttribute("aria-label", button.title);
@@ -3825,8 +4049,6 @@
         if (!screen) return;
         desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
         railButtons.forEach((button) => button.classList.toggle("active", button.dataset.domain === domain));
-        const frame = screen.closest(".desktop-frame");
-        if (frame) frame.classList.toggle("inspector-collapsed", screen.classList.contains("inspector-collapsed") && !window.matchMedia("(max-width: 980px)").matches);
         showToast(`已切换到${({ session: "会话", team: "团队", project: "项目", notify: "通知", settings: "设置" })[domain]}域`);
       }
 
@@ -3912,6 +4134,36 @@ function connectLan(ctx) {
         document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
       }
 
+      // ---------- #158-批4a 外链兜底收口（改动 3）：全文件外链点击统一走此 helper ----------
+      // 桌面→ccDeck.openExternal（失败 catch 降级复制）；浏览器→window.open 探路，被拦（返回 null）
+      // 再合成 a[target=_blank noopener noreferrer] 点击并复制链接兜底——弹窗拦截器吞掉时用户至少
+      // 拿到「链接已复制」反馈。幂等挂 window，消费点（B4 验收单/地基更新与诊断/mobile 下载）点击期解析。
+      if (!window.__ccDeck005OpenUrl) {
+        const sharedToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(sharedToast._t); sharedToast._t = setTimeout(() => t.classList.remove("show"), 2600); };
+        const copyLink = async (url) => {
+          try { await navigator.clipboard.writeText(url); sharedToast("链接已复制 · 可粘贴到浏览器打开"); return true; }
+          catch (_) { sharedToast("打开被拦截 · 链接：" + url); return false; }
+        };
+        window.__ccDeck005OpenUrl = async function openExternalUrl(url) {
+          const u = String(url || "");
+          if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接"); return false; }
+          if (window.ccDeck && typeof window.ccDeck.openExternal === "function") {
+            try { await window.ccDeck.openExternal(u); return true; }
+            catch (_) { return copyLink(u); }
+          }
+          let opened = null;
+          try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (_) { opened = null; }
+          if (opened) { try { opened.opener = null; } catch (_) {} return true; }
+          // window.open 被拦：合成 a 点击（沙箱禁 window.open 但放行锚点导航的场景）+ 复制兜底
+          const a = document.createElement("a");
+          a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
+          document.body.appendChild(a);
+          try { a.click(); } catch (_) {}
+          a.remove();
+          return copyLink(u);
+        };
+      }
+
       function setupStubTabs() {
         document.querySelectorAll(".segment-bar, .mobile-detail-tabs, .mobile-team-tabs").forEach((bar) => {
           if (bar.closest(".settings-panel")) return; // ⑥c-1：设置域已由 setupSettingsDomain 重建六面板，不让位 stub
@@ -3953,6 +4205,115 @@ function connectLan(ctx) {
       function settingsToggleState(key) {
         try { return localStorage.getItem("cc-deck-005-" + (key === "sound" ? "notify-sound" : "desktop-notify")) !== "0"; } catch (_) { return true; }
       }
+      // #158-批3 呼出/收起快捷键文案（改绑录制 UI 留 test.5）：桌面壳侧 setup 已注册默认
+      // Alt+D（main.rs DEFAULT_TOGGLE_KEY）；localStorage ccd_toggle_key 记忆旧壳改绑值
+      //（""=已注销）。浏览器无壳不注册——维持「未设置」不撒谎
+      function toggleHotkeyDisplay() {
+        if (!(window.__TAURI__ || window.ccDeck)) return "未设置";
+        let saved = null;
+        try { saved = localStorage.getItem("ccd_toggle_key"); } catch (_) { saved = null; }
+        const combo = saved === null ? "alt+d" : saved;
+        if (!combo) return "未设置";
+        return combo.split("+").map((part) => part === "space" ? "Space" : part.charAt(0).toUpperCase() + part.slice(1)).join("+");
+      }
+      // ---------- #158-批3 检查更新真实现（旧壳 8597-8655 范式） ----------
+      // 浏览器形态（无 __TAURI__.updater）返回 null——网页端确实随 relay 部署更新，假文案
+      // 对该形态是正确的。Mac / snap / dev 通道门控（UPDATER_BLOCKED）：tauri-latest 清单
+      // 无 mac 条目，check 判有更新而下载必炸；test 包 endpoint 构建期烙 test 清单可在线升
+      const UPDATER_BLOCKED = /Mac/i.test(navigator.platform || navigator.userAgent)
+        || /-(snap|dev)\./i.test(CONSOLE_VERSION);
+      async function shellCheckUpdate() {
+        const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("网络超时")), ms))]);
+        if (!(window.__TAURI__ && window.__TAURI__.updater)) return null; // 浏览器：无更新通道（随 relay 部署更新），先于门控判定
+        if (UPDATER_BLOCKED) return { blocked: true };
+        const u = await withTimeout(window.__TAURI__.updater.check(), 10000); // #385 网络黑洞：check 无内置超时，外层 race 兜底
+        if (u && u.available) {
+          await withTimeout(u.downloadAndInstall(), 120000);
+          return { available: true, version: u.version, current: u.currentVersion, installed: true };
+        }
+        return { available: false, version: u && u.currentVersion };
+      }
+      window.__ccDeck005Updater = { check: shellCheckUpdate, blocked: () => UPDATER_BLOCKED }; // 手机 IIFE 复用同一链
+      // 手动检查（设置页关于面板）：状态行驱动 + 超时给手动下载入口（exe 更新 endpoint 在
+      // GitHub，国内/公司网常连不上）；浏览器形态保持原 toast 文案不动
+      async function manualCheckUpdate() {
+        const status = document.querySelector('[data-settings-panel="about"] [data-update-status]');
+        const btn = document.querySelector('[data-settings-panel="about"] [data-update-check]');
+        if (status) status.textContent = "检查中…";
+        if (btn) btn.disabled = true;
+        try {
+          const r = await shellCheckUpdate();
+          if (r && r.blocked) {
+            if (status) status.textContent = "此版本请手动更新（Mac / 快照与开发通道不走在线升级）";
+            showToast("此版本请手动更新（Mac / 快照与开发通道不走在线升级）", 5000);
+          } else if (r === null) {
+            if (status) status.textContent = "当前已是最新版本";
+            showToast("当前已是最新版本 · 网页端随 relay 部署更新");
+          } else if (r.available) {
+            if (status) status.textContent = r.installed ? "新版已下载 · 重启后生效" : "发现新版 → v" + r.version;
+            showToast(r.installed ? "新版本已就绪，重启 CC Deck 后生效" : "发现新版 v" + r.version + "，下载中…");
+          } else {
+            if (status) status.textContent = "已是最新 v" + (r.version || "");
+          }
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          if (status) status.textContent = "检查更新失败";
+          if (/超时|timeout|network|fetch/i.test(msg)) {
+            showToast("检查超时（网络受限），可手动下载新版本", 6000);
+            void window.__ccDeck005OpenUrl("https://cc.humumu.online/dl/"); // #158-批4a：外链统一兜底链（被拦降级复制+toast）
+          } else {
+            showToast("检查更新失败：" + msg);
+          }
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+      // ---------- #158-批3 连接诊断（桌面形态，旧壳 relayStatus 11917-11959 消费范式） ----------
+      // relayStatus 透出 { port:端口在听, embedded, node, err }——err（Node 过旧/spawn 失败）
+      // 优先直出；缺 node 给安装引导（点击 openExternal nodejs.org）；端口在听显示运行端口。
+      // fetch 带 6s 陈旧窗（帧事件高频重渲不刷屏 invoke）；结果只进小字行不动主行
+      let relayDiag = null, relayDiagAt = 0, relayDiagBusy = false;
+      function paintRelayDiagRow(host) {
+        const d = relayDiag;
+        if (!d) { if (host) host.textContent = ""; return; }
+        if (d.err) {
+          host.textContent = String(d.err).slice(0, 64) + " · 点击查看安装方法";
+          host.title = String(d.err);
+          host.dataset.diag = "err";
+        } else if (d.node === false) {
+          host.textContent = "缺少 Node.js 运行时 · 点击查看安装方法";
+          host.title = "内置 relay 需要 Node.js（Claude Code 的 VS Code 扩展不算——它自带运行时不进系统 PATH）";
+          host.dataset.diag = "node";
+        } else if (d.port) {
+          host.textContent = "内置服务运行中 · 端口 " + ((localRelayInfo && localRelayInfo.port) || relayPortOfCfg());
+          host.title = "";
+          host.dataset.diag = "ok";
+        } else {
+          host.textContent = "未检测到本机 relay 服务";
+          host.title = "";
+          host.dataset.diag = "none";
+        }
+      }
+      function paintRelayDiag() { document.querySelectorAll("[data-relay-diag]").forEach((el) => paintRelayDiagRow(el)); }
+      async function refreshRelayDiag() {
+        paintRelayDiag();
+        if (relayDiagBusy) return;
+        if (relayDiag && Date.now() - relayDiagAt < 6000) return;
+        if (!(window.ccDeck && typeof window.ccDeck.relayStatus === "function")) return;
+        relayDiagBusy = true;
+        try {
+          const st = await window.ccDeck.relayStatus();
+          relayDiag = st && typeof st === "object" ? { port: st.port === true, node: st.node, err: typeof st.err === "string" ? st.err : "" } : null;
+          relayDiagAt = Date.now();
+        } catch (_) { /* 保留上次结果 */ }
+        finally { relayDiagBusy = false; }
+        paintRelayDiag();
+      }
+      function relayPortOfCfg() {
+        try { return String(ctx.cfg.wsUrl || "").match(/:(\d+)\//)?.[1] || (location.port || "8787"); } catch (_) { return location.port || "8787"; }
+      }
+      // 自测/排障钩子：绕过 6s 陈旧窗强刷诊断行（正常运行不消费）
+      window.__ccDeck005RelayDiag = { refresh: refreshRelayDiag, stale: () => { relayDiagAt = 0; } };
       function setupSettingsDomain() {
         const section = document.querySelector("#d-settings");
         const queue = section?.querySelector(".queue");
@@ -3963,10 +4324,10 @@ function connectLan(ctx) {
         body.innerHTML = `
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">⌘K</span><div><strong>全局搜索</strong><p>⌘K</p></div></div><div class="settings-row"><span class="avatar">⌘N</span><div><strong>新建会话</strong><p>⌘N</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">未设置</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">⌘ + ↑↓</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">⌘ + ←→</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button">开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button">开</button></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
         wireCardDensityControls(body);
         body.dataset.settingsReady = "1";
         const panels = [...body.querySelectorAll("[data-settings-panel]")];
@@ -4005,7 +4366,10 @@ function connectLan(ctx) {
             showToast("配对新设备 · 分享本页同款带 token 的链接即可加入"); return;
           }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
-          if (event.target.closest("[data-update-check]")) { showToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+          // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导（批4a 走统一外链兜底链）
+          const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
+          if (diagRow) { void window.__ccDeck005OpenUrl("https://nodejs.org/zh-cn"); return; }
+          if (event.target.closest("[data-update-check]")) { void manualCheckUpdate(); return; }
         });
         activateSettings(0);
       }
@@ -4022,7 +4386,9 @@ function connectLan(ctx) {
           const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {};
           const caps = snap.source_capabilities || {};
           const catalog = Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
-          const connState = bridge.hasSnapshot ? "online" : bridge.connection;
+          // #158-批3 状态遮蔽修复（审查 R4）：快照只在连接层仍在线/连接中时兜底「在线」——
+          // WS 已断（offline/unconfigured）时曾收过 SNAPSHOT 也显示实际态，不再假「在线」
+          const connState = bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured" ? "online" : bridge.connection;
           const stateText = connState === "online" ? "在线" : connState === "connecting" ? "连接中" : "未连接";
           const connLive = section.querySelector('[data-settings-live="connections"]');
           if (connLive) {
@@ -4031,10 +4397,16 @@ function connectLan(ctx) {
               connLive.innerHTML = '<div data-cloud-settings-slot></div>';
               renderCloudUI();
             } else {
+              // #158-批3：桌面形态加 relay 诊断小字行（relayStatus 病因透出）；端口行优先取
+              // 探测命中端口（tauri.localhost 的 location.port 是空，8787 硬编会误导多端口变体）
+              const shellDiag = !!(window.ccDeck && typeof window.ccDeck.relayStatus === "function");
+              const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
+              const desktopForm = !!(window.__TAURI__ || window.ccDeck);
               connLive.innerHTML =
-                `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${location.port || "8787"} · 事件流自动补发</p></div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
+                `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
                 `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>` +
-                `<div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token ${connState === "unconfigured" ? "未配置" : "已就绪"}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
+                `<div class="settings-row"><span class="avatar">▣</span><div><strong>${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}</strong><p>${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
+              if (shellDiag) void refreshRelayDiag();
             }
           }
           const devLive = section.querySelector('[data-settings-live="devices"]');
@@ -4117,6 +4489,17 @@ function connectLan(ctx) {
           return j && j.ok && j.token ? { port: Number(j.port) || Number(port), token: String(j.token) } : null;
         } catch (_) { return null; }
       }
+      // #158-批3 探测命中统一落库：token 无条件写最新（#21 教训：relay 换代/令牌轮换后旧
+      // token 被 401 拒且永不自愈——不等缓存空）；探测结果留 localRelayInfo 供诊断行消费
+      let localRelayInfo = null;
+      function applyLocalProbe(probed) {
+        localRelayInfo = { port: probed.port, token: probed.token };
+        if (shellProbe) ctx.cfg.wsUrl = "ws://127.0.0.1:" + probed.port + "/ws";
+        relayToken = probed.token;
+        ctx.cfg.token = relayToken;
+        try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
+      }
+      let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后交给 6s 周期自愈）
       async function bootstrapConnection() {
         // 缝合点 a：https 公网页面（/app2 经 CF Worker 出面）走云桥链——loopback ws:// 被混合
         // 内容策略掐死、桌面探测链不适配公网形态；tauri / http LAN 形态保持原探测链不动。
@@ -4125,18 +4508,26 @@ function connectLan(ctx) {
         // 页面即 relay 同源服务，wsUrl 维持 location 推导不变。探测全败不炸——回落未配置引导。
         if (shellProbe || (isHttpPage && !relayToken)) {
           const probed = await probeLocalRelay();
-          if (probed) {
-            if (shellProbe) ctx.cfg.wsUrl = "ws://127.0.0.1:" + probed.port + "/ws";
-            if (!relayToken) {
-              relayToken = probed.token;
-              ctx.cfg.token = relayToken;
-              try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
-            }
-          }
+          if (probed) applyLocalProbe(probed);
         }
         ctx.probing = false;
         connectLan(ctx);
         if (!ctx.cfg.wsUrl || !ctx.cfg.token) {
+          // 桌面形态首探落空 2.5s 补试一次（旧壳 12316-12343 模式）：壳拉起内嵌 relay 有冷启动
+          // 竞态（Defender 冷扫描可让 relay 起过壳的就绪窗口），补试命中即落库重走连接链
+          if (shellProbe && !bootProbeRetried) {
+            bootProbeRetried = true;
+            setTimeout(async () => {
+              if (ctx.stopped) return;
+              const again = await probeLocalRelay();
+              if (again) {
+                applyLocalProbe(again);
+                ctx.probing = false;
+                connectLan(ctx);
+                renderSessionList();
+              }
+            }, 2500);
+          }
           const b4 = window.__ccDeck005B4;
           if (b4 && typeof b4.markUnconfigured === "function") b4.markUnconfigured();
           renderSessionList();
@@ -4160,6 +4551,26 @@ function connectLan(ctx) {
         selectedSessionId: null,
         relayName: location.host,
       };
+      // #158-批3 B2 新建表单浏览钮判定（旧壳 activeIsLocalRelay 8748-8758 口径的 005 简化）：
+      // 当前源 ws 指向回环——目录对话框选的是这台电脑的文件系统，远程源该路径不存在
+      window.__ccDeck005LocalRelayLoopback = () => {
+        try {
+          const h = new URL(String(ctx.cfg.wsUrl || "").replace(/^ws/i, "http")).hostname;
+          return h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
+        } catch (_) { return false; }
+      };
+      // #158-批4a：验收单等页内生成链接的绝对地址源——按当前实连 ws 地址换 http origin（云形态
+      // wss://cc.humumu.online/cloud → https://cc.humumu.online；桌面 ws://127.0.0.1:port/ws →
+      // http://127.0.0.1:port，替代 location 推导——桌面形态 location 是 tauri.localhost 必断链）。
+      // 推导不出（file://、未配置）回落 location.origin（浏览器形态两者本就一致）
+      window.__ccDeck005HttpOrigin = () => {
+        try {
+          const raw = String((typeof cloudMode !== "undefined" && cloudMode ? cloudCtx.cfg.wsUrl : ctx.cfg.wsUrl) || "");
+          const u = new URL(raw.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
+          if (u.protocol === "http:" || u.protocol === "https:") return u.origin;
+        } catch (_) {}
+        return location.origin;
+      };
 
       function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -4175,7 +4586,7 @@ function connectLan(ctx) {
         return {
           id: escapeHtml(session.session_id),
           title: escapeHtml(session.title || session.initial_prompt || session.session_id),
-          summary: escapeHtml(session.action_summary || session.last_error || session.cwd || "暂无活动摘要"),
+          summary: escapeHtml(session.action_summary || session.last_error || window.__ccDeck005PathUi.displayPath(session.cwd) || "暂无活动摘要"),
           status,
           tag: ({ working: "运行中", waiting: "待处理", error: "错误", done: "完成" })[status],
           tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
@@ -5307,6 +5718,37 @@ function connectLan(ctx) {
       initSettingsLiveData();
       renderSessionList();
       bootstrapConnection();
+      // #158-批3 桌面壳周期自愈（旧壳 12400-12410 的 90s/6s 窗口，升级为真重连）：连接
+      // offline/unconfigured 且桌面形态时每 6s 重探本机 relay——Defender 冷扫描让 relay 晚起、
+      // 或 token 轮换后旧 token 401 永不自愈（#21），重探命中即刷 token 重走连接链。
+      // online/connecting 不动作（ws 层自带退避重连）；15 次未果（约 90s）停表
+      if (shellProbe) {
+        let healTries = 0;
+        const healTimer = setInterval(async () => {
+          if (ctx.stopped) { clearInterval(healTimer); return; }
+          const conn = window.__ccDeck005B4 ? window.__ccDeck005B4.connection : ctx.status;
+          if (conn === "online" || conn === "connecting") { clearInterval(healTimer); return; }
+          if (++healTries > 15) { clearInterval(healTimer); return; }
+          const again = await probeLocalRelay();
+          if (again) {
+            applyLocalProbe(again);
+            ctx.probing = false;
+            connectLan(ctx);
+            clearInterval(healTimer); // 连接链接管后续重试
+          }
+        }, 6000);
+      }
+      // #158-批3 桌面壳启动静默检查更新（旧壳 8643-8653 范式）：5s 后台查一次，有新版直接
+      // 下载安装（退出时生效不打扰）；UPDATER_BLOCKED 门控（Mac/snap/dev 不走在线升级）
+      setTimeout(() => {
+        try {
+          if (!UPDATER_BLOCKED && window.__TAURI__ && window.__TAURI__.updater) {
+            window.__TAURI__.updater.check().then((u) => {
+              if (u && u.available) u.downloadAndInstall().then(() => showToast("新版本已就绪，重启后生效")).catch(() => {});
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      }, 5000);
       setInterval(() => {
         if (sessionList.dataset.b2Owned === "1") return; // #143 盲评A-2：B2 自有走秒定时器，双写互覆盖让位
         sessionList.querySelectorAll(".queue-card").forEach((card) => {
@@ -5322,7 +5764,22 @@ function connectLan(ctx) {
       // ---------- ⑥c-2 移动端 B7：四屏真数据 + 导航栈（原型 openMobileRoot/openMobileDetail/closeMobileDetail 同构） ----------
       const bridge = window.__ccDeck005B4;
       if (!bridge) return;
-      const VERSION = window.__shellVer || window.__ccDeck005Version || ""; // ⑥d：对齐桌面壳版本优先口径
+      // ⑥d：桌面壳版本优先（foundation invoke app_version 异步回填后才就位，改为读时取值）
+      const VER_NOW = () => window.__shellVer || window.__ccDeck005Version || "";
+      // #158-批3 状态遮蔽（R4 同款口径）：曾收 SNAPSHOT 但连接已 offline/unconfigured 时
+      // 不再谎报「在线」，显示连接实际态
+      const connStateText = () => {
+        const c = bridge.connection;
+        if (bridge.hasSnapshot && c !== "offline" && c !== "unconfigured") return "在线";
+        return c === "connecting" ? "连接中" : c === "unconfigured" ? "未配置" : "未连接";
+      };
+      const connMaskedOk = () => bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured";
+      // #158-⌘文案：与 foundation IIFE 作用域不通，独立定义同款常量
+      const IS_MAC = /Mac/i.test(navigator.userAgent);
+      const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
+      // #158-批4a：B2 IIFE 挂的全页共享路径助手（展示 \ 化 / 归一比较 / 跨分隔符基名）
+      const displayPath = window.__ccDeck005PathUi.displayPath;
+      const baseName = window.__ccDeck005PathUi.baseName;
       const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
       const oneLine = (t) => { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 60 ? v.slice(0, 60) + "…" : v; };
       const svg = (name) => `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
@@ -5338,11 +5795,15 @@ function connectLan(ctx) {
       const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
       const sourceBadge = () => `<span class="source-badge">${esc(bridge.relayName || location.host)}</span>`;
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
-      const getSessionProject = (s) => {
-        const cwd = String((s && s.cwd) || "").replace(/\/+$/, "");
+      const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
+        const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         if (cwd) {
-          const hit = projects.find((p) => p && typeof p.anchor_dir === "string" && (p.anchor_dir.replace(/\/+$/, "") === cwd || cwd.startsWith(p.anchor_dir.replace(/\/+$/, "") + "/")));
+          const hit = projects.find((p) => {
+            if (!(p && typeof p.anchor_dir === "string" && p.anchor_dir)) return false;
+            const a = p.anchor_dir.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+            return a === cwd || cwd.startsWith(a + "/");
+          });
           if (hit && hit.name) return hit.name;
         }
         return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
@@ -5351,7 +5812,7 @@ function connectLan(ctx) {
         const [w, cls] = stTag(s);
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(s.cwd) || w)}</p><div class="identity-cluster"><span class="tag ${cls}">${w}</span>${engineBadge(s)}${sourceBadge()}</div></div>`;
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster"><span class="tag ${cls}">${w}</span>${engineBadge(s)}${sourceBadge()}</div></div>`;
       };
 
       // ---------- 导航栈 ----------
@@ -5385,7 +5846,7 @@ function connectLan(ctx) {
         const titleEl = document.querySelector("#mobile-detail-title");
         if (titleEl && titleEl.firstChild) titleEl.firstChild.textContent = s ? sessionTitle(s) : "会话详情";
         const sub = document.querySelector("#mobile-detail-sub");
-        if (sub) sub.textContent = s ? (String(s.cwd || "") || "目录未记录") : "";
+        if (sub) sub.textContent = s ? (displayPath(s.cwd) || "目录未记录") : "";
         const idn = document.querySelector("#mobile-detail-identity");
         if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge();
         const tag = target.querySelector(".mobile-head .tag.action");
@@ -5529,7 +5990,7 @@ function connectLan(ctx) {
         const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
         if (!arts.length) return '<div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>';
         const sorted = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0));
-        return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = String(a.path).split("/").pop(); return '<div class="artifact-row">' + svg(mArtIcon(name)) + " " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
+        return '<div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>' + sorted.length + "</span></div>" + sorted.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + svg(mArtIcon(name)) + " " + esc(name) + " <span>" + esc(mRelTime(a.last_at || a.first_at)) + "</span></div>"; }).join("") + "</div>" + (s.artifacts_truncated ? '<div class="readonly-banner">输出物清单曾被 relay 截断</div>' : "");
       }
       function mUsageHtml(s) { // B2 ctxMeterHtml 同构（12 格 band + tone 分级），mobile 形态加 mobile-context-meter
         if (!s) return '<div class="readonly-banner">未选择会话</div>';
@@ -5683,7 +6144,7 @@ function connectLan(ctx) {
           if (confirms.length) { slot.hidden = false; slot.innerHTML = `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`; }
           else { slot.hidden = true; slot.textContent = ""; }
         }
-        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(s.cwd) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
+        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
         const lane = (label, items, mapper) => `<div class="mobile-lane"><div class="mobile-lane-head"><span>${label}</span><span>${items.length}</span></div>${items.map(mapper).join("") || '<div class="mobile-task"><span class="muted">暂无</span></div>'}</div>`;
         const todo = screen.querySelector('[data-team-pane="todo"]');
         if (todo) todo.innerHTML = lane("需行动", sessions.filter(needAction).sort(byPinnedUpdated), taskRow) + (confirms.length ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>组织确认</span><span class="tag action">${confirms.length}</span></div><div class="mobile-task"><b>确认事项待处理</b><br><span class="muted">回桌面团队域确认</span></div></div>` : "");
@@ -5716,7 +6177,7 @@ function connectLan(ctx) {
         if (cards) cards.innerHTML = projects.length ? projects.map((p) => {
           const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
           const [word, cls] = p.status === "active" ? ["活跃", "done"] : p.status === "parked" ? ["挂起", ""] : ["归档", ""];
-          return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(p.anchor_dir || "")}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
+          return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(displayPath(p.anchor_dir || ""))}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
         }).join("") : '<div class="readonly-banner">暂无项目组 · 立项后在组织侧同步。</div>';
         const laneHost = screen.querySelector("[data-mobile-project-lane]");
         if (laneHost) laneHost.innerHTML = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`;
@@ -5727,7 +6188,7 @@ function connectLan(ctx) {
         const rows = [...screen.querySelectorAll(".mobile-settings .settings-row")];
         if (!rows.length) return;
         const cat = catalog();
-        const stateText = bridge.hasSnapshot ? "在线" : bridge.connection === "connecting" ? "连接中" : "未连接";
+        const stateText = connStateText();
         const byTitle = (t) => rows.find((r) => r.querySelector("strong")?.textContent.trim() === t);
         const setP = (title, text) => { const p = byTitle(title)?.querySelector("p"); if (p) p.textContent = text; };
         setP("连接与设备", (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active()) ? `云桥 ${window.__ccDeck005CloudUI.stateLabel()} · 本页设备` : `relay ${stateText} · 本页设备`);
@@ -5736,7 +6197,7 @@ function connectLan(ctx) {
         const roleSet = new Set();
         (cat || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((r) => roleSet.add(r)));
         setP("团队身份模板", `${roleSet.size} 个角色 · 开团时逐成员覆盖`);
-        setP("关于", VERSION ? `${VERSION} 通道` : "版本待定");
+        setP("关于", VER_NOW() ? `${VER_NOW()} 通道` : "版本待定");
         const connTag = byTitle("连接与设备")?.querySelector(".tag");
         const actN = allSessions().filter(needAction).length;
         if (connTag) { if (actN) connTag.textContent = String(actN); else connTag.remove(); }
@@ -5756,19 +6217,19 @@ function connectLan(ctx) {
         content._renderSettingsDetail = (name) => {
           if (!name || name === "主题") return;
           const cat = catalog();
-          const stateText = bridge.hasSnapshot ? "在线" : bridge.connection === "connecting" ? "连接中" : "未连接";
+          const stateText = connStateText();
           const roleSet = new Map();
           (cat || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((r) => { if (r && !roleSet.has(r)) roleSet.set(r, e); }));
-          const html = name === "关于" ? `<div class="readonly-banner">cc-deck ${VERSION ? VERSION + " 通道" : "版本待定"}<br>Command Bridge · 零外部资源</div><div class="mobile-task" role="button" tabindex="0" data-update-check>检查更新 · 当前已是最新版本</div>`
+          const html = name === "关于" ? `<div class="readonly-banner">cc-deck ${VER_NOW() ? VER_NOW() + " 通道" : "版本待定"}<br>Command Bridge · 零外部资源</div><div class="mobile-task" role="button" tabindex="0" data-update-check>检查更新 · 当前已是最新版本</div>`
             : name === "连接与设备"
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
-                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${bridge.hasSnapshot ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(bridge.relayName || "")}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
+                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(bridge.relayName || "")}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
             : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
-            : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 桌面设置域配置</div>`
+            : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
             : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>'
-            : '<div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 桌面设置域配置</div>';
+            : `<div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`;
           list.hidden = true;
           content.querySelector(".primary-btn")?.setAttribute("hidden", "true");
           detail.hidden = false;
@@ -5815,7 +6276,29 @@ function connectLan(ctx) {
         }
         const settingsRow = target.closest("#m-settings .mobile-settings .settings-row");
         if (settingsRow && !settingsRow.matches("[data-theme-toggle]")) { settingsRow.closest(".mobile-content")?._renderSettingsDetail?.(settingsRow.querySelector("strong")?.textContent.trim()); return; }
-        if (target.closest("[data-update-check]")) { mToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+        if (target.closest("[data-update-check]")) {
+          // #158-批3：走 foundation 的真更新链（桌面/门控/超时口径与设置页一致）；浏览器形态保留原文案
+          const upd = window.__ccDeck005Updater;
+          if (!upd || !(window.__TAURI__ || window.ccDeck)) { mToast("当前已是最新版本 · 网页端随 relay 部署更新"); return; }
+          const row = target.closest("[data-update-check]");
+          row.style.opacity = ".6";
+          void (async () => {
+            try {
+              const r = await upd.check();
+              if (r && r.blocked) mToast("此版本请手动更新（Mac / 快照与开发通道不走在线升级）", 4000);
+              else if (!r) mToast("当前已是最新版本 · 网页端随 relay 部署更新");
+              else if (r.available) mToast(r.installed ? "新版本已就绪，重启 CC Deck 后生效" : "发现新版 v" + r.version + "，下载中…", 4000);
+              else mToast("已是最新 v" + (r.version || "?"));
+            } catch (e) {
+              const msg = e && e.message ? e.message : String(e);
+              if (/超时|timeout|network|fetch/i.test(msg)) {
+                mToast("检查超时（网络受限），可手动下载新版本", 4000);
+                void window.__ccDeck005OpenUrl("https://cc.humumu.online/dl/"); // #158-批4a：外链统一兜底链
+              } else mToast("检查更新失败：" + msg, 4000);
+            } finally { row.style.opacity = ""; }
+          })();
+          return;
+        }
         if (target.closest("[data-mobile-wait-deny]") || target.closest("[data-mobile-wait-allow]")) { mToast("审批操作请在桌面会话域完成"); return; } // ⑥c-3 产品口径：移动端仅浏览验证
         const openDetail = target.closest("[data-open-detail]");
         if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
@@ -5830,6 +6313,8 @@ function connectLan(ctx) {
       setupMobileDetail(); // ⑥c-3：收编五 pane + composer 发送接线
       refreshMobile();
       bridge.subscribe(() => refreshMobile());
+      // #158-批3：桌面壳版本异步回填完成（app_version invoke）后刷「关于」版本行
+      window.addEventListener("ccdeck:shellver", () => refreshMobile());
     })();
   </script>
 </body>
