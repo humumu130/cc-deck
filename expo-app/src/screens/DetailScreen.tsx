@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { Fragment, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -34,17 +34,15 @@ import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
-// 详情页视图 tab（与网页端 tabs 对齐：对话/任务/全部/输出物/定时/统计，同序）。
-// 对话/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
-// 原"工具/系统"过滤 chips 与设置抽屉"过程消息·隐藏档"重叠，移除。
+// 详情页视图 tab（W-EXPO 005 化：对齐 index-005 四 tab 制——对话/任务/输出物/
+// 更多）。更多 = 水位计（context-meter）+ 统计键值行 + 定时任务收编（原
+// 全部/定时/统计三 tab 退役；「全部」过滤视图差异备案后续阶段）。
 // #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」。
 const VIEWS = [
   { k: "msg", label: "对话" },
   { k: "todos", label: "任务" },
-  { k: "all", label: "全部" },
   { k: "arts", label: "输出物" },
-  { k: "cron", label: "定时" },
-  { k: "stats", label: "统计" },
+  { k: "more", label: "更多" },
 ] as const;
 // tab 指示条几何参数：tabWrap 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
 const TAB_PAD_L = 4;
@@ -65,6 +63,10 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）。四档含"跳过"：
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
+// 005 #166 手机 waitbox 仅浏览口径（s2 定档）：等待卡在手机端只展示不决议——按钮全
+// disabled + 底部引导「请在电脑上处理」。decide/#212 remember 范围等真决议链路原样
+// 保留，后续阶段放开手机远程决议时翻此开关即可
+const WAITBOX_READONLY = true;
 type PermMode = (typeof PERM_CYCLE)[number];
 // P81-8W 权限摘要三端统一词表（specs/081 钉死段；与 web-console PERM_MODE_ZH /
 // 桌面端同表逐字一致，勿改字面——三端单一词表源，本表取代旧局部 PERM_LABEL 四键表）：
@@ -1340,6 +1342,24 @@ function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; s
   );
 }
 
+// W-EXPO 005 dock 呼吸点（.session-state-dot 等价）：#148 铁律低频步进——480ms/步
+// 四级三角波（≈1.9s 一拍，每秒仅 2 次提交），禁逐帧 Animated（RenderThread 风暴）
+const DOCK_PHASES = [1, 0.72, 0.45, 0.72];
+function DockDot({ color, breathe }: { color: string; breathe?: boolean }) {
+  const [ph, setPh] = useState(0);
+  useEffect(() => {
+    if (!breathe) return;
+    const t = setInterval(() => setPh((n) => (n + 1) % DOCK_PHASES.length), 480);
+    return () => clearInterval(t);
+  }, [breathe]);
+  return (
+    <View
+      style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, opacity: breathe ? DOCK_PHASES[ph] : 1 }}
+      accessibilityLabel={breathe ? "运行中" : undefined}
+    />
+  );
+}
+
 // E3a 状态/收口条（类 CLI，固定工具区内）：ERROR ⚠ 常驻 / DONE ✓ 尾窗收口（本轮
 // 刚结束 8s 内，「本轮已完成」）/ WAITING 等待行（横幅不可见时的兜底行，原状态条
 // 语义原样收编）。显隐与文案全部走 closingBarOf 纯投影；仅 DONE 尾窗激活期起 1s
@@ -1356,8 +1376,12 @@ function StatusStrip({ s, wr, bannerVisible }: { s: SessionState; wr: WaitingPay
     return () => clearInterval(t);
   }, [tailLive]);
   if (s.status === "ERROR" || bar) {
+    // W-EXPO 005 终态收口动画等价（terminal-fade；#148 铁律低频步进不逐帧）：
+    // DONE 尾窗最后 1s 降半档透明度预告收口，窗口关闭即卸载；ERROR ⚠ 常驻不收
+    const age = Date.now() - (s.activity?.updated_at ?? 0);
+    const fading = bar?.kind === "done" && DONE_TAIL_MS - age <= 1000;
     return (
-      <View style={d.strip}>
+      <View style={[d.strip, fading && { opacity: 0.45 }]}>
         {s.status === "ERROR" ? (
           <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
         ) : (
@@ -1394,6 +1418,22 @@ function PendingRow({ text }: { text: string }) {
   return (
     <View style={[d.pendRow, { opacity: PEND_PHASES[ph] }]}>
       <Text style={d.pendT} numberOfLines={3}>{text}</Text>
+    </View>
+  );
+}
+
+// 005 wait-card 容器（#166 双态）：isAsk 提问态=中性底+品牌描边（提问≠风险，不用
+// 警示色）；审批态=黄 tint 警示。手机仅浏览口径下底部挂引导条
+function WaitCard({ isAsk, children }: { isAsk: boolean; children: ReactNode }) {
+  const d = useThemeStyles(makeStyles);
+  return (
+    <View style={[d.waitBanner, isAsk ? d.waitCardAsk : d.waitCardApprove]}>
+      {children}
+      {WAITBOX_READONLY ? (
+        <View style={d.waitRO}>
+          <Text style={d.waitROT}>请在电脑上处理</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1448,7 +1488,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   const freeText = free[qi] ?? "";
 
   return (
-    <View style={d.waitBanner}>
+    <WaitCard isAsk>
       <Text style={d.waitT}>◉ Claude 在提问</Text>
       {stepped ? (
         <View style={d.askSteps}>
@@ -1461,7 +1501,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       {q ? (
         <View>
           <Text style={d.askQ}>{q.question}</Text>
-          <View style={d.askOpts}>
+          <View style={[d.askOpts, WAITBOX_READONLY && d.roDim]}>
             {q.options.map((o) => {
               const on = (picked[qi] ?? []).includes(o.label);
               return (
@@ -1469,6 +1509,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
                   key={o.label}
                   style={[d.askChip, on && d.askChipOn]}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+                  disabled={WAITBOX_READONLY}
                   onPress={() => (single ? answer([o.label]) : q.multi ? toggle(qi, o.label) : pickSingle(qi, o.label))}
                 >
                   <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && on ? "✓ " : "") + o.label}</Text>
@@ -1478,9 +1519,10 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           </View>
           {stepped ? (
             <TextInput
-              style={[d.askFree, { marginBottom: 4 }]}
+              style={[d.askFree, { marginBottom: 4 }, WAITBOX_READONLY && d.roDim]}
               value={freeText}
               onChangeText={(t) => setFree((f) => ({ ...f, [qi]: t }))}
+              editable={!WAITBOX_READONLY}
               placeholder="或输入自定义回答…"
               placeholderTextColor={c.faint}
               returnKeyType="send"
@@ -1498,20 +1540,21 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       ) : null}
       {!single ? (
         <Pressable
-          style={[d.askSubmit, !allAnswered && { opacity: 0.4 }]}
+          style={[d.askSubmit, (WAITBOX_READONLY || !allAnswered) && { opacity: WAITBOX_READONLY ? 0.5 : 0.4 }]}
           android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
-          disabled={!allAnswered}
+          disabled={!allAnswered || WAITBOX_READONLY}
           onPress={submit}
         >
           <Text style={d.askSubmitT}>提交回答</Text>
         </Pressable>
       ) : null}
       {single ? (
-        <View style={d.askFreeRow}>
+        <View style={[d.askFreeRow, WAITBOX_READONLY && d.roDim]}>
           <TextInput
             style={d.askFree}
             value={free[0] ?? ""}
             onChangeText={(t) => setFree((f) => ({ ...f, 0: t }))}
+            editable={!WAITBOX_READONLY}
             placeholder="或输入自定义回答…"
             placeholderTextColor={c.faint}
             returnKeyType="send"
@@ -1522,17 +1565,17 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           <Pressable
             style={[d.askFreeBtn, !(free[0] ?? "").trim() && { opacity: 0.4 }]}
             android_ripple={{ color: withA(c.brandA, 0.2), borderless: false }}
-            disabled={!(free[0] ?? "").trim()}
+            disabled={!(free[0] ?? "").trim() || WAITBOX_READONLY}
             onPress={() => (free[0] ?? "").trim() && answer([(free[0] ?? "").trim()])}
           >
             <Text style={d.askFreeBtnT}>作答</Text>
           </Pressable>
         </View>
       ) : null}
-      <Pressable hitSlop={8} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
+      <Pressable hitSlop={8} disabled={WAITBOX_READONLY} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
         <Text style={d.askSkip}>取消作答（视为拒绝回答）</Text>
       </Pressable>
-    </View>
+    </WaitCard>
   );
 }
 
@@ -1616,7 +1659,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   const flashQueuedHint = () => flashHint("已排队，确认/回合结束后自动发送");
   const [picking, setPicking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  const allScrollRef = useRef<ScrollView>(null);
+  const allScrollRef = useRef<ScrollView>(null); // W-EXPO 四 tab 化后仅对话页用滚动锚（保留 ref 防他处引用悬空）
   const pagerRef = useRef<ScrollView>(null);
   // E3b 决议定向守卫：晚到 ACK 失败只在同一请求仍挂起时提示（wr 每渲染同步进 ref，
   // 回调闭包读到的不是过期渲染帧）
@@ -1935,12 +1978,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
       !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
   );
   const shownMsg = procVisible.filter((e) => matchFilter(e.kind, "msg", e.tool));
-  const shownAll = procVisible;
-  const pageShown = view === "msg" ? shownMsg : view === "all" ? shownAll : [];
+  const pageShown = view === "msg" ? shownMsg : [];
   const lastEntry = pageShown.length ? pageShown[pageShown.length - 1] : null;
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
-    const ref = view === "msg" ? scrollRef.current : view === "all" ? allScrollRef.current : null;
+    const ref = view === "msg" ? scrollRef.current : null;
     if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
   }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
@@ -2112,7 +2154,10 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // E3a 头部活动舱投影：activity 缺失 / native_status 能力关 → null 整舱不渲染
   const dock = dockModelOf(s);
   // 舱态配色：四态各占主题色（图标+文字同色双通道）；其余态投影已滤不为 null
-  const dockColor = !dock ? "" : dock.state === "WORKING" ? c.working : dock.state === "WAITING" ? c.waiting : dock.state === "DONE" ? c.done : c.error;
+  // W-EXPO 005 化（session-state-dock 口径）：running=done 绿（呼吸点）、waiting=
+  // working 黄；终态（closing/suspended）由 StatusStrip 承载（ERROR 常驻 / DONE ✓
+  // 尾窗收口 8s），舱内只渲染 WORKING/WAITING 两活态
+  const dockColor = !dock ? "" : dock.state === "WORKING" ? c.done : dock.state === "WAITING" ? c.working : dock.state === "DONE" ? c.brandHover : c.error;
 
   const send = (override?: string) => {
     const text = (override ?? input).trim();
@@ -2456,18 +2501,31 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               </Pressable>
             </View>
           </View>
-          {/* E3a 头部活动舱（B0 StatusDockState 只读投影）：状态行 + 任务摘要 + 当前活动。
-              四态图标/色双通道区分（✶◉✓⚠ + 四主题色），不引新依赖；行高恒定 lineHeight +
-              numberOfLines=1（390 宽不抖）；耗时按 native_elapsed、摘要/活动按
-              operation_summary 各自门控；approval 不入舱（横幅承载） */}
-          {dock ? (
-            <View style={d.dock}>
+          {/* W-EXPO 005 化头部活动舱（对齐 index-005 .session-state-dock）：上缘 hairline +
+              左缘 2px 状态色；两行制 = 当前任务行（dim）+ 活动行（呼吸点·状态词·耗时·
+              token 内联「· 34k/200k」）。呼吸点走 #148 低频步进（每秒 2 次提交，禁逐帧
+              Animated）；token 行在终端实时行（零宽前缀）时隐藏防双计；终态（DONE/ERROR）
+              不入舱——StatusStrip 已承载收口（DONE ✓ 8s 尾窗 / ERROR ⚠ 常驻） */}
+          {dock && (dock.state === "WORKING" || dock.state === "WAITING") ? (
+            <View style={[d.dock, { borderLeftColor: dockColor }]}>
               <View style={d.dockRow}>
-                <Text style={[d.dockIcon, { color: dockColor }]}>{dock.icon}</Text>
+                <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
                 <Text style={[d.dockStateT, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
                 {dock.elapsedMs !== undefined ? <Text style={d.dockElapsed}>· {fmtElapsed(dock.elapsedMs)}</Text> : null}
+                {(() => {
+                  // A0-1 token 内联：有水位且非终端实时行才显（实时行自带 ↓token）
+                  const used = s?.context_usage ?? 0;
+                  if (!used || isLiveLine(s?.action_summary)) return null;
+                  const limit = s?.context_limit ?? CONTEXT_LIMIT_FALLBACK;
+                  return <Text style={d.dockTok}>· {fmtTok(used)}/{fmtTok(limit)}</Text>;
+                })()}
               </View>
-              {dock.summary ? <Text style={d.dockSummary} numberOfLines={1}>{dock.summary}</Text> : null}
+              {(() => {
+                const task = dock.summary || s?.action_summary || "";
+                if (!task) return null;
+                const t = isLiveLine(task) ? task.slice(1) : task;
+                return <Text style={d.dockTask} numberOfLines={1}>当前任务 · {t}</Text>;
+              })()}
               {dock.actText ? (
                 <Text style={d.dockAct} numberOfLines={1}>
                   {dock.actKind === "tool_use" ? "⚙ " : ""}{dock.actTool ? `${dock.actTool} · ` : ""}{dock.actText}
@@ -2651,45 +2709,6 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
           </View>
           )}
         </View>
-      ) : v.k === "cron" ? (
-        /* 定时任务视图：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发）。
-           #376 条目点击展开看 prompt 全文；cron 表达式配人话频率（未识别模式显原文） */
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.cron_tasks?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
-          {/* 空态垂直居中：内容容器 flexGrow 撑满可视面板 + justifyContent 居中提示组；
-              底部 40+insets 的滚动余量在空态无意义，收成与顶部对称（14+insets）防中心偏上 */}
-          {(s.cron_tasks?.length ?? 0) === 0 ? (
-            <Text style={d.empty}>暂无定时任务</Text>
-          ) : (
-            s.cron_tasks!.map((t, i) => {
-              const open = !!cronOpen[t.id];
-              const desc = cronDesc(t.schedule);
-              return (
-                <Pressable
-                  key={t.id + "|" + i}
-                  style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}
-                  android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => setCronOpen((m) => ({ ...m, [t.id]: !m[t.id] }))}
-                >
-                  <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
-                    <Text style={d.cronMeta} numberOfLines={open ? undefined : 1}>
-                      {desc ?? t.schedule}
-                      {t.recurring === false ? " · 一次性" : ""}
-                      {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
-                    </Text>
-                    {open ? (
-                      <>
-                        {desc ? <Text style={d.cronRaw}>cron: {t.schedule}</Text> : null}
-                        <Text style={d.cronPrompt} selectable>{t.prompt}</Text>
-                      </>
-                    ) : null}
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
-        </ScrollView>
       ) : v.k === "arts" ? (
         /* #35 输出物视图（网页端第 6 tab 同构）。#222 起支持文件夹颗粒度：同父目录
            ≥2 个文件聚成可折叠文件夹行（最近活跃的默认展开、其余折叠，点按开合有记忆），
@@ -2865,37 +2884,134 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             );
           })()}
         </ScrollView>
-      ) : v.k === "stats" ? (
-        /* 统计视图（原 StatsModal 内容平铺；字段与网页"统计" tab 呼应） */
+      ) : v.k === "more" ? (
+        /* 「更多」（W-EXPO 005 化，对齐 index-005 renderMore/mMoreHtml 信息架构）：
+           水位计（12 段 band + 分级胶囊）+ 统计键值行（本回合/会话信息/用量统计/
+           标识）+ 定时任务收编。军规②③：行级无常驻分隔线，分组只靠间距+小节标题 */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
-          <View style={d.statsCard}>
-            <StatRow k="耗时" v={fmtElapsed(sessionElapsed(s))} />
-            {s.todos?.length ? (
-              <StatRow k="任务进度" v={`${s.todos.filter((t) => t.status === "completed").length}/${s.todos.length}`} />
-            ) : null}
-            <StatRow k="改动文件" v={String(s.stats?.files_changed ?? 0)} />
-            <StatRow k="新增行" v={"+" + (s.stats?.lines_added ?? 0)} vc={c.working} />
-            <StatRow k="删除行" v={"-" + (s.stats?.lines_deleted ?? 0)} vc={c.error} />
-            <StatRow k="输入 tokens" v={fmtTok(s.usage?.input_tokens)} />
-            <StatRow k="输出 tokens" v={fmtTok(s.usage?.output_tokens)} />
-            <StatRow k="缓存读取" v={fmtTok(s.usage?.cache_read_input_tokens)} />
-            <StatRow k="缓存写入" v={fmtTok(s.usage?.cache_creation_input_tokens)} />
-            <StatRow k="模型" v={s.model || "—"} />
-            <StatRow k="开始时间" v={fmtClock(s.started_at)} />
-            <StatRow k="最近活动" v={fmtClock(s.updated_at)} />
-            <StatRow k="工作目录" v={s.cwd || "—"} />
-            {s.cli_pid ? <StatRow k="CLI PID" v={String(s.cli_pid)} /> : null}
-            {/* #205 对齐网页端统计 tab：Session ID（长按复制整串） */}
-            <StatRow k="Session ID" v={s.session_id} copy />
-          </View>
+          {(() => {
+            const used = s.context_usage ?? 0;
+            const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
+            const pct = used > 0 ? contextPct(used, limit) : 0;
+            const lv = contextLevel(used, limit);
+            const grade = lv === "done" ? "安全" : lv === "working" ? "注意" : "紧张";
+            const gColor = lv === "done" ? c.ctxSafe : lv === "working" ? c.ctxAttention : c.ctxCritical;
+            const gFill = lv === "done" ? c.ctxSafeFill : lv === "working" ? c.ctxAttentionFill : c.ctxCriticalFill;
+            const on = Math.round((pct / 100) * 12);
+            const u = s.usage;
+            const turnRun = s.status === "WORKING" && s.turn_started_at ? fmtElapsed(Math.max(0, Date.now() - s.turn_started_at)) : null;
+            const turnTok = u && (u.input_tokens || u.output_tokens) ? fmtTok((u.input_tokens ?? 0) + (u.output_tokens ?? 0)) : null;
+            return (
+              <View>
+                {/* 水位计（context-meter）：kicker+模型+分级胶囊 / 12 段 band / 用量+百分比 */}
+                <View style={d.meterWrap}>
+                  <View style={d.meterHead}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={d.meterKicker}>CONTEXT WINDOW</Text>
+                      <Text style={d.meterModel} numberOfLines={1}>{s.model || "默认模型"} · {fmtTok(limit)} 上限</Text>
+                    </View>
+                    <View style={[d.meterGrade, { borderColor: withA(gColor, 0.42), backgroundColor: withA(gColor, 0.12) }]}>
+                      <Text style={[d.meterGradeT, { color: gColor }]}>{grade}</Text>
+                    </View>
+                  </View>
+                  <View style={d.meterBand}>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <View key={i} style={[d.meterCell, i < on ? { backgroundColor: gFill } : null]} />
+                    ))}
+                  </View>
+                  <View style={d.meterStats}>
+                    <Text style={d.meterStatsL} numberOfLines={1}>
+                      <Text style={d.meterUsed}>{used > 0 ? fmtTok(used) : "—"}</Text>
+                      <Text style={d.meterLimit}> / {fmtTok(limit)} tokens</Text>
+                    </Text>
+                    <Text style={[d.meterPct, { color: gColor }]}>{used > 0 ? `${pct}%` : "--"}</Text>
+                  </View>
+                </View>
+
+                {turnRun || turnTok ? (
+                  <View style={d.moreSec}>
+                    <Text style={d.moreSecT}>本回合</Text>
+                    {turnRun ? <StatRow k="已运行" v={turnRun} /> : null}
+                    {turnTok ? <StatRow k={`tokens（入 ${fmtTok(u!.input_tokens ?? 0)} · 出 ${fmtTok(u!.output_tokens ?? 0)}）`} v={turnTok} /> : null}
+                  </View>
+                ) : null}
+
+                <View style={d.moreSec}>
+                  <Text style={d.moreSecT}>会话信息</Text>
+                  <StatRow k="状态" v={STATUS_ZH[s.status] ?? s.status} />
+                  <StatRow k="目录" v={s.cwd || "—"} />
+                  <StatRow k="模型" v={s.model || "—"} />
+                  <StatRow k="权限模式" v={(PERM_MODE_ZH as Record<string, string>)[s.permission_mode ?? "default"] ?? "—"} />
+                  <StatRow k="开始时间" v={fmtClock(s.started_at)} />
+                  <StatRow k="用时" v={fmtElapsed(sessionElapsed(s))} />
+                  {s.historical ? <StatRow k="来源" v={s.external ? "外部 CLI" : "历史会话"} /> : null}
+                </View>
+
+                <View style={d.moreSec}>
+                  <Text style={d.moreSecT}>用量统计</Text>
+                  <StatRow k="修改文件" v={String(s.stats?.files_changed ?? 0)} />
+                  <StatRow k="增删行数" v={`+${s.stats?.lines_added ?? 0} / −${s.stats?.lines_deleted ?? 0}`} />
+                  {s.todos?.length ? (
+                    <StatRow k="任务清单" v={`${s.todos.filter((t) => t.status === "completed").length}/${s.todos.length}`} />
+                  ) : null}
+                  <StatRow k="输入 / 输出" v={`${fmtTok(u?.input_tokens)} / ${fmtTok(u?.output_tokens)}`} />
+                  <StatRow k="缓存读 / 写" v={`${fmtTok(u?.cache_read_input_tokens)} / ${fmtTok(u?.cache_creation_input_tokens)}`} />
+                  {s.done_reason ? <StatRow k="结束原因" v={s.done_reason} /> : null}
+                </View>
+
+                <View style={d.moreSec}>
+                  <Text style={d.moreSecT}>标识</Text>
+                  {/* #205 长按复制整串（uuid 手动拖选繁琐），复制后「已复制 ✓」1.5s */}
+                  <StatRow k="Session ID" v={s.session_id} copy />
+                  {s.relay_session_id ? <StatRow k="SDK 会话" v={s.relay_session_id} copy /> : null}
+                  {s.cli_pid ? <StatRow k="CLI PID" v={String(s.cli_pid)} /> : null}
+                </View>
+
+                {/* 定时任务（原独立 tab 收编；空清单整节不渲染） */}
+                {(s.cron_tasks?.length ?? 0) > 0 ? (
+                  <View style={d.moreSec}>
+                    <Text style={d.moreSecT}>定时任务</Text>
+                    {s.cron_tasks!.map((t, i) => {
+                      const open = !!cronOpen[t.id];
+                      const desc = cronDesc(t.schedule);
+                      return (
+                        <Pressable
+                          key={t.id + "|" + i}
+                          style={d.cronRow}
+                          android_ripple={{ color: c.tintSoft, borderless: false }}
+                          onPress={() => setCronOpen((m) => ({ ...m, [t.id]: !m[t.id] }))}
+                        >
+                          <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
+                            <Text style={d.cronMeta} numberOfLines={open ? undefined : 1}>
+                              {desc ?? t.schedule}
+                              {t.recurring === false ? " · 一次性" : ""}
+                              {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
+                            </Text>
+                            {open ? (
+                              <>
+                                {desc ? <Text style={d.cronRaw}>cron: {t.schedule}</Text> : null}
+                                <Text style={d.cronPrompt} selectable>{t.prompt}</Text>
+                              </>
+                            ) : null}
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })()}
         </ScrollView>
       ) : (() => {
-        // 转录页（消息/全部共用结构）：list 按页取过滤结果，跨天分隔游标随本页 map 推进
-        const list = v.k === "msg" ? shownMsg : shownAll;
+        // 转录页（对话过滤视图）：list 取过滤结果，跨天分隔游标随本页 map 推进
+        const list = shownMsg;
         let lastDay = "";
         return (
       <ScrollView
-        ref={v.k === "msg" ? scrollRef : allScrollRef}
+        ref={scrollRef}
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         // 空态垂直居中（同定时视图手法）：仅 list 为空时容器撑满可视面板并居中提示组，
@@ -2925,7 +3041,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         //（旧 translateY 方案视口不变无此问题；手法同任务页 todoAtBottom 的贴底保底，
         //  touching 守卫同 1535 行流式滚底——按住列表时不抢滚动）
         onLayout={() => {
-          if (atBottom.current && !touching.current) (v.k === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: false });
+          if (atBottom.current && !touching.current) scrollRef.current?.scrollToEnd({ animated: false });
         }}
       >
         {s.historical && !external ? (
@@ -3056,13 +3172,13 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
 
       {/* 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框正上方，
           正圆形；滚动进行中隐藏、停止 ~300ms 才浮现——绝对定位不占布局 */}
-      {showJump && (view === "msg" || view === "all") ? (
+      {showJump && view === "msg" ? (
         <Pressable
           style={d.jumpFab}
           android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 17 }}
           onPress={() => {
             if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current);
-            (view === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: true });
+            scrollRef.current?.scrollToEnd({ animated: true });
             setShowJump(false);
           }}
         >
@@ -3084,7 +3200,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
           ) : (
           <FadeIn>
-          <View style={[d.waitBanner, d.waitBannerApprove]}>
+          <WaitCard isAsk={false}>
             <View style={d.waitHead}>
               <View style={d.waitDot} />
               <Text style={d.waitTitle}>等待你的确认</Text>
@@ -3102,7 +3218,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                 </Text>
                 <View style={d.wbtns}>
                   <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "session")}>
-                    <Text style={d.btnAllowT}>仅本会话</Text>
+                    <Text style={d.btnAllowT}>本次会话</Text>
                   </PressScale>
                   <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "global")}>
                     <Text style={d.btnAllowT}>所有会话</Text>
@@ -3113,24 +3229,23 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                 </View>
               </View>
             ) : (
-              <View>
-                <View style={d.wbtns}>
-                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
-                    <Text style={d.btnAllowT}>✓ 允许</Text>
-                  </PressScale>
-                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
-                    <Text style={d.btnRejectT}>✕ 拒绝</Text>
-                  </PressScale>
-                </View>
-                {/* #212 remember 由 relay 判定可记忆才下发（危险形态无此字段 = 不出现） */}
+              /* 005 #166 三级按钮：拒绝=次级描边、允许并记住=第三钮（同次级档次）、
+                  允许=唯一实心主钮（done 色）；仅浏览口径下全 disabled 压灰 */
+              <View style={[d.wbtns, WAITBOX_READONLY && d.roDim]}>
+                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
+                  <Text style={d.btnRejectT}>✕ 拒绝</Text>
+                </PressScale>
                 {wr!.remember ? (
-                  <Pressable style={d.rmEntry} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={() => setRmOpen(true)}>
-                    <Text style={d.rmEntryT}>✓ 允许并记住…</Text>
-                  </Pressable>
+                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
+                    <Text style={d.btnRememberT}>允许并记住</Text>
+                  </PressScale>
                 ) : null}
+                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(true)}>
+                  <Text style={d.btnAllowT}>✓ 允许</Text>
+                </PressScale>
               </View>
             )}
-          </View>
+          </WaitCard>
           </FadeIn>
           )
         ) : null}
@@ -3367,9 +3482,10 @@ function StatRow({ k, v, vc, copy }: { k: string; v: string; vc?: string; copy?:
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
   return (
     <View style={d.statRow}>
-      <Text style={d.statRowK}>{k}</Text>
+      {/* W-EXPO 005 kv-row 形制：值左（粗体 text-strong，flexShrink 截断）、标签右（dim 10px） */}
       <Text
         style={[d.statRowV, vc ? { color: vc } : null]}
+        numberOfLines={1}
         onLongPress={copy ? () => {
           void Clipboard.setStringAsync(v).then(() => {
             setCopied(true);
@@ -3378,6 +3494,7 @@ function StatRow({ k, v, vc, copy }: { k: string; v: string; vc?: string; copy?:
           });
         } : undefined}
       >{copied ? "已复制 ✓" : v}</Text>
+      <Text style={d.statRowK}>{k}</Text>
     </View>
   );
 }
@@ -3429,12 +3546,27 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 副信息行（头部专用）：次级信息统一档 10px dim（#159：源与 ctx 同档同色，报警档才异色）
   sub: { color: c.dim, fontSize: 10, lineHeight: 13 },
   // 统计视图卡片（原 StatsModal 内容平铺）
-  statsCard: {
-    borderRadius: 14, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, padding: 16,
-  },
-  statRow: { flexDirection: "row", justifyContent: "space-between", gap: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12) },
-  statRowK: { color: c.dim, fontSize: 13 },
-  statRowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
+  // W-EXPO 005「更多」键值行（kv-row）：行级无常驻分隔线（军规②），值左标签右
+  statRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 6 },
+  statRowK: { flexShrink: 0, color: c.dim, fontSize: 10 },
+  statRowV: { color: c.textStrong, fontSize: 12.5, fontWeight: "700", fontVariant: ["tabular-nums"], flexShrink: 1 },
+  // 「更多」小节（more-section）：分组只靠间距+小节标题（军规③）
+  moreSec: { marginTop: 18 },
+  moreSecT: { marginBottom: 4, color: c.faint, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
+  // 水位计（context-meter 005 形制）
+  meterWrap: { paddingVertical: 4 },
+  meterHead: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  meterKicker: { color: c.faint, fontSize: 9, letterSpacing: 0.8 },
+  meterModel: { color: c.textStrong, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  meterGrade: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3 },
+  meterGradeT: { fontSize: 10, fontWeight: "700" },
+  meterBand: { flexDirection: "row", gap: 3, marginVertical: 10 },
+  meterCell: { flex: 1, height: 7, borderRadius: 3, backgroundColor: c.ctxTrack },
+  meterStats: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  meterStatsL: { flexShrink: 1 },
+  meterUsed: { color: c.textStrong, fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  meterLimit: { color: c.dim, fontSize: 10, fontVariant: ["tabular-nums"] },
+  meterPct: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
   // 思考/审批开关（R2 设置簇）：#159 方案A 去迷你滑块，改与权限胶囊同形文字胶囊——
   // h14/r7/tintSoft 素底（off）+ 品牌蓝描边亮底（on），一行只剩一种胶囊形态；
   // 触达靠 hitSlop 补偿，圆角 8 语感与返回钮同
@@ -3458,12 +3590,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   stripDone: { flex: 1, color: c.done, fontSize: 12.5, fontWeight: "600" },
   // E3a 头部活动舱：行高恒定（lineHeight 锁定）+ 单行截断，390 宽不抖；紧凑三行
   //（状态/摘要/活动）随内容 0~3 行，能力门控缺行不占位
-  dock: { marginTop: 5 },
+  // W-EXPO 005 化活动舱（.session-state-dock）：上缘 hairline + 左缘 2px 状态色
+  dock: { marginTop: 8, borderTopWidth: 1, borderTopColor: c.line, borderLeftWidth: 2, borderLeftColor: c.dim, paddingLeft: 10, paddingVertical: 7 },
   dockRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  dockIcon: { fontSize: 11, width: 13, textAlign: "center", lineHeight: 15 },
   dockStateT: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
   dockElapsed: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
-  dockSummary: { fontSize: 11, color: c.dim, lineHeight: 15, marginTop: 1 },
+  dockTok: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
+  dockTask: { fontSize: 10.5, color: c.dim, lineHeight: 15, marginTop: 1 },
   dockAct: { fontSize: 10.5, color: c.faint, lineHeight: 14, marginTop: 1 },
   stripBtnWarn: {
     height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
@@ -3495,9 +3628,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
+  // 005 mobile-detail-tabs：激活 text-strong 加粗 + brand 底杠（指示条动画保留）
+  tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2, borderRadius: 1, backgroundColor: c.brandA },
   tabT: { fontSize: 12, color: c.dim },
-  tabTOn: { color: c.text, fontWeight: "600" },
+  tabTOn: { color: c.textStrong, fontWeight: "700" },
   // #36 权限胶囊（R2 设置簇左位，思考开关右侧成组）：h14/r7 与思考开关同形态语言
   permCluster: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
   permPill: {
@@ -3575,7 +3709,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cronRaw: { color: c.faint, fontSize: 10.5, fontFamily: "monospace", marginTop: 2 },
   cronPrompt: { color: c.dim, fontSize: 12, lineHeight: 17, marginTop: 5 },
   // 定时任务视图行（原 cronScroll/cronBox 折叠面板平铺化）
-  cronRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6, borderTopWidth: 1, borderTopColor: c.line, marginTop: 4 },
+  cronRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6, marginTop: 4, paddingHorizontal: 6, borderRadius: 6 },
   cronMark: { color: c.working, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   cronName: { color: c.text, fontSize: 12.5, lineHeight: 17 },
   cronMeta: { color: c.faint, fontSize: 11, lineHeight: 15, marginTop: 1, fontVariant: ["tabular-nums"] },
@@ -3717,36 +3851,43 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
   waitBanner: {
     marginHorizontal: 8, marginBottom: 6,
-    borderRadius: 14, borderWidth: 1, borderColor: withA(c.working, 0.38),
+    borderRadius: 14, borderWidth: 1, borderColor: c.line,
     backgroundColor: c.panel, padding: 12,
   },
-  /* #192 审批态黄 tint 容器（提问态 AskBanner 复用 waitBanner 基础样式保持中性底，不受影响） */
-  waitBannerApprove: { backgroundColor: withA(c.working, 0.07) },
-  /* 提问态 AskBanner 专用（审批态标题已并入 waitHead 行） */
-  waitT: { color: c.working, fontWeight: "700", fontSize: 13, marginBottom: 6 },
+  /* 005 #166 双态容器：提问态中性底+品牌描边（提问≠风险）；审批态黄 tint 警示
+    （--wait-bg/--wait-line 双主题折中 alpha 直译） */
+  waitCardAsk: { backgroundColor: c.panel, borderColor: c.brandA },
+  waitCardApprove: { backgroundColor: withA(c.working, 0.09), borderColor: withA(c.working, 0.45) },
+  /* 005 #166 手机仅浏览：作答/决议控件压灰 + 底部引导条（--surface2 底 dim 字） */
+  roDim: { opacity: 0.5 },
+  waitRO: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 6, backgroundColor: c.panel2, alignItems: "center" },
+  waitROT: { color: c.dim, fontSize: 11, textAlign: "center" },
+  /* 提问态 AskBanner 专用（审批态标题已并入 waitHead 行；005 双态随卡转品牌色） */
+  waitT: { color: c.brandA, fontWeight: "700", fontSize: 13, marginBottom: 6 },
   waitHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 9 },
   waitDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: c.working },
   waitTitle: { color: c.working, fontWeight: "700", fontSize: 13, flexShrink: 1 },
   waitChip: { marginLeft: "auto", fontFamily: "monospace", fontSize: 10.5, fontWeight: "700", color: c.working, backgroundColor: withA(c.working, 0.12), borderWidth: 1, borderColor: withA(c.working, 0.3), borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden" as const },
   waitPs: { color: c.done, fontWeight: "700" },
   waitCmd: { fontFamily: "monospace", fontSize: 12, lineHeight: 17, color: c.text, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9, marginBottom: 11 },
-  wbtns: { flexDirection: "row", gap: 10 },
+  wbtns: { flexDirection: "row", gap: 8 },
   btnAllow: {
-    flex: 1.5, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    flex: 1.25, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
     backgroundColor: c.done,
   },
   btnAllowT: { color: c.onDone, fontWeight: "700", fontSize: 14.5 },
+  /* 005 #166 拒绝/允许并记住=次级描边档（中性 lineStrong 描边——允许是唯一高亮钮） */
   btnReject: {
     flex: 1, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    backgroundColor: "transparent", borderWidth: 1, borderColor: withA(c.waiting, 0.45),
+    backgroundColor: "transparent", borderWidth: 1, borderColor: c.lineStrong,
   },
-  btnRejectT: { color: c.dangerFg, fontWeight: "600", fontSize: 14 },
-  /* #212 允许并记住：次级入口（视觉弱于「允许」）+ 范围确认条说明行 */
-  rmEntry: {
-    marginTop: 8, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
-    backgroundColor: "transparent", borderWidth: 1, borderColor: c.line,
+  btnRejectT: { color: c.text, fontWeight: "600", fontSize: 13 },
+  btnRemember: {
+    flex: 1.15, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: "transparent", borderWidth: 1, borderColor: c.lineStrong,
   },
-  rmEntryT: { color: c.dim, fontWeight: "600", fontSize: 12.5 },
+  btnRememberT: { color: c.text, fontWeight: "600", fontSize: 13 },
+  /* #212 范围确认条说明行 */
   rmLabel: { color: c.faint, fontSize: 11.5, lineHeight: 16, marginBottom: 9 },
   rmLabelB: { color: c.dim, fontWeight: "600" },
   // AskUserQuestion 作答横幅（#190 stepper 指示器行）

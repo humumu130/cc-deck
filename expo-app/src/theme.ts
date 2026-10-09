@@ -1,98 +1,183 @@
-// 主题调色板：深色（默认，cc light 风格）+ 浅色
+// 主题调色板：W-EXPO 阶段二 005 化（2026-10-09）——色值从设计权威
+// web-console/index-005.html 的 CSS 变量区（:root 暗色 / html[data-theme=light] 亮色）
+// 逐键直译，暗亮双主题同名键；旧接口键全部保留（全端引用零改动即整体换装），
+// 005 新增键（textStrong/qRow*/ctx*/tag*/me*/art* 六类分色等）随阶段三~五接入。
+// 更新 token 时以 index-005.html 为准同步两端。
 export interface ThemeColors {
   bg: string;
   panel: string;
   panel2: string;
   line: string;
+  lineStrong: string;
   text: string;
+  textStrong: string;
   dim: string;
   faint: string;
   brandA: string;
   brandB: string;
+  brandHover: string;
   working: string;
   waiting: string;
   error: string;
   done: string;
-  // #192 实心绿钮文字 / 红系可读文字（修 #F0524F 暗底 3.9:1 不达 AA）
+  info: string;
+  // 实心绿钮文字 / 红系可读文字（005 --done-ink）
   onDone: string;
   dangerFg: string;
-  tintSoft: string;    // 品牌色弱底（chip/卡片叠层）
-  tintStrong: string;  // 选中态底
+  onBrand: string;
+  tintSoft: string;    // 品牌色弱底（chip/卡片叠层，005 --mobile-active-bg）
+  tintStrong: string;  // 选中态底（005 --action-bg）
   overlay: string;     // 命令栏等近实底
-  // 列表页"新建会话"FAB（2026-09-18 亮色二次反馈：品牌蓝底太突兀）：
-  // 深色保持原观感（近黑底+暖橙十字），浅色走中性面板口径（暖白底+灰描边+深灰十字）
+  // 列表页"新建会话"FAB：中性面板口径 + 品牌橙十字（旧结构保留，005 直值）
   fabBg: string;
   fabLine: string;
   fabPlus: string;
-  // 详情页命令栏发送键（2026-09-18 亮色反馈定稿、2026-09-19 #48 补暗色）：
-  // 两主题同规则——与并排输入框同材质（panel2 底 + line 描边）+ 品牌橙 ➤
-  // （FAB 十字同为品牌橙，按钮符号色全端一致；废止暗色品牌蓝实底）
+  // 详情页命令栏发送键：与输入框同材质 + 品牌橙 ➤（005 --composer-bg/--line）
   sendBg: string;
   sendLine: string;
   sendFg: string;
+  // ---------- 005 增补键 ----------
+  hover: string;       // 交互 hover 底（--hover）
+  chrome: string;      // 顶栏/窗铬底（--chrome）
+  headBg: string;      // 手机头部底（--mobile-head-bg）
+  navBg: string;       // 手机底部导航底（--mobile-nav-bg）
+  qRowHov: string;     // 通栏行扫过淡底（--q-row-hov）
+  qRowSel: string;     // 通栏行选中淡底（--q-row-sel）
+  tagBg: string;       // tag 胶囊底（--tag-bg）
+  tagBorder: string;   // tag 胶囊描边（--tag-border）
+  tagInk: string;      // tag 胶囊文字（--tag-ink）
+  ctxTrack: string;    // 水位计/微型条轨道（--ctx-track）
+  ctxSafe: string;     // 水位分级：安全（--ctx-safe）
+  ctxAttention: string; // 水位分级：注意（--ctx-attention）
+  ctxCritical: string; // 水位分级：紧张（--ctx-critical）
+  ctxSafeFill: string;     // 水位条填充：安全（--ctx-safe-fill）
+  ctxAttentionFill: string; // 水位条填充：注意（--ctx-attention-fill）
+  ctxCriticalFill: string; // 水位条填充：紧张（--ctx-critical-fill）
+  meBg: string;        // 用户消息气泡底（--me-bg）
+  meLine: string;      // 用户消息气泡描边（--me-line）
+  artDoc: string;      // #168 输出物六类分色（只染瓦片）：doc 紫
+  artSheet: string;    // sheet 琥珀
+  artCode: string;     // code=info
+  artImage: string;    // image=done
+  artPkg: string;      // pkg 中性
+  artAccept: string;   // accept=brand 系
 }
 
 export const DARK: ThemeColors = {
-  bg: "#050B12",
-  panel: "#0B1622",
-  panel2: "#101F30",
-  line: "rgba(125,165,220,0.10)",
-  text: "#E8F0FA",
-  dim: "#7B93AE",
-  faint: "#4A5F78",
-  brandA: "#4D9FFF",
-  brandB: "#7C6CF2",
-  // #124 加黄提亮（#FFC400 → #FFD60A，用户拍板"更黄更显眼"）；沿革：#118 曾把
-  // #FFC53D 对齐桌面 #FFC400——两轮反馈都嫌不够黄，这次直接进纯黄段；浅色不动
-  // （#8F6400 对比度红线，见下）。
-  working: "#FFD60A",
-  waiting: "#F0524F",
-  error: "#FF7849",
-  done: "#2BD98F",
-  onDone: "#07230F",
-  dangerFg: "#FF6B68",
-  tintSoft: "rgba(125,165,220,0.08)",
-  tintStrong: "rgba(93,134,245,0.16)",
-  overlay: "rgba(8,15,26,0.97)",
-  fabBg: "#1D1726",
-  fabLine: "rgba(255,255,255,0.09)",
-  fabPlus: "#D97757",
-  // #48：暗色与亮色统一（用户 2026-09-19 反馈）——同输入框材质 + 品牌橙 ➤
-  sendBg: "#101F30",
-  sendLine: "rgba(125,165,220,0.10)",
-  sendFg: "#D97757",
+  // 005 :root 直译（暗 #07111D 系）
+  bg: "#07111D",
+  panel: "#101E2F",
+  panel2: "#15273B",
+  line: "#203247",       // --line-soft（通用 hairline；描边重档走 lineStrong）
+  lineStrong: "#2A4058", // --line
+  text: "#C4D0DE",
+  textStrong: "#E8EFF8",
+  dim: "#9AABBE",
+  faint: "#8298B0",
+  brandA: "#E2855E",
+  brandB: "#F0A06A",
+  brandHover: "#F0A06A",
+  // 005 状态轴：working/waiting 同黄（待处理灯黄+静态光圈、运行灯黄+呼吸，
+  // 靠动画区分——设计稿 .status-dot.waiting/.working 同色）
+  working: "#E9B84C",
+  waiting: "#E9B84C",
+  error: "#EC7472",
+  done: "#4BCB91",
+  info: "#7EAFE8",
+  onDone: "#082116",
+  dangerFg: "#EC7472",
+  onBrand: "#FFFAF6",
+  tintSoft: "rgba(226,133,94,0.08)",
+  tintStrong: "rgba(226,133,94,0.16)",
+  overlay: "rgba(7,17,29,0.97)",
+  fabBg: "#15273B",
+  fabLine: "#2A4058",
+  fabPlus: "#E2855E",
+  sendBg: "#0E1B2B",
+  sendLine: "#2A4058",
+  sendFg: "#F0A06A",
+  // 005 增补键
+  hover: "#1D344D",
+  chrome: "#070D15",
+  headBg: "rgba(11,22,36,0.82)",
+  navBg: "rgba(16,30,47,0.96)",
+  qRowHov: "rgba(148,163,190,0.07)",
+  qRowSel: "rgba(148,163,190,0.14)",
+  tagBg: "rgba(83,103,126,0.19)",
+  tagBorder: "rgba(111,139,166,0.18)",
+  tagInk: "#D7E3EF",
+  ctxTrack: "#3A5570",
+  ctxSafe: "#4BCB91",
+  ctxAttention: "#E9B84C",
+  ctxCritical: "#EC7472",
+  ctxSafeFill: "#79E3B4",
+  ctxAttentionFill: "#F4C95F",
+  ctxCriticalFill: "#FF8A87",
+  meBg: "#15273B",
+  meLine: "#4E6D8E",
+  artDoc: "#B7A5F0",
+  artSheet: "#E9B84C",
+  artCode: "#7EAFE8",
+  artImage: "#4BCB91",
+  artPkg: "#A9BCD1",
+  artAccept: "#F0A06A",
 };
 
 export const LIGHT: ThemeColors = {
-  // #351 浅色降刺眼：冷白偏暖灰（蓝灰相→暖灰相），整体压暗半档；panel 从近纯白降为暖白
-  bg: "#E9EAE4",
-  panel: "#F2F3EE",
-  panel2: "#E2E4DC",
-  line: "rgba(52,58,50,0.13)",
-  text: "#29302A",
-  dim: "#5D665C",
-  faint: "#8B938A",
-  brandA: "#2F7FE8",
-  brandB: "#6F5FE8",
-  // 浅色状态四色与网页端 CSS 浅色变量对齐（两端风格一致）
-  // #118 同步对齐桌面浅色 --working（#8F6400；旧值 #A16207 同样欠饱和）
-  working: "#8F6400",
-  waiting: "#DC2626",
-  error: "#C2410C",
-  done: "#047857",
-  onDone: "#FFFFFF",
-  dangerFg: "#DC2626",
-  tintSoft: "rgba(47,127,232,0.06)",
-  tintStrong: "rgba(47,127,232,0.13)",
-  overlay: "rgba(240,241,236,0.97)",
-  // #13 巡检 nit②：#E2E4DC 与页面底近同色，提亮一档拉开层次（描边已有，提底即够）
-  fabBg: "#EDEFE8",
-  fabLine: "rgba(52,58,50,0.13)",
-  // #23 补：浅色十字/箭头回归品牌橙（与深色 FAB 十字同色），中性面板上保品牌识别
-  fabPlus: "#D97757",
-  sendBg: "#E2E4DC",
-  sendLine: "rgba(52,58,50,0.13)",
-  sendFg: "#D97757",
+  // 005 html[data-theme="light"] 直译（暖灰白 #F1F5F8 系）
+  bg: "#F1F5F8",
+  panel: "#E8EFF5",
+  panel2: "#FFFFFF",
+  line: "#DCE5EC",
+  lineStrong: "#C6D3DF",
+  text: "#30465B",
+  textStrong: "#15283D",
+  dim: "#334B61",
+  faint: "#4B6278",
+  brandA: "#C86440",
+  brandB: "#D9754D",
+  brandHover: "#D9754D",
+  working: "#A56D00",
+  waiting: "#A56D00",
+  error: "#C84C51",
+  done: "#168D60",
+  info: "#3978B8",
+  onDone: "#073C27",
+  dangerFg: "#C84C51",
+  onBrand: "#FFFFFF",
+  tintSoft: "rgba(200,100,64,0.08)",
+  tintStrong: "rgba(200,100,64,0.14)",
+  overlay: "rgba(248,250,252,0.97)",
+  fabBg: "#FFFFFF",
+  fabLine: "#C6D3DF",
+  fabPlus: "#C86440",
+  sendBg: "#E8EFF5",
+  sendLine: "#C6D3DF",
+  sendFg: "#C86440",
+  hover: "#DDE8F1",
+  chrome: "#E5ECF2",
+  headBg: "rgba(248,250,252,0.94)",
+  navBg: "rgba(232,239,245,0.97)",
+  qRowHov: "rgba(16,24,40,0.05)",
+  qRowSel: "rgba(16,24,40,0.09)",
+  tagBg: "rgba(132,151,169,0.16)",
+  tagBorder: "rgba(96,117,138,0.24)",
+  tagInk: "#2D4358",
+  ctxTrack: "#C6D3DF",
+  ctxSafe: "#168D60",
+  ctxAttention: "#A56D00",
+  ctxCritical: "#C84C51",
+  ctxSafeFill: "#168D60",
+  ctxAttentionFill: "#A56D00",
+  ctxCriticalFill: "#C84C51",
+  meBg: "#FFFFFF",
+  meLine: "#C6D3DF",
+  artDoc: "#6D5BD8",
+  artSheet: "#A56D00",
+  artCode: "#3978B8",
+  artImage: "#168D60",
+  artPkg: "#5B7186",
+  artAccept: "#C86440",
 };
 
 // #RRGGBB + alpha -> #RRGGBBAA（RN 支持 8 位 hex）
@@ -103,9 +188,8 @@ export const withA = (hex: string, a: number): string => {
   return `${hex}${v}`;
 };
 
-// 两 hex 预混合（t=0 取 a，t=1 取 b），输出不透明 hex。#17 白块根因：elevation 阴影
-// 会从半透明底后面不均匀透出（边缘浓成灰环、中心无阴影成亮块）——玻璃浮钮染底一律
-// 用 mix(前景, 页面底, t) 预混合成不透明色，观感与真半透明一致且无分层（品红实验定案）
+// 两 hex 预混合（t=0 取 a，t=1 取 b），输出不透明 hex。玻璃浮钮染底一律
+// 用 mix(前景, 页面底, t) 预混合成不透明色，观感与真半透明一致且无分层
 export const mix = (a: string, b: string, t: number): string => {
   const pa = [0, 2, 4].map((i) => parseInt(a.slice(1 + i, 3 + i), 16));
   const pb = [0, 2, 4].map((i) => parseInt(b.slice(1 + i, 3 + i), 16));
@@ -116,10 +200,9 @@ export const mix = (a: string, b: string, t: number): string => {
 // 兼容旧引用（静态场景）；组件内请用 useTheme()
 export const C = DARK;
 
-// 75-E 引擎标识色（specs/005-prototype-a.html --engine-* 词表直搬，web/桌面同源，
-// PM-75 §2「沿用同一引擎色/名称体系」）：选择器 badge 色点用。仅标识轴（这是哪个
-// 引擎），与状态轴（可用/未安装/不支持/未知→done/working/error/faint 四主题色）两套
-// 不同轴勿混——状态词徽章配色见 NewSessionModal ENGINE_STATE_COLOR
+// 引擎标识色（index-005.html --engine-* 直值，web/桌面/手机三端同源）：
+// 仅标识轴（这是哪个引擎），与状态轴（done/working/waiting/error/faint）两套
+// 不同轴勿混——状态词徽章配色走主题四色
 export const ENGINE_ACCENT: Record<string, string> = {
   claude: "#A97A62",
   codex: "#8DABFF",
@@ -129,9 +212,11 @@ export const ENGINE_ACCENT: Record<string, string> = {
   zcode: "#E58DB0",
 };
 
+// 005 STATUS_TAG 口径（index-005.html :1484）：WAITING 词面从「等待确认」
+// 收敛为「待处理」（与桌面 tag/待处理组同词）
 export const STATUS_ZH: Record<string, string> = {
   WORKING: "运行中",
-  WAITING: "等待确认",
+  WAITING: "待处理",
   ERROR: "错误",
   DONE: "已完成",
 };
