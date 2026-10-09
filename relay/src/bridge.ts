@@ -38,6 +38,27 @@ import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
 import type { ActivityKind } from "./types.js";
+import { artifactsDir } from "./artifacts.js";
+
+// W-ORPH（2026-10-09）：本机 cc-deck 接入能力在场检测——孤儿接入文案分叉用。
+// ①装法 A 插件：installed_plugins.json 的 plugins 键含 cc-deck@*；②旧式手动 hooks
+//（install-hooks.mjs，README 已废弃但存量机器可能在）：settings.json 串匹配
+// cc-deck/bridge-hook 路径。文件缺失/解析失败一律按未装（保守：文案多给一份安装
+// 指引无副作用；真实功能路径不走此函数）
+export function deckHooksInstalled(): boolean {
+  const cfgDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(homedir(), ".claude");
+  try {
+    const j = JSON.parse(readFileSync(path.join(cfgDir, "plugins", "installed_plugins.json"), "utf-8")) as {
+      plugins?: Record<string, unknown>;
+    };
+    if (j?.plugins && Object.keys(j.plugins).some((k) => /^cc-deck@/.test(k))) return true;
+  } catch {}
+  try {
+    const s = readFileSync(path.join(cfgDir, "settings.json"), "utf-8");
+    if (s.includes("cc-deck") || s.includes("bridge-hook")) return true;
+  } catch {}
+  return false;
+}
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -369,10 +390,16 @@ export class Bridge {
           this.mgr.ensureExternal(id, cwd, "", sid, transcriptFirstTs(p));
           this.transcriptPaths.set(id, p);
           this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
+          // W-ORPH 接入文案分叉：插件/hooks 在场 → 重启 CLI 即获全功能（老口径）；
+          // 不在场（装法 B 桌面 relay / 插件未装）→ 重启无济于事，给安装指引 +
+          // 点名输出物通道不受影响（relay 已兜底落位 ~/.cc-deck/bin/deliver，见
+          // index.ts onReady 的 ensureDeliverBin）
           this.mgr.pushExternalLog(
             id,
             "system",
-            "孤儿扫描接入：该 CLI 启动早于插件或未加载 hook，事件无法上报；当前只读可见，重启该 CLI 后获得完整功能",
+            deckHooksInstalled()
+              ? "孤儿扫描接入：该 CLI 启动早于插件或未加载 hook，事件无法上报；当前只读可见，重启该 CLI 后获得完整功能"
+              : "只读接入：该电脑尚未安装 CC Deck 接入插件，会话动态无法上报；安装后新开的会话可远程操控（claude plugin marketplace add humumu130/cc-deck，再 claude plugin install cc-deck@cc-deck-plugins）。输出物不受影响：在该会话里运行 ~/.cc-deck/bin/deliver <文件> 即可登记上板",
           );
           this.ensureQueuePoll();
           console.log(`[orphan-adopt] ${id} cwd=${cwd}`);
@@ -406,6 +433,17 @@ export class Bridge {
     } finally {
       if (fd !== undefined) closeSync(fd);
     }
+  }
+
+  // W-ORPH A3：file_path 是否落在产物目录内（mergeArtifact 收录闸同口径——相对
+  // 路径以会话 cwd 补全、归一后前缀匹配，大小写不敏感对齐 Windows/不敏感盘）
+  private underArtifactsDir(rawP: string, id: string): boolean {
+    if (!rawP) return false;
+    let p = rawP;
+    const cwd = this.mgr.getExternal(id)?.cwd ?? "";
+    if (!path.isAbsolute(p) && cwd) p = path.resolve(cwd, p);
+    const adir = path.resolve(artifactsDir()).toLowerCase();
+    return p.toLowerCase().startsWith(adir + path.sep);
   }
 
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
@@ -1648,6 +1686,10 @@ export class Bridge {
       // 前台 result 则是真实完成信号（hook 断链会话 fg 子 Agent 的结束兜底）
       const agentResults = new Map<string, { async: boolean; at: number }>();
       const creates = this.taskCreateSet(id);
+      // W-ORPH A3：本批是否有文件工具写产物目录（~/.cc-deck/artifacts/）——孤儿会话
+      //（无 hook）的增量批次原本不喂输出物（只有 firstRead 全量回放一次），中途写进
+      // 产物目录的文件要等 relay 重启/重新收养才上板；命中则批尾补一次全文件回放
+      let artifactsDirHit = false;
       let removes = 0;
       // token 用量/模型：assistant 条目自带 usage（逐条 API 调用量，累加为会话总量）
       let usageIn = 0;
@@ -1829,6 +1871,15 @@ export class Bridge {
                 name: typeof blk.name === "string" ? blk.name : "",
                 input: ((b as { input?: unknown }).input ?? {}) as Record<string, unknown>,
               };
+              // W-ORPH A3 命中采集：四类文件工具 + file_path 落产物目录（判定与
+              // mergeArtifact 的收录闸同口径：cwd 补全 + 归一前缀）
+              if (
+                !firstRead &&
+                (blk.name === "Write" || blk.name === "Edit" || blk.name === "MultiEdit" || blk.name === "NotebookEdit")
+              ) {
+                const fp = ((b as { input?: { file_path?: unknown } }).input ?? {}).file_path;
+                if (typeof fp === "string" && this.underArtifactsDir(fp, id)) artifactsDirHit = true;
+              }
               if (blk.name === "Agent" || blk.name === "Task") {
                 const uid = typeof blk.id === "string" ? blk.id : "";
                 agentUses.push({ id: uid, input: (b as { input?: unknown }).input, ts: lastTs || Date.now() });
@@ -1936,6 +1987,9 @@ export class Bridge {
       // #35 输出物：首读全文件回放重建（转录轮转/shrink 重触 firstRead 也安全——
       // setArtifacts 整体替换，天然幂等不双计）
       if (firstRead) this.replayArtifacts(id, transcriptPath, hydrateAt);
+      // W-ORPH A3：无 hook 会话中途写产物目录 → 同款全文件回放即时上板（幂等整表
+      // 替换；触发稀有——本批含产物目录写入才扫，成本与首读同量级）
+      else if (artifactsDirHit) this.replayArtifacts(id, transcriptPath);
       if (usageSeen || model) {
         // 首读以窗口内条目做种子（relay 重启后的近似值）；此后增量累加
         let u = this.extUsage.get(id);
