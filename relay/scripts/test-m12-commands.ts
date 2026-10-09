@@ -713,9 +713,11 @@ try {
         "C13⑧ artifact unknown 禁下载：不存在文件 serve 拒（false）+空产物目录零条目");
       // C13⑨ 登记面归因 NULL 档：不存在会话零落账（不造会话归因）
       const r9 = mgr.registerDeliverable("ghost-sid-13", join(ART, "x.txt"));
+      // #183 账本 = artifacts-index.json（新名 + 旧 deliverables.json 都核，双保险）
+      const idxRaw = existsSync(join(DATA, "artifacts-index.json")) ? readFileSync(join(DATA, "artifacts-index.json"), "utf-8") : "";
       const dlRaw = existsSync(join(DATA, "deliverables.json")) ? readFileSync(join(DATA, "deliverables.json"), "utf-8") : "";
-      assert(r9.ok === false && !dlRaw.includes("ghost-sid-13"),
-        "C13⑨ 登记面零落账：不存在会话→登记拒+deliverables 零造归因行（registerDeliverable 会话门槛）");
+      assert(r9.ok === false && !idxRaw.includes("ghost-sid-13") && !dlRaw.includes("ghost-sid-13"),
+        "C13⑨ 登记面零落账：不存在会话→登记拒+关联索引零造归因行（registerDeliverable 会话门槛）");
     } finally {
       if (prevAcc === undefined) delete process.env.CCR_ACCEPTANCE_DIR;
       else process.env.CCR_ACCEPTANCE_DIR = prevAcc;

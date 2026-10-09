@@ -192,6 +192,25 @@ assert(countOf("c") === 1 && rowOf("c")?.source_id === "x a b", "（x a b, c）�
 const cLoss = listLoss(port, fileC);
 assert(cLoss.length === 1 && cLoss[0]?.reason === "duplicate-key" && cLoss[0]?.lineNo === 3, "duplicate-key 恰 1 条且落在真重复行（line3）——错位组合零误判");
 
+// ---------- 9. #183 keyed 账本形态：artifacts-index.json {sid:[{path,name,size,delivered_at}]} ----------
+console.log("keyed 账本形态（#183）:");
+const fileD = join(dataDir, "artifacts-index.json");
+writeFileSync(fileD, JSON.stringify({
+  "sess-ok": [
+    { path: "/repo/k/one.md", name: "one.md", size: 10, delivered_at: T + 40 },
+    { path: "/repo/k/two.md", name: "two.md", delivered_at: T + 41, unverified: true },
+  ],
+  "sess-gone": [
+    { path: "/repo/k/three.md", name: "three.md", delivered_at: T + 42 },
+  ],
+}, null, 2) + "\n");
+const r9 = importArtifacts(port, [{ id: "kindex", file: fileD }]);
+assert(r9.skipped === false && r9.counts.upserted === 3, `keyed 根拍平导入 3 行（实测 ${JSON.stringify(r9.counts)}）`);
+const k1 = rowOf("/repo/k/one.md");
+assert(k1?.session_id === "sess-ok" && k1?.size === 10 && k1?.created_at === T + 40 && k1?.existence_state === "unknown", "keyed 行：sid 组键归因 + size + delivered_at→created_at + 无 exists 证据 unknown");
+assert(rowOf("/repo/k/two.md")?.existence_state === "unknown", "unverified 行抑制证据（unknown 不猜）");
+assert(rowOf("/repo/k/three.md")?.session_id === null, "悬空 sid 组键：dangling-ref 落 loss、行归因 NULL 不造关联");
+
 port.close();
 rmSync(dataDir, { recursive: true, force: true });
 

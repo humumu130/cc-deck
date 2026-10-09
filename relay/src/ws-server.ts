@@ -637,7 +637,7 @@ export function startServer(
           }
           const c = typeof cwd === "string" && cwd ? cwd : p;
           // #72A0FIX2：校验闸快照随签名穿透进登记侧——mgr 不再二次 stat（TOCTOU
-          // 剩余段收口），unverified 标记由登记侧落账（deliverables.json + 账面）
+          // 剩余段收口），unverified 标记由登记侧落账（artifacts-index.json + 账面）
           const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid)
             ? mgr.deliverBySession(sid, c, validated.path, validated)
             : mgr.deliverByCwd(c, validated.path, validated);

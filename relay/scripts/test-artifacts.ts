@@ -216,7 +216,7 @@ assert(Array.isArray(snapArts) && snapArts.length === 2 && snapArts.every((x) =>
   "SNAPSHOT 携带存活 artifacts（#224 快照不背已删条目；含登记条目）");
 
 // 回放幂等 + 登记保留：转录换文件（≈轮转）重触 firstRead → setArtifacts 整表替换，
-// 产物目录基线回放 + 登记条目从 deliverables.json 挂回（不丢、不双计）。
+// 产物目录基线回放 + 登记条目从关联索引（artifacts-index.json）挂回（不丢、不双计）。
 // #82 起 mergeArtifact 新条目同步落登记清单——活采条目（不在 transcript 里的
 // 实时-补充.md）此前会被整表替换洗掉，现在经清单挂回存活
 const T2 = join(ROOT, "transcript2.jsonl");
@@ -247,10 +247,12 @@ assert(!!k1 && k1.adds === 1 && stateArts().length === 4 && !!byPath(DECLARED) &
   assert(noauth.status === 401, "产物中心：无 token 401");
 }
 
-// ---------- #82 托管会话产物表跨重启：mergeArtifact 新条目落 deliverables.json ----------
+// ---------- #82 托管会话产物表跨重启：mergeArtifact 新条目落关联索引（#183 artifacts-index.json） ----------
 {
-  // ① 活采路径（hook 实时 Write）与回放路径（transcript 重扫）的新条目都进登记清单
-  const reg = JSON.parse(readFileSync(join(cfg.dataDir, "deliverables.json"), "utf-8")) as { sid: string; path: string }[];
+  // ① 活采路径（hook 实时 Write）与回放路径（transcript 重扫）的新条目都进关联索引
+  //（#183 keyed {sid:[...]} 账本，拍平成 sid+path 行便于断言）
+  const regRaw = JSON.parse(readFileSync(join(cfg.dataDir, "artifacts-index.json"), "utf-8")) as Record<string, { path: string }[]>;
+  const reg = Object.entries(regRaw).flatMap(([sid, es]) => es.map((e) => ({ sid, path: e.path })));
   assert(reg.some((e) => e.sid === SID && e.path === join(ART, "实时-补充.md")), "#82 活采新条目落登记清单");
   assert(reg.some((e) => e.sid === SID && e.path === join(ART, "工作报告-2026-09-19.html")), "#82 回放新条目同落清单（含轮转重扫）");
   assert(reg.filter((e) => e.sid === SID && e.path === join(ART, "工作报告-2026-09-19.html")).length === 1, "#82 登记清单 sid+path 幂等（实时+回放+轮转不重复追加）");
@@ -309,24 +311,26 @@ assert(!!k1 && k1.adds === 1 && stateArts().length === 4 && !!byPath(DECLARED) &
 
 // ---------- #72A0FIX2 deliver 登记快照穿透：unverified 落账 + 重启存活 + 失败不先落账 ----------
 {
-  const LEDGER = join(cfg.dataDir, "deliverables.json");
+  // #183 账本 = artifacts-index.json（keyed {sid:[...]}），拍平成 sid 行便于断言
+  const LEDGER = join(cfg.dataDir, "artifacts-index.json");
   const ledger = (): { sid: string; path: string; unverified?: boolean }[] =>
-    JSON.parse(readFileSync(LEDGER, "utf-8")) as { sid: string; path: string; unverified?: boolean }[];
+    Object.entries(JSON.parse(readFileSync(LEDGER, "utf-8")) as Record<string, { path: string; unverified?: boolean }[]>)
+      .flatMap(([sid, es]) => es.map((e) => ({ sid, path: e.path, unverified: e.unverified })));
   const ledgerCount = (): number => ledger().length;
   // ① 校验闸 !ok 快照直达登记侧：拒收且零落账（失败不先落账的防御分支）
   const beforeGhost = ledgerCount();
   const badSnap = mgr.registerDeliverable(SID, join(CWD, "docs", "快照拒绝.md"), { ok: false, path: "/x", error: "快照未过闸" });
   assert(badSnap.ok === false && ledgerCount() === beforeGhost, "registerDeliverable 带 !ok 快照：拒收且零落账");
-  // ② HTTP 闸拒收路径同样零写账（闸在归因前拦截，deliverables.json 不见幽灵）
+  // ② HTTP 闸拒收路径同样零写账（闸在归因前拦截，关联索引不见幽灵）
   const ghost = await fetch(`${http}/api/deliver?token=${cfg.token}`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: join(CWD, "docs", "不在.md"), cwd: CWD }),
   });
-  assert(ghost.status === 400 && ledgerCount() === beforeGhost, "校验失败路径不写 deliverables.json（失败不先落账）");
+  assert(ghost.status === 400 && ledgerCount() === beforeGhost, "校验失败路径不写关联索引（失败不先落账）");
   // ③ 普通（已验证）登记：账面无 unverified；闸快照的 size 直接入账（登记侧不再二次 stat）
   const plainItem = byPath(DECLARED) as (ArtifactItem & { unverified?: boolean }) | undefined;
   assert(!!plainItem && plainItem.unverified === undefined, "普通文件登记账面不带 unverified");
-  // ④ symlink 分量登记：闸标 unverified → 签名穿透 → ArtifactItem + deliverables.json 双落账
+  // ④ symlink 分量登记：闸标 unverified → 签名穿透 → ArtifactItem + 关联索引双落账
   const LINK = join(CWD, "docs", "symlink-登记.md");
   symlinkSync(DECLARED, LINK);
   const rl = await fetch(`${http}/api/deliver?token=${cfg.token}`, {
@@ -338,13 +342,13 @@ assert(!!k1 && k1.adds === 1 && stateArts().length === 4 && !!byPath(DECLARED) &
     "symlink 分量 deliver：200 + unverified 标记（响应口径不回归）");
   const linkItem = byPath(LINK) as (ArtifactItem & { unverified?: boolean }) | undefined;
   assert(!!linkItem && linkItem.unverified === true && linkItem.exists === true, "unverified 落 ArtifactItem 账面（不只 HTTP 响应）");
-  assert(ledger().some((e) => e.sid === SID && e.path === LINK && e.unverified === true), "unverified 落 deliverables.json（持久层）");
+  assert(ledger().some((e) => e.sid === SID && e.path === LINK && e.unverified === true), "unverified 落关联索引（持久层）");
   // ⑤ 重启存活：新 manager 收养 → applyDeclaredDeliverables 挂回仍带标记（重启后不丢）
   const bus3 = new EventBus();
   const mgr3 = new SessionManager(bus3, cfg);
   mgr3.ensureExternal(SID, CWD, "重启挂回 unverified 不丢（72A0FIX2）", "cli-art1");
   const rem = (mgr3.getExternal(SID)?.artifacts ?? []).find((x) => x.path === LINK) as (ArtifactItem & { unverified?: boolean }) | undefined;
-  assert(rem?.unverified === true, "重启挂回：unverified 标记经 deliverables.json 存活");
+  assert(rem?.unverified === true, "重启挂回：unverified 标记经关联索引存活");
 }
 
 ws.close();

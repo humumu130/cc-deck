@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
 import {
@@ -324,15 +324,24 @@ function appendDeletedExt(dataDir: string, id: string): void {
 // 意图声明制登记清单（2026-09-19）：项目内交付物原路径不搬动，只在看板记录。
 // 登记动作不在 transcript 里，重启回放重建不出来——必须落盘（同 title-overrides
 // 模式），ensureExternal/adopt/setArtifacts 三处回放挂回
-const DELIVERABLES_CAP = 300;
+// #183（2026-10-09）账本升级 artifacts-index.json（keyed by 卡 id）：events.ndjson
+// 压缩只留 30 会话×50 状态帧、replay 的 SESSION_UPDATED 分支也不回放 artifacts
+// 字段——重启后面板产物存活全靠这本账。relay 启动整表加载进内存（不依赖
+// events.ndjson 回放），deliver 登记/产物目录收录双通道 upsert，产物删除（re-stat
+// 翻 exists=false）同步摘除。旧 deliverables.json（扁平 [{sid,path,ts}]）首启一次
+// 性迁移，此后不再读写（v2 读线 read-mode/import-artifact 仍兼容两种形态）。
+const ARTIFACTS_INDEX_CAP = 300;
 
 interface DeliverableEntry { sid: string; path: string; ts: number; unverified?: boolean }
+
+interface ArtifactsIndexEntry { path: string; name: string; size?: number; delivered_at: number; unverified?: boolean }
 
 // #72A0FIX2：unverified 标记（symlink 分量交付，目标元数据不当文件本体记账）的
 // 账面扩展位。types.ts 的 ArtifactItem 冻结面不动，本文件内结构化交叉类型承载，
 // JSON 落盘/下发随 extra 字段走（旧客户端忽略未知字段，线格式兼容）
 type LedgerArtifactItem = ArtifactItem & { unverified?: boolean };
 
+// 旧扁平账读取（#183 起仅迁移用）
 function readDeliverables(dataDir: string): DeliverableEntry[] {
   try {
     const raw = JSON.parse(readFileSync(join(dataDir, "deliverables.json"), "utf-8")) as unknown;
@@ -350,11 +359,54 @@ function readDeliverables(dataDir: string): DeliverableEntry[] {
   }
 }
 
-function appendDeliverable(dataDir: string, e: DeliverableEntry): void {
-  const list = readDeliverables(dataDir).filter((x) => !(x.sid === e.sid && x.path === e.path));
-  list.push(e);
+function artifactsIndexPath(dataDir: string): string {
+  return join(dataDir, "artifacts-index.json");
+}
+
+// 索引整表读：artifacts-index.json 优先（文件在即权威，空对象也算——被摘空的账
+// 不回灌旧数据）；文件缺失/损坏时从旧 deliverables.json 一次性迁移（扁平→keyed，
+// name=basename，delivered_at 承接 ts；旧账未记 size 不补造）。migrated 供调用方
+// 落盘固化迁移结果
+function readArtifactsIndex(dataDir: string): { index: Map<string, ArtifactsIndexEntry[]>; migrated: boolean } {
+  const index = new Map<string, ArtifactsIndexEntry[]>();
   try {
-    writeFileSync(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    const raw = JSON.parse(readFileSync(artifactsIndexPath(dataDir), "utf-8")) as unknown;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [sid, entries] of Object.entries(raw)) {
+        if (!Array.isArray(entries)) continue;
+        const list = entries.filter(
+          (x): x is ArtifactsIndexEntry =>
+            !!x && typeof x === "object" &&
+            typeof (x as ArtifactsIndexEntry).path === "string" && !!(x as ArtifactsIndexEntry).path &&
+            typeof (x as ArtifactsIndexEntry).delivered_at === "number",
+        );
+        if (list.length) index.set(sid, list);
+      }
+    }
+    return { index, migrated: false };
+  } catch {}
+  for (const e of readDeliverables(dataDir)) {
+    // 空 sid 行不迁：永远挂不上卡（卡 id 非空），纯死账
+    if (!e.sid.trim()) continue;
+    const list = index.get(e.sid) ?? [];
+    if (!list.some((x) => x.path.toLowerCase() === e.path.toLowerCase())) {
+      list.push({ path: e.path, name: basename(e.path), delivered_at: e.ts, ...(e.unverified ? { unverified: true } : {}) });
+    }
+    index.set(e.sid, list);
+  }
+  return { index, migrated: index.size > 0 };
+}
+
+// 落盘：全局按 delivered_at 保最新 CAP 条（跨会话统一水位，承旧扁平账语义），
+// 按 sid 归组成 keyed JSON。写穿失败静默降级：运行期 state 不受影响，下次写重试
+function writeArtifactsIndex(dataDir: string, index: Map<string, ArtifactsIndexEntry[]>): void {
+  const flat: { sid: string; entry: ArtifactsIndexEntry }[] = [];
+  for (const [sid, list] of index) for (const entry of list) flat.push({ sid, entry });
+  flat.sort((a, b) => b.entry.delivered_at - a.entry.delivered_at);
+  const grouped: Record<string, ArtifactsIndexEntry[]> = {};
+  for (const { sid, entry } of flat.slice(0, ARTIFACTS_INDEX_CAP)) (grouped[sid] ??= []).push(entry);
+  try {
+    writeFileSync(artifactsIndexPath(dataDir), JSON.stringify(grouped));
   } catch {}
 }
 
@@ -576,6 +628,9 @@ export class SessionManager {
   private childSdkIds: Set<string>;
   private deletedExtIds: Set<string>;
   private titleOverrides: Record<string, string>;
+  // #183 产物-会话关联索引（artifacts-index.json 的内存整表）：启动加载，deliver/
+  // 产物目录收录 upsert，删除翻转摘除——applyDeclaredDeliverables 挂回唯一数据源
+  private artifactsIndex: Map<string, ArtifactsIndexEntry[]>;
   // #018-R1c 决策通知账（结构化投影）：内存 Map + notifications.json 持久。
   // 与 decision-notify watcher 的文本推送通道（decision-notifications.json）并存
   // 不冲突——那边管「注入会话的提醒文本」，这边管「端上通知列表的结构化数据源」
@@ -678,6 +733,11 @@ export class SessionManager {
     this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
+    // #183 启动加载：产物关联索引整表进内存（不依赖 events.ndjson 回放）；旧
+    // deliverables.json 迁移结果立即落盘固化，防每次启动重算
+    const loadedIndex = readArtifactsIndex(cfg.dataDir);
+    this.artifactsIndex = loadedIndex.index;
+    if (loadedIndex.migrated) writeArtifactsIndex(cfg.dataDir, this.artifactsIndex);
     this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
     this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
     // #018-R1FIX1 P1-1：确认单产生回调（projects.addConfirm 单咽喉 → 本 manager
@@ -1548,12 +1608,12 @@ export class SessionManager {
       });
       // #82 落盘：产物目录写入即交付声明（#69），但声明动作不在 transcript；journal
       // 状态帧每会话仅留最近 50 条（见 #53 注释），写产物那帧很快被挤掉——托管（SDK）
-      // 会话没有 transcript 全文件重扫兜底，relay 重启后产物表只剩 deliverables.json
-      // 挂回项（2026-09-20 晨间夜间报告丢失实锤）。新条目同步进登记清单
-      // （appendDeliverable sid+path 幂等，回放重扫/轮转不重复追加），借
+      // 会话没有 transcript 全文件重扫兜底，relay 重启后产物表只剩登记账
+      // 挂回项（2026-09-20 晨间夜间报告丢失实锤）。新条目同步进关联索引
+      // （#183 upsertArtifactIndex sid+path 幂等，回放重扫/轮转不重复追加），借
       // ensureExternal/adopt/setArtifacts 三处 applyDeclaredDeliverables 跨重启存活；
       // 重启挂回后 tools 降级为「登记」、增删行归零，可见性优先可接受
-      appendDeliverable(this.cfg.dataDir, { sid: id, path: p, ts: item.ts });
+      this.upsertArtifactIndex(id, { path: p, name: basename(p), size, delivered_at: item.ts });
       // 上限保最新：超 200 条丢最旧 + 标记截断（UI 汇总行提示）
       if (list.length > 200) {
         list.sort((x, y) => y.last_at - x.last_at);
@@ -1575,13 +1635,13 @@ export class SessionManager {
 
   // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
   // 不搬动），stat 补 size/exists；同路径重复登记幂等合并（tools 记「登记」，
-  // 产物目录自动收录的条目并入同 key 不重复）。持久化 deliverables.json
+  // 产物目录自动收录的条目并入同 key 不重复）。持久化 artifacts-index.json（#183）
   // #72A0FIX2（P1-1B 剩余段收口）：①签名穿透校验闸快照——入参带
   // validateDeliverablePath 的一次性快照时本侧不再 statSync（消「闸后二次 stat」
   // 的 TOCTOU 剩余段：size 取快照值；unverified 快照 size=null → 账面不记尺寸，
   // symlink 目标元数据不入账）；②失败不先落账——取证/校验全部通过前不碰
-  // deliverables.json（旧序 appendDeliverable 先于 stat，登记即失败也已写账）；
-  // ③unverified 标记随 ArtifactItem + deliverables.json 落账（applyDeclaredDeliverables
+  // 关联索引（旧序先于 stat 落账，登记即失败也已写账）；
+  // ③unverified 标记随 ArtifactItem + 关联索引落账（applyDeclaredDeliverables
   // 重启挂回还原），此前只到 HTTP 响应、重启即丢；重复登记以最新证据为准
   registerDeliverable(sessionId: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; error?: string } {
     const s = this.sessions.get(sessionId);
@@ -1602,10 +1662,12 @@ export class SessionManager {
         exists = false;
       }
     }
-    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now(), ...(unverified ? { unverified: true } : {}) });
+    const ts = Date.now();
+    // #183 关联索引 upsert（含 events.ndjson 侧：下方 SESSION_UPDATED 帧照发，帧内
+    // artifacts 数组随事件流落盘——账本与事件流双写）
+    this.upsertArtifactIndex(sessionId, { path: p, name: basename(p), size, delivered_at: ts, ...(unverified ? { unverified: true } : {}) });
     const list: LedgerArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
-    const ts = Date.now();
     if (idx >= 0) {
       const a = list[idx] as LedgerArtifactItem;
       list[idx] = {
@@ -1692,7 +1754,7 @@ export class SessionManager {
   // 补：老外部卡/托管卡 id 与 CLI sid 无前缀关系，2026-10-02 生产实锤——deliver 带
   // CLI sid 两查全 miss，回落 cwd 启发式把产物挂给隔壁卡）。sid 不在册（会话已清理/
   // env 残留）回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的卡 id 供核对
-  //（deliverables.json 按 e.sid === 卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
+  //（关联索引按卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
   deliverBySession(sid: string, cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string } {
     const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : this.findByCliSid(sid);
     if (real) {
@@ -1714,6 +1776,8 @@ export class SessionManager {
     const list = s.state.artifacts;
     if (!list || !list.length) return false;
     let changed = false;
+    // #183 存活→消失翻转路径收集：翻即摘账本（面板=磁盘现状，重启不再挂回）
+    const deadNow: string[] = [];
     s.state.artifacts = list.map((a) => {
       let size: number | undefined;
       let exists = true;
@@ -1724,10 +1788,12 @@ export class SessionManager {
       }
       if (exists !== a.exists || size !== a.size) {
         changed = true;
+        if (a.exists !== false && !exists) deadNow.push(a.path);
         return { ...a, size, exists };
       }
       return a;
     });
+    for (const p of deadNow) this.pruneArtifactIndex(s.state.session_id, p);
     return changed;
   }
 
@@ -1756,12 +1822,37 @@ export class SessionManager {
     }
   }
 
-  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）。
+  // #183 账本 upsert（deliver 登记 + 产物目录收录双通道）：sid+path 幂等，重复
+  // 登记以最新证据覆盖；内存与 artifacts-index.json 同步写
+  private upsertArtifactIndex(sid: string, entry: ArtifactsIndexEntry): void {
+    const list = this.artifactsIndex.get(sid) ?? [];
+    const idx = list.findIndex((x) => x.path.toLowerCase() === entry.path.toLowerCase());
+    if (idx >= 0) list[idx] = entry;
+    else list.push(entry);
+    this.artifactsIndex.set(sid, list);
+    writeArtifactsIndex(this.cfg.dataDir, this.artifactsIndex);
+  }
+
+  // #183 删除同步：re-stat 翻 exists=false → 账本摘除该条（重启后不再挂回已删
+  // 产物）。内存 state 仍保留 dead 条目（#224 语义：文件重建时合并复用历史）；
+  // events.ndjson 侧无需删——replay 不回放 artifacts 字段，帧只是实时面板投影
+  private pruneArtifactIndex(sid: string, path: string): void {
+    const list = this.artifactsIndex.get(sid);
+    if (!list?.length) return;
+    const next = list.filter((x) => x.path.toLowerCase() !== path.toLowerCase());
+    if (next.length === list.length) return;
+    if (next.length) this.artifactsIndex.set(sid, next);
+    else this.artifactsIndex.delete(sid);
+    writeArtifactsIndex(this.cfg.dataDir, this.artifactsIndex);
+  }
+
+  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 artifacts-index.json，
+  // #183 起直接读启动加载的内存索引——不再逐调用重读文件）。
   // #72A0FIX2：挂回条目还原 unverified 标记（落账面持久化的最后一环——标记跨重启不丢）
   private applyDeclaredDeliverables(sessionId: string): void {
     const s = this.sessions.get(sessionId);
     if (!s) return;
-    const entries = readDeliverables(this.cfg.dataDir).filter((e) => e.sid === sessionId);
+    const entries = this.artifactsIndex.get(sessionId) ?? [];
     if (!entries.length) return;
     const list: LedgerArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     for (const e of entries) {
@@ -1773,7 +1864,7 @@ export class SessionManager {
       } catch {
         exists = false;
       }
-      list.push({ path: e.path, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists, ...(e.unverified ? { unverified: true } : {}) });
+      list.push({ path: e.path, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: e.delivered_at, last_at: e.delivered_at, size, exists, ...(e.unverified ? { unverified: true } : {}) });
     }
     s.state.artifacts = list;
   }
@@ -1792,7 +1883,7 @@ export class SessionManager {
     s.state.artifacts_truncated = false;
     for (const it of items) this.mergeArtifact(id, it, true);
     // 登记制条目不在 transcript 里：整表替换会把原地登记的交付物洗掉，必须从
-    // deliverables.json 挂回（转录轮转/收缩重触 firstRead 也不丢登记；items 为
+    // 关联索引挂回（转录轮转/收缩重触 firstRead 也不丢登记；items 为
     // 空也走这里——只剩登记条目同样要恢复）
     this.applyDeclaredDeliverables(id);
     if (!s.state.artifacts) return;

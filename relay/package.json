@@ -49,6 +49,7 @@
     "test:import-session-task": "tsx scripts/test-import-session-task.ts",
     "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
     "test:import-artifact": "tsx scripts/test-import-artifact.ts",
+    "test:artifacts-persistence": "tsx scripts/test-artifacts-persistence.ts",
     "test:read-mode": "tsx scripts/test-read-mode.ts",
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",
     "test:m1-foundation": "tsx scripts/test-m1-foundation.ts",

@@ -256,11 +256,15 @@ if (process.env.CCR_RUN_HTTP === "1") {
   });
   const validResponse = await postDeliver(target);
   assert(validResponse.status === 200 && (await validResponse.json() as { ok?: boolean }).ok === true, "正常 deliver 行为回归");
-  const ledgerAfterValid = JSON.parse(readFileSync(join(ROOT, "data", "deliverables.json"), "utf8")) as unknown[];
+  // #183 账本 = artifacts-index.json（keyed {sid:[...]}），拍平成 sid 行便于断言
+  const flatLedger = (): { sid: string; path: string; unverified?: boolean }[] =>
+    Object.entries(JSON.parse(readFileSync(join(ROOT, "data", "artifacts-index.json"), "utf8")) as Record<string, { path: string; unverified?: boolean }[]>)
+      .flatMap(([sid, es]) => es.map((e) => ({ sid, path: e.path, unverified: e.unverified })));
+  const ledgerAfterValid = flatLedger();
   const directoryResponse = await postDeliver(directory);
   const missingResponse = await postDeliver(missingPath);
   const brokenResponse = await postDeliver(brokenLink);
-  const ledgerAfterGhosts = JSON.parse(readFileSync(join(ROOT, "data", "deliverables.json"), "utf8")) as unknown[];
+  const ledgerAfterGhosts = flatLedger();
   assert(directoryResponse.status === 400 && missingResponse.status === 400 && brokenResponse.status === 400, "deliver ghost 目录/不存在/断链均返回 4xx");
   assert(ledgerAfterValid.length === 1 && ledgerAfterGhosts.length === 1, "幽灵登记在 session 归因前被拦截且不写账");
   // #72A0（P1-1B）：symlink 分量路径 deliver 不拒绝（原地交付合法），200 响应带 unverified 标记
@@ -270,8 +274,8 @@ if (process.env.CCR_RUN_HTTP === "1") {
     "deliver symlink 分量路径 200 且响应带 unverified 标记",
   );
   // #72A0FIX2：快照穿透 + unverified 落账——闸的标记经签名进登记侧，账面/持久层可还原
-  const fixLedger = JSON.parse(readFileSync(join(ROOT, "data", "deliverables.json"), "utf8")) as { sid: string; path: string; unverified?: boolean }[];
-  assert(fixLedger.some((e) => e.path === liveLink && e.unverified === true), "unverified 落 deliverables.json（重启可还原）");
+  const fixLedger = flatLedger();
+  assert(fixLedger.some((e) => e.path === liveLink && e.unverified === true), "unverified 落关联索引（重启可还原）");
   const linkItem = mgr.getExternal(sid)?.artifacts?.find((x) => x.path === liveLink) as ArtifactItem & { unverified?: boolean };
   assert(linkItem?.unverified === true && linkItem.exists === true, "unverified 落 ArtifactItem 账面（不只 HTTP 响应）");
   const plainItem = mgr.getExternal(sid)?.artifacts?.find((x) => x.path === target) as ArtifactItem & { unverified?: boolean };

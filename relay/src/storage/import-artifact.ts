@@ -106,7 +106,18 @@ function observeFile(file: string, key: string): ObservedSource {
   try {
     const parsed = JSON.parse(obs.text) as unknown;
     if (Array.isArray(parsed)) records = parsed;
-    else badJson = "根非数组";
+    else if (parsed && typeof parsed === "object") {
+      // #183 keyed 账本形态 {sid: [{path,name,size,delivered_at},...]}：拍平成记录
+      // 流，sid 从组键注入（条目自带 session_id/sid 时记录级优先，parseRecord 口径）
+      const flat: unknown[] = [];
+      for (const [sid, entries] of Object.entries(parsed)) {
+        if (!Array.isArray(entries)) continue;
+        for (const e of entries) {
+          if (e && typeof e === "object" && !Array.isArray(e)) flat.push({ sid, ...e });
+        }
+      }
+      records = flat;
+    } else badJson = "根非数组/对象";
   } catch {
     badJson = obs.text.slice(0, 200);
   }
@@ -175,7 +186,8 @@ function parseRecord(
   const rec = raw as Record<string, unknown>;
   const rawPath = typeof rec.path === "string" ? rec.path : (typeof rec.normalized_path === "string" ? rec.normalized_path : null);
   if (!rawPath) return bad("missing-field", JSON.stringify(rec));
-  const createdAt = typeof rec.first_at === "number" ? rec.first_at : (typeof rec.ts === "number" ? rec.ts : null);
+  // createdAt 链：ArtifactItem 形 first_at / keyed 账本 delivered_at（#183）/ 旧扁平 ts
+  const createdAt = typeof rec.first_at === "number" ? rec.first_at : (typeof rec.delivered_at === "number" ? rec.delivered_at : (typeof rec.ts === "number" ? rec.ts : null));
   if (createdAt === null) return bad("missing-field", JSON.stringify(rec));
   // 归因：记录级 session_id/sid 优先，source 级兜底；悬空查库写 NULL 不造关联
   const sessionId = firstString(rec.session_id, rec.sid, attribution?.session_id);

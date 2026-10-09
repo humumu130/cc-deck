@@ -219,13 +219,14 @@ export function importAllForShadow(
     },
     { domain: "acceptance", run: () => importAcceptance(port, join(dirs.dataDir, "acceptances")) },
     { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
-    // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
-    // 扫描源路径 G2 再接——备案见头注降级条目）。
+    // artifact 聚合源首期只接产物登记账本（生产 artifacts 目录无固定清单文件，
+    // 扫描源路径 G2 再接——备案见头注降级条目）。#183 账本改名 artifacts-index.json
+    //（keyed 形态，import-artifact 已兼容），旧 deliverables.json 兜底（迁移后冻结）。
     {
       domain: "artifact",
       run: () => {
-        const f = join(dirs.dataDir, "deliverables.json");
-        return importArtifacts(port, existsSync(f) ? [{ id: "deliverables", file: f }] : []);
+        const f = artifactsLedgerFile(dirs.dataDir);
+        return importArtifacts(port, f ? [{ id: "deliverables", file: f }] : []);
       },
     },
   ];
@@ -451,7 +452,8 @@ export function compareDomain(domain: ShadowDomain, port: StoragePort, dirs: Rea
       // 复合键归一域降级：数量+按 source_id 分组数量（备案见头注）
       const now = Date.now();
       const rows: ShadowDiffRow[] = [];
-      const jCount = countNdjsonLines(join(dirs.dataDir, "deliverables.json"));
+      // #183 账本条目数（两形态通吃）：旧 countNdjsonLines 对单行 JSON 恒 1，名不副实
+      const jCount = countLedgerArtifacts(artifactsLedgerFile(join(dirs.dataDir)));
       const sCount = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? 0;
       if (jCount !== sCount) rows.push({ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount });
       return rows;
@@ -555,6 +557,27 @@ function readNdjsonIds(file: string): string[] {
 function countNdjsonLines(file: string): number {
   if (!existsSync(file)) return 0;
   return readFileSync(file, "utf-8").split("\n").filter((l) => l.trim()).length;
+}
+
+/** #183 产物账本文件定位：artifacts-index.json 优先，旧 deliverables.json 兜底（迁移后冻结）。 */
+function artifactsLedgerFile(dataDir: string): string | null {
+  const idx = join(dataDir, "artifacts-index.json");
+  if (existsSync(idx)) return idx;
+  const legacy = join(dataDir, "deliverables.json");
+  return existsSync(legacy) ? legacy : null;
+}
+
+/** #183 账本条目数：扁平数组=length；keyed {sid:[...]}=各组求和；坏文件 0。 */
+function countLedgerArtifacts(file: string | null): number {
+  if (!file || !existsSync(file)) return 0;
+  try {
+    const raw = JSON.parse(readFileSync(file, "utf-8")) as unknown;
+    if (Array.isArray(raw)) return raw.length;
+    if (raw && typeof raw === "object") {
+      return Object.values(raw).reduce((n, v) => n + (Array.isArray(v) ? v.length : 0), 0);
+    }
+  } catch {}
+  return 0;
 }
 
 function acceptanceKeys(dir: string): string[] {
