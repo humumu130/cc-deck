@@ -141,6 +141,7 @@ jobs:
           if [ "${{ inputs.nova }}" = "true" ]; then
             CONFIG_ARGS="--config src-tauri/tauri.nova.conf.json"
             echo "nova variant: overlay tauri.nova.conf.json active（productName/identifier/updater）"
+            echo "nova variant: mainBinaryName=cc-deck-nova——主 exe 改名，NSIS 运行检测不再误杀旧版同名进程"
           fi
           npx tauri build --bundles nsis $CONFIG_ARGS
           # 不再改名：updater 的 latest.json 按原始产物名（CC Deck Tauri_<v>_x64-setup.exe）寻址
