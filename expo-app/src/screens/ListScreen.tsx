@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, use
 import { Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
+import { STATUS_ZH, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
@@ -485,6 +485,60 @@ function BgBadge({ n, color }: { n: number; color: string }) {
   return <Text style={{ color, fontSize: 9.5, fontWeight: "700" }}> ⑂{n}</Text>;
 }
 
+// W-EXPO 005 srow 头像（.srow-ava 等价）：34px 圆角 9 方块，源色 16% 淡染底 +
+// 首字母；右下角状态灯叠角（2px 页底光圈遮接缝，.status-dot 同口径四色）
+function AvaBadge({ letter, srcColor, dotColor, breathe }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const bg = srcColor ? mix(srcColor, c.panel2, 0.84) : c.panel2;
+  const [ph, setPh] = useState(0);
+  useEffect(() => {
+    if (!breathe) return;
+    const t = setInterval(() => setPh((n) => (n + 1) % BLINK_PHASES.length), 480);
+    return () => clearInterval(t);
+  }, [breathe]);
+  return (
+    <View style={[styles.ava, { backgroundColor: bg }]}>
+      <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
+      <View
+        style={{
+          position: "absolute", right: -3, bottom: -3, width: 9, height: 9, borderRadius: 5,
+          borderWidth: 2, borderColor: c.bg, backgroundColor: dotColor,
+          opacity: breathe ? BLINK_PHASES[ph] : 1,
+        }}
+      />
+    </View>
+  );
+}
+
+// r2 走秒行⑂N 呼吸点（.srow-live-dot：6px working 色，低频步进明灭）
+function R2LiveDot() {
+  const { c } = useTheme();
+  const [ph, setPh] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setPh((n) => (n + 1) % BLINK_PHASES.length), 480);
+    return () => clearInterval(t);
+  }, []);
+  return <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.working, opacity: BLINK_PHASES[ph] }} />;
+}
+
+// r3 状态 tag 胶囊（005 STATUS_TAG 口径：待处理=action 橙 / 错误=danger / 完成=done /
+// 运行中=info；tint 底 + 同色描边 + 同色字）
+const TAG_TINT: Record<string, keyof ThemeColors> = {
+  WAITING: "brandA", ERROR: "error", DONE: "done", WORKING: "info",
+};
+function StatusTag({ s }: { s: SessionState }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const key = TAG_TINT[s.status] ?? "info";
+  const tint = c[key];
+  return (
+    <View style={[styles.srowTag, { borderColor: withA(tint, 0.42), backgroundColor: withA(tint, 0.12) }]}>
+      <Text style={[styles.srowTagT, { color: tint }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
+    </View>
+  );
+}
+
 // 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）；
 // #363 压缩中：⟳ 明示（CLI "Compacting conversation..."），不显示旧摘要防误判卡死
 function LiveStat({ s }: { s: SessionState }) {
@@ -854,47 +908,53 @@ const SessionCard = memo(function SessionCard({
         </>
       ) : (
         <>
-          {/* #362 标题恒第一行（灯+名称+时长）：WORKING/空闲同构，状态切换不跳行；
-              工作实时行/摘要 occupy 第二行可变位 */}
-          <View style={styles.titleRow}>
-            {s.status === "WORKING" || bgLive ? (
-              <BlinkDot color={dotColor} />
-            ) : (
-              <View style={[styles.dot, { backgroundColor: color }]} />
-            )}
-            <Text style={[styles.title, idle && styles.titleIdle]} numberOfLines={1}>
-              {s.title || "未命名会话"}
-            </Text>
-            {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
-            <View style={{ flex: 1 }} />
-            <Elapsed s={s} />
-          </View>
-          {s.status === "WORKING" ? (
-            <View style={styles.liveRow}>
-              <LiveStat s={s} />
+          {/* W-EXPO 005 srow 通栏行（.srow-* 等价，index-005 手机模式参照）：ava（源色
+              淡化头像+状态灯叠角）+ 三行制——r1 标题全宽+行尾时间；r2 摘要+行尾走秒·
+              ⑂N（warn 呼吸点+tag 形制，#bg-live 口径）；r3 徽章行 footnote 级（状态 tag/
+              源胶囊/目录/外部·历史，全空整行不渲染）。无框无底无圆角，间距分行（军规①②） */}
+          <View style={styles.srow}>
+            <AvaBadge
+              letter={(s.title || "未").trim().slice(0, 1) || "未"}
+              srcColor={srcBadge ? srcBadge.color : null}
+              dotColor={dotColor}
+              breathe={s.status === "WORKING" || bgLive}
+            />
+            <View style={styles.srowMain}>
+              <View style={styles.srowR1}>
+                <Text style={[styles.srowTitle, idle && styles.titleIdle]} numberOfLines={1}>
+                  {s.title || "未命名会话"}
+                </Text>
+                <Elapsed s={s} />
+              </View>
+              <View style={styles.srowR2}>
+                {bgCount > 0 ? (
+                  <>
+                    <R2LiveDot />
+                    <Text style={styles.srowBgTag}>⑂{bgCount}</Text>
+                  </>
+                ) : null}
+                {s.status === "WORKING" ? (
+                  <LiveStat s={s} />
+                ) : s.status === "WAITING" && s.waiting_request ? (
+                  <Text style={[styles.srowSum, styles.sumWaiting]} numberOfLines={1}>需要确认 · {s.action_summary || ""}</Text>
+                ) : (
+                  <Text style={styles.srowSum} numberOfLines={1}>{s.action_summary || "…"}</Text>
+                )}
+              </View>
+              {/* E2a 活动指标块：activity 缺失/能力全关时自返回 null */}
+              <ActivityBlock s={s} />
+              {/* r3 徽章行：状态 tag + 源胶囊 + 组织/目录/外部·历史 + 水位 mini */}
+              <View style={styles.srowR3}>
+                <StatusTag s={s} />
+                {srcBadge ? <SrcBadge {...srcBadge} /> : null}
+                {s.cwd ? <Text style={styles.srowMeta} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
+                {orgTag ? <Text style={styles.srowMeta} numberOfLines={1}>◈ {orgTag}</Text> : null}
+                {dormant ? <Text style={styles.srowMeta}>已保存</Text> : null}
+                {s.historical && !s.external ? <Text style={styles.srowMeta}>历史</Text> : null}
+                <View style={{ flex: 1 }} />
+                <CtxMini s={s} />
+              </View>
             </View>
-          ) : s.status === "WAITING" && s.waiting_request ? (
-            <Text style={[styles.sum, styles.sumWaiting]} numberOfLines={1}>需要确认 · {s.action_summary || ""}</Text>
-          ) : (
-            <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
-          )}
-          {/* E2a 活动指标块（标准档）：四行按 capability 门控；极简档无位不显 */}
-          <ActivityBlock s={s} />
-          {/* 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行小字（原 tag 胶囊 +
-              目录/历史分散多段 → 单段 faint 尾截断），右侧 ctx 水位（#145 改动统计行
-              移除，详情页统计保留全量） */}
-          <View style={styles.foot}>
-            {/* #86 多源源标签独立放左下（对齐桌面端卡底统计行形态），不再挤标题行 */}
-            {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-            <Text style={styles.meta} numberOfLines={1}>
-              {/* #26 M2 组织归属前置（§2.5 分流形态）：组名/档位最先交代，旧 relay 无字段零变化 */}
-              {orgTag ? `${orgTag} · ` : ""}{s.external ? "外部 CLI" : s.engine === "codex" ? "Codex" : "托管"}
-              {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
-              {dormant ? " · 已保存" : ""}
-              {s.historical && !s.external ? " · 历史" : ""}
-            </Text>
-            <View style={{ flex: 1 }} />
-            <CtxMini s={s} />
           </View>
         </>
       )}
@@ -1756,7 +1816,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         }
         // G5（冲刺审查）：任务完成汇报悬浮钮（列表页抬高让开 FAB，bottom=insets+124）
         // 非空时末卡右缘被遮——条件让位 +52（浮钮形态用户拍板 #17 勿改，只让内容让路）
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 14, paddingTop: 6 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 0, paddingTop: 6 }}
         // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）
         // #26 M2 组织区（确认卡 + 项目组 chips）与之同位平铺；OrgZone 空数据自返回 null
         ListHeaderComponent={
@@ -2225,16 +2285,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // E2a 起组头吸顶（stickyHeaderIndices），自带页面底色防滚动叠加透字
   grpHead: {
     flexDirection: "row", alignItems: "center", gap: 7,
-    marginTop: 10, marginBottom: 9, paddingBottom: 7,
-    borderBottomWidth: 1, borderBottomColor: c.line,
+    marginTop: 12, marginBottom: 5, paddingHorizontal: 14,
     backgroundColor: c.bg,
   },
-  // E2a 段头（待处理/其他会话）：分组头同族小节标题 + 实际渲染计数；吸顶行
-  // 定高（无内容浮动）+ 自带底色
+  // E2a 段头（待处理/其他会话）：分组只靠间距+小节标题（005 军规③——去下衬线）；
+  // 吸顶行定高 + 自带底色；左缘与行内容对齐（14）
   secHead: {
     flexDirection: "row", alignItems: "baseline", gap: 6,
-    marginTop: 10, marginBottom: 7, paddingBottom: 6,
-    borderBottomWidth: 1, borderBottomColor: c.line,
+    marginTop: 14, marginBottom: 5, paddingHorizontal: 14,
     backgroundColor: c.bg,
   },
   secHeadT: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2 },
@@ -2274,32 +2332,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   aggBtnOn: { borderColor: withA(c.brandA, 0.65), backgroundColor: withA(c.brandA, 0.1) },
   aggT: { fontSize: 11, color: c.dim },
   aggTOn: { color: c.brandA, fontWeight: "700" },
-  swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
-  swipeWrapC: { marginBottom: 7 },
-  // 极简行（用户拍板圆角统一）：同标准/紧凑的圆角卡语言，仅行高更矮、间距更密
-  swipeWrapM: { marginBottom: 5 },
-  swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
+  // W-EXPO 005 通栏行（军规①②）：无框无圆角、行间零分隔线（纯留白分行）；卡面用
+  // 页面底色保持不透明（左滑动作排藏在卡后，透明底会提前露出）
+  swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
+  swipeWrapC: { marginBottom: 2 },
+  swipeWrapM: { marginBottom: 1 },
+  swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
   // #32 离线源降权 + 空闲置灰：向页面背景渐隐的蒙层（不用 opacity——会让底层
   // 动作排透出，2026-09-17 测试机截图实锤）
   dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.45) },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
-    flexDirection: "row", borderRadius: 16, overflow: "hidden",
+    flexDirection: "row", borderRadius: 10, overflow: "hidden",
   },
-  actPanelM: { top: 2, bottom: 2, borderRadius: 12 },
+  actPanelM: { top: 2, bottom: 2, borderRadius: 10 },
   actBtn: { width: ACT_W, alignItems: "center", justifyContent: "center", gap: 3, backgroundColor: withA(c.waiting, 0.9) },
   actRen: { backgroundColor: c.brandB },
   actOff: { backgroundColor: withA(c.dim, 0.3) },
   actT: { color: "#fff", fontSize: 17, fontWeight: "600" },
   actT2: { color: "#fff", fontSize: 11.5, fontWeight: "600" },
   card: {
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 16, paddingVertical: 11, paddingHorizontal: 13,
+    backgroundColor: "transparent", borderWidth: 0,
+    borderRadius: 0, paddingVertical: 8, paddingHorizontal: 14,
   },
-  cardC: { borderRadius: 13, padding: 9 },
-  // 极简平铺行：去框（hairline 分隔接管分隔职责），纵向 8 呼吸感比 6 松一点，
-  // 行高仍远低于紧凑卡（单行 vs 三行）
-  cardM: { borderRadius: 13, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 11 },
+  cardC: { borderRadius: 0, paddingVertical: 6, paddingHorizontal: 14 },
+  // 极简平铺行：同通栏语言，行高最矮
+  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 7, paddingHorizontal: 14 },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
@@ -2318,10 +2376,24 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 11, height: 11, borderRadius: 6, opacity: 1,
     alignItems: "center", justifyContent: "center",
   },
-  elapsed: { fontSize: 12, color: c.faint, fontVariant: ["tabular-nums"] },
+  elapsed: { fontSize: 10, color: c.faint, fontVariant: ["tabular-nums"] },
   liveStat: { flex: 1, fontSize: 12, color: c.dim, fontVariant: ["tabular-nums"] },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 3, flexShrink: 1 },
+  // ---------- W-EXPO 005 srow 通栏行 ----------
+  srow: { flexDirection: "row", alignItems: "center", gap: 11 },
+  ava: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  avaT: { fontSize: 15, fontWeight: "700" },
+  srowMain: { flex: 1, minWidth: 0, gap: 3 },
+  srowR1: { flexDirection: "row", alignItems: "center", gap: 6 },
+  srowTitle: { flex: 1, color: c.textStrong, fontSize: 13.5, fontWeight: "600" },
+  srowR2: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 16 },
+  srowSum: { flex: 1, color: c.dim, fontSize: 12, lineHeight: 16 },
+  srowBgTag: { color: c.working, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  srowR3: { flexDirection: "row", alignItems: "center", gap: 5 },
+  srowTag: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1 },
+  srowTagT: { fontSize: 10, fontWeight: "600" },
+  srowMeta: { color: c.faint, fontSize: 10 },
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 6 }, /* #83 同缩进 */
