@@ -428,6 +428,8 @@
     .rail-btn:hover { color: var(--text); background: var(--hover); }
     .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
     .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--selected-line); }
+    /* FB20 项目域可配置：默认隐藏 rail 项目入口（设置·通用「显示项目浏览器」开才现身） */
+    body:not([data-project-rail="on"]) .rail-btn[data-domain="project"] { display: none; }
     .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 10px/15px var(--mono); text-align: center; }
     .rail-spring { flex: 1; }
     .theme-toggle { margin-top: 7px; margin-bottom: 0; color: var(--dim); }
@@ -1061,6 +1063,11 @@
     #d-notify .notify-source-card:hover .notify-actions, #d-notify .notify-source-card:focus-within .notify-actions { display: flex; }
     #d-notify .notify-actions { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: none; flex-wrap: nowrap; margin: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); box-shadow: var(--shadow-hover); }
     #d-notify .notify-state { margin-left: 0; }
+    /* FB18 通知清除：行级 ✕ hover 现身（queue 行与来源卡同款）；焦点可达不依赖指针 */
+    #d-notify .notice { position: relative; }
+    .notify-x { position: absolute; top: 50%; right: 10px; z-index: 3; display: none; width: 22px; height: 22px; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--bg1); color: var(--dim); cursor: pointer; font-size: 11px; line-height: 20px; text-align: center; }
+    .notify-x:hover { color: var(--text-strong); border-color: var(--border-strong); }
+    #d-notify .notice:hover .notify-x, #d-notify .notify-source-card:hover .notify-x, .notify-x:focus-visible { display: block; }
     .mobile-notify-screen .mobile-content { padding-bottom: 18px; }
     .mobile-notify-card { cursor: pointer; }
     .mobile-notify-card .notify-actions { margin-top: 10px; }
@@ -4996,6 +5003,11 @@
                 const railBadge = document.querySelector('.rail-btn[data-domain="notify"] [data-notify-badge]');
                 const countNodes = [...section.querySelectorAll("[data-notify-action-count]")];
                 const flight = new Set();
+                // FB18 通知清除：本页会话内已清除键（不落盘——通知账权威在 relay，落盘键集会随
+                // relay 重启漂移成脏过滤；actionable 行清除时另发 ACK 同步权威账面）。
+                // 挂 window 与移动端 renderNotify 共账（桌面/手机同一浏览器才共，跨设备各自清）
+                const dismissedNotifyKeys = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
+                let lastRows = []; // FB18：清除动作要行信息（synth/actionable），渲染期留账
                 // #B3-17 新通知入场动画：仅首见行挂 .enter（首帧存量不动画，防整列闪烁）
                 const seenNotifyKeys = new Set();
                 let notifySeenInit = false;
@@ -5011,7 +5023,7 @@
                 function buildRows() {
                   const rows = [];
                   for (const n of bridge.notifications) {
-                    if (flight.has(n.key)) continue;
+                    if (flight.has(n.key) || dismissedNotifyKeys.has(n.key)) continue;
                     const session = sessionOf(n);
                     rows.push({
                       synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: n.created_at,
@@ -5022,6 +5034,7 @@
                     });
                   }
                   for (const confirm of bridge.pendingConfirms) {
+                    if (dismissedNotifyKeys.has("confirm:" + confirm.id)) continue;
                     const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOf(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
                     if (covered) continue;
                     rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: Number(confirm.created_at) || 0, unresolved: true, active: true, actionable: false, source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
@@ -5029,6 +5042,7 @@
                   const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
                   if (!hasAcceptanceChannel) {
                     for (const acceptance of bridge.accepts) {
+                      if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
                       rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : " · 打开表单页回填"), ts: Number(acceptance.created_at) || 0, unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" });
                     }
                   }
@@ -5064,12 +5078,13 @@
                       + ' title="' + (row.active ? "整卡可点 · " + (jump ? jump.label : "处理") : "历史动态 · 无需处理") + '">'
                       + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + (row.active ? "alert" : "info") + '"></use></svg></span>'
                       + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + (row.active ? '<span class="tag action">' + escapeHtml(KIND_LABEL[row.kind] || "需处理") + "</span>" : "") + "</div>"
-                      + '<p class="notify-line">' + (row.body ? escapeHtml(row.body) : "无补充详情") + "</p></div></div>";
+                      + '<p class="notify-line">' + (row.body ? escapeHtml(row.body) : "无补充详情") + '</p></div>'
+                      + '<button class="notify-x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">✕</button></div>';
                   };
                   const group = (label, groupKey, items, selectedFirst) => items.length
                     ? '<div class="queue-group">' + escapeHtml(label) + ' · <span data-notify-group-count="' + groupKey + '">' + items.length + "</span></div>" + items.map((row, index) => notice(row, groupKey, selectedFirst && index === 0)).join("")
                     : "";
-                  return '<div class="queue-head"><h2>通知</h2><button class="icon-btn" type="button" data-notify-clear aria-label="通知不清零说明">×</button></div>'
+                  return '<div class="queue-head"><h2>通知</h2><button class="icon-btn" type="button" data-notify-clear title="全部清除（含需行动项）" aria-label="全部清除通知">×</button></div>'
                     + group("需你行动", "action", actionRows, true)
                     + group("注意", "attention", attentionRows, false)
                     + group("动态", "dynamic", dynamicRows, false);
@@ -5108,6 +5123,7 @@
                     + '<span class="notify-source-kicker"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + kickerIcon + '"></use></svg>' + escapeHtml(kicker.replace(/^来源会话 · /, "").replace(/^来源团队 · /, "")) + "</span>"
                     + '<div class="notify-copy">' + copyRowsOf(row) + "</div>"
                     + '<div class="nrow-r3">' + (row.engine ? engineBadge(row.engine) : "") + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span>" + '<span class="notify-state" data-notify-status>' + stateLabel + "</span></div></div>"
+                    + '<button class="notify-x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">✕</button>'
                     + actions + "</article>";
                 }
 
@@ -5187,7 +5203,16 @@
                     return;
                   }
                   const rows = buildRows();
+                  lastRows = rows;
                   for (const r of rows) r.isNew = notifySeenInit && !seenNotifyKeys.has(r.key); // #B3-17
+                  // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
+                  if (notifySeenInit && window.__ccDeck005NotifyFx) {
+                    const fresh = rows.filter((r) => r.isNew && r.active);
+                    if (fresh.length) {
+                      if (window.__ccDeck005NotifyFx.soundOn()) window.__ccDeck005NotifyFx.ding();
+                      window.__ccDeck005NotifyFx.desktop(fresh[0].title, fresh[0].body);
+                    }
+                  }
                   queue.replaceChildren(nodesFrom(queueMarkup(rows)));
                   if (!rows.length) list.replaceChildren(emptyState("暂无需要你行动的通知"));
                   else list.replaceChildren(nodesFrom(listMarkup(rows)));
@@ -5215,6 +5240,28 @@
                   render();
                 }
 
+                // FB18 清除：行级 ✕ 与全部清除共用——本地即刻隐藏；actionable 行另发 ACK 同步
+                // 权威账（失败不回滚——清除意图优先，relay 账面随后自愈）
+                function dismissRow(row) {
+                  dismissedNotifyKeys.add(row.key);
+                  if (!row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported) {
+                    void bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: row.key, action: "handled" });
+                  }
+                }
+                function dismissRowByKey(key) {
+                  const row = lastRows.find((r) => r.key === key);
+                  if (!row || dismissedNotifyKeys.has(key)) return;
+                  dismissRow(row);
+                  render();
+                }
+                function clearAllNotifications() {
+                  const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key));
+                  if (!rows.length) { toast("没有可清除的通知"); return; }
+                  for (const row of rows) dismissRow(row);
+                  render();
+                  toast("已清除 " + rows.length + " 条通知");
+                }
+
                 function focusSource(el) {
                   if (el.hasAttribute("data-notify-open-acceptance")) { bridge.openAcceptance(el.dataset.notifyOpenAcceptance); return; }
                   const domain = el.dataset.notifyDomain;
@@ -5232,9 +5279,11 @@
 
                 section.addEventListener("click", (event) => {
                   const target = event.target;
+                  const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
+                  if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");
                   if (ackButton) { ackNotification(ackButton.dataset.notifyAck); return; }
-                  if (target.closest("[data-notify-clear]")) { toast("通知不清零 · 需行动项处理后自动归档为历史动态"); return; }
+                  if (target.closest("[data-notify-clear]")) { clearAllNotifications(); return; }
                   const open = target.closest("[data-notify-open-acceptance]");
                   if (open) { bridge.openAcceptance(open.dataset.openAcceptance); return; }
                   const jump = target.closest("[data-notify-jump]");
@@ -5254,7 +5303,7 @@
 
           <section class="desktop-screen" id="d-settings">
             <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接管理</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div><p>relay 在线 · 3 台设备 · 1 异常</p></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div><p>Claude/Codex 已接 · 4 待装</p></div><div class="queue-card"><div class="row"><span class="avatar">◌</span><strong>通用与快捷键</strong></div><p>⌘K 搜索 · ⌘N 新建会话</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div><p>5 个角色 · 开团时可覆盖</p></div><div class="queue-card"><div class="row"><span class="avatar">▦</span><strong>扩展</strong></div><p>验收 · 登记 · 产物</p></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div><p>v0.6.0-test · test 通道</p></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2>连接与设备</h2></div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>端口 8787 · 事件流自动补发</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云桥连接详情</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token 已就绪</p></div><span class="tag done">在线</span></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2>连接与设备</h2></div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>端口 8787 · 事件流自动补发</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云桥连接详情</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token 已就绪</p></div><span class="tag done">在线</span></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn" data-settings-help type="button">查看连接帮助</button><button class="primary-btn" data-settings-verify type="button">验证全部连接</button></footer></section>
             <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>—</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
           </section>
           <div class="toast" id="toast" role="status"></div>
@@ -5282,7 +5331,7 @@
           <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
             <div class="mobile-content" data-notify-center>
-            <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。</div>
+            <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。<button class="notify-light-action" type="button" data-notify-clear-all hidden>全部清除</button></div>
             <div data-mobile-notification-list></div>
           </div>
           <div class="mobile-notify-detail" data-notify-source-detail hidden><button class="mobile-back" type="button" data-notify-detail-back>‹ 返回通知中心</button><h3 data-notify-detail-title>来源详情</h3><p data-notify-detail-copy>从通知进入的来源上下文。</p><div class="notify-source-summary">当前只定位来源；验收与团队写操作仍在原域完成。</div><button class="primary-btn" type="button" data-notify-detail-jump>回来源域处理</button></div>
@@ -5306,7 +5355,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done connection-chip status-connected"><span class="mini-signal" aria-hidden="true"><i></i><i></i><i></i></span>relay 在线</span><button class="icon-btn">⋯</button></header>
-          <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>Agent 引擎</strong><p>6 引擎 · 2 已接 · 浏览态</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px">扫码添加新设备</button></div>
+          <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>Agent 引擎</strong><p>6 引擎 · 2 已接 · 浏览态</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px" data-settings-pair type="button">扫码添加新设备</button></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button class="active" data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
       </div>
@@ -5530,8 +5579,11 @@
         if (host && toast.parentElement !== host) host.append(toast);
       }
 
+      let lastNonSettingsDomain = "session"; // FB9：设置 queue × 的返程票
       function setDesktopDomain(domain) {
         closeTransientOverlays();
+        if (domain === "project" && document.body.dataset.projectRail !== "on") domain = "session"; // FB20：项目域隐藏期间外部跳转兜底
+        if (domain !== "settings") lastNonSettingsDomain = domain;
         const screen = document.querySelector(`#d-${domain}`);
         if (!screen) return;
         desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
@@ -5662,6 +5714,40 @@ function connectLan(ctx) {
         switcher?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
       }
 
+      // ---------- FB1 source-menu 浮窗完整性：真实源名/连接态/摘要从 B4 桥同步到全部壳 ----------
+      // （windowbar + 四条移动 sourcebar；静态壳里的「当前源 / —」占位到此退役）
+      function sourceDotClass(state) {
+        return state === "online" ? "status-connected" : state === "connecting" ? "status-reconnecting" : "status-disconnected";
+      }
+      function refreshSourceSwitchers() {
+        const bridge = window.__ccDeck005B4;
+        const state = bridge ? bridge.connection : "connecting";
+        const online = !!bridge && state === "online" && bridge.hasSnapshot;
+        const name = !bridge || state === "unconfigured" ? "未配置" : String(bridge.relayName || "relay");
+        const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
+        const summary = !bridge || state === "unconfigured" ? "待配对" : online ? count + " 会话 · 在线" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
+        document.querySelectorAll(".source-switcher").forEach((switcher) => {
+          switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
+          switcher.querySelectorAll("[data-current-source]").forEach((el) => { el.textContent = name; });
+          switcher.querySelectorAll("[data-current-summary]").forEach((el) => { el.textContent = summary; });
+          switcher.querySelectorAll(".source-option[data-source-choice]").forEach((option) => {
+            const strong = option.querySelector("strong");
+            const small = option.querySelector("small");
+            if (strong) strong.textContent = name;
+            if (small) small.textContent = summary;
+            option.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(state));
+          });
+        });
+      }
+      // FB1：源显示模式持久化——载入恢复 body 态 + 五壳按钮归位（此前仅点击壳内生效、刷新即丢）
+      function initSourceModeState() {
+        let saved = null;
+        try { saved = localStorage.getItem("cc-deck-005-source-mode"); } catch (_) {}
+        const mode = saved === "aggregate" ? "aggregate" : "single";
+        document.body.dataset.sourceMode = mode;
+        document.querySelectorAll(".source-switcher [data-source-mode]").forEach((el) => el.classList.toggle("active", el.dataset.sourceMode === mode));
+      }
+
       // ---------- #158-批4a 外链兜底收口（改动 3）：全文件外链点击统一走此 helper ----------
       // 桌面→ccDeck.openExternal（失败 catch 降级复制）；浏览器→window.open 探路，被拦（返回 null）
       // 再合成 a[target=_blank noopener noreferrer] 点击并复制链接兜底——弹窗拦截器吞掉时用户至少
@@ -5730,9 +5816,50 @@ function connectLan(ctx) {
         extensions: "验收 · 登记 · 产物",
         about: "版本 · 检查更新 · 手机 App",
       };
+      // FB9/FB20：设置开关键统一账——slug 映射 + 每键默认值（project-rail 默认关，FB20 Leader 口径）
+      const SETTINGS_TOGGLE_KEYS = { sound: "notify-sound", notify: "desktop-notify", "project-rail": "project-rail" };
       function settingsToggleState(key) {
-        try { return localStorage.getItem("cc-deck-005-" + (key === "sound" ? "notify-sound" : "desktop-notify")) !== "0"; } catch (_) { return true; }
+        const slug = SETTINGS_TOGGLE_KEYS[key] || key;
+        const offDefault = key === "project-rail";
+        try { const v = localStorage.getItem("cc-deck-005-" + slug); return v === null ? !offDefault : v !== "0"; } catch (_) { return !offDefault; }
       }
+      // FB9 通知反馈：短滴声（WebAudio 合成，零外部资源）+ 桌面通知（权限授予才弹，静音防与 OS 双响）
+      let dingCtx = null;
+      function playNotifyDing() {
+        try {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          dingCtx = dingCtx || new AC();
+          if (dingCtx.state === "suspended") void dingCtx.resume();
+          const t0 = dingCtx.currentTime;
+          const gain = dingCtx.createGain();
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+          gain.connect(dingCtx.destination);
+          [880, 1174.66].forEach((freq, i) => {
+            const osc = dingCtx.createOscillator();
+            osc.type = "sine";
+            osc.frequency.value = freq;
+            osc.start(t0 + i * 0.12);
+            osc.stop(t0 + 0.5);
+            osc.connect(gain);
+          });
+        } catch (_) {}
+      }
+      async function ensureNotifyPermission() {
+        if (!("Notification" in window)) { showToast("此环境不支持桌面通知"); return; }
+        if (Notification.permission === "default") { try { await Notification.requestPermission(); } catch (_) {} }
+        if (Notification.permission !== "granted") showToast("桌面通知权限未授予 · 可在浏览器站点权限里开启");
+      }
+      function desktopNotifyText(title, body) {
+        if (!settingsToggleState("notify")) return;
+        if (!("Notification" in window) || Notification.permission !== "granted") return;
+        try { new Notification(String(title || "CC Deck"), { body: String(body || "").slice(0, 120), silent: true, tag: "cc-deck-notify" }); } catch (_) {}
+      }
+      window.__ccDeck005NotifyFx = { ding: playNotifyDing, desktop: desktopNotifyText, soundOn: () => settingsToggleState("sound") };
+      // FB20 项目域可配置：rail 上项目入口显隐（body 属性 + CSS 落位，默认隐藏）
+      function applyProjectRail(on) { document.body.dataset.projectRail = on ? "on" : "off"; }
       // #158-批3 呼出/收起快捷键文案（改绑录制 UI 留 test.5）：桌面壳侧 setup 已注册默认
       // Alt+D（main.rs DEFAULT_TOGGLE_KEY）；localStorage ccd_toggle_key 记忆旧壳改绑值
       //（""=已注销）。浏览器无壳不注册——维持「未设置」不撒谎
@@ -5852,11 +5979,19 @@ function connectLan(ctx) {
         body.innerHTML = `
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音">开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知">开</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-grid"></use></svg></span><div><strong>显示项目浏览器</strong><p>rail 项目域入口 · 关闭后从侧栏隐藏（FB20）</p></div><button class="toggle-control${settingsToggleState("project-rail") ? " active" : ""}" data-settings-toggle="project-rail" type="button" aria-pressed="${settingsToggleState("project-rail")}" title="切换项目浏览器显隐">开</button></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
         wireCardDensityControls(body);
+        // FB9 设置 queue 头 ×：返回进入设置前的域（设置无独立关闭语义，等价「关门走人」）
+        queue.querySelector(".queue-head .icon-btn")?.addEventListener("click", () => setDesktopDomain(lastNonSettingsDomain));
+        // FB9/FB3 移动设置「扫码添加新设备」与桌面同链（云形态输码 / LAN 弹配对四件套）
+        document.querySelector("#m-settings")?.addEventListener("click", (event) => {
+          if (!event.target.closest("[data-settings-pair]")) return;
+          if (cloudMode) { openCloudPairUI(); showToast("输入 8 位配对码配对（电脑端 CC Deck 设置 → relay 页领取）"); return; }
+          openLanPairDialog();
+        });
         // #160 空闲置灰时长（旧壳 #121 口径）：change 提交（空/非法回落 30），存
         // ccd_idle_dim_min 后经 __ccDeck005IdleDim 钩子回写 B2 闭包并立即重渲生效；
         // Enter 直接 blur 走 change（旧壳 #121②：WebView 回车不触发 change 只失焦触发）
@@ -5896,11 +6031,23 @@ function connectLan(ctx) {
         body.addEventListener("click", (event) => {
           const toggle = event.target.closest("[data-settings-toggle]");
           if (toggle) {
+            const key = toggle.dataset.settingsToggle;
             const next = !toggle.classList.contains("active");
             toggle.classList.toggle("active", next);
             toggle.textContent = next ? "开" : "关";
-            try { localStorage.setItem("cc-deck-005-" + (toggle.dataset.settingsToggle === "sound" ? "notify-sound" : "desktop-notify"), next ? "1" : "0"); } catch (_) {}
-            showToast((toggle.dataset.settingsToggle === "sound" ? "通知声音" : "桌面通知") + "已" + (next ? "开启" : "关闭"));
+            toggle.setAttribute("aria-pressed", String(next));
+            try { localStorage.setItem("cc-deck-005-" + (SETTINGS_TOGGLE_KEYS[key] || key), next ? "1" : "0"); } catch (_) {}
+            if (key === "project-rail") { // FB20：立即生效——rail 显隐 + 藏域时退回会话
+              applyProjectRail(next);
+              if (!next && document.querySelector("#d-project.active")) setDesktopDomain("session");
+              showToast("项目浏览器已" + (next ? "显示 · rail 可见" : "隐藏"));
+            } else if (key === "sound") {
+              showToast("通知声音已" + (next ? "开启" : "关闭"));
+              if (next) playNotifyDing();
+            } else {
+              showToast("桌面通知已" + (next ? "开启" : "关闭"));
+              if (next) void ensureNotifyPermission();
+            }
             return;
           }
           if (event.target.closest("[data-settings-pair]")) {
@@ -5910,6 +6057,15 @@ function connectLan(ctx) {
             return;
           }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
+          // FB9 footer 两钮接线：帮助走仓库 README 外链；验证按桥的实连态给结论（不伪造通过）
+          if (event.target.closest("[data-settings-help]")) { void window.__ccDeck005OpenUrl("https://github.com/humumu130/cc-deck#readme"); return; }
+          if (event.target.closest("[data-settings-verify]")) {
+            const b = window.__ccDeck005B4;
+            if (b && b.connection === "online" && b.hasSnapshot) showToast("验证完成 · relay " + b.relayName + " 在线 · " + (b.sessions ? b.sessions.size : 0) + " 会话在册");
+            else if (b && b.connection === "connecting") showToast("验证中 · relay 连接建立中，快照到达后自动同步");
+            else showToast("验证未通过 · relay 未连接（自动重连中）");
+            return;
+          }
           // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导（批4a 走统一外链兜底链）
           const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
           if (diagRow) { void window.__ccDeck005OpenUrl("https://nodejs.org/zh-cn"); return; }
@@ -7330,18 +7486,21 @@ function connectLan(ctx) {
           }
           const option = target.closest(".source-option[data-source-choice]");
           if (option) {
+            const wasActive = option.classList.contains("active");
             switcher.querySelectorAll(".source-option").forEach((el) => el.classList.toggle("active", el === option));
             const name = option.querySelector("strong")?.textContent || "当前源";
             switcher.querySelectorAll("[data-current-source]").forEach((el) => { el.textContent = name; });
             closeSourceMenu(switcher);
-            showToast("已切换数据源 · " + name);
+            showToast(wasActive ? "当前源 · " + name + "（配对新源走下方入口）" : "已切换数据源 · " + name);
             return;
           }
           const modeBtn = target.closest("[data-source-mode]");
           if (modeBtn) {
-            switcher.querySelectorAll("[data-source-mode]").forEach((el) => el.classList.toggle("active", el === modeBtn));
-            document.body.dataset.sourceMode = modeBtn.dataset.sourceMode === "aggregate" ? "aggregate" : "single";
-            showToast(modeBtn.dataset.sourceMode === "aggregate" ? "多源聚合视图" : "单源视图");
+            const nextMode = modeBtn.dataset.sourceMode === "aggregate" ? "aggregate" : "single";
+            document.body.dataset.sourceMode = nextMode;
+            try { localStorage.setItem("cc-deck-005-source-mode", nextMode); } catch (_) {} // FB1：模式记忆
+            document.querySelectorAll(".source-switcher [data-source-mode]").forEach((el) => el.classList.toggle("active", el.dataset.sourceMode === nextMode)); // FB1：五壳同步（曾只点改本壳）
+            showToast(nextMode === "aggregate" ? "多源聚合视图" : "单源视图");
             return;
           }
           const manage = target.closest("[data-source-settings]");
@@ -7431,6 +7590,7 @@ function connectLan(ctx) {
       } catch (_) {}
       ensureThemeSymbols();
       setupSettingsDomain(); // ⑥c-1：先建六面板（含连接三子 tab），setupStubTabs 对 settings 域让位
+      applyProjectRail(settingsToggleState("project-rail")); // FB20：rail 项目入口显隐首帧即位（默认隐藏）
       setupStubTabs();
       wireCardDensityControls();
       applyTheme(savedTheme);
@@ -7445,6 +7605,9 @@ function connectLan(ctx) {
       if (window.__ccDeck005B4) window.__ccDeck005B4.jumpMode = setMode; // 手机脚本 jumpDesktop 借道
       initInspectors();
       initSettingsLiveData();
+      initSourceModeState(); // FB1：源显示模式恢复（body 态 + 五壳按钮）
+      refreshSourceSwitchers(); // FB1：占位文案即刻退役
+      window.__ccDeck005B4?.subscribe(() => refreshSourceSwitchers()); // 连接态/快照到达即同步全部壳
       renderSessionList();
       bootstrapConnection();
       // #158-批3 桌面壳周期自愈（旧壳 12400-12410 的 90s/6s 窗口，升级为真重连）：连接
@@ -8009,11 +8172,13 @@ function connectLan(ctx) {
         if (badge) { badge.style.display = act ? "" : "none"; const n = badge.querySelector("span:not([class])") || badge.querySelector("span:last-child"); if (n) n.textContent = String(act); }
       }
       function renderNotify() {
-        const items = Array.isArray(bridge.notifications) ? bridge.notifications : [];
+        const dismissed = window.__ccDeck005DismissedNotifyKeys; // FB18：与桌面通知域共账
+        const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !(dismissed && dismissed.has(n.key)));
         const isDone = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
         const activeN = items.filter((n) => !isDone(n)).length;
         const countEl = document.querySelector("[data-notify-action-count]");
         if (countEl) countEl.textContent = String(activeN);
+        document.querySelectorAll("[data-notify-clear-all]").forEach((b) => { b.hidden = !items.length; }); // FB18：移动端批量清除钮
         const list = document.querySelector("#m-notify [data-mobile-notification-list]");
         if (!list) return;
         list.innerHTML = items.length ? items.map((n) => {
@@ -8023,7 +8188,7 @@ function connectLan(ctx) {
           const mainBtn = !act ? "" : sid
             ? `<button class="primary-btn" type="button" data-notify-mobile-jump="${esc(sid)}">回会话处理</button>`
             : domain ? `<button class="primary-btn" type="button" data-notify-jump-domain="${esc(domain)}">回${domain === "team" ? "团队" : domain === "project" ? "项目" : "会话"}域处理</button>` : "";
-          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="tag ${act ? "action" : ""}">${act ? (n.group === "action" ? "需行动" : "注意") : "历史"}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}</div></article>`;
+          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="tag ${act ? "action" : ""}">${act ? (n.group === "action" ? "需行动" : "注意") : "历史"}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}<button class="notify-light-action" type="button" data-mobile-notify-dismiss="${esc(n.key)}" title="清除这条通知" aria-label="清除通知">✕</button></div></article>`;
         }).join("") : '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>';
       }
       function renderTeam() {
@@ -8163,6 +8328,32 @@ function connectLan(ctx) {
         if (target.closest("[data-notify-detail-jump]")) { jumpDesktop("session"); return; }
         const ackBtn = target.closest("[data-mobile-notify-ack]");
         if (ackBtn) { mobileAckNotify(ackBtn.dataset.mobileNotifyAck); return; }
+        // FB18 移动端清除：行级 ✕ / 全部清除（与桌面通知域同一 dismissed 账 + ACK 同步）
+        const mobileDismiss = target.closest("[data-mobile-notify-dismiss]");
+        if (mobileDismiss) {
+          const dismissed = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
+          const key = mobileDismiss.dataset.mobileNotifyDismiss;
+          const n = (Array.isArray(bridge.notifications) ? bridge.notifications : []).find((x) => x && x.key === key);
+          dismissed.add(key);
+          if (n && !(n.resolved_at || n.handled_at || n.dismissed_at) && n.actionable === true) {
+            void bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: key, action: "handled" });
+          }
+          renderNotify();
+          return;
+        }
+        if (target.closest("[data-notify-clear-all]")) {
+          const dismissed = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
+          const isDoneM = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
+          const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !dismissed.has(n.key));
+          if (!items.length) { toast("没有可清除的通知"); return; }
+          for (const n of items) {
+            dismissed.add(n.key);
+            if (!isDoneM(n) && n.actionable === true) void bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: n.key, action: "handled" });
+          }
+          renderNotify();
+          toast("已清除 " + items.length + " 条通知");
+          return;
+        }
         const jumpSession = target.closest("[data-notify-mobile-jump]");
         if (jumpSession) { if (jumpSession.dataset.notifyMobileJump) openMobileDetail(jumpSession.dataset.notifyMobileJump); return; }
         const jumpDomain = target.closest("[data-notify-jump-domain]");
