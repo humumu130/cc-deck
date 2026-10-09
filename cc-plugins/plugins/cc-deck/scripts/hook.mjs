@@ -184,12 +184,14 @@ async function main() {
     cli_pid: cli_pid || undefined,
   };
 
-  // PreToolUse 等远程审批（最长 600s，须 < settings.json 里该 hook 的 timeout 620s）
-  const waitMs = event === "PreToolUse" ? 600_000 : 1500;
+  // PreToolUse 等远程审批（最长 600s，须 < settings.json 里该 hook 的 timeout 620s）。
+  // 旁路事件 1500→3000（2026-10-09）：relay 主线程高负载时事件循环阻塞普遍 >1.5s
+  //（实测 UserPromptSubmit 广播滞后 6.6s），1.5s 短窗在回合首尾（relay 正忙）必撞
+  const waitMs = event === "PreToolUse" ? 600_000 : 3000;
   // 逐候选上报：403（token 失配）/连不上（relay 未起或换班）就试下一目录的
   // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求
   // 外层补 3 轮整体重试（2s/4s 退避，仅旁路事件）：relay 热替换重启窗口约 5~8s，
-  // 旁路事件 1.5s 短等撞上即丢（审批/通知凭空消失的根因之一）；PreToolUse 的
+  // 旁路事件短等撞上即丢（审批/通知凭空消失的根因之一）；PreToolUse 的
   // 600s 长等天然覆盖重启窗口，无需多轮
   const rounds = event === "PreToolUse" ? 1 : 3;
   let res = null;
@@ -197,19 +199,26 @@ async function main() {
     if (round) await new Promise((r) => setTimeout(r, 2000 * round).unref?.());
     for (let i = 0; i < cfgs.length; i++) {
       const c = cfgs[i];
+      // 超时经 AbortController 真正中止未决 fetch，且超时 timer 不再 unref：原先
+      // race 输掉后 fetch 的 socket 仍持着事件循环引用的假象——一旦 socket 已死
+      //（relay 忙时 ECONNRESET 很常见），只剩 unref 的重试 timer，事件循环排空、
+      // 整个 hook 进程提前退出，r1/r2 重试静默失效（2026-10-09 hook-debug 实证：
+      // r0 超时后无任何 r1 记录）。AbortController 让超时语义落在 fetch 本体上
+      const ac = new AbortController();
+      const to = setTimeout(() => ac.abort(new Error("timeout")), waitMs);
       try {
-        res = await Promise.race([
-          fetch(`http://127.0.0.1:${c.port}/bridge/hook`, {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-bridge-token": c.token },
-            body: JSON.stringify(body),
-          }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), waitMs).unref?.()),
-        ]);
+        res = await fetch(`http://127.0.0.1:${c.port}/bridge/hook`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-bridge-token": c.token },
+          body: JSON.stringify(body),
+          signal: ac.signal,
+        });
       } catch (e) {
-        diag(`post fail (r${round} ${i}): ` + (e?.message ?? e));
+        diag(`post fail (r${round} ${i}): ` + (ac.signal.reason?.message ?? e?.message ?? e));
         res = null;
         continue;
+      } finally {
+        clearTimeout(to);
       }
       if (res && res.ok) {
         diag(`post ok (r${round} ${i})`);
