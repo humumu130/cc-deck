@@ -48,7 +48,7 @@ const fakeLog = (): string[][] => {
   return out;
 };
 
-process.env.CCR_PORT = "8798";
+process.env.CCR_PORT ||= "8798"; // 多 worktree 并行跑套件时可用 CCR_PORT 错开端口（默认 8798）
 process.env.CCR_TOKEN = "test-token-123";
 process.env.CCR_BRIDGE_TOKEN = "bridge-token-456";
 process.env.CCR_NO_TITLE_GEN = "1";

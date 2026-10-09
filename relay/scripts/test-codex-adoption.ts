@@ -5,7 +5,7 @@ import { EventBus } from "../src/event-bus.js";
 import { Bridge } from "../src/bridge.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
-import { CodexRolloutScanner, matchCodexProcess, type CodexProcessInfo } from "../src/codex-rollout.js";
+import { RolloutScanner, specOf, matchEngineProcess, type EngineProcessInfo } from "../src/engine-rollouts.js";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -32,8 +32,13 @@ process.env.CCR_DATA_DIR = dataDir;
 process.env.CCR_PROJECTS_ROOT = projectsRoot;
 process.env.CCR_SESSIONS_ROOT = join(root, "claude-sessions");
 process.env.CCR_CODEX_SESSIONS_ROOT = rolloutRoot;
-process.env.CCR_CODEX_SCAN_MS = "60000";
-process.env.CCR_CODEX_STALE_MS = "600000";
+// 其余引擎根指到不存在的沙盒路径，隔离真机 ~/.trae 等目录
+process.env.CCR_TRAE_SESSIONS_ROOT = join(root, "no-trae");
+process.env.CCR_QWEN_SESSIONS_ROOT = join(root, "no-qwen");
+process.env.CCR_CODEBUDDY_SESSIONS_ROOT = join(root, "no-codebuddy");
+process.env.CCR_ZCODE_SESSIONS_ROOT = join(root, "no-zcode");
+process.env.CCR_ENGINE_SCAN_MS = "60000";
+process.env.CCR_ENGINE_STALE_MS = "600000";
 process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_NO_LEADER = "1";
 process.env.CCR_CLOUD_URL = "";
@@ -67,7 +72,7 @@ writeFileSync(
   ].join(""),
 );
 
-let processes: CodexProcessInfo[] | null = [{ pid: 4242, cwd: workDir, startedAt: start + 200, command: "codex exec" }];
+let processes: EngineProcessInfo[] | null = [{ pid: 4242, cwd: workDir, startedAt: start + 200, command: "codex exec" }];
 const bus = new EventBus();
 const events: Array<{ type: string; session_id: string; payload: unknown }> = [];
 bus.subscribe((event) => events.push(event));
@@ -76,34 +81,34 @@ const bridge = new Bridge(bus, mgr, {
   gateTools: new Set(),
   hasClients: () => false,
   dataDir,
-  codexProcessProvider: () => processes,
+  engineProcessProvider: (engine) => engine === "codex" ? processes : undefined,
 });
 
-bridge.scanCodexRollouts();
+bridge.scanExternalEngines();
 let state = mgr.snapshot().find((item) => item.relay_session_id === sessionId);
 assert(!!state, "rollout 增量扫描收编 Codex 会话");
 assert(state?.external === true && state.engine === "codex", "Codex 卡标 external + engine=codex");
 assert(state?.title === "收编 Codex 外部会话", `首条 UserMessage 派生标题 (${state?.title ?? ""})`);
 assert(state?.status === "WORKING" && state.historical !== true, "活跃 rollout 映射 WORKING");
 assert(state?.cli_pid === 4242, "cwd/启动时间启发式对位活 Codex 进程");
-const scannedProfile = new CodexRolloutScanner(rolloutRoot).scan().find((profile) => profile.sessionId === sessionId);
-assert(!!scannedProfile && !matchCodexProcess(scannedProfile, [{ pid: 4343, cwd: workDir, startedAt: start - 30 * 60_000 }]), "同 cwd 但启动时间不符不误认 Codex 进程");
+const scannedProfile = new RolloutScanner(specOf("codex"), rolloutRoot).scan().find((profile) => profile.sessionId === sessionId);
+assert(!!scannedProfile && !matchEngineProcess(scannedProfile, [{ pid: 4343, cwd: workDir, startedAt: start - 30 * 60_000 }]), "同 cwd 但启动时间不符不误认 Codex 进程");
 assert(events.some((event) => event.type === "SESSION_CREATED" && (event.payload as { engine?: string }).engine === "codex"), "SESSION_CREATED 带 engine=codex");
 assert(mgr.getExternalLogs(state!.session_id).some((log) => log.text.includes("执行命令") && typeof log.occurred_at === "number"), "最近 rollout 活动投影到时间线");
 
 appendFileSync(rolloutPath, line(start + 500, 4, "event_msg", { type: "turn.completed" }));
-bridge.scanCodexRollouts();
+bridge.scanExternalEngines();
 state = mgr.snapshot().find((item) => item.relay_session_id === sessionId);
 assert(state?.status === "DONE", "turn.completed 映射 DONE");
 assert(state?.action_summary === "Codex 回合完成", "终态卡摘要跟随最近 rollout 活动");
 assert(state?.historical !== true, "进程仍在时完成会话不提前归档");
 
 processes = [];
-bridge.scanCodexRollouts();
+bridge.scanExternalEngines();
 state = mgr.snapshot().find((item) => item.relay_session_id === sessionId);
 assert(state?.historical === true && state.status === "DONE", "进程死亡后转历史态");
 
-bridge.scanCodexRollouts();
+bridge.scanExternalEngines();
 const errorState = mgr.snapshot().find((item) => item.relay_session_id === errorSessionId);
 assert(errorState?.engine === "codex" && errorState.status === "ERROR", "error rollout 映射 ERROR");
 assert(errorState?.historical === true, "无活进程的 error rollout 进入历史态");

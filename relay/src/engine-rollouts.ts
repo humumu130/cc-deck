@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { closeSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { deriveTitle } from "./history.js";
-import type { LogEntry, SessionStatus } from "./types.js";
+import type { LogEntry, SessionEngine, SessionStatus } from "./types.js";
 
-export interface CodexProcessInfo {
+export interface EngineProcessInfo {
   pid: number;
   cwd?: string;
   startedAt?: number;
@@ -12,7 +12,7 @@ export interface CodexProcessInfo {
   threadId?: string;
 }
 
-export interface CodexRolloutProfile {
+export interface EngineRolloutProfile {
   filePath: string;
   sessionId: string;
   cwd: string;
@@ -31,10 +31,40 @@ export interface CodexRolloutProfile {
   error?: string;
 }
 
+export interface EngineScanSpec {
+  engine: SessionEngine;   // 收编卡的 engine 徽标值
+  label: string;           // 活动文案前缀（Codex / Trae / Qwen Code / …）
+  envRoot: string;         // sessions 根目录覆盖变量（测试沙盒用）
+  homeDirName: string;     // 默认根 ~/.<homeDirName>/sessions
+  filePattern: RegExp;     // rollout 文件名匹配（未知命名引擎放宽到任意 .jsonl）
+  commandPattern: RegExp;  // ps 命令行匹配（词级，防前缀误撞）
+}
+
+const commandPatternOf = (name: string): RegExp =>
+  new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
+
+export const ENGINE_SCAN_SPECS: EngineScanSpec[] = [
+  { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
+  { engine: "trae", label: "Trae", envRoot: "CCR_TRAE_SESSIONS_ROOT", homeDirName: ".trae", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("trae") },
+  { engine: "qwen-code", label: "Qwen Code", envRoot: "CCR_QWEN_SESSIONS_ROOT", homeDirName: ".qwen", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("qwen") },
+  { engine: "codebuddy", label: "CodeBuddy", envRoot: "CCR_CODEBUDDY_SESSIONS_ROOT", homeDirName: ".codebuddy", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("codebuddy") },
+  { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") },
+];
+
+export function specOf(engine: SessionEngine): EngineScanSpec {
+  const spec = ENGINE_SCAN_SPECS.find((item) => item.engine === engine);
+  if (!spec) throw new Error(`未知引擎: ${engine}`);
+  return spec;
+}
+
+export function engineRoot(spec: EngineScanSpec, home: string): string {
+  return process.env[spec.envRoot] || join(home, spec.homeDirName, "sessions");
+}
+
 interface RolloutCursor {
   offset: number;
   carry: string;
-  profile: CodexRolloutProfile;
+  profile: EngineRolloutProfile;
 }
 
 interface RolloutRecord {
@@ -88,7 +118,7 @@ function sessionIdFromFile(filePath: string): string {
   return id || stem || basename(filePath);
 }
 
-function initialProfile(filePath: string): CodexRolloutProfile {
+function initialProfile(spec: EngineScanSpec, filePath: string): EngineRolloutProfile {
   return {
     filePath,
     sessionId: sessionIdFromFile(filePath),
@@ -111,6 +141,7 @@ function eventBody(record: RolloutRecord): Record<string, unknown> {
 function activityFor(
   type: string,
   body: Record<string, unknown>,
+  label: string,
 ): { text?: string; kind?: LogEntry["kind"]; tool?: string; status?: SessionStatus; terminal?: boolean; error?: string; prompt?: string } {
   const normalizedType = type.replace(/^item_/, "item.").replace(/^turn_/, "turn.");
   const item = objectOf(body.item);
@@ -118,20 +149,20 @@ function activityFor(
   const errorValue = body.error ?? item.error;
   const error = clip(typeof errorValue === "string" ? errorValue : textOf(errorValue), 220);
   if (normalizedType === "turn.failed" || type === "task_failed" || type === "error") {
-    return { text: error || "Codex 回合失败", kind: "system", status: "ERROR", terminal: true, error: error || "Codex 回合失败" };
+    return { text: error || `${label} 回合失败`, kind: "system", status: "ERROR", terminal: true, error: error || `${label} 回合失败` };
   }
   if (normalizedType === "turn.completed" || type === "task_complete" || type === "task_completed") {
-    return { text: "Codex 回合完成", kind: "system", status: "DONE", terminal: true };
+    return { text: `${label} 回合完成`, kind: "system", status: "DONE", terminal: true };
   }
   if (normalizedType === "turn.started" || type === "task_started") {
-    return { text: "Codex 回合运行中", kind: "system", status: "WORKING", terminal: false };
+    return { text: `${label} 回合运行中`, kind: "system", status: "WORKING", terminal: false };
   }
   if (normalizedType === "item.started") {
     if (itemType === "command_execution") {
       const command = clip(textOf(item.command), 180);
       return { text: command ? `执行命令：${command}` : "执行命令", kind: "tool_use", tool: "command", status: "WORKING", terminal: false };
     }
-    return { text: itemType ? `开始：${itemType}` : "Codex 工作中", kind: "system", status: "WORKING", terminal: false };
+    return { text: itemType ? `开始：${itemType}` : `${label} 工作中`, kind: "system", status: "WORKING", terminal: false };
   }
   if (normalizedType === "item.completed") {
     if (itemType === "UserMessage") {
@@ -140,7 +171,7 @@ function activityFor(
     }
     if (itemType === "AgentMessage") {
       const text = clip(textOf(item.content ?? item.text), 220);
-      return { text: text ? `回复：${text}` : "Codex 回复", kind: "assistant_text", status: "WORKING", terminal: false };
+      return { text: text ? `回复：${text}` : `${label} 回复`, kind: "assistant_text", status: "WORKING", terminal: false };
     }
     if (itemType === "CommandExecution") {
       const command = clip(textOf(item.command), 120);
@@ -165,7 +196,7 @@ function activityFor(
     const text = clip(textOf(body.content ?? body.text), 220);
     const prompt = role === "user" ? clip(textOf(body.content), 4000) : "";
     if (role === "user") return { text: text ? `用户：${clip(text, 180)}` : "用户输入", kind: "user_message", status: "WORKING", terminal: false, prompt };
-    if (role === "assistant") return { text: text ? `回复：${text}` : "Codex 回复", kind: "assistant_text", status: "WORKING", terminal: false };
+    if (role === "assistant") return { text: text ? `回复：${text}` : `${label} 回复`, kind: "assistant_text", status: "WORKING", terminal: false };
     if (body.type === "function_call") {
       const name = clip(textOf(body.name), 100);
       return { text: name ? `调用：${name}` : "调用工具", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
@@ -181,7 +212,7 @@ function activityFor(
   return {};
 }
 
-function applyRecord(profile: CodexRolloutProfile, record: RolloutRecord): void {
+function applyRecord(spec: EngineScanSpec, profile: EngineRolloutProfile, record: RolloutRecord): void {
   const body = eventBody(record);
   const type = typeof body.type === "string" ? body.type : typeof record.type === "string" ? record.type : "";
   const at = eventTime(record);
@@ -200,7 +231,7 @@ function applyRecord(profile: CodexRolloutProfile, record: RolloutRecord): void 
   if (typeof body.model === "string" && body.model) profile.model = body.model;
   const item = objectOf(body.item);
   if (typeof item.cwd === "string" && item.cwd && !profile.cwd) profile.cwd = item.cwd;
-  const activity = activityFor(type, body);
+  const activity = activityFor(type, body, spec.label);
   if (activity.prompt && !isBootstrapPrompt(activity.prompt) && (!profile.prompt || isBootstrapPrompt(profile.prompt))) {
     profile.prompt = activity.prompt;
     profile.title = deriveTitle(activity.prompt);
@@ -219,7 +250,7 @@ function applyRecord(profile: CodexRolloutProfile, record: RolloutRecord): void 
   }
 }
 
-function rolloutFiles(root: string): string[] {
+function rolloutFiles(root: string, pattern: RegExp): string[] {
   const out: string[] = [];
   const walk = (dir: string, depth: number): void => {
     if (depth > 6) return;
@@ -228,20 +259,20 @@ function rolloutFiles(root: string): string[] {
     for (const entry of entries) {
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p, depth + 1);
-      else if (entry.isFile() && /^rollout-.+\.jsonl$/i.test(entry.name)) out.push(p);
+      else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
     }
   };
   walk(root, 0);
   return out;
 }
 
-export class CodexRolloutScanner {
+export class RolloutScanner {
   private readonly cursors = new Map<string, RolloutCursor>();
 
-  constructor(private readonly root: string) {}
+  constructor(private readonly spec: EngineScanSpec, private readonly root: string) {}
 
-  scan(now = Date.now()): CodexRolloutProfile[] {
-    const files = rolloutFiles(this.root);
+  scan(now = Date.now()): EngineRolloutProfile[] {
+    const files = rolloutFiles(this.root, this.spec.filePattern);
     const seen = new Set(files);
     for (const filePath of files) {
       let size = 0;
@@ -255,7 +286,7 @@ export class CodexRolloutScanner {
       }
       let cursor = this.cursors.get(filePath);
       if (!cursor || size < cursor.offset) {
-        cursor = { offset: 0, carry: "", profile: initialProfile(filePath) };
+        cursor = { offset: 0, carry: "", profile: initialProfile(this.spec, filePath) };
         this.cursors.set(filePath, cursor);
       }
       let fd: number | undefined;
@@ -274,7 +305,7 @@ export class CodexRolloutScanner {
             carry = lines.pop() ?? "";
             for (const line of lines) {
               if (!line.trim()) continue;
-              try { applyRecord(cursor.profile, JSON.parse(line) as RolloutRecord); } catch {}
+              try { applyRecord(this.spec, cursor.profile, JSON.parse(line) as RolloutRecord); } catch {}
             }
           }
           cursor.offset = position;
@@ -303,33 +334,44 @@ function processCwd(pid: number): string | undefined {
   }
 }
 
+interface PsEntry {
+  pid: number;
+  startedAt?: number;
+  command: string;
+}
+
 function parseProcessStart(raw: string): number | undefined {
   const parsed = Date.parse(raw);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function isCodexCommand(command: string): boolean {
-  return /(?:^|\s|\/)codex(?:\.exe)?(?:\s|$)/i.test(command);
-}
-
-export function listCodexProcesses(): CodexProcessInfo[] | null {
+// 一次 ps 快照供全部引擎共享（每 tick 一次，避免逐引擎重复跑 ps）
+export function captureCliProcesses(): PsEntry[] | null {
   if (process.platform === "win32") return null;
   try {
     const raw = execFileSync("ps", ["-axo", "pid=,ppid=,lstart=,command="], { encoding: "utf8", timeout: 5000, maxBuffer: 4 * 1024 * 1024 });
-    const out: CodexProcessInfo[] = [];
+    const out: PsEntry[] = [];
     for (const line of raw.split(/\r?\n/)) {
       const match = /^\s*(\d+)\s+(\d+)\s+(.{24})\s+(.+)$/.exec(line);
-      if (!match || !isCodexCommand(match[4])) continue;
+      if (!match) continue;
       const pid = Number(match[1]);
       if (!Number.isInteger(pid) || pid <= 0) continue;
-      const command = match[4];
-      const threadId = /(?:^|\s)([0-9a-z]{8,}(?:-[0-9a-z]+){2,})(?:\s|$)/i.exec(command)?.[1];
-      out.push({ pid, cwd: processCwd(pid), startedAt: parseProcessStart(match[3]), command, threadId });
+      out.push({ pid, startedAt: parseProcessStart(match[3]), command: match[4] });
     }
     return out;
   } catch {
     return null;
   }
+}
+
+export function engineProcesses(snapshot: PsEntry[], spec: EngineScanSpec): EngineProcessInfo[] {
+  const out: EngineProcessInfo[] = [];
+  for (const entry of snapshot) {
+    if (!spec.commandPattern.test(entry.command)) continue;
+    const threadId = /(?:^|\s)([0-9a-z]{8,}(?:-[0-9a-z]+){2,})(?:\s|$)/i.exec(entry.command)?.[1];
+    out.push({ pid: entry.pid, cwd: processCwd(entry.pid), startedAt: entry.startedAt, command: entry.command, threadId });
+  }
+  return out;
 }
 
 function samePath(a: string | undefined, b: string): boolean {
@@ -339,7 +381,7 @@ function samePath(a: string | undefined, b: string): boolean {
 
 const PROCESS_START_TOLERANCE_MS = 10 * 60_000;
 
-export function matchCodexProcess(profile: CodexRolloutProfile, processes: CodexProcessInfo[]): CodexProcessInfo | undefined {
+export function matchEngineProcess(profile: EngineRolloutProfile, processes: EngineProcessInfo[]): EngineProcessInfo | undefined {
   const byThread = processes.filter((process) => process.threadId === profile.sessionId);
   const cwdCandidates = processes.filter((process) => samePath(process.cwd, profile.cwd));
   const byStart = cwdCandidates.filter((process) => {
@@ -355,7 +397,7 @@ export function matchCodexProcess(profile: CodexRolloutProfile, processes: Codex
         : cwdCandidates;
   if (!candidates.length) return undefined;
   return [...candidates].sort((left, right) => {
-    const score = (process: CodexProcessInfo): number => {
+    const score = (process: EngineProcessInfo): number => {
       let value = 0;
       if (process.threadId === profile.sessionId) value += 1_000_000;
       if (samePath(process.cwd, profile.cwd)) value += 100_000;
