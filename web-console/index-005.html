@@ -419,7 +419,7 @@
     .source-group-bar .company { background: var(--source-company-bg); color: var(--source-company); }
     .source-group-bar .home { background: var(--source-home-bg); color: var(--source-home); }
     html[data-source-mode="aggregate"] .source-group-bar { display: flex; }
-    .source-filter-cta {display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 9px; margin: 8px 0 4px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); cursor: pointer; text-align: left; font-size: var(--fs-E);}
+    .source-filter-cta {display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 9px; margin: 8px 0 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); cursor: pointer; text-align: left; font-size: var(--fs-E);} /* FB7：虚线清为实线 */
     .source-filter-cta[hidden] { display: none; }
     .source-filter-cta:hover { border-color: var(--info); background: var(--hover); color: var(--text); }
     .source-filter-cta strong {flex: 0 0 auto; color: var(--info); font-size: var(--fs-E); font-weight: 700; white-space: nowrap;}
@@ -553,7 +553,11 @@
     .primary-btn.composer-secondary-action:hover { background: var(--hover); filter: none; box-shadow: none; }
     /* #79 输入栏补全：附件暂存架（composer 内 wrap 换行承载；空架不渲染）+ 拖入高亮 + 生成中点动波 + 已停止标记——全走既有 token，暗亮双主题自动。
        #169 起停止钮改独立 .composer-stopbtn（发送不再 morph），旧 .primary-btn.composer-stop 规则随之退役 */
-    .composer-tray { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 0 100%; margin: 6px 0 8px; padding-top: 6px; border-top: 1px dashed var(--line-soft); }
+    .composer-tray { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 0 100%; margin: 6px 0 8px; padding-top: 6px; border-top: 1px solid var(--line-soft); } /* FB7：虚线清为实线 */
+    /* FB14：用户气泡附图缩略（点击放大还原） */
+    .ub-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+    .ub-img { width: 92px; height: 92px; object-fit: cover; border: 1px solid var(--line-soft); border-radius: 8px; cursor: zoom-in; transition: width .15s ease, height .15s ease; }
+    .ub-img.zoomed { width: min(320px, 100%); height: auto; cursor: zoom-out; }
     .composer-tray-item {display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 4px 2px 5px; border: 1px solid var(--tag-border); border-radius: var(--radius-sm); background: var(--tag-bg); color: var(--text); font-size: var(--fs-C);}
     /* #B3-16 图片缩略 18→40：辨识度（胶片感能看清内容再发送） */
     .composer-tray-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line-soft); }
@@ -995,7 +999,7 @@
     .metric:first-child { border-left: 0; }
     .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
     .metric span {color: var(--dim); font-size: var(--fs-B);}
-    .readonly-banner {padding: 8px 10px; margin-bottom: 14px; border: 1px dashed var(--readonly-line); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: var(--fs-B);}
+    .readonly-banner {padding: 8px 10px; margin-bottom: 14px; border: 1px solid color-mix(in srgb, var(--readonly-line) 55%, transparent); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: var(--fs-B);} /* FB7：虚线清为低对比实线 */
     .aggregate-grid { display: grid; gap: 0; }
     .aggregate-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
     .aggregate-card h4 {grid-column: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-B);}
@@ -1072,10 +1076,11 @@
     #d-notify .queue .notice.selected { background: var(--q-row-sel); }
     #d-notify .queue .notice .notice-icon { border-radius: 9px; }
     #d-notify .workspace-body { padding: 16px 0; }
-    #d-notify .notify-source-summary { margin: 0 14px 12px; }
+    #d-notify .notify-source-summary { margin: 0 14px 14px; } /* FB13：摘要与列表间留同律间距 */
+    #d-notify .notify-source-card { padding: 12px 14px; } /* FB13：卡内纵向节奏 10→12 */
     #d-notify .notify-source-list { padding: 0 0 16px; }
     #d-notify .notify-source-card:hover .notify-actions, #d-notify .notify-source-card:focus-within .notify-actions { display: flex; }
-    #d-notify .notify-actions { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: none; flex-wrap: nowrap; margin: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); box-shadow: var(--shadow-hover); }
+    #d-notify .notify-actions { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); display: none; flex-wrap: nowrap; margin: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); box-shadow: var(--shadow-hover); } /* FB13：右让 30px 给行级 ✕，不再叠压 */
     #d-notify .notify-state { margin-left: 0; }
     /* FB18 通知清除：行级 ✕ hover 现身（queue 行与来源卡同款）；焦点可达不依赖指针 */
     #d-notify .notice { position: relative; }
@@ -1612,7 +1617,7 @@
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
-                  selected: "", staged: [], engineChoice: "",
+                  selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
@@ -2119,7 +2124,7 @@
                 function pushLog(sid, entry) {
                   if (!S.timelines.has(sid)) S.timelines.set(sid, []);
                   const list = S.timelines.get(sid);
-                  const e = { ts: entry.ts || Date.now(), kind: entry.kind || "system", text: entry.text || "", tool: entry.tool, id: entry.id, full: entry.full, streaming: entry.streaming, detail: entry.detail, diff: entry.diff };
+                  const e = { ts: entry.ts || Date.now(), kind: entry.kind || "system", text: entry.text || "", tool: entry.tool, id: entry.id, full: entry.full, streaming: entry.streaming, detail: entry.detail, diff: entry.diff, images: Array.isArray(entry.images) ? entry.images : undefined }; // FB14：随消息图片随行
                   if (e.id) {
                     const i = list.findIndex((x) => x.id === e.id);
                     if (i >= 0) { if (streamMergeDecide(list[i], e) === "skip") return "skip"; list[i] = e; return "replace"; }
@@ -2274,7 +2279,15 @@
                 // 保证地基重渲与本端补渲的 DOM 一致，observer 完整性检查不误判。
                 const b2EngineIconFor = (engineClass) => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
                 const b2EngineBadge = (item) => '<span class="engine-badge ' + item.engineClass + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>' + item.engine + "</span>";
-                const b2SourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
+                // FB19 源色块：源色不再「家里 iMac 二值」——按源名哈希取八色环，同名恒色异名易分
+                const b2SourcePalette = ["#3E8E7E", "#5B8FA8", "#8A7AB5", "#A8763E", "#7D9A3C", "#B55F7A", "#4E85C0", "#9A8A4E"];
+                const b2SourceColor = (source) => {
+                  const s = String(source || "");
+                  if (!s) return "var(--source)";
+                  let h = 0;
+                  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+                  return b2SourcePalette[h % b2SourcePalette.length];
+                };
                 function myCardMarkup(item) {
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
@@ -2294,6 +2307,49 @@
                   }
                   return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
                 }
+                // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
+                const SESSION_FILTERS = [
+                  { id: "all", label: "全部", test: () => true },
+                  { id: "working", label: "进行中", test: (x) => x.status === "WORKING" },
+                  { id: "action", label: "需行动", test: (x) => x.status === "WAITING" || x.status === "ERROR" },
+                  { id: "done", label: "已完成", test: (x) => x.status === "DONE" },
+                ];
+                const sessionFilterOf = () => SESSION_FILTERS.find((f) => f.id === S.filter) || SESSION_FILTERS[0];
+                function syncFilterChip() {
+                  const btn = document.querySelector("#d-session [data-session-filter]");
+                  if (!btn) return;
+                  const def = sessionFilterOf();
+                  btn.textContent = def.label;
+                  btn.setAttribute("aria-label", "筛选会话 · 当前" + def.label);
+                  btn.classList.toggle("active", def.id !== "all");
+                }
+                function openSessionFilterMenu(anchor) {
+                  document.querySelectorAll("[data-filter-pop]").forEach((el) => el.remove());
+                  const pop = document.createElement("div");
+                  pop.className = "source-menu open"; // open 类管 display:block，定位由内联 fixed 接管
+                  pop.dataset.filterPop = "";
+                  pop.style.position = "fixed";
+                  pop.style.zIndex = "96";
+                  pop.innerHTML = '<div class="source-menu-head">筛选会话</div>' + SESSION_FILTERS.map((f) => {
+                    const n = f.id === "all" ? S.sessions.size : [...S.sessions.values()].filter(f.test).length;
+                    return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + " 个</small></button>";
+                  }).join("");
+                  const rect = anchor.getBoundingClientRect();
+                  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 220)) + "px";
+                  pop.style.top = Math.min(rect.bottom + 6, window.innerHeight - 200) + "px";
+                  const closePop = () => { pop.remove(); document.removeEventListener("click", onDoc, true); };
+                  const onDoc = (ev) => { if (!ev.target.closest("[data-filter-pop]") && !ev.target.closest("[data-session-filter]")) closePop(); };
+                  pop.addEventListener("click", (ev) => {
+                    const opt = ev.target.closest("[data-filter-choice]");
+                    if (!opt) return;
+                    S.filter = opt.dataset.filterChoice;
+                    syncFilterChip();
+                    renderMyList();
+                    closePop();
+                  });
+                  document.body.append(pop);
+                  setTimeout(() => document.addEventListener("click", onDoc, true), 0);
+                }
                 function renderMyList() {
                   if (!UI) return;
                   const list = UI.sessionList;
@@ -2302,6 +2358,7 @@
                   list.dataset.relayState = "snapshot";
                   list.dataset.connection = S.status;
                   list.dataset.sessionCount = String(S.sessions.size);
+                  syncFilterChip();
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
                     ph.className = "readonly-banner";
@@ -2311,7 +2368,19 @@
                     list.replaceChildren(ph);
                     return;
                   }
-                  const sessions = [...S.sessions.values()].sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  const filterDef = sessionFilterOf();
+                  const sessions = [...S.sessions.values()].filter(filterDef.test).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）
+                  const filterHidden = [...S.sessions.values()].filter((x) => !filterDef.test(x)).map((x) => x.session_id);
+                  S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
+                  if (!sessions.length) {
+                    const ph = document.createElement("div");
+                    ph.className = "readonly-banner";
+                    ph.dataset.sessionEmpty = "true";
+                    ph.textContent = "「" + filterDef.label + "」筛选下暂无会话 · 切回「全部」查看";
+                    list.replaceChildren(ph);
+                    return;
+                  }
                   // B18 活跃优先两级分组（nova-fix4）：顶部「进行中」收全部活跃会话
                   // （WORKING/WAITING/ERROR 不论项目、按置顶+recency 排）；其余（闲置）按项目
                   // 分组沉底、默认折叠（projExpanded 记手动展开）。旧「待处理/其他」外层组退役。
@@ -2695,7 +2764,15 @@
                     // 旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文；任务号/裸 URL 链接化
                     const src = String(e.full ?? e.text ?? "");
                     const long = src.length > 100;
-                    return '<div class="bubble me" data-x="' + ke + '"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" +
+                    // FB14：随消息发送的图片在气泡内缩略呈现（点击放大/还原），不再只发不显
+                    const imgs = Array.isArray(e.images) ? e.images.filter((x) => typeof x === "string" && x) : [];
+                    const imgHtml = imgs.length
+                      ? '<div class="ub-imgs">' + imgs.slice(0, 8).map((b64) => {
+                          const url = b64.startsWith("data:") ? b64 : "data:image/jpeg;base64," + b64;
+                          return '<img class="ub-img" src="' + esc(url) + '" alt="随消息发送的图片" title="点击放大/还原" loading="lazy">';
+                        }).join("") + "</div>"
+                      : "";
+                    return '<div class="bubble me" data-x="' + ke + '"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" + imgHtml +
                       (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
@@ -3661,7 +3738,13 @@
                     html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '"' + (dis ? " disabled style=\"opacity:.5\"" : "") + '><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(engineStateText(e)) + "</small></button>";
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
-                    + createModelsFor(chosen).map((m) => '<option value="' + esc(m) + '">' + esc(m) + "</option>").join("") + "</select>";
+                    + (() => { // FB15：上次用的模型在同清单内则预选
+                      let lastModel = null;
+                      try { lastModel = localStorage.getItem("cc-deck-005-last-model"); } catch (_) {}
+                      const models = createModelsFor(chosen);
+                      if (lastModel && !models.includes(lastModel)) lastModel = null;
+                      return models.map((m) => '<option value="' + esc(m) + '"' + (m === lastModel ? " selected" : "") + '>' + esc(m) + "</option>").join("");
+                    })() + "</select>";
                   html += '<div class="create-label">初始指令</div><input class="create-field" data-create-field="prompt" placeholder="让新会话做的第一件事（必填）" aria-label="初始指令">';
                   // #368 预填优先级：上次创建用的目录 > 源用户根目录；桌面+本机源时附原生目录浏览钮；
                   // B10 历史目录走 datalist（输入即建议，不占常驻行）
@@ -3674,7 +3757,12 @@
                 }
                 function openCreatePop() {
                   closeCreatePop();
-                  if (!S.engineChoice) S.engineChoice = defaultEngineId();
+                  // FB15 智能默认：上次创建用的引擎优先（仍 ready 才算数），否则首个 ready 引擎
+                  if (!S.engineChoice) {
+                    let lastEng = null;
+                    try { lastEng = localStorage.getItem("cc-deck-005-last-engine"); } catch (_) {}
+                    S.engineChoice = lastEng && catalogEntries().some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId();
+                  }
                   const back = document.createElement("div");
                   back.className = "pair-pop-backdrop";
                   back.dataset.createBack = "";
@@ -3734,6 +3822,8 @@
                   const payload = { cwd: cwd || S.homedir || ".", prompt: prompt.trim() };
                   if (eng && eng !== "claude") payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）
                   if (model) payload.model = model; // B10 模型二层
+                  // FB15 智能默认：本次引擎/模型记忆为下次新建的预填（引擎须仍 ready 才回填）
+                  try { localStorage.setItem("cc-deck-005-last-engine", eng || ""); localStorage.setItem("cc-deck-005-last-model", model || ""); } catch (_) {}
                   if (skipPerm) payload.permissionMode = "bypassPermissions"; // B10 跳权限（relay #217：非 skip 启动的会话后续不可切跳过，创建时定）
                   if (autoMkdir) payload.autoMkdir = true; // #208 目录不存在时 relay 侧 mkdir -p
                   const id = sendCmd("COMMAND_CREATE", payload);
@@ -3767,8 +3857,8 @@
                     }
                     if (S.hasSnapshot && S.sessions.size) {
                       const domIds = new Set([...UI.sessionList.querySelectorAll("[data-session-card]")].map((c) => c.dataset.sessionCard));
-                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0);
-                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k))) { miss = true; break; }
+                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0); // FB17：筛空态是合法形态
+                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失
                       if (miss) renderMyList();
                     }
                   });
@@ -3815,6 +3905,8 @@
                     if (fp) { ev.stopPropagation(); copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || "")); return; }
                     const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x]");
                     if (xEl) { ev.stopPropagation(); toggleExpand(xEl.dataset.x); return; }
+                    const ubImg = ev.target.closest(".ub-img"); // FB14：缩略图点击放大/还原
+                    if (ubImg) { ev.stopPropagation(); ubImg.classList.toggle("zoomed"); return; }
                     const cta = ev.target.closest(".srow-cta");
                     if (cta) {
                       ev.stopPropagation();
@@ -3832,6 +3924,8 @@
                       }, 60);
                       return;
                     }
+                    const filterBtn = ev.target.closest("#d-session [data-session-filter]"); // FB17：筛选芯片开浮菜单
+                    if (filterBtn) { ev.stopPropagation(); openSessionFilterMenu(filterBtn); return; }
                     const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中/项目组统一走此链）
                     if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
                     const taskHide = ev.target.closest("[data-task-hide]");
@@ -5701,7 +5795,15 @@
       const engineIconFor = (engineClass = "") => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
       const engineBadgeMarkup = (item) => `<span class="engine-badge ${item.engineClass}"><svg class="engine-icon" aria-hidden="true"><use href="#icon-${engineIconFor(item.engineClass)}"></use></svg>${item.engine}</span>`;
 
-      const sessionSourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
+      // FB19 源色块（地基同款）：按源名哈希取色，与 B2 会话卡同一套八色环
+      const sessionSourcePalette = ["#3E8E7E", "#5B8FA8", "#8A7AB5", "#A8763E", "#7D9A3C", "#B55F7A", "#4E85C0", "#9A8A4E"];
+      const sessionSourceColor = (source) => {
+        const s = String(source || "");
+        if (!s) return "var(--source)";
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return sessionSourcePalette[h % sessionSourcePalette.length];
+      };
       const sessionCtaMarkup = (item) => item.tagClass === "action" || item.tagClass === "danger" ? `<button type="button" class="srow-cta">处理</button>` : "";
       const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong></div><p>${item.summary}</p><div class="identity-cluster">${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}<span class="source-badge">${item.source}</span></div></div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><span class="srow-ava" style="--srow-ava-c:${sessionSourceColor(item.source)}">${(item.title || "·").trim().charAt(0).toUpperCase()}<i class="status-dot ${item.status}"></i></span><span class="srow-main"><span class="srow-r1"><strong title="${item.title}">${item.title}</strong>${item.time ? `<time class="srow-time">${item.time}</time>` : ""}</span><span class="srow-r2"><span class="srow-r2-t">${item.summary}</span>${item.status === "working" ? `<span class="srow-sec" data-work-sec="${item.workSecs || 0}">${item.workSecs || 0}s</span>` : ""}</span>${item.tag || item.engine || item.source || item.pinned ? `<span class="srow-r3">${item.pinned ? `<span class="tag pin-flag">置顶</span>` : ""}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}<span class="source-badge">${item.source}</span></span>` : ""}</span>${sessionCtaMarkup(item)}</div>`;
 
@@ -5766,6 +5868,7 @@ function connectLan(ctx) {
           overlay.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
         });
         document.querySelectorAll("[data-pair-pop], [data-pair-back]").forEach((el) => el.remove()); // W-NOVAFIX B1 配对弹窗随 Esc/切域收口
+        document.querySelectorAll("[data-filter-pop]").forEach((el) => el.remove()); // FB17 筛选浮菜单同口径收口
         document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); // B10 新建弹窗同口径收口（B2 域 IIFE 内函数，地基直删 DOM 免耦合）
         document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
       }
@@ -8243,18 +8346,21 @@ function connectLan(ctx) {
       }
 
       // ---------- 四屏渲染 ----------
+      const mobileProjOpen = new Set(); // FB16：手机闲置项目组手动展开账（会话内记忆）
       function renderInbox() {
         const list = document.querySelector("#m-inbox [data-mobile-session-list]");
         if (!list) return;
         const sessions = allSessions().sort(byPinnedUpdated);
-        // B18 活跃优先（手机同口径）：顶部「进行中」收全部活跃，闲置按项目分组（手机无折叠机制，平铺）
+        // B18 活跃优先（手机同口径）：顶部「进行中」收全部活跃；闲置按项目分组
+        // FB16：手机补折叠机制——闲置组默认折叠、组头可点展开（与桌面 B11 同语言）
         const pend = sessions.filter((s) => s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR");
         const pendIds = new Set(pend.map((s) => s.session_id));
         const other = sessions.filter((s) => !pendIds.has(s.session_id));
         const groups = [...new Set(other.map(getSessionProject))];
         const otherMarkup = groups.map((g) => {
           const items = other.filter((s) => getSessionProject(s) === g);
-          return `<div class="session-group" data-session-group="project"><div class="queue-group"><span>${esc(g)}</span> · <span data-session-group-count>${items.length}</span></div>${items.map(mobileCard).join("")}</div>`;
+          const open = mobileProjOpen.has(g);
+          return `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span>${esc(g)}</span> · <span data-session-group-count>${items.length}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`;
         }).join("");
         list.innerHTML = (pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span> · <span data-session-group-count>${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "") + otherMarkup;
         const act = sessions.filter(needAction).length;
@@ -8414,6 +8520,13 @@ function connectLan(ctx) {
         }
         const navBtn = target.closest(".mobile-nav [data-mobile-root]");
         if (navBtn) { openMobileRoot(navBtn.dataset.mobileRoot); return; }
+        const mGrp = target.closest("[data-mobile-group-toggle]"); // FB16：手机闲置项目组折叠/展开
+        if (mGrp) {
+          const gname = mGrp.dataset.mobileGroupToggle;
+          if (mobileProjOpen.has(gname)) mobileProjOpen.delete(gname); else mobileProjOpen.add(gname);
+          renderInbox();
+          return;
+        }
         if (target.closest("[data-mobile-back]")) { closeMobileDetail(); return; }
         if (target.closest(".mobile-notify")) { openMobileNotify(); return; }
         if (target.closest("[data-notify-center-close]")) { openMobileRoot(["team", "project", "settings"].includes(mobileReturn) ? mobileReturn : "inbox"); return; }
