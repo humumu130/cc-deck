@@ -14707,7 +14707,7 @@ function withContextWindowSuffix(model) {
   if (!model) return model;
   const m = model.trim();
   if (!m || /\[1m\]$/i.test(m)) return m;
-  if (/^glm-5/i.test(m)) return `${m}[1m]`;
+  if (/^(glm-5|claude-sonnet-4-5|claude-opus-5|claude-haiku-4-5)/i.test(m)) return `${m}[1m]`;
   return m;
 }
 
