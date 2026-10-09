@@ -424,6 +424,13 @@ interface ManagedSession {
   // childPid 尚未就位，此时换流补刀必然落空（双进程根源），消息改走 sendMessage
   // 排队等新流就绪。undefined = 无进行中的 resume
   resumePending?: number;
+  // W-LEADFIX resume 熔断：连续 init 失败计数与冷却截止时刻。阈值次失败进入冷却，
+  // 期间自动恢复路径（值守喂活/派单失败回执/看门狗接管/auto-revive）不再触发
+  // resume（消息入队 unacked，恢复成功后补投）；用户发消息/点卡片 = 手动意图照常
+  // 放行。streak 只在 onInit 成功时清零。内存态（重启即清——重启本身就是一次合法
+  // 重试机会），与 resumePending 同生命周期
+  resumeFailStreak?: number;
+  resumeCooldownUntil?: number;
   // #21③ 首回合在途标记：create(prompt) 的 initialPrompt 在 adapter 构造时已 push 进
   // SDK 队列（不进 unacked——create 路径没有 user_message 回显日志可出队，塞了会变
   // 永久悬账激活 watchdog 重放）。onInit 待命化（Leader 防看门狗误杀的 DONE 翻转）
@@ -495,19 +502,50 @@ function watchdogSampleMs(): number {
 // 并发窗口。实测双拉案例：11:10:32 relay 重启 auto-revive 拉起 A1，36s 后用户消息触
 // 发接管 resume——A1 的 childPid 由异步 spawn 回调填充尚未就位，第二次补刀落空 →
 // 双进程并存、旧进程输出无人采集。窗口内到达的 resume 请求不换流：消息走 sendMessage
-// 排队（AsyncQueue 即 SDK prompt 流，按序消费）。45s 覆盖 CLI 冷启动（reviveSaved 的
-// init 超时 30s 再放宽），超窗仍无 init 视为本次 resume 失败，放行下一次接管补刀
+// 排队（AsyncQueue 即 SDK prompt 流，按序消费）。45s 覆盖 CLI 冷启动（口径备查：
+// resumeAgent 的 init 看门狗 base 同为 45s；reviveSaved 历史上独立 30s，W-LEADFIX
+// 起改用下方自适应窗统一来源），超窗仍无 init 视为本次 resume 失败，放行下一次接管补刀
 function resumePendingWindowMs(): number {
   const v = Number(process.env.CCR_RESUME_PENDING_MS);
   return Number.isFinite(v) && v >= 5_000 ? v : 45_000;
 }
-// 冲刺 F-07：resumeAgent 的 init 看门狗时长（测试可缩短；与互斥窗同缺省 45s）。
-// env 耦合提醒（审查备案）：若把本值调得比 #7 停摆阈值（CCR_WATCHDOG_STALL_MS，
-// 合法下限 5s）还大，停摆看门狗会先于 init 看门狗接管烧自愈额度——缺省 45/600s
-// 安全，调参时保持 init 窗 ≤ 停摆阈值为宜
+// 冲刺 F-07：resumeAgent 的 init 看门狗 base 时长（测试可缩短）。env 耦合提醒（审查
+// 备案）：若把本值调得比 #7 停摆阈值（CCR_WATCHDOG_STALL_MS，合法下限 5s）还大，停摆
+// 看门狗会先于 init 看门狗接管烧自愈额度——缺省 45/600s 安全，调参时保持 init 窗 ≤
+// 停摆阈值为宜。口径澄清（W-LEADFIX 生产实证 0f6906c5 连挂 34 次「初始化超时（30s）」
+// 排查结论）：本函数 45s 一直是 resumeAgent 的真实缺省；生产 30s 报错帧出自 reviveSaved
+// 的独立硬编码 30s 看门狗（两个看门狗，历史原因）——非「注释说 45 实际 30」的劈叉
 function resumeInitTimeoutMs(): number {
   const v = Number(process.env.CCR_RESUME_INIT_MS);
   return Number.isFinite(v) && v >= 100 ? v : 45_000;
+}
+// W-LEADFIX：resume init 看门狗自适应——大上下文会话（长跑数日的 org Leader）resume
+// 时 CLI 全量重放 transcript，加载耗时随体量线性涨；重载机器（生产 CPU 104% 实测）
+// 上固定 45s 必超时，超时→ERROR→下一条消息再 resume 的外驱动死循环由此点燃。按会话
+// transcript 体量放大：每满 10MB 加一个 base 窗，上限 4×（缺省 180s——与 #7 停摆阈值
+// 缺省 600s 保持安全距离，env 耦合备案见 resumeInitTimeoutMs）。transcript 读不到
+//（codex 自有存储 / 首回合未落盘）= base 不放大
+function resumeInitTimeoutFor(transcriptBytes: number | undefined): number {
+  const base = resumeInitTimeoutMs();
+  if (!transcriptBytes || transcriptBytes <= 0) return base;
+  const units = Math.floor(transcriptBytes / (10 * 1024 * 1024));
+  return Math.min(base * (1 + units), base * 4);
+}
+// W-LEADFIX resume 熔断参数：同一会话连续 resume init 失败 ≥threshold 次 → 冷却
+//（指数退避 2^(streak-threshold)×base，封顶 cap）。冷却期内自动恢复路径（值守喂活 /
+// 派单失败回执 / 看门狗接管 / auto-revive）不再触发 resume；用户发消息 / 点卡片恢复
+// = 手动意图照常放行（streak 不清，onInit 成功才清——连点绕不过退避）
+function resumeBreakerThreshold(): number {
+  const v = Number(process.env.CCR_RESUME_BREAKER_THRESHOLD);
+  return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 2;
+}
+function resumeBreakerBaseMs(): number {
+  const v = Number(process.env.CCR_RESUME_BREAKER_BASE_MS);
+  return Number.isFinite(v) && v >= 1_000 ? v : 5 * 60_000;
+}
+function resumeBreakerCapMs(): number {
+  const v = Number(process.env.CCR_RESUME_BREAKER_CAP_MS);
+  return Number.isFinite(v) && v >= 60_000 ? v : 60 * 60_000;
 }
 // 冲刺审查加固（F-07b）：CLI transcript 里是否已有 assistant 消息——「会话有无
 // 记忆」的权威事实。内存 logs 有 500 条滚动窗、重启回放只留 300 条尾巴，长会话
@@ -515,18 +553,32 @@ function resumeInitTimeoutMs(): number {
 // 会把有记忆会话误判成首回合，fresh 回退静默抹上下文。transcript 文件由 CLI 维护
 // 不裁剪，resume 挂死超时是罕见路径，整读可接受。失败安全：任何异常按「无记忆」
 // 处理（与旧口径一致，不阻断 fresh 自愈）
+// transcript 文件路径（目录名约定同 Claude Code：cwd 实路径的非字母数字全替换为
+// '-'，/tmp 在 macOS 解析为 /private/tmp，realpath 对齐；#17 雇员独立家按会话身份
+// 选家目录前缀，undefined = 用户默认家 ~/.claude）。W-LEADFIX 抽公共：记忆判定
+//（transcriptHasAssistant）与体量探测（transcriptBytesFor，init 超时自适应）同源
+function transcriptPathFor(cwd: string, sdkId: string, configHome?: string): string {
+  const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]/g, "-");
+  const base = configHome ?? join(homedir(), ".claude");
+  return join(base, "projects", slug, `${sdkId}.jsonl`);
+}
 function transcriptHasAssistant(cwd: string, sdkId: string, configHome?: string): boolean {
   try {
     // 目录名约定同 Claude Code：cwd 实路径的非字母数字全替换为 '-'（/tmp 在 macOS
-    // 解析为 /private/tmp，realpath 对齐）
-    const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-    // #17 雇员独立家：雇员会话 transcript 在独立家下，按会话身份选家目录前缀；
-    // undefined = 用户默认家（~/.claude），与从前逐字节一致
-    const base = configHome ?? join(homedir(), ".claude");
-    const p = join(base, "projects", slug, `${sdkId}.jsonl`);
+    // 解析为 /private/tmp，realpath 对齐）——路径拼装见 transcriptPathFor
+    const p = transcriptPathFor(cwd, sdkId, configHome);
     return readFileSync(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
+  }
+}
+// W-LEADFIX：transcript 体量（字节）——resume init 超时自适应的放大依据。读不到
+//（codex 自有存储 / 首回合未落盘 / 权限异常）返回 undefined = 不放大（失败安全）
+function transcriptBytesFor(cwd: string, sdkId: string, configHome?: string): number | undefined {
+  try {
+    return statSync(transcriptPathFor(cwd, sdkId, configHome)).size;
+  } catch {
+    return undefined;
   }
 }
 function watchdogDisabled(): boolean {
@@ -1178,6 +1230,14 @@ export class SessionManager {
       // #189 resume 互斥：上一轮 resume 的 agent 还在路上（spawn→onInit 窗口），
       // 不重复拉起（双拉 → childPid 未就位补刀落空 → 双进程）
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
+      // W-LEADFIX pin 休眠豁免：置顶会话的设计语义是「可见 + 点卡片按需恢复」
+      //（2026-09-09 用户拍板「开机不自动 resume」，见 applyPinned）——applyPinned 刚把
+      // 清单内会话标成 saved 休眠，此处原实现漏挡会把它们全部自动 resume（绕过用户
+      // 决策）。pinned+saved（停放休眠形态）一律跳过，用户消息/点卡才拉起
+      if (s.state.pinned && s.state.saved) continue;
+      // W-LEADFIX 熔断豁免：连续 resume 失败冷却期内的会话不自动拉起（否则 boot 后
+      // 照旧每条消息一拉，死循环换个入口重演）
+      if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) continue;
       if (!s.state.relay_session_id) continue; // 首回合未完成即断，无 resume 锚点
       // #17 雇员按家读取任务存储（审查修正：此口漏传则开关开启后雇员任务恒
       // 读不到 → 有未完待办的雇员会话重启后不再被自动拉起，恰是本函数要保的）
@@ -1275,7 +1335,7 @@ export class SessionManager {
 
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
-  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0): SessionState {
+  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0, opts?: { engine?: SessionEngine; model?: string; provider?: string }): SessionState {
     const existing = this.sessions.get(id);
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
@@ -1287,6 +1347,9 @@ export class SessionManager {
         existing.state.title_locked = true;
       }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      if (opts?.engine && !existing.state.engine) existing.state.engine = opts.engine;
+      if (opts?.model && !existing.state.model) existing.state.model = opts.model;
+      if (opts?.provider && !existing.state.engine_provider) existing.state.engine_provider = opts.provider;
       this.applyDeclaredDeliverables(id);
       return existing.state;
     }
@@ -1296,7 +1359,7 @@ export class SessionManager {
       cwd: cwd || process.cwd(),
       initial_prompt: prompt,
       title: prompt ? deriveTitle(prompt) : (cwd.split(/[\\/]/).pop() ?? "未命名会话") || "未命名会话",
-      model: "",
+      model: opts?.model ?? "",
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "接入中",
       started_at: startedAt || Date.now(),
@@ -1304,6 +1367,8 @@ export class SessionManager {
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
+      ...(opts?.engine ? { engine: opts.engine } : {}),
+      ...(opts?.provider ? { engine_provider: opts.provider } : {}),
     };
     // 手动命名回放（readTitleOverrides）：重启前的 rename 跨重启保留
     const ov = this.titleOverrides[id];
@@ -1317,11 +1382,26 @@ export class SessionManager {
       cwd: state.cwd,
       initial_prompt: prompt,
       title: state.title,
-      model: "",
+      model: state.model,
       external: true,
       started_at: state.started_at,
+      ...(state.engine ? { engine: state.engine } : {}),
+      ...(state.engine_provider ? { provider: state.engine_provider } : {}),
     });
     return state;
+  }
+
+  updateExternalProfile(id: string, profile: { cwd?: string; prompt?: string; title?: string; model?: string; engine?: SessionEngine; provider?: string }): void {
+    const s = this.sessions.get(id);
+    if (!s || !s.state.external) return;
+    let changed = false;
+    if (profile.cwd && s.state.cwd !== profile.cwd) { s.state.cwd = profile.cwd; changed = true; }
+    if (profile.prompt && !s.state.initial_prompt) { s.state.initial_prompt = profile.prompt; changed = true; }
+    if (profile.title && !s.state.title_locked && s.state.title !== profile.title) { s.state.title = profile.title; changed = true; }
+    if (profile.model && s.state.model !== profile.model) { s.state.model = profile.model; changed = true; }
+    if (profile.engine && s.state.engine !== profile.engine) { s.state.engine = profile.engine; changed = true; }
+    if (profile.provider && s.state.engine_provider !== profile.provider) { s.state.engine_provider = profile.provider; changed = true; }
+    if (changed) this.emitUpdated(s, true);
   }
 
   getExternal(id: string): SessionState | undefined {
@@ -1332,12 +1412,13 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return;
     const changed = s.state.status !== status;
+    const summaryChanged = s.state.action_summary !== summary;
     s.state.status = status;
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = undefined;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
-    if (changed || status === "WORKING") {
+    if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,
         action_summary: summary,
@@ -1883,9 +1964,18 @@ export class SessionManager {
   // Date.now() 会把「几小时前的死亡」洗成「刚刚活跃」，快照下发后全端 30 分钟
   // 不置灰（2026-09-22 用户实测：装 test.18 重启即本机源全亮、远程源正常）。
   // 正常终态上报（Stop hook/用户打断/compact 归档）不传 at，判定时刻即真实时刻
-  finishExternal(id: string, reason: string, durationMs: number, at: number = Date.now()): void {
+  finishExternal(id: string, reason: string, durationMs: number, at: number = Date.now(), summary?: string): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    if (summary !== undefined && s.state.action_summary !== summary) {
+      s.state.action_summary = summary;
+      this.bus.emit(id, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: summary,
+        stats: { ...s.state.stats },
+        updated_at: at,
+      });
+    }
     s.state.status = "DONE";
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
@@ -1910,7 +2000,7 @@ export class SessionManager {
     kind: LogEntry["kind"],
     text: string,
     tool?: string,
-    meta?: { full?: string; detail?: string; diff?: string[]; id?: string },
+    meta?: { full?: string; detail?: string; diff?: string[]; id?: string; occurred_at?: number },
   ): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -2040,6 +2130,12 @@ export class SessionManager {
               s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
+            }
+            // W-LEADFIX：用户显式消息 = 手动恢复意图，越过熔断冷却照常拉起（streak
+            // 不清零，onInit 成功才清——连发消息绕不过退避，连续失败冷却仍逐次翻倍）。
+            // 自动路径（值守/回执/看门狗）没有这层豁免，死循环由此与手动路径分流
+            if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+              this.pushExternalLog(s.state.session_id, "system", "收到手动消息，越过恢复冷却尝试拉起");
             }
             this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
@@ -2820,6 +2916,10 @@ export class SessionManager {
           // #189 resume 互斥解除：新流 init 到达 = spawn 窗口结束，后续消息/恢复
           // 请求恢复正常路径（sendMessage 直达 / 接管补刀）
           managed.resumePending = undefined;
+          // W-LEADFIX 熔断复位：resume 真正成功（init 到达）才清连败计数——手动
+          // 重试不清（连点绕不过退避），只有流真正活过一次冷却才归零
+          managed.resumeFailStreak = undefined;
+          managed.resumeCooldownUntil = undefined;
           // #307：托管子会话 sid 即时落盘 child-sessions.json——relay 在此刻之后
           // 任意时点重启，孤儿扫描都认得它是自己的（不再被收养成"relay"垃圾会话）
           // #22 审查确认：迟到 init（卡已被 bootTimer/deleteSession 删掉）在此登记
@@ -3185,12 +3285,17 @@ export class SessionManager {
     // 冲刺 F-07（H1 受控实验）：上游 CLI 对「transcript 尾=悬空 user 轮」的会话
     //（首回合被杀）resume 时**静默挂死**——不 init、不报错、不退出（30s 零输出
     // 实锤；先灌消息则崩 role 校验）。消息路径此前无 init 超时 → 看门狗反复接管
-    // 最终 gave_up，自动/手动恢复双不可达。加 45s init 看门狗（对齐 #189 互斥窗，
-    // 盖住冷启动；reviveSaved 显式 30s 不动）：
+    // 最终 gave_up，自动/手动恢复双不可达。加 init 看门狗（base 45s 对齐 #189 互斥
+    // 窗盖住冷启动；W-LEADFIX 起按 transcript 体量自适应放大、上限 4×，见
+    // resumeInitTimeoutFor——长跑 Leader 大上下文固定 45s 必超时是生产死循环根因；
+    // reviveSaved 同源同窗不再独立 30s）：
     // - 首回合会话（无已完成回合 = 无记忆可丢）：回退 fresh spawn 重放 firstMessage，
     //   语义无损自愈——H2 恢复链路（连续恢复/防风暴/gave_up）打通的前提；
     // - 有记忆会话：不赌 fresh（会抹上下文）——ERROR+saved 可重试，宁可留死卡等用户。
     const resumeStart = Date.now();
+    // W-LEADFIX：init 看门狗时长按 transcript 体量一次定型（spawn 时刻探测；codex
+    // 自有存储读不到 = base，与既有口径一致）
+    const initWaitMs = resumeInitTimeoutFor(transcriptBytesFor(s.state.cwd, sdkId, this.employeeHome(s.state)));
     let inited = false;
     let initTimer: ReturnType<typeof setTimeout> | null = null;
     const clearInitTimer = () => {
@@ -3203,6 +3308,9 @@ export class SessionManager {
         inited = true;
         clearInitTimer();
         baseCb.onInit(id2, model, pm);
+        // W-LEADFIX：熔断冷却/pin 休眠期间入队的积压消息随本次恢复补投（只取
+        // resume 之前的旧账；窗口内新消息走 sendMessage 排队既定路径）
+        this.flushResumeBacklog(s, resumeStart);
       },
       // 审查修正（P1「停了又复活」）：流关闭（用户 STOP / 进程退出）= 本次 resume
       // 已终局——timer 不撤销的话 45s 后照样开火：首回合分支 fresh spawn 重放用户
@@ -3213,21 +3321,31 @@ export class SessionManager {
         baseCb.onSessionEnd(reason);
       },
     };
-    const agent = this.newAgent(
-      s.state.cwd,
-      s.state.model,
-      cb,
-      firstMessage,
-      {
-        resume: sdkId,
-        permissionMode: s.state.permission_mode ?? "default",
-        images,
-        configHome: this.employeeHome(s.state),
-        // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
-        // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
-        ...(s.state.engine ? { engine: s.state.engine } : {}),
-      },
-    );
+    let agent: AgentLike;
+    try {
+      agent = this.newAgent(
+        s.state.cwd,
+        s.state.model,
+        cb,
+        firstMessage,
+        {
+          resume: sdkId,
+          permissionMode: s.state.permission_mode ?? "default",
+          images,
+          configHome: this.employeeHome(s.state),
+          // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
+          // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
+          ...(s.state.engine ? { engine: s.state.engine } : {}),
+        },
+      );
+    } catch (e) {
+      // W-LEADFIX：spawn 同步失败同进熔断记账（引擎损坏/资源耗尽的连续 spawn 失败
+      // 与 init 超时同属恢复失控类，连败 → 冷却）；互斥标记一并清——没拉起新流，
+      // 窗口只剩误导（后续消息会卡在 sendMessage 排队 45s）
+      s.resumePending = undefined;
+      this.noteResumeFailure(s, `resume spawn 失败（${e instanceof Error ? e.message : String(e)}）`);
+      throw e;
+    }
     s.agent = agent;
     // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
     s.state.status = "WORKING";
@@ -3269,7 +3387,7 @@ export class SessionManager {
         // transcriptHasAssistant 读 ~/.claude/projects JSONL（Claude 特性泄漏面）：
         // codex 的记忆判定只看前两口（logs/usage）
         (s.state.engine !== "codex" && transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state)));
-      const waitS = Math.round(resumeInitTimeoutMs() / 1000);
+      const waitS = Math.max(1, Math.round(initWaitMs / 1000));
       if (!s.state.external && !hasMemory) {
         // 首回合挂死 → fresh spawn 重放：resume 窗口内到达的全部未回显消息一并
         // 合并重放（挂死流的队列没人消费，只重放首条会让窗口内第二条静默丢失、
@@ -3315,9 +3433,12 @@ export class SessionManager {
         s.state.updated_at = Date.now();
         this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
         this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+        // W-LEADFIX：resume init 失败记账 → 连败进冷却（自动路径停拉，见
+        // suppressAutoResume）；有记忆会话的 fresh 回退分支不计——那是自愈成功路径
+        this.noteResumeFailure(s, `resume init 超时（${waitS}s）`);
         this.emitUpdated(s, true);
       }
-    }, resumeInitTimeoutMs());
+    }, initWaitMs);
     initTimer.unref?.();
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
@@ -3327,9 +3448,12 @@ export class SessionManager {
 
   // #49 按需拉起（COMMAND_RESUME_SESSION）：不带首条消息的 parked resume——
   // transcript 重放完成后 CLI 停在等待输入，首个回合由后续 COMMAND_MESSAGE 开启。
-  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / 30s 超时 = 恢复失败
-  // （ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
-  // resumeAgent（消息驱动）行为保持原样不动
+  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / init 看门狗超时 =
+  // 恢复失败（ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
+  // resumeAgent（消息驱动）行为保持原样不动。W-LEADFIX：init 看门狗由独立硬编码
+  // 30s 改用 resumeInitTimeoutFor 自适应窗（与 resumeAgent 同源——生产死循环的报错
+  // 帧「初始化超时（30s）」即出自这里的旧硬编码；大上下文 Leader 必超时），fail
+  // 同时进熔断记账；用户点卡是手动意图，不受熔断压制（本函数无闸）
   private reviveSaved(s: ManagedSession): void {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
@@ -3368,6 +3492,9 @@ export class SessionManager {
     s.resumePending = Date.now();
     s.wd.gaveUp = false;
     const base = this.agentCallbacks(s);
+    // W-LEADFIX：init 看门狗与 resumeAgent 同源自适应（transcript 体量放大，codex
+    // 已在上方短路不会走到这）
+    const initWaitMs = resumeInitTimeoutFor(transcriptBytesFor(s.state.cwd, sdkId, this.employeeHome(s.state)));
     const fail = (reason: string): void => {
       if (inited) return;
       inited = true; // 流关闭与超时可能先后到，双触发只记一次
@@ -3386,6 +3513,9 @@ export class SessionManager {
       s.state.updated_at = Date.now();
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+      // W-LEADFIX：恢复失败同样进熔断记账（连败 → 冷却，自动路径停拉）；点卡重试
+      // 是手动路径不受闸，但退避照记——连点不会绕过冷却翻倍
+      this.noteResumeFailure(s, reason);
       this.emitUpdated(s, true);
     };
     const cb: AgentCallbacks = {
@@ -3393,11 +3523,24 @@ export class SessionManager {
       onInit: (sdkIdNew, model, permissionMode) => {
         inited = true;
         if (timer) clearTimeout(timer);
+        // W-LEADFIX：revive 起算时刻先于 base.onInit 捕获——base 会清 resumePending
+        const reviveStart = s.resumePending ?? Date.now();
         // 先清休眠标记再走 base 的 emitUpdated，让首帧就带最终状态
         s.state.saved = undefined;
         s.state.historical = false;
         s.state.org_parked = undefined; // M3 审查修正：恢复即脱离挂起休眠（同 resumeAgent）
         base.onInit(sdkIdNew, model, permissionMode);
+        // W-LEADFIX：熔断冷却/pin 休眠期间入队的积压注入（值守/回执）随恢复补投，
+        // 有活即开回合，不再宣称「等待输入」（无积压才落 DONE 待命态）
+        const backlog = s.unacked.filter((m) => m.ts < reviveStart);
+        if (backlog.length > 0 && s.agent && !s.agent.ended) {
+          this.flushResumeBacklog(s, reviveStart);
+          s.state.status = "WORKING";
+          s.state.action_summary = "已恢复，处理排队消息";
+          this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+          this.emitUpdated(s, true);
+          return;
+        }
         s.state.status = "DONE";
         s.state.done_reason = "已恢复（等待输入）";
         s.state.action_summary = "已恢复，等待输入";
@@ -3413,20 +3556,29 @@ export class SessionManager {
         base.onSessionEnd(reason);
       },
     };
-    // 初始化看门狗：CLI 卡住不吐 init 时不让会话永远吊在「恢复中」
+    // 初始化看门狗：CLI 卡住不吐 init 时不让会话永远吊在「恢复中」（时长自适应，
+    // 见上方 initWaitMs——独立 30s 硬编码已废）
     timer = setTimeout(() => {
       timer = null;
-      fail("初始化超时（30s）");
+      fail(`初始化超时（${Math.max(1, Math.round(initWaitMs / 1000))}s）`);
       void s.agent?.stop();
-    }, 30_000);
+    }, initWaitMs);
     timer.unref?.();
-    const agent = this.newAgent(s.state.cwd, s.state.model, cb, undefined, {
-      resume: sdkId,
-      permissionMode: s.state.permission_mode ?? "default",
-      configHome: this.employeeHome(s.state),
-      // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
-      ...(s.state.engine ? { engine: s.state.engine } : {}),
-    });
+    let agent: AgentLike;
+    try {
+      agent = this.newAgent(s.state.cwd, s.state.model, cb, undefined, {
+        resume: sdkId,
+        permissionMode: s.state.permission_mode ?? "default",
+        configHome: this.employeeHome(s.state),
+        // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
+        ...(s.state.engine ? { engine: s.state.engine } : {}),
+      });
+    } catch (e) {
+      // W-LEADFIX：同 resumeAgent——spawn 失败进熔断记账并清互斥标记
+      s.resumePending = undefined;
+      this.noteResumeFailure(s, `恢复 spawn 失败（${e instanceof Error ? e.message : String(e)}）`);
+      throw e;
+    }
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.action_summary = "恢复中";
@@ -3866,6 +4018,66 @@ export class SessionManager {
     }
   }
 
+  // ===== W-LEADFIX resume 熔断与自动恢复闸门 =====
+  // 生产实证（2026-10-09 深夜，org Leader 0f6906c5）：Leader CLI 死后值守喂活/派单
+  // 回执/org 通知的消息流持续到达，每条触发 resumeAgent/reviveSaved → init 超时失败
+  //（「初始化超时（30s）」×34）→ 下一条消息再触发，分钟级死循环。根修三板：
+  // ① noteResumeFailure 记账连败 → 冷却（自动路径统一经 suppressAutoResume 压制）；
+  // ② 用户手动意图（发消息/点卡）不过闸——手动恢复路径永不封锁；③ pin 停放休眠
+  //（pinned+saved）的自动拉起同闸压制——置顶语义是「点卡片按需恢复」（#49，2026-09-09
+  // 用户拍板），自动注入不得绕过。
+
+  // 熔断记账：resume init 失败（resumeAgent 看门狗 ERROR 分支 / reviveSaved fail /
+  // 看门狗接管失败）连击 → 冷却。指数退避 2^(streak-threshold)×base 封顶 cap；
+  // streak 只在 onInit 成功复位（见 agentCallbacks.onInit）
+  private noteResumeFailure(s: ManagedSession, detail: string): void {
+    const streak = (s.resumeFailStreak ?? 0) + 1;
+    s.resumeFailStreak = streak;
+    const threshold = resumeBreakerThreshold();
+    if (streak < threshold) return;
+    const cool = Math.min(resumeBreakerBaseMs() * 2 ** (streak - threshold), resumeBreakerCapMs());
+    s.resumeCooldownUntil = Date.now() + cool;
+    const min = Math.max(1, Math.round(cool / 60_000));
+    this.pushExternalLog(
+      s.state.session_id, "system",
+      `恢复已连续失败 ${streak} 次（${detail}），自动恢复进入冷却（本次 ${min} 分钟）——期间自动注入只入队不再拉起，点卡片或发消息可手动恢复`,
+    );
+    this.emitUpdated(s, true);
+  }
+
+  // 自动恢复统一闸门：返回 true = 应压制（勿 resume）。压制原因两种：熔断冷却中 /
+  // pin 停放休眠（pinned+saved 且无 agent——用户手动停放的「点卡按需恢复」形态）。
+  // queueMessage 给出时消息入队 unacked（恢复成功后补投，见 flushResumeBacklog）；
+  // 不给出 = 纯跳过（值班 prompt 可重推导、auto-revive 引导语是合成物，入队无益）
+  private suppressAutoResume(s: ManagedSession, source: string, queueMessage?: string): boolean {
+    const tripped = !!s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil;
+    const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
+    if (!tripped && !parkedPinned) return false;
+    if (queueMessage !== undefined) s.unacked.push({ text: queueMessage, ts: Date.now() });
+    const why = tripped
+      ? `恢复连续失败 ${s.resumeFailStreak ?? "?"} 次已熔断，约 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 60_000))} 分钟后自动重试`
+      : "会话为置顶休眠（点卡片按需恢复）";
+    this.pushExternalLog(
+      s.state.session_id, "system",
+      `[${source}] ${why}；本条注入已跳过${queueMessage !== undefined ? "并入队，恢复后自动补投" : ""}`,
+    );
+    this.emitUpdated(s, true);
+    return true;
+  }
+
+  // 恢复成功（onInit 到达）后补投冷却期/pin 休眠期积压：只取 beforeTs 之前的旧账
+  //（之后的属 spawn 窗口消息，走 sendMessage 排队既定路径），合并单回合送达
+  //（同看门狗多消息重放口径）。resumeAgent 与 reviveSaved 的 onInit 包裹各调一次
+  private flushResumeBacklog(s: ManagedSession, beforeTs: number): void {
+    const backlog = s.unacked.filter((m) => m.ts < beforeTs);
+    if (backlog.length === 0) return;
+    s.unacked = s.unacked.filter((m) => m.ts >= beforeTs);
+    const text = backlog.map((m) => m.text).join("\n\n");
+    const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
+    this.pushExternalLog(s.state.session_id, "system", `恢复成功，补投排队消息 ${backlog.length} 条`);
+    s.agent?.sendMessage(text, images.length ? images : undefined);
+  }
+
   // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
   // 口径 + 通知对账）：上一进程遗留 running/dispatched 悬账各补一行 done 收口（事实
   // 源先行），板条同步退 todo（中断口径，F-08 实测校准注释随块迁入——auto-revive
@@ -3949,9 +4161,15 @@ export class SessionManager {
       returnPath: "dispatch",
     });
     if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
+    // W-LEADFIX：回执注入先过熔断/pin 休眠闸——Leader 死卡时这里曾是死循环主驱动
+    // 之一（每条 failed 回执拉一次 resume）。压制时 prompt 入队 unacked，手动恢复后
+    // 补投；通知账（上方 upsertNotification）本就持久可操作，用户可见面零损失
+    const receiptPrompt = `[派单失败回执] 你派的 ${e.tier} 单（${e.id.slice(0, 8)}${e.gid ? ` · 组 ${e.gid.slice(0, 8)}` : ""}）失败：${truncate(receipt, 160)}\n请决定重派 / 换人接替 / 放弃，并同步任务板。`;
+    const leaderSession = this.sessions.get(this.leaderId);
+    if (leaderSession && this.suppressAutoResume(leaderSession, "派单失败回执", receiptPrompt)) return;
     try {
       this.pushExternalLog(this.leaderId, "system", `[派单失败回执] ${e.tier} 单 ${e.id.slice(0, 8)} 失败：${truncate(receipt, 160)}`);
-      this.resumeAgent(this.require(this.leaderId), `[派单失败回执] 你派的 ${e.tier} 单（${e.id.slice(0, 8)}${e.gid ? ` · 组 ${e.gid.slice(0, 8)}` : ""}）失败：${truncate(receipt, 160)}\n请决定重派 / 换人接替 / 放弃，并同步任务板。`);
+      this.resumeAgent(this.require(this.leaderId), receiptPrompt);
     } catch (err) {
       console.warn(`[m4] 派单失败通知注入 Leader 失败: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -4133,6 +4351,24 @@ export class SessionManager {
       `请验收回执、派发下一批或同步任务板；完成后末行单独输出一行 JSON（不加代码块）：`,
       `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`,
     ].join("\n");
+    // W-LEADFIX：喂活注入先过熔断/pin 休眠闸——Leader 死卡时值守周期曾是死循环
+    // 主驱动（每轮喂活拉一次 resume → init 超时 → 退避续办再拉）。压制时本轮按
+    // sleep 收口不续办（值守判定每轮重推导队列，prompt 无需入队）；熔断冷却结束
+    // 后由下一轮触发（turn_end/event）自然恢复喂活。pm_unwakeable 审计口径保留给
+    // 真注入异常，此处单独记 resume_breaker / pm_parked_pinned 不混淆
+    const leaderSession = this.sessions.get(this.leaderId);
+    if (leaderSession) {
+      const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
+      const parkedPinned = !!leaderSession.state.pinned && !!leaderSession.state.saved && !leaderSession.agent;
+      if (tripped || parkedPinned) {
+        this.suppressAutoResume(leaderSession, "值守喂活");
+        this.appendDutyRound({
+          feed_id: feedId, feed_generation: generation, trigger: [trigger],
+          result: "sleep", reason: tripped ? "resume_breaker" : "pm_parked_pinned", observed, from,
+        });
+        return;
+      }
+    }
     try {
       this.pushExternalLog(this.leaderId, "system", `[值守喂活] 发现 ${verdict.candidates.length} 项可处理（最老：${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}）`);
       this.resumeAgent(this.require(this.leaderId), prompt);
@@ -5159,7 +5395,13 @@ export class SessionManager {
     let sessionId: string;
     if (veteran) {
       try {
-        this.resumeAgent(this.require(veteran), wrapDispatchPrompt(tier, input.prompt));
+        const veteranSession = this.require(veteran);
+        // W-LEADFIX：熟手 resume 熔断冷却中——不在冷却期硬拉熟手（必超时烧窗），
+        // 抛错走下方既定降级链（本单开新会话承接，台账/通知口径原样）
+        if (veteranSession.resumeCooldownUntil && Date.now() < veteranSession.resumeCooldownUntil) {
+          throw new Error(`resume 熔断冷却中（连续失败 ${veteranSession.resumeFailStreak ?? "?"} 次）`);
+        }
+        this.resumeAgent(veteranSession, wrapDispatchPrompt(tier, input.prompt));
         sessionId = veteran;
       } catch (e) {
         // 熟手复活失败（理论窗口：并发竞态后 require 抛/新 agent 拉起即抛）：同 id
@@ -5567,6 +5809,9 @@ export class SessionManager {
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
+      ...(s.state.model ? { model: s.state.model } : {}),
+      ...(s.state.engine ? { engine: s.state.engine } : {}),
+      ...(s.state.engine_provider ? { provider: s.state.engine_provider } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
       ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),
       ...(s.state.compacting ? { compacting: true } : {}),
@@ -5614,6 +5859,13 @@ export class SessionManager {
   /** 测试缝：注入 proc-tree 替身（null 还原真实实现） */
   setWatchdogProcs(p: { snapshotTree: typeof snapshotTree; killTree: typeof killTree } | null): void {
     this.watchdogProcs = p ?? { snapshotTree, killTree };
+  }
+
+  /** 测试缝（W-LEADFIX）：读会话 resume 熔断态——streak=连败次数，cooldownUntil=冷却截止（0=无）。null=会话不存在 */
+  resumeBreakerForTests(sid: string): { streak: number; cooldownUntil: number } | null {
+    const s = this.sessions.get(sid);
+    if (!s) return null;
+    return { streak: s.resumeFailStreak ?? 0, cooldownUntil: s.resumeCooldownUntil ?? 0 };
   }
 
   // 心跳同频扫描（5s）。双通道起疑：慢通道 = 任意静默 > T_stall（10min）；快通道 =
@@ -5729,6 +5981,17 @@ export class SessionManager {
     const sid = s.state.session_id;
     const t0 = Date.now();
     const agent = s.agent;
+    // W-LEADFIX：熔断冷却期内不再自动接管——杀树+resume 本身就是死循环的一环
+    //（每轮烧一个 init 窗口再原样失败）。留现场等手动恢复；冷却结束后下一次
+    // stall 采样照常接管。零干预零额度（不动 recoveries，与放弃守卫同口径）
+    if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+      this.bus.emit(sid, "WATCHDOG", {
+        action: "recover_suppressed", lane,
+        detail: `恢复熔断冷却中（连续失败 ${s.resumeFailStreak ?? "?"} 次，约 ${Math.max(1, Math.round((s.resumeCooldownUntil - Date.now()) / 60_000))} 分钟后可重试），跳过自动接管`,
+      });
+      s.wd.phase = "idle";
+      return;
+    }
     this.bus.emit(sid, "WATCHDOG", { action: "recover_start", lane, stalled_ms: stalled, cpu_delta_ms: cpuDelta });
     // #189 ended 通道：流已关（非 CPU 僵死），文案区分——用户看时间线不困惑
     this.pushExternalLog(
@@ -5857,6 +6120,9 @@ export class SessionManager {
       s.state.waiting_request = undefined;
       s.state.waiting_started_at = undefined;
       this.pushExternalLog(sid, "system", s.state.last_error);
+      // W-LEADFIX：接管失败同进熔断记账（resumeAgent/reviveSaved 的 init 看门狗
+      // 失败是异步路径，落不到这个 catch——此处补的是同步抛错形态，两类同权连击）
+      this.noteResumeFailure(s, `看门狗接管失败（${msg}）`);
       this.emitUpdated(s, true);
       s.wd.phase = "idle";
     }

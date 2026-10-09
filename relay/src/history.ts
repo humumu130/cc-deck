@@ -167,13 +167,16 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
     s.updated_at = e.ts;
     switch (e.type) {
       case "SESSION_UPDATED": {
-        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; title_locked?: boolean; turn_started_at?: number; usage?: SessionState["usage"]; todos?: SessionState["todos"]; subagents?: SessionState["subagents"] };
+        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; title_locked?: boolean; turn_started_at?: number; usage?: SessionState["usage"]; todos?: SessionState["todos"]; subagents?: SessionState["subagents"]; model?: string; engine?: SessionEngine; provider?: string };
         s.status = p.status;
         s.action_summary = p.action_summary;
         if (p.stats) s.stats = p.stats;
         if (p.remote_mode !== undefined) s.remote_mode = p.remote_mode;
         if (p.title) s.title = p.title;
         if (p.title_locked) s.title_locked = true;
+        if (p.model) s.model = p.model;
+        if (p.engine) s.engine = p.engine;
+        if (p.provider) s.engine_provider = p.provider;
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         if (p.usage) s.usage = p.usage;
         // #72 水位跨重启还原：热替换/重启清空内存态后，此前不回放 context_usage/
@@ -227,7 +230,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         // streaming 不回放：历史条目都是终态，残留光标会卡住 "▌"
         const entry: LogEntry = {
           ts: e.ts, kind: p.kind, text: p.text, tool: p.tool,
-          full: p.full, id: p.id, detail: p.detail, diff: p.diff,
+          full: p.full, id: p.id, detail: p.detail, diff: p.diff, occurred_at: p.occurred_at,
         };
         // #73 同 id 原地替换（与运行期语义一致）：托管流式块/外部转录增长链每帧
         // 都落盘，重放逐条 push 会把同一条消息的中间快照全部复活成重复条目

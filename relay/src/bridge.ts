@@ -37,7 +37,11 @@ import { readTaskStoreTodos } from "./task-store.js";
 import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
-import type { ActivityKind } from "./types.js";
+import type { ActivityKind, SessionEngine } from "./types.js";
+import {
+  ENGINE_SCAN_SPECS, RolloutScanner, captureCliProcesses, engineProcesses, engineRoot, matchEngineProcess,
+  type EngineProcessInfo, type EngineRolloutProfile, type EngineScanSpec,
+} from "./engine-rollouts.js";
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -46,6 +50,7 @@ export interface BridgeOptions {
   questionHoldMs?: number;         // AskUserQuestion 挂起窗口（默认 90s；超时放行 CLI 本地选择器）
   dataDir: string;                 // pid 缓存所在数据目录（与 hook 单源对齐：插件形态 ~/.cc-deck/data，dev 形态 <repo>/data）
   rules?: AllowRuleStore;          // #212 允许并记住：命中规则的门控请求直接放行（缺省 = 未启用）
+  engineProcessProvider?: (engine: SessionEngine) => EngineProcessInfo[] | null | undefined; // 测试缝：undefined = 走真实 ps 快照
 }
 
 export interface BridgeDecision {
@@ -189,6 +194,9 @@ export class Bridge {
   private escMarkedAt = new Map<string, number>(); // ext id -> 最近一次 Esc 注入成功时间（乐观置 DONE 的自我纠正窗口）
   private queuePollTimer: NodeJS.Timeout | null = null;
   private healTimer: NodeJS.Timeout | null = null;
+  private engineScanTimer: NodeJS.Timeout | null = null;
+  private readonly engineScanners: Array<{ spec: EngineScanSpec; scanner: RolloutScanner }> = [];
+  private readonly engineActivityKeys = new Map<string, string>();
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
   private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string; ctx: number }>();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
@@ -243,10 +251,16 @@ export class Bridge {
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 60_000;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 60_000;
+    // 外部引擎收编：每引擎一个 scanner（共享 rollout 解析框架）；根目录不存在时
+    // scan() 静默返回空（跳过不报错），引擎装上后下轮自动跟进
+    for (const spec of ENGINE_SCAN_SPECS) {
+      this.engineScanners.push({ spec, scanner: new RolloutScanner(spec, engineRoot(spec, homedir())) });
+    }
     this.hydratePidsFromCache();
     this.reconcilePidsFromSessions();
     this.healExternal();
     this.adoptOrphans();
+    this.scanExternalEngines();
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
     this.healTimer = setInterval(() => {
       this.hydratePidsFromCache();
@@ -256,6 +270,85 @@ export class Bridge {
       this.sweepIdleArchive();
     }, 60_000);
     this.healTimer.unref?.();
+    const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5_000;
+    this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
+    this.engineScanTimer.unref?.();
+  }
+
+  close(): void {
+    if (this.queuePollTimer) clearInterval(this.queuePollTimer);
+    if (this.healTimer) clearInterval(this.healTimer);
+    if (this.engineScanTimer) clearInterval(this.engineScanTimer);
+    this.queuePollTimer = null;
+    this.healTimer = null;
+    this.engineScanTimer = null;
+  }
+
+  scanExternalEngines(): void {
+    const snapshot = captureCliProcesses();
+    for (const { spec, scanner } of this.engineScanners) {
+      const overridden = this.opts.engineProcessProvider?.(spec.engine);
+      const processes = overridden !== undefined ? overridden : snapshot ? engineProcesses(snapshot, spec) : null;
+      this.adoptEngineProfiles(spec, scanner.scan(), processes);
+    }
+  }
+
+  private adoptEngineProfiles(spec: EngineScanSpec, profiles: EngineRolloutProfile[], processes: EngineProcessInfo[] | null): void {
+    const processListAvailable = processes !== null;
+    const now = Date.now();
+    const staleMs = Number(process.env.CCR_ENGINE_STALE_MS) > 0 ? Number(process.env.CCR_ENGINE_STALE_MS) : 5 * 60_000;
+    for (const profile of profiles) {
+      const id = `ext-${spec.engine}-${profile.sessionId}`;
+      const existing = this.mgr.getExternal(id);
+      if (!existing && this.mgr.ownsCliSession(profile.sessionId)) continue;
+      if (this.mgr.isDeletedExt(id)) continue;
+      const title = profile.prompt ? profile.title : undefined;
+      const state = existing ?? this.mgr.ensureExternal(
+        id,
+        profile.cwd,
+        profile.prompt,
+        profile.sessionId,
+        profile.startedAt,
+        { engine: spec.engine, model: profile.model, provider: profile.provider },
+      );
+      if (existing) {
+        this.mgr.updateExternalProfile(id, {
+          cwd: profile.cwd,
+          prompt: profile.prompt,
+          title,
+          model: profile.model,
+          engine: spec.engine,
+          provider: profile.provider,
+        });
+      }
+      const matched = processes
+        ? matchEngineProcess(profile, processes) ?? (state.cli_pid ? processes.find((item) => item.pid === state.cli_pid) : undefined)
+        : state.cli_pid && pidAlive(state.cli_pid) ? { pid: state.cli_pid } : undefined;
+      const active = matched !== undefined;
+      if (matched && state.cli_pid !== matched.pid) this.mgr.setExternalCliPid(id, matched.pid);
+      if (!matched && processListAvailable && state.cli_pid) this.mgr.clearExternalCliPid(id);
+      const inferredDead = !active && (processListAvailable || profile.terminal || now - profile.updatedAt > staleMs);
+      const desiredStatus = inferredDead && !profile.terminal
+        ? profile.error ? "ERROR" : "DONE"
+        : profile.status;
+      const summary = profile.activity ?? (desiredStatus === "WORKING" ? `${spec.label} 运行中` : desiredStatus === "ERROR" ? `${spec.label} 出错` : `${spec.label} 已完成`);
+      if (desiredStatus === "ERROR" && profile.error) state.last_error = profile.error;
+      if (desiredStatus === "DONE" && state.status !== "DONE") {
+        this.mgr.finishExternal(id, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
+      } else if (state.status !== desiredStatus || state.action_summary !== summary) {
+        this.mgr.setExternalStatus(id, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : undefined);
+        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id);
+      }
+      const historical = !active && inferredDead;
+      if (!!state.historical !== historical) {
+        state.historical = historical;
+        this.mgr.emitExternalSync(id);
+      }
+      if (profile.activity && profile.activityKey && this.engineActivityKeys.get(id) !== profile.activityKey) {
+        this.engineActivityKeys.set(id, profile.activityKey);
+        this.mgr.pushExternalLog(id, profile.activityKind ?? "system", profile.activity, profile.activityTool, { occurred_at: profile.updatedAt });
+      }
+    }
   }
 
   // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的

@@ -28,6 +28,8 @@
     "test:settings": "tsx scripts/test-settings.ts",
     "test:settings-ws": "tsx scripts/test-settings-ws.ts",
     "test:codex": "tsx scripts/test-codex.ts",
+    "test:codex-adoption": "tsx scripts/test-codex-adoption.ts",
+    "test:engine-rollouts": "tsx scripts/test-engine-rollouts.ts",
     "test:engine-adapters": "tsx scripts/test-engine-adapters.ts",
     "test:artifacts-dead": "tsx scripts/test-artifacts-dead.ts",
     "test:artifact-groups": "tsx scripts/test-artifact-groups.ts",

@@ -1058,6 +1058,7 @@ export function startServer(
     close: () =>
       new Promise((resolve) => {
         clearInterval(heartbeat);
+        bridge.close();
         unsubscribe();
         for (const client of wss.clients) client.terminate();
         wss.close(() => server.close(() => resolve()));
