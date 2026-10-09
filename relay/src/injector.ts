@@ -189,6 +189,81 @@ export function mapAppleError(stderr: string): string | undefined {
       : undefined;
 }
 
+// ---------- tmux 宿主支持（W-RB-FIX）：CLI 跑在 tmux pane 里时 Terminal.app 定位
+// 必然落空——CLI 的 tty 属于 tmux 的 pty，不属于任何 Terminal 标签页，osascript
+// 循环静默空转后 exit 0，relay 误报注入成功，消息永远进不了 CLI（2026-10-09
+// redbook 会话实测根因：终端面板 found=false，手机端注入全军覆没且无错误痕迹）。
+// 按 CLI 的 tty 在 tmux 全局 pane 表里匹配，命中即走 tmux send-keys / capture-pane：
+// pane 不存在时 tmux 明确报错 exit 1，不再有静默误报；顺带把屏幕快照（防抢发检测、
+// 终端转轮摘要）在 tmux 会话上激活。tmux 不在 PATH / CLI 不在 tmux 里 → null 回退
+// 原 Terminal 通道，测试假注入器（CCR_OSASCRIPT_CMD / CCR_INJECT_CMD）恒走原路径。
+
+function runTmux(args: string[], timeoutMs = 5000): Promise<{ ok: boolean; text: string; error?: string }> {
+  return new Promise((resolve) => {
+    const child = spawn("tmux", args);
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (c) => (out += c));
+    child.stderr?.on("data", (c) => (err += c));
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ ok: false, text: "", error: "timeout" });
+    }, timeoutMs);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve({ ok: false, text: "", error: e.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0, text: out, error: code === 0 ? undefined : (err.trim() || `exit ${code}`) });
+    });
+  });
+}
+
+// = 前缀精确匹配 session 名（防 "work" 吃掉 "work2" 的前缀歧义）是 tmux 3.1 引入；
+// 更老版本回退裸名（此时特殊字符 session 名有歧义风险，属可接受边界）
+let tmuxEqCache: boolean | null = null;
+function tmuxSupportsEqPrefix(): boolean {
+  if (tmuxEqCache !== null) return tmuxEqCache;
+  try {
+    const v = execFileSync("tmux", ["-V"], { encoding: "utf8", timeout: 3000 });
+    const m = /(\d+)\.(\d+)/.exec(v);
+    tmuxEqCache = !!m && (+m[1] > 3 || (+m[1] === 3 && +m[2] >= 1));
+  } catch {
+    tmuxEqCache = false;
+  }
+  return tmuxEqCache;
+}
+
+// CLI pid → tmux pane target（"session:win.pane"）；不在 tmux 里/探测失败返回 null
+async function resolveTmuxTarget(pid: number): Promise<string | null> {
+  if (process.platform !== "darwin" && process.platform !== "linux") return null;
+  // 测试假注入器显式走原通道结构断言，不碰 tmux
+  if (process.env.CCR_OSASCRIPT_CMD || process.env.CCR_INJECT_CMD) return null;
+  let tty = "";
+  try {
+    tty = execFileSync("ps", ["-o", "tty=", "-p", String(pid)], { encoding: "utf8", timeout: 3000 }).trim();
+  } catch {
+    return null;
+  }
+  if (!tty || tty === "?") return null;
+  try {
+    const r = await runTmux(["list-panes", "-a", "-F", "#{pane_tty}\t#{session_name}\t#{window_index}\t#{pane_index}"]);
+    if (!r.ok) return null;
+    for (const line of r.text.split(/\r?\n/)) {
+      const [ptty, s, w, p] = line.split("\t");
+      if (!ptty || !s || !w || !p) continue;
+      if (ptty.endsWith(tty)) return tmuxSupportsEqPrefix() ? `=${s}:${w}.${p}` : `${s}:${w}.${p}`;
+    }
+  } catch {}
+  return null;
+}
+
+async function tmuxSendKeys(target: string, ...keys: string[]): Promise<InjectResult> {
+  const r = await runTmux(["send-keys", "-t", target, ...keys]);
+  return r.ok ? { ok: true } : { ok: false, error: `tmux send-keys 失败: ${r.error}` };
+}
+
 function runAppleScript(script: string): Promise<InjectResult> {
   return new Promise((resolve) => {
     // CCR_OSASCRIPT_CMD：测试用假 osascript（node 脚本记录 argv）；生产恒为系统 osascript
@@ -308,6 +383,14 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
   if (!text) return { ok: false, error: "空消息" };
+  // tmux 宿主：send-keys -l 字面量整段写入（-- 分隔防正文以 - 开头被当 flag），
+  // 再单独补 Enter（-l 不自带回车，与 do script 语义对齐）
+  const target = await resolveTmuxTarget(pid);
+  if (target) {
+    const w = await tmuxSendKeys(target, "-l", "--", text);
+    if (!w.ok) return w;
+    return tmuxSendKeys(target, "Enter");
+  }
   // do script 单次整段注入（无 keystroke 的长度可靠性问题，不切分；自带 Return 提交）
   return runAppleScript(buildDoScript(pid, text));
 }
@@ -346,6 +429,9 @@ export async function injectEsc(pid: number): Promise<InjectResult> {
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    // tmux 宿主：Escape 键名直达 pane
+    const target = await resolveTmuxTarget(pid);
+    if (target) return tmuxSendKeys(target, "Escape");
     // do script 只能打"文本+Return"：ESC 用 ASCII 27 表达式注入，尾随 Return 对 claude
     // 是"打断后提交空输入"，实测无害
     return runAppleScript(buildDoScriptExpr(pid, "ASCII character 27"));
@@ -362,6 +448,9 @@ export async function injectEnter(pid: number): Promise<InjectResult> {
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    // tmux 宿主：单独补发 Enter
+    const target = await resolveTmuxTarget(pid);
+    if (target) return tmuxSendKeys(target, "Enter");
     return runAppleScript(buildDoScriptExpr(pid, '""'));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
@@ -430,13 +519,21 @@ function runAppleScriptOut(script: string): Promise<{ ok: boolean; text: string;
 }
 
 // 快照目标控制台可见区末尾 rows 行（默认 20，覆盖 CLI 输入框 + 状态行）。
-// Windows: inject.exe --peek 读屏幕缓冲写临时文件；macOS: Terminal contents。
+// Windows: inject.exe --peek 读屏幕缓冲写临时文件；macOS: Terminal contents
+// （tmux 宿主走 capture-pane——Terminal 定位在 tmux CLI 上必然落空，原路径
+// 恒返回 null 导致防抢发永久降级）。
 // 失败返回 null——#180 起调用方按 unknown 保守处理（暂缓重试、连续 3 轮放弃），
 // 绝不因快照不可用盲发回车。
 export async function captureConsoleBottom(pid: number, rows = 20): Promise<string[] | null> {
   if (!injectSupported()) return null;
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return null;
+    const target = await resolveTmuxTarget(pid);
+    if (target) {
+      const tm = await runTmux(["capture-pane", "-t", target, "-p"]);
+      if (!tm.ok || !tm.text.trim()) return null;
+      return tm.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
+    }
     const r = await runAppleScriptOut(buildCaptureScript(pid));
     if (!r.ok || !r.text.trim()) return null;
     return r.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);

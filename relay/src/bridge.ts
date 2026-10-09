@@ -1616,8 +1616,12 @@ export class Bridge {
         // 早已翻 WORKING）：翻 WORKING 让手机呼吸灯/工作状态随转录实时走。
         // ERROR 态同理——relay 重启会把无 pid 的外部会话误标 ERROR，没有 hook 事件
         // 就永远无自愈路径；转录在写 = CLI 活着。顺带清 historical：重启遗留的
-        // "仅可查看"标记在会话被证活后必须解除，否则设备端永远发不了消息
-        if (st0 && (st0.status === "DONE" || st0.status === "ERROR")) {
+        // "仅可查看"标记在会话被证活后必须解除，否则设备端永远发不了消息。
+        // hook 刚活过（≤15s 有事件到达）的 DONE 是回合正常收尾：Stop 置 DONE 后转录
+        // 还会补写 usage/metadata 尾行，此时增长不是"无 hook 会话"证据——不回标，
+        // 否则回合刚结束就被兜底文案回潮覆盖（2026-10-09 redbook 会话实测）
+        const hookRecent = Date.now() - (this.lastHookAt.get(id) ?? 0) < 15_000;
+        if (st0 && !hookRecent && (st0.status === "DONE" || st0.status === "ERROR")) {
           this.noHookIds.add(id);
           if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
           this.mgr.setExternalStatus(
