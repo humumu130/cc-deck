@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/tweetnacl/nacl-fast.js
+// relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,781 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// node_modules/better-sqlite3/lib/util.js
-var require_util = __commonJS({
-  "node_modules/better-sqlite3/lib/util.js"(exports) {
-    "use strict";
-    exports.getBooleanOption = (options, key) => {
-      let value = false;
-      if (key in options && typeof (value = options[key]) !== "boolean") {
-        throw new TypeError(`Expected the "${key}" option to be a boolean`);
-      }
-      return value;
-    };
-    exports.cppdb = /* @__PURE__ */ Symbol();
-    exports.inspect = /* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom");
-  }
-});
-
-// node_modules/better-sqlite3/lib/sqlite-error.js
-var require_sqlite_error = __commonJS({
-  "node_modules/better-sqlite3/lib/sqlite-error.js"(exports, module) {
-    "use strict";
-    var descriptor = { value: "SqliteError", writable: true, enumerable: false, configurable: true };
-    function SqliteError(message, code) {
-      if (new.target !== SqliteError) {
-        return new SqliteError(message, code);
-      }
-      if (typeof code !== "string") {
-        throw new TypeError("Expected second argument to be a string");
-      }
-      Error.call(this, message);
-      descriptor.value = "" + message;
-      Object.defineProperty(this, "message", descriptor);
-      Error.captureStackTrace(this, SqliteError);
-      this.code = code;
-    }
-    Object.setPrototypeOf(SqliteError, Error);
-    Object.setPrototypeOf(SqliteError.prototype, Error.prototype);
-    Object.defineProperty(SqliteError.prototype, "name", descriptor);
-    module.exports = SqliteError;
-  }
-});
-
-// node_modules/file-uri-to-path/index.js
-var require_file_uri_to_path = __commonJS({
-  "node_modules/file-uri-to-path/index.js"(exports, module) {
-    var sep9 = __require("path").sep || "/";
-    module.exports = fileUriToPath;
-    function fileUriToPath(uri) {
-      if ("string" != typeof uri || uri.length <= 7 || "file://" != uri.substring(0, 7)) {
-        throw new TypeError("must pass in a file:// URI to convert to a file path");
-      }
-      var rest = decodeURI(uri.substring(7));
-      var firstSlash = rest.indexOf("/");
-      var host = rest.substring(0, firstSlash);
-      var path6 = rest.substring(firstSlash + 1);
-      if ("localhost" == host) host = "";
-      if (host) {
-        host = sep9 + sep9 + host;
-      }
-      path6 = path6.replace(/^(.+)\|/, "$1:");
-      if (sep9 == "\\") {
-        path6 = path6.replace(/\//g, "\\");
-      }
-      if (/^.+\:/.test(path6)) {
-      } else {
-        path6 = sep9 + path6;
-      }
-      return host + path6;
-    }
-  }
-});
-
-// node_modules/bindings/bindings.js
-var require_bindings = __commonJS({
-  "node_modules/bindings/bindings.js"(exports, module) {
-    var fs = __require("fs");
-    var path6 = __require("path");
-    var fileURLToPath5 = require_file_uri_to_path();
-    var join32 = path6.join;
-    var dirname10 = path6.dirname;
-    var exists = fs.accessSync && function(path7) {
-      try {
-        fs.accessSync(path7);
-      } catch (e) {
-        return false;
-      }
-      return true;
-    } || fs.existsSync || path6.existsSync;
-    var defaults = {
-      arrow: process.env.NODE_BINDINGS_ARROW || " \u2192 ",
-      compiled: process.env.NODE_BINDINGS_COMPILED_DIR || "compiled",
-      platform: process.platform,
-      arch: process.arch,
-      nodePreGyp: "node-v" + process.versions.modules + "-" + process.platform + "-" + process.arch,
-      version: process.versions.node,
-      bindings: "bindings.node",
-      try: [
-        // node-gyp's linked version in the "build" dir
-        ["module_root", "build", "bindings"],
-        // node-waf and gyp_addon (a.k.a node-gyp)
-        ["module_root", "build", "Debug", "bindings"],
-        ["module_root", "build", "Release", "bindings"],
-        // Debug files, for development (legacy behavior, remove for node v0.9)
-        ["module_root", "out", "Debug", "bindings"],
-        ["module_root", "Debug", "bindings"],
-        // Release files, but manually compiled (legacy behavior, remove for node v0.9)
-        ["module_root", "out", "Release", "bindings"],
-        ["module_root", "Release", "bindings"],
-        // Legacy from node-waf, node <= 0.4.x
-        ["module_root", "build", "default", "bindings"],
-        // Production "Release" buildtype binary (meh...)
-        ["module_root", "compiled", "version", "platform", "arch", "bindings"],
-        // node-qbs builds
-        ["module_root", "addon-build", "release", "install-root", "bindings"],
-        ["module_root", "addon-build", "debug", "install-root", "bindings"],
-        ["module_root", "addon-build", "default", "install-root", "bindings"],
-        // node-pre-gyp path ./lib/binding/{node_abi}-{platform}-{arch}
-        ["module_root", "lib", "binding", "nodePreGyp", "bindings"]
-      ]
-    };
-    function bindings(opts) {
-      if (typeof opts == "string") {
-        opts = { bindings: opts };
-      } else if (!opts) {
-        opts = {};
-      }
-      Object.keys(defaults).map(function(i2) {
-        if (!(i2 in opts)) opts[i2] = defaults[i2];
-      });
-      if (!opts.module_root) {
-        opts.module_root = exports.getRoot(exports.getFileName());
-      }
-      if (path6.extname(opts.bindings) != ".node") {
-        opts.bindings += ".node";
-      }
-      var requireFunc = typeof __webpack_require__ === "function" ? __non_webpack_require__ : __require;
-      var tries = [], i = 0, l = opts.try.length, n, b, err;
-      for (; i < l; i++) {
-        n = join32.apply(
-          null,
-          opts.try[i].map(function(p) {
-            return opts[p] || p;
-          })
-        );
-        tries.push(n);
-        try {
-          b = opts.path ? requireFunc.resolve(n) : requireFunc(n);
-          if (!opts.path) {
-            b.path = n;
-          }
-          return b;
-        } catch (e) {
-          if (e.code !== "MODULE_NOT_FOUND" && e.code !== "QUALIFIED_PATH_RESOLUTION_FAILED" && !/not find/i.test(e.message)) {
-            throw e;
-          }
-        }
-      }
-      err = new Error(
-        "Could not locate the bindings file. Tried:\n" + tries.map(function(a) {
-          return opts.arrow + a;
-        }).join("\n")
-      );
-      err.tries = tries;
-      throw err;
-    }
-    module.exports = exports = bindings;
-    exports.getFileName = function getFileName(calling_file) {
-      var origPST = Error.prepareStackTrace, origSTL = Error.stackTraceLimit, dummy = {}, fileName;
-      Error.stackTraceLimit = 10;
-      Error.prepareStackTrace = function(e, st2) {
-        for (var i = 0, l = st2.length; i < l; i++) {
-          fileName = st2[i].getFileName();
-          if (fileName !== __filename) {
-            if (calling_file) {
-              if (fileName !== calling_file) {
-                return;
-              }
-            } else {
-              return;
-            }
-          }
-        }
-      };
-      Error.captureStackTrace(dummy);
-      dummy.stack;
-      Error.prepareStackTrace = origPST;
-      Error.stackTraceLimit = origSTL;
-      var fileSchema = "file://";
-      if (fileName.indexOf(fileSchema) === 0) {
-        fileName = fileURLToPath5(fileName);
-      }
-      return fileName;
-    };
-    exports.getRoot = function getRoot(file) {
-      var dir = dirname10(file), prev;
-      while (true) {
-        if (dir === ".") {
-          dir = process.cwd();
-        }
-        if (exists(join32(dir, "package.json")) || exists(join32(dir, "node_modules"))) {
-          return dir;
-        }
-        if (prev === dir) {
-          throw new Error(
-            'Could not find module root given file: "' + file + '". Do you have a `package.json` file? '
-          );
-        }
-        prev = dir;
-        dir = join32(dir, "..");
-      }
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/wrappers.js
-var require_wrappers = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/wrappers.js"(exports) {
-    "use strict";
-    var { cppdb } = require_util();
-    exports.prepare = function prepare(sql) {
-      return this[cppdb].prepare(sql, this, false);
-    };
-    exports.exec = function exec(sql) {
-      this[cppdb].exec(sql);
-      return this;
-    };
-    exports.close = function close() {
-      this[cppdb].close();
-      return this;
-    };
-    exports.loadExtension = function loadExtension(...args) {
-      this[cppdb].loadExtension(...args);
-      return this;
-    };
-    exports.defaultSafeIntegers = function defaultSafeIntegers(...args) {
-      this[cppdb].defaultSafeIntegers(...args);
-      return this;
-    };
-    exports.unsafeMode = function unsafeMode(...args) {
-      this[cppdb].unsafeMode(...args);
-      return this;
-    };
-    exports.getters = {
-      name: {
-        get: function name() {
-          return this[cppdb].name;
-        },
-        enumerable: true
-      },
-      open: {
-        get: function open3() {
-          return this[cppdb].open;
-        },
-        enumerable: true
-      },
-      inTransaction: {
-        get: function inTransaction() {
-          return this[cppdb].inTransaction;
-        },
-        enumerable: true
-      },
-      readonly: {
-        get: function readonly() {
-          return this[cppdb].readonly;
-        },
-        enumerable: true
-      },
-      memory: {
-        get: function memory() {
-          return this[cppdb].memory;
-        },
-        enumerable: true
-      }
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/transaction.js
-var require_transaction = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/transaction.js"(exports, module) {
-    "use strict";
-    var { cppdb } = require_util();
-    var controllers = /* @__PURE__ */ new WeakMap();
-    module.exports = function transaction(fn) {
-      if (typeof fn !== "function") throw new TypeError("Expected first argument to be a function");
-      const db2 = this[cppdb];
-      const controller = getController(db2, this);
-      const { apply } = Function.prototype;
-      const properties = {
-        default: { value: wrapTransaction(apply, fn, db2, controller.default) },
-        deferred: { value: wrapTransaction(apply, fn, db2, controller.deferred) },
-        immediate: { value: wrapTransaction(apply, fn, db2, controller.immediate) },
-        exclusive: { value: wrapTransaction(apply, fn, db2, controller.exclusive) },
-        database: { value: this, enumerable: true }
-      };
-      Object.defineProperties(properties.default.value, properties);
-      Object.defineProperties(properties.deferred.value, properties);
-      Object.defineProperties(properties.immediate.value, properties);
-      Object.defineProperties(properties.exclusive.value, properties);
-      return properties.default.value;
-    };
-    var getController = (db2, self2) => {
-      let controller = controllers.get(db2);
-      if (!controller) {
-        const shared = {
-          commit: db2.prepare("COMMIT", self2, false),
-          rollback: db2.prepare("ROLLBACK", self2, false),
-          savepoint: db2.prepare("SAVEPOINT `	_bs3.	`", self2, false),
-          release: db2.prepare("RELEASE `	_bs3.	`", self2, false),
-          rollbackTo: db2.prepare("ROLLBACK TO `	_bs3.	`", self2, false)
-        };
-        controllers.set(db2, controller = {
-          default: Object.assign({ begin: db2.prepare("BEGIN", self2, false) }, shared),
-          deferred: Object.assign({ begin: db2.prepare("BEGIN DEFERRED", self2, false) }, shared),
-          immediate: Object.assign({ begin: db2.prepare("BEGIN IMMEDIATE", self2, false) }, shared),
-          exclusive: Object.assign({ begin: db2.prepare("BEGIN EXCLUSIVE", self2, false) }, shared)
-        });
-      }
-      return controller;
-    };
-    var wrapTransaction = (apply, fn, db2, { begin, commit, rollback, savepoint, release, rollbackTo }) => function sqliteTransaction() {
-      let before, after, undo;
-      if (db2.inTransaction) {
-        before = savepoint;
-        after = release;
-        undo = rollbackTo;
-      } else {
-        before = begin;
-        after = commit;
-        undo = rollback;
-      }
-      before.run();
-      try {
-        const result = apply.call(fn, this, arguments);
-        if (result && typeof result.then === "function") {
-          throw new TypeError("Transaction function cannot return a promise");
-        }
-        after.run();
-        return result;
-      } catch (ex2) {
-        if (db2.inTransaction) {
-          undo.run();
-          if (undo !== rollback) after.run();
-        }
-        throw ex2;
-      }
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/pragma.js
-var require_pragma = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/pragma.js"(exports, module) {
-    "use strict";
-    var { getBooleanOption, cppdb } = require_util();
-    module.exports = function pragma(source, options) {
-      if (options == null) options = {};
-      if (typeof source !== "string") throw new TypeError("Expected first argument to be a string");
-      if (typeof options !== "object") throw new TypeError("Expected second argument to be an options object");
-      const simple = getBooleanOption(options, "simple");
-      const stmt = this[cppdb].prepare(`PRAGMA ${source}`, this, true);
-      return simple ? stmt.pluck().get() : stmt.all();
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/backup.js
-var require_backup = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/backup.js"(exports, module) {
-    "use strict";
-    var fs = __require("fs");
-    var path6 = __require("path");
-    var { promisify } = __require("util");
-    var { cppdb } = require_util();
-    var fsAccess = promisify(fs.access);
-    module.exports = async function backup(filename, options) {
-      if (options == null) options = {};
-      if (typeof filename !== "string") throw new TypeError("Expected first argument to be a string");
-      if (typeof options !== "object") throw new TypeError("Expected second argument to be an options object");
-      filename = filename.trim();
-      const attachedName = "attached" in options ? options.attached : "main";
-      const handler = "progress" in options ? options.progress : null;
-      if (!filename) throw new TypeError("Backup filename cannot be an empty string");
-      if (filename === ":memory:") throw new TypeError('Invalid backup filename ":memory:"');
-      if (typeof attachedName !== "string") throw new TypeError('Expected the "attached" option to be a string');
-      if (!attachedName) throw new TypeError('The "attached" option cannot be an empty string');
-      if (handler != null && typeof handler !== "function") throw new TypeError('Expected the "progress" option to be a function');
-      await fsAccess(path6.dirname(filename)).catch(() => {
-        throw new TypeError("Cannot save backup because the directory does not exist");
-      });
-      const isNewFile = await fsAccess(filename).then(() => false, () => true);
-      return runBackup(this[cppdb].backup(this, attachedName, filename, isNewFile), handler || null);
-    };
-    var runBackup = (backup, handler) => {
-      let rate = 0;
-      let useDefault = true;
-      return new Promise((resolve8, reject) => {
-        setImmediate(function step() {
-          try {
-            const progress = backup.transfer(rate);
-            if (!progress.remainingPages) {
-              backup.close();
-              resolve8(progress);
-              return;
-            }
-            if (useDefault) {
-              useDefault = false;
-              rate = 100;
-            }
-            if (handler) {
-              const ret = handler(progress);
-              if (ret !== void 0) {
-                if (typeof ret === "number" && ret === ret) rate = Math.max(0, Math.min(2147483647, Math.round(ret)));
-                else throw new TypeError("Expected progress callback to return a number or undefined");
-              }
-            }
-            setImmediate(step);
-          } catch (err) {
-            backup.close();
-            reject(err);
-          }
-        });
-      });
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/serialize.js
-var require_serialize = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/serialize.js"(exports, module) {
-    "use strict";
-    var { cppdb } = require_util();
-    module.exports = function serialize(options) {
-      if (options == null) options = {};
-      if (typeof options !== "object") throw new TypeError("Expected first argument to be an options object");
-      const attachedName = "attached" in options ? options.attached : "main";
-      if (typeof attachedName !== "string") throw new TypeError('Expected the "attached" option to be a string');
-      if (!attachedName) throw new TypeError('The "attached" option cannot be an empty string');
-      return this[cppdb].serialize(attachedName);
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/function.js
-var require_function = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/function.js"(exports, module) {
-    "use strict";
-    var { getBooleanOption, cppdb } = require_util();
-    module.exports = function defineFunction(name, options, fn) {
-      if (options == null) options = {};
-      if (typeof options === "function") {
-        fn = options;
-        options = {};
-      }
-      if (typeof name !== "string") throw new TypeError("Expected first argument to be a string");
-      if (typeof fn !== "function") throw new TypeError("Expected last argument to be a function");
-      if (typeof options !== "object") throw new TypeError("Expected second argument to be an options object");
-      if (!name) throw new TypeError("User-defined function name cannot be an empty string");
-      const safeIntegers = "safeIntegers" in options ? +getBooleanOption(options, "safeIntegers") : 2;
-      const deterministic = getBooleanOption(options, "deterministic");
-      const directOnly = getBooleanOption(options, "directOnly");
-      const varargs = getBooleanOption(options, "varargs");
-      let argCount = -1;
-      if (!varargs) {
-        argCount = fn.length;
-        if (!Number.isInteger(argCount) || argCount < 0) throw new TypeError("Expected function.length to be a positive integer");
-        if (argCount > 100) throw new RangeError("User-defined functions cannot have more than 100 arguments");
-      }
-      this[cppdb].function(fn, name, argCount, safeIntegers, deterministic, directOnly);
-      return this;
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/aggregate.js
-var require_aggregate = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/aggregate.js"(exports, module) {
-    "use strict";
-    var { getBooleanOption, cppdb } = require_util();
-    module.exports = function defineAggregate(name, options) {
-      if (typeof name !== "string") throw new TypeError("Expected first argument to be a string");
-      if (typeof options !== "object" || options === null) throw new TypeError("Expected second argument to be an options object");
-      if (!name) throw new TypeError("User-defined function name cannot be an empty string");
-      const start = "start" in options ? options.start : null;
-      const step = getFunctionOption(options, "step", true);
-      const inverse = getFunctionOption(options, "inverse", false);
-      const result = getFunctionOption(options, "result", false);
-      const safeIntegers = "safeIntegers" in options ? +getBooleanOption(options, "safeIntegers") : 2;
-      const deterministic = getBooleanOption(options, "deterministic");
-      const directOnly = getBooleanOption(options, "directOnly");
-      const varargs = getBooleanOption(options, "varargs");
-      let argCount = -1;
-      if (!varargs) {
-        argCount = Math.max(getLength(step), inverse ? getLength(inverse) : 0);
-        if (argCount > 0) argCount -= 1;
-        if (argCount > 100) throw new RangeError("User-defined functions cannot have more than 100 arguments");
-      }
-      this[cppdb].aggregate(start, step, inverse, result, name, argCount, safeIntegers, deterministic, directOnly);
-      return this;
-    };
-    var getFunctionOption = (options, key, required) => {
-      const value = key in options ? options[key] : null;
-      if (typeof value === "function") return value;
-      if (value != null) throw new TypeError(`Expected the "${key}" option to be a function`);
-      if (required) throw new TypeError(`Missing required option "${key}"`);
-      return null;
-    };
-    var getLength = ({ length }) => {
-      if (Number.isInteger(length) && length >= 0) return length;
-      throw new TypeError("Expected function.length to be a positive integer");
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/table.js
-var require_table = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/table.js"(exports, module) {
-    "use strict";
-    var { cppdb } = require_util();
-    module.exports = function defineTable(name, factory) {
-      if (typeof name !== "string") throw new TypeError("Expected first argument to be a string");
-      if (!name) throw new TypeError("Virtual table module name cannot be an empty string");
-      let eponymous = false;
-      if (typeof factory === "object" && factory !== null) {
-        eponymous = true;
-        factory = defer(parseTableDefinition(factory, "used", name));
-      } else {
-        if (typeof factory !== "function") throw new TypeError("Expected second argument to be a function or a table definition object");
-        factory = wrapFactory(factory);
-      }
-      this[cppdb].table(factory, name, eponymous);
-      return this;
-    };
-    function wrapFactory(factory) {
-      return function virtualTableFactory(moduleName, databaseName, tableName, ...args) {
-        const thisObject = {
-          module: moduleName,
-          database: databaseName,
-          table: tableName
-        };
-        const def = apply.call(factory, thisObject, args);
-        if (typeof def !== "object" || def === null) {
-          throw new TypeError(`Virtual table module "${moduleName}" did not return a table definition object`);
-        }
-        return parseTableDefinition(def, "returned", moduleName);
-      };
-    }
-    function parseTableDefinition(def, verb, moduleName) {
-      if (!hasOwnProperty.call(def, "rows")) {
-        throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition without a "rows" property`);
-      }
-      if (!hasOwnProperty.call(def, "columns")) {
-        throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition without a "columns" property`);
-      }
-      const rows = def.rows;
-      if (typeof rows !== "function" || Object.getPrototypeOf(rows) !== GeneratorFunctionPrototype) {
-        throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with an invalid "rows" property (should be a generator function)`);
-      }
-      let columns = def.columns;
-      if (!Array.isArray(columns) || !(columns = [...columns]).every((x) => typeof x === "string")) {
-        throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with an invalid "columns" property (should be an array of strings)`);
-      }
-      if (columns.length !== new Set(columns).size) {
-        throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with duplicate column names`);
-      }
-      if (!columns.length) {
-        throw new RangeError(`Virtual table module "${moduleName}" ${verb} a table definition with zero columns`);
-      }
-      let parameters;
-      if (hasOwnProperty.call(def, "parameters")) {
-        parameters = def.parameters;
-        if (!Array.isArray(parameters) || !(parameters = [...parameters]).every((x) => typeof x === "string")) {
-          throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with an invalid "parameters" property (should be an array of strings)`);
-        }
-      } else {
-        parameters = inferParameters(rows);
-      }
-      if (parameters.length !== new Set(parameters).size) {
-        throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with duplicate parameter names`);
-      }
-      if (parameters.length > 32) {
-        throw new RangeError(`Virtual table module "${moduleName}" ${verb} a table definition with more than the maximum number of 32 parameters`);
-      }
-      for (const parameter of parameters) {
-        if (columns.includes(parameter)) {
-          throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with column "${parameter}" which was ambiguously defined as both a column and parameter`);
-        }
-      }
-      let safeIntegers = 2;
-      if (hasOwnProperty.call(def, "safeIntegers")) {
-        const bool = def.safeIntegers;
-        if (typeof bool !== "boolean") {
-          throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with an invalid "safeIntegers" property (should be a boolean)`);
-        }
-        safeIntegers = +bool;
-      }
-      let directOnly = false;
-      if (hasOwnProperty.call(def, "directOnly")) {
-        directOnly = def.directOnly;
-        if (typeof directOnly !== "boolean") {
-          throw new TypeError(`Virtual table module "${moduleName}" ${verb} a table definition with an invalid "directOnly" property (should be a boolean)`);
-        }
-      }
-      const columnDefinitions = [
-        ...parameters.map(identifier).map((str2) => `${str2} HIDDEN`),
-        ...columns.map(identifier)
-      ];
-      return [
-        `CREATE TABLE x(${columnDefinitions.join(", ")});`,
-        wrapGenerator(rows, new Map(columns.map((x, i) => [x, parameters.length + i])), moduleName),
-        parameters,
-        safeIntegers,
-        directOnly
-      ];
-    }
-    function wrapGenerator(generator, columnMap, moduleName) {
-      return function* virtualTable(...args) {
-        const output = args.map((x) => Buffer.isBuffer(x) ? Buffer.from(x) : x);
-        for (let i = 0; i < columnMap.size; ++i) {
-          output.push(null);
-        }
-        for (const row of generator(...args)) {
-          if (Array.isArray(row)) {
-            extractRowArray(row, output, columnMap.size, moduleName);
-            yield output;
-          } else if (typeof row === "object" && row !== null) {
-            extractRowObject(row, output, columnMap, moduleName);
-            yield output;
-          } else {
-            throw new TypeError(`Virtual table module "${moduleName}" yielded something that isn't a valid row object`);
-          }
-        }
-      };
-    }
-    function extractRowArray(row, output, columnCount, moduleName) {
-      if (row.length !== columnCount) {
-        throw new TypeError(`Virtual table module "${moduleName}" yielded a row with an incorrect number of columns`);
-      }
-      const offset = output.length - columnCount;
-      for (let i = 0; i < columnCount; ++i) {
-        output[i + offset] = row[i];
-      }
-    }
-    function extractRowObject(row, output, columnMap, moduleName) {
-      let count = 0;
-      for (const key of Object.keys(row)) {
-        const index = columnMap.get(key);
-        if (index === void 0) {
-          throw new TypeError(`Virtual table module "${moduleName}" yielded a row with an undeclared column "${key}"`);
-        }
-        output[index] = row[key];
-        count += 1;
-      }
-      if (count !== columnMap.size) {
-        throw new TypeError(`Virtual table module "${moduleName}" yielded a row with missing columns`);
-      }
-    }
-    function inferParameters({ length }) {
-      if (!Number.isInteger(length) || length < 0) {
-        throw new TypeError("Expected function.length to be a positive integer");
-      }
-      const params = [];
-      for (let i = 0; i < length; ++i) {
-        params.push(`$${i + 1}`);
-      }
-      return params;
-    }
-    var { hasOwnProperty } = Object.prototype;
-    var { apply } = Function.prototype;
-    var GeneratorFunctionPrototype = Object.getPrototypeOf(function* () {
-    });
-    var identifier = (str2) => `"${str2.replace(/"/g, '""')}"`;
-    var defer = (x) => () => x;
-  }
-});
-
-// node_modules/better-sqlite3/lib/methods/inspect.js
-var require_inspect = __commonJS({
-  "node_modules/better-sqlite3/lib/methods/inspect.js"(exports, module) {
-    "use strict";
-    var DatabaseInspection = function Database2() {
-    };
-    module.exports = function inspect(depth, opts) {
-      return Object.assign(new DatabaseInspection(), this);
-    };
-  }
-});
-
-// node_modules/better-sqlite3/lib/database.js
-var require_database = __commonJS({
-  "node_modules/better-sqlite3/lib/database.js"(exports, module) {
-    "use strict";
-    var fs = __require("fs");
-    var path6 = __require("path");
-    var util = require_util();
-    var SqliteError = require_sqlite_error();
-    var DEFAULT_ADDON;
-    function Database2(filenameGiven, options) {
-      if (new.target == null) {
-        return new Database2(filenameGiven, options);
-      }
-      let buffer;
-      if (Buffer.isBuffer(filenameGiven)) {
-        buffer = filenameGiven;
-        filenameGiven = ":memory:";
-      }
-      if (filenameGiven == null) filenameGiven = "";
-      if (options == null) options = {};
-      if (typeof filenameGiven !== "string") throw new TypeError("Expected first argument to be a string");
-      if (typeof options !== "object") throw new TypeError("Expected second argument to be an options object");
-      if ("readOnly" in options) throw new TypeError('Misspelled option "readOnly" should be "readonly"');
-      if ("memory" in options) throw new TypeError('Option "memory" was removed in v7.0.0 (use ":memory:" filename instead)');
-      const filename = filenameGiven.trim();
-      const anonymous = filename === "" || filename === ":memory:";
-      const readonly = util.getBooleanOption(options, "readonly");
-      const fileMustExist = util.getBooleanOption(options, "fileMustExist");
-      const timeout = "timeout" in options ? options.timeout : 5e3;
-      const verbose = "verbose" in options ? options.verbose : null;
-      const nativeBinding = "nativeBinding" in options ? options.nativeBinding : null;
-      if (readonly && anonymous && !buffer) throw new TypeError("In-memory/temporary databases cannot be readonly");
-      if (!Number.isInteger(timeout) || timeout < 0) throw new TypeError('Expected the "timeout" option to be a positive integer');
-      if (timeout > 2147483647) throw new RangeError('Option "timeout" cannot be greater than 2147483647');
-      if (verbose != null && typeof verbose !== "function") throw new TypeError('Expected the "verbose" option to be a function');
-      if (nativeBinding != null && typeof nativeBinding !== "string" && typeof nativeBinding !== "object") throw new TypeError('Expected the "nativeBinding" option to be a string or addon object');
-      let addon;
-      if (nativeBinding == null) {
-        addon = DEFAULT_ADDON || (DEFAULT_ADDON = require_bindings()("better_sqlite3.node"));
-      } else if (typeof nativeBinding === "string") {
-        const requireFunc = typeof __non_webpack_require__ === "function" ? __non_webpack_require__ : __require;
-        addon = requireFunc(path6.resolve(nativeBinding).replace(/(\.node)?$/, ".node"));
-      } else {
-        addon = nativeBinding;
-      }
-      if (!addon.isInitialized) {
-        addon.setErrorConstructor(SqliteError);
-        addon.isInitialized = true;
-      }
-      if (!anonymous && !fs.existsSync(path6.dirname(filename))) {
-        throw new TypeError("Cannot open database because the directory does not exist");
-      }
-      Object.defineProperties(this, {
-        [util.cppdb]: { value: new addon.Database(filename, filenameGiven, anonymous, readonly, fileMustExist, timeout, verbose || null, buffer || null) },
-        ...wrappers.getters
-      });
-    }
-    var wrappers = require_wrappers();
-    Database2.prototype.prepare = wrappers.prepare;
-    Database2.prototype.transaction = require_transaction();
-    Database2.prototype.pragma = require_pragma();
-    Database2.prototype.backup = require_backup();
-    Database2.prototype.serialize = require_serialize();
-    Database2.prototype.function = require_function();
-    Database2.prototype.aggregate = require_aggregate();
-    Database2.prototype.table = require_table();
-    Database2.prototype.loadExtension = wrappers.loadExtension;
-    Database2.prototype.exec = wrappers.exec;
-    Database2.prototype.close = wrappers.close;
-    Database2.prototype.defaultSafeIntegers = wrappers.defaultSafeIntegers;
-    Database2.prototype.unsafeMode = wrappers.unsafeMode;
-    Database2.prototype[util.inspect] = require_inspect();
-    module.exports = Database2;
-  }
-});
-
-// node_modules/better-sqlite3/lib/index.js
-var require_lib = __commonJS({
-  "node_modules/better-sqlite3/lib/index.js"(exports, module) {
-    "use strict";
-    module.exports = require_database();
-    module.exports.SqliteError = require_sqlite_error();
-  }
-});
-
-// node_modules/ws/lib/constants.js
+// relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "node_modules/ws/lib/constants.js"(exports, module) {
+  "relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -3054,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/ws/lib/buffer-util.js
+// relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -3129,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// node_modules/ws/lib/limiter.js
+// relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "node_modules/ws/lib/limiter.js"(exports, module) {
+  "relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -3179,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// node_modules/ws/lib/permessage-deflate.js
+// relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -3562,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// node_modules/ws/lib/validation.js
+// relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "node_modules/ws/lib/validation.js"(exports, module) {
+  "relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -3763,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ws/lib/receiver.js
+// relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "node_modules/ws/lib/receiver.js"(exports, module) {
+  "relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -4386,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// node_modules/ws/lib/sender.js
+// relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "node_modules/ws/lib/sender.js"(exports, module) {
+  "relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4879,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// node_modules/ws/lib/event-target.js
+// relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "node_modules/ws/lib/event-target.js"(exports, module) {
+  "relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -5108,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// node_modules/ws/lib/extension.js
+// relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "node_modules/ws/lib/extension.js"(exports, module) {
+  "relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -5261,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket.js
+// relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "node_modules/ws/lib/websocket.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -6157,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// node_modules/ws/lib/stream.js
+// relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "node_modules/ws/lib/stream.js"(exports, module) {
+  "relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -6255,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// node_modules/ws/lib/subprotocol.js
+// relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -6300,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket-server.js
+// relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -6701,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -6713,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -6735,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6773,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num2, shift) {
       if (num2.length === void 0) {
@@ -6825,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6841,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -7065,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -7077,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -7326,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -7361,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/index.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -7681,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/lib/main.js
+// relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -7771,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7789,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/dns-txt.js
+// relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7832,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service-types.js
+// relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7887,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service.js
+// relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -8022,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/registry.js
+// relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -8169,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// node_modules/dns-packet/types.js
+// relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "node_modules/dns-packet/types.js"(exports) {
+  "relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -8365,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/dns-packet/rcodes.js
+// relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "node_modules/dns-packet/rcodes.js"(exports) {
+  "relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -8446,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/opcodes.js
+// relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "node_modules/dns-packet/opcodes.js"(exports) {
+  "relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -8527,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/classes.js
+// relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "node_modules/dns-packet/classes.js"(exports) {
+  "relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -8564,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/optioncodes.js
+// relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "node_modules/dns-packet/optioncodes.js"(exports) {
+  "relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -8658,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// node_modules/@leichtgewicht/ip-codec/index.cjs
+// relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8851,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// node_modules/dns-packet/index.js
+// relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "node_modules/dns-packet/index.js"(exports) {
+  "relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -10279,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// node_modules/thunky/index.js
+// relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "node_modules/thunky/index.js"(exports, module) {
+  "relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -10328,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// node_modules/multicast-dns/index.js
+// relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "node_modules/multicast-dns/index.js"(exports, module) {
+  "relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -10501,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/es6/index.js
+// relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -10557,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/mdns-server.js
+// relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10668,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -10694,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -10705,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -10727,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/browser.js
+// relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10926,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/bonjour.js
+// relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10981,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/index.js
+// relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -11047,10 +10275,10 @@ var require_dist = __commonJS({
   }
 });
 
-// src/index.ts
+// relay/src/index.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 
-// src/e2e.ts
+// relay/src/e2e.ts
 var import_tweetnacl = __toESM(require_nacl_fast(), 1);
 var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 function toB64(b) {
@@ -11108,20 +10336,20 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
   return JSON.parse(new TextDecoder().decode(opened));
 }
 
-// src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir16, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join31, sep as sep8 } from "node:path";
-import { writeFileSync as writeFileSync20, openSync as openSync4, readFileSync as readFileSync27, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
-import { spawn as spawn6, execFileSync as execFileSync2 } from "node:child_process";
+// relay/src/index.ts
+import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
+import { join as join34, sep as sep8 } from "node:path";
+import { writeFileSync as writeFileSync20, openSync as openSync5, readFileSync as readFileSync28, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync12, statSync as statSync11 } from "node:fs";
+import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
-// src/config.ts
+// relay/src/config.ts
 import { randomUUID } from "node:crypto";
 import { existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { isAbsolute, join as join2, resolve } from "node:path";
 import { homedir } from "node:os";
 
-// src/settings.ts
+// relay/src/settings.ts
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 var SETTINGS_FILE = "settings.json";
@@ -11186,7 +10414,7 @@ function resolveEmployeeHome(dataDir2, freshInstall) {
   };
 }
 
-// src/config.ts
+// relay/src/config.ts
 function parseEmployeeConfigDir(v, dataDir2) {
   const t = (v ?? "").trim();
   if (t === "auto") {
@@ -11257,7 +10485,7 @@ function loadConfig() {
   };
 }
 
-// src/lan-ip.ts
+// relay/src/lan-ip.ts
 import * as os from "node:os";
 var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
 var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
@@ -11285,11 +10513,11 @@ function detectLanIp(interfaces = os.networkInterfaces()) {
   return "";
 }
 
-// src/history.ts
+// relay/src/history.ts
 import { readFileSync as readFileSync3, writeFileSync as writeFileSync3, existsSync as existsSync3, mkdirSync as mkdirSync3, statSync, renameSync as renameSync2 } from "node:fs";
 import { dirname } from "node:path";
 
-// src/context-limit.ts
+// relay/src/context-limit.ts
 var CONTEXT_LIMIT_DEFAULT = 2e5;
 function envOverride() {
   const raw = process.env.CCR_CONTEXT_LIMIT;
@@ -11310,7 +10538,7 @@ function contextLimitOf(model) {
 }
 var REPLAY_CONTEXT_MAX = 15e5;
 
-// src/history.ts
+// relay/src/history.ts
 var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 300;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
@@ -11439,6 +10667,9 @@ function reduceHistory(events) {
         if (p.remote_mode !== void 0) s.remote_mode = p.remote_mode;
         if (p.title) s.title = p.title;
         if (p.title_locked) s.title_locked = true;
+        if (p.model) s.model = p.model;
+        if (p.engine) s.engine = p.engine;
+        if (p.provider) s.engine_provider = p.provider;
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         if (p.usage) s.usage = p.usage;
         const cu = p.context_usage;
@@ -11491,7 +10722,8 @@ function reduceHistory(events) {
           full: p.full,
           id: p.id,
           detail: p.detail,
-          diff: p.diff
+          diff: p.diff,
+          occurred_at: p.occurred_at
         };
         const li = p.id ? rs2.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs2.logs[li] = entry;
@@ -11553,7 +10785,7 @@ function deriveTitle(prompt) {
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
 }
 
-// src/event-bus.ts
+// relay/src/event-bus.ts
 var EventBus = class {
   constructor(opts = {}) {
     this.opts = opts;
@@ -11627,13 +10859,13 @@ var EventBus = class {
   }
 };
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { appendFileSync as appendFileSync2, existsSync as existsSync18, mkdirSync as mkdirSync14, readFileSync as readFileSync20, realpathSync as realpathSync3, statSync as statSync7, writeFileSync as writeFileSync14 } from "node:fs";
-import { homedir as homedir9 } from "node:os";
-import { isAbsolute as isAbsolute6, join as join25, resolve as resolve7, sep as sep6 } from "node:path";
+import { appendFileSync as appendFileSync2, existsSync as existsSync19, mkdirSync as mkdirSync14, readFileSync as readFileSync22, realpathSync as realpathSync3, statSync as statSync7, writeFileSync as writeFileSync14 } from "node:fs";
+import { homedir as homedir12 } from "node:os";
+import { isAbsolute as isAbsolute7, join as join28, resolve as resolve8, sep as sep6 } from "node:path";
 
-// src/artifacts.ts
+// relay/src/artifacts.ts
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync as readFileSync4, realpathSync } from "node:fs";
 import { dirname as dirname2, extname, join as join3, normalize, relative, resolve as resolve2, sep } from "node:path";
 import { homedir as homedir2 } from "node:os";
@@ -11772,21 +11004,43 @@ function serveArtifact(name, res) {
   }
 }
 
-// src/org.ts
+// relay/src/org.ts
 import { readFileSync as readFileSync9, writeFileSync as writeFileSync5, existsSync as existsSync11, mkdirSync as mkdirSync6, rmSync, chmodSync } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { dirname as dirname3, join as join11 } from "node:path";
 
-// src/storage/read-mode.ts
+// relay/src/storage/read-mode.ts
 import { existsSync as existsSync10, mkdirSync as mkdirSync5, readFileSync as readFileSync8, readdirSync as readdirSync5, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 import { basename as basename2, join as join10 } from "node:path";
 
-// src/storage/sqlite.ts
-var import_better_sqlite3 = __toESM(require_lib(), 1);
+// relay/src/storage/sqlite.ts
 import { mkdirSync as mkdirSync4 } from "node:fs";
 import { join as join4 } from "node:path";
+import { createRequire } from "node:module";
 var DEFAULT_DB_FILENAME = "cc-deck.sqlite3";
+var requireCjs = createRequire(import.meta.url);
+var driverCache;
+var driverOverride;
+function loadSqliteDriver() {
+  if (driverOverride !== void 0) return driverOverride;
+  if (driverCache !== void 0) return driverCache;
+  try {
+    const mod = requireCjs("better-sqlite3");
+    const ctor = typeof mod === "function" ? mod : mod.default;
+    if (typeof ctor !== "function") {
+      driverCache = { ok: false, ctor: null, error: "better-sqlite3 \u5BFC\u51FA\u5F62\u6001\u5F02\u5E38\uFF08\u975E\u6784\u9020\u51FD\u6570\uFF09", code: null };
+    } else {
+      const throwaway = new ctor(":memory:");
+      throwaway.close();
+      driverCache = { ok: true, ctor, error: null, code: null };
+    }
+  } catch (err) {
+    const code = err.code ?? null;
+    driverCache = { ok: false, ctor: null, error: err instanceof Error ? err.message : String(err), code };
+  }
+  return driverCache;
+}
 var SqliteStorage = class {
   constructor(dir, filename) {
     this.dir = dir;
@@ -11804,8 +11058,12 @@ var SqliteStorage = class {
   }
   open() {
     if (this._open) throw new Error(`StoragePort.open: \u5DF2\u6253\u5F00\uFF08${this._path}\uFF09\u2014\u2014\u91CD\u590D open \u5C5E\u7F16\u7A0B\u9519\u8BEF`);
+    const driver = loadSqliteDriver();
+    if (!driver.ok || driver.ctor === null) {
+      throw new Error(`StoragePort.open: better-sqlite3 \u4E0D\u53EF\u7528\uFF08${driver.code ?? "\u65E0\u9519\u8BEF\u7801"}\uFF1A${driver.error}\uFF09\u2014\u2014\u539F\u751F\u4E8C\u8FDB\u5236\u7F3A\u5931\u6216\u5E73\u53F0\u4E0D\u5339\u914D\uFF0C\u8BFB\u9762\u5E94\u964D\u7EA7 json \u6863`);
+    }
     mkdirSync4(this.dir, { recursive: true });
-    this.db = new import_better_sqlite3.default(this._path);
+    this.db = new driver.ctor(this._path);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("synchronous = NORMAL");
@@ -11849,7 +11107,7 @@ function createSqlitePort(options) {
   return new SqliteStorage(options.dataDir, options.filename ?? DEFAULT_DB_FILENAME);
 }
 
-// src/storage/migrator.ts
+// relay/src/storage/migrator.ts
 function currentVersion(port) {
   const row = port.query("PRAGMA user_version")[0];
   const v = row?.user_version;
@@ -11889,7 +11147,7 @@ function runMigrations(port, migrations2) {
   return { from, to: currentVersion(port), applied };
 }
 
-// src/storage/checkpoint.ts
+// relay/src/storage/checkpoint.ts
 function writeCheckpoint(port, key) {
   if (!Number.isInteger(key.offset) || key.offset < 0 || key.offset > key.lineCount) {
     throw new Error(`checkpoint.writeCheckpoint: offset(${key.offset}) \u8D8A\u754C [0, lineCount(${key.lineCount})]\u2014\u2014\u7F16\u7A0B\u9519\u8BEF`);
@@ -11922,24 +11180,34 @@ function readCheckpoint(port, path6, current) {
   return checkpoint;
 }
 
-// src/storage/import-util.ts
+// relay/src/storage/import-util.ts
 import { createHash } from "node:crypto";
 import { readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
 function sha12(s) {
   return createHash("sha1").update(s).digest("hex").slice(0, 12);
 }
+var OBS_MEMO = /* @__PURE__ */ new Map();
+var SIZE_MEMO_MAX_BYTES = 2 * 1024 * 1024;
 function statThenRead(file) {
-  const mtimeMs = Math.round(statSync2(file).mtimeMs);
+  const st2 = statSync2(file);
+  const mtimeMs = Math.round(st2.mtimeMs);
+  const mtimeNs = statSync2(file, { bigint: true }).mtimeNs.toString();
+  const hit = OBS_MEMO.get(file);
+  if (hit !== void 0 && hit.mtimeNs === mtimeNs && hit.size === st2.size) {
+    return { mtimeMs, text: hit.text };
+  }
   const text = readFileSync5(file, "utf8");
+  if (st2.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st2.size, text });
+  else OBS_MEMO.delete(file);
   return { mtimeMs, text };
 }
 
-// src/storage/import-org.ts
+// relay/src/storage/import-org.ts
 import { createHash as createHash2 } from "node:crypto";
 import { existsSync as existsSync4 } from "node:fs";
 import { join as join5 } from "node:path";
 
-// src/storage/loss-report.ts
+// relay/src/storage/loss-report.ts
 var EXCERPT_MAX = 512;
 function appendLoss(port, record) {
   const excerpt = record.excerpt.length > EXCERPT_MAX ? `${record.excerpt.slice(0, EXCERPT_MAX - 1)}\u2026` : record.excerpt;
@@ -11948,24 +11216,8 @@ function appendLoss(port, record) {
     [record.sourcePath, record.lineNo, record.reason, excerpt, Date.now()]
   );
 }
-function listLoss(port, sourcePath) {
-  const rows = sourcePath === void 0 ? port.query(
-    "SELECT id, source_path, line_no, reason, excerpt, created_at FROM import_loss ORDER BY id"
-  ) : port.query(
-    "SELECT id, source_path, line_no, reason, excerpt, created_at FROM import_loss WHERE source_path = ? ORDER BY id",
-    [sourcePath]
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    sourcePath: r.source_path,
-    lineNo: r.line_no,
-    reason: r.reason,
-    excerpt: r.excerpt,
-    createdAt: r.created_at
-  }));
-}
 
-// src/storage/import-org.ts
+// relay/src/storage/import-org.ts
 var ORG_IMPORT_SCHEMA_VERSION = 1;
 var GROUP_STATUS = /* @__PURE__ */ new Set(["pending", "active", "parked", "archived"]);
 var GROUP_TIER = /* @__PURE__ */ new Set(["\u8F7B\u7ACB\u9879", "\u6B63\u7ECF\u7ACB\u9879"]);
@@ -11998,7 +11250,7 @@ function importOrg(port, orgDir2, opts) {
   const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
   if (allValid) {
-    return { skipped: true, counts: countAll(port), loss: listLoss(port).filter((l) => sources.some((s) => s.file === l.sourcePath)).length, rescanned: [] };
+    return { skipped: true, counts: countAll(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
   }
   const losses = [];
   const groups = [];
@@ -12108,7 +11360,7 @@ function importOrg(port, orgDir2, opts) {
   }
   const memberByIdentity = /* @__PURE__ */ new Map();
   for (const h of headcountRefs) {
-    const identity = `${orgDir2}@${h.role}@${h.engine}`;
+    const identity = `${orgDir2}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
     const id2 = `mem-${sha12(identity)}`;
     const seen = memberByIdentity.get(identity);
     if (seen) {
@@ -12223,15 +11475,20 @@ function importOrg(port, orgDir2, opts) {
         ]
       );
     }
+    const seenRef = /* @__PURE__ */ new Set();
     for (const h of headcountRefs) {
       if (!validGroupIds.has(h.gid)) {
         losses.push({ source: projectsSrc, lineNo: groupLineNo.get(h.gid) ?? 0, reason: "dangling-ref", excerpt: JSON.stringify({ gid: h.gid, role: h.role, engine: h.engine }).slice(0, 200) });
         continue;
       }
-      const identity = `${orgDir2}@${h.role}@${h.engine}`;
+      const identity = `${orgDir2}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
+      const memId = `mem-${sha12(identity)}`;
+      const gmKey = `${h.gid}@${memId}`;
+      if (seenRef.has(gmKey)) continue;
+      seenRef.add(gmKey);
       port.exec(
         "INSERT INTO group_member (group_id, member_id, command_role, task_participation, joined_at, retired_at, archive_json) VALUES (?, ?, ?, NULL, ?, NULL, '{}')",
-        [h.gid, `mem-${sha12(identity)}`, h.role, h.groupCreatedAt]
+        [h.gid, memId, h.role, h.groupCreatedAt]
       );
     }
     for (const c of confirms) {
@@ -12250,7 +11507,7 @@ function importOrg(port, orgDir2, opts) {
   return { skipped: false, counts: countAll(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
 }
 
-// src/storage/import-notification.ts
+// relay/src/storage/import-notification.ts
 import { existsSync as existsSync5 } from "node:fs";
 import { join as join6 } from "node:path";
 var NOTIFICATION_IMPORT_SCHEMA_VERSION = 1;
@@ -12280,7 +11537,7 @@ function importNotifications(port, dataDir2, opts) {
   const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
   if (allValid) {
-    return { skipped: true, counts: countAll2(port), loss: listLoss(port).filter((l) => sources.some((s) => s.file === l.sourcePath)).length, rescanned: [] };
+    return { skipped: true, counts: countAll2(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
   }
   const losses = [];
   const byKey = /* @__PURE__ */ new Map();
@@ -12441,7 +11698,7 @@ function importNotifications(port, dataDir2, opts) {
   return { skipped: false, counts: countAll2(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
 }
 
-// src/storage/import-session-task.ts
+// relay/src/storage/import-session-task.ts
 import { existsSync as existsSync6, readdirSync as readdirSync2, readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
 import { join as join7 } from "node:path";
 var SESSION_TASK_IMPORT_SCHEMA_VERSION = 1;
@@ -12845,7 +12102,7 @@ function importSessionTask(port, sources, opts) {
   };
 }
 
-// src/storage/import-acceptance.ts
+// relay/src/storage/import-acceptance.ts
 import { existsSync as existsSync7, readdirSync as readdirSync3 } from "node:fs";
 import { basename, join as join8 } from "node:path";
 var ACCEPTANCE_IMPORT_SCHEMA_VERSION = 1;
@@ -12915,7 +12172,7 @@ function importAcceptance(port, acceptanceDir2, opts) {
   const obs = observeAcceptanceDir2(acceptanceDir2);
   const cp2 = readCheckpoint(port, acceptanceDir2, { mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, schemaVersion });
   if (cp2 !== null) {
-    const n = (sql) => port.query(sql)[0]?.n ?? -1;
+    const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
     return {
       skipped: true,
       counts: {
@@ -12923,7 +12180,8 @@ function importAcceptance(port, acceptanceDir2, opts) {
         item: n("SELECT COUNT(*) AS n FROM acceptance_item"),
         result: n("SELECT COUNT(*) AS n FROM acceptance_result")
       },
-      loss: listLoss(port, acceptanceDir2).length,
+      loss: n("SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ?", acceptanceDir2),
+      // COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）
       rescanned: []
     };
   }
@@ -13096,7 +12354,7 @@ function importAcceptance(port, acceptanceDir2, opts) {
   };
 }
 
-// src/storage/import-artifact.ts
+// relay/src/storage/import-artifact.ts
 import { createHash as createHash3 } from "node:crypto";
 import { existsSync as existsSync8 } from "node:fs";
 import { normalize as normalize2 } from "node:path";
@@ -13212,7 +12470,9 @@ function importArtifacts(port, sources, opts) {
     return {
       skipped: true,
       counts: { artifact: port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: 0 },
-      loss: listLoss(port).filter((l) => sourceKeys.includes(l.sourcePath)).length,
+      // loss 计数走 COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）；
+      // allValid 已保证 sourceKeys 非空（上方 observed.length > 0），IN 占位动态拼安全
+      loss: port.query(`SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(", ")})`, sourceKeys)[0]?.n ?? 0,
       rescanned: []
     };
   }
@@ -13297,7 +12557,7 @@ function importArtifacts(port, sources, opts) {
   };
 }
 
-// src/storage/import-dispatch-lesson.ts
+// relay/src/storage/import-dispatch-lesson.ts
 import { existsSync as existsSync9, readdirSync as readdirSync4, readFileSync as readFileSync7, statSync as statSync4 } from "node:fs";
 import { join as join9 } from "node:path";
 var DISPATCH_LESSON_IMPORT_SCHEMA_VERSION = 1;
@@ -13621,7 +12881,7 @@ function importDispatchLesson(port, sources, opts) {
   };
 }
 
-// src/storage/schema.ts
+// relay/src/storage/schema.ts
 var BASELINE_15_TABLES_DDL = `
 CREATE TABLE project (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, dir_fingerprint TEXT NOT NULL UNIQUE,
@@ -13746,6 +13006,19 @@ CREATE TABLE import_loss (
   created_at INTEGER NOT NULL
 );
 `;
+var PERMISSION_AUDIT_DDL = `
+CREATE TABLE permission_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requested_mode TEXT, normalized_mode TEXT,
+  effective_mode TEXT NOT NULL, native_mode TEXT,
+  capability_state TEXT, engine TEXT,
+  reason TEXT NOT NULL, policy_source TEXT,
+  environment TEXT, dir_scope TEXT,
+  tier TEXT, actor TEXT, session_id TEXT, command_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_permission_audit_created ON permission_audit(created_at);
+`;
 var migrations = [
   {
     version: 1,
@@ -13756,17 +13029,22 @@ var migrations = [
     version: 2,
     name: "import-ledger",
     up: (p) => p.exec(IMPORT_LEDGER_DDL)
+  },
+  {
+    version: 3,
+    name: "permission-audit",
+    up: (p) => p.exec(PERMISSION_AUDIT_DDL)
   }
 ];
 
-// src/storage/read-mode.ts
+// relay/src/storage/read-mode.ts
 var READ_MODE_ENV = "CCR_STORAGE_READ_MODE";
 var READ_MODES = ["json", "sqlite", "shadow"];
 var SHADOW_DIFF_FILE = "shadow-diff.ndjson";
 var SHADOW_DIFF_COOLDOWN_MS = 2e3;
 var MAX_DIFF_ROWS_PER_DOMAIN = 200;
 function resolveReadMode(raw) {
-  if (raw === void 0 || raw === null || raw.trim() === "") return "json";
+  if (raw === void 0 || raw === null || raw.trim() === "") return "sqlite";
   const v = raw.trim();
   if (READ_MODES.includes(v)) return v;
   throw new Error(`[read-mode] \u65E0\u6548 ${READ_MODE_ENV}="${raw}"\uFF08\u6709\u6548\u503C\uFF1A${READ_MODES.join("/")}\uFF09\u2014\u2014boot fail-fast\uFF0C\u4E0D\u9759\u9ED8\u56DE\u9000`);
@@ -13782,10 +13060,28 @@ function resolveDirs(override) {
     tasksDir: override?.tasksDir ?? join10(dataDir2, "tasks")
   };
 }
+var degradationNotified = false;
+function warnSqliteDegradedOnce(reason, code, context) {
+  if (degradationNotified) return;
+  degradationNotified = true;
+  console.error(`[read-mode] \u26A0\uFE0F  sqlite \u4E0D\u53EF\u7528\uFF0C\u5DF2\u964D\u7EA7 json \u6863\uFF08${context}\uFF1B\u9519\u8BEF\u7801 ${code ?? "\u65E0"}\uFF1B\u5E73\u53F0 ${process.platform}-${process.arch}\uFF09`);
+  console.error(`[read-mode] \u26A0\uFE0F  \u539F\u56E0: ${reason}`);
+  console.error(`[read-mode] \u8BFB\u9762\u884C\u4E3A\u540C CCR_STORAGE_READ_MODE=json\uFF0Crelay \u7EE7\u7EED\u542F\u52A8\uFF088787 \u7167\u5E38\u76D1\u542C\uFF09\u2014\u2014\u4FEE\u590D\u539F\u751F\u4E8C\u8FDB\u5236\u540E\u81EA\u52A8\u6062\u590D sqlite \u6863`);
+}
+function probeSqliteDriverAtBoot() {
+  const mode = currentReadMode();
+  if (mode === "json") return;
+  const driver = loadSqliteDriver();
+  if (driver.ok) return;
+  warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `boot \u63A2\u6D4B\uFF1A\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u9A71\u52A8\u52A0\u8F7D\u5931\u8D25`);
+}
 var portCache = /* @__PURE__ */ new Map();
 function ensureStore(dirs) {
   const cached2 = portCache.get(dirs.dataDir);
-  if (cached2) return cached2;
+  if (cached2) {
+    importAllForShadow(cached2, dirs);
+    return cached2;
+  }
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
@@ -14008,9 +13304,26 @@ function compareDomain(domain, port, dirs) {
       return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
     }
     case "notification": {
-      const jCount = countNdjsonLines(join10(dirs.dataDir, "notifications.ndjson")) + countNdjsonLines(join10(dirs.dataDir, "decision-ledger.ndjson"));
-      const sCount = port.query("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
       const now = Date.now();
+      const keys = /* @__PURE__ */ new Set();
+      const addValidKeys = (arr) => {
+        for (const raw of arr) {
+          const x = raw;
+          if (typeof x.key === "string" && x.key && typeof x.kind === "string" && typeof x.created_at === "number") keys.add(x.key);
+        }
+      };
+      try {
+        const pf = JSON.parse(readFileSync8(join10(dirs.dataDir, "notifications.json"), "utf-8"));
+        if (Array.isArray(pf.notifications)) addValidKeys(pf.notifications);
+      } catch {
+      }
+      try {
+        const lf = JSON.parse(readFileSync8(join10(dirs.dataDir, "decision-notifications.json"), "utf-8"));
+        if (Array.isArray(lf)) addValidKeys(lf);
+      } catch {
+      }
+      const jCount = keys.size;
+      const sCount = port.query("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
       return jCount !== sCount ? [{ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount }] : [];
     }
     case "acceptance": {
@@ -14126,8 +13439,19 @@ var shadowCooldown = /* @__PURE__ */ new Map();
 function viaReadMode(domain, io2) {
   const mode = currentReadMode();
   if (mode === "json") return io2.json();
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain} \u89E6\u53D1`);
+    return io2.json();
+  }
   const dirs = resolveDirs(io2.dirs);
-  const port = ensureStore(dirs);
+  let port;
+  try {
+    port = ensureStore(dirs);
+  } catch (err) {
+    warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain}\uFF0Csqlite \u5EFA\u5E93/\u8FC1\u79FB\u5931\u8D25`);
+    return io2.json();
+  }
   if (mode === "sqlite") return io2.sqlite(port);
   const jsonVal = io2.json();
   const now = Date.now();
@@ -14187,7 +13511,7 @@ function diffProjection(domain, jsonVal, sqliteVal) {
   return rows;
 }
 
-// src/org.ts
+// relay/src/org.ts
 var COMMAND_CAPABILITY_MATRIX = {
   owner: ["org:write", "profile:write", "artifact:read"],
   operator: ["org:write", "profile:write", "artifact:read"],
@@ -14563,12 +13887,12 @@ function ensureOrgCli() {
   }
 }
 
-// src/projects.ts
-import { existsSync as existsSync13, mkdirSync as mkdirSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync7 } from "node:fs";
+// relay/src/projects.ts
+import { copyFileSync, existsSync as existsSync13, mkdirSync as mkdirSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync7 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { isAbsolute as isAbsolute2, join as join13 } from "node:path";
 
-// src/routing.ts
+// relay/src/routing.ts
 import { existsSync as existsSync12, mkdirSync as mkdirSync7, readFileSync as readFileSync10, writeFileSync as writeFileSync6 } from "node:fs";
 import { join as join12 } from "node:path";
 function routingPath(dir) {
@@ -14634,7 +13958,8 @@ function tagRouting(gid, sessionId, tags, dir) {
   return { ok: true, entry: e };
 }
 
-// src/projects.ts
+// relay/src/projects.ts
+var BOARD_ENTRY_STATUSES = ["backlog", "claimed", "submitted", "ready_to_install", "done"];
 function projectsFilePath(dir) {
   return join13(dir ?? orgDir(), "projects.json");
 }
@@ -14732,6 +14057,7 @@ function createGroup(input, dir) {
     tier: input.tier,
     headcount: input.headcount ?? [],
     ...input.role_defaults ? { role_defaults: input.role_defaults } : {},
+    ...input.mixed_engine === true ? { mixed_engine: true } : {},
     single_card: input.tier === "\u8F7B\u7ACB\u9879",
     created_at: now,
     updated_at: now
@@ -14763,7 +14089,7 @@ function handleOrgActionCreate(payload, dir) {
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir \u5FC5\u586B" };
   if (!isAbsolute2(anchor)) return { ok: false, error: "anchor_dir \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
   if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
-  return createGroup({ name, anchor_dir: anchor, tier }, dir);
+  return createGroup({ name, anchor_dir: anchor, tier, ...raw.mixed_engine === true ? { mixed_engine: true } : {} }, dir);
 }
 var adaptOrgAction = handleOrgActionCreate;
 function setGroupStatus(id2, to2, note, dir) {
@@ -14833,19 +14159,46 @@ function removeMember(gid, sessionId, dir) {
   if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
   return { ok: true, group: g2 };
 }
+function migrateBoardStatuses(gid, board, dir) {
+  let moved = 0;
+  for (const e of board.entries) {
+    const st2 = e.status;
+    if (st2 === "todo") {
+      e.status = "backlog";
+      moved++;
+    } else if (st2 === "doing") {
+      e.status = "claimed";
+      moved++;
+    }
+  }
+  if (moved === 0) return board;
+  try {
+    const p = boardFilePath(gid, dir);
+    if (existsSync13(p)) copyFileSync(p, `${p}.pre-d18.json`);
+    saveBoardFile(board, dir);
+  } catch {
+  }
+  return board;
+}
 function loadBoardFile(gid, dir) {
   try {
     const raw = JSON.parse(readFileSync11(boardFilePath(gid, dir), "utf-8"));
-    return {
+    return migrateBoardStatuses(gid, {
       gid,
       entries: Array.isArray(raw.entries) ? raw.entries : [],
       ...Array.isArray(raw.lessons) ? { lessons: raw.lessons } : {},
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0
-    };
-  } catch {
-    return { gid, entries: [], frozen: false, updated_at: 0 };
+    }, dir);
+  } catch (e) {
+    if (e.code === "ENOENT") {
+      return { gid, entries: [], frozen: false, updated_at: 0 };
+    }
+    return null;
   }
+}
+function loadBoardOrEmpty(gid, dir) {
+  return loadBoardFile(gid, dir) ?? { gid, entries: [], frozen: false, updated_at: 0 };
 }
 function saveBoardFile(b, dir) {
   try {
@@ -14859,22 +14212,33 @@ function saveBoardFile(b, dir) {
   }
 }
 function loadBoard(gid, dir) {
-  return loadBoardFile(gid, dir);
+  return loadBoardOrEmpty(gid, dir);
 }
 function writableBoard(gid, dir) {
   const g2 = listGroups(dir).find((x) => x.id === gid);
   if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
   if (g2.status !== "active") return { ok: false, error: `\u4EFB\u52A1\u677F\u5DF2\u51BB\u7ED3\uFF08\u9879\u76EE\u7EC4 ${g2.status}\uFF09\uFF0C\u6062\u590D\u5728\u529E\u540E\u53EF\u5199` };
-  const b = loadBoardFile(gid, dir);
+  const b = loadBoardOrEmpty(gid, dir);
   if (b.frozen) return { ok: false, error: "\u4EFB\u52A1\u677F\u5DF2\u51BB\u7ED3\uFF08frozen \u6807\u8BB0\uFF09" };
   return { ok: true, board: b };
 }
 function freezeBoard(gid, frozen, dir) {
-  const b = loadBoardFile(gid, dir);
+  const b = loadBoardOrEmpty(gid, dir);
   if (b.frozen === frozen) return;
   b.frozen = frozen;
   b.updated_at = Date.now();
   saveBoardFile(b, dir);
+}
+function resolveStatusTransition(e, to2, rrInput) {
+  if (to2 === "submitted") {
+    if (e.review_required === true || rrInput === true) return { ok: true, status: "submitted", review_required: true };
+    return { ok: false, error: "submitted \u4EC5\u7531\u5B8C\u6210\u5019\u9009\u4E14 review_required=1 \u751F\u6210\uFF08\u5148\u4E3A\u5361\u8BBE review_required\uFF09" };
+  }
+  if (to2 === "done") {
+    if (e.status !== "submitted" && rrInput === true) return { ok: true, status: "submitted", review_required: true };
+    return { ok: true, status: "done", review_required: false };
+  }
+  return { ok: true, status: to2 };
 }
 function upsertBoardEntry(gid, entry, dir) {
   const w2 = writableBoard(gid, dir);
@@ -14884,7 +14248,16 @@ function upsertBoardEntry(gid, entry, dir) {
   let e = entry.id ? w2.board.entries.find((x) => x.id === entry.id) : void 0;
   if (e) {
     e.text = entry.text;
-    if (entry.status) e.status = entry.status;
+    if (entry.status) {
+      const t = resolveStatusTransition(e, entry.status, entry.review_required);
+      if (!t.ok) return { ok: false, error: t.error };
+      e.status = t.status;
+      if (t.review_required === true) e.review_required = true;
+      else if (t.review_required === false) delete e.review_required;
+    } else if (entry.review_required !== void 0) {
+      if (entry.review_required) e.review_required = true;
+      else delete e.review_required;
+    }
     if (entry.owner_session !== void 0) e.owner_session = entry.owner_session;
     if (entry.dispatch_id !== void 0) e.dispatch_id = entry.dispatch_id;
     if (entry.note !== void 0) e.note = entry.note;
@@ -14898,15 +14271,18 @@ function upsertBoardEntry(gid, entry, dir) {
     }
     e.updated_at = now;
   } else {
+    const t = resolveStatusTransition({ status: "backlog" }, entry.status ?? "backlog", entry.review_required);
+    if (!t.ok) return { ok: false, error: t.error };
     e = {
       id: entry.id ?? `t-${randomUUID2().slice(0, 8)}`,
       text: entry.text,
-      status: entry.status ?? "todo",
+      status: t.status,
       owner_session: entry.owner_session,
       dispatch_id: entry.dispatch_id,
       ts: now,
       updated_at: now,
       note: entry.note,
+      ...t.review_required === true ? { review_required: true } : {},
       ...deps && deps.length > 0 ? { depends_on: deps } : {},
       ...entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}
     };
@@ -14921,7 +14297,11 @@ function moveBoardEntry(gid, entryId, to2, dir) {
   if (!w2.ok) return w2;
   const e = w2.board.entries.find((x) => x.id === entryId);
   if (!e) return { ok: false, error: `\u677F\u6761\u76EE\u4E0D\u5B58\u5728: ${entryId}` };
-  e.status = to2;
+  const t = resolveStatusTransition(e, to2);
+  if (!t.ok) return { ok: false, error: t.error };
+  e.status = t.status;
+  if (t.review_required === true) e.review_required = true;
+  else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
   w2.board.updated_at = e.updated_at;
   if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
@@ -15079,7 +14459,7 @@ function buildArchiveChecklist(gid, dir) {
     const anchor = e.project_anchor ?? "";
     return anchor && anchor.replace(/\/+$/, "") === g2.anchor_dir.replace(/\/+$/, "") && (e.status === "running" || e.status === "dispatched");
   }).map((e) => ({ id: e.id, tier: e.tier, status: e.status, target: e.target, ts: e.ts }));
-  const b = loadBoardFile(gid, dir);
+  const b = loadBoardOrEmpty(gid, dir);
   const openBoardEntries = b.entries.filter((x) => x.status !== "done").length;
   return { gid: g2.id, name: g2.name, openDispatches, headcount: g2.headcount, openBoardEntries, anchor_dir: g2.anchor_dir };
 }
@@ -15121,395 +14501,223 @@ function findStaleGroups(now, staleDays, dir, memberActivity) {
   return out;
 }
 
-// src/leader-duty.ts
-function receiptCandidates(snapshot, now) {
-  return (snapshot.pending_receipts ?? []).filter((receipt) => receipt.reviewed !== true).map((receipt) => ({
-    kind: "receipt",
-    id: receipt.sid,
-    source_session_id: receipt.sid,
-    age_ms: Math.max(0, now - receipt.mtime)
-  }));
+// relay/src/permission-policy.ts
+var WIRE_TO_NORMALIZED = {
+  ask: "ask",
+  plan: "plan",
+  "edit-auto": "edit-auto",
+  "full-auto": "full-auto",
+  default: "ask",
+  acceptEdits: "edit-auto",
+  bypassPermissions: "full-auto"
+};
+var NATIVE_CLAUDE = {
+  ask: "default",
+  plan: "plan",
+  "edit-auto": "acceptEdits",
+  "full-auto": "bypassPermissions"
+};
+var EFFECTIVE_TO_MANAGED = {
+  ask: "default",
+  plan: "plan",
+  "edit-auto": "acceptEdits",
+  "full-auto": "bypassPermissions"
+};
+function normalizeLegacyPermissionMode(value) {
+  if (value === void 0 || value === null || value === "") return { mode: "default", kind: "missing_default" };
+  if (value === "default" || value === "acceptEdits" || value === "plan") return { mode: value, kind: "identity" };
+  if (value === "bypassPermissions") return { mode: "acceptEdits", kind: "bypass_demoted" };
+  return { mode: "default", kind: "unknown_reset" };
 }
-function dispatchCandidates(snapshot) {
-  return (snapshot.failed_or_hanging_dispatches ?? []).filter((dispatch) => dispatch.status !== "running" || (dispatch.hanging_ms ?? 0) > 0).filter((dispatch) => dispatch.status === "failed" || dispatch.status === "hanging" || dispatch.status === "dispatched" || (dispatch.hanging_ms ?? 0) > 0).map((dispatch) => ({
-    kind: "dispatch",
-    id: dispatch.dispatch_id,
-    source_session_id: dispatch.source_session_id,
-    age_ms: dispatch.hanging_ms,
-    playbook: dispatch.playbook,
-    risk: dispatch.risk,
-    token_estimate: dispatch.token_estimate,
-    time_estimate_ms: dispatch.time_estimate_ms
-  }));
+var ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
+var ROLES = ["team_pm", "worker", "review_pm"];
+var CAPS = ["confirmed", "unverified", "unsupported"];
+var CONSERV = { ask: 0, plan: 1, "edit-auto": 2, "full-auto": 3 };
+var CEILING = {
+  team_pm: { \u54A8\u8BE2: "edit-auto", \u968F\u624B\u529E: "full-auto", \u8F7B\u7ACB\u9879: "full-auto", \u6B63\u7ECF\u7ACB\u9879: "full-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
+  worker: { \u54A8\u8BE2: "edit-auto", \u968F\u624B\u529E: "full-auto", \u8F7B\u7ACB\u9879: "full-auto", \u6B63\u7ECF\u7ACB\u9879: "full-auto", \u6682\u7F13: "ask", \u770B\u95E8\u72D7: "ask" },
+  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+};
+var TIER_DEFAULT = {
+  team_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
+  worker: { \u54A8\u8BE2: "ask", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "ask", \u770B\u95E8\u72D7: "ask" },
+  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "plan", \u8F7B\u7ACB\u9879: "plan", \u6B63\u7ECF\u7ACB\u9879: "plan", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+};
+function denied(requested, engine, cap, source, reason) {
+  return { requested_mode: requested, normalized_mode: null, effective_mode: "forbidden", native_mode: null, capability_state: cap, engine, reason, policy_source: source };
 }
-function todoCandidates(snapshot) {
-  return (snapshot.unlocked_todos ?? []).map((todo) => ({
-    kind: "todo",
-    id: todo.todo_id,
-    source_session_id: todo.source_session_id,
-    playbook: todo.playbook,
-    risk: todo.risk,
-    token_estimate: todo.token_estimate,
-    time_estimate_ms: todo.time_estimate_ms
-  }));
-}
-function staleDoingCandidates(snapshot) {
-  return (snapshot.stale_doing ?? []).map((doing) => ({
-    kind: "stale_doing",
-    id: doing.dispatch_id ?? doing.session_id,
-    source_session_id: doing.session_id,
-    age_ms: doing.doing_ms,
-    playbook: doing.playbook,
-    risk: doing.risk,
-    token_estimate: doing.token_estimate,
-    time_estimate_ms: doing.time_estimate_ms
-  }));
-}
-function hasRecentRunningProgress(session, now, windowMs) {
-  if (session.recent_progress !== void 0) return session.recent_progress;
-  const progressAt = session.last_progress_at ?? session.updated_at;
-  return progressAt !== void 0 && now - progressAt <= windowMs;
-}
-function evaluateLeaderActionableWork(snapshot) {
-  const now = snapshot.now ?? Date.now();
-  const candidates = [
-    ...receiptCandidates(snapshot, now),
-    ...dispatchCandidates(snapshot),
-    ...todoCandidates(snapshot),
-    ...staleDoingCandidates(snapshot)
-  ];
-  const blocked = [...snapshot.blocked ?? []];
-  if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
-  if (blocked.length > 0) return { actionable: false, candidates, reason: "blocked", blocked };
-  const running = (snapshot.running_sessions ?? []).filter((session) => session.status === "running" || session.status === "WORKING");
-  const progressWindow = snapshot.progress_window_ms ?? 60 * 60 * 1e3;
-  if (running.length > 0 && running.every((session) => hasRecentRunningProgress(session, now, progressWindow))) {
-    return { actionable: false, candidates, reason: "all_running", blocked };
+function effectiveFor(engine, cap, normalized) {
+  if (cap === "confirmed") {
+    const native = engine === "claude" ? NATIVE_CLAUDE[normalized] : null;
+    return { effective: normalized, native, reason: "ok" };
   }
-  return { actionable: false, candidates, reason: "empty", blocked };
-}
-function transitionDutyFeedCount(state = { consecutive_feeds: 0 }, signal, k3 = 3) {
-  if (signal === "idle" || signal === "natural_sleep") {
-    return { state: { consecutive_feeds: 0 }, shouldSleep: false };
+  if (cap === "unverified") {
+    if (normalized === "full-auto") return { effective: "edit-auto", native: null, reason: "native_permission_not_confirmed" };
+    if (normalized === "edit-auto") return { effective: "ask", native: null, reason: "native_permission_not_confirmed" };
+    return { effective: normalized, native: null, reason: "ok" };
   }
-  const consecutive = Math.max(0, state.consecutive_feeds) + 1;
-  if (consecutive >= k3) {
-    return {
-      state: { consecutive_feeds: consecutive },
-      shouldSleep: true,
-      continuation: {
-        delay_min_ms: 5 * 60 * 1e3,
-        delay_max_ms: 15 * 60 * 1e3,
-        wake_once: true,
-        auto_renew: false
+  if (normalized === "full-auto" || normalized === "edit-auto") return { effective: "ask", native: null, reason: "engine_permission_unsupported" };
+  return { effective: normalized, native: null, reason: "ok" };
+}
+function evaluatePermission(input) {
+  const requestedRaw = input.requested_mode ?? null;
+  const source = input.policy_source ?? "explicit";
+  const capRaw = input.capability_state ?? null;
+  if (!ENGINES.includes(input.engine)) return denied(requestedRaw, input.engine, null, source, "unknown_engine");
+  if (input.engine === "zcode") return denied(requestedRaw, input.engine, null, source, "zcode_fail_closed");
+  if (!ROLES.includes(input.role)) return denied(requestedRaw, input.engine, null, source, "unknown_role");
+  const ceiling = CEILING[input.role][input.tier];
+  if (!ceiling) return denied(requestedRaw, input.engine, null, source, "tier_not_in_policy_matrix");
+  const cap = capRaw !== null && CAPS.includes(capRaw) ? capRaw : null;
+  if (!["explicit", "tier_default", "mixed_team_default"].includes(source)) {
+    const nUnknown = requestedRaw !== null ? WIRE_TO_NORMALIZED[requestedRaw] ?? null : null;
+    if (requestedRaw !== null && nUnknown === null) return denied(requestedRaw, input.engine, cap, source, "unknown_requested_mode");
+    return { requested_mode: requestedRaw, normalized_mode: nUnknown, effective_mode: "ask", native_mode: null, capability_state: cap, engine: input.engine, reason: "unknown_policy_source", policy_source: source };
+  }
+  let requested = requestedRaw;
+  let normalized;
+  let materialized = "";
+  if (requested === null) {
+    if (source === "mixed_team_default") {
+      if (input.role === "review_pm") {
+        requested = "plan";
+        normalized = "plan";
+        materialized = "mixed_team_default_review_pm_excluded";
+      } else {
+        requested = "bypassPermissions";
+        normalized = "full-auto";
+        materialized = "mixed_team_default_materialized";
       }
-    };
+    } else if (source === "tier_default" || source === "explicit") {
+      if (source === "explicit") {
+        requested = "ask";
+        normalized = "ask";
+        materialized = "explicit_source_missing_request";
+      } else {
+        normalized = TIER_DEFAULT[input.role][input.tier];
+        requested = normalized;
+      }
+    } else {
+      return denied(null, input.engine, cap, source, "unknown_policy_source");
+    }
+  } else {
+    const n = WIRE_TO_NORMALIZED[requested];
+    if (!n) return denied(requested, input.engine, cap, source, "unknown_requested_mode");
+    normalized = n;
   }
-  return { state: { consecutive_feeds: consecutive }, shouldSleep: false };
+  if (CONSERV[normalized] > CONSERV[ceiling]) {
+    if (materialized.startsWith("mixed_team_default")) {
+      normalized = ceiling;
+      materialized = "mixed_team_default_demoted_to_ceiling";
+    } else {
+      return denied(requested, input.engine, cap, source, "above_role_tier_ceiling");
+    }
+  }
+  const dScope = input.dir_scope ?? null;
+  const eScope = input.env ?? null;
+  if (dScope !== null || eScope !== null) {
+    const prod = dScope === "production" || eScope === "production";
+    const unk = dScope === "unknown" || eScope === "unknown";
+    if (prod || unk) {
+      const threat = prod ? "production" : "env_unknown";
+      if (normalized === "full-auto") {
+        if (materialized === "") {
+          return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
+        }
+        normalized = "edit-auto";
+        materialized = `${threat}_demoted_from_full_auto`;
+      } else if (normalized === "edit-auto" && !prod) {
+        normalized = "ask";
+        materialized = "env_unknown_demoted_from_edit_auto";
+      }
+    }
+  }
+  if (cap === null) {
+    return { requested_mode: requested, normalized_mode: normalized, effective_mode: "ask", native_mode: null, capability_state: null, engine: input.engine, reason: "capability_state_missing", policy_source: source };
+  }
+  const ev2 = effectiveFor(input.engine, cap, normalized);
+  const reason = ev2.reason !== "ok" ? ev2.reason : materialized !== "" ? materialized : "ok";
+  return {
+    requested_mode: requested,
+    normalized_mode: normalized,
+    effective_mode: ev2.effective,
+    native_mode: ev2.native,
+    capability_state: cap,
+    engine: input.engine,
+    reason,
+    policy_source: source
+  };
 }
-
-// src/acceptance.ts
-import { readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync9, existsSync as existsSync14, readdirSync as readdirSync6 } from "node:fs";
-import { join as join14 } from "node:path";
-var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
-function acceptanceDir() {
-  return process.env.CCR_ACCEPTANCE_DIR || join14(resolveDataDir(), "acceptances");
+function engineCapabilityState(engine) {
+  if (engine === "claude") return "confirmed";
+  if (engine === "codex" || engine === "trae" || engine === "qwen-code" || engine === "codebuddy") return "unverified";
+  return "unsupported";
 }
-function loadAcceptance(id2) {
-  if (!ACCEPTANCE_ID_RE.test(id2)) return null;
-  const file = join14(acceptanceDir(), `${id2}.json`);
-  if (!existsSync14(file)) return null;
-  try {
-    const a = JSON.parse(readFileSync12(file, "utf-8"));
-    if (!a || !Array.isArray(a.rows) || a.rows.length === 0) return null;
-    return a;
-  } catch {
-    return null;
-  }
+function guaranteedModes(cap) {
+  if (cap === "confirmed") return ["ask", "plan", "edit-auto", "full-auto"];
+  if (cap === "unverified") return ["ask", "plan"];
+  return [];
 }
-var hits = /* @__PURE__ */ new Map();
-function rateLimited(id2, limit = 10, windowMs = 6e4) {
-  const now = Date.now();
-  const arr = (hits.get(id2) ?? []).filter((t) => now - t < windowMs);
-  if (arr.length >= limit) {
-    hits.set(id2, arr);
-    return true;
-  }
-  arr.push(now);
-  hits.set(id2, arr);
-  if (hits.size > 500) {
-    for (const [k3, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k3);
-  }
+function permissionCapabilitiesSummary() {
+  return ENGINES.map((engine) => {
+    const cap = engineCapabilityState(engine);
+    return { engine, capability_state: cap, modes: guaranteedModes(cap) };
+  });
+}
+function permissionPolicyEnabled() {
+  const raw = process.env.CCR_PERMISSION_POLICY;
+  if (raw === void 0 || raw.trim() === "") return true;
+  const v = raw.trim().toLowerCase();
+  if (v === "on" || v === "1" || v === "true") return true;
+  if (v === "off" || v === "0" || v === "false") return false;
+  console.warn(`[p81-kill-switch] CCR_PERMISSION_POLICY \u672A\u77E5\u503C "${raw}"\u2014\u2014\u6309 off\uFF08\u56DE\u9000 P81 \u524D\uFF09\u5904\u7406`);
   return false;
 }
-function saveResult(id2, payload, ua, ck2) {
-  if (typeof payload !== "object" || payload === null) return "bad body";
-  const rows = payload.rows;
-  if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return "rows \u975E\u6CD5";
-  const clean = [];
-  for (const r of rows) {
-    if (typeof r !== "object" || r === null) return "row \u975E\u6CD5";
-    const { i, verdict, note } = r;
-    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i > 1e6) return "\u884C\u53F7\u975E\u6CD5";
-    if (verdict !== "pass" && verdict !== "fail" && verdict !== null) return "\u5224\u5B9A\u503C\u975E\u6CD5";
-    if (note !== void 0 && typeof note !== "string") return "\u5907\u6CE8\u975E\u6CD5";
-    if (typeof note === "string" && note.length > 600) return "\u5907\u6CE8\u8FC7\u957F";
-    clean.push({ i, verdict, note: typeof note === "string" ? note : "" });
-  }
-  const dir = acceptanceDir();
-  mkdirSync9(dir, { recursive: true });
-  const file = join14(dir, `${id2}.results.json`);
-  let history = [];
+
+// relay/src/models.ts
+import { existsSync as existsSync14, readFileSync as readFileSync12 } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+import { join as join14 } from "node:path";
+var DEFAULT_MODEL = "glm-5.3";
+function readClaudeSettings() {
   try {
-    history = JSON.parse(readFileSync12(file, "utf-8")).history ?? [];
+    return JSON.parse(readFileSync12(join14(homedir5(), ".claude", "settings.json"), "utf8"));
   } catch {
+    return {};
   }
-  if (!Array.isArray(history)) history = [];
-  const counts = {
-    pass: clean.filter((r) => r.verdict === "pass").length,
-    fail: clean.filter((r) => r.verdict === "fail").length,
-    skip: clean.filter((r) => r.verdict === null).length
-  };
-  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean, ...ck2 ? { ck: ck2 } : {} });
-  if (history.length > 50) history = history.slice(history.length - 50);
-  writeFileSync8(file, JSON.stringify({ id: id2, history }, null, 1));
-  return null;
 }
-function listAcceptances(limit = 20) {
-  let names;
-  try {
-    names = readdirSync6(acceptanceDir());
-  } catch {
-    return [];
-  }
+function listModels(fallbackDefault) {
+  const s = existsSync14(join14(homedir5(), ".claude", "settings.json")) ? readClaudeSettings() : {};
+  const env = s.env ?? {};
   const out = [];
-  for (const n of names) {
-    if (!n.endsWith(".json") || n.endsWith(".results.json")) continue;
-    const id2 = n.slice(0, -5);
-    if (!ACCEPTANCE_ID_RE.test(id2)) continue;
-    const a = loadAcceptance(id2);
-    if (!a) continue;
-    let judged = 0;
-    let done = false;
-    let submitted = false;
-    try {
-      const r = JSON.parse(readFileSync12(join14(acceptanceDir(), `${id2}.results.json`), "utf-8"));
-      const last = r.history?.[r.history.length - 1];
-      if (last?.rows) {
-        submitted = true;
-        judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
-        done = judged >= a.rows.length;
-      }
-    } catch {
-    }
-    out.push({
-      id: id2,
-      title: a.title,
-      created_at: a.created_at,
-      total: a.rows.length,
-      judged,
-      submitted,
-      done,
-      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}
-    });
-  }
-  out.sort((x, y) => y.created_at - x.created_at);
-  return out.slice(0, limit);
+  const add = (m) => {
+    if (typeof m !== "string") return;
+    const base = m.replace(/\[1m\]$/, "").trim();
+    if (base && !out.includes(base)) out.push(base);
+  };
+  for (const m of (process.env.CCR_MODELS ?? "").split(",")) add(m);
+  add(s.model);
+  add(env.ANTHROPIC_DEFAULT_SONNET_MODEL);
+  add(env.ANTHROPIC_DEFAULT_HAIKU_MODEL);
+  add(env.ANTHROPIC_DEFAULT_OPUS_MODEL);
+  add(fallbackDefault || DEFAULT_MODEL);
+  return out;
 }
-function acceptanceClosure(id2) {
-  const a = loadAcceptance(id2);
-  if (!a) return null;
-  let submitted = false;
-  let all_pass = false;
-  let fail_count = 0;
-  try {
-    const r = JSON.parse(readFileSync12(join14(acceptanceDir(), `${id2}.results.json`), "utf-8"));
-    const last = r.history?.[r.history.length - 1];
-    if (last?.rows && Array.isArray(last.rows)) {
-      submitted = true;
-      const pass = last.rows.filter((x) => x.verdict === "pass").length;
-      fail_count = last.rows.filter((x) => x.verdict === "fail").length;
-      all_pass = pass === a.rows.length && fail_count === 0 && last.rows.length >= a.rows.length;
-    }
-  } catch {
-  }
-  return { submitted, all_pass, fail_count, total: a.rows.length };
-}
-function acceptanceHtml(a, apiPath = "/api/acceptance") {
-  const { sheet_key: _sk, gid: _g2, entry_id: _e, ...pub } = a;
-  const data = JSON.stringify(pub).replace(/</g, "\\u003c");
-  const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
-  const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
-  return `<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(a.title)}</title>
-<style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; margin: 0; }
-  body { background:#0A0E14; color:#E6EDF3; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; padding:20px 14px 120px; }
-  .wrap { max-width: 720px; margin: 0 auto; }
-  h1 { font-size:18px; margin-bottom:10px; }
-  .pf { color:#9BA8B7; font-size:12.5px; margin:4px 0; }
-  .bar { position:sticky; top:0; z-index:5; background:rgba(10,14,20,.92); backdrop-filter:blur(6px);
-    display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #1C2430; margin-bottom:12px; }
-  .bar b { color:#4D9FFF; font-variant-numeric:tabular-nums; }
-  .card { background:#10161F; border:1px solid #1C2430; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
-  .r1 { display:flex; align-items:center; gap:8px; }
-  .task { color:#4D9FFF; font-weight:700; font-size:12px; flex:none; }
-  .item { flex:1; font-weight:600; font-size:14px; }
-  .btns { display:flex; gap:8px; flex:none; }
-  .vb { width:34px; height:34px; border-radius:50%; border:2px solid #2A3644; background:none;
-    color:#5A6B7E; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-  .vb:active { transform:scale(.92); }
-  .vb.on-pass { border-color:#2BD98F; background:#2BD98F; color:#06281B; }
-  .vb.on-fail { border-color:#F0524F; background:#F0524F; color:#2B0A09; }
-  .crit { color:#7E8B9B; font-size:12px; margin-top:6px; }
-  .note { width:100%; margin-top:8px; background:#0A0E14; border:1px solid #1C2430; border-radius:8px;
-    color:#E6EDF3; font:inherit; font-size:12.5px; padding:7px 10px; display:none; }
-  .note.show { display:block; }
-  .foot { position:fixed; left:0; right:0; bottom:0; padding:12px 14px calc(12px + env(safe-area-inset-bottom));
-    background:rgba(10,14,20,.95); border-top:1px solid #1C2430; }
-  .foot .wrap { display:flex; align-items:center; gap:12px; }
-  #submit { flex:1; height:46px; border-radius:12px; border:1px solid #2E5FA3; background:#14314F;
-    color:#4D9FFF; font-size:15px; font-weight:700; cursor:pointer; }
-  #submit:disabled { opacity:.45; }
-  #msg { font-size:12px; color:#9BA8B7; }
-  .done { text-align:center; padding:40px 0; }
-  .done .n { font-size:34px; font-weight:800; }
-  ul.nt { color:#7E8B9B; font-size:12px; margin:12px 0 0 18px; }
-</style>
-</head>
-<body>
-<div class="wrap" id="app"></div>
-<div class="foot"><div class="wrap"><button id="submit">\u63D0\u4EA4</button><span id="msg"></span></div></div>
-<script>
-var DATA = ${data};
-var state = {};  // \u884C\u53F7 -> "pass"|"fail"|undefined\uFF08undefined=\u672A\u6D4B\uFF09
-var app = document.getElementById("app");
-var h = '<h1>' + esc(DATA.title) + '</h1>' + ${JSON.stringify(preface)} +
-  '<div class="bar">\u5DF2\u5224 <b id="cnt">0</b> / ' + DATA.rows.length + '\u3000<span style="color:#5A6B7E;font-size:12px">\u2713 \u901A\u8FC7\u3000\u2717 \u4E0D\u901A\u8FC7\u3000\u4E0D\u70B9=\u672A\u6D4B</span></div>';
-for (var i = 0; i < DATA.rows.length; i++) {
-  var r = DATA.rows[i];
-  h += '<div class="card" id="c' + i + '"><div class="r1">' +
-    '<span class="task">' + esc(r.task) + '</span><span class="item">' + esc(r.item) + '</span>' +
-    '<span class="btns"><button class="vb" data-i="' + i + '" data-v="pass">\u2713</button>' +
-    '<button class="vb" data-i="' + i + '" data-v="fail">\u2717</button></span></div>' +
-    '<div class="crit">' + esc(r.criteria) + '</div>' +
-    '<input class="note" id="n' + i + '" placeholder="\u95EE\u9898/\u73B0\u8C61\uFF08\u9009\u586B\uFF09"></div>';
-}
-if (DATA.notes && DATA.notes.length) h += '<ul class="nt">' + ${JSON.stringify(notes)} + '</ul>';
-app.innerHTML = h;
-function esc(s) {
-  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-  });
-}
-function paint() {
-  var n = 0;
-  document.querySelectorAll(".vb").forEach(function (b) {
-    var on = state[b.dataset.i] === b.dataset.v;
-    b.className = "vb" + (on ? " on-" + b.dataset.v : "");
-    if (on) n++;
-  });
-  document.getElementById("cnt").textContent = n;
-  document.getElementById("submit").textContent = "\u63D0\u4EA4\u9A8C\u6536\uFF08" + n + "/" + DATA.rows.length + "\uFF09";
-  for (var i = 0; i < DATA.rows.length; i++) {
-    var show = state[i] === "fail" || (document.getElementById("n" + i).value || "") !== "";
-    document.getElementById("n" + i).className = "note" + (show ? " show" : "");
-  }
-}
-document.addEventListener("click", function (e) {
-  var b = e.target.closest(".vb");
-  if (!b) return;
-  var i = b.dataset.i;
-  state[i] = state[i] === b.dataset.v ? undefined : b.dataset.v;  // \u518D\u70B9\u4E00\u6B21\u53D6\u6D88
-  if (state[i] === "fail") document.getElementById("n" + i).focus();
-  paint();
-});
-document.addEventListener("input", paint);
-paint();
-document.getElementById("submit").onclick = function () {
-  var rows = [];
-  for (var i = 0; i < DATA.rows.length; i++) {
-    rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
-  }
-  document.getElementById("msg").textContent = "\u63D0\u4EA4\u4E2D\u2026";
-  // #28 \u4E91\u901A\u9053\u9632\u4F2A\u9020\uFF1A\u51FA\u5355\u94FE\u63A5\u4EE5 fragment\uFF08#<key>\uFF09\u643A\u5E26\u6BCF\u5355\u5BC6\u94A5\uFF08\u4E0D\u8FDB\u670D\u52A1\u5668\u65E5\u5FD7/
-  // Referer/\u7F13\u5B58\u952E\uFF09\uFF0C\u63D0\u4EA4\u968F body \u5E26\u56DE\u7531 Worker \u5BF9\u7167\u3002LAN \u7AEF\u70B9\u4E0D\u6821\u9A8C\uFF08\u5BB6\u5EAD\u7F51\u5A01\u80C1
-  // \u6A21\u578B=\u5BB6\u4EBA\uFF0C\u7EF4\u6301\u80FD\u529B\u94FE\u63A5\u53E3\u5F84\uFF09\uFF1B\u4E91\u7248\u9875\u9762\u7F3A fragment \u65F6\u63D0\u4EA4\u4F1A\u88AB 403 \u5E76\u663E\u793A\u539F\u56E0
-  var sheetKey = location.hash.replace(/^#/, "").trim() || undefined;
-  fetch(${JSON.stringify(apiPath)}, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: DATA.id, rows: rows, key: sheetKey }),
-  }).then(function (r) { return r.json(); }).then(function (j) {
-    if (!j.ok) { document.getElementById("msg").textContent = "\u63D0\u4EA4\u5931\u8D25\uFF1A" + (j.error || "\u7A0D\u540E\u518D\u8BD5"); return; }
-    var p = 0, f = 0, s = 0;
-    rows.forEach(function (r) { if (r.verdict === "pass") p++; else if (r.verdict === "fail") f++; else s++; });
-    app.innerHTML = '<div class="done"><div class="n" style="color:#2BD98F">\u2713 ' + p + ' \u901A\u8FC7</div>' +
-      '<div class="n" style="color:#F0524F">' + f + ' \u4E0D\u901A\u8FC7</div>' +
-      '<div class="n" style="color:#5A6B7E">' + s + ' \u672A\u6D4B</div>' +
-      '<p style="color:#9BA8B7;margin-top:16px">\u5DF2\u63D0\u4EA4\uFF08' + new Date().toLocaleTimeString() + '\uFF09\u3002\u9875\u9762\u53EF\u4EE5\u5173\u4E86\u3002</p></div>';
-    document.querySelector(".foot").style.display = "none";
-  }).catch(function () {
-    document.getElementById("msg").textContent = "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u7A0D\u540E\u518D\u8BD5";
-  });
-};
-</script>
-</body>
-</html>`;
-}
-function esc(s) {
-  return String(s ?? "").replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
-  );
-}
-function serveAcceptancePage(id2, res, apiPath) {
-  const a = loadAcceptance(id2);
-  if (!a) return false;
-  const html = acceptanceHtml(a, apiPath);
-  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-  res.end(html);
-  return true;
-}
-function applyCloudSubmits(id2, submits) {
-  if (!ACCEPTANCE_ID_RE.test(id2)) return [];
-  const seenK = /* @__PURE__ */ new Set();
-  const seen = /* @__PURE__ */ new Set();
-  try {
-    const h = JSON.parse(readFileSync12(join14(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
-    if (Array.isArray(h)) {
-      for (const e of h) {
-        if (typeof e.ck === "string") seenK.add(e.ck);
-        try {
-          seen.add(JSON.stringify(e.rows ?? null));
-        } catch {
-        }
-      }
-    }
-  } catch {
-  }
-  const added = [];
-  if (!Array.isArray(submits)) return added;
-  for (const s of submits) {
-    if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
-    const sig = JSON.stringify(s.rows);
-    if (typeof s.k === "string" ? seenK.has(s.k) : seen.has(sig)) continue;
-    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
-    if (saveResult(id2, { rows: s.rows }, ua, typeof s.k === "string" ? s.k : void 0) === null) {
-      if (typeof s.k === "string") seenK.add(s.k);
-      seen.add(sig);
-      added.push(s);
-    }
-  }
-  return added;
+function withContextWindowSuffix(model) {
+  if (!model) return model;
+  const m = model.trim();
+  if (!m || /\[1m\]$/i.test(m)) return m;
+  if (/^glm-5/i.test(m)) return `${m}[1m]`;
+  return m;
 }
 
-// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// relay/src/agent-jsonl.ts
+import { spawn as spawn3 } from "node:child_process";
+import { accessSync as accessSync2, constants as constants4 } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { randomUUID as randomUUID6 } from "node:crypto";
+
+// relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -44966,17 +44174,17 @@ function VJ(e, t) {
   return null;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { homedir as homedir6 } from "node:os";
+import { homedir as homedir7 } from "node:os";
 import { delimiter as pathDelimiter, join as join21 } from "node:path";
 
-// src/cli-path.ts
+// relay/src/cli-path.ts
 import { accessSync, constants as constants3, existsSync as existsSync16, readFileSync as readFileSync14 } from "node:fs";
-import { createRequire } from "node:module";
+import { createRequire as createRequire2 } from "node:module";
 import { delimiter as delimiter2, dirname as dirname7, join as join19 } from "node:path";
-import { homedir as homedir5 } from "node:os";
+import { homedir as homedir6 } from "node:os";
 var cached;
 function usable(p) {
   if (!p || !existsSync16(p)) return false;
@@ -44996,7 +44204,7 @@ function fromPlatformPackage() {
   }
   for (const pkg of pkgs) {
     try {
-      const p = createRequire(import.meta.url).resolve(`${pkg}/${exe3}`);
+      const p = createRequire2(import.meta.url).resolve(`${pkg}/${exe3}`);
       if (usable(p)) return p;
     } catch {
     }
@@ -45036,7 +44244,7 @@ function cmdToFallbackJs(p) {
   return null;
 }
 function knownLocations() {
-  const home = homedir5();
+  const home = homedir6();
   if (process.platform === "win32") {
     const appdata = process.env.APPDATA ?? join19(home, "AppData", "Roaming");
     return [
@@ -45072,9 +44280,9 @@ function resolveClaudeCliPath() {
   return null;
 }
 
-// src/allow-rules.ts
+// relay/src/allow-rules.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { mkdirSync as mkdirSync11, readFileSync as readFileSync15, writeFileSync as writeFileSync9 } from "node:fs";
+import { mkdirSync as mkdirSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join20 } from "node:path";
 var BASH_TOKEN_DENY = /* @__PURE__ */ new Set([
   "rm",
@@ -45181,8 +44389,8 @@ var AllowRuleStore = class {
   }
   persist() {
     try {
-      mkdirSync11(join20(this.file, ".."), { recursive: true });
-      writeFileSync9(this.file, JSON.stringify(this.rules, null, 2));
+      mkdirSync10(join20(this.file, ".."), { recursive: true });
+      writeFileSync8(this.file, JSON.stringify(this.rules, null, 2));
     } catch {
     }
   }
@@ -45235,7 +44443,7 @@ var AllowRuleStore = class {
   }
 };
 
-// src/summarizer.ts
+// relay/src/summarizer.ts
 var MAX_SUMMARY = 80;
 function basename5(p) {
   if (typeof p !== "string") return "";
@@ -45696,16 +44904,16 @@ function taskDoneLabel(t) {
   return typeof t.id === "number" ? `#${t.id} ${t.content}` : t.content;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 function childEnv(opts) {
   const extra = [
-    join21(homedir6(), "node/bin"),
+    join21(homedir7(), "node/bin"),
     // 用户级 node（本机实证位置）
     "/usr/local/bin",
     // macOS Intel / 惯装位
     "/opt/homebrew/bin",
     // macOS Apple Silicon (homebrew)
-    join21(homedir6(), ".npm-global/bin"),
+    join21(homedir7(), ".npm-global/bin"),
     // npm 全局自定义前缀惯用位
     ...process.env.CCR_EXTRA_PATH ? process.env.CCR_EXTRA_PATH.split(pathDelimiter) : []
   ];
@@ -45771,14 +44979,14 @@ var AsyncQueue = class {
   closed = false;
   push(value) {
     if (this.closed) throw new Error("queue closed");
-    const resolve8 = this.resolvers.shift();
-    if (resolve8) resolve8({ value, done: false });
+    const resolve9 = this.resolvers.shift();
+    if (resolve9) resolve9({ value, done: false });
     else this.values.push(value);
   }
   end() {
     this.closed = true;
-    for (const resolve8 of this.resolvers.splice(0)) {
-      resolve8({ value: void 0, done: true });
+    for (const resolve9 of this.resolvers.splice(0)) {
+      resolve9({ value: void 0, done: true });
     }
   }
   get iterable() {
@@ -45792,7 +45000,7 @@ var AsyncQueue = class {
             if (self2.closed) {
               return Promise.resolve({ value: void 0, done: true });
             }
-            return new Promise((resolve8) => self2.resolvers.push(resolve8));
+            return new Promise((resolve9) => self2.resolvers.push(resolve9));
           }
         };
       }
@@ -45822,7 +45030,9 @@ var AgentSession = class {
     this.q = NUt({
       prompt: this.queue.iterable,
       options: {
-        model: this.model,
+        // [1m] 水位档重挂（见 models.ts withContextWindowSuffix）：存储/显示保持裸名，
+        // 仅 spawn 进 CLI 的这一刻对 1M 档模型重挂后缀，否则 CLI 按 200K 假设主动压缩
+        model: withContextWindowSuffix(this.model) ?? this.model,
         cwd: this.cwd,
         pathToClaudeCodeExecutable: cliPath,
         // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
@@ -46270,14 +45480,14 @@ var AgentSession = class {
       ...remember ? { remember } : {}
     });
     this.cb.onLog("system", questions.length ? summary : `\u7B49\u5F85\u786E\u8BA4: ${summary}`);
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       this.pending.set(requestId, {
         tool: toolName,
         input,
         created_at: Date.now(),
         resolve: (r) => {
           this.pending.delete(requestId);
-          resolve8(r);
+          resolve9(r);
         }
       });
     });
@@ -46379,165 +45589,7 @@ var AgentSession = class {
   }
 };
 
-// src/title-gen.ts
-async function generateTitle(task, model, onSid, cwd, configHome) {
-  const trimmed = task.trim().slice(0, 600);
-  if (!trimmed) return { title: null };
-  let timer;
-  let sidSeen = false;
-  const timeout = new Promise((resolve8) => {
-    timer = setTimeout(() => resolve8({ title: null }), 2e4);
-    timer.unref();
-  });
-  try {
-    const run2 = async () => {
-      const q2 = NUt({
-        prompt: "\u4E3A\u4E0B\u9762\u7684\u4EFB\u52A1\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898\uFF0C\u4E0D\u8D85\u8FC7 12 \u4E2A\u5B57\uFF0C\u76F4\u63A5\u8F93\u51FA\u6807\u9898\u672C\u8EAB\uFF0C\u4E0D\u8981\u5F15\u53F7\u548C\u4EFB\u4F55\u89E3\u91CA\uFF1A\n\n" + trimmed,
-        options: {
-          model,
-          // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
-          // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
-          cwd: cwd ?? process.cwd(),
-          // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
-          ...resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath() } : {},
-          // 防止被全局 bridge hook 注册成外部会话；#17 开关开启时 titlegen 一次性
-          // 会话落独立家（relay 内部工具会话，不区分归属——默认家不再冒 .tmp-titlegen 目录）
-          env: {
-            ...process.env,
-            CCR_RELAY_CHILD: "1",
-            ...configHome ? { CLAUDE_CONFIG_DIR: configHome } : {}
-          },
-          permissionMode: "bypassPermissions",
-          maxTurns: 1
-        }
-      });
-      for await (const msg of q2) {
-        const sid = msg.session_id;
-        if (sid && !sidSeen) {
-          sidSeen = true;
-          onSid?.(sid);
-        }
-        if (msg.type === "result" && !msg.is_error) {
-          const raw = (msg.result ?? "").trim();
-          const t = raw.replace(/^["'「『]|["'」』]$/g, "").split("\n")[0].trim();
-          if (t) return { title: [...t].slice(0, 16).join(""), sid };
-          if (sid) return { title: null, sid };
-        }
-      }
-      return { title: null };
-    };
-    return await Promise.race([run2(), timeout]);
-  } catch {
-    return { title: null };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-// src/cron.ts
-import { readFileSync as readFileSync16 } from "node:fs";
-import { join as join22 } from "node:path";
-var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
-var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
-function tsNum(v) {
-  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
-  if (typeof v === "string" && v.trim()) {
-    const parsed = Date.parse(v);
-    if (Number.isFinite(parsed)) return parsed;
-    const n = Number(v);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return void 0;
-}
-function normalizeTask(raw, fallbackId) {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw;
-  const status = str(o.status);
-  if (status === "deleted") return null;
-  const rawId = str(o.id) ?? str(o.taskId);
-  const prompt = str(o.prompt) ?? str(o.command) ?? str(o.task) ?? str(o.instruction) ?? str(o.message) ?? "";
-  const schedule = str(o.humanSchedule) ?? str(o.schedule) ?? str(o.cron) ?? str(o.interval) ?? str(o.expression) ?? "";
-  const name = str(o.name) ?? str(o.title) ?? str(o.label);
-  if (!prompt && !schedule && !name && !rawId) return null;
-  const paused = o.paused === true || o.enabled === false || o.active === false || status === "paused" || status === "expired";
-  const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
-  if (o.recurring === false && next !== void 0 && next < Date.now() - EXPIRED_ONE_SHOT_GRACE_MS) return null;
-  return {
-    id: rawId ?? fallbackId,
-    name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "\u672A\u547D\u540D\u4EFB\u52A1"),
-    prompt,
-    schedule,
-    ...next !== void 0 ? { next_run_at: next } : {},
-    ...paused ? { paused: true } : {},
-    ...o.recurring === false ? { recurring: false } : {}
-  };
-}
-function readCronTasks(cwd) {
-  let text;
-  try {
-    text = readFileSync16(join22(cwd, ".claude", "scheduled_tasks.json"), "utf8");
-  } catch (e) {
-    return e.code === "ENOENT" ? void 0 : "bad";
-  }
-  let root;
-  try {
-    root = JSON.parse(text);
-  } catch {
-    return "bad";
-  }
-  let entries;
-  if (Array.isArray(root)) {
-    entries = root.map((r, i) => [String(i), r]);
-  } else if (root && typeof root === "object") {
-    const wrapped = root.tasks;
-    entries = Array.isArray(wrapped) ? wrapped.map((r, i) => [String(i), r]) : Object.entries(root);
-  } else {
-    return "bad";
-  }
-  const out = [];
-  for (const [key, raw] of entries) {
-    const t = normalizeTask(raw, key);
-    if (t) out.push(t);
-  }
-  return out;
-}
-function cronTasksKey(tasks) {
-  return JSON.stringify(tasks);
-}
-
-// src/task-store.ts
-import { readdirSync as readdirSync8, readFileSync as readFileSync17, statSync as statSync6 } from "node:fs";
-import { homedir as homedir7 } from "node:os";
-import path from "node:path";
-function readTaskStoreTodos(cliSessionId, base) {
-  const dir = path.join(base ?? path.join(homedir7(), ".claude"), "tasks", cliSessionId);
-  let files;
-  try {
-    files = readdirSync8(dir).filter((f) => f.endsWith(".json"));
-  } catch {
-    return null;
-  }
-  const out = [];
-  for (const f of files) {
-    try {
-      const fp2 = path.join(dir, f);
-      const t = JSON.parse(readFileSync17(fp2, "utf-8"));
-      if (t.status === "deleted") continue;
-      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
-      if (!subject) continue;
-      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
-      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-      const parsed = Number(t.id);
-      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync6(fp2).mtimeMs, ...activeForm });
-    } catch {
-    }
-  }
-  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  return out;
-}
-
-// src/proc-tree.ts
+// relay/src/proc-tree.ts
 import { execFile } from "node:child_process";
 function parseCpuTimeMs(s) {
   const raw = (s || "").trim();
@@ -46577,13 +45629,13 @@ async function snapshotTree() {
   return out;
 }
 function psExec(cmd, args) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     try {
       execFile(cmd, args, { timeout: 1e4, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-        resolve8(err ? "" : String(stdout));
+        resolve9(err ? "" : String(stdout));
       });
     } catch {
-      resolve8("");
+      resolve9("");
     }
   });
 }
@@ -46648,741 +45700,7 @@ async function killTree(root) {
   return "killed";
 }
 
-// src/uploads.ts
-import { mkdirSync as mkdirSync12, writeFileSync as writeFileSync10 } from "node:fs";
-import path2 from "node:path";
-function tmpUploadDir(dataDir2) {
-  return path2.join(dataDir2, "..", "tmp");
-}
-function sidKeyOf(sessionId) {
-  return sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
-}
-function sniffImageExt(head) {
-  if (head[0] === 137 && head[1] === 80) return "png";
-  if (head[0] === 255 && head[1] === 216) return "jpg";
-  if (head[0] === 71 && head[1] === 73) return "gif";
-  if (head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP") return "webp";
-  return "png";
-}
-function safeName(raw) {
-  const base = raw.split(/[\\/]/).pop() ?? "";
-  const cleaned = base.replace(new RegExp("[\\x00-\\x1f\\x7f]", "g"), "").replace(/^\.+/g, "").trim();
-  return cleaned.slice(0, 60) || "file";
-}
-function saveUploadImages(dataDir2, sessionId, images) {
-  if (images.length === 0) return [];
-  const dir = tmpUploadDir(dataDir2);
-  try {
-    mkdirSync12(dir, { recursive: true });
-  } catch {
-  }
-  const sidKey = sidKeyOf(sessionId);
-  const stamp = Date.now();
-  const saved = [];
-  for (let i = 0; i < Math.min(images.length, 4); i++) {
-    const b64 = images[i];
-    const head = Buffer.from(b64.slice(0, 24), "base64");
-    const ext = sniffImageExt(head);
-    const p = path2.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
-    try {
-      writeFileSync10(p, Buffer.from(b64, "base64"));
-      saved.push(p);
-    } catch {
-    }
-  }
-  return saved;
-}
-function saveUploadFiles(dataDir2, sessionId, files) {
-  if (files.length === 0) return [];
-  const dir = tmpUploadDir(dataDir2);
-  try {
-    mkdirSync12(dir, { recursive: true });
-  } catch {
-  }
-  const sidKey = sidKeyOf(sessionId);
-  const stamp = Date.now();
-  const saved = [];
-  for (let i = 0; i < Math.min(files.length, 2); i++) {
-    const f = files[i];
-    const p = path2.join(dir, `file-${sidKey}-${stamp}-${i + 1}-${safeName(f.name)}`);
-    try {
-      writeFileSync10(p, Buffer.from(f.b64, "base64"));
-      saved.push(p);
-    } catch {
-    }
-  }
-  return saved;
-}
-
-// src/todo-hidden.ts
-import { readFileSync as readFileSync18, writeFileSync as writeFileSync11 } from "node:fs";
-import path3 from "node:path";
-import { fileURLToPath } from "node:url";
-var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
-var MAX_PER_SESSION = 200;
-var fileCache = null;
-var keySets = /* @__PURE__ */ new Map();
-function load2() {
-  if (fileCache) return fileCache;
-  try {
-    const raw = JSON.parse(readFileSync18(FILE, "utf-8"));
-    fileCache = {};
-    for (const [k3, v] of Object.entries(raw)) {
-      if (Array.isArray(v)) {
-        const keys = v.filter((x) => typeof x === "string" && !!x);
-        if (keys.length) fileCache[k3] = keys.slice(-MAX_PER_SESSION);
-      }
-    }
-  } catch {
-    fileCache = {};
-  }
-  return fileCache;
-}
-function hiddenTodoKeys(sessionId) {
-  let s = keySets.get(sessionId);
-  if (!s) {
-    s = new Set(load2()[sessionId] ?? []);
-    keySets.set(sessionId, s);
-  }
-  return s;
-}
-function addHiddenTodoKey(sessionId, key) {
-  if (!sessionId || !key) return;
-  const s = hiddenTodoKeys(sessionId);
-  if (s.has(key) && s.size <= MAX_PER_SESSION) return;
-  s.add(key);
-  const capped = [...s].slice(-MAX_PER_SESSION);
-  keySets.set(sessionId, new Set(capped));
-  const disk = load2();
-  disk[sessionId] = capped;
-  fileCache = disk;
-  try {
-    writeFileSync11(FILE, JSON.stringify(disk));
-  } catch {
-  }
-}
-
-// src/decision-notify.ts
-import { mkdirSync as mkdirSync13, readFileSync as readFileSync19, writeFileSync as writeFileSync12 } from "node:fs";
-import { join as join23 } from "node:path";
-var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
-function isDecisionNotificationKind(value) {
-  return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
-}
-function transitionNotification(item, action, at) {
-  const next = { ...item };
-  if (action === "source_succeeded" && next.handled_at === void 0) next.handled_at = at;
-  if (action === "dismissed") {
-    if (next.dismissed_at === void 0) next.dismissed_at = at;
-    if (next.handled_at === void 0) next.handled_at = at;
-  }
-  if (action === "resolved" && next.resolved_at === void 0) next.resolved_at = at;
-  return next;
-}
-function stableKey(kind, entityId, revision) {
-  if (!isDecisionNotificationKind(kind)) throw new Error(`unsupported notification kind: ${String(kind)}`);
-  if (kind === "dispatch") return `${kind}:${entityId}`;
-  if (revision === void 0 || String(revision).length === 0) return `${kind}:${entityId}`;
-  return `${kind}:${entityId}:${String(revision)}`;
-}
-var DEFAULT_WAIT_MIN = 10;
-var DEFAULT_REMIND_HOURS = 24;
-var DEFAULT_INTERVAL_MS = 2e4;
-function numberEnv(name, fallback, min) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value >= min ? value : fallback;
-}
-function enabledEnv() {
-  return process.env.CCR_DECISION_NOTIFY !== "0";
-}
-function ledgerPathOf(options) {
-  const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ?? process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
-  if (override) return override;
-  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join23(process.cwd(), "data");
-  return join23(dataDir2, "decision-notifications.json");
-}
-function defaultNotificationGroup(kind) {
-  return kind === "system" ? "activity" : "action";
-}
-function defaultActionable(kind, group) {
-  return group === "action" && kind !== "system";
-}
-function normalizeSourceContext(value) {
-  if (!value || typeof value !== "object") return void 0;
-  const x = value;
-  if (typeof x.domain !== "string" || !x.domain || typeof x.entityId !== "string" || !x.entityId || typeof x.alertId !== "string" || !x.alertId || typeof x.returnPath !== "string") return void 0;
-  return {
-    domain: x.domain,
-    entityId: x.entityId,
-    alertId: x.alertId,
-    returnPath: x.returnPath,
-    ...typeof x.sessionId === "string" ? { sessionId: x.sessionId } : {},
-    ...typeof x.segment === "string" ? { segment: x.segment } : {}
-  };
-}
-function normalizeDecisionNotification(item) {
-  if (!item || typeof item !== "object") return null;
-  const x = item;
-  if (typeof x.key !== "string" || !isDecisionNotificationKind(x.kind) || typeof x.source_session_id !== "string" || typeof x.created_at !== "number" || typeof x.revision !== "string") return null;
-  const group = x.group === "action" || x.group === "attention" || x.group === "activity" ? x.group : defaultNotificationGroup(x.kind);
-  const sourceContext = normalizeSourceContext(x.source_context);
-  return {
-    key: x.key,
-    kind: x.kind,
-    source_session_id: x.source_session_id,
-    created_at: x.created_at,
-    ...typeof x.first_sent_at === "number" ? { first_sent_at: x.first_sent_at } : {},
-    ...typeof x.reminded_at === "number" ? { reminded_at: x.reminded_at } : {},
-    ...typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {},
-    ...typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {},
-    ...typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {},
-    group,
-    actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
-    revision: x.revision,
-    ...sourceContext ? { source_context: sourceContext } : {}
-  };
-}
-function readDecisionNotificationLedger(path6) {
-  try {
-    const raw = JSON.parse(readFileSync19(path6, "utf-8"));
-    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.notifications) ? raw.notifications : [];
-    const notifications = list.map(normalizeDecisionNotification).filter((item) => item !== null);
-    return { notifications };
-  } catch {
-    return { notifications: [] };
-  }
-}
-function writeDecisionNotificationLedger(path6, ledger) {
-  mkdirSync13(join23(path6, ".."), { recursive: true });
-  writeFileSync12(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
-}
-function confirmRevision(confirm) {
-  const revision = confirm.revision;
-  return typeof revision === "string" || typeof revision === "number" ? String(revision) : String(confirm.created_at);
-}
-function confirmKey(confirm) {
-  return stableKey("org-confirm", confirm.id, confirmRevision(confirm));
-}
-function confirmSourceSession(confirm) {
-  for (const key of ["source_session_id", "session_id", "source_session"]) {
-    const value = confirm.payload?.[key];
-    if (typeof value === "string" && value) return value;
-  }
-  return "";
-}
-function waitingKey(session) {
-  return stableKey("waiting", session.session_id, session.waiting_request.request_id);
-}
-function allowWaiting(session) {
-  const request = session.waiting_request;
-  return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
-}
-function kindLabel(kind) {
-  switch (kind) {
-    case "project-create":
-      return "\u7ACB\u9879\u786E\u8BA4";
-    case "tier-change":
-      return "\u6863\u4F4D\u53D8\u66F4";
-    case "suggest-hold":
-      return "\u6682\u7F13\u5EFA\u8BAE";
-    case "archive":
-      return "\u7ED3\u9879\u786E\u8BA4";
-    case "revive":
-      return "\u590D\u6D3B\u786E\u8BA4";
-  }
-}
-function compact(text, max = 160) {
-  const oneLine = text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}\u2026` : oneLine;
-}
-function confirmText(confirm, sourceSessionId) {
-  const source = sourceSessionId ? ` \xB7 \u6765\u6E90\u4F1A\u8BDD ${sourceSessionId.slice(0, 12)}` : " \xB7 \u6765\u6E90\uFF1ALeader \u63A7\u5236\u4F1A\u8BDD";
-  const summary = confirm.reason ? `\uFF1A${compact(confirm.reason)}` : "";
-  return `[\u62CD\u677F] ${compact(confirm.title, 70)} \xB7 ${kindLabel(confirm.kind)}${source}${summary}`;
-}
-function waitingText(session) {
-  const tool = compact(session.waiting_request?.tool_name || "\u64CD\u4F5C", 60);
-  return `[\u5BA1\u6279] \u5F53\u524D\u4F1A\u8BDD\u7B49\u5F85\u5141\u8BB8 ${tool} \xB7 \u6765\u6E90\u4F1A\u8BDD ${session.session_id.slice(0, 12)}`;
-}
-var DecisionNotificationWatcher = class {
-  path;
-  intervalMs;
-  waitMs;
-  remindMs;
-  enabled;
-  now;
-  options;
-  ledger;
-  timer = null;
-  constructor(options) {
-    this.options = options;
-    this.path = ledgerPathOf(options);
-    this.intervalMs = options.intervalMs ?? numberEnv("CCR_DECISION_NOTIFY_INTERVAL_MS", DEFAULT_INTERVAL_MS, 1e3);
-    this.waitMs = (options.waitMin ?? numberEnv("CCR_DECISION_WAIT_MIN", DEFAULT_WAIT_MIN, 0)) * 6e4;
-    this.remindMs = (options.remindHours ?? numberEnv("CCR_DECISION_REMIND_HOURS", DEFAULT_REMIND_HOURS, 0)) * 36e5;
-    this.enabled = options.enabled ?? enabledEnv();
-    this.now = options.now ?? (() => Date.now());
-    this.ledger = readDecisionNotificationLedger(this.path);
-  }
-  get ledgerPath() {
-    return this.path;
-  }
-  snapshotLedger() {
-    return this.ledger.notifications.map((item) => ({ ...item }));
-  }
-  start() {
-    if (!this.enabled || this.timer) return;
-    this.scan();
-    this.timer = setInterval(() => this.scan(), this.intervalMs);
-    this.timer.unref?.();
-  }
-  stop() {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-  }
-  scan(now = this.now()) {
-    if (!this.enabled) return;
-    const confirms = this.options.listConfirms();
-    const sessions = this.options.snapshotSessions();
-    const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
-    const activeConfirmKeys = /* @__PURE__ */ new Set();
-    const activeWaitingKeys = /* @__PURE__ */ new Set();
-    let changed = false;
-    for (const confirm of confirms) {
-      const key = confirmKey(confirm);
-      const existing = byKey.get(key);
-      if (confirm.status === "pending") {
-        activeConfirmKeys.add(key);
-        const item = existing ?? {
-          key,
-          kind: "org-confirm",
-          source_session_id: confirmSourceSession(confirm),
-          created_at: confirm.created_at,
-          group: "action",
-          actionable: true,
-          revision: confirmRevision(confirm)
-        };
-        if (!existing) {
-          this.ledger.notifications.push(item);
-          byKey.set(key, item);
-          changed = true;
-        }
-        if (!item.source_session_id) {
-          const source = confirmSourceSession(confirm);
-          if (source) item.source_session_id = source;
-        }
-        const target = this.targetSession(item.source_session_id, sessions);
-        if (!item.first_sent_at && target && this.options.notify(target, confirmText(confirm, target))) {
-          item.source_session_id = target;
-          item.first_sent_at = now;
-          changed = true;
-        } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && target && this.options.notify(target, confirmText(confirm, target))) {
-          item.reminded_at = now;
-          changed = true;
-        }
-      } else if (existing && !existing.resolved_at) {
-        existing.resolved_at = confirm.decided_at ?? now;
-        changed = true;
-      }
-    }
-    for (const session of sessions) {
-      if (!allowWaiting(session)) continue;
-      const key = waitingKey(session);
-      activeWaitingKeys.add(key);
-      const existing = byKey.get(key);
-      const item = existing ?? {
-        key,
-        kind: "waiting",
-        source_session_id: session.session_id,
-        created_at: session.waiting_started_at ?? session.updated_at,
-        group: "action",
-        actionable: true,
-        revision: session.waiting_request.request_id
-      };
-      if (!existing) {
-        this.ledger.notifications.push(item);
-        byKey.set(key, item);
-        changed = true;
-      }
-      const startedAt = session.waiting_started_at ?? session.updated_at;
-      if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
-        item.first_sent_at = now;
-        changed = true;
-      } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && this.options.notify(session.session_id, waitingText(session))) {
-        item.reminded_at = now;
-        changed = true;
-      }
-    }
-    for (const item of this.ledger.notifications) {
-      if (item.resolved_at) continue;
-      if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
-        item.resolved_at = now;
-        changed = true;
-      }
-      if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
-        item.resolved_at = now;
-        changed = true;
-      }
-    }
-    if (changed) writeDecisionNotificationLedger(this.path, this.ledger);
-  }
-  targetSession(preferred, sessions) {
-    if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
-    const leader2 = this.options.leaderSessionId();
-    if (leader2 && sessions.some((session) => session.session_id === leader2)) return leader2;
-    return sessions[0]?.session_id ?? null;
-  }
-};
-
-// src/agent-codex.ts
-import { spawn as spawn3 } from "node:child_process";
-import { randomUUID as randomUUID6 } from "node:crypto";
-import { existsSync as existsSync17, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync13 } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter as delimiter3, dirname as dirname8, join as join24 } from "node:path";
-var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
-var CODEX_ACTIVITY_CAPABILITIES = {
-  native_status: true,
-  operation_summary: true,
-  native_elapsed: false,
-  approval: false
-};
-var CodexEventMapper = class {
-  /** 当前回合起始时刻（turn.started 记，回合收口事件算时长用；测试可注入 now 定值） */
-  turnStartMs = 0;
-  /** 上个回合是否已收口（turn.completed/turn.failed）。会话侧判「进程退出但回合
-   *  未收口」用——true 时退出码不再补发 onTurnEnd（防双发） */
-  turnTerminal = true;
-  /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
-  lastThreadId;
-  handle(raw, cb2, now = Date.now()) {
-    if (!raw || typeof raw !== "object") return;
-    const ev2 = raw;
-    switch (ev2.type) {
-      case "thread.started": {
-        const tid = typeof ev2.thread_id === "string" ? ev2.thread_id : "";
-        this.lastThreadId = tid || this.lastThreadId;
-        cb2.onInit(tid, "codex");
-        break;
-      }
-      case "turn.started":
-        this.turnStartMs = now;
-        this.turnTerminal = false;
-        cb2.onStatusChange("WORKING", "\u6267\u884C\u4E2D");
-        break;
-      case "item.started": {
-        const it2 = ev2.item;
-        if (it2?.type === "command_execution") {
-          cb2.onLog("tool_use", truncate(it2.command ?? "(\u547D\u4EE4)", 200) || "(\u547D\u4EE4)", {
-            tool: "command",
-            id: it2.id,
-            full: capDetail(it2.command ?? "")
-          });
-        }
-        break;
-      }
-      case "item.completed": {
-        const it2 = ev2.item;
-        if (!it2) break;
-        if (it2.type === "agent_message") {
-          cb2.onLog("assistant_text", it2.text ?? "", { id: it2.id });
-        } else if (it2.type === "command_execution") {
-          const exit = it2.exit_code ?? null;
-          const ok2 = it2.status === "failed" || exit !== null && exit !== 0 ? false : true;
-          const head = (it2.aggregated_output ?? "").trim().split("\n")[0] ?? "";
-          cb2.onLog("tool_result", ok2 ? head || `\u9000\u51FA\u7801 ${exit ?? "?"}` : `\u5931\u8D25\uFF08\u9000\u51FA\u7801 ${exit ?? "?"}\uFF09`, {
-            tool: "command",
-            id: it2.id,
-            full: capDetail(it2.aggregated_output ?? "")
-          });
-        }
-        break;
-      }
-      case "turn.completed": {
-        const u = ev2.usage ?? {};
-        cb2.onUsage({
-          input_tokens: num(u.input_tokens),
-          output_tokens: num(u.output_tokens),
-          cache_read_input_tokens: num(u.cached_input_tokens),
-          cache_creation_input_tokens: num(u.cache_write_input_tokens)
-        });
-        cb2.onTurnEnd(true, "success", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
-        this.turnTerminal = true;
-        break;
-      }
-      case "turn.failed": {
-        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
-        cb2.onTurnEnd(false, truncate(msg ?? "\u56DE\u5408\u5931\u8D25", 200) || "\u56DE\u5408\u5931\u8D25", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
-        this.turnTerminal = true;
-        break;
-      }
-      case "error": {
-        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
-        cb2.onLog("system", `codex \u9519\u8BEF\uFF1A${truncate(msg ?? "(\u65E0\u4FE1\u606F)", 200)}`);
-        break;
-      }
-      default:
-        break;
-    }
-  }
-};
-var cachedBin;
-function resolveCodexCliPath() {
-  if (cachedBin !== void 0) return cachedBin;
-  const fromEnv = process.env.CCR_CODEX_PATH;
-  if (fromEnv === "__none__") {
-    cachedBin = null;
-    return null;
-  }
-  if (fromEnv && existsSync17(fromEnv)) {
-    cachedBin = fromEnv;
-    return cachedBin;
-  }
-  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex.bat", "codex"] : ["codex"];
-  const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
-  for (const d2 of dirs) {
-    for (const n of names) {
-      const p = join24(d2, n);
-      if (existsSync17(p)) {
-        cachedBin = p;
-        return p;
-      }
-    }
-  }
-  cachedBin = null;
-  return null;
-}
-function materializeImages(images) {
-  if (!images || images.length === 0) return [];
-  const dir = mkdtempSync(join24(tmpdir(), "ccr-codex-img-"));
-  const out = [];
-  images.forEach((b64, i) => {
-    if (typeof b64 !== "string" || b64.length === 0) return;
-    try {
-      const p = join24(dir, `${i}.img`);
-      writeFileSync13(p, Buffer.from(b64, "base64"));
-      out.push(p);
-    } catch {
-    }
-  });
-  return out;
-}
-var CodexAgentSession = class {
-  id = randomUUID6();
-  startedAt = Date.now();
-  stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
-  ended = false;
-  cb;
-  cwd;
-  bin;
-  threadId;
-  mapper = new CodexEventMapper();
-  proc = null;
-  pid;
-  // 排队消息带图绑定（#63）：文本与该条的临时图路径一起入队，merge 时图拼接；
-  // 队列元素里的图路径在落盘时已持久，消费回合结束才清理
-  queued = [];
-  // 本回合消费的图所在目录（回合收口清理；排队中未消费的不在此列）
-  turnImageDirs = /* @__PURE__ */ new Set();
-  stopping = false;
-  stderrTail = "";
-  get childPid() {
-    return this.pid;
-  }
-  constructor(cwd, _model, cb2, initialPrompt, opts) {
-    this.cwd = cwd;
-    this.cb = cb2;
-    this.threadId = opts?.resume;
-    const bin = resolveCodexCliPath();
-    if (!bin) {
-      throw new Error("codex CLI \u672A\u627E\u5230\uFF08\u5B89\u88C5 codex \u6216\u8BBE CCR_CODEX_PATH\uFF09");
-    }
-    this.bin = bin;
-    if (initialPrompt !== void 0) this.execTurn(initialPrompt, materializeImages(opts?.images));
-  }
-  sendMessage(text, images, echo) {
-    if (this.ended) {
-      console.warn("[codex] \u4F1A\u8BDD\u5DF2\u7ED3\u675F\uFF0C\u6D88\u606F\u4E22\u5F03");
-      return;
-    }
-    const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
-    if (echo !== void 0) {
-      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
-    } else {
-      const full = fullText(text, 200);
-      this.cb.onLog("user_message", truncate(text, 200) + marker, {
-        full: full === void 0 ? void 0 : full + marker
-      });
-    }
-    if (images && images.length > 0) {
-      const paths = materializeImages(images);
-      if (this.proc) {
-        if (this.queued.length >= 50) {
-          this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
-          return;
-        }
-        this.queued.push({ text, images: paths.length > 0 ? paths : void 0 });
-        return;
-      }
-      this.execTurn(text, paths);
-      return;
-    }
-    if (this.proc) {
-      if (this.queued.length >= 50) {
-        this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
-        return;
-      }
-      this.queued.push({ text });
-      return;
-    }
-    this.execTurn(text);
-  }
-  // headless 无审批通道（WAITING 形态 P0 不做）——三口恒 false，端上不出现审批卡
-  allow(_requestId, _by, _rememberScope) {
-    return false;
-  }
-  deny(_requestId, _reason, _by) {
-    return false;
-  }
-  answer(_requestId, _answers, _by) {
-    return false;
-  }
-  hasPending() {
-    return false;
-  }
-  async setPermissionMode(_mode) {
-  }
-  async stop() {
-    if (this.ended) return;
-    this.stopping = true;
-    this.ended = true;
-    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname8(p))));
-    this.queued = [];
-    this.cleanupTurnImages(queuedDirs);
-    const child = this.proc;
-    this.proc = null;
-    this.pid = void 0;
-    this.cb.onSessionEnd("stopped");
-    if (child?.pid) void killTree(child.pid).catch(() => {
-    });
-  }
-  // -- 内部 -------------------------------------------------------------
-  execTurn(prompt, images = []) {
-    const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
-    if (this.threadId) args.push("resume", this.threadId);
-    for (const p of images) args.push("--image", p);
-    args.push("-");
-    this.turnImageDirs = new Set(images.map((p) => dirname8(p)));
-    this.mapper.turnTerminal = false;
-    this.mapper.turnStartMs = Date.now();
-    let child;
-    try {
-      child = spawn3(this.bin, args, {
-        stdio: ["pipe", "pipe", "pipe"],
-        cwd: this.cwd,
-        env: childEnv()
-      });
-    } catch (e) {
-      this.failTurn(`codex \u542F\u52A8\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`);
-      return;
-    }
-    this.proc = child;
-    this.pid = child.pid;
-    this.stderrTail = "";
-    this.cb.onStatusChange("WORKING", "\u542F\u52A8\u4E2D");
-    let pending = Buffer.alloc(0);
-    child.stdout.on("data", (d2) => {
-      pending = Buffer.concat([pending, d2]);
-      let i;
-      while ((i = pending.indexOf(10)) >= 0) {
-        const line = pending.subarray(0, i).toString("utf-8").trim();
-        pending = pending.subarray(i + 1);
-        if (line) this.onLine(line);
-      }
-    });
-    child.stderr.on("data", (d2) => {
-      this.stderrTail = (this.stderrTail + d2.toString("utf-8")).slice(-500);
-    });
-    child.on("error", (e) => {
-      this.cb.onLog("system", `codex \u8FDB\u7A0B\u9519\u8BEF\uFF1A${truncate(e.message, 200)}`);
-    });
-    child.on("close", (code) => this.onClose(code));
-    child.stdin.on("error", () => {
-    });
-    child.stdin.end(prompt, "utf-8");
-  }
-  onLine(line) {
-    let parsed;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      this.cb.onLog("system", `codex \u8F93\u51FA\u975E JSON\uFF1A${truncate(line, 120)}`);
-      return;
-    }
-    const ev2 = parsed;
-    if (ev2?.type === "thread.started" && typeof ev2.thread_id === "string" && ev2.thread_id) {
-      this.threadId = ev2.thread_id;
-    }
-    this.mapper.handle(parsed, this.cb);
-  }
-  onClose(code) {
-    this.proc = null;
-    this.pid = void 0;
-    this.cleanupTurnImages();
-    if (this.stopping) return;
-    if (!this.mapper.turnTerminal) {
-      this.mapper.turnTerminal = true;
-      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
-      const why = code === null ? "\u8FDB\u7A0B\u88AB\u4FE1\u53F7\u7EC8\u6B62" : `\u9000\u51FA\u7801 ${code}`;
-      this.cb.onTurnEnd(false, `codex ${why}${this.stderrTail ? `\uFF1A${truncate(this.stderrTail.trim().split("\n").at(-1) ?? "", 160)}` : ""}`, dur);
-      if (!this.threadId) {
-        this.ended = true;
-        this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
-        return;
-      }
-    }
-    if (this.queued.length > 0 && !this.ended) {
-      const merged = this.queued.map((q2) => q2.text).join("\n\n");
-      const imgs = this.queued.flatMap((q2) => q2.images ?? []);
-      this.queued = [];
-      this.execTurn(merged, imgs);
-    }
-  }
-  /** 回合收口清理本回合消费的临时图目录；extraDirs=会话终止时排队未消费的 */
-  cleanupTurnImages(extraDirs) {
-    const dirs = this.turnImageDirs;
-    this.turnImageDirs = /* @__PURE__ */ new Set();
-    for (const d2 of extraDirs ?? []) dirs.add(d2);
-    for (const d2 of dirs) {
-      try {
-        rmSync3(d2, { recursive: true, force: true });
-      } catch {
-      }
-    }
-  }
-  /** spawn 同步失败收口（onClose 崩溃分支的同款语义，无进程版） */
-  failTurn(why) {
-    this.proc = null;
-    this.pid = void 0;
-    if (this.stopping || this.ended) return;
-    this.cleanupTurnImages();
-    if (!this.mapper.turnTerminal) {
-      this.mapper.turnTerminal = true;
-      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
-      this.cb.onTurnEnd(false, truncate(why, 300), dur);
-    }
-    if (!this.threadId) {
-      this.ended = true;
-      this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
-    }
-  }
-};
-
-// src/agent-jsonl.ts
-import { spawn as spawn4 } from "node:child_process";
-import { accessSync as accessSync2, constants as constants4 } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { randomUUID as randomUUID7 } from "node:crypto";
+// relay/src/agent-jsonl.ts
 var ENGINE_JSONL_PROFILES = {
   trae: {
     structured: false,
@@ -47601,7 +45919,7 @@ function preflightEngine(config) {
   return { ok: errors.length === 0, command: config.command, errors, warnings };
 }
 var JsonProcessAgentSession = class {
-  id = randomUUID7();
+  id = randomUUID6();
   startedAt = Date.now();
   stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   ended = false;
@@ -47689,7 +46007,7 @@ ${text}`;
     };
     let child;
     try {
-      child = spawn4(command, args, { cwd: this.opts.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+      child = spawn3(command, args, { cwd: this.opts.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     } catch (error) {
       this.fail(`\u542F\u52A8\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
       return;
@@ -47804,71 +46122,7 @@ ${text}`;
   }
 };
 
-// src/agent-trae.ts
-var TRAE_CAPABILITIES = {
-  resume: false,
-  reinjection: true,
-  approval: false,
-  images: false,
-  usage: false,
-  todos: false,
-  artifacts: false,
-  streaming: false
-};
-var TRAE_ACTIVITY_CAPABILITIES = {
-  native_status: false,
-  operation_summary: true,
-  native_elapsed: false,
-  approval: false
-};
-var TraeAgentSession = class extends JsonProcessAgentSession {
-  constructor(opts) {
-    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
-  }
-  buildArgs(prompt) {
-    return ["run", prompt];
-  }
-};
-function preflightTrae(config) {
-  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
-}
-function createTraeAgent(opts) {
-  return new TraeAgentSession(opts);
-}
-
-// src/agent-qwen.ts
-var QWEN_CODE_CAPABILITIES = {
-  resume: false,
-  reinjection: true,
-  approval: false,
-  images: false,
-  usage: true,
-  todos: false,
-  artifacts: false,
-  streaming: false
-};
-var QWEN_ACTIVITY_CAPABILITIES = {
-  native_status: false,
-  operation_summary: true,
-  native_elapsed: false,
-  approval: false
-};
-var QwenCodeAgentSession = class extends JsonProcessAgentSession {
-  constructor(opts) {
-    super({ ...opts, label: "qwen-code", command: opts.command ?? process.env.CCR_QWEN_PATH ?? "qwen", profileId: "qwen-code" });
-  }
-  buildArgs(prompt) {
-    return ["-p", prompt, "--output-format", "json"];
-  }
-};
-function preflightQwen(config) {
-  return preflightEngine({ command: config?.command ?? process.env.CCR_QWEN_PATH ?? "qwen", provider: config?.provider });
-}
-function createQwenCodeAgent(opts) {
-  return new QwenCodeAgentSession(opts);
-}
-
-// src/agent-codebuddy.ts
+// relay/src/agent-codebuddy.ts
 var CODEBUDDY_CAPABILITIES = {
   resume: false,
   reinjection: true,
@@ -47900,15 +46154,71 @@ function createCodeBuddyAgent(opts) {
   return new CodeBuddyAgentSession(opts);
 }
 
-// src/agent-zcode.ts
-var ZCODE_ACTIVITY_CAPABILITIES = {
+// relay/src/agent-qwen.ts
+var QWEN_CODE_CAPABILITIES = {
+  resume: false,
+  reinjection: true,
+  approval: false,
+  images: false,
+  usage: true,
+  todos: false,
+  artifacts: false,
+  streaming: false
+};
+var QWEN_ACTIVITY_CAPABILITIES = {
   native_status: false,
-  operation_summary: false,
+  operation_summary: true,
   native_elapsed: false,
   approval: false
 };
+var QwenCodeAgentSession = class extends JsonProcessAgentSession {
+  constructor(opts) {
+    super({ ...opts, label: "qwen-code", command: opts.command ?? process.env.CCR_QWEN_PATH ?? "qwen", profileId: "qwen-code" });
+  }
+  buildArgs(prompt) {
+    return ["-p", prompt, "--output-format", "json"];
+  }
+};
+function preflightQwen(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_QWEN_PATH ?? "qwen", provider: config?.provider });
+}
+function createQwenCodeAgent(opts) {
+  return new QwenCodeAgentSession(opts);
+}
 
-// src/engine-registry.ts
+// relay/src/agent-trae.ts
+var TRAE_CAPABILITIES = {
+  resume: false,
+  reinjection: true,
+  approval: false,
+  images: false,
+  usage: false,
+  todos: false,
+  artifacts: false,
+  streaming: false
+};
+var TRAE_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var TraeAgentSession = class extends JsonProcessAgentSession {
+  constructor(opts) {
+    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
+  }
+  buildArgs(prompt) {
+    return ["run", prompt];
+  }
+};
+function preflightTrae(config) {
+  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
+}
+function createTraeAgent(opts) {
+  return new TraeAgentSession(opts);
+}
+
+// relay/src/engine-registry.ts
 function profileFor(engine, provider) {
   if (!provider) return void 0;
   const key = engine.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
@@ -47962,7 +46272,1443 @@ function providerProfileFor(engine, provider) {
   return profileFor(engine, provider);
 }
 
-// src/session-manager.ts
+// relay/src/engine-catalog.ts
+var SIX_ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
+function engineCatalogSummary(claudeModelFallback = "") {
+  const rolesByEngine = /* @__PURE__ */ new Map();
+  try {
+    for (const g2 of listGroups()) {
+      for (const [role, dflt] of Object.entries(g2.role_defaults ?? {})) {
+        const e = dflt?.engine;
+        if (!e) continue;
+        const list = rolesByEngine.get(e) ?? [];
+        if (!list.includes(role)) list.push(role);
+        rolesByEngine.set(e, list);
+      }
+    }
+  } catch {
+  }
+  const rolesFor = (e) => rolesByEngine.get(e) ?? [];
+  return SIX_ENGINES.map((id2) => {
+    const roles = rolesFor(id2);
+    if (id2 === "claude") {
+      return {
+        id: id2,
+        label: "Claude",
+        state: "ready",
+        capabilities: { resume: true, approval: true, artifacts: true },
+        preflight: { state: "pass", reason: "" },
+        models: listModels(claudeModelFallback),
+        default_for_roles: roles
+      };
+    }
+    if (id2 === "codex") {
+      const pf2 = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
+      return {
+        id: id2,
+        label: "Codex",
+        state: pf2.ok ? "ready" : "unavailable",
+        capabilities: { resume: true, approval: false, artifacts: false },
+        preflight: pf2.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf2.errors.join("\uFF1B") },
+        models: [],
+        // codex 无源级模型清单——端上显示「使用引擎默认」，不冒充
+        default_for_roles: roles
+      };
+    }
+    if (id2 === "zcode") {
+      return {
+        id: id2,
+        label: "ZCode",
+        state: "unsupported",
+        capabilities: { resume: false, approval: false, artifacts: false },
+        preflight: { state: "unknown", reason: "\u679A\u4E3E\u5360\u4F4D\u672A\u63A5\u5165\u7F16\u6392\uFF08\u4E0D\u53EF\u9009\uFF09" },
+        models: [],
+        default_for_roles: roles
+      };
+    }
+    const def = getEngineDefinition(id2);
+    if (!def) {
+      return { id: id2, label: id2, state: "unknown", capabilities: { resume: false, approval: false, artifacts: false }, preflight: { state: "unknown", reason: "\u6CE8\u518C\u8868\u7F3A\u5B9A\u4E49" }, models: [], default_for_roles: roles };
+    }
+    const pf = def.preflight();
+    return {
+      id: id2,
+      label: def.label,
+      state: pf.ok ? "ready" : "unavailable",
+      capabilities: {
+        resume: def.capabilities?.resume ?? false,
+        approval: def.capabilities?.approval ?? false,
+        artifacts: def.capabilities?.artifacts ?? false
+      },
+      preflight: pf.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf.errors.join("\uFF1B") },
+      models: [],
+      default_for_roles: roles
+    };
+  });
+}
+function catalogReadyEngines() {
+  return new Set(engineCatalogSummary().filter((e) => e.state === "ready").map((e) => e.id));
+}
+
+// relay/src/permission-audit.ts
+import { isAbsolute as isAbsolute6, join as join22, resolve as resolve7 } from "node:path";
+import { homedir as homedir8 } from "node:os";
+function resolveDirScope(cwd) {
+  if (!cwd || typeof cwd !== "string") return "unknown";
+  let abs;
+  try {
+    if (!isAbsolute6(cwd)) return "unknown";
+    abs = resolve7(cwd);
+  } catch {
+    return "unknown";
+  }
+  const home = homedir8();
+  const orgRoot = resolve7(home, ".cc-deck");
+  if (abs === orgRoot || abs.startsWith(orgRoot + "/")) return "production";
+  if (abs === home) return "production";
+  return "sandbox";
+}
+function resolveEnvScope(port) {
+  const explicit = process.env.CCR_ENV;
+  if (explicit === "production" || explicit === "sandbox") return explicit;
+  if (explicit === "unknown") return "unknown";
+  if (port === void 0 || port === null || !Number.isFinite(port) || port <= 0) return "unknown";
+  return port === 8787 ? "production" : "sandbox";
+}
+function auditStore(dataDir2) {
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnAuditSkipped(`${driver.code ?? "\u65E0\u9519\u8BEF\u7801"}: ${driver.error ?? "unknown"}`);
+    return null;
+  }
+  try {
+    return ensureStore({ dataDir: dataDir2, orgDir: orgDir(), tasksDir: join22(dataDir2, "tasks") });
+  } catch (e) {
+    warnAuditSkipped(e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+var auditSkipNotified = false;
+function warnAuditSkipped(reason) {
+  if (auditSkipNotified) return;
+  auditSkipNotified = true;
+  console.warn(`[permission-audit] \u26A0\uFE0F  sqlite \u4E0D\u53EF\u7528\uFF0C\u5BA1\u8BA1\u843D\u5E93\u8DF3\u8FC7\uFF08\u5C3D\u529B\u800C\u4E3A\u9762\uFF0C\u4E0D\u963B\u65AD\u4E3B\u8DEF\u5F84\uFF09\u3002\u539F\u56E0: ${reason}\uFF1B\u5E73\u53F0 ${process.platform}-${process.arch}`);
+}
+function appendPermissionAudit(port, row) {
+  if (port === null) return;
+  try {
+    port.exec(
+      `INSERT INTO permission_audit (requested_mode, normalized_mode, effective_mode, native_mode, capability_state, engine, reason, policy_source, environment, dir_scope, tier, actor, session_id, command_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [row.requested_mode, row.normalized_mode, row.effective_mode, row.native_mode, row.capability_state, row.engine, row.reason, row.policy_source, row.environment, row.dir_scope, row.tier, row.actor, row.session_id, row.command_id, row.created_at]
+    );
+  } catch (e) {
+    console.warn(`[permission-audit] \u5BA1\u8BA1\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// relay/src/leader-duty.ts
+function receiptCandidates(snapshot, now) {
+  return (snapshot.pending_receipts ?? []).filter((receipt) => receipt.reviewed !== true).map((receipt) => ({
+    kind: "receipt",
+    id: receipt.sid,
+    source_session_id: receipt.sid,
+    age_ms: Math.max(0, now - receipt.mtime)
+  }));
+}
+function dispatchCandidates(snapshot) {
+  return (snapshot.failed_or_hanging_dispatches ?? []).filter((dispatch) => dispatch.status !== "running" || (dispatch.hanging_ms ?? 0) > 0).filter((dispatch) => dispatch.status === "failed" || dispatch.status === "hanging" || dispatch.status === "dispatched" || (dispatch.hanging_ms ?? 0) > 0).map((dispatch) => ({
+    kind: "dispatch",
+    id: dispatch.dispatch_id,
+    source_session_id: dispatch.source_session_id,
+    age_ms: dispatch.hanging_ms,
+    playbook: dispatch.playbook,
+    risk: dispatch.risk,
+    token_estimate: dispatch.token_estimate,
+    time_estimate_ms: dispatch.time_estimate_ms
+  }));
+}
+function todoCandidates(snapshot) {
+  return (snapshot.unlocked_todos ?? []).map((todo) => ({
+    kind: "todo",
+    id: todo.todo_id,
+    source_session_id: todo.source_session_id,
+    playbook: todo.playbook,
+    risk: todo.risk,
+    token_estimate: todo.token_estimate,
+    time_estimate_ms: todo.time_estimate_ms
+  }));
+}
+function staleDoingCandidates(snapshot) {
+  return (snapshot.stale_doing ?? []).map((doing) => ({
+    kind: "stale_doing",
+    id: doing.dispatch_id ?? doing.session_id,
+    source_session_id: doing.session_id,
+    age_ms: doing.doing_ms,
+    playbook: doing.playbook,
+    risk: doing.risk,
+    token_estimate: doing.token_estimate,
+    time_estimate_ms: doing.time_estimate_ms
+  }));
+}
+function hasRecentRunningProgress(session, now, windowMs) {
+  if (session.recent_progress !== void 0) return session.recent_progress;
+  const progressAt = session.last_progress_at ?? session.updated_at;
+  return progressAt !== void 0 && now - progressAt <= windowMs;
+}
+function evaluateLeaderActionableWork(snapshot) {
+  const now = snapshot.now ?? Date.now();
+  const candidates = [
+    ...receiptCandidates(snapshot, now),
+    ...dispatchCandidates(snapshot),
+    ...todoCandidates(snapshot),
+    ...staleDoingCandidates(snapshot)
+  ];
+  const blocked = [...snapshot.blocked ?? []];
+  if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
+  if (blocked.length > 0) return { actionable: false, candidates, reason: "blocked", blocked };
+  const running = (snapshot.running_sessions ?? []).filter((session) => session.status === "running" || session.status === "WORKING");
+  const progressWindow = snapshot.progress_window_ms ?? 60 * 60 * 1e3;
+  if (running.length > 0 && running.every((session) => hasRecentRunningProgress(session, now, progressWindow))) {
+    return { actionable: false, candidates, reason: "all_running", blocked };
+  }
+  return { actionable: false, candidates, reason: "empty", blocked };
+}
+function transitionDutyFeedCount(state = { consecutive_feeds: 0 }, signal, k3 = 3) {
+  if (signal === "idle" || signal === "natural_sleep") {
+    return { state: { consecutive_feeds: 0 }, shouldSleep: false };
+  }
+  const consecutive = Math.max(0, state.consecutive_feeds) + 1;
+  if (consecutive >= k3) {
+    return {
+      state: { consecutive_feeds: consecutive },
+      shouldSleep: true,
+      continuation: {
+        delay_min_ms: 5 * 60 * 1e3,
+        delay_max_ms: 15 * 60 * 1e3,
+        wake_once: true,
+        auto_renew: false
+      }
+    };
+  }
+  return { state: { consecutive_feeds: consecutive }, shouldSleep: false };
+}
+
+// relay/src/acceptance.ts
+import { readFileSync as readFileSync16, writeFileSync as writeFileSync9, mkdirSync as mkdirSync11, existsSync as existsSync17, readdirSync as readdirSync7 } from "node:fs";
+import { join as join23 } from "node:path";
+var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
+function acceptanceDir() {
+  return process.env.CCR_ACCEPTANCE_DIR || join23(resolveDataDir(), "acceptances");
+}
+function loadAcceptance(id2) {
+  if (!ACCEPTANCE_ID_RE.test(id2)) return null;
+  const file = join23(acceptanceDir(), `${id2}.json`);
+  if (!existsSync17(file)) return null;
+  try {
+    const a = JSON.parse(readFileSync16(file, "utf-8"));
+    if (!a || !Array.isArray(a.rows) || a.rows.length === 0) return null;
+    return a;
+  } catch {
+    return null;
+  }
+}
+var hits = /* @__PURE__ */ new Map();
+function rateLimited(id2, limit = 10, windowMs = 6e4) {
+  const now = Date.now();
+  const arr = (hits.get(id2) ?? []).filter((t) => now - t < windowMs);
+  if (arr.length >= limit) {
+    hits.set(id2, arr);
+    return true;
+  }
+  arr.push(now);
+  hits.set(id2, arr);
+  if (hits.size > 500) {
+    for (const [k3, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k3);
+  }
+  return false;
+}
+function saveResult(id2, payload, ua, ck2) {
+  if (typeof payload !== "object" || payload === null) return "bad body";
+  const rows = payload.rows;
+  if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return "rows \u975E\u6CD5";
+  const clean = [];
+  for (const r of rows) {
+    if (typeof r !== "object" || r === null) return "row \u975E\u6CD5";
+    const { i, verdict, note } = r;
+    if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i > 1e6) return "\u884C\u53F7\u975E\u6CD5";
+    if (verdict !== "pass" && verdict !== "fail" && verdict !== null) return "\u5224\u5B9A\u503C\u975E\u6CD5";
+    if (note !== void 0 && typeof note !== "string") return "\u5907\u6CE8\u975E\u6CD5";
+    if (typeof note === "string" && note.length > 600) return "\u5907\u6CE8\u8FC7\u957F";
+    clean.push({ i, verdict, note: typeof note === "string" ? note : "" });
+  }
+  const dir = acceptanceDir();
+  mkdirSync11(dir, { recursive: true });
+  const file = join23(dir, `${id2}.results.json`);
+  let history = [];
+  try {
+    history = JSON.parse(readFileSync16(file, "utf-8")).history ?? [];
+  } catch {
+  }
+  if (!Array.isArray(history)) history = [];
+  const counts = {
+    pass: clean.filter((r) => r.verdict === "pass").length,
+    fail: clean.filter((r) => r.verdict === "fail").length,
+    skip: clean.filter((r) => r.verdict === null).length
+  };
+  history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean, ...ck2 ? { ck: ck2 } : {} });
+  if (history.length > 50) history = history.slice(history.length - 50);
+  writeFileSync9(file, JSON.stringify({ id: id2, history }, null, 1));
+  return null;
+}
+function listAcceptances(limit = 20) {
+  let names;
+  try {
+    names = readdirSync7(acceptanceDir());
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const n of names) {
+    if (!n.endsWith(".json") || n.endsWith(".results.json")) continue;
+    const id2 = n.slice(0, -5);
+    if (!ACCEPTANCE_ID_RE.test(id2)) continue;
+    const a = loadAcceptance(id2);
+    if (!a) continue;
+    let judged = 0;
+    let done = false;
+    let submitted = false;
+    try {
+      const r = JSON.parse(readFileSync16(join23(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+      const last = r.history?.[r.history.length - 1];
+      if (last?.rows) {
+        submitted = true;
+        judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
+        done = judged >= a.rows.length;
+      }
+    } catch {
+    }
+    out.push({
+      id: id2,
+      title: a.title,
+      created_at: a.created_at,
+      total: a.rows.length,
+      judged,
+      submitted,
+      done,
+      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}
+    });
+  }
+  out.sort((x, y) => y.created_at - x.created_at);
+  return out.slice(0, limit);
+}
+function acceptanceClosure(id2) {
+  const a = loadAcceptance(id2);
+  if (!a) return null;
+  let submitted = false;
+  let all_pass = false;
+  let fail_count = 0;
+  try {
+    const r = JSON.parse(readFileSync16(join23(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+    const last = r.history?.[r.history.length - 1];
+    if (last?.rows && Array.isArray(last.rows)) {
+      submitted = true;
+      const pass = last.rows.filter((x) => x.verdict === "pass").length;
+      fail_count = last.rows.filter((x) => x.verdict === "fail").length;
+      all_pass = pass === a.rows.length && fail_count === 0 && last.rows.length >= a.rows.length;
+    }
+  } catch {
+  }
+  return { submitted, all_pass, fail_count, total: a.rows.length };
+}
+function acceptanceHtml(a, apiPath = "/api/acceptance") {
+  const { sheet_key: _sk, gid: _g2, entry_id: _e, ...pub } = a;
+  const data = JSON.stringify(pub).replace(/</g, "\\u003c");
+  const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
+  const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(a.title)}</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background:#0A0E14; color:#E6EDF3; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; padding:20px 14px 120px; }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size:18px; margin-bottom:10px; }
+  .pf { color:#9BA8B7; font-size:12.5px; margin:4px 0; }
+  .bar { position:sticky; top:0; z-index:5; background:rgba(10,14,20,.92); backdrop-filter:blur(6px);
+    display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #1C2430; margin-bottom:12px; }
+  .bar b { color:#4D9FFF; font-variant-numeric:tabular-nums; }
+  .card { background:#10161F; border:1px solid #1C2430; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .r1 { display:flex; align-items:center; gap:8px; }
+  .task { color:#4D9FFF; font-weight:700; font-size:12px; flex:none; }
+  .item { flex:1; font-weight:600; font-size:14px; }
+  .btns { display:flex; gap:8px; flex:none; }
+  .vb { width:34px; height:34px; border-radius:50%; border:2px solid #2A3644; background:none;
+    color:#5A6B7E; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .vb:active { transform:scale(.92); }
+  .vb.on-pass { border-color:#2BD98F; background:#2BD98F; color:#06281B; }
+  .vb.on-fail { border-color:#F0524F; background:#F0524F; color:#2B0A09; }
+  .crit { color:#7E8B9B; font-size:12px; margin-top:6px; }
+  .note { width:100%; margin-top:8px; background:#0A0E14; border:1px solid #1C2430; border-radius:8px;
+    color:#E6EDF3; font:inherit; font-size:12.5px; padding:7px 10px; display:none; }
+  .note.show { display:block; }
+  .foot { position:fixed; left:0; right:0; bottom:0; padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+    background:rgba(10,14,20,.95); border-top:1px solid #1C2430; }
+  .foot .wrap { display:flex; align-items:center; gap:12px; }
+  #submit { flex:1; height:46px; border-radius:12px; border:1px solid #2E5FA3; background:#14314F;
+    color:#4D9FFF; font-size:15px; font-weight:700; cursor:pointer; }
+  #submit:disabled { opacity:.45; }
+  #msg { font-size:12px; color:#9BA8B7; }
+  .done { text-align:center; padding:40px 0; }
+  .done .n { font-size:34px; font-weight:800; }
+  ul.nt { color:#7E8B9B; font-size:12px; margin:12px 0 0 18px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="foot"><div class="wrap"><button id="submit">\u63D0\u4EA4</button><span id="msg"></span></div></div>
+<script>
+var DATA = ${data};
+var state = {};  // \u884C\u53F7 -> "pass"|"fail"|undefined\uFF08undefined=\u672A\u6D4B\uFF09
+var app = document.getElementById("app");
+var h = '<h1>' + esc(DATA.title) + '</h1>' + ${JSON.stringify(preface)} +
+  '<div class="bar">\u5DF2\u5224 <b id="cnt">0</b> / ' + DATA.rows.length + '\u3000<span style="color:#5A6B7E;font-size:12px">\u2713 \u901A\u8FC7\u3000\u2717 \u4E0D\u901A\u8FC7\u3000\u4E0D\u70B9=\u672A\u6D4B</span></div>';
+for (var i = 0; i < DATA.rows.length; i++) {
+  var r = DATA.rows[i];
+  h += '<div class="card" id="c' + i + '"><div class="r1">' +
+    '<span class="task">' + esc(r.task) + '</span><span class="item">' + esc(r.item) + '</span>' +
+    '<span class="btns"><button class="vb" data-i="' + i + '" data-v="pass">\u2713</button>' +
+    '<button class="vb" data-i="' + i + '" data-v="fail">\u2717</button></span></div>' +
+    '<div class="crit">' + esc(r.criteria) + '</div>' +
+    '<input class="note" id="n' + i + '" placeholder="\u95EE\u9898/\u73B0\u8C61\uFF08\u9009\u586B\uFF09"></div>';
+}
+if (DATA.notes && DATA.notes.length) h += '<ul class="nt">' + ${JSON.stringify(notes)} + '</ul>';
+app.innerHTML = h;
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function paint() {
+  var n = 0;
+  document.querySelectorAll(".vb").forEach(function (b) {
+    var on = state[b.dataset.i] === b.dataset.v;
+    b.className = "vb" + (on ? " on-" + b.dataset.v : "");
+    if (on) n++;
+  });
+  document.getElementById("cnt").textContent = n;
+  document.getElementById("submit").textContent = "\u63D0\u4EA4\u9A8C\u6536\uFF08" + n + "/" + DATA.rows.length + "\uFF09";
+  for (var i = 0; i < DATA.rows.length; i++) {
+    var show = state[i] === "fail" || (document.getElementById("n" + i).value || "") !== "";
+    document.getElementById("n" + i).className = "note" + (show ? " show" : "");
+  }
+}
+document.addEventListener("click", function (e) {
+  var b = e.target.closest(".vb");
+  if (!b) return;
+  var i = b.dataset.i;
+  state[i] = state[i] === b.dataset.v ? undefined : b.dataset.v;  // \u518D\u70B9\u4E00\u6B21\u53D6\u6D88
+  if (state[i] === "fail") document.getElementById("n" + i).focus();
+  paint();
+});
+document.addEventListener("input", paint);
+paint();
+document.getElementById("submit").onclick = function () {
+  var rows = [];
+  for (var i = 0; i < DATA.rows.length; i++) {
+    rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
+  }
+  document.getElementById("msg").textContent = "\u63D0\u4EA4\u4E2D\u2026";
+  // #28 \u4E91\u901A\u9053\u9632\u4F2A\u9020\uFF1A\u51FA\u5355\u94FE\u63A5\u4EE5 fragment\uFF08#<key>\uFF09\u643A\u5E26\u6BCF\u5355\u5BC6\u94A5\uFF08\u4E0D\u8FDB\u670D\u52A1\u5668\u65E5\u5FD7/
+  // Referer/\u7F13\u5B58\u952E\uFF09\uFF0C\u63D0\u4EA4\u968F body \u5E26\u56DE\u7531 Worker \u5BF9\u7167\u3002LAN \u7AEF\u70B9\u4E0D\u6821\u9A8C\uFF08\u5BB6\u5EAD\u7F51\u5A01\u80C1
+  // \u6A21\u578B=\u5BB6\u4EBA\uFF0C\u7EF4\u6301\u80FD\u529B\u94FE\u63A5\u53E3\u5F84\uFF09\uFF1B\u4E91\u7248\u9875\u9762\u7F3A fragment \u65F6\u63D0\u4EA4\u4F1A\u88AB 403 \u5E76\u663E\u793A\u539F\u56E0
+  var sheetKey = location.hash.replace(/^#/, "").trim() || undefined;
+  fetch(${JSON.stringify(apiPath)}, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: DATA.id, rows: rows, key: sheetKey }),
+  }).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j.ok) { document.getElementById("msg").textContent = "\u63D0\u4EA4\u5931\u8D25\uFF1A" + (j.error || "\u7A0D\u540E\u518D\u8BD5"); return; }
+    var p = 0, f = 0, s = 0;
+    rows.forEach(function (r) { if (r.verdict === "pass") p++; else if (r.verdict === "fail") f++; else s++; });
+    app.innerHTML = '<div class="done"><div class="n" style="color:#2BD98F">\u2713 ' + p + ' \u901A\u8FC7</div>' +
+      '<div class="n" style="color:#F0524F">' + f + ' \u4E0D\u901A\u8FC7</div>' +
+      '<div class="n" style="color:#5A6B7E">' + s + ' \u672A\u6D4B</div>' +
+      '<p style="color:#9BA8B7;margin-top:16px">\u5DF2\u63D0\u4EA4\uFF08' + new Date().toLocaleTimeString() + '\uFF09\u3002\u9875\u9762\u53EF\u4EE5\u5173\u4E86\u3002</p></div>';
+    document.querySelector(".foot").style.display = "none";
+  }).catch(function () {
+    document.getElementById("msg").textContent = "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u7A0D\u540E\u518D\u8BD5";
+  });
+};
+</script>
+</body>
+</html>`;
+}
+function esc(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}
+function serveAcceptancePage(id2, res, apiPath) {
+  const a = loadAcceptance(id2);
+  if (!a) return false;
+  const html = acceptanceHtml(a, apiPath);
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+  res.end(html);
+  return true;
+}
+function applyCloudSubmits(id2, submits) {
+  if (!ACCEPTANCE_ID_RE.test(id2)) return [];
+  const seenK = /* @__PURE__ */ new Set();
+  const seen = /* @__PURE__ */ new Set();
+  try {
+    const h = JSON.parse(readFileSync16(join23(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
+    if (Array.isArray(h)) {
+      for (const e of h) {
+        if (typeof e.ck === "string") seenK.add(e.ck);
+        try {
+          seen.add(JSON.stringify(e.rows ?? null));
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  const added = [];
+  if (!Array.isArray(submits)) return added;
+  for (const s of submits) {
+    if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
+    const sig = JSON.stringify(s.rows);
+    if (typeof s.k === "string" ? seenK.has(s.k) : seen.has(sig)) continue;
+    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
+    if (saveResult(id2, { rows: s.rows }, ua, typeof s.k === "string" ? s.k : void 0) === null) {
+      if (typeof s.k === "string") seenK.add(s.k);
+      seen.add(sig);
+      added.push(s);
+    }
+  }
+  return added;
+}
+
+// relay/src/plugin-config.ts
+import { readFileSync as readFileSync17 } from "node:fs";
+import { homedir as homedir9 } from "node:os";
+import { join as join24 } from "node:path";
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty"];
+function pluginConfigPath() {
+  return process.env.CCR_CONFIG_FILE ?? join24(homedir9(), ".cc-deck", "config.json");
+}
+function readPluginConfig() {
+  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true };
+  try {
+    const raw = JSON.parse(readFileSync17(pluginConfigPath(), "utf-8"));
+    for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
+  } catch {
+  }
+  return out;
+}
+
+// relay/src/title-gen.ts
+async function generateTitle(task, model, onSid, cwd, configHome) {
+  const trimmed = task.trim().slice(0, 600);
+  if (!trimmed) return { title: null };
+  let timer;
+  let sidSeen = false;
+  const timeout = new Promise((resolve9) => {
+    timer = setTimeout(() => resolve9({ title: null }), 2e4);
+    timer.unref();
+  });
+  try {
+    const run2 = async () => {
+      const q2 = NUt({
+        prompt: "\u4E3A\u4E0B\u9762\u7684\u4EFB\u52A1\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898\uFF0C\u4E0D\u8D85\u8FC7 12 \u4E2A\u5B57\uFF0C\u76F4\u63A5\u8F93\u51FA\u6807\u9898\u672C\u8EAB\uFF0C\u4E0D\u8981\u5F15\u53F7\u548C\u4EFB\u4F55\u89E3\u91CA\uFF1A\n\n" + trimmed,
+        options: {
+          model,
+          // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
+          // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
+          cwd: cwd ?? process.cwd(),
+          // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
+          ...resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath() } : {},
+          // 防止被全局 bridge hook 注册成外部会话；#17 开关开启时 titlegen 一次性
+          // 会话落独立家（relay 内部工具会话，不区分归属——默认家不再冒 .tmp-titlegen 目录）
+          env: {
+            ...process.env,
+            CCR_RELAY_CHILD: "1",
+            ...configHome ? { CLAUDE_CONFIG_DIR: configHome } : {}
+          },
+          permissionMode: "bypassPermissions",
+          maxTurns: 1
+        }
+      });
+      for await (const msg of q2) {
+        const sid = msg.session_id;
+        if (sid && !sidSeen) {
+          sidSeen = true;
+          onSid?.(sid);
+        }
+        if (msg.type === "result" && !msg.is_error) {
+          const raw = (msg.result ?? "").trim();
+          const t = raw.replace(/^["'「『]|["'」』]$/g, "").split("\n")[0].trim();
+          if (t) return { title: [...t].slice(0, 16).join(""), sid };
+          if (sid) return { title: null, sid };
+        }
+      }
+      return { title: null };
+    };
+    return await Promise.race([run2(), timeout]);
+  } catch {
+    return { title: null };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// relay/src/cron.ts
+import { readFileSync as readFileSync18 } from "node:fs";
+import { join as join25 } from "node:path";
+var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
+var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
+function tsNum(v) {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+  if (typeof v === "string" && v.trim()) {
+    const parsed = Date.parse(v);
+    if (Number.isFinite(parsed)) return parsed;
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return void 0;
+}
+function normalizeTask(raw, fallbackId) {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw;
+  const status = str(o.status);
+  if (status === "deleted") return null;
+  const rawId = str(o.id) ?? str(o.taskId);
+  const prompt = str(o.prompt) ?? str(o.command) ?? str(o.task) ?? str(o.instruction) ?? str(o.message) ?? "";
+  const schedule = str(o.humanSchedule) ?? str(o.schedule) ?? str(o.cron) ?? str(o.interval) ?? str(o.expression) ?? "";
+  const name = str(o.name) ?? str(o.title) ?? str(o.label);
+  if (!prompt && !schedule && !name && !rawId) return null;
+  const paused = o.paused === true || o.enabled === false || o.active === false || status === "paused" || status === "expired";
+  const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
+  if (o.recurring === false && next !== void 0 && next < Date.now() - EXPIRED_ONE_SHOT_GRACE_MS) return null;
+  return {
+    id: rawId ?? fallbackId,
+    name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "\u672A\u547D\u540D\u4EFB\u52A1"),
+    prompt,
+    schedule,
+    ...next !== void 0 ? { next_run_at: next } : {},
+    ...paused ? { paused: true } : {},
+    ...o.recurring === false ? { recurring: false } : {}
+  };
+}
+function readCronTasks(cwd) {
+  let text;
+  try {
+    text = readFileSync18(join25(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+  } catch (e) {
+    return e.code === "ENOENT" ? void 0 : "bad";
+  }
+  let root;
+  try {
+    root = JSON.parse(text);
+  } catch {
+    return "bad";
+  }
+  let entries;
+  if (Array.isArray(root)) {
+    entries = root.map((r, i) => [String(i), r]);
+  } else if (root && typeof root === "object") {
+    const wrapped = root.tasks;
+    entries = Array.isArray(wrapped) ? wrapped.map((r, i) => [String(i), r]) : Object.entries(root);
+  } else {
+    return "bad";
+  }
+  const out = [];
+  for (const [key, raw] of entries) {
+    const t = normalizeTask(raw, key);
+    if (t) out.push(t);
+  }
+  return out;
+}
+function cronTasksKey(tasks) {
+  return JSON.stringify(tasks);
+}
+
+// relay/src/task-store.ts
+import { readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync6 } from "node:fs";
+import { homedir as homedir10 } from "node:os";
+import path from "node:path";
+function readTaskStoreTodos(cliSessionId, base) {
+  const dir = path.join(base ?? path.join(homedir10(), ".claude"), "tasks", cliSessionId);
+  let files;
+  try {
+    files = readdirSync8(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  const out = [];
+  for (const f of files) {
+    try {
+      const fp2 = path.join(dir, f);
+      const t = JSON.parse(readFileSync19(fp2, "utf-8"));
+      if (t.status === "deleted") continue;
+      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
+      if (!subject) continue;
+      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
+      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
+      const parsed = Number(t.id);
+      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync6(fp2).mtimeMs, ...activeForm });
+    } catch {
+    }
+  }
+  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  return out;
+}
+
+// relay/src/uploads.ts
+import { mkdirSync as mkdirSync12, writeFileSync as writeFileSync10 } from "node:fs";
+import path2 from "node:path";
+function tmpUploadDir(dataDir2) {
+  return path2.join(dataDir2, "..", "tmp");
+}
+function sidKeyOf(sessionId) {
+  return sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
+}
+function sniffImageExt(head) {
+  if (head[0] === 137 && head[1] === 80) return "png";
+  if (head[0] === 255 && head[1] === 216) return "jpg";
+  if (head[0] === 71 && head[1] === 73) return "gif";
+  if (head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP") return "webp";
+  return "png";
+}
+function safeName(raw) {
+  const base = raw.split(/[\\/]/).pop() ?? "";
+  const cleaned = base.replace(new RegExp("[\\x00-\\x1f\\x7f]", "g"), "").replace(/^\.+/g, "").trim();
+  return cleaned.slice(0, 60) || "file";
+}
+function saveUploadImages(dataDir2, sessionId, images) {
+  if (images.length === 0) return [];
+  const dir = tmpUploadDir(dataDir2);
+  try {
+    mkdirSync12(dir, { recursive: true });
+  } catch {
+  }
+  const sidKey = sidKeyOf(sessionId);
+  const stamp = Date.now();
+  const saved = [];
+  for (let i = 0; i < Math.min(images.length, 4); i++) {
+    const b64 = images[i];
+    const head = Buffer.from(b64.slice(0, 24), "base64");
+    const ext = sniffImageExt(head);
+    const p = path2.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
+    try {
+      writeFileSync10(p, Buffer.from(b64, "base64"));
+      saved.push(p);
+    } catch {
+    }
+  }
+  return saved;
+}
+function saveUploadFiles(dataDir2, sessionId, files) {
+  if (files.length === 0) return [];
+  const dir = tmpUploadDir(dataDir2);
+  try {
+    mkdirSync12(dir, { recursive: true });
+  } catch {
+  }
+  const sidKey = sidKeyOf(sessionId);
+  const stamp = Date.now();
+  const saved = [];
+  for (let i = 0; i < Math.min(files.length, 2); i++) {
+    const f = files[i];
+    const p = path2.join(dir, `file-${sidKey}-${stamp}-${i + 1}-${safeName(f.name)}`);
+    try {
+      writeFileSync10(p, Buffer.from(f.b64, "base64"));
+      saved.push(p);
+    } catch {
+    }
+  }
+  return saved;
+}
+
+// relay/src/todo-hidden.ts
+import { readFileSync as readFileSync20, writeFileSync as writeFileSync11 } from "node:fs";
+import path3 from "node:path";
+import { fileURLToPath } from "node:url";
+var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
+var MAX_PER_SESSION = 200;
+var fileCache = null;
+var keySets = /* @__PURE__ */ new Map();
+function load2() {
+  if (fileCache) return fileCache;
+  try {
+    const raw = JSON.parse(readFileSync20(FILE, "utf-8"));
+    fileCache = {};
+    for (const [k3, v] of Object.entries(raw)) {
+      if (Array.isArray(v)) {
+        const keys = v.filter((x) => typeof x === "string" && !!x);
+        if (keys.length) fileCache[k3] = keys.slice(-MAX_PER_SESSION);
+      }
+    }
+  } catch {
+    fileCache = {};
+  }
+  return fileCache;
+}
+function hiddenTodoKeys(sessionId) {
+  let s = keySets.get(sessionId);
+  if (!s) {
+    s = new Set(load2()[sessionId] ?? []);
+    keySets.set(sessionId, s);
+  }
+  return s;
+}
+function addHiddenTodoKey(sessionId, key) {
+  if (!sessionId || !key) return;
+  const s = hiddenTodoKeys(sessionId);
+  if (s.has(key) && s.size <= MAX_PER_SESSION) return;
+  s.add(key);
+  const capped = [...s].slice(-MAX_PER_SESSION);
+  keySets.set(sessionId, new Set(capped));
+  const disk = load2();
+  disk[sessionId] = capped;
+  fileCache = disk;
+  try {
+    writeFileSync11(FILE, JSON.stringify(disk));
+  } catch {
+  }
+}
+
+// relay/src/decision-notify.ts
+import { mkdirSync as mkdirSync13, readFileSync as readFileSync21, writeFileSync as writeFileSync12 } from "node:fs";
+import { join as join26 } from "node:path";
+var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
+function isDecisionNotificationKind(value) {
+  return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
+}
+function transitionNotification(item, action, at) {
+  const next = { ...item };
+  if (action === "source_succeeded" && next.handled_at === void 0) next.handled_at = at;
+  if (action === "dismissed") {
+    if (next.dismissed_at === void 0) next.dismissed_at = at;
+    if (next.handled_at === void 0) next.handled_at = at;
+  }
+  if (action === "resolved" && next.resolved_at === void 0) next.resolved_at = at;
+  return next;
+}
+function stableKey(kind, entityId, revision) {
+  if (!isDecisionNotificationKind(kind)) throw new Error(`unsupported notification kind: ${String(kind)}`);
+  if (kind === "dispatch") return `${kind}:${entityId}`;
+  if (revision === void 0 || String(revision).length === 0) return `${kind}:${entityId}`;
+  return `${kind}:${entityId}:${String(revision)}`;
+}
+var DEFAULT_WAIT_MIN = 10;
+var DEFAULT_REMIND_HOURS = 24;
+var DEFAULT_INTERVAL_MS = 2e4;
+function numberEnv(name, fallback, min) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= min ? value : fallback;
+}
+function enabledEnv() {
+  return process.env.CCR_DECISION_NOTIFY !== "0";
+}
+function ledgerPathOf(options) {
+  const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ?? process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
+  if (override) return override;
+  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join26(process.cwd(), "data");
+  return join26(dataDir2, "decision-notifications.json");
+}
+function defaultNotificationGroup(kind) {
+  return kind === "system" ? "activity" : "action";
+}
+function defaultActionable(kind, group) {
+  return group === "action" && kind !== "system";
+}
+function normalizeSourceContext(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const x = value;
+  if (typeof x.domain !== "string" || !x.domain || typeof x.entityId !== "string" || !x.entityId || typeof x.alertId !== "string" || !x.alertId || typeof x.returnPath !== "string") return void 0;
+  return {
+    domain: x.domain,
+    entityId: x.entityId,
+    alertId: x.alertId,
+    returnPath: x.returnPath,
+    ...typeof x.sessionId === "string" ? { sessionId: x.sessionId } : {},
+    ...typeof x.segment === "string" ? { segment: x.segment } : {}
+  };
+}
+function normalizeDecisionNotification(item) {
+  if (!item || typeof item !== "object") return null;
+  const x = item;
+  if (typeof x.key !== "string" || !isDecisionNotificationKind(x.kind) || typeof x.source_session_id !== "string" || typeof x.created_at !== "number" || typeof x.revision !== "string") return null;
+  const group = x.group === "action" || x.group === "attention" || x.group === "activity" ? x.group : defaultNotificationGroup(x.kind);
+  const sourceContext = normalizeSourceContext(x.source_context);
+  return {
+    key: x.key,
+    kind: x.kind,
+    source_session_id: x.source_session_id,
+    created_at: x.created_at,
+    ...typeof x.first_sent_at === "number" ? { first_sent_at: x.first_sent_at } : {},
+    ...typeof x.reminded_at === "number" ? { reminded_at: x.reminded_at } : {},
+    ...typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {},
+    ...typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {},
+    ...typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {},
+    group,
+    actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
+    revision: x.revision,
+    ...sourceContext ? { source_context: sourceContext } : {}
+  };
+}
+function readDecisionNotificationLedger(path6) {
+  try {
+    const raw = JSON.parse(readFileSync21(path6, "utf-8"));
+    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.notifications) ? raw.notifications : [];
+    const notifications = list.map(normalizeDecisionNotification).filter((item) => item !== null);
+    return { notifications };
+  } catch {
+    return { notifications: [] };
+  }
+}
+function writeDecisionNotificationLedger(path6, ledger) {
+  mkdirSync13(join26(path6, ".."), { recursive: true });
+  writeFileSync12(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
+}
+function confirmRevision(confirm) {
+  const revision = confirm.revision;
+  return typeof revision === "string" || typeof revision === "number" ? String(revision) : String(confirm.created_at);
+}
+function confirmKey(confirm) {
+  return stableKey("org-confirm", confirm.id, confirmRevision(confirm));
+}
+function confirmSourceSession(confirm) {
+  for (const key of ["source_session_id", "session_id", "source_session"]) {
+    const value = confirm.payload?.[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
+}
+function waitingKey(session) {
+  return stableKey("waiting", session.session_id, session.waiting_request.request_id);
+}
+function allowWaiting(session) {
+  const request = session.waiting_request;
+  return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
+}
+function kindLabel(kind) {
+  switch (kind) {
+    case "project-create":
+      return "\u7ACB\u9879\u786E\u8BA4";
+    case "tier-change":
+      return "\u6863\u4F4D\u53D8\u66F4";
+    case "suggest-hold":
+      return "\u6682\u7F13\u5EFA\u8BAE";
+    case "archive":
+      return "\u7ED3\u9879\u786E\u8BA4";
+    case "revive":
+      return "\u590D\u6D3B\u786E\u8BA4";
+  }
+}
+function compact(text, max = 160) {
+  const oneLine = text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}\u2026` : oneLine;
+}
+function confirmText(confirm, sourceSessionId) {
+  const source = sourceSessionId ? ` \xB7 \u6765\u6E90\u4F1A\u8BDD ${sourceSessionId.slice(0, 12)}` : " \xB7 \u6765\u6E90\uFF1ALeader \u63A7\u5236\u4F1A\u8BDD";
+  const summary = confirm.reason ? `\uFF1A${compact(confirm.reason)}` : "";
+  return `[\u62CD\u677F] ${compact(confirm.title, 70)} \xB7 ${kindLabel(confirm.kind)}${source}${summary}`;
+}
+function waitingText(session) {
+  const tool = compact(session.waiting_request?.tool_name || "\u64CD\u4F5C", 60);
+  return `[\u5BA1\u6279] \u5F53\u524D\u4F1A\u8BDD\u7B49\u5F85\u5141\u8BB8 ${tool} \xB7 \u6765\u6E90\u4F1A\u8BDD ${session.session_id.slice(0, 12)}`;
+}
+var DecisionNotificationWatcher = class {
+  path;
+  intervalMs;
+  waitMs;
+  remindMs;
+  enabled;
+  now;
+  options;
+  ledger;
+  timer = null;
+  constructor(options) {
+    this.options = options;
+    this.path = ledgerPathOf(options);
+    this.intervalMs = options.intervalMs ?? numberEnv("CCR_DECISION_NOTIFY_INTERVAL_MS", DEFAULT_INTERVAL_MS, 1e3);
+    this.waitMs = (options.waitMin ?? numberEnv("CCR_DECISION_WAIT_MIN", DEFAULT_WAIT_MIN, 0)) * 6e4;
+    this.remindMs = (options.remindHours ?? numberEnv("CCR_DECISION_REMIND_HOURS", DEFAULT_REMIND_HOURS, 0)) * 36e5;
+    this.enabled = options.enabled ?? enabledEnv();
+    this.now = options.now ?? (() => Date.now());
+    this.ledger = readDecisionNotificationLedger(this.path);
+  }
+  get ledgerPath() {
+    return this.path;
+  }
+  snapshotLedger() {
+    return this.ledger.notifications.map((item) => ({ ...item }));
+  }
+  start() {
+    if (!this.enabled || this.timer) return;
+    this.scan();
+    this.timer = setInterval(() => this.scan(), this.intervalMs);
+    this.timer.unref?.();
+  }
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+  scan(now = this.now()) {
+    if (!this.enabled) return;
+    const confirms = this.options.listConfirms();
+    const sessions = this.options.snapshotSessions();
+    const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
+    const activeConfirmKeys = /* @__PURE__ */ new Set();
+    const activeWaitingKeys = /* @__PURE__ */ new Set();
+    let changed = false;
+    for (const confirm of confirms) {
+      const key = confirmKey(confirm);
+      const existing = byKey.get(key);
+      if (confirm.status === "pending") {
+        activeConfirmKeys.add(key);
+        const item = existing ?? {
+          key,
+          kind: "org-confirm",
+          source_session_id: confirmSourceSession(confirm),
+          created_at: confirm.created_at,
+          group: "action",
+          actionable: true,
+          revision: confirmRevision(confirm)
+        };
+        if (!existing) {
+          this.ledger.notifications.push(item);
+          byKey.set(key, item);
+          changed = true;
+        }
+        if (!item.source_session_id) {
+          const source = confirmSourceSession(confirm);
+          if (source) item.source_session_id = source;
+        }
+        const target = this.targetSession(item.source_session_id, sessions);
+        if (!item.first_sent_at && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.source_session_id = target;
+          item.first_sent_at = now;
+          changed = true;
+        } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.reminded_at = now;
+          changed = true;
+        }
+      } else if (existing && !existing.resolved_at) {
+        existing.resolved_at = confirm.decided_at ?? now;
+        changed = true;
+      }
+    }
+    for (const session of sessions) {
+      if (!allowWaiting(session)) continue;
+      const key = waitingKey(session);
+      activeWaitingKeys.add(key);
+      const existing = byKey.get(key);
+      const item = existing ?? {
+        key,
+        kind: "waiting",
+        source_session_id: session.session_id,
+        created_at: session.waiting_started_at ?? session.updated_at,
+        group: "action",
+        actionable: true,
+        revision: session.waiting_request.request_id
+      };
+      if (!existing) {
+        this.ledger.notifications.push(item);
+        byKey.set(key, item);
+        changed = true;
+      }
+      const startedAt = session.waiting_started_at ?? session.updated_at;
+      if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.first_sent_at = now;
+        changed = true;
+      } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.reminded_at = now;
+        changed = true;
+      }
+    }
+    for (const item of this.ledger.notifications) {
+      if (item.resolved_at) continue;
+      if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+      if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+    }
+    if (changed) writeDecisionNotificationLedger(this.path, this.ledger);
+  }
+  targetSession(preferred, sessions) {
+    if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
+    const leader2 = this.options.leaderSessionId();
+    if (leader2 && sessions.some((session) => session.session_id === leader2)) return leader2;
+    return sessions[0]?.session_id ?? null;
+  }
+};
+
+// relay/src/agent-codex.ts
+import { spawn as spawn4 } from "node:child_process";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { existsSync as existsSync18, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync13 } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter as delimiter3, dirname as dirname8, join as join27 } from "node:path";
+var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+var CODEX_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false
+};
+var CodexEventMapper = class {
+  /** 当前回合起始时刻（turn.started 记，回合收口事件算时长用；测试可注入 now 定值） */
+  turnStartMs = 0;
+  /** 上个回合是否已收口（turn.completed/turn.failed）。会话侧判「进程退出但回合
+   *  未收口」用——true 时退出码不再补发 onTurnEnd（防双发） */
+  turnTerminal = true;
+  /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
+  lastThreadId;
+  handle(raw, cb2, now = Date.now()) {
+    if (!raw || typeof raw !== "object") return;
+    const ev2 = raw;
+    switch (ev2.type) {
+      case "thread.started": {
+        const tid = typeof ev2.thread_id === "string" ? ev2.thread_id : "";
+        this.lastThreadId = tid || this.lastThreadId;
+        cb2.onInit(tid, "codex");
+        break;
+      }
+      case "turn.started":
+        this.turnStartMs = now;
+        this.turnTerminal = false;
+        cb2.onStatusChange("WORKING", "\u6267\u884C\u4E2D");
+        break;
+      case "item.started": {
+        const it2 = ev2.item;
+        if (it2?.type === "command_execution") {
+          cb2.onLog("tool_use", truncate(it2.command ?? "(\u547D\u4EE4)", 200) || "(\u547D\u4EE4)", {
+            tool: "command",
+            id: it2.id,
+            full: capDetail(it2.command ?? "")
+          });
+        }
+        break;
+      }
+      case "item.completed": {
+        const it2 = ev2.item;
+        if (!it2) break;
+        if (it2.type === "agent_message") {
+          cb2.onLog("assistant_text", it2.text ?? "", { id: it2.id });
+        } else if (it2.type === "command_execution") {
+          const exit = it2.exit_code ?? null;
+          const ok2 = it2.status === "failed" || exit !== null && exit !== 0 ? false : true;
+          const head = (it2.aggregated_output ?? "").trim().split("\n")[0] ?? "";
+          cb2.onLog("tool_result", ok2 ? head || `\u9000\u51FA\u7801 ${exit ?? "?"}` : `\u5931\u8D25\uFF08\u9000\u51FA\u7801 ${exit ?? "?"}\uFF09`, {
+            tool: "command",
+            id: it2.id,
+            full: capDetail(it2.aggregated_output ?? "")
+          });
+        }
+        break;
+      }
+      case "turn.completed": {
+        const u = ev2.usage ?? {};
+        cb2.onUsage({
+          input_tokens: num(u.input_tokens),
+          output_tokens: num(u.output_tokens),
+          cache_read_input_tokens: num(u.cached_input_tokens),
+          cache_creation_input_tokens: num(u.cache_write_input_tokens)
+        });
+        cb2.onTurnEnd(true, "success", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
+        this.turnTerminal = true;
+        break;
+      }
+      case "turn.failed": {
+        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
+        cb2.onTurnEnd(false, truncate(msg ?? "\u56DE\u5408\u5931\u8D25", 200) || "\u56DE\u5408\u5931\u8D25", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
+        this.turnTerminal = true;
+        break;
+      }
+      case "error": {
+        const msg = typeof ev2.error === "string" ? ev2.error : ev2.error?.message;
+        cb2.onLog("system", `codex \u9519\u8BEF\uFF1A${truncate(msg ?? "(\u65E0\u4FE1\u606F)", 200)}`);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+};
+var cachedBin;
+function resolveCodexCliPath() {
+  if (cachedBin !== void 0) return cachedBin;
+  const fromEnv = process.env.CCR_CODEX_PATH;
+  if (fromEnv === "__none__") {
+    cachedBin = null;
+    return null;
+  }
+  if (fromEnv && existsSync18(fromEnv)) {
+    cachedBin = fromEnv;
+    return cachedBin;
+  }
+  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex.bat", "codex"] : ["codex"];
+  const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
+  for (const d2 of dirs) {
+    for (const n of names) {
+      const p = join27(d2, n);
+      if (existsSync18(p)) {
+        cachedBin = p;
+        return p;
+      }
+    }
+  }
+  cachedBin = null;
+  return null;
+}
+function materializeImages(images) {
+  if (!images || images.length === 0) return [];
+  const dir = mkdtempSync(join27(tmpdir(), "ccr-codex-img-"));
+  const out = [];
+  images.forEach((b64, i) => {
+    if (typeof b64 !== "string" || b64.length === 0) return;
+    try {
+      const p = join27(dir, `${i}.img`);
+      writeFileSync13(p, Buffer.from(b64, "base64"));
+      out.push(p);
+    } catch {
+    }
+  });
+  return out;
+}
+var CodexAgentSession = class {
+  id = randomUUID7();
+  startedAt = Date.now();
+  stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  ended = false;
+  cb;
+  cwd;
+  bin;
+  threadId;
+  mapper = new CodexEventMapper();
+  proc = null;
+  pid;
+  // 排队消息带图绑定（#63）：文本与该条的临时图路径一起入队，merge 时图拼接；
+  // 队列元素里的图路径在落盘时已持久，消费回合结束才清理
+  queued = [];
+  // 本回合消费的图所在目录（回合收口清理；排队中未消费的不在此列）
+  turnImageDirs = /* @__PURE__ */ new Set();
+  stopping = false;
+  stderrTail = "";
+  get childPid() {
+    return this.pid;
+  }
+  constructor(cwd, _model, cb2, initialPrompt, opts) {
+    this.cwd = cwd;
+    this.cb = cb2;
+    this.threadId = opts?.resume;
+    const bin = resolveCodexCliPath();
+    if (!bin) {
+      throw new Error("codex CLI \u672A\u627E\u5230\uFF08\u5B89\u88C5 codex \u6216\u8BBE CCR_CODEX_PATH\uFF09");
+    }
+    this.bin = bin;
+    if (initialPrompt !== void 0) this.execTurn(initialPrompt, materializeImages(opts?.images));
+  }
+  sendMessage(text, images, echo) {
+    if (this.ended) {
+      console.warn("[codex] \u4F1A\u8BDD\u5DF2\u7ED3\u675F\uFF0C\u6D88\u606F\u4E22\u5F03");
+      return;
+    }
+    const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
+    if (echo !== void 0) {
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+    } else {
+      const full = fullText(text, 200);
+      this.cb.onLog("user_message", truncate(text, 200) + marker, {
+        full: full === void 0 ? void 0 : full + marker
+      });
+    }
+    if (images && images.length > 0) {
+      const paths = materializeImages(images);
+      if (this.proc) {
+        if (this.queued.length >= 50) {
+          this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
+          return;
+        }
+        this.queued.push({ text, images: paths.length > 0 ? paths : void 0 });
+        return;
+      }
+      this.execTurn(text, paths);
+      return;
+    }
+    if (this.proc) {
+      if (this.queued.length >= 50) {
+        this.cb.onLog("system", "\u6392\u961F\u6D88\u606F\u5DF2\u8FBE\u4E0A\u9650\uFF0850 \u6761\uFF09\uFF0C\u672C\u6761\u4E22\u5F03");
+        return;
+      }
+      this.queued.push({ text });
+      return;
+    }
+    this.execTurn(text);
+  }
+  // headless 无审批通道（WAITING 形态 P0 不做）——三口恒 false，端上不出现审批卡
+  allow(_requestId, _by, _rememberScope) {
+    return false;
+  }
+  deny(_requestId, _reason, _by) {
+    return false;
+  }
+  answer(_requestId, _answers, _by) {
+    return false;
+  }
+  hasPending() {
+    return false;
+  }
+  async setPermissionMode(_mode) {
+  }
+  async stop() {
+    if (this.ended) return;
+    this.stopping = true;
+    this.ended = true;
+    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname8(p))));
+    this.queued = [];
+    this.cleanupTurnImages(queuedDirs);
+    const child = this.proc;
+    this.proc = null;
+    this.pid = void 0;
+    this.cb.onSessionEnd("stopped");
+    if (child?.pid) void killTree(child.pid).catch(() => {
+    });
+  }
+  // -- 内部 -------------------------------------------------------------
+  execTurn(prompt, images = []) {
+    const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
+    if (this.threadId) args.push("resume", this.threadId);
+    for (const p of images) args.push("--image", p);
+    args.push("-");
+    this.turnImageDirs = new Set(images.map((p) => dirname8(p)));
+    this.mapper.turnTerminal = false;
+    this.mapper.turnStartMs = Date.now();
+    let child;
+    try {
+      child = spawn4(this.bin, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: this.cwd,
+        env: childEnv()
+      });
+    } catch (e) {
+      this.failTurn(`codex \u542F\u52A8\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    this.proc = child;
+    this.pid = child.pid;
+    this.stderrTail = "";
+    this.cb.onStatusChange("WORKING", "\u542F\u52A8\u4E2D");
+    let pending = Buffer.alloc(0);
+    child.stdout.on("data", (d2) => {
+      pending = Buffer.concat([pending, d2]);
+      let i;
+      while ((i = pending.indexOf(10)) >= 0) {
+        const line = pending.subarray(0, i).toString("utf-8").trim();
+        pending = pending.subarray(i + 1);
+        if (line) this.onLine(line);
+      }
+    });
+    child.stderr.on("data", (d2) => {
+      this.stderrTail = (this.stderrTail + d2.toString("utf-8")).slice(-500);
+    });
+    child.on("error", (e) => {
+      this.cb.onLog("system", `codex \u8FDB\u7A0B\u9519\u8BEF\uFF1A${truncate(e.message, 200)}`);
+    });
+    child.on("close", (code) => this.onClose(code));
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(prompt, "utf-8");
+  }
+  onLine(line) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      this.cb.onLog("system", `codex \u8F93\u51FA\u975E JSON\uFF1A${truncate(line, 120)}`);
+      return;
+    }
+    const ev2 = parsed;
+    if (ev2?.type === "thread.started" && typeof ev2.thread_id === "string" && ev2.thread_id) {
+      this.threadId = ev2.thread_id;
+    }
+    this.mapper.handle(parsed, this.cb);
+  }
+  onClose(code) {
+    this.proc = null;
+    this.pid = void 0;
+    this.cleanupTurnImages();
+    if (this.stopping) return;
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      const why = code === null ? "\u8FDB\u7A0B\u88AB\u4FE1\u53F7\u7EC8\u6B62" : `\u9000\u51FA\u7801 ${code}`;
+      this.cb.onTurnEnd(false, `codex ${why}${this.stderrTail ? `\uFF1A${truncate(this.stderrTail.trim().split("\n").at(-1) ?? "", 160)}` : ""}`, dur);
+      if (!this.threadId) {
+        this.ended = true;
+        this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
+        return;
+      }
+    }
+    if (this.queued.length > 0 && !this.ended) {
+      const merged = this.queued.map((q2) => q2.text).join("\n\n");
+      const imgs = this.queued.flatMap((q2) => q2.images ?? []);
+      this.queued = [];
+      this.execTurn(merged, imgs);
+    }
+  }
+  /** 回合收口清理本回合消费的临时图目录；extraDirs=会话终止时排队未消费的 */
+  cleanupTurnImages(extraDirs) {
+    const dirs = this.turnImageDirs;
+    this.turnImageDirs = /* @__PURE__ */ new Set();
+    for (const d2 of extraDirs ?? []) dirs.add(d2);
+    for (const d2 of dirs) {
+      try {
+        rmSync3(d2, { recursive: true, force: true });
+      } catch {
+      }
+    }
+  }
+  /** spawn 同步失败收口（onClose 崩溃分支的同款语义，无进程版） */
+  failTurn(why) {
+    this.proc = null;
+    this.pid = void 0;
+    if (this.stopping || this.ended) return;
+    this.cleanupTurnImages();
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      this.cb.onTurnEnd(false, truncate(why, 300), dur);
+    }
+    if (!this.threadId) {
+      this.ended = true;
+      this.cb.onSessionEnd("codex \u9996\u56DE\u5408\u8FDB\u7A0B\u9000\u51FA");
+    }
+  }
+};
+
+// relay/src/agent-zcode.ts
+var ZCODE_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: false,
+  native_elapsed: false,
+  approval: false
+};
+
+// relay/src/session-manager.ts
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
@@ -48007,8 +47753,8 @@ function sanitizeImportPushEntry(raw) {
   return { kind, wsUrl, ...token ? { token } : {}, ...cloud ? { cloud } : {} };
 }
 function expandHome(p) {
-  if (p === "~") return homedir9();
-  if (p.startsWith("~/")) return join25(homedir9(), p.slice(2));
+  if (p === "~") return homedir12();
+  if (p.startsWith("~/")) return join28(homedir12(), p.slice(2));
   return p;
 }
 function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
@@ -48032,7 +47778,7 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const def = expandHome((defaultCwd || "").trim());
   let mkdirFailed = false;
   if (wanted) {
-    const abs = resolve7(wanted);
+    const abs = resolve8(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
     if (autoMkdir) {
       if (tryMkdir(abs)) {
@@ -48042,15 +47788,15 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
     }
   }
   if (def) {
-    const abs = resolve7(def);
+    const abs = resolve8(def);
     if (isUsableDir(abs)) {
-      const note = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
+      const note = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
       return { cwd: abs, fallbackNote: note };
     }
   }
-  const home = homedir9();
-  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve7(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
-  const wantedDesc = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C${defDesc}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve7(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
+  const home = homedir12();
+  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve8(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const wantedDesc = wanted ? mkdirFailed ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u5B58\u5728\uFF0C\u300C\u81EA\u52A8\u521B\u5EFA\u300D\u5931\u8D25\uFF08\u8DEF\u5F84\u4E2D\u95F4\u53EF\u80FD\u662F\u6587\u4EF6\u6216\u65E0\u5199\u6743\u9650\uFF09\uFF0C${defDesc}` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve8(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
   const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
@@ -48089,7 +47835,7 @@ function sanitizeFiles(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48100,13 +47846,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync14(join25(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync14(join28(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48117,14 +47863,14 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync14(join25(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync14(join28(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 var DELIVERABLES_CAP = 300;
 function readDeliverables(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "deliverables.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "deliverables.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter(
       (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
     ) : [];
@@ -48136,13 +47882,13 @@ function appendDeliverable(dataDir2, e) {
   const list = readDeliverables(dataDir2).filter((x) => !(x.sid === e.sid && x.path === e.path));
   list.push(e);
   try {
-    writeFileSync14(join25(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    writeFileSync14(join28(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
   } catch {
   }
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(join25(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync22(join28(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -48155,11 +47901,11 @@ function readTitleOverrides(dataDir2) {
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
-  return join25(dataDir2, "pinned-sessions.json");
+  return join28(dataDir2, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync20(pinnedSessionsPath(dataDir2), "utf-8"));
+    const raw = JSON.parse(readFileSync22(pinnedSessionsPath(dataDir2), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48230,14 +47976,42 @@ function resumeInitTimeoutMs() {
   const v = Number(process.env.CCR_RESUME_INIT_MS);
   return Number.isFinite(v) && v >= 100 ? v : 45e3;
 }
+function resumeInitTimeoutFor(transcriptBytes) {
+  const base = resumeInitTimeoutMs();
+  if (!transcriptBytes || transcriptBytes <= 0) return base;
+  const units = Math.floor(transcriptBytes / (10 * 1024 * 1024));
+  return Math.min(base * (1 + units), base * 4);
+}
+function resumeBreakerThreshold() {
+  const v = Number(process.env.CCR_RESUME_BREAKER_THRESHOLD);
+  return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 2;
+}
+function resumeBreakerBaseMs() {
+  const v = Number(process.env.CCR_RESUME_BREAKER_BASE_MS);
+  return Number.isFinite(v) && v >= 1e3 ? v : 5 * 6e4;
+}
+function resumeBreakerCapMs() {
+  const v = Number(process.env.CCR_RESUME_BREAKER_CAP_MS);
+  return Number.isFinite(v) && v >= 6e4 ? v : 60 * 6e4;
+}
+function transcriptPathFor(cwd, sdkId, configHome) {
+  const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
+  const base = configHome ?? join28(homedir12(), ".claude");
+  return join28(base, "projects", slug, `${sdkId}.jsonl`);
+}
 function transcriptHasAssistant(cwd, sdkId, configHome) {
   try {
-    const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-    const base = configHome ?? join25(homedir9(), ".claude");
-    const p = join25(base, "projects", slug, `${sdkId}.jsonl`);
-    return readFileSync20(p, "utf-8").includes('"type":"assistant"');
+    const p = transcriptPathFor(cwd, sdkId, configHome);
+    return readFileSync22(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
+  }
+}
+function transcriptBytesFor(cwd, sdkId, configHome) {
+  try {
+    return statSync7(transcriptPathFor(cwd, sdkId, configHome)).size;
+  } catch {
+    return void 0;
   }
 }
 function watchdogDisabled() {
@@ -48402,7 +48176,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 与 M4 DISPATCH_DONE / ORG_CONFIRM_UPDATED 等既有瞬时通道并存：那些管在线弹，
   // 这边持久落账管离线兜底与列表沉淀（任务书对账：不双发靠 stableKey 一单一行）。
   notificationsPath() {
-    return join25(this.cfg.dataDir, "notifications.json");
+    return join28(this.cfg.dataDir, "notifications.json");
   }
   // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
   // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
@@ -48412,7 +48186,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
   loadNotifications() {
     try {
-      const raw = JSON.parse(readFileSync20(this.notificationsPath(), "utf-8"));
+      const raw = JSON.parse(readFileSync22(this.notificationsPath(), "utf-8"));
       const list = Array.isArray(raw.notifications) ? raw.notifications : [];
       for (const item of list) {
         if (item && typeof item.key === "string" && item.key) this.notifications.set(item.key, item);
@@ -48626,11 +48400,11 @@ provider=${opts.provider ?? "default"}` : void 0,
   // P2-6 把「读失败」伪装成「空清单」再放行批量收口的通道，闸门处必须区分「读不
   // 出来」与「真的没有」（只读消费 confirms.json 文件本身，projects.ts 结构不动）
   readConfirmsForReconcile() {
-    const path6 = join25(orgDir(), "confirms.json");
-    if (!existsSync18(path6)) return null;
+    const path6 = join28(orgDir(), "confirms.json");
+    if (!existsSync19(path6)) return null;
     let raw;
     try {
-      raw = readFileSync20(path6, "utf-8");
+      raw = readFileSync22(path6, "utf-8");
     } catch {
       return null;
     }
@@ -48657,7 +48431,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join25(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join28(this.cfg.dataDir, ".tmp-titlegen");
     try {
       mkdirSync14(titleCwd, { recursive: true });
     } catch {
@@ -48772,6 +48546,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
       if (this.isRetiredMember(s.state.session_id)) continue;
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
+      if (s.state.pinned && s.state.saved) continue;
+      if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) continue;
       if (!s.state.relay_session_id) continue;
       const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
       if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
@@ -48827,7 +48603,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
-  ensureExternal(id2, cwd, prompt, cliSessionId = "", startedAt = 0) {
+  ensureExternal(id2, cwd, prompt, cliSessionId = "", startedAt = 0, opts) {
     const existing = this.sessions.get(id2);
     if (existing) {
       existing.state.historical = false;
@@ -48837,6 +48613,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         existing.state.title_locked = true;
       }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      if (opts?.engine && !existing.state.engine) existing.state.engine = opts.engine;
+      if (opts?.model && !existing.state.model) existing.state.model = opts.model;
+      if (opts?.provider && !existing.state.engine_provider) existing.state.engine_provider = opts.provider;
       this.applyDeclaredDeliverables(id2);
       return existing.state;
     }
@@ -48846,14 +48625,16 @@ provider=${opts.provider ?? "default"}` : void 0,
       cwd: cwd || process.cwd(),
       initial_prompt: prompt,
       title: prompt ? deriveTitle(prompt) : (cwd.split(/[\\/]/).pop() ?? "\u672A\u547D\u540D\u4F1A\u8BDD") || "\u672A\u547D\u540D\u4F1A\u8BDD",
-      model: "",
+      model: opts?.model ?? "",
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "\u63A5\u5165\u4E2D",
       started_at: startedAt || Date.now(),
       updated_at: Date.now(),
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
-      remote_mode: false
+      remote_mode: false,
+      ...opts?.engine ? { engine: opts.engine } : {},
+      ...opts?.provider ? { engine_provider: opts.provider } : {}
     };
     const ov2 = this.titleOverrides[id2];
     if (ov2) {
@@ -48866,11 +48647,43 @@ provider=${opts.provider ?? "default"}` : void 0,
       cwd: state.cwd,
       initial_prompt: prompt,
       title: state.title,
-      model: "",
+      model: state.model,
       external: true,
-      started_at: state.started_at
+      started_at: state.started_at,
+      ...state.engine ? { engine: state.engine } : {},
+      ...state.engine_provider ? { provider: state.engine_provider } : {}
     });
     return state;
+  }
+  updateExternalProfile(id2, profile) {
+    const s = this.sessions.get(id2);
+    if (!s || !s.state.external) return;
+    let changed = false;
+    if (profile.cwd && s.state.cwd !== profile.cwd) {
+      s.state.cwd = profile.cwd;
+      changed = true;
+    }
+    if (profile.prompt && !s.state.initial_prompt) {
+      s.state.initial_prompt = profile.prompt;
+      changed = true;
+    }
+    if (profile.title && !s.state.title_locked && s.state.title !== profile.title) {
+      s.state.title = profile.title;
+      changed = true;
+    }
+    if (profile.model && s.state.model !== profile.model) {
+      s.state.model = profile.model;
+      changed = true;
+    }
+    if (profile.engine && s.state.engine !== profile.engine) {
+      s.state.engine = profile.engine;
+      changed = true;
+    }
+    if (profile.provider && s.state.engine_provider !== profile.provider) {
+      s.state.engine_provider = profile.provider;
+      changed = true;
+    }
+    if (changed) this.emitUpdated(s, true);
   }
   getExternal(id2) {
     return this.sessions.get(id2)?.state;
@@ -48879,12 +48692,13 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s) return;
     const changed = s.state.status !== status;
+    const summaryChanged = s.state.action_summary !== summary;
     s.state.status = status;
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
-    if (changed || status === "WORKING") {
+    if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id2, "SESSION_UPDATED", {
         status,
         action_summary: summary,
@@ -49032,8 +48846,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!item.path || item.path === "(\u672A\u77E5\u6587\u4EF6)") return;
     const cwd = s.state.cwd || "";
     let p = item.path;
-    if (!isAbsolute6(p) && cwd) p = resolve7(cwd, p);
-    const adir = resolve7(artifactsDir()).toLowerCase();
+    if (!isAbsolute7(p) && cwd) p = resolve8(cwd, p);
+    const adir = resolve8(artifactsDir()).toLowerCase();
     if (!p.toLowerCase().startsWith(adir + sep6)) return;
     const key = p.toLowerCase();
     const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
@@ -49104,7 +48918,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   registerDeliverable(sessionId, rawPath, snapshot) {
     const s = this.sessions.get(sessionId);
     if (!s) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
-    const p = resolve7(rawPath.trim());
+    const p = resolve8(rawPath.trim());
     let size;
     let exists = true;
     let unverified = false;
@@ -49170,7 +48984,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 回填），循环内逐会话归一的代价可忽略
   matchSessionByCwd(cwd) {
     const norm = (x) => {
-      const r = resolve7(x || ".");
+      const r = resolve8(x || ".");
       try {
         return realpathSync3(r);
       } catch {
@@ -49354,6 +49168,57 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!s || !s.state.external || !EXTERNAL_PERM_MODES.has(mode)) return;
     s.state.permission_mode = mode;
   }
+  // P81-6 旧值规范化审计（resume/revive 读点专用）：legacy_state_normalized 行——
+  // session_id=被规范化会话、command_id=null（非命令触发，状态迁移）、policy_source=null
+  // （非策略裁决是状态迁移）；native_mode 恒 null（未重新求值不声称 native——§6.3 保守，
+  // 降档后的真实 native 由下次 spawn 实参面自证）。
+  auditLegacyPermMode(s, raw, mode) {
+    appendPermissionAudit(auditStore(this.cfg.dataDir), {
+      requested_mode: raw,
+      normalized_mode: mode === "acceptEdits" ? "edit-auto" : mode === "plan" ? "plan" : "ask",
+      effective_mode: mode,
+      native_mode: null,
+      capability_state: engineCapabilityState(s.state.engine ?? "claude"),
+      engine: s.state.engine ?? "claude",
+      reason: "legacy_state_normalized",
+      policy_source: null,
+      environment: resolveEnvScope(this.cfg.port),
+      dir_scope: resolveDirScope(s.state.cwd),
+      tier: null,
+      actor: null,
+      session_id: s.state.session_id,
+      command_id: null,
+      created_at: Date.now()
+    });
+  }
+  // P81-6 resume/revive 读 state 权限档统一入口（§5.3.2 旧值映射+§6.3「不得创建声称
+  // 已 bypass 的会话状态」）：三读点（resumeAgent/fresh 回退/reviveSaved）经此收敛——
+  // ①external 卡豁免（CLI 自报 auto/manual/bypass 是镜像事实，bridge 域，P81-6 只管托管卡）；
+  // ②claude（confirmed 族）bypass 保留——native 真实生效过=「当时真实生效档」（§5.3.2）；
+  // ③JSONL/未知引擎 bypass 降 acceptEdits+审计——state 声称从未真实生效（适配器
+  //   setPermissionMode no-op+P81-5 前直传伪装），降档把声称与真实对齐；
+  // ④未知值 fail-closed 回 default+审计（不升权铁断言：词表外绝不映射 bypass）；
+  // ⑤缺字段回 default（与既有 `?? "default"` 逐字节一致——零变零审计）。
+  // 规范化即回写收敛：一次降档后续读点恒等，审计只落一次（emitUpdated 随调用方落新值帧）。
+  resumePermMode(s) {
+    const raw = s.state.permission_mode;
+    if (raw === void 0 || raw === null) return "default";
+    if (s.state.external) return raw;
+    if (!permissionPolicyEnabled()) return raw;
+    const n = normalizeLegacyPermissionMode(raw);
+    if (n.kind === "bypass_demoted") {
+      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    if (n.kind === "unknown_reset") {
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    return n.mode;
+  }
   // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
   // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
   // M1 审查轮：返回 false = 拒删（组织 Leader 卡——锚 org.json 仍指向它，§3.5
@@ -49363,7 +49228,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s) return true;
     if (this.isLeaderSession(id2)) return false;
-    this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
+    this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
     this.sessions.delete(id2);
     this.lastStoreTodos.delete(id2);
     this.allowRules.dropSession(id2);
@@ -49383,9 +49248,18 @@ provider=${opts.provider ?? "default"}` : void 0,
   // Date.now() 会把「几小时前的死亡」洗成「刚刚活跃」，快照下发后全端 30 分钟
   // 不置灰（2026-09-22 用户实测：装 test.18 重启即本机源全亮、远程源正常）。
   // 正常终态上报（Stop hook/用户打断/compact 归档）不传 at，判定时刻即真实时刻
-  finishExternal(id2, reason, durationMs, at = Date.now()) {
+  finishExternal(id2, reason, durationMs, at = Date.now(), summary) {
     const s = this.sessions.get(id2);
     if (!s) return;
+    if (summary !== void 0 && s.state.action_summary !== summary) {
+      s.state.action_summary = summary;
+      this.bus.emit(id2, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: summary,
+        stats: { ...s.state.stats },
+        updated_at: at
+      });
+    }
     s.state.status = "DONE";
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
@@ -49456,16 +49330,115 @@ provider=${opts.provider ?? "default"}` : void 0,
         case "COMMAND_CREATE": {
           const pm2 = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : void 0;
           const requestedEngine = cmd.payload.engine;
+          const dirScope = resolveDirScope(cmd.payload.cwd);
+          const envScope = resolveEnvScope(this.cfg.port);
           if (requestedEngine !== void 0 && !isSessionEngine(requestedEngine)) {
+            if (permissionPolicyEnabled()) {
+              appendPermissionAudit(auditStore(this.cfg.dataDir), {
+                requested_mode: pm2 ?? null,
+                normalized_mode: null,
+                effective_mode: "forbidden",
+                native_mode: null,
+                capability_state: engineCapabilityState(String(requestedEngine)),
+                engine: String(requestedEngine),
+                reason: "unknown_engine",
+                policy_source: "explicit",
+                environment: envScope,
+                dir_scope: dirScope,
+                tier: "\u968F\u624B\u529E",
+                actor: by,
+                session_id: null,
+                command_id: cmd.command_id,
+                created_at: Date.now()
+              });
+            }
             return { command_id: cmd.command_id, ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine;
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2, cmd.payload.autoMkdir === true, {
-            ...engine ? { engine } : {},
-            ...cmd.payload.model ? { model: cmd.payload.model } : {},
-            ...cmd.payload.provider ? { provider: cmd.payload.provider } : {}
+          const selPayload = cmd.payload;
+          const selSource = selPayload.selection_source;
+          if (selSource !== void 0 && selSource !== "role_default" && selSource !== "manual" && selSource !== "relay_default") {
+            return { command_id: cmd.command_id, ok: false, error: `\u65E0\u6548 selection_source: ${String(selSource)}\uFF08\u6709\u6548\u503C\uFF1Arole_default/manual/relay_default\uFF09` };
+          }
+          const selGid = typeof selPayload.gid === "string" ? selPayload.gid.trim() : "";
+          const selRole = typeof selPayload.role === "string" ? selPayload.role.trim() : "";
+          let degraded = false;
+          let degradedReason = "";
+          let engineResolved = engine;
+          if (!engineResolved && selGid && selRole) {
+            const preset = findGroup(selGid)?.role_defaults?.[selRole]?.engine;
+            if (preset) {
+              if (catalogReadyEngines().has(preset)) {
+                engineResolved = preset;
+              } else {
+                degraded = true;
+                degradedReason = `\u89D2\u8272\u9884\u7F6E\u5F15\u64CE ${preset} \u4E0D\u53EF\u7528\uFF08catalog \u975E ready\uFF09\uFF0C\u5DF2\u56DE\u9000\u9ED8\u8BA4\u5F15\u64CE`;
+              }
+            }
+          }
+          if (!permissionPolicyEnabled()) {
+            const session_id2 = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2, cmd.payload.autoMkdir === true, {
+              ...engineResolved ? { engine: engineResolved } : {},
+              ...cmd.payload.model ? { model: cmd.payload.model } : {},
+              ...cmd.payload.provider ? { provider: cmd.payload.provider } : {},
+              ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
+            });
+            return {
+              command_id: cmd.command_id,
+              ok: true,
+              session_id: session_id2,
+              ...engineResolved ? { engine: engineResolved } : {},
+              ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
+            };
+          }
+          const engineForPolicy = engineResolved ?? "claude";
+          const perm = evaluatePermission({
+            requested_mode: pm2 ?? null,
+            engine: engineForPolicy,
+            role: "team_pm",
+            tier: "\u968F\u624B\u529E",
+            capability_state: engineCapabilityState(engineForPolicy),
+            policy_source: "explicit",
+            dir_scope: dirScope,
+            env: envScope
           });
-          return { command_id: cmd.command_id, ok: true, session_id };
+          const auditBase = {
+            requested_mode: perm.requested_mode,
+            normalized_mode: perm.normalized_mode,
+            effective_mode: perm.effective_mode,
+            native_mode: perm.native_mode,
+            capability_state: perm.capability_state,
+            engine: perm.engine,
+            reason: perm.reason,
+            policy_source: perm.policy_source,
+            environment: envScope,
+            dir_scope: dirScope,
+            tier: "\u968F\u624B\u529E",
+            actor: by,
+            session_id: null,
+            command_id: cmd.command_id,
+            created_at: Date.now()
+          };
+          if (perm.effective_mode === "forbidden") {
+            appendPermissionAudit(auditStore(this.cfg.dataDir), auditBase);
+            return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
+          }
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
+            ...engineResolved ? { engine: engineResolved } : {},
+            ...cmd.payload.model ? { model: cmd.payload.model } : {},
+            ...cmd.payload.provider ? { provider: cmd.payload.provider } : {},
+            ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
+          });
+          appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
+          return {
+            command_id: cmd.command_id,
+            ok: true,
+            session_id,
+            // #75 实际引擎回显+降级显式标记（端上据此显示降级徽标，不静默——提案 §6.2）
+            ...engineResolved ? { engine: engineResolved } : {},
+            ...degraded ? { degraded: true, degraded_reason: degradedReason } : {},
+            permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason }
+          };
         }
         case "COMMAND_MESSAGE": {
           const s = this.require(cmd.payload.session_id);
@@ -49507,6 +49480,9 @@ provider=${opts.provider ?? "default"}` : void 0,
               s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
+            }
+            if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+              this.pushExternalLog(s.state.session_id, "system", "\u6536\u5230\u624B\u52A8\u6D88\u606F\uFF0C\u8D8A\u8FC7\u6062\u590D\u51B7\u5374\u5C1D\u8BD5\u62C9\u8D77");
             }
             this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
@@ -49715,7 +49691,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           s.state.updated_at = Date.now();
           this.titleOverrides[s.state.session_id] = title;
           try {
-            writeFileSync14(join25(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+            writeFileSync14(join28(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
           } catch {
           }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
@@ -49898,7 +49874,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         }
         case "COMMAND_ARTIFACT_FETCH": {
           const s = this.require(cmd.payload.session_id);
-          const key = resolve7(String(cmd.payload.path ?? "")).toLowerCase();
+          const key = resolve8(String(cmd.payload.path ?? "")).toLowerCase();
           const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
           if (!hit) {
             return { command_id: cmd.command_id, ok: false, error: "\u8DEF\u5F84\u672A\u767B\u8BB0\u5728\u8BE5\u4F1A\u8BDD\u7684\u8F93\u51FA\u7269\u6E05\u5355\u91CC\uFF0C\u65E0\u6743\u62C9\u53D6" };
@@ -49915,7 +49891,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
           const ref = cmd.command_id;
           try {
-            const buf = readFileSync20(hit.path);
+            const buf = readFileSync22(hit.path);
             const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
             for (let seq = 0; seq < total; seq++) {
               this.bus.emitTransient(
@@ -50001,10 +49977,10 @@ provider=${opts.provider ?? "default"}` : void 0,
   create(rawCwd, prompt, permissionMode, autoMkdir = false, opts) {
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
     if (!cwd) throw new Error(fallbackNote);
-    if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir9()) {
+    if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir12()) {
       this.cfg.defaultCwd = cwd;
       try {
-        writeFileSync14(join25(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+        writeFileSync14(join28(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
       } catch {
       }
     }
@@ -50077,7 +50053,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       ...managed.state.employee ? { employee: true } : {},
       ...managed.state.employee_home ? { employee_home: managed.state.employee_home } : {},
       // #27 引擎随首帧下发（端上徽标 + 重启回放还原分叉依据）
-      ...managed.state.engine ? { engine: managed.state.engine } : {}
+      ...managed.state.engine ? { engine: managed.state.engine } : {},
+      // #75 预置降级显式标记（提案 §6.2「标记已降级不隐藏差异」；仅 COMMAND_CREATE
+      // gid/role 预置回退场景携带，其余创建路径恒不带）
+      ...opts?.degraded ? { degraded: true, degraded_reason: opts.degraded_reason ?? "" } : {}
     });
     if (fallbackNote) {
       const entry = { ts: Date.now(), kind: "system", text: fallbackNote };
@@ -50190,6 +50169,8 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (!mine()) return;
         touch("init");
         managed.resumePending = void 0;
+        managed.resumeFailStreak = void 0;
+        managed.resumeCooldownUntil = void 0;
         if (!this.childSdkIds.has(sdkId)) {
           this.childSdkIds.add(sdkId);
           appendChildSession(this.cfg.dataDir, sdkId);
@@ -50372,7 +50353,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           // 中断≠交付，换家≠干砸
           !(ok2 && reason === "interrupted") && !homeLost,
           void 0,
-          delivered ? void 0 : "todo"
+          delivered ? void 0 : "backlog"
         );
         managed.state.updated_at = Date.now();
         managed.state.duration_ms = durationMs;
@@ -50392,13 +50373,16 @@ provider=${opts.provider ?? "default"}` : void 0,
           this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason });
         }
         this.syncWaitingNotification(managed);
-        if (dutyEnabled() && this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+        if (dutyEnabled()) {
+          if (this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+          else if (ok2) this.feedPM("worker_done");
+        }
       },
       onSessionEnd: (reason) => {
         if (!mine()) return;
         managed.pendingInitial = void 0;
         if (managed.wd.phase === "recovering") return;
-        this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, void 0, "todo");
+        this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, void 0, "backlog");
         managed.wd.phase = "idle";
         if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
           managed.state.status = "DONE";
@@ -50458,6 +50442,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     s.resumePending = Date.now();
     const resumeStart = Date.now();
+    const initWaitMs = resumeInitTimeoutFor(transcriptBytesFor(s.state.cwd, sdkId, this.employeeHome(s.state)));
     let inited = false;
     let initTimer = null;
     const clearInitTimer = () => {
@@ -50473,6 +50458,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         inited = true;
         clearInitTimer();
         baseCb.onInit(id2, model, pm2);
+        this.flushResumeBacklog(s, resumeStart);
       },
       // 审查修正（P1「停了又复活」）：流关闭（用户 STOP / 进程退出）= 本次 resume
       // 已终局——timer 不撤销的话 45s 后照样开火：首回合分支 fresh spawn 重放用户
@@ -50483,21 +50469,29 @@ provider=${opts.provider ?? "default"}` : void 0,
         baseCb.onSessionEnd(reason);
       }
     };
-    const agent = this.newAgent(
-      s.state.cwd,
-      s.state.model,
-      cb2,
-      firstMessage,
-      {
-        resume: sdkId,
-        permissionMode: s.state.permission_mode ?? "default",
-        images,
-        configHome: this.employeeHome(s.state),
-        // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
-        // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
-        ...s.state.engine ? { engine: s.state.engine } : {}
-      }
-    );
+    let agent;
+    try {
+      agent = this.newAgent(
+        s.state.cwd,
+        s.state.model,
+        cb2,
+        firstMessage,
+        {
+          resume: sdkId,
+          permissionMode: this.resumePermMode(s),
+          // P81-6 旧值规范化统一入口
+          images,
+          configHome: this.employeeHome(s.state),
+          // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
+          // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
+          ...s.state.engine ? { engine: s.state.engine } : {}
+        }
+      );
+    } catch (e) {
+      s.resumePending = void 0;
+      this.noteResumeFailure(s, `resume spawn \u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09`);
+      throw e;
+    }
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.historical = false;
@@ -50522,7 +50516,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const hasMemory = s.logs.some((e) => e.kind === "assistant_text") || (s.state.usage?.output_tokens ?? 0) > 0 || // transcriptHasAssistant 读 ~/.claude/projects JSONL（Claude 特性泄漏面）：
       // codex 的记忆判定只看前两口（logs/usage）
       s.state.engine !== "codex" && transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state));
-      const waitS = Math.round(resumeInitTimeoutMs() / 1e3);
+      const waitS = Math.max(1, Math.round(initWaitMs / 1e3));
       if (!s.state.external && !hasMemory) {
         const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart);
         s.unacked = s.unacked.filter((m) => m.ts < resumeStart);
@@ -50531,7 +50525,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             const q2 = this.openDispatches.get(s.state.session_id);
             if (!q2 || q2.length <= 1) break;
             q2.unshift(q2.pop());
-            this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "todo");
+            this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "backlog");
           }
         }
         const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
@@ -50547,7 +50541,8 @@ provider=${opts.provider ?? "default"}` : void 0,
           this.agentCallbacks(s),
           replayText,
           {
-            permissionMode: s.state.permission_mode ?? "default",
+            permissionMode: this.resumePermMode(s),
+            // P81-6 旧值规范化统一入口（fresh 回退同收敛）
             images: replayImages.length ? replayImages : void 0,
             configHome: this.employeeHome(s.state),
             // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
@@ -50568,9 +50563,10 @@ provider=${opts.provider ?? "default"}` : void 0,
         s.state.updated_at = Date.now();
         this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
         this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+        this.noteResumeFailure(s, `resume init \u8D85\u65F6\uFF08${waitS}s\uFF09`);
         this.emitUpdated(s, true);
       }
-    }, resumeInitTimeoutMs());
+    }, initWaitMs);
     initTimer.unref?.();
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
@@ -50579,9 +50575,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   // #49 按需拉起（COMMAND_RESUME_SESSION）：不带首条消息的 parked resume——
   // transcript 重放完成后 CLI 停在等待输入，首个回合由后续 COMMAND_MESSAGE 开启。
-  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / 30s 超时 = 恢复失败
-  // （ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
-  // resumeAgent（消息驱动）行为保持原样不动
+  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / init 看门狗超时 =
+  // 恢复失败（ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
+  // resumeAgent（消息驱动）行为保持原样不动。W-LEADFIX：init 看门狗由独立硬编码
+  // 30s 改用 resumeInitTimeoutFor 自适应窗（与 resumeAgent 同源——生产死循环的报错
+  // 帧「初始化超时（30s）」即出自这里的旧硬编码；大上下文 Leader 必超时），fail
+  // 同时进熔断记账；用户点卡是手动意图，不受熔断压制（本函数无闸）
   reviveSaved(s) {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
@@ -50614,6 +50613,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.resumePending = Date.now();
     s.wd.gaveUp = false;
     const base = this.agentCallbacks(s);
+    const initWaitMs = resumeInitTimeoutFor(transcriptBytesFor(s.state.cwd, sdkId, this.employeeHome(s.state)));
     const fail = (reason) => {
       if (inited) return;
       inited = true;
@@ -50629,6 +50629,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.updated_at = Date.now();
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+      this.noteResumeFailure(s, reason);
       this.emitUpdated(s, true);
     };
     const cb2 = {
@@ -50636,10 +50637,20 @@ provider=${opts.provider ?? "default"}` : void 0,
       onInit: (sdkIdNew, model, permissionMode) => {
         inited = true;
         if (timer) clearTimeout(timer);
+        const reviveStart = s.resumePending ?? Date.now();
         s.state.saved = void 0;
         s.state.historical = false;
         s.state.org_parked = void 0;
         base.onInit(sdkIdNew, model, permissionMode);
+        const backlog = s.unacked.filter((m) => m.ts < reviveStart);
+        if (backlog.length > 0 && s.agent && !s.agent.ended) {
+          this.flushResumeBacklog(s, reviveStart);
+          s.state.status = "WORKING";
+          s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u5904\u7406\u6392\u961F\u6D88\u606F";
+          this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
+          this.emitUpdated(s, true);
+          return;
+        }
         s.state.status = "DONE";
         s.state.done_reason = "\u5DF2\u6062\u590D\uFF08\u7B49\u5F85\u8F93\u5165\uFF09";
         s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u7B49\u5F85\u8F93\u5165";
@@ -50657,17 +50668,25 @@ provider=${opts.provider ?? "default"}` : void 0,
     };
     timer = setTimeout(() => {
       timer = null;
-      fail("\u521D\u59CB\u5316\u8D85\u65F6\uFF0830s\uFF09");
+      fail(`\u521D\u59CB\u5316\u8D85\u65F6\uFF08${Math.max(1, Math.round(initWaitMs / 1e3))}s\uFF09`);
       void s.agent?.stop();
-    }, 3e4);
+    }, initWaitMs);
     timer.unref?.();
-    const agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
-      resume: sdkId,
-      permissionMode: s.state.permission_mode ?? "default",
-      configHome: this.employeeHome(s.state),
-      // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
-      ...s.state.engine ? { engine: s.state.engine } : {}
-    });
+    let agent;
+    try {
+      agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
+        resume: sdkId,
+        permissionMode: this.resumePermMode(s),
+        // P81-6 旧值规范化统一入口（parked revive）
+        configHome: this.employeeHome(s.state),
+        // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
+        ...s.state.engine ? { engine: s.state.engine } : {}
+      });
+    } catch (e) {
+      s.resumePending = void 0;
+      this.noteResumeFailure(s, `\u6062\u590D spawn \u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09`);
+      throw e;
+    }
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.action_summary = "\u6062\u590D\u4E2D";
@@ -50747,7 +50766,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (this.titleOverrides[anchor.leader_session_id]) {
         delete this.titleOverrides[anchor.leader_session_id];
         try {
-          writeFileSync14(join25(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+          writeFileSync14(join28(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
         } catch {
         }
       }
@@ -50807,7 +50826,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (!cur || !bootAgent || cur.agent !== bootAgent) return;
       if (cur.state.relay_session_id) return;
       const droppedMsgs = cur.unacked.length;
-      this.closeOpenDispatches(id2, "failed", `\u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD`, true, false, void 0, "todo");
+      this.closeOpenDispatches(id2, "failed", `\u9996\u5EFA\u4E0A\u5C97\u8D85\u65F6\uFF08${bootWaitSec}s \u65E0 init\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD`, true, false, void 0, "backlog");
       if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {
       });
       void bootAgent.stop().catch(() => {
@@ -50912,7 +50931,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   setTitleOverride(id2, title) {
     this.titleOverrides[id2] = title;
     try {
-      writeFileSync14(join25(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+      writeFileSync14(join28(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
     } catch {
     }
     const s = this.sessions.get(id2);
@@ -50986,7 +51005,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       });
       this.notifyDispatchClosed(e, status, receipt, key);
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
+        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         if (status === "done") {
           const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
           const lr2 = this.orgAction("lesson-append", {
@@ -51012,6 +51031,62 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
   }
+  // ===== W-LEADFIX resume 熔断与自动恢复闸门 =====
+  // 生产实证（2026-10-09 深夜，org Leader 0f6906c5）：Leader CLI 死后值守喂活/派单
+  // 回执/org 通知的消息流持续到达，每条触发 resumeAgent/reviveSaved → init 超时失败
+  //（「初始化超时（30s）」×34）→ 下一条消息再触发，分钟级死循环。根修三板：
+  // ① noteResumeFailure 记账连败 → 冷却（自动路径统一经 suppressAutoResume 压制）；
+  // ② 用户手动意图（发消息/点卡）不过闸——手动恢复路径永不封锁；③ pin 停放休眠
+  //（pinned+saved）的自动拉起同闸压制——置顶语义是「点卡片按需恢复」（#49，2026-09-09
+  // 用户拍板），自动注入不得绕过。
+  // 熔断记账：resume init 失败（resumeAgent 看门狗 ERROR 分支 / reviveSaved fail /
+  // 看门狗接管失败）连击 → 冷却。指数退避 2^(streak-threshold)×base 封顶 cap；
+  // streak 只在 onInit 成功复位（见 agentCallbacks.onInit）
+  noteResumeFailure(s, detail) {
+    const streak = (s.resumeFailStreak ?? 0) + 1;
+    s.resumeFailStreak = streak;
+    const threshold = resumeBreakerThreshold();
+    if (streak < threshold) return;
+    const cool = Math.min(resumeBreakerBaseMs() * 2 ** (streak - threshold), resumeBreakerCapMs());
+    s.resumeCooldownUntil = Date.now() + cool;
+    const min = Math.max(1, Math.round(cool / 6e4));
+    this.pushExternalLog(
+      s.state.session_id,
+      "system",
+      `\u6062\u590D\u5DF2\u8FDE\u7EED\u5931\u8D25 ${streak} \u6B21\uFF08${detail}\uFF09\uFF0C\u81EA\u52A8\u6062\u590D\u8FDB\u5165\u51B7\u5374\uFF08\u672C\u6B21 ${min} \u5206\u949F\uFF09\u2014\u2014\u671F\u95F4\u81EA\u52A8\u6CE8\u5165\u53EA\u5165\u961F\u4E0D\u518D\u62C9\u8D77\uFF0C\u70B9\u5361\u7247\u6216\u53D1\u6D88\u606F\u53EF\u624B\u52A8\u6062\u590D`
+    );
+    this.emitUpdated(s, true);
+  }
+  // 自动恢复统一闸门：返回 true = 应压制（勿 resume）。压制原因两种：熔断冷却中 /
+  // pin 停放休眠（pinned+saved 且无 agent——用户手动停放的「点卡按需恢复」形态）。
+  // queueMessage 给出时消息入队 unacked（恢复成功后补投，见 flushResumeBacklog）；
+  // 不给出 = 纯跳过（值班 prompt 可重推导、auto-revive 引导语是合成物，入队无益）
+  suppressAutoResume(s, source, queueMessage) {
+    const tripped = !!s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil;
+    const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
+    if (!tripped && !parkedPinned) return false;
+    if (queueMessage !== void 0) s.unacked.push({ text: queueMessage, ts: Date.now() });
+    const why = tripped ? `\u6062\u590D\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\u5DF2\u7194\u65AD\uFF0C\u7EA6 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 6e4))} \u5206\u949F\u540E\u81EA\u52A8\u91CD\u8BD5` : "\u4F1A\u8BDD\u4E3A\u7F6E\u9876\u4F11\u7720\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF09";
+    this.pushExternalLog(
+      s.state.session_id,
+      "system",
+      `[${source}] ${why}\uFF1B\u672C\u6761\u6CE8\u5165\u5DF2\u8DF3\u8FC7${queueMessage !== void 0 ? "\u5E76\u5165\u961F\uFF0C\u6062\u590D\u540E\u81EA\u52A8\u8865\u6295" : ""}`
+    );
+    this.emitUpdated(s, true);
+    return true;
+  }
+  // 恢复成功（onInit 到达）后补投冷却期/pin 休眠期积压：只取 beforeTs 之前的旧账
+  //（之后的属 spawn 窗口消息，走 sendMessage 排队既定路径），合并单回合送达
+  //（同看门狗多消息重放口径）。resumeAgent 与 reviveSaved 的 onInit 包裹各调一次
+  flushResumeBacklog(s, beforeTs) {
+    const backlog = s.unacked.filter((m) => m.ts < beforeTs);
+    if (backlog.length === 0) return;
+    s.unacked = s.unacked.filter((m) => m.ts >= beforeTs);
+    const text = backlog.map((m) => m.text).join("\n\n");
+    const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
+    this.pushExternalLog(s.state.session_id, "system", `\u6062\u590D\u6210\u529F\uFF0C\u8865\u6295\u6392\u961F\u6D88\u606F ${backlog.length} \u6761`);
+    s.agent?.sendMessage(text, images.length ? images : void 0);
+  }
   // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
   // 口径 + 通知对账）：上一进程遗留 running/dispatched 悬账各补一行 done 收口（事实
   // 源先行），板条同步退 todo（中断口径，F-08 实测校准注释随块迁入——auto-revive
@@ -51030,7 +51105,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const scanGids = [...bySt.active, ...bySt.parked].map((g2) => g2.id);
     for (const e of hung) {
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD" });
-      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} },
         "done",
@@ -51095,10 +51170,13 @@ provider=${opts.provider ?? "default"}` : void 0,
       returnPath: "dispatch"
     });
     if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
+    const receiptPrompt = `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] \u4F60\u6D3E\u7684 ${e.tier} \u5355\uFF08${e.id.slice(0, 8)}${e.gid ? ` \xB7 \u7EC4 ${e.gid.slice(0, 8)}` : ""}\uFF09\u5931\u8D25\uFF1A${truncate(receipt, 160)}
+\u8BF7\u51B3\u5B9A\u91CD\u6D3E / \u6362\u4EBA\u63A5\u66FF / \u653E\u5F03\uFF0C\u5E76\u540C\u6B65\u4EFB\u52A1\u677F\u3002`;
+    const leaderSession = this.sessions.get(this.leaderId);
+    if (leaderSession && this.suppressAutoResume(leaderSession, "\u6D3E\u5355\u5931\u8D25\u56DE\u6267", receiptPrompt)) return;
     try {
       this.pushExternalLog(this.leaderId, "system", `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] ${e.tier} \u5355 ${e.id.slice(0, 8)} \u5931\u8D25\uFF1A${truncate(receipt, 160)}`);
-      this.resumeAgent(this.require(this.leaderId), `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] \u4F60\u6D3E\u7684 ${e.tier} \u5355\uFF08${e.id.slice(0, 8)}${e.gid ? ` \xB7 \u7EC4 ${e.gid.slice(0, 8)}` : ""}\uFF09\u5931\u8D25\uFF1A${truncate(receipt, 160)}
-\u8BF7\u51B3\u5B9A\u91CD\u6D3E / \u6362\u4EBA\u63A5\u66FF / \u653E\u5F03\uFF0C\u5E76\u540C\u6B65\u4EFB\u52A1\u677F\u3002`);
+      this.resumeAgent(this.require(this.leaderId), receiptPrompt);
     } catch (err) {
       console.warn(`[m4] \u6D3E\u5355\u5931\u8D25\u901A\u77E5\u6CE8\u5165 Leader \u5931\u8D25: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -51128,7 +51206,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 直接写 notification ledger」），非 EventBus。
   appendDutyRound(r) {
     try {
-      appendFileSync2(join25(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
+      appendFileSync2(join28(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
         kind: "PM_DUTY_ROUND",
         v: 1,
         feed_id: r.feed_id,
@@ -51172,14 +51250,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     const openIds = /* @__PURE__ */ new Set();
     for (const q2 of this.openDispatches.values()) for (const x of q2) openIds.add(x.id);
     for (const g2 of listGroupsByStatus().active) {
+      if (g2.duty_policy?.enabled === false) continue;
       const board = loadBoard(g2.id);
       const ready2 = new Map(computeReadySet(board).map((x) => [x.id, x.check.ready]));
       for (const e of board.entries) {
-        if (e.status === "todo") {
+        if (e.status === "backlog") {
           if (e.gate) blocked.push({ id: e.id, reason: "external" });
           else if (ready2.get(e.id) === true) todos.push({ todo_id: e.id, content: truncate(e.text, 80) });
           else blocked.push({ id: e.id, reason: "external" });
-        } else if (e.status === "doing" && e.dispatch_id && !openIds.has(e.dispatch_id) && now - e.updated_at >= dutyStaleMs()) {
+        } else if (e.status === "claimed" && e.dispatch_id && !openIds.has(e.dispatch_id) && now - e.updated_at >= dutyStaleMs()) {
           stale.push({ session_id: g2.id, doing_ms: now - e.updated_at, dispatch_id: e.dispatch_id });
         }
       }
@@ -51206,6 +51285,19 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
   feedPM(trigger, opts) {
     if (!dutyEnabled() || !this.leaderId) return;
+    if (readPluginConfig().duty === false) {
+      this.appendDutyRound({
+        feed_id: randomUUID8(),
+        feed_generation: randomUUID8(),
+        trigger: [trigger],
+        result: "disabled",
+        reason: "global_switch",
+        from: Date.now()
+      });
+      return;
+    }
+    const leader2 = this.sessions.get(this.leaderId);
+    if (leader2?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID8();
     const generation = randomUUID8();
@@ -51271,6 +51363,24 @@ provider=${opts.provider ?? "default"}` : void 0,
       `\u8BF7\u9A8C\u6536\u56DE\u6267\u3001\u6D3E\u53D1\u4E0B\u4E00\u6279\u6216\u540C\u6B65\u4EFB\u52A1\u677F\uFF1B\u5B8C\u6210\u540E\u672B\u884C\u5355\u72EC\u8F93\u51FA\u4E00\u884C JSON\uFF08\u4E0D\u52A0\u4EE3\u7801\u5757\uFF09\uFF1A`,
       `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`
     ].join("\n");
+    const leaderSession = this.sessions.get(this.leaderId);
+    if (leaderSession) {
+      const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
+      const parkedPinned = !!leaderSession.state.pinned && !!leaderSession.state.saved && !leaderSession.agent;
+      if (tripped || parkedPinned) {
+        this.suppressAutoResume(leaderSession, "\u503C\u5B88\u5582\u6D3B");
+        this.appendDutyRound({
+          feed_id: feedId,
+          feed_generation: generation,
+          trigger: [trigger],
+          result: "sleep",
+          reason: tripped ? "resume_breaker" : "pm_parked_pinned",
+          observed,
+          from
+        });
+        return;
+      }
+    }
     try {
       this.pushExternalLog(this.leaderId, "system", `[\u503C\u5B88\u5582\u6D3B] \u53D1\u73B0 ${verdict.candidates.length} \u9879\u53EF\u5904\u7406\uFF08\u6700\u8001\uFF1A${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}\uFF09`);
       this.resumeAgent(this.require(this.leaderId), prompt);
@@ -51316,7 +51426,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     try {
       const dir = acceptanceDir();
       return listAcceptances(50).filter((s) => !s.submitted).map((s) => {
-        const p = join25(dir, `${s.id}.json`);
+        const p = join28(dir, `${s.id}.json`);
         let mtime = 0;
         try {
           mtime = statSync7(p).mtimeMs;
@@ -51446,9 +51556,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.auditOrgCommand(actor, device, action, "", tier, false, "gid \u5FC5\u586B");
         return { ok: false, error: "gid \u5FC5\u586B" };
       }
-      if (status && !["todo", "doing", "done"].includes(status)) {
-        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status \u5FC5\u987B\u662F todo|doing|done\uFF08\u5F97 ${status}\uFF09`);
-        return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+      if (status && !BOARD_ENTRY_STATUSES.includes(status)) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}\uFF08\u5F97 ${status}\uFF09`);
+        return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
       }
       let text = typeof payload.text === "string" ? payload.text.trim() : "";
       if (action === "task-update") {
@@ -51508,7 +51618,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (typeof taskObj !== "object" || Array.isArray(taskObj) || typeof taskObj.text !== "string" || taskObj.text.trim() === "")
           return failAudit("task.text \u5FC5\u586B");
         const taskStatus = typeof taskObj.status === "string" ? taskObj.status : "";
-        if (taskStatus && taskStatus !== "todo" && taskStatus !== "doing") return failAudit("task.status \u5FC5\u987B\u662F todo|doing");
+        if (taskStatus && taskStatus !== "backlog" && taskStatus !== "claimed") return failAudit("task.status \u5FC5\u987B\u662F backlog|claimed");
         const taskNote = typeof taskObj.note === "string" ? taskObj.note.trim() : "";
         const taskDeps = Array.isArray(taskObj.depends_on) ? taskObj.depends_on.filter((x) => typeof x === "string" && x.trim() !== "") : void 0;
         const gateRaw = taskObj.gate;
@@ -51688,7 +51798,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           const anchor = str2("anchor");
           const tier = str2("tier");
           if (!name || !anchor) return { ok: false, error: "name/anchor \u5FC5\u586B" };
-          if (!isAbsolute6(anchor)) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+          if (!isAbsolute7(anchor)) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
           if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
           const roleDefaults = {};
           if (p.role_defaults && typeof p.role_defaults === "object" && !Array.isArray(p.role_defaults)) {
@@ -51839,7 +51949,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             const text = str2("text");
             if (!text) return { ok: false, error: "text \u5FC5\u586B" };
             const status = str2("status");
-            if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+            if (status && !BOARD_ENTRY_STATUSES.includes(status)) return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
             let deps;
             if (p.depends_on !== void 0) {
               if (!Array.isArray(p.depends_on)) return { ok: false, error: "depends_on \u987B\u4E3A\u5B57\u7B26\u4E32\u6570\u7EC4" };
@@ -51863,7 +51973,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             r = u.ok ? { ok: true, data: { entry: u.entry } } : u;
           } else if (op2 === "move") {
             const st2 = str2("status");
-            if (!["todo", "doing", "done"].includes(st2)) return { ok: false, error: "status \u5FC5\u987B\u662F todo|doing|done" };
+            if (!BOARD_ENTRY_STATUSES.includes(st2)) return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str2("entry_id"), st2);
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op2 === "del") {
@@ -52076,14 +52186,62 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.transitionNotifications((n) => n.kind === "org-confirm" && n.sourceContext.entityId === c.id, "resolved");
     return { ok: true };
   }
+  // ── M13-2 delta 投影：上次发射状态缓存（发射侧单点 diff，25 处调用点零改）──
+  // 重启后缓存空=首帧省略 delta（端上覆盖式消费旧字段兜底，与旧 relay 帧同形）；
+  // 此后每帧带 entity_refs+delta。缓存只作 diff 基线，不参与任何业务判定。
+  lastProjectsBroadcast = null;
+  lastBoardBroadcast = /* @__PURE__ */ new Map();
+  // 按 id 深比差分：无前值返回 null（调用方省略 delta 走覆盖式）；有前值时
+  // upserts=新增或内容变化条目（JSON 深等，updated_at 推进即判变）、removes=前有今无。
+  diffById(prev, next) {
+    if (!prev) return null;
+    const prevJson = new Map(prev.map((x) => [x.id, JSON.stringify(x)]));
+    const nextIds = new Set(next.map((x) => x.id));
+    const upserts = next.filter((x) => prevJson.get(x.id) !== JSON.stringify(x));
+    const removes = prev.filter((x) => !nextIds.has(x.id)).map((x) => x.id);
+    return { upserts, removes };
+  }
   // #26 M2 组织广播（瞬态：在线端实时收敛；离线端由 SNAPSHOT.projects/org_confirms
-  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）
+  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）。
+  // M13-2：payload 扩 entity_refs+delta（旧字段 groups 保留全量，旧端覆盖式零变化；
+  // D18② 帧级判定=payload.delta 键存在性）
   emitOrgState() {
-    this.bus.emitTransient("PROJECTS_UPDATED", { groups: listGroups() });
+    const groups = listGroups();
+    const delta = this.diffById(this.lastProjectsBroadcast, groups);
+    this.lastProjectsBroadcast = groups;
+    this.bus.emitTransient("PROJECTS_UPDATED", {
+      groups,
+      ...delta ? {
+        entity_refs: [.../* @__PURE__ */ new Set([...delta.upserts.map((g2) => g2.id), ...delta.removes])],
+        delta
+      } : {}
+    });
     this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
   }
+  // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
+  // 发帧）；board 旧字段保留全量（不带板正文的只是 delta——M13-1 实体引用裁定沿承）
   emitBoard(gid) {
-    this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
+    const board = loadBoardFile(gid);
+    if (!board) return;
+    const prev = this.lastBoardBroadcast.get(gid) ?? null;
+    this.lastBoardBroadcast.set(gid, board);
+    if (!prev) {
+      this.bus.emitTransient("BOARD_UPDATED", { gid, board });
+      return;
+    }
+    const entries = this.diffById(prev.entries, board.entries) ?? { upserts: [], removes: [] };
+    const lessons = this.diffById(prev.lessons ?? [], board.lessons ?? []) ?? { upserts: [], removes: [] };
+    const delta = { entries, lessons, meta: { frozen: board.frozen, updated_at: board.updated_at } };
+    this.bus.emitTransient("BOARD_UPDATED", {
+      gid,
+      board,
+      // P3-4：refs=提示性定位索引，端上以 delta 本体为准；当前不含 lessons.removes
+      //（lessons append-only 恒空），未来若引入删边须并入 refs。
+      entity_refs: [
+        .../* @__PURE__ */ new Set([...entries.upserts.map((e) => e.id), ...entries.removes, ...lessons.upserts.map((l) => l.id)])
+      ],
+      delta
+    });
   }
   // M12-5 引擎 preflight（拉起前纯静态检查，失败即 error 拒派）：裁定「派单前 error」
   // 口径——preflight 是 which/路径/env 级同步探测，纯静态无进程无账可记，dispatched
@@ -52184,19 +52342,86 @@ provider=${opts.provider ?? "default"}` : void 0,
     };
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
-      if (!pf.ok) return { ok: false, error: pf.error };
+      if (!pf.ok) {
+        appendPermissionAudit(auditStore(this.cfg.dataDir), {
+          requested_mode: "bypassPermissions",
+          normalized_mode: null,
+          effective_mode: "forbidden",
+          native_mode: null,
+          capability_state: engineCapabilityState(planned.engine),
+          engine: planned.engine,
+          reason: "preflight_failed",
+          policy_source: "tier_default",
+          environment: resolveEnvScope(this.cfg.port),
+          dir_scope: resolveDirScope(anchor),
+          tier,
+          actor,
+          session_id: null,
+          command_id: dispatchId,
+          created_at: Date.now()
+        });
+        return { ok: false, error: pf.error };
+      }
     }
+    const engineForPolicy = planned.engine ?? "claude";
+    const dirScope = resolveDirScope(anchor);
+    const envScope = resolveEnvScope(this.cfg.port);
+    const policyOn = permissionPolicyEnabled();
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const auditRow = (p, sid) => ({
+      ...p,
+      environment: envScope,
+      dir_scope: dirScope,
+      tier,
+      actor,
+      session_id: sid,
+      command_id: dispatchId,
+      created_at: Date.now()
+    });
+    if (policyOn && !bizRole) {
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow({
+        requested_mode: "bypassPermissions",
+        normalized_mode: null,
+        effective_mode: "forbidden",
+        native_mode: null,
+        capability_state: engineCapabilityState(engineForPolicy),
+        engine: engineForPolicy,
+        reason: "unknown_role_mapping",
+        policy_source: null
+      }, null));
+      return { ok: false, error: `forbidden: unknown_role_mapping\uFF08\u672A\u77E5\u5C97\u4F4D\u540D ${role}\u2014\u2014\u6743\u9650\u4E3B\u4F53\u6620\u5C04\u8BCD\u8868 worker/pm/team_pm/review/review_pm\uFF09` };
+    }
+    const perm = policyOn ? evaluatePermission({
+      requested_mode: "bypassPermissions",
+      engine: engineForPolicy,
+      role: bizRole ?? "worker",
+      // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
+      tier,
+      capability_state: engineCapabilityState(engineForPolicy),
+      policy_source: group?.mixed_engine === true ? "mixed_team_default" : "tier_default",
+      dir_scope: dirScope,
+      env: envScope
+    }) : null;
+    if (perm && perm.effective_mode === "forbidden") {
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));
+      return { ok: false, error: `forbidden: ${perm.reason}` };
+    }
+    const spawnMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : "bypassPermissions";
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId;
     if (veteran) {
       try {
-        this.resumeAgent(this.require(veteran), wrapDispatchPrompt(tier, input.prompt));
+        const veteranSession = this.require(veteran);
+        if (veteranSession.resumeCooldownUntil && Date.now() < veteranSession.resumeCooldownUntil) {
+          throw new Error(`resume \u7194\u65AD\u51B7\u5374\u4E2D\uFF08\u8FDE\u7EED\u5931\u8D25 ${veteranSession.resumeFailStreak ?? "?"} \u6B21\uFF09`);
+        }
+        this.resumeAgent(veteranSession, wrapDispatchPrompt(tier, input.prompt));
         sessionId = veteran;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `\u719F\u624B\u590D\u6D3B\u5931\u8D25\uFF0C\u672C\u5355\u964D\u7EA7\u65B0\u4F1A\u8BDD: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
             skipStickyCwd: true,
             employee: true,
             role,
@@ -52214,7 +52439,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
           skipStickyCwd: true,
           employee: true,
           role,
@@ -52231,6 +52456,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
     const s = this.sessions.get(sessionId);
+    if (perm) appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, sessionId));
     if (s) {
       s.state.project_gid = input.gid;
       s.state.dispatch_tier = tier;
@@ -52247,9 +52473,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id ? (
-        // #087 beads：认领模式——前置检查已过，既有卡 todo→doing 挂派单（卡是同一张，依赖关系保留）
-        { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId }
-      ) : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId });
+        // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
+        { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
+      ) : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
@@ -52262,7 +52488,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       });
     }
     this.emitOrgState();
-    return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId, ...perm ? { permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } } : {} };
   }
   // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个
   // 可承接者。避开名单 = bad 评价｜失败≥2 且多于成功（未手动评 bad 时的兜底——
@@ -52408,9 +52634,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     for (const q2 of this.openDispatches.values()) for (const e of q2) live.add(e.id);
     const open3 = new Set(readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").map((e) => e.id));
     for (const ent of loadBoard(gid).entries) {
-      if (ent.status !== "doing" || !ent.dispatch_id) continue;
+      if (ent.status !== "claimed" || !ent.dispatch_id) continue;
       if (live.has(ent.dispatch_id) || open3.has(ent.dispatch_id)) continue;
-      moveEntryByDispatch(gid, ent.dispatch_id, "todo");
+      moveEntryByDispatch(gid, ent.dispatch_id, "backlog");
     }
   }
   // #26 M3 重启重建挂起标记（审查修正）：org_parked 是内存态、不进事件流——重启后
@@ -52547,6 +52773,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       ...s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {},
       ...s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {},
       ...s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {},
+      ...s.state.model ? { model: s.state.model } : {},
+      ...s.state.engine ? { engine: s.state.engine } : {},
+      ...s.state.engine_provider ? { provider: s.state.engine_provider } : {},
       ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
       ...s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {},
       ...s.state.compacting ? { compacting: true } : {},
@@ -52591,6 +52820,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   /** 测试缝：注入 proc-tree 替身（null 还原真实实现） */
   setWatchdogProcs(p) {
     this.watchdogProcs = p ?? { snapshotTree, killTree };
+  }
+  /** 测试缝（W-LEADFIX）：读会话 resume 熔断态——streak=连败次数，cooldownUntil=冷却截止（0=无）。null=会话不存在 */
+  resumeBreakerForTests(sid) {
+    const s = this.sessions.get(sid);
+    if (!s) return null;
+    return { streak: s.resumeFailStreak ?? 0, cooldownUntil: s.resumeCooldownUntil ?? 0 };
   }
   // 心跳同频扫描（5s）。双通道起疑：慢通道 = 任意静默 > T_stall（10min）；快通道 =
   // 最后进展是 tool_result（工具已完成，CLI 本该立刻接话）却静默 > 3min。命中即进
@@ -52683,6 +52918,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     const sid = s.state.session_id;
     const t02 = Date.now();
     const agent = s.agent;
+    if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+      this.bus.emit(sid, "WATCHDOG", {
+        action: "recover_suppressed",
+        lane,
+        detail: `\u6062\u590D\u7194\u65AD\u51B7\u5374\u4E2D\uFF08\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\uFF0C\u7EA6 ${Math.max(1, Math.round((s.resumeCooldownUntil - Date.now()) / 6e4))} \u5206\u949F\u540E\u53EF\u91CD\u8BD5\uFF09\uFF0C\u8DF3\u8FC7\u81EA\u52A8\u63A5\u7BA1`
+      });
+      s.wd.phase = "idle";
+      return;
+    }
     this.bus.emit(sid, "WATCHDOG", { action: "recover_start", lane, stalled_ms: stalled, cpu_delta_ms: cpuDelta });
     this.pushExternalLog(
       sid,
@@ -52762,13 +53006,13 @@ provider=${opts.provider ?? "default"}` : void 0,
           const q2 = this.openDispatches.get(s.state.session_id);
           if (!q2 || q2.length <= 1) break;
           q2.unshift(q2.pop());
-          this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "todo");
+          this.closeOpenDispatches(s.state.session_id, "done", "\u591A\u6D88\u606F\u5408\u5E76\u91CD\u653E\uFF08\u5E76\u5165\u540C\u56DE\u5408\uFF09", false, false, void 0, "backlog");
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
         this.resumeAgent(s, text, images.length ? images : void 0);
       } else {
-        this.closeOpenDispatches(s.state.session_id, "done", "\u6D41\u4E2D\u65AD\u6062\u590D\u5F85\u547D\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
+        this.closeOpenDispatches(s.state.session_id, "done", "\u6D41\u4E2D\u65AD\u6062\u590D\u5F85\u547D\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
         this.reviveSaved(s);
       }
       s.wd.phase = "idle";
@@ -52785,6 +53029,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.waiting_request = void 0;
       s.state.waiting_started_at = void 0;
       this.pushExternalLog(sid, "system", s.state.last_error);
+      this.noteResumeFailure(s, `\u770B\u95E8\u72D7\u63A5\u7BA1\u5931\u8D25\uFF08${msg}\uFF09`);
       this.emitUpdated(s, true);
       s.wd.phase = "idle";
     }
@@ -52857,7 +53102,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const finished = [...this.sessions.values()].filter((s) => (s.state.status === "DONE" || s.state.status === "ERROR") && !s.state.pinned).sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
       if (this.sessions.size < MAX_SESSIONS) break;
-      this.closeOpenDispatches(s.state.session_id, "failed", "\u5BB9\u91CF\u9A71\u9010\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "todo");
+      this.closeOpenDispatches(s.state.session_id, "failed", "\u5BB9\u91CF\u9A71\u9010\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
       void s.agent?.stop();
       this.sessions.delete(s.state.session_id);
       this.lastStoreTodos.delete(s.state.session_id);
@@ -52879,47 +53124,15 @@ ${task}
 - \u96F6\u786E\u8BA4\u76F4\u505A\uFF08\u6743\u9650 acceptEdits\uFF09\uFF1B\u53D1\u73B0\u8D85\u8303\u56F4\u4E8B\u9879\uFF0C\u56DE\u62A5\u800C\u975E\u6269\u6743\u3002`;
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { readFileSync as readFileSync24, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
-import { join as join28, dirname as dirname9, sep as sep7 } from "node:path";
-import { homedir as homedir13, networkInterfaces as networkInterfaces2 } from "node:os";
-
-// src/models.ts
-import { existsSync as existsSync19, readFileSync as readFileSync21 } from "node:fs";
-import { homedir as homedir10 } from "node:os";
-import { join as join26 } from "node:path";
-var DEFAULT_MODEL = "glm-5.3";
-function readClaudeSettings() {
-  try {
-    return JSON.parse(readFileSync21(join26(homedir10(), ".claude", "settings.json"), "utf8"));
-  } catch {
-    return {};
-  }
-}
-function listModels(fallbackDefault) {
-  const s = existsSync19(join26(homedir10(), ".claude", "settings.json")) ? readClaudeSettings() : {};
-  const env = s.env ?? {};
-  const out = [];
-  const add = (m) => {
-    if (typeof m !== "string") return;
-    const base = m.replace(/\[1m\]$/, "").trim();
-    if (base && !out.includes(base)) out.push(base);
-  };
-  for (const m of (process.env.CCR_MODELS ?? "").split(",")) add(m);
-  add(s.model);
-  add(env.ANTHROPIC_DEFAULT_SONNET_MODEL);
-  add(env.ANTHROPIC_DEFAULT_HAIKU_MODEL);
-  add(env.ANTHROPIC_DEFAULT_OPUS_MODEL);
-  add(fallbackDefault || DEFAULT_MODEL);
-  return out;
-}
-
-// src/ws-server.ts
+import { readFileSync as readFileSync25, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
+import { join as join31, dirname as dirname9, sep as sep7 } from "node:path";
+import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// node_modules/ws/wrapper.mjs
+// relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -52930,17 +53143,17 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
-// src/bridge.ts
+// relay/src/bridge.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, readFileSync as readFileSync23, readdirSync as readdirSync9, statSync as statSync8, writeFileSync as writeFileSync16 } from "node:fs";
-import { homedir as homedir12 } from "node:os";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync24, readdirSync as readdirSync10, statSync as statSync9, writeFileSync as writeFileSync16 } from "node:fs";
+import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
-// src/injector.ts
+// relay/src/injector.ts
 import { spawn as spawn5, execFileSync } from "node:child_process";
-import { existsSync as existsSync20, mkdirSync as mkdirSync15, appendFileSync as appendFileSync3, readFileSync as readFileSync22, writeFileSync as writeFileSync15, rmSync as rmSync4 } from "node:fs";
-import path4, { join as join27 } from "node:path";
-import { homedir as homedir11, tmpdir as tmpdir2 } from "node:os";
+import { existsSync as existsSync20, mkdirSync as mkdirSync15, appendFileSync as appendFileSync3, readFileSync as readFileSync23, writeFileSync as writeFileSync15, rmSync as rmSync4 } from "node:fs";
+import path4, { join as join29 } from "node:path";
+import { homedir as homedir13, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path4.dirname(fileURLToPath2(import.meta.url));
 var dataDir = process.env.CCR_DATA_DIR ?? path4.join(here, "..", "data");
@@ -52957,7 +53170,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync22(injectCs, "utf8").includes("--peek");
+    return readFileSync23(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -53021,23 +53234,23 @@ var ERR_BY_CODE = {
   6: "peek-fail"
 };
 function run(args) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const fake = process.env.CCR_INJECT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, ...args], { windowsHide: true }) : spawn5(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve8({ ok: false, error: "timeout" });
+      resolve9({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve8({ ok: false, error: e.message });
+      resolve9({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve8({ ok: true });
-      else resolve8({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
+      if (code === 0) resolve9({ ok: true });
+      else resolve9({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -53068,28 +53281,87 @@ function buildDoScriptExpr(pid, expr) {
 function mapAppleError(stderr) {
   return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : void 0;
 }
+function runTmux(args, timeoutMs = 5e3) {
+  return new Promise((resolve9) => {
+    const child = spawn5("tmux", args);
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (c) => out += c);
+    child.stderr?.on("data", (c) => err += c);
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve9({ ok: false, text: "", error: "timeout" });
+    }, timeoutMs);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve9({ ok: false, text: "", error: e.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve9({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+    });
+  });
+}
+var tmuxEqCache = null;
+function tmuxSupportsEqPrefix() {
+  if (tmuxEqCache !== null) return tmuxEqCache;
+  try {
+    const v = execFileSync("tmux", ["-V"], { encoding: "utf8", timeout: 3e3 });
+    const m = /(\d+)\.(\d+)/.exec(v);
+    tmuxEqCache = !!m && (+m[1] > 3 || +m[1] === 3 && +m[2] >= 1);
+  } catch {
+    tmuxEqCache = false;
+  }
+  return tmuxEqCache;
+}
+async function resolveTmuxTarget(pid) {
+  if (process.platform !== "darwin" && process.platform !== "linux") return null;
+  if (process.env.CCR_OSASCRIPT_CMD || process.env.CCR_INJECT_CMD) return null;
+  let tty = "";
+  try {
+    tty = execFileSync("ps", ["-o", "tty=", "-p", String(pid)], { encoding: "utf8", timeout: 3e3 }).trim();
+  } catch {
+    return null;
+  }
+  if (!tty || tty === "?") return null;
+  try {
+    const r = await runTmux(["list-panes", "-a", "-F", "#{pane_tty}	#{session_name}	#{window_index}	#{pane_index}"]);
+    if (!r.ok) return null;
+    for (const line of r.text.split(/\r?\n/)) {
+      const [ptty, s, w2, p] = line.split("	");
+      if (!ptty || !s || !w2 || !p) continue;
+      if (ptty.endsWith(tty)) return tmuxSupportsEqPrefix() ? `=${s}:${w2}.${p}` : `${s}:${w2}.${p}`;
+    }
+  } catch {
+  }
+  return null;
+}
+async function tmuxSendKeys(target, ...keys) {
+  const r = await runTmux(["send-keys", "-t", target, ...keys]);
+  return r.ok ? { ok: true } : { ok: false, error: `tmux send-keys \u5931\u8D25: ${r.error}` };
+}
 function runAppleScript(script) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve8({ ok: false, error: "timeout" });
+      resolve9({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve8({ ok: false, error: e.message });
+      resolve9({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) return resolve8({ ok: true });
+      if (code === 0) return resolve9({ ok: true });
       try {
-        appendFileSync3(join27(homedir11(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync3(join29(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
-      resolve8({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
+      resolve9({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -53131,9 +53403,9 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join27(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    const tmp = join29(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync15(tmp, body, "utf8");
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       const child = spawn5("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
@@ -53144,9 +53416,9 @@ async function resumeSession(cwd, sessionId, text, permMode) {
           rmSync4(tmp, { force: true });
         } catch {
         }
-        resolve8({ ok: false, error: e.message });
+        resolve9({ ok: false, error: e.message });
       });
-      child.on("spawn", () => resolve8({ ok: true }));
+      child.on("spawn", () => resolve9({ ok: true }));
       child.unref?.();
     });
   }
@@ -53156,6 +53428,12 @@ async function injectTextMac(pid, rawText) {
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
   if (!text) return { ok: false, error: "\u7A7A\u6D88\u606F" };
+  const target = await resolveTmuxTarget(pid);
+  if (target) {
+    const w2 = await tmuxSendKeys(target, "-l", "--", text);
+    if (!w2.ok) return w2;
+    return tmuxSendKeys(target, "Enter");
+  }
   return runAppleScript(buildDoScript(pid, text));
 }
 function injectSupported() {
@@ -53187,6 +53465,8 @@ async function injectEsc(pid) {
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    const target = await resolveTmuxTarget(pid);
+    if (target) return tmuxSendKeys(target, "Escape");
     return runAppleScript(buildDoScriptExpr(pid, "ASCII character 27"));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
@@ -53197,6 +53477,8 @@ async function injectEnter(pid) {
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    const target = await resolveTmuxTarget(pid);
+    if (target) return tmuxSendKeys(target, "Enter");
     return runAppleScript(buildDoScriptExpr(pid, '""'));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
@@ -53225,7 +53507,7 @@ function buildCaptureScript(pid) {
   ].join("\n");
 }
 function runAppleScriptOut(script) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let out = "";
@@ -53234,15 +53516,15 @@ function runAppleScriptOut(script) {
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve8({ ok: false, text: "", error: "timeout" });
+      resolve9({ ok: false, text: "", error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve8({ ok: false, text: "", error: e.message });
+      resolve9({ ok: false, text: "", error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve8({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+      resolve9({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
     });
   });
 }
@@ -53250,17 +53532,23 @@ async function captureConsoleBottom(pid, rows = 20) {
   if (!injectSupported()) return null;
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return null;
+    const target = await resolveTmuxTarget(pid);
+    if (target) {
+      const tm2 = await runTmux(["capture-pane", "-t", target, "-p"]);
+      if (!tm2.ok || !tm2.text.trim()) return null;
+      return tm2.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
+    }
     const r2 = await runAppleScriptOut(buildCaptureScript(pid));
     if (!r2.ok || !r2.text.trim()) return null;
     return r2.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join27(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join29(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync22(tmp, "utf8");
+    const text = readFileSync23(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
@@ -53273,7 +53561,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
 }
 
-// src/type-guard.ts
+// relay/src/type-guard.ts
 function guardConfig() {
   const num2 = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
@@ -53368,16 +53656,341 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
-// src/bridge.ts
+// relay/src/engine-rollouts.ts
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { closeSync as closeSync3, openSync as openSync3, readdirSync as readdirSync9, readSync as readSync2, statSync as statSync8 } from "node:fs";
+import { basename as basename6, join as join30 } from "node:path";
+var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
+var ENGINE_SCAN_SPECS = [
+  { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
+  { engine: "trae", label: "Trae", envRoot: "CCR_TRAE_SESSIONS_ROOT", homeDirName: ".trae", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("trae") },
+  { engine: "qwen-code", label: "Qwen Code", envRoot: "CCR_QWEN_SESSIONS_ROOT", homeDirName: ".qwen", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("qwen") },
+  { engine: "codebuddy", label: "CodeBuddy", envRoot: "CCR_CODEBUDDY_SESSIONS_ROOT", homeDirName: ".codebuddy", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("codebuddy") },
+  { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") }
+];
+function engineRoot(spec, home) {
+  return process.env[spec.envRoot] || join30(home, spec.homeDirName, "sessions");
+}
+var clip = (text, cap) => {
+  const compact2 = text.replace(/\s+/g, " ").trim();
+  return [...compact2].length > cap ? [...compact2].slice(0, cap).join("") + "\u2026" : compact2;
+};
+function isBootstrapPrompt(prompt) {
+  const normalized = prompt.trimStart();
+  return normalized.startsWith("<environment_context>") || normalized.startsWith("<skills_instructions>");
+}
+var finite = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
+function eventTime(record) {
+  const numeric = finite(record.timestamp);
+  if (numeric !== void 0) return numeric > 1e10 ? numeric : numeric * 1e3;
+  if (typeof record.timestamp === "string") {
+    const parsed = Date.parse(record.timestamp);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return void 0;
+}
+function objectOf(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function textOf2(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(textOf2).filter(Boolean).join("\n");
+  const object = objectOf(value);
+  if (typeof object.text === "string") return object.text;
+  if (typeof object.message === "string") return object.message;
+  if (typeof object.content === "string") return object.content;
+  if (object.content !== void 0) return textOf2(object.content);
+  return "";
+}
+function sessionIdFromFile(filePath) {
+  const stem = basename6(filePath, ".jsonl").replace(/^rollout-/, "");
+  const id2 = /([0-9a-z]{8,}(?:-[0-9a-z]+){2,})$/i.exec(stem)?.[1];
+  return id2 || stem || basename6(filePath);
+}
+function initialProfile(spec, filePath) {
+  return {
+    filePath,
+    sessionId: sessionIdFromFile(filePath),
+    cwd: "",
+    prompt: "",
+    title: "\u672A\u547D\u540D\u4F1A\u8BDD",
+    startedAt: 0,
+    updatedAt: 0,
+    status: "WORKING",
+    terminal: false,
+    activityKey: ""
+  };
+}
+function eventBody(record) {
+  const payload = objectOf(record.payload);
+  return Object.keys(payload).length ? payload : objectOf(record);
+}
+function activityFor(type, body, label) {
+  const normalizedType = type.replace(/^item_/, "item.").replace(/^turn_/, "turn.");
+  const item = objectOf(body.item);
+  const itemType = typeof item.type === "string" ? item.type : "";
+  const errorValue = body.error ?? item.error;
+  const error = clip(typeof errorValue === "string" ? errorValue : textOf2(errorValue), 220);
+  if (normalizedType === "turn.failed" || type === "task_failed" || type === "error") {
+    return { text: error || `${label} \u56DE\u5408\u5931\u8D25`, kind: "system", status: "ERROR", terminal: true, error: error || `${label} \u56DE\u5408\u5931\u8D25` };
+  }
+  if (normalizedType === "turn.completed" || type === "task_complete" || type === "task_completed") {
+    return { text: `${label} \u56DE\u5408\u5B8C\u6210`, kind: "system", status: "DONE", terminal: true };
+  }
+  if (normalizedType === "turn.started" || type === "task_started") {
+    return { text: `${label} \u56DE\u5408\u8FD0\u884C\u4E2D`, kind: "system", status: "WORKING", terminal: false };
+  }
+  if (normalizedType === "item.started") {
+    if (itemType === "command_execution") {
+      const command = clip(textOf2(item.command), 180);
+      return { text: command ? `\u6267\u884C\u547D\u4EE4\uFF1A${command}` : "\u6267\u884C\u547D\u4EE4", kind: "tool_use", tool: "command", status: "WORKING", terminal: false };
+    }
+    return { text: itemType ? `\u5F00\u59CB\uFF1A${itemType}` : `${label} \u5DE5\u4F5C\u4E2D`, kind: "system", status: "WORKING", terminal: false };
+  }
+  if (normalizedType === "item.completed") {
+    if (itemType === "UserMessage") {
+      const prompt = clip(textOf2(item.content), 4e3);
+      return { text: prompt ? `\u7528\u6237\uFF1A${clip(prompt, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
+    }
+    if (itemType === "AgentMessage") {
+      const text = clip(textOf2(item.content ?? item.text), 220);
+      return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
+    }
+    if (itemType === "CommandExecution") {
+      const command = clip(textOf2(item.command), 120);
+      const failed = item.status === "failed" || finite(item.exit_code) !== void 0 && item.exit_code !== 0;
+      const output = clip(textOf2(item.aggregated_output), 160);
+      return {
+        text: failed ? `\u547D\u4EE4\u5931\u8D25\uFF1A${command || output || "\u672A\u77E5\u547D\u4EE4"}` : `\u547D\u4EE4\u5B8C\u6210\uFF1A${command || output || "command"}`,
+        kind: failed ? "system" : "tool_result",
+        tool: "command",
+        status: failed ? "ERROR" : "WORKING",
+        terminal: false,
+        ...failed ? { error: output || "\u547D\u4EE4\u6267\u884C\u5931\u8D25" } : {}
+      };
+    }
+    if (itemType === "FileChange") {
+      return { text: "\u6587\u4EF6\u53D8\u66F4\u5B8C\u6210", kind: "tool_result", status: "WORKING", terminal: false };
+    }
+    if (itemType) return { text: `\u5B8C\u6210\uFF1A${itemType}`, kind: "system", status: "WORKING", terminal: false };
+  }
+  if (type === "message" || type === "response_item") {
+    const role = typeof body.role === "string" ? body.role : "";
+    const text = clip(textOf2(body.content ?? body.text), 220);
+    const prompt = role === "user" ? clip(textOf2(body.content), 4e3) : "";
+    if (role === "user") return { text: text ? `\u7528\u6237\uFF1A${clip(text, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
+    if (role === "assistant") return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
+    if (body.type === "function_call") {
+      const name = clip(textOf2(body.name), 100);
+      return { text: name ? `\u8C03\u7528\uFF1A${name}` : "\u8C03\u7528\u5DE5\u5177", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
+    }
+  }
+  if (type === "function_call") {
+    const name = clip(textOf2(body.name), 100);
+    return { text: name ? `\u8C03\u7528\uFF1A${name}` : "\u8C03\u7528\u5DE5\u5177", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
+  }
+  if (type === "function_call_output") {
+    return { text: "\u5DE5\u5177\u8C03\u7528\u5B8C\u6210", kind: "tool_result", status: "WORKING", terminal: false };
+  }
+  return {};
+}
+function applyRecord(spec, profile, record) {
+  const body = eventBody(record);
+  const type = typeof body.type === "string" ? body.type : typeof record.type === "string" ? record.type : "";
+  const at = eventTime(record);
+  if (at !== void 0) {
+    profile.startedAt = profile.startedAt > 0 ? Math.min(profile.startedAt, at) : at;
+    profile.updatedAt = Math.max(profile.updatedAt, at);
+  }
+  const meta = type === "session_meta" ? body.payload && typeof body.payload === "object" ? objectOf(body.payload) : body : body;
+  const sessionId = typeof meta.session_id === "string" && meta.session_id ? meta.session_id : typeof meta.id === "string" && meta.id && type === "session_meta" ? meta.id : "";
+  if (sessionId) profile.sessionId = sessionId;
+  if (typeof body.thread_id === "string" && body.thread_id) profile.sessionId = body.thread_id;
+  if (typeof meta.cwd === "string" && meta.cwd) profile.cwd = meta.cwd;
+  if (typeof meta.model_provider === "string" && meta.model_provider) profile.provider = meta.model_provider;
+  if (typeof body.model === "string" && body.model) profile.model = body.model;
+  const item = objectOf(body.item);
+  if (typeof item.cwd === "string" && item.cwd && !profile.cwd) profile.cwd = item.cwd;
+  const activity = activityFor(type, body, spec.label);
+  if (activity.prompt && !isBootstrapPrompt(activity.prompt) && (!profile.prompt || isBootstrapPrompt(profile.prompt))) {
+    profile.prompt = activity.prompt;
+    profile.title = deriveTitle(activity.prompt);
+  }
+  if (activity.status) profile.status = activity.status;
+  if (activity.terminal !== void 0) profile.terminal = activity.terminal;
+  if (activity.error) profile.error = activity.error;
+  else if (activity.status === "WORKING" || activity.status === "DONE") profile.error = void 0;
+  if (activity.text) {
+    const ordinal = typeof record.ordinal === "string" || typeof record.ordinal === "number" ? String(record.ordinal) : "";
+    const itemId = typeof item.id === "string" ? item.id : "";
+    profile.activity = activity.text;
+    profile.activityKind = activity.kind;
+    profile.activityTool = activity.tool;
+    profile.activityKey = `${at ?? profile.updatedAt}:${ordinal}:${type}:${itemId}:${activity.text}`;
+  }
+}
+function rolloutFiles(root, pattern) {
+  const out = [];
+  const walk = (dir, depth) => {
+    if (depth > 6) return;
+    let entries;
+    try {
+      entries = readdirSync9(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const p = join30(dir, entry.name);
+      if (entry.isDirectory()) walk(p, depth + 1);
+      else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+var RolloutScanner = class {
+  constructor(spec, root) {
+    this.spec = spec;
+    this.root = root;
+  }
+  spec;
+  root;
+  cursors = /* @__PURE__ */ new Map();
+  scan(now = Date.now()) {
+    const files = rolloutFiles(this.root, this.spec.filePattern);
+    const seen = new Set(files);
+    for (const filePath of files) {
+      let size = 0;
+      let mtime = now;
+      try {
+        const stat2 = statSync8(filePath);
+        size = stat2.size;
+        mtime = stat2.mtimeMs;
+      } catch {
+        continue;
+      }
+      let cursor = this.cursors.get(filePath);
+      if (!cursor || size < cursor.offset) {
+        cursor = { offset: 0, carry: "", profile: initialProfile(this.spec, filePath) };
+        this.cursors.set(filePath, cursor);
+      }
+      let fd2;
+      try {
+        fd2 = openSync3(filePath, "r");
+        const remaining = size - cursor.offset;
+        if (remaining > 0) {
+          const buffer = Buffer.alloc(Math.min(remaining, 1024 * 1024));
+          let position = cursor.offset;
+          let carry = cursor.carry;
+          while (position < size) {
+            const read = readSync2(fd2, buffer, 0, Math.min(buffer.length, size - position), position);
+            if (read <= 0) break;
+            position += read;
+            const lines = (carry + buffer.subarray(0, read).toString("utf8")).split(/\r?\n/);
+            carry = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                applyRecord(this.spec, cursor.profile, JSON.parse(line));
+              } catch {
+              }
+            }
+          }
+          cursor.offset = position;
+          cursor.carry = carry;
+        }
+        if (cursor.profile.startedAt === 0) cursor.profile.startedAt = mtime || now;
+        if (cursor.profile.updatedAt === 0) cursor.profile.updatedAt = mtime || now;
+      } catch {
+        continue;
+      } finally {
+        if (fd2 !== void 0) try {
+          closeSync3(fd2);
+        } catch {
+        }
+      }
+    }
+    for (const filePath of this.cursors.keys()) if (!seen.has(filePath)) this.cursors.delete(filePath);
+    return [...this.cursors.values()].map((cursor) => ({ ...cursor.profile }));
+  }
+};
+function processCwd(pid) {
+  if (process.platform === "win32") return void 0;
+  try {
+    const raw = execFileSync2("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf8", timeout: 3e3 });
+    return raw.split(/\r?\n/).find((line) => line.startsWith("n"))?.slice(1) || void 0;
+  } catch {
+    return void 0;
+  }
+}
+function parseProcessStart(raw) {
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function captureCliProcesses() {
+  if (process.platform === "win32") return null;
+  try {
+    const raw = execFileSync2("ps", ["-axo", "pid=,ppid=,lstart=,command="], { encoding: "utf8", timeout: 5e3, maxBuffer: 4 * 1024 * 1024 });
+    const out = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const match = /^\s*(\d+)\s+(\d+)\s+(.{24})\s+(.+)$/.exec(line);
+      if (!match) continue;
+      const pid = Number(match[1]);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      out.push({ pid, startedAt: parseProcessStart(match[3]), command: match[4] });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+function engineProcesses(snapshot, spec) {
+  const out = [];
+  for (const entry of snapshot) {
+    if (!spec.commandPattern.test(entry.command)) continue;
+    const threadId = /(?:^|\s)([0-9a-z]{8,}(?:-[0-9a-z]+){2,})(?:\s|$)/i.exec(entry.command)?.[1];
+    out.push({ pid: entry.pid, cwd: processCwd(entry.pid), startedAt: entry.startedAt, command: entry.command, threadId });
+  }
+  return out;
+}
+function samePath(a, b) {
+  if (!a || !b) return false;
+  return a.replace(/[\\/]$/, "").toLowerCase() === b.replace(/[\\/]$/, "").toLowerCase();
+}
+var PROCESS_START_TOLERANCE_MS = 10 * 6e4;
+function matchEngineProcess(profile, processes) {
+  const byThread = processes.filter((process2) => process2.threadId === profile.sessionId);
+  const cwdCandidates = processes.filter((process2) => samePath(process2.cwd, profile.cwd));
+  const byStart = cwdCandidates.filter((process2) => {
+    if (!profile.startedAt || !process2.startedAt) return true;
+    return Math.abs(process2.startedAt - profile.startedAt) <= PROCESS_START_TOLERANCE_MS;
+  });
+  const candidates = byThread.length > 0 ? byThread : byStart.length > 0 ? byStart : profile.startedAt || cwdCandidates.length !== 1 ? [] : cwdCandidates;
+  if (!candidates.length) return void 0;
+  return [...candidates].sort((left, right) => {
+    const score = (process2) => {
+      let value = 0;
+      if (process2.threadId === profile.sessionId) value += 1e6;
+      if (samePath(process2.cwd, profile.cwd)) value += 1e5;
+      if (process2.startedAt && profile.startedAt) {
+        value += Math.max(0, 5e4 - Math.abs(profile.startedAt - process2.startedAt) / 10);
+      }
+      return value;
+    };
+    return score(right) - score(left);
+  })[0];
+}
+
+// relay/src/bridge.ts
 function pBody(p) {
   return p.body ?? p.text;
 }
 function transcriptFirstTs(p) {
   let fd2;
   try {
-    fd2 = openSync3(p, "r");
+    fd2 = openSync4(p, "r");
     const buf = Buffer.alloc(4096);
-    const n = readSync2(fd2, buf, 0, 4096, 0);
+    const n = readSync3(fd2, buf, 0, 4096, 0);
     const line = buf.toString("utf-8", 0, n).split("\n")[0];
     const ts2 = line ? JSON.parse(line).timestamp : void 0;
     const t = ts2 ? Date.parse(ts2) : NaN;
@@ -53386,7 +53999,7 @@ function transcriptFirstTs(p) {
     return 0;
   } finally {
     if (fd2 !== void 0) try {
-      closeSync3(fd2);
+      closeSync4(fd2);
     } catch {
     }
   }
@@ -53396,8 +54009,8 @@ var QUESTION_HOLD_MS = 9e4;
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
-    const f = path5.join(homedir12(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync23(f, "utf-8"));
+    const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync24(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -53405,8 +54018,8 @@ function cliSessionIdle(pid) {
 }
 function cliSessionStatus(pid) {
   try {
-    const f = path5.join(homedir12(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync23(f, "utf-8"));
+    const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync24(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -53430,10 +54043,14 @@ var Bridge = class _Bridge {
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 6e4;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 6e4;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 6e4;
+    for (const spec of ENGINE_SCAN_SPECS) {
+      this.engineScanners.push({ spec, scanner: new RolloutScanner(spec, engineRoot(spec, homedir14())) });
+    }
     this.hydratePidsFromCache();
     this.reconcilePidsFromSessions();
     this.healExternal();
     this.adoptOrphans();
+    this.scanExternalEngines();
     this.healTimer = setInterval(() => {
       this.hydratePidsFromCache();
       this.reconcilePidsFromSessions();
@@ -53442,6 +54059,9 @@ var Bridge = class _Bridge {
       this.sweepIdleArchive();
     }, 6e4);
     this.healTimer.unref?.();
+    const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5e3;
+    this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
+    this.engineScanTimer.unref?.();
   }
   bus;
   mgr;
@@ -53466,6 +54086,9 @@ var Bridge = class _Bridge {
   // ext id -> 最近一次 Esc 注入成功时间（乐观置 DONE 的自我纠正窗口）
   queuePollTimer = null;
   healTimer = null;
+  engineScanTimer = null;
+  engineScanners = [];
+  engineActivityKeys = /* @__PURE__ */ new Map();
   extFileStats = /* @__PURE__ */ new Map();
   extUsage = /* @__PURE__ */ new Map();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
@@ -53508,6 +54131,75 @@ var Bridge = class _Bridge {
   get resumeVerifyMs() {
     return Number(process.env.CCR_RESUME_VERIFY_MS) > 0 ? Number(process.env.CCR_RESUME_VERIFY_MS) : 45e3;
   }
+  close() {
+    if (this.queuePollTimer) clearInterval(this.queuePollTimer);
+    if (this.healTimer) clearInterval(this.healTimer);
+    if (this.engineScanTimer) clearInterval(this.engineScanTimer);
+    this.queuePollTimer = null;
+    this.healTimer = null;
+    this.engineScanTimer = null;
+  }
+  scanExternalEngines() {
+    const snapshot = captureCliProcesses();
+    for (const { spec, scanner } of this.engineScanners) {
+      const overridden = this.opts.engineProcessProvider?.(spec.engine);
+      const processes = overridden !== void 0 ? overridden : snapshot ? engineProcesses(snapshot, spec) : null;
+      this.adoptEngineProfiles(spec, scanner.scan(), processes);
+    }
+  }
+  adoptEngineProfiles(spec, profiles, processes) {
+    const processListAvailable = processes !== null;
+    const now = Date.now();
+    const staleMs = Number(process.env.CCR_ENGINE_STALE_MS) > 0 ? Number(process.env.CCR_ENGINE_STALE_MS) : 5 * 6e4;
+    for (const profile of profiles) {
+      const id2 = `ext-${spec.engine}-${profile.sessionId}`;
+      const existing = this.mgr.getExternal(id2);
+      if (!existing && this.mgr.ownsCliSession(profile.sessionId)) continue;
+      if (this.mgr.isDeletedExt(id2)) continue;
+      const title = profile.prompt ? profile.title : void 0;
+      const state = existing ?? this.mgr.ensureExternal(
+        id2,
+        profile.cwd,
+        profile.prompt,
+        profile.sessionId,
+        profile.startedAt,
+        { engine: spec.engine, model: profile.model, provider: profile.provider }
+      );
+      if (existing) {
+        this.mgr.updateExternalProfile(id2, {
+          cwd: profile.cwd,
+          prompt: profile.prompt,
+          title,
+          model: profile.model,
+          engine: spec.engine,
+          provider: profile.provider
+        });
+      }
+      const matched = processes ? matchEngineProcess(profile, processes) ?? (state.cli_pid ? processes.find((item) => item.pid === state.cli_pid) : void 0) : state.cli_pid && pidAlive(state.cli_pid) ? { pid: state.cli_pid } : void 0;
+      const active = matched !== void 0;
+      if (matched && state.cli_pid !== matched.pid) this.mgr.setExternalCliPid(id2, matched.pid);
+      if (!matched && processListAvailable && state.cli_pid) this.mgr.clearExternalCliPid(id2);
+      const inferredDead = !active && (processListAvailable || profile.terminal || now - profile.updatedAt > staleMs);
+      const desiredStatus = inferredDead && !profile.terminal ? profile.error ? "ERROR" : "DONE" : profile.status;
+      const summary = profile.activity ?? (desiredStatus === "WORKING" ? `${spec.label} \u8FD0\u884C\u4E2D` : desiredStatus === "ERROR" ? `${spec.label} \u51FA\u9519` : `${spec.label} \u5DF2\u5B8C\u6210`);
+      if (desiredStatus === "ERROR" && profile.error) state.last_error = profile.error;
+      if (desiredStatus === "DONE" && state.status !== "DONE") {
+        this.mgr.finishExternal(id2, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
+      } else if (state.status !== desiredStatus || state.action_summary !== summary) {
+        this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0);
+        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id2);
+      }
+      const historical = !active && inferredDead;
+      if (!!state.historical !== historical) {
+        state.historical = historical;
+        this.mgr.emitExternalSync(id2);
+      }
+      if (profile.activity && profile.activityKey && this.engineActivityKeys.get(id2) !== profile.activityKey) {
+        this.engineActivityKeys.set(id2, profile.activityKey);
+        this.mgr.pushExternalLog(id2, profile.activityKind ?? "system", profile.activity, profile.activityTool, { occurred_at: profile.updatedAt });
+      }
+    }
+  }
   // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
   // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
   // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
@@ -53544,13 +54236,13 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
-      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir12(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir14(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync9(root, { withFileTypes: true })) {
+      for (const dir of readdirSync10(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync9(path5.join(root, dir.name));
+          files = readdirSync10(path5.join(root, dir.name));
         } catch {
           continue;
         }
@@ -53571,7 +54263,7 @@ var Bridge = class _Bridge {
           if (this.mgr.isDeletedExt(id2)) continue;
           let mtime;
           try {
-            mtime = statSync8(p).mtimeMs;
+            mtime = statSync9(p).mtimeMs;
           } catch {
             continue;
           }
@@ -53615,11 +54307,11 @@ var Bridge = class _Bridge {
   readCwdFromTail(p) {
     let fd2;
     try {
-      fd2 = openSync3(p, "r");
-      const size = statSync8(p).size;
+      fd2 = openSync4(p, "r");
+      const size = statSync9(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
-      readSync2(fd2, buf, 0, len, size - len);
+      readSync3(fd2, buf, 0, len, size - len);
       const lines = buf.toString("utf-8").split("\n").reverse();
       for (const line of lines) {
         const i = line.indexOf("{");
@@ -53634,7 +54326,7 @@ var Bridge = class _Bridge {
     } catch {
       return "";
     } finally {
-      if (fd2 !== void 0) closeSync3(fd2);
+      if (fd2 !== void 0) closeSync4(fd2);
     }
   }
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
@@ -53644,14 +54336,14 @@ var Bridge = class _Bridge {
   transcriptHeadHas(p, needle) {
     let fd2;
     try {
-      fd2 = openSync3(p, "r");
+      fd2 = openSync4(p, "r");
       const buf = Buffer.alloc(4096);
-      const n = readSync2(fd2, buf, 0, 4096, 0);
+      const n = readSync3(fd2, buf, 0, 4096, 0);
       return buf.subarray(0, n).includes(needle);
     } catch {
       return false;
     } finally {
-      if (fd2 !== void 0) closeSync3(fd2);
+      if (fd2 !== void 0) closeSync4(fd2);
     }
   }
   isTitleGenTranscript(p) {
@@ -53683,8 +54375,8 @@ var Bridge = class _Bridge {
   scanOrphanActivity(p) {
     let fd2;
     try {
-      fd2 = openSync3(p, "r");
-      const size = statSync8(p).size;
+      fd2 = openSync4(p, "r");
+      const size = statSync9(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -53699,7 +54391,7 @@ var Bridge = class _Bridge {
         return n;
       };
       for (let pos = 0; pos < size; ) {
-        const len = readSync2(fd2, buf, 0, chunk, pos);
+        const len = readSync3(fd2, buf, 0, chunk, pos);
         if (len <= 0) break;
         pos += len;
         const isLast = pos >= size;
@@ -53713,14 +54405,14 @@ var Bridge = class _Bridge {
     } catch {
       return { adopt: false, size: 0 };
     } finally {
-      if (fd2 !== void 0) closeSync3(fd2);
+      if (fd2 !== void 0) closeSync4(fd2);
     }
   }
   // Relay 重启后内存里的 cli_pid 丢了，而空闲终端不会有新 hook 事件来恢复；
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync23(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync24(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -53737,10 +54429,10 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir12(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir14(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync9(dir);
+        files = readdirSync10(dir);
       } catch {
         return;
       }
@@ -53750,7 +54442,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync23(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync24(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -53914,16 +54606,16 @@ var Bridge = class _Bridge {
   //（标题多在会话前段；长会话后期任务切换的新标题在尾部），取文件序最新一条
   scanTranscriptTitles(p) {
     try {
-      const size = statSync8(p).size;
+      const size = statSync9(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
-      const fd2 = openSync3(p, "r");
+      const fd2 = openSync4(p, "r");
       try {
-        readSync2(fd2, buf, 0, buf.length, 0);
-        if (size > buf.length) readSync2(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
+        readSync3(fd2, buf, 0, buf.length, 0);
+        if (size > buf.length) readSync3(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
       } catch {
       } finally {
         try {
-          closeSync3(fd2);
+          closeSync4(fd2);
         } catch {
         }
       }
@@ -54218,7 +54910,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync23(path5.join(homedir12(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync24(path5.join(homedir14(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -54385,7 +55077,7 @@ var Bridge = class _Bridge {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(shown, 80)}`);
       return { ok: true };
     }
-    const cwd = state.cwd || homedir12();
+    const cwd = state.cwd || homedir14();
     this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
@@ -54542,7 +55234,7 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync23(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync24(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
       writeFileSync16(this.pidCacheFile, JSON.stringify(raw));
     } catch {
@@ -54602,11 +55294,11 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path5.join(homedir12(), ".claude", "sessions");
-      for (const f of readdirSync9(dir)) {
+      const dir = path5.join(homedir14(), ".claude", "sessions");
+      for (const f of readdirSync10(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync23(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync24(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -54650,7 +55342,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync8(transcriptPath).size;
+      const size = statSync9(transcriptPath).size;
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -54662,11 +55354,11 @@ var Bridge = class _Bridge {
       } else {
         start = prev;
       }
-      const fd2 = openSync3(transcriptPath, "r");
+      const fd2 = openSync4(transcriptPath, "r");
       const len = size - start;
       const buf = Buffer.alloc(len);
-      readSync2(fd2, buf, 0, len, start);
-      closeSync3(fd2);
+      readSync3(fd2, buf, 0, len, start);
+      closeSync4(fd2);
       const raw = buf.toString("utf-8");
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
@@ -54676,7 +55368,8 @@ var Bridge = class _Bridge {
         this.lastGrow.set(id2, Date.now());
         this.mgr.setExternalCompacting(id2, false);
         const st0 = this.mgr.getExternal(id2);
-        if (st0 && (st0.status === "DONE" || st0.status === "ERROR")) {
+        const hookRecent = Date.now() - (this.lastHookAt.get(id2) ?? 0) < 15e3;
+        if (st0 && !hookRecent && (st0.status === "DONE" || st0.status === "ERROR")) {
           this.noHookIds.add(id2);
           if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
           this.mgr.setExternalStatus(
@@ -55011,13 +55704,13 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync8(path6).size;
-      const fd2 = openSync3(path6, "r");
+      const size = statSync9(path6).size;
+      const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
       for (let pos = 0; pos < size; ) {
-        const n = readSync2(fd2, buf, 0, CHUNK2, pos);
+        const n = readSync3(fd2, buf, 0, CHUNK2, pos);
         if (n <= 0) break;
         const text = carry + buf.toString("utf-8", 0, n);
         const lines = text.split("\n");
@@ -55056,7 +55749,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync3(fd2);
+      closeSync4(fd2);
     } catch {
       return;
     }
@@ -55071,13 +55764,13 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync8(path6).size;
-      const fd2 = openSync3(path6, "r");
+      const size = statSync9(path6).size;
+      const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
       for (let pos = 0; pos < size; ) {
-        const n = readSync2(fd2, buf, 0, CHUNK2, pos);
+        const n = readSync3(fd2, buf, 0, CHUNK2, pos);
         if (n <= 0) break;
         const text = carry + buf.toString("utf-8", 0, n);
         const lines = text.split("\n");
@@ -55092,7 +55785,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync3(fd2);
+      closeSync4(fd2);
     } catch {
       return;
     }
@@ -55261,7 +55954,7 @@ var Bridge = class _Bridge {
       ...taskCallId ? { id: taskCallId } : {}
     });
     const holdMs = questions.length ? this.opts.questionHoldMs ?? QUESTION_HOLD_MS : this.opts.holdMs ?? DEFAULT_HOLD_MS;
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       const timer = setTimeout(() => {
         this.pending.delete(id2);
         if (questions.length) {
@@ -55270,13 +55963,13 @@ var Bridge = class _Bridge {
           this.mgr.setExternalStatus(id2, "WORKING", summary);
           this.bus.emit(id2, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision: "timeout", by: "relay" });
         }
-        resolve8({ decision: "pass" });
+        resolve9({ decision: "pass" });
       }, holdMs);
       timer.unref();
       this.pending.set(id2, {
         sessionId: id2,
         requestId,
-        resolve: resolve8,
+        resolve: resolve9,
         timer,
         toolName: ev2.tool_name ?? "tool",
         toolInput: input,
@@ -55591,14 +56284,14 @@ var Bridge = class _Bridge {
     if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
     let names;
     try {
-      names = readdirSync9(dir);
+      names = readdirSync10(dir);
     } catch {
       return null;
     }
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync23(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync24(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -55610,19 +56303,19 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync8(file);
+      st2 = statSync9(file);
     } catch {
       return null;
     }
     const start = Math.max(0, st2.size - 65536);
     let buf;
     try {
-      const fd2 = openSync3(file, "r");
+      const fd2 = openSync4(file, "r");
       try {
         buf = Buffer.alloc(st2.size - start);
-        readSync2(fd2, buf, 0, buf.length, start);
+        readSync3(fd2, buf, 0, buf.length, start);
       } finally {
-        closeSync3(fd2);
+        closeSync4(fd2);
       }
     } catch {
       return null;
@@ -55703,7 +56396,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync8(agentFile).size;
+          const sz2 = statSync9(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -55884,10 +56577,10 @@ function parseGateTools(raw) {
   return new Set((raw ?? def).split(",").map((s) => s.trim()).filter(Boolean));
 }
 
-// src/types.ts
+// relay/src/types.ts
 var SNAPSHOT_SCHEMA_VERSION = 1;
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -55896,19 +56589,6 @@ function localIps() {
   return out;
 }
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
-var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
-function pluginConfigPath() {
-  return join28(homedir13(), ".cc-deck", "config.json");
-}
-function readPluginConfig() {
-  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
-  try {
-    const raw = JSON.parse(readFileSync24(pluginConfigPath(), "utf-8"));
-    for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
-  } catch {
-  }
-  return out;
-}
 function notifyAcceptanceRefill(acc, rows, mgr2) {
   try {
     const cwd = acc.cwd;
@@ -56045,13 +56725,13 @@ var BUILTIN_COMMANDS = [
 function listCustomCommands(dir, source) {
   let entries;
   try {
-    entries = readdirSync10(dir, { withFileTypes: true });
+    entries = readdirSync11(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync24(p, "utf-8").slice(0, 400);
+      const head = readFileSync25(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -56063,11 +56743,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join28(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join31(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync10(join28(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join28(dir, e.name, g2)), source });
+        for (const g2 of readdirSync11(join31(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join31(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -56081,11 +56761,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync21(join28(p, "web-console", "index.html"))) ?? webRootCandidates[1];
-  const consoleHtml = join28(webRoot, "web-console", "index.html");
-  const naclJs = join28(webRoot, "web-console", "nacl.js");
-  const qrJs = join28(webRoot, "web-console", "qr.js");
-  const mobileDir = join28(webRoot, "mobile") + sep7;
+  const webRoot = webRootCandidates.find((p) => p && existsSync21(join31(p, "web-console", "index.html"))) ?? webRootCandidates[1];
+  const consoleHtml = join31(webRoot, "web-console", "index.html");
+  const consoleHtml005 = join31(webRoot, "web-console", "index-005.html");
+  const naclJs = join31(webRoot, "web-console", "nacl.js");
+  const qrJs = join31(webRoot, "web-console", "qr.js");
+  const mobileDir = join31(webRoot, "mobile") + sep7;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -56111,7 +56792,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync9(file).isFile();
+      isFile = statSync10(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -56119,7 +56800,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync24(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync25(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
@@ -56147,8 +56828,16 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync24(consoleHtml);
+      const html = readFileSync25(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/app2") {
+      if (!existsSync21(consoleHtml005)) {
+        res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync25(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -56156,7 +56845,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync24(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync25(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
@@ -56164,16 +56853,16 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync24(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync25(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join28(webRoot, "web-console", url.pathname.slice(1));
+      const file = join31(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync21(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync24(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync25(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -56217,11 +56906,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join28(cfg2.dataDir, "relay-name");
+      const file = join31(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync24(file, "utf8").trim().slice(0, 40);
+          name = readFileSync25(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -56496,8 +57185,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join28(homedir13(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join28(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join31(homedir15(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join31(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -56628,7 +57317,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
-          homedir: homedir13(),
+          homedir: homedir15(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
           platform: process.platform,
@@ -56650,6 +57339,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr2.employeeHomeState(),
+          // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
+          // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
+          // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
+          // P81-9 kill-switch off：permission 摘要停发（端上经 P81-8 双端 undefined
+          // 降级面自动隐藏=三端自动还原）；engine_catalog 属 #75 线不受开关影响
+          source_capabilities: { projection_v2: true, ...permissionPolicyEnabled() ? { permission: permissionCapabilitiesSummary() } : {}, engine_catalog: engineCatalogSummary(mgr2.cfg.model) },
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -56743,11 +57438,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   return {
     port: cfg2.port,
     bridge,
-    close: () => new Promise((resolve8) => {
+    close: () => new Promise((resolve9) => {
       clearInterval(heartbeat);
+      bridge.close();
       unsubscribe();
       for (const client of wss.clients) client.terminate();
-      wss.close(() => server.close(() => resolve8()));
+      wss.close(() => server.close(() => resolve9()));
     })
   };
 }
@@ -56806,7 +57502,7 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync24(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync25(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
@@ -56886,33 +57582,33 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 }
 var connectionCounter = 0;
 
-// src/cloud-identity.ts
-import { existsSync as existsSync22, readFileSync as readFileSync25, writeFileSync as writeFileSync18 } from "node:fs";
-import { join as join29 } from "node:path";
+// relay/src/cloud-identity.ts
+import { existsSync as existsSync22, readFileSync as readFileSync26, writeFileSync as writeFileSync18 } from "node:fs";
+import { join as join32 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join29(dataDir2, "cloud-keypair.json");
+  const kpPath = join32(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync22(kpPath)) {
-    keypair = JSON.parse(readFileSync25(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync26(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
     writeFileSync18(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join29(dataDir2, "wan-secret");
+  const wanSecretPath = join32(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync22(wanSecretPath)) wanSecret = readFileSync25(wanSecretPath, "utf-8").trim();
+  if (existsSync22(wanSecretPath)) wanSecret = readFileSync26(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
     writeFileSync18(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join29(dataDir2, "cloud-peers.json");
+  const peersPath = join32(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync22(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync25(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync26(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -56969,8 +57665,8 @@ function loadOrCreateIdentity(dataDir2) {
   };
 }
 
-// src/cloud-client.ts
-import { homedir as homedir14 } from "node:os";
+// relay/src/cloud-client.ts
+import { homedir as homedir16 } from "node:os";
 var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -57328,6 +58024,11 @@ var CloudClient = class {
         // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
         // 云桥手机设置页同样要读 source 判锁定态）
         settings: this.mgr.employeeHomeState(),
+        // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
+        // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
+        // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，
+        // #117 教训）；engine_catalog 属 #75 线不受开关影响
+        source_capabilities: { projection_v2: true, ...permissionPolicyEnabled() ? { permission: permissionCapabilitiesSummary() } : {}, engine_catalog: engineCatalogSummary(this.mgr.cfg.model) },
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
@@ -57337,7 +58038,7 @@ var CloudClient = class {
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
-        homedir: homedir14(),
+        homedir: homedir16(),
         models: listModels(this.mgr.cfg.model),
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
@@ -57607,7 +58308,7 @@ var CloudClient = class {
   }
 };
 
-// src/pairing.ts
+// relay/src/pairing.ts
 import { randomInt } from "node:crypto";
 var TTL_FLOOR_MS = 6e4;
 var TTL_CEIL_MS = 30 * 6e4;
@@ -57650,7 +58351,7 @@ function createPairingCodes(ttlMs) {
   };
 }
 
-// src/qr.ts
+// relay/src/qr.ts
 var import_qrcode_terminal = __toESM(require_main(), 1);
 function printQr(text, label) {
   console.log(`
@@ -57658,7 +58359,7 @@ ${label}`);
   import_qrcode_terminal.default.generate(text, { small: true });
 }
 
-// src/mdns.ts
+// relay/src/mdns.ts
 var import_bonjour_service = __toESM(require_dist(), 1);
 function advertiseRelay(port, name) {
   try {
@@ -57682,24 +58383,24 @@ function advertiseRelay(port, name) {
   }
 }
 
-// src/todo-tools-env.ts
-import { existsSync as existsSync23, readFileSync as readFileSync26, writeFileSync as writeFileSync19 } from "node:fs";
-import { join as join30 } from "node:path";
-import { homedir as homedir15 } from "node:os";
+// relay/src/todo-tools-env.ts
+import { existsSync as existsSync23, readFileSync as readFileSync27, writeFileSync as writeFileSync19 } from "node:fs";
+import { join as join33 } from "node:path";
+import { homedir as homedir17 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join30(homedir15(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join33(homedir17(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync23(dir)) return "skip-no-dir";
-  const file = join30(dir, "settings.json");
+  const file = join33(dir, "settings.json");
   let obj;
   if (!existsSync23(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync26(file, "utf-8"));
+      obj = JSON.parse(readFileSync27(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -57719,7 +58420,7 @@ function ensureTodoToolsEnv() {
   }
 }
 
-// src/index.ts
+// relay/src/index.ts
 if (process.env.CCR_PARENT_PID) {
   const ts2 = () => (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19) + " ";
   for (const m of ["log", "error", "warn"]) {
@@ -57735,9 +58436,9 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join31(cfg.dataDir, "relay.lock");
+  const lockPath = join34(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync27(lockPath, "utf8").trim());
+    const prev = Number(readFileSync28(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -57756,7 +58457,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync27(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
+      if (Number(readFileSync28(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
     } catch {
     }
   };
@@ -57797,7 +58498,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync27(join31(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync28(join34(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -57848,28 +58549,28 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync4(join31(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync5(join34(cfg.dataDir, "relay.log"), "a");
   const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join31(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join34(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
   try {
     if (process.platform === "win32") {
-      const out = execFileSync2("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+      const out = execFileSync3("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
         encoding: "utf-8",
         timeout: 5e3,
         windowsHide: true
       });
       return /node/i.test(out);
     }
-    if (existsSync24("/proc")) return readFileSync27(`/proc/${pid}/comm`, "utf-8").includes("node");
-    return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
+    if (existsSync24("/proc")) return readFileSync28(`/proc/${pid}/comm`, "utf-8").includes("node");
+    return "node" === execFileSync3("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
     }).trim().split(/[\\/]/).pop();
@@ -57878,9 +58579,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join31(cfg.dataDir, "relay.pid");
+  const pidFile = join34(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync27(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync28(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -57904,21 +58605,22 @@ if (cliArgs.has("--stop")) {
     console.log(`[config] \u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u5F00\u542F\uFF08${st2.source === "file" ? "\u8BBE\u7F6E\u9879" : "\u65B0\u88C5\u9ED8\u8BA4"}\uFF09\uFF1A${st2.value}`);
   }
 }
-var persistPath = join31(cfg.dataDir, "events.ndjson");
+probeSqliteDriverAtBoot();
+var persistPath = join34(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
-    for (const f of readdirSync11(dir)) {
+    for (const f of readdirSync12(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join31(dir, f);
+      const p = join34(dir, f);
       try {
-        if (Date.now() - statSync10(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
+        if (Date.now() - statSync11(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
       }
     }
   } catch {
   }
 }
-var tmpImageDir = join31(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join34(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var prior = loadEvents(persistPath);
@@ -57991,7 +58693,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync27(join31(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync28(join34(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -58014,7 +58716,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync27(join31(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync28(join34(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -58048,15 +58750,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync20(join31(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync20(join34(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync20(join31(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join31(homedir16(), ".cc-deck", "data");
+    writeFileSync20(join34(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join34(homedir18(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
     if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync24(hookHome)) {
       try {
-        writeFileSync20(join31(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync20(join34(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -58081,7 +58783,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join31(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join34(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );
