@@ -12,6 +12,9 @@
   <!-- 云桥 E2E 密封依赖（B批）：根相对路径——LAN relay（ws-server /nacl.js）与 CF assets 均在根路径直出。
        放 head 阻塞加载，保证所有内联块执行时 nacl 就绪；加载失败由云链模块降级提示（不白屏） -->
   <script src="/nacl.js"></script>
+  <!-- FB3 配对二维码编码器：与 nacl.js 同投放面——relay 根路径 /qr.js（ws-server）与 Tauri
+       resources bundle 均带此文件；加载失败只是弹窗无码图（链接/配对码仍可用），不白屏 -->
+  <script src="/qr.js"></script>
   <style>
     :root {
       --bg0: #07111D;
@@ -369,8 +372,25 @@
     .source-mode button.active { border-color: var(--selected-line); background: var(--selected-bg); color: var(--text-strong); }
     .source-manage {display: block; padding: 7px 6px 3px; color: var(--info); font-size: var(--fs-E); text-decoration: none;}
     /* W-NOVAFIX B1：配对弹窗（source-menu 同壳浮层，居中位）+ 背板 */
-    .pair-pop { position: fixed; top: 50%; left: 50%; display: block; z-index: 96; width: 300px; transform: translate(-50%, -50%); }
+    .pair-pop { position: fixed; top: 50%; left: 50%; display: block; z-index: 96; width: min(392px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow-y: auto; transform: translate(-50%, -50%); }
     .pair-pop-backdrop { position: fixed; inset: 0; z-index: 95; background: color-mix(in srgb, var(--bg0) 55%, transparent); }
+    /* FB3 配对弹窗四件套：QR 图 / 8 位码 / 链接+复制 / 已连设备列表（参照旧版 relay 页两栏制） */
+    .pair-grid { display: flex; gap: 14px; padding: 6px; }
+    .pair-qr-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .pair-qr-col canvas { width: 118px; height: 118px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .pair-qr-col small, .pair-code-note, .pair-dev small { color: var(--dim); font: var(--fs-B) var(--mono); }
+    .pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .pair-code-box { padding: 9px 10px; border: 1px solid var(--selected-line); border-radius: 9px; background: var(--surface1); text-align: center; }
+    .pair-code-digits { color: var(--text-strong); font: 700 22px/1.2 var(--mono); letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+    .pair-code-note { display: block; margin-top: 4px; text-align: center; }
+    .pair-link-row { display: flex; gap: 6px; }
+    .pair-link-row input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono); }
+    .pair-devs { margin: 8px 6px 4px; padding: 7px 6px 3px; border-top: 1px solid var(--line-soft); }
+    .pair-dev { display: flex; align-items: center; gap: 8px; padding: 6px 4px; }
+    .pair-dev strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+    .pair-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 6px 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+    .pair-cloud-link { color: var(--info); font-size: var(--fs-E); text-decoration: none; cursor: pointer; }
+    .pair-cloud-link:hover { text-decoration: underline; }
     /* B10 新建会话弹窗：居中对话框（引擎选择/模型二层/初始指令/目录+浏览+历史/两开关）。
        浮层描边合法（军规④）；行内不再画线（军规②③），分组靠间距+小节标题 */
     .create-pop { position: fixed; top: 50%; left: 50%; z-index: 96; display: block; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; padding: 16px 16px 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: var(--shadow); transform: translate(-50%, -50%); }
@@ -4065,7 +4085,7 @@
                   UI = {
                     section, sessionList, workspace, body, panes,
                     tabs: [...section.querySelectorAll(".segment-bar button")],
-                    title: $id("session-title"), statusTag: $id("session-status"), identity: $id("session-identity"), subHint: (text) => setWindowbarHint("session", text), // FB2：sub 元素出舱，写顶栏 hint
+                    title: $id("session-title"), statusTag: $id("session-status"), identity: $id("session-identity"), subHint: (text) => window.__ccDeck005SetWindowbarHint?.("session", text), // FB2：sub 元素出舱，写顶栏 hint
                     headActions: $id("session-head-actions"),
                     dock: $id("session-state-dock"),
                     composer: section.querySelector('[data-composer="session"]'),
@@ -4285,7 +4305,7 @@
                   query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? (state.online ? "无团队数据" : "正在连接") : "暂无项目组";
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = state.source;
-                  setWindowbarHint("team", project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
+                  window.__ccDeck005SetWindowbarHint?.("team", project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
@@ -4788,8 +4808,8 @@
                   els.name.textContent = entry ? entry.name : "项目";
                   els.source.textContent = bridge.relayName;
                   if (entry) {
-                    setWindowbarHint("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进总览指标
-                  } else setWindowbarHint("project", "—");
+                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进总览指标
+                  } else window.__ccDeck005SetWindowbarHint?.("project", "—");
                 }
 
                 function overviewMarkup(entry) {
@@ -4904,7 +4924,7 @@
                     els.queue.replaceChildren(bannerNode(waiting));
                     els.name.textContent = "项目";
                     els.source.textContent = bridge.relayName;
-                    setWindowbarHint("project", waiting);
+                    window.__ccDeck005SetWindowbarHint?.("project", waiting);
                     setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
                     els.riskCount.style.display = "none";
                     els.riskCopy.textContent = waiting;
@@ -5521,7 +5541,8 @@
       }
 
       // ---------- FB2：workspace-sub 出舱入顶栏——各域提示文字集中路由到 windowbar 右侧 ----------
-      // 每域存自己的最新文案，展示活动域的那条；windowbar 全局唯一，避免后写覆盖前域
+      // 每域存自己的最新文案，展示活动域的那条；windowbar 全局唯一，避免后写覆盖前域。
+      // 域各在独立 <script> 块（函数声明不跨块），写点经 window.__ccDeck005SetWindowbarHint 进来
       const windowbarHintStore = { session: "加载中…", team: "尚未收到团队快照", project: "等待 relay SNAPSHOT…", notify: "通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。", settings: "" };
       function setWindowbarHint(domain, text) {
         if (!(domain in windowbarHintStore)) return;
@@ -5534,6 +5555,7 @@
         const active = document.querySelector(".desktop-screen.active")?.id.replace(/^d-/, "");
         el.textContent = active ? (windowbarHintStore[active] || "") : "";
       }
+      window.__ccDeck005SetWindowbarHint = setWindowbarHint;
 
       function openMobileRoot(root) {
         const target = document.querySelector(`#m-${root}`);
@@ -6036,6 +6058,47 @@ function connectLan(ctx) {
         }
         return location.origin + "/app2?token=" + encodeURIComponent(t);
       }
+      // FB3 配对 UI 四件套（参照旧版 relay 页两栏制）：①二维码（手机扫码直入）②8 位配对码
+      // （本机 relay 领码，手机 App「添加电脑 → 云桥」输入）③分享链接+复制钮 ④已连接设备列表。
+      // 云形态不进此弹窗（openCloudPairUI 输码链）
+      function drawPairQr(canvas, text) {
+        try {
+          const q = new QRCode(0, QRErrorCorrectLevel.M);
+          q.addData(text);
+          q.make();
+          const n = q.getModuleCount(), pad = 2, scale = 4;
+          canvas.width = canvas.height = (n + pad * 2) * scale;
+          const g = canvas.getContext("2d");
+          if (!g) return false;
+          g.fillStyle = "#fff";
+          g.fillRect(0, 0, canvas.width, canvas.height);
+          g.fillStyle = "#10151C";
+          for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect((c + pad) * scale, (r + pad) * scale, scale, scale);
+          return true;
+        } catch (_) { return false; }
+      }
+      async function fetchLanPairCode() {
+        const t = String((ctx.cfg && ctx.cfg.token) || relayToken || "");
+        if (!t) throw new Error("token 未就绪");
+        const base = shellProbe && localRelayInfo ? "http://127.0.0.1:" + (localRelayInfo.port || 8787) : location.origin;
+        const r = await fetch(base + "/api/pair-code?token=" + encodeURIComponent(t), { method: "POST", signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined });
+        if (!r.ok) throw new Error("http " + r.status);
+        const j = await r.json();
+        if (!j || !j.code) throw new Error("响应缺码");
+        return { code: String(j.code), ttlMs: Number(j.expires_in || 0) };
+      }
+      function pairDeviceRows() {
+        const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+        const bridge = window.__ccDeck005B4;
+        const snapOk = !!(bridge && bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured");
+        const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
+        const relayName = bridge ? String(bridge.relayName || "relay") : "relay";
+        const desktopForm = !!(window.__TAURI__ || window.ccDeck);
+        const dot = (on) => '<span class="source-dot' + (on ? "" : " status-disconnected") + '"></span>';
+        return '<div class="pair-dev">' + dot(snapOk) + '<strong>本机 relay · ' + esc(relayName) + '</strong><small>端口 ' + esc(String(relayPort)) + '</small></div>'
+          + '<div class="pair-dev">' + dot(true) + '<strong>' + (desktopForm ? "桌面 App（本机）" : "浏览器 · 本页设备") + '</strong><small>token 已就绪</small></div>'
+          + '<div class="pair-dev"><span class="source-dot status-reconnecting"></span><strong>云桥</strong><small>状态未随网页端下发</small></div>';
+      }
       function openLanPairDialog() {
         document.querySelectorAll("[data-pair-pop], [data-pair-back]").forEach((el) => el.remove());
         const back = document.createElement("div");
@@ -6044,29 +6107,53 @@ function connectLan(ctx) {
         const pop = document.createElement("div");
         pop.className = "source-menu pair-pop";
         pop.dataset.pairPop = "";
+        pop.setAttribute("role", "dialog");
+        pop.setAttribute("aria-modal", "true");
+        pop.setAttribute("aria-label", "配对新设备");
+        const link = lanShareLink();
         pop.innerHTML = '<div class="source-menu-head">配对新设备</div>'
-          + '<button class="source-option" type="button" data-pair-copy><span class="source-dot"></span><strong>复制配对链接</strong><small>本机 relay · 同网络设备打开即加入</small></button>'
-          + '<button class="source-option" type="button" data-pair-cloud><span class="source-dot status-reconnecting"></span><strong>连接其他服务器</strong><small>云通道 · 输 8 位配对码</small></button>';
+          + '<div class="pair-grid">'
+          + '<div class="pair-qr-col"><canvas data-pair-qr width="10" height="10"></canvas><small>手机扫码直接加入</small></div>'
+          + '<div class="pair-info">'
+          + '<div class="pair-code-box"><div class="pair-code-digits" data-pair-code>···· ····</div><span class="pair-code-note" data-pair-code-note>正在领取 8 位配对码…</span></div>'
+          + '<div class="pair-link-row"><input readonly value="' + link.replace(/"/g, "&quot;") + '" aria-label="配对链接"><button class="secondary-btn" type="button" data-pair-copy>复制</button></div>'
+          + '</div></div>'
+          + '<div class="source-menu-head">已连接设备</div>'
+          + '<div class="pair-devs">' + pairDeviceRows() + '</div>'
+          + '<div class="pair-foot"><a class="pair-cloud-link" data-pair-cloud>云通道配对页 ↗</a><button class="primary-btn" type="button" data-pair-close>完成</button></div>';
         const close = () => { pop.remove(); back.remove(); };
         back.addEventListener("click", close);
         pop.addEventListener("click", async (event) => {
-          if (event.target.closest("[data-pair-copy]")) {
-            const link = lanShareLink();
+          if (event.target.closest("[data-pair-copy]") || event.target.closest(".pair-link-row input")) {
             let ok = false;
             try { await navigator.clipboard.writeText(link); ok = true; } catch (_) {}
             showToast(ok ? "配对链接已复制 · 发给同网络的设备打开" : "复制失败 · 链接：" + link);
-            close();
             return;
           }
           if (event.target.closest("[data-pair-cloud]")) {
-            close();
             void window.__ccDeck005OpenUrl("https://cc.humumu.online/app2");
             showToast("云配对页已打开 · 在该页输入 8 位配对码");
             return;
           }
+          if (event.target.closest("[data-pair-close]")) { close(); return; }
         });
         const host = document.querySelector(".mode-stage.active") || document.body;
         host.append(back, pop);
+        // ①二维码：lanShareLink 落码图（qr.js 由 relay/Tauri 同源投放；加载失败留白不阻断）
+        const cv = pop.querySelector("[data-pair-qr]");
+        if (cv && !drawPairQr(cv, link)) cv.closest(".pair-qr-col")?.querySelector("small")?.replaceWith(Object.assign(document.createElement("small"), { textContent: "码图不可用 · 用下方链接" }));
+        // ②8 位配对码：本机 relay 领码（一次性短时效）；领码失败（旧 relay 未开配对 / 桌面壳跨源被拦）降级提示
+        void fetchLanPairCode().then(({ code, ttlMs }) => {
+          const digits = pop.querySelector("[data-pair-code]");
+          const note = pop.querySelector("[data-pair-code-note]");
+          if (!digits || !note) return;
+          digits.textContent = (code.slice(0, 4) + " " + code.slice(4)).trim();
+          const mins = Math.max(1, Math.round(ttlMs / 60000));
+          note.textContent = "手机 App「添加电脑」输入 · " + mins + " 分钟内有效";
+        }).catch(() => {
+          const note = pop.querySelector("[data-pair-code-note]");
+          if (note) note.textContent = "领码失败 · 用二维码或链接配对";
+        });
       }
       async function bootstrapConnection() {
         // 缝合点 a：https 公网页面（/app2 经 CF Worker 出面）走云桥链——loopback ws:// 被混合
