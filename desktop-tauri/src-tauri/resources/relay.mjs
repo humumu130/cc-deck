@@ -10530,6 +10530,7 @@ function contextLimitOf(model) {
   if (o !== void 0) return o;
   const m = (model ?? "").trim().toLowerCase();
   if (!m) return CONTEXT_LIMIT_DEFAULT;
+  if (/\[1m\]$/.test(m)) return 1e6;
   if (m.startsWith("glm-5")) return 1e6;
   if (m.startsWith("glm-4.7")) return 1e6;
   if (m.startsWith("glm-4.6")) return 2e5;

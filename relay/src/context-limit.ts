@@ -37,6 +37,7 @@ export function contextLimitOf(model: string | undefined): number {
   if (o !== undefined) return o;
   const m = (model ?? "").trim().toLowerCase();
   if (!m) return CONTEXT_LIMIT_DEFAULT;
+  if (/\[1m\]$/.test(m)) return 1_000_000; // [1m] 后缀=水位档标记（models.ts 重挂同源；#22 面板虚高实证：claude-sonnet-4-5[1m] 落 200K 档显示 42%，真实 1M 口径仅 8.4%）
   if (m.startsWith("glm-5")) return 1_000_000; // 5 / 5-turbo / 5.1 / 5.2 / 5.3 / 5.3-flash(x)
   if (m.startsWith("glm-4.7")) return 1_000_000; // Cursor 端点旁证，存疑
   if (m.startsWith("glm-4.6")) return 200_000; // 官方
