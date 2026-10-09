@@ -376,13 +376,14 @@
     .create-field::placeholder { color: var(--faint); }
     select.create-field { padding: 0 6px; }
     .create-row { display: flex; gap: 6px; align-items: stretch; }
+    .create-pop > .create-field { width: 100%; } /* 独立成行的字段（模型/指令）不处 flex 父级，须显式满宽——select/input 缺省会按内容塌缩 */
     .create-browse { flex: none; min-height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); cursor: pointer; font-size: 11px; white-space: nowrap; }
     .create-browse:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
-    .create-checks { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 2px 2px 0; }
+    .create-checks { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 12px; padding: 2px 2px 0; }
     .create-check { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); cursor: pointer; font-size: 11px; user-select: none; }
     .create-check input { accent-color: var(--brand); }
     .create-check:hover { color: var(--text); }
-    .create-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .create-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; } /* 主操作靠右（#df2-E 全线右对齐惯例） */
     /* #df2-A 顶栏唯一胶囊：connection-capsule 整链退役（:337-356），连接摘要+统计并入 source-trigger；重连按钮迁入 source-menu（.connection-reconnect 保留复用） */
     .source-option .connection-reconnect { min-width: 34px; min-height: 22px; padding: 2px 7px; margin-left: auto; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 11px; white-space: nowrap; }
     .source-group-bar { display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: 11px var(--mono); }
@@ -2449,10 +2450,7 @@
                 // ---------- B22 模型切换胶囊（head 右侧）→ 模型列表 → COMMAND_MODEL ----------
                 // relay #388：托管 Claude/外部会话注入 /model 下一回合生效；codex 等他引擎拒绝（配置文件制）
                 function capsuleModelsFor(s) {
-                  const engKey = s && s.external ? "claude" : (s && s.engine) || "claude";
-                  const entry = catalogEntries().find((e) => e.id === engKey);
-                  const list = entry && Array.isArray(entry.models) && entry.models.length ? entry.models : (engKey === "claude" && Array.isArray(S.models) ? S.models : []);
-                  return list.filter((m) => typeof m === "string" && m).slice(0, 24);
+                  return createModelsFor(s && s.external ? "claude" : (s && s.engine) || "claude"); // 模型源与 B10 弹窗同源
                 }
                 function capsuleSupported(s) {
                   if (!s || !canCmd(s)) return false;
@@ -3563,8 +3561,8 @@
                     return;
                   }
                   try {
-                    const menu = document.getElementById("b2-create-menu");
-                    const input = menu && menu.querySelector("[data-create-field='cwd']");
+                    const pop = document.getElementById("b2-create-pop");
+                    const input = pop && pop.querySelector("[data-create-field='cwd']");
                     const cur = input ? input.value.trim() : "";
                     const dir = await window.__TAURI__.dialog.open({
                       directory: true, multiple: false, title: "选择工作目录",
@@ -3572,86 +3570,125 @@
                     });
                     if (typeof dir === "string" && dir) {
                       if (input) input.value = dir;
-                      const p = menu && menu.querySelector("[data-create-field='prompt']");
+                      const p = pop && pop.querySelector("[data-create-field='prompt']");
                       if (p) p.focus();
                     }
                   } catch (e) { b2Toast("打开目录选择器失败: " + ((e && e.message) || e)); }
                 }
+                // B10 历史目录：MRU 列表（≤8 去重），旧单键记忆（#368）并入首选项
+                const CWD_HISTORY_KEY = "cc-deck-005-cwd-history";
+                function createCwdHistory() {
+                  let arr = [];
+                  try {
+                    const v = JSON.parse(localStorage.getItem(CWD_HISTORY_KEY) || "[]");
+                    if (Array.isArray(v)) arr = v.filter((x) => typeof x === "string" && x);
+                  } catch (_) {}
+                  const last = lastCreateCwd();
+                  if (last && !arr.includes(last)) arr.unshift(last);
+                  return arr.slice(0, 8);
+                }
+                function pushCreateCwd(dir) {
+                  const d = String(dir || "").trim();
+                  if (!d) return;
+                  try { localStorage.setItem(CWD_LAST_KEY, d); } catch (_) {}
+                  try { localStorage.setItem(CWD_HISTORY_KEY, JSON.stringify([d, ...createCwdHistory().filter((x) => x !== d)].slice(0, 8))); } catch (_) {}
+                }
+                // B10 模型二层：引擎目录 models 优先，claude 回落 SNAPSHOT S.models（与 B22 胶囊同源）
+                function createModelsFor(eng) {
+                  const entry = catalogEntries().find((e) => e.id === eng);
+                  const list = entry && Array.isArray(entry.models) && entry.models.length ? entry.models : (eng === "claude" && Array.isArray(S.models) ? S.models : []);
+                  return list.filter((m) => typeof m === "string" && m).slice(0, 24);
+                }
                 function buildCreateHtml() {
                   const chosen = S.engineChoice || defaultEngineId();
-                  let html = '<div class="source-menu-head">新建会话 · 选择引擎</div>';
+                  let html = '<h3>新建会话</h3><p class="create-sub">选择引擎与工作目录，创建新会话</p>';
+                  html += '<div class="create-label">引擎</div>';
                   for (const e of catalogEntries()) {
                     const meta = ENGINES[e.id] || [e.label || e.id, ""];
                     const dis = e.state !== "ready";
                     html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '"' + (dis ? " disabled style=\"opacity:.5\"" : "") + '><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(engineStateText(e)) + "</small></button>";
                   }
-                  html += '<input class="composer-input" data-create-field="prompt" placeholder="初始指令（必填）" aria-label="初始指令" style="width:100%;margin:8px 0 6px">';
-                  // #368 预填优先级：上次创建用的目录 > 源用户根目录；桌面+本机源时附原生目录浏览钮
-                  html += '<div style="display:flex;gap:6px;margin:0 0 8px;align-items:stretch"><input class="composer-input" data-create-field="cwd" placeholder="工作目录" aria-label="工作目录" value="' + esc(lastCreateCwd() || S.homedir || "") + '" style="flex:1;min-width:0">'
-                    + (createCwdBrowseable() ? '<button class="ghost-btn" type="button" data-create-browse style="flex:none;white-space:nowrap">浏览…</button>' : "") + '</div>';
-                  html += '<button class="primary-btn" type="button" data-create-submit style="width:100%">创建会话</button>';
+                  html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"><option value="">默认模型</option>'
+                    + createModelsFor(chosen).map((m) => '<option value="' + esc(m) + '">' + esc(m) + "</option>").join("") + "</select>";
+                  html += '<div class="create-label">初始指令</div><input class="create-field" data-create-field="prompt" placeholder="让新会话做的第一件事（必填）" aria-label="初始指令">';
+                  // #368 预填优先级：上次创建用的目录 > 源用户根目录；桌面+本机源时附原生目录浏览钮；
+                  // B10 历史目录走 datalist（输入即建议，不占常驻行）
+                  html += '<div class="create-label">工作目录</div><div class="create-row"><input class="create-field" data-create-field="cwd" list="b2-create-cwd-list" placeholder="工作目录" aria-label="工作目录" value="' + esc(lastCreateCwd() || S.homedir || "") + '">'
+                    + (createCwdBrowseable() ? '<button class="create-browse" type="button" data-create-browse>浏览…</button>' : "") + '</div>'
+                    + '<datalist id="b2-create-cwd-list">' + createCwdHistory().map((d) => '<option value="' + esc(d) + '"></option>').join("") + "</datalist>";
+                  html += '<div class="create-checks"><label class="create-check"><input type="checkbox" data-create-field="skipPerm">跳过权限确认</label><label class="create-check"><input type="checkbox" data-create-field="autoMkdir">目录不存在时自动创建</label></div>';
+                  html += '<div class="create-actions"><button class="secondary-btn" type="button" data-create-cancel>取消</button><button class="primary-btn" type="button" data-create-submit>创建会话</button></div>';
                   return html;
                 }
-                function openCreateMenu(anchor) {
-                  let menu = document.getElementById("b2-create-menu");
-                  if (!menu) {
-                    menu = document.createElement("div");
-                    menu.id = "b2-create-menu";
-                    menu.className = "source-menu";
-                    menu.style.position = "fixed";
-                    menu.style.zIndex = "80";
-                    menu.style.width = "276px";
-                    document.body.appendChild(menu);
-                    // 菜单挂 body，UI.section 的委托点不到——菜单自带 click 委托
-                    // （批3 实测修复：此前引擎选择/创建按钮鼠标点全哑，仅 Enter 键路径活着）
-                    menu.addEventListener("click", (ev) => {
-                      const engine = ev.target.closest("[data-engine-choice]");
-                      if (engine) { pickEngine(engine); return; }
-                      if (ev.target.closest("[data-create-browse]")) { void pickCreateCwd(); return; }
-                      if (ev.target.closest("[data-create-submit]")) { submitCreate(); return; }
-                    });
-                    menu.addEventListener("keydown", (ev) => {
-                      if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.createField) { ev.preventDefault(); submitCreate(); }
-                    });
-                  }
+                function openCreatePop() {
+                  closeCreatePop();
                   if (!S.engineChoice) S.engineChoice = defaultEngineId();
-                  menu.innerHTML = buildCreateHtml();
-                  menu.classList.add("open");
-                  const r = anchor.getBoundingClientRect();
-                  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 284)) + "px";
-                  menu.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - menu.offsetHeight - 8)) + "px";
-                  const prompt = menu.querySelector("[data-create-prompt], [data-create-field='prompt']");
+                  const back = document.createElement("div");
+                  back.className = "pair-pop-backdrop";
+                  back.dataset.createBack = "";
+                  const pop = document.createElement("div");
+                  pop.id = "b2-create-pop";
+                  pop.className = "create-pop";
+                  pop.setAttribute("role", "dialog");
+                  pop.setAttribute("aria-modal", "true");
+                  pop.setAttribute("aria-label", "新建会话");
+                  pop.innerHTML = buildCreateHtml();
+                  back.addEventListener("click", closeCreatePop);
+                  pop.addEventListener("click", (ev) => {
+                    const engine = ev.target.closest("[data-engine-choice]");
+                    if (engine) { pickEngine(engine); return; }
+                    if (ev.target.closest("[data-create-browse]")) { void pickCreateCwd(); return; }
+                    if (ev.target.closest("[data-create-cancel]")) { closeCreatePop(); return; }
+                    if (ev.target.closest("[data-create-submit]")) { submitCreate(); return; }
+                  });
+                  pop.addEventListener("keydown", (ev) => {
+                    if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.createField) { ev.preventDefault(); submitCreate(); }
+                  });
+                  document.body.append(back, pop);
+                  const prompt = pop.querySelector("[data-create-field='prompt']");
                   if (prompt) prompt.focus();
                 }
-                function closeCreateMenu() { const menu = document.getElementById("b2-create-menu"); if (menu) menu.classList.remove("open"); }
+                function closeCreatePop() { document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); }
                 function pickEngine(btn) {
                   const id = btn.dataset.engineChoice;
                   const entry = catalogEntries().find((e) => e.id === id);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   S.engineChoice = id;
-                  const menu = document.getElementById("b2-create-menu");
-                  if (menu) {
-                    menu.querySelectorAll(".source-option").forEach((o) => o.classList.toggle("active", o.dataset.engineChoice === id));
-                    const prompt = menu.querySelector("[data-create-field='prompt']");
-                    if (prompt) prompt.focus();
+                  const pop = document.getElementById("b2-create-pop");
+                  if (!pop) return;
+                  pop.querySelectorAll(".source-option").forEach((o) => o.classList.toggle("active", o.dataset.engineChoice === id));
+                  const sel = pop.querySelector("[data-create-field='model']"); // B10 模型二层随引擎重灌
+                  if (sel) {
+                    const models = createModelsFor(id);
+                    const cur = sel.value;
+                    sel.innerHTML = '<option value="">默认模型</option>' + models.map((m) => '<option value="' + esc(m) + '">' + esc(m) + "</option>").join("");
+                    sel.value = models.includes(cur) ? cur : "";
                   }
+                  const prompt = pop.querySelector("[data-create-field='prompt']");
+                  if (prompt) prompt.focus();
                 }
                 function submitCreate() {
-                  const menu = document.getElementById("b2-create-menu");
-                  if (!menu) return;
-                  const prompt = (menu.querySelector("[data-create-field='prompt']") || {}).value || "";
-                  const cwd = ((menu.querySelector("[data-create-field='cwd']") || {}).value || "").trim();
+                  const pop = document.getElementById("b2-create-pop");
+                  if (!pop) return;
+                  const prompt = (pop.querySelector("[data-create-field='prompt']") || {}).value || "";
+                  const cwd = ((pop.querySelector("[data-create-field='cwd']") || {}).value || "").trim();
+                  const model = ((pop.querySelector("[data-create-field='model']") || {}).value || "").trim();
+                  const skipPerm = !!(pop.querySelector("[data-create-field='skipPerm']") || {}).checked;
+                  const autoMkdir = !!(pop.querySelector("[data-create-field='autoMkdir']") || {}).checked;
                   if (!prompt.trim()) { b2Toast("请输入初始指令"); return; }
                   const eng = S.engineChoice || defaultEngineId();
                   const entry = catalogEntries().find((e) => e.id === eng);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   const payload = { cwd: cwd || S.homedir || ".", prompt: prompt.trim() };
                   if (eng && eng !== "claude") payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）
+                  if (model) payload.model = model; // B10 模型二层
+                  if (skipPerm) payload.permissionMode = "bypassPermissions"; // B10 跳权限（relay #217：非 skip 启动的会话后续不可切跳过，创建时定）
+                  if (autoMkdir) payload.autoMkdir = true; // #208 目录不存在时 relay 侧 mkdir -p
                   const id = sendCmd("COMMAND_CREATE", payload);
                   if (!id) return;
-                  // #368：创建已受理即记忆本次 cwd，下次新建预填
-                  if (cwd) { try { localStorage.setItem(CWD_LAST_KEY, cwd); } catch (_) {} }
-                  closeCreateMenu();
+                  // #368：创建已受理即记忆本次 cwd，下次新建预填；B10 历史目录列表同步 MRU
+                  if (cwd) pushCreateCwd(cwd);
+                  closeCreatePop();
                   const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
                     clearTimeout(wd);
@@ -3853,8 +3890,7 @@
                     if (ev.target.closest("button, a, input, textarea, select, label, [contenteditable]")) return;
                     const sel = window.getSelection();
                     if (sel && !sel.isCollapsed && sel.toString()) return;
-                    const createMenuOpen = document.getElementById("b2-create-menu");
-                    if (createMenuOpen && createMenuOpen.classList.contains("open")) return;
+                    if (document.getElementById("b2-create-pop")) return; // B10 弹窗开着不抢焦
                     if (S.selected && UI.input && !UI.input.disabled) { try { UI.input.focus({ preventScroll: true }); } catch (_) {} }
                   });
 
@@ -3880,7 +3916,7 @@
 
                   // 「+」新建入口（#75 引擎菜单）
                   const plus = UI.queueHead.querySelector("button.icon-btn");
-                  if (plus) plus.addEventListener("click", (ev) => { ev.stopPropagation(); const menu = document.getElementById("b2-create-menu"); if (menu && menu.classList.contains("open")) closeCreateMenu(); else openCreateMenu(ev.currentTarget); });
+                  if (plus) plus.addEventListener("click", (ev) => { ev.stopPropagation(); if (document.getElementById("b2-create-pop")) closeCreatePop(); else openCreatePop(); });
 
                   // 点击空白收浮层（document 级，兜在冒泡末端）
                   document.addEventListener("click", (ev) => {
@@ -5491,7 +5527,7 @@
         if (!screen) return;
         desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
         railButtons.forEach((button) => button.classList.toggle("active", button.dataset.domain === domain));
-        showToast(`已切换到${({ session: "会话", team: "团队", project: "项目", notify: "通知", settings: "设置" })[domain]}域`);
+        // B16 域切换 toast 退役：rail 高亮已是即时可瞥反馈，弹toast 反遮内容
       }
 
       function openMobileRoot(root) {
@@ -5574,6 +5610,7 @@ function connectLan(ctx) {
           overlay.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
         });
         document.querySelectorAll("[data-pair-pop], [data-pair-back]").forEach((el) => el.remove()); // W-NOVAFIX B1 配对弹窗随 Esc/切域收口
+        document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); // B10 新建弹窗同口径收口（B2 域 IIFE 内函数，地基直删 DOM 免耦合）
         document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
       }
 
