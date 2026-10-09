@@ -487,7 +487,9 @@
     .head-capsule:hover { border-color: var(--border-strong); color: var(--text-strong); }
     .head-capsule[hidden] { display: none; }
     .head-capsule .cap-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
-    .model-menu { position: fixed; z-index: 82; display: none; width: 264px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    /* B22 模型菜单：视觉与 .source-menu 同壳，但不共用类——closeTransientOverlays 会摘
+       一切 .source-menu.open 的 open，共类即被全局收起误伤 */
+    .model-menu { position: fixed; z-index: 82; display: none; width: 264px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
     .model-menu.open { display: block; }
     .model-menu .source-option strong { font-family: var(--mono); }
     .model-menu-custom { display: flex; gap: 5px; padding: 6px 4px 4px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
@@ -502,9 +504,6 @@
     .composer-clip, .composer-img { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
     .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
     .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
-    /* #169 输入栏五点：能力提示小字（旧壳 #179 attachHint 同语义，005 化为 composer 内换行行）。
-       min-width:0 必备——nowrap 长文的 min-content 会把 flex 行撑出手机屏（发送钮被推出右缘） */
-    .composer-hint { flex: 1 0 100%; min-width: 0; padding: 0 2px 7px; color: var(--faint); font-size: 10.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* #169 发送常驻（旧壳 #48 sendBtn 形态 005 化：中性面板+描边+品牌色➤，不做实底大色块） */
     .composer-sendbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); color: var(--brand); cursor: pointer; }
     .composer-sendbtn:hover:not(:disabled) { background: var(--hover); border-color: var(--brand); }
@@ -753,27 +752,27 @@
     .remember-scope { display: flex; gap: 8px; margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--surface2); }
     .remember-scope button { flex: 1; min-height: 36px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; font-size: 12px; transition: all .18s ease; }
     .remember-scope button:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, transparent); color: var(--brand); }
-    /* B21 状态坞一行流式：旋转品牌图标 + 摘要（label+operation 同流省略）+ 走秒 + token；
-       左缘 2px 态色条保留（状态色可瞥），顶线退役归 B17（底栈唯一横线在 footer） */
-    .session-state-dock { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 16px; border-left: 2px solid var(--session-state-color); color: var(--dim); font: 11px var(--mono); }
-    .session-state-dock[data-session-state="waiting"] { --session-state-color: var(--working); }
-    .session-state-dock[data-session-state="running"] { --session-state-color: var(--done); }
-    .session-state-dock[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
-    .session-state-dock[data-session-state="suspended"] { --session-state-color: var(--error); }
-    .session-state-spin { flex: 0 0 auto; display: inline-grid; place-items: center; width: 14px; height: 14px; color: var(--brand); font-size: 12px; line-height: 1; animation: dock-spin 2.8s linear infinite; }
-    .session-state-dock[data-session-state="closing"] .session-state-spin { animation-play-state: paused; opacity: .55; }
-    .session-state-dock[data-session-state="suspended"] .session-state-spin { animation-play-state: paused; opacity: .55; }
+    /* B21 状态坞一行流式：[态图标 12px][摘要 flex:1][走秒][token]——图标承态（旋转=运行 /
+       呼吸=等待 / ✓=完成 / ⚠=错误），左缘 2px 态色条、状态词、呼吸点全部退役；
+       顶线退役归 B17（底栈唯一横线在 footer） */
+    .session-state-dock { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 16px; color: var(--dim); font: 11px var(--mono); }
+    .session-state-spin { flex: 0 0 auto; display: inline-grid; place-items: center; width: 14px; height: 14px; color: var(--working); font-size: 12px; line-height: 1; }
+    .session-state-spin::before { content: "✻"; }
+    .session-state-dock[data-session-state="running"] .session-state-spin { animation: dock-spin 2.8s linear infinite; }
+    .session-state-dock[data-session-state="waiting"] .session-state-spin { animation: dock-breath 1.8s ease-in-out infinite; }
+    .session-state-dock[data-session-state="closing"] .session-state-spin::before { content: "✓"; color: var(--done); }
+    .session-state-dock[data-session-state="suspended"] .session-state-spin::before { content: "⚠"; color: var(--error); }
     @keyframes dock-spin { to { transform: rotate(360deg); } }
-    .session-state-flow { display: flex; align-items: baseline; gap: 7px; flex: 1 1 auto; min-width: 0; white-space: nowrap; }
-    .session-state-label { flex: 0 0 auto; color: var(--text-strong); font-weight: 700; }
-    .session-state-operation { min-width: 0; overflow: hidden; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; }
+    @keyframes dock-breath { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+    .session-state-flow { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+    .session-state-operation { display: block; min-width: 0; overflow: hidden; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; }
     .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
-    /* B2 批2 A0-1/B#133：token 内联 + 终端实时行防双计 + 终态收口（呼吸点随 B21 一行制退役，旋转图标承活动语义） */
+    /* B2 批2 A0-1/B#133：token 内联 + 终端实时行防双计 + 终态收口（DONE ✓ 8s 淡出在 terminal-fade） */
     .session-state-tokens { flex: 0 0 auto; color: var(--dim); font-variant-numeric: tabular-nums; }
     .session-state-dock[data-live-line] .session-state-tokens, .session-state-dock[data-live-line] .session-state-elapsed { display: none; }
-    .session-state-dock { max-height: 44px; transition: max-height .45s cubic-bezier(.4, 0, .2, 1), padding .45s cubic-bezier(.4, 0, .2, 1), opacity .5s ease .1s, border-color .5s ease; }
+    .session-state-dock { max-height: 44px; transition: max-height .45s cubic-bezier(.4, 0, .2, 1), padding .45s cubic-bezier(.4, 0, .2, 1), opacity .5s ease .1s; }
     #m-detail .session-state-dock { max-height: 60px; }
-    .session-state-dock.terminal-fade { max-height: 0; padding-block: 0; border-top-color: transparent; opacity: 0; overflow: hidden; pointer-events: none; }
+    .session-state-dock.terminal-fade { max-height: 0; padding-block: 0; opacity: 0; overflow: hidden; pointer-events: none; }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 12px; }
     .artifact-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--info); }
     .artifact-row-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
@@ -1135,8 +1134,7 @@
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }
     .mobile-detail-composer .primary-btn { padding: 0 10px; }
-    #m-detail .session-state-dock { flex-wrap: wrap; padding: 8px 12px; border-left: 0; }
-    #m-detail .session-state-task { grid-column: 1 / -1; }
+    #m-detail .session-state-dock { padding: 8px 12px; }
     #m-detail .session-state-activity { grid-column: 1 / -1; justify-content: flex-start; margin-left: 0; }
     #m-detail .session-state-operation { max-width: 46%; }
     .toast { position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
@@ -1483,15 +1481,15 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><input type="search" placeholder="搜索" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter aria-label="筛选会话 · 当前全部">全部</button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span><div class="workspace-sub" id="session-sub">加载中…</div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span><div class="workspace-sub" id="session-sub">加载中…</div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
                 <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
               </div>
-              <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true">✻</span><span class="session-state-flow"><span class="session-state-label" data-session-state-label>未选择</span><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div>
-              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="输入消息 · Enter 发送 · ↑↓ 历史" aria-label="给会话发消息"><div class="composer-hint">支持拖入 / 粘贴即附 · 图片 ≤8 张 · 文件 ≤5 个 · ↑↓ 翻阅历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></footer>
+              <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true"></span><span class="session-state-flow"><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="拖入/粘贴即附 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
             <script>
@@ -1545,7 +1543,7 @@
                 const HIST_MAX = 200;
                 const IMG_MAX = 8, FILE_MAX = 5, FILE_SIZE_MAX = 20 * 1024 * 1024; // B20 附件上限提升（图 8 / 文件 5）
                 const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
-                const DOCK_STATE = { WORKING: ["running", "运行中"], WAITING: ["waiting", "等待确认"], ERROR: ["suspended", "错误"], DONE: ["closing", "已完成"] };
+                const DOCK_STATE = { WORKING: "running", WAITING: "waiting", ERROR: "suspended", DONE: "closing" }; // B21 态图标承态，状态词退役
 
                 const S = {
                   status: "offline",
@@ -2169,18 +2167,22 @@
                   get: () => idleDimMin,
                   set: (v) => { idleDimMin = v; renderMyList(); },
                 };
-                // #B3-7 闲置组折叠（旧壳 ccd_collapse_idle 键沿用）：开启后真闲置卡（已过置灰阈值）
-                // 从常规组抽出，沉底为「闲置会话」组；组内展开/收起并入 B11 通用分组折叠。
-                let collapseIdle = (() => { try { return localStorage.getItem("ccd_collapse_idle") === "1"; } catch (_) { return false; } })();
-                // B11 分组折叠态（跨组统一）：key = 组标识（active/other/project:<名>/idle），
-                // 持久 localStorage；observer 完整性检查据 _collapsedHiddenIds 放行缺卡防重渲死循环
-                // （沿用 #B3-7 折叠未展开时不进 DOM 的口径）
+                // B11 分组折叠态：collapsedGroups 记「默认展开、点击收起」的组（active）；项目组语义
+                // 相反——默认折叠，projExpanded 记手动展开过的（nova-fix4 B18）。均持久 localStorage；
+                // observer 完整性检查据 _collapsedIdleIds 放行缺卡防重渲死循环（折叠未展开不进 DOM）
                 const GRP_COLLAPSE_KEY = "cc-deck-005-grp-collapsed";
                 let collapsedGroups = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_COLLAPSE_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
                 function persistCollapsedGroups() { try { localStorage.setItem(GRP_COLLAPSE_KEY, JSON.stringify([...collapsedGroups])); } catch (_) {} }
+                const GRP_PROJ_EXPAND_KEY = "cc-deck-005-grp-proj-expanded";
+                let projExpanded = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_PROJ_EXPAND_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
                 function toggleGroupCollapse(key) {
-                  if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
-                  persistCollapsedGroups();
+                  if (key.startsWith("project:")) {
+                    if (projExpanded.has(key)) projExpanded.delete(key); else projExpanded.add(key);
+                    try { localStorage.setItem(GRP_PROJ_EXPAND_KEY, JSON.stringify([...projExpanded])); } catch (_) {}
+                  } else {
+                    if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
+                    persistCollapsedGroups();
+                  }
                   renderMyList();
                 }
                 function myCardItem(session) {
@@ -2248,49 +2250,36 @@
                     return;
                   }
                   const sessions = [...S.sessions.values()].sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
-                  // B18 活跃优先重构：原「待处理封顶 3 + 其余按项目」改为「活跃」组承载全部未完成
-                  // 会话（WORKING/WAITING/ERROR 全收、不再封顶溢出回落），DONE 落「其他会话」项目分组。
-                  // 组内细排沿用 #B3-10 reason 序：审批等待 > 错误 > 运行中，同级置顶优先再 recency。
-                  const QUEUE_REASON_ORDER = { waiting: 0, error: 1, working: 2 };
-                  const reasonOf = (x) => (x.status === "WAITING" ? "waiting" : x.status === "ERROR" ? "error" : x.status === "WORKING" ? "working" : "other");
-                  const activePool = sessions.filter((x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR");
-                  activePool.sort((a, b) => {
-                    const ra = QUEUE_REASON_ORDER[reasonOf(a)] ?? 9;
-                    const rb = QUEUE_REASON_ORDER[reasonOf(b)] ?? 9;
-                    return ra !== rb ? ra - rb : Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0);
-                  });
-                  // #B3-7 折叠开启时真闲置卡沉底独立组（只折已过变灰阈值的；活跃组永不入）
-                  const otherAll = sessions.filter((x) => !(x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR"));
-                  const idlePool = collapseIdle ? otherAll.filter((x) => idleDimmed(x)) : [];
-                  const idleIds = new Set(idlePool.map((x) => x.session_id));
-                  const other = collapseIdle ? otherAll.filter((x) => !idleIds.has(x.session_id)) : otherAll;
+                  // B18 活跃优先两级分组（nova-fix4）：顶部「进行中」收全部活跃会话
+                  // （WORKING/WAITING/ERROR 不论项目、按置顶+recency 排）；其余（闲置）按项目
+                  // 分组沉底、默认折叠（projExpanded 记手动展开）。旧「待处理/其他」外层组退役。
+                  const isActive = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
+                  const activePool = sessions.filter(isActive); // 已按置顶+recency 排，不再按 reason 重排
+                  const idleAll = sessions.filter((x) => !isActive(x));
                   // B11 组头（可折叠）：caret + 文件夹图标 + 名 · 计数；卡体包 .grp-body，折叠态 CSS 隐藏
-                  const grpHead = (key, title, count, extra) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (!collapsedGroups.has(key) ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span> · <span data-session-group-count>' + count + "</span>" + (extra || "") + "</div>";
-                  const groupMarkup = (group, title, entries) => '<div class="session-group' + (collapsedGroups.has(group) ? " collapsed" : "") + '" data-session-group="' + group + '">' + grpHead(group, title, entries.length) + '<div class="grp-body">' + entries.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>";
-                  // ⑥a-2 其他组语义=外层组头 + 内嵌项目子分组（跟随原型 renderSessionQueue）
-                  const projectNames = [...new Set(other.map((x) => getSessionProject(x)))];
-                  const otherMarkup = other.length
-                    ? '<div class="session-group' + (collapsedGroups.has("other") ? " collapsed" : "") + '" data-session-group="other">' + grpHead("other", "其他会话", other.length)
-                      + '<div class="grp-body">' + projectNames.map((name) => {
-                        const inProject = other.filter((x) => getSessionProject(x) === name);
-                        const pkey = "project:" + name;
-                        return '<div class="session-group' + (collapsedGroups.has(pkey) ? " collapsed" : "") + '" data-session-group="project" data-session-project="' + esc(name) + '">' + grpHead(pkey, esc(name), inProject.length) + '<div class="grp-body">' + inProject.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>";
-                      }).join("") + "</div></div>"
+                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span> · <span data-session-group-count>' + count + "</span></div>";
+                  const activeOpen = !collapsedGroups.has("active");
+                  const activeMarkup = activePool.length
+                    ? '<div class="session-group' + (activeOpen ? "" : " collapsed") + '" data-session-group="active">' + grpHead("active", "进行中", activePool.length, activeOpen) + '<div class="grp-body">' + activePool.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>"
                     : "";
-                  const idleMarkup = idlePool.length
-                    ? groupMarkup("idle", "闲置会话", idlePool)
-                    : "";
+                  // ⑥a-2 项目组：闲置会话按项目归属直接分组（默认折叠，无外层「其他会话」壳）
+                  const projectNames = [...new Set(idleAll.map((x) => getSessionProject(x)))];
+                  const projMarkup = projectNames.map((name) => {
+                    const inProject = idleAll.filter((x) => getSessionProject(x) === name);
+                    const pkey = "project:" + name;
+                    const open = projExpanded.has(pkey);
+                    return '<div class="session-group' + (open ? "" : " collapsed") + '" data-session-group="project" data-session-project="' + esc(name) + '">' + grpHead(pkey, esc(name), inProject.length, open) + '<div class="grp-body">' + inProject.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>";
+                  }).join("");
                   // 折叠未展开时这些卡有意不进 DOM——observer 完整性检查据此放行，防「缺卡→重渲→
                   // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）
                   const collapsedHidden = [];
-                  const collectHidden = (key, arr) => { if (collapsedGroups.has(key)) collapsedHidden.push(...arr.map((x) => x.session_id)); };
-                  collectHidden("active", activePool);
-                  collectHidden("other", other);
-                  collectHidden("idle", idlePool);
-                  if (!collapsedGroups.has("other")) for (const name of projectNames) collectHidden("project:" + name, other.filter((x) => getSessionProject(x) === name));
+                  if (!activeOpen) collapsedHidden.push(...activePool.map((x) => x.session_id));
+                  for (const name of projectNames) {
+                    if (!projExpanded.has("project:" + name)) collapsedHidden.push(...idleAll.filter((x) => getSessionProject(x) === name).map((x) => x.session_id));
+                  }
                   S._collapsedIdleIds = collapsedHidden.length ? new Set(collapsedHidden) : null;
                   const template = document.createElement("template");
-                  template.innerHTML = groupMarkup("active", "活跃", activePool) + otherMarkup + idleMarkup;
+                  template.innerHTML = activeMarkup + projMarkup;
                   list.replaceChildren(template.content);
                 }
 
@@ -2432,6 +2421,7 @@
                     UI.title.textContent = "会话";
                     UI.statusTag.textContent = "未选择"; UI.statusTag.className = "tag"; UI.statusTag.hidden = false;
                     UI.identity.innerHTML = '<span class="source-badge">' + esc(S.relayName) + '</span>';
+                    UI.modelCapsule = null; // B22 胶囊随会话渲染（engine-badge 旁），无会话不挂
                     UI.sub.textContent = !WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…";
                     updateModelCapsule(null);
                     return;
@@ -2443,11 +2433,13 @@
                   if (s.status === "DONE") UI.statusTag.hidden = true;
                   else { UI.statusTag.hidden = false; UI.statusTag.textContent = st[0]; UI.statusTag.className = "tag " + st[1]; }
                   const eng = ENGINES[s.engine || "claude"] || [s.engine || "Claude", ""];
-                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + esc(eng[0]) + '</span><span class="source-badge">' + esc(S.relayName) + '</span>' + (s.external ? '<span class="tag info">CLI</span>' : "");
+                  // B22 模型胶囊挂 engine-badge 旁（identity-cluster 内随 innerHTML 重建，重建后重取引用）
+                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + esc(eng[0]) + '</span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><span class="source-badge">' + esc(S.relayName) + '</span>' + (s.external ? '<span class="tag info">CLI</span>' : "");
+                  UI.modelCapsule = UI.identity.querySelector("#session-model-capsule");
                   UI.sub.textContent = (s.cwd ? shortPath(s.cwd) + " · " : "") + "最近活动 " + relTime(s.updated_at || s.started_at);
                   updateModelCapsule(s);
                 }
-                // ---------- B22 模型切换胶囊（head 右侧）→ 模型列表 → COMMAND_MODEL ----------
+                // ---------- B22 模型切换胶囊（engine-badge 旁）→ source-menu 同壳列表 → COMMAND_MODEL ----------
                 // relay #388：托管 Claude/外部会话注入 /model 下一回合生效；codex 等他引擎拒绝（配置文件制）
                 function capsuleModelsFor(s) {
                   return createModelsFor(s && s.external ? "claude" : (s && s.engine) || "claude"); // 模型源与 B10 弹窗同源
@@ -2470,10 +2462,10 @@
                 function openModelMenu(anchor) {
                   closeModelMenu();
                   const s = curSession();
-                  if (!s || !capsuleSupported(s)) return;
+                  if (!anchor || !s || !capsuleSupported(s)) return;
                   const menu = document.createElement("div");
                   menu.id = "b2-model-menu";
-                  menu.className = "model-menu";
+                  menu.className = "model-menu"; // 与 source-menu 同壳样式（独立类，防被 .source-menu.open 全局收起误伤）
                   menu.setAttribute("role", "menu");
                   const cur = s.model || "";
                   const models = capsuleModelsFor(s);
@@ -2515,33 +2507,30 @@
                   if (v.ok) {
                     s.model = model; // 乐观回显；relay 已置 state.model，后续 UPDATED 帧权威归位
                     renderHeader();
-                    b2Toast("模型已切换 · " + model + "（下一回合生效）");
+                    b2Toast("已切换 · 下一回合生效"); // 新模型名由胶囊乐观回显，不重复播报
                   } else b2Toast("切换失败：" + v.error);
                 }
                 function renderDock() {
                   const dock = UI.dock;
                   if (!dock) return;
                   const s = curSession();
-                  const label = dock.querySelector("[data-session-state-label]");
                   const op = dock.querySelector("[data-session-state-operation]");
                   const tok = dock.querySelector("[data-session-state-tokens]");
                   if (!s) {
                     dock.dataset.sessionState = "waiting";
-                    label.textContent = "未选择";
-                    op.textContent = "";
+                    op.textContent = "未选择";
                     dock.querySelector("[data-session-state-elapsed]").textContent = "";
                     if (tok) tok.hidden = true;
                     dockTerminalWatch(dock, null);
                     renderPendChips(null); // #B3-14
                     return;
                   }
-                  // B21 一行流式：旋转品牌图标 + [态标 + 摘要]（同流省略）+ 走秒 + token
-                  const [state, stateLabel] = DOCK_STATE[s.status] || ["closing", "已完成"];
+                  // B21 一行流式：态图标（旋转/呼吸/✓/⚠，CSS 按 data-session-state 承载）+ 摘要 + 走秒 + token
+                  const state = DOCK_STATE[s.status] || "closing";
                   dock.dataset.sessionState = state;
                   const live = dockLiveLine(s); // A0-1：终端实时行（relay ​ 零宽前缀约定）→ 隐藏自家走秒/token 防双计
                   if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
                   const w = s.waiting_request;
-                  label.textContent = (s.status === "DONE" ? "✓ " : s.status === "ERROR" ? "⚠ " : "") + (w ? "等待确认" : stateLabel); // B#133 终态符号
                   const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
                   op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
                   if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
@@ -3381,10 +3370,8 @@
                   UI.sendBtn.disabled = !editable || !(UI.input.value.trim() || S.staged.length); // 常驻判空：运行中有内容仍可发（排队链）
                   UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
                   UI.input.disabled = !editable;
-                  // B20 placeholder 改造：按会话态给可用性指引（运行中提示可排队，常态带快捷键提示）
-                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "先从左侧选择会话") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "输入消息 · Enter 发送 · ↑↓ 历史";
-                  const hint = UI.composer.querySelector(".composer-hint");
-                  if (hint) hint.style.display = editable ? "" : "none"; // 旧壳 #179 同口径：只读态按钮都藏了别孤挂小字
+                  // B20 placeholder 承载附件/历史提示（hint 小字行退役）：按会话态给可用性指引
+                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "先从左侧选择会话") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅历史";
                 }
                 function sendMessage() {
                   const s = curSession();
@@ -3780,10 +3767,8 @@
                       }, 60);
                       return;
                     }
-                    const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（#B3-7 闲置组并入）
+                    const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中/项目组统一走此链）
                     if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
-                    const idleTgl = ev.target.closest("[data-idle-toggle]");
-                    if (idleTgl) { ev.stopPropagation(); toggleGroupCollapse("idle"); return; } // #B3-7 旧标残留兜底
                     const taskHide = ev.target.closest("[data-task-hide]");
                     if (taskHide) { ev.stopPropagation(); const cs = curSession(); if (cs) { hiddenTaskKeys.add(cs.session_id + "#" + taskHide.dataset.taskHide); renderTasks(); } return; } // #B3-9
                     const taskJump = ev.target.closest("[data-task-jump]");
@@ -4060,7 +4045,7 @@
                     section, sessionList, workspace, body, panes,
                     tabs: [...section.querySelectorAll(".segment-bar button")],
                     title: $id("session-title"), statusTag: $id("session-status"), identity: $id("session-identity"), sub: $id("session-sub"),
-                    headActions: $id("session-head-actions"), modelCapsule: $id("session-model-capsule"),
+                    headActions: $id("session-head-actions"),
                     dock: $id("session-state-dock"),
                     composer: section.querySelector('[data-composer="session"]'),
                     sendBtn: section.querySelector("[data-composer-send]"),
@@ -4082,15 +4067,20 @@
                   }
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }
                   setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
-                  // B12 head 右端过程/思考开关 + B22 模型胶囊（head-actions 静态钮，一次绑定）
+                  // B12 head 右端过程/思考开关（head-actions）；B22 模型胶囊在 identity-cluster 内
+                  // 随 renderHeader 重建，点击走容器级委托一次绑定
                   if (UI.headActions) {
                     UI.headActions.addEventListener("click", (ev) => {
                       const tgl = ev.target.closest(".conv-mini[data-conv-toggle]");
-                      if (tgl) { toggleConv(tgl.dataset.convToggle); return; }
-                      if (ev.target.closest("#session-model-capsule")) {
-                        const menu = document.getElementById("b2-model-menu");
-                        if (menu) closeModelMenu(); else openModelMenu(ev.currentTarget.querySelector("#session-model-capsule") || ev.currentTarget);
-                      }
+                      if (tgl) toggleConv(tgl.dataset.convToggle);
+                    });
+                  }
+                  if (UI.identity) {
+                    UI.identity.addEventListener("click", (ev) => {
+                      const cap = ev.target.closest("#session-model-capsule");
+                      if (!cap) return;
+                      const menu = document.getElementById("b2-model-menu");
+                      if (menu) closeModelMenu(); else openModelMenu(cap);
                     });
                   }
                   if (UI.sessionList) { // B11 组头键盘可达（role=button）
@@ -4101,27 +4091,6 @@
                       ev.preventDefault();
                       toggleGroupCollapse(head.dataset.groupToggle);
                     });
-                  }
-                  // #B3-7 闲置折叠开关（列表工具行尾小钮；键沿用旧壳 ccd_collapse_idle）
-                  if (UI.listTools) {
-                    const idleBtn = document.createElement("button");
-                    idleBtn.type = "button";
-                    idleBtn.dataset.idleCollapseToggle = "";
-                    const paintIdleBtn = () => {
-                      idleBtn.textContent = collapseIdle ? "闲置折叠" : "闲置全显";
-                      idleBtn.classList.toggle("active", collapseIdle);
-                      idleBtn.setAttribute("aria-pressed", String(collapseIdle));
-                      idleBtn.title = collapseIdle ? "闲置会话已折叠成组，点击恢复混排" : "把闲置会话折叠成底部一组";
-                    };
-                    paintIdleBtn();
-                    idleBtn.addEventListener("click", (ev) => {
-                      ev.stopPropagation();
-                      collapseIdle = !collapseIdle;
-                      try { localStorage.setItem("ccd_collapse_idle", collapseIdle ? "1" : "0"); } catch (_) {}
-                      paintIdleBtn();
-                      renderMyList();
-                    });
-                    UI.listTools.appendChild(idleBtn);
                   }
                   // 占位标记收编：已绑定面移除 data-stub；搜索/筛选拨给 B2b
                   UI.queueHead.removeAttribute("data-stub");
@@ -5266,7 +5235,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">会话<small id="mobile-detail-sub">加载中…</small></h2><span class="identity-cluster" id="mobile-detail-identity"></span><span class="tag action">加载中</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div>
-              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true">✻</span><span class="session-state-flow"><span class="session-state-label" data-session-state-label>未选择</span><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="输入消息 · Enter 发送 · ↑↓ 历史" aria-label="给会话发消息"><div class="composer-hint">拖入 / 粘贴即附 · 图 ≤8 · 文件 ≤5 · ↑↓ 历史</div></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div>
+              <div class="mobile-content no-bottom"><div data-mobile-detail-content></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true"></span><span class="session-state-flow"><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="拖入/粘贴即附 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div>
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
@@ -6198,11 +6167,12 @@ function connectLan(ctx) {
           return;
         }
         const sessions = [...c.sessions.values()].sort((first, second) => Number(second.pinned === true) - Number(first.pinned === true) || Number(second.updated_at || 0) - Number(first.updated_at || 0));
-        const pending = sessions.filter((session) => session.status === "WAITING" || session.status === "ERROR");
-        const other = sessions.filter((session) => session.status !== "WAITING" && session.status !== "ERROR");
+        // B18 口径同步（地基首屏占位；接管后由 B2 renderMyList 重渲）：进行中=全部活跃，闲置按项目
+        const pending = sessions.filter((session) => session.status === "WORKING" || session.status === "WAITING" || session.status === "ERROR");
+        const other = sessions.filter((session) => session.status !== "WORKING" && session.status !== "WAITING" && session.status !== "ERROR");
         const groupMarkup = (group, title, entries) => '<div class="session-group" data-session-group="' + group + '"><div class="queue-group"><span>' + title + '</span> · <span data-session-group-count>' + entries.length + '</span></div>' + entries.map((session) => renderSessionCard(sessionItem(session), "desktop")).join("") + '</div>';
         const template = document.createElement("template");
-        template.innerHTML = groupMarkup("pending", "待处理", pending) + groupMarkup("other", "其他会话", other);
+        template.innerHTML = (pending.length ? groupMarkup("active", "进行中", pending) : "") + (other.length ? groupMarkup("idle", "闲置会话", other) : "");
         template.content.querySelectorAll(".srow-cta").forEach((button) => {
           button.dataset.stub = "B2";
           button.setAttribute("aria-label", "处理会话 · 待 B2 迁移");
@@ -7523,7 +7493,7 @@ function connectLan(ctx) {
       if (window.__ccDeck005B4) window.__ccDeck005B4.currentDetail = () => detailSid;
       const DETAIL_TL_MAX = 30;
       const VERIFY_RE_M = /[〔\[【]\s*待验证\s*[〕\]】]/; // 与 B2 任务 tab 四组制同口径（#85 待验证档）
-      const M_DOCK_STATE = { WORKING: ["running", "执行中"], WAITING: ["waiting", "已暂停"], ERROR: ["suspended", "出错"], DONE: ["closing", "已完成"] }; // 态位与 CSS/B2 DOCK_STATE 同集
+      const M_DOCK_STATE = { WORKING: "running", WAITING: "waiting", ERROR: "suspended", DONE: "closing" }; // 态位与 CSS/B2 DOCK_STATE 同集（B21 态图标承态）
       const mTokStr = (n) => { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(n); };
       const mCtxPct = (s) => (!s || !s.context_usage) ? 0 : Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100));
       const mCtxTone = (pct) => (pct >= 85 ? "critical" : pct >= 60 ? "attention" : "safe");
@@ -7784,27 +7754,24 @@ function connectLan(ctx) {
       function updateMobileDetailDock(s) {
         const dock = document.querySelector("#mobile-detail-state-dock");
         if (!dock) return;
-        const task = dock.querySelector("[data-session-state-task]");
-        const label = dock.querySelector("[data-session-state-label]");
+        const op = dock.querySelector("[data-session-state-operation]");
         const elapsed = dock.querySelector("[data-session-state-elapsed]");
         const tok = dock.querySelector("[data-session-state-tokens]");
         if (!s) {
           dock.dataset.sessionState = "waiting";
-          if (task) task.textContent = "当前任务 · 无挂起";
-          if (label) label.textContent = "未选择";
+          if (op) op.textContent = "未选择";
           if (elapsed) elapsed.textContent = "";
           if (tok) tok.hidden = true;
           mDockTerminalWatch(dock, null);
           return;
         }
-        const [state, stateLabel] = M_DOCK_STATE[s.status] || ["closing", "已完成"];
+        const state = M_DOCK_STATE[s.status] || "closing";
         dock.dataset.sessionState = state;
         const live = !!s.action_summary && s.status === "WORKING" && String(s.action_summary).startsWith("\u200B"); // A0-1 终端实时行防双计（与桌面 dockLiveLine 同口径）
         if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
         const w = s.waiting_request;
-        const taskText = w ? "等待确认 · " + (w.tool_name || "工具调用") : (s.action_summary || "无挂起");
-        if (task) task.textContent = ("当前任务 · " + String(taskText)).slice(0, 60);
-        if (label) label.textContent = (s.status === "DONE" ? "✓ " : s.status === "ERROR" ? "⚠ " : "") + stateLabel; // B#133 终态符号
+        const taskText = w ? "等待确认 · " + (w.tool_name || "工具调用") : (s.action_summary || s.last_error || "");
+        if (op) op.textContent = String(taskText).replace(/^\u200B+/, "").slice(0, 60); // B21 摘要承任务流（终态符号在态图标）
         if (elapsed) elapsed.textContent = mRelTime(s.updated_at || s.started_at);
         if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? "· " + mTokStr(u) + "/" + mTokStr(s.context_limit || 1e6) : ""; }
         mDockTerminalWatch(dock, s);
@@ -7854,14 +7821,12 @@ function connectLan(ctx) {
         const send = document.querySelector('#m-detail [data-composer-send]');
         const stop = document.querySelector('#m-detail [data-composer-stop]');
         const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
-        const hint = document.querySelector('#m-detail .composer-hint');
         const api = b2Api();
         const s = detailSid ? (bridge.sessions.get(detailSid) || (api && api.S && api.S.sessions ? api.S.sessions.get(detailSid) : null)) : null;
         const editable = !!(s && (!api || !api.canCmd || api.canCmd(s)));
         const staged = (api && api.S && api.S.staged) || [];
         if (send) send.disabled = !editable || !((input && input.value.trim()) || staged.length);
         if (stop) stop.hidden = !(editable && s && (s.status === "WORKING" || s.status === "WAITING"));
-        if (hint) hint.style.display = editable ? "" : "none";
       }
       function setupMobileDetail() {
         detailBase = ensureDetailBase();
@@ -7903,7 +7868,8 @@ function connectLan(ctx) {
         const list = document.querySelector("#m-inbox [data-mobile-session-list]");
         if (!list) return;
         const sessions = allSessions().sort(byPinnedUpdated);
-        const pend = sessions.filter(needAction).slice(0, 3);
+        // B18 活跃优先（手机同口径）：顶部「进行中」收全部活跃，闲置按项目分组（手机无折叠机制，平铺）
+        const pend = sessions.filter((s) => s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR");
         const pendIds = new Set(pend.map((s) => s.session_id));
         const other = sessions.filter((s) => !pendIds.has(s.session_id));
         const groups = [...new Set(other.map(getSessionProject))];
@@ -7911,7 +7877,7 @@ function connectLan(ctx) {
           const items = other.filter((s) => getSessionProject(s) === g);
           return `<div class="session-group" data-session-group="project"><div class="queue-group"><span>${esc(g)}</span> · <span data-session-group-count>${items.length}</span></div>${items.map(mobileCard).join("")}</div>`;
         }).join("");
-        list.innerHTML = `<div class="session-group" data-session-group="pending"><div class="queue-group"><span>待处理</span> · <span data-session-group-count>${pend.length}</span></div>${pend.map(mobileCard).join("")}</div><div class="session-group" data-session-group="other"><div class="queue-group"><span>其他会话</span> · <span data-session-group-count>${other.length}</span></div>${otherMarkup}</div>`;
+        list.innerHTML = (pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span> · <span data-session-group-count>${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "") + otherMarkup;
         const act = sessions.filter(needAction).length;
         const work = sessions.filter((s) => s.status === "WORKING").length;
         const done = sessions.filter((s) => s.status === "DONE").length;
