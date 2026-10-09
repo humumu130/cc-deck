@@ -23,8 +23,8 @@
       --line-soft: #203247;
       --text-strong: #E8EFF8;
       --text: #C4D0DE;
-      --dim: #9AABBE;
-      --faint: #8298B0;
+      --dim: #A8B9CA;
+      --faint: #90A6BD;
       --progress-fill: #7793AE;
       --brand: #E2855E;
       --brand-hover: #F0A06A;
@@ -170,7 +170,7 @@
       --text-strong: #15283D;
       --text: #30465B;
       --dim: #334B61;
-      --faint: #4B6278;
+      --faint: #3F566C;
       --progress-fill: #607D99;
       --brand: #C86440;
       --brand-hover: #D9754D;
@@ -1124,18 +1124,19 @@
     /* ---------- 全站字号层级体系（W-FONT 专项 2026-10-09）----------
        分门别类不统一加大：每个元素的大小匹配其信息重要度。层级阶梯 A/D > B/E/F > C(micro)。
        基准 = standard 档；允许范围 = 三档全落类内（设置面板密度控件驱动，键同 data-card-density）：
-         A 主内容    正文/名称/标题行   基准 14px  范围 13-15（--fs-A-item = 密集条目标题，A 下沿）
-         B 次级元数据 时间戳/路径/摘要  基准 12px  范围 11-12.5
-         C 标签徽章   tag/engine-badge  基准 11px  范围 10.5-11.5（高 DPI 可读下限：真文本徽章 ≥11）
-         D 区块标题   queue-head/分组头 基准 13.5px 范围 13-14（--fs-page = 页面级大标题 16px，D 上沿特例）
-         E 按钮动作   primary/conv-mini 基准 12px  范围 11-12.5（--fs-cta = 大 CTA，E 上沿特例）
-         F 等宽代码   wait-detail/md-code 基准 12px  范围 11-12.5（终验拍板：代码要逐字符读，不小于正文一档）
+         A 主内容    正文/名称/标题行   基准 14px  范围 12-16（--fs-A-item = 密集条目标题，A 下沿）
+         B 次级元数据 时间戳/路径/摘要  基准 12px  范围 10-14
+         C 标签徽章   tag/engine-badge  基准 11px  范围 9-13（高 DPI 下限 ≥11 指 standard 档；
+                     compact 档 9px 系 W-FONT2 2026-10-09 拍板 ±2px 步进的代价，用户自选密度）
+         D 区块标题   queue-head/分组头 基准 13.5px 范围 11.5-15.5（--fs-page = 页面级大标题 16px，D 上沿特例）
+         E 按钮动作   primary/conv-mini 基准 12px  范围 10-14（--fs-cta = 大 CTA，E 上沿特例）
+         F 等宽代码   wait-detail/md-code 基准 12px  范围 10-14（终验拍板：代码要逐字符读，不小于正文一档）
        --fs-micro = 非阅读微字（计数点/箭头 glyph/kicker），不参与文本层级、几何耦合不改。
        豁免（不入类）：KPI 数字读数（usage-summary-number/metric b/kv b）、图标 glyph、
        相对 em 排版（md-h1~h4/x-full/code .88em）、头像字（--srow-ava-font/.avatar）。 */
     body { --fs-A: 14px; --fs-A-item: 13px; --fs-B: 12px; --fs-C: 11px; --fs-D: 13.5px; --fs-E: 12px; --fs-F: 12px; --fs-page: 16px; --fs-cta: 13px; --fs-micro: 10px; }
-    body[data-card-density="compact"] { --fs-A: 13px; --fs-A-item: 12px; --fs-B: 11px; --fs-C: 10.5px; --fs-D: 13px; --fs-E: 11px; --fs-F: 11px; --fs-page: 15px; --fs-cta: 12.5px; --fs-micro: 9.5px; }
-    body[data-card-density="relaxed"] { --fs-A: 15px; --fs-A-item: 14px; --fs-B: 12.5px; --fs-C: 11.5px; --fs-D: 14px; --fs-E: 12.5px; --fs-F: 12.5px; --fs-page: 17px; --fs-cta: 13.5px; --fs-micro: 10.5px; }
+    body[data-card-density="compact"] { --fs-A: 12px; --fs-A-item: 11px; --fs-B: 10px; --fs-C: 9px; --fs-D: 11.5px; --fs-E: 10px; --fs-F: 10px; --fs-page: 14px; --fs-cta: 11px; --fs-micro: 8px; }
+    body[data-card-density="relaxed"] { --fs-A: 16px; --fs-A-item: 15px; --fs-B: 14px; --fs-C: 13px; --fs-D: 15.5px; --fs-E: 14px; --fs-F: 14px; --fs-page: 18px; --fs-cta: 15px; --fs-micro: 12px; }
     body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 54px; }
     body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 48px; }
     body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 62px; }
@@ -1164,7 +1165,7 @@
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
     #d-session .queue-card[data-session-card="mobile"]:hover { background: var(--danger-bg); }
     #d-session .srow-ava { position: relative; display: grid; place-items: center; flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--srow-ava-c, var(--source)) 16%, var(--surface2)); color: var(--srow-ava-c, var(--text-strong)); font: 700 var(--srow-ava-font)/1 var(--mono); user-select: none; }
-    #d-session .srow-ava .status-dot { position: absolute; right: -3px; bottom: -3px; box-shadow: 0 0 0 2px var(--bg1); }
+    #d-session .srow-ava .status-dot { --dot-halo: var(--faint); position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; box-shadow: 0 0 0 2px var(--bg1), 0 0 0 3px color-mix(in srgb, var(--dot-halo) 20%, transparent); }
     #d-session .srow-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--srow-gap); }
     #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
     #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); text-overflow: ellipsis; white-space: nowrap; }
@@ -1313,6 +1314,10 @@
     /* #df3-H 快捷键键值 chip（tag 底色系克制风） */
     .kbd-chip { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface2); color: var(--dim); font: 700 var(--fs-C) var(--mono); white-space: nowrap; }
     .settings-panel .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    /* B15 模板页（团队身份模板）：底部提示从横幅降为右下角 faint 小字；空态居中 */
+    .settings-panel[data-settings-panel="identity"].active { display: flex; flex-direction: column; }
+    .pane-corner-note { margin-top: auto; padding: 12px 2px 2px; text-align: right; color: var(--faint); font-size: var(--fs-micro); }
+    .pane-empty { display: grid; place-items: center; min-height: 180px; color: var(--dim); font-size: var(--fs-B); text-align: center; }
     .toggle-control { min-width: 34px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); cursor: pointer; font: 700 var(--fs-E) var(--mono); }
     .toggle-control.active { border-color: var(--done); background: var(--done-bg); color: var(--done); }
     /* #158-批4a 未接线假开关置灰：disabled + 行尾灰字「即将支持」，防用户操作后零反馈被当 bug 报 */
@@ -1413,11 +1418,12 @@
     html[data-theme="light"] .status-dot.done { box-shadow: 0 0 6px var(--status-done-glow), 0 0 0 1px color-mix(in srgb, var(--done) 50%, transparent); }
     html[data-theme="light"] .status-dot.error { box-shadow: 0 0 6px var(--status-error-glow), 0 0 0 1px color-mix(in srgb, var(--error) 50%, transparent); }
     html[data-theme="light"] .status-dot.waiting { box-shadow: 0 0 6px var(--status-working-glow), 0 0 0 1px color-mix(in srgb, var(--working) 50%, transparent); }
-    /* 会话列表头像角标灯：既有 bg1 切角描边外再补状态色光圈（ID 规则优先，单独覆写） */
-    #d-session .srow-ava .status-dot.done { box-shadow: 0 0 0 2px var(--bg1), 0 0 5px var(--status-done-glow); }
-    #d-session .srow-ava .status-dot.error { box-shadow: 0 0 0 2px var(--bg1), 0 0 5px var(--status-error-glow); }
-    #d-session .srow-ava .status-dot.waiting { box-shadow: 0 0 0 2px var(--bg1), 0 0 5px var(--status-working-glow); }
-    html[data-theme="light"] #d-session .srow-ava .status-dot { box-shadow: 0 0 0 2px var(--bg1), 0 0 0 3px color-mix(in srgb, #22364A 38%, transparent); }
+    /* 会话列表头像角标灯（font2 拍板）：10px 灯体 + 2px 底色切角环 + 3px 状态色 20% 光环，
+       环结构统一明暗两主题（bg1 随主题取值），状态只注入 --dot-halo 色源 */
+    #d-session .srow-ava .status-dot.done { --dot-halo: var(--done); }
+    #d-session .srow-ava .status-dot.error { --dot-halo: var(--error); }
+    #d-session .srow-ava .status-dot.waiting { --dot-halo: var(--working); }
+    #d-session .srow-ava .status-dot.working { --dot-halo: var(--working); }
     /* dock 状态灯同族光圈（--session-state-color 随态位） */
     .session-state-dot { box-shadow: 0 0 6px color-mix(in srgb, var(--session-state-color) 38%, transparent), 0 0 0 1px color-mix(in srgb, var(--session-state-color) 32%, transparent); }
     @media (max-width: 959px) {
@@ -5612,8 +5618,8 @@ function connectLan(ctx) {
         body.innerHTML = `
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" disabled aria-disabled="true">开</button><span class="coming-soon">即将支持</span></div><div class="settings-row"><span class="avatar">Aa</span><div><strong>字号</strong><p>全站文字大小 · 默认标准</p></div><div class="density-control font-scale-control" role="group" aria-label="字号"><button type="button" data-card-density-option="compact">小</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">大</button></div></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="pane-corner-note">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
         wireCardDensityControls(body);
@@ -5735,7 +5741,7 @@ function connectLan(ctx) {
             (catalog || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((role) => { if (role && !roleMap.has(role)) roleMap.set(role, e); }));
             idLive.innerHTML = roleMap.size
               ? [...roleMap.entries()].map(([role, e]) => `<div class="member-card"><span class="avatar">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div><strong>${esc(role)}</strong><p>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省引擎</p></div></div>`).join("")
-              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>';
+              : '<div class="pane-empty">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>';
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
@@ -6963,6 +6969,15 @@ function connectLan(ctx) {
         if (railButton) { setDesktopDomain(railButton.dataset.domain); return; }
         const themeToggle = target.closest("[data-theme-toggle]");
         if (themeToggle) { applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true); return; }
+        // 密度/字号共用 data-card-density 键（W-FONT 拍板：同键驱动字号族）；
+        // 按来源行区分 toast 文案，两行按钮 active 态由 applyCardDensity 统一刷新
+        const densityOption = target.closest("[data-card-density-option]");
+        if (densityOption) {
+          const next = densityOption.dataset.cardDensityOption;
+          if (densityOption.closest(".font-scale-control")) { applyCardDensity(next); showToast(`字号：${({ compact: "小", standard: "标准", relaxed: "大" })[document.body.dataset.cardDensity]}`); }
+          else applyCardDensity(next, true);
+          return;
+        }
         const mobileRoot = target.closest("[data-mobile-root]");
         if (mobileRoot) { openMobileRoot(mobileRoot.dataset.mobileRoot); return; }
         if (target.closest(".mobile-notify")) { openMobileRoot("notify"); return; }
