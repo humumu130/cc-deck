@@ -22,6 +22,7 @@
 | #150 收敛线 R1-R3 | 1d676e7 / 2830005 / 98e8904 | DV-ARCH 终态达成（本批不改用户可见面） | 005-arch-convergence-survey.md + 本文 DV-ARCH 节 |
 | ⑥d 出包切换 | a4f2593 | DV6d-1…DV6d-5（005 落位 index.html+定版 0.7.0-test.2） | 本文（派单模式：worker 实施，Leader 核验代提交） |
 | ⑥f 新旧壳共存 | （本批） | DV6f-1…DV6f-3（用户否决单点切换，改共存布局） | 本文（派单模式：worker 实施，Leader 核验代提交） |
+| W-ORPH2 孤儿引导显示侧 | （本批） | DV6h-1…DV6h-2（relay 修复 cherry-pick 线的显示侧配合） | 本文（feat/orphan-artifacts-005，不推送） |
 
 ## B2 会话域补录（DV2-）
 
@@ -111,3 +112,10 @@ B2 无独立 report（worker 交付短式提交），已知持久偏差在此补
 3. B4 report 补写（⑥e，f2e19c6）后 DV4 系列指向迁移 ✓；
 4. 本文档随每批更新，新偏差先入表后合入 ✓。
 - **DV6g-9 云形态空态措辞借道（P0 急救，Leader 直修）**：B2 对话域头部/面板空态三元链 `!TOKEN` 分支先于 `hasSnapshot`，云形态 TOKEN 恒空 → pair_ack 后主区仍显示「请通过带 ?token= 的 relay 链接连接」误导未连接（Playwright 线上实证，截图 shot-A3）。修=新增 `cloudLaneOn()`（经 `__ccDeck005CloudUI.stateLabel()` 含「已连接」判云在线）豁免 `!TOKEN` 分支，云在线空态回落「从左侧选择一个会话/从左侧选择会话查看对话」。LAN/桌面形态行为不变。
+
+## W-ORPH2 孤儿接入引导显示侧（DV6h-，2026-10-09，cherry-pick 线）
+
+> 背景：dev 线孤儿会话修复（f00139e，deliver 兜底落位/接入文案分叉/增量上板）cherry-pick 到 005 线（feat/orphan-artifacts-005）。未装插件分支的新接入引导 ~160 字，超 005 壳系统行 oneLine 120 字 JS 截断阈值——关键尾部（deliver 登记指引/安装命令）会被切掉，显示侧需配合。
+
+- **DV6h-1 长系统行折叠/展开（超原型新增交互）**：`entryHtml` system 分支对 >120 字（oneLine 同阈值）文本包 `tnote-wrap`——折叠态 CSS 单行省略（与短系统行原型观感一致），展开态全文左对齐折行（命令路径不溢出）；展开语汇复用 user 气泡「展开全文 N 字 ▾ / 收起 ▴」+ `expanded` Set + `.x-full[data-x]` 既有点击委托（桌面 toggleExpand 原位重建 / 手机整页重渲，零新增事件面）。≤120 字短系统行（完成/错误/接入）渲染式不变。理由：引导文案是给用户照着操作的，截断即功能缺失；旧壳同场景 CSS 单行裁切同样读不全，005 线按「文案用户语言 + 原型观感零扰动」补齐可读性。
+- **DV6h-2 发现备案（不修，#71 范畴）**：005 壳输出物面板（v3，#168）未接 `SNAPSHOT.deliverables` 门控（旧壳 #71 有：relay 配置关=隐藏输出物面）——属 #71 功能的 005 移植缺口，非本批引入；输出物取数链（MERGE_KEYS `artifacts` + SESSION_UPDATED 增量合流）本就通行，孤儿卡经 deliver 登记即上板。单独立项补。

@@ -212,5 +212,18 @@ ok(shell.includes("if (cloudMode) cloudDisconnect();"), "C11 pagehide 云链卸�
   ok(synFails === 0, "C12 六内联块全部 node --check 通过");
 }
 
+// ---- W-ORPH2 孤儿接入引导长系统行（DV6h-1：005 显示侧配合，防回退锁） ----
+{
+  // 引导文案 ~160 字由 relay 侧下发（bridge.ts 未装插件分支），壳侧职责 = 长系统行可读：
+  ok(shell.includes('const sysSrc = String(e.text ?? "");') && shell.includes("sysSrc.length > 120"), "W1 长系统行阈值 120（oneLine 同源），超长走展开分支");
+  ok(shell.includes('\'<div class="tnote-wrap\' + (open ? " open" : "") + \'" data-x="\' + ke + \'"><div class="timeline-note\''), "W1 wrapper 带 data-x + open 态类（toggleExpand 原位重建挂点）");
+  ok(shell.includes('展开全文 " + sysSrc.length + " 字 ▾') && shell.includes('"收起 ▴"'), "W1 展开语汇与 user 气泡同款（展开全文 N 字 ▾ / 收起 ▴）");
+  ok(shell.includes("esc(oneLine(sysSrc))"), "W1 ≤120 字短系统行渲染式不变（原型观感零偏差）");
+  ok(shell.includes(".tnote-wrap:not(.open) .timeline-note") && shell.includes(".tnote-wrap.open .timeline-note"), "W1 CSS 双态：折叠=单行省略 / 展开=折行");
+  ok(shell.includes(".tnote-wrap .x-full { display: block; }"), "W1 展开钮独立成行（不与省略行抢宽）");
+  // 手机侧正常路径委托桌面 entryHtml（mEntryHtml 首行 api.entryHtml），同分支自动生效——锚委托本身
+  ok(shell.includes("if (api && typeof api.entryHtml === \"function\") return api.entryHtml(e, s);"), "W1 手机侧 mEntryHtml 委托桌面 entryHtml（长系统行两端同渲染）");
+}
+
 console.log(`\n005-parity: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

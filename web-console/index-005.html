@@ -596,6 +596,12 @@
     .x-full:hover { text-decoration: underline; }
     .bubble.me .x-full { display: block; text-align: right; margin: 5px 2px 0 0; }
     .message-body .x-full { margin: 7px 0 0 2px; }
+    /* W-ORPH2 长系统行（孤儿接入引导）：折叠=单行省略（同短注观感）；展开=全文左对齐折行 */
+    .tnote-wrap { margin-bottom: 15px; }
+    .tnote-wrap .timeline-note { margin-bottom: 4px; }
+    .tnote-wrap:not(.open) .timeline-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tnote-wrap.open .timeline-note { text-align: left; white-space: pre-wrap; word-break: break-word; }
+    .tnote-wrap .x-full { display: block; }
     /* 轻量 Markdown（旧壳 md-* 体系贴 005 token；assistant 正文无卡片直接排版） */
     .message-body .md-p, .th-body .md-p { white-space: pre-wrap; margin: 9px 0; }
     .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 15px 0 6px; }
@@ -2530,7 +2536,13 @@
                     return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefRow(e.text) + "</span></div></div>";
                   }
                   // #B3-13 ⚠ 开头系统/警告行着 --working（旧壳 .msg-sys.warn 口径：/^\s*⚠/）
-                  return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + '">' + esc(oneLine(e.text)) + "</div>";
+                  // W-ORPH2：长系统行（孤儿会话接入引导 ~160 字）折叠单行省略 + 展开全文
+                  // （user 气泡 >100 字折行展开同语汇）；≤120 字短系统行不包 wrapper，原型观感不变
+                  const sysSrc = String(e.text ?? "");
+                  const sysWarn = /^\s*⚠/.test(sysSrc) ? " warn" : "";
+                  if (sysSrc.length > 120)
+                    return '<div class="tnote-wrap' + (open ? " open" : "") + '" data-x="' + ke + '"><div class="timeline-note' + sysWarn + '">' + esc(sysSrc) + '</div><span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + sysSrc.length + " 字 ▾") + "</span></div>";
+                  return '<div class="timeline-note' + sysWarn + '">' + esc(oneLine(sysSrc)) + "</div>";
                 }
                 function entryNode(e, s) {
                   const html = entryHtml(e, s);
