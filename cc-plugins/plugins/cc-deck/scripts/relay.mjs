@@ -10338,9 +10338,9 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join33, sep as sep8 } from "node:path";
-import { writeFileSync as writeFileSync20, openSync as openSync4, readFileSync as readFileSync28, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
-import { spawn as spawn6, execFileSync as execFileSync2 } from "node:child_process";
+import { join as join34, sep as sep8 } from "node:path";
+import { writeFileSync as writeFileSync20, openSync as openSync5, readFileSync as readFileSync28, rmSync as rmSync5, existsSync as existsSync24, readdirSync as readdirSync12, statSync as statSync11 } from "node:fs";
+import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/config.ts
@@ -10530,6 +10530,7 @@ function contextLimitOf(model) {
   if (o !== void 0) return o;
   const m = (model ?? "").trim().toLowerCase();
   if (!m) return CONTEXT_LIMIT_DEFAULT;
+  if (/\[1m\]$/.test(m)) return 1e6;
   if (m.startsWith("glm-5")) return 1e6;
   if (m.startsWith("glm-4.7")) return 1e6;
   if (m.startsWith("glm-4.6")) return 2e5;
@@ -10667,6 +10668,9 @@ function reduceHistory(events) {
         if (p.remote_mode !== void 0) s.remote_mode = p.remote_mode;
         if (p.title) s.title = p.title;
         if (p.title_locked) s.title_locked = true;
+        if (p.model) s.model = p.model;
+        if (p.engine) s.engine = p.engine;
+        if (p.provider) s.engine_provider = p.provider;
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         if (p.usage) s.usage = p.usage;
         const cu = p.context_usage;
@@ -10719,7 +10723,8 @@ function reduceHistory(events) {
           full: p.full,
           id: p.id,
           detail: p.detail,
-          diff: p.diff
+          diff: p.diff,
+          occurred_at: p.occurred_at
         };
         const li = p.id ? rs2.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs2.logs[li] = entry;
@@ -14698,6 +14703,13 @@ function listModels(fallbackDefault) {
   add(env.ANTHROPIC_DEFAULT_OPUS_MODEL);
   add(fallbackDefault || DEFAULT_MODEL);
   return out;
+}
+function withContextWindowSuffix(model) {
+  if (!model) return model;
+  const m = model.trim();
+  if (!m || /\[1m\]$/i.test(m)) return m;
+  if (/^(glm-5|claude-sonnet-4-5|claude-opus-5|claude-haiku-4-5)/i.test(m)) return `${m}[1m]`;
+  return m;
 }
 
 // src/agent-jsonl.ts
@@ -45019,7 +45031,9 @@ var AgentSession = class {
     this.q = NUt({
       prompt: this.queue.iterable,
       options: {
-        model: this.model,
+        // [1m] 水位档重挂（见 models.ts withContextWindowSuffix）：存储/显示保持裸名，
+        // 仅 spawn 进 CLI 的这一刻对 1M 档模型重挂后缀，否则 CLI 按 200K 假设主动压缩
+        model: withContextWindowSuffix(this.model) ?? this.model,
         cwd: this.cwd,
         pathToClaudeCodeExecutable: cliPath,
         // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
@@ -47963,14 +47977,42 @@ function resumeInitTimeoutMs() {
   const v = Number(process.env.CCR_RESUME_INIT_MS);
   return Number.isFinite(v) && v >= 100 ? v : 45e3;
 }
+function resumeInitTimeoutFor(transcriptBytes) {
+  const base = resumeInitTimeoutMs();
+  if (!transcriptBytes || transcriptBytes <= 0) return base;
+  const units = Math.floor(transcriptBytes / (10 * 1024 * 1024));
+  return Math.min(base * (1 + units), base * 4);
+}
+function resumeBreakerThreshold() {
+  const v = Number(process.env.CCR_RESUME_BREAKER_THRESHOLD);
+  return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 2;
+}
+function resumeBreakerBaseMs() {
+  const v = Number(process.env.CCR_RESUME_BREAKER_BASE_MS);
+  return Number.isFinite(v) && v >= 1e3 ? v : 5 * 6e4;
+}
+function resumeBreakerCapMs() {
+  const v = Number(process.env.CCR_RESUME_BREAKER_CAP_MS);
+  return Number.isFinite(v) && v >= 6e4 ? v : 60 * 6e4;
+}
+function transcriptPathFor(cwd, sdkId, configHome) {
+  const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
+  const base = configHome ?? join28(homedir12(), ".claude");
+  return join28(base, "projects", slug, `${sdkId}.jsonl`);
+}
 function transcriptHasAssistant(cwd, sdkId, configHome) {
   try {
-    const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-    const base = configHome ?? join28(homedir12(), ".claude");
-    const p = join28(base, "projects", slug, `${sdkId}.jsonl`);
+    const p = transcriptPathFor(cwd, sdkId, configHome);
     return readFileSync22(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
+  }
+}
+function transcriptBytesFor(cwd, sdkId, configHome) {
+  try {
+    return statSync7(transcriptPathFor(cwd, sdkId, configHome)).size;
+  } catch {
+    return void 0;
   }
 }
 function watchdogDisabled() {
@@ -48505,6 +48547,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
       if (this.isRetiredMember(s.state.session_id)) continue;
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
+      if (s.state.pinned && s.state.saved) continue;
+      if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) continue;
       if (!s.state.relay_session_id) continue;
       const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
       if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
@@ -48560,7 +48604,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
-  ensureExternal(id2, cwd, prompt, cliSessionId = "", startedAt = 0) {
+  ensureExternal(id2, cwd, prompt, cliSessionId = "", startedAt = 0, opts) {
     const existing = this.sessions.get(id2);
     if (existing) {
       existing.state.historical = false;
@@ -48570,6 +48614,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         existing.state.title_locked = true;
       }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      if (opts?.engine && !existing.state.engine) existing.state.engine = opts.engine;
+      if (opts?.model && !existing.state.model) existing.state.model = opts.model;
+      if (opts?.provider && !existing.state.engine_provider) existing.state.engine_provider = opts.provider;
       this.applyDeclaredDeliverables(id2);
       return existing.state;
     }
@@ -48579,14 +48626,16 @@ provider=${opts.provider ?? "default"}` : void 0,
       cwd: cwd || process.cwd(),
       initial_prompt: prompt,
       title: prompt ? deriveTitle(prompt) : (cwd.split(/[\\/]/).pop() ?? "\u672A\u547D\u540D\u4F1A\u8BDD") || "\u672A\u547D\u540D\u4F1A\u8BDD",
-      model: "",
+      model: opts?.model ?? "",
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "\u63A5\u5165\u4E2D",
       started_at: startedAt || Date.now(),
       updated_at: Date.now(),
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
-      remote_mode: false
+      remote_mode: false,
+      ...opts?.engine ? { engine: opts.engine } : {},
+      ...opts?.provider ? { engine_provider: opts.provider } : {}
     };
     const ov2 = this.titleOverrides[id2];
     if (ov2) {
@@ -48599,11 +48648,43 @@ provider=${opts.provider ?? "default"}` : void 0,
       cwd: state.cwd,
       initial_prompt: prompt,
       title: state.title,
-      model: "",
+      model: state.model,
       external: true,
-      started_at: state.started_at
+      started_at: state.started_at,
+      ...state.engine ? { engine: state.engine } : {},
+      ...state.engine_provider ? { provider: state.engine_provider } : {}
     });
     return state;
+  }
+  updateExternalProfile(id2, profile) {
+    const s = this.sessions.get(id2);
+    if (!s || !s.state.external) return;
+    let changed = false;
+    if (profile.cwd && s.state.cwd !== profile.cwd) {
+      s.state.cwd = profile.cwd;
+      changed = true;
+    }
+    if (profile.prompt && !s.state.initial_prompt) {
+      s.state.initial_prompt = profile.prompt;
+      changed = true;
+    }
+    if (profile.title && !s.state.title_locked && s.state.title !== profile.title) {
+      s.state.title = profile.title;
+      changed = true;
+    }
+    if (profile.model && s.state.model !== profile.model) {
+      s.state.model = profile.model;
+      changed = true;
+    }
+    if (profile.engine && s.state.engine !== profile.engine) {
+      s.state.engine = profile.engine;
+      changed = true;
+    }
+    if (profile.provider && s.state.engine_provider !== profile.provider) {
+      s.state.engine_provider = profile.provider;
+      changed = true;
+    }
+    if (changed) this.emitUpdated(s, true);
   }
   getExternal(id2) {
     return this.sessions.get(id2)?.state;
@@ -48612,12 +48693,13 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s) return;
     const changed = s.state.status !== status;
+    const summaryChanged = s.state.action_summary !== summary;
     s.state.status = status;
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
-    if (changed || status === "WORKING") {
+    if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id2, "SESSION_UPDATED", {
         status,
         action_summary: summary,
@@ -49167,9 +49249,18 @@ provider=${opts.provider ?? "default"}` : void 0,
   // Date.now() 会把「几小时前的死亡」洗成「刚刚活跃」，快照下发后全端 30 分钟
   // 不置灰（2026-09-22 用户实测：装 test.18 重启即本机源全亮、远程源正常）。
   // 正常终态上报（Stop hook/用户打断/compact 归档）不传 at，判定时刻即真实时刻
-  finishExternal(id2, reason, durationMs, at = Date.now()) {
+  finishExternal(id2, reason, durationMs, at = Date.now(), summary) {
     const s = this.sessions.get(id2);
     if (!s) return;
+    if (summary !== void 0 && s.state.action_summary !== summary) {
+      s.state.action_summary = summary;
+      this.bus.emit(id2, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: summary,
+        stats: { ...s.state.stats },
+        updated_at: at
+      });
+    }
     s.state.status = "DONE";
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
@@ -49390,6 +49481,9 @@ provider=${opts.provider ?? "default"}` : void 0,
               s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
+            }
+            if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+              this.pushExternalLog(s.state.session_id, "system", "\u6536\u5230\u624B\u52A8\u6D88\u606F\uFF0C\u8D8A\u8FC7\u6062\u590D\u51B7\u5374\u5C1D\u8BD5\u62C9\u8D77");
             }
             this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
@@ -50076,6 +50170,8 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (!mine()) return;
         touch("init");
         managed.resumePending = void 0;
+        managed.resumeFailStreak = void 0;
+        managed.resumeCooldownUntil = void 0;
         if (!this.childSdkIds.has(sdkId)) {
           this.childSdkIds.add(sdkId);
           appendChildSession(this.cfg.dataDir, sdkId);
@@ -50347,6 +50443,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     s.resumePending = Date.now();
     const resumeStart = Date.now();
+    const initWaitMs = resumeInitTimeoutFor(transcriptBytesFor(s.state.cwd, sdkId, this.employeeHome(s.state)));
     let inited = false;
     let initTimer = null;
     const clearInitTimer = () => {
@@ -50362,6 +50459,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         inited = true;
         clearInitTimer();
         baseCb.onInit(id2, model, pm2);
+        this.flushResumeBacklog(s, resumeStart);
       },
       // 审查修正（P1「停了又复活」）：流关闭（用户 STOP / 进程退出）= 本次 resume
       // 已终局——timer 不撤销的话 45s 后照样开火：首回合分支 fresh spawn 重放用户
@@ -50372,22 +50470,29 @@ provider=${opts.provider ?? "default"}` : void 0,
         baseCb.onSessionEnd(reason);
       }
     };
-    const agent = this.newAgent(
-      s.state.cwd,
-      s.state.model,
-      cb2,
-      firstMessage,
-      {
-        resume: sdkId,
-        permissionMode: this.resumePermMode(s),
-        // P81-6 旧值规范化统一入口
-        images,
-        configHome: this.employeeHome(s.state),
-        // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
-        // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
-        ...s.state.engine ? { engine: s.state.engine } : {}
-      }
-    );
+    let agent;
+    try {
+      agent = this.newAgent(
+        s.state.cwd,
+        s.state.model,
+        cb2,
+        firstMessage,
+        {
+          resume: sdkId,
+          permissionMode: this.resumePermMode(s),
+          // P81-6 旧值规范化统一入口
+          images,
+          configHome: this.employeeHome(s.state),
+          // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
+          // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
+          ...s.state.engine ? { engine: s.state.engine } : {}
+        }
+      );
+    } catch (e) {
+      s.resumePending = void 0;
+      this.noteResumeFailure(s, `resume spawn \u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09`);
+      throw e;
+    }
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.historical = false;
@@ -50412,7 +50517,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const hasMemory = s.logs.some((e) => e.kind === "assistant_text") || (s.state.usage?.output_tokens ?? 0) > 0 || // transcriptHasAssistant 读 ~/.claude/projects JSONL（Claude 特性泄漏面）：
       // codex 的记忆判定只看前两口（logs/usage）
       s.state.engine !== "codex" && transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state));
-      const waitS = Math.round(resumeInitTimeoutMs() / 1e3);
+      const waitS = Math.max(1, Math.round(initWaitMs / 1e3));
       if (!s.state.external && !hasMemory) {
         const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart);
         s.unacked = s.unacked.filter((m) => m.ts < resumeStart);
@@ -50459,9 +50564,10 @@ provider=${opts.provider ?? "default"}` : void 0,
         s.state.updated_at = Date.now();
         this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
         this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+        this.noteResumeFailure(s, `resume init \u8D85\u65F6\uFF08${waitS}s\uFF09`);
         this.emitUpdated(s, true);
       }
-    }, resumeInitTimeoutMs());
+    }, initWaitMs);
     initTimer.unref?.();
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
@@ -50470,9 +50576,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   // #49 按需拉起（COMMAND_RESUME_SESSION）：不带首条消息的 parked resume——
   // transcript 重放完成后 CLI 停在等待输入，首个回合由后续 COMMAND_MESSAGE 开启。
-  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / 30s 超时 = 恢复失败
-  // （ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
-  // resumeAgent（消息驱动）行为保持原样不动
+  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / init 看门狗超时 =
+  // 恢复失败（ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
+  // resumeAgent（消息驱动）行为保持原样不动。W-LEADFIX：init 看门狗由独立硬编码
+  // 30s 改用 resumeInitTimeoutFor 自适应窗（与 resumeAgent 同源——生产死循环的报错
+  // 帧「初始化超时（30s）」即出自这里的旧硬编码；大上下文 Leader 必超时），fail
+  // 同时进熔断记账；用户点卡是手动意图，不受熔断压制（本函数无闸）
   reviveSaved(s) {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
@@ -50505,6 +50614,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.resumePending = Date.now();
     s.wd.gaveUp = false;
     const base = this.agentCallbacks(s);
+    const initWaitMs = resumeInitTimeoutFor(transcriptBytesFor(s.state.cwd, sdkId, this.employeeHome(s.state)));
     const fail = (reason) => {
       if (inited) return;
       inited = true;
@@ -50520,6 +50630,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.updated_at = Date.now();
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+      this.noteResumeFailure(s, reason);
       this.emitUpdated(s, true);
     };
     const cb2 = {
@@ -50527,10 +50638,20 @@ provider=${opts.provider ?? "default"}` : void 0,
       onInit: (sdkIdNew, model, permissionMode) => {
         inited = true;
         if (timer) clearTimeout(timer);
+        const reviveStart = s.resumePending ?? Date.now();
         s.state.saved = void 0;
         s.state.historical = false;
         s.state.org_parked = void 0;
         base.onInit(sdkIdNew, model, permissionMode);
+        const backlog = s.unacked.filter((m) => m.ts < reviveStart);
+        if (backlog.length > 0 && s.agent && !s.agent.ended) {
+          this.flushResumeBacklog(s, reviveStart);
+          s.state.status = "WORKING";
+          s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u5904\u7406\u6392\u961F\u6D88\u606F";
+          this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
+          this.emitUpdated(s, true);
+          return;
+        }
         s.state.status = "DONE";
         s.state.done_reason = "\u5DF2\u6062\u590D\uFF08\u7B49\u5F85\u8F93\u5165\uFF09";
         s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u7B49\u5F85\u8F93\u5165";
@@ -50548,18 +50669,25 @@ provider=${opts.provider ?? "default"}` : void 0,
     };
     timer = setTimeout(() => {
       timer = null;
-      fail("\u521D\u59CB\u5316\u8D85\u65F6\uFF0830s\uFF09");
+      fail(`\u521D\u59CB\u5316\u8D85\u65F6\uFF08${Math.max(1, Math.round(initWaitMs / 1e3))}s\uFF09`);
       void s.agent?.stop();
-    }, 3e4);
+    }, initWaitMs);
     timer.unref?.();
-    const agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
-      resume: sdkId,
-      permissionMode: this.resumePermMode(s),
-      // P81-6 旧值规范化统一入口（parked revive）
-      configHome: this.employeeHome(s.state),
-      // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
-      ...s.state.engine ? { engine: s.state.engine } : {}
-    });
+    let agent;
+    try {
+      agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
+        resume: sdkId,
+        permissionMode: this.resumePermMode(s),
+        // P81-6 旧值规范化统一入口（parked revive）
+        configHome: this.employeeHome(s.state),
+        // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
+        ...s.state.engine ? { engine: s.state.engine } : {}
+      });
+    } catch (e) {
+      s.resumePending = void 0;
+      this.noteResumeFailure(s, `\u6062\u590D spawn \u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09`);
+      throw e;
+    }
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.action_summary = "\u6062\u590D\u4E2D";
@@ -50904,6 +51032,62 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
   }
+  // ===== W-LEADFIX resume 熔断与自动恢复闸门 =====
+  // 生产实证（2026-10-09 深夜，org Leader 0f6906c5）：Leader CLI 死后值守喂活/派单
+  // 回执/org 通知的消息流持续到达，每条触发 resumeAgent/reviveSaved → init 超时失败
+  //（「初始化超时（30s）」×34）→ 下一条消息再触发，分钟级死循环。根修三板：
+  // ① noteResumeFailure 记账连败 → 冷却（自动路径统一经 suppressAutoResume 压制）；
+  // ② 用户手动意图（发消息/点卡）不过闸——手动恢复路径永不封锁；③ pin 停放休眠
+  //（pinned+saved）的自动拉起同闸压制——置顶语义是「点卡片按需恢复」（#49，2026-09-09
+  // 用户拍板），自动注入不得绕过。
+  // 熔断记账：resume init 失败（resumeAgent 看门狗 ERROR 分支 / reviveSaved fail /
+  // 看门狗接管失败）连击 → 冷却。指数退避 2^(streak-threshold)×base 封顶 cap；
+  // streak 只在 onInit 成功复位（见 agentCallbacks.onInit）
+  noteResumeFailure(s, detail) {
+    const streak = (s.resumeFailStreak ?? 0) + 1;
+    s.resumeFailStreak = streak;
+    const threshold = resumeBreakerThreshold();
+    if (streak < threshold) return;
+    const cool = Math.min(resumeBreakerBaseMs() * 2 ** (streak - threshold), resumeBreakerCapMs());
+    s.resumeCooldownUntil = Date.now() + cool;
+    const min = Math.max(1, Math.round(cool / 6e4));
+    this.pushExternalLog(
+      s.state.session_id,
+      "system",
+      `\u6062\u590D\u5DF2\u8FDE\u7EED\u5931\u8D25 ${streak} \u6B21\uFF08${detail}\uFF09\uFF0C\u81EA\u52A8\u6062\u590D\u8FDB\u5165\u51B7\u5374\uFF08\u672C\u6B21 ${min} \u5206\u949F\uFF09\u2014\u2014\u671F\u95F4\u81EA\u52A8\u6CE8\u5165\u53EA\u5165\u961F\u4E0D\u518D\u62C9\u8D77\uFF0C\u70B9\u5361\u7247\u6216\u53D1\u6D88\u606F\u53EF\u624B\u52A8\u6062\u590D`
+    );
+    this.emitUpdated(s, true);
+  }
+  // 自动恢复统一闸门：返回 true = 应压制（勿 resume）。压制原因两种：熔断冷却中 /
+  // pin 停放休眠（pinned+saved 且无 agent——用户手动停放的「点卡按需恢复」形态）。
+  // queueMessage 给出时消息入队 unacked（恢复成功后补投，见 flushResumeBacklog）；
+  // 不给出 = 纯跳过（值班 prompt 可重推导、auto-revive 引导语是合成物，入队无益）
+  suppressAutoResume(s, source, queueMessage) {
+    const tripped = !!s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil;
+    const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
+    if (!tripped && !parkedPinned) return false;
+    if (queueMessage !== void 0) s.unacked.push({ text: queueMessage, ts: Date.now() });
+    const why = tripped ? `\u6062\u590D\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\u5DF2\u7194\u65AD\uFF0C\u7EA6 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 6e4))} \u5206\u949F\u540E\u81EA\u52A8\u91CD\u8BD5` : "\u4F1A\u8BDD\u4E3A\u7F6E\u9876\u4F11\u7720\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF09";
+    this.pushExternalLog(
+      s.state.session_id,
+      "system",
+      `[${source}] ${why}\uFF1B\u672C\u6761\u6CE8\u5165\u5DF2\u8DF3\u8FC7${queueMessage !== void 0 ? "\u5E76\u5165\u961F\uFF0C\u6062\u590D\u540E\u81EA\u52A8\u8865\u6295" : ""}`
+    );
+    this.emitUpdated(s, true);
+    return true;
+  }
+  // 恢复成功（onInit 到达）后补投冷却期/pin 休眠期积压：只取 beforeTs 之前的旧账
+  //（之后的属 spawn 窗口消息，走 sendMessage 排队既定路径），合并单回合送达
+  //（同看门狗多消息重放口径）。resumeAgent 与 reviveSaved 的 onInit 包裹各调一次
+  flushResumeBacklog(s, beforeTs) {
+    const backlog = s.unacked.filter((m) => m.ts < beforeTs);
+    if (backlog.length === 0) return;
+    s.unacked = s.unacked.filter((m) => m.ts >= beforeTs);
+    const text = backlog.map((m) => m.text).join("\n\n");
+    const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
+    this.pushExternalLog(s.state.session_id, "system", `\u6062\u590D\u6210\u529F\uFF0C\u8865\u6295\u6392\u961F\u6D88\u606F ${backlog.length} \u6761`);
+    s.agent?.sendMessage(text, images.length ? images : void 0);
+  }
   // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
   // 口径 + 通知对账）：上一进程遗留 running/dispatched 悬账各补一行 done 收口（事实
   // 源先行），板条同步退 todo（中断口径，F-08 实测校准注释随块迁入——auto-revive
@@ -50987,10 +51171,13 @@ provider=${opts.provider ?? "default"}` : void 0,
       returnPath: "dispatch"
     });
     if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
+    const receiptPrompt = `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] \u4F60\u6D3E\u7684 ${e.tier} \u5355\uFF08${e.id.slice(0, 8)}${e.gid ? ` \xB7 \u7EC4 ${e.gid.slice(0, 8)}` : ""}\uFF09\u5931\u8D25\uFF1A${truncate(receipt, 160)}
+\u8BF7\u51B3\u5B9A\u91CD\u6D3E / \u6362\u4EBA\u63A5\u66FF / \u653E\u5F03\uFF0C\u5E76\u540C\u6B65\u4EFB\u52A1\u677F\u3002`;
+    const leaderSession = this.sessions.get(this.leaderId);
+    if (leaderSession && this.suppressAutoResume(leaderSession, "\u6D3E\u5355\u5931\u8D25\u56DE\u6267", receiptPrompt)) return;
     try {
       this.pushExternalLog(this.leaderId, "system", `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] ${e.tier} \u5355 ${e.id.slice(0, 8)} \u5931\u8D25\uFF1A${truncate(receipt, 160)}`);
-      this.resumeAgent(this.require(this.leaderId), `[\u6D3E\u5355\u5931\u8D25\u56DE\u6267] \u4F60\u6D3E\u7684 ${e.tier} \u5355\uFF08${e.id.slice(0, 8)}${e.gid ? ` \xB7 \u7EC4 ${e.gid.slice(0, 8)}` : ""}\uFF09\u5931\u8D25\uFF1A${truncate(receipt, 160)}
-\u8BF7\u51B3\u5B9A\u91CD\u6D3E / \u6362\u4EBA\u63A5\u66FF / \u653E\u5F03\uFF0C\u5E76\u540C\u6B65\u4EFB\u52A1\u677F\u3002`);
+      this.resumeAgent(this.require(this.leaderId), receiptPrompt);
     } catch (err) {
       console.warn(`[m4] \u6D3E\u5355\u5931\u8D25\u901A\u77E5\u6CE8\u5165 Leader \u5931\u8D25: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -51177,6 +51364,24 @@ provider=${opts.provider ?? "default"}` : void 0,
       `\u8BF7\u9A8C\u6536\u56DE\u6267\u3001\u6D3E\u53D1\u4E0B\u4E00\u6279\u6216\u540C\u6B65\u4EFB\u52A1\u677F\uFF1B\u5B8C\u6210\u540E\u672B\u884C\u5355\u72EC\u8F93\u51FA\u4E00\u884C JSON\uFF08\u4E0D\u52A0\u4EE3\u7801\u5757\uFF09\uFF1A`,
       `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`
     ].join("\n");
+    const leaderSession = this.sessions.get(this.leaderId);
+    if (leaderSession) {
+      const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
+      const parkedPinned = !!leaderSession.state.pinned && !!leaderSession.state.saved && !leaderSession.agent;
+      if (tripped || parkedPinned) {
+        this.suppressAutoResume(leaderSession, "\u503C\u5B88\u5582\u6D3B");
+        this.appendDutyRound({
+          feed_id: feedId,
+          feed_generation: generation,
+          trigger: [trigger],
+          result: "sleep",
+          reason: tripped ? "resume_breaker" : "pm_parked_pinned",
+          observed,
+          from
+        });
+        return;
+      }
+    }
     try {
       this.pushExternalLog(this.leaderId, "system", `[\u503C\u5B88\u5582\u6D3B] \u53D1\u73B0 ${verdict.candidates.length} \u9879\u53EF\u5904\u7406\uFF08\u6700\u8001\uFF1A${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}\uFF09`);
       this.resumeAgent(this.require(this.leaderId), prompt);
@@ -52207,7 +52412,11 @@ provider=${opts.provider ?? "default"}` : void 0,
     let sessionId;
     if (veteran) {
       try {
-        this.resumeAgent(this.require(veteran), wrapDispatchPrompt(tier, input.prompt));
+        const veteranSession = this.require(veteran);
+        if (veteranSession.resumeCooldownUntil && Date.now() < veteranSession.resumeCooldownUntil) {
+          throw new Error(`resume \u7194\u65AD\u51B7\u5374\u4E2D\uFF08\u8FDE\u7EED\u5931\u8D25 ${veteranSession.resumeFailStreak ?? "?"} \u6B21\uFF09`);
+        }
+        this.resumeAgent(veteranSession, wrapDispatchPrompt(tier, input.prompt));
         sessionId = veteran;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -52565,6 +52774,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       ...s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {},
       ...s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {},
       ...s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {},
+      ...s.state.model ? { model: s.state.model } : {},
+      ...s.state.engine ? { engine: s.state.engine } : {},
+      ...s.state.engine_provider ? { provider: s.state.engine_provider } : {},
       ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
       ...s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {},
       ...s.state.compacting ? { compacting: true } : {},
@@ -52609,6 +52821,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   /** 测试缝：注入 proc-tree 替身（null 还原真实实现） */
   setWatchdogProcs(p) {
     this.watchdogProcs = p ?? { snapshotTree, killTree };
+  }
+  /** 测试缝（W-LEADFIX）：读会话 resume 熔断态——streak=连败次数，cooldownUntil=冷却截止（0=无）。null=会话不存在 */
+  resumeBreakerForTests(sid) {
+    const s = this.sessions.get(sid);
+    if (!s) return null;
+    return { streak: s.resumeFailStreak ?? 0, cooldownUntil: s.resumeCooldownUntil ?? 0 };
   }
   // 心跳同频扫描（5s）。双通道起疑：慢通道 = 任意静默 > T_stall（10min）；快通道 =
   // 最后进展是 tool_result（工具已完成，CLI 本该立刻接话）却静默 > 3min。命中即进
@@ -52701,6 +52919,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     const sid = s.state.session_id;
     const t02 = Date.now();
     const agent = s.agent;
+    if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+      this.bus.emit(sid, "WATCHDOG", {
+        action: "recover_suppressed",
+        lane,
+        detail: `\u6062\u590D\u7194\u65AD\u51B7\u5374\u4E2D\uFF08\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\uFF0C\u7EA6 ${Math.max(1, Math.round((s.resumeCooldownUntil - Date.now()) / 6e4))} \u5206\u949F\u540E\u53EF\u91CD\u8BD5\uFF09\uFF0C\u8DF3\u8FC7\u81EA\u52A8\u63A5\u7BA1`
+      });
+      s.wd.phase = "idle";
+      return;
+    }
     this.bus.emit(sid, "WATCHDOG", { action: "recover_start", lane, stalled_ms: stalled, cpu_delta_ms: cpuDelta });
     this.pushExternalLog(
       sid,
@@ -52803,6 +53030,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.waiting_request = void 0;
       s.state.waiting_started_at = void 0;
       this.pushExternalLog(sid, "system", s.state.last_error);
+      this.noteResumeFailure(s, `\u770B\u95E8\u72D7\u63A5\u7BA1\u5931\u8D25\uFF08${msg}\uFF09`);
       this.emitUpdated(s, true);
       s.wd.phase = "idle";
     }
@@ -52900,8 +53128,8 @@ ${task}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { readFileSync as readFileSync25, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync10, statSync as statSync9 } from "node:fs";
-import { join as join30, dirname as dirname9, sep as sep7 } from "node:path";
+import { readFileSync as readFileSync25, writeFileSync as writeFileSync17, mkdirSync as mkdirSync17, existsSync as existsSync21, readdirSync as readdirSync11, statSync as statSync10 } from "node:fs";
+import { join as join31, dirname as dirname9, sep as sep7 } from "node:path";
 import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
@@ -52918,7 +53146,7 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, readFileSync as readFileSync24, readdirSync as readdirSync9, statSync as statSync8, writeFileSync as writeFileSync16 } from "node:fs";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync24, readdirSync as readdirSync10, statSync as statSync9, writeFileSync as writeFileSync16 } from "node:fs";
 import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
@@ -53054,6 +53282,65 @@ function buildDoScriptExpr(pid, expr) {
 function mapAppleError(stderr) {
   return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : void 0;
 }
+function runTmux(args, timeoutMs = 5e3) {
+  return new Promise((resolve9) => {
+    const child = spawn5("tmux", args);
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (c) => out += c);
+    child.stderr?.on("data", (c) => err += c);
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve9({ ok: false, text: "", error: "timeout" });
+    }, timeoutMs);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve9({ ok: false, text: "", error: e.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve9({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+    });
+  });
+}
+var tmuxEqCache = null;
+function tmuxSupportsEqPrefix() {
+  if (tmuxEqCache !== null) return tmuxEqCache;
+  try {
+    const v = execFileSync("tmux", ["-V"], { encoding: "utf8", timeout: 3e3 });
+    const m = /(\d+)\.(\d+)/.exec(v);
+    tmuxEqCache = !!m && (+m[1] > 3 || +m[1] === 3 && +m[2] >= 1);
+  } catch {
+    tmuxEqCache = false;
+  }
+  return tmuxEqCache;
+}
+async function resolveTmuxTarget(pid) {
+  if (process.platform !== "darwin" && process.platform !== "linux") return null;
+  if (process.env.CCR_OSASCRIPT_CMD || process.env.CCR_INJECT_CMD) return null;
+  let tty = "";
+  try {
+    tty = execFileSync("ps", ["-o", "tty=", "-p", String(pid)], { encoding: "utf8", timeout: 3e3 }).trim();
+  } catch {
+    return null;
+  }
+  if (!tty || tty === "?") return null;
+  try {
+    const r = await runTmux(["list-panes", "-a", "-F", "#{pane_tty}	#{session_name}	#{window_index}	#{pane_index}"]);
+    if (!r.ok) return null;
+    for (const line of r.text.split(/\r?\n/)) {
+      const [ptty, s, w2, p] = line.split("	");
+      if (!ptty || !s || !w2 || !p) continue;
+      if (ptty.endsWith(tty)) return tmuxSupportsEqPrefix() ? `=${s}:${w2}.${p}` : `${s}:${w2}.${p}`;
+    }
+  } catch {
+  }
+  return null;
+}
+async function tmuxSendKeys(target, ...keys) {
+  const r = await runTmux(["send-keys", "-t", target, ...keys]);
+  return r.ok ? { ok: true } : { ok: false, error: `tmux send-keys \u5931\u8D25: ${r.error}` };
+}
 function runAppleScript(script) {
   return new Promise((resolve9) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
@@ -53142,6 +53429,12 @@ async function injectTextMac(pid, rawText) {
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
   if (!text) return { ok: false, error: "\u7A7A\u6D88\u606F" };
+  const target = await resolveTmuxTarget(pid);
+  if (target) {
+    const w2 = await tmuxSendKeys(target, "-l", "--", text);
+    if (!w2.ok) return w2;
+    return tmuxSendKeys(target, "Enter");
+  }
   return runAppleScript(buildDoScript(pid, text));
 }
 function injectSupported() {
@@ -53173,6 +53466,8 @@ async function injectEsc(pid) {
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    const target = await resolveTmuxTarget(pid);
+    if (target) return tmuxSendKeys(target, "Escape");
     return runAppleScript(buildDoScriptExpr(pid, "ASCII character 27"));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
@@ -53183,6 +53478,8 @@ async function injectEnter(pid) {
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    const target = await resolveTmuxTarget(pid);
+    if (target) return tmuxSendKeys(target, "Enter");
     return runAppleScript(buildDoScriptExpr(pid, '""'));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
@@ -53236,6 +53533,12 @@ async function captureConsoleBottom(pid, rows = 20) {
   if (!injectSupported()) return null;
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return null;
+    const target = await resolveTmuxTarget(pid);
+    if (target) {
+      const tm2 = await runTmux(["capture-pane", "-t", target, "-p"]);
+      if (!tm2.ok || !tm2.text.trim()) return null;
+      return tm2.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
+    }
     const r2 = await runAppleScriptOut(buildCaptureScript(pid));
     if (!r2.ok || !r2.text.trim()) return null;
     return r2.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
@@ -53354,6 +53657,331 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
+// src/engine-rollouts.ts
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { closeSync as closeSync3, openSync as openSync3, readdirSync as readdirSync9, readSync as readSync2, statSync as statSync8 } from "node:fs";
+import { basename as basename6, join as join30 } from "node:path";
+var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
+var ENGINE_SCAN_SPECS = [
+  { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
+  { engine: "trae", label: "Trae", envRoot: "CCR_TRAE_SESSIONS_ROOT", homeDirName: ".trae", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("trae") },
+  { engine: "qwen-code", label: "Qwen Code", envRoot: "CCR_QWEN_SESSIONS_ROOT", homeDirName: ".qwen", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("qwen") },
+  { engine: "codebuddy", label: "CodeBuddy", envRoot: "CCR_CODEBUDDY_SESSIONS_ROOT", homeDirName: ".codebuddy", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("codebuddy") },
+  { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") }
+];
+function engineRoot(spec, home) {
+  return process.env[spec.envRoot] || join30(home, spec.homeDirName, "sessions");
+}
+var clip = (text, cap) => {
+  const compact2 = text.replace(/\s+/g, " ").trim();
+  return [...compact2].length > cap ? [...compact2].slice(0, cap).join("") + "\u2026" : compact2;
+};
+function isBootstrapPrompt(prompt) {
+  const normalized = prompt.trimStart();
+  return normalized.startsWith("<environment_context>") || normalized.startsWith("<skills_instructions>");
+}
+var finite = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
+function eventTime(record) {
+  const numeric = finite(record.timestamp);
+  if (numeric !== void 0) return numeric > 1e10 ? numeric : numeric * 1e3;
+  if (typeof record.timestamp === "string") {
+    const parsed = Date.parse(record.timestamp);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return void 0;
+}
+function objectOf(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function textOf2(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(textOf2).filter(Boolean).join("\n");
+  const object = objectOf(value);
+  if (typeof object.text === "string") return object.text;
+  if (typeof object.message === "string") return object.message;
+  if (typeof object.content === "string") return object.content;
+  if (object.content !== void 0) return textOf2(object.content);
+  return "";
+}
+function sessionIdFromFile(filePath) {
+  const stem = basename6(filePath, ".jsonl").replace(/^rollout-/, "");
+  const id2 = /([0-9a-z]{8,}(?:-[0-9a-z]+){2,})$/i.exec(stem)?.[1];
+  return id2 || stem || basename6(filePath);
+}
+function initialProfile(spec, filePath) {
+  return {
+    filePath,
+    sessionId: sessionIdFromFile(filePath),
+    cwd: "",
+    prompt: "",
+    title: "\u672A\u547D\u540D\u4F1A\u8BDD",
+    startedAt: 0,
+    updatedAt: 0,
+    status: "WORKING",
+    terminal: false,
+    activityKey: ""
+  };
+}
+function eventBody(record) {
+  const payload = objectOf(record.payload);
+  return Object.keys(payload).length ? payload : objectOf(record);
+}
+function activityFor(type, body, label) {
+  const normalizedType = type.replace(/^item_/, "item.").replace(/^turn_/, "turn.");
+  const item = objectOf(body.item);
+  const itemType = typeof item.type === "string" ? item.type : "";
+  const errorValue = body.error ?? item.error;
+  const error = clip(typeof errorValue === "string" ? errorValue : textOf2(errorValue), 220);
+  if (normalizedType === "turn.failed" || type === "task_failed" || type === "error") {
+    return { text: error || `${label} \u56DE\u5408\u5931\u8D25`, kind: "system", status: "ERROR", terminal: true, error: error || `${label} \u56DE\u5408\u5931\u8D25` };
+  }
+  if (normalizedType === "turn.completed" || type === "task_complete" || type === "task_completed") {
+    return { text: `${label} \u56DE\u5408\u5B8C\u6210`, kind: "system", status: "DONE", terminal: true };
+  }
+  if (normalizedType === "turn.started" || type === "task_started") {
+    return { text: `${label} \u56DE\u5408\u8FD0\u884C\u4E2D`, kind: "system", status: "WORKING", terminal: false };
+  }
+  if (normalizedType === "item.started") {
+    if (itemType === "command_execution") {
+      const command = clip(textOf2(item.command), 180);
+      return { text: command ? `\u6267\u884C\u547D\u4EE4\uFF1A${command}` : "\u6267\u884C\u547D\u4EE4", kind: "tool_use", tool: "command", status: "WORKING", terminal: false };
+    }
+    return { text: itemType ? `\u5F00\u59CB\uFF1A${itemType}` : `${label} \u5DE5\u4F5C\u4E2D`, kind: "system", status: "WORKING", terminal: false };
+  }
+  if (normalizedType === "item.completed") {
+    if (itemType === "UserMessage") {
+      const prompt = clip(textOf2(item.content), 4e3);
+      return { text: prompt ? `\u7528\u6237\uFF1A${clip(prompt, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
+    }
+    if (itemType === "AgentMessage") {
+      const text = clip(textOf2(item.content ?? item.text), 220);
+      return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
+    }
+    if (itemType === "CommandExecution") {
+      const command = clip(textOf2(item.command), 120);
+      const failed = item.status === "failed" || finite(item.exit_code) !== void 0 && item.exit_code !== 0;
+      const output = clip(textOf2(item.aggregated_output), 160);
+      return {
+        text: failed ? `\u547D\u4EE4\u5931\u8D25\uFF1A${command || output || "\u672A\u77E5\u547D\u4EE4"}` : `\u547D\u4EE4\u5B8C\u6210\uFF1A${command || output || "command"}`,
+        kind: failed ? "system" : "tool_result",
+        tool: "command",
+        status: failed ? "ERROR" : "WORKING",
+        terminal: false,
+        ...failed ? { error: output || "\u547D\u4EE4\u6267\u884C\u5931\u8D25" } : {}
+      };
+    }
+    if (itemType === "FileChange") {
+      return { text: "\u6587\u4EF6\u53D8\u66F4\u5B8C\u6210", kind: "tool_result", status: "WORKING", terminal: false };
+    }
+    if (itemType) return { text: `\u5B8C\u6210\uFF1A${itemType}`, kind: "system", status: "WORKING", terminal: false };
+  }
+  if (type === "message" || type === "response_item") {
+    const role = typeof body.role === "string" ? body.role : "";
+    const text = clip(textOf2(body.content ?? body.text), 220);
+    const prompt = role === "user" ? clip(textOf2(body.content), 4e3) : "";
+    if (role === "user") return { text: text ? `\u7528\u6237\uFF1A${clip(text, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
+    if (role === "assistant") return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
+    if (body.type === "function_call") {
+      const name = clip(textOf2(body.name), 100);
+      return { text: name ? `\u8C03\u7528\uFF1A${name}` : "\u8C03\u7528\u5DE5\u5177", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
+    }
+  }
+  if (type === "function_call") {
+    const name = clip(textOf2(body.name), 100);
+    return { text: name ? `\u8C03\u7528\uFF1A${name}` : "\u8C03\u7528\u5DE5\u5177", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
+  }
+  if (type === "function_call_output") {
+    return { text: "\u5DE5\u5177\u8C03\u7528\u5B8C\u6210", kind: "tool_result", status: "WORKING", terminal: false };
+  }
+  return {};
+}
+function applyRecord(spec, profile, record) {
+  const body = eventBody(record);
+  const type = typeof body.type === "string" ? body.type : typeof record.type === "string" ? record.type : "";
+  const at = eventTime(record);
+  if (at !== void 0) {
+    profile.startedAt = profile.startedAt > 0 ? Math.min(profile.startedAt, at) : at;
+    profile.updatedAt = Math.max(profile.updatedAt, at);
+  }
+  const meta = type === "session_meta" ? body.payload && typeof body.payload === "object" ? objectOf(body.payload) : body : body;
+  const sessionId = typeof meta.session_id === "string" && meta.session_id ? meta.session_id : typeof meta.id === "string" && meta.id && type === "session_meta" ? meta.id : "";
+  if (sessionId) profile.sessionId = sessionId;
+  if (typeof body.thread_id === "string" && body.thread_id) profile.sessionId = body.thread_id;
+  if (typeof meta.cwd === "string" && meta.cwd) profile.cwd = meta.cwd;
+  if (typeof meta.model_provider === "string" && meta.model_provider) profile.provider = meta.model_provider;
+  if (typeof body.model === "string" && body.model) profile.model = body.model;
+  const item = objectOf(body.item);
+  if (typeof item.cwd === "string" && item.cwd && !profile.cwd) profile.cwd = item.cwd;
+  const activity = activityFor(type, body, spec.label);
+  if (activity.prompt && !isBootstrapPrompt(activity.prompt) && (!profile.prompt || isBootstrapPrompt(profile.prompt))) {
+    profile.prompt = activity.prompt;
+    profile.title = deriveTitle(activity.prompt);
+  }
+  if (activity.status) profile.status = activity.status;
+  if (activity.terminal !== void 0) profile.terminal = activity.terminal;
+  if (activity.error) profile.error = activity.error;
+  else if (activity.status === "WORKING" || activity.status === "DONE") profile.error = void 0;
+  if (activity.text) {
+    const ordinal = typeof record.ordinal === "string" || typeof record.ordinal === "number" ? String(record.ordinal) : "";
+    const itemId = typeof item.id === "string" ? item.id : "";
+    profile.activity = activity.text;
+    profile.activityKind = activity.kind;
+    profile.activityTool = activity.tool;
+    profile.activityKey = `${at ?? profile.updatedAt}:${ordinal}:${type}:${itemId}:${activity.text}`;
+  }
+}
+function rolloutFiles(root, pattern) {
+  const out = [];
+  const walk = (dir, depth) => {
+    if (depth > 6) return;
+    let entries;
+    try {
+      entries = readdirSync9(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const p = join30(dir, entry.name);
+      if (entry.isDirectory()) walk(p, depth + 1);
+      else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+var RolloutScanner = class {
+  constructor(spec, root) {
+    this.spec = spec;
+    this.root = root;
+  }
+  spec;
+  root;
+  cursors = /* @__PURE__ */ new Map();
+  scan(now = Date.now()) {
+    const files = rolloutFiles(this.root, this.spec.filePattern);
+    const seen = new Set(files);
+    for (const filePath of files) {
+      let size = 0;
+      let mtime = now;
+      try {
+        const stat2 = statSync8(filePath);
+        size = stat2.size;
+        mtime = stat2.mtimeMs;
+      } catch {
+        continue;
+      }
+      let cursor = this.cursors.get(filePath);
+      if (!cursor || size < cursor.offset) {
+        cursor = { offset: 0, carry: "", profile: initialProfile(this.spec, filePath) };
+        this.cursors.set(filePath, cursor);
+      }
+      let fd2;
+      try {
+        fd2 = openSync3(filePath, "r");
+        const remaining = size - cursor.offset;
+        if (remaining > 0) {
+          const buffer = Buffer.alloc(Math.min(remaining, 1024 * 1024));
+          let position = cursor.offset;
+          let carry = cursor.carry;
+          while (position < size) {
+            const read = readSync2(fd2, buffer, 0, Math.min(buffer.length, size - position), position);
+            if (read <= 0) break;
+            position += read;
+            const lines = (carry + buffer.subarray(0, read).toString("utf8")).split(/\r?\n/);
+            carry = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                applyRecord(this.spec, cursor.profile, JSON.parse(line));
+              } catch {
+              }
+            }
+          }
+          cursor.offset = position;
+          cursor.carry = carry;
+        }
+        if (cursor.profile.startedAt === 0) cursor.profile.startedAt = mtime || now;
+        if (cursor.profile.updatedAt === 0) cursor.profile.updatedAt = mtime || now;
+      } catch {
+        continue;
+      } finally {
+        if (fd2 !== void 0) try {
+          closeSync3(fd2);
+        } catch {
+        }
+      }
+    }
+    for (const filePath of this.cursors.keys()) if (!seen.has(filePath)) this.cursors.delete(filePath);
+    return [...this.cursors.values()].map((cursor) => ({ ...cursor.profile }));
+  }
+};
+function processCwd(pid) {
+  if (process.platform === "win32") return void 0;
+  try {
+    const raw = execFileSync2("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf8", timeout: 3e3 });
+    return raw.split(/\r?\n/).find((line) => line.startsWith("n"))?.slice(1) || void 0;
+  } catch {
+    return void 0;
+  }
+}
+function parseProcessStart(raw) {
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function captureCliProcesses() {
+  if (process.platform === "win32") return null;
+  try {
+    const raw = execFileSync2("ps", ["-axo", "pid=,ppid=,lstart=,command="], { encoding: "utf8", timeout: 5e3, maxBuffer: 4 * 1024 * 1024 });
+    const out = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const match = /^\s*(\d+)\s+(\d+)\s+(.{24})\s+(.+)$/.exec(line);
+      if (!match) continue;
+      const pid = Number(match[1]);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      out.push({ pid, startedAt: parseProcessStart(match[3]), command: match[4] });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+function engineProcesses(snapshot, spec) {
+  const out = [];
+  for (const entry of snapshot) {
+    if (!spec.commandPattern.test(entry.command)) continue;
+    const threadId = /(?:^|\s)([0-9a-z]{8,}(?:-[0-9a-z]+){2,})(?:\s|$)/i.exec(entry.command)?.[1];
+    out.push({ pid: entry.pid, cwd: processCwd(entry.pid), startedAt: entry.startedAt, command: entry.command, threadId });
+  }
+  return out;
+}
+function samePath(a, b) {
+  if (!a || !b) return false;
+  return a.replace(/[\\/]$/, "").toLowerCase() === b.replace(/[\\/]$/, "").toLowerCase();
+}
+var PROCESS_START_TOLERANCE_MS = 10 * 6e4;
+function matchEngineProcess(profile, processes) {
+  const byThread = processes.filter((process2) => process2.threadId === profile.sessionId);
+  const cwdCandidates = processes.filter((process2) => samePath(process2.cwd, profile.cwd));
+  const byStart = cwdCandidates.filter((process2) => {
+    if (!profile.startedAt || !process2.startedAt) return true;
+    return Math.abs(process2.startedAt - profile.startedAt) <= PROCESS_START_TOLERANCE_MS;
+  });
+  const candidates = byThread.length > 0 ? byThread : byStart.length > 0 ? byStart : profile.startedAt || cwdCandidates.length !== 1 ? [] : cwdCandidates;
+  if (!candidates.length) return void 0;
+  return [...candidates].sort((left, right) => {
+    const score = (process2) => {
+      let value = 0;
+      if (process2.threadId === profile.sessionId) value += 1e6;
+      if (samePath(process2.cwd, profile.cwd)) value += 1e5;
+      if (process2.startedAt && profile.startedAt) {
+        value += Math.max(0, 5e4 - Math.abs(profile.startedAt - process2.startedAt) / 10);
+      }
+      return value;
+    };
+    return score(right) - score(left);
+  })[0];
+}
+
 // src/bridge.ts
 function pBody(p) {
   return p.body ?? p.text;
@@ -53361,9 +53989,9 @@ function pBody(p) {
 function transcriptFirstTs(p) {
   let fd2;
   try {
-    fd2 = openSync3(p, "r");
+    fd2 = openSync4(p, "r");
     const buf = Buffer.alloc(4096);
-    const n = readSync2(fd2, buf, 0, 4096, 0);
+    const n = readSync3(fd2, buf, 0, 4096, 0);
     const line = buf.toString("utf-8", 0, n).split("\n")[0];
     const ts2 = line ? JSON.parse(line).timestamp : void 0;
     const t = ts2 ? Date.parse(ts2) : NaN;
@@ -53372,7 +54000,7 @@ function transcriptFirstTs(p) {
     return 0;
   } finally {
     if (fd2 !== void 0) try {
-      closeSync3(fd2);
+      closeSync4(fd2);
     } catch {
     }
   }
@@ -53416,10 +54044,14 @@ var Bridge = class _Bridge {
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 6e4;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 6e4;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 6e4;
+    for (const spec of ENGINE_SCAN_SPECS) {
+      this.engineScanners.push({ spec, scanner: new RolloutScanner(spec, engineRoot(spec, homedir14())) });
+    }
     this.hydratePidsFromCache();
     this.reconcilePidsFromSessions();
     this.healExternal();
     this.adoptOrphans();
+    this.scanExternalEngines();
     this.healTimer = setInterval(() => {
       this.hydratePidsFromCache();
       this.reconcilePidsFromSessions();
@@ -53428,6 +54060,9 @@ var Bridge = class _Bridge {
       this.sweepIdleArchive();
     }, 6e4);
     this.healTimer.unref?.();
+    const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5e3;
+    this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
+    this.engineScanTimer.unref?.();
   }
   bus;
   mgr;
@@ -53452,6 +54087,9 @@ var Bridge = class _Bridge {
   // ext id -> 最近一次 Esc 注入成功时间（乐观置 DONE 的自我纠正窗口）
   queuePollTimer = null;
   healTimer = null;
+  engineScanTimer = null;
+  engineScanners = [];
+  engineActivityKeys = /* @__PURE__ */ new Map();
   extFileStats = /* @__PURE__ */ new Map();
   extUsage = /* @__PURE__ */ new Map();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
@@ -53494,6 +54132,75 @@ var Bridge = class _Bridge {
   get resumeVerifyMs() {
     return Number(process.env.CCR_RESUME_VERIFY_MS) > 0 ? Number(process.env.CCR_RESUME_VERIFY_MS) : 45e3;
   }
+  close() {
+    if (this.queuePollTimer) clearInterval(this.queuePollTimer);
+    if (this.healTimer) clearInterval(this.healTimer);
+    if (this.engineScanTimer) clearInterval(this.engineScanTimer);
+    this.queuePollTimer = null;
+    this.healTimer = null;
+    this.engineScanTimer = null;
+  }
+  scanExternalEngines() {
+    const snapshot = captureCliProcesses();
+    for (const { spec, scanner } of this.engineScanners) {
+      const overridden = this.opts.engineProcessProvider?.(spec.engine);
+      const processes = overridden !== void 0 ? overridden : snapshot ? engineProcesses(snapshot, spec) : null;
+      this.adoptEngineProfiles(spec, scanner.scan(), processes);
+    }
+  }
+  adoptEngineProfiles(spec, profiles, processes) {
+    const processListAvailable = processes !== null;
+    const now = Date.now();
+    const staleMs = Number(process.env.CCR_ENGINE_STALE_MS) > 0 ? Number(process.env.CCR_ENGINE_STALE_MS) : 5 * 6e4;
+    for (const profile of profiles) {
+      const id2 = `ext-${spec.engine}-${profile.sessionId}`;
+      const existing = this.mgr.getExternal(id2);
+      if (!existing && this.mgr.ownsCliSession(profile.sessionId)) continue;
+      if (this.mgr.isDeletedExt(id2)) continue;
+      const title = profile.prompt ? profile.title : void 0;
+      const state = existing ?? this.mgr.ensureExternal(
+        id2,
+        profile.cwd,
+        profile.prompt,
+        profile.sessionId,
+        profile.startedAt,
+        { engine: spec.engine, model: profile.model, provider: profile.provider }
+      );
+      if (existing) {
+        this.mgr.updateExternalProfile(id2, {
+          cwd: profile.cwd,
+          prompt: profile.prompt,
+          title,
+          model: profile.model,
+          engine: spec.engine,
+          provider: profile.provider
+        });
+      }
+      const matched = processes ? matchEngineProcess(profile, processes) ?? (state.cli_pid ? processes.find((item) => item.pid === state.cli_pid) : void 0) : state.cli_pid && pidAlive(state.cli_pid) ? { pid: state.cli_pid } : void 0;
+      const active = matched !== void 0;
+      if (matched && state.cli_pid !== matched.pid) this.mgr.setExternalCliPid(id2, matched.pid);
+      if (!matched && processListAvailable && state.cli_pid) this.mgr.clearExternalCliPid(id2);
+      const inferredDead = !active && (processListAvailable || profile.terminal || now - profile.updatedAt > staleMs);
+      const desiredStatus = inferredDead && !profile.terminal ? profile.error ? "ERROR" : "DONE" : profile.status;
+      const summary = profile.activity ?? (desiredStatus === "WORKING" ? `${spec.label} \u8FD0\u884C\u4E2D` : desiredStatus === "ERROR" ? `${spec.label} \u51FA\u9519` : `${spec.label} \u5DF2\u5B8C\u6210`);
+      if (desiredStatus === "ERROR" && profile.error) state.last_error = profile.error;
+      if (desiredStatus === "DONE" && state.status !== "DONE") {
+        this.mgr.finishExternal(id2, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
+      } else if (state.status !== desiredStatus || state.action_summary !== summary) {
+        this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0);
+        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id2);
+      }
+      const historical = !active && inferredDead;
+      if (!!state.historical !== historical) {
+        state.historical = historical;
+        this.mgr.emitExternalSync(id2);
+      }
+      if (profile.activity && profile.activityKey && this.engineActivityKeys.get(id2) !== profile.activityKey) {
+        this.engineActivityKeys.set(id2, profile.activityKey);
+        this.mgr.pushExternalLog(id2, profile.activityKind ?? "system", profile.activity, profile.activityTool, { occurred_at: profile.updatedAt });
+      }
+    }
+  }
   // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
   // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
   // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
@@ -53532,11 +54239,11 @@ var Bridge = class _Bridge {
     try {
       const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir14(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync9(root, { withFileTypes: true })) {
+      for (const dir of readdirSync10(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync9(path5.join(root, dir.name));
+          files = readdirSync10(path5.join(root, dir.name));
         } catch {
           continue;
         }
@@ -53557,7 +54264,7 @@ var Bridge = class _Bridge {
           if (this.mgr.isDeletedExt(id2)) continue;
           let mtime;
           try {
-            mtime = statSync8(p).mtimeMs;
+            mtime = statSync9(p).mtimeMs;
           } catch {
             continue;
           }
@@ -53601,11 +54308,11 @@ var Bridge = class _Bridge {
   readCwdFromTail(p) {
     let fd2;
     try {
-      fd2 = openSync3(p, "r");
-      const size = statSync8(p).size;
+      fd2 = openSync4(p, "r");
+      const size = statSync9(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
-      readSync2(fd2, buf, 0, len, size - len);
+      readSync3(fd2, buf, 0, len, size - len);
       const lines = buf.toString("utf-8").split("\n").reverse();
       for (const line of lines) {
         const i = line.indexOf("{");
@@ -53620,7 +54327,7 @@ var Bridge = class _Bridge {
     } catch {
       return "";
     } finally {
-      if (fd2 !== void 0) closeSync3(fd2);
+      if (fd2 !== void 0) closeSync4(fd2);
     }
   }
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
@@ -53630,14 +54337,14 @@ var Bridge = class _Bridge {
   transcriptHeadHas(p, needle) {
     let fd2;
     try {
-      fd2 = openSync3(p, "r");
+      fd2 = openSync4(p, "r");
       const buf = Buffer.alloc(4096);
-      const n = readSync2(fd2, buf, 0, 4096, 0);
+      const n = readSync3(fd2, buf, 0, 4096, 0);
       return buf.subarray(0, n).includes(needle);
     } catch {
       return false;
     } finally {
-      if (fd2 !== void 0) closeSync3(fd2);
+      if (fd2 !== void 0) closeSync4(fd2);
     }
   }
   isTitleGenTranscript(p) {
@@ -53669,8 +54376,8 @@ var Bridge = class _Bridge {
   scanOrphanActivity(p) {
     let fd2;
     try {
-      fd2 = openSync3(p, "r");
-      const size = statSync8(p).size;
+      fd2 = openSync4(p, "r");
+      const size = statSync9(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -53685,7 +54392,7 @@ var Bridge = class _Bridge {
         return n;
       };
       for (let pos = 0; pos < size; ) {
-        const len = readSync2(fd2, buf, 0, chunk, pos);
+        const len = readSync3(fd2, buf, 0, chunk, pos);
         if (len <= 0) break;
         pos += len;
         const isLast = pos >= size;
@@ -53699,7 +54406,7 @@ var Bridge = class _Bridge {
     } catch {
       return { adopt: false, size: 0 };
     } finally {
-      if (fd2 !== void 0) closeSync3(fd2);
+      if (fd2 !== void 0) closeSync4(fd2);
     }
   }
   // Relay 重启后内存里的 cli_pid 丢了，而空闲终端不会有新 hook 事件来恢复；
@@ -53726,7 +54433,7 @@ var Bridge = class _Bridge {
       const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir14(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync9(dir);
+        files = readdirSync10(dir);
       } catch {
         return;
       }
@@ -53900,16 +54607,16 @@ var Bridge = class _Bridge {
   //（标题多在会话前段；长会话后期任务切换的新标题在尾部），取文件序最新一条
   scanTranscriptTitles(p) {
     try {
-      const size = statSync8(p).size;
+      const size = statSync9(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
-      const fd2 = openSync3(p, "r");
+      const fd2 = openSync4(p, "r");
       try {
-        readSync2(fd2, buf, 0, buf.length, 0);
-        if (size > buf.length) readSync2(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
+        readSync3(fd2, buf, 0, buf.length, 0);
+        if (size > buf.length) readSync3(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
       } catch {
       } finally {
         try {
-          closeSync3(fd2);
+          closeSync4(fd2);
         } catch {
         }
       }
@@ -54589,7 +55296,7 @@ var Bridge = class _Bridge {
   readCcSessionName(cliSessionId) {
     try {
       const dir = path5.join(homedir14(), ".claude", "sessions");
-      for (const f of readdirSync9(dir)) {
+      for (const f of readdirSync10(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
           const d2 = JSON.parse(readFileSync24(path5.join(dir, f), "utf-8"));
@@ -54636,7 +55343,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync8(transcriptPath).size;
+      const size = statSync9(transcriptPath).size;
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -54648,11 +55355,11 @@ var Bridge = class _Bridge {
       } else {
         start = prev;
       }
-      const fd2 = openSync3(transcriptPath, "r");
+      const fd2 = openSync4(transcriptPath, "r");
       const len = size - start;
       const buf = Buffer.alloc(len);
-      readSync2(fd2, buf, 0, len, start);
-      closeSync3(fd2);
+      readSync3(fd2, buf, 0, len, start);
+      closeSync4(fd2);
       const raw = buf.toString("utf-8");
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
@@ -54662,7 +55369,8 @@ var Bridge = class _Bridge {
         this.lastGrow.set(id2, Date.now());
         this.mgr.setExternalCompacting(id2, false);
         const st0 = this.mgr.getExternal(id2);
-        if (st0 && (st0.status === "DONE" || st0.status === "ERROR")) {
+        const hookRecent = Date.now() - (this.lastHookAt.get(id2) ?? 0) < 15e3;
+        if (st0 && !hookRecent && (st0.status === "DONE" || st0.status === "ERROR")) {
           this.noHookIds.add(id2);
           if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
           this.mgr.setExternalStatus(
@@ -54997,13 +55705,13 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync8(path6).size;
-      const fd2 = openSync3(path6, "r");
+      const size = statSync9(path6).size;
+      const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
       for (let pos = 0; pos < size; ) {
-        const n = readSync2(fd2, buf, 0, CHUNK2, pos);
+        const n = readSync3(fd2, buf, 0, CHUNK2, pos);
         if (n <= 0) break;
         const text = carry + buf.toString("utf-8", 0, n);
         const lines = text.split("\n");
@@ -55042,7 +55750,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync3(fd2);
+      closeSync4(fd2);
     } catch {
       return;
     }
@@ -55057,13 +55765,13 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync8(path6).size;
-      const fd2 = openSync3(path6, "r");
+      const size = statSync9(path6).size;
+      const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
       for (let pos = 0; pos < size; ) {
-        const n = readSync2(fd2, buf, 0, CHUNK2, pos);
+        const n = readSync3(fd2, buf, 0, CHUNK2, pos);
         if (n <= 0) break;
         const text = carry + buf.toString("utf-8", 0, n);
         const lines = text.split("\n");
@@ -55078,7 +55786,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync3(fd2);
+      closeSync4(fd2);
     } catch {
       return;
     }
@@ -55577,7 +56285,7 @@ var Bridge = class _Bridge {
     if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
     let names;
     try {
-      names = readdirSync9(dir);
+      names = readdirSync10(dir);
     } catch {
       return null;
     }
@@ -55596,19 +56304,19 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync8(file);
+      st2 = statSync9(file);
     } catch {
       return null;
     }
     const start = Math.max(0, st2.size - 65536);
     let buf;
     try {
-      const fd2 = openSync3(file, "r");
+      const fd2 = openSync4(file, "r");
       try {
         buf = Buffer.alloc(st2.size - start);
-        readSync2(fd2, buf, 0, buf.length, start);
+        readSync3(fd2, buf, 0, buf.length, start);
       } finally {
-        closeSync3(fd2);
+        closeSync4(fd2);
       }
     } catch {
       return null;
@@ -55689,7 +56397,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync8(agentFile).size;
+          const sz2 = statSync9(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -56018,7 +56726,7 @@ var BUILTIN_COMMANDS = [
 function listCustomCommands(dir, source) {
   let entries;
   try {
-    entries = readdirSync10(dir, { withFileTypes: true });
+    entries = readdirSync11(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -56036,11 +56744,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join30(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join31(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync10(join30(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join30(dir, e.name, g2)), source });
+        for (const g2 of readdirSync11(join31(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join31(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -56054,12 +56762,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync21(join30(p, "web-console", "index.html"))) ?? webRootCandidates[1];
-  const consoleHtml = join30(webRoot, "web-console", "index.html");
-  const consoleHtml005 = join30(webRoot, "web-console", "index-005.html");
-  const naclJs = join30(webRoot, "web-console", "nacl.js");
-  const qrJs = join30(webRoot, "web-console", "qr.js");
-  const mobileDir = join30(webRoot, "mobile") + sep7;
+  const webRoot = webRootCandidates.find((p) => p && existsSync21(join31(p, "web-console", "index.html"))) ?? webRootCandidates[1];
+  const consoleHtml = join31(webRoot, "web-console", "index.html");
+  const consoleHtml005 = join31(webRoot, "web-console", "index-005.html");
+  const naclJs = join31(webRoot, "web-console", "nacl.js");
+  const qrJs = join31(webRoot, "web-console", "qr.js");
+  const mobileDir = join31(webRoot, "mobile") + sep7;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -56085,7 +56793,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync9(file).isFile();
+      isFile = statSync10(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -56150,7 +56858,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join30(webRoot, "web-console", url.pathname.slice(1));
+      const file = join31(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync21(file)) {
         res.writeHead(404).end("not found");
         return;
@@ -56199,7 +56907,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join30(cfg2.dataDir, "relay-name");
+      const file = join31(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
@@ -56478,8 +57186,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join30(homedir15(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join30(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join31(homedir15(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join31(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -56733,6 +57441,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     bridge,
     close: () => new Promise((resolve9) => {
       clearInterval(heartbeat);
+      bridge.close();
       unsubscribe();
       for (const client of wss.clients) client.terminate();
       wss.close(() => server.close(() => resolve9()));
@@ -56876,10 +57585,10 @@ var connectionCounter = 0;
 
 // src/cloud-identity.ts
 import { existsSync as existsSync22, readFileSync as readFileSync26, writeFileSync as writeFileSync18 } from "node:fs";
-import { join as join31 } from "node:path";
+import { join as join32 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join31(dataDir2, "cloud-keypair.json");
+  const kpPath = join32(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync22(kpPath)) {
     keypair = JSON.parse(readFileSync26(kpPath, "utf-8"));
@@ -56888,7 +57597,7 @@ function loadOrCreateIdentity(dataDir2) {
     keypair = generateKeyPair();
     writeFileSync18(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join31(dataDir2, "wan-secret");
+  const wanSecretPath = join32(dataDir2, "wan-secret");
   let wanSecret = "";
   if (existsSync22(wanSecretPath)) wanSecret = readFileSync26(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
@@ -56896,7 +57605,7 @@ function loadOrCreateIdentity(dataDir2) {
     writeFileSync18(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join31(dataDir2, "cloud-peers.json");
+  const peersPath = join32(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync22(peersPath)) {
     try {
@@ -57677,16 +58386,16 @@ function advertiseRelay(port, name) {
 
 // src/todo-tools-env.ts
 import { existsSync as existsSync23, readFileSync as readFileSync27, writeFileSync as writeFileSync19 } from "node:fs";
-import { join as join32 } from "node:path";
+import { join as join33 } from "node:path";
 import { homedir as homedir17 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join32(homedir17(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join33(homedir17(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync23(dir)) return "skip-no-dir";
-  const file = join32(dir, "settings.json");
+  const file = join33(dir, "settings.json");
   let obj;
   if (!existsSync23(file)) {
     obj = {};
@@ -57728,7 +58437,7 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join33(cfg.dataDir, "relay.lock");
+  const lockPath = join34(cfg.dataDir, "relay.lock");
   try {
     const prev = Number(readFileSync28(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
@@ -57790,7 +58499,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync28(join33(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync28(join34(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -57841,20 +58550,20 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync4(join33(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync5(join34(cfg.dataDir, "relay.log"), "a");
   const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join33(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join34(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
   try {
     if (process.platform === "win32") {
-      const out = execFileSync2("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+      const out = execFileSync3("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
         encoding: "utf-8",
         timeout: 5e3,
         windowsHide: true
@@ -57862,7 +58571,7 @@ function pidIsNode(pid) {
       return /node/i.test(out);
     }
     if (existsSync24("/proc")) return readFileSync28(`/proc/${pid}/comm`, "utf-8").includes("node");
-    return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
+    return "node" === execFileSync3("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
     }).trim().split(/[\\/]/).pop();
@@ -57871,7 +58580,7 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join33(cfg.dataDir, "relay.pid");
+  const pidFile = join34(cfg.dataDir, "relay.pid");
   try {
     const pid = Number(readFileSync28(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
@@ -57898,21 +58607,21 @@ if (cliArgs.has("--stop")) {
   }
 }
 probeSqliteDriverAtBoot();
-var persistPath = join33(cfg.dataDir, "events.ndjson");
+var persistPath = join34(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
-    for (const f of readdirSync11(dir)) {
+    for (const f of readdirSync12(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join33(dir, f);
+      const p = join34(dir, f);
       try {
-        if (Date.now() - statSync10(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
+        if (Date.now() - statSync11(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
       }
     }
   } catch {
   }
 }
-var tmpImageDir = join33(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join34(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var prior = loadEvents(persistPath);
@@ -57985,7 +58694,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync28(join33(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync28(join34(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -58008,7 +58717,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync28(join33(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync28(join34(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -58042,15 +58751,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync20(join33(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync20(join34(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync20(join33(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join33(homedir18(), ".cc-deck", "data");
+    writeFileSync20(join34(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join34(homedir18(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
     if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync24(hookHome)) {
       try {
-        writeFileSync20(join33(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync20(join34(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -58075,7 +58784,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join33(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join34(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );
