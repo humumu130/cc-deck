@@ -36,3 +36,16 @@ export function listModels(fallbackDefault: string): string[] {
   add(fallbackDefault || DEFAULT_MODEL);
   return out;
 }
+
+// [1m] 水位档重挂（2026-10-09）：客户端清单/会话存储一律裸名（上面 listModels 展示时剥
+// 后缀），但 CLI 只认模型名 [1m] 后缀升 1M 窗口——模型表外的名字（GLM-* 直传）一律按
+// 200K 假设并主动 auto-compact（根因链与死路清单见 memory claude-context-window-1m.md）。
+// glm-5 系（含 flash/turbo 变体）按 z.ai 官方规格 1M（同 context-limit.ts 显示表口径）；
+// claude-* 原生窗口 CLI 自知、GLM-4.x 及未知模型不动。已带后缀的幂等返回。
+export function withContextWindowSuffix(model: string | undefined): string | undefined {
+  if (!model) return model;
+  const m = model.trim();
+  if (!m || /\[1m\]$/i.test(m)) return m;
+  if (/^glm-5/i.test(m)) return `${m}[1m]`;
+  return m;
+}

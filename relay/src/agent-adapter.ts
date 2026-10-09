@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import { delimiter as pathDelimiter, join } from "node:path";
 import { resolveClaudeCliPath } from "./cli-path.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
+import { withContextWindowSuffix } from "./models.js";
 import type {
   FileChangeStats,
   ActivityCapabilities,
@@ -435,7 +436,9 @@ export class AgentSession {
     this.q = query({
       prompt: this.queue.iterable,
       options: {
-        model: this.model,
+        // [1m] 水位档重挂（见 models.ts withContextWindowSuffix）：存储/显示保持裸名，
+        // 仅 spawn 进 CLI 的这一刻对 1M 档模型重挂后缀，否则 CLI 按 200K 假设主动压缩
+        model: withContextWindowSuffix(this.model) ?? this.model,
         cwd: this.cwd,
         pathToClaudeCodeExecutable: cliPath,
         // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
