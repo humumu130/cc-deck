@@ -9325,7 +9325,7 @@ $("thinkBtn").onclick = () => {
 // #56 外部会话远程审批开关：toggle 发 COMMAND_EXT_MODE；乐观翻转 + SESSION_UPDATED 权威回显
 $("extModeBtn").onclick = () => {
   const sel = selSession();
-  if (!sel || !sel.s.external || sel.s.historical) return;
+  if (!sel || !sel.s.external || sel.s.historical) return; // external 必须检查，这是外部会话专用按钮
   const next = !sel.s.remote_mode;
   if (sendCommandTo(sel.ctx, "COMMAND_EXT_MODE", { session_id: selected.sid, enabled: next })) {
     sel.s.remote_mode = next;
@@ -9401,7 +9401,7 @@ function renderPermPop(cur, arm) {
 }
 $("permBtn").onclick = () => {
   const sel = selSession();
-  if (!sel || sel.s.external || sel.s.historical) return;
+  if (!sel || sel.s.historical) return;
   const pop = $("permPop");
   if (pop.classList.contains("open")) { closePermPop(); return; }
   closeModelPop(); // 防与模型弹层叠加
