@@ -19,10 +19,19 @@ DOMAIN="https://cc.humumu.online"
 
 [ -f "$FILE" ] || { echo "ERR: 本地文件不存在 $FILE"; exit 1; }
 FILE=$(cd "$(dirname "$FILE")" && pwd)/$(basename "$FILE")  # wrangler 在 cloudflare/ 下执行，路径必须绝对
+# md5 helper（2026-10-10）：Mac 无 PATH 内 md5/md5sum（check-bundle-sync P1b 同坑，
+# 本脚本漏修）——python3 系统自带，分块读避免大文件内存尖峰
+md5_of() { python3 -c '
+import hashlib, sys
+h = hashlib.md5()
+with open(sys.argv[1], "rb") as f:
+    for chunk in iter(lambda: f.read(1 << 20), b""):
+        h.update(chunk)
+print(h.hexdigest())' "$1"; }
 case "$FILE" in
   *.apk|*.zip) unzip -t "$FILE" >/dev/null || { echo "ERR: 本地 zip 已损坏，禁止上传"; exit 1; } ;;
 esac
-LOCAL_MD5=$(md5 -q "$FILE")
+LOCAL_MD5=$(md5_of "$FILE")
 LOCAL_SIZE=$(stat -f%z "$FILE")
 FN=$(basename "$FILE")
 
@@ -58,7 +67,7 @@ REMOTE_MD5=""; REMOTE_SIZE=""; VERIFY_OK=0
 for i in 1 2 3 4; do
   # 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
   if kv_api_read "$TMP"; then
-    REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
+    REMOTE_MD5=$(md5_of "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
     if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
   fi
   [ "$i" = "4" ] || { echo "    第 $i 次回读未一致（remote=$REMOTE_MD5），6s 后重读"; sleep 6; }

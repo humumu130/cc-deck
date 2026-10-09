@@ -1,0 +1,6 @@
+4f0d4b5dbefc2e3324f2455a8a9e129143c845d234b28a097ac1eee0a317d8cb  CC-Deck-0.7.0-test.5-arm64.apk
+f8cf4065455a487d351009a47bf415a3af94e8da5612441a5761c185c700ec1e  CC-Deck-0.7.0-test.5-universal.apk
+f06770df6d2925acf3e0299664168fb41f242923ddb8c60fc097ea9b8ea78251  CC Deck_0.7.0-test.5_aarch64.dmg
+aa9ef3f76d3670f4cf41c378027bdc71dc538c9005043805a87c3866c8ec842c  CC-Deck-Nova-0.7.0-test.5-x64-setup.exe
+54e789ab80c490449b90d1dd1c179d2e931716a2f3ab04a346cee2747a6ba004  CC Deck Nova_0.7.0-test.5-nova_x64-setup.exe.sig
+e16101194bf42f7e17e39691ade163ea23fd1672892b398e57881caf4e8a3e02  CC Deck_0.7.0-test.5-nova_aarch64.dmg
