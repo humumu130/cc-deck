@@ -301,6 +301,8 @@ export interface SessionUpdatedPayload {
   title?: string;              // 标题升级（外部会话首个 prompt 到达时 / 用户改名）
   title_locked?: boolean;      // 用户命名标记（true 时自动命名跳过）
   model?: string;              // 模型名变化时携带（外部会话从 transcript 提取）
+  engine?: SessionEngine;
+  provider?: string;
   turn_started_at?: number;    // 回合起点变化时携带
   usage?: TokenUsage;          // token 用量变化时携带
   todos?: TodoItem[];          // 任务清单变化时携带

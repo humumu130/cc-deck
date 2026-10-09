@@ -1275,7 +1275,7 @@ export class SessionManager {
 
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
-  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0): SessionState {
+  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0, opts?: { engine?: SessionEngine; model?: string; provider?: string }): SessionState {
     const existing = this.sessions.get(id);
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
@@ -1287,6 +1287,9 @@ export class SessionManager {
         existing.state.title_locked = true;
       }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      if (opts?.engine && !existing.state.engine) existing.state.engine = opts.engine;
+      if (opts?.model && !existing.state.model) existing.state.model = opts.model;
+      if (opts?.provider && !existing.state.engine_provider) existing.state.engine_provider = opts.provider;
       this.applyDeclaredDeliverables(id);
       return existing.state;
     }
@@ -1296,7 +1299,7 @@ export class SessionManager {
       cwd: cwd || process.cwd(),
       initial_prompt: prompt,
       title: prompt ? deriveTitle(prompt) : (cwd.split(/[\\/]/).pop() ?? "未命名会话") || "未命名会话",
-      model: "",
+      model: opts?.model ?? "",
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "接入中",
       started_at: startedAt || Date.now(),
@@ -1304,6 +1307,8 @@ export class SessionManager {
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
+      ...(opts?.engine ? { engine: opts.engine } : {}),
+      ...(opts?.provider ? { engine_provider: opts.provider } : {}),
     };
     // 手动命名回放（readTitleOverrides）：重启前的 rename 跨重启保留
     const ov = this.titleOverrides[id];
@@ -1317,11 +1322,26 @@ export class SessionManager {
       cwd: state.cwd,
       initial_prompt: prompt,
       title: state.title,
-      model: "",
+      model: state.model,
       external: true,
       started_at: state.started_at,
+      ...(state.engine ? { engine: state.engine } : {}),
+      ...(state.engine_provider ? { provider: state.engine_provider } : {}),
     });
     return state;
+  }
+
+  updateExternalProfile(id: string, profile: { cwd?: string; prompt?: string; title?: string; model?: string; engine?: SessionEngine; provider?: string }): void {
+    const s = this.sessions.get(id);
+    if (!s || !s.state.external) return;
+    let changed = false;
+    if (profile.cwd && s.state.cwd !== profile.cwd) { s.state.cwd = profile.cwd; changed = true; }
+    if (profile.prompt && !s.state.initial_prompt) { s.state.initial_prompt = profile.prompt; changed = true; }
+    if (profile.title && !s.state.title_locked && s.state.title !== profile.title) { s.state.title = profile.title; changed = true; }
+    if (profile.model && s.state.model !== profile.model) { s.state.model = profile.model; changed = true; }
+    if (profile.engine && s.state.engine !== profile.engine) { s.state.engine = profile.engine; changed = true; }
+    if (profile.provider && s.state.engine_provider !== profile.provider) { s.state.engine_provider = profile.provider; changed = true; }
+    if (changed) this.emitUpdated(s, true);
   }
 
   getExternal(id: string): SessionState | undefined {
@@ -1332,12 +1352,13 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return;
     const changed = s.state.status !== status;
+    const summaryChanged = s.state.action_summary !== summary;
     s.state.status = status;
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = undefined;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
-    if (changed || status === "WORKING") {
+    if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,
         action_summary: summary,
@@ -1883,9 +1904,18 @@ export class SessionManager {
   // Date.now() 会把「几小时前的死亡」洗成「刚刚活跃」，快照下发后全端 30 分钟
   // 不置灰（2026-09-22 用户实测：装 test.18 重启即本机源全亮、远程源正常）。
   // 正常终态上报（Stop hook/用户打断/compact 归档）不传 at，判定时刻即真实时刻
-  finishExternal(id: string, reason: string, durationMs: number, at: number = Date.now()): void {
+  finishExternal(id: string, reason: string, durationMs: number, at: number = Date.now(), summary?: string): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    if (summary !== undefined && s.state.action_summary !== summary) {
+      s.state.action_summary = summary;
+      this.bus.emit(id, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: summary,
+        stats: { ...s.state.stats },
+        updated_at: at,
+      });
+    }
     s.state.status = "DONE";
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
@@ -1910,7 +1940,7 @@ export class SessionManager {
     kind: LogEntry["kind"],
     text: string,
     tool?: string,
-    meta?: { full?: string; detail?: string; diff?: string[]; id?: string },
+    meta?: { full?: string; detail?: string; diff?: string[]; id?: string; occurred_at?: number },
   ): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -5567,6 +5597,9 @@ export class SessionManager {
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
+      ...(s.state.model ? { model: s.state.model } : {}),
+      ...(s.state.engine ? { engine: s.state.engine } : {}),
+      ...(s.state.engine_provider ? { provider: s.state.engine_provider } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
       ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),
       ...(s.state.compacting ? { compacting: true } : {}),
