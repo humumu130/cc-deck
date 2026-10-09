@@ -46,6 +46,10 @@ function groupOf(r: { ok: boolean; group?: ProjectGroup }): ProjectGroup {
 }
 
 // ---------- 0. 纪律 ----------
+// 本件语义=「旧 json 读面 ↔ sqlite 导入行」双源对表——旧读面必须走 json 档读 fixture。
+// 显式钉档（SQLITE-FLIP 后缺省=sqlite，本件 fixture 是 json 形态，缺省读空库八红；
+// 75-R 回归时发现的 SQLITE-FLIP 漏网连带面，与 test-m1-orchestration :124 同口径）
+process.env.CCR_STORAGE_READ_MODE = "json";
 const dataDir = mkdtempSync(join(tmpdir(), "cc-deck-parity-db-"));
 process.env.CCR_DATA_DIR = dataDir;
 const fx1 = mkdtempSync(join(tmpdir(), "cc-deck-parity-org1-")); // F1 现状证据
@@ -235,7 +239,7 @@ const lossC = listLoss(port, confFile);
 const reasonsP = lossP.map((l) => `${l.lineNo}:${l.reason}`).sort().join();
 assert(lossP.length === 5 && reasonsP === [`${sparseIdx + 1}:missing-field`, `${sparseIdx + 2}:missing-field`, `${sparseIdx + 3}:bad-field`, "0:dangling-ref", "0:dangling-ref"].sort().join(), `S5 projects.json 5 账对号：sparse 坏 headcount 条目/noname 缺 name/doing 词表外+两拒入组关系悬空账（组拒入无行号可指→lineNo=0，导入器现状）（实测 ${reasonsP}）`);
 assert(lossC.length === 2 && lossC.map((l) => `${l.lineNo}:${l.reason}`).sort().join() === "6:missing-attribution,7:dangling-ref", "S5 confirms.json 2 账对号：缺 payload=missing-attribution、gid 悬空=dangling-ref（裸数组元素序=lineNo）");
-assert((port.query<{ n: number }>("SELECT COUNT(*) AS n FROM member WHERE stable_identity = ?", [`${fx2}@qa@codex`])[0]?.n ?? 0) === 1, "S5 成员面：拒入组（noname）的 headcount 成员照导（冻结件 §4：headcount 是成员存在的事实）");
+assert((port.query<{ n: number }>("SELECT COUNT(*) AS n FROM member WHERE stable_identity = ?", [`${fx2}@qa@codex@s-n`])[0]?.n ?? 0) === 1, "S5 成员面：拒入组（noname）的 headcount 成员照导（identity 带 session 段 @qa@codex@s-n；冻结件 §4：headcount 是成员存在的事实）");
 assert((port.query<{ n: number }>("SELECT COUNT(*) AS n FROM group_member WHERE group_id IN ('g-noname','g-doing')")[0]?.n ?? 0) === 0, "S5 关系面：拒入组零 group_member（悬空落账不造关联）");
 assert((port.query<{ n: number }>("SELECT COUNT(*) AS n FROM group_member WHERE group_id = 'g-sparse'")[0]?.n ?? 0) === 1, "S5 关系面：合法组坏条目剔除后关系恰 1 条（s-ok）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "全库零悬空 FK");

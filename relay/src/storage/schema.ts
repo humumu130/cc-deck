@@ -43,6 +43,9 @@ export const STORAGE_INDEXES = [
 /** v2 导入台账表名清单（import_checkpoint + import_loss，M11-B2；非冻结件 15 表口径，单独列）。 */
 export const IMPORT_LEDGER_TABLES = ["import_checkpoint", "import_loss"] as const;
 
+/** v3 权限审计表名清单（permission_audit，P81-5；append-only 审计面，非冻结件 15 表口径，单独列）。 */
+export const PERMISSION_AUDIT_TABLES = ["permission_audit"] as const;
+
 // v1 基线 DDL——与冻结件 §2 逐字对齐（含引号写法 "group"）。
 const BASELINE_15_TABLES_DDL = `
 CREATE TABLE project (
@@ -175,7 +178,27 @@ CREATE TABLE import_loss (
 );
 `;
 
-/** 迁移列表：v1 一次性建全 15 表 + 6 索引；v2 导入台账（checkpoint+loss）（v3+ 逐版追加）。入口 runMigrations(port, migrations)。 */
+// v3 权限审计（P81-5）——两闸求值结果落库（成功与拒绝都落，081 §6.3「拒绝也写审计，
+// 但不得创建一个声称已 bypass 的会话状态」）。十字段=策略核 PolicyResult 八字段
+//（requested/normalized/effective/native/capability_state/engine/reason/policy_source）
+//+environment/dir_scope 两维（§6.1 审计清单）；另附 tier/actor/session_id/command_id/
+// created_at 运维列。append-only 审计语义（无 UPDATE/DELETE 路径）；写面=经 StoragePort
+// 单写者（permission-audit.ts），不新建 JSON 账（D10 口径）。
+const PERMISSION_AUDIT_DDL = `
+CREATE TABLE permission_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requested_mode TEXT, normalized_mode TEXT,
+  effective_mode TEXT NOT NULL, native_mode TEXT,
+  capability_state TEXT, engine TEXT,
+  reason TEXT NOT NULL, policy_source TEXT,
+  environment TEXT, dir_scope TEXT,
+  tier TEXT, actor TEXT, session_id TEXT, command_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_permission_audit_created ON permission_audit(created_at);
+`;
+
+/** 迁移列表：v1 一次性建全 15 表 + 6 索引；v2 导入台账（checkpoint+loss）；v3 权限审计（v4+ 逐版追加）。入口 runMigrations(port, migrations)。 */
 export const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -186,5 +209,10 @@ export const migrations: readonly Migration[] = [
     version: 2,
     name: "import-ledger",
     up: (p) => p.exec(IMPORT_LEDGER_DDL),
+  },
+  {
+    version: 3,
+    name: "permission-audit",
+    up: (p) => p.exec(PERMISSION_AUDIT_DDL),
   },
 ];

@@ -390,7 +390,13 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     TrayIconBuilder::with_id("cc-deck-tray")
         .icon(icon)
         .icon_as_template(cfg!(target_os = "macos"))
-        .tooltip("CC Deck")
+        // W15 双装：tooltip 随构建变体（CC Deck / CC Deck Nova）——同图标双托盘可分辨
+        .tooltip(
+            app.config()
+                .product_name
+                .clone()
+                .unwrap_or_else(|| "CC Deck".into()),
+        )
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -1188,6 +1194,11 @@ fn main() {
             }
             // #334 启动自动启用：本地无 relay 在服务就静默拉起内嵌 relay（已有则让位），
             // 等端口就绪再建窗口，保证页面首次探测（/local-info）即命中——用户全程无感
+            // W15 让位分支补 WANT：启动时端口已有 relay（0.6.3 旧版壳/插件托管——nova 与
+            // 旧版双装并排的常态）只直接连不另起；但旧版退出会带走 relay，WANT 不置真
+            // 则监督线程判「别添乱」永不接管，壳当场掉线直到手动重启。置真后让位逻辑
+            // 不变（端口在服务=need_spawn false 零动作），端口空出才补起内嵌实例
+            //（与 #76 relay_service 停用回退同语义）
             if !port_listening(relay_port()) {
                 match spawn_embedded_relay(app.handle()) {
                     // #17 首启预算 4s→9s：全新安装机器上 Defender 冷扫描 2MB relay.mjs
@@ -1209,6 +1220,9 @@ fn main() {
                         *EMBEDDED_RELAY_ERR.lock().unwrap() = Some(e);
                     }
                 }
+            } else {
+                RELAY_WANTED.store(true, Ordering::SeqCst);
+                println!("[embedded-relay] port {} already serving at boot - takeover armed", relay_port());
             }
             // #66 子进程监督常驻（WANT 门控：从未启用/用户手动停时静默空转）
             supervise_embedded_relay(app.handle().clone());
@@ -1228,8 +1242,12 @@ fn main() {
             // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
             //（窗口样式仍带 WS_CAPTION），此处显式去框兜底；标题栏职责移交网页自绘。
             // #74 mac 例外：走 tauri.macos.conf 的 Overlay（系统红黄绿 + 内容全幅），
-            // 这里再 set false 会把圆点一起扒掉——mac 跳过
-            if !cfg!(target_os = "macos") {
+            // 这里再 set false 会把圆点一起扒掉——mac 跳过。
+            // W15 Windows 例外（用户拍板「系统标准标题栏，最稳」）：tauri.windows.conf.json
+            // 覆盖 decorations=true，此处不再去框——无框窗在 Windows 的拖拽/缩放边/贴边
+            // 快照各有一堆边角（0.7.0-test.3 装机实测拖不动+顶栏残留），系统标题栏一并
+            // 根治；网页侧 windowbar 退化为工具条（win 按钮与 mac 圆点都不再显示）
+            if cfg!(not(any(target_os = "macos", target_os = "windows"))) {
                 let _ = win.set_decorations(false);
             }
             // #74 第七轮：红黄绿圆点离窗口角（用户两轮反馈「太靠左上」）——系统默认

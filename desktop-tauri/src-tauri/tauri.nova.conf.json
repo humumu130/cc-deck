@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CC Deck Nova",
+  "identifier": "online.humumu.ccdeck.nova",
+  "mainBinaryName": "cc-deck-nova",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "url": "index-005.html",
+        "title": "CC Deck Nova",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "create": false,
+        "decorations": true,
+        "theme": "Dark",
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://cc.humumu.online/download/tauri-latest-nova.json"
+      ]
+    }
+  }
+}

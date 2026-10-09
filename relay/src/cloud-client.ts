@@ -10,6 +10,8 @@ import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
 import { listGroups, listPendingConfirms } from "./projects.js";
 import { listModels } from "./models.js";
+import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
+import { engineCatalogSummary } from "./engine-catalog.js";
 import { SNAPSHOT_SCHEMA_VERSION, type Command, type CommandAckPayload, type Envelope, type PeerMeta } from "./types.js";
 
 interface PhoneState {
@@ -435,6 +437,11 @@ export class CloudClient {
         // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
         // 云桥手机设置页同样要读 source 判锁定态）
         settings: this.mgr.employeeHomeState(),
+        // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
+        // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
+        // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，
+        // #117 教训）；engine_catalog 属 #75 线不受开关影响
+        source_capabilities: { projection_v2: true, ...(permissionPolicyEnabled() ? { permission: permissionCapabilitiesSummary() } : {}), engine_catalog: engineCatalogSummary(this.mgr.cfg.model) },
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),

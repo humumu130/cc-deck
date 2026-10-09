@@ -14,11 +14,17 @@ import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import {
   adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
-  listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
+  listPendingConfirms, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
-  ensureProjectClaudeMd,
+  ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
+} from "./projects.js";
+import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionPolicyEnabled } from "./permission-policy.js";
+import { catalogReadyEngines } from "./engine-catalog.js";
+import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
+import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
+  type ProjectGroup, type ProjectBoard,
 } from "./projects.js";
 // #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
 import { rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
@@ -30,6 +36,7 @@ import {
 } from "./leader-duty.js";
 // M12-7 验收回写读面（acceptance.ts 零依赖本文件，无环）：收单判定+单读+待填汇总+目录锚
 import { acceptanceClosure, acceptanceDir, listAcceptances, loadAcceptance } from "./acceptance.js";
+import { readPluginConfig } from "./plugin-config.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
@@ -86,6 +93,8 @@ import type {
   NotificationKind,
   NotificationGroup,
   NotificationSeverity,
+  BoardDelta,
+  EntityDelta,
 } from "./types.js";
 // #018-R1c 决策通知账（B3a 纯函数层，只消费不改）：stableKey 防重 + 生命周期迁移
 import { stableKey, transitionNotification } from "./decision-notify.js";
@@ -586,11 +595,13 @@ function watchdogDisabled(): boolean {
 }
 
 // ===== M12-6 值守喂活参数（019 §6.1 环境门；env 逐次求值同 watchdogDisabled 范式） =====
-// 有效式接线半边只认环境门两级：CCR_NO_LEADER（测试/沙盒铁律总闸）+ CCR_PM_DUTY
-// （值守显式开）。缺省关=零注入零审计零开销（既有测试/生产行为零波及）；全局总闸
-// plugin_config.duty 与组级 duty_policy.enabled 属 #71 产品面（019 §6.5），本单不接。
-// 备案差异：019 §6.1「关闭时也记录 disabled」落 #71 coordinator 面——环境门关=值守
-// 组件不存在，每回合写 disabled 行是垃圾账，接线半边直接短路零写入。
+// 有效式（019 §6.1 四级）本件落全：环境门 CCR_NO_LEADER（测试/沙盒铁律总闸）+
+// CCR_PM_DUTY（值守显式开）在此判定；全局总闸 plugin_config.duty 与组级
+// duty_policy.enabled 属 #71 产品面（P71 落地）——总闸在 feedPM 产品门（关=disabled
+// 审计不注入），组级在 dutySnapshot（关组不进候选快照）。两级同开才生效（§6.5 拍板）。
+// 环境门缺省关=零注入零审计零开销（既有测试/生产行为零波及）；备案差异维持：环境门
+// 关=值守组件不存在，不写 disabled 行（垃圾账）；产品门关才写 disabled（§6.1「值守
+// 审计仍记录 disabled」）。
 function dutyEnabled(): boolean {
   return process.env.CCR_NO_LEADER !== "1" && process.env.CCR_PM_DUTY === "1";
 }
@@ -1932,6 +1943,63 @@ export class SessionManager {
     s.state.permission_mode = mode as ManagedPermissionMode;
   }
 
+  // P81-6 旧值规范化审计（resume/revive 读点专用）：legacy_state_normalized 行——
+  // session_id=被规范化会话、command_id=null（非命令触发，状态迁移）、policy_source=null
+  // （非策略裁决是状态迁移）；native_mode 恒 null（未重新求值不声称 native——§6.3 保守，
+  // 降档后的真实 native 由下次 spawn 实参面自证）。
+  private auditLegacyPermMode(s: ManagedSession, raw: string, mode: ManagedPermissionMode): void {
+    appendPermissionAudit(auditStore(this.cfg.dataDir), {
+      requested_mode: raw,
+      normalized_mode: mode === "acceptEdits" ? "edit-auto" : mode === "plan" ? "plan" : "ask",
+      effective_mode: mode,
+      native_mode: null,
+      capability_state: engineCapabilityState(s.state.engine ?? "claude"),
+      engine: s.state.engine ?? "claude",
+      reason: "legacy_state_normalized",
+      policy_source: null,
+      environment: resolveEnvScope(this.cfg.port),
+      dir_scope: resolveDirScope(s.state.cwd),
+      tier: null,
+      actor: null,
+      session_id: s.state.session_id,
+      command_id: null,
+      created_at: Date.now(),
+    });
+  }
+
+  // P81-6 resume/revive 读 state 权限档统一入口（§5.3.2 旧值映射+§6.3「不得创建声称
+  // 已 bypass 的会话状态」）：三读点（resumeAgent/fresh 回退/reviveSaved）经此收敛——
+  // ①external 卡豁免（CLI 自报 auto/manual/bypass 是镜像事实，bridge 域，P81-6 只管托管卡）；
+  // ②claude（confirmed 族）bypass 保留——native 真实生效过=「当时真实生效档」（§5.3.2）；
+  // ③JSONL/未知引擎 bypass 降 acceptEdits+审计——state 声称从未真实生效（适配器
+  //   setPermissionMode no-op+P81-5 前直传伪装），降档把声称与真实对齐；
+  // ④未知值 fail-closed 回 default+审计（不升权铁断言：词表外绝不映射 bypass）；
+  // ⑤缺字段回 default（与既有 `?? "default"` 逐字节一致——零变零审计）。
+  // 规范化即回写收敛：一次降档后续读点恒等，审计只落一次（emitUpdated 随调用方落新值帧）。
+  private resumePermMode(s: ManagedSession): ManagedPermissionMode {
+    const raw = s.state.permission_mode;
+    if (raw === undefined || raw === null) return "default";
+    if (s.state.external) return raw;
+    // P81-9 kill-switch off（§8.1 显式存量 permission_mode 原样保留/resume 继续用该值）：
+    // 旧卡续跑原值直读——不降档、不审计、不回写（§6.3「不得创建声称已 bypass 的会话
+    // 状态」仅在新 policy 生效期有效，回退契约优先；缺字段 `?? "default"` 是 P81 前
+    // 既有惯例，上方两行本就是它，不属回退面）
+    if (!permissionPolicyEnabled()) return raw;
+    const n = normalizeLegacyPermissionMode(raw);
+    if (n.kind === "bypass_demoted") {
+      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    if (n.kind === "unknown_reset") {
+      s.state.permission_mode = n.mode;
+      this.auditLegacyPermMode(s, raw, n.mode);
+      return n.mode;
+    }
+    return n.mode; // identity 恒等 / missing_default（空串——缺字段的字符串形态）
+  }
+
   // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
   // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
   // M1 审查轮：返回 false = 拒删（组织 Leader 卡——锚 org.json 仍指向它，§3.5
@@ -1943,7 +2011,7 @@ export class SessionManager {
     if (this.isLeaderSession(id)) return false;
     // #25-P2 删卡清挂单：FIFO 残条此前进程内常驻（重启才清）。先收口再删（对齐
     // 退休/挂起联动口径）；bootTimer 开火路径已先行收口，此处幂等 no-op 不双记
-    this.closeOpenDispatches(id, "failed", "会话删除，回合中断", true, false, undefined, "todo");
+    this.closeOpenDispatches(id, "failed", "会话删除，回合中断", true, false, undefined, "backlog");
     this.sessions.delete(id);
     this.lastStoreTodos.delete(id);
     this.allowRules.dropSession(id); // #212 会话删除清 session 级记住规则
@@ -2068,16 +2136,115 @@ export class SessionManager {
           const pm = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : undefined;
           // #208 autoMkdir：客户端创建表单「目录不存在时自动创建」开关（默认关＝旧回落行为）
           const requestedEngine = (cmd.payload as { engine?: unknown }).engine;
+          // P81-5 真实判定接线（§6.1「服务端识别运行环境和工作目录」）：判不出显式回
+          // "unknown"（P81-3/4 头注钉死纪律——判定缺位走 fail-closed，绝不缺席两维）
+          const dirScope = resolveDirScope(cmd.payload.cwd);
+          const envScope = resolveEnvScope(this.cfg.port);
           if (requestedEngine !== undefined && !isSessionEngine(requestedEngine)) {
+            // 未知引擎拒也落审计（§6.3「拒绝也写审计」；B8 修正面）。P81-9 off：恢复
+            // P81 前口径——拒保留（isSessionEngine 校验非 P81 线），审计不落（新面不写）
+            if (permissionPolicyEnabled()) {
+              appendPermissionAudit(auditStore(this.cfg.dataDir), {
+                requested_mode: pm ?? null, normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+                capability_state: engineCapabilityState(String(requestedEngine)), engine: String(requestedEngine),
+                reason: "unknown_engine", policy_source: "explicit",
+                environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id: null, command_id: cmd.command_id, created_at: Date.now(),
+              });
+            }
             return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(requestedEngine)}` };
           }
           const engine = requestedEngine as SessionEngine | undefined;
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, {
-            ...(engine ? { engine } : {}),
+          // #75 开卡选择上下文（PM-75 提案 §3/§7.2）：可选 selection_source（选择来源
+          // 词表）+gid/role（组上下文）。求值序与派单口一致（显式输入优先既有语义零
+          // 改动）：payload.engine 显式值 > 组 role_defaults[role].engine 预置 > relay
+          // 默认（claude）。预置引擎不在 catalog ready 态 ⇒ 回退默认+degraded 显式标记
+          //（提案 §6.1「不静默换引擎」红线）；显式手动选择不经降级（P81 闸+preflight
+          // 拒绝面既有语义，未选/选错都会被拒而非回落）。
+          const selPayload = cmd.payload as unknown as { selection_source?: unknown; gid?: unknown; role?: unknown };
+          const selSource = selPayload.selection_source;
+          if (selSource !== undefined && selSource !== "role_default" && selSource !== "manual" && selSource !== "relay_default") {
+            return { command_id: cmd.command_id, ok: false, error: `无效 selection_source: ${String(selSource)}（有效值：role_default/manual/relay_default）` };
+          }
+          const selGid = typeof selPayload.gid === "string" ? selPayload.gid.trim() : "";
+          const selRole = typeof selPayload.role === "string" ? selPayload.role.trim() : "";
+          let degraded = false;
+          let degradedReason = "";
+          let engineResolved = engine;
+          if (!engineResolved && selGid && selRole) {
+            const preset = findGroup(selGid)?.role_defaults?.[selRole]?.engine;
+            if (preset) {
+              if (catalogReadyEngines().has(preset)) {
+                engineResolved = preset; // 预置引擎可用：role_default 缺省生效
+              } else {
+                degraded = true; // 预置不可用（未装/unsupported）：回退 claude+显式降级
+                degradedReason = `角色预置引擎 ${preset} 不可用（catalog 非 ready），已回退默认引擎`;
+              }
+            }
+          }
+          // P81-9 kill-switch off（§8.2.4 回退契约）：完整回 P81 前行为——pm 走旧直通
+          //（:2041 本就是旧形态），引擎/角色/ceiling/环境四闸跳过、forbidden 面缺席、
+          // 不落新 P81 审计（「回退不删除任何事实源」=既有审计照旧，新面不写）；ACK 回
+          // P81 前三键形态（无 permission 键——端上 P81-8 降级面见 undefined 自动隐藏）。
+          // #75 selection 面（引擎预置/degraded 标记）与未知引擎校验保留（非 P81 线，
+          // 75-R 交付已验收；校验拒不落审计=恢复 P81 前口径）。
+          if (!permissionPolicyEnabled()) {
+            const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, {
+              ...(engineResolved ? { engine: engineResolved } : {}),
+              ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
+              ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
+              ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
+            });
+            return {
+              command_id: cmd.command_id,
+              ok: true,
+              session_id,
+              ...(engineResolved ? { engine: engineResolved } : {}),
+              ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
+            };
+          }
+          // P81-2 开卡求值闸（§6.1 统一拒绝面）：用户自建卡映射 team_pm×随手办（§5.2
+          // 上限 full-auto）。P81-5：两维真实判定接入+审计落库（成功与拒绝都落）+
+          // spawn 传值收口（effective→MANAGED 实参——JSONL 降级后 CLI 收 acceptEdits
+          // 而非伪装 bypass；claude 沙盒 bypass 恒等=多数路径零变）。
+          const engineForPolicy = engineResolved ?? "claude";
+          const perm = evaluatePermission({
+            requested_mode: pm ?? null,
+            engine: engineForPolicy,
+            role: "team_pm",
+            tier: "随手办",
+            capability_state: engineCapabilityState(engineForPolicy),
+            policy_source: "explicit",
+            dir_scope: dirScope,
+            env: envScope,
+          });
+          // 审计落库（§6.3 拒绝也写审计；session_id 拒=null 成功=新会话）
+          const auditBase = {
+            requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode,
+            native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine,
+            reason: perm.reason, policy_source: perm.policy_source,
+            environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by,
+            session_id: null as string | null, command_id: cmd.command_id, created_at: Date.now(),
+          };
+          if (perm.effective_mode === "forbidden") {
+            appendPermissionAudit(auditStore(this.cfg.dataDir), auditBase);
+            return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
+          }
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
+            ...(engineResolved ? { engine: engineResolved } : {}),
             ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
             ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
+            ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
           });
-          return { command_id: cmd.command_id, ok: true, session_id };
+          appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
+          return {
+            command_id: cmd.command_id,
+            ok: true,
+            session_id,
+            // #75 实际引擎回显+降级显式标记（端上据此显示降级徽标，不静默——提案 §6.2）
+            ...(engineResolved ? { engine: engineResolved } : {}),
+            ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
+            permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason },
+          };
         }
         case "COMMAND_MESSAGE": {
           const s = this.require(cmd.payload.session_id);
@@ -2704,7 +2871,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine; model?: string; provider?: string; role?: string }): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine; model?: string; provider?: string; role?: string; /** #75 预置降级标记（COMMAND_CREATE gid/role 面）——随 SESSION_CREATED 下发端上显示 */ degraded?: boolean; degraded_reason?: string }): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
     // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
@@ -2791,6 +2958,9 @@ export class SessionManager {
       ...(managed.state.employee_home ? { employee_home: managed.state.employee_home } : {}),
       // #27 引擎随首帧下发（端上徽标 + 重启回放还原分叉依据）
       ...(managed.state.engine ? { engine: managed.state.engine } : {}),
+      // #75 预置降级显式标记（提案 §6.2「标记已降级不隐藏差异」；仅 COMMAND_CREATE
+      // gid/role 预置回退场景携带，其余创建路径恒不带）
+      ...(opts?.degraded ? { degraded: true, degraded_reason: opts.degraded_reason ?? "" } : {}),
     });
     // 目录回落说明进时间线：手机端能看到会话为何落在用户主目录，relay 日志同步留痕
     if (fallbackNote) {
@@ -3172,7 +3342,7 @@ export class SessionManager {
             // 中断≠交付，换家≠干砸
             !(ok && reason === "interrupted") && !homeLost,
             undefined,
-            delivered ? undefined : "todo");
+            delivered ? undefined : "backlog");
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -3196,9 +3366,16 @@ export class SessionManager {
           this.syncWaitingNotification(managed);
           // M12-6 值守：Leader 回合终态=统一值守检查点（019 §3.2 回合结束拦截——
           // 完成收口/更新终态/发帧后异步位接线，回合正常结束=在岗证据重算行动位）。
-          // worker 回合终态不触发（备案：增量判定需前后快照 diff 属 #71 产品面；failed
-          // 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，双挂会重复轰炸）
-          if (dutyEnabled() && this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+          // P71 扩 worker done 边（019 §3.1 首行「worker SESSION_DONE→新 receipt 可
+          // 验收或依赖变 ready 时喂活」）：worker 交付收口→回单入候选/相邻依赖卡解锁，
+          // 立即喂活值守——不留「worker 干完、Leader 休眠、回单无人验收」的空转窗
+          // （杜绝有活全员闲主链；依赖解锁由收口搬卡后同一次重算覆盖）。failed 边不喂
+          // （备案维持：failed 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，
+          // 双挂会重复轰炸）；WORKING Leader 由 feedPM 内合并门兜住（不追加回合）。
+          if (dutyEnabled()) {
+            if (this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
+            else if (ok) this.feedPM("worker_done");
+          }
         },
         onSessionEnd: (reason) => {
           if (!mine()) return;
@@ -3213,7 +3390,7 @@ export class SessionManager {
           // 未开工/被打断），不写熟手 count（含用户停止触发的 pump finally 路径）。
           // M1/M2 审查轮：板去向也按中断口径退 todo——活没交付，台账 done 只写实
           //「流关了」，条目退回待认领（否则结项核对清单看不见未完，绕过知情放行卡）
-          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "todo");
+          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "backlog");
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             managed.state.status = "DONE";
@@ -3330,7 +3507,7 @@ export class SessionManager {
         firstMessage,
         {
           resume: sdkId,
-          permissionMode: s.state.permission_mode ?? "default",
+          permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口
           images,
           configHome: this.employeeHome(s.state),
           // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
@@ -3399,7 +3576,7 @@ export class SessionManager {
             const q = this.openDispatches.get(s.state.session_id);
             if (!q || q.length <= 1) break;
             q.unshift(q.pop()!);
-            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "todo");
+            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
           }
         }
         const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
@@ -3415,7 +3592,7 @@ export class SessionManager {
           this.agentCallbacks(s),
           replayText,
           {
-            permissionMode: s.state.permission_mode ?? "default",
+            permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口（fresh 回退同收敛）
             images: replayImages.length ? replayImages : undefined,
             configHome: this.employeeHome(s.state),
             // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
@@ -3568,7 +3745,7 @@ export class SessionManager {
     try {
       agent = this.newAgent(s.state.cwd, s.state.model, cb, undefined, {
         resume: sdkId,
-        permissionMode: s.state.permission_mode ?? "default",
+        permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口（parked revive）
         configHome: this.employeeHome(s.state),
         // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
         ...(s.state.engine ? { engine: s.state.engine } : {}),
@@ -3780,7 +3957,7 @@ export class SessionManager {
       // unacked 随卡弃——首建窗口消息接受可见丢失（CLI 从未收到，console 留条数），
       // 不做跨会话 stash 重放（窗口=45s×挂死×恰有人发言，极窄）
       const droppedMsgs = cur.unacked.length;
-      this.closeOpenDispatches(id, "failed", `首建上岗超时（${bootWaitSec}s 无 init），回合中断`, true, false, undefined, "todo");
+      this.closeOpenDispatches(id, "failed", `首建上岗超时（${bootWaitSec}s 无 init），回合中断`, true, false, undefined, "backlog");
       if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {});
       void bootAgent.stop().catch(() => {});
       this.leaderId = null; // 先卸常驻身份——deleteSession 拒删 Leader 卡
@@ -3946,7 +4123,7 @@ export class SessionManager {
     return reason;
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "todo"): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog"): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     // onlyGid（组挂起/结项联动收口用）：只收**该组**的派单——同一熟手可跨多组在跑，
@@ -3978,7 +4155,7 @@ export class SessionManager {
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       this.notifyDispatchClosed(e, status, receipt, key);
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
+        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
         // 落，本单接 closeOpenDispatches done 边）：worker 派单收口 done 时自动回流
         // 一条结构化账（卡文本摘要+收口态+dispatch 锚），**不生成内容性经验**（不总
@@ -4096,7 +4273,7 @@ export class SessionManager {
     const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
     for (const e of hung) {
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
-      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
         "done", "relay 重启，回合中断", e.session_id,
@@ -4200,7 +4377,7 @@ export class SessionManager {
   // 直接写 notification ledger」），非 EventBus。
   private appendDutyRound(r: {
     feed_id: string; feed_generation: string; trigger: string[];
-    result: "continue" | "sleep" | "pm_unwakeable" | "failed";
+    result: "continue" | "sleep" | "disabled" | "pm_unwakeable" | "failed";
     reason?: string;
     observed?: { actionable_count: number; top_items: { kind: string; id: string; age_ms?: number }[] };
     blocked?: DutyBlockedItem[];
@@ -4256,14 +4433,18 @@ export class SessionManager {
     const openIds = new Set<string>();
     for (const q of this.openDispatches.values()) for (const x of q) openIds.add(x.id);
     for (const g of listGroupsByStatus().active) {
+      // P71 组级开关（019 §6.1 层级语义）：duty_policy.enabled=false=该组不进值守
+      // 快照（todo/stale/blocked 全不产生候选），普通 worker/事实源继续运行不受扰；
+      // 缺省（键缺席）=开——「已有显式 false 的组不被迁移覆盖」（§6.3）
+      if (g.duty_policy?.enabled === false) continue;
       const board = loadBoard(g.id);
       const ready = new Map(computeReadySet(board).map((x) => [x.id, x.check.ready] as const));
       for (const e of board.entries) {
-        if (e.status === "todo") {
+        if (e.status === "backlog") {
           if (e.gate) blocked.push({ id: e.id, reason: "external" }); // gate 未过=等人放行
           else if (ready.get(e.id) === true) todos.push({ todo_id: e.id, content: truncate(e.text, 80) });
           else blocked.push({ id: e.id, reason: "external" }); // 依赖未就绪=等外部完成
-        } else if (e.status === "doing" && e.dispatch_id && !openIds.has(e.dispatch_id)
+        } else if (e.status === "claimed" && e.dispatch_id && !openIds.has(e.dispatch_id)
           && now - e.updated_at >= dutyStaleMs()) { // >=：窗口 0（测试缝/即时超窗）恒真；> 同毫秒恒假是坑
           stale.push({ session_id: g.id, doing_ms: now - e.updated_at, dispatch_id: e.dispatch_id });
         }
@@ -4292,6 +4473,21 @@ export class SessionManager {
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
   private feedPM(trigger: string, opts?: { continuation?: boolean }): void {
     if (!dutyEnabled() || !this.leaderId) return;
+    // P71 产品门两级之全局总闸（019 §6.1/§6.2）：plugin_config.duty=false=全组停止
+    // 值守 feed——不注入但写 disabled 审计行（§6.1「值守审计仍记录 disabled」；环境门
+    // 关仍走上方短路零写入，备案差异维持——环境门关=值守组件不存在无审计面）
+    if (readPluginConfig().duty === false) {
+      this.appendDutyRound({
+        feed_id: randomUUID(), feed_generation: randomUUID(), trigger: [trigger],
+        result: "disabled", reason: "global_switch", from: Date.now(),
+      });
+      return;
+    }
+    // PM WORKING 合并语义（019 §3.3「PM WORKING 时合并 feed 上下文而不追加回合」
+    // 最小落地）：Leader 在岗干活中不追加值守回合（resumeAgent 会换流打断在途回合）
+    // ——不丢事件：Leader 回合终态必触发 turn_end 重算，届时候选照收。
+    const leader = this.sessions.get(this.leaderId);
+    if (leader?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID();
     const generation = randomUUID();
@@ -4549,9 +4745,9 @@ export class SessionManager {
         this.auditOrgCommand(actor, device, action, "", tier, false, "gid 必填");
         return { ok: false, error: "gid 必填" };
       }
-      if (status && !["todo", "doing", "done"].includes(status)) {
-        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status 必须是 todo|doing|done（得 ${status}）`);
-        return { ok: false, error: "status 必须是 todo|doing|done" };
+      if (status && !BOARD_ENTRY_STATUSES.includes(status as BoardEntryStatus)) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}（得 ${status}）`);
+        return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
       }
       let text = typeof payload.text === "string" ? payload.text.trim() : "";
       if (action === "task-update") {
@@ -4617,7 +4813,7 @@ export class SessionManager {
         if (typeof taskObj !== "object" || Array.isArray(taskObj) || typeof taskObj.text !== "string" || taskObj.text.trim() === "")
           return failAudit("task.text 必填");
         const taskStatus = typeof taskObj.status === "string" ? taskObj.status : "";
-        if (taskStatus && taskStatus !== "todo" && taskStatus !== "doing") return failAudit("task.status 必须是 todo|doing");
+        if (taskStatus && taskStatus !== "backlog" && taskStatus !== "claimed") return failAudit("task.status 必须是 backlog|claimed");
         const taskNote = typeof taskObj.note === "string" ? taskObj.note.trim() : "";
         const taskDeps = Array.isArray(taskObj.depends_on)
           ? taskObj.depends_on.filter((x): x is string => typeof x === "string" && x.trim() !== "")
@@ -4975,7 +5171,7 @@ export class SessionManager {
             const text = str("text");
             if (!text) return { ok: false, error: "text 必填" };
             const status = str("status") as BoardEntryStatus;
-            if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            if (status && !BOARD_ENTRY_STATUSES.includes(status as BoardEntryStatus)) return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
             // M12-2 编排链补透传 #087 两字段（原白名单漏 deps/gate——store 层支持但
             // 漏斗滤掉，卡带不上依赖导致 ready 误放行）；gate 面用户命令须形状守卫：
             // 对象=设闸、null=显式清除（唯一清除口，人决策）、其余形状拒收
@@ -5004,7 +5200,7 @@ export class SessionManager {
             // M1/M2 审查轮：move 与 upsert 同口径校验——store 层不挡非法串，
             // 不校验会把任意字符串写进 BoardEntryStatus 污染三端分区渲染
             const st = str("status");
-            if (!["todo", "doing", "done"].includes(st)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            if (!BOARD_ENTRY_STATUSES.includes(st as BoardEntryStatus)) return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str("entry_id"), st as BoardEntryStatus);
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op === "del") {
@@ -5251,15 +5447,69 @@ export class SessionManager {
     return { ok: true };
   }
 
+  // ── M13-2 delta 投影：上次发射状态缓存（发射侧单点 diff，25 处调用点零改）──
+  // 重启后缓存空=首帧省略 delta（端上覆盖式消费旧字段兜底，与旧 relay 帧同形）；
+  // 此后每帧带 entity_refs+delta。缓存只作 diff 基线，不参与任何业务判定。
+  private lastProjectsBroadcast: ProjectGroup[] | null = null;
+  private lastBoardBroadcast = new Map<string, ProjectBoard>();
+
+  // 按 id 深比差分：无前值返回 null（调用方省略 delta 走覆盖式）；有前值时
+  // upserts=新增或内容变化条目（JSON 深等，updated_at 推进即判变）、removes=前有今无。
+  private diffById<T extends { id: string }>(prev: T[] | null, next: T[]): EntityDelta<T> | null {
+    if (!prev) return null;
+    const prevJson = new Map(prev.map((x) => [x.id, JSON.stringify(x)]));
+    const nextIds = new Set(next.map((x) => x.id));
+    const upserts = next.filter((x) => prevJson.get(x.id) !== JSON.stringify(x));
+    const removes = prev.filter((x) => !nextIds.has(x.id)).map((x) => x.id);
+    return { upserts, removes };
+  }
+
   // #26 M2 组织广播（瞬态：在线端实时收敛；离线端由 SNAPSHOT.projects/org_confirms
-  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）
+  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）。
+  // M13-2：payload 扩 entity_refs+delta（旧字段 groups 保留全量，旧端覆盖式零变化；
+  // D18② 帧级判定=payload.delta 键存在性）
   emitOrgState(): void {
-    this.bus.emitTransient("PROJECTS_UPDATED", { groups: listGroups() });
+    const groups = listGroups();
+    const delta = this.diffById(this.lastProjectsBroadcast, groups);
+    this.lastProjectsBroadcast = groups;
+    this.bus.emitTransient("PROJECTS_UPDATED", {
+      groups,
+      ...(delta
+        ? {
+            entity_refs: [...new Set([...delta.upserts.map((g) => g.id), ...delta.removes])],
+            delta,
+          }
+        : {}),
+    });
     this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
   }
 
+  // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
+  // 发帧）；board 旧字段保留全量（不带板正文的只是 delta——M13-1 实体引用裁定沿承）
   emitBoard(gid: string): void {
-    this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
+    const board = loadBoardFile(gid);
+    if (!board) return; // P3-2 跳帧：读失败≠空板（外部改板半态/磁盘抖动不得差分出「整板 removes」清板广播——UI 闪断+半态扩散）；前值缓存不动，文件恢复后下帧照常差分
+    const prev = this.lastBoardBroadcast.get(gid) ?? null;
+    this.lastBoardBroadcast.set(gid, board);
+    if (!prev) {
+      this.bus.emitTransient("BOARD_UPDATED", { gid, board });
+      return;
+    }
+    const entries = this.diffById(prev.entries, board.entries) ?? { upserts: [], removes: [] };
+    // 前值 lessons undefined（板升级前旧文件）视为空表，首次出现=全量 upserts
+    const lessons = this.diffById(prev.lessons ?? [], board.lessons ?? []) ?? { upserts: [], removes: [] };
+    // meta 恒随 delta 下发（frozen/updated_at 深比不等才有实义；全空差分+无 meta 变化帧=纯心跳，M13-REV P3-1 死变量清理）
+    const delta: BoardDelta = { entries, lessons, meta: { frozen: board.frozen, updated_at: board.updated_at } };
+    this.bus.emitTransient("BOARD_UPDATED", {
+      gid,
+      board,
+      // P3-4：refs=提示性定位索引，端上以 delta 本体为准；当前不含 lessons.removes
+      //（lessons append-only 恒空），未来若引入删边须并入 refs。
+      entity_refs: [
+        ...new Set([...entries.upserts.map((e) => e.id), ...entries.removes, ...lessons.upserts.map((l) => l.id)]),
+      ],
+      delta,
+    });
   }
 
   // M12-5 引擎 preflight（拉起前纯静态检查，失败即 error 拒派）：裁定「派单前 error」
@@ -5295,7 +5545,7 @@ export class SessionManager {
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string }):
-    { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
+    { ok: true; dispatch_id: string; session_id: string; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
     // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
@@ -5389,8 +5639,67 @@ export class SessionManager {
     };
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
-      if (!pf.ok) return { ok: false, error: pf.error };
+      if (!pf.ok) {
+        // P81-5：preflight 拒也落审计（§6.3「拒绝也写审计」；B8 修正「与 preflight 拒同记」）
+        appendPermissionAudit(auditStore(this.cfg.dataDir), {
+          requested_mode: "bypassPermissions", normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+          capability_state: engineCapabilityState(planned.engine), engine: planned.engine,
+          reason: "preflight_failed", policy_source: "tier_default",
+          environment: resolveEnvScope(this.cfg.port), dir_scope: resolveDirScope(anchor), tier, actor,
+          session_id: null, command_id: dispatchId, created_at: Date.now(),
+        });
+        return { ok: false, error: pf.error };
+      }
     }
+    // P81-2 派单求值闸（§6.1 统一拒绝面，落账前拒=零台账污染与 preflight 同位）：
+    // requested=bypassPermissions（§5.3.1 组织派单请求事实）；policy_source：混编标记组
+    // →mixed_team_default（§5.3.1 服务端物化 bypass 写审计），普通组→tier_default。
+    // P81-5：岗位映射收紧（词表外→forbidden unknown_role_mapping——原「落 worker 默认」
+    // 是静默升权口：未知岗位若本该 review_pm（ceiling edit-auto），落 worker（ceiling
+    // full-auto）反升权，违「零静默升权」硬断言）；两维真实判定接入；审计落库（成功与
+    // 拒绝都落）；spawn 传值收口（effective→MANAGED 实参）。
+    const engineForPolicy = planned.engine ?? "claude";
+    const dirScope = resolveDirScope(anchor);
+    const envScope = resolveEnvScope(this.cfg.port);
+    // P81-9 kill-switch off（§8.2.4 回退契约）：完整回 P81 前行为——岗位映射不拒
+    //（bizRole 占位 "worker" 不消费）、求值/forbidden/审计全跳、spawnMode 硬传 bypass
+    //（恢复 P81 前两处 create 硬传点原样）
+    const policyOn = permissionPolicyEnabled();
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const auditRow = (p: {
+      requested_mode: string | null; normalized_mode: string | null; effective_mode: string; native_mode: string | null;
+      capability_state: string | null; engine: string | null; reason: string; policy_source: string | null;
+    }, sid: string | null) => ({
+      ...p, environment: envScope, dir_scope: dirScope, tier, actor, session_id: sid, command_id: dispatchId, created_at: Date.now(),
+    });
+    if (policyOn && !bizRole) {
+      // 未知岗位收紧拒（P81-5 B3 债：fail-closed 不猜——显性错误优于静默错权）
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow({
+        requested_mode: "bypassPermissions", normalized_mode: null, effective_mode: "forbidden", native_mode: null,
+        capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy,
+        reason: "unknown_role_mapping", policy_source: null,
+      }, null));
+      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm）` };
+    }
+    // P81-9 off：perm=null 跳过求值与 forbid 面；spawnMode 恢复 P81 前硬传 bypass
+    const perm = policyOn ? evaluatePermission({
+      requested_mode: "bypassPermissions",
+      engine: engineForPolicy,
+      role: bizRole ?? "worker", // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
+      tier,
+      capability_state: engineCapabilityState(engineForPolicy),
+      policy_source: group?.mixed_engine === true ? "mixed_team_default" : "tier_default",
+      dir_scope: dirScope,
+      env: envScope,
+    }) : null;
+    if (perm && perm.effective_mode === "forbidden") {
+      appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));
+      return { ok: false, error: `forbidden: ${perm.reason}` };
+    }
+    // spawn 传值收口（P81-5）：effective→MANAGED 实参（claude 沙盒 bypass 恒等零变；
+    // JSONL unverified 降 edit-auto 后 CLI 收 acceptEdits 而非伪装 bypass）。veteran
+    // resume 分支不传 pm（resume 面 permission_mode 从 state 继承——P81-6 域）。
+    const spawnMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : "bypassPermissions";
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -5410,7 +5719,7 @@ export class SessionManager {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
             skipStickyCwd: true, employee: true, role,
             ...(planned.engine ? { engine: planned.engine } : {}),
             ...(planned.model ? { model: planned.model } : {}),
@@ -5428,7 +5737,7 @@ export class SessionManager {
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
           skipStickyCwd: true, employee: true, role,
           ...(planned.engine ? { engine: planned.engine } : {}),
           ...(planned.model ? { model: planned.model } : {}),
@@ -5445,6 +5754,12 @@ export class SessionManager {
       }
     }
     const s = this.sessions.get(sessionId);
+    // P81-5 成功面审计落库（承接会话 id 已知后落——session_id=真实承接会话，与
+    // COMMAND_CREATE「成功=新会话 id」对称；create 失败出口不落 audit：权限闸已通过
+    // 非权限事件，appendDispatch failed 行已承载）。物化事实由 requested_mode+
+    // policy_source 双字段承载（reason=ok 即「降级/拒绝事实优先」语义下的正解）。
+    // P81-9 off：回退态不落新 P81 审计（「回退不删除任何事实源」=既有照旧，新面不写）。
+    if (perm) appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, sessionId));
     if (s) {
       s.state.project_gid = input.gid;
       s.state.dispatch_tier = tier;
@@ -5461,9 +5776,9 @@ export class SessionManager {
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
-        ? // #087 beads：认领模式——前置检查已过，既有卡 todo→doing 挂派单（卡是同一张，依赖关系保留）
-          { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId }
-        : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId });
+        ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
+          { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
+        : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
@@ -5478,7 +5793,9 @@ export class SessionManager {
       });
     }
     this.emitOrgState();
-    return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
+    // P81-9 off：permission 回显键停发——旧 relay ACK 无此键（三态矩阵「新客户端×旧
+    // relay」wire 基准），conditional spread 与 SNAPSHOT 摘要出口同口径
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId, ...(perm ? { permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } } : {}) };
   }
 
   // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个
@@ -5652,9 +5969,9 @@ export class SessionManager {
     for (const q of this.openDispatches.values()) for (const e of q) live.add(e.id);
     const open = new Set(readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").map((e) => e.id));
     for (const ent of loadBoard(gid).entries) {
-      if (ent.status !== "doing" || !ent.dispatch_id) continue;
+      if (ent.status !== "claimed" || !ent.dispatch_id) continue;
       if (live.has(ent.dispatch_id) || open.has(ent.dispatch_id)) continue;
-      moveEntryByDispatch(gid, ent.dispatch_id, "todo");
+      moveEntryByDispatch(gid, ent.dispatch_id, "backlog");
     }
   }
 
@@ -6092,7 +6409,7 @@ export class SessionManager {
           const q = this.openDispatches.get(s.state.session_id);
           if (!q || q.length <= 1) break;
           q.unshift(q.pop()!);
-          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "todo");
+          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
@@ -6103,7 +6420,7 @@ export class SessionManager {
         // 口径全清（回执写实；不写路由），否则 org status 挂假账直到下一条消息
         // 冲刺 F-06：板去向同中断口径退 todo（对照 onSessionEnd 兜底 :2240 与多消息
         // 重放 :3657）——活没交付不能停 done，否则结项核对清单看不见未完
-        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "todo");
+        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "backlog");
         this.reviveSaved(s); // 无未回显消息：parked 恢复，停在等待输入
       }
       s.wd.phase = "idle";
@@ -6222,7 +6539,7 @@ export class SessionManager {
       if (this.sessions.size < MAX_SESSIONS) break;
       // #25-P2 容量驱逐同款清挂单：驱逐对象是 DONE/ERROR 理论无在途回合，但多消息
       // FIFO 边缘形态（收口顺序错位）兜底——残留 FIFO 键进程内常驻，重启才清
-      this.closeOpenDispatches(s.state.session_id, "failed", "容量驱逐，回合中断", true, false, undefined, "todo");
+      this.closeOpenDispatches(s.state.session_id, "failed", "容量驱逐，回合中断", true, false, undefined, "backlog");
       void s.agent?.stop(); // 回收 parked 的 CLI 子进程（历史会话无 agent）
       this.sessions.delete(s.state.session_id);
       this.lastStoreTodos.delete(s.state.session_id);

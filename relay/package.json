@@ -15,6 +15,7 @@
     "test:todo-env": "tsx scripts/test-todo-env.ts",
     "test:waiting-deadlock": "tsx scripts/test-waiting-deadlock.ts",
     "test:cloud": "tsx scripts/test-cloud.ts",
+    "test:005-cloud": "tsx scripts/test-005-cloud.ts",
     "test:watchdog": "tsx scripts/test-watchdog.ts",
     "test:acceptance": "tsx scripts/test-acceptance.ts",
     "test:org": "tsx scripts/test-org.ts",
@@ -51,11 +52,19 @@
     "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
     "test:import-artifact": "tsx scripts/test-import-artifact.ts",
     "test:read-mode": "tsx scripts/test-read-mode.ts",
+    "test:sqlite-resilience": "tsx scripts/test-sqlite-resilience.ts",
+    "bench:read": "tsx scripts/bench-read-mode.ts",
+    "rehearse:rollback": "tsx scripts/rehearse-cutover-rollback.ts",
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",
     "test:m1-foundation": "tsx scripts/test-m1-foundation.ts",
     "test:duty-boundary": "tsx scripts/test-duty-boundary.ts",
+    "test:pm-duty-product": "tsx scripts/test-pm-duty-product.ts",
     "test:m12-commands": "tsx scripts/test-m12-commands.ts",
-    "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts"
+    "test:m1-orchestration": "tsx scripts/test-m1-orchestration.ts",
+    "test:m13-delta": "tsx scripts/test-delta-projection.ts",
+    "test:m13-web-delta": "tsx scripts/test-m13-web-delta.ts",
+    "test:d18-five-states": "tsx scripts/test-d18-five-states.ts",
+    "test:permission-compat": "tsx scripts/test-permission-compat.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

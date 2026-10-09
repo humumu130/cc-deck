@@ -4,7 +4,7 @@
 import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
 import type { AllowRule } from "./allow-rules.js";
-import type { ProjectGroup, ProjectBoard, OrgConfirm } from "./projects.js";
+import type { ProjectGroup, ProjectBoard, OrgConfirm, BoardEntry, LessonEntry, BoardEntryStatus } from "./projects.js";
 
 // ---------- 事件信封 ----------
 
@@ -82,12 +82,64 @@ export interface StatusDockState {
   updated_at: number;
 }
 
+/** P81-2：每引擎权限能力只读摘要（SNAPSHOT source_capabilities.permission 载荷——
+ * P75 引擎选择器数据源）。modes=该 capability_state 下保证按请求档生效的归一档集
+ *（evaluatePermission 不会降级的档）；纯静态投影（081 §7.1「真实反映当前代码」）。 */
+export interface PermissionCapabilitySummary {
+  engine: SessionEngine;
+  capability_state: "confirmed" | "unverified" | "unsupported";
+  modes: string[];
+}
+
 export interface SourceCapabilities {
   models?: boolean;
   activity?: boolean;
   notifications?: boolean;
   commands?: string[];
-  [key: string]: boolean | string[] | undefined;
+  /** P81-2 权限能力摘要：六注册引擎逐个只读投影（ws-server/cloud-client 两出口同发，
+   * #117 教训）；端上以字段存在性判断能力（旧 relay 不发=选择器降级隐藏摘要）。 */
+  permission?: PermissionCapabilitySummary[];
+  /**
+   * #75 引擎目录（PM-75 提案 §4.3 契约钉死，75-R relay 半）：源级引擎选择器数据源，
+   * 六枚举全覆盖投影（不另建事实源）。旧 relay 不发=选择器降级「默认 Claude+Codex 兼容
+   * 开关」；旧客户端忽略未知键零感知（既有索引签名宽容语义）。
+   */
+  engine_catalog?: EngineCatalogEntry[];
+  /**
+   * M13-2 v2 投影协议能力位（v2 投影信号字段，三端消费定案）：true = 本 relay 的
+   * PROJECTS_UPDATED/BOARD_UPDATED 携带 entity_refs+delta 增量形状（D18②），端上
+   * 可启用五态渲染与 delta merge 分支。语义边界：此位表达「支持 v2 投影协议」，
+   * 不等于「板值域已迁五态」（D18① 三态→五态一次性迁移独立单落）——端上渲染按值
+   * 自适应（按值分组+非空泳道才渲染，v2-system-design :100），三态值只占
+   * backlog/claimed/done 不会出假五泳道。旧 relay 不发 source_capabilities 整体
+   * （undefined=能力降级，expo 既有判定）/ 旧客户端忽略未知键，双向兼容。
+   * 随 SNAPSHOT 下发：LAN/phone 两出口同发（#117），WAN 手表极简集不带（M13-1 闸）。
+   */
+  projection_v2?: boolean;
+  // P81-2：值域收容 permission 摘要（未知键宽容索引保留——旧客户端忽略未知键语义不变）
+  [key: string]: boolean | string[] | PermissionCapabilitySummary[] | EngineCatalogEntry[] | undefined;
+}
+
+/**
+ * #75 引擎目录条目（PM-75 提案 §4.3 契约钉死——75-W web 半按此形状先行开发，改形状须
+ * 三端同步）。六枚举全覆盖：
+ *   ready        可选（preflight 过/自证可用）
+ *   unavailable  不可选（CLI 未装/校验未过——preflight.fail+reason）
+ *   unsupported  不可选（枚举占位未接入编排，如 zcode——灰显给原因）
+ *   unknown      状态未知（投影兜底，理论上不出现——六枚举全有确定分支）
+ * capabilities 三键是 catalog 静态投影（源级能力，非会话级运行时配置——codex 的
+ * remoteDecisionChannel 会话位不在此反映，备案）。models=该引擎源级可用清单，没有
+ * 清单的引擎恒空数组（端上显示「使用引擎默认」——严禁拿 Claude 的 SNAPSHOT.models
+ * 冒充他引擎清单，提案 §5.2 红线）。
+ */
+export interface EngineCatalogEntry {
+  id: SessionEngine;
+  label: string;
+  state: "ready" | "unavailable" | "unsupported" | "unknown";
+  capabilities: { resume: boolean; approval: boolean; artifacts: boolean };
+  preflight: { state: "pass" | "fail" | "unknown"; reason: string };
+  models: string[];
+  default_for_roles: string[];
 }
 
 export interface NotificationSourceContext {
@@ -602,13 +654,49 @@ export interface AllowRulesUpdatedPayload {
   rules: AllowRule[];
 }
 
+// M13-2 delta 投影形状（D18②：PROJECTS_UPDATED/BOARD_UPDATED 扩 payload，旧字段
+// 保留旧端天然兼容）。设计铁律：全部差分用「带稳定 id 的完整条目」表达增改，端上
+// 按 id upsert、removes 忽略未知 id——重复投递（同状态重复发射/双端各收一份）二次
+// 应用零变化（幂等规格，test-delta-projection 锁）。帧级判定（三端照此实现）：
+// `payload.delta !== undefined` → 增量 merge；缺席 → 覆盖式消费旧字段（旧 relay /
+// mgr 重启后首帧，零行为变化）。
+//
+// 锚定纪律（M13-REV P1 回炉定案，三端照此实现）：delta 帧仅可在**锚定后**应用——
+// 该域已消费过覆盖式帧（PROJECTS 域：SNAPSHOT.projects 全量索引或任一带 groups 的帧；
+// BOARD 域：该 gid 任一带 board 的帧）。未锚定收到 delta 帧 = 丢弃 + 重拉重锚
+//（PROJECTS 域随下一帧 SNAPSHOT 自愈；BOARD 域显式 COMMAND_PROJECT_DETAIL 按需重拉）。
+// 「基线缺失→空集/空板起底 merge」是**禁止路径**：瞬态帧 seq:0 不进缓冲、重连不补发、
+// 板域又无 SNAPSHOT 兜底，把「缺锚」错当「空集」会把中间态差分起底成错乱终态（掉帧
+// 静默错乱）。覆盖式帧兼任锚定帧：先到先锚，之后 delta 帧才可应用。
+export interface EntityDelta<T extends { id: string }> {
+  /** 变更实体完整条目（整条替换，含未变字段——端上不做字段级合并） */
+  upserts: T[];
+  /** 移除实体 id（忽略未知 id=幂等；组域 v1 无删边恒空，编码留位） */
+  removes: string[];
+}
+// 板 delta：条目级差分（不带板全量正文——M13-1 实体引用裁定沿承，板变更通知继续
+// 走 emitBoard 专通道）；lessons 按 id upsert（append-only 语义由端上 ts 排序承载）；
+// meta 承载板级元数据（frozen 翻转/时间戳推进——挂起/结项/复活边无条目变化也发帧）。
+export interface BoardDelta {
+  entries: EntityDelta<BoardEntry>;
+  lessons: EntityDelta<LessonEntry>;
+  meta: { frozen: boolean; updated_at: number };
+}
+
 // #26 M2 组织推送载荷（与 SNAPSHOT 同源同构）
 export interface ProjectsUpdatedPayload {
-  groups: ProjectGroup[]; // listGroups() 全量（小表，写穿全量）
+  groups: ProjectGroup[]; // 旧字段保留：listGroups() 全量（小表，写穿全量；旧端覆盖式零变化）
+  entity_refs?: string[]; // v2：本次变更组 id（端上局部刷新定位；与 delta 同进出）
+  delta?: EntityDelta<ProjectGroup>; // v2：增量差分；缺席=首发/mgr 重启后首帧（端上覆盖式兜底）
 }
+// 帧双载（board 全量正文+delta 增量并存）=广播架构定案（M13-REV P3-6）：emitTransient
+// 广播不区分端能力，旧端依赖旧字段（board 覆盖式）新端消费 delta；正文裁剪需 per-conn
+// 能力分流——已裁不做（成本高收益低；WAN 极简集本不带板）。
 export interface BoardUpdatedPayload {
   gid: string;
-  board: ProjectBoard; // 该组全量板（单组小表）
+  board: ProjectBoard; // 旧字段保留：该组全量板（旧端覆盖式零变化）
+  entity_refs?: string[]; // v2：本次变更条目/lesson id
+  delta?: BoardDelta; // v2：增量差分；缺席语义同上
 }
 export interface OrgConfirmUpdatedPayload {
   pending: OrgConfirm[]; // listPendingConfirms()
@@ -891,13 +979,13 @@ export interface OrgActionCommand extends CommandBase {
 // 公共约定：ACK ok 路径 data={entity_id, gid}（设计稿 §七口径）；DISPATCH 并列 dispatch_id。
 // 全部经 orgCommand 咽喉（org:write 能力位+审计一行）→orgAction 单漏斗执行。
 
-// 建板卡：映射 orgAction board/op=upsert（无 entry_id=新卡，status 缺省 todo）
+// 建板卡：映射 orgAction board/op=upsert（无 entry_id=新卡，status 缺省 backlog）
 export interface TaskCreateCommand extends CommandBase {
   type: "COMMAND_TASK_CREATE";
   payload: {
     gid: string;                                  // 目标组（板随组落 boards/<gid>.json）
     text: string;                                 // 卡文本（store 层必填）
-    status?: "todo" | "doing" | "done";           // 缺省 todo
+    status?: BoardEntryStatus;                    // D18 五态词表（缺省 backlog）
     note?: string;
   };
 }
@@ -910,7 +998,7 @@ export interface TaskUpdateCommand extends CommandBase {
     gid: string;
     entry_id: string;                             // 目标卡（不存在即拒）
     text?: string;
-    status?: "todo" | "doing" | "done";
+    status?: BoardEntryStatus;                    // D18 五态词表（submitted 受 store 层 R1 资格锁）
     note?: string;
   };
 }
@@ -937,7 +1025,7 @@ export interface DispatchCommand extends CommandBase {
      * 零写零 spawn 返回 blocked；坏引用（depends_on 指不存在卡）error 拒收非 blocked。 */
     task?: {
       text: string;
-      status?: "todo" | "doing";                  // 缺省 todo（done 建卡即完成不收）
+      status?: "backlog" | "claimed";             // D18 词表：缺省 backlog（终态/候选态建卡不收，done 建卡即完成不收原则）
       note?: string;
       depends_on?: string[];                      // #087 beads：依赖卡 id 引用
       gate?: { reason: string };                  // #087 gate：编排只设闸，清除仍走人决策口（gate:null 无自动路径）
@@ -1120,6 +1208,15 @@ export interface CommandAckPayload {
   ok: boolean;
   session_id?: string;   // COMMAND_CREATE 成功时返回
   error?: string;
+  /** #75 仅 COMMAND_CREATE 成功：实际引擎回显（缺省=claude 旧语义）；与请求引擎不一致
+   * 时 degraded=true+degraded_reason 显式标记（提案 §6.2「标记已降级不隐藏差异」——
+   * 端上据此显示降级徽标，不静默换引擎）。 */
+  engine?: SessionEngine;
+  degraded?: boolean;
+  degraded_reason?: string;
+  /** P81-2 开卡权限求值回执（COMMAND_CREATE/组织派单成功时携带）：effective≠normalized
+   * 即发生降级（端上可显示 effective badge）；forbidden 拒绝面走 ok:false+error 不带本字段。 */
+  permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
   pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
   peers?: PairedDeviceInfo[]; // 仅 COMMAND_PEERS 成功时携带（议题①）

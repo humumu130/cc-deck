@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSqlitePort } from "../src/storage/sqlite.js";
 import { resetReadModeForTest, resolveReadMode, currentReadMode, compareDomain, runShadowCompare, readShadowDiff } from "../src/storage/read-mode.js";
+import { statThenRead } from "../src/storage/import-util.js";
 import { listGroups, findGroup, isLightConfirmTrusted, listConfirms, listLessons } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 
@@ -76,16 +77,18 @@ const setMode = (m: string | undefined): void => {
 try {
   // ---------- 0. 解析器：缺省/词表/无效值 fail-fast ----------
   console.log("段0 解析器:");
-  assert(resolveReadMode(undefined) === "json" && resolveReadMode("") === "json" && resolveReadMode("  ") === "json", "缺省/空/空白= json（零配置零行为变化）");
-  assert(resolveReadMode("json") === "json" && resolveReadMode(" sqlite ") === "sqlite" && resolveReadMode("shadow") === "shadow", "词表三值 trim 后识别");
+  // 缺省=sqlite（2026-10-06 SQLITE-FLIP 翻转，用户拍板「开干吧」；CUT-1 六闸全绿+读税双清前置）
+  assert(resolveReadMode(undefined) === "sqlite" && resolveReadMode("") === "sqlite" && resolveReadMode("  ") === "sqlite", "缺省/空/空白= sqlite（2026-10-06 翻转，用户拍板）");
+  assert(resolveReadMode("json") === "json", "显式 json 仍解析 json（回滚=env 钉 json，回退通道健在锁）");
+  assert(resolveReadMode(" sqlite ") === "sqlite" && resolveReadMode("shadow") === "shadow", "词表三值 trim 后识别");
   let threw = false;
   try { resolveReadMode("jsno"); } catch { threw = true; }
   assert(threw, "无效值 throw（fail-fast，不静默回退）");
 
-  // ---------- 1. json 档（env 不设）：金值+零 SQLite 参与 ----------
+  // ---------- 1. json 档（显式钉 env）：金值+零 SQLite 参与 ----------
   console.log("段1 json 档:");
-  setMode(undefined);
-  assert(currentReadMode() === "json", "缺省 currentReadMode= json");
+  setMode("json");
+  assert(currentReadMode() === "json", "显式 json 档 currentReadMode= json（回滚档语义原样）");
   const jGroups = listGroups(orgDir);
   assert(jGroups.length === 2 && jGroups[0].id === "g-1" && jGroups[1].parked_at === T + 5 && jGroups[1].archive_note === "暂缓备注", "json 档组列表金值（含可选字段 parked_at/archive_note 原样）");
   assert(isLightConfirmTrusted(orgDir) === true, "json 档 trust_light=true（原样）");
@@ -174,6 +177,55 @@ try {
   assert(all.every((r) => r.domain !== "group" || r.category !== "value-mismatch" || r.key !== "g-1"), "runShadowCompare 对齐库零 group 值差异（对账面独立于段3人为差异）");
   port.close();
 
+  // ---------- 4b. 长驻场景：portCache 命中分支也快进（READMODE-FIX；P81-6FIX B1 备案裁定修） ----------
+  console.log("段4b 长驻增量可见:");
+  setMode("sqlite");
+  // 模拟长驻进程：不 resetReadModeForTest（端口缓存保持命中态），写侧直接追加 JSON 账——
+  // dispatch-log 追加新单一行+板文件追加一条 lesson（org.ts append-only 写者语义）。
+  // 修复前此处 ensureStore 命中 portCache 直接 return，读面永远停留首建快照（P81-6FIX O10 四红根因）。
+  const dNew = [
+    ...dLines,
+    { ts: T + 60, id: "disp-3", tier: "正经立项", target: "s-w1", status: "dispatched", session_id: "s-leader", actor: "user" },
+  ];
+  writeFileSync(join(orgDir, "dispatch-log.ndjson"), dNew.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  const boardDoc = JSON.parse(readFileSync(join(orgDir, "boards", "g-1.json"), "utf-8")) as { lessons: unknown[] };
+  boardDoc.lessons.push({ id: "l-3", text: "追加经验", tags: ["live"], ts: T + 61 });
+  writeFileSync(join(orgDir, "boards", "g-1.json"), JSON.stringify(boardDoc, null, 2) + "\n");
+  // 同进程二次读（ensureStore 缓存命中→同样跑导入聚合，checkpoint 失效重灌）：新账必须可见
+  const liveDispatch = readDispatchLog(orgDir);
+  assert(liveDispatch.length === 3 && liveDispatch.some((e) => e.id === "disp-3" && e.status === "dispatched"),
+    "长驻二次读见新派单（portCache 命中分支也快进——READMODE-FIX 语义锁）");
+  const liveLessons = listLessons("g-1", undefined, orgDir);
+  assert(liveLessons.length === 3 && liveLessons.some((l) => l.id === "l-3"),
+    "长驻二次读见新经验（boards 追加增量可见，dispatch 失效⇒lesson 联动重灌）");
+  // 注：铁律 2 零写检查在此段不适用——两源 mtime/body 变化是本段模拟写者的合法写入。
+
+  // ---------- 4c. statThenRead 短路 memo：行为等价+失效对抗+计时塌缩（STAT-SHORTCUT） ----------
+  console.log("段4c stat 短路 memo:");
+  setMode("sqlite");
+  // 独立探针文件（不进导入域）直测 statThenRead memo 面：命中/失效/计时
+  const memoProbe = join(orgDir, "memo-probe.ndjson");
+  writeFileSync(memoProbe, Array.from({ length: 8000 }, (_, i) => `{"i":${i},"pad":"${"y".repeat(120)}"}`).join("\n") + "\n");
+  const m1 = statThenRead(memoProbe);
+  const m2 = statThenRead(memoProbe);
+  assert(m1.text === m2.text && m1.mtimeMs === m2.mtimeMs,
+    "memo 命中：重复 observe 返回值逐字节一致（text+mtimeMs 等价锁）");
+  const tHot = performance.now();
+  for (let i = 0; i < 50; i++) statThenRead(memoProbe);
+  const hotMs = (performance.now() - tHot) / 50;
+  assert(hotMs < 0.1,
+    `memo 命中计时塌缩 ${hotMs.toFixed(4)} ms/次（<0.1 阈值——全文读已跳过的计数锁替身：readFileSync 无 seam，1.4ms 全读 vs 0.0xms 命中有两个数量级分差）`);
+  // 对抗锁：等长覆盖写（内容变 size 相同，writeFileSync 紧跟 observe——同毫秒内写 mtimeMs 不推，
+  // 实锤 ms 粒度误命中，见 memo ns 腿头注）——ns 腿独立失效，size 相同不误短路
+  const before = readFileSync(memoProbe, "utf-8");
+  writeFileSync(memoProbe, before.replace('"i":1,', '"i":9,')); // 1→9 等长替换（值后逗号结尾才匹配，size 不变）
+  const m3 = statThenRead(memoProbe);
+  assert(m3.text !== m2.text && m3.text.includes('"i":9'),
+    "等长覆盖写（size 同 mtime 推）→memo 失效见新内容（对抗锁：size 相同不误短路，ns 腿独立工作）");
+  // memo 未毒化后续：再命中态恢复（mtime/size 稳定后重复 observe 一致）
+  const m4 = statThenRead(memoProbe);
+  assert(m4.text === m3.text, "失效重读后 memo 刷新：再次 observe 与新内容一致");
+
   // ---------- 5. 无效值 boot 抛错（读入口面） ----------
   console.log("段5 无效值读入口 fail-fast:");
   setMode("jsno");
@@ -196,9 +248,9 @@ try {
   resetReadModeForTest();
   listGroups(orgDir); // 新一轮 shadow：投影带 archived→差异落账
   const round2 = readShadowDiff(dataDir);
-  setMode(undefined);
+  setMode("json");
   resetReadModeForTest();
-  listGroups(orgDir); // 回 json 档收尾（零副作用）
+  listGroups(orgDir); // 回 json 档收尾（零副作用；SQLITE-FLIP 后收尾档显式钉 json，不依赖缺省）
   assert(round2.some((r) => r.domain === "group" && r.key === "g-1" && r.category === "value-mismatch" && JSON.stringify(r.sqlite_value) === JSON.stringify({ tier: "正经立项", status: "archived" })), "shadow 二轮新差异落账（g-1 status 改库被抓，双侧值精确）");
 } finally {
   resetReadModeForTest();

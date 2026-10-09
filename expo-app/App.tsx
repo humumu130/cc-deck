@@ -32,6 +32,7 @@ import {
   type UpdateInfo,
 } from "./src/updates";
 import ListScreen, { type ListBackHandle } from "./src/screens/ListScreen";
+import ArtPoolModal from "./src/screens/ArtPoolModal";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
 import NewSessionModal from "./src/screens/NewSessionModal";
@@ -605,6 +606,9 @@ function Shell() {
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
+  // #72 E 线 产物池视图（列表常驻胶囊入口① + 详情可达行入口②共用；Modal 挂 App 层——
+  // 两入口分属两屏，池视图提一级免跨屏导航链）
+  const [artPoolOpen, setArtPoolOpen] = useState(false);
   // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
   // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
   const [navPhase, setNavPhase] = useState<"idle" | "entering" | "closing">("idle");
@@ -912,6 +916,7 @@ function Shell() {
               onSetup={() => { setSetupScan(false); setSetup("new"); }}
               onScanServer={() => { setSetupScan(true); setSetup("new"); }}
               onEditServer={(id) => { setSetupScan(false); setSetup(id); }}
+              onOpenArtPool={() => setArtPoolOpen(true)}
             />
           )}
           {detail ? (
@@ -919,9 +924,11 @@ function Shell() {
               style={[st.navLayer, { transform: [{ translateX: navX }] }]}
             >
               <DetailScreen
-          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} />
+          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} onOpenArtPool={() => setArtPoolOpen(true)} />
             </Animated.View>
           ) : null}
+          {/* #72 E 线 产物池视图（入口①/②共用；NewSessionModal 同层全 App 弹面） */}
+          <ArtPoolModal visible={artPoolOpen} onClose={() => setArtPoolOpen(false)} />
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
           {updateInfo ? <UpdateBanner info={updateInfo} onSkip={() => setUpdateInfo(null)} /> : null}
           <Toast />

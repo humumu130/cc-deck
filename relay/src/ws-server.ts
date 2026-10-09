@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
+import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
+import { engineCatalogSummary } from "./engine-catalog.js";
 import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
 import {
   serveAcceptancePage,
@@ -40,26 +42,14 @@ function localIps(): Set<string> {
 // 响应被浏览器静默拦截，「本机领码」必失败。新增部署域只需在此追加。
 const TRUSTED_WEB_ORIGINS: readonly string[] = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
 
-// #448 插件可选能力配置：~/.cc-deck/config.json 四键（guard-stop/guard-context hooks 与
-// /api/plugin-config 端点共用）。缺省值与 hooks 侧 guard-lib.mjs 的 CONFIG_DEFAULTS 一致。
-// #71 第四键 deliverables：输出物看板总开关——关=三端隐藏「输出物」tab、
-// guard-context 不注入投递约定；开=SNAPSHOT 下发 true + hook 注入约定 + deliver 脚本落位。
-// #107 默认改开（#71 决策反转，用户 2026-09-20：默认关用户可能几个月都不知道有这
-// 功能）；已显式写 false 的用户不受影响（下方 typeof 守卫：键存在才覆盖）
-const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"] as const;
-type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean };
-function pluginConfigPath(): string {
-  return join(homedir(), ".cc-deck", "config.json");
-}
-// 导出供 cloud-client 云通道 SNAPSHOT 同源携带（手机走云桥也要拿到开关）
-export function readPluginConfig(): PluginConfig {
-  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
-  try {
-    const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
-    for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;
-  } catch {}
-  return out;
-}
+// #448 插件可选能力配置：~/.cc-deck/config.json 五键（guard-stop/guard-context hooks 与
+// /api/plugin-config 端点共用）。P71 起读写落 src/plugin-config.ts 独立件（值守判定面
+// session-manager 要读 duty 总闸，不许反向依赖 ws-server HTTP 面）；此处 re-export
+// readPluginConfig 保 cloud-client 既有 import 不破，PLUGIN_CFG_KEYS/pluginConfigPath
+// 本文件 /api/plugin-config 写面自用。
+// #71 第五键 duty：值守总闸（019 §6.5 拍板），缺省 true 显式 false 才关（kill-switch）。
+import { PLUGIN_CFG_KEYS, pluginConfigPath, readPluginConfig } from "./plugin-config.js";
+export { readPluginConfig } from "./plugin-config.js";
 
 // #138 回填通知（LAN 直提与 #175 云回流共用）：按出单时盖进记录的 cwd 归因到会话，
 // 推一条 system 行——「3✓ 1✗ 2未测」式摘要消掉人肉对账。归因不到（旧单没盖
@@ -305,6 +295,8 @@ export function startServer(
     webRootCandidates.find((p) => p && existsSync(join(p, "web-console", "index.html"))) ??
     webRootCandidates[1]!;
   const consoleHtml = join(webRoot, "web-console", "index.html");
+  // 新旧壳共存（用户拍板，2026-10-07）：`/` 主路径 = 旧版稳定壳，`/app2` = 005 新壳对照体验
+  const consoleHtml005 = join(webRoot, "web-console", "index-005.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
   const qrJs = join(webRoot, "web-console", "qr.js");
   const mobileDir = join(webRoot, "mobile") + sep;
@@ -383,6 +375,16 @@ export function startServer(
       // no-store：控制台是单文件全量替换（无哈希资产名），浏览器启发式缓存会
       // 让 relay 升级后的 LAN 用户一直看旧页（token 换代 → 莫名 401）
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
+      return;
+    }
+    // 005 新壳对照入口（新旧壳共存，2026-10-07 用户拍板）：主路径 `/` 服务旧版稳定壳，
+    // `/app2` 服务 005 新壳；两壳各自独立文件，互不影响。no-store 理由同上。
+    if (req.method === "GET" && url.pathname === "/app2") {
+      if (!existsSync(consoleHtml005)) {
+        res.writeHead(503).end("web-console/index-005.html 不存在（005 新壳未生成/未随包）");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -944,6 +946,12 @@ export function startServer(
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr.employeeHomeState(),
+          // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
+          // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
+          // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
+          // P81-9 kill-switch off：permission 摘要停发（端上经 P81-8 双端 undefined
+          // 降级面自动隐藏=三端自动还原）；engine_catalog 属 #75 线不受开关影响
+          source_capabilities: { projection_v2: true, ...(permissionPolicyEnabled() ? { permission: permissionCapabilitiesSummary() } : {}), engine_catalog: engineCatalogSummary(mgr.cfg.model) },
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -1092,7 +1100,7 @@ async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Pr
     res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
     return;
   }
-  // POST：吸掉 body（可能为空/JSON）后合并 query 参数写入；只认三键布尔，其余忽略
+  // POST：吸掉 body（可能为空/JSON）后合并 query 参数写入；只认白名单键布尔（PLUGIN_CFG_KEYS），其余忽略
   let body = "";
   req.setEncoding("utf-8");
   for await (const chunk of req) body += chunk;

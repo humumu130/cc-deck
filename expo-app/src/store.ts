@@ -7,9 +7,12 @@ import { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifica
 import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, LogEntry, NotificationItem, NotificationsUpdatedPayload, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
 export { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
 import { uuid } from "./fmt";
+import { applyBoardFrame, applyProjectsFrame } from "./org-delta";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 import { fgSupported, notifyAlert, startForegroundService, stopForegroundService } from "./notify";
+import { httpBaseOf } from "./slash";
+import { artPoolItemsOf, artPoolListUrl, artPoolUrl, poolNameOk, type ArtPoolItem } from "./artpool";
 
 // #42 设备实名上报（配对时）：expo-constants 的 deviceName（Android = Build.MODEL，
 // 如 "Find X8"）优先，回落 RN Platform.constants.Model；都无 → "手机"。
@@ -103,6 +106,11 @@ export interface SourceConn {
   projects: ProjectGroup[] | null;
   orgConfirms: OrgConfirm[];
   boards: Map<string, ProjectBoard>;
+  // M13-4ADD 板 delta 锚定集：gid 消费过覆盖式全量帧（含重拉 ack）才允许后继 delta
+  // merge；未锚定 delta 一律丢弃+重拉（瞬态帧无缺口检测，差分应用在错误基线=静默错乱）
+  anchoredBoards: Set<string>;
+  // M13-4ADD 重拉防抖：in-flight gid（orgDetail ack 回调必达，Set 必清理）
+  boardResync: Set<string>;
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -141,6 +149,15 @@ export interface SourceConn {
   // F7（2026-09-09）手表 /wan 透传凭据 dev（wt-<hash>，随 SNAPSHOT wan_dev 下发）：
   // 手表网关拼手表连接配置用（旧 relay 无字段 = 回落 wt-app1，自建宽松桥不受影响）
   wanDev?: string | null;
+  // #72 E 线 产物池探测三态（W 线 _artPool 同构镜像）：pending=未探明（入口隐藏），
+  // yes=fetch /api/artifacts 首连探测成功（入口可见），no=探测失败（404/401/网络错/
+  // 云通道——入口整体隐藏，降级=下线不灰置）。**判据=fetch 探测，禁 schema 版本**
+  // （artifacts 端点始于 09-14 早于 schema_version 首现，版本判据会误杀该窗口 relay）。
+  // 每 conn 生命周期探一次（SNAPSHOT 挂点 + pending 去重，重连不重试不循环打爆）；
+  // 新鲜度由进池视图时 refreshArtPool 重拉承载
+  artPool: "yes" | "no" | "pending";
+  artPoolData: ArtPoolItem[]; // 探测顺带缓存的首份清单（web W 线同款）；进入池视图时重拉
+  artPoolProbing: boolean; // 探测 in-flight 去重（探测期间再收 SNAPSHOT 不重复发）
 }
 
 // 已发出未回执的命令（ACK 追踪，按源隔离）：断开时静默清空，靠重连快照对账
@@ -153,7 +170,18 @@ interface PendingCmd {
   // 断连清场不回调（调用方自带兜底超时）。#79：artifact 仅 COMMAND_ARTIFACT_FETCH
   // 成功 ACK 携带（mime/size，分级预览用）；#26 M2：data 仅 COMMAND_PROJECT_DETAIL
   // 成功 ACK 携带（{ group, board, receipts }）
-  onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown }) => void;
+  onAck?: (r: {
+    ok: boolean;
+    err: string | null;
+    artifact?: { size: number; mime: string };
+    data?: unknown;
+    // P81-5 开卡权限求值回执（COMMAND_CREATE 成功时携带）：effective≠normalized=降级
+    //（端上显调整提示）；forbidden 拒绝走 ok:false+error 不带本字段
+    permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
+    // 75-E COMMAND_CREATE 成功 ACK 的实际引擎（75-R relay 落地才有；旧 relay 不带 =
+    // undefined，端上 engineDowngradeNote 字段存在性消费不误报）
+    engine?: string;
+  }) => void;
 }
 
 // #79 输出物拉取重组状态（fetchArtifact/artFetches/maybeSettleArtFetch 共用）：
@@ -199,10 +227,20 @@ export interface SourceStatus {
   // 不支持（列表组织区不渲染）；orgConfirms = 待决议确认卡（✓/✗ 决议入口）
   projects?: ProjectGroup[] | null;
   orgConfirms?: OrgConfirm[];
+  // M13-6E 任务板缓存透出（conn.boards 对象化）：通知回跳 dispatch 域归因反查
+  //（dispatch_id → gid+entryId）数据面，与 web 端 ctx.boards 同构。缓存语义=增量
+  // 维护（M13-4 锚定纪律），反查只出「线索」——最终呈现以 GroupModal orgDetail
+  // 现拉全量为准（gid 悬空=打开失败示错，entry 缺=不高亮），不出假数据
+  boards?: Record<string, ProjectBoard>;
   schemaVersion?: number;
   sourceCapabilities?: SourceCapabilities;
   notifications?: NotificationItem[] | null;
   notificationsLegacy?: boolean;
+  // #72 E 线 产物池三态与清单透出（conn.artPool/artPoolData 同名透出）：UI 三重门
+  // （artPoolGate：yes && deliverables && online）据此判定入口显隐。清单仅 yes 源
+  // 有值；pending/no 源 UI 不消费（入口隐藏，与探测数据面无关）
+  artPool?: "yes" | "no" | "pending";
+  artPoolData?: ArtPoolItem[];
 }
 
 export interface Snapshot {
@@ -235,6 +273,10 @@ export interface Snapshot {
   // #71 输出物看板开关（活动源 SNAPSHOT.deliverables，relay 插件配置）：false/缺省
   // （旧 relay 无字段）= 详情页隐藏「输出物」tab；true 才显示
   deliverables?: boolean;
+  // #72 E 线 产物池（活动源口径）：三态 + 探测顺带缓存的首份清单。UI 经 artPoolGate
+  // （yes && deliverables && online）判入口显隐；清单是池视图初始面，进入时 refreshArtPool 重拉
+  artPool?: "yes" | "no" | "pending";
+  artPoolData?: ArtPoolItem[];
   // #17 第二批 雇员独立家设置（活动源 SNAPSHOT.settings）：null = 旧 relay 无字段
   // （设置抽屉行隐藏）；开关命令按活动源路由（对齐 models 口径）
   empHome: EmployeeHomeSettings | null;
@@ -279,6 +321,8 @@ const emptySnapshot: Snapshot = {
   notifications: null,
   notificationsLegacy: true,
   deliverables: false,
+  artPool: "pending", // #72 E 线：未配置态无池入口（三重门 online 不过）
+  artPoolData: [],
   empHome: null,
   sessions: [],
   lastErrorCmd: null,
@@ -518,7 +562,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome" | "schemaVersion" | "sourceCapabilities" | "notifications" | "notificationsLegacy"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome" | "schemaVersion" | "sourceCapabilities" | "notifications" | "notificationsLegacy" | "artPool" | "artPoolData"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -533,6 +577,9 @@ class RelayStore {
       allowRules: c.allowRules, // #212 记住规则（设置抽屉列表 + 按源路由删除）
       projects: c.projects, // #26 M2 项目组（列表组织区 + 组详情）
       orgConfirms: c.orgConfirms, // #26 M2 待决议确认卡
+      boards: Object.fromEntries(c.boards), // M13-6E 板缓存对象化（回跳 dispatch 反查）
+      artPool: c.artPool, // #72 E 线 产物池三态透出（artPoolGate 三重门数据面）
+      artPoolData: c.artPoolData,
       schemaVersion: c.schemaVersion,
       sourceCapabilities: c.sourceCapabilities,
       notifications: c.notifications,
@@ -549,7 +596,7 @@ class RelayStore {
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null, schemaVersion: undefined, sourceCapabilities: undefined, notifications: null, notificationsLegacy: true };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null, schemaVersion: undefined, sourceCapabilities: undefined, notifications: null, notificationsLegacy: true, artPool: "pending", artPoolData: [] };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -574,6 +621,8 @@ class RelayStore {
         models: activeModels,
         deliverables: activeDeliverables,
         empHome: activeEmpHome,
+        artPool: this.activeConn()?.artPool ?? "pending", // #72 E 线 活动源口径（deliverables 同款）
+        artPoolData: this.activeConn()?.artPoolData ?? [],
         schemaVersion: this.activeConn()?.schemaVersion,
         sourceCapabilities: this.activeConn()?.sourceCapabilities,
         notifications: this.activeConn()?.notifications ?? null,
@@ -594,6 +643,8 @@ class RelayStore {
       models: c.models,
       deliverables: c.deliverables,
       empHome: c.empHome,
+      artPool: c.artPool, // #72 E 线 单源直出（聚合 return 同款活动源口径）
+      artPoolData: c.artPoolData,
       schemaVersion: c.schemaVersion,
       sourceCapabilities: c.sourceCapabilities,
       notifications: c.notifications,
@@ -892,12 +943,17 @@ class RelayStore {
         schemaVersion: undefined,
         sourceCapabilities: undefined,
         notifications: null,
+        artPool: "pending", // #72 E 线：未探明（首个 SNAPSHOT 到达且 online 时探测一次）
+        artPoolData: [],
+        artPoolProbing: false,
         acceptances: [], // #137 SNAPSHOT 覆盖式更新（收到快照前为空）
         allowRules: null, // #212 SNAPSHOT 覆盖式更新（null = 旧 relay 无 allow_rules 字段）
         empHome: null, // #17 第二批 SNAPSHOT 覆盖式更新（null = 旧 relay 无 settings 字段）
         projects: null, // #26 M2 SNAPSHOT 覆盖式更新（null = 旧 relay 无团队字段）
         orgConfirms: [],
         boards: new Map(),
+        anchoredBoards: new Set(), // M13-4ADD 板 delta 锚定集（覆盖式帧/重拉 ack 确立）
+        boardResync: new Set(), // M13-4ADD 重拉 in-flight 防抖
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -1687,7 +1743,7 @@ class RelayStore {
       // 其余按 ACK 原样；p 不存在（已被超时收摊）则丢弃
       if (p?.onAck) {
         const dup = !ack.ok && !!ack.error && ack.error.startsWith("duplicate");
-        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}) }); } catch {}
+        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}), ...(ack.permission ? { permission: ack.permission } : {}), ...(typeof ack.engine === "string" && ack.engine ? { engine: ack.engine } : {}) }); } catch {}
       }
       if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
@@ -2215,6 +2271,10 @@ class RelayStore {
         conn.projects = Array.isArray(projs)
           ? projs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name)
           : null;
+        // M13-4ADD：快照不带板——断连期间板 delta 可能丢帧，板基线与 relay 脱节。
+        // 清板锚定：后继首帧 delta → drop+重拉重锚定（基线自愈）；projects 由本段
+        // 覆盖式重置天然重锚，无需处理
+        conn.anchoredBoards.clear();
         const cfs = (msg.payload as { org_confirms?: unknown }).org_confirms;
         conn.orgConfirms = Array.isArray(cfs)
           ? cfs.filter((c): c is OrgConfirm => !!c && typeof (c as OrgConfirm).id === "string" && !!(c as OrgConfirm).kind)
@@ -2231,6 +2291,13 @@ class RelayStore {
           : [];
         // #71 输出物看板开关随快照携带（旧版 relay 无此字段 = 关，详情页藏 tab）
         conn.deliverables = snapshot.deliverables;
+        // #72 E 线 产物池首连探测挂点（W 线 updateArtPoolBtn 同语义）：快照到达且在线
+        // 时探一次（pending 去重 + in-flight 防并发，重连不重试不循环打爆）。fire-and-forget
+        // 不挡快照装配，探测完 emit。云通道源直接 no（池静态服务仅 LAN 可达——web W 线
+        // 「云源 slashHttpBase 不可达 → 池仅 LAN 源出节」同款，不发必败请求）
+        if (conn.state === "online" && conn.artPool === "pending" && !conn.artPoolProbing) {
+          void this.probeArtPool(conn);
+        }
         conn.schemaVersion = snapshot.schemaVersion;
         conn.sourceCapabilities = snapshot.sourceCapabilities;
         conn.notifications = snapshot.notifications;
@@ -2497,12 +2564,13 @@ class RelayStore {
         break;
       }
       // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡覆盖式更新（同 SNAPSHOT 口径，
-      // 旧 relay 无事件 = 收不到帧，重连快照兜底）；任务板增量进 boards 缓存
+      // 旧 relay 无事件 = 收到帧，重连快照兜底）；任务板增量进 boards 缓存。
+      // M13-4 delta 投影消费：v2 relay（projection_v2）且帧带 delta → 增量 merge；
+      // M13-4ADD 锚定纪律：projects 锚定=快照/覆盖式消费过（prev 非 null），未锚定
+      // delta 丢弃（SNAPSHOT.projects 天然锚定兜底，无重拉面）；缺席/旧 relay → 覆盖式
       case "PROJECTS_UPDATED": {
-        const gs = (msg.payload as { groups?: unknown }).groups;
-        if (Array.isArray(gs)) {
-          conn.projects = gs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name);
-        }
+        const eff = applyProjectsFrame(conn.projects, msg.payload, conn.sourceCapabilities?.projection_v2 === true);
+        if (eff.projects) conn.projects = eff.projects;
         break;
       }
       case "ORG_CONFIRM_UPDATED": {
@@ -2520,10 +2588,24 @@ class RelayStore {
         if (eh) conn.empHome = eh;
         break;
       }
+      // BOARD_UPDATED：M13-4 delta 投影消费 + M13-4ADD 锚定纪律——delta 仅在锚定后
+      // merge（该 gid 消费过覆盖式全量帧）；未锚定 delta 丢弃+重拉（resyncBoard ack
+      // 回全量重锚定）；覆盖式帧消费成功即锚定。断连重连后 SNAPSHOT 清锚（见 SNAPSHOT
+      // 段）——首帧 delta 触发重拉，基线自愈
       case "BOARD_UPDATED": {
-        const gid = (msg.payload as { gid?: unknown }).gid;
-        const b = (msg.payload as { board?: unknown }).board as ProjectBoard | undefined;
-        if (typeof gid === "string" && b && Array.isArray(b.entries)) conn.boards.set(gid, b);
+        const p = msg.payload as { gid?: unknown };
+        const gid = typeof p.gid === "string" ? p.gid : null;
+        const eff = applyBoardFrame(
+          gid !== null ? conn.boards.get(gid) : undefined,
+          gid !== null && conn.anchoredBoards.has(gid),
+          msg.payload,
+          conn.sourceCapabilities?.projection_v2 === true,
+        );
+        if (eff.board) {
+          conn.boards.set(eff.board.gid, eff.board);
+          if (eff.anchor) conn.anchoredBoards.add(eff.board.gid);
+        }
+        if (eff.resyncGid) this.resyncBoard(conn, eff.resyncGid);
         break;
       }
       // #212 记住规则变更推送（瞬态 seq:0）：删规则后 relay 全量重发——覆盖式更新，
@@ -2710,7 +2792,7 @@ class RelayStore {
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
   // relay 幂等去重兜底，不跨源串扰。onAck（0.4.4）：需要结果语义的调用方注入
-  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown }) => void, cmdId?: string): boolean {
+  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string }; engine?: string }) => void, cmdId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
     // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
     // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器
@@ -2808,6 +2890,105 @@ class RelayStore {
       if (!r.ok) { onDone(null); return; }
       onDone((r.data as { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | undefined) ?? null);
     });
+  }
+
+  // M13-4ADD 未锚定板 delta 的重拉重锚定：COMMAND_PROJECT_DETAIL ack 回 board 全量
+  // → 覆盖式消费+锚定（基线确立后继 delta 才可 merge）。in-flight 防抖：同 gid 重拉
+  // 未回期间再收 drop 帧不重复发（send 的 ACK 机制保证回调恒达——成功/失败/超时收摊，
+  // Set 必清理；send 立即失败（未连/排队满）时同步放行防抖位）。失败不锚定——后继
+  // delta 继续丢弃+重拉，防抖挡频率，不自旋
+  private resyncBoard(conn: SourceConn, gid: string) {
+    if (conn.boardResync.has(gid)) return;
+    conn.boardResync.add(gid);
+    const release = () => { conn.boardResync.delete(gid); };
+    const sent = this.orgDetail(conn.id, gid, (r) => {
+      release();
+      const b = r?.board;
+      if (b && Array.isArray(b.entries)) {
+        conn.boards.set(gid, b); // ack 全量 = 覆盖式消费（现状口径原样）
+        conn.anchoredBoards.add(gid); // 基线确立
+      }
+      // 失败/无板：不锚定——后继 delta 帧继续 drop+重拉（防抖挡频率）
+    });
+    if (!sent) release();
+  }
+
+  // ---------- #72 E 线 产物池（池 A 单源：/api/artifacts 只读 + /artifacts/<name> HTTP 直取） ----------
+
+  // 池 HTTP 面地址与凭据：LAN 直连源 = cfg.wsUrl 的 http base + cfg.token；云升级源
+  //（#95 云→LAN 握手后 channel=lan）= lanHint 的 http base + lanToken。云通道源无
+  // LAN HTTP 面（云桥只做信令，无 /api/artifacts 静态服务）→ null（调用方定 no，
+  // 与 web W 线「云源仅 LAN 源出节」同语义）。token 只在 store 内部使用，不进 UI
+  private artPoolHttp(conn: SourceConn): { base: string; token: string } | null {
+    if (!conn.cfg) return null;
+    if (conn.channel !== "lan") return null;
+    const upgraded = !!conn.lanToken && !!conn.lanHint;
+    const base = httpBaseOf(upgraded ? `ws://${conn.lanHint}` : conn.cfg.wsUrl);
+    const token = upgraded ? conn.lanToken : conn.cfg.token;
+    return base && token ? { base, token } : null;
+  }
+
+  // 首连探测（SNAPSHOT 挂点，每 conn 一次）：fetch /api/artifacts 探测 + 顺带缓存首份
+  // 清单（web W 线 probeArtPool 同构）。判定=HTTP 语义：200 且 ok===true → yes（清单
+  // 入缓存）；404 → no（旧 relay 无此端点）；401 → no（凭据问题不当空池）；网络错/
+  // 超时 → no。**判据=fetch 探测，禁 schema 版本**（端点早于 schema_version 首现，
+  // 版本判据会误杀 09-14~09-27 窗口 relay——72W0 裁定勘误）。AbortSignal 8s 兜底
+  private async probeArtPool(conn: SourceConn): Promise<void> {
+    conn.artPoolProbing = true;
+    try {
+      const http = this.artPoolHttp(conn);
+      if (!http) { conn.artPool = "no"; return; }
+      const r = await fetch(artPoolListUrl(http.base, http.token), { signal: AbortSignal.timeout?.(8000) });
+      if (!r.ok) { conn.artPool = "no"; return; } // 404=端点不存在 / 401=token 失效，同 no
+      const j = (await r.json()) as { ok?: unknown; artifacts?: unknown };
+      if (!j || j.ok !== true) { conn.artPool = "no"; return; }
+      conn.artPoolData = artPoolItemsOf(j.artifacts);
+      conn.artPool = "yes";
+    } catch {
+      conn.artPool = "no"; // 网络错/超时：池不可达，入口隐藏（降级=下线不灰置）
+    } finally {
+      conn.artPoolProbing = false;
+      this.emit();
+    }
+  }
+
+  // 进入池视图时重拉（web openArtPool「每次进入重拉保新鲜」同语义）：仅 yes 源可调。
+  // 成功覆盖清单并 emit；失败 throw 由调用方（ArtPoolModal）显错误文案——门态不变
+  //（探测已过，瞬时拉取失败不推翻入口可见性），404（列表后文件被清理）由池动作面
+  // 单文件兜底
+  async refreshArtPool(sourceId: string): Promise<ArtPoolItem[]> {
+    const conn = this.conns.get(sourceId);
+    if (!conn || conn.artPool !== "yes") throw new Error("产物池不可用");
+    const http = this.artPoolHttp(conn);
+    if (!http) throw new Error("产物池不可达（仅同网直连可用）");
+    const r = await fetch(artPoolListUrl(http.base, http.token), { signal: AbortSignal.timeout?.(8000) });
+    if (!r.ok) throw new Error(`拉取失败（HTTP ${r.status}）`);
+    const j = (await r.json()) as { ok?: unknown; artifacts?: unknown };
+    if (!j || j.ok !== true) throw new Error("拉取失败（响应格式异常）");
+    conn.artPoolData = artPoolItemsOf(j.artifacts);
+    this.emit();
+    return conn.artPoolData;
+  }
+
+  // 池文件 HTTP 直取（web W 线池动作通道同款；/artifacts/<name> 静态服务）：
+  // - 池条目是全局扫描相对名，不在会话账授权锚点内——不可走 ws 的
+  //   COMMAND_ARTIFACT_FETCH（该通道校验 path 必须命中该会话 artifacts 账，防任意读），
+  //   必须 HTTP 直取（LAN only，云通道源在 artPoolHttp 已挡）
+  // - unknown 护栏（#28/#29 安全口径）：名字客户端先拒（poolNameOk 镜像 relay
+  //   ARTIFACT_NAME_RE——防穿越段/反斜杠/深嵌套/隐藏文件），畸形名不发请求；
+  //   404（列表后被清理）显错不假预览
+  // - token 只在本方法内部拼 URL，不出 store 不进 UI
+  async fetchPoolFile(sourceId: string, name: string): Promise<{ u8: Uint8Array; mime: string }> {
+    const conn = this.conns.get(sourceId);
+    if (!conn || conn.artPool !== "yes") throw new Error("产物池不可用");
+    if (!poolNameOk(name)) throw new Error("文件名不合法");
+    const http = this.artPoolHttp(conn);
+    if (!http) throw new Error("产物池不可达（仅同网直连可用）");
+    const r = await fetch(artPoolUrl(http.base, name, http.token), { signal: AbortSignal.timeout?.(15_000) });
+    if (r.status === 404) throw new Error("文件已不存在（可能已被清理）"); // web W 线同文案
+    if (!r.ok) throw new Error(`拉取失败（HTTP ${r.status}）`);
+    const mime = (r.headers.get("content-type") || "").split(";")[0].trim();
+    return { u8: new Uint8Array(await r.arrayBuffer()), mime };
   }
 
   // ---------- E3b 通知消费（R1c 面端侧接线） ----------

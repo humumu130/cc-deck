@@ -42,9 +42,33 @@ export interface ObservedFile {
   text: string;
 }
 
-/** 单文件观测骨架：stat 先于 read（定稿序，理由见头注）。裸调不吞 IO 异常（容错边界见头注）。 */
+/** 单文件观测骨架：stat 先于 read（定稿序，理由见头注）。裸调不吞 IO 异常（容错边界见头注）。
+ *
+ * **stat 短路 memo（STAT-SHORTCUT，READMODE-FIX 性能报忧转单）**：ensureStore 每次调用全源
+ * observe（READMODE-FIX 起 portCache 命中也跑导入聚合），checkpoint 全命中时 observe 拿到的
+ * mtime/lineCount 只为判定快进，text 用完即弃——同内容反复全文读是纯税（1MB 源实测 1.4ms/次）。
+ * memo 按 (mtimeNs, size) 判定：双未变⇒内容未变⇒直接复用上次 text（skip readFileSync）；
+ * 任一变⇒照常全文读并刷新 memo。正确性锚：
+ *   · mtime 推进是 OS 写路径保证（writeFileSync/appendFileSync 必推）；失效腿用 **mtimeNs 纳秒
+ *     精度**（bigint stat）——ms 粒度在同毫秒内二次写不推进（等长覆盖写对抗形态，测试探针实锤
+ *     误命中），ns 腿堵死该缝（APFS/ext4 均纳秒；秒级精度 FS 退化为现行为，安全侧）；
+ *   · 定稿序不变：命中路径只有 stat 无 read（无竞态窗口），miss 路径 stat 后 read 原样；
+ *   · SIZE_MEMO_MAX_BYTES 上限防大源常驻内存（events.ndjson 生产持续增长，超限源退化为
+ *     现行为=每次全文读，安全侧）。
+ */
+const OBS_MEMO = new Map<string, { mtimeNs: string; size: number; text: string }>();
+const SIZE_MEMO_MAX_BYTES = 2 * 1024 * 1024;
+
 export function statThenRead(file: string): ObservedFile {
-  const mtimeMs = Math.round(statSync(file).mtimeMs);
+  const st = statSync(file);
+  const mtimeMs = Math.round(st.mtimeMs);
+  const mtimeNs = statSync(file, { bigint: true }).mtimeNs.toString(); // 纳秒失效腿（ms 同粒度写也能区分）
+  const hit = OBS_MEMO.get(file);
+  if (hit !== undefined && hit.mtimeNs === mtimeNs && hit.size === st.size) {
+    return { mtimeMs, text: hit.text }; // 双未变短路：跳过全文读
+  }
   const text = readFileSync(file, "utf8");
+  if (st.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st.size, text });
+  else OBS_MEMO.delete(file); // 超限源不 memo（曾 memo 过的膨胀源顺手清出，防滞留旧 text）
   return { mtimeMs, text };
 }

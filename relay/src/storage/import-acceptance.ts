@@ -38,7 +38,7 @@ import { basename, join } from "node:path";
 import { sha12, statThenRead, type ObservedFile } from "./import-util.js";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
-import { appendLoss, listLoss } from "./loss-report.js";
+import { appendLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级 bump→源失效强制重扫（与 DB user_version 正交）。 */
 export const ACCEPTANCE_IMPORT_SCHEMA_VERSION = 1;
@@ -192,7 +192,7 @@ export function importAcceptance(port: StoragePort, acceptanceDir: string, opts?
   const obs = observeAcceptanceDir(acceptanceDir);
   const cp = readCheckpoint(port, acceptanceDir, { mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, schemaVersion });
   if (cp !== null) {
-    const n = (sql: string): number => port.query<{ n: number }>(sql)[0]?.n ?? -1;
+    const n = (sql: string, ...params: unknown[]): number => port.query<{ n: number }>(sql, params)[0]?.n ?? -1;
     return {
       skipped: true,
       counts: {
@@ -200,7 +200,7 @@ export function importAcceptance(port: StoragePort, acceptanceDir: string, opts?
         item: n("SELECT COUNT(*) AS n FROM acceptance_item"),
         result: n("SELECT COUNT(*) AS n FROM acceptance_result"),
       },
-      loss: listLoss(port, acceptanceDir).length,
+      loss: n("SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ?", acceptanceDir), // COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）
       rescanned: [],
     };
   }

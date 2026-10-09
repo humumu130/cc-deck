@@ -100,10 +100,10 @@ writeFileSync(join(boardsDir, "g-1.json"), JSON.stringify({
   gid: "g-1",
   entries: [
     { id: "e-done", text: "已完成卡", ts: T + 43, updated_at: T + 43, title: "已完成卡", status: "done" },
-    { id: "e-a", text: "无依赖卡", ts: T + 43, updated_at: T + 43, title: "无依赖卡", status: "todo" },
-    { id: "e-b", text: "依赖全 done", ts: T + 43, updated_at: T + 43, title: "依赖全 done", status: "doing", depends_on: ["e-done"] },
-    { id: "e-c", text: "gate 未过", ts: T + 43, updated_at: T + 43, title: "gate 未过", status: "doing", depends_on: ["e-done"], gate: { reason: "等用户验收", opened_at: T + 44 } },
-    { id: "e-d", text: "坏引用", ts: T + 43, updated_at: T + 43, title: "坏引用", status: "todo", depends_on: ["e-ghost"] },
+    { id: "e-a", text: "无依赖卡", ts: T + 43, updated_at: T + 43, title: "无依赖卡", status: "backlog" },
+    { id: "e-b", text: "依赖全 done", ts: T + 43, updated_at: T + 43, title: "依赖全 done", status: "claimed", depends_on: ["e-done"] },
+    { id: "e-c", text: "gate 未过", ts: T + 43, updated_at: T + 43, title: "gate 未过", status: "claimed", depends_on: ["e-done"], gate: { reason: "等用户验收", opened_at: T + 44 } },
+    { id: "e-d", text: "坏引用", ts: T + 43, updated_at: T + 43, title: "坏引用", status: "backlog", depends_on: ["e-ghost"] },
   ],
   lessons: [
     { id: "l-1", text: "经验一", tags: ["react", "p1"], ts: T + 40 },
@@ -299,7 +299,7 @@ try {
 
   // ---------- 3. computeReady 板语义锁 + listLessons tags 双档同结果 ----------
   console.log("段3 板语义回归锁:");
-  const board = JSON.parse(readFileSync(join(boardsDir, "g-1.json"), "utf-8")) as { entries: { id: string; text: string; ts: number; updated_at: number; title?: string; status: "todo" | "doing" | "done"; depends_on?: string[]; gate?: { reason: string; opened_at: number } }[] };
+  const board = JSON.parse(readFileSync(join(boardsDir, "g-1.json"), "utf-8")) as { entries: { id: string; text: string; ts: number; updated_at: number; title?: string; status: "backlog" | "claimed" | "submitted" | "ready_to_install" | "done"; depends_on?: string[]; gate?: { reason: string; opened_at: number } }[] };
   const ready = computeReadySet({ entries: board.entries });
   const byId = new Map(ready.map((r) => [r.id, r.check]));
   assert(ready.length === 4 && !byId.has("e-done"), "computeReadySet 过滤 done 卡（entries 不入 SQLite，板读面仍 JSON 直读——M1 语义零回归锁）");

@@ -177,7 +177,7 @@ const DATA_TABLES = [
   "project", "member", "group", "group_member", "session", "task", "dispatch", "lesson", "org_confirm",
   "acceptance_sheet", "acceptance_item", "acceptance_result", "artifact", "notification", "notification_client_state",
 ] as const;
-const ALL_17 = [...DATA_TABLES, "import_checkpoint", "import_loss"];
+const ALL_18 = [...DATA_TABLES, "import_checkpoint", "import_loss", "permission_audit"]; // v3+permission_audit（P81-5）
 function tableNames(port: StoragePort): string[] {
   return port.query<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'").map((r) => r.name);
 }
@@ -212,13 +212,13 @@ function throwOf(run: () => unknown): string {
 }
 
 try {
-  // ---------- 轴① 建库冷启动：零库 dataDir → ensureStore 聚合入口 → 17 表+六域+checkpoint ----------
+  // ---------- 轴① 建库冷启动：零库 dataDir → ensureStore 聚合入口 → 18 表+六域+checkpoint ----------
   console.log("轴① 建库冷启动:");
   const port = ensureStore(dirsA);
   assert(port.isOpen && port.path === join(dataDir, "cc-deck.sqlite3"), `ensureStore 打开聚合库 ${port.path.split("/").pop()}`);
   assert(ensureStore(dirsA) === port, "ensureStore 单例缓存：同 dirs 二次调用返回同 port（不重开）");
   const tabs = tableNames(port);
-  assert(ALL_17.every((t) => tabs.includes(t)), `17 表全在（15 baseline+checkpoint+loss；缺=${ALL_17.filter((t) => !tabs.includes(t)).join(",") || "无"}）`);
+  assert(ALL_18.every((t) => tabs.includes(t)), `18 表全在（15 baseline+checkpoint+loss+permission_audit；缺=${ALL_18.filter((t) => !tabs.includes(t)).join(",") || "无"}）`);
   const n = (sql: string, params?: unknown[]): number => port.query<{ n: number }>(sql, params)[0]?.n ?? -1;
   const gN = n(`SELECT COUNT(*) AS n FROM "group"`);
   const pN = n("SELECT COUNT(*) AS n FROM project");
@@ -242,12 +242,12 @@ try {
   console.log("轴② 迁移幂等:");
   const masterBefore = JSON.stringify(port.query("SELECT name, sql FROM sqlite_master ORDER BY name"));
   const re = runMigrations(port, migrations);
-  assert(re.applied.length === 0 && re.from === 2 && re.to === 2, `已迁库重跑零迁移（applied=[]，from/to=2，实际 applied=${JSON.stringify(re.applied)}）`);
-  assert(JSON.stringify(port.query("SELECT name, sql FROM sqlite_master ORDER BY name")) === masterBefore && (port.query<Record<string, number>>("PRAGMA user_version")[0]?.user_version) === 2, "重跑后 schema 零变化（sqlite_master 全等+user_version=2）");
+  assert(re.applied.length === 0 && re.from === 3 && re.to === 3, `已迁库重跑零迁移（applied=[]，from/to=3，实际 applied=${JSON.stringify(re.applied)}）`);
+  assert(JSON.stringify(port.query("SELECT name, sql FROM sqlite_master ORDER BY name")) === masterBefore && (port.query<Record<string, number>>("PRAGMA user_version")[0]?.user_version) === 3, "重跑后 schema 零变化（sqlite_master 全等+user_version=3）");
   const emptyPort = createSqlitePort({ dataDir, filename: "empty-migrate.sqlite3" });
   emptyPort.open();
   const reEmpty = runMigrations(emptyPort, migrations);
-  assert(JSON.stringify(reEmpty.applied) === "[1,2]" && ALL_17.every((t) => tableNames(emptyPort).includes(t)), "空库直跑全量 DDL：applied=[1,2] 且 17 表全建");
+  assert(JSON.stringify(reEmpty.applied) === "[1,2,3]" && ALL_18.every((t) => tableNames(emptyPort).includes(t)), "空库直跑全量 DDL：applied=[1,2,3] 且 18 表全建");
   emptyPort.close();
 
   // ---------- 轴③+⑤a 断点续跑+events 批原子性（独立库实验场，恢复走 ensureStore 主路径） ----------

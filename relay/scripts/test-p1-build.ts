@@ -17,6 +17,12 @@ const pluginBundle = join(root, "cc-plugins", "plugins", "cc-deck", "scripts", "
 const desktopBundle = join(root, "desktop-tauri", "src-tauri", "resources", "relay.mjs");
 const webSrc = join(root, "web-console", "index.html");
 const webCopy = join(root, "cc-plugins", "plugins", "cc-deck", "web-console", "index.html");
+// M13-7 增量：单源复制清单的其余副本也锁一致性（copy 有、断言此前只锁 index.html 一件）
+const pairedCopies: [string, string][] = [
+  ["web-console/nacl.js", "web-console/nacl.js"],
+  ["web-console/qr.js", "web-console/qr.js"],
+  ["mobile/index.html", "mobile/index.html"],
+].map(([from, to]) => [join(root, from), join(root, "cc-plugins", "plugins", "cc-deck", to)]);
 const pluginJsonPath = join(root, "cc-plugins", "plugins", "cc-deck", ".claude-plugin", "plugin.json");
 const mktPath = join(root, ".claude-plugin", "marketplace.json");
 
@@ -54,8 +60,17 @@ try {
   const copy = readFileSync(webCopy);
   ok(src.equals(copy), "Web 副本与 web-console/index.html byte-identical（单源复制）");
   ok(readFileSync(webCopy, "utf-8").trimEnd().endsWith("</html>"), "Web 副本 </html> 收尾（完整非截断）");
+  // M13-7 增量：其余静态资源副本一致性（nacl/qr/mobile 壳——漂移=插件网页端 503 同坑 #150）
+  for (const [from, to] of pairedCopies) {
+    ok(readFileSync(from).equals(readFileSync(to)), `副本一致：${to.split("cc-plugins/")[1]} ≡ 源`);
+  }
 
   ok(sha256(pluginBundle) === sha256(desktopBundle), "两份 relay.mjs SHA256 一致（018 :654 DoD）");
+  // M13-7 增量：M13 面随 bundle 带入特征锁（防「新面落库忘重打」——实测抓到过 10-05 stale
+  // 产物：同 hash 一致地旧，delta 投影发射面缺席。esbuild 无 minify，标识符/串字面量保留）
+  const bundleText2 = readFileSync(pluginBundle, "utf-8");
+  ok(bundleText2.includes("projection_v2") && bundleText2.includes("entity_refs"),
+    "bundle 携 M13 delta 投影发射面（projection_v2 信号位+entity_refs 差分键）");
 
   const pluginVer = JSON.parse(readFileSync(pluginJsonPath, "utf-8")).version;
   const mkt = JSON.parse(readFileSync(mktPath, "utf-8"));

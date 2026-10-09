@@ -23,13 +23,13 @@
 // fixture 缝仿 test-m12-commands（mkdtemp+CCR_ORG_DIR 注入+fake agent factory+send 直调
 // handleCommand）；CLI 段 spawnSync python3 子进程（env 显式注入，不污染父进程）。
 // **三 worker 编制形态备案**：链路三次认领派单按职能透传不同 role（surveyor/builder/
-// rework，dispatchWorker input.role 命令面原生参数）——同组三条 headcount 同 role+engine
-// 会撞 import-org UNIQUE(group_id,member_id)（identity=sha12(orgDir@role@engine) 不含
-// session 维度，同组多 worker 同 role 必炸 org 域导入整体回滚；生产同 role 多 worker 组
-// 即撞，已实证并回单报告待裁度）——本链路走合法编制形态（不同职能=不同 role）。
-// **两处钉住的既有缺陷（零源件改动，实证断言+回单备案）**：①import-org 同 (role,engine)
-// 聚合缺陷（上述）；②read-mode compareDomain notification 分支文件名错位（.ndjson vs
-// 实际存储 .json → json 面恒 0，有通知场景必报 count-mismatch，O10④ 钉住）。
+// rework——D18 时点备案：P81-2 权限主体映射词表（worker/pm/team_pm/review/review_pm）
+// 收窄后 surveyor 非法，最小修=落 worker（勘察属 worker 职能）；builder/rework 实际
+// 未显式传 role（缺省 worker 直通）
+// rework，dispatchWorker input.role 命令面原生参数）。M12-8 FIX-1 已修 import-org 聚合缺陷
+// （identity=sha12(orgDir@role@engine@session) 混入 session 维度+关系落库去重）——同组多
+// worker 同 role 同引擎不再撞 UNIQUE(group_id,member_id)，O10 shadow 对账全域零容忍
+//（notification 比对口径缺陷同期已修：read-mode compareDomain 改读两 JSON 源 distinct key）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-m1-orchestration.ts
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -121,7 +121,7 @@ try {
   const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
   const prevDuty = process.env.CCR_PM_DUTY;
   const prevAcc = process.env.CCR_ACCEPTANCE_DIR;
-  delete process.env.CCR_STORAGE_READ_MODE; // 主链全程 json 档（现状写路径）；SQLite 面走 ensureStore 直调不经读档位
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 主链全程 json 档（现状写路径）；SQLite 面走 ensureStore 直调不经读档位——显式钉档（SQLITE-FLIP 后缺省=sqlite，「delete env=json」旧假设失效）
   delete process.env.CCR_PM_DUTY;           // 值守 O9 才开
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
@@ -161,16 +161,16 @@ try {
     const mainId = dMain1?.entity_id ?? "";
     assert(mainAck1.ok === true && dMain1?.blocked === true && (dMain1.block_reasons ?? []).some((s) => s.includes("未完成")) && !("dispatch_id" in (mainAck1.data as object)),
       "O2① 主卡依赖未就绪 → blocked:true 零派单（编排 gate，无 dispatch_id 键）");
-    assert(created.length === baseO2 && mainId !== "" && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "todo",
+    assert(created.length === baseO2 && mainId !== "" && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "backlog",
       "O2② 零 spawn+主卡落板 todo（backlog 语义，task_ref≡entity_id）");
 
     // ---------- O3 段②依赖卡先派先收：认领→回合 done→台账 done+卡自动 done+lesson 回流 ----------
     console.log("O3 依赖卡先派先收");
     const baseO3 = created.length;
-    const depDisp = send(mgr, "o3dep", "COMMAND_DISPATCH", { gid, prompt: "勘察走起", title: "依赖前置：环境勘察报告", entry_id: depId, role: "surveyor" }, "web-1");
+    const depDisp = send(mgr, "o3dep", "COMMAND_DISPATCH", { gid, prompt: "勘察走起", title: "依赖前置：环境勘察报告", entry_id: depId, role: "worker" }, "web-1");
     const depDispatchId = (depDisp.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(depDisp.ok === true && depDispatchId !== "" && created.length === baseO3 + 1
-      && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "doing",
+      && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "claimed",
       "O3① 依赖卡认领放行：spawn+卡 doing 挂接 dispatch_id（M12-1 入口）");
     created[baseO3]?.cb.onInit("sdk-orch-dep", "test-model"); // 清 init timer 防悬挂
     created[baseO3]?.cb.onTurnEnd(true, "结果：勘察完成｜改动文件：survey.md", 100);
@@ -187,12 +187,12 @@ try {
     //            认领既有卡必须 entry_id） ----------
     console.log("O4 就绪放行主卡");
     const baseO4 = created.length;
-    const mainAck2 = send(mgr, "o4main", "COMMAND_DISPATCH", { gid, prompt: "主卡活", entry_id: mainId, role: "builder" }, "web-1");
+    const mainAck2 = send(mgr, "o4main", "COMMAND_DISPATCH", { gid, prompt: "主卡活", entry_id: mainId, role: "worker" }, "web-1");
     const dMain2 = mainAck2.data as { entity_id?: string; dispatch_id?: string; session_id?: string } | undefined;
     const hungId = dMain2?.dispatch_id ?? "";
     assert(mainAck2.ok === true && hungId !== "" && created.length === baseO4 + 1,
       "O4① 依赖 done → 认领放行：spawn（M12-2/M12-4 ready 链闭环，认领路径 computeReady 同口径）");
-    assert(loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "doing"
+    assert(loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "claimed"
       && loadBoard(gid).entries.find((e) => e.id === mainId)?.dispatch_id === hungId,
       "O4② 主卡认领 doing 挂接 dispatch_id（零新卡，认领既有 blocked 卡）");
 
@@ -210,13 +210,13 @@ try {
     assert(ackL.ok === true && convView.length === 0 && hungRows[hungRows.length - 1]?.status === "done"
       && String(hungRows[hungRows.length - 1]?.receipt ?? "").includes("relay 重启"),
       "O5① 悬账兜底：收敛视图零 running/dispatched+悬挂行补 done（receipt=relay 重启，回合中断——M12-3 重启出口）");
-    assert(mainAfterRestart?.status === "todo" && (loadBoard(gid).lessons ?? []).length === lessonsAtRestart,
+    assert(mainAfterRestart?.status === "backlog" && (loadBoard(gid).lessons ?? []).length === lessonsAtRestart,
       "O5② 主卡退 todo（中断口径非真交付：不落 done 不写 lesson——垃圾账防线）+板卡状态跨重启可读");
 
     // ---------- O6 段④主卡认领重派+回合收口（重启后链路续走到终态） ----------
     console.log("O6 主卡认领重派+收口");
     const baseO6 = created.length;
-    const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续", title: "交付主活：全链编排验收", entry_id: mainId, role: "rework" }, "web-1");
+    const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续", title: "交付主活：全链编排验收", entry_id: mainId, role: "worker" }, "web-1");
     const mainDispatchId2 = (mainAck3.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(mainAck3.ok === true && mainDispatchId2 !== "" && created.length === baseO6 + 1,
       "O6① 重启后认领重派放行（依赖仍 done，computeReady 同口径；新 dispatch 单非复用悬挂 id）");
@@ -273,7 +273,13 @@ try {
     // ---------- O10 SQLite 账实段（read-mode 裁定面：全链后重建+投影读回+shadow 对账） ----------
     console.log("O10 SQLite 账实（read-mode 裁定：切换后读 SQLite 不丢账）");
     const dirs = resolveDirs({ dataDir: DATA, orgDir: ORG });
-    const port = ensureStore(dirs); // 建库冷启动：open→migrate→importAllForShadow（全链 JSON 账全量进 SQLite）
+    const port = ensureStore(dirs);
+    // 读前触发灌库（铁律 3；importAllForShadow 幂等快进）。P81-5 起审计写面（permission-audit
+    // auditStore=ensureStore）会在链路中途建库+缓存端口，ensureStore 命中 portCache 零重扫——
+    // 「冷启动全量灌」不再由 ensureStore 保证，显式快进把全链 JSON 账灌到当前再投影/对账。
+    const importFails = importAllForShadow(port, dirs);
+    assert(importFails.length === 0,
+      `O10⓪ 七域导入零失败（快进灌账兜底；实报 ${importFails.length} 域失败）`);
     const dbDispatch = dispatchEntriesFromDb(port);
     const dbDep = dbDispatch.filter((e) => e.id === depDispatchId);
     const dbMain = dbDispatch.filter((e) => e.id === mainDispatchId2);
@@ -293,15 +299,11 @@ try {
     // value-mismatch 行键落此集即合规（点路径形态宽松包含匹配；新未备案词面=红）
     const WHITELIST = ["trust_light", "parked_at", "archived_at", "target"];
     const offRows = shadowRows.filter((r) => r.category === "value-mismatch" && !WHITELIST.some((w) => r.key.includes(w)));
-    // notification 域比对口径缺陷实证（真链路暴露，钉住现状待 Leader 裁度修复单）：比对器
-    // 读 notifications.ndjson+decision-ledger.ndjson（read-mode.ts :438），实际存储是
-    // notifications.json（R1c JSON 对象，session-manager :752；导入器 import-notification
-    // 从 .json 正确导入）——文件名+格式双错位 → json 面恒 0，有通知场景必报 count-mismatch
-    //（本链路实证 3 通知 vs 0）。修复需重写该分支读取口径，超出本单靶面（M11 读侧件）。
-    const notifKnown = shadowRows.filter((r) => r.domain === "notification" && r.category === "count-mismatch");
-    const hardExceptNotif = hardRows.filter((r) => r.domain !== "notification");
-    assert(hardExceptNotif.length === 0 && offRows.length === 0 && notifKnown.length <= 1,
-      `O10④ shadow 六域对账（notification 域口径缺陷实证钉住）：缺失/数量/错误类零行+value-mismatch 全落备案集（实报 ${shadowRows.length} 行=notification count-mismatch ${notifKnown.length}+其余 ${hardExceptNotif.length + offRows.length}）`);
+    // M12-8 FIX-1 已修 notification 比对口径（read-mode compareDomain 改读两 JSON 源 distinct
+    // key 数，对齐 import-notification），全域零容忍恢复：缺失/数量/错误类任何域零行
+    // +value-mismatch 全落备案集。
+    assert(hardRows.length === 0 && offRows.length === 0,
+      `O10④ shadow 六域对账（全域零容忍，notification 口径缺陷已修）：缺失/数量/错误类零行+value-mismatch 全落备案集（实报 ${shadowRows.length} 行）`);
     const before = dispatchEntriesFromDb(port).length;
     importAllForShadow(port, dirs); // 二调：checkpoint 快进幂等（重启续跑不重灌）
     assert(dispatchEntriesFromDb(port).length === before,

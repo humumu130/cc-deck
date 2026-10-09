@@ -4,6 +4,7 @@
     "windows": [
       {
         "label": "main",
+        "url": "index-005.html",
         "title": "",
         "width": 1200,
         "height": 800,
@@ -12,7 +13,8 @@
         "create": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
-        "theme": "Dark"
+        "theme": "Dark",
+        "dragDropEnabled": false
       }
     ]
   }

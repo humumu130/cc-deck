@@ -115,7 +115,11 @@
 | 随手办 | `edit-auto` / `full-auto` | `edit-auto` / `full-auto` | `plan` / `edit-auto` | 仅预授权 playbook、非生产目录、预算未超；未知风险 `review_only` |
 | 正经立项 | `edit-auto` / `full-auto` | `edit-auto` / `full-auto` | `plan` / `edit-auto` | 必须有 group policy、环境闸门、引擎 capability 和审计；生产默认不接受 bypass |
 | 暂缓/冻结 | `plan` / `plan` | `ask` / `ask` | `plan` / `plan` | 禁止自动执行；只能读、审查和收口 |
+| 轻立项（2026-10-06 增补） | `edit-auto` / `full-auto` | `edit-auto` / `full-auto` | `plan` / `edit-auto` | 对齐随手办行（轻需求免税通道同语义；P81-1 验收 Leader 裁定） |
+| 看门狗（2026-10-06 增补） | `plan` / `plan` | `ask` / `ask` | `plan` / `plan` | 对齐暂缓行（值守自动化无人监督应最保守；P81-1 验收 Leader 裁定） |
 | 混编团队新开卡（PM/worker） | **请求默认 `bypassPermissions`** / 按所在 tier 上限 | **请求默认 `bypassPermissions`** / 按所在 tier 上限 | `plan` / `edit-auto` | **2026-10-06 用户拍板**；服务端仍做 tier、环境、capability、预算裁决，不能由默认值绕过护栏 |
+
+> **矩阵外 tier 裁定注记（2026-10-06 Leader 裁定，P81-1 验收；正式行已随 P81-2 落上表）**：relay 一等 tier「轻立项/看门狗」原不在表——P81-1 纯核心期按 fail-closed 拒面（reason=tier_not_in_policy_matrix）。裁定：**轻立项对齐随手办行、看门狗对齐暂缓行**（轻立项=轻需求免税通道同语义；看门狗=值守自动化无人监督应最保守）。裁定依据见 docs/reviews/2026-10-06-p811-worker-k.md；实现面=`relay/src/permission-policy.ts` CEILING/TIER_DEFAULT 两表。
 
 ### 5.3 默认值的精确定义
 

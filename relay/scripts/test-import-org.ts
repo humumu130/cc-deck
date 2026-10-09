@@ -1,7 +1,8 @@
 // M11-C1 组织域导入器测试：fixture 驱动（自制小样 orgDir，零生产触达）。
 // 范式沿用 test-storage（mkdtemp+env 全清+assert 计数+两轮连跑）。
 // fixture 布局：org.json（Leader 锚）+ projects.json（4 组：合法×3/词表外×1，含 anchor 归并/
-//   engine 缺省/跨组归并/坏 headcount 条目）+ confirms.json（5 单：合法/坏 kind/坏 status/
+//   engine 缺省/跨组归并/坏 headcount 条目；M12-8 FIX-1 两场景：g-1 同卡 s-1 重复认领去重、
+//   s-1/s-5 两卡同 (role,engine) 分立）+ confirms.json（5 单：合法/坏 kind/坏 status/
 //   悬空 gid/缺 gid）+ boards/g-1.json（边界实证：板内容不进五表）。
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, utimesSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,10 +44,10 @@ writeFileSync(join(orgDir, "org.json"), JSON.stringify({ version: 1, leader_sess
 writeFileSync(join(orgDir, "projects.json"), JSON.stringify({
   trust_light: false,
   groups: [
-    { id: "g-1", name: "alpha", anchor_dir: "/fx/alpha", status: "active", tier: "正经立项", single_card: false, created_at: T + 200, updated_at: T + 300, headcount: [{ session_id: "s-1", role: "dev", engine: "codex" }, { session_id: "s-2", role: "dev", engine: "claude" }] },
+    { id: "g-1", name: "alpha", anchor_dir: "/fx/alpha", status: "active", tier: "正经立项", single_card: false, created_at: T + 200, updated_at: T + 300, headcount: [{ session_id: "s-1", role: "dev", engine: "codex" }, { session_id: "s-2", role: "dev", engine: "claude" }, { session_id: "s-1", role: "dev", engine: "codex" }, { session_id: "s-5", role: "dev", engine: "codex" }] },
     { id: "g-2", name: "beta", anchor_dir: "/fx/beta", status: "parked", tier: "轻立项", single_card: true, created_at: T + 400, updated_at: T + 500, headcount: [{ session_id: "s-bad", role: "dev" }, { session_id: "s-x" }] },
     { id: "g-bad", name: "deadgrp", anchor_dir: "/fx/dead", status: "dead", tier: "正经立项", single_card: false, created_at: T + 600, updated_at: T + 700, headcount: [{ session_id: "s-3", role: "dev", engine: "codex" }] },
-    { id: "g-3", name: "alpha-two", anchor_dir: "/fx/alpha", status: "active", tier: "正经立项", single_card: false, created_at: T + 100, updated_at: T + 150, headcount: [{ session_id: "s-4", role: "dev", engine: "codex" }] },
+    { id: "g-3", name: "alpha-two", anchor_dir: "/fx/alpha", status: "active", tier: "正经立项", single_card: false, created_at: T + 100, updated_at: T + 150, headcount: [{ session_id: "s-1", role: "dev", engine: "codex" }] },
   ],
 }, null, 2) + "\n");
 writeFileSync(join(orgDir, "confirms.json"), JSON.stringify([
@@ -63,16 +64,19 @@ writeFileSync(join(orgDir, "boards", "g-1.json"), JSON.stringify({ gid: "g-1", e
 console.log("全量导入:");
 const r1 = importOrg(port, orgDir);
 assert(r1.skipped === false && r1.rescanned.length === 3, "三源全重扫（首轮无 checkpoint）");
-assert(r1.counts.project === 2 && r1.counts.group === 3 && r1.counts.member === 4 && r1.counts.groupMember === 4 && r1.counts.orgConfirm === 3, `五表行数 2/3/4/4/3 与 fixture 期望一致（实测 ${JSON.stringify(r1.counts)}）`);
+assert(r1.counts.project === 2 && r1.counts.group === 3 && r1.counts.member === 6 && r1.counts.groupMember === 5 && r1.counts.orgConfirm === 3, `五表行数 2/3/6/5/3 与 fixture 期望一致（M12-8 FIX-1：member 按 (session,role,engine) 分立——Leader+s-1+s-2+s-5+s-bad+s-3=6；gm g-1 3 行含同卡 s-1 去重/g-2 1/g-3 1=5）（实测 ${JSON.stringify(r1.counts)}）`);
 // 字段抽查：Leader member
 const leader = port.query<{ id: string; stable_identity: string; display_name: string; external_sid: string; joined_at: number }>("SELECT id, stable_identity, display_name, external_sid, joined_at FROM member WHERE stable_identity LIKE '%@leader@'")[0];
 assert(leader !== undefined && leader.stable_identity === `${orgDir}@leader@` && leader.display_name === "Leader" && leader.external_sid === "sess-leader" && leader.joined_at === T, "Leader member：identity=<orgDir>@leader@、sid/joined_at 来自锚");
-// 字段抽查：跨组归并 member（dev@codex 归并 s-1/s-3/s-4 → g-1+g-3）
-const devCodex = port.query<{ id: string; archive_json: string; joined_at: number; engine: string | null }>("SELECT id, archive_json, joined_at, engine FROM member WHERE stable_identity = ?", [`${orgDir}@dev@codex`])[0];
-assert(devCodex !== undefined && devCodex.archive_json === JSON.stringify({ groups: ["g-1", "g-3"] }), "跨组归并 member：archive_json 记两组历史（g-1+g-3）");
-// 字段抽查：engine 缺省条目 → identity 空段
-const devNoEngine = port.query<{ id: string }>("SELECT id FROM member WHERE stable_identity = ?", [`${orgDir}@dev@`])[0];
-assert(devNoEngine !== undefined && devNoEngine.id === memId(`${orgDir}@dev@`), "engine 缺省条目 identity 空段（<orgDir>@dev@）且 id 确定性推导");
+// 字段抽查：同卡跨组归并 member（案 B 后 identity 带 session 段；s-1 在 g-1/g-3 两认领 → 归并 1 行）
+const devCodex = port.query<{ id: string; archive_json: string; joined_at: number; engine: string | null }>("SELECT id, archive_json, joined_at, engine FROM member WHERE stable_identity = ?", [`${orgDir}@dev@codex@s-1`])[0];
+assert(devCodex !== undefined && devCodex.archive_json === JSON.stringify({ groups: ["g-1", "g-3"] }), "同卡跨组归并：identity 带 session 段（@dev@codex@s-1）、archive_json 记两组历史（g-1+g-3）——归并语义在 session 维度内保留");
+// 字段抽查：两卡同 (role,engine) 分立（M12-8 FIX-1 场景二：s-1/s-3/s-5 三行各自 session 段，不再共 identity）
+const devCodexRows = port.query<{ stable_identity: string }>("SELECT stable_identity FROM member WHERE stable_identity LIKE ?", [`${orgDir}@dev@codex@%`]);
+assert(devCodexRows.length === 3 && devCodexRows.map((r) => r.stable_identity).sort().join() === [`${orgDir}@dev@codex@s-1`, `${orgDir}@dev@codex@s-3`, `${orgDir}@dev@codex@s-5`].join(), "两卡同 (role,engine) 分立：dev@codex 前缀三行（s-1/s-3/s-5 各自 session 段）——UNIQUE 炸根除直接证词");
+// 字段抽查：engine 缺省条目 → identity 空段（engine 段空、session 段在）
+const devNoEngine = port.query<{ id: string }>("SELECT id FROM member WHERE stable_identity = ?", [`${orgDir}@dev@@s-bad`])[0];
+assert(devNoEngine !== undefined && devNoEngine.id === memId(`${orgDir}@dev@@s-bad`), "engine 缺省条目 identity 空段（<orgDir>@dev@@s-bad）且 id 确定性推导");
 // 字段抽查：project 归并（g-1/g-3 同 anchor → 同 project，name 取最早组 g-3）
 const projAlpha = port.query<{ id: string; name: string; dir_fingerprint: string; anchor_dir: string }>("SELECT id, name, dir_fingerprint, anchor_dir FROM project WHERE anchor_dir = '/fx/alpha'")[0];
 assert(projAlpha !== undefined && projAlpha.name === "alpha-two" && projAlpha.dir_fingerprint === sha1hex("/fx/alpha") && projAlpha.id === `proj-${sha1hex("/fx/alpha").slice(0, 12)}`, "anchor 归并：同 anchor 同 project、name 取最早组、dir_fingerprint=sha1(anchor)");
@@ -134,10 +138,10 @@ const pj = join(orgDir, "projects.json");
 utimesSync(pj, new Date(Date.now() + 10), new Date(Date.now() + 10)); // 防同毫秒 mtime 巧合
 const r3 = importOrg(port, orgDir);
 assert(r3.skipped === false && r3.rescanned.includes(pj), "projects.json 失效→重扫");
-assert(r3.counts.project === 3 && r3.counts.group === 4 && r3.counts.member === 4 && r3.counts.groupMember === 5 && r3.counts.orgConfirm === 3, `重灌后行数与新期望一致 3/4/4/5/3（实测 ${JSON.stringify(r3.counts)}）`);
+assert(r3.counts.project === 3 && r3.counts.group === 4 && r3.counts.member === 6 && r3.counts.groupMember === 5 && r3.counts.orgConfirm === 3, `重灌后行数与新期望一致 3/4/6/5/3（member=Leader+s-1+s-2+s-3+s-4+s-9 六卡分立；实测 ${JSON.stringify(r3.counts)}）`);
 assert(port.query<{ n: number }>(`SELECT COUNT(*) AS n FROM "group" WHERE id = 'g-2'`)[0]?.n === 0 && port.query<{ n: number }>("SELECT COUNT(*) AS n FROM project WHERE anchor_dir = '/fx/beta'")[0]?.n === 0, "旧数据不残留：g-2 及其孤 project 行已随域清消失");
 assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM group_member WHERE group_id = 'g-bad'")[0]?.n === 1, "g-bad 转合法后其 group_member 关系补齐（重扫语义）");
-assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM member WHERE stable_identity = ?", [`${orgDir}@qa@codex`])[0]?.n === 1, "新 role qa@codex 成员导入");
+assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM member WHERE stable_identity = ?", [`${orgDir}@qa@codex@s-9`])[0]?.n === 1, "新 role qa@codex 成员导入（identity 带 session 段）");
 const lossAfter = listLoss(port);
 assert(lossAfter.filter((l) => l.sourcePath === pj).length === 0 && lossAfter.filter((l) => l.sourcePath === join(orgDir, "confirms.json")).length === 4, "重扫按源清旧 loss 再落新账：projects.json 转净（0 条）、confirms.json 重灌同 4 条");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "重扫后仍零悬空 FK");
@@ -171,7 +175,7 @@ utimesSync(confirmsPath, new Date(Date.now() + 20), new Date(Date.now() + 20));
 const r4 = importOrg(port, orgDir);
 assert(r4.skipped === false, "confirms.json 失效触发重扫");
 assert(r4.counts.orgConfirm === 0, "坏 JSON 源零导入（损坏数据零进库）");
-assert(r4.counts.group === 4 && r4.counts.member === 4 && r4.counts.project === 3, "其余源照常重灌（不阻断）");
+assert(r4.counts.group === 4 && r4.counts.member === 6 && r4.counts.project === 3, "其余源照常重灌（不阻断；member 六卡分立同 r3 基准）");
 const badLoss = listLoss(port, confirmsPath);
 assert(badLoss.length === 1 && badLoss[0]?.reason === "bad-json" && badLoss[0]?.lineNo === 1, "坏 JSON 落账恰 1 条（line 1）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "坏源重扫后仍零悬空 FK");

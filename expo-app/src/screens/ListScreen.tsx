@@ -8,8 +8,10 @@ import { LogoMark, PencilIcon } from "../brand";
 import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
+import { artPoolGate } from "../artpool";
 import { FadeIn, PressScale } from "../motion";
 import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
+import { notifActionableOf, notifDoneAt, splitResolvedRows, jumpTargetOf, type NotifJumpTarget } from "../notify-jump";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
@@ -28,6 +30,7 @@ interface Props {
   onSetup: () => void;
   onScanServer: () => void; // 抽屉「扫码添加」（#276）：开设置页直接拉起扫码
   onEditServer: (id: string) => void;
+  onOpenArtPool: () => void; // #72 E 线 入口①：产物池常驻胶囊（三重门显隐），App.tsx 开 ArtPoolModal
   ref?: Ref<ListBackHandle>;
 }
 
@@ -313,18 +316,9 @@ export function orgConfirmPayload(confirmId: unknown, approve: unknown): { confi
   return { confirm_id: confirmId, approve: approve === true };
 }
 
-// 可行动项（badge 计数/「知道了」按钮位口径）：actionable===true 且 resolved_at/
-// handled_at/dismissed_at 全空且 key 为字符串。池非数组/条目畸形一律安全空——
-// 不清零不伪造（通知不清零的收缩面只由权威账驱动）
-export function notifActionableOf(items: unknown): { key: string }[] {
-  if (!Array.isArray(items)) return [];
-  return items.filter((n): n is { key: string } => {
-    if (!n || typeof n !== "object") return false;
-    const o = n as Record<string, unknown>;
-    return o.actionable === true && o.resolved_at == null && o.handled_at == null
-      && o.dismissed_at == null && typeof o.key === "string";
-  });
-}
+// notifActionableOf 迁入 ../notify-jump（M13-6E：与 done 判定/分区/回跳判定同模块，
+// 断言脚本直跑同路径；本文件 re-export 保持既有引用面不变）
+export { notifActionableOf } from "../notify-jump";
 // E2B-COMMANDS-END
 
 // 源配色映射（#294 审查修复口径）：按跨端稳定键 colorKey 排序等距分配调色板，
@@ -987,11 +981,12 @@ function OrgZone({ confirms, groups, onDecide, onOpenGroup }: {
 //（轻立项单列简化态 / 正经立项三段；挂起=冻结只读）→ 最近派单回执流（§3.5 过程不
 // 回灌只收回执一行）。板不随快照（帧预算纪律）——COMMAND_PROJECT_DETAIL 按需拉取；
 // 状态行优先取源快照实时值（PROJECTS_UPDATED 即时反映），拉取结果兜底
-function GroupModal({ srcId, target, onClose, onOpenSession }: {
+function GroupModal({ srcId, target, onClose, onOpenSession, highlightEntryId }: {
   srcId: string;
   target: { gid: string; name: string };
   onClose: () => void;
   onOpenSession: (sid: string) => void;
+  highlightEntryId?: string; // M13-6E 验收回跳：命中台账卡高亮定位（orgDetail 现拉板内查无=不高亮，防御）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -1017,7 +1012,7 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
     return g;
   }, [snap.sources, target.gid, g]);
   const entRow = (e: BoardEntry) => (
-    <View key={e.id} style={styles.gmEnt}>
+    <View key={e.id} style={[styles.gmEnt, e.id === highlightEntryId && styles.gmEntHi]}>
       <Text style={styles.gmEntT} numberOfLines={2}>{e.text}</Text>
       {e.note ? <Text style={styles.gmEntNote} numberOfLines={1}>{e.note}</Text> : null}
     </View>
@@ -1078,14 +1073,14 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
                   <View key={p.session_id}>{body}</View>
                 );
               }) : <Text style={styles.gmEmpty}>熟手池为空（首次派单后积累）</Text>}
-              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=待办/进行/完成三段 */}
+              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=D18 五态段（freeze §1.2） */}
               <Text style={styles.gmSec}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
               {ents.length === 0 ? (
                 <Text style={styles.gmEmpty}>板为空</Text>
               ) : g?.tier === "轻立项" ? (
                 <View style={styles.gmCol}>{ents.map(entRow)}</View>
               ) : (
-                ([["todo", "待办"], ["doing", "进行"], ["done", "完成"]] as const).map(([st, lb]) => (
+                ([["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待复核"], ["ready_to_install", "待装机"], ["done", "完成"]] as const).map(([st, lb]) => (
                   <View key={st} style={styles.gmColGroup}>
                     <Text style={styles.gmColH}>{lb} {ents.filter((e) => e.status === st).length}</Text>
                     <View style={styles.gmCol}>{ents.filter((e) => e.status === st).map(entRow)}</View>
@@ -1111,7 +1106,7 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
   );
 }
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, ref }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, onOpenArtPool, ref }: Props) {
   const { c } = useTheme();
   const { mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -1446,7 +1441,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [projNameById],
   );
   // 组详情弹窗：点 chip 打开 → COMMAND_PROJECT_DETAIL 按需拉取
-  const [orgOpen, setOrgOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
+  const [orgOpen, setOrgOpen] = useState<{ srcId: string; gid: string; name: string; entryId?: string } | null>(null);
   // E2b：确认卡决议走 ACK 严格判定门（W1b 同构）——approve 经 orgConfirmPayload
   // 强转真布尔（relay 咽喉 ===true 严判）、双击闸、失败可见态；unknownCommandError
   // 记能力位后该源决议降级禁用（不再弹错轰炸）；成功不本地造状态，等
@@ -1724,6 +1719,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             <Text style={styles.bellT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
           </Pressable>
         ) : null}
+        {snap.sources.some(artPoolGate) ? (
+          /* #72 E 线 入口①（常驻钮）：产物池=全局目录视图（与会话账正交的单源），
+             三重门（探测 yes && deliverables && online）任一源过即显——降级=下线不
+             灰置（探测 no/未探明的源整体隐藏，W 线同口径）。bellBtn 同款形制=
+             统计行胶囊既有常驻钮语言 */
+          <Pressable
+            style={styles.bellBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+            onPress={onOpenArtPool}
+            hitSlop={4}
+            accessibilityLabel="打开全局输出物目录"
+          >
+            <Text style={styles.bellT} numberOfLines={1}>输出物</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <FlatList
@@ -1911,12 +1921,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         <GroupModal
           srcId={orgOpen.srcId}
           target={{ gid: orgOpen.gid, name: orgOpen.name }}
+          highlightEntryId={orgOpen.entryId}
           onClose={() => setOrgOpen(null)}
           onOpenSession={onOpen}
         />
       ) : null}
 
-      {/* E2b 通知中心（铃铛/返回键呼出；打开/关闭零清零，池只读自快照） */}
+      {/* E2b 通知中心（铃铛/返回键呼出；打开/关闭零清零，池只读自快照）。
+          M13-6E onJump：回跳前先收通知中心（返回键分发面恢复），再 onOpen 打开
+          归因会话（导航聚焦）；target 仅 session 落点（jumpTargetOf 已把关） */}
       <NotifCenterModal
         open={notifOpen}
         onClose={() => setNotifOpen(false)}
@@ -1924,6 +1937,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         flight={notifFlight}
         errs={notifErr}
         onAct={notifAct}
+        onJump={(t, srcId) => {
+          setNotifOpen(false);
+          if (t.type === "session") { onOpen(t.sid); return; }
+          // task 落点：组详情打开后高亮定位台账卡（orgDetail 现拉全量为准）；组不在
+          // 该源 projects 在册（缓存悬空）=不跳不假造（M12-7 unknown-target 同哲学）
+          const g = (snap.sources.find((x) => x.id === srcId)?.projects ?? []).find((pg) => pg.id === t.gid);
+          if (!g) return;
+          setOrgOpen({ srcId, gid: t.gid, name: g.name, entryId: t.entryId });
+        }}
       />
     </SafeAreaView>
   );
@@ -1932,21 +1954,92 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 // E2b 通知中心 Modal：全源通知池只读列表 + actionable 未决行「知道了/忽略」动作。
 // 池只读自 store 快照——本组件无任何清池路径（打开/浏览/关闭/重连不清零）；
 // 动作经 ACK 严格判定门（notifAct）：失败行内错误可重试，飞行中按钮转「…」；
-// 旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造
-function NotifCenterModal({ open, onClose, rows, flight, errs, onAct }: {
+// 旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造。
+// M13-6E resolved 分离：已处理行（三时间戳任一）拆入「已处理 N」折叠分区（默认
+// 收起防长跑堆积），灰态+处理时刻（fmtLastActive 行语言）；main/resolved 两区各保
+// 池序不重排。M13-6E 验收回跳：acceptance 域未处理行经 jumpTargetOf 归因命中时
+// 显示「定位来源 ›」点击面（关中心→onJump 打开原会话）；归因缺失=无点击面降级。
+function NotifCenterModal({ open, onClose, rows, flight, errs, onAct, onJump }: {
   open: boolean;
   onClose: () => void;
   rows: { srcId: string; srcName: string; item: NotificationItem }[];
   flight: Set<string>;
   errs: Map<string, string>;
   onAct: (key: string, action: "handled" | "dismissed") => void;
+  onJump: (target: NotifJumpTarget, srcId: string) => void;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const snap = useRelay();
   const pendingKeys = useMemo(
     () => new Set(notifActionableOf(rows.map((r) => r.item)).map((n) => n.key)),
     [rows],
   );
+  // M13-6E 分区：done 行拆入「已处理 N」折叠区（默认收起；展开态组件本地内存级，
+  // 关闭即回默认——同 confirmDismissedKey 不落盘哲学）
+  const { main, resolved } = useMemo(() => splitResolvedRows(rows, (r) => notifDoneAt(r.item)), [rows]);
+  const [resolvedOpen, setResolvedOpen] = useState(false);
+  // 关闭即回默认收起：再开通知中心永远「默认折叠」（规格①口径；展开态不跨开合保留）
+  useEffect(() => {
+    if (!open) setResolvedOpen(false);
+  }, [open]);
+  const renderRow = (row: { srcId: string; srcName: string; item: NotificationItem }) => {
+    const { srcId, srcName, item } = row;
+    const actionable = pendingKeys.has(item.key);
+    const busy = flight.has(item.key);
+    const err = errs.get(item.key);
+    const doneAt = notifDoneAt(item);
+    // 回跳点击面口径对齐 web（canJmp=actionable 且未收口；已处理区=归档语义纯展示）。
+    // 落点解析与 web notifJumpTarget 同链：dispatch 域板缓存反查→task；降级 sessionId
+    // →session；解析不出=null 无按钮（不假造）。源板缓存取自该行 srcId 对应源
+    const jump = actionable && doneAt === null
+      ? jumpTargetOf(item, { sessions: snap.sessions, srcId, boards: snap.sources.find((x) => x.id === srcId)?.boards })
+      : null;
+    return (
+      <View key={`${srcId}/${item.key}`} style={styles.notiRow}>
+        <View style={styles.notiRowHead}>
+          {actionable ? <View style={styles.notiDot} /> : null}
+          <Text style={[styles.notiRowTitle, !actionable && { color: c.dim }]} numberOfLines={1}>{item.title}</Text>
+          {doneAt !== null ? <Text style={styles.notiDoneAt}>{fmtLastActive(doneAt)}</Text> : null}
+          <Text style={styles.notiSrc} numberOfLines={1}>{srcName}</Text>
+        </View>
+        {item.body ? <Text style={styles.notiBody} numberOfLines={2}>{item.body}</Text> : null}
+        {err ? <Text style={styles.notiErrT} numberOfLines={2}>{err}</Text> : null}
+        {jump ? (
+          // M13-6E 验收回跳（规格②，web nr-jmp 行同语义）：点击关通知中心→导航聚焦
+          //（task=组详情定位台账卡 / session=打开原会话）；降级路径无此按钮不假造
+          <Pressable
+            style={styles.notiJumpBtn}
+            hitSlop={6}
+            accessibilityLabel={`定位来源：${item.title}`}
+            onPress={() => onJump(jump, srcId)}
+          >
+            <Text style={styles.notiJumpT}>定位来源 ›</Text>
+          </Pressable>
+        ) : null}
+        {actionable ? (
+          <View style={styles.notiActRow}>
+            <Pressable
+              style={[styles.notiBtn, { backgroundColor: c.done, opacity: busy ? 0.5 : 1 }]}
+              disabled={busy}
+              accessibilityLabel={`知道了：${item.title}`}
+              onPress={() => onAct(item.key, "handled")}
+            >
+              <Text style={[styles.notiBtnT, { color: c.onDone }]}>{busy ? "…" : "知道了"}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.notiBtn, styles.notiBtnGhost, { borderColor: withA(c.dim, 0.5), opacity: busy ? 0.5 : 1 }]}
+              disabled={busy}
+              accessibilityLabel={`忽略：${item.title}`}
+              onPress={() => onAct(item.key, "dismissed")}
+            >
+              <Text style={[styles.notiBtnT, { color: c.dim }]}>{busy ? "…" : "忽略"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.notiMask} onPress={onClose}>
@@ -1961,42 +2054,26 @@ function NotifCenterModal({ open, onClose, rows, flight, errs, onAct }: {
           <ScrollView style={styles.notiList} contentContainerStyle={{ paddingBottom: 24 }}>
             {rows.length === 0 ? (
               <Text style={styles.notiEmpty}>暂无通知</Text>
-            ) : rows.map(({ srcId, srcName, item }) => {
-              const actionable = pendingKeys.has(item.key);
-              const busy = flight.has(item.key);
-              const err = errs.get(item.key);
-              return (
-                <View key={`${srcId}/${item.key}`} style={styles.notiRow}>
-                  <View style={styles.notiRowHead}>
-                    {actionable ? <View style={styles.notiDot} /> : null}
-                    <Text style={[styles.notiRowTitle, !actionable && { color: c.dim }]} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.notiSrc} numberOfLines={1}>{srcName}</Text>
+            ) : (
+              <>
+                {main.map(renderRow)}
+                {resolved.length > 0 ? (
+                  // M13-6E「已处理 N」折叠分区（规格①）：默认收起防长跑堆积；
+                  // 行不删除（不清零硬条款不破——拆区≠删行，池仍只读自快照）
+                  <View>
+                    <Pressable
+                      style={styles.notiResolvedHead}
+                      hitSlop={8}
+                      accessibilityLabel={resolvedOpen ? "收起已处理通知" : `展开已处理通知 ${resolved.length} 条`}
+                      onPress={() => setResolvedOpen((v) => !v)}
+                    >
+                      <Text style={styles.notiResolvedT}>已处理 {resolved.length} {resolvedOpen ? "▴" : "▾"}</Text>
+                    </Pressable>
+                    {resolvedOpen ? resolved.map(renderRow) : null}
                   </View>
-                  {item.body ? <Text style={styles.notiBody} numberOfLines={2}>{item.body}</Text> : null}
-                  {err ? <Text style={styles.notiErrT} numberOfLines={2}>{err}</Text> : null}
-                  {actionable ? (
-                    <View style={styles.notiActRow}>
-                      <Pressable
-                        style={[styles.notiBtn, { backgroundColor: c.done, opacity: busy ? 0.5 : 1 }]}
-                        disabled={busy}
-                        accessibilityLabel={`知道了：${item.title}`}
-                        onPress={() => onAct(item.key, "handled")}
-                      >
-                        <Text style={[styles.notiBtnT, { color: c.onDone }]}>{busy ? "…" : "知道了"}</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.notiBtn, styles.notiBtnGhost, { borderColor: withA(c.dim, 0.5), opacity: busy ? 0.5 : 1 }]}
-                        disabled={busy}
-                        accessibilityLabel={`忽略：${item.title}`}
-                        onPress={() => onAct(item.key, "dismissed")}
-                      >
-                        <Text style={[styles.notiBtnT, { color: c.dim }]}>{busy ? "…" : "忽略"}</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })}
+                ) : null}
+              </>
+            )}
           </ScrollView>
         </Pressable>
       </Pressable>
@@ -2036,6 +2113,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   notiBtnGhost: { backgroundColor: "transparent", borderWidth: 1 },
   notiBtnT: { fontSize: 12, fontWeight: "600" },
   notiErrT: { color: c.error, fontSize: 11, lineHeight: 15 },
+  // M13-6E：已处理行时间戳（复用 notiSrc 灰态小字语言）+「已处理 N」折叠分区头
+  notiDoneAt: { color: c.faint, fontSize: 10 },
+  notiResolvedHead: { paddingVertical: 10, alignItems: "center" },
+  notiResolvedT: { color: c.faint, fontSize: 11, fontWeight: "600" },
+  // M13-6E：acceptance 域回跳按钮（未处理行「定位来源 ›」——ghost 同款形制小号化）
+  notiJumpBtn: { alignSelf: "flex-start", borderRadius: 8, borderWidth: 1, borderColor: withA(c.dim, 0.5), paddingHorizontal: 10, paddingVertical: 4, marginTop: 2 },
+  notiJumpT: { color: c.dim, fontSize: 11, fontWeight: "600" },
   orgErrRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     borderRadius: 10, borderWidth: 1, borderColor: withA(c.error, 0.45),
@@ -2320,6 +2404,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   gmColGroup: { marginBottom: 8 },
   gmColH: { color: c.faint, fontSize: 10.5, fontWeight: "700", marginBottom: 4 },
   gmEnt: { borderWidth: 1, borderColor: c.line, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: c.panel },
+  // M13-6E 验收回跳定位高亮（web jump-flash 闪烁的 expo 静态对等——动画差异备案）
+  gmEntHi: { borderWidth: 1.5, borderColor: c.brandA, backgroundColor: c.tintSoft },
   gmEntT: { color: c.text, fontSize: 12 },
   gmEntNote: { color: c.faint, fontSize: 10.5, marginTop: 2 },
   gmRec: { borderLeftWidth: 2, borderLeftColor: c.line, paddingLeft: 8, paddingVertical: 3, marginBottom: 6 },

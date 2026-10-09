@@ -1,16 +1,18 @@
 // ---------- 读模式三档开关与影子比对引擎（M11-G1） ----------
 // 三端读入口从「只有 JSON」走向「JSON/SQLite 可切换+影子验证期」。三档语义（验收锚）：
-//   json（默认）  现状原样——走旧 JSON 读路径，SQLite 零参与（不建库、不开端口）。
-//   sqlite        读入口改走 SQLite（导入器灌好的表），表直读不经过 JSON。
+//   sqlite（默认） 读入口走 SQLite（导入器灌好的表），表直读不经过 JSON——2026-10-06
+//                 SQLITE-FLIP 翻转（用户拍板；CUT-1 六闸全绿+读税双清 #136/#139 前置）。
+//   json          回滚档：现状原样——走旧 JSON 读路径，SQLite 零参与（不建库、不开端口）。
+//                 显式 CCR_STORAGE_READ_MODE=json 即钉回旧档（回退通道，见 §6 回退路径）。
 //   shadow        返回值以 JSON 为准（三端行为零改变），旁路读 SQLite 对比，差异只报告不修改。
 //
 // 环境承载：CCR_STORAGE_READ_MODE（READ_MODE_ENV）。无效值 fail-fast 抛错（resolveReadMode
-// 在任何档位下都先解析——静默回退 json 会让配置 typo 长期潜伏，派单明确禁止）；缺省=不设
-// env 恒为 json 档（零配置零行为变化）。
+// 在任何档位下都先解析——静默回退会让配置 typo 长期潜伏，派单明确禁止）；缺省=不设
+// env 恒为 sqlite 档（2026-10-06 翻转；env 词表三值与 fail-fast 语义零改动）。
 //
-// 双读截止计划：默认档翻转的闸门判据（shadow 长清零等六条）/冷备份/回退路径唯一权威见
-// docs/v2-dual-read-cutover.md（M11-H2）——缺省保持 json 直到 M1-2 收口 commit，翻转动作
-// 由用户拍板执行，本层不内建任何自动切换。
+// 双读截止计划：闸门判据（shadow 长清零等六条）/冷备份/回退路径唯一权威见
+// docs/v2-dual-read-cutover.md（M11-H2）——缺省已于 2026-10-06 翻转为 sqlite（用户拍板
+// 执行单 SQLITE-FLIP），本层不内建任何自动切换。
 //
 // 三条铁律（违反任一=P1）：
 //   1. shadow 只报告差异不改旧读：shadow 档返回值与 json 档逐字节一致；差异落
@@ -30,7 +32,11 @@
 //     shadow-error       影子侧（读库/对比）本身异常——报告面绝不让异常冒泡进读路径
 //   降级备案（合成键/有损映射域不可直接键集对账，留 G2）：
 //     · notification：导入 id 是跨源归并合成键（E1 sha12 词根），源侧无法独立重算——首期
-//       只做数量口径（源条目数 vs 表行数）。
+//       只做数量口径。M12-8 FIX-1 修正源读法：源=data/notifications.json（{notifications:[…]}
+//       包裹形）+ data/decision-notifications.json（裸数组），json 面=两源合法条目（key/kind/
+//       created_at 三项过验）distinct key 数（对齐 import-notification 的 byKey 归并=表行数来源；
+//       同 key 跨源归并计 1）。此前误读 notifications.ndjson+decision-ledger.ndjson（文件名+
+//       格式双错位，两件不存在→json 面恒 0→有通知场景必报 count-mismatch）。
 //     · artifact：键是 (source_id, normalized_path) 复合键且归一函数未导出——首期只做
 //       数量+按 source_id 分组数量。
 //     · task：键集对账做 tasksDir 文件 stem vs 表 external_task_file_id（task_ref 复合串
@@ -60,7 +66,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { StoragePort } from "./port.js";
-import { createSqlitePort } from "./sqlite.js";
+import { createSqlitePort, loadSqliteDriver, resetSqliteDriverForTest } from "./sqlite.js";
 import { runMigrations } from "./migrator.js";
 import { readCheckpoint } from "./checkpoint.js";
 import { statThenRead } from "./import-util.js";
@@ -89,9 +95,11 @@ const SHADOW_DIFF_COOLDOWN_MS = 2000;
 /** 单轮单域差异行上限（超大结构的报告面防爆量；超出记一行 truncated 摘要，备案）。 */
 const MAX_DIFF_ROWS_PER_DOMAIN = 200;
 
-/** 解析读模式：undefined/空="json"；词表严格匹配（trim 后）；无效值 fail-fast 抛错。 */
+/** 解析读模式：undefined/空="sqlite"（2026-10-06 SQLITE-FLIP 翻转，用户拍板；回滚=显式
+ * CCR_STORAGE_READ_MODE=json 钉回旧档，回退通道长期健在）；词表严格匹配（trim 后）；
+ * 无效值 fail-fast 抛错。 */
 export function resolveReadMode(raw: string | undefined | null): StorageReadMode {
-  if (raw === undefined || raw === null || raw.trim() === "") return "json";
+  if (raw === undefined || raw === null || raw.trim() === "") return "sqlite";
   const v = raw.trim();
   if ((READ_MODES as readonly string[]).includes(v)) return v as StorageReadMode;
   throw new Error(`[read-mode] 无效 ${READ_MODE_ENV}="${raw}"（有效值：${READ_MODES.join("/")}）——boot fail-fast，不静默回退`);
@@ -122,14 +130,59 @@ export function resolveDirs(override?: Partial<ReadModeDirs>): ReadModeDirs {
   };
 }
 
+// ---------- sqlite 可用性降级（#158 批1 纵深防御） ----------
+// 根因背景见 sqlite.ts 头注（Windows 包携 darwin-arm64 二进制 → dlopen 失败炸进程）。
+// 降级语义：CCR_STORAGE_READ_MODE 三档语义零改（json 仍钉旧档、无效值仍 fail-fast）——
+// 仅当配置要求 sqlite/shadow 而原生驱动加载失败（或建库/迁移失败）时，读面自动落回
+// json 档并打一次醒目告警（含原因/错误码/平台），进程不因存储层伤而 boot 失败或
+// 僵尸化（8787 必须照常监听）。写面（org/projects 落盘）本就走 JSON，不受影响。
+
+let degradationNotified = false;
+
+/** 降级告警（每进程一次，防读入口高频触发刷屏）：醒目横幅含原因/错误码/平台/配置档位。 */
+function warnSqliteDegradedOnce(reason: string, code: string | null, context: string): void {
+  if (degradationNotified) return;
+  degradationNotified = true;
+  console.error(`[read-mode] ⚠️  sqlite 不可用，已降级 json 档（${context}；错误码 ${code ?? "无"}；平台 ${process.platform}-${process.arch}）`);
+  console.error(`[read-mode] ⚠️  原因: ${reason}`);
+  console.error(`[read-mode] 读面行为同 CCR_STORAGE_READ_MODE=json，relay 继续启动（8787 照常监听）——修复原生二进制后自动恢复 sqlite 档`);
+}
+
+/**
+ * boot 期驱动探测（index.ts 启动序列调用，#158 批1）：sqlite/shadow 档下驱动加载失败
+ * 即先打降级横幅（不等首个读入口触发，启动日志必见）；json 档零 SQLite 参与直接跳过；
+ * 正常路径零输出（mac sqlite 档行为零变化）。无效模式值在此 fail-fast（与读入口同语义，
+ * 只是提前到 boot 最前）。
+ */
+export function probeSqliteDriverAtBoot(): void {
+  const mode = currentReadMode();
+  if (mode === "json") return;
+  const driver = loadSqliteDriver();
+  if (driver.ok) return;
+  warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `boot 探测：配置档位 ${mode}，驱动加载失败`);
+}
+
+/** 测试面：降级告警是否已触发（一次性标志的可观测锚）。 */
+export function isSqliteDegradationNotifiedForTest(): boolean {
+  return degradationNotified;
+}
+
 // ---------- store 惰性单例：open + migrate + 灌库（铁律 3 读前触发） ----------
 
 const portCache = new Map<string, StoragePort>();
 
-/** 取（或建）dataDir 对应的 store 端口：open→migrate→importAllForShadow（导入器幂等快进）。 */
+/** 取（或建）dataDir 对应的 store 端口：open→migrate→importAllForShadow。每次调用都保证账
+ * 灌到当前（READMODE-FIX）：缓存命中分支同样跑导入聚合——checkpoint 幂等快进（源
+ * mtime/lineCount 未变时仅 observe 成本，近零开销），写侧（org.ts 派单台账/boards 经验回流）
+ * 追加后同进程读面即见新账。缘由注：P81-5 审计写面（permission-audit auditStore）引入首个
+ * 链路中途消费者后，「冷启动一次性灌账」前提失效——端口缓存若跳过导入，长驻进程
+ * sqlite/shadow 档读面将永远停在首建快照（P81-6FIX B1 备案，Leader 裁定修）。 */
 export function ensureStore(dirs: ReadModeDirs): StoragePort {
   const cached = portCache.get(dirs.dataDir);
-  if (cached) return cached;
+  if (cached) {
+    importAllForShadow(cached, dirs); // 铁律 3 读前触发的字面执行：命中缓存≠跳过灌账
+    return cached;
+  }
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
@@ -434,10 +487,28 @@ export function compareDomain(domain: ShadowDomain, port: StoragePort, dirs: Rea
       return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
     }
     case "notification": {
-      // 合成键域降级：数量口径（源条目数=投影源+ledger 行数 vs 表行数；备案见头注）
-      const jCount = countNdjsonLines(join(dirs.dataDir, "notifications.ndjson")) + countNdjsonLines(join(dirs.dataDir, "decision-ledger.ndjson"));
-      const sCount = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
+      // 合成键域降级：数量口径（两 JSON 源合法条目 distinct key 数 vs 表行数；备案见头注）。
+      // 读法对齐 import-notification：proj 源取 .notifications 包裹数组、ledger 源取根数组，
+      // 条目三项过验（key 非空串/kind 串/created_at 数）才计入——坏条目与同源重复 key 导入器
+      // 不落行，distinct key 数即行数口径。源缺失/坏 JSON → 该面 0（对齐导入器 text===null 路径）。
       const now = Date.now();
+      const keys = new Set<string>();
+      const addValidKeys = (arr: unknown[]): void => {
+        for (const raw of arr) {
+          const x = raw as { key?: unknown; kind?: unknown; created_at?: unknown };
+          if (typeof x.key === "string" && x.key && typeof x.kind === "string" && typeof x.created_at === "number") keys.add(x.key);
+        }
+      };
+      try {
+        const pf = JSON.parse(readFileSync(join(dirs.dataDir, "notifications.json"), "utf-8")) as { notifications?: unknown };
+        if (Array.isArray(pf.notifications)) addValidKeys(pf.notifications);
+      } catch { /* proj 源缺失/坏 JSON → 投影面 0 */ }
+      try {
+        const lf = JSON.parse(readFileSync(join(dirs.dataDir, "decision-notifications.json"), "utf-8")) as unknown;
+        if (Array.isArray(lf)) addValidKeys(lf);
+      } catch { /* ledger 源缺失/坏 JSON → 账本面 0 */ }
+      const jCount = keys.size;
+      const sCount = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
       return jCount !== sCount
         ? [{ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount }]
         : [];
@@ -591,12 +662,27 @@ const shadowCooldown = new Map<ShadowDomain, number>();
  *   shadow → io.json() 为准 + 旁路 io.sqlite(port) 投影对比，差异落 shadow-diff.ndjson
  *            （节流 SHADOW_DIFF_COOLDOWN_MS/域；对比侧异常落 shadow-error 行，绝不冒泡）。
  * 无效模式值在任何档位下 fail-fast 抛错（currentReadMode 内 resolve）。
+ * #158 批1 降级（纵深防御）：sqlite/shadow 档下驱动加载失败或 ensureStore（建库/迁移/
+ * 灌库聚合入口的 org 联动作废段）抛错时，返回 io.json() 并打一次降级告警——读入口绝不
+ * 因存储层伤把异常冒泡进启动序列（8787 必须照常监听）。正常路径（驱动可载+建库成功）
+ * 行为零变化。
  */
 export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
   const mode = currentReadMode();
   if (mode === "json") return io.json();
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `配置档位 ${mode}，读域 ${domain} 触发`);
+    return io.json();
+  }
   const dirs = resolveDirs(io.dirs);
-  const port = ensureStore(dirs);
+  let port: StoragePort;
+  try {
+    port = ensureStore(dirs);
+  } catch (err) {
+    warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `配置档位 ${mode}，读域 ${domain}，sqlite 建库/迁移失败`);
+    return io.json();
+  }
   if (mode === "sqlite") return io.sqlite(port);
   // ---- shadow 档：返回值以 JSON 为准，旁路对比只报告 ----
   const jsonVal = io.json();
@@ -659,11 +745,13 @@ export function diffProjection<T>(domain: ShadowDomain, jsonVal: T, sqliteVal: T
   return rows;
 }
 
-/** 测试隔离：清 port 单例与节流缓存（关开库）。生产勿调。 */
+/** 测试隔离：清 port 单例与节流缓存（关开库）+ 降级告警标志 + 驱动加载缓存/注入。生产勿调。 */
 export function resetReadModeForTest(): void {
   for (const port of portCache.values()) {
     try { if (port.isOpen) port.close(); } catch { /* 已关则跳过 */ }
   }
   portCache.clear();
   shadowCooldown.clear();
+  degradationNotified = false;
+  resetSqliteDriverForTest(); // 清测试注入与驱动缓存（下次按真实环境重载）
 }

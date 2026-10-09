@@ -100,6 +100,7 @@ try {
   const anchor2 = mkdtempSync(join(tmpdir(), "ccr-anchor2-m12-"));
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
+  process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   try {
@@ -124,12 +125,12 @@ try {
 
     // ---------- C2 TASK_CREATE 成功路径 ----------
     console.log("C2 TASK_CREATE");
-    const ack1 = send(mgr, "c1", "COMMAND_TASK_CREATE", { gid, text: "交付 parity 报告", status: "todo" }, "web-1");
+    const ack1 = send(mgr, "c1", "COMMAND_TASK_CREATE", { gid, text: "交付 parity 报告", status: "backlog" }, "web-1");
     const d1 = ack1.data as { entity_id?: string; gid?: string } | undefined;
     assert(ack1.ok === true && typeof d1?.entity_id === "string" && d1.entity_id !== "" && d1.gid === gid,
       "C2① ACK ok+data{entity_id,gid} 齐全");
     const card1 = loadBoard(gid).entries.find((e) => e.id === d1?.entity_id);
-    assert(card1 !== undefined && card1.text === "交付 parity 报告" && card1.status === "todo",
+    assert(card1 !== undefined && card1.text === "交付 parity 报告" && card1.status === "backlog",
       "C2② 板卡真落盘（text/status 与 payload 一致，单漏斗写入 boards/<gid>.json）");
     const rows1 = auditLog();
     const last1 = rows1[rows1.length - 1] ?? {};
@@ -139,22 +140,22 @@ try {
     // 缺 status：缺省 todo
     const ack1b = send(mgr, "c1b", "COMMAND_TASK_CREATE", { gid, text: "缺省状态卡" }, "web-1");
     const card1b = loadBoard(gid).entries.find((e) => e.id === (ack1b.data as { entity_id?: string }).entity_id);
-    assert(ack1b.ok === true && card1b?.status === "todo", "C2④ status 缺省落 todo");
+    assert(ack1b.ok === true && card1b?.status === "backlog", "C2④ status 缺省落 todo");
 
     // ---------- C3 TASK_UPDATE ----------
     console.log("C3 TASK_UPDATE");
     const eid = d1?.entity_id ?? "";
-    const ack2 = send(mgr, "c2", "COMMAND_TASK_UPDATE", { gid, entry_id: eid, status: "doing" }, "web-1");
+    const ack2 = send(mgr, "c2", "COMMAND_TASK_UPDATE", { gid, entry_id: eid, status: "claimed" }, "web-1");
     const d2 = ack2.data as { entity_id?: string; gid?: string } | undefined;
     const card2 = loadBoard(gid).entries.find((e) => e.id === eid);
     assert(ack2.ok === true && d2?.entity_id === eid && d2.gid === gid
-      && card2?.status === "doing" && card2.text === "交付 parity 报告",
+      && card2?.status === "claimed" && card2.text === "交付 parity 报告",
       "C3① 只推 status：卡状态迁移+text 缺省补旧值不丢");
     const ack2b = send(mgr, "c2b", "COMMAND_TASK_UPDATE", { gid, entry_id: "t-nonexist", status: "done" }, "web-1");
     assert(ack2b.ok === false && typeof ack2b.error === "string" && ack2b.error.includes("板卡不存在"),
       "C3② 坏路径：entry_id 不存在拒收（error fixture）");
     const ack2c = send(mgr, "c2c", "COMMAND_TASK_UPDATE", { gid, entry_id: eid, status: "zombie" }, "web-1");
-    assert(ack2c.ok === false && ack2c.error === "status 必须是 todo|doing|done",
+    assert(ack2c.ok === false && ack2c.error === "status 必须是 backlog|claimed|submitted|ready_to_install|done",
       "C3③ 坏路径：status 词表外拒收（error fixture）");
 
     // ---------- C4 DISPATCH ----------
@@ -227,7 +228,7 @@ try {
     assert(ack81.ok === true && d81?.blocked === false && d81.task_ref === d81.entity_id
       && typeof d81.dispatch_id === "string" && d81.dispatch_id !== "" && typeof d81.session_id === "string" && d81.session_id !== "",
       "C8① 成功链 ACK data{entity_id,task_ref,blocked:false,dispatch_id,session_id}（task_ref≡entity_id）");
-    assert(card81 !== undefined && card81.status === "doing" && card81.dispatch_id === d81?.dispatch_id && card81.text === longText && card81.note === "编排备注",
+    assert(card81 !== undefined && card81.status === "claimed" && card81.dispatch_id === d81?.dispatch_id && card81.text === longText && card81.note === "编排备注",
       "C8② 卡入账认领：doing+dispatch_id 挂接+text 全文保留（title 兜底防截断）+note 落盘");
     const audit81 = auditLog().slice(audit81Base);
     assert(created.length === before81 + 1 && audit81.some((r) => String(r.receipt ?? "").includes("编排建卡"))
@@ -263,7 +264,7 @@ try {
     assert(ack87.ok === false && ack87.error === "task 与 entry_id 互斥（建新卡或认领旧卡二选一）",
       "C8⑨ task 与 entry_id 互斥 error fixture");
     const ack88 = send(mgr, "c88", "COMMAND_DISPATCH", { gid, prompt: "x", task: { text: "已完成卡", status: "done" } }, "web-1");
-    assert(ack88.ok === false && ack88.error === "task.status 必须是 todo|doing", "C8⑩ task.status 词表外拒收");
+    assert(ack88.ok === false && ack88.error === "task.status 必须是 backlog|claimed", "C8⑩ task.status 词表外拒收");
     // C8⑧ task 建卡成功但 dispatch 失败中间态：卡保留（不回滚）+error 带 task_ref 可重派
     const before89 = created.length;
     const ack89 = send(mgr, "c89", "COMMAND_DISPATCH", { gid, prompt: "中间态单", task: { text: "写卡成派单败" }, engine: "bogus" }, "web-1");
@@ -283,7 +284,7 @@ try {
     const d8b = ack8b.data as { entity_id?: string; dispatch_id?: string } | undefined;
     const depCard = loadBoard(gid).entries.find((e) => e.id === depId);
     assert(ack8b.ok === true && typeof d8b?.dispatch_id === "string" && !(d8b as { task_ref?: string }).task_ref
-      && depCard?.status === "doing" && depCard?.dispatch_id === d8b.dispatch_id,
+      && depCard?.status === "claimed" && depCard?.dispatch_id === d8b.dispatch_id,
       "C8⑭ M12-1 旧路径零回归：entry_id 认领（无 task_ref 键=直派/认领语义，卡 doing 挂接）");
 
     // ---------- C9 生命周期（M12-3）：全状态边/重投段链/三面对账/重启兜底出口 ----------
@@ -514,9 +515,11 @@ try {
       assert(created.length === baseC2 && round2.result === "sleep" && round2.reason === "all_running",
         "C12② 全 running 放行：worker 健康在跑→sleep 零注入（值守防的是有活全员闲，干活中不催——019 §2.2 全 running 反例）");
       // C12③ stale doing 类：worker1 交付收口（running→done 零 failed）+造悬挂 doing 卡
-      //（dispatch 已收口不在 open FIFO+超窗零阈值——019 §5.1 stale 判定确定性数据源）
+      //（dispatch 已收口不在 open FIFO+超窗零阈值——019 §5.1 stale 判定确定性数据源）。
+      // P71：worker done 边即刻触发一次 worker_done 检查（此时无候选→sleep empty 放行；
+      // 断言在 C12④a 行数 5——交付唤醒面的正向用例在 test-pm-duty-product.ts）
       created[baseW1]?.cb.onTurnEnd(true, "干完了", 50);
-      upsertBoardEntry(gidD, { text: "悬挂 doing 卡（dispatch 已收口不在途）", status: "doing", dispatch_id: "d-already-closed" });
+      upsertBoardEntry(gidD, { text: "悬挂 doing 卡（dispatch 已收口不在途）", status: "claimed", dispatch_id: "d-already-closed" });
       const baseC3 = created.length;
       leaderCb?.onTurnEnd(true, "值守收口", 1);
       assert(created.length === baseC3 + 1 && String(created[baseC3]?.prompt ?? "").includes("[值守喂活]"),
@@ -541,10 +544,12 @@ try {
       created[baseC3b]?.cb.onInit("sdk-duty-3", "test-model");
       leaderCb = created[baseC3b]?.cb;
       // C12④ audit 三零：每检查一行审计只落 duty-rounds；events/通知账零值守词
-      //（receipt 类备案：v1 空源不误报——正常 done 收口零注入即证，验收状态机 M12-7 落）
+      //（receipt 类备案：v1 空源不误报——正常 done 收口零注入即证，验收状态机 M12-7 落）。
+      // P71：C12③ worker1 done 边新增一行 worker_done 检查（候选空→sleep——回单面在
+      // C12 时 ACC 未设/台账干净/无卡，empty 放行；触发面见 session-manager onTurnEnd）
       const rounds4 = dutyRounds();
-      assert(rounds4.length === 4 && rounds4.every((r) => r.kind === "PM_DUTY_ROUND"),
-        "C12④a 四类检查四行审计（kind 全一致——一回合至多一检查，feedPM 同步单飞）");
+      assert(rounds4.length === 5 && rounds4.every((r) => r.kind === "PM_DUTY_ROUND"),
+        "C12④a 五次检查五行审计（kind 全一致——一回合至多一检查，feedPM 同步单飞；含 P71 worker_done 边一行）");
       const eventsText = existsSync(join(DATA, "events.ndjson")) ? readFileSync(join(DATA, "events.ndjson"), "utf-8") : "";
       assert(eventsText.length > 0 && !eventsText.includes("PM_DUTY"),
         "C12④b 零 EventBus：events.ndjson 有会话帧但零 PM_DUTY 词（D18 三零边界——值守是内部治理非用户可见事件）");
@@ -659,7 +664,7 @@ try {
       writeSheet(id2, { id: id2, title: "靶卡二验收", created_at: Date.now(), gid, entry_id: entry2, rows: [{ task: "#T2①", item: "项一", criteria: "c1" }, { task: "#T2②", item: "项二", criteria: "c2" }] });
       writeResults(id2, ["pass", "fail"]);
       const r2 = mgr.settleAcceptanceResult(id2);
-      assert(r2.ok === false && r2.reason === "not-closed" && loadBoard(gid).entries.find((e) => e.id === entry2)?.status === "todo",
+      assert(r2.ok === false && r2.reason === "not-closed" && loadBoard(gid).entries.find((e) => e.id === entry2)?.status === "backlog",
         "C13② 有 fail 行→卡保持原态（not-closed 不联动，fail 走既有修复面）");
       // C13③ 卡态不回转（D14：closed 后改判仅修 result，done 是终态）
       writeResults(id1, ["pass", "fail"]); // 改判 fail 重提

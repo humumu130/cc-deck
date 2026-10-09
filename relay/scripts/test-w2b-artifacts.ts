@@ -78,8 +78,9 @@ ok(deadIdx > 0 && frowIdx > deadIdx, "dead-retry delegation registered before fr
 ok(html.includes("retryDeadGroup(hit.ctx, hit.s.session_id, deadRetry.dataset.dir || \"\")"), "delegation routes current session ctx+sid+dir");
 
 // ---- ④ 请求失败组尾收口条 ----
-ok(/function markArtFetchError\(path, retry\) \{/.test(html), "markArtFetchError fn present");
-ok(/function clearArtFetchError\(path\) \{/.test(html), "clearArtFetchError fn present");
+// W4 (#72) 起第三参 root：池视图 #ap-body 复用错误条，缺省 $("timeline") 保会话 tab 原行为
+ok(/function markArtFetchError\(path, retry, root\) \{/.test(html), "markArtFetchError fn present");
+ok(/function clearArtFetchError\(path, root\) \{/.test(html), "clearArtFetchError fn present");
 ok(html.includes('.af-batch-err[data-fetch-err]'), "fetch-fail bar distinguished from outcome bar via data-fetch-err");
 const dlFn = blockOf("async function downloadAndOpenArtifact", "// Uint8Array → base64");
 ok(dlFn.includes("markArtFetchError(path, () => { downloadAndOpenArtifact(ctx, sid, path); })"), "download catch hangs retry bar with original action");
@@ -119,7 +120,8 @@ ok(html.includes('wb.style.display = "block";'), "waitbox display chain intact")
 
 // ---- ⑦ 行为直跑（正则提取纯函数 + 桩依赖，W1a 先例）：outcome 三态 / 冻结绑定路由 ----
 {
-  const fnSrc = html.match(/function artFolderHtml\(s, g, open\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  // W4 (#72) 起第 4 参 opts 透传（缺省=原行为零变化；池视图传 badge:false 抑制 op 徽标）
+  const fnSrc = html.match(/function artFolderHtml\(s, g, open, opts\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   const escapeSrc = html.match(/function escapeHtml\(s\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   ok(fnSrc !== "" && escapeSrc !== "", "behavior: artFolderHtml+escapeHtml extractable");
   const run = new Function(
