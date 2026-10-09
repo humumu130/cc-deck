@@ -18,6 +18,7 @@ import { createPairingCodes } from "./pairing.js";
 import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
+import { ensureDeliverBin } from "./deliver-bin.js";
 import { orgDir } from "./org.js";
 import { listConfirms } from "./projects.js";
 import { DecisionNotificationWatcher } from "./decision-notify.js";
@@ -473,6 +474,18 @@ startServer(bus, mgr, cfg, {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}
     }
+    // W-ORPH deliver 脚本兜底落位：无插件机器（装法 B 桌面内置 relay / relay 独立
+    // 运行）上 guard-context hook 永远不来，~/.cc-deck/bin/deliver 缺位——输出物
+    // 登记通道物理不存在，孤儿会话面板空（2026-10-09 公司机器实锤）。仅缺失时创建，
+    // 插件在场时升级归 guard-context（读比较覆盖）；沙盒态不碰真实家目录，
+    // CCR_DELIVER_BIN_DIR 显式指路时照写（测试自身用它验证落位）
+    try {
+      if (!sandboxed || process.env.CCR_DELIVER_BIN_DIR) {
+        if (ensureDeliverBin() === "written") {
+          console.log("  兜底:   已创建 ~/.cc-deck/bin/deliver（无插件机器的输出物登记通道）");
+        }
+      }
+    } catch {} // 模块内部已吞写失败，这里只防未预期异常影响启动
     // 任务工具门控的用户级兜底（listen 成功后做，启动失败不碰用户文件）：终端自开的
     // 会话不是 relay spawn 的，进程级注入管不到——幂等补写 settings.json env，让之后
     // 新开的终端会话也有任务工具。只在键缺失时补，用户显式设置一律尊重（见模块头注释）
