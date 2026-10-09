@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { Fragment, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -63,6 +63,10 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）。四档含"跳过"：
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
+// 005 #166 手机 waitbox 仅浏览口径（s2 定档）：等待卡在手机端只展示不决议——按钮全
+// disabled + 底部引导「请在电脑上处理」。decide/#212 remember 范围等真决议链路原样
+// 保留，后续阶段放开手机远程决议时翻此开关即可
+const WAITBOX_READONLY = true;
 type PermMode = (typeof PERM_CYCLE)[number];
 // P81-8W 权限摘要三端统一词表（specs/081 钉死段；与 web-console PERM_MODE_ZH /
 // 桌面端同表逐字一致，勿改字面——三端单一词表源，本表取代旧局部 PERM_LABEL 四键表）：
@@ -1418,6 +1422,22 @@ function PendingRow({ text }: { text: string }) {
   );
 }
 
+// 005 wait-card 容器（#166 双态）：isAsk 提问态=中性底+品牌描边（提问≠风险，不用
+// 警示色）；审批态=黄 tint 警示。手机仅浏览口径下底部挂引导条
+function WaitCard({ isAsk, children }: { isAsk: boolean; children: ReactNode }) {
+  const d = useThemeStyles(makeStyles);
+  return (
+    <View style={[d.waitBanner, isAsk ? d.waitCardAsk : d.waitCardApprove]}>
+      {children}
+      {WAITBOX_READONLY ? (
+        <View style={d.waitRO}>
+          <Text style={d.waitROT}>请在电脑上处理</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // AskUserQuestion 作答横幅：单问题单选 = 点选项即发；多问题/多选 = 勾选后提交；单问题支持自由输入
 // #190 多问题 stepper（CLI 式，对齐桌面端）：一次只展示一题 + 题号指示器（可点击跳题）；
 // 单选题选中自动进下一题、末题留步等「提交回答」——题多时 banner 不再撑爆底部栈
@@ -1468,7 +1488,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   const freeText = free[qi] ?? "";
 
   return (
-    <View style={d.waitBanner}>
+    <WaitCard isAsk>
       <Text style={d.waitT}>◉ Claude 在提问</Text>
       {stepped ? (
         <View style={d.askSteps}>
@@ -1481,7 +1501,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       {q ? (
         <View>
           <Text style={d.askQ}>{q.question}</Text>
-          <View style={d.askOpts}>
+          <View style={[d.askOpts, WAITBOX_READONLY && d.roDim]}>
             {q.options.map((o) => {
               const on = (picked[qi] ?? []).includes(o.label);
               return (
@@ -1489,6 +1509,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
                   key={o.label}
                   style={[d.askChip, on && d.askChipOn]}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+                  disabled={WAITBOX_READONLY}
                   onPress={() => (single ? answer([o.label]) : q.multi ? toggle(qi, o.label) : pickSingle(qi, o.label))}
                 >
                   <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && on ? "✓ " : "") + o.label}</Text>
@@ -1498,9 +1519,10 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           </View>
           {stepped ? (
             <TextInput
-              style={[d.askFree, { marginBottom: 4 }]}
+              style={[d.askFree, { marginBottom: 4 }, WAITBOX_READONLY && d.roDim]}
               value={freeText}
               onChangeText={(t) => setFree((f) => ({ ...f, [qi]: t }))}
+              editable={!WAITBOX_READONLY}
               placeholder="或输入自定义回答…"
               placeholderTextColor={c.faint}
               returnKeyType="send"
@@ -1518,20 +1540,21 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       ) : null}
       {!single ? (
         <Pressable
-          style={[d.askSubmit, !allAnswered && { opacity: 0.4 }]}
+          style={[d.askSubmit, (WAITBOX_READONLY || !allAnswered) && { opacity: WAITBOX_READONLY ? 0.5 : 0.4 }]}
           android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
-          disabled={!allAnswered}
+          disabled={!allAnswered || WAITBOX_READONLY}
           onPress={submit}
         >
           <Text style={d.askSubmitT}>提交回答</Text>
         </Pressable>
       ) : null}
       {single ? (
-        <View style={d.askFreeRow}>
+        <View style={[d.askFreeRow, WAITBOX_READONLY && d.roDim]}>
           <TextInput
             style={d.askFree}
             value={free[0] ?? ""}
             onChangeText={(t) => setFree((f) => ({ ...f, 0: t }))}
+            editable={!WAITBOX_READONLY}
             placeholder="或输入自定义回答…"
             placeholderTextColor={c.faint}
             returnKeyType="send"
@@ -1542,17 +1565,17 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           <Pressable
             style={[d.askFreeBtn, !(free[0] ?? "").trim() && { opacity: 0.4 }]}
             android_ripple={{ color: withA(c.brandA, 0.2), borderless: false }}
-            disabled={!(free[0] ?? "").trim()}
+            disabled={!(free[0] ?? "").trim() || WAITBOX_READONLY}
             onPress={() => (free[0] ?? "").trim() && answer([(free[0] ?? "").trim()])}
           >
             <Text style={d.askFreeBtnT}>作答</Text>
           </Pressable>
         </View>
       ) : null}
-      <Pressable hitSlop={8} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
+      <Pressable hitSlop={8} disabled={WAITBOX_READONLY} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
         <Text style={d.askSkip}>取消作答（视为拒绝回答）</Text>
       </Pressable>
-    </View>
+    </WaitCard>
   );
 }
 
@@ -3177,7 +3200,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
           ) : (
           <FadeIn>
-          <View style={[d.waitBanner, d.waitBannerApprove]}>
+          <WaitCard isAsk={false}>
             <View style={d.waitHead}>
               <View style={d.waitDot} />
               <Text style={d.waitTitle}>等待你的确认</Text>
@@ -3195,7 +3218,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                 </Text>
                 <View style={d.wbtns}>
                   <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "session")}>
-                    <Text style={d.btnAllowT}>仅本会话</Text>
+                    <Text style={d.btnAllowT}>本次会话</Text>
                   </PressScale>
                   <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "global")}>
                     <Text style={d.btnAllowT}>所有会话</Text>
@@ -3206,24 +3229,23 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                 </View>
               </View>
             ) : (
-              <View>
-                <View style={d.wbtns}>
-                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
-                    <Text style={d.btnAllowT}>✓ 允许</Text>
-                  </PressScale>
-                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
-                    <Text style={d.btnRejectT}>✕ 拒绝</Text>
-                  </PressScale>
-                </View>
-                {/* #212 remember 由 relay 判定可记忆才下发（危险形态无此字段 = 不出现） */}
+              /* 005 #166 三级按钮：拒绝=次级描边、允许并记住=第三钮（同次级档次）、
+                  允许=唯一实心主钮（done 色）；仅浏览口径下全 disabled 压灰 */
+              <View style={[d.wbtns, WAITBOX_READONLY && d.roDim]}>
+                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
+                  <Text style={d.btnRejectT}>✕ 拒绝</Text>
+                </PressScale>
                 {wr!.remember ? (
-                  <Pressable style={d.rmEntry} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={() => setRmOpen(true)}>
-                    <Text style={d.rmEntryT}>✓ 允许并记住…</Text>
-                  </Pressable>
+                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
+                    <Text style={d.btnRememberT}>允许并记住</Text>
+                  </PressScale>
                 ) : null}
+                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(true)}>
+                  <Text style={d.btnAllowT}>✓ 允许</Text>
+                </PressScale>
               </View>
             )}
-          </View>
+          </WaitCard>
           </FadeIn>
           )
         ) : null}
@@ -3829,36 +3851,43 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
   waitBanner: {
     marginHorizontal: 8, marginBottom: 6,
-    borderRadius: 14, borderWidth: 1, borderColor: withA(c.working, 0.38),
+    borderRadius: 14, borderWidth: 1, borderColor: c.line,
     backgroundColor: c.panel, padding: 12,
   },
-  /* #192 审批态黄 tint 容器（提问态 AskBanner 复用 waitBanner 基础样式保持中性底，不受影响） */
-  waitBannerApprove: { backgroundColor: withA(c.working, 0.07) },
-  /* 提问态 AskBanner 专用（审批态标题已并入 waitHead 行） */
-  waitT: { color: c.working, fontWeight: "700", fontSize: 13, marginBottom: 6 },
+  /* 005 #166 双态容器：提问态中性底+品牌描边（提问≠风险）；审批态黄 tint 警示
+    （--wait-bg/--wait-line 双主题折中 alpha 直译） */
+  waitCardAsk: { backgroundColor: c.panel, borderColor: c.brandA },
+  waitCardApprove: { backgroundColor: withA(c.working, 0.09), borderColor: withA(c.working, 0.45) },
+  /* 005 #166 手机仅浏览：作答/决议控件压灰 + 底部引导条（--surface2 底 dim 字） */
+  roDim: { opacity: 0.5 },
+  waitRO: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 6, backgroundColor: c.panel2, alignItems: "center" },
+  waitROT: { color: c.dim, fontSize: 11, textAlign: "center" },
+  /* 提问态 AskBanner 专用（审批态标题已并入 waitHead 行；005 双态随卡转品牌色） */
+  waitT: { color: c.brandA, fontWeight: "700", fontSize: 13, marginBottom: 6 },
   waitHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 9 },
   waitDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: c.working },
   waitTitle: { color: c.working, fontWeight: "700", fontSize: 13, flexShrink: 1 },
   waitChip: { marginLeft: "auto", fontFamily: "monospace", fontSize: 10.5, fontWeight: "700", color: c.working, backgroundColor: withA(c.working, 0.12), borderWidth: 1, borderColor: withA(c.working, 0.3), borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden" as const },
   waitPs: { color: c.done, fontWeight: "700" },
   waitCmd: { fontFamily: "monospace", fontSize: 12, lineHeight: 17, color: c.text, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9, marginBottom: 11 },
-  wbtns: { flexDirection: "row", gap: 10 },
+  wbtns: { flexDirection: "row", gap: 8 },
   btnAllow: {
-    flex: 1.5, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    flex: 1.25, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
     backgroundColor: c.done,
   },
   btnAllowT: { color: c.onDone, fontWeight: "700", fontSize: 14.5 },
+  /* 005 #166 拒绝/允许并记住=次级描边档（中性 lineStrong 描边——允许是唯一高亮钮） */
   btnReject: {
     flex: 1, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    backgroundColor: "transparent", borderWidth: 1, borderColor: withA(c.waiting, 0.45),
+    backgroundColor: "transparent", borderWidth: 1, borderColor: c.lineStrong,
   },
-  btnRejectT: { color: c.dangerFg, fontWeight: "600", fontSize: 14 },
-  /* #212 允许并记住：次级入口（视觉弱于「允许」）+ 范围确认条说明行 */
-  rmEntry: {
-    marginTop: 8, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
-    backgroundColor: "transparent", borderWidth: 1, borderColor: c.line,
+  btnRejectT: { color: c.text, fontWeight: "600", fontSize: 13 },
+  btnRemember: {
+    flex: 1.15, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: "transparent", borderWidth: 1, borderColor: c.lineStrong,
   },
-  rmEntryT: { color: c.dim, fontWeight: "600", fontSize: 12.5 },
+  btnRememberT: { color: c.text, fontWeight: "600", fontSize: 13 },
+  /* #212 范围确认条说明行 */
   rmLabel: { color: c.faint, fontSize: 11.5, lineHeight: 16, marginBottom: 9 },
   rmLabelB: { color: c.dim, fontWeight: "600" },
   // AskUserQuestion 作答横幅（#190 stepper 指示器行）
