@@ -964,7 +964,17 @@ fn kill_embedded_relay() {
 // 占住即自然让位；服务停用后端口空出，supervisor 1.5s 内重拉内嵌实例（无缝回退）。
 // 与 deploy/mac-relay-launchd/ 脚本同款 plist 模板（终端用户没有仓库，逻辑内嵌壳里）。
 // Windows 版走任务计划器，后续另做——开关 cfg 门控只在 macOS 露出。
-const RELAY_SERVICE_LABEL: &str = "online.humumu.ccdeck.relay";
+// 服务 label 随 M2_BUILD 变体化（G1，W-SVCDESIGN 2026-10-10）：固定常量下 M2 构建
+// 开「开机自启」会注册生产变体的 label——同机双变体互覆写 plist、bootout 互删、
+// 8787/8788 两服务绑同一 label 互相顶掉。命名与现场手工 M2 服务一致（该命名已被
+// 现场权威化）。生产构建返回值与旧常量逐字相同，行为零变化。
+fn relay_service_label() -> &'static str {
+    if M2_BUILD {
+        "online.humumu.ccdeck.m2.relay"
+    } else {
+        "online.humumu.ccdeck.relay"
+    }
+}
 
 #[cfg(target_os = "macos")]
 fn current_uid() -> u32 {
@@ -984,7 +994,7 @@ fn launchctl(args: &[&str]) -> std::io::Result<std::process::Output> {
 /// 服务是否已注册进 launchd（print 命中即注册；plist 在但未 bootstrap 不算）
 #[cfg(target_os = "macos")]
 fn relay_service_registered() -> bool {
-    let target = format!("gui/{}/{}", current_uid(), RELAY_SERVICE_LABEL);
+    let target = format!("gui/{}/{}", current_uid(), relay_service_label());
     matches!(launchctl(&["print", &target]), Ok(o) if o.status.success())
 }
 
@@ -1014,12 +1024,13 @@ fn write_relay_service_plist(app: &tauri::AppHandle) -> Result<std::path::PathBu
     let inject_env = if std::path::Path::new(&inject_cs).exists() {
         format!("    <key>CCR_INJECT_CS</key>\n    <string>{inject_cs}</string>\n")
     } else { String::new() };
+    let label = relay_service_label();
     let plist = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>{RELAY_SERVICE_LABEL}</string>
+  <string>{label}</string>
   <key>ProgramArguments</key>
   <array>
     <string>{node}</string>
@@ -1051,7 +1062,7 @@ fn write_relay_service_plist(app: &tauri::AppHandle) -> Result<std::path::PathBu
 "#);
     let dir = std::path::Path::new(&home).join("Library").join("LaunchAgents");
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建 LaunchAgents 失败：{e}"))?;
-    let path = dir.join(format!("{RELAY_SERVICE_LABEL}.plist"));
+    let path = dir.join(format!("{}.plist", relay_service_label()));
     std::fs::write(&path, plist).map_err(|e| format!("写 plist 失败：{e}"))?;
     Ok(path)
 }
@@ -1091,7 +1102,7 @@ async fn relay_service_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, 
 #[cfg(target_os = "macos")]
 fn relay_service_toggle_sync(app: &tauri::AppHandle, on: bool) -> Result<Value, String> {
     let uid = current_uid();
-    let target = format!("gui/{uid}/{RELAY_SERVICE_LABEL}");
+    let target = format!("gui/{uid}/{}", relay_service_label());
     let port = relay_port();
     if on {
         // 端口被非本方 relay 占着且服务未注册（插件 supervisor/手动实例）：硬上=服务
@@ -1130,7 +1141,7 @@ fn relay_service_toggle_sync(app: &tauri::AppHandle, on: bool) -> Result<Value, 
         let _ = launchctl(&["bootout", &target]);
         let home = std::env::var("HOME").unwrap_or_default();
         let _ = std::fs::remove_file(
-            std::path::Path::new(&home).join("Library").join("LaunchAgents").join(format!("{RELAY_SERVICE_LABEL}.plist")),
+            std::path::Path::new(&home).join("Library").join("LaunchAgents").join(format!("{}.plist", relay_service_label())),
         );
         RELAY_WANTED.store(true, Ordering::SeqCst);
         wait_port_ready(port, 8000);
@@ -1372,6 +1383,15 @@ mod t1a_tests {
 #[cfg(test)]
 mod t2_tests {
     use super::*;
+
+    #[test]
+    fn relay_service_label_variant() {
+        // G1（W-SVCDESIGN 2026-10-10）：label 随 M2_BUILD 变体化，防双变体互覆写
+        // plist / bootout 互删。构建期常量判定，这里只锁「非空 + 后缀形状」。
+        let l = relay_service_label();
+        assert!(l.starts_with("online.humumu.ccdeck"));
+        assert_eq!(l.ends_with(".m2.relay"), M2_BUILD);
+    }
 
     #[test]
     fn t2_probe_report() {
