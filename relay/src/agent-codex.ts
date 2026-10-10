@@ -363,19 +363,21 @@ export class CodexAgentSession implements AgentLike {
     if (initialPrompt !== undefined) this.execTurn(initialPrompt, materializeImages(opts?.images));
   }
 
-  sendMessage(text: string, images?: string[], echo?: string): void {
+  sendMessage(text: string, images?: string[], echo?: string, ackId?: string): void {
     if (this.ended) {
       console.warn("[codex] 会话已结束，消息丢弃");
       return;
     }
-    // 回显语义对齐 AgentSession（#62 echo 面：文件消息正文短回显不露临时路径）
+    // 回显语义对齐 AgentSession（#62 echo 面：文件消息正文短回显不露临时路径；
+    // ackId 透传同 P1FIX——relay unacked 出账对账）
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     if (echo !== undefined) {
-      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200), ...(ackId ? { ackId } : {}) });
     } else {
       const full = fullText(text, 200);
       this.cb.onLog("user_message", truncate(text, 200) + marker, {
         full: full === undefined ? undefined : full + marker,
+        ...(ackId ? { ackId } : {}),
       });
     }
     if (images && images.length > 0) {

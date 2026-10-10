@@ -521,9 +521,10 @@ export abstract class JsonProcessAgentSession implements AgentLike {
 
   protected abstract buildArgs(prompt: string): string[];
 
-  sendMessage(text: string, _images?: string[], echo?: string): void {
+  sendMessage(text: string, _images?: string[], echo?: string, ackId?: string): void {
     if (this.ended) return;
-    this.opts.cb.onLog("user_message", echo ?? text.slice(0, 200), { full: echo ?? text });
+    // ackId 透传（P1FIX）：relay unacked 出账对账
+    this.opts.cb.onLog("user_message", echo ?? text.slice(0, 200), { full: echo ?? text, ...(ackId ? { ackId } : {}) });
     if (this.proc) {
       this.queued.push(text);
       return;

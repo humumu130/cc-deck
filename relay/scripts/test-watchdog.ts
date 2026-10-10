@@ -42,6 +42,10 @@ const TDATA = fileURLToPath(new URL("../data/test-wd-datadir/", import.meta.url)
 process.env.CCR_DATA_DIR = TDATA;
 const TORG = mkdtempSync(join(tmpdir(), "ccr-wd-org-"));
 process.env.CCR_ORG_DIR = TORG;
+// 台账断言（#25-P7）验证的是 dispatch-log.ndjson 写入面；2026-10-06 SQLITE-FLIP 后
+// 读侧缺省走 sqlite 投影（导入器灌库 + target 有损映射），沙盒里 wdLedger 恒空——
+// 本测试钉 JSON 读档恢复其本意（read-mode currentReadMode 逐次求值，env 即时生效）
+process.env.CCR_STORAGE_READ_MODE = "json";
 process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_WATCHDOG_STALL_MS = "5000";
 process.env.CCR_WATCHDOG_FAST_MS = "2000";
@@ -77,11 +81,16 @@ const hasSysLog = (sid: string, kw: string) =>
 const wdLedger = (sid: string) => readDispatchLog().filter((e) => e.tier === "看门狗" && e.session_id === sid);
 
 // ---- 假 agent 工厂：20ms 后 onInit 就绪；保持 WORKING（不自动回合结束） ----
+// P1FIX 同步回显建模（2026-10-10）：真实 adapter 的 sendMessage 在发送时刻**同步**发
+// user_message 回显并透传 ackId——旧 fake 只记录不回显，「回显出队」场景靠测试事后手工
+// onLog 模拟「CLI 稍后异步回显」的假想行为，与生产时序错位，恰好掩盖了 unacked 账
+// 「永不按本条出队」的 P1（审计 W-AUDIT-CORRECT 实锤）。改同步回显后，凡断言 unacked
+// 行为的用例测的都是真时序
 interface Rec {
   prompt: string | undefined;
   resume?: string;
   cb: AgentCallbacks;
-  agent: AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string }[] };
+  agent: AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string; ackId?: string }[] };
 }
 const created: Rec[] = [];
 let noPidFrom = Infinity; // 该序号起的 agent 不带 childPid（排除项场景用）
@@ -91,10 +100,13 @@ mgr.setAgentFactory((_cwd, _model, cb, prompt, opts) => {
     id: randomUUID(),
     startedAt: Date.now(),
     ended: false,
-    // #62：记录 sendMessage 收到的实参（托管发文件断言用：正文合成 + echo 分离）
-    sent: [] as { text: string; images?: string[]; echo?: string }[],
-    sendMessage: (text: string, images?: string[], echo?: string) => {
-      (a as AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string }[] }).sent.push({ text, images, echo });
+    // #62：记录 sendMessage 收到的实参（托管发文件断言用：正文合成 + echo 分离；
+    // P1FIX 增记 ackId 供出账链路断言）
+    sent: [] as { text: string; images?: string[]; echo?: string; ackId?: string }[],
+    sendMessage: (text: string, images?: string[], echo?: string, ackId?: string) => {
+      const rec = a as AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string; ackId?: string }[] };
+      rec.sent.push({ text, images, echo, ackId });
+      if (!a.ended) cb.onLog("user_message", echo ?? text, ackId ? { ackId } : undefined);
     },
     allow: () => false,
     deny: () => false,
@@ -144,7 +156,12 @@ const ack = (cmd: Parameters<SessionManager["handleCommand"]>[0]) =>
 const stateOf = (sid: string) => mgr.snapshot().find((s) => s.session_id === sid);
 
 async function main(): Promise<void> {
-  // ===== A. 快通道命中 → 杀树重拉 + 未回显消息重放 + 回显出队后 parked 恢复 =====
+  // ===== A. 快通道命中 → 杀树重拉（parked）+ 活流发送同步回显即时出队（零残留）
+  //      + 流死重发路径仍入账 → 看门狗带账重放 =====
+  // P1FIX 时序语义（2026-10-10）：sendMessage 的回显是同步的（真 adapter 行为），
+  // 已 init 会话的消息发出即出账（出账语义 = relay 已投递）——此后流死恢复走 parked
+  // 不重放（A1/A2）；「看门狗带账重放」覆盖移到 A3 的流死重发路径（resumeAgent 首条
+  // 消息走 initialPrompt 无回显，hold:"turn" 在账直到首个 ok 回合结束）
   const a1 = ack({ command_id: "c-a1", type: "COMMAND_CREATE", payload: { cwd: process.cwd(), prompt: "看门狗 A" }, ts: Date.now() });
   assert(a1.ok === true && typeof a1.session_id === "string", "A 会话创建");
   const sidA = a1.session_id!;
@@ -152,8 +169,6 @@ async function main(): Promise<void> {
   assert(await waitFor(() => !!stateOf(sidA)?.relay_session_id), "A onInit 就绪");
   const sdkA = stateOf(sidA)!.relay_session_id;
   recA1.cb.onLog("tool_result", "工具完成", { tool: "Bash" }); // 快通道指纹：工具已回，CLI 本该立刻接话
-  const msgAck = ack({ command_id: "m-a1", type: "COMMAND_MESSAGE", payload: { session_id: sidA, text: "流断后发的消息" }, ts: Date.now() });
-  assert(msgAck.ok === true, "A COMMAND_MESSAGE 入重放账（流死，无回显）");
   cpuFeed = [100, 100];
   hush();
   await wait(QUIET_FAST);
@@ -164,32 +179,68 @@ async function main(): Promise<void> {
   assert(killedPids.includes(recA1.agent.childPid!), "A 杀树收到 childPid");
   assert(wd(sidA, "zombie_confirmed"), "A 两轮 CPU 采样判僵死");
   const recA2 = created[created.length - 1];
-  assert(recA2 !== recA1 && recA2.resume === sdkA, "A 重拉（resume 同 SDK 会话 id）");
-  assert(recA2.prompt === "流断后发的消息", "A 未回显消息随 resume 重放");
+  // 无任何未出账消息 → 恢复走 parked（reviveSaved，prompt 空）而非带账 resume
+  assert(recA2 !== recA1 && recA2.resume === sdkA && recA2.prompt === undefined, "A 空账恢复走 parked（不重放）");
   assert(hasSysLog(sidA, "看门狗接管"), "A 时间线留『看门狗接管』（用户可见）");
   // #25-P7 台账行：自愈动作进回执流（tier=看门狗，done，跨重启可审计）
   assert(wdLedger(sidA).some((e) => e.status === "done" && (e.receipt ?? "").startsWith("看门狗接管")), "A 台账留看门狗自愈行（done·看门狗接管）");
-  assert(stateOf(sidA)?.status === "WORKING", "A 恢复后 WORKING");
-  // 回显出队：新 agent 流回显 user_message → unacked 清空 → 再僵死时走 parked 恢复（不重放）。
-  // 先等新 agent 的 onInit 落地（工厂 +20ms 延迟回报）——晚了会把 lastProgressKind 从
-  // tool_result 改回 init，快通道指纹被冲掉
+  assert(
+    await waitFor(() => stateOf(sidA)?.status === "DONE" && (stateOf(sidA)?.done_reason ?? "").includes("已恢复")),
+    "A parked 恢复停在等待输入（DONE·已恢复）",
+  );
+
+  // A2 活流发消息 → 同步回显即时出账（零残留行为验证）：发一条再僵死一次，恢复仍
+  // parked——若账内还滞留该消息，恢复会带账 resume（prompt 非空）当场暴露
   const sdkA2 = "sdk-" + recA2.agent.id.slice(0, 8);
-  assert(await waitFor(() => stateOf(sidA)?.relay_session_id === sdkA2), "A 新 agent init 落地");
-  recA2.cb.onLog("user_message", "流断后发的消息");
+  assert(await waitFor(() => stateOf(sidA)?.relay_session_id === sdkA2), "A2 新 agent init 落地");
+  const msgA2 = ack({ command_id: "m-a2", type: "COMMAND_MESSAGE", payload: { session_id: sidA, text: "活流发的消息" }, ts: Date.now() });
+  assert(msgA2.ok === true, "A2 活流消息 ack");
+  assert(recA2.agent.sent.some((m) => m.text === "活流发的消息"), "A2 消息进活流（同 agent sendMessage）");
   recA2.cb.onLog("tool_result", "工具完成 2", { tool: "Bash" });
   cpuFeed = [100, 100];
   hush();
   await wait(QUIET_FAST);
   arm();
   mgr.tickWatchdog();
-  assert(await waitFor(() => created.length >= 3), "A 第二次僵死重拉");
+  assert(await waitFor(() => created.length >= 3), "A2 第二次僵死重拉");
   const recA3 = created[created.length - 1];
   // 假 agent 每次生成新 sdk id：parked resume 从"最新"SDK 会话 id 续（真 SDK resume 同 id，此处只验证非空续接语义）
-  assert(recA3.prompt === undefined && recA3.resume === sdkA2, "A 回显已出队 → 第二次恢复走 parked（不重放）");
+  assert(recA3.prompt === undefined && recA3.resume === sdkA2, "A2 同步回显即时出队（零残留）→ 恢复走 parked 不重放");
   assert(
     await waitFor(() => stateOf(sidA)?.status === "DONE" && (stateOf(sidA)?.done_reason ?? "").includes("已恢复")),
-    "A parked 恢复停在等待输入（DONE·已恢复）",
+    "A2 parked 恢复停在等待输入（DONE·已恢复）",
   );
+  const sdkA3 = "sdk-" + recA3.agent.id.slice(0, 8);
+  assert(await waitFor(() => stateOf(sidA)?.relay_session_id === sdkA3), "A2 新 agent init 落地");
+
+  // A3 流死重发路径仍入账（任务书断言②）：resumeAgent 首条消息 = initialPrompt 路径
+  // 永无回显，入账（hold:"turn"）→ 新流再僵死 → 看门狗带账重放（prompt = 该消息）。
+  // 独立新会话：sidA 的防风暴滑窗已被 A1/A2 两次自愈烧满（≥2 次即 gave_up），再接管
+  // 不会发生——这正是防风暴语义，A3 的重放覆盖换新会话验
+  const a9 = ack({ command_id: "c-a9", type: "COMMAND_CREATE", payload: { cwd: process.cwd(), prompt: "看门狗 A3" }, ts: Date.now() });
+  assert(a9.ok === true && typeof a9.session_id === "string", "A3 会话创建（独立会话，自愈额度独立计）");
+  const sidA9 = a9.session_id!;
+  assert(await waitFor(() => !!stateOf(sidA9)?.relay_session_id), "A3 onInit 就绪");
+  const recA9 = created[created.length - 1];
+  const sdkA9 = stateOf(sidA9)!.relay_session_id;
+  recA9.agent.ended = true; // 模拟流崩：死流分支判定只看 ended，不走假 killTree 免噪音
+  const msgA3 = ack({ command_id: "m-a3", type: "COMMAND_MESSAGE", payload: { session_id: sidA9, text: "流死后发的消息" }, ts: Date.now() });
+  assert(msgA3.ok === true, "A3 流死消息 ack（resumeAgent 接管）");
+  assert(await waitFor(() => created.length >= 5), "A3 流死发送 → resume 重拉");
+  const recA4 = created[created.length - 1];
+  assert(recA4.prompt === "流死后发的消息" && recA4.resume === sdkA9, "A3 首条消息随 resume 入账（hold:turn，未出账）");
+  assert(await waitFor(() => stateOf(sidA9)?.relay_session_id === "sdk-" + recA4.agent.id.slice(0, 8)), "A3 新流 init 落地");
+  cpuFeed = [100, 100];
+  hush();
+  await wait(QUIET_SLOW);
+  arm();
+  mgr.tickWatchdog();
+  assert(await waitFor(() => created.length >= 6), "A3 新流再僵死 → 接管");
+  const recA5 = created[created.length - 1];
+  assert(recA5.prompt === "流死后发的消息", "A3 账内消息随接管重放（watchdog 带账重放回归锁）");
+  assert(await waitFor(() => stateOf(sidA9)?.status === "WORKING"), "A3 重放恢复后 WORKING");
+  recA5.cb.onTurnEnd(true, "A3 收尾退场", 1000); // 退场（DONE）：WORKING 会话留到 B 的
+  // tick 会同窗起疑抢走 B 的 cpuFeed 序列（采样按 tick 顺序异步并发），B 被误判僵尸
 
   // ===== B. CPU 活跃 → 误杀排除 + 锚点后移 =====
   const b1 = ack({ command_id: "c-b1", type: "COMMAND_CREATE", payload: { cwd: process.cwd(), prompt: "看门狗 B 长构建" }, ts: Date.now() });
@@ -255,18 +306,32 @@ async function main(): Promise<void> {
   await wait(QUIET_SLOW);
   arm();
   mgr.tickWatchdog();
-  assert(await waitFor(() => wdCount("recover_ok") >= 1), "E 第 1 轮自愈完成（parked 恢复）");
-  // 唤醒：发一条消息（DONE → WORKING，消息入重放账）
+  assert(await waitFor(() => wd(sidE, "recover_ok")), "E 第 1 轮自愈完成（parked 恢复）");
+  // 唤醒：先等恢复的新 agent init 落地再发——消除「init 前发送落互斥窗（hold:turn
+  // 在账会被重放）/ init 后走活流（同步回显即时出账）」的竞态，断言才能确定化。
+  // P1FIX 后本段验证活流路径：消息同步回显即时出账，第 2 轮恢复走 parked（不重放）
+  const recE1 = created[created.length - 1];
+  assert(await waitFor(() => stateOf(sidE)?.relay_session_id === "sdk-" + recE1.agent.id.slice(0, 8)), "E 第 1 轮恢复的新流 init 落地");
+  // 唤醒：发一条消息（DONE → WORKING）
   const w1 = ack({ command_id: "m-e1", type: "COMMAND_MESSAGE", payload: { session_id: sidE, text: "第二轮消息" }, ts: Date.now() });
   assert(w1.ok === true && stateOf(sidE)?.status === "WORKING", "E 唤醒（消息驱动回 WORKING）");
-  // 第 2 轮：静默 → 僵死 → 带消息 resume 自愈（recover_ok #2）
+  // 第 2 轮：静默 → 僵死 → 空账 parked 自愈（recover_ok #2）；「带账重放」覆盖在 A3。
+  // 等待用 delta 计数（wdCount 是全局数，A1/A2/A3 已烧掉 3 次，>=2 会瞬间放行，
+  // 断言跑在恢复完成前——竞态）
+  const recoverOkBeforeE2 = wdCount("recover_ok");
   cpuFeed = [100, 100];
   hush();
   await wait(QUIET_SLOW);
   arm();
   mgr.tickWatchdog();
-  assert(await waitFor(() => wdCount("recover_ok") >= 2), "E 第 2 轮自愈完成");
-  assert(created[created.length - 1].prompt === "第二轮消息", "E 第 2 轮 resume 重放唤醒消息");
+  assert(await waitFor(() => wdCount("recover_ok") >= recoverOkBeforeE2 + 1), "E 第 2 轮自愈完成");
+  assert(created[created.length - 1].prompt === undefined, "E 第 2 轮活流消息已即时出账 → parked 恢复（不重放）");
+  // 第 3 轮起疑需 WORKING：第 2 轮 parked 恢复后卡面 DONE（P1FIX 后不再带账 resume）。
+  // 先等 R2 的 init 落地（否则 onInit 的 revive 包裹会把状态覆写回 DONE），再
+  // onStatusChange 翻回 WORKING 模拟 CLI 报活（stall 检测只扫 WORKING）
+  const recE2r2 = created[created.length - 1];
+  assert(await waitFor(() => stateOf(sidE)?.relay_session_id === "sdk-" + recE2r2.agent.id.slice(0, 8)), "E 第 2 轮恢复的新流 init 落地");
+  recE2r2.cb.onStatusChange("WORKING", "第 3 轮唤醒");
   // 第 3 轮：1h 滑窗内已 2 次自愈 → 放弃（不再拉起）
   cpuFeed = [100, 100];
   hush();
