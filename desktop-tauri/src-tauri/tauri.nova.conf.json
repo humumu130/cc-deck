@@ -14,7 +14,7 @@
         "minWidth": 960,
         "minHeight": 640,
         "create": false,
-        "decorations": true,
+        "decorations": false,
         "theme": "Dark",
         "dragDropEnabled": false
       }

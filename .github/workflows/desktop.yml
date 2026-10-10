@@ -114,6 +114,12 @@ jobs:
           if [[ "$GITHUB_REF_NAME" == *-test.* ]]; then
             sed -i 's#https://cc.humumu.online/download/tauri-latest.json#https://cc.humumu.online/download/tauri-latest-test.json#' src-tauri/tauri.conf.json
             grep -n "tauri-latest-test" src-tauri/tauri.conf.json
+            # nova 变体同烙（tag 路径 nova 检测见 Build NSIS 步骤）：通道隔离一致性——
+            # nova test 包若指向正式 nova 清单，正式清单版本更高时会穿仓提示「升级」
+            if [ -f src-tauri/tauri.nova.conf.json ]; then
+              sed -i 's#https://cc.humumu.online/download/tauri-latest-nova.json#https://cc.humumu.online/download/tauri-latest-nova-test.json#' src-tauri/tauri.nova.conf.json
+              grep -n "tauri-latest-nova-test" src-tauri/tauri.nova.conf.json
+            fi
           fi
 
       - name: Stamp dev suffix (无 tag 验证构建通道标识)
@@ -138,8 +144,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           CONFIG_ARGS=""
-          if [ "${{ inputs.nova }}" = "true" ]; then
+          # nova 变体双入口：dispatch 勾选 / tag 名含 -nova 后缀（test 包走 tag 路径，
+          # inputs 恒空——v0.7.0-test.5-nova 先例，nova 共存包与版本烙印两全）
+          if [ "${{ inputs.nova }}" = "true" ] || [[ "$GITHUB_REF_NAME" == *-nova ]]; then
             CONFIG_ARGS="--config src-tauri/tauri.nova.conf.json"
+            echo "NOVA_SUFFIX=-Nova" >> "$GITHUB_ENV"
             echo "nova variant: overlay tauri.nova.conf.json active（productName/identifier/updater）"
             echo "nova variant: mainBinaryName=cc-deck-nova——主 exe 改名，NSIS 运行检测不再误杀旧版同名进程"
           fi
@@ -153,7 +162,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Deck-Desktop-Tauri${{ inputs.nova && '-Nova' || '' }}-${{ env.REF_SLUG }}
+          name: CC-Deck-Desktop-Tauri${{ env.NOVA_SUFFIX }}-${{ env.REF_SLUG }}
           path: |
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig

@@ -2,12 +2,6 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-// W-EXPO 阶段一共存骨架（2026-10-09）：APP_VARIANT=nova（-PAPP_VARIANT=nova 或同名
-// 环境变量）时改独立包名与应用名「CC Deck 新版」，与已装 0.6.x 共存双装；缺省时
-// 两个值与原配置逐字节相同——原包构建不受影响。JS 侧同款开关见 app.config.js。
-def appVariant = findProperty('APP_VARIANT') ?: System.getenv('APP_VARIANT') ?: ''
-def isNovaVariant = appVariant == 'nova'
-
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
@@ -95,12 +89,11 @@ android {
 
     namespace 'com.humumu.ccwatch'
     defaultConfig {
-        applicationId isNovaVariant ? 'online.humumu.ccdeck.nova' : 'com.humumu.ccwatch'
-        manifestPlaceholders = [appLabel: isNovaVariant ? 'CC Deck 新版' : '@string/app_name']
+        applicationId 'com.humumu.ccwatch'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 101
-        versionName "0.7.0-test.5"
+        versionName "0.7.0-test.7"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
