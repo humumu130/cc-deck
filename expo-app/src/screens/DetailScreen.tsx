@@ -376,7 +376,80 @@ const PROC_FONT = {
   hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
 } as const;
 
-function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
+// ---------- FB14 气泡附图：引用 → 缩略（按需拉取 + 内存缓存） ----------
+// 引用拉取复用输出物 CHUNK 管线（COMMAND_ARTIFACT_FETCH 的 img 引用分支，relay 校验
+// 引用形态+归属）：SNAPSHOT 里只有 basename 引用（体积恒小），首渲排队拉取，就位后
+// 换图。拉取失败（含 relay tmp 7 天清扫过期）缓存 failed 态不再重试——占位收敛隐藏，
+// 气泡正文仍在；未连接/超时属瞬态不缓存（重连后 connState 触发 effect 自然补，同
+// 005 壳「离线不排拉取，重连全量重渲自然补」语义）。发送侧统一 JPEG 长边≤1568
+// （≤4 张），内存 data URI 量级可控；缓存不设上界与 005 壳同口径（LRU 备案后续统一）
+type BubbleImgState = { state: "loading" | "ready" | "failed"; uri?: string };
+const bubbleImgCache = new Map<string, BubbleImgState>();
+const bubbleImgInflight = new Map<string, Promise<BubbleImgState>>();
+const BUBBLE_IMG_TRANSIENT_RE = /未连接|超时/;
+
+async function fetchBubbleImg(sid: string, ref: string): Promise<BubbleImgState> {
+  const key = `${sid}/${ref}`;
+  const done = bubbleImgCache.get(key);
+  if (done) return done;
+  const run = bubbleImgInflight.get(key);
+  if (run) return run;
+  const p = (async (): Promise<BubbleImgState> => {
+    let st: BubbleImgState;
+    try {
+      const r = await store.fetchArtifact(sid, ref);
+      // 分块重组：chunk 边界不保证 base64 对齐，按字节拼回再统一编码（同 fetchArtView 口径）
+      const chunks = r.b64s.map(fromB64);
+      let n = 0;
+      for (const cc of chunks) n += cc.length;
+      const u8 = new Uint8Array(n);
+      let o = 0;
+      for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
+      st = { state: "ready", uri: `data:${r.mime || "image/jpeg"};base64,${toB64(u8)}` };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      st = BUBBLE_IMG_TRANSIENT_RE.test(msg) ? { state: "loading" } : { state: "failed" };
+    }
+    if (st.state !== "loading") bubbleImgCache.set(key, st);
+    bubbleImgInflight.delete(key);
+    return st;
+  })();
+  bubbleImgInflight.set(key, p);
+  return p;
+}
+
+function BubbleImage({ sid, imgref }: { sid: string; imgref: string }) {
+  const d = useThemeStyles(makeStyles);
+  const rl = useRelay();
+  const online = rl.connState === "online";
+  const key = `${sid}/${imgref}`;
+  const [st, setSt] = useState<BubbleImgState>(() => bubbleImgCache.get(key) ?? { state: "loading" });
+  const [zoom, setZoom] = useState(false);
+  useEffect(() => {
+    const hit = bubbleImgCache.get(key);
+    if (hit) { setSt(hit); return; }
+    if (!online) return; // 离线不排拉取；重连后 connState 变更重跑本 effect 自然补
+    let alive = true;
+    fetchBubbleImg(sid, imgref).then((s2) => { if (alive && s2.state !== "loading") setSt(s2); });
+    return () => { alive = false; };
+  }, [key, sid, imgref, online]);
+  if (st.state === "failed") return null; // 过期/拉取失败：不占位（气泡正文 [+N 图] 有交代）
+  if (st.state !== "ready" || !st.uri) return <View style={d.ubImgWait} />;
+  return (
+    <>
+      <Pressable onPress={() => setZoom(true)} accessibilityLabel="随消息发送的图片，点按放大">
+        <Image source={{ uri: st.uri }} style={d.ubImg} resizeMode="cover" />
+      </Pressable>
+      <Modal visible={zoom} transparent animationType="fade" onRequestClose={() => setZoom(false)}>
+        <Pressable style={d.ubPreviewWrap} onPress={() => setZoom(false)} accessibilityLabel="图片放大预览，点按关闭">
+          <Image source={{ uri: st.uri }} style={d.ubPreviewImg} resizeMode="contain" />
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; sid?: string; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const pf = PROC_FONT[useProcessFont()];
@@ -385,6 +458,9 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefO
     // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
     // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
     const long = !!e.full;
+    // FB14：随消息发送的图片在气泡内缩略呈现（点按放大），不再只发不显。
+    // 引用形态 img-* basename，经 COMMAND_ARTIFACT_FETCH 按需拉取（≤4 张与 relay 同口径）
+    const imgs = Array.isArray(e.images) ? e.images.filter((x) => typeof x === "string" && x).slice(0, 4) : [];
     return (
       <View style={d.trUser}>
         {/* URL 链接化：拆段渲染，链接段品牌色+可点开系统浏览器（2026-09-14 用户提） */}
@@ -397,6 +473,11 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefO
             ),
           )}
         </Text>
+        {imgs.length > 0 && sid ? (
+          <View style={d.ubImgs}>
+            {imgs.map((ref, i) => <BubbleImage key={`${i}-${ref}`} sid={sid} imgref={ref} />)}
+          </View>
+        ) : null}
         {long ? (
           <Pressable onPress={onToggle} hitSlop={6}>
             <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full!.length} 字 ▾`}</Text>
@@ -3062,7 +3143,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {dayLabel(e.ts!)} ──</Text>);
             }
             if (day) lastDay = day;
-            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} onTaskRef={openTaskRef} onTaskRefOut={outTaskRef} />);
+            nodes.push(<TranscriptRow key={key} e={e} sid={sid} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} onTaskRef={openTaskRef} onTaskRefOut={outTaskRef} />);
             return nodes;
           })
         )}
@@ -3815,6 +3896,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   trUserText: { color: c.text, fontSize: 14, lineHeight: 20 },
   trUserTime: { color: c.faint, fontSize: 10, textAlign: "right", marginTop: 3, fontVariant: ["tabular-nums"] },
+  // FB14 气泡附图缩略行：气泡内文字下方（64 方图，圆角同发送侧 imgThumb；加载占位
+  // working tint 微光；点按全屏黑底 contain 预览，点任意处关闭）
+  ubImgs: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  ubImg: { width: 64, height: 64, borderRadius: 10 },
+  ubImgWait: {
+    width: 64, height: 64, borderRadius: 10,
+    backgroundColor: withA(c.working, 0.12), borderWidth: 1, borderColor: withA(c.working, 0.22),
+  },
+  ubPreviewWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)" },
+  ubPreviewImg: { flex: 1 },
   trMsg: { marginBottom: 10 },
   trMsgTime: { color: c.faint, fontSize: 10, marginBottom: 2, fontVariant: ["tabular-nums"] },
   daySep: { color: c.faint, fontSize: 10.5, textAlign: "center", marginVertical: 8, fontVariant: ["tabular-nums"] },
