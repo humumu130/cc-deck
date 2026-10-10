@@ -252,9 +252,15 @@ export class Bridge {
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 60_000;
     // 外部引擎收编：每引擎一个 scanner（共享 rollout 解析框架）；根目录不存在时
-    // scan() 静默返回空（跳过不报错），引擎装上后下轮自动跟进
+    // scan() 静默返回空（跳过不报错），引擎装上后下轮自动跟进。
+    // W-PERF：cursor 落盘 dataDir（engine-cursors-<engine>.json）——rollout 全量
+    // 解析只在文件首见时发生一次，relay 重启不再从 0 烧一遍（实测 246MB 冷扫 =
+    // 2.75s CPU 100%，sessions 上 GB 的机器每次重启烧 10s+ 且 HTTP 饿死）
     for (const spec of ENGINE_SCAN_SPECS) {
-      this.engineScanners.push({ spec, scanner: new RolloutScanner(spec, engineRoot(spec, homedir())) });
+      this.engineScanners.push({
+        spec,
+        scanner: new RolloutScanner(spec, engineRoot(spec, homedir()), path.join(opts.dataDir, `engine-cursors-${spec.engine}.json`)),
+      });
     }
     this.hydratePidsFromCache();
     this.reconcilePidsFromSessions();
@@ -419,8 +425,11 @@ export class Bridge {
           if (this.mgr.ownsCliSession(sid)) continue; // 托管会话/一次性子会话：不收养
           if (this.mgr.isDeletedExt(id)) continue; // 手机删过的：墓碑拦截，防复活
           let mtime: number;
+          let fileSize = 0;
           try {
-            mtime = statSync(p).mtimeMs;
+            const st = statSync(p);
+            mtime = st.mtimeMs;
+            fileSize = st.size;
           } catch {
             continue;
           }
@@ -445,12 +454,16 @@ export class Bridge {
           if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
           // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：user<2 且
           // 无工具调用时观察一轮文件增长再定（见 scanOrphanActivity 注释）；
-          // 仍在增长 → 穿透收养，否则记探针等下一轮
+          // 仍在增长 → 穿透收养，否则记探针等下一轮。
+          // W-PERF 零增长门槛：上轮已判「不收养」且文件一字节没长 → 行数计数必然
+          // 不变，全量重扫（70MB 实测 65ms/次）纯烧——30min 活跃窗内同文件每 60s
+          // 重扫 30 次的空转在这里掐断，语义与旧路径完全等价（计数只依赖字节内容）
+          const probePrev = this.orphanProbe.get(p);
+          if (probePrev && !probePrev.adopt && probePrev.size === fileSize) continue;
           const act = this.scanOrphanActivity(p);
           if (!act.adopt) {
-            const prev = this.orphanProbe.get(p);
-            if (prev === undefined || act.size <= prev.size) {
-              this.orphanProbe.set(p, { size: act.size, ts: Date.now() });
+            if (probePrev === undefined || act.size <= probePrev.size) {
+              this.orphanProbe.set(p, { size: act.size, ts: Date.now(), adopt: false });
               if (this.orphanProbe.size > 200) {
                 for (const [k, v] of this.orphanProbe) {
                   if (Date.now() - v.ts > 30 * 60_000) this.orphanProbe.delete(k);
@@ -459,6 +472,7 @@ export class Bridge {
               continue;
             }
           }
+          this.orphanProbe.delete(p); // 已收养/穿透收养：探针记录即时清掉，不占 200 上额
           this.mgr.ensureExternal(id, cwd, "", sid, transcriptFirstTs(p));
           this.transcriptPaths.set(id, p);
           this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
@@ -545,7 +559,7 @@ export class Bridge {
   //   会被误收养，代价仅一张只读卡片（可删），可接受。
   // 其余（纯文本首回合 / claude -p 单发）：不收养，返回 size 供调用方观察增长——
   //   活跃会话下一轮必然变长，-p 单发不会。
-  private orphanProbe = new Map<string, { size: number; ts: number }>();
+  private orphanProbe = new Map<string, { size: number; ts: number; adopt: boolean }>();
 
   private scanOrphanActivity(p: string): { adopt: boolean; size: number } {
     let fd: number | undefined;
