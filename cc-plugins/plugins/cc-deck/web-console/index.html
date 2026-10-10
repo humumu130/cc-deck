@@ -1977,12 +1977,32 @@
 
   /* #14 提问卡排版重设计：提问态（.ask）中性面板+品牌轻描边——AskUserQuestion 是中性
      提问不是告警；审批态（默认，权限允许/拒绝）保留黄警示语言，两态互不污染 */
-  #waitbox {
-    margin: 12px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
+  #waitbox {    margin: 12px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
     background: var(--panel);
     border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: none;
     flex: none;
     animation: riseIn .18s ease-out;
+  }
+  /* W-CTXFIX B3 压缩前状态摘要折叠块：灰调低调卡（存档查阅属性，不与状态卡抢视觉），
+     同 waitbox 的宽度节奏；summary 行 = 折叠头，展开后 pre 等宽展示全文可复制 */
+  #pcsum {
+    margin: 8px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px;
+    font-size: 12px; flex: none;
+  }
+  #pcsum summary {
+    cursor: pointer; user-select: none;
+    padding: 8px 14px; color: var(--dim); font-weight: 600;
+    list-style: none; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  #pcsum summary::before { content: "▸"; flex: none; color: var(--faint); transition: transform .15s; }
+  #pcsum[open] summary::before { transform: rotate(90deg); }
+  #pcsum .pcsum-hint { font-weight: 400; font-size: 11px; color: var(--faint); }
+  #pcsum pre {
+    margin: 0; padding: 4px 14px 12px;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6;
+    color: var(--dim); white-space: pre-wrap; word-break: break-word;
   }
   /* #192 黄 tint 与状态灯同源（旧为硬编码 rgba(245,184,65) 另一黄）；高度预算收紧 */
   #waitbox:not(.ask) { background: color-mix(in srgb, var(--working) 7%, var(--panel)); border-color: color-mix(in srgb, var(--working) 36%, transparent); }
@@ -2892,6 +2912,13 @@
         </div>
       </div>
     </div>
+
+    <!-- W-CTXFIX B3 压缩前任务状态摘要：relay 看门狗在水位到阈值时固化（有摘要才显示，
+         默认折叠）；上下文被 CLI 压缩后由 relay 自动注入下一条消息，此处供人工查阅复制 -->
+    <details id="pcsum" hidden>
+      <summary>压缩前状态摘要<span class="pcsum-hint">上下文压缩前的任务状态存档，已自动注入恢复</span></summary>
+      <pre id="pcsumText"></pre>
+    </details>
 
     <div id="timeline"></div>
 
@@ -4817,7 +4844,7 @@ function onEvent(ctx, msg) {
       // 永远挂着"历史会话"横幅（本地值只在快照时写过一次）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated",
-        "project_gid", "dispatch_tier", "engine", "activity", "activity_capabilities"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记；#018 W1a 活动投影 */
+        "project_gid", "dispatch_tier", "engine", "activity", "activity_capabilities", "pre_compact_summary"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记；#018 W1a 活动投影；W-CTXFIX B3 压缩前摘要 */
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       // #157 最后活跃时间优先采信载荷显式值（relay 水合帧 ≠ 活动帧，信 envelope ts
@@ -6941,6 +6968,18 @@ function renderDetail() {
   // #392web 水位随内容显隐（对齐手机：无水位且无 chip 时不占位）；#41web 并入元信息行
   $("dctxcell").style.display = (s.context_usage || canModel) ? "flex" : "none";
 
+  // W-CTXFIX B3 压缩前状态摘要折叠块：有摘要才显示、默认折叠（切会话复位展开态）
+  const pcs = $("pcsum"), pcsText = $("pcsumText");
+  if (s.pre_compact_summary) {
+    pcs.hidden = false;
+    pcs.open = false;
+    pcsText.textContent = s.pre_compact_summary;
+  } else {
+    pcs.hidden = true;
+    pcs.open = false;
+    pcsText.textContent = "";
+  }
+
   // WAITING 处理框
   const wb = $("waitbox");
   if (s.status === "WAITING" && s.waiting_request && !s.historical) {
@@ -8238,7 +8277,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.7.0-test.8"; // dev 0.6.2 正式版基线并入（#222 分组等）；团队域特性未发版，随其发版再 bump
+const CONSOLE_VERSION = "0.7.0-test.9"; // dev 0.6.2 正式版基线并入（#222 分组等）；团队域特性未发版，随其发版再 bump
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;

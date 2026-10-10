@@ -6305,7 +6305,7 @@ export class SessionManager {
     // 直发 + unacked 入账（#7 重放账同款：流死重放保必达；CLI 消费时回显出队）。
     // echo 短文案：面板时间线显示一行系统动作，指令全文不刷屏
     s.agent?.sendMessage(prompt, undefined, "【relay】上下文水位告警，已请求任务状态摘要");
-    s.unacked.push({ text: prompt, ts: now });
+    s.unacked.push({ id: randomUUID(), text: prompt, ts: now }); // 合并修正：P1FIX 账目类型要 id（原 CTXFIX 旧形态）
     this.pushExternalLog(s.state.session_id, "system", `上下文水位 ${Math.round((tokens / limit) * 100)}%，已请求压缩前任务状态摘要`);
     this.emitUpdated(s, true);
   }
