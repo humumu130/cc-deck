@@ -248,11 +248,19 @@ async function resolveTmuxTarget(pid: number): Promise<string | null> {
   }
   if (!tty || tty === "?") return null;
   try {
-    const r = await runTmux(["list-panes", "-a", "-F", "#{pane_tty}\t#{session_name}\t#{window_index}\t#{pane_index}"]);
+    // ⚠ tmux 会把 -F 格式串里的控制字符（\t/\x01/\x1f…）原样输出成字面 '_'（3.6a
+    // 实测，管道 stdout 下亦然）——tab 分列永远解析不出字段，resolveTmuxTarget 恒
+    // null，tmux 宿主整机跌落 osascript 静默空转后假报注入成功（2026-10-10 生产
+    // 事故根因：面板显示已注入但文字从不落地、防抢发快照恒不可用；launchd/交互
+    // shell 通杀，测试假注入器绕过真实 tmux 故从未暴露）。改 | 分隔 + 正则解析：
+    // tty 不含 |、序号恒为数字、session 名放行尾（名字含 | 也只污染最后一个字段，
+    // 定位三要素不受影响）。
+    const r = await runTmux(["list-panes", "-a", "-F", "#{pane_tty}|#{window_index}|#{pane_index}|#{session_name}"]);
     if (!r.ok) return null;
     for (const line of r.text.split(/\r?\n/)) {
-      const [ptty, s, w, p] = line.split("\t");
-      if (!ptty || !s || !w || !p) continue;
+      const m = /^(\/dev\/[^\s|]+)\|(\d+)\|(\d+)\|(.*)$/.exec(line);
+      if (!m) continue;
+      const [, ptty, w, p, s] = m;
       if (ptty.endsWith(tty)) return tmuxSupportsEqPrefix() ? `=${s}:${w}.${p}` : `${s}:${w}.${p}`;
     }
   } catch {}
