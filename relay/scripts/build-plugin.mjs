@@ -1,52 +1,41 @@
 #!/usr/bin/env node
 // 打包 CC Deck 插件：bundle relay 成单文件 + 汇集静态资源到 cc-plugins/plugins/cc-deck/
-// 用法：node scripts/build-plugin.mjs（relay 目录下）
+// 用法：node scripts/build-plugin.mjs [版本号]（relay 目录下；版本缺省回落仓库根 VERSION——
+//       2026-10-10 A1 收敛后 VERSION 是唯一事实源，显式传参仅应急覆盖用）
 import { build } from "esbuild";
 import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { bundleOptions, relayRoot } from "./bundle-options.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const relayRoot = join(here, "..");
 const root = join(relayRoot, "..");
 const out = join(root, "cc-plugins", "plugins", "cc-deck");
 
-// 1. bundle relay：esm 单文件，ws 的可选原生依赖不打进
-await build({
-  entryPoints: [join(relayRoot, "src", "index.ts")],
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node18", // #17（2026-09-10）：内嵌 relay 真实下限=18（源码用 top-level await + 全局 fetch，node14 转译救不了）；老 Node 由壳侧 err 引导升级（见 main.rs EMBEDDED_RELAY_ERR）
-  outfile: join(out, "scripts", "relay.mjs"),
-  // better-sqlite3 是原生模块（.node 二进制）不可内联：bundle 进 ESM 后其运行时依赖
-  // bindings 包的 __filename 在 ESM 语境未定义 → 任何环境首次 boot 即 ReferenceError
-  // （2026-10-07 部署单沙盒首 boot 实锤，此前测试全走 tsx 源码未踩中）。运行时从
-  // bundle 同目录 node_modules 解析——插件/桌面两形态发布都须随包携带
-  // node_modules 内 better-sqlite3 完整运行时 require 闭包：bindings、
-  // file-uri-to-path（缺 file-uri-to-path 同样 boot 必崩，2026-10-07 沙盒
-  // 二度实锤；含 build/Release 原生二进制）
-  external: ["bufferutil", "utf-8-validate", "better-sqlite3"],
-  define: { "process.env.CC_DECK_PLUGIN": '"1"' },
-  // banner 里不声明 createRequire 标识符——源码（如 cli-path.ts）静态 import { createRequire }
-  // 时 esbuild 会原样保留该 import，banner 再 import 一份 = 重复声明 SyntaxError，
-  // 整个 bundle 起不来（2026-09-16 事故）。动态取用无标识符冲突
-  banner: { js: "const require = (await import('node:module')).createRequire(import.meta.url);" },
-  logLevel: "info",
-});
+// 1. bundle relay：esm 单文件，ws 的可选原生依赖不打进（参数单源见 bundle-options.mjs）
+await build(bundleOptions(join(out, "scripts", "relay.mjs")));
 
-// 2. 版本同步（单一版本源）：plugin.json 为源，回写三线——marketplace.json、
-//    desktop-tauri/package.json（App 壳版本，tauri.conf.json version 引用它）、
-//    web-console CONSOLE_VERSION。0.7.0 起三线统一，一处 bump 全线同步
-//    （杜绝「App 0.6.4 > 控制台 0.6.2 却内容更旧」的撞名再现）。
+// 2. 版本同步（唯一版本源，2026-10-10 A1 收敛，审查 P1-1）：仓库根 VERSION 为唯一
+//    事实源，本脚本取值回写四线——plugin.json（原「第二事实源」降为纯落点）、
+//    marketplace.json、desktop-tauri/package.json（App 壳版本，tauri.conf.json
+//    version 引用它）、web-console 双壳 CONSOLE_VERSION。此前 plugin.json 为源
+//    与 scripts/version.mjs（VERSION 为源）并存且互不回写对方落点，test.7 批
+//    bump（63b92a7）漏刷 VERSION → 五处守卫全红 + 危险降级窗口。收敛后两机制
+//    同读 VERSION，幂等互证；与 version.mjs 落点差异仅官网主页（预发豁免在此管）。
 //    ⚠ 必须在静态资源拷贝之前跑：拷贝从 root/web-console 取源，晚于此步
 //    产物会带上旧版本号（test.1 预发首跑实锤，git status 无 diff 即症状）
-const pluginJson = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf-8"));
-const ver = pluginJson.version;
+const argVer = process.argv[2];
+const ver = (argVer ?? readFileSync(join(root, "VERSION"), "utf-8")).trim();
+if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(ver)) {
+  console.error(`版本号不是三段 semver（可带 -test.N/-snap.N 预发段；四段号与 Tauri/npm 不兼容）：${ver}`);
+  process.exit(1);
+}
+const pluginJsonPath = join(out, ".claude-plugin", "plugin.json");
+const pluginJsonRaw = readFileSync(pluginJsonPath, "utf-8");
+writeFileSync(pluginJsonPath, pluginJsonRaw.replace(/("version":\s*)"[^"]*"/, `$1"${ver}"`));
+const pluginName = JSON.parse(pluginJsonRaw).name; // 名字/描述仍以 plugin.json 为权威（与版本无关）
 const mktPath = join(root, ".claude-plugin", "marketplace.json");
 const mkt = JSON.parse(readFileSync(mktPath, "utf-8"));
 for (const p of mkt.plugins) {
-  if (p.name === pluginJson.name) p.version = ver;
+  if (p.name === pluginName) p.version = ver;
 }
 writeFileSync(mktPath, JSON.stringify(mkt, null, 2) + "\n");
 const pkgPath = join(root, "desktop-tauri", "package.json");
