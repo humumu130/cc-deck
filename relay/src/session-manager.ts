@@ -49,7 +49,7 @@ import type { EmployeeHomeSettingsPayload } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { killTree, snapshotTree, treeCpuMs } from "./proc-tree.js";
-import { saveUploadFiles, type UploadBlob } from "./uploads.js";
+import { saveUploadFiles, saveUploadImages, imageRefsOf, resolveUploadImage, type UploadBlob } from "./uploads.js";
 import { normKey, taskDoneLabel, truncate } from "./summarizer.js";
 import type { AgentLike } from "./agent-adapter.js";
 
@@ -419,7 +419,7 @@ interface ManagedSession {
   lastProgressKind: string;
   // 已 sendMessage 但流未回显 user_message 的消息：僵死恢复时重放（回显即出队，
   // 已被 CLI 处理过的消息在 transcript 里，重放会重复）
-  unacked: { text: string; images?: string[]; ts: number }[];
+  unacked: { text: string; images?: string[]; ts: number; refs?: string[] }[];
   wd: WatchdogState;
   // #109 流代际：resumeAgent/reviveSaved 换流前递增。回调闭包按创建时代际比对，
   // 不匹配即忽略——旧流的任何后续事件（接管补刀的收尾回调 / 网络回魂）不再写
@@ -442,6 +442,11 @@ interface ManagedSession {
   // ×N 重复文本本身是同 id 流式部分帧，观察口径问题）。首个回合终态（onTurnEnd/
   // onSessionEnd）清除；此后 Leader 空闲 init 到达照旧待命化
   pendingInitial?: boolean;
+  // FB14 气泡附图回显槽：COMMAND_MESSAGE 发送前置入本次落盘引用，sendMessage 的
+  // user_message 回显（同步发出）即刻消费——echo 先于 unacked.push，refs 不能靠
+  // unacked 对账取出（对账条在回显之后才入账）。unacked.refs 仍记（看门狗重放/
+  // resume 续带用），两处数据源各管一段
+  pendingImgRefs?: string[];
 }
 
 interface WatchdogState {
@@ -1978,7 +1983,7 @@ export class SessionManager {
     kind: LogEntry["kind"],
     text: string,
     tool?: string,
-    meta?: { full?: string; detail?: string; diff?: string[]; id?: string },
+    meta?: { full?: string; detail?: string; diff?: string[]; id?: string; images?: string[] },
   ): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -2178,6 +2183,14 @@ export class SessionManager {
               return { command_id: cmd.command_id, ok: false, error: "文件保存失败（临时目录不可写）" };
             }
           }
+          // FB14 气泡附图：base64 原链照旧进 CLI（#63 不动），另落一份共享 tmp 供气泡
+          // 回取——refs（basename 引用）随发送链透传：流回显经 onLog 对账取出附到
+          // LogEntry.images，看门狗重放/resume 经 unacked.refs 续带。落盘失败不挡发送
+          //（气泡少缩略，消息本身无损）
+          const imgPayload = sanitizeImages(cmd.payload.images) ?? [];
+          const imgRefs = imgPayload.length > 0
+            ? imageRefsOf(saveUploadImages(this.cfg.dataDir, cmd.payload.session_id, imgPayload))
+            : [];
           // #26 派单台账（M1 咨询档）：Leader 会话的每条用户消息 = 一次咨询派单。
           // M1「派与跑同刻」直接落 running（dispatched 留 M2 异步派单，schema 已留位）；
           // 放在文件保存失败返回之后 = 只记必达消息，三投递出口（resumePending 排队 /
@@ -2203,21 +2216,23 @@ export class SessionManager {
             // 静默丢（codex 侧 console.warn），消息蒸发；一律走 resumeAgent 真拉活
             if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
-              s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
-              s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
+              s.pendingImgRefs = imgRefs.length ? imgRefs : undefined; // FB14：回显槽先置（echo 同步消费）
+              s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo);
+              s.unacked.push({ text, images: imgPayload.length ? imgPayload : undefined, refs: imgRefs.length ? imgRefs : undefined, ts: Date.now() });
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
             }
-            this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
+            this.resumeAgent(s, text, imgPayload.length ? imgPayload : undefined, echo, imgRefs.length ? imgRefs : undefined);
             return { command_id: cmd.command_id, ok: true };
           }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
-          s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
+          s.pendingImgRefs = imgRefs.length ? imgRefs : undefined; // FB14：回显槽先置（echo 同步消费）
+          s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo);
           // #7 看门狗重放账：入队即记，流回显 user_message 才出队（流死时 CLI 从未
           // 收到，恢复后须重发；不推进 lastProgressAt——灌进死队列不是"进展"）
-          s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
+          s.unacked.push({ text, images: imgPayload.length ? imgPayload : undefined, refs: imgRefs.length ? imgRefs : undefined, ts: Date.now() });
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -2652,9 +2667,16 @@ export class SessionManager {
           // 经瞬态 ARTIFACT_CHUNK 帧按 ref=command_id 回发（LAN/云同路径，云侧自动
           // E2E 密封，桥不落存储）。幂等重放（duplicate ack）不会重发数据——缺帧
           // 重试必须换新 command_id
+          // FB14 气泡附图：path 为 img-* basename 引用时走临时目录分支（resolveUploadImage
+          // 校验形态+会话归属+目录钳制，授权口径同级：只能拉本会话收过的图）。复用同一
+          // CHUNK 回发管线，端上拉取代码零分叉
           const s = this.require(cmd.payload.session_id);
-          const key = resolve(String(cmd.payload.path ?? "")).toLowerCase();
-          const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
+          const rawPath = String(cmd.payload.path ?? "");
+          const imgHit = resolveUploadImage(this.cfg.dataDir, s.state.session_id, rawPath);
+          const key = imgHit ? "" : resolve(rawPath).toLowerCase();
+          const hit = imgHit
+            ? { path: imgHit }
+            : (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
           if (!hit) {
             return { command_id: cmd.command_id, ok: false, error: "路径未登记在该会话的输出物清单里，无权拉取" };
           }
@@ -2662,7 +2684,7 @@ export class SessionManager {
           try {
             st = statSync(hit.path);
           } catch {
-            return { command_id: cmd.command_id, ok: false, error: "文件不存在或不可访问（可能已被移动/删除）" };
+            return { command_id: cmd.command_id, ok: false, error: imgHit ? "图片已过期（临时附件定期清扫）" : "文件不存在或不可访问（可能已被移动/删除）" };
           }
           if (!st.isFile()) return { command_id: cmd.command_id, ok: false, error: "不是常规文件" };
           if (st.size > ARTIFACT_FETCH_MAX_BYTES) {
@@ -3176,6 +3198,12 @@ export class SessionManager {
           // #7 看门狗消息重放账：流回显 user_message = CLI 真正收到了这条消息
           //（echo 文案带"（+N 图）"尾缀，匹配前剥掉；normalize 口径与手机端一致）
           if (kind === "user_message") {
+            // FB14 气泡附图：消费发送时置入的回显槽——sendMessage 的 echo 同步发出，
+            // 此刻 unacked 尚未入账（push 在 sendMessage 之后），refs 只能走槽位
+            if (managed.pendingImgRefs?.length) {
+              meta = { ...meta, images: managed.pendingImgRefs };
+              managed.pendingImgRefs = undefined;
+            }
             const key = text.replace(/（\+\d+ 图）$/, "").trim().replace(/\s+/g, " ").slice(0, 200);
             const i = managed.unacked.findIndex((m) => m.text.trim().replace(/\s+/g, " ").slice(0, 200) === key);
             if (i >= 0) managed.unacked.splice(i, 1);
@@ -3310,7 +3338,7 @@ export class SessionManager {
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
   // echo（#62 文件消息）：客户端可见回显文本——正文已合成路径指令时传原文本短回显，
   // 不暴露临时路径（同 #54b 口径）；不传则回显截断正文 + 图片计数
-  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string): void {
+  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[]): void {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
@@ -3336,7 +3364,7 @@ export class SessionManager {
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.gaveUp = false;
-      s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+      s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now() });
       this.emitUpdated(s, true);
       return;
     }
@@ -3425,7 +3453,7 @@ export class SessionManager {
     s.lastProgressKind = "";
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
-    s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+    s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now() });
     initTimer = setTimeout(() => {
       initTimer = null;
       // 已 init / 流已换（stale timer）/ 流已被 STOP 或自然关闭 / 会话卡已被删
@@ -3497,7 +3525,8 @@ export class SessionManager {
     }, resumeInitTimeoutMs());
     initTimer.unref?.();
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
-    this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
+    // FB14：恢复路径回显同样带图引用（refs 由调用侧从落盘结果/重放台账续带）
+    this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker, undefined, refs?.length ? { images: refs } : undefined);
     this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
     this.emitUpdated(s, true);
   }
@@ -4441,6 +4470,30 @@ export class SessionManager {
     if (action === "create") {
       const anchor = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
       const tier = payload.tier === "轻立项" || payload.tier === "正经立项" ? payload.tier : "随手办";
+      // FB4 团队创建表单：随团种子编制会话校验（门禁对齐 member-add：在册/非外部/非
+      // Leader；形状与去重在 adaptOrgAction→sanitizeHeadcount）。任一席不合法整单拒——
+      // 半编组比拒单更难解释
+      if (Array.isArray(payload.headcount)) {
+        for (const item of payload.headcount as unknown[]) {
+          const sid = item && typeof item === "object" && typeof (item as { session_id?: unknown }).session_id === "string"
+            ? ((item as { session_id: string }).session_id).trim()
+            : "";
+          if (!sid) continue; // 形状由 sanitizeHeadcount 拒，这里只做在册性
+          const s = this.sessions.get(sid);
+          if (!s) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`);
+            return { ok: false, error: `随团编制里的会话 ${sid.slice(0, 8)} 不在册（成员需先有会话卡）` };
+          }
+          if (s.state.external) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：外部会话不可入编`);
+            return { ok: false, error: "外部会话不可入编（成员只能是托管会话）" };
+          }
+          if (this.isLeaderSession(sid)) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：Leader 不可入编`);
+            return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
+          }
+        }
+      }
       // B2a 单漏斗：create → createGroup（校验 name/anchor_dir/tier；needsConfirm 时
       // addConfirm 已落 confirms.json，组停 pending 等用户 ✓/✗）
       const r = adaptOrgAction(payload);
@@ -6150,7 +6203,9 @@ export class SessionManager {
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
-        this.resumeAgent(s, text, images.length ? images : undefined);
+        // FB14：重放合并后的气泡引用随行（多条各带图时全带上——引用是basename，无体积压力）
+        const refs = pending.flatMap((m) => m.refs ?? []);
+        this.resumeAgent(s, text, images.length ? images : undefined, undefined, refs.length ? refs : undefined);
       } else {
         // M1 审查轮（漏收窗口）：reviveSaved 是 parked 恢复（停在等待输入，不再产
         // 生任何回合事件）——FIFO 里挂着的派单/咨询单永等不到 onTurnEnd，先按中断

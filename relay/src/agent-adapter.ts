@@ -313,7 +313,7 @@ export interface AgentCallbacks {
   onLog(
     kind: SessionLogPayload["kind"],
     text: string,
-    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean; detail?: string; diff?: string[] },
+    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean; detail?: string; diff?: string[]; images?: string[] },
   ): void;
   // 每回合结束（result 消息）：ok=true → DONE；ok=false → ERROR
   onTurnEnd(ok: boolean, reason: string, durationMs: number): void;

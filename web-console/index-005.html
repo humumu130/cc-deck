@@ -411,6 +411,12 @@
     .create-check input { accent-color: var(--brand); }
     .create-check:hover { color: var(--text); }
     .create-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; } /* 主操作靠右（#df2-E 全线右对齐惯例） */
+    /* FB4 新建团队表单：成员多选清单（复选行 + 引擎徽标 + 角色输入；自由编制模板时展开） */
+    .team-cand-list { display: grid; gap: 2px; margin: 2px 0 4px; max-height: 176px; overflow-y: auto; }
+    .team-cand { justify-content: flex-start; gap: 8px; padding: 5px 6px; border-radius: 7px; }
+    .team-cand:hover { background: var(--hover); }
+    .team-cand-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .team-cand .team-cand-role { flex: 0 0 96px; height: 26px; padding: 0 7px; font-size: var(--fs-E); }
     /* #df2-A 顶栏唯一胶囊：connection-capsule 整链退役（:337-356），连接摘要+统计并入 source-trigger；重连按钮迁入 source-menu（.connection-reconnect 保留复用） */
     .source-option .connection-reconnect {min-width: 34px; min-height: 22px; padding: 2px 7px; margin-left: auto; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: var(--fs-E); white-space: nowrap;}
     .source-group-bar {display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono);}
@@ -558,6 +564,9 @@
     .ub-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
     .ub-img { width: 92px; height: 92px; object-fit: cover; border: 1px solid var(--line-soft); border-radius: 8px; cursor: zoom-in; transition: width .15s ease, height .15s ease; }
     .ub-img.zoomed { width: min(320px, 100%); height: auto; cursor: zoom-out; }
+    /* FB14 拉图占位：92px 方块微呼吸（就位后原地换 img；失败收敛隐藏不占位） */
+    .ub-img-wait { display: inline-block; background: var(--surface2, rgba(127,127,127,.12)); border: 1px solid var(--line-soft); border-radius: 8px; animation: ubWait 1.2s ease-in-out infinite; }
+    @keyframes ubWait { 0%, 100% { opacity: .55; } 50% { opacity: .95; } }
     .composer-tray-item {display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 4px 2px 5px; border: 1px solid var(--tag-border); border-radius: var(--radius-sm); background: var(--tag-bg); color: var(--text); font-size: var(--fs-C);}
     /* #B3-16 图片缩略 18→40：辨识度（胶片感能看清内容再发送） */
     .composer-tray-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line-soft); }
@@ -1641,6 +1650,7 @@
                   engineCatalog: null, models: [], projects: [],
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
+                  imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
                 };
@@ -2136,7 +2146,11 @@
                 function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
-                function onDeleted(sid) { S.sessions.delete(sid); S.timelines.delete(sid); try { localStorage.removeItem(HIST_PREFIX + sid); } catch (_) {} inputDrafts.delete(sid); if (S.selected === sid) S.selected = ""; renderMyList(); renderAll(); }
+                function onDeleted(sid) {
+                  S.sessions.delete(sid); S.timelines.delete(sid);
+                  for (const [key, c] of S.imgUrls) if (key.startsWith(sid + "/")) { if (c && c.url) { try { URL.revokeObjectURL(c.url); } catch (_) {} } S.imgUrls.delete(key); } // FB14 附图缓存随会话回收
+                  try { localStorage.removeItem(HIST_PREFIX + sid); } catch (_) {} inputDrafts.delete(sid); if (S.selected === sid) S.selected = ""; renderMyList(); renderAll();
+                }
 
                 // 同 id 流式块原地替换（v1 pushLog/streamMergeDecide 口径）
                 function streamMergeDecide(prev, next) {
@@ -2760,6 +2774,47 @@
                 function isStreaming(e, s) { return !!e.streaming && !!s && s.status === "WORKING"; }
                 function daySepNode(ts) { const d = document.createElement("div"); d.className = "timeline-note"; d.textContent = "── " + dayLabel(ts) + " ──"; return d; }
                 function noteNode(text) { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(text ?? "")) ? " warn" : ""); d.textContent = text; return d; } // #B3-13 ⚠ 行同款黄
+                // ---------- FB14 气泡附图：引用 → 缩略（按需拉取 + 缓存） ----------
+                // 引用拉取复用输出物 CHUNK 管线（COMMAND_ARTIFACT_FETCH 的 img 引用分支）：
+                // 快照里只带 basename 引用（体积恒小），首次渲染时排队拉取，就位后原地换 img。
+                // 失败（含 7 天清扫过期）缓存 failed 态不再重试——占位收敛隐藏，正文仍在
+                function bubbleImgHtml(s, ref) {
+                  if (ref.startsWith("data:")) return '<img class="ub-img" src="' + esc(ref) + '" alt="随消息发送的图片" title="点击放大/还原" loading="lazy">';
+                  const sid = (s && s.session_id) || "";
+                  if (!sid || !S.status || S.status !== "online") return ""; // 离线不排拉取（重连后全量重渲自然补）
+                  const key = sid + "/" + ref;
+                  const c = S.imgUrls.get(key);
+                  if (c && c.state === "ready") return '<img class="ub-img" src="' + esc(c.url) + '" alt="随消息发送的图片" title="点击放大/还原" loading="lazy">';
+                  if (c && c.state === "failed") return ""; // 过期/拉取失败：不占位（气泡正文有 [图片×N] 交代）
+                  queueBubbleImg(sid, ref);
+                  return '<span class="ub-img ub-img-wait" data-imgref="' + esc(key) + '" aria-label="图片加载中"></span>';
+                }
+                function queueBubbleImg(sid, ref) {
+                  const key = sid + "/" + ref;
+                  if (S.imgUrls.has(key)) return;
+                  S.imgUrls.set(key, { state: "loading" });
+                  fetchArtifact(sid, ref).then((res) => {
+                    const url = URL.createObjectURL(new Blob([artifactBytes(res)], { type: res.mime || "image/jpeg" }));
+                    S.imgUrls.set(key, { state: "ready", url });
+                    settleBubbleImg(key);
+                  }).catch(() => {
+                    S.imgUrls.set(key, { state: "failed" });
+                    settleBubbleImg(key);
+                  });
+                }
+                function settleBubbleImg(key) {
+                  const c = S.imgUrls.get(key);
+                  document.querySelectorAll('[data-imgref="' + cssEsc(key) + '"]').forEach((el) => {
+                    if (!c || c.state !== "ready") { el.remove(); return; } // failed：占位收敛隐藏
+                    const img = document.createElement("img");
+                    img.className = "ub-img";
+                    img.src = c.url;
+                    img.alt = "随消息发送的图片";
+                    img.title = "点击放大/还原";
+                    img.loading = "lazy";
+                    el.replaceWith(img);
+                  });
+                }
                 // #164 单条消息 HTML（桌面/手机同一渲染路径；返回 "" = 该类开关关闭不渲染）
                 function entryHtml(e, s) {
                   const role = msgRoleOf(e.kind);
@@ -2770,13 +2825,12 @@
                     // 旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文；任务号/裸 URL 链接化
                     const src = String(e.full ?? e.text ?? "");
                     const long = src.length > 100;
-                    // FB14：随消息发送的图片在气泡内缩略呈现（点击放大/还原），不再只发不显
+                    // FB14：随消息发送的图片在气泡内缩略呈现（点击放大/还原），不再只发不显。
+                    // 元素形态两种：data: URL（前缀直用）或 relay 落盘引用（img-* basename，
+                    // 经 COMMAND_ARTIFACT_FETCH 按需拉取——快照里只有引用，体积恒小）
                     const imgs = Array.isArray(e.images) ? e.images.filter((x) => typeof x === "string" && x) : [];
                     const imgHtml = imgs.length
-                      ? '<div class="ub-imgs">' + imgs.slice(0, 8).map((b64) => {
-                          const url = b64.startsWith("data:") ? b64 : "data:image/jpeg;base64," + b64;
-                          return '<img class="ub-img" src="' + esc(url) + '" alt="随消息发送的图片" title="点击放大/还原" loading="lazy">';
-                        }).join("") + "</div>"
+                      ? '<div class="ub-imgs">' + imgs.slice(0, 8).map((ref) => bubbleImgHtml(s, ref)).join("") + "</div>"
                       : "";
                     return '<div class="bubble me" data-x="' + ke + '"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" + imgHtml +
                       (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>";
@@ -4330,7 +4384,7 @@
           </section>
 
           <section class="desktop-screen" id="d-team" data-stub="B3">
-            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建会话（成员编制在团队域维护）" aria-label="新建会话">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
               <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
@@ -4559,6 +4613,105 @@
                   void requestDetail(gid);
                   return true;
                 }
+                // ---------- FB4 团队创建表单 ----------
+                // 真表单（团队名/锚点目录/立项档/成员多选+角色模板），提交走
+                // COMMAND_ORG_ACTION create（relay 单漏斗 createGroup；headcount 随团种子
+                // 编制，会话在册性由 relay 咽喉校验）。取代此前「代理会话域新建会话弹窗」
+                // 的形态错位（FB 审计 4327/4563）。创建成功/确认卡落单后 PROJECTS_UPDATED
+                // 帧自动刷新队列，无需手动重拉
+                const TEAM_ROLE_PRESETS = ["worker", "PM", "reviewer", "qa"];
+                const toast = (text) => { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast(text); else feedback(text); }; // B4 toast 在场用之，否则落 footer 反馈行
+                const cssEscape = (value) => String(value).replace(/["\\]/g, "\\$&"); // 属性选择器内引号安全（B2 cssEsc 同款）
+                function teamCandidates() {
+                  return [...state.sessions.values()]
+                    .filter((s) => s && typeof s.session_id === "string" && !s.external)
+                    .sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0))
+                    .slice(0, 12);
+                }
+                function teamCwdDefault() {
+                  try { return localStorage.getItem("cc-deck-005-last-cwd") || ""; } catch (_) { return ""; }
+                }
+                function openTeamCreate() {
+                  closeTeamCreate();
+                  const back = document.createElement("div");
+                  back.className = "pair-pop-backdrop";
+                  back.dataset.teamCreateBack = "";
+                  const pop = document.createElement("div");
+                  pop.id = "team-create-pop";
+                  pop.className = "create-pop";
+                  pop.setAttribute("role", "dialog");
+                  pop.setAttribute("aria-modal", "true");
+                  pop.setAttribute("aria-label", "新建团队");
+                  const cands = teamCandidates();
+                  let html = '<h3>新建团队</h3><p class="create-sub">立项后出现在团队列表；正经立项与首次轻立项需你在确认卡上决议</p>';
+                  html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广（必填）" aria-label="团队名">';
+                  html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径（必填，一锚一团）" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
+                  html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻立项（单卡简化态）</option><option value="正经立项">正经立项（每次创建都需确认）</option></select>';
+                  html += '<div class="create-label">成员编制（可选，最多 8 席）</div>';
+                  if (!state.online || !state.command) html += banner("命令通道未接入，无法提交创建。");
+                  if (cands.length) {
+                    html += '<div class="team-cand-list" data-team-cands>' + cands.map((s) => {
+                      const eng = engines.get(s.engine || "claude") || ["Claude", ""];
+                      return '<label class="create-check team-cand"><input type="checkbox" data-team-member="' + escape(s.session_id) + '"><span class="engine-badge ' + escape(eng[1]) + '">' + escape(eng[0]) + '</span><span class="team-cand-name">' + escape(s.title || s.session_id.slice(0, 12)) + '</span><input class="create-field team-cand-role" data-team-role="' + escape(s.session_id) + '" list="team-role-list" placeholder="worker" aria-label="成员角色" hidden></label>';
+                    }).join("") + "</div>"
+                      + '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
+                    html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>';
+                  } else {
+                    html += banner("当前来源暂无可入编会话（成员只能是托管会话）。可先不选，创建后由派单/编制面补齐。");
+                  }
+                  html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit>创建团队</button></div>';
+                  pop.innerHTML = html;
+                  back.addEventListener("click", closeTeamCreate);
+                  pop.addEventListener("click", (ev) => {
+                    if (ev.target.closest("[data-team-cancel]")) { closeTeamCreate(); return; }
+                    if (ev.target.closest("[data-team-submit]")) { void submitTeamCreate(pop); return; }
+                  });
+                  pop.addEventListener("change", (ev) => {
+                    const tpl = ev.target.closest("[data-team-field='template']");
+                    if (tpl) {
+                      const free = tpl.value === "free";
+                      pop.querySelectorAll(".team-cand-role").forEach((el) => { el.hidden = !free; });
+                      return;
+                    }
+                  });
+                  pop.addEventListener("keydown", (ev) => {
+                    if (ev.key === "Escape") { ev.stopPropagation(); closeTeamCreate(); return; }
+                    if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.teamField) { ev.preventDefault(); void submitTeamCreate(pop); }
+                  });
+                  document.body.append(back, pop);
+                  const name = pop.querySelector("[data-team-field='name']");
+                  if (name) name.focus();
+                }
+                function closeTeamCreate() { document.querySelectorAll("#team-create-pop, [data-team-create-back]").forEach((el) => el.remove()); }
+                async function submitTeamCreate(pop) {
+                  const name = String(pop.querySelector("[data-team-field='name']")?.value ?? "").trim();
+                  const anchor = String(pop.querySelector("[data-team-field='anchor']")?.value ?? "").trim();
+                  const tier = String(pop.querySelector("[data-team-field='tier']")?.value ?? "轻立项");
+                  const template = String(pop.querySelector("[data-team-field='template']")?.value ?? "worker");
+                  if (!name) { toast("先填团队名"); return; }
+                  if (!anchor.startsWith("/")) { toast("锚点目录需是绝对路径"); return; }
+                  const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
+                    const sid = el.dataset.teamMember;
+                    const roleInput = pop.querySelector("[data-team-role='" + cssEscape(sid) + "']");
+                    const role = template === "free" ? String(roleInput?.value ?? "").trim() : template;
+                    return { session_id: sid, role: role || "worker" };
+                  });
+                  const flight = "team-create";
+                  if (state.flights.has(flight)) return;
+                  state.flights.add(flight);
+                  try {
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}) }));
+                    if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
+                    closeTeamCreate();
+                    feedback(result.data?.needsConfirm ? "立项已提交，等你在确认卡上 ✓/✗。" : "团队已创建。");
+                    toast(result.data?.needsConfirm ? "立项已提交，待确认卡决议" : "团队已创建");
+                  } catch (error) {
+                    feedback("创建失败：" + String(error?.message || error));
+                  } finally {
+                    state.flights.delete(flight);
+                    render();
+                  }
+                }
                 function mount() {
                   if (state.mounted) return;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
@@ -4567,13 +4720,11 @@
                   root.removeAttribute("data-stub");
                   state.mounted = true;
                   root.addEventListener("click", (event) => {
-                    // FB4 团域新建：复用会话域 B10 新建弹窗（stopPropagation 免被 document 级收口守卫立刻关掉）
+                    // FB4 团域新建：真表单（团队名/锚点/档位/成员多选），不再代理会话域新建会话弹窗
                     const newSession = event.target.closest("[data-team-new-session]");
                     if (newSession) {
                       event.stopPropagation();
-                      const plus = document.querySelector("#d-session .queue-head button.icon-btn");
-                      if (plus) plus.click();
-                      else if (window.__ccDeck005B4 && window.__ccDeck005B4.toast) window.__ccDeck005B4.toast("新建会话入口未就绪 · 去会话域点 ＋");
+                      openTeamCreate();
                       return;
                     }
                     const decision = event.target.closest("[data-team-decision]");
