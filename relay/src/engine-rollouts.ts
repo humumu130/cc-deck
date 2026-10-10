@@ -61,10 +61,13 @@ export function engineRoot(spec: EngineScanSpec, home: string): string {
   return process.env[spec.envRoot] || join(home, spec.homeDirName, "sessions");
 }
 
+// 唯一声明（2026-10-10 顺手清理：原 :284 起有第二处同 interface，靠 TS 声明合并
+// 巧合成立——size? 由 W-PERF 批补在第二处；合并防「改一处漏一处」重构地雷）
 interface RolloutCursor {
   offset: number;
   carry: string;
   profile: EngineRolloutProfile;
+  size?: number; // 上次见到的文件大小（零增长 stat 门槛，W-PERF ③）
 }
 
 interface RolloutRecord {
@@ -280,13 +283,6 @@ export const ENGINE_SCAN_BUDGET_BYTES = (() => {
   const kb = Number(process.env.CCR_ENGINE_SCAN_BUDGET_KB);
   return kb > 0 ? kb * 1024 : 32 * 1024 * 1024;
 })();
-
-interface RolloutCursor {
-  offset: number;
-  carry: string;
-  profile: EngineRolloutProfile;
-  size?: number; // 上次见到的文件大小（零增长 stat 门槛）
-}
 
 // 持久化结构（dataDir/engine-cursors-<engine>.json）：relPath → 断点 + 会话画像。
 // profile 一并落盘：重启后不重读也能保住 prompt/title/activity 状态。
