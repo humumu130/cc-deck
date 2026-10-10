@@ -1,7 +1,7 @@
 # cc-deck UI 骨架方案评审报告
 
 评审日期：2026-10-03  
-评审范围：`docs/v8-ui-mockup.html`、`docs/v8-ui-interactive-v2.html`、`web-console/index.html`、`expo-app/App.tsx` 及其当前列表/详情相关组件。
+评审范围：`docs/mockups/v8-ui-mockup.html`、`docs/mockups/v8-ui-interactive-v2.html`、`web-console/index.html`、`expo-app/App.tsx` 及其当前列表/详情相关组件。
 
 ## a. 方案审查结论
 

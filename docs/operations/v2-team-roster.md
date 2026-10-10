@@ -1,6 +1,6 @@
 # v2 开发团队编制表（#92，2026-10-06 用户放行开工）
 
-> 依据：`docs/v2-dev-plan.md` 定稿 41 单。工作树=~/dev/cc-deck-m1（feat/matrix-team-m2）。
+> 依据：`docs/operations/v2-dev-plan.md` 定稿 41 单。工作树=~/dev/cc-deck-m1（feat/matrix-team-m2）。
 > 现编制 5+1（2026-10-06 核验订正+L 扩编：以会话号为准，双代号钉死对应）：
 
 | 角色 | 会话号 | 开卡代号 | Leader 惯用代号 | 引擎/模型 |

@@ -1,6 +1,6 @@
 # M1-0 契约冻结前置勘察：现状 inventory 与注册表草案
 
-> 只读勘察，日期 2026-10-05。对照：`docs/v2-system-design.md` 0.9 §五～§十；源码证据均为 m2 工作树。任务书给出的 `ws-server.ts:132-163=28`、`types.ts:294-313=19` 已过时；当前实况是 WS 白名单 33 条、`CommandType` 35 条、`EventType` 26 条，以下以源码为准。
+> 只读勘察，日期 2026-10-05。对照：`docs/architecture/v2-system-design.md` 0.9 §五～§十；源码证据均为 m2 工作树。任务书给出的 `ws-server.ts:132-163=28`、`types.ts:294-313=19` 已过时；当前实况是 WS 白名单 33 条、`CommandType` 35 条、`EventType` 26 条，以下以源码为准。
 
 ## 1. 持久化 inventory
 

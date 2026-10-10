@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CC Deck · 权限档位原型 v3.1</title>
+  <!-- ============================================================
+       多引擎权限档位 · UI 原型小样 v3（纯前端状态切换，无后端）
+       v3 变更（弹窗本体验收通过后的微调）：
+       1) 盾牌按钮去外描边：中性淡底 pill（--tag-bg 同族），与两侧标签同 24px/圆角/基线，hover 微深
+       2) 「各档位在…」引导条整条退役（含虚线框）：卡片容器右下角小问号钮 toggle 矩阵，展开态高亮
+       3) 底部约束区/页脚去分隔线，纯间距分组
+       4) 角标四枚图标线描家族重画：7px / 约 1px 描边 / 无填充（铅笔简化、闪电改轮廓版）
+       5) 「仅本会话生效…」降为弹窗底边左角 footnote 小字，不占行高（与右下问号错开）
+       v3.1 返工（2026-10-08）：① 闪电角标重画为宽腔开口轮廓 M13 2 3 14.5h7L10 22 21 9.5h-7z——
+                 fill 严格 none 只 stroke，7px 实寸腰部透底通道 ≈1.1px，10x 放大内部明显透底；
+                 ② 等待确认卡去描边圈 → 左 2px 色条 + 黄 tint 实底（同 queue-card.selected 语法），
+                 全文件 grep dashed/dotted 零命中；③ 底角 footnote 维持 --dim（暗 ≈7.2:1 / 亮 ≈8.3:1，达 AA），
+                 绝对定位不占行高、与问号钮左右错开；新增 #zoom=1 角标放大验证区（10 倍并列取证）
+       v2 已通过项不回退：矩阵零竖线/首列 16px/单引擎静态徽章/四档等宽/≈ 降级/裸 ✕/三 pill 24px
+       视觉 token 体系原样取自 web-console/index-005.html（暗 :root / 亮 data-theme）
+       URL hash 预置状态：#theme=light&dialog=1&tier=edit&engine=codex&help=1
+       ============================================================ -->
+  <script>
+    // 主题在 CSS 前落定，避免截图闪白（与 005 的 data-theme 机制一致）
+    (function () {
+      var h = new URLSearchParams(location.hash.slice(1));
+      if (h.get("theme") === "light") document.documentElement.setAttribute("data-theme", "light");
+    })();
+  </script>
+  <style>
+    /* ---------- token 体系：自 index-005.html :14-283 原样提取（暗 :root / 亮 data-theme） ---------- */
+    :root {
+      --bg0: #07111D;
+      --bg1: #0B1624;
+      --surface1: #101E2F;
+      --surface2: #15273B;
+      --hover: #1D344D;
+      --line: #2A4058;
+      --line-soft: #203247;
+      --text-strong: #E8EFF8;
+      --text: #C4D0DE;
+      --dim: #9AABBE;
+      --faint: #8298B0;
+      --brand: #E2855E;
+      --brand-hover: #F0A06A;
+      --brand-strong: #B85B38;
+      --brand-soft: #3A251F;
+      --done: #4BCB91;
+      --working: #E9B84C;
+      --error: #EC7472;
+      --info: #7EAFE8;
+      --chrome: #070D15;
+      --rail: #06101B;
+      --queue-deep: #0E1B2B;
+      --workspace-top: #0B1726;
+      --footer: #0E1B2B;
+      --inspector-top: #0F2031;
+      --glow-brand: rgba(226,133,94,.14);
+      --glow-blue: rgba(41,94,137,.08);
+      --card-border: rgba(71,101,132,.48);
+      --card-veil: rgba(21,39,59,.78);
+      --border-strong: #4E6D8E;
+      --selected-line: #AFC0D2;
+      --selected-bg: rgba(232,239,248,.08);
+      --shadow-hover: 0 10px 24px rgba(1,8,16,.28);
+      --q-row-hov: rgba(148,163,190,.07);
+      --tag-border: rgba(111,139,166,.18);
+      --tag-bg: rgba(83,103,126,.19);
+      --tag-ink: #D7E3EF;
+      --action-bg: rgba(226,133,94,.16);
+      --done-bg: rgba(75,203,145,.12);
+      --info-bg: rgba(126,175,232,.13);
+      --me-bg: #15273B;
+      --me-line: #4E6D8E;
+      --badge-ink: #FFFFFF;
+      --tier-badge-ink: #0B1624;
+      --wait-bg: rgba(233,184,76,.08);
+      --wait-line: rgba(233,184,76,.5);
+      --allowed-bg: rgba(75,203,145,.08);
+      --allowed-line: rgba(75,203,145,.45);
+      --identity-bg: rgba(143,157,177,.1);
+      --identity-line: rgba(143,157,177,.34);
+      --identity-ink: #B9C8D8;
+      --on-brand: #FFFAF6;
+      --brand-highlight: rgba(255,255,255,.18);
+      --brand-shadow: rgba(226,133,94,.25);
+      --danger-line: rgba(236,116,114,.4);
+      --danger-bg: rgba(236,116,114,.12);
+      --toast-line: #4E6D8E;
+      --toast-bg-top: #15273B;
+      --toast-bg-bottom: #101E2F;
+      --toast-highlight: rgba(255,255,255,.06);
+      --shadow: 0 26px 80px rgba(0, 0, 0, .42);
+      --small-shadow: 0 12px 30px rgba(0, 0, 0, .28);
+      --card-shadow: 0 8px 22px rgba(1, 8, 16, .2);
+      --rail-shadow: rgba(1,8,16,.16);
+      --panel-shadow: rgba(1,8,16,.1);
+      --artifact-sheet-backdrop: rgba(1, 8, 16, .56);
+      --engine-claude: #A97A62;
+      --engine-codex: #8DABFF;
+      --engine-trae: #58C9B1;
+      --engine-qwen: #B493FF;
+      --radius: 10px;
+      --radius-sm: 7px;
+      --radius-lg: 14px;
+      --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Microsoft YaHei", monospace;
+      --sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg0: #F1F5F8;
+      --bg1: #F8FAFC;
+      --surface1: #E8EFF5;
+      --surface2: #FFFFFF;
+      --hover: #DDE8F1;
+      --line: #C6D3DF;
+      --line-soft: #DCE5EC;
+      --text-strong: #15283D;
+      --text: #30465B;
+      --dim: #334B61;
+      --faint: #4B6278;
+      --brand: #C86440;
+      --brand-hover: #D9754D;
+      --brand-strong: #A94725;
+      --brand-soft: #FBE7DE;
+      --done: #168D60;
+      --working: #A56D00;
+      --error: #C84C51;
+      --info: #3978B8;
+      --chrome: #E5ECF2;
+      --rail: #EDF3F7;
+      --queue-deep: #E3EBF2;
+      --workspace-top: #F8FBFD;
+      --footer: #E8EFF5;
+      --inspector-top: #EDF3F7;
+      --glow-brand: rgba(200,100,64,.1);
+      --glow-blue: rgba(58,120,184,.08);
+      --card-border: #C6D3DF;
+      --card-veil: #FFFFFF;
+      --border-strong: #7895AE;
+      --selected-line: #7895AE;
+      --selected-bg: #F3F7FA;
+      --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
+      --q-row-hov: rgba(16,24,40,.05);
+      --tag-border: rgba(96,117,138,.24);
+      --tag-bg: rgba(132,151,169,.16);
+      --tag-ink: #2D4358;
+      --action-bg: rgba(200,100,64,.14);
+      --done-bg: rgba(22,141,96,.11);
+      --info-bg: rgba(57,120,184,.11);
+      --me-bg: #FFFFFF;
+      --me-line: #C6D3DF;
+      --badge-ink: #FFFFFF;
+      --tier-badge-ink: #FFFFFF;
+      --wait-bg: rgba(165,109,0,.1);
+      --wait-line: rgba(165,109,0,.42);
+      --allowed-bg: rgba(22,141,96,.09);
+      --allowed-line: rgba(22,141,96,.34);
+      --identity-bg: #F3F6F8;
+      --identity-line: #B8C8D6;
+      --identity-ink: #40566B;
+      --on-brand: #FFFFFF;
+      --brand-highlight: rgba(255,255,255,.28);
+      --brand-shadow: rgba(200,100,64,.2);
+      --danger-line: rgba(200,76,81,.36);
+      --danger-bg: rgba(200,76,81,.1);
+      --toast-line: #C6D3DF;
+      --toast-bg-top: #FFFFFF;
+      --toast-bg-bottom: #F1F5F8;
+      --toast-highlight: rgba(255,255,255,.7);
+      --shadow: 0 24px 62px rgba(50, 74, 96, .18);
+      --small-shadow: 0 10px 24px rgba(50, 74, 96, .16);
+      --card-shadow: 0 6px 16px rgba(50, 74, 96, .1);
+      --rail-shadow: rgba(50,74,96,.08);
+      --panel-shadow: rgba(50,74,96,.08);
+      --artifact-sheet-backdrop: rgba(50, 74, 96, .28);
+      --engine-claude: #B85232;
+      --engine-codex: #4B6FCA;
+      --engine-trae: #168C78;
+      --engine-qwen: #7652C4;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0);
+      font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    }
+    button { font: inherit; }
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-track { background: var(--scroll-track, rgba(4,12,21,.22)); }
+    ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--scroll-thumb, rgba(120,146,173,.34)); background-clip: padding-box; }
+    :focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+    /* ---------- 壳骨架（自 005 同名类精简复制：windowbar / rail / queue / workspace / inspector） ---------- */
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
+    .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .desktop-frame { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100%; height: 100vh; background: var(--bg1); }
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    .window-dots { display: flex; gap: 6px; }
+    .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot, #36414D); }
+    .window-title { flex: 1; color: var(--faint); font-size: 11px; }
+    .window-link { color: var(--dim); font-size: 10px; }
+    .desktop-shell { display: flex; min-width: min(960px, 100%); flex: 1; min-height: 0; }
+    .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
+    .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
+    .rail-btn:hover { color: var(--text); background: var(--hover); }
+    .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
+    .rail-spring { flex: 1; }
+    .theme-toggle { margin-top: 7px; color: var(--dim); }
+    .theme-toggle:hover { color: var(--brand-hover); }
+    .desktop-screen { display: grid; flex: 1; min-width: 0; min-height: 0; grid-template-columns: 296px minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr); }
+    .queue { overflow: hidden auto; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
+    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; padding-left: 14px; padding-right: 14px; }
+    .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
+    .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+    .icon-btn::before { content: ""; position: absolute; inset: -7px; }
+    .icon-btn:hover { color: var(--text); background: var(--hover); }
+    .session-list-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; padding-left: 14px; padding-right: 14px; }
+    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 12px var(--sans); }
+    .session-list-tools input::placeholder { color: var(--faint); }
+    .session-list-tools button { min-height: 28px; padding: 0 7px; border: 0; border-radius: 999px; background: var(--surface2); color: var(--dim); cursor: pointer; font: 10px var(--mono); white-space: nowrap; }
+    .session-list-tools button:hover { background: var(--hover); color: var(--text); }
+    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 11px var(--mono); letter-spacing: .04em; padding-left: 14px; }
+    .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .queue-card .row { display: flex; align-items: center; gap: 7px; }
+    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-card p { overflow: hidden; margin: 4px 0 0; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: 10px; white-space: nowrap; }
+    .tag.action { background: var(--action-bg); color: var(--brand-strong); }
+    .tag.done { background: var(--done-bg); color: var(--done); }
+    .tag.info { background: var(--info-bg); color: var(--info); }
+    .engine-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); font-size: 10px; line-height: 1; white-space: nowrap; }
+    .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
+    .engine-badge.claude { color: var(--engine-claude); }
+    .engine-badge.codex { color: var(--engine-codex); }
+    .engine-badge.trae { color: var(--engine-trae); }
+    .engine-badge.qwen { color: var(--engine-qwen); }
+    .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: linear-gradient(180deg, var(--workspace-top), var(--bg1) 42%); }
+    .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
+    .workspace-title-row { display: flex; align-items: center; gap: 7px; }
+    .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+    /* #v2-⑦ 头部三件同节奏：状态标签 / 引擎标签 / 盾牌钮统一 24px 高、同一 pill 圆角语言 */
+    .workspace-title-row .tag, .workspace-title-row .engine-badge { height: 24px; padding: 0 9px; align-items: center; }
+    .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
+    .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
+    .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
+    .segment-bar button:hover { color: var(--text); }
+    .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
+    .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
+    .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
+    .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
+    .composer { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 13px; }
+    .composer:focus-within { border-color: var(--brand); }
+    .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
+    .composer-input::placeholder { color: var(--faint); }
+    .primary-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); cursor: pointer; font-size: 11px; transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
+    .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 13px; }
+    .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
+    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 13px; }
+    .message-author { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--text-strong); }
+    .message-author strong { font-size: 12px; }
+    .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
+    .message-body { min-width: 0; padding-left: 14px; line-height: 1.55; }
+    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 11px var(--mono); }
+    /* v3.1-②：等待卡去描边圈（全局线条纪律）——改「左 2px 色条 + 实底 tint」；
+       备案理由：①与 queue-card.selected 的 inset 2px 左色条同语法，壳内已有先例；
+       ②纯 8% tint 无描边在浅色主题下成形偏弱，左色条保证关键卡在深浅两主题都有锚点且不围一圈线 */
+    .wait-card { padding: 12px; margin: 14px 0; border: 0; border-radius: 10px; background: var(--wait-bg); box-shadow: inset 2px 0 0 var(--working); }
+    .wait-card strong { display: block; color: var(--working); font-size: 11px; }
+    .wait-card p { margin: 5px 0 10px; color: var(--dim); font-size: 10px; }
+    .wait-actions { display: flex; justify-content: flex-end; gap: 7px; }
+    .wait-actions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; }
+    .wait-actions button.allow { border-color: transparent; background: var(--brand-strong); color: var(--on-brand); font-weight: 700; }
+    .inspector { position: relative; overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); }
+    .inspector h3 { margin: 0 0 14px; color: var(--text-strong); font-size: 12px; }
+    .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
+    .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
+    .inspector-title { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 700; }
+    .inspector-copy { color: var(--dim); font-size: 10px; }
+    .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
+    .progress i { display: block; height: 100%; border-radius: inherit; background: var(--progress-fill, var(--done)); }
+    .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
+    .check-row b { color: var(--done); }
+
+    /* ---------- ① 盾牌按钮（v3：去外描边，中性淡底 pill 与两侧标签同族同 24px 基线） ---------- */
+    .perm-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 24px; border: 0; border-radius: 999px; background: var(--tag-bg); color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
+    .perm-btn::before { content: ""; position: absolute; inset: -6px -4px; } /* 命中区外扩 */
+    .perm-btn:hover { color: var(--text); background: var(--hover); }
+    .perm-btn.on { color: var(--text-strong); background: var(--hover); }
+    .perm-btn .shield { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    /* #v2-④ 角标去汉字：档位色小方 chip + 迷你线描图标；#v3-④ 一家族线描重画（7px / 约1px 描边 / 无填充）
+       #v3.1-① 角标 stroke-width 3.2→2.6，四枚统一线重；闪电重画为开口轮廓，7px 实寸腰部透底通道 ≈1.1px */
+    .perm-badge { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 13px; height: 13px; border: 1.5px solid var(--bg1); border-radius: 4px; background: var(--tier-color, var(--info)); color: var(--tier-badge-ink); }
+    .perm-badge svg { width: 7px; height: 7px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+    .perm-btn:hover .perm-badge { border-color: var(--hover); }
+
+    /* ---------- ② 权限档位弹窗 v2：默认四档卡片直选，矩阵收进 ? 帮助 ---------- */
+    .perm-backdrop { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; padding: 28px; background: var(--artifact-sheet-backdrop); }
+    .perm-backdrop.open { display: flex; }
+    .perm-dialog { position: relative; display: flex; flex-direction: column; width: 540px; max-width: 100%; max-height: calc(100vh - 56px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); box-shadow: var(--shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; transform: translateY(10px); transition: opacity .18s ease, transform .18s ease; }
+    .perm-backdrop.open .perm-dialog { opacity: 1; transform: none; }
+
+    .perm-head { display: flex; align-items: center; gap: 9px; padding: 15px 16px 12px; }
+    .perm-head .shield { width: 17px; height: 17px; flex: none; color: var(--brand); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .perm-head h3 { flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: 13px; }
+    .perm-head .perm-kicker { display: block; margin-top: 1px; color: var(--faint); font: 9px var(--mono); letter-spacing: .05em; }
+    /* #v2-⑥ ✕ 去边框纯图标，hover 轻反馈 */
+    .perm-close { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 13px; line-height: 1; transition: color .15s ease, background .15s ease; }
+    .perm-close:hover { color: var(--text-strong); background: var(--hover); }
+
+    /* 四档卡片：2×2 直选 */
+    .tier-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 16px 12px; }
+    .tier-card { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface2); cursor: pointer; text-align: left; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+    .tier-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); }
+    .tier-card.sel { border-color: var(--brand); background: var(--selected-bg); }
+    .tier-card.armed { border-color: var(--danger-line); background: var(--danger-bg); }
+    .tc-chip { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 6px; background: var(--tc); color: var(--tier-badge-ink); }
+    .tc-chip svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .tc-body { flex: 1; min-width: 0; }
+    .tc-body b { display: flex; align-items: center; gap: 5px; color: var(--text-strong); font-size: 12px; line-height: 1.25; }
+    .tc-body small { display: block; overflow: hidden; margin-top: 1px; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .tc-def { padding: 1px 4px; border: 1px solid var(--tag-border); border-radius: 4px; background: var(--tag-bg); color: var(--dim); font: 600 8px var(--sans); line-height: 1.3; }
+    .tc-check { flex: none; color: var(--brand); font-size: 13px; font-weight: 700; opacity: 0; transform: scale(.7); transition: opacity .15s ease, transform .15s ease; }
+    .tier-card.sel .tc-check { opacity: 1; transform: none; }
+
+    /* #v3-② 引导条整条退役（文案+虚线框全删）：四档卡片容器右下角小问号钮，点开/收起矩阵 */
+    .perm-help-fab { display: flex; justify-content: flex-end; padding: 0 16px 10px; }
+    .help-fab { display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
+    .help-fab svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+    .help-fab:hover { color: var(--text); background: var(--q-row-hov); }
+    .help-fab.open { color: var(--brand-hover); background: var(--brand-soft); box-shadow: inset 0 0 0 1px var(--brand); }
+
+    /* 帮助展开区：当前会话引擎的能力矩阵（引擎为静态标识，真实弹窗无切换 tab；
+       原型用 URL hash #engine=codex 换矩阵数据以保留复验能力） */
+    .perm-matrix-zone { border-top: 1px solid var(--line-soft); }
+    .perm-engines { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 10px 16px 8px; }
+    .perm-engines .mz-label { color: var(--faint); font: 9px var(--mono); letter-spacing: .05em; }
+    .perm-engines-note { margin-left: auto; color: var(--faint); font: 9px var(--mono); white-space: nowrap; }
+    .perm-legend { display: flex; justify-content: flex-end; gap: 11px; padding: 0 16px 8px; color: var(--faint); font: 9px var(--mono); }
+    .perm-legend .lg { display: inline-flex; align-items: center; gap: 4px; }
+    .perm-legend .lg i { font-style: normal; font-weight: 700; }
+    .perm-legend .lg.ok i { color: var(--done); }
+    .perm-legend .lg.q i { color: var(--working); }
+    .perm-legend .lg.no i { color: var(--error); }
+    .perm-legend .lg.deg i { color: var(--dim); }
+    /* #v2-① 矩阵只留横向线（无竖线）；#v2-② 首列左缘 16px 与弹窗 padding 对齐 */
+    .perm-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .perm-table col.cap-col { width: 168px; }
+    .perm-table th, .perm-table td { border: 0; vertical-align: middle; }
+    .perm-table thead th { padding: 7px 6px 8px; border-bottom: 1px solid var(--line); }
+    .perm-table thead th.cap-corner { color: var(--faint); font: 9px var(--mono); letter-spacing: .05em; text-align: left; padding-left: 16px; }
+    .tier-th { cursor: pointer; }
+    .tier-th .th-in { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .tier-th b { color: var(--text); font-size: 10.5px; font-weight: 600; line-height: 1.2; }
+    .tier-th small { color: var(--faint); font: 8.5px var(--mono); line-height: 1.2; }
+    .perm-table tbody td { border-bottom: 1px solid var(--line-soft); }
+    .perm-table tbody tr:last-child td { border-bottom: 0; }
+    .perm-table tbody tr:not(.span-row):hover td { background: var(--q-row-hov); }
+    .cap-cell { padding: 0 6px 0 16px; color: var(--text); font-size: 11px; }
+    .cap-cell small { display: block; color: var(--faint); font: 9px var(--mono); }
+    .tier-cell { text-align: center; cursor: default; height: 34px; }
+    .cell-glyph { color: var(--dim); font: 700 12px var(--mono); }
+    .cell-glyph.ok { color: var(--done); }
+    .cell-glyph.q { color: var(--working); }
+    .cell-glyph.no { color: var(--error); opacity: .78; }
+    /* #v2 等效降级：格内只放 ≈ 标记（对比度够），完整说明走 hover tooltip */
+    .cell-deg { color: var(--dim); font: 700 12px var(--mono); cursor: help; }
+    .span-row td { padding: 6px 12px 7px 16px; }
+    .span-note { color: var(--dim); font-size: 10px; }
+    .span-note::before { content: "≈"; margin-right: 5px; color: var(--dim); font: 700 10px var(--mono); }
+    /* 选中档位列：高亮带只在矩阵内（selected-bg 列铺色 + 列头 2px 品牌顶线），不贯穿其他区 */
+    .perm-table .tier-cell.sel { background: var(--selected-bg); }
+    .perm-table th.tier-th.sel { background: var(--selected-bg); box-shadow: inset 0 2px 0 var(--brand); }
+    .perm-table th.tier-th.sel b { color: var(--brand); }
+    .matrix-foot { padding: 8px 16px 10px; border-top: 1px solid var(--line-soft); color: var(--faint); font: 9px var(--mono); }
+
+    /* #v2-⑤ 附加约束收敛：一行两开关 + 更多设置入口；#v3-③ 去分隔线，纯间距分组 */
+    .perm-quick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 16px 8px; }
+    .q-label { color: var(--dim); font-size: 10px; white-space: nowrap; }
+    .q-pill { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; white-space: nowrap; }
+    .q-pill:hover { border-color: var(--brand); color: var(--brand); }
+    .q-pill .caret { color: var(--faint); font-size: 8px; }
+    .q-state { color: var(--faint); font-size: 10px; white-space: nowrap; }
+    .switch { position: relative; flex: none; width: 30px; height: 17px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface1); cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+    .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--dim); transition: left .15s ease, background .15s ease; }
+    .switch.on { border-color: var(--brand-strong); background: var(--brand); }
+    .switch.on::after { left: 15px; background: var(--on-brand); }
+    .q-more { margin-left: auto; color: var(--info); cursor: pointer; font-size: 10px; white-space: nowrap; text-decoration: none; }
+    .q-more:hover { color: var(--brand-hover); }
+
+    /* #v3-③ 去分隔线 + #v3-⑥ 会话级说明降为底边角落 footnote（不占行高，与卡片区右下问号错开）
+       #v3.1-③ 对比度复核：--dim 在暗主题 #9AABBE / 背景渐变终点 #101E2F 对比度 7.2:1（达 AA），
+                          浅主题 #334B61 / #F1F5F8 对比度 8.3:1（达 AA+），保持 --dim 不提档 */
+    .perm-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 6px 16px 13px; }
+    .perm-foot-note { position: absolute; left: 16px; bottom: 4px; color: var(--dim); font-size: 10px; }
+    .restore-link { min-height: 30px; padding: 0 10px; border: 0; background: transparent; color: var(--info); cursor: pointer; font-size: 10px; white-space: nowrap; }
+    .restore-link:hover { color: var(--brand-hover); }
+    .restore-link[hidden] { display: none; }
+    .perm-foot .primary-btn { min-height: 30px; }
+
+    /* toast（005 同款） */
+    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 60; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+    .toast.show { opacity: 1; transform: none; }
+
+    /* #v3.1 角标放大验证区（#zoom=1 触发）：四枚角标 10 倍并列，证明闪电空心（放大后内部透底） */
+    .badge-zoom { display: none; padding: 20px 16px; border-top: 1px solid var(--line-soft); background: var(--surface1); }
+    .badge-zoom.show { display: block; }
+    .badge-zoom h4 { margin: 0 0 12px; color: var(--text-strong); font-size: 11px; }
+    .badge-zoom-row { display: flex; gap: 20px; align-items: center; }
+    .badge-zoom-chip { display: grid; place-items: center; width: 70px; height: 70px; border: 2px solid var(--line); border-radius: 12px; background: var(--tier-color, var(--info)); color: var(--tier-badge-ink); }
+    .badge-zoom-chip svg { width: 70px; height: 70px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+    .badge-zoom-label { color: var(--dim); font-size: 9px; text-align: center; margin-top: 4px; }
+  </style>
+</head>
+<body data-source-mode="single">
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 4V2m0 20v-2m8-8h2M2 12h2m13.66-5.66 1.42-1.42M4.92 19.08l1.42-1.42m0-11.32L4.92 4.92m14.16 14.16-1.42-1.42"/><circle cx="12" cy="12" r="4"/></symbol><symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></symbol></svg>
+
+  <main class="page">
+    <section class="mode-stage active" id="stage-desktop">
+      <div class="desktop-frame">
+        <div class="windowbar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">CC Deck · Command Bridge</span><span class="window-link">⌘K 全局搜索</span></div>
+        <div class="desktop-shell">
+          <nav class="domain-rail" aria-label="桌面域栏">
+            <button class="rail-btn active" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
+            <button class="rail-btn" title="团队"><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></button>
+            <button class="rail-btn" title="项目"><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></button>
+            <div class="rail-spring"></div>
+            <button class="rail-btn" title="通知"><svg class="icon-nav" aria-hidden="true"><use href="#icon-bell"></use></svg></button>
+            <button class="rail-btn" title="设置"><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></button>
+            <button class="theme-toggle rail-btn" id="themeToggle" type="button" title="切换浅色主题" aria-label="切换主题">
+              <svg class="icon-inline" id="themeIconSun" aria-hidden="true"><use href="#icon-sun"></use></svg>
+              <svg class="icon-inline" id="themeIconMoon" aria-hidden="true" style="display:none"><use href="#icon-moon"></use></svg>
+            </button>
+          </nav>
+
+          <section class="desktop-screen active" id="d-session">
+            <aside class="queue">
+              <div class="queue-head"><h2>会话</h2><button class="icon-btn" title="新建会话">＋</button></div>
+              <div class="session-list-tools"><input type="search" placeholder="搜索" aria-label="搜索会话"><button type="button">全部</button></div>
+              <div class="queue-group">今天</div>
+              <div class="queue-card selected"><div class="row"><strong>验收单收尾 · release-check</strong><span class="tag action">运行中</span></div><p>~/dev/cc-deck-w-int · Claude</p></div>
+              <div class="queue-card"><div class="row"><strong>周报草稿 · sweep</strong><span class="tag info">待处理</span></div><p>~/dev/relay · Codex</p></div>
+              <div class="queue-card"><div class="row"><strong>依赖升级预检</strong><span class="tag done">完成</span></div><p>~/dev/cc-deck-app · Trae</p></div>
+              <div class="queue-group">昨天</div>
+              <div class="queue-card"><div class="row"><strong>发布通道隔离检查</strong><span class="tag done">完成</span></div><p>~/dev/cc-deck-w-int · Claude</p></div>
+            </aside>
+
+            <section class="workspace">
+              <header class="workspace-head">
+                <div class="workspace-title-row">
+                  <h2>验收单收尾 · release-check</h2>
+                  <span class="tag action">运行中</span>
+                  <span class="engine-badge claude">Claude</span>
+                  <!-- ① 权限档位盾牌按钮：所有引擎同一颗，角标=档位色 chip + 迷你图标 -->
+                  <button class="perm-btn" id="permBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="权限档位 · 询问每步">
+                    <svg class="shield" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 19 6v5.2c0 4.6-2.9 7.7-7 9.3-4.1-1.6-7-4.7-7-9.3V6Z"/></svg>
+                    <span class="perm-badge" id="permBadge" style="--tier-color: var(--info)" title="询问每步"></span>
+                  </button>
+                </div>
+                <div class="workspace-sub">~/dev/cc-deck-w-int · Claude · 今天 14:02</div>
+                <div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
+              </header>
+              <div class="workspace-body">
+                <div class="timeline-note">今天 14:02 · 会话上下文</div>
+                <div class="message-ai">
+                  <div class="message-author"><strong>PM</strong><span class="role-label">验收上下文</span></div>
+                  <div class="message-body">独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单，权限档位切到「自动接受编辑」后我直接回填证据文件。</div>
+                </div>
+                <div class="bubble me">好，我先切档位，再让你继续回填。</div>
+                <div class="wait-card"><strong>等待你的确认 · 写入验收文档</strong><p>将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow">允许一次</button></div></div>
+              </div>
+              <footer class="workspace-footer">
+                <div class="composer"><button style="display:grid;place-items:center;border:0;background:transparent;color:var(--dim);cursor:pointer" title="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…"></div>
+                <button class="primary-btn" type="button">发送</button>
+              </footer>
+            </section>
+
+            <aside class="inspector">
+              <h3>证据检查器</h3>
+              <div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div>
+              <div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div>
+            </aside>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ② 权限档位弹窗 v2：四档卡片直选；能力矩阵收进 ? 帮助 -->
+  <div class="perm-backdrop" id="permBackdrop">
+    <div class="perm-dialog" role="dialog" aria-modal="true" aria-label="权限档位">
+      <div class="perm-head">
+        <svg class="shield" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 19 6v5.2c0 4.6-2.9 7.7-7 9.3-4.1-1.6-7-4.7-7-9.3V6Z"/></svg>
+        <h3>权限档位<span class="perm-kicker">会话权限 · 原型 v3</span></h3>
+        <span class="engine-badge claude" id="permEngineBadge" title="当前会话引擎">Claude</span>
+        <button class="perm-close" id="permClose" type="button" title="关闭" aria-label="关闭">✕</button>
+      </div>
+
+      <div class="tier-cards" id="tierCards"><!-- 四档卡片由 JS 生成 --></div>
+
+      <div class="perm-help-fab"><button class="help-fab" id="helpToggle" type="button" title="各档位权限明细" aria-label="展开各档位权限明细" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.1-3 4.2"/><path d="M12 17.8h.01"/></svg></button></div>
+
+      <div class="perm-matrix-zone" id="matrixZone" hidden>
+        <div class="perm-engines">
+          <span class="mz-label">当前引擎</span>
+          <span class="engine-badge claude" id="matrixEngineBadge">Claude</span>
+          <span class="perm-engines-note">新增引擎 = 补一份矩阵数据，弹窗结构不变</span>
+        </div>
+        <div class="perm-legend">
+          <span class="lg ok"><i>✓</i>允许</span><span class="lg q"><i>?</i>每次询问</span><span class="lg no"><i>✕</i>拒绝</span><span class="lg deg"><i>≈</i>等效降级 · 悬停看说明</span>
+        </div>
+        <table class="perm-table" id="permTable">
+          <colgroup><col class="cap-col"><col><col><col><col></colgroup>
+          <thead><tr><th class="cap-corner">能力项 ↓ 档位 →</th></tr></thead>
+          <tbody id="permBody"></tbody>
+        </table>
+        <div class="matrix-foot" id="matrixFoot">高亮列为当前档位 · 档位语义各引擎一致，映射细节由引擎能力决定</div>
+      </div>
+
+      <div class="perm-quick">
+        <span class="q-label">改动范围</span>
+        <button class="q-pill" id="dirPill" type="button" title="点击切换改动范围">仅当前项目<span class="caret"> ▾</span></button>
+        <span class="q-label">环境变量注入</span>
+        <button class="switch" id="envSwitch" type="button" role="switch" aria-checked="false" aria-label="环境变量注入"></button>
+        <span class="q-state" id="envState">关</span>
+        <a class="q-more" id="moreLink" title="更多设置在设置域配置">更多设置 →</a>
+      </div>
+
+      <div class="perm-foot">
+        <span class="perm-foot-note">仅本会话生效，默认档位在设置中配置</span>
+        <button class="restore-link" id="restoreLink" type="button" hidden>恢复默认档位</button>
+        <button class="primary-btn" id="doneBtn" type="button">完成</button>
+      </div>
+
+      <!-- #v3.1-① 角标放大验证区（#zoom=1 触发）：四枚角标 10 倍并列，证明闪电空心（放大后内部透底） -->
+      <div class="badge-zoom" id="badgeZoom">
+        <h4>角标放大验证（10×）· 证明四枚统一线描家族、闪电内部透底</h4>
+        <div class="badge-zoom-row">
+          <div>
+            <div class="badge-zoom-chip" style="--tier-color: var(--info)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.1-3 4.2"/><path d="M12 17.8h.01"/></svg>
+            </div>
+            <div class="badge-zoom-label">询问每步</div>
+          </div>
+          <div>
+            <div class="badge-zoom-chip" style="--tier-color: var(--working)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.8 3.7a2.3 2.3 0 0 1 3.5 3.5L8.6 18.9 4 20l1.1-4.6L16.8 3.7z"/></svg>
+            </div>
+            <div class="badge-zoom-label">自动接受编辑</div>
+          </div>
+          <div>
+            <div class="badge-zoom-chip" style="--tier-color: var(--done)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+            </div>
+            <div class="badge-zoom-label">只读计划</div>
+          </div>
+          <div>
+            <div class="badge-zoom-chip" style="--tier-color: var(--error)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14.5h7L10 22 21 9.5h-7z"/></svg>
+            </div>
+            <div class="badge-zoom-label">全放行（闪电·腰部透底）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (() => {
+      "use strict";
+      // ---------- 词表（对齐旧壳 PERM_MODE_ZH 的托管键名；code 即引擎侧 API 名） ----------
+      // icon：角标/卡片 chip 共用；#v3-④ 一家族线描——7px / 线描 / 无填充（? 询问 / ✎ 编辑 / ☰ 计划 / ⚡ 全放）
+      // v3.1-①：闪电重画为「开口轮廓」M13 2 3 14.5h7L10 22 21 9.5h-7z——fill 严格 none 只 stroke，
+      //        负空间腰部间距拉大，7px 显示尺寸实测腰部透底通道宽度 ≈1.1px（10x 放大肉眼清晰透底）
+      const ICON = {
+        ask: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.1-3 4.2"/><path d="M12 17.8h.01"/></svg>',
+        edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.8 3.7a2.3 2.3 0 0 1 3.5 3.5L8.6 18.9 4 20l1.1-4.6L16.8 3.7z"/></svg>',
+        plan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>',
+        full: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14.5h7L10 22 21 9.5h-7z"/></svg>',
+      };
+      const TIERS = [
+        { id: "ask",  name: "询问每步",   code: "default",          desc: "每次改动都先问你",     color: "var(--info)",    def: true },
+        { id: "edit", name: "自动接受编辑", code: "acceptEdits",       desc: "文件编辑免确认，命令仍询问", color: "var(--working)" },
+        { id: "plan", name: "只读计划",   code: "plan",              desc: "先出方案，确认后再动手", color: "var(--done)" },
+        { id: "full", name: "全放行",     code: "bypassPermissions", desc: "全部免确认，仅限可信环境", color: "var(--error)" },
+      ];
+      const ENGINES = [
+        { id: "claude", name: "Claude",    note: "原生四档支持" },
+        { id: "codex",  name: "Codex",     note: "沙箱审批模型" },
+        { id: "trae",   name: "Trae",      note: "IDE 内置审批" },
+        { id: "qwen",   name: "Qwen Code", note: "CLI 审批链" },
+      ];
+      // 矩阵数据（仅在 ? 帮助展开区内呈现）：行=能力项，四列依次 ask/edit/plan/full。
+      // 单元格：'ok' ✓ / 'q' ? / 'no' ✕ / {n:'…'} ≈ 标记（完整说明走 hover tooltip）；行级不适用用 {span:'…'}。
+      const MATRIX = {
+        claude: { rows: [
+          { cap: "文件读取", sub: "read", cells: ["ok", "ok", "ok", "ok"] },
+          { cap: "文件写入", sub: "edit", cells: ["q", "ok", "no", "ok"] },
+          { cap: "命令执行", sub: "bash", cells: ["q", "q", "no", "ok"] },
+          { cap: "网络访问", sub: "web", cells: ["q", "q", "no", "ok"] },
+          { cap: "计划模式", sub: "plan", cells: ["no", "no", "ok", { n: "与全放行互斥" }] },
+          { cap: "子 Agent 派生", sub: "agent", cells: ["ok", "ok", "no", "ok"] },
+        ] },
+        codex: { rows: [
+          { cap: "文件读取", sub: "read", cells: ["ok", "ok", "ok", "ok"] },
+          { cap: "文件写入", sub: "edit", cells: ["q", "ok", "no", "ok"] },
+          { cap: "命令执行", sub: "bash", cells: ["q", { n: "沙箱内直跑，越界才询问" }, "no", "ok"] },
+          { cap: "网络访问", sub: "web", cells: ["no", "no", "no", "ok"] },
+          { cap: "计划模式", sub: "plan", cells: ["no", "no", { n: "该引擎无计划模式，等效只读沙箱" }, "no"] },
+          { span: "该引擎无子 Agent 能力，任务串行执行" },
+        ] },
+        trae: { rows: [
+          { cap: "文件读取", sub: "read", cells: ["ok", "ok", "ok", "ok"] },
+          { cap: "文件写入", sub: "edit", cells: ["q", "ok", "no", "ok"] },
+          { cap: "命令执行", sub: "bash", cells: ["q", "q", "no", "ok"] },
+          { cap: "网络访问", sub: "web", cells: ["ok", "ok", "no", "ok"] },
+          { cap: "计划模式", sub: "plan", cells: ["no", "no", { n: "该引擎无计划模式，等效为只读询问" }, "no"] },
+          { cap: "子 Agent 派生", sub: "agent", cells: ["ok", "ok", "no", "ok"] },
+        ] },
+        qwen: { rows: [
+          { cap: "文件读取", sub: "read", cells: ["ok", "ok", "ok", "ok"] },
+          { cap: "文件写入", sub: "edit", cells: ["q", "ok", "no", "ok"] },
+          { cap: "命令执行", sub: "bash", cells: ["q", "q", { n: "只放行白名单内命令" }, "ok"] },
+          { cap: "网络访问", sub: "web", cells: ["q", "q", "no", { n: "需在引擎侧配置网络白名单" }] },
+          { cap: "计划模式", sub: "plan", cells: ["no", "no", "ok", "no"] },
+          { span: "该引擎无子 Agent 能力，任务串行执行" },
+        ] },
+      };
+      const GLYPH = { ok: ["✓", "ok"], q: ["?", "q"], no: ["✕", "no"] };
+
+      const S = { tier: "ask", engine: "claude", dialog: false, armed: false, help: false, dirScope: "project", envGate: false };
+      const $ = (id) => document.getElementById(id);
+      const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+      const tierOf = (id) => TIERS.find((t) => t.id === id);
+
+      function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2400); }
+
+      // ---------- 结构生成 ----------
+      (function buildStatic() {
+        // 四档卡片
+        const cards = $("tierCards");
+        TIERS.forEach((t) => {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "tier-card"; b.dataset.tier = t.id;
+          b.innerHTML = '<span class="tc-chip" style="--tc:' + t.color + '">' + ICON[t.id] + "</span>" +
+            '<span class="tc-body"><b>' + esc(t.name) + (t.def ? '<span class="tc-def">默认</span>' : "") + "</b><small>" + esc(t.desc) + "</small></span>" +
+            '<span class="tc-check">✓</span>';
+          b.addEventListener("click", () => pickTier(t.id));
+          cards.appendChild(b);
+        });
+        // 矩阵列头
+        const tr = document.querySelector("#permTable thead tr");
+        TIERS.forEach((t) => {
+          const th = document.createElement("th");
+          th.className = "tier-th"; th.dataset.col = t.id;
+          th.title = "矩阵为只读参考，档位在上方卡片选择";
+          th.innerHTML = '<div class="th-in"><b>' + esc(t.name) + "</b><small>" + esc(t.code) + "</small></div>";
+          tr.appendChild(th);
+        });
+        // 引擎为静态标识（真实弹窗无切换；原型经 URL hash #engine= 换矩阵数据复验）
+        renderEngineBadge();
+      })();
+
+      function buildBody() {
+        const tb = $("permBody"); tb.innerHTML = "";
+        for (const row of MATRIX[S.engine].rows) {
+          const tr = document.createElement("tr");
+          if (row.span) {
+            tr.className = "span-row";
+            tr.innerHTML = '<td></td><td colspan="4"><span class="span-note">' + esc(row.span) + "</span></td>";
+          } else {
+            tr.innerHTML = '<td class="cap-cell">' + esc(row.cap) + "<small>" + esc(row.sub) + "</small></td>" +
+              TIERS.map((t, i) => {
+                const c = row.cells[i];
+                const inner = typeof c === "string"
+                  ? '<span class="cell-glyph ' + GLYPH[c][1] + '">' + GLYPH[c][0] + "</span>"
+                  : '<span class="cell-deg" title="' + esc(c.n) + '">≈</span>';
+                return '<td class="tier-cell" data-col="' + t.id + '">' + inner + "</td>";
+              }).join("");
+          }
+          tb.appendChild(tr);
+        }
+      }
+
+      function pickTier(id) {
+        if (id === "full" && S.tier !== "full" && !S.armed) { S.armed = true; render(); return; } // 危险档二次确认（沿用旧壳武装态语义）
+        S.armed = false;
+        if (S.tier !== id) { S.tier = id; render(); toast("已切换 · " + tierOf(id).name + " · 仅本会话生效"); }
+        else render();
+      }
+
+      function renderEngineBadge() {
+        const me = ENGINES.find((e) => e.id === S.engine) || ENGINES[0];
+        for (const id of ["permEngineBadge", "matrixEngineBadge"]) {
+          const b = $(id);
+          b.className = "engine-badge " + me.id;
+          b.textContent = me.name;
+          b.title = id === "matrixEngineBadge" ? me.note : "当前会话引擎";
+        }
+      }
+
+      function render() {
+        const t = tierOf(S.tier);
+        renderEngineBadge();
+        // 按钮角标（图标 chip）+ 标题
+        const badge = $("permBadge");
+        badge.style.setProperty("--tier-color", t.color);
+        badge.innerHTML = ICON[t.id];
+        badge.title = t.name;
+        $("permBtn").title = "权限档位 · " + t.name;
+        $("permBtn").classList.toggle("on", S.dialog);
+        $("permBtn").setAttribute("aria-expanded", S.dialog ? "true" : "false");
+        // 弹窗
+        $("permBackdrop").classList.toggle("open", S.dialog);
+        // 四档卡片（武装态时全放行卡片提示二次确认）
+        document.querySelectorAll(".tier-card").forEach((c) => {
+          const tt = tierOf(c.dataset.tier);
+          c.classList.toggle("sel", c.dataset.tier === S.tier);
+          c.classList.toggle("armed", S.armed && c.dataset.tier === "full");
+          c.querySelector("small").textContent = (S.armed && c.dataset.tier === "full") ? "再点一次确认生效" : tt.desc;
+        });
+        // ? 帮助区（v3：小问号钮高亮态指示展开）
+        $("helpToggle").setAttribute("aria-expanded", S.help ? "true" : "false");
+        $("helpToggle").setAttribute("aria-label", S.help ? "收起各档位权限明细" : "展开各档位权限明细");
+        $("helpToggle").classList.toggle("open", S.help);
+        $("matrixZone").hidden = !S.help;
+        if (S.help) {
+          buildBody();
+          document.querySelectorAll(".tier-th").forEach((th) => th.classList.toggle("sel", th.dataset.col === S.tier));
+          document.querySelectorAll(".tier-cell").forEach((td) => td.classList.toggle("sel", td.dataset.col === S.tier));
+          $("matrixFoot").textContent = "高亮列为当前档位 · 档位语义各引擎一致，映射细节由引擎能力决定";
+        }
+        $("restoreLink").hidden = S.tier === "ask";
+        // 简化约束行
+        $("dirPill").firstChild.textContent = S.dirScope === "project" ? "仅当前项目" : "指定目录 · 2 个";
+        $("envSwitch").classList.toggle("on", S.envGate);
+        $("envSwitch").setAttribute("aria-checked", S.envGate ? "true" : "false");
+        $("envState").textContent = S.envGate ? "注入 3 个" : "关";
+        // 主题图标
+        const light = document.documentElement.getAttribute("data-theme") === "light";
+        $("themeIconSun").style.display = light ? "none" : "block";
+        $("themeIconMoon").style.display = light ? "block" : "none";
+        $("themeToggle").title = light ? "切换深色主题" : "切换浅色主题";
+      }
+
+      // ---------- 交互绑定 ----------
+      $("permBtn").addEventListener("click", () => { S.dialog = !S.dialog; S.armed = false; render(); });
+      $("permClose").addEventListener("click", () => { S.dialog = false; render(); });
+      $("doneBtn").addEventListener("click", () => { S.dialog = false; render(); });
+      $("permBackdrop").addEventListener("click", (e) => { if (e.target === e.currentTarget) { S.dialog = false; render(); } });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.dialog) { S.dialog = false; render(); } });
+      $("restoreLink").addEventListener("click", () => pickTier("ask"));
+      $("helpToggle").addEventListener("click", () => { S.help = !S.help; render(); });
+      $("dirPill").addEventListener("click", () => {
+        S.dirScope = S.dirScope === "project" ? "list" : "project";
+        render();
+        toast(S.dirScope === "project" ? "改动范围 · 仅当前项目" : "改动范围 · 指定目录 2 个（更多设置里管理）");
+      });
+      $("envSwitch").addEventListener("click", () => { S.envGate = !S.envGate; render(); });
+      $("moreLink").addEventListener("click", (e) => { e.preventDefault(); toast("更多设置在设置域 · 权限页配置（原型未接线）"); });
+      $("themeToggle").addEventListener("click", () => {
+        const root = document.documentElement;
+        if (root.getAttribute("data-theme") === "light") root.removeAttribute("data-theme");
+        else root.setAttribute("data-theme", "light");
+        render();
+      });
+
+      // ---------- URL hash 预置状态（截图用）：#theme=light&dialog=1&tier=edit&engine=codex&help=1&zoom=1 ----------
+      const h = new URLSearchParams(location.hash.slice(1));
+      if (h.get("tier") && TIERS.some((t) => t.id === h.get("tier"))) S.tier = h.get("tier");
+      if (h.get("engine") && MATRIX[h.get("engine")]) S.engine = h.get("engine");
+      if (h.get("dialog") === "1") S.dialog = true;
+      if (h.get("help") === "1") S.help = true;
+      if (h.get("zoom") === "1") $("badgeZoom").classList.add("show");
+      render();
+    })();
+  </script>
+</body>
+</html>

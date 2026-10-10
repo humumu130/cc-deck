@@ -1,7 +1,7 @@
 # Beads 在 cc-deck 团队模式中的用武之地
 
 - 调研日期：2026-10-03
-- 范围：`/tmp/beads-research/` 指定材料；对照 `docs/team-mode-design.md`、`specs/006-engine-adapters-spec.md` 与现有 relay 项目/板/确认实现。
+- 范围：`/tmp/beads-research/` 指定材料；对照 `docs/design/team-mode-design.md`、`specs/006-engine-adapters-spec.md` 与现有 relay 项目/板/确认实现。
 
 ## 1. beads 是什么
 
