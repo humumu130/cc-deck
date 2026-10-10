@@ -23,6 +23,12 @@
 3. **Release 包**：snapshot 攒了几批、连续使用几天无问题后发正式版。
    `v<X.Y.Z>` 干净 tag → CI 建 GitHub Release 挂产物 + latest.json 轻量清单同步（双镜像，见 updates.ts 的发版八步清单注释）→ **main 快进到该 tag**（`git push origin v<X.Y.Z>:main`，门面分支与发版同步）。
 
+### 验证期打包口径（2026-10-10 用户拍板：test 包从分支出，不碰 dev）
+
+- **tag 可指向分支 commit**：CI 认 tag 不认分支归属，`git tag v<X.Y.Z>-test.N-nova <分支sha> && git push origin <tag>` 即从分支出包——流水线零修改。Windows 包只能 CI 出（NSIS 要 windows runner）；mac 包本地打仅限自查，交付的一律 CI 产物（带烙印）。
+- **闭环**：✓ → squash 一笔回 dev；✗ → 在分支上继续修 → bump 重打 tag 再包。**dev 只收用户验证通过的一笔**，验证迭代全程留在分支上，dev 不出现「并进 dev 又连修三笔」。
+- **多 worker 批**：开临时汇集分支（`feat/<批次slug>`，把各 worker 分支 merge 进去）→ 汇集分支打 tag 出包 → 验证过 → 各 worker 分支分别 squash 回 dev（一 worker 一笔），汇集分支即删。
+
 ### 更新说明军规（cc-deck 特化落点）
 
 通用六军规/排版结构/通道精度见全局 ~/.claude/CLAUDE.md「更新说明军规」节（2026-09-21 定立、2026-09-22 补措辞语气条，权威，持续打磨）。本节只记项目特化：
