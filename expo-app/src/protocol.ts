@@ -546,6 +546,26 @@ export type EventType =
   | "NOTIFICATIONS_UPDATED"
   | string;
 
+// W-EXPP2 团队经验库条目（relay/src/experience.ts ExperienceEntry 端侧镜像；只读消费
+// ——手机不做操作，P2 范围外。字段与 relay schema 同构，多出的键端上忽略）
+export interface ExperienceEntry {
+  id: string;
+  text: string;
+  kind: "pitfall" | "practice" | "preference" | "fact";
+  role_scope: string;
+  project_scope: string;
+  tags?: string[];
+  status: "active" | "retired";
+  use_count?: number;
+  created_at?: number;
+  last_used_at?: number;
+  updated_at?: number;
+  merged_from?: string[];
+  demoted_at?: number;
+  restored_at?: number;
+  source?: { actor: "agent" | "user" | "system"; session_id: string; dispatch_id?: string; migrated_lesson_id?: string };
+}
+
 export interface SnapshotPayload {
   sessions: SessionState[];
   logs: Record<string, LogEntry[]>;
@@ -560,6 +580,9 @@ export interface SnapshotPayload {
   projects?: ProjectGroup[];
   boards?: ProjectBoard[];
   org_confirms?: OrgConfirm[];
+  // W-EXPP2 经验库（覆盖式锚定；空数组也下发=支持位，缺席=旧 relay）
+  experience?: ExperienceEntry[];
+  experience_enabled?: boolean;
   notifications?: NotificationItem[];
   source_capabilities?: SourceCapabilities;
 }

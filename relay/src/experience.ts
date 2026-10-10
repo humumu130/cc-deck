@@ -344,6 +344,9 @@ export interface AppendExperienceInput {
   role_scope?: string;
   project_scope?: string;
   tags?: string[];
+  /** W-EXPP2 面板「补申报/改归组」组合动作（设计 §7.1 D1-6）溯源链：新条收编旧条
+   * id（语义同 GC dedupe 的 keeper.merged_from——append-only 审计不覆盖旧条） */
+  merged_from?: string[];
   source: ExperienceEntry["source"];
 }
 
@@ -410,6 +413,7 @@ export function appendExperience(input: AppendExperienceInput, dir?: string): Ex
     created_at: now,
     last_used_at: now,
     updated_at: now,
+    ...(input.merged_from?.length ? { merged_from: [...new Set(input.merged_from.filter((x): x is string => typeof x === "string" && x.trim() !== ""))] } : {}),
     source: input.source,
   };
   store.entries.push(entry);
@@ -668,6 +672,40 @@ export interface GcRunResult {
   reason: string;
 }
 
+// ---------- W-EXPP2 GC 轮收口回调（P2 通知面 D1-4 + 面板广播） ----------
+// 机械档 GC 在本模块自转（startExperienceGc 定时器），拿不到 manager——单槽回调把
+// 「本轮有动作」事件递出去，manager 注册后做两件事：emitExperience 广播 + GC 轮摘要
+// 通知（「经验整理：淘汰 N、合并 M，均可恢复」走既有通知流）。setConfirmCreatedHook
+// 同款单槽模式（后注册覆盖）。归档-only 轮也回调（条目从主库移出=面板可见变化），
+// 但 retired/merged 计数为 0 → manager 只广播不发通知。
+
+export interface ExperienceGcSummary {
+  ts: number;
+  /** 从未命中超期自动淘汰条数（dedupe 收编不计——那是并入不是淘汰） */
+  retired: number;
+  /** 跨 kind 归一键撞车收编条数 */
+  merged: number;
+  /** 超期未用降权条数 */
+  demoted: number;
+}
+
+let gcSummaryHook: ((s: ExperienceGcSummary) => void) | null = null;
+
+export function setExperienceGcSummaryHook(fn: ((s: ExperienceGcSummary) => void) | null): void {
+  gcSummaryHook = fn;
+}
+
+/** 轮末统一收口：有动作才回调（饱和空轮不吵）；hook 异常吞掉不炸 GC（通知/广播面
+ * 尽力而为，整理主路径不受连坐——对齐写失败 warn 不抛口径） */
+function notifyGcRound(ts: number, s: ExperienceGcSummary): void {
+  if (!gcSummaryHook) return;
+  try {
+    gcSummaryHook(s);
+  } catch (e) {
+    console.warn(`[experience] GC 收口回调异常（忽略）: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 /**
  * 机械档整理一轮（§3.3.2）：跨 kind 归一键去重补漏（后条 retire、前条并入）+ 衰减梯度
  * （从未命中 90d 自动 retire——复活环兜底；命中过超期未用降权）+ retired 归档。
@@ -729,6 +767,7 @@ export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?:
       appendGcLog({ ts: now, trigger, mode: "auto", actions: [archiveOnly], snapshot_ref: now }, dir);
       gcLastRunAt = now;
       gcLastRoundHadActions = true;
+      notifyGcRound(now, { ts: now, retired: 0, merged: 0, demoted: 0 }); // W-EXPP2：归档移出=面板可见变化，广播面回调（无淘汰/合并不发通知）
       return { ran: true, actions: [archiveOnly], reason: "仅归档" };
     }
     gcLastRoundHadActions = false;
@@ -785,6 +824,8 @@ export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?:
   appendGcLog({ ts: now, trigger, mode: "auto", actions, snapshot_ref: affected.length > 0 ? now : undefined }, dir);
   gcLastRunAt = now;
   gcLastRoundHadActions = true;
+  // W-EXPP2：轮收口回调（dedupe=merged、neverUsed=retired、降权=demoted）
+  notifyGcRound(now, { ts: now, retired: neverUsedRetireIds.length, merged: retireIds.size, demoted: demoteIds.length });
   return { ran: true, actions, reason: "ok" };
 }
 

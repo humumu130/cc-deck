@@ -1207,6 +1207,43 @@
   .org-badge.lv { color: var(--faint); border-style: dashed; }
   /* 项目组详情抽屉（右侧滑入）：状态/编制/任务板/回执流分节 */
   #orgdrawer { position: fixed; inset: 0; z-index: 61; background: rgba(2,5,10,.45); display: flex; justify-content: flex-end; }
+  /* ---------- W-EXPP2 团队经验库抽屉（P2 面板）：orgdrawer 同形右缘抽屉，行卡/徽章/两步确认/改归组表单 ---------- */
+  #expdrawer { position: fixed; inset: 0; z-index: 61; background: rgba(2,5,10,.45); display: flex; justify-content: flex-end; }
+  #expdrawer .ed-panel { width: min(460px, 94vw); background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: -10px 0 34px rgba(0,0,0,.35); }
+  #expdrawer .ed-head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  #expdrawer .ed-head b { flex: 1; min-width: 0; font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #expdrawer .ed-src { flex: none; font-size: 10px; color: var(--faint); }
+  #expdrawer .ed-body { flex: 1; overflow-y: auto; padding: 10px 15px 20px; }
+  #expdrawer .ed-banner { margin: 8px 0; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 8px; color: var(--dim); font-size: 11.5px; line-height: 1.5; }
+  #expdrawer .ed-filters { display: flex; align-items: center; gap: 7px; margin: 4px 0 10px; }
+  #expdrawer .ed-filters select { min-height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 11px; }
+  #expdrawer .ed-count { flex: none; margin-left: auto; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  #expdrawer .ed-row { padding: 8px 9px; margin-bottom: 7px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+  #expdrawer .ed-row.ed-retired { opacity: .68; }
+  #expdrawer .ed-row-top { display: flex; align-items: baseline; gap: 6px; }
+  #expdrawer .ed-kind { flex: none; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--dim); }
+  #expdrawer .ed-kind.k-pitfall { color: var(--err, #e5484d); border-color: color-mix(in srgb, var(--err, #e5484d) 40%, transparent); }
+  #expdrawer .ed-kind.k-practice { color: var(--ok, #30a46c); border-color: color-mix(in srgb, var(--ok, #30a46c) 40%, transparent); }
+  #expdrawer .ed-kind.k-preference { color: var(--info, #3b82f6); border-color: color-mix(in srgb, var(--info, #3b82f6) 40%, transparent); }
+  #expdrawer .ed-text { flex: 1; min-width: 0; font-size: 12px; color: var(--text); line-height: 1.45; overflow-wrap: anywhere; }
+  #expdrawer .ed-status { flex: none; font-size: 10px; color: var(--faint); }
+  #expdrawer .ed-status.on { color: var(--ok, #30a46c); }
+  #expdrawer .ed-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; }
+  #expdrawer .ed-badge { font-size: 9.5px; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+  #expdrawer .ed-ops { display: flex; gap: 6px; margin-top: 7px; }
+  #expdrawer .ed-ops .mini { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  #expdrawer .ed-ops .mini:hover { border-color: var(--text); }
+  #expdrawer .ed-ops .ed-danger { color: var(--err, #e5484d); }
+  #expdrawer .ed-ops .ed-ok { color: var(--ok, #30a46c); }
+  #expdrawer .ed-ops .mini:disabled { opacity: .5; cursor: default; }
+  #expdrawer .ed-form { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 8px; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; }
+  #expdrawer .ed-form label { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--dim); }
+  #expdrawer .ed-form input, #expdrawer .ed-form select { min-height: 25px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 11px; }
+  #expdrawer .ed-form .ed-go { font-size: 10.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text-strong); cursor: pointer; }
+  #expdrawer .ed-form .ed-go:disabled { opacity: .5; cursor: default; }
+  #expdrawer .ed-hint { flex-basis: 100%; font-size: 10px; color: var(--faint); }
+  .exp-entry.exp-off { opacity: .55; }
   /* #018-W1b 远程立项轻模态（orgnew）：复用 orgdrawer 的遮罩语汇，居中窄卡 */
   #orgnew { position: fixed; inset: 0; z-index: 62; background: rgba(2,5,10,.45); display: flex; align-items: center; justify-content: center; }
   #orgnew .on-panel { width: min(360px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
@@ -3325,6 +3362,7 @@ function ensureCtx(cfg) {
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
+      experiences: null, experienceEnabled: undefined, // W-EXPP2 经验库（SNAPSHOT.experience；null = 旧 relay 不支持，入口不渲染）
       projectionV2: false, // M13-3 v2 投影协议位（SNAPSHOT source_capabilities.projection_v2；缺省/undefined = 旧 relay → 覆盖式，一切照旧）
       permCaps: null, // P81-8W 权限能力摘要（SNAPSHOT source_capabilities.permission[]；null = 旧 relay 不发 → 摘要区整体隐藏）
       engineCatalog: null, // #75-W 引擎目录（SNAPSHOT source_capabilities.engine_catalog；null = 旧 relay 不发 → checkbox 兼容面+降级摘要）
@@ -4794,6 +4832,10 @@ function onEvent(ctx, msg) {
       syncEngUI(); // 摘要行 + checkbox 显隐随快照收敛
       if (selected && selected.src === ctx.cfg.id) renderDetail(); // 详情开着时档位条随摘要翻转即时收敛（旧 relay 降级不挂陈点）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
+      // W-EXPP2 经验库锚定（空数组也下发=支持位；缺席=旧 relay null 不渲染入口）
+      ctx.experiences = Array.isArray(msg.payload.experience) ? msg.payload.experience.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null;
+      ctx.experienceEnabled = msg.payload.experience_enabled !== false;
+      renderOrgZone(); // 经验库入口行随快照收敛（函数内有 key 去重闸）
       ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
       renderEmpHome(); // 同上：雇员独立家卡
@@ -4917,6 +4959,19 @@ function onEvent(ctx, msg) {
     }
     case "ORG_CONFIRM_UPDATED": {
       if (Array.isArray(msg.payload.pending)) ctx.orgConfirms = msg.payload.pending;
+      break;
+    }
+    case "EXPERIENCE_UPDATED": {
+      // W-EXPP2 经验库变更帧（帧双载沿 PROJECTS_UPDATED 同构）：v2 锚定后 delta merge，
+      // 否则 entries 全量覆盖式（锚定帧/旧形消费）；未锚定收到纯 delta 丢弃等快照
+      const p = msg.payload;
+      if (p && p.delta !== undefined && ctx.projectionV2) {
+        if (!Array.isArray(ctx.experiences)) break; // 未锚定：丢弃（SNAPSHOT.experience 自愈）
+        ctx.experiences = mergeEntityDelta(ctx.experiences, p.delta);
+      } else if (Array.isArray(p && p.entries)) {
+        ctx.experiences = p.entries.filter((e) => e && typeof e.id === "string" && typeof e.text === "string");
+      }
+      expRenderDrawer(); // 抽屉开着时实时收敛（函数内有打开闸）
       break;
     }
     case "BOARD_UPDATED": {
@@ -5454,6 +5509,187 @@ function orgOpenCreate() {
   if (nameInput) nameInput.focus();
 }
 
+// ---------- W-EXPP2 团队经验库（P2 面板）：orgzone 入口 + 抽屉（列表/筛选/退役/恢复/
+// 补申报改归组）。数据源 SNAPSHOT.experience + EXPERIENCE_UPDATED 帧（case 在帧分发处，
+// v2 delta merge/覆盖式双路径）。操作走 COMMAND_ORG_ACTION {action:"exp-*"}（relay 侧
+// orgCommand 咽喉单漏斗）；操作两步武装确认不裸奔；总开关关=入口置灰+抽屉横幅。 ----------
+const EXP_KIND_ZH = { pitfall: "坑", practice: "法", preference: "好", fact: "实" };
+const expDrawer = { open: false, src: "", scope: "all", status: "active", arm: null, armTimer: 0, form: null, flight: new Set() };
+function expCtxs() {
+  return orgCtxs().filter((c) => c.experiences !== null);
+}
+function expCloseDrawer() {
+  expDrawer.open = false;
+  if (expDrawer.armTimer) { clearTimeout(expDrawer.armTimer); expDrawer.armTimer = 0; }
+  const d = $("expdrawer");
+  if (d) d.remove();
+  renderOrgZone();
+  if (orgFocusBack) { try { orgFocusBack.focus(); } catch {} orgFocusBack = null; }
+}
+function expOpenDrawer(ctx) {
+  expCloseDrawer();
+  expDrawer.open = true;
+  expDrawer.src = ctx.cfg.id;
+  expDrawer.scope = "all"; expDrawer.status = "active"; expDrawer.arm = null; expDrawer.form = null;
+  if (!$("expdrawer")) orgFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null; // P58 焦点归还锚
+  const d = document.createElement("div");
+  d.id = "expdrawer";
+  d.innerHTML = '<div class="ed-panel"><div class="ed-head"><b>团队经验库</b><span class="ed-src"></span><button class="ed-close mini" title="关闭">✕</button></div><div class="ed-body"></div></div>';
+  d.addEventListener("click", (e) => {
+    if (e.target === d || e.target.closest(".ed-close")) { expCloseDrawer(); return; }
+    const arm = e.target.closest("[data-exp-retire],[data-exp-restore]");
+    if (arm) { expOp(arm.dataset.expRetire ? "exp-retire" : "exp-restore", arm.dataset.expRetire || arm.dataset.expRestore); return; }
+    const rg = e.target.closest("[data-exp-regroup]");
+    if (rg) { expDrawer.form = expDrawer.form === rg.dataset.expRegroup ? null : rg.dataset.expRegroup; expDrawer.arm = null; expRenderDrawer(); return; }
+    const go = e.target.closest("[data-exp-form-go]");
+    if (go) {
+      const row = go.closest(".ed-row");
+      const role = row ? (row.querySelector("[data-exp-form-role]") || {}).value || "" : "";
+      const proj = row ? (row.querySelector("[data-exp-form-project]") || {}).value || "" : "";
+      expRegroupSubmit(go.dataset.expFormGo, role.trim(), proj.trim());
+      return;
+    }
+  });
+  d.addEventListener("change", (e) => {
+    const sc = e.target.closest(".ed-f-scope");
+    if (sc) { expDrawer.scope = sc.value; expRenderDrawer(); return; }
+    const st = e.target.closest(".ed-f-status");
+    if (st) { expDrawer.status = st.value; expRenderDrawer(); return; }
+  });
+  document.body.appendChild(d);
+  expRenderDrawer();
+}
+function expFiltered(ctx) {
+  const list = Array.isArray(ctx.experiences) ? ctx.experiences : [];
+  return list.filter((e) => {
+    if (!e || typeof e.id !== "string") return false;
+    if (expDrawer.status === "active" && e.status !== "active") return false;
+    if (expDrawer.status === "retired" && e.status !== "retired") return false;
+    const norm = (v) => String(v || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+    if (expDrawer.scope === "global" && e.project_scope !== "global") return false;
+    if (expDrawer.scope !== "all" && expDrawer.scope !== "global" && norm(e.project_scope) !== norm(expDrawer.scope)) return false;
+    return true;
+  }).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+}
+function expProjName(ctx, anchor) {
+  const norm = (v) => String(v || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+  const g = (Array.isArray(ctx.projects) ? ctx.projects : []).find((x) => norm(x.anchor_dir) === norm(anchor));
+  if (g) return g.name || g.id;
+  return norm(anchor).split("/").filter(Boolean).pop() || "全局";
+}
+function expRowHtml(ctx, e) {
+  const armed = expDrawer.arm === e.id;
+  const flight = expDrawer.flight.has(e.id);
+  const canOp = ctx.status === "online" && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_ORG_ACTION") && ctx.experienceEnabled !== false;
+  const active = e.status === "active";
+  const formOpen = expDrawer.form === e.id;
+  const norm = (v) => String(v || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+  const anchors = (Array.isArray(ctx.projects) ? ctx.projects : []).map((g) =>
+    '<option value="' + escapeHtml(g.anchor_dir || "") + '"' + (norm(g.anchor_dir) === norm(e.project_scope) ? " selected" : "") + ">" + escapeHtml(g.name || g.id) + "</option>").join("");
+  const merged = Array.isArray(e.merged_from) && e.merged_from.length
+    ? '<span class="ed-badge" title="收编自 ' + escapeHtml(e.merged_from.join("、")) + '">并 ' + e.merged_from.length + "</span>" : "";
+  const t = new Date(e.last_used_at || e.created_at || 0);
+  const time = Number.isFinite(t.getTime()) && t.getTime() > 0
+    ? String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0") + " " + String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0") : "—";
+  return '<div class="ed-row' + (active ? "" : " ed-retired") + '">' +
+    '<div class="ed-row-top"><span class="ed-kind k-' + escapeHtml(e.kind) + '">' + escapeHtml(EXP_KIND_ZH[e.kind] || e.kind) + "</span>" +
+    '<span class="ed-text" title="' + escapeHtml(e.id) + '">' + escapeHtml(e.text) + "</span>" +
+    '<span class="ed-status ' + (active ? "on" : "off") + '">' + (active ? "在役" : "已退役") + "</span></div>" +
+    '<div class="ed-meta">' +
+    '<span class="ed-badge">' + escapeHtml(e.role_scope === "any" ? "通用" : e.role_scope || "any") + "</span>" +
+    '<span class="ed-badge">' + escapeHtml(e.project_scope === "global" ? "全局" : expProjName(ctx, e.project_scope)) + "</span>" +
+    '<span class="ed-badge">用 ' + Number(e.use_count || 0) + " 次</span>" +
+    '<span class="ed-badge">' + time + "</span>" + merged + "</div>" +
+    (canOp ? '<div class="ed-ops">' + (active
+      ? '<button class="mini ed-danger" data-exp-retire="' + escapeHtml(e.id) + '"' + (flight ? " disabled" : "") + ">" + (armed ? "确认退役？" : "退役") + "</button>"
+      : '<button class="mini ed-ok" data-exp-restore="' + escapeHtml(e.id) + '"' + (flight ? " disabled" : "") + ">" + (armed ? "确认恢复？" : "恢复") + "</button>") +
+      '<button class="mini" data-exp-regroup="' + escapeHtml(e.id) + '">' + (formOpen ? "收起" : "补申报/改归组") + "</button></div>" : "") +
+    (formOpen ? '<div class="ed-form">' +
+      '<label>角色轴 <input data-exp-form-role value="' + escapeHtml(e.role_scope || "any") + '" list="ed-role-list" placeholder="any=跨角色"></label>' +
+      '<label>项目轴 <select data-exp-form-project><option value="global"' + (e.project_scope === "global" ? " selected" : "") + ">全局</option>" + anchors + "</select></label>" +
+      '<button class="mini ed-go" data-exp-form-go="' + escapeHtml(e.id) + '"' + (flight ? " disabled" : "") + ">提交</button>" +
+      '<span class="ed-hint">正文与类型继承原条；新条入库、旧条退役（可恢复）</span></div>' : "") +
+    "</div>";
+}
+function expRenderDrawer() {
+  const d = $("expdrawer");
+  if (!d || !expDrawer.open) return;
+  const ctx = ctxs.get(expDrawer.src);
+  if (!ctx) { expCloseDrawer(); return; }
+  const srcName = d.querySelector(".ed-src");
+  if (srcName) srcName.textContent = srcDisplayName(ctx.cfg);
+  const body = d.querySelector(".ed-body");
+  if (!body) return;
+  if (ctx.experienceEnabled === false) {
+    body.innerHTML = '<div class="ed-banner">经验库总开关已关闭（relay 设置）——注入与整理均已停，此面板暂不可用。</div>';
+    return;
+  }
+  if (ctx.experiences === null) {
+    body.innerHTML = '<div class="ed-banner">此 relay 无经验库数据（旧版本 relay 或经验域未随快照下发）。</div>';
+    return;
+  }
+  const all = ctx.experiences.filter((e) => e && typeof e.id === "string");
+  const head = '<div class="ed-filters">' +
+    '<select class="ed-f-scope"><option value="all"' + (expDrawer.scope === "all" ? " selected" : "") + ">全部范围</option>" +
+    '<option value="global"' + (expDrawer.scope === "global" ? " selected" : "") + ">全局</option>" +
+    (Array.isArray(ctx.projects) ? ctx.projects : []).map((g) => '<option value="' + escapeHtml(g.anchor_dir || "") + '"' + (expDrawer.scope === g.anchor_dir ? " selected" : "") + ">" + escapeHtml(g.name || g.id) + "</option>").join("") + "</select>" +
+    '<select class="ed-f-status"><option value="active"' + (expDrawer.status === "active" ? " selected" : "") + ">在役</option>" +
+    '<option value="retired"' + (expDrawer.status === "retired" ? " selected" : "") + ">已退役</option>" +
+    '<option value="all"' + (expDrawer.status === "all" ? " selected" : "") + ">全部</option></select>" +
+    '<span class="ed-count">在役 ' + all.filter((e) => e.status === "active").length + " · 共 " + all.length + " 条</span></div>" +
+    '<datalist id="ed-role-list"><option value="any"></option><option value="worker"></option><option value="pm"></option><option value="reviewer"></option><option value="qa"></option></datalist>';
+  if (!all.length) { body.innerHTML = head + '<div class="ed-banner">经验库为空——worker 回执「经验：<一句话>（#kind）」申报入库，或 CLI org exp append。</div>'; return; }
+  const list = expFiltered(ctx);
+  body.innerHTML = head + (list.length
+    ? list.map((e) => expRowHtml(ctx, e)).join("")
+    : '<div class="ed-banner">当前筛选无条目</div>');
+}
+async function expOp(type, id) { // 退役/恢复：两步武装确认 + 飞行去重；权威收敛走帧
+  const ctx = ctxs.get(expDrawer.src);
+  if (!ctx || ctx.status !== "online") return;
+  if (expDrawer.flight.has(id)) return;
+  if (expDrawer.arm !== id) {
+    expDrawer.arm = id;
+    if (expDrawer.armTimer) clearTimeout(expDrawer.armTimer);
+    expDrawer.armTimer = setTimeout(() => { expDrawer.arm = null; expRenderDrawer(); }, 4000);
+    expRenderDrawer();
+    return;
+  }
+  if (expDrawer.armTimer) { clearTimeout(expDrawer.armTimer); expDrawer.armTimer = 0; }
+  expDrawer.arm = null;
+  expDrawer.flight.add(id);
+  expRenderDrawer();
+  try {
+    const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", { action: type, id });
+    const v = ackVerdict(ack);
+    if (v.ok) toast(type === "exp-retire" ? "已退役（可恢复）" : "已恢复", 2200);
+    else if (unknownCommandError(v.error)) { ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_ACTION"); toast("当前源 relay 版本较旧，不支持经验库操作"); }
+    else toast("操作失败: " + v.error);
+  } finally {
+    expDrawer.flight.delete(id);
+    expRenderDrawer(); // EXPERIENCE_UPDATED 帧回来自动收敛，此处清飞行态
+  }
+}
+async function expRegroupSubmit(id, role, project) { // D1-6 组合动作（relay 单漏斗 append+retire+merged_from）
+  const ctx = ctxs.get(expDrawer.src);
+  if (!ctx || ctx.status !== "online" || expDrawer.flight.has(id)) return;
+  expDrawer.flight.add(id);
+  expRenderDrawer();
+  try {
+    const payload = { action: "exp-regroup", old_id: id };
+    if (role) payload.role_scope = role;
+    if (project) payload.project_scope = project;
+    const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", payload);
+    const v = ackVerdict(ack);
+    if (v.ok) { expDrawer.form = null; toast("已改归组：新条入库、旧条退役（可恢复）", 2400); }
+    else if (unknownCommandError(v.error)) { ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_ACTION"); toast("当前源 relay 版本较旧，不支持改归组"); }
+    else toast("改归组失败: " + v.error);
+  } finally {
+    expDrawer.flight.delete(id);
+    expRenderDrawer();
+  }
+}
+
 function orgCtxs() {
   return [...ctxs.values()].filter((c) => Array.isArray(c.projects) && c.status === "online");
 }
@@ -5472,7 +5708,9 @@ function renderOrgZone() {
   }
   const key = confirms.map((x) => x.ctx.cfg.id + x.cf.id + (x.cf.status || "")).join(",") + "|" +
     groups.map((x) => x.ctx.cfg.id + x.g.id + x.g.status + x.g.tier + ":" + (x.g.headcount || []).length).join(",") +
-    (orgDrawer.open ? "|d" + orgDrawer.gid : "");
+    (orgDrawer.open ? "|d" + orgDrawer.gid : "") +
+    (expDrawer.open ? "|x" + expDrawer.src : "") + // W-EXPP2
+    "|" + expCtxs().map((c) => c.cfg.id + (c.experiences ? c.experiences.length : 0) + (c.experienceEnabled === false ? "off" : "on")).join(",");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   let html = "";
@@ -5499,6 +5737,17 @@ function renderOrgZone() {
   // #018-W1b 远程立项轻入口：至少一个未被旧 relay 降级记忆封锁的 org 源才显示
   if (orgCreateSrcs().length) {
     html += '<div class="org-newrow"><button class="org-new" data-org-new="1" title="远程立项（轻立项/正经立项，relay 侧执行）">＋ 新建团队</button></div>';
+  }
+  // W-EXPP2 经验库入口行：有经验域数据的源各一枚（单源不带源名；开关关=置灰+说明）
+  const exps = expCtxs();
+  if (exps.length) {
+    html += '<div class="org-newrow">' + exps.map((c) => {
+      const off = c.experienceEnabled === false;
+      const n = c.experiences ? c.experiences.filter((e) => e && e.status === "active").length : 0;
+      return '<button class="org-new exp-entry' + (off ? " exp-off" : "") + '" data-exp-open="' + escapeHtml(c.cfg.id) + '"' +
+        (off ? ' title="经验库总开关已关闭（relay 设置）——注入与整理均已停"' : ' title="团队经验库（查看/退役/恢复/改归组）"') + ">" +
+        "经验库" + (off ? "（已关）" : " · " + n) + "</button>";
+    }).join("") + "</div>";
   }
   box.innerHTML = html;
   box.hidden = false;
@@ -5651,6 +5900,8 @@ document.addEventListener("click", (e) => {
   }
   const nb = e.target.closest("button[data-org-new]");
   if (nb) { orgOpenCreate(); return; }
+  const xb = e.target.closest("button[data-exp-open]");
+  if (xb) { const c = ctxs.get(xb.dataset.expOpen); if (c) expOpenDrawer(c); return; } // W-EXPP2 经验库入口
   // #018-W1b 通知「知道了」：委托绑定（通知区 innerHTML 整体重建，行上挂不了监听）
   const nk = e.target.closest("button[data-nack-key]");
   if (nk) {

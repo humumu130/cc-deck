@@ -10,7 +10,7 @@ import { setListDensity, useListDensity, setAggregate as persistAggregate, useId
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
 import { FadeIn, PressScale } from "../motion";
-import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
+import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type ExperienceEntry, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf, notifDoneAt, splitResolvedRows, jumpTargetOf, type NotifJumpTarget } from "../notify-jump";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
@@ -976,16 +976,18 @@ function orgStColor(st: string, c: ThemeColors): string {
   return st === "active" ? c.done : st === "pending" ? c.waiting : c.faint;
 }
 
-// 组织区（列表顶条件区，随待填验收单卡同位）：确认卡行 + 项目组 chips
-function OrgZone({ confirms, groups, onDecide, onOpenGroup }: {
+// 组织区（列表顶条件区，随待填验收单卡同位）：确认卡行 + 项目组 chips + 经验分节
+//（W-EXPP2：只读——手机不做操作，退役/恢复/改归组走电脑端，P2 范围外注明）
+function OrgZone({ confirms, groups, exps, onDecide, onOpenGroup }: {
   confirms: { src: SourceStatus; cf: OrgConfirm }[];
   groups: { src: SourceStatus; g: ProjectGroup }[];
+  exps: { src: SourceStatus; entries: ExperienceEntry[]; enabled: boolean }[];
   onDecide: (srcId: string, confirmId: string, approve: boolean) => void;
   onOpenGroup: (src: SourceStatus, g: ProjectGroup) => void;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
-  if (!confirms.length && !groups.length) return null;
+  if (!confirms.length && !groups.length && !exps.length) return null;
   const sorted = [...groups].sort((a, b) => (ORG_ST_ORD[a.g.status] ?? 9) - (ORG_ST_ORD[b.g.status] ?? 9));
   return (
     <View style={styles.orgZone}>
@@ -1033,6 +1035,46 @@ function OrgZone({ confirms, groups, onDecide, onOpenGroup }: {
           </Pressable>
         ))}
       </View>
+      {exps.length ? (
+        <View style={styles.orgExp}>
+          {exps.map(({ src, entries, enabled }) => {
+            const actives = entries.filter((e) => e.status === "active");
+            return (
+              <View key={src.id}>
+                {!enabled ? (
+                  <Text style={styles.orgExpNote}>经验库总开关已关闭（relay 设置）——注入与整理均已停</Text>
+                ) : actives.length === 0 ? (
+                  <Text style={styles.orgExpNote}>经验库为空（worker 回执申报入库）</Text>
+                ) : (
+                  <>
+                    {actives.slice(0, 6).map((e) => {
+                      const kindColor = e.kind === "pitfall" ? c.error : e.kind === "practice" ? c.done : e.kind === "preference" ? c.brandA : c.faint;
+                      const kindZh = e.kind === "pitfall" ? "坑" : e.kind === "practice" ? "法" : e.kind === "preference" ? "好" : "实";
+                      const scopeP = e.project_scope === "global" ? "全局" : (e.project_scope.split("/").filter(Boolean).pop() || "项目");
+                      const scopeR = e.role_scope === "any" ? "通用" : e.role_scope;
+                      return (
+                        <View key={e.id} style={styles.orgExpRow}>
+                          <Text style={[styles.orgExpKind, { color: kindColor }]}>{kindZh}</Text>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.orgExpText} numberOfLines={2}>{e.text}</Text>
+                            <Text style={styles.orgExpMeta} numberOfLines={1}>
+                              {scopeR} · {scopeP} · 用 {e.use_count ?? 0} 次
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                    {actives.length > 6 ? (
+                      <Text style={styles.orgExpNote}>其余 {actives.length - 6} 条见电脑端经验库</Text>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            );
+          })}
+          <Text style={styles.orgExpNote}>手机只读 · 退役/恢复/改归组请用电脑端经验库</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1491,6 +1533,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       for (const g of src.projects ?? []) if (g.status !== "archived") out.push({ src, g });
     return out;
   }, [snap.sources]);
+  // W-EXPP2 经验域（orgZone 分节只读）：跨源平铺——旧 relay（null）源不进；总开关关
+  // 的源照进（分节里置灰说明），条目只出 active（retired 归档面在电脑端）
+  const orgExps = useMemo(() => {
+    const out: { src: SourceStatus; entries: ExperienceEntry[]; enabled: boolean }[] = [];
+    for (const src of snap.sources) {
+      if (!src.experiences) continue;
+      out.push({ src, entries: src.experiences, enabled: src.experienceEnabled !== false });
+    }
+    return out;
+  }, [snap.sources]);
   const projNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const src of snap.sources) for (const g of src.projects ?? []) m.set(g.id, g.name);
@@ -1852,6 +1904,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             <OrgZone
               confirms={orgConfirms}
               groups={orgGroups}
+              exps={orgExps}
               onDecide={orgDecide}
               onOpenGroup={(src, g) => setOrgOpen({ srcId: src.id, gid: g.id, name: g.name })}
             />
@@ -2456,6 +2509,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   orgChipT: { fontSize: 11.5, fontWeight: "600", maxWidth: 120 },
   orgChipSt: { color: c.faint, fontSize: 9.5 },
+  // W-EXPP2 经验分节（orgZone 内只读列表）：行=kind 徽标+两行文本+meta 行；徽章色随
+  // kind（坑 error/法 done/好 brandA/实 faint），对齐 web 壳 exp 行语言
+  orgExp: { gap: 4, marginTop: 2, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line },
+  orgExpRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 4 },
+  orgExpKind: { fontSize: 10, fontWeight: "700", flexShrink: 0, marginTop: 1 },
+  orgExpText: { color: c.text, fontSize: 12, lineHeight: 17 },
+  orgExpMeta: { color: c.faint, fontSize: 10, marginTop: 1 },
+  orgExpNote: { color: c.faint, fontSize: 10, marginTop: 2 },
   // 组详情弹窗（gm*）：头部（名称+状态/档位 tags）→ 编制行 → 板段 → 回执流
   gmWrap: { flex: 1, backgroundColor: c.bg },
   gmHead: {
