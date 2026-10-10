@@ -171,7 +171,12 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
     s.updated_at = e.ts;
     switch (e.type) {
       case "SESSION_UPDATED": {
-        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; title_locked?: boolean; turn_started_at?: number; usage?: SessionState["usage"]; todos?: SessionState["todos"]; subagents?: SessionState["subagents"]; model?: string; engine?: SessionEngine; provider?: string };
+        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; title_locked?: boolean; turn_started_at?: number; usage?: SessionState["usage"]; todos?: SessionState["todos"]; subagents?: SessionState["subagents"]; model?: string; engine?: SessionEngine; provider?: string; updated_at?: number };
+        // #157 起 UPDATED 载荷恒带显式 updated_at（水合帧≠活动时刻，下发侧注释明说
+        // 客户端以它为准）——重放侧同口径消费；旧版帧/异常缺载回落信封 ts（上方默认）。
+        // 不消费则水合时刻被固化为活跃时刻，二次重启后闲置置灰
+        //（memberActivity/sweepIdleArchive）用漂移时间误判
+        if (typeof p.updated_at === "number" && p.updated_at > 0) s.updated_at = p.updated_at;
         s.status = p.status;
         s.action_summary = p.action_summary;
         if (p.stats) s.stats = p.stats;

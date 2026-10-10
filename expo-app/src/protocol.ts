@@ -520,6 +520,11 @@ export interface LogEntry {
   detail?: string; // 工具完整入参/输出（展开查看）
   diff?: string[]; // Edit/Write 的 +/- diff 行（着色渲染）
   occurred_at?: number; // optional: old relay only has relay receive time ts
+  // FB14 气泡附图：随消息发送图片的落盘文件名引用（relay uploads.ts img-* 命名，仅
+  // basename 防路径泄漏）。引用而非 base64——LogEntry 随 SNAPSHOT 每次重连全量重发，
+  // 内联大图会把快照/事件流撑爆；端上经 COMMAND_ARTIFACT_FETCH（img 引用分支）按需
+  // 拉取。relay tmp 目录 7 天清扫，过期引用拉取失败，端上隐藏缩略即可（旧 relay 无此字段）
+  images?: string[];
 }
 
 export interface Envelope {
