@@ -9,6 +9,7 @@ import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
 import { listGroups, listPendingConfirms } from "./projects.js";
+import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 云通道同源携带
 import { listModels } from "./models.js";
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
@@ -445,6 +446,10 @@ export class CloudClient {
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
+        // W-EXPP2 经验库：全量条目锚定帧 + 总开关（与 ws-server 直连快照同源同步，
+        // #117 教训——云桥手机经验分节同样靠快照兜底；空数组也下发）
+        experience: listExperience(),
+        experience_enabled: readPluginConfig().experience,
         // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
         // 通知列表同样靠快照兜底；空数组也下发）
         notifications: this.mgr.notificationsList(),

@@ -21,6 +21,7 @@ import {
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listGroups, listPendingConfirms } from "./projects.js";
+import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
@@ -685,6 +686,8 @@ export function startServer(
             // W-EXPP1 经验库动作（非决议类：写入面走经验库自身硬校验+软上限+漏斗审计
             // 行，无用户决策卡语义；exp-list/exp-export 只读——org exp 子命令的 HTTP 面）
             "exp-append", "exp-bump", "exp-retire", "exp-restore", "exp-list",
+            // W-EXPP2 面板组合动作（D1-6 补申报/改归组）：HTTP 面与 WS 面同权开放
+            "exp-regroup",
             // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）
             "exp-export", "exp-import",
           ]);
@@ -940,6 +943,10 @@ export function startServer(
           // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          // W-EXPP2 经验库：全量条目锚定帧 + 总开关（空数组也下发——端上以字段存在性
+          // 判断能力；cloud-client 云通道快照同步携带，#117 教训）
+          experience: listExperience(),
+          experience_enabled: readPluginConfig().experience,
           // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
           // 下发——端上以字段存在性判断能力）
           notifications: mgr.notificationsList(),

@@ -19,6 +19,7 @@ import type {
   BoardDelta,
   BoardEntry,
   EntityDelta,
+  ExperienceEntry,
   LessonEntry,
   ProjectBoard,
   ProjectGroup,
@@ -61,6 +62,13 @@ export function isEntityDelta<T extends { id: string }>(
 export function isBoardDelta(v: unknown): v is BoardDelta {
   const d = v as BoardDelta | undefined;
   return !!d && typeof d === "object" && isEntityDelta<BoardEntry>(d.entries, isBoardEntry);
+}
+
+// W-EXPP2 经验域条目防御尺（同口径：畸形条目不进缓存）。宽松鸭子校验——kind/status
+// 只查 string 不锁值域（前向兼容不出假渲染，isBoardEntry 同款裁定）
+export function isExperienceEntry(x: unknown): x is ExperienceEntry {
+  const e = x as ExperienceEntry | undefined;
+  return !!e && typeof e.id === "string" && !!e.id && typeof e.text === "string" && typeof e.kind === "string" && typeof e.status === "string";
 }
 
 // ---------- merge 核心（幂等：同帧重放二次应用零变化） ----------

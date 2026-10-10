@@ -59,11 +59,12 @@ import { contextLimitOf, contextLimitOfEffective } from "./context-limit.js";
 import { compactPrompt, wdThreshold, wdDropRatio, wdCooldownMs, wdCaptureTimeoutMs, wrapPreCompactReminder } from "./context-watchdog.js";
 import { AllowRuleStore } from "./allow-rules.js";
 // W-EXPP1 角色经验回流 P1（store 零依赖本文件，无环）：写入口/查询/注入构建/申报行解析
+// W-EXPP2 追加：setExperienceGcSummaryHook（GC 轮收口回调注册，通知面 D1-4 + 面板广播）
 import {
   appendExperience, bumpExperiences, retireExperience, restoreExperience, listExperience,
   buildExperienceInjection, parseExperienceDeclaration, resetExperienceRuntimeForTests,
-  exportExperience, importExperience,
-  type ExperienceKind,
+  exportExperience, importExperience, setExperienceGcSummaryHook,
+  type ExperienceEntry, type ExperienceGcSummary, type ExperienceKind,
 } from "./experience.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
@@ -781,6 +782,10 @@ export class SessionManager {
     // 通知账）。单回调槽后注册覆盖——生产单 manager 进程假设内成立（多 manager
     // 仅测试形态，后建者接管产生登记）
     setConfirmCreatedHook((c) => this.recordOrgConfirmNotification(c));
+    // W-EXPP2：经验库 GC 轮收口回调（单槽，experience.ts notifyGcRound 递出）——
+    // 广播增量 + 淘汰/合并非零时发 GC 轮摘要通知（D1-4「经验整理：淘汰 N、合并 M，
+    // 均可恢复」走既有通知流）。注册在构造器：startExperienceGc 定时器晚于 mgr 建立
+    setExperienceGcSummaryHook((s) => this.onExperienceGcRound(s));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -4289,6 +4294,24 @@ export class SessionManager {
         project_scope: e.anchor ?? "global",
         source: { actor: "agent", session_id: key, dispatch_id: e.id },
       });
+      if (r.ok) {
+        this.emitExperience(); // W-EXPP2：入库/复活后广播（端上 ≤60s 可见）
+        // W-EXPP2 新经验通知摘要一行（设计 §8 P2 用户否决通道——「变更可见」同样覆盖
+        // 新增：面板是被动的，申报静默入库用户无从否决；stableKey=entry.id 一条一行，
+        // agent 面才发（用户自己在面板/CLI 写的不重复吵）。domain=experience 端上无
+        // 跳转目标 = 纯信息行，操作入口在经验库面板
+        try {
+          this.upsertNotification("system", r.entry.id, undefined, {
+            title: `经验入库（${parsed.kind}）${r.restored ? "· 复活" : ""}`,
+            body: truncate(parsed.text, 120),
+            severity: "info",
+            group: "activity",
+            actionable: false,
+            domain: "experience",
+            returnPath: "experience",
+          });
+        } catch { /* 通知面尽力而为 */ }
+      }
       appendDispatch({
         ts: Date.now(), id: randomUUID(), tier: e.tier, target: "org-command",
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
@@ -5159,6 +5182,15 @@ export class SessionManager {
       const lesson = (r.data as { lesson?: { id?: string } } | undefined)?.lesson;
       return { ok: true, data: { entity_id: lesson?.id ?? "", gid } };
     }
+    // ---------- W-EXPP2 经验库面板通道：exp-* 动作直通 orgAction 单漏斗 ----------
+    // COMMAND_ORG_ACTION {action:"exp-retire"|...}（不另立 COMMAND_EXP_* 命令字——
+    // M12 教义「adapter 映射到 orgAction 旧 shape，不建第二事实源」；LAN/cloud 两入口
+    // 均已通该命令，org:write 鉴权已在咽喉头部统一判定）。审计行/广播增量都在漏斗
+    // case 内单点（auditExpAction + emitExperience），此处不重复记账。
+    if (action.startsWith("exp-")) {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
 
@@ -5483,6 +5515,7 @@ export class SessionManager {
             },
           });
           this.auditExpAction("exp-append", r, str("project_scope") || "global");
+          if (r.ok) this.emitExperience(); // W-EXPP2：入库/复活环后端上 ≤60s 可见
           return r.ok ? { ok: true, data: { entry: r.entry, ...(r.restored ? { restored: true } : {}) } } : r;
         }
         case "exp-bump": {
@@ -5491,7 +5524,10 @@ export class SessionManager {
           if (!id) return { ok: false, error: "id 必填" };
           const r = bumpExperiences([id]);
           const hit = r.bumped.length > 0;
-          if (hit) this.auditExpAction("exp-bump", { ok: true }, "global");
+          if (hit) {
+            this.auditExpAction("exp-bump", { ok: true }, "global");
+            this.emitExperience(); // W-EXPP2：加权/复活后广播（use_count/状态翻转）
+          }
           return hit
             ? { ok: true, data: { id, ...(r.restored.includes(id) ? { restored: true } : {}) } }
             : { ok: false, error: `经验条目不存在或处于坏 JSON 保护态: ${id}` };
@@ -5501,6 +5537,7 @@ export class SessionManager {
           if (!id) return { ok: false, error: "id 必填" };
           const r = retireExperience(id);
           this.auditExpAction("exp-retire", r, "global");
+          if (r.ok) this.emitExperience(); // W-EXPP2
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
         }
         case "exp-restore": {
@@ -5508,7 +5545,47 @@ export class SessionManager {
           if (!id) return { ok: false, error: "id 必填" };
           const r = restoreExperience(id);
           this.auditExpAction("exp-restore", r, "global");
+          if (r.ok) this.emitExperience(); // W-EXPP2
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "exp-regroup": {
+          // ---------- W-EXPP2 P2 面板组合动作（设计 §7.1 D1-6）：补申报/改归组 =
+          // append(新)+retire(旧)+merged_from 溯源，一次漏斗调用一次审计行（P1 拍板
+          // 「COMMAND_EXP_APPEND 与 RETIRE 成对」的执行体合成——端上两连发有半态窗，
+          // 漏斗内串行无窗）。改归组语义=换 role/project 轴、正文不变：新条 scope 与
+          // 旧条不同（同 scope 同文会被 append 去重拒收，恰是误用护栏）。半态说明：
+          // append 已生效而 retire 拒（旧条mid-flight被删/保护态）→ 返回 ok:false 但
+          // 新条在库，面板广播已出，错误信息写明双条现状由用户收尾（append-only 不回滚）。
+          const oldId = str("old_id");
+          if (!oldId) return { ok: false, error: "old_id 必填（被改归组的旧条目 id）" };
+          const oldEntry = listExperience().find((x) => x.id === oldId);
+          if (!oldEntry) return { ok: false, error: `旧条目不存在: ${oldId}` };
+          const text = str("text") || oldEntry.text; // text 缺省继承旧条（纯改归组不改正文）
+          const kind = (str("kind") || oldEntry.kind) as ExperienceKind;
+          if (!["pitfall", "practice", "preference", "fact"].includes(kind)) return { ok: false, error: "kind 必须是 pitfall|practice|preference|fact" };
+          const roleScope = str("role_scope") || oldEntry.role_scope;
+          const projectScope = str("project_scope") || oldEntry.project_scope;
+          if (roleScope === oldEntry.role_scope && projectScope === oldEntry.project_scope && text === oldEntry.text) {
+            return { ok: false, error: "新条与旧条同 scope 同文（改归组须至少换 role/project 轴；纯改字请走 retire+append 两步）" };
+          }
+          const r = appendExperience({
+            text,
+            kind,
+            role_scope: roleScope,
+            project_scope: projectScope,
+            merged_from: [oldId],
+            source: { actor: "user", session_id: str("session_id") },
+          });
+          if (!r.ok) {
+            this.auditExpAction("exp-regroup", r, projectScope);
+            return r;
+          }
+          const rr = retireExperience(oldId);
+          this.auditExpAction("exp-regroup", rr.ok ? r : { ok: false, error: `新条 ${r.entry.id} 已入库但旧条退役失败：${rr.error}` }, projectScope);
+          this.emitExperience(); // append 已生效，无论 retire 成败库已变化，广播为准
+          return rr.ok
+            ? { ok: true, data: { entry: r.entry, retired: oldId } }
+            : { ok: false, error: `新条已入库（${r.entry.id}）但旧条退役失败：${rr.error}——请在面板手动退役旧条 ${oldId}` };
         }
         case "exp-list": {
           // org CLI 直查用（§3.1③）：全字段过滤可选，缺省全量
@@ -5538,6 +5615,7 @@ export class SessionManager {
           if (!p) return { ok: false, error: "path 必填（导出文件绝对路径）" };
           const r = importExperience(p);
           this.auditExpAction("exp-import", r, "global");
+          if (r.ok) this.emitExperience(); // W-EXPP2：导入合并后广播（bump/restore/insert 都可能发生）
           return r.ok ? { ok: true, data: r.data } : r;
         }
         case "project-detail": {
@@ -5841,6 +5919,54 @@ export class SessionManager {
       ],
       delta,
     });
+  }
+
+  // ── W-EXPP2 experience 域广播：发射侧单点 diff（emitOrgState/emitBoard M13-2 同款，
+  // lastXxxBroadcast 只作 diff 基线不参与业务判定）──
+  // 帧双载沿 PROJECTS_UPDATED 同构（types.ts ExperienceUpdatedPayload）：entries 恒
+  // 全量（覆盖式锚定/旧形消费），delta 已知时并出（端上增量 merge）。触发点=全部
+  // exp-* 漏斗成功边 + 申报捕获入库 + GC 轮回调（onExperienceGcRound）；无基线
+  //（mgr 重启后首帧）diffById 返 null → 只发 entries 全量（端上覆盖式=锚定帧）。
+  // 调用方对「条目可达数百条」的全量帧体积已核账（types.ts SNAPSHOT.experience 注释）。
+  private lastExperienceBroadcast: ExperienceEntry[] | null = null;
+
+  emitExperience(): void {
+    try {
+      const entries = listExperience();
+      const delta = this.diffById(this.lastExperienceBroadcast, entries);
+      this.lastExperienceBroadcast = entries;
+      this.bus.emitTransient("EXPERIENCE_UPDATED", {
+        entries,
+        ...(delta
+          ? {
+              entity_refs: [...new Set([...delta.upserts.map((e) => e.id), ...delta.removes])],
+              delta,
+            }
+          : {}),
+      });
+    } catch (e) {
+      console.warn(`[experience] 广播失败（忽略，不阻断动作主路径）: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // GC 轮收口（experience.ts notifyGcRound 递出）：广播增量恒发（降权/归档也是面板
+  // 可见变化）；淘汰/合并非零才发通知（D1-4 摘要一行——「变更可见」覆盖「变更消失」，
+  // 降权是可逆软动作不吵）。通知 kind=system/group=activity/actionable=false（信息面，
+  // 操作入口在经验库面板），stableKey=exp-gc-<ts> 一轮一行天然去重。
+  private onExperienceGcRound(s: ExperienceGcSummary): void {
+    this.emitExperience();
+    if (s.retired === 0 && s.merged === 0) return;
+    try {
+      this.upsertNotification("system", `exp-gc-${s.ts}`, String(s.ts), {
+        title: "经验整理",
+        body: truncate(`淘汰 ${s.retired}、合并 ${s.merged}，均可恢复（经验库面板可操作）`, 160),
+        severity: "info",
+        group: "activity",
+        actionable: false,
+        domain: "experience",
+        returnPath: "experience",
+      });
+    } catch { /* 通知面尽力而为（emitExperience 已先行） */ }
   }
 
   // M12-5 引擎 preflight（拉起前纯静态检查，失败即 error 拒派）：裁定「派单前 error」

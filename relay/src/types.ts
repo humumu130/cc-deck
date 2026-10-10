@@ -5,6 +5,7 @@ import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
 import type { AllowRule } from "./allow-rules.js";
 import type { ProjectGroup, ProjectBoard, OrgConfirm, BoardEntry, LessonEntry, BoardEntryStatus } from "./projects.js";
+import type { ExperienceEntry } from "./experience.js"; // W-EXPP2：类型-only 引用（experience.ts 不反向 import 本件，无环）
 
 // ---------- 事件信封 ----------
 
@@ -476,6 +477,17 @@ export interface SnapshotPayload {
   // 同口径。板不随快照（一板一文件按需拉：COMMAND_PROJECT_DETAIL）
   projects?: ProjectGroup[];
   org_confirms?: OrgConfirm[];
+  // W-EXPP2 经验库（设计 §6.2「P2 接 SNAPSHOT 新域」）：全量条目锚定帧（离线端兜底
+  // + delta 域锚定依据——端上以字段存在性判断能力，projects 同口径；空数组也下发）。
+  // LAN ws-server 与 cloud-client 两处快照组装同步携带（#117 教训）。体积账：软上限
+  // 200 active + retired 归档阈值 500 内 ≈ 数百条 ×~0.5KB ≈ 最坏 ~300KB（实测典型
+  // 几十条 ≈ 数十 KB），瞬态低频帧可控；量级失控升级路径 = 设计 §6.1 迁 sqlite +
+  // P3 云桥同步再议
+  experience?: ExperienceEntry[];
+  // W-EXPP2 经验库总开关随快照下发（deliverables 键同款口径：恒布尔、旧客户端忽略
+  // 未知键，端上据此显隐/置灰入口）。开关翻转不另发帧（/api/plugin-config 无广播
+  // 面），端上下次快照收敛——低频运维操作可接受
+  experience_enabled?: boolean;
   // #17 第二批：雇员独立家开关状态（设置页数据源；空对象也下发——端上以字段
   // 存在性判断能力）。locked=true（env 显式设置）时端上开关只读
   settings?: EmployeeHomeSettingsPayload;
@@ -536,6 +548,7 @@ export type EventType =
   | "PROJECTS_UPDATED"
   | "BOARD_UPDATED"
   | "ORG_CONFIRM_UPDATED"
+  | "EXPERIENCE_UPDATED"
   | "DISPATCH_DONE"
   | "SETTINGS_UPDATED"
   | "NOTIFICATIONS_UPDATED"
@@ -573,6 +586,10 @@ export type EventPayloadMap = {
   // #26 M2 确认单变更（瞬态）：新单入队/决议后广播待决队列；离线端由
   // SNAPSHOT.org_confirms 兜底
   ORG_CONFIRM_UPDATED: OrgConfirmUpdatedPayload;
+  // W-EXPP2 经验库变更（瞬态）：exp-* 动作/申报入库/GC 轮后广播；离线端由
+  // SNAPSHOT.experience 兜底。帧双载（entries 全量+delta 差分并存）沿 PROJECTS_UPDATED
+  // 同构（M13-REV P3-6 广播架构定案——经验域虽无旧端，形状从众不立第三种判例）
+  EXPERIENCE_UPDATED: ExperienceUpdatedPayload;
   // #40 M4 派单完成回调（瞬态）：收口时广播，端上弹通知；见 DispatchDonePayload
   DISPATCH_DONE: DispatchDonePayload;
   // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
@@ -712,6 +729,16 @@ export interface BoardUpdatedPayload {
 }
 export interface OrgConfirmUpdatedPayload {
   pending: OrgConfirm[]; // listPendingConfirms()
+}
+
+// W-EXPP2 经验库推送载荷（与 SNAPSHOT.experience 同源同构，PROJECTS_UPDATED 同构形）：
+// entries=旧字段保留（listExperience() 全量，覆盖式锚定/消费）；delta=条目级差分
+//（mgr 重启后首帧无基线时缺席——端上覆盖式消费 entries 并锚定）。帧级判定沿 M13-2
+// 铁律：payload.delta !== undefined → 增量 merge；缺席 → 覆盖式消费 entries。
+export interface ExperienceUpdatedPayload {
+  entries: ExperienceEntry[]; // listExperience() 全量（active+retired，归档移出后不含已归档）
+  entity_refs?: string[]; // 本次变更条目 id（端上局部刷新定位；与 delta 同进出）
+  delta?: EntityDelta<ExperienceEntry>; // 缺席=mgr 重启后首帧（端上覆盖式兜底）
 }
 
 // #40 M4 派单完成回调（谁派活谁收通知）：worker 派单在 closeOpenDispatches 收口
