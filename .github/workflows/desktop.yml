@@ -242,6 +242,14 @@ jobs:
             sed -i.bak 's#https://cc.humumu.online/download/tauri-latest.json#https://cc.humumu.online/download/tauri-latest-test.json#' src-tauri/tauri.conf.json
             rm -f src-tauri/tauri.conf.json.bak
             grep -n "tauri-latest-test" src-tauri/tauri.conf.json
+            # W-NOVAVAR B3：nova overlay 同烙（同 Windows job :119-122）——nova test 包若指向
+            # 正式 nova 清单，正式清单版本更高时会穿仓提示「升级」。overlay 只在 Build 步
+            # --config 传入时 merge，此处无条件烙不伤标准构建
+            if [ -f src-tauri/tauri.nova.conf.json ]; then
+              sed -i.bak 's#https://cc.humumu.online/download/tauri-latest-nova.json#https://cc.humumu.online/download/tauri-latest-nova-test.json#' src-tauri/tauri.nova.conf.json
+              rm -f src-tauri/tauri.nova.conf.json.bak
+              grep -n "tauri-latest-nova-test" src-tauri/tauri.nova.conf.json
+            fi
           fi
 
       - name: Stamp dev suffix (无 tag 验证构建通道标识)
@@ -270,7 +278,17 @@ jobs:
           # updater 签名与 Windows 共用（密钥对平台无关）；macOS 应用签名留空 = ad-hoc
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build --bundles dmg --target aarch64-apple-darwin
+        run: |
+          CONFIG_ARGS=""
+          # W-NOVAVAR B3（W-AUDIT-CONTRACT P1-5）：nova 双入口对齐 Windows job——dispatch
+          # 勾选 / tag 名含 -nova 后缀（test 包走 tag 路径，inputs 恒空）。缺此分支时
+          # v*-nova tag 出的是标准变体 dmg 但版本烙成 nova 名（名实不符，曾靠本地手工补）
+          if [ "${{ inputs.nova }}" = "true" ] || [[ "$GITHUB_REF_NAME" == *-nova ]]; then
+            CONFIG_ARGS="--config src-tauri/tauri.nova.conf.json"
+            echo "NOVA_SUFFIX=-Nova" >> "$GITHUB_ENV"
+            echo "nova variant: overlay tauri.nova.conf.json active（productName/identifier/updater）"
+          fi
+          npx tauri build --bundles dmg --target aarch64-apple-darwin $CONFIG_ARGS
 
       - name: Artifact name suffix（分支名含 / 会炸 upload-artifact）
         shell: bash
@@ -279,7 +297,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Deck-Desktop-Tauri-Mac-${{ env.REF_SLUG }}
+          name: CC-Deck-Desktop-Tauri-Mac${{ env.NOVA_SUFFIX }}-${{ env.REF_SLUG }}
           path: |
             desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg.sig
