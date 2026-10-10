@@ -417,9 +417,17 @@ interface ManagedSession {
   // sendMessage 不推进锚点——流死了发再多消息也只是灌进死队列（中午案例的教训）
   lastProgressAt: number;
   lastProgressKind: string;
-  // 已 sendMessage 但流未回显 user_message 的消息：僵死恢复时重放（回显即出队，
-  // 已被 CLI 处理过的消息在 transcript 里，重放会重复）
-  unacked: { text: string; images?: string[]; ts: number; refs?: string[] }[];
+  // 已 sendMessage 但尚未确认送达的消息：僵死恢复时重放（已被 CLI 处理过的消息在
+  // transcript 里，重放会重复）。出账（P1FIX 2026-10-10，审计实锤「永不按本条出队」）：
+  // - 活流消息（已 init 会话）：echo 出账——adapter 的 sendMessage 同步发 user_message
+  //   回显并透传 ackId，按 id 精确出账（旧文本匹配对 >200 字截断/文件消息形态必失配）。
+  //   语义 =「relay 已代显/已投递」，流在发送后才死的情况不再重放（窄窗口，接受）
+  // - hold "init"（未 init 会话的活流发送）：echo 不出账——CLI 可能根本没起来，
+  //   pre-init 僵死检测靠 unacked 非空起疑（tickWatchdog :6275）；onInit 到达清账
+  // - hold "turn"（resume 首条消息走 initialPrompt 路径、永无回显；resume 互斥窗
+  //   排队的消息）：首个 ok 回合结束清账——回合完成 = transcript 已收，重放即重复；
+  //   init 超时走 fresh 回退时账还在，合并重放语义（:3597 注释）不破
+  unacked: { id: string; text: string; images?: string[]; ts: number; refs?: string[]; hold?: "init" | "turn" }[];
   wd: WatchdogState;
   // #109 流代际：resumeAgent/reviveSaved 换流前递增。回调闭包按创建时代际比对，
   // 不匹配即忽略——旧流的任何后续事件（接管补刀的收尾回调 / 网络回魂）不再写
@@ -450,9 +458,9 @@ interface ManagedSession {
   // onSessionEnd）清除；此后 Leader 空闲 init 到达照旧待命化
   pendingInitial?: boolean;
   // FB14 气泡附图回显槽：COMMAND_MESSAGE 发送前置入本次落盘引用，sendMessage 的
-  // user_message 回显（同步发出）即刻消费——echo 先于 unacked.push，refs 不能靠
-  // unacked 对账取出（对账条在回显之后才入账）。unacked.refs 仍记（看门狗重放/
-  // resume 续带用），两处数据源各管一段
+  // user_message 回显（同步发出）即刻消费——refs 是展示面数据（进 LogEntry.images），
+  // 与 unacked 出账（ackId 对账）无关；unacked.refs 仍记（看门狗重放/resume 续带
+  // 用），两处数据源各管一段
   pendingImgRefs?: string[];
 }
 
@@ -2307,8 +2315,12 @@ export class SessionManager {
             if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
               s.pendingImgRefs = imgRefs.length ? imgRefs : undefined; // FB14：回显槽先置（echo 同步消费）
-              s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo);
-              s.unacked.push({ text, images: imgPayload.length ? imgPayload : undefined, refs: imgRefs.length ? imgRefs : undefined, ts: Date.now() });
+              // P1FIX：push 先于 sendMessage（回显同步到达时账必须在），hold:"turn"
+              // 让回显不出账——init 超时 fresh 回退靠账内条目合并重放（:3597 注释），
+              // 出账时点 = 首个 ok 回合结束（onTurnEnd 清 hold:"turn"）
+              const msgId = randomUUID();
+              s.unacked.push({ id: msgId, text, images: imgPayload.length ? imgPayload : undefined, refs: imgRefs.length ? imgRefs : undefined, ts: Date.now(), hold: "turn" });
+              s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo, msgId);
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
             }
@@ -2325,10 +2337,21 @@ export class SessionManager {
             s.state.status = "WORKING";
           }
           s.pendingImgRefs = imgRefs.length ? imgRefs : undefined; // FB14：回显槽先置（echo 同步消费）
-          s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo);
-          // #7 看门狗重放账：入队即记，流回显 user_message 才出队（流死时 CLI 从未
-          // 收到，恢复后须重发；不推进 lastProgressAt——灌进死队列不是"进展"）
-          s.unacked.push({ text, images: imgPayload.length ? imgPayload : undefined, refs: imgRefs.length ? imgRefs : undefined, ts: Date.now() });
+          // #7 看门狗重放账（P1FIX 2026-10-10 调序 + id 精确出账）：push 先于
+          // sendMessage——adapter 的回显在 sendMessage 内同步发出并透传 ackId，账不在场
+          // 则 findIndex 恒扑空（审计实锤的「永不按本条出队」根因）。已 init 会话无 hold
+          // = 回显即出账（出账语义 = relay 已投递）；未 init（无 relay_session_id）保持
+          // hold:"init"，pre-init 僵死检测与 onInit 清账接管。send 本身不推进
+          // lastProgressAt（灌进死队列不是"进展"）
+          const msgId = randomUUID();
+          s.unacked.push({
+            id: msgId, text,
+            images: imgPayload.length ? imgPayload : undefined,
+            refs: imgRefs.length ? imgRefs : undefined,
+            ts: Date.now(),
+            hold: s.state.relay_session_id ? undefined : "init",
+          });
+          s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo, msgId);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -3145,6 +3168,11 @@ export class SessionManager {
               managed.state.turn_started_at = undefined;
             }
           }
+          // P1FIX：init 到达 = 流已就绪，pre-init 期间入账的消息（hold:"init"）已
+          // 在新流队列里即将消费——清账。必须在上方 Leader 待命化检查之后：那段靠
+          // unacked≥1 判断「有即将开始的回合」不误翻 DONE（:3136 注释），先清会让
+          // 2026-09-28 的「DONE 后 WORKING 复起」缺陷回潮
+          managed.unacked = managed.unacked.filter((m) => m.hold !== "init");
           managed.state.model = model;
           if (isManagedMode(permissionMode)) managed.state.permission_mode = permissionMode;
           this.emitUpdated(managed, true);
@@ -3295,22 +3323,26 @@ export class SessionManager {
         onLog: (kind, text, meta) => {
           if (!mine()) return;
           touch(kind);
-          // #7 看门狗消息重放账：流回显 user_message = CLI 真正收到了这条消息
-          //（echo 文案带"（+N 图）"尾缀，匹配前剥掉；normalize 口径与手机端一致）
+          // ackId 只用于 unacked 出账对账，不进 LogEntry/客户端载荷
+          const { ackId, ...logMeta } = meta ?? {};
+          // #7 看门狗消息重放账出账（P1FIX 2026-10-10）：回显由 adapter 的
+          // sendMessage 同步发出（非 CLI 流回吐），ackId 精确对账出账——旧的文本
+          // 归一匹配对 >200 字截断/文件消息 echo 形态必失配，且调序前账后到恒扑空。
+          // hold 条目（pre-init 发送 / resume 批）不出账，见 unacked 字段注释
           if (kind === "user_message") {
-            // FB14 气泡附图：消费发送时置入的回显槽——sendMessage 的 echo 同步发出，
-            // 此刻 unacked 尚未入账（push 在 sendMessage 之后），refs 只能走槽位
+            // FB14 气泡附图：消费发送时置入的回显槽（展示面数据，与出账无关）
             if (managed.pendingImgRefs?.length) {
-              meta = { ...meta, images: managed.pendingImgRefs };
+              logMeta.images = managed.pendingImgRefs;
               managed.pendingImgRefs = undefined;
             }
-            const key = text.replace(/（\+\d+ 图）$/, "").trim().replace(/\s+/g, " ").slice(0, 200);
-            const i = managed.unacked.findIndex((m) => m.text.trim().replace(/\s+/g, " ").slice(0, 200) === key);
-            if (i >= 0) managed.unacked.splice(i, 1);
+            if (ackId) {
+              const i = managed.unacked.findIndex((m) => m.id === ackId);
+              if (i >= 0 && !managed.unacked[i].hold) managed.unacked.splice(i, 1);
+            }
           }
-          const entry: LogEntry = { ts: Date.now(), kind, text, ...meta };
+          const entry: LogEntry = { ts: Date.now(), kind, text, ...logMeta };
           // 同 id 流式块原地替换，避免时间线被增量刷屏
-          const i = meta?.id ? managed.logs.findIndex((e) => e.id === meta.id) : -1;
+          const i = logMeta.id ? managed.logs.findIndex((e) => e.id === logMeta.id) : -1;
           if (i >= 0) managed.logs[i] = entry;
           else {
             managed.logs.push(entry);
@@ -3324,7 +3356,7 @@ export class SessionManager {
               state: managed.state.status,
               activityKind: kind === "thinking" ? "assistant_text" : kind,
               activityText: text,
-              ...(meta?.tool ? { tool: meta.tool } : {}),
+              ...(logMeta.tool ? { tool: logMeta.tool } : {}),
               ts: entry.ts,
               now: entry.ts,
               task: { todos: managed.state.todos },
@@ -3340,6 +3372,11 @@ export class SessionManager {
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
           if (managed.wd.phase === "recovering") return;
+          // P1FIX：回合正常完成 = 本回合消费的消息已进 transcript，重放即重复——
+          // 清 hold:"turn" 账（resume 首条消息 + resume 互斥窗排队消息，均无回显
+          // 可出账）。ok=false / recovering 保持入账（下次恢复重放）；新账不再持有
+          // hold 标记（互斥窗已由 onInit 关闭，后续消息走回显即出账路径）
+          if (ok) managed.unacked = managed.unacked.filter((m) => m.hold !== "turn");
           // #26 派单台账收口（M2 泛化全会话）：一回合一单，FIFO 收最旧（多消息排队时
           // 按序逐回合收）；Leader 咨询档与 worker 派单同机制，FIFO 空 = no-op。
           // recovering 让位漏掉的收口由恢复流的下个 onTurnEnd 补上
@@ -3464,7 +3501,9 @@ export class SessionManager {
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.gaveUp = false;
-      s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now() });
+      // P1FIX：首条消息走 initialPrompt 路径（构造时入 SDK 队列）永无回显，出账点 =
+      // 首个 ok 回合结束（onTurnEnd 清 hold:"turn"）；流断在回合内则由看门狗带账重放
+      s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn" });
       this.emitUpdated(s, true);
       return;
     }
@@ -3571,7 +3610,11 @@ export class SessionManager {
     s.lastProgressKind = "";
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
-    s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now() });
+    // #7 看门狗：新 agent 锚点重新起算；首条消息同样入重放账（resume 后流再断，
+    // 下一轮自愈要带上它）。P1FIX：initialPrompt 路径永无回显，出账点 = 首个 ok
+    // 回合结束（onTurnEnd 清 hold:"turn"）——此前无出账点，账永久滞留被后续每次
+    // 恢复全量重放（审计 P1 实锤）
+    s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn" });
     initTimer = setTimeout(() => {
       initTimer = null;
       // 已 init / 流已换（stale timer）/ 流已被 STOP 或自然关闭 / 会话卡已被删
@@ -4259,7 +4302,8 @@ export class SessionManager {
     const tripped = !!s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil;
     const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
     if (!tripped && !parkedPinned) return false;
-    if (queueMessage !== undefined) s.unacked.push({ text: queueMessage, ts: Date.now() });
+    // 冷却/休眠期积压：无回显无 hold，恢复成功由 flushResumeBacklog 补投并出账
+    if (queueMessage !== undefined) s.unacked.push({ id: randomUUID(), text: queueMessage, ts: Date.now() });
     const why = tripped
       ? `恢复连续失败 ${s.resumeFailStreak ?? "?"} 次已熔断，约 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 60_000))} 分钟后自动重试`
       : "会话为置顶休眠（点卡片按需恢复）";

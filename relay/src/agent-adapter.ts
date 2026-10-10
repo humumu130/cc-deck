@@ -314,7 +314,8 @@ export interface AgentCallbacks {
   onLog(
     kind: SessionLogPayload["kind"],
     text: string,
-    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean; detail?: string; diff?: string[]; images?: string[] },
+    // ackId（P1FIX）：unacked 出账对账 id，仅 relay 内部消费，不进 LogEntry/客户端载荷
+    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean; detail?: string; diff?: string[]; images?: string[]; ackId?: string },
   ): void;
   // 每回合结束（result 消息）：ok=true → DONE；ok=false → ERROR
   onTurnEnd(ok: boolean, reason: string, durationMs: number): void;
@@ -337,8 +338,11 @@ export interface AgentLike {
   readonly startedAt: number;
   ended: boolean;
   // echo（#62）：客户端回显文本（文件消息正文合成路径指令后传原文本短回显，不露临时
-  // 路径）；不传则回显 = 截断正文 + 图片计数
-  sendMessage(text: string, images?: string[], echo?: string): void;
+  // 路径）；不传则回显 = 截断正文 + 图片计数。
+  // ackId（P1FIX 2026-10-10）：relay 侧 unacked 重放账的对账 id——sendMessage 同步
+  // 发出的 user_message 回显透传它，relay 按 id 精确出账（旧文本归一匹配对长消息
+  // 截断/文件消息形态必失配）。不传 = 回显照发但不出账
+  sendMessage(text: string, images?: string[], echo?: string, ackId?: string): void;
   allow(requestId: string, by?: string, rememberScope?: "session" | "global"): boolean;
   deny(requestId: string, reason?: string, by?: string): boolean;
   answer(requestId: string, answers: string[], by?: string): boolean;
@@ -976,15 +980,18 @@ export class AgentSession {
     });
   }
 
-  sendMessage(text: string, images?: string[], echo?: string): void {
+  sendMessage(text: string, images?: string[], echo?: string, ackId?: string): void {
     this.pushUserMessage(text, images);
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     if (echo !== undefined) {
       // #62 文件消息：回显/展开都用调用方给的短文本（正文含临时路径，不对账展示）
-      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200), ...(ackId ? { ackId } : {}) });
     } else {
       const full = fullText(text, 200);
-      this.cb.onLog("user_message", truncate(text, 200) + marker, { full: full === undefined ? undefined : full + marker });
+      this.cb.onLog("user_message", truncate(text, 200) + marker, {
+        full: full === undefined ? undefined : full + marker,
+        ...(ackId ? { ackId } : {}),
+      });
     }
     // 审批弹窗死锁根治①：WAITING 中用户再发消息时，这里不能乐观报 WORKING——CLI 仍
     // 阻塞在 canUseTool 上（新消息排队等权限放行），假报会把 status 翻成 WORKING 而
