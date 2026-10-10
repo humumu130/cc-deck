@@ -3069,7 +3069,11 @@ export class Bridge {
       // 窗口解锁重试），此时补回车只会打进旧 CLI 的空输入框——无效果纯噪音
       if (Date.now() - (this.resumeSpawns.get(id) ?? 0) < this.resumeWindowMs) continue;
       const w = this.stuckWatch.get(id);
-      if (w?.given_up) continue; // 连续 3 次仍滞留：放弃，防无限打转
+      // given_up 的会话翻空闲（DONE）时放行自愈：「不打断打字」的保护前提是有打字
+      // 主体，CLI 空闲时框内滞留即唯一内容，Enter=纯提交零打断风险；WORKING 维持
+      // 放弃。否则单条滞留会无限期挂着，只能等用户再发新消息才「一并提交」（2026-
+      // 10-10 临时 leader 会话实测：防抢发快照不可用 3 连→放弃→消息挂死）
+      if (w?.given_up && s.status !== "DONE") continue;
       if (w && now - w.lastTry < this.stuckRetryMs) continue; // 每会话限速
       const pid = s.cli_pid;
       // 防抢发守门（异步等待期间占位限速防重入；补发计数只在真正发回车时增加）
@@ -3141,7 +3145,16 @@ export class Bridge {
       return;
     }
     if (v.kind === "unknown") {
-      // #180：快照不可用 ≠ 可以发。本轮暂缓（下轮看门狗按限速重试，弹窗盖住等瞬态
+      // #180 修订（2026-10-10）：快照不可用但 CLI 已空闲（DONE）= 无打字主体，
+      // 守门顾虑不成立，直接按空闲安全语义补发（fireStuckEnter 内 tries 闸要求
+      // 先清计数）。WORKING 时维持原保守：快照不可用 ≠ 可以发。
+      const stNow = this.mgr.getExternal(id);
+      if (stNow?.status === "DONE") {
+        this.stuckWatch.set(id, { lastTry: Date.now(), tries: 0, skips: 0, blind: 0, given_up: false });
+        this.fireStuckEnter(id, pid, "快照不可用但 CLI 已空闲（无人打字），按空闲安全语义补发回车");
+        return;
+      }
+      // 快照不可用 ≠ 可以发。本轮暂缓（下轮看门狗按限速重试，弹窗盖住等瞬态
       // 场景随后自愈）；连续 3 轮不可用 → 放弃自动补发，交用户下次发送时一并提交
       //（CLI 原生排队语义，滞留消息不会丢）——与 fireStuckEnter 3 次上限同界。
       const w = this.stuckWatch.get(id);

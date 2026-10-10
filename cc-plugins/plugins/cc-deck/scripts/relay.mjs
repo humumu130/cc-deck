@@ -56498,7 +56498,7 @@ var Bridge = class _Bridge {
       }
       if (Date.now() - (this.resumeSpawns.get(id2) ?? 0) < this.resumeWindowMs) continue;
       const w2 = this.stuckWatch.get(id2);
-      if (w2?.given_up) continue;
+      if (w2?.given_up && s.status !== "DONE") continue;
       if (w2 && now - w2.lastTry < this.stuckRetryMs) continue;
       const pid = s.cli_pid;
       if (guardConfig().enabled) {
@@ -56559,6 +56559,12 @@ var Bridge = class _Bridge {
       return;
     }
     if (v.kind === "unknown") {
+      const stNow = this.mgr.getExternal(id2);
+      if (stNow?.status === "DONE") {
+        this.stuckWatch.set(id2, { lastTry: Date.now(), tries: 0, skips: 0, blind: 0, given_up: false });
+        this.fireStuckEnter(id2, pid, "\u5FEB\u7167\u4E0D\u53EF\u7528\u4F46 CLI \u5DF2\u7A7A\u95F2\uFF08\u65E0\u4EBA\u6253\u5B57\uFF09\uFF0C\u6309\u7A7A\u95F2\u5B89\u5168\u8BED\u4E49\u8865\u53D1\u56DE\u8F66");
+        return;
+      }
       const w2 = this.stuckWatch.get(id2);
       const blind = (w2?.blind ?? 0) + 1;
       const giveUp = blind >= 3;
