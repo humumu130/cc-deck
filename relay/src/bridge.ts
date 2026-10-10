@@ -815,8 +815,9 @@ export class Bridge {
   private titleScanned = new Set<string>();
   private pollTerminalLineBusy = false;
   // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
-  // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 32KB + 尾 64KB 两窗扫描
-  //（标题多在会话前段；长会话后期任务切换的新标题在尾部），取文件序最新一条
+  // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 48KB + 尾 48KB 两窗扫描
+  //（96KB 缓冲前半留头、后半让尾窗覆写；标题多在会话前段，长会话后期任务切换的
+  // 新标题在尾部），取文件序最新一条
   private scanTranscriptTitles(p: string): { custom?: string; ai?: string } {
     try {
       const size = statSync(p).size;
@@ -824,7 +825,10 @@ export class Bridge {
       const fd = openSync(p, "r");
       try {
         readSync(fd, buf, 0, buf.length, 0);
-        if (size > buf.length) readSync(fd, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
+        // 尾窗：offset/length 都按缓冲后半（49152）算，position 取文件末 48KB——
+        // 旧写法 length 传「文件剩余量」，size>147456 必抛 ERR_OUT_OF_RANGE 被
+        // 上层吞掉（长转录尾窗恒失效）；96K-144K 区间不抛但覆写头窗后半丢头区标题
+        if (size > buf.length) readSync(fd, buf, buf.length / 2, buf.length / 2, size - buf.length / 2);
       } catch {}
       finally { try { closeSync(fd); } catch {} }
       const text = buf.toString("latin1");
