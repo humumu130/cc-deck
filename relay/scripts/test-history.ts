@@ -109,6 +109,16 @@ assert(before.seq === 4, "新事件 seq=4");
 assert(bus2.replayAfter(3).length === 1, "跨重启补发缺口");
 const snapshot = { sessions: null as unknown, logs: null as unknown } as SnapshotPayload;
 
+// ---------- #148：ext- 前缀兜底——存量事件流部分历史 CREATED 帧缺 external 字段（旧版本
+// 写入），回放后外部会话被误判为不可注入的纯历史卡（web「仅可查看」锁死）。
+// ext- 前缀 = ensureExternal 唯一起 id 形态 = 外部会话铁证，兜底恢复标记。
+{
+  const extBad = [mk(++seq, "ext-abc123", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "旧版坏帧", model: "m" })];
+  assert(reduceHistory(extBad).get("ext-abc123")?.state.external === true, "#148：ext- 前缀 CREATED 缺 external 字段 → 兜底恢复外部标记（存量坏帧自愈）");
+  const managedBad = [mk(++seq, "plain-1", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "托管", model: "m" })];
+  assert(!("external" in (reduceHistory(managedBad).get("plain-1")?.state ?? {})), "#148：非 ext- 前缀缺省语义不变（托管会话不带 external 键）");
+}
+
 // ---------- #25-P1 compactEventsFile：运行期压缩（长跑治理） ----------
 console.log("compactEventsFile:");
 {

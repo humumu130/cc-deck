@@ -142,7 +142,11 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         },
         logs: [],
       };
-      if (p.external) rs.state.external = true;
+      // #148：ext- 前缀 = 外部会话铁证 id 形态（ensureExternal 唯一这么起 id）。
+      // 存量事件流里部分历史 CREATED 帧缺 external 字段（旧版本写入），回放后 external
+      // 缺失 → 重启收养把外部会话误判为不可注入的纯历史卡（web「仅可查看」锁死）。
+      // 前缀兜底治全部存量帧，无需数据迁移。
+      if (p.external || e.session_id.startsWith("ext-")) rs.state.external = true;
       // #17 雇员标记随首帧流经事件流：重启回放后 transcript/任务清单读取路径
       // 按此选家（雇员独立家），resume 也据此传 CLAUDE_CONFIG_DIR
       if (p.employee) rs.state.employee = true;
