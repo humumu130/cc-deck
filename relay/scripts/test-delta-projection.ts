@@ -181,10 +181,11 @@ try {
   assert(rL.ok === true, "前置：lesson 回流落板");
   mgr.emitBoard(gid);
   const bfL = lastBoardFrame();
-  assert(bfL.delta!.lessons.upserts.length === 1 && bfL.delta!.lessons.upserts[0]!.text.startsWith("M13-2 教训"), "lesson 帧差分走 lessons.upserts");
+  // W-EXPP1 读侧退役（2026-10-10）：lessons 不再随板下发（§0 摘要不再下发，端上缓存
+  // 靠首发 removes 清空）——lesson 写动不再产生 lessons.upserts 差分，也不污染 entries
+  assert(bfL.delta!.lessons.upserts.length === 0 && (bfL.delta!.lessons.removes ?? []).length === 0, "W-EXPP1：lesson 写动零差分（lessons 域退役不下发）");
   assert(bfL.delta!.entries.upserts.length === 0 && bfL.delta!.entries.removes.length === 0, "lesson 变动不污染 entries 差分");
-  const lessonUp = bfL.delta!.lessons.upserts[0]!;
-  assert(bfL.entity_refs!.includes(lessonUp.id), "lesson id 同入 entity_refs");
+  assert(Array.isArray((bfL.board as { lessons?: unknown[] }).lessons) && ((bfL.board as { lessons?: unknown[] }).lessons ?? []).length === 0, "W-EXPP1：板下发载荷不带 lessons");
 
   // 冻结翻转（组 parked → 板 frozen）：meta 承载非条目变更
   //（命令联合类型只冻结 create variant；status 变体是 session-manager 内部面，测试侧 as 放行）
@@ -265,16 +266,18 @@ try {
     mergedAt = p.delta.meta.updated_at;
   }
   const live = loadBoard(gid);
+  // W-EXPP1 读侧退役：lessons 不随帧下发 → merge 链 lessons 终态恒空（板文件内冻结
+  // 数据不参与消费面），entries/meta 照旧与文件收敛一致
   assert(
     JSON.stringify([...mergedEntries.values()]) === JSON.stringify(live.entries) &&
-      JSON.stringify([...mergedLessons.values()]) === JSON.stringify(live.lessons ?? []) &&
+      mergedLessons.size === 0 &&
       mergedFrozen === live.frozen &&
       mergedAt === live.updated_at,
-    "全帧 merge 链终态 == 板文件现值（增量消费与覆盖消费收敛一致）",
+    "全帧 merge 链终态 == 板文件现值（lessons 退役恒空——W-EXPP1；entries/meta 照旧收敛）",
   );
-  // 覆盖链：只认旧字段（旧端行为）→ 同一终态
+  // 覆盖链：只认旧字段（旧端行为）→ 同一终态（lessons 摘除后下发）
   const covered = boardFrames().at(-1)!.payload as BoardUpdatedPayload;
-  assert(JSON.stringify(covered.board) === JSON.stringify(live), "全帧覆盖链（只认 board 旧字段）终态同收敛");
+  assert(JSON.stringify(covered.board) === JSON.stringify({ ...live, lessons: [] }), "全帧覆盖链（只认 board 旧字段）终态同收敛（lessons 摘除——W-EXPP1）");
   // 同一 delta 二次应用零变化
   const twice = applyBoardFrame({ ...live, entries: [...live.entries], lessons: [...(live.lessons ?? [])] }, gid, lastBoardFrame());
   assert(JSON.stringify(twice) === JSON.stringify(live), "对已收敛状态二次应用同一 delta：零变化（重复投递幂等）");
@@ -292,7 +295,15 @@ try {
   const mgr2 = new SessionManager(bus2, loadConfig());
   mgr2.emitBoard(gid);
   const reboot = frames2.at(-1)!.payload as BoardUpdatedPayload;
-  assert(Array.isArray(reboot.board.entries) && !("delta" in reboot) && !("entity_refs" in reboot), "重启后 BOARD 首帧无 delta（缓存冷覆盖式，端上兜底路径）");
+  // W-EXPP1：重启首帧=覆盖式起底 + lessons 清缓存 purge（文件内有冻结 lessons 时
+  // delta.lessons.removes 列全量 id；无 lessons 时保持无 delta 旧形状）
+  const fileLessonIds = (loadBoard(gid).lessons ?? []).map((l) => l.id);
+  assert(Array.isArray(reboot.board.entries) && (reboot.board.lessons ?? []).length === 0, "重启后 BOARD 首帧覆盖式（board 载荷不带 lessons——W-EXPP1）");
+  if (fileLessonIds.length > 0) {
+    assert("delta" in reboot && JSON.stringify(reboot.delta!.lessons.removes) === JSON.stringify(fileLessonIds), "重启首帧带 lessons 清缓存 purge（removes=文件冻结 id 全集——W-EXPP1）");
+  } else {
+    assert(!("delta" in reboot), "重启后 BOARD 首帧无 delta（缓存冷覆盖式，端上兜底路径）");
+  }
 
   // ---------- 段 5：双出口同步 wire 锁（#117 事件面） ----------
   console.log("S5 双出口事件帧同步");

@@ -682,6 +682,11 @@ export function startServer(
             "status", "project-create", "project-status", "project-tier", "suggest-hold",
             "dispatch", "board", "project-detail", "rate", "tag",
             "member-retire", "member-add", // #26 补章：编制面执行动作（可逆：复拉走 member-add），非决议类
+            // W-EXPP1 经验库动作（非决议类：写入面走经验库自身硬校验+软上限+漏斗审计
+            // 行，无用户决策卡语义；exp-list/exp-export 只读——org exp 子命令的 HTTP 面）
+            "exp-append", "exp-bump", "exp-retire", "exp-restore", "exp-list",
+            // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）
+            "exp-export", "exp-import",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

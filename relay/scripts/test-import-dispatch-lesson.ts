@@ -172,29 +172,16 @@ const xRoot = row("x");
 assert(xRoot !== undefined && xRoot.status === "done" && xRoot.attempt_no === 1 && xRoot.parent_dispatch_id === null,
   "P2 复现：行13/14 x 常态收敛 done（行15 重投被拒后段状态保持终态不推进）");
 
-// S5 lesson 面
-const lRows = port.query<{ id: string; group_id: string | null; task_id: string | null; text: string;
-  tags_json: string; source_dispatch_id: string | null; created_at: number }>("SELECT * FROM lesson ORDER BY id");
-assert(lRows.length === 6, `lesson 行数=6（真写 3+手搓落行 2+幽灵组板 1；坏板/非数组板 0 行）——实测 ${lRows.length}`);
-const lrow = (id: string) => lRows.find((r) => r.id === id)!;
-assert(lrow("ls-badtags") !== undefined && JSON.parse(lrow("ls-badtags").tags_json).length === 0,
-  "S5 tags 非数组→bad-field 落账+落 []（字段级坏不拒行）");
-assert(lrow("ls-ghost").group_id === null && lrow("ls-ghost").text === "幽灵组经验",
-  "S5 悬空组板照导：group_id NULL+文本保留（组归因缺失不丢经验）");
-assert(lrow("ls-dup") !== undefined && lRows.filter((r) => r.id === "ls-dup").length === 1,
-  "S5 同 id 二遇→duplicate-id 保首行");
-const g1Ok = lRows.find((r) => r.text === "经验一")!;
-assert(g1Ok.tags_json === JSON.stringify(["rust"]) && g1Ok.source_dispatch_id === "d-ok" && g1Ok.group_id === GID
-  && g1Ok.task_id === null && g1Ok.created_at > 0,
-  "S5 真写 lesson 直落：tags 洗刷去重、sdi 合法落、group 落、task_id 恒 NULL");
-assert(lRows.find((r) => r.text === "经验三")?.source_dispatch_id === null,
-  "S5 sdi 悬空→NULL（dispatch 集外零造关联）");
-
-// S5 loss 对号（boards 源：bad-json 1 + bad-field 2（lessons 非数组/tags 坏型）+ missing-field 1（空 text）+ duplicate-id 1 + dangling-ref 2（幽灵 gid/sdi 悬空））
+// S5 lesson 面 —— **W-EXPP1 停灌口径（2026-10-10）**：经验域已被团队经验库接管
+//（relay/src/experience.ts migrateLessonsToExperience 一次性迁移），lesson 段灌装口
+// no-op——lesson 表停灌不删表（空投影即退役终态），boards 源 loss 也不再产 lesson 账。
+// 板文件里的 lessons fixture 保留在场（迁移器按 source lesson id 幂等重读的依据），
+// 原行级落库断言（tags 洗刷/悬空归因/dup 保首行等）随停灌作废，历史实现见
+// retiredImportBoardLessons。
+const lRows = port.query<{ id: string }>("SELECT * FROM lesson ORDER BY id");
+assert(lRows.length === 0, `W-EXPP1 停灌：lesson 表空投影（不删表、零新灌）——实测 ${lRows.length}`);
 const lossBoards = listLoss(port, boardsDir);
-const reasonsBoards = lossBoards.map((l) => `${l.lineNo}:${l.reason}`).sort().join();
-assert(lossBoards.length === 7 && reasonsBoards === ["1:bad-field", "1:bad-json", "1:dangling-ref", "3:dangling-ref", "4:missing-field", "6:duplicate-id", "7:bad-field"].sort().join(),
-  `S5 boards 源 7 账对号（bad-json/lessons 非数组/幽灵 gid/sdi 悬空/空 text/duplicate-id/tags 坏型）——实测 ${reasonsBoards}`);
+assert(lossBoards.length === 0, `W-EXPP1 停灌：boards 源零 loss 账（lesson 段不再产账）——实测 ${lossBoards.length}`);
 assert(port.query("PRAGMA foreign_key_check").length === 0, "全库零悬空 FK");
 const cps = port.query<{ path: string; line_offset: number; line_count: number }>("SELECT path, line_offset, line_count FROM import_checkpoint ORDER BY path");
 assert(cps.length === 2 && cps.every((c) => c.line_offset === c.line_count), "两源 checkpoint 落位（offset=lineCount 全处理）");
@@ -202,8 +189,8 @@ assert(cps.length === 2 && cps.every((c) => c.line_offset === c.line_count), "�
 // ---------- 5. 幂等快进 / 中断续跑 / 失效重放不残留 ----------
 console.log("幂等与时间维度:");
 const r2 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
-assert(r2.skipped === true && r2.counts.dispatch === 10 && r2.counts.lesson === 6 && r2.dispatchProcessed === 0,
-  "同源重跑快进：skipped=true、行数不增、零处理");
+assert(r2.skipped === true && r2.counts.dispatch === 10 && r2.counts.lesson === 0 && r2.dispatchProcessed === 0,
+  "同源重跑快进：skipped=true、行数不增、零处理（lesson 停灌恒 0）");
 
 // 续跑：构造真实批间崩现场——先追加 d-ok 重投两行（21 行），再把 checkpoint 拨回批间态
 // （mtime=当前观测、line_count=21、line_offset=16：五元组自洽仅 offset 落后=崩在批尾）。
@@ -228,17 +215,17 @@ assert(port.query("PRAGMA foreign_key_check").length === 0, "续跑后仍零悬�
 // 失效重放：mtime 推进（源变语义）→两域联动重灌、行数不残留
 utimesSync(logFile, new Date(Date.now() + 5), new Date(Date.now() + 5));
 const r4 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
-assert(r4.skipped === false && r4.rescanned.length === 2 && r4.counts.dispatch === 11 && r4.counts.lesson === 6,
-  "dispatch 失效重放：两域联动重灌、行数与重放前一致（确定性重建不残留）");
+assert(r4.skipped === false && r4.rescanned.length === 2 && r4.counts.dispatch === 11 && r4.counts.lesson === 0,
+  "dispatch 失效重放：两域联动重灌、行数与重放前一致（lesson 停灌恒 0）");
 assert(port.query<{ id: string }>("SELECT id FROM dispatch WHERE id = 'd-ok#r2' AND attempt_no = 2 AND parent_dispatch_id = 'd-ok'").length === 1,
   "重放后重投链确定性重建（同输入同输出，幂等）");
-assert(listLoss(port, logFile).length === 7 && listLoss(port, boardsDir).length === 7, "重放后两源 loss 重建同数（先清后灌不叠加）");
+assert(listLoss(port, logFile).length === 7 && listLoss(port, boardsDir).length === 0, "重放后 dispatch 源 loss 重建同数、boards 源零 loss（lesson 停灌）");
 
 // 小批事务：batchSize=2 逐批 flush（重放清域单次+跨批段链父行保留）——批间边界正确性
 utimesSync(logFile, new Date(Date.now() + 10), new Date(Date.now() + 10)); // 先失效（r4 后 cp 已命中，否则快进）
 const r5 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir }, { batchSize: 2 });
-assert(r5.counts.dispatch === 11 && r5.counts.lesson === 6 && r5.dispatchProcessed === 21,
-  "小批重放（batchSize=2，21 行/11 批）：批间 flush 行数不变（批事务边界+清域单次正确）");
+assert(r5.counts.dispatch === 11 && r5.counts.lesson === 0 && r5.dispatchProcessed === 21,
+  "小批重放（batchSize=2，21 行/11 批）：批间 flush 行数不变（lesson 停灌恒 0）");
 
 // 残留面：ndjson 截断重写（源变短）→失效重放→dispatch 域收敛到新内容；boards 删坏文件→其账消失
 const cpB2 = port.query<{ mtime_ms: number }>("SELECT mtime_ms FROM import_checkpoint WHERE path = ?", [logFile])[0]!.mtime_ms;
@@ -248,8 +235,8 @@ const r6 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boa
 assert(r6.counts.dispatch === 1, `源截断重放：前 3 行（d-ok 同 id 链）收敛 1 行，旧 10 行零残留——实测 ${r6.counts.dispatch}`);
 unlinkSync(join(boardsDir, "bad.json"));
 const r7 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
-assert(r7.counts.lesson === 6 && !listLoss(port, boardsDir).some((l) => l.reason === "bad-json"),
-  "boards 删坏文件→count 变失效→重灌后坏板账消失、lesson 行数不变");
+assert(r7.counts.lesson === 0 && !listLoss(port, boardsDir).some((l) => l.reason === "bad-json"),
+  "boards 删坏文件→count 变失效→重灌后零账（lesson 停灌空投影不变）");
 assert(r7.rescanned.length === 1 && r7.rescanned[0] === boardsDir,
   "boards 失效轮 rescanned 单源：dispatch 跑完态零处理不虚报（P3-5 条件 push）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "终态零悬空 FK");

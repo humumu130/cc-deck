@@ -372,6 +372,13 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
 #   org member-retire <gid> <sid> [reason]         成员级退休（编制除名；本组悬账按中断收口，路由档案保留）
 #   org member-add <gid> <sid> [role] [engine] [model] [provider]  复拉入编（可覆盖引擎选择）
+#   org exp append <text> <kind> [role] [project]  经验申报（W-EXPP1 团队经验库；kind=pitfall|practice|preference|fact，role/project 缺省 any/global）
+#   org exp list [status|kind|role|/path]          经验库查询（参数按形状识别：active/retired、四 kind、角色名、锚路径）
+#   org exp bump <id>                              经验加权（use_count+1；retired 条目触发复活）
+#   org exp retire <id>                            经验淘汰（可恢复，不物理删）
+#   org exp restore <id>                           恢复淘汰条目
+#   org exp export [path]                          导出经验库备份（全量+计数校验和；缺省 org/exports/experience-<时间戳>.json）
+#   org exp import <path>                          导入备份（normKey 合并去重：撞车 bump 不覆盖；坏文件/超 5MB 整单拒绝零写入）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 # 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
@@ -384,7 +391,7 @@ port="\${CCR_PORT:-\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[
 : "\${port:=8787}"
 
 action="\${1:-}"
-[ -z "$action" ] && { sed -n '3,20p' "$0" | sed 's/^# //' >&2; exit 1; }
+[ -z "$action" ] && { sed -n '3,27p' "$0" | sed 's/^# //' >&2; exit 1; }
 shift || true
 
 abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
@@ -513,6 +520,44 @@ d={"action":"member-add","gid":sys.argv[1],"sid":sys.argv[2],"role":sys.argv[3]}
 if sys.argv[4]: d["engine"]=sys.argv[4]
 if sys.argv[5]: d["model"]=sys.argv[5]
 if sys.argv[6]: d["provider"]=sys.argv[6]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  exp)
+    # W-EXPP1 团队经验库（~/.cc-deck/org/experience.json）：append/list/bump/retire/restore
+    [ $# -ge 1 ] || { echo "用法: org exp append|list|bump|retire|restore ..." >&2; exit 1; }
+    op="$1"; shift
+    body="$(python3 - "$op" "$@" <<'PY'
+import json, sys
+op = sys.argv[1]
+args = sys.argv[2:]
+if op == "append":
+    if len(args) < 2:
+        print("用法: org exp append <text> <kind> [role] [project]", file=sys.stderr); sys.exit(1)
+    d={"action":"exp-append","text":args[0],"kind":args[1]}
+    if len(args)>2 and args[2]: d["role_scope"]=args[2]
+    if len(args)>3 and args[3]: d["project_scope"]=args[3]
+elif op == "list":
+    d={"action":"exp-list"}
+    for a in args:
+        if a in ("active","retired"): d["status"]=a
+        elif a in ("pitfall","practice","preference","fact"): d["kind"]=a
+        elif a.startswith("/"): d["project"]=a
+        else: d["role"]=a
+elif op == "export":
+    d={"action":"exp-export"}
+    if args and args[0]: d["path"]=args[0]
+elif op == "import":
+    if not args:
+        print("用法: org exp import <导出文件路径>", file=sys.stderr); sys.exit(1)
+    d={"action":"exp-import","path":args[0]}
+elif op in ("bump","retire","restore"):
+    if len(args) < 1:
+        print("用法: org exp "+op+" <id>", file=sys.stderr); sys.exit(1)
+    d={"action":"exp-"+op,"id":args[0]}
+else:
+    print("未知 exp 子命令: "+op, file=sys.stderr); sys.exit(1)
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"

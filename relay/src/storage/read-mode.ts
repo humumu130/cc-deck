@@ -528,25 +528,13 @@ export function compareDomain(domain: ShadowDomain, port: StoragePort, dirs: Rea
       return rows;
     }
     case "lesson": {
-      const boardsDir = join(dirs.orgDir, "boards");
-      const jLessons = existsSync(boardsDir)
-        ? readdirSync(boardsDir).filter((f) => f.endsWith(".json")).flatMap((f) => {
-            try {
-              const v = JSON.parse(readFileSync(join(boardsDir, f), "utf-8")) as { lessons?: unknown };
-              return Array.isArray(v.lessons) ? v.lessons : [];
-            } catch { return []; }
-          })
-        : [];
-      const jKeys = jLessons.map((l) => String((l as { id?: unknown }).id ?? "")).filter(Boolean);
-      const sRows = port.query<{ id: string; tags_json: string }>("SELECT id, tags_json FROM lesson");
-      return [
-        ...keySetDiff(domain, jKeys, sRows.map((r) => r.id),
-          (k) => jLessons.find((l) => (l as { id?: unknown }).id === k),
-          (k) => sRows.find((r) => r.id === k)),
-        ...sampleFieldDiff(domain,
-          jLessons.map((l) => ({ key: String((l as { id?: unknown }).id), value: (l as { tags?: unknown }).tags })),
-          sRows.map((r) => ({ key: r.id, value: safeParseArray(r.tags_json) }))),
-      ];
+      // W-EXPP1 读侧退役（2026-10-10，设计 §8 P1 退役清单 + §10「read-mode 兼容评估」落点）：
+      // 经验域已被团队经验库接管（experience.ts），lesson 域停灌（import-dispatch-lesson
+      // 灌装口 no-op）+读过滤恒空（projects.ts listLessons）——对账面同谓词收敛为空对空，
+      // 否则停灌后板文件旧 lessons（冻结不删）会永久产出 missing-in-sqlite 噪声差异。
+      // 板文件 lessons 数据保留原样（迁移器幂等重读依据），只是不再参与对账。
+      void dirs;
+      return [];
     }
     case "confirm": {
       // 接线域投影级对账：confirms.json 键集 vs org_confirm 表键集

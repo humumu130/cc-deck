@@ -286,10 +286,13 @@ try {
     assert(dbDep.length > 0 && dbDep[dbDep.length - 1]?.status === "done"
       && dbMain.length > 0 && dbMain[dbMain.length - 1]?.status === "done",
       "O10① dispatch 域投影：两单收敛 done 读回（台账账实相符）");
-    const dbLessons = lessonsFromDb(port, gid);
-    assert(dbLessons.some((l) => l.source_dispatch_id === depDispatchId)
-      && dbLessons.some((l) => l.source_dispatch_id === mainDispatchId2),
-      "O10② lesson 域投影：两单收口经验读回（回流账实相符）");
+    // W-EXPP1 停灌：M12-4 自动账仍写板文件 lessons（读侧退役），lesson 表不再灌——
+    // 回流账实相符改在板文件层面核对（原 lessonsFromDb 读回断言随域退役作废）
+    const boardLessons = loadBoard(gid).lessons ?? [];
+    assert(boardLessons.some((l) => l.source_dispatch_id === depDispatchId)
+      && boardLessons.some((l) => l.source_dispatch_id === mainDispatchId2),
+      "O10② 收口经验回流账实相符（板文件层面；lesson 表停灌空投影——W-EXPP1）");
+    assert(lessonsFromDb(port, gid).length === 0, "O10②b lesson 表停灌空投影（W-EXPP1 退役）");
     const dbGroups = projectGroupsFromDb(port);
     assert(dbGroups.some((g) => g.id === gid),
       "O10③ group 域投影：编排组读回（归因锚在位）");

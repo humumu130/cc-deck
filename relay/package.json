@@ -25,6 +25,7 @@
     "test:decision-ledger": "tsx scripts/test-decision-ledger.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
     "test:routing": "tsx scripts/test-routing.ts",
+    "test:experience": "tsx scripts/test-experience.ts",
     "test:autorevive": "tsx scripts/test-autorevive.ts",
     "test:settings": "tsx scripts/test-settings.ts",
     "test:settings-ws": "tsx scripts/test-settings-ws.ts",

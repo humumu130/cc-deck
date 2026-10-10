@@ -58,6 +58,13 @@ import { contextLimitOf, contextLimitOfEffective } from "./context-limit.js";
 // W-CTXFIX B3：压缩前任务摘要看门狗（阈值/文案/状态机判定集中在该模块）
 import { compactPrompt, wdThreshold, wdDropRatio, wdCooldownMs, wdCaptureTimeoutMs, wrapPreCompactReminder } from "./context-watchdog.js";
 import { AllowRuleStore } from "./allow-rules.js";
+// W-EXPP1 角色经验回流 P1（store 零依赖本文件，无环）：写入口/查询/注入构建/申报行解析
+import {
+  appendExperience, bumpExperiences, retireExperience, restoreExperience, listExperience,
+  buildExperienceInjection, parseExperienceDeclaration, resetExperienceRuntimeForTests,
+  exportExperience, importExperience,
+  type ExperienceKind,
+} from "./experience.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
 // 交付」的东西，且交付物原地不动、看板只做登记——
@@ -2898,21 +2905,32 @@ export class SessionManager {
         }
         case "COMMAND_TASK_CREATE":
         case "COMMAND_TASK_UPDATE":
-        case "COMMAND_DISPATCH":
-        case "COMMAND_LESSON_APPEND": {
-          // M12-1 四新命令（v2-m10-freeze §3.1 新增候选定岗）：LAN/cloud 两入口都经
+        case "COMMAND_DISPATCH": {
+          // M12-1 三新命令（v2-m10-freeze §3.1 新增候选定岗）：LAN/cloud 两入口都经
           // handleCommand 到这里，同走 orgCommand 咽喉（权限矩阵+审计一行），adapter
           // 把 canonical payload 映射到 orgAction 旧 shape 再执行——不建第二事实源。
           // ACK data 冻结口径 {entity_id, gid}（dispatch 并列 dispatch_id/session_id）
+          // W-EXPP1：COMMAND_LESSON_APPEND 命令字下线（设计 §8 P1 退役清单）——经验
+          // 回流走经验库 exp 通道（经验库 HTTP 面 exp-append；P2 面板 COMMAND_EXP_*），
+          // case 单列显式退役报错优于落 generic unsupported（端上可读指引）
           const m12Action: Record<string, string> = {
             COMMAND_TASK_CREATE: "task-create",
             COMMAND_TASK_UPDATE: "task-update",
             COMMAND_DISPATCH: "dispatch",
-            COMMAND_LESSON_APPEND: "lesson-append",
           };
           const r = this.orgCommand("owner", by, m12Action[cmd.type] ?? "", cmd.payload as Record<string, unknown>);
           if ("forbidden" in r) return r.forbidden;
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+        }
+        case "COMMAND_LESSON_APPEND": {
+          // W-EXPP1 退役（设计 §8 P1 旧域读侧退役清单）：#087 lessons 分区已被团队经验
+          // 库接管（relay/src/experience.ts），本命令字不再受理——M12-4 收口自动账仍走
+          // orgAction("lesson-append") 写旧域（维持现状，不经此命令面）
+          return {
+            command_id: cmd.command_id,
+            ok: false,
+            error: "lesson 命令已退役（经验回流走团队经验库：org CLI `org exp append` / HTTP exp-append；P2 起面板 COMMAND_EXP_*）",
+          };
         }
         case "COMMAND_NOTIFICATION_ACK": {
           // #018-R1c 通知生命周期（B0 冻结 action 词表 handled|dismissed；resolved
@@ -4237,6 +4255,53 @@ export class SessionManager {
     return reason;
   }
 
+  // W-EXPP1 申报捕获（设计 §3.1②）：从最近一条 assistant 消息捞「经验：<一句话>
+  // （#kind）」行（手法对齐 receiptWithResultLine 捞「结果：」行——只看最近一条
+  // assistant 防更早回合串台、块内末行向首行扫）。role_scope 由收口侧从承接会话
+  // engine_role 填写（ARCH S1：判定权在收口侧，worker 自报仅教学语义不采信）；
+  // project_scope 取派单锚（工作发生在哪，scope 就在哪）。store 硬校验拒收（随手办
+  // 锚不在 projects.json 等）→ 静默丢弃只留台账失败行，**不炸收口**（ARCH S4，开放
+  // 问题 11 默认 a）。总开关关闭=自动申报捕获停（plugin-config experience 键；CLI
+  // 直写是显式人为意图不受连坐）。本方法整体 try-catch：捕获面任何异常不得影响收口。
+  private captureExperienceDeclaration(key: string, e: { id: string; tier: DispatchTier; anchor?: string }): void {
+    try {
+      if (!readPluginConfig().experience) return;
+      const m = this.sessions.get(key);
+      if (!m) return;
+      let line: string | null = null;
+      for (let i = m.logs.length - 1; i >= 0; i--) {
+        const log = m.logs[i];
+        if (log.kind !== "assistant_text") continue;
+        const lines = (log.full ?? log.text).split("\n");
+        for (let j = lines.length - 1; j >= 0; j--) {
+          const t = lines[j].trim();
+          if (/^经验[:：]/.test(t)) { line = t; break; }
+        }
+        break; // 只看最近一条 assistant（receiptWithResultLine 同口径）
+      }
+      if (!line) return;
+      const parsed = parseExperienceDeclaration(line);
+      if (!parsed) return; // 带 kind 标记才收（REL 建-4：无标记纯文本不收，防横向污染）
+      const r = appendExperience({
+        text: parsed.text,
+        kind: parsed.kind,
+        role_scope: m.state.engine_role ?? "worker",
+        project_scope: e.anchor ?? "global",
+        source: { actor: "agent", session_id: key, dispatch_id: e.id },
+      });
+      appendDispatch({
+        ts: Date.now(), id: randomUUID(), tier: e.tier, target: "org-command",
+        ...(e.anchor ? { project_anchor: e.anchor } : {}),
+        status: r.ok ? "done" : "failed",
+        receipt: truncate(`经验申报（${parsed.kind}）· actor=system：${r.ok ? `入库 ${r.entry.id}${r.restored ? "（复活环自动恢复）" : ""}` : `拒绝：${r.error}`}`, 200),
+        session_id: this.leaderId ?? "",
+        actor: "system",
+      });
+    } catch (err) {
+      console.warn(`[experience] 申报捕获异常（静默降级不炸收口）: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog"): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
@@ -4305,6 +4370,12 @@ export class SessionManager {
         // recordRouting=false = 挂起联动收口：回合中断是用户决策不是 worker 干砸，
         // 熟手评价无感
         if (recordRouting) recordRoutingResult(e.gid, key, status, receipt);
+      }
+      // W-EXPP1 申报捕获（§3.1②）：只认真实交付收口——boardTo==="backlog" 是中断/
+      // 兜底口径（中断≠交付，日志捞行有串台风险，与 M12-4/板退 todo 同款排除）；
+      // done 且无 gid（随手办）同样捕获（锚校验不过自然静默丢弃）
+      if (status === "done" && boardTo !== "backlog") {
+        this.captureExperienceDeclaration(key, e);
       }
     }
   }
@@ -5115,6 +5186,25 @@ export class SessionManager {
   // 都路由到 orgAction。决议与执行分离：decideConfirm 只记决策，副作用统一
   // applyConfirmEffects（可审计）。用户是指挥/验收者——Leader 只提案不决议。
 
+  // W-EXPP1：exp-* 漏斗审计行（设计 §8 P1「orgAction exp-* + 审计行」）。target=
+  // "org-command" 沿 M12-4 自动账口径；agent 申报随收口事件产生 → actor=system（自动
+  // 面非命令面），CLI/面板直写 → actor=user。审计失败不阻断主路径（台账面尽力而为）。
+  private auditExpAction(action: string, r: { ok: boolean; error?: string }, projectScope: string): void {
+    try {
+      appendDispatch({
+        ts: Date.now(),
+        id: randomUUID(),
+        tier: "随手办",
+        target: "org-command",
+        ...(projectScope !== "global" ? { project_anchor: projectScope } : {}),
+        status: r.ok ? "done" : "failed",
+        receipt: truncate(`${action} · ${r.ok ? "ok" : `拒绝：${r.error ?? ""}`}`, 200),
+        session_id: this.leaderId ?? "",
+        actor: "user",
+      });
+    } catch { /* 台账面尽力而为 */ }
+  }
+
   orgAction(action: string, p: Record<string, unknown>): { ok: true; data?: unknown } | { ok: false; error: string } {
     const str = (k: string): string => (typeof p[k] === "string" ? (p[k] as string).trim() : "");
     const bool = (k: string): boolean => p[k] === true;
@@ -5354,7 +5444,9 @@ export class SessionManager {
         case "lesson-append": {
           // M12-1：lesson 写入口的最小漏斗面（COMMAND_LESSON_APPEND 的执行体）——
           // 冻结校验/文本必填/tags 洗刷/sdi 语义全在 addLesson store 层，此处只做
-          // 形状分发；广播走 BOARD_UPDATED（lessons 分区随板下发，emitBoard 已覆盖）
+          // 形状分发；广播走 BOARD_UPDATED（lessons 分区随板下发，emitBoard 已覆盖）。
+          // W-EXPP1 后本 case 保留但只服务 M12-4 收口自动账（D1-1：维持现状写旧域，
+          // 不进经验库）；端上命令字 COMMAND_LESSON_APPEND 已下线（handleCommand）。
           const gid = str("gid");
           if (!gid) return { ok: false, error: "gid 必填" };
           const text = str("text");
@@ -5364,6 +5456,89 @@ export class SessionManager {
           const r = addLesson(gid, { text, ...(tags ? { tags } : {}), ...(sdi ? { source_dispatch_id: sdi } : {}) });
           if (r.ok) this.emitBoard(gid);
           return r.ok ? { ok: true, data: { lesson: r.lesson } } : r;
+        }
+        // ---------- W-EXPP1 经验库漏斗（§3.1：全部经 orgAction 单漏斗，对齐 lesson-append
+        // 先例「单漏斗内调 store 层」；执行体自记 dispatch-log 审计行——设计 §8 P1 表
+        // 「orgAction exp-* + 审计行」，与 lesson-append 的「执行体无审计」刻意不同：经验
+        // 写入没有 M12-4 那样的调用方自带台账边，审计只能在漏斗内落）。agent 申报路径
+        // （captureExperienceDeclaration）对 ok:false 一律静默降级（ARCH S4：校验/解析失败
+        // 同口径不炸收口）；CLI/面板路径错误原样上屏。 ----------
+        case "exp-append": {
+          const text = str("text");
+          const kind = str("kind") as ExperienceKind;
+          if (!text) return { ok: false, error: "text 必填" };
+          if (!kind) return { ok: false, error: "kind 必填（pitfall|practice|preference|fact）" };
+          const actor = str("actor") === "agent" ? "agent" : "user";
+          const tags = Array.isArray(p.tags) ? p.tags.filter((x): x is string => typeof x === "string") : undefined;
+          const r = appendExperience({
+            text,
+            kind,
+            ...(str("role_scope") ? { role_scope: str("role_scope") } : {}),
+            ...(str("project_scope") ? { project_scope: str("project_scope") } : {}),
+            ...(tags ? { tags } : {}),
+            source: {
+              actor,
+              session_id: str("session_id"),
+              ...(str("dispatch_id") ? { dispatch_id: str("dispatch_id") } : {}),
+            },
+          });
+          this.auditExpAction("exp-append", r, str("project_scope") || "global");
+          return r.ok ? { ok: true, data: { entry: r.entry, ...(r.restored ? { restored: true } : {}) } } : r;
+        }
+        case "exp-bump": {
+          // 单条或多条加权（注入命中闭环 §5.3 走 store 批量口；漏斗面收单 id 形状）
+          const id = str("id");
+          if (!id) return { ok: false, error: "id 必填" };
+          const r = bumpExperiences([id]);
+          const hit = r.bumped.length > 0;
+          if (hit) this.auditExpAction("exp-bump", { ok: true }, "global");
+          return hit
+            ? { ok: true, data: { id, ...(r.restored.includes(id) ? { restored: true } : {}) } }
+            : { ok: false, error: `经验条目不存在或处于坏 JSON 保护态: ${id}` };
+        }
+        case "exp-retire": {
+          const id = str("id");
+          if (!id) return { ok: false, error: "id 必填" };
+          const r = retireExperience(id);
+          this.auditExpAction("exp-retire", r, "global");
+          return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "exp-restore": {
+          const id = str("id");
+          if (!id) return { ok: false, error: "id 必填" };
+          const r = restoreExperience(id);
+          this.auditExpAction("exp-restore", r, "global");
+          return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "exp-list": {
+          // org CLI 直查用（§3.1③）：全字段过滤可选，缺省全量
+          const status = str("status");
+          if (status && status !== "active" && status !== "retired") return { ok: false, error: "status 必须是 active|retired" };
+          const kind = str("kind") as ExperienceKind | "";
+          if (kind && !["pitfall", "practice", "preference", "fact"].includes(kind)) return { ok: false, error: "kind 必须是 pitfall|practice|preference|fact" };
+          const entries = listExperience({
+            ...(status ? { status: status as "active" | "retired" } : {}),
+            ...(str("role") ? { role: str("role") } : {}),
+            ...(str("project") ? { project: str("project") } : {}),
+            ...(kind ? { kind } : {}),
+          });
+          return { ok: true, data: { entries } };
+        }
+        // ---------- W-EXPP1 追加（2026-10-10 用户拍板）：导出备份/导入恢复——GC backup
+        // 体系之外的用户主动备份通道。校验/合并/原子性/体积保险丝全在 store 层
+        //（importExperience：整读校验在前零半写；exportExperience：坏 JSON 保护态拒导出），
+        // 漏斗面只做形状分发+审计。 ----------
+        case "exp-export": {
+          const r = exportExperience(str("path") || undefined);
+          this.auditExpAction("exp-export", r, "global");
+          return r.ok ? { ok: true, data: { path: r.path, count: r.count } } : r;
+        }
+        case "exp-import": {
+          const p = str("path");
+          if (!p) return { ok: false, error: "path 必填（导出文件绝对路径）" };
+          const r = importExperience(p);
+          this.auditExpAction("exp-import", r, "global");
+          return r.ok ? { ok: true, data: r.data } : r;
         }
         case "project-detail": {
           const g = findGroup(str("id"));
@@ -5396,7 +5571,9 @@ export class SessionManager {
               parked: s?.state.org_parked === g.id,
             };
           });
-          return { ok: true, data: { group: g, board: loadBoard(g.id), receipts, pool } };
+          // W-EXPP1：lessons 摘除下发（与 emitBoard 同口径——detail 拉取是端上板缓存的
+          // 另一条喂养链，磁盘文件不动）
+          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool } };
         }
         // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
         case "rate": {
@@ -5624,28 +5801,43 @@ export class SessionManager {
   }
 
   // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
-  // 发帧）；board 旧字段保留全量（不带板正文的只是 delta——M13-1 实体引用裁定沿承）
+  // 发帧）；board 旧字段保留全量（不带板正文的只是 delta——M13-1 实体引用裁定沿承）。
+  // W-EXPP1 lessons 下发摘除（设计 §8 P1 退役清单「端上 lessons 缓存处置=清空」ARCH M1）：
+  // 经验域已被经验库接管，板下发一律不带 lessons（§0 摘要不再下发）——M12-4 自动账还在
+  // 写旧域，若照旧差分下发，端上缓存会被旧域持续喂养；清空口径写死在发射侧（不采用
+  // 「标记陈旧」案）：①首发帧不带 lessons + delta.lessons.removes 列全量文件内 lesson id
+  // （端上 mergeBoard 判 removes 清缓存）；②后续帧 lessons 恒空差分。
   emitBoard(gid: string): void {
     const board = loadBoardFile(gid);
     if (!board) return; // P3-2 跳帧：读失败≠空板（外部改板半态/磁盘抖动不得差分出「整板 removes」清板广播——UI 闪断+半态扩散）；前值缓存不动，文件恢复后下帧照常差分
     const prev = this.lastBoardBroadcast.get(gid) ?? null;
-    this.lastBoardBroadcast.set(gid, board);
+    // lessons 摘除后的下发形态（磁盘文件不动——迁移器幂等重读依据）
+    const outBoard: ProjectBoard = board.lessons?.length ? { ...board, lessons: [] } : board;
+    this.lastBoardBroadcast.set(gid, outBoard);
     if (!prev) {
-      this.bus.emitTransient("BOARD_UPDATED", { gid, board });
+      const lessonIds = (board.lessons ?? []).map((l) => l.id);
+      this.bus.emitTransient("BOARD_UPDATED", {
+        gid,
+        board: outBoard,
+        // 首发清缓存 delta：lesson id 全列 removes（有缓存端清空、无缓存端 no-op）
+        ...(lessonIds.length ? {
+          entity_refs: lessonIds,
+          delta: { entries: { upserts: [], removes: [] }, lessons: { upserts: [], removes: lessonIds }, meta: { frozen: board.frozen, updated_at: board.updated_at } } satisfies BoardDelta,
+        } : {}),
+      });
       return;
     }
-    const entries = this.diffById(prev.entries, board.entries) ?? { upserts: [], removes: [] };
-    // 前值 lessons undefined（板升级前旧文件）视为空表，首次出现=全量 upserts
-    const lessons = this.diffById(prev.lessons ?? [], board.lessons ?? []) ?? { upserts: [], removes: [] };
+    const entries = this.diffById(prev.entries, outBoard.entries) ?? { upserts: [], removes: [] };
+    const lessons = { upserts: [], removes: [] }; // W-EXPP1：lessons 域退役，恒空差分
     // meta 恒随 delta 下发（frozen/updated_at 深比不等才有实义；全空差分+无 meta 变化帧=纯心跳，M13-REV P3-1 死变量清理）
     const delta: BoardDelta = { entries, lessons, meta: { frozen: board.frozen, updated_at: board.updated_at } };
     this.bus.emitTransient("BOARD_UPDATED", {
       gid,
-      board,
+      board: outBoard,
       // P3-4：refs=提示性定位索引，端上以 delta 本体为准；当前不含 lessons.removes
       //（lessons append-only 恒空），未来若引入删边须并入 refs。
       entity_refs: [
-        ...new Set([...entries.upserts.map((e) => e.id), ...entries.removes, ...lessons.upserts.map((l) => l.id)]),
+        ...new Set([...entries.upserts.map((e) => e.id), ...entries.removes]),
       ],
       delta,
     });
@@ -5839,6 +6031,19 @@ export class SessionManager {
     // JSONL unverified 降 edit-auto 后 CLI 收 acceptEdits 而非伪装 bypass）。veteran
     // resume 分支不传 pm（resume 面 permission_mode 从 state 继承——P81-6 域）。
     const spawnMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : "bypassPermissions";
+    // W-EXPP1 经验注入（设计 §5.1 挂点=wrapDispatchPrompt 扩展，worker 两路新会话 +
+    // veteran resume 天然覆盖）：注入块构造整体 try-catch 降级（开关关/空库/读失败 →
+    // null 无注入，派单照发——记账/注入面绝不阻断派单主路径）；熟手 resume 带 session
+    // 级 memo（候选与已注入集无新增 → 零注入，防 30 单熟手累积上万 token 重复文本）；
+    // 注入命中即时 bump（§5.3 闭环：use_count+1 + GC 衰减基准刷新，零交互）。角色轴
+    // 取值：熟手用其在编 engine_role，新会用本次派单 role（dispatchWorker 落定值，
+    // worker 自报不参与——ARCH S1 判定权在收口/派发侧）。
+    const expRole = (veteran ? this.sessions.get(veteran)?.state.engine_role : undefined) ?? role;
+    const expInjection = buildExperienceInjection({ session_id: veteran ?? undefined, role: expRole, anchor });
+    if (expInjection) {
+      try { bumpExperiences(expInjection.ids); } catch { /* 加权失败不阻断派单 */ }
+    }
+    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -5849,7 +6054,7 @@ export class SessionManager {
         if (veteranSession.resumeCooldownUntil && Date.now() < veteranSession.resumeCooldownUntil) {
           throw new Error(`resume 熔断冷却中（连续失败 ${veteranSession.resumeFailStreak ?? "?"} 次）`);
         }
-        this.resumeAgent(veteranSession, wrapDispatchPrompt(tier, input.prompt));
+        this.resumeAgent(veteranSession, dispatchPrompt);
         sessionId = veteran;
       } catch (e) {
         // 熟手复活失败（理论窗口：并发竞态后 require 抛/新 agent 拉起即抛）：同 id
@@ -5858,7 +6063,7 @@ export class SessionManager {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
+          sessionId = this.create(anchor, dispatchPrompt, spawnMode, true, {
             skipStickyCwd: true, employee: true, role,
             ...(planned.engine ? { engine: planned.engine } : {}),
             ...(planned.model ? { model: planned.model } : {}),
@@ -5876,7 +6081,7 @@ export class SessionManager {
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), spawnMode, true, {
+        sessionId = this.create(anchor, dispatchPrompt, spawnMode, true, {
           skipStickyCwd: true, employee: true, role,
           ...(planned.engine ? { engine: planned.engine } : {}),
           ...(planned.model ? { model: planned.model } : {}),
@@ -6792,14 +6997,18 @@ export class SessionManager {
 // 三件套 = ①完成回一行结果+改动文件（回执）②commit 归属 [档位] 前缀 ③派单记录
 // 留台账（由 dispatchWorker 自动落）。worker 会话首条输入即此包装，纪律随 cwd
 // 的项目 CLAUDE.md（防漂移种子）双层生效。导出供测试断言。
-export function wrapDispatchPrompt(tier: string, task: string): string {
+// W-EXPP1 第三参 experienceBlock（设计 §5.1）：团队经验注入块（buildExperienceInjection
+// 产出，预算 ≤700 字符已在上游裁剪；undefined/空串=无注入块）；申报教学行（D1-2）恒在
+// ——没有这行 worker 永远不知道可以申报，解析器静默空转、捕获环断腿。
+export function wrapDispatchPrompt(tier: string, task: string, experienceBlock?: string): string {
   return `[${tier} 派单]
 ${task}
-
+${experienceBlock ? `\n${experienceBlock}\n` : ""}
 —— 派单纪律（矩阵式团队 §3.5 / §4）——
 - 过程不回灌，只收回执：不逐动作汇报，结束才回。
 - 改前认领：动文件前先一句说明要改哪些文件；改后报 diff 摘要（改了什么、几处）。
 - commit 归属：提交信息以 [${tier}] 开头并描述任务；无提交环节的任务可省略。
 - 完成回执：最后一行固定格式「结果：<一行结果>｜改动文件：<文件列表或无>」。
-- 零确认直做（权限 acceptEdits）；发现超范围事项，回报而非扩权。`;
+- 零确认直做（权限 acceptEdits）；发现超范围事项，回报而非扩权。
+（回执末行可选申报经验：经验：<一句话>（#pitfall/#practice/#preference/#fact））`;
 }

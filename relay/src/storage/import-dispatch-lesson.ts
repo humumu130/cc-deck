@@ -272,7 +272,25 @@ function applyDispatchLine(
 }
 
 // ---------- lesson 段：单板重灌 ----------
+// **W-EXPP1 停灌（2026-10-10，设计 §8 P1 旧域读侧退役清单 / M11 导入器 lesson 段同步
+// 退役）**：经验域已被团队经验库接管（relay/src/experience.ts migrateLessonsToExperience
+// 一次性迁移），灌装口改为 no-op——lesson 表停灌**不删表**（schema 冻结不动，失效重放
+// 链里的 DELETE FROM lesson 照旧执行，表收敛为空投影）；板文件内旧 lessons 数据原样
+// 冻结（迁移器按 source lesson id 幂等重读的依据）。原灌装实现保留改名存档（历史考古
+// 用，无调用点）。
 function importBoardLessons(
+  port: StoragePort,
+  ref: BoardFileRef,
+  srcDir: string,
+  groupIds: Set<string>,
+  dispatchIds: Set<string>,
+  seenLessonIds: Set<string>,
+  losses: PendingLoss[],
+): void {
+  void port; void ref; void srcDir; void groupIds; void dispatchIds; void seenLessonIds; void losses;
+  // 停灌：不再从板文件灌 lesson 表（空投影即退役终态）
+}
+function retiredImportBoardLessons(
   port: StoragePort,
   ref: BoardFileRef,
   srcDir: string,

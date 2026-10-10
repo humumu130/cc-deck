@@ -175,16 +175,22 @@ try {
       "C4④ 坏路径：prompt 空白拒收（error fixture）");
 
     // ---------- C5 LESSON_APPEND ----------
-    console.log("C5 LESSON_APPEND");
+    // W-EXPP1（2026-10-10）：COMMAND_LESSON_APPEND 命令字下线（经验回流走经验库 exp
+    // 通道）——命令面退役断言替代原 ACK 成功路径；addLesson tags 洗刷语义改经
+    // orgAction("lesson-append") 直测（M12-4 收口自动账保留面，D1-1 维持现状）。
+    console.log("C5 LESSON_APPEND（W-EXPP1 退役口径）");
     const ack4 = send(mgr, "c4", "COMMAND_LESSON_APPEND", { gid, text: "parity 口径先对齐导入器语义", tags: ["m12", "m12", " ", "parity"] }, "web-1");
-    const d4 = ack4.data as { entity_id?: string; gid?: string } | undefined;
-    assert(ack4.ok === true && typeof d4?.entity_id === "string" && d4.entity_id !== "" && d4.gid === gid,
-      "C5① ACK ok+data{entity_id,gid}");
-    const lessons = listLessons(gid, undefined);
-    assert(lessons.length === 1 && lessons[0]?.id === d4?.entity_id && JSON.stringify(lessons[0]?.tags) === JSON.stringify(["m12", "parity"]),
-      "C5② lesson 落盘+tags 洗刷（去重/剔除空白，store 层语义）");
-    const ack4b = send(mgr, "c4b", "COMMAND_LESSON_APPEND", { gid, text: "" }, "web-1");
-    assert(ack4b.ok === false && ack4b.error === "text 必填", "C5③ 坏路径：text 必填（error fixture）");
+    assert(ack4.ok === false && String(ack4.error).includes("退役"),
+      "C5① 命令字退役：显式报错指路经验库（W-EXPP1 读侧退役清单）");
+    const lr = mgr.orgAction("lesson-append", { gid, text: "parity 口径先对齐导入器语义", tags: ["m12", "m12", " ", "parity"] });
+    const lessonId = lr.ok ? ((lr.data as { lesson?: { id?: string; tags?: string[] } }).lesson?.id ?? "") : "";
+    assert(lr.ok && lessonId !== "", "C5② orgAction lesson-append 保留面可用（M12-4 自动账路径）");
+    const lessonRow = (loadBoard(gid).lessons ?? []).find((l) => l.id === lessonId);
+    assert(!!lessonRow && JSON.stringify(lessonRow.tags) === JSON.stringify(["m12", "parity"]),
+      "C5③ tags 洗刷语义不变（板文件层面验证——listLessons 读侧已退役恒空）");
+    assert(listLessons(gid, undefined).length === 0, "C5④ listLessons 读侧退役恒空（W-EXPP1）");
+    const ack4b = mgr.orgAction("lesson-append", { gid, text: "" });
+    assert(ack4b.ok === false && ack4b.error === "text 必填", "C5⑤ 坏路径：text 必填（error fixture）");
 
     // ---------- C6 权限拒绝（viewer 无 org:write，咽喉层直调——org.ts 不信任客户端自报角色） ----------
     console.log("C6 权限拒绝");
@@ -199,8 +205,8 @@ try {
     const rejectRows6 = auditLog().slice(before6);
     assert(role6 === "viewer" && rejectRows6.length === 4 && rejectRows6.every((r) => String(r.receipt ?? "").includes("权限拒收")),
       "C6② forbidden ACK 带 actor_role=viewer+4 行拒收审计（R1b 先例：拒收本身留痕）");
-    assert(loadBoard(gid).entries.every((e) => e.text !== "越权卡") && listLessons(gid, undefined).length === 1,
-      "C6③ 越权写零副作用（板/lessons 均无新行——拒收审计≠写副作用）");
+    assert(loadBoard(gid).entries.every((e) => e.text !== "越权卡") && (loadBoard(gid).lessons ?? []).filter((l) => l.text === "越权经验").length === 0,
+      "C6③ 越权写零副作用（板/lessons 均无新行——拒收审计≠写副作用；lessons 按板文件行数计，listLessons 读侧已退役）");
 
     // ---------- C7 坏 payload+未知 action 统一收口 ----------
     console.log("C7 坏 payload 与未知 action");

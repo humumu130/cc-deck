@@ -225,7 +225,7 @@ try {
   assert(gN === 1 && pN === 1 && n("SELECT COUNT(*) AS n FROM org_confirm") === 0, `org 域落库：1 组 1 项目（confirms 空源零行；实际组=${gN} 项目=${pN}）`);
   assert(n("SELECT COUNT(*) AS n FROM member") === 2 && n("SELECT COUNT(*) AS n FROM group_member") === 1, `成员面落库：headcount 1 条+Leader 自动建行→member 2 行/group_member 1 行（g-bad 拒入；实际 member=${n("SELECT COUNT(*) AS n FROM member")} gm=${n("SELECT COUNT(*) AS n FROM group_member")}）`);
   assert(n("SELECT COUNT(*) AS n FROM session") === 4 && n("SELECT COUNT(*) AS n FROM task") === 3, "session-task 域落库：4 会话（12 行事件收敛）+3 任务（t6/t8 拒入）");
-  assert(n("SELECT COUNT(*) AS n FROM dispatch") === 4 && n("SELECT COUNT(*) AS n FROM lesson") === 2, "dispatch/lesson 域落库：disp-1×1+disp-2×1+disp-3 两段=4 行；lesson 2 条");
+  assert(n("SELECT COUNT(*) AS n FROM dispatch") === 4 && n("SELECT COUNT(*) AS n FROM lesson") === 0, "dispatch 域落库 4 行；lesson 域停灌空投影 0 行（W-EXPP1 退役：经验入 experience.json，lesson 表不删不灌）");
   assert(n("SELECT COUNT(*) AS n FROM notification") === 3 && n("SELECT COUNT(*) AS n FROM notification_client_state") === 2, "notification 域落库：k-1 归并+k-2+k-4=3 行+client_state 2 行");
   assert(n("SELECT COUNT(*) AS n FROM acceptance_sheet") === 2 && n("SELECT COUNT(*) AS n FROM acceptance_item") === 3 && n("SELECT COUNT(*) AS n FROM acceptance_result") === 1, "acceptance 域落库：2 单 3 项 1 判定（坏 JSON 单拒入）");
   assert(n("SELECT COUNT(*) AS n FROM artifact") === 3, "artifact 域落库：deliverables 3 好行（orphan 拒入）");

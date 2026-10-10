@@ -94,9 +94,10 @@ try {
   assert(isLightConfirmTrusted(orgDir) === true, "json 档 trust_light=true（原样）");
   const jConfirms = listConfirms(orgDir);
   assert(jConfirms.length === 3 && jConfirms[0].id === "c-1" && jConfirms[2].id === "c-2" && jConfirms[2].decided_by === "user-x", "json 档确认单金值（源序）");
+  // W-EXPP1 读侧退役：listLessons 恒空（json/sqlite 同谓词，经验域走 experience.ts）
   const jLessons = listLessons("g-1", undefined, orgDir);
-  assert(jLessons.length === 2 && jLessons[0].tags.includes("react"), "json 档经验金值");
-  assert(listLessons("g-1", { tags: ["p2"] }, orgDir).length === 1, "json 档 tags 过滤（AND 语义）");
+  assert(jLessons.length === 0, "W-EXPP1 读侧退役：json 档 lessons 恒空");
+  assert(listLessons("g-1", { tags: ["p2"] }, orgDir).length === 0, "W-EXPP1：tags 过滤同谓词恒空");
   const jDispatch = readDispatchLog(orgDir);
   assert(jDispatch.length === 2 && jDispatch[0].id === "disp-1" && jDispatch[0].status === "done" && jDispatch[0].receipt === "收口ok" && jDispatch[0].ts === T + 52, "json 档派单金值（同 id 收敛末行）");
   assert(readDispatchLog(orgDir, 1).length === 1 && readDispatchLog(orgDir, 1)[0].id === "disp-2", "json 档 max 截断（尾条）");
@@ -116,8 +117,7 @@ try {
   assert(sConfirms.length === 3 && sConfirms[0].id === "c-1" && sConfirms[1].id === "c-3" && sConfirms[2].id === "c-2", "sqlite 档确认单=投影序（pending 段前+decided 段后）");
   assert(sConfirms[2].decided_at === T + 25 && sConfirms[2].payload.gid === "g-1", "sqlite 档 decided_at/payload 还原");
   const sLessons = listLessons("g-1", undefined, orgDir);
-  assert(sLessons.length === 2 && sLessons[1].source_dispatch_id === "disp-1", "sqlite 档经验=lesson 表投影");
-  assert(listLessons("g-1", { tags: ["p2"] }, orgDir).length === 1, "sqlite 档 tags 过滤同谓词");
+  assert(sLessons.length === 0, "W-EXPP1：sqlite 档 lessons 同谓词恒空（停灌空投影）");
   const sDispatch = readDispatchLog(orgDir);
   assert(sDispatch.length === 2 && sDispatch[0].id === "disp-1" && sDispatch[0].status === "done" && sDispatch[0].receipt === "收口ok" && sDispatch[0].ts === T + 52, "sqlite 档派单=段链收敛投影（状态机末态+末行 ts）");
   // 有损映射面金值：target/session_id 经 member/session 归因链——session 表空→NULL→投影 ""
@@ -171,7 +171,9 @@ try {
   assert(dConfirm.length === 0, "confirm 接线域对账零差异");
   port.exec(`DELETE FROM lesson WHERE id = 'l-1'`);
   const dBroken = compareDomain("lesson", port, dirs);
-  assert(dBroken.some((r) => r.category === "missing-in-sqlite" && r.key === "l-1") && dBroken.some((r) => r.category === "count-mismatch"), "人为删行→missing-in-sqlite+count-mismatch 落账");
+  // W-EXPP1：lesson 域对账退役（空对空），人为删行不再产差异账——原「missing-in-sqlite
+  // 落账」断言随域退役作废（对账噪声面归零，见 read-mode.ts compareDomain case "lesson"）
+  assert(dBroken.length === 0, "W-EXPP1：lesson 域对账退役恒零差异（人为删行不产账）");
   const all = runShadowCompare(port, dirs);
   assert(Array.isArray(all) && existsSync(join(dataDir, "shadow-diff.ndjson")), "全域聚合对账落 shadow-diff.ndjson");
   assert(all.every((r) => r.domain !== "group" || r.category !== "value-mismatch" || r.key !== "g-1"), "runShadowCompare 对齐库零 group 值差异（对账面独立于段3人为差异）");
@@ -196,8 +198,8 @@ try {
   assert(liveDispatch.length === 3 && liveDispatch.some((e) => e.id === "disp-3" && e.status === "dispatched"),
     "长驻二次读见新派单（portCache 命中分支也快进——READMODE-FIX 语义锁）");
   const liveLessons = listLessons("g-1", undefined, orgDir);
-  assert(liveLessons.length === 3 && liveLessons.some((l) => l.id === "l-3"),
-    "长驻二次读见新经验（boards 追加增量可见，dispatch 失效⇒lesson 联动重灌）");
+  // W-EXPP1 读侧退役：板文件追加照旧（写路径在），读侧恒空——经验消费走 experience.ts
+  assert(liveLessons.length === 0, "W-EXPP1：长驻二次读 lessons 恒空（读侧退役谓词不随写翻动）");
   // 注：铁律 2 零写检查在此段不适用——两源 mtime/body 变化是本段模拟写者的合法写入。
 
   // ---------- 4c. statThenRead 短路 memo：行为等价+失效对抗+计时塌缩（STAT-SHORTCUT） ----------

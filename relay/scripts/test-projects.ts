@@ -268,9 +268,14 @@ assert(l1.ok && l1.lesson.tags.length === 3 && l1.lesson.source_dispatch_id === 
 addLesson(gidB, { text: "lessons 语义由 cc-deck 定义", tags: ["PM", "设计"] }, dirB);
 addLesson(gidB, { text: "无 tag 经验也合法", tags: [] }, dirB);
 assert(loadBoard(gidB, dirB).lessons?.length === 3, "lessons 落盘恢复（board 分区）");
-assert(listLessons(gidB, undefined, dirB).length === 3, "无 filter 全量（文件序=时间序）");
-assert(listLessons(gidB, { tags: ["测试"] }, dirB).length === 1, "单 tag 筛选命中");
-assert(listLessons(gidB, { tags: ["worker-G", "claude"] }, dirB).length === 1 && listLessons(gidB, { tags: ["worker-G", "PM"] }, dirB).length === 0, "多 tag AND 筛选（项目/角色/引擎组合键）");
+// W-EXPP1 读侧退役（2026-10-10，设计 §8 P1 退役清单）：经验域已被团队经验库
+//（relay/src/experience.ts）接管，listLessons 恒空（json/sqlite 同谓词）；写入面
+// addLesson 保留（M12-4 收口自动账维持现状写旧域，D1-1），板文件数据原样冻结。
+// 原「无 filter 全量/单 tag/多 tag AND」三断言随读侧退役作废——查询消费一律走
+// experience.ts（listExperience/matchPredicate），见 scripts/test-experience.ts。
+assert(listLessons(gidB, undefined, dirB).length === 0, "读侧退役：无 filter 恒空（W-EXPP1）");
+assert(listLessons(gidB, { tags: ["测试"] }, dirB).length === 0, "读侧退役：带 tags 同谓词恒空（W-EXPP1）");
+assert(listLessons(gidB, { tags: ["worker-G", "claude"] }, dirB).length === 0, "读侧退役：多 tag 同谓词恒空（W-EXPP1）");
 assert(listLessons(gidB, { tags: ["不存在的tag"] }, dirB).length === 0, "无命中返回空（不炸）");
 assert(!addLesson(gidB, { text: "   " }, dirB).ok, "空 text 拒写");
 setGroupStatus(gidB, "parked", undefined, dirB);

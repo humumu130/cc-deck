@@ -20,6 +20,8 @@ import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 import { orgDir } from "./org.js";
 import { listConfirms } from "./projects.js";
+// W-EXPP1 角色经验回流 P1：迁移器与 GC 调度（store 纯 fs 无环；test/沙盒隔离靠 CCR_ORG_DIR）
+import { migrateLessonsToExperience, startExperienceGc } from "./experience.js";
 import { DecisionNotificationWatcher } from "./decision-notify.js";
 import { probeSqliteDriverAtBoot } from "./storage/read-mode.js";
 
@@ -341,6 +343,22 @@ const parkedRehydrated = mgr.rehydrateParkedMembers();
 // #26 M3 挂起自动化：两周无活动的在办组 → Leader 主动建议暂缓（确认卡，用户点头
 // 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
 mgr.startStaleScan();
+
+// W-EXPP1 角色经验回流 P1（2026-10-10）：① 旧 lessons 内容性条目一次性迁移——先迁后
+// 切（REL 建-2）：报错只 warn 不阻断启动，旧域数据原样冻结（停灌不删），下次启动按
+// source lesson id 幂等重跑；② GC 机械档调度挂载（双轨触发+启动补跑+饱和降频，tick
+// 内自检 plugin-config experience 总开关）。CCR_EXP_GC_DISABLE=1 全停（测试/沙盒缝，
+// 与 WATCHDOG_DISABLE 约定同型）
+try {
+  const mig = migrateLessonsToExperience();
+  if (mig.migrated > 0 || mig.errors.length > 0) {
+    console.log(`[experience] 旧 lessons 迁移：入迁 ${mig.migrated}，跳过 ${mig.skipped_auto + mig.skipped_dup}${mig.errors.length ? `，异常 ${mig.errors.length} 条（见 warn）` : ""}`);
+    for (const err of mig.errors) console.warn(`[experience] 迁移异常: ${err}`);
+  }
+} catch (e) {
+  console.warn(`[experience] 旧 lessons 迁移失败（旧域原样保留，下次启动重试）: ${e instanceof Error ? e.message : String(e)}`);
+}
+if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
 
 // #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
 // 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）

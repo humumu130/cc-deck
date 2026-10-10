@@ -312,7 +312,9 @@ try {
   process.env.CCR_STORAGE_READ_MODE = "sqlite";
   resetReadModeForTest();
   const sLessons = listLessons("g-1", { tags: ["p1"] }, orgDir);
-  assert(jLessons.length === 1 && jLessons[0].id === "l-1" && JSON.stringify(sLessons.map((l) => l.id)) === JSON.stringify(jLessons.map((l) => l.id)), "listLessons tags 谓词：json 档与 sqlite 投影侧同结果（boardsDir lessons 源经 D2 灌库）");
+  // W-EXPP1 读侧退役：listLessons 三档同谓词恒空（原 json/sqlite 谓词对账断言随退役作废，
+  // 经验查询消费走 experience.ts——见 scripts/test-experience.ts）
+  assert(jLessons.length === 0 && sLessons.length === 0, "listLessons 读侧退役：json/sqlite 同谓词恒空（W-EXPP1）");
   process.env.CCR_STORAGE_READ_MODE = "shadow";
   resetReadModeForTest();
   const shLessons = listLessons("g-1", { tags: ["p1"] }, orgDir);
