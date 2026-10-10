@@ -72,6 +72,22 @@ assert(rs!.state.status === "DONE" && rs!.state.done_reason === "success", "终�
 assert(rs!.state.stats.lines_added === 2 && rs!.state.stats.lines_deleted === 3, "统计恢复");
 assert(rs!.logs.length === 301, "时间线 = 300 日志 + 1 完成事件");
 
+// UPDATED 载荷显式 updated_at 消费（#157 起下发恒带）：水合帧≠活动时刻，重放若一律
+// 取信封 ts 会把水合时刻固化成活跃时刻——二次重启后闲置置灰（memberActivity/
+// sweepIdleArchive）用漂移时间误判；缺载荷（旧版帧）回落信封 ts
+{
+  const evA = [
+    mk(++seq, "upd-a", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "u", model: "m" }),
+    mk(++seq, "upd-a", "SESSION_UPDATED", { status: "IDLE", action_summary: "闲", stats: null, updated_at: 999_999 }),
+  ];
+  assert(reduceHistory(evA).get("upd-a")!.state.updated_at === 999_999, "UPDATED 载荷 updated_at 有值用载荷值（不信封 ts）");
+  const evB = [
+    mk(++seq, "upd-b", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "u", model: "m" }),
+    mk(++seq, "upd-b", "SESSION_UPDATED", { status: "IDLE", action_summary: "闲", stats: null }),
+  ];
+  assert(reduceHistory(evB).get("upd-b")!.state.updated_at === evB.at(-1)!.ts, "UPDATED 缺 updated_at 载荷回落信封 ts");
+}
+
 // 非终态会话（无 SDK 会话号，不可恢复）→ ERROR + historical（#52 批：文案改中性）
 const events2 = [mk(1, "s2", "SESSION_CREATED", { cwd: "/x", initial_prompt: "中断测试", model: "m" }), mk(2, "s2", "SESSION_UPDATED", { status: "WORKING", action_summary: "干活", stats: null })];
 const replayed2 = reduceHistory(events2);
