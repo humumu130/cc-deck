@@ -488,15 +488,12 @@ export function startServer(
       // 带 Origin（跨源页面）：白名单回显放行；无 Origin：同源 fetch / 本机进程，认 Host。
       // Host 浏览器不可伪造；能伪造的非浏览器进程本来就能直接读 token 文件，非此端点威胁面。
       let allowOrigin = "";
-      // #43 回环豁免（#29 收紧）：只认 Origin:"null"（tauri/electron webview 加载本地页
-      // 的真实形态）。原版「Host=loopback 即回显任意 Origin」等于对任意网站开门——远程
-      // 网页的 JS 发起的 loopback 请求 Host 就是 127.0.0.1，恶意页 fetch 本端点即可携
-      // 任意 Origin 读走 {token,…}=主 token 泄露（Safari/Firefox 无 PNA 拦截）。残留：
-      // 沙箱 iframe 也能造 Origin:null（ACAO:* 可读），第二刀=桌面端改走 tauri command
-      // 注入 token 后彻底关闭本豁免（备案）
-      const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb && origin === "null") allowOrigin = "*";
-      else if (origin) {
+      // Origin:"null" 豁免已删除（P1FIX 2026-10-10，安全审计 W-AUDIT-SEC P1-1 实锤）：
+      // 沙箱 iframe 的 fetch 恒带 Origin:null，豁免 = 任意网页可经 loopback 读走
+      // {token,…}=主 token 连 ws 全权（Safari/Firefox 无 PNA 拦截）。桌面端自 #43 起
+      // 改走 tauri command 注入 token（壳进程 reqwest 无 Origin、不经浏览器 CORS），
+      // 豁免无合法消费方；合法来源仍走下方白名单（部署域/本机/LAN IP 托管页）
+      if (origin) {
         try {
           const u = new URL(origin);
           if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostTrusted(u.hostname)) allowOrigin = origin;
@@ -550,11 +547,9 @@ export function startServer(
       const ips = localIps();
       const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let acao = "";
-      // #43 回环豁免（同 /local-info，#29 同步收紧）：只认 Origin:"null"（exe webview）。
-      // 「Host=loopback 即回显任意 Origin」= 对任意网站开门（loopback 请求 Host 恒 127.0.0.1）
-      const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb2 && origin === "null") acao = "*";
-      else if (origin) {
+      // Origin:"null" 豁免已删除（同 /local-info，P1FIX 2026-10-10：沙箱 iframe 可造
+      // Origin:null；本端点另有 token 鉴权在前，豁免纯属多余攻击面）
+      if (origin) {
         try {
           const u = new URL(origin);
           if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
@@ -1082,10 +1077,9 @@ async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Pr
   const ips = localIps();
   const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
   let acao = "";
-  // #43 回环豁免（同 /local-info、/api/pair-code，#29 同步收紧）：只认 Origin:"null"
-  const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-  if (origin && reqLb && origin === "null") acao = "*";
-  else if (origin) {
+  // Origin:"null" 豁免已删除（同 /local-info，P1FIX 2026-10-10：沙箱 iframe 可造
+  // Origin:null；本端点已持 LAN token 才可达，豁免无合法消费方）
+  if (origin) {
     try {
       const u = new URL(origin);
       if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
