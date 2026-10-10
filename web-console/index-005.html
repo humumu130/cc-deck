@@ -79,7 +79,7 @@
       --action-bg: rgba(226,133,94,.16);
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
-      --me-bg: #15273B;
+      --me-bg: #0E1927; /* W-UIFB ⑩：我方气泡再加深一点点（i=13，用户原话「一点点一点点」；test.8 值 #101B2B 基础上微降） */
       --me-line: #4E6D8E;
       --action-ink: #211B0E;
       --done-ink: #082116;
@@ -225,7 +225,7 @@
       --action-bg: rgba(200,100,64,.14);
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
-      --me-bg: #FFFFFF;
+      --me-bg: #EDF1F7; /* W-UIFB ⑩：浅色同口径微加深（test.8 值 #F1F4F9 基础上微降） */
       --me-line: #C6D3DF;
       --action-ink: #3C2600;
       --done-ink: #073C27;
@@ -314,7 +314,9 @@
     .mode-stage { display: none; }
     .mode-stage.active { display: block; }
     .desktop-frame { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100%; height: 100vh; background: var(--bg1); }
-    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    /* W-UIFB ②：windowbar 底部横线退役（浅色主题下仍见淡横线，用户验收 i=2）——border-bottom
+       删除且不引入替代分隔（深浅两主题都干净）；列区分交给 rail 自身 border-right */
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); }
     .window-dots { display: flex; gap: 6px; }
     .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
     .window-title {flex: 1; color: var(--faint); font-size: var(--fs-B);}
@@ -343,6 +345,9 @@
     html.win-tauri .windowbar .source-menu { right: auto; left: 0; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
+    /* W-UIFB ⑤：rail 图标整体微增大（+2px，用户原话「增益增大一点点」——只动桌面图标栏，
+       移动端 mobile-nav 保持 18px 原尺寸；theme-toggle 同步放大保持视觉一致） */
+    .domain-rail .icon-nav, .domain-rail .icon-bell, .domain-rail .theme-toggle-icon { width: 20px; height: 20px; }
     .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .icon-inline use[href="#icon-users"], .icon-status use[href="#icon-users"] { fill: currentColor; stroke: none; }
     .source-switcher { position: relative; z-index: 5; border-radius: 8px; background: var(--source-switcher-bg); }
@@ -351,10 +356,19 @@
     .source-trigger:hover { border-color: var(--brand); background: var(--hover); }
     .source-trigger.source-company { border-color: var(--source-company); background: var(--source-company-bg); }
     .source-trigger.source-home { border-color: var(--source-home); background: var(--source-home-bg); }
-    .source-trigger .source-trigger-summary {color: var(--dim); font: var(--fs-E) var(--mono);}
     .source-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
     .source-dot.status-reconnecting { background: var(--working); color: var(--working); }
     .source-dot.status-disconnected { background: var(--error); color: var(--error); }
+    /* W-UIFB ①：源胶囊连接图标四态（旧版 connChip 线条电脑图标同形移植，随态染色）——
+       绿=已连接 / 黄闪=连接中 / 红=连接失败 / 灰=未配置。胶囊内容只留源名+此图标（i=1），
+       摘要与 ⌄ 退役；菜单内 source-option 行仍用圆点不受影响 */
+    .source-conn { display: inline-flex; align-items: center; flex: none; color: var(--faint); }
+    .source-conn svg { display: block; }
+    .source-conn.conn-on { color: var(--done); }
+    .source-conn.conn-wait { color: var(--working); animation: conn-wait-blink 1.1s ease-in-out infinite; }
+    .source-conn.conn-fail { color: var(--error); }
+    .source-conn.conn-idle { color: var(--faint); opacity: .6; }
+    @keyframes conn-wait-blink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
     .source-menu { position: absolute; top: calc(100% + 8px); right: 0; display: none; width: 276px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
     .source-menu.open { display: block; }
     .source-menu-head {padding: 4px 6px 7px; color: var(--faint); font: var(--fs-C) var(--mono); letter-spacing: .04em; text-transform: uppercase;}
@@ -399,7 +413,21 @@
     .create-pop .create-label:first-of-type { margin-top: 4px; }
     .create-field { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font: var(--fs-A) var(--sans); }
     .create-field:focus { border-color: var(--brand); outline: none; }
-    .create-field::placeholder { color: var(--faint); }
+    /* W-UIFB 追加⑬：placeholder 明显小一号+淡色（用户截图：提示文字与正文几乎同大）——
+       正文 fs-A(14px)，提示 fs-B(12px) 再降透明度；输入文字不变 */
+    .create-field::placeholder { color: var(--faint); font-size: var(--fs-B); opacity: .8; }
+    /* W-UIFB 追加⑬：成员编制分组盒（与设置面板卡片分组同语言：surface1 底+细边），
+       候选列表/添加按钮/手动行装同盒，字段区与编制区分层 */
+    .create-group { margin: 6px 0 2px; padding: 9px 10px 9px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface1); }
+    .create-group > .create-label { margin-top: 0; }
+    /* W-UIFB 追加⑮：手动成员行（引擎下拉+角色名+移除钮）与「+ 添加成员」ghost 钮 */
+    .team-manual-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .team-manual-row .team-manual-engine { flex: 0 0 108px; height: 28px; font-size: var(--fs-B); }
+    .team-manual-row .create-field { flex: 1; height: 28px; font-size: var(--fs-B); }
+    .team-manual-x { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer; font-size: 11px; }
+    .team-manual-x:hover { color: var(--error); background: var(--danger-bg); }
+    .team-add-btn { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 3px 8px; border: 1px solid var(--line-soft); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-B); }
+    .team-add-btn:hover { color: var(--text); background: var(--hover); border-color: var(--line); }
     select.create-field { padding: 0 6px; }
     select.create-field:disabled { opacity: .5; cursor: not-allowed; } /* FB5：无模型清单的引擎，模型下拉置灰 */
     .create-row { display: flex; gap: 6px; align-items: stretch; }
@@ -452,6 +480,10 @@
     .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
     .queue-head h2 {flex: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-D);}
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+    /* W-UIFB ⑨：第二列列头「＋」美化（i=11）——去边框、加号增大增粗（悬停淡底兜可发现性）；
+       只动 queue-head 位，其余 icon-btn（手机头 ⋯ 等）保持描边原样 */
+    .queue-head .icon-btn { border: 0; background: transparent; color: var(--dim); font-size: 19px; font-weight: 700; line-height: 1; }
+    .queue-head .icon-btn:hover { color: var(--text-strong); background: var(--hover); }
     .icon-btn::before { content: ""; position: absolute; inset: -7px; }
     .icon-btn:hover { color: var(--text); background: var(--hover); }
     .session-list-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
@@ -508,6 +540,11 @@
     /* W-NOVAFIX B3：Postman 式一行制——sub 并入标题行（源胶囊/路径随行右对齐），独立 sub 行退役
        FB2 再进一步：sub 整行出舱入顶栏（.windowbar-hint），标题行只留标签簇 */
     .workspace-title-row h2 {flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-page); text-overflow: ellipsis; white-space: nowrap;}
+    /* W-UIFB ③：目录·最近活动从顶栏 hint 回归标题正下方（小几号灰字单行，i=3）——
+       ws-title-main 纵排承载 h2+sub；sub 空文本零占位 */
+    .ws-title-main { display: flex; flex-direction: column; justify-content: center; flex: 0 1 auto; min-width: 0; }
+    .head-sub { max-width: 100%; overflow: hidden; color: var(--faint); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .head-sub:empty { display: none; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
     .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .segment-bar button:hover { color: var(--text); }
@@ -519,10 +556,12 @@
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
     /* B12+B22 head 右端动作位：过程/思考开关 + 模型胶囊（标题行尾部，不进 tablist 的 segment-bar） */
     .head-actions { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; margin: 0 -2px 0 2px; }
-    .head-capsule { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-height: 24px; padding: 0 10px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--text); cursor: pointer; font: var(--fs-C) var(--mono); white-space: nowrap; }
-    .head-capsule:hover { border-color: var(--border-strong); color: var(--text-strong); }
+    /* W-UIFB ④：模型胶囊去边框（i=4）——无边框软底 chip；名右小号灰 chevron 提示可展开 */
+    .head-capsule { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--tag-bg); color: var(--text); cursor: pointer; font: var(--fs-C) var(--mono); white-space: nowrap; }
+    .head-capsule:hover { background: var(--hover); color: var(--text-strong); }
     .head-capsule[hidden] { display: none; }
     .head-capsule .cap-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+    .head-capsule .cap-chev { flex: none; width: 10px; height: 10px; color: var(--faint); }
     /* B22 模型菜单：视觉与 .source-menu 同壳，但不共用类——closeTransientOverlays 会摘
        一切 .source-menu.open 的 open，共类即被全局收起误伤 */
     .model-menu { position: fixed; z-index: 82; display: none; width: 264px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
@@ -594,7 +633,10 @@
        设变量，默认 320 与旧三列档一致）；collapsed 42px 窄条把手恒覆盖基础宽（同类后写胜出） */
     .inspector { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; width: var(--inspector-w, 320px); overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); transition: background .18s ease, padding .18s ease; }
     .inspector h3 {margin: 0 0 14px; color: var(--text-strong); font-size: var(--fs-D);}
-    .inspector-toggle {position: absolute; top: 11px; right: 10px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: color .18s ease, background .18s ease, border-color .18s ease;}
+    /* W-UIFB ⑨：第四列收起把手美化（i=11）——描边盒退役改 ghost 形（默认无边框仅淡箭头，
+       悬停浮出底色），箭头本身放大一档；折叠态通栏样式保持 */
+    .inspector-toggle {position: absolute; top: 9px; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--faint); cursor: pointer; font-size: 15px; line-height: 1; transition: color .18s ease, background .18s ease, border-color .18s ease;}
+    .inspector-toggle:hover { color: var(--text); background: var(--hover); }
     .inspector-toggle:hover { color: var(--text); background: var(--hover); }
     .inspector.collapsed { width: 42px; overflow: hidden; padding: 12px 6px; }
     .inspector.collapsed > :not(.inspector-toggle) { display: none; }
@@ -837,6 +879,25 @@
     .session-state-dock { max-height: 44px; transition: max-height .45s cubic-bezier(.4, 0, .2, 1), padding .45s cubic-bezier(.4, 0, .2, 1), opacity .5s ease .1s; }
     #m-detail .session-state-dock { max-height: 60px; }
     .session-state-dock.terminal-fade { max-height: 0; padding-block: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+    /* W-UIFB ⑧：子 Agent 活性面板（W-TOPBAR ⑥ 同构移植 + i=10 三修正）——状态栏下续行，
+       标题行即折叠开关（subAgent N + 尾箭头，呼吸点只属于具体条目）：
+       ① 底色与上方状态栏一致——transparent 同绘 workspace 渐变（原 --footer 平色与渐变错层）；
+       ② 字号整体降一档：条目 fs-C、动作/走秒 fs-micro（原过大）；
+       ③ 条目相对标题缩进 24px 成层级（原 13px 贴平感） */
+    .agbox { flex: 0 0 auto; padding: 0 20px 6px; background: transparent; }
+    .agbox[hidden] { display: none; }
+    .aghead { display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px 3px 0; border-radius: 6px; color: var(--faint); cursor: pointer; user-select: none; font-size: var(--fs-C); letter-spacing: .04em; }
+    .aghead:hover { color: var(--dim); }
+    .aghead .caret { font-size: 9px; }
+    .agrow { display: flex; align-items: center; gap: 8px; padding: 2px 0 0 24px; font-size: var(--fs-C); min-width: 0; }
+    .agrow .ad { flex: 1; min-width: 0; overflow: hidden; color: var(--working); text-overflow: ellipsis; white-space: nowrap; }
+    .agrow.done .ad { color: var(--dim); }
+    .agrow .aa { flex: none; max-width: 46%; overflow: hidden; color: var(--dim); font-size: var(--fs-micro); text-overflow: ellipsis; white-space: nowrap; }
+    .agrow.done .aa { color: var(--faint); }
+    .agrow .at { flex: none; color: var(--faint); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    .agdot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+    .agrow .ag-done-mark { flex: none; color: var(--done); font-size: 10px; }
+    .agmore { padding: 3px 0 0 24px; color: var(--faint); font-size: var(--fs-C); }
     .artifact-row {display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: var(--fs-B);}
     .artifact-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--info); }
     .artifact-row-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
@@ -1220,6 +1281,16 @@
     .engine-badge.qwen { --engine-color: var(--engine-qwen); }
     .engine-badge.codebuddy { --engine-color: var(--engine-codebuddy); }
     .engine-badge.zcode { --engine-color: var(--engine-zcode); }
+    /* W-UIFB ⑥：agent 标签低饱和官方色填充（i=7 设计结论，详见回执）——会话卡第三行 + head
+       身份簇的引擎标签底/描边取 --engine-color 低透明 color-mix（暗 14%/亮同值皆低饱和），
+       文字维持中性 identity-ink 保对比度，点/小图标继续用引擎色；其余语境徽章维持原中性皮 */
+    #d-session .srow-r3 .engine-badge, .workspace-title-row .identity-cluster .engine-badge {
+      background: color-mix(in srgb, var(--engine-color, var(--source)) 14%, transparent);
+      border-color: color-mix(in srgb, var(--engine-color, var(--source)) 30%, transparent);
+    }
+    /* W-UIFB ⑥：单源数据下会话卡第三行源标签隐藏（i=7）——与既有 single 模式规则互补，
+       聚合模式但数据单源同样隐藏；多源数据落地后自动回归 */
+    body[data-source-count="1"] #d-session .queue-card .source-badge { display: none; }
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge .icon-inline { width: 12px; height: 12px; }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
@@ -1267,6 +1338,9 @@
     #d-session .queue-card[hidden] { display: none; }
     /* 微信电脑端「扫过见底」：hover 瞬时淡底；选中持续淡底（原描边/悬浮抬升档废止） */
     #d-session .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
+    /* W-UIFB ⑨：会话卡之间 hairline 分割线（用户追加，微信式细淡线）——相邻卡上缘 65% 透明
+       line-soft，浅色呈极淡灰、深色呈微亮线；组头/空态横幅处天然断开不画 */
+    #d-session .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line-soft) 65%, transparent); }
     #d-session .queue-card.selected { border-color: transparent; background: var(--q-row-sel); box-shadow: none; }
     /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
@@ -1482,11 +1556,16 @@
     html[data-theme="light"] body { background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0); }
     html[data-theme="light"] .window-dots i { background: var(--window-dot); }
     html[data-theme="light"] .window-title { color: var(--faint); }
-    html[data-theme="light"] .domain-rail, html[data-theme="light"] .windowbar { box-shadow: 5px 0 20px var(--rail-shadow); }
+    /* W-UIFB ②：windowbar 撤出浅色投影规则（20px 模糊在底缘留痕=淡横线残留的另一半）；
+       rail 阴影保留（第二列分界仍有层次需求） */
+    html[data-theme="light"] .domain-rail { box-shadow: 5px 0 20px var(--rail-shadow); }
     html[data-theme="light"] .mobile-status { color: var(--dim); }
     /* ==================== 批3（B3）增量样式 ==================== */
     /* #B3-13 ⚠ 警告行亮黄（旧壳 .msg-sys.warn 同语义：灰字里的警示不再淹没） */
     .timeline-note.warn { color: var(--working); }
+    /* W-UIFB ⑦：跨机排队提示（relay 防抢发文案）字号小 2 号（i=9 附带）——系统注专用，
+       靠文本特征挂类，不影响日期分隔/过程组头等同形行 */
+    .timeline-note.note-xs { font-size: calc(var(--fs-F) - 2px); opacity: .85; }
     /* #B3-12 AI 消息 hover 复制钮：copy-btn 形制浮贴右上角（pointer-events 随显隐，防隐形拦截点击） */
     .message-ai { position: relative; }
     .message-ai .msg-copy { position: absolute; right: 0; top: 0; z-index: 2; pointer-events: none; }
@@ -1494,7 +1573,11 @@
     /* #B3-14 排队注入 chip 行（dock 下）：working 色小胶囊，展开态换行显全文 */
     .pend-row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; padding: 7px 16px 9px; }
     .pend-row[hidden] { display: none; }
-    .pend-chip {display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--working) 10%, transparent); color: var(--working); cursor: pointer; font: var(--fs-C) var(--mono); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+    /* W-UIFB ⑦：排队 chip 呼吸闪烁（i=9 前半）——柔和 opacity 呼吸非生硬 blink；
+       reduced-motion 用户全局已降级（:root 媒查.all .01ms） */
+    .pend-chip {display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--working) 10%, transparent); color: var(--working); cursor: pointer; font: var(--fs-C) var(--mono); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: pend-breathe 2.4s ease-in-out infinite;}
+    @keyframes pend-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
+    .pend-chip.open { animation: none; } /* 展开读全文时停止呼吸，减少阅读干扰 */
     .pend-chip:hover { border-color: var(--working); }
     .pend-chip.open { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
     .pend-caret { flex: none; font-size: 9px; }
@@ -1564,7 +1647,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title" data-tauri-drag-region>CC Deck · Command Bridge</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span class="source-trigger-summary" data-current-summary>—</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><span class="window-link">⌘K 全局搜索</span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><span class="window-link">⌘K 全局搜索</span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -1579,7 +1662,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><input type="search" placeholder="搜索" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter aria-label="筛选会话 · 当前全部">全部</button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><h2 id="session-title">会话</h2><div class="head-sub" id="session-head-sub"></div></div><span class="identity-cluster" id="session-identity"></span><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -1587,6 +1670,7 @@
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
               </div>
               <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true"></span><span class="session-state-flow"><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div>
+              <div class="agbox" id="session-agbox" hidden></div>
               <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="拖入/粘贴即附 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
@@ -2388,6 +2472,14 @@
                   list.dataset.relayState = "snapshot";
                   list.dataset.connection = S.status;
                   list.dataset.sessionCount = String(S.sessions.size);
+                  // W-UIFB ⑥（i=7）：源标签只在数据真有多源时显示——源数 = 会话数据出现过的去重源身份；
+                  // 今日单一 relay 数据源恒 1 → body[data-source-count="1"]，CSS 据此隐藏第三行源标签；
+                  // 多源链路（B7）落地后 per-session 源字段进来此集自然变大，标签自动回归
+                  try {
+                    const srcSet = new Set();
+                    S.sessions.forEach((x) => srcSet.add(String((x && (x.relay_source || x.source)) || S.relayName || "")));
+                    document.body.dataset.sourceCount = String(srcSet.size || 1);
+                  } catch (_) {}
                   syncFilterChip();
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
@@ -2568,24 +2660,23 @@
                 function canCmd(s) { return !!s && (!s.historical || s.external === true); }
                 function renderHeader() {
                   const s = curSession();
+                  const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
                   if (!s) {
                     UI.title.textContent = "会话";
-                    UI.statusTag.textContent = "未选择"; UI.statusTag.className = "tag"; UI.statusTag.hidden = false;
-                    UI.identity.innerHTML = '<span class="source-badge">' + esc(S.relayName) + '</span>';
+                    UI.identity.innerHTML = '<span class="source-badge">' + esc(srcName(S.relayName)) + '</span>';
                     UI.modelCapsule = null; // B22 胶囊随会话渲染（engine-badge 旁），无会话不挂
                     UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…");
                     updateModelCapsule(null);
                     return;
                   }
                   UI.title.textContent = s.title || s.initial_prompt || s.session_id;
-                  const st = STATUS_TAG[s.status] || ["完成", "done"];
-                  // B13 徽章精简：DONE 不再挂「完成」tag（dock ✓ 已表达，避免双报）；历史 tag 退役；
-                  // 外部会话标「CLI」（用户语言：本机 CLI 里开的会话，非本面板新建）
-                  if (s.status === "DONE") UI.statusTag.hidden = true;
-                  else { UI.statusTag.hidden = false; UI.statusTag.textContent = st[0]; UI.statusTag.className = "tag " + st[1]; }
+                  // W-UIFB ③：「运行中」状态胶囊退役（i=3）——会话态由 dock 态图标单点表达（B21 语义，
+                  // B13 DONE 隐藏口径的全量版）；外部会话仍标「CLI」（用户语言：本机 CLI 里开的会话）
                   const eng = ENGINES[s.engine || "claude"] || [s.engine || "Claude", ""];
                   // B22 模型胶囊挂 engine-badge 旁（identity-cluster 内随 innerHTML 重建，重建后重取引用）
-                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + esc(eng[0]) + '</span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><span class="source-badge">' + esc(S.relayName) + '</span>' + (s.external ? '<span class="tag info">CLI</span>' : "");
+                  // W-UIFB ③：agent 图标同款复用第二列 b2EngineBadge 的 sprite 图标（i=3）
+                  // W-UIFB ④：模型胶囊去边框 + 名右小号灰 chevron（i=4）
+                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>' + esc(eng[0]) + '</span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span><svg class="cap-chev" aria-hidden="true" viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="source-badge">' + esc(srcName(S.relayName)) + '</span>' + (s.external ? '<span class="tag info">CLI</span>' : "");
                   UI.modelCapsule = UI.identity.querySelector("#session-model-capsule");
                   UI.subHint((s.cwd ? shortPath(s.cwd) + " · " : "") + "最近活动 " + relTime(s.updated_at || s.started_at));
                   updateModelCapsule(s);
@@ -2674,6 +2765,7 @@
                     if (tok) tok.hidden = true;
                     dockTerminalWatch(dock, null);
                     renderPendChips(null); // #B3-14
+                    renderSubagents(null); // W-UIFB ⑧ 无会话撤面板
                     return;
                   }
                   // B21 一行流式：态图标（旋转/呼吸/✓/⚠，CSS 按 data-session-state 承载）+ 摘要 + 走秒 + token
@@ -2688,7 +2780,31 @@
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
                   renderPendChips(s); // #B3-14 排队注入 chip 行（dock 下，B19 居右=用户侧语义）
+                  renderSubagents(s); // W-UIFB ⑧ 子 Agent 活性面板（状态栏下续行）
                 }
+                // W-UIFB ⑧：子 Agent 活性面板（W-TOPBAR ⑥ test.8 同构移植 + i=10 修正入形）——
+                // 防御同旧壳：ended_at>0 才算结束（ended_at:0 falsy 坑）；>4 条溢出提示；
+                // 折叠态模块级记忆（renderDock 高频重建不丢态，pendOpen 先例）
+                let agCollapsed = false;
+                function renderSubagents(s) {
+                  const box = document.getElementById("session-agbox");
+                  if (!box) return;
+                  const subs = s && Array.isArray(s.subagents) ? s.subagents : [];
+                  if (!subs.length) { box.hidden = true; box.textContent = ""; return; }
+                  box.hidden = false;
+                  const shown = subs.slice(-4);
+                  const more = subs.length - shown.length;
+                  box.innerHTML = '<span class="aghead" data-ag-toggle role="button" tabindex="0">subAgent ' + subs.length + ' <span class="caret">' + (agCollapsed ? "▸" : "▾") + "</span></span>" +
+                    (agCollapsed ? "" : shown.map((a) => {
+                      const run = !(a.ended_at > 0);
+                      const dur = a.started_at > 0 ? fmtDur(Math.max(0, (a.ended_at > 0 ? a.ended_at : Date.now()) - a.started_at)) : "";
+                      return '<div class="agrow' + (run ? "" : " done") + '">' + (run ? '<i class="agdot"></i>' : '<span class="ag-done-mark">✓</span>') +
+                        '<span class="ad">' + esc(a.desc || a.kind || "子任务") + "</span>" +
+                        (a.act && run ? '<span class="aa" title="当前动作">' + esc(a.act) + "</span>" : "") +
+                        '<span class="at" data-ag-at data-started="' + (a.started_at || 0) + '" data-ended="' + (a.ended_at || 0) + '">' + dur + "</span></div>";
+                    }).join("") + (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : ""));
+                }
+                function toggleSubagents() { agCollapsed = !agCollapsed; renderSubagents(curSession()); }
                 // #B3-14 排队注入气泡（旧壳 pendbox 语义 005 化）：pending_inputs 渲染为 dock 下
                 // chip 行，点击展开全文；展开态按文本记忆（Set）——排队区随 SESSION_UPDATED 重建
                 // DOM，无记忆则展开即被收回（旧壳 2026-09-16 用户反馈③同坑）。清空时连记忆一并回收。
@@ -2724,6 +2840,12 @@
                   if (s && s.status === "DONE") dockTermT = setTimeout(() => dock.classList.add("terminal-fade"), 8000);
                 }
                 function tickDockElapsed() {
+                  // W-UIFB ⑧：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本不重建面板；
+                  // 置于 dock 早退之前——live-line/无会话态面板计时不冻结）
+                  document.querySelectorAll("#session-agbox [data-ag-at]").forEach((at) => {
+                    const st = Number(at.dataset.started) || 0, ed = Number(at.dataset.ended) || 0;
+                    if (st > 0) at.textContent = fmtDur(Math.max(0, (ed > 0 ? ed : Date.now()) - st));
+                  });
                   if (!UI || !UI.dock) return;
                   const el = UI.dock.querySelector("[data-session-state-elapsed]");
                   const s = curSession();
@@ -2874,7 +2996,8 @@
                     return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefRow(e.text) + "</span></div></div>";
                   }
                   // #B3-13 ⚠ 开头系统/警告行着 --working（旧壳 .msg-sys.warn 口径：/^\s*⚠/）
-                  return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + '">' + esc(oneLine(e.text)) + "</div>";
+                  // W-UIFB ⑦：relay 防抢发提示小字号呈现（i=9 附带；文本特征挂 note-xs）
+                  return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + (/防抢发/.test(String(e.text ?? "")) ? " note-xs" : "") + '">' + esc(oneLine(e.text)) + "</div>";
                 }
                 function entryNode(e, s) {
                   const html = entryHtml(e, s);
@@ -2905,7 +3028,10 @@
                     const isProc = x.dataset.convToggle === "proc";
                     const on = isProc ? procShow : thinkShown;
                     x.classList.toggle("on", on);
-                    x.textContent = (isProc ? "⚙ 过程 ·" : "✦ 思考 ·") + (on ? "开" : "关");
+                    // W-UIFB ③：标签收敛「⚙ 过程/✦ 思考」，开关态改由 .on 绿态承载（原「·开/·关」
+                    // 后缀退役——head 右簇少 4 字符宽度，不与胶囊打架；title 补足可读性）
+                    x.textContent = isProc ? "⚙ 过程" : "✦ 思考";
+                    x.title = (isProc ? "工具过程行" : "思考过程") + (on ? " · 已显示，点击隐藏" : " · 已隐藏，点击显示");
                   });
                 }
                 function toggleConv(name) {
@@ -4263,7 +4389,12 @@
                   UI = {
                     section, sessionList, workspace, body, panes,
                     tabs: [...section.querySelectorAll(".segment-bar button")],
-                    title: $id("session-title"), statusTag: $id("session-status"), identity: $id("session-identity"), subHint: (text) => window.__ccDeck005SetWindowbarHint?.("session", text), // FB2：sub 元素出舱，写顶栏 hint
+                    title: $id("session-title"), statusTag: null, identity: $id("session-identity"), // W-UIFB ③：状态胶囊退役（i=3），statusTag 置空防旧引用
+                    subHint: (text) => { // W-UIFB ③：会话域 sub 回归标题正下方 .head-sub（i=3），顶栏 hint 会话位清零防残留
+                      const el = $id("session-head-sub");
+                      if (el) el.textContent = String(text || "");
+                      window.__ccDeck005SetWindowbarHint?.("session", "");
+                    },
                     headActions: $id("session-head-actions"),
                     dock: $id("session-state-dock"),
                     composer: section.querySelector('[data-composer="session"]'),
@@ -4318,6 +4449,14 @@
                   if (UI.listTools) UI.listTools.dataset.stub = "B2b";
                   bindEvents();
                   updateConvCtrl(); // B12 head 开关初值上色
+                  // W-UIFB ⑧：子 Agent 面板折叠开关（标题行点击/键盘；agCollapsed 模块级记忆）
+                  const agbox = document.getElementById("session-agbox");
+                  if (agbox) {
+                    agbox.addEventListener("click", (ev) => { if (ev.target.closest("[data-ag-toggle]")) toggleSubagents(); });
+                    agbox.addEventListener("keydown", (ev) => {
+                      if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest("[data-ag-toggle]")) { ev.preventDefault(); toggleSubagents(); }
+                    });
+                  }
                   renderAll();
                 }
                 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);
@@ -4620,6 +4759,8 @@
                 // 的形态错位（FB 审计 4327/4563）。创建成功/确认卡落单后 PROJECTS_UPDATED
                 // 帧自动刷新队列，无需手动重拉
                 const TEAM_ROLE_PRESETS = ["worker", "PM", "reviewer", "qa"];
+                // W-UIFB 追加⑮：手动成员行 agent 类型清单（与 sessionItem 引擎映射同六引擎口径）
+                const TEAM_ENGINE_OPTIONS = [["claude", "Claude"], ["codex", "Codex"], ["trae", "Trae"], ["qwen-code", "Qwen Code"], ["codebuddy", "CodeBuddy"], ["zcode", "ZCode"]];
                 const toast = (text) => { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast(text); else feedback(text); }; // B4 toast 在场用之，否则落 footer 反馈行
                 const cssEscape = (value) => String(value).replace(/["\\]/g, "\\$&"); // 属性选择器内引号安全（B2 cssEsc 同款）
                 function teamCandidates() {
@@ -4630,6 +4771,24 @@
                 }
                 function teamCwdDefault() {
                   try { return localStorage.getItem("cc-deck-005-last-cwd") || ""; } catch (_) { return ""; }
+                }
+                // W-UIFB 追加⑮：手动成员行——agent 类型 + 角色名，候选勾选与手动行合计 ≤8 席。
+                // 接通现状（回执「追加批」详述）：relay sanitizeHeadcount 硬性要求 session_id 且
+                // org adapter 不透传 role_defaults，手动席暂不进创建载荷，创建成功后明示用户。
+                function teamSeatCount(pop) {
+                  return pop.querySelectorAll("[data-team-member]:checked").length + pop.querySelectorAll(".team-manual-row").length;
+                }
+                function addTeamManualRow(pop) {
+                  if (teamSeatCount(pop) >= 8) { toast("编制最多 8 席"); return; }
+                  const opts = TEAM_ENGINE_OPTIONS.map((e) => '<option value="' + escape(e[0]) + '">' + escape(e[1]) + "</option>").join("");
+                  const row = document.createElement("div");
+                  row.className = "team-manual-row";
+                  row.innerHTML = '<select class="create-field team-manual-engine" data-manual-engine aria-label="agent 类型">' + opts + '</select>'
+                    + '<input class="create-field" data-manual-role list="team-role-list" placeholder="角色名（默认 worker）" aria-label="成员角色">'
+                    + '<button type="button" class="team-manual-x" data-manual-remove title="移除此行" aria-label="移除此行">✕</button>';
+                  const addBtn = pop.querySelector("[data-team-add-member]");
+                  if (addBtn) addBtn.before(row); else pop.querySelector(".create-group")?.append(row);
+                  row.querySelector("select")?.focus();
                 }
                 function openTeamCreate() {
                   closeTeamCreate();
@@ -4643,28 +4802,38 @@
                   pop.setAttribute("aria-modal", "true");
                   pop.setAttribute("aria-label", "新建团队");
                   const cands = teamCandidates();
-                  let html = '<h3>新建团队</h3><p class="create-sub">立项后出现在团队列表；正经立项与首次轻立项需你在确认卡上决议</p>';
-                  html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广（必填）" aria-label="团队名">';
-                  html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径（必填，一锚一团）" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
+                  // W-UIFB 追加⑭：顶部说明一句话收敛（原句啰嗦且「轻立项」与档位选项重复）；
+                  // 档位语义由下拉选项自身表达，说明只答「创建后去哪、要不要确认」
+                  let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的立项会在确认卡上请你决议</p>';
+                  html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名">';
+                  html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
                   html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻立项（单卡简化态）</option><option value="正经立项">正经立项（每次创建都需确认）</option></select>';
-                  html += '<div class="create-label">成员编制（可选，最多 8 席）</div>';
+                  // W-UIFB 追加⑬：成员编制入分组盒（字段区/编制区分层）；追加⑮：组内「+ 添加成员」
+                  // 手动行（agent 类型+角色名），候选勾选与手动行合计 ≤8 席
+                  html += '<div class="create-group"><div class="create-label">成员编制 · 最多 8 席</div>';
                   if (!state.online || !state.command) html += banner("命令通道未接入，无法提交创建。");
                   if (cands.length) {
                     html += '<div class="team-cand-list" data-team-cands>' + cands.map((s) => {
                       const eng = engines.get(s.engine || "claude") || ["Claude", ""];
                       return '<label class="create-check team-cand"><input type="checkbox" data-team-member="' + escape(s.session_id) + '"><span class="engine-badge ' + escape(eng[1]) + '">' + escape(eng[0]) + '</span><span class="team-cand-name">' + escape(s.title || s.session_id.slice(0, 12)) + '</span><input class="create-field team-cand-role" data-team-role="' + escape(s.session_id) + '" list="team-role-list" placeholder="worker" aria-label="成员角色" hidden></label>';
-                    }).join("") + "</div>"
-                      + '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
-                    html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>';
+                    }).join("") + "</div>";
                   } else {
-                    html += banner("当前来源暂无可入编会话（成员只能是托管会话）。可先不选，创建后由派单/编制面补齐。");
+                    html += banner("暂无可入编的托管会话。可先创建，稍后在编制面板补齐成员。");
                   }
+                  // 角色预设两分支共用（候选行/手动行 datalist 同源）
+                  html += '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
+                  html += '<button type="button" class="team-add-btn" data-team-add-member>＋ 添加成员</button>';
+                  html += "</div>";
+                  if (cands.length) html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>';
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit>创建团队</button></div>';
                   pop.innerHTML = html;
                   back.addEventListener("click", closeTeamCreate);
                   pop.addEventListener("click", (ev) => {
                     if (ev.target.closest("[data-team-cancel]")) { closeTeamCreate(); return; }
                     if (ev.target.closest("[data-team-submit]")) { void submitTeamCreate(pop); return; }
+                    // W-UIFB 追加⑮：手动成员行增删（委托挂 pop——行随开随建）
+                    if (ev.target.closest("[data-team-add-member]")) { addTeamManualRow(pop); return; }
+                    if (ev.target.closest("[data-manual-remove]")) { ev.target.closest(".team-manual-row")?.remove(); return; }
                   });
                   pop.addEventListener("change", (ev) => {
                     const tpl = ev.target.closest("[data-team-field='template']");
@@ -4696,6 +4865,13 @@
                     const role = template === "free" ? String(roleInput?.value ?? "").trim() : template;
                     return { session_id: sid, role: role || "worker" };
                   });
+                  // W-UIFB 追加⑮：手动席（agent 类型+角色名）——relay sanitizeHeadcount 现版
+                  // 硬性要求 session_id 且 adapter 不透传 role_defaults，入载会整单被拒；
+                  // 故手动席暂不进创建载荷，创建成功后明示「待补齐」，接通条件见回执。
+                  const manualSeats = [...pop.querySelectorAll(".team-manual-row")].map((row) => ({
+                    engine: String(row.querySelector("[data-manual-engine]")?.value ?? "claude"),
+                    role: String(row.querySelector("[data-manual-role]")?.value ?? "").trim() || "worker",
+                  }));
                   const flight = "team-create";
                   if (state.flights.has(flight)) return;
                   state.flights.add(flight);
@@ -4703,8 +4879,9 @@
                     const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}) }));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
-                    feedback(result.data?.needsConfirm ? "立项已提交，等你在确认卡上 ✓/✗。" : "团队已创建。");
-                    toast(result.data?.needsConfirm ? "立项已提交，待确认卡决议" : "团队已创建");
+                    const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";
+                    feedback(result.data?.needsConfirm ? "立项已提交，等你在确认卡上 ✓/✗。" + manualNote : "团队已创建。" + manualNote);
+                    toast(result.data?.needsConfirm ? "立项已提交，待确认卡决议" : "团队已创建" + (manualSeats.length ? " · 手动席位 " + manualSeats.length + " 个待入编" : ""));
                   } catch (error) {
                     feedback("创建失败：" + String(error?.message || error));
                   } finally {
@@ -5653,7 +5830,7 @@
       <div class="mobile-frame">
         <div class="mobile-screen active" id="m-inbox" data-mobile-root="inbox">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>待我处理<small>会话行动与状态</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
           <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待审查</span></div></div><div data-mobile-session-list></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -5666,7 +5843,7 @@
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
             <div class="mobile-content" data-notify-center>
             <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。<button class="notify-light-action" type="button" data-notify-clear-all hidden>全部清除</button></div>
@@ -5683,7 +5860,7 @@
 
         <div class="mobile-screen" id="m-project" data-mobile-root="project">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span></header>
           <div class="mobile-content"><div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div><div data-mobile-project-cards></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div data-mobile-project-lane></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -5691,7 +5868,7 @@
 
         <div class="mobile-screen" id="m-settings" data-mobile-root="settings">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done connection-chip status-connected"><span class="mini-signal" aria-hidden="true"><i></i><i></i><i></i></span>relay 在线</span><button class="icon-btn">⋯</button></header>
           <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>Agent 引擎</strong><p>6 引擎 · 2 已接 · 浏览态</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px" data-settings-pair type="button">扫码添加新设备</button></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button class="active" data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -5979,6 +6156,7 @@
         el.textContent = active ? (windowbarHintStore[active] || "") : "";
       }
       window.__ccDeck005SetWindowbarHint = setWindowbarHint;
+      window.__ccDeck005SourceDisplayName = sourceDisplayName; // W-UIFB ①：跨块消费（head 源徽标「本机」同口径）
 
       function openMobileRoot(root) {
         const target = document.querySelector(`#m-${root}`);
@@ -6096,20 +6274,32 @@ function connectLan(ctx) {
 
       // ---------- FB1 source-menu 浮窗完整性：真实源名/连接态/摘要从 B4 桥同步到全部壳 ----------
       // （windowbar + 四条移动 sourcebar；静态壳里的「当前源 / —」占位到此退役）
+      // W-UIFB ①：trigger 胶囊重做——内容只留源名+连接图标（摘要/⌄ 退役），图标四态
       function sourceDotClass(state) {
         return state === "online" ? "status-connected" : state === "connecting" ? "status-reconnecting" : "status-disconnected";
       }
+      function sourceConnClass(state) {
+        return state === "online" ? "conn-on" : state === "connecting" ? "conn-wait" : state === "unconfigured" ? "conn-idle" : "conn-fail";
+      }
+      // W-UIFB ①：源名展示口径——桌面壳 location.host 即本机 relay（tauri.localhost 等），展示「本机」
+      function sourceDisplayName(name) {
+        const n = String(name || "");
+        return /^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(n) ? "本机" : n;
+      }
+      // W-UIFB ①：连接图标（旧版 connChip 线条电脑图标同形移植）注入全部 trigger 壳
+      const SOURCE_CONN_SVG = '<svg viewBox="0 0 16 13" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.2" y="1.5" width="13.6" height="9" rx="1.6"/><path d="M5.5 12.5h5" stroke-linecap="round"/></svg>';
+      document.querySelectorAll("[data-source-conn]").forEach((el) => { el.innerHTML = SOURCE_CONN_SVG; });
       function refreshSourceSwitchers() {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
         const online = !!bridge && state === "online" && bridge.hasSnapshot;
-        const name = !bridge || state === "unconfigured" ? "未配置" : String(bridge.relayName || "relay");
+        const name = !bridge || state === "unconfigured" ? "未配置" : sourceDisplayName(String(bridge.relayName || "relay"));
         const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
         const summary = !bridge || state === "unconfigured" ? "待配对" : online ? count + " 会话 · 在线" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
+          switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
           switcher.querySelectorAll("[data-current-source]").forEach((el) => { el.textContent = name; });
-          switcher.querySelectorAll("[data-current-summary]").forEach((el) => { el.textContent = summary; });
           switcher.querySelectorAll(".source-option[data-source-choice]").forEach((option) => {
             const strong = option.querySelector("strong");
             const small = option.querySelector("small");
@@ -6878,6 +7068,9 @@ function connectLan(ctx) {
           dot.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
           dot.classList.add(className);
         });
+        // W-UIFB ①：trigger 连接图标同步四态（此链路无 unconfigured 概念，非连非通即红=失败）
+        const connCls = status === "online" ? "conn-on" : status === "connecting" ? "conn-wait" : "conn-fail";
+        document.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + connCls; });
         renderSessionList();
       }
 
