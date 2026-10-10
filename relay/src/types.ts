@@ -313,6 +313,9 @@ export interface PendingInput {
   text: string;
   ts: number;
   body?: string;
+  // FB14：随消息图片的落盘引用（img-* basename）。晋升写正式消息日志时随行透传，
+  // 气泡才有缩略可渲；对账（pBody）不受影响
+  refs?: string[];
 }
 
 // 托管会话权限模式四档（#217 起 bypassPermissions 也接受：创建时勾选「跳过权限确认」
@@ -331,6 +334,11 @@ export interface LogEntry {
   detail?: string; // P2 转录：工具完整入参/输出（等宽展开）
   diff?: string[]; // P2 转录：Edit/Write 的 +/- diff 行（着色渲染）
   occurred_at?: number; // 引擎/bridge 明确提供的原生产生时间；缺失时沿用 ts
+  // FB14 气泡附图：随消息发送图片的落盘文件名引用（uploads.ts img-* 命名，仅 basename
+  // 防路径泄漏）。引用而非 base64——LogEntry 随 SNAPSHOT 每次重连全量重发，内联大图
+  // 会把快照/事件流撑爆；端上经 COMMAND_ARTIFACT_FETCH 按需拉取（img 引用分支）。
+  // tmp 目录 7 天清扫（index.ts sweepTmpImages），过期引用拉取 404，端上隐藏缩略即可
+  images?: string[];
 }
 
 // ---------- 事件 payload（Relay -> 客户端） ----------

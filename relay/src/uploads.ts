@@ -53,6 +53,27 @@ export function saveUploadImages(dataDir: string, sessionId: string, images: str
   return saved;
 }
 
+// FB14 气泡附图：落盘结果的引用形态（仅 basename）。LogEntry.images / PendingInput.refs
+// 走它——绝对路径不进事件流（不泄目录结构），端上凭引用经 COMMAND_ARTIFACT_FETCH 回取
+export function imageRefsOf(savedPaths: string[]): string[] {
+  return savedPaths.map((p) => path.basename(p)).filter(Boolean);
+}
+
+// FB14 引用回取：校验引用形态（img-<sidKey>-<stamp>-<n>.<ext>，仅 basename）+ 归属
+// （sidKey 必须与请求会话一致，防跨会话枚举他组图片）+ 落在 tmp 目录内（防穿越），
+// 返回可读的绝对路径；形态/归属不符或文件不存在返回 null。COMMAND_ARTIFACT_FETCH
+// 的 img 引用分支用——授权口径与输出物清单同级：只能拉自己会话收过的图
+const IMG_REF_RE = /^img-[a-z0-9]{0,8}-\d{13}-[1-4]\.(png|jpg|gif|webp)$/i;
+
+export function resolveUploadImage(dataDir: string, sessionId: string, name: string): string | null {
+  if (typeof name !== "string" || !IMG_REF_RE.test(name)) return null;
+  if (name.slice(4).split("-")[0].toLowerCase() !== sidKeyOf(sessionId).toLowerCase()) return null;
+  const dir = tmpUploadDir(dataDir);
+  const p = path.join(dir, name);
+  if (path.dirname(p) !== dir) return null; // 双保险：name 已仅 basename，护栏再断一层
+  return p;
+}
+
 // 文件落盘：命名 file-<sid>-<时间戳>-<序号>-<原始文件名>（扩展名以用户侧文件名为准，
 // 不做魔数嗅探——文档/代码等文本类文件的类型由名字与内容共同决定，重命名反而误导）
 export function saveUploadFiles(dataDir: string, sessionId: string, files: UploadBlob[]): string[] {

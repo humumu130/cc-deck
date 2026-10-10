@@ -319,6 +319,29 @@ export interface OrgActionCreatePayload {
   tier: string;
   /** P81-5 混编标记（可选）：true=组内多引擎混编（派单 policy_source=mixed_team_default）。 */
   mixed_engine?: boolean;
+  /** FB4 团队创建表单：随团种子编制（可选）。会话在册性/外部会话/Leader 排除在
+   * session-manager orgCommand 咽喉校验（有 this.sessions 视野）；此处只做形状校验。 */
+  headcount?: { session_id: string; role: string }[];
+}
+
+/** FB4：随团编制形状校验（≤8 席；role 缺省 worker；session_id 去重）。 */
+function sanitizeHeadcount(raw: unknown): { ok: true; headcount?: ProjectHeadcountEntry[] } | { ok: false; error: string } {
+  if (raw === undefined) return { ok: true };
+  if (!Array.isArray(raw)) return { ok: false, error: "headcount 必须是数组" };
+  if (raw.length > 8) return { ok: false, error: "headcount 超上限（8 席）" };
+  const out: ProjectHeadcountEntry[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return { ok: false, error: "headcount 条目必须是对象" };
+    const sid = typeof (item as { session_id?: unknown }).session_id === "string" ? ((item as { session_id: string }).session_id).trim() : "";
+    if (!sid) return { ok: false, error: "headcount 条目缺 session_id" };
+    if (seen.has(sid)) continue; // 重复选择静默去重
+    seen.add(sid);
+    const roleRaw = (item as { role?: unknown }).role;
+    const role = typeof roleRaw === "string" && roleRaw.trim() ? roleRaw.trim().slice(0, 24) : "worker";
+    out.push({ session_id: sid, role });
+  }
+  return { ok: true, ...(out.length ? { headcount: out } : {}) };
 }
 
 /** B2a adapter：只把 COMMAND_ORG_ACTION=create 收敛到既有 createGroup 单漏斗。 */
@@ -334,7 +357,9 @@ export function handleOrgActionCreate(payload: unknown, dir?: string): CreateGro
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir 必填" };
   if (!isAbsolute(anchor)) return { ok: false, error: "anchor_dir 必须是绝对路径" };
   if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
-  return createGroup({ name, anchor_dir: anchor, tier, ...(raw.mixed_engine === true ? { mixed_engine: true } : {}) }, dir);
+  const hc = sanitizeHeadcount(raw.headcount);
+  if (!hc.ok) return { ok: false, error: hc.error };
+  return createGroup({ name, anchor_dir: anchor, tier, ...(hc.headcount ? { headcount: hc.headcount } : {}), ...(raw.mixed_engine === true ? { mixed_engine: true } : {}) }, dir);
 }
 
 export const adaptOrgAction = handleOrgActionCreate;

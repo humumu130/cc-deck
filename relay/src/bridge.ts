@@ -34,7 +34,7 @@ import {
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
-import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js";
+import { saveUploadImages, saveUploadFiles, imageRefsOf, type UploadBlob } from "./uploads.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
 import type { ActivityKind, SessionEngine } from "./types.js";
@@ -1046,8 +1046,9 @@ export class Bridge {
     return false;
   }
 
-  // 从 pending 里出队所有被 text 覆盖的条目（单条精确 / 合并形态包含），返回被出队的原文
-  private consumePendingTexts(id: string, text: string): string[] {
+  // 从 pending 里出队所有被 text 覆盖的条目（单条精确 / 合并形态包含），返回被出队的
+  // 原文与随行图引用（FB14：气泡缩略数据源；正文与 refs 一一同序配对）
+  private consumePendingTexts(id: string, text: string): { text: string; refs?: string[] }[] {
     const state = this.mgr.getExternal(id);
     const list = state?.pending_inputs ?? [];
     if (!list.length) return [];
@@ -1056,7 +1057,9 @@ export class Bridge {
     if (kept.length === list.length) return [];
     this.mgr.setExternalPending(id, kept);
     for (const p of list) if (key.includes(normKey(pBody(p)))) this.dropEnqueuedKey(id, pBody(p));
-    return list.filter((p) => key.includes(normKey(pBody(p)))).map((p) => p.text);
+    return list
+      .filter((p) => key.includes(normKey(pBody(p))))
+      .map((p) => ({ text: p.text, ...(p.refs?.length ? { refs: p.refs } : {}) }));
   }
 
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
@@ -1086,7 +1089,8 @@ export class Bridge {
         // 登记了 isEnqueued 会永久跳过补发，39 段回归（晋升后重滞留）正挂在这
         this.dropEnqueuedKey(id, pBody(p));
         this.noteUserMsg(id, pBody(p), "promote");
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
+        // FB14：晋升写正式消息日志随行图引用（气泡缩略数据源）
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000), ...(p.refs?.length ? { images: p.refs } : {}) });
       }
       this.resetStuckWatch(id); // #111：enqueue 回执晋升与 UPS 晋升同权，重置滞留快窗
       return;
@@ -1130,8 +1134,9 @@ export class Bridge {
     const consumed = this.consumePendingTexts(id, text);
     if (consumed.length) {
       for (const t of consumed) {
-        if (!this.recentlyLogged(id, t)) this.mgr.pushExternalLog(id, "user_message", truncate(t, 300), undefined, { full: truncate(t, 2000) });
-        this.noteUserMsg(id, t, "promote");
+        // FB14：交付晋升随行图引用（consumePendingTexts 出队的 refs 与原文同源）
+        if (!this.recentlyLogged(id, t.text)) this.mgr.pushExternalLog(id, "user_message", truncate(t.text, 300), undefined, { full: truncate(t.text, 2000), ...(t.refs?.length ? { images: t.refs } : {}) });
+        this.noteUserMsg(id, t.text, "promote");
       }
       this.resetStuckWatch(id); // #111：交付晋升同权，重置滞留快窗
     } else {
@@ -1296,6 +1301,8 @@ export class Bridge {
     // 落盘逻辑抽至 uploads.ts（与托管会话共用，命名口径对账见 test-bridge）
     let body = text.trim();
     const savedImgs = images && images.length ? saveUploadImages(this.opts.dataDir, sessionId, images) : [];
+    // FB14：气泡缩略引用（basename）随 pending 走——晋升/交付写正式消息日志时随行
+    const imgRefs = imageRefsOf(savedImgs);
     if (savedImgs.length) {
       body = body
         ? `${body}\n（图片已保存：${savedImgs.join("、")}——请用 Read 工具查看后再继续）`
@@ -1345,7 +1352,7 @@ export class Bridge {
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2); // 二次探测
       if (!alive2) {
-        return this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`, echoText);
+        return this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`, echoText, imgRefs.length ? imgRefs : undefined);
       }
     }
 
@@ -1355,7 +1362,7 @@ export class Bridge {
     // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）。
     // 带图消息双文本：text=短回显（客户端可见面一律不暴露临时路径），body=注入 CLI 的
     // 全文——晋升/看门狗/防抢发守门对账用 body（pBody），CLI 侧回流的只有 body 形态
-    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}) }]);
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}), ...(imgRefs.length ? { refs: imgRefs } : {}) }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
         this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(echoText, 80)}`);
@@ -1374,14 +1381,14 @@ export class Bridge {
   // pending，恢复进程空闲时 flushQueue 自动带上
   private resumeSpawns = new Map<string, number>();
 
-  private resumeExternal(sessionId: string, text: string, why?: string, echo?: string): { ok: boolean; error?: string } {
+  private resumeExternal(sessionId: string, text: string, why?: string, echo?: string, refs?: string[]): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
     const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
     // 带图消息：pending 回显/日志用短文本（不暴露临时路径），对账键仍是注入全文
     const shown = echo ?? text.trim();
-    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: shown, ts: Date.now(), ...(shown !== text.trim() ? { body: text.trim() } : {}) }]);
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: shown, ts: Date.now(), ...(shown !== text.trim() ? { body: text.trim() } : {}), ...(refs?.length ? { refs } : {}) }]);
     if (inWindow) {
       this.mgr.pushExternalLog(sessionId, "system", `恢复进行中，消息已排队（恢复进程空闲后自动带上）：${truncate(shown, 80)}`);
       return { ok: true };
@@ -1437,7 +1444,8 @@ export class Bridge {
       this.mgr.setExternalPending(sessionId, list);
       this.dropEnqueuedKey(sessionId, pBody(promoted));
       this.noteUserMsg(sessionId, pBody(promoted), "promote");
-      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: truncate(promoted.text, 2000) });
+      // FB14：晋升写正式消息随行图引用（气泡缩略数据源；本函数是 UPS 晋升主路径）
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: truncate(promoted.text, 2000), ...(promoted.refs?.length ? { images: promoted.refs } : {}) });
       this.resetStuckWatch(sessionId);
       return true;
     }
@@ -1454,7 +1462,7 @@ export class Bridge {
           for (const h of hits) {
             this.dropEnqueuedKey(sessionId, pBody(h));
             this.noteUserMsg(sessionId, pBody(h), "promote");
-            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000), ...(h.refs?.length ? { images: h.refs } : {}) });
           }
           this.noteUserMsg(sessionId, prompt, "promote"); // 合并形态也记账：后续同形态到达直接跳过
           this.resetStuckWatch(sessionId);
@@ -1482,7 +1490,7 @@ export class Bridge {
       for (const h of subHits) {
         this.dropEnqueuedKey(sessionId, pBody(h));
         this.noteUserMsg(sessionId, pBody(h), "promote");
-        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000), ...(h.refs?.length ? { images: h.refs } : {}) });
       }
       this.resetStuckWatch(sessionId);
       return true;
@@ -2581,7 +2589,8 @@ export class Bridge {
       const qi = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
       if (qi === -1) {
         this.noteUserMsg(id, pBody(p), "promote");
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
+        // FB14：回合收尾清扫晋升同权随行图引用
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000), ...(p.refs?.length ? { images: p.refs } : {}) });
       } else {
         avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
         kept.push(p);
