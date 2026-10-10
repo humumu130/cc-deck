@@ -20,6 +20,32 @@ if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(canonical)) {
   process.exit(1);
 }
 
+// versionCode 推导（2026-10-10 #44 收编为落点）：Android 覆盖升级硬要求 versionCode
+// 单调不减，此前 build.gradle 硬编码 101、expo 自动值不随版本走——0.6.3 正式版
+// versionCode=104，所有 0.6.3 用户装不上任何 0.7 包（INSTALL_FAILED_VERSION_DOWNGRADE）。
+// 规则不用「统一 +1」手工计数器——忘 bump 即复发同一 bug；改用 VERSION 确定性推导，
+// --write 自动得值、--check 可精确校验，遗忘类事故根除：
+//   base = major*1e6 + minor*1e4 + patch*100（minor/patch 各留两位槽）
+//   预发（-test.N/-snap.N）再减 (100-N)：同版本 test 包排在正式版之下
+//   （0.7.0-test.99=69999 < 0.7.0=70000，test 用户可升正式版；N 限两位）
+// 值域对照：0.6.3=60300（历史已发 104，新值只需后续 >104）、0.7.0-test.10=69910、
+// 0.7.0=70000、0.7.1=70100——对 104/101 均严格递增
+const vc = /^(\d+)\.(\d+)\.(\d+)(?:-(test|snap)\.(\d+))?$/.exec(canonical);
+if (!vc) {
+  console.error(`VERSION 预发段只认 -test.N/-snap.N 两位数（versionCode 推导需要）：${canonical}`);
+  process.exit(1);
+}
+const [, vcMaj, vcMin, vcPat, vcPre, vcPreN] = vc;
+if (Number(vcMin) > 99 || Number(vcPat) > 99) {
+  console.error(`VERSION minor/patch 超两位槽（${vcMin}.${vcPat}）：versionCode 推导会跨槽串位，请换新 major`);
+  process.exit(1);
+}
+if (vcPre && Number(vcPreN) > 99) {
+  console.error(`VERSION 预发序号超两位（${vcPre}.${vcPreN}）：versionCode 推导只容 N≤99（否则与正式版撞号），请发新版本号`);
+  process.exit(1);
+}
+const versionCode = Number(vcMaj) * 1e6 + Number(vcMin) * 1e4 + Number(vcPat) * 100 - (vcPre ? 100 - Number(vcPreN) : 0);
+
 // 各落点：[文件, 取值正则, 回写替换函数]
 const targets = [
   {
@@ -55,6 +81,26 @@ const targets = [
     file: "expo-app/android/app/build.gradle",
     get: (s) => /versionName\s+"(.+?)"/.exec(s)?.[1],
     set: (s) => s.replace(/versionName\s+"(?:.+?)"/, `versionName "${canonical}"`),
+  },
+  {
+    // Android 覆盖升级闸（2026-10-10 #44，推导规则见文件头 versionCode 注释）：
+    // app.json 是 expo/prebuild 的声明源（expo 读它生成/校验原生工程）。
+    // expected：本落点校验值是推导整数而非 VERSION 字符串，走 expected 通道
+    name: "expo-app app.json android.versionCode",
+    file: "expo-app/app.json",
+    get: (s) => /"versionCode":\s*(\d+)/.exec(s)?.[1],
+    set: (s) => s.replace(/("versionCode":\s*)\d+/, `$1${versionCode}`),
+    expected: String(versionCode),
+  },
+  {
+    // 同上（#44）：CI（android.yml）用 checked-in android/ 目录 gradlew 直包、
+    // 不跑 prebuild——build.gradle 的 versionCode 才是装机 APK 的真值
+    // （此前硬编码 101 不动，正是 0.6.3 用户装不上 0.7 包的根因），两处同刷防漂移
+    name: "expo-app build.gradle versionCode",
+    file: "expo-app/android/app/build.gradle",
+    get: (s) => /versionCode\s+(\d+)/.exec(s)?.[1],
+    set: (s) => s.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`),
+    expected: String(versionCode),
   },
   {
     name: "desktop-tauri package.json version",
@@ -112,9 +158,10 @@ for (const t of targets) {
   }
   const raw = read(t.file);
   const cur = t.get(raw);
-  const ok = cur === canonical;
+  const expected = t.expected ?? canonical;
+  const ok = cur === expected;
   if (!ok) mismatch = true;
-  console.log(`${ok ? "✓" : "✗"} ${t.name}: ${cur ?? "(未找到)"}${ok ? "" : ` ≠ ${canonical}`}`);
+  console.log(`${ok ? "✓" : "✗"} ${t.name}: ${cur ?? "(未找到)"}${ok ? "" : ` ≠ ${expected}`}`);
   if (!ok && (mode === "--write" || mode === "-w")) write(t.file, t.set(raw));
 }
 if (mode === "--write" || mode === "-w") console.log(`已全部同步为 ${canonical}`);

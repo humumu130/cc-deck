@@ -125,6 +125,24 @@ if [ -f scripts/version.mjs ] && ! node scripts/version.mjs --check >/dev/null 2
   FAIL=1
 fi
 
+# versionCode 单调不减闸（2026-10-10 #44，P1）：Android 覆盖升级硬要求新包
+# versionCode ≥ 已装包——build.gradle 曾硬编码 101，0.6.3 正式版=104，0.6.3 用户
+# 装任何 0.7 包都 INSTALL_FAILED_VERSION_DOWNGRADE。version.mjs 已把 versionCode
+# 收为 VERSION 推导落点（semver 序天然单调，见该文件头推导注释），本闸兜底
+# 「对旧基线出包」：当前值低于最近可达 tag 的值 = 拿旧源码/旧分支出包，拦。
+# v0.6.3 时代 app.json 无此字段（计 0），历史 tag 天然放行
+VC_NOW=$(node -pe "JSON.parse(require('fs').readFileSync('expo-app/app.json','utf8')).expo?.android?.versionCode ?? 0")
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+if [ -n "$LAST_TAG" ]; then
+  VC_LAST=$(git show "$LAST_TAG:expo-app/app.json" 2>/dev/null | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).expo?.android?.versionCode ?? 0" 2>/dev/null || echo 0)
+  if [ "$VC_NOW" -lt "$VC_LAST" ] 2>/dev/null; then
+    echo "❌ versionCode 倒退：当前 $VC_NOW < 最近 tag $LAST_TAG 的 $VC_LAST（对旧基线出包？）"
+    FAIL=1
+  else
+    echo "✅ versionCode 单调（当前 $VC_NOW ≥ $LAST_TAG 的 $VC_LAST）"
+  fi
+fi
+
 if [ "$FAIL" = "1" ]; then
   echo "——检查未通过，禁止打 tag/发版"
   exit 1
