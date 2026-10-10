@@ -686,6 +686,14 @@
     .settings-row.engine-off .engine-badge { filter: saturate(.35); }
     .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
     .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
+    /* W-CTXFIX B3 压缩前状态摘要折叠：灰调低调（存档查阅属性），details 原生折叠默认收起 */
+    details.pcsum summary { cursor: pointer; user-select: none; color: var(--dim); font-size: var(--fs-E); font-weight: 600; list-style: none; display: flex; align-items: baseline; gap: 7px; }
+    details.pcsum summary::-webkit-details-marker { display: none; }
+    details.pcsum summary::before { content: "▸"; color: var(--text-faint, var(--dim)); flex: none; transition: transform .15s; }
+    details.pcsum[open] summary::before { transform: rotate(90deg); }
+    details.pcsum summary span { font-weight: 400; opacity: .65; }
+    details.pcsum pre { margin: 7px 0 0; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: color-mix(in srgb, var(--dim) 5%, transparent); font-family: var(--mono, monospace); font-size: var(--fs-E); line-height: 1.6; color: var(--dim); white-space: pre-wrap; word-break: break-word; }
+    .detail-panel-list details.pcsum { margin: 10px 0; border: 1px solid var(--line-soft); border-radius: 10px; padding: 8px 12px; }
     .inspector-title {display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: var(--fs-B); font-weight: 700;}
     .inspector-copy {color: var(--dim); font-size: var(--fs-E);}
     .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
@@ -2189,7 +2197,7 @@
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
                 }
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error"];
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary"];
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -2874,6 +2882,8 @@
                     html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
                     if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
                     if (s.context_usage) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>";
+                    // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
+                    if (s.pre_compact_summary) html += '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>";
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
                     if (arts.length) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
@@ -3623,6 +3633,8 @@
                   // 上部：ctxMeter 水位计
                   if (s.context_usage) html += ctxMeterHtml(s);
                   else html += '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
+                  // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
+                  if (s.pre_compact_summary) html += '<details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details>";
                   // 本回合时长 + 输入输出 tokens（原 .metric 改普通键值行）
                   if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + fmtDur(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
                   const u = s.usage;

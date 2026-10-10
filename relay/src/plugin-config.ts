@@ -16,8 +16,12 @@ import { join } from "node:path";
 // 全组停止值守 feed/自动派活；缺省 true（019 §6.4 六项默认生效基调+§6.3「已有显式
 // false 的组不被迁移覆盖」同构：显式 false 才关，config 无键=开）。环境门
 // CCR_PM_DUTY 仍须显式开（沙盒/既有测试缺省关零波及），两级同开才生效（§6.1）。
-export const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty"] as const;
-export type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean; duty: boolean };
+// W-CTXFIX 第六键 preCompactSummary（2026-10-10）：压缩前任务摘要看门狗总闸
+//（relay/src/context-watchdog.ts 链路）——关=托管会话水位到阈值不发摘要指令、
+// 不注回；缺省 true（用户拍板：默认开启、设置域可关）。relay 侧专属键，hooks 侧
+// guard-lib CONFIG_DEFAULTS 不含（同 duty 先例）。
+export const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary"] as const;
+export type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean; duty: boolean; preCompactSummary: boolean };
 // 测试缝（P71）：缺省 ~/.cc-deck/config.json；CCR_CONFIG_FILE 注入后读写全落指定
 // 文件——值守产品门测试绝不触生产配置（同 CCR_DATA_DIR/CCR_ORG_DIR 隔离范式）
 export function pluginConfigPath(): string {
@@ -26,7 +30,7 @@ export function pluginConfigPath(): string {
 // 导出供 cloud-client 云通道 SNAPSHOT 同源携带（手机走云桥也要拿到开关）+
 // session-manager feedPM 产品门（P71）读取
 export function readPluginConfig(): PluginConfig {
-  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true };
+  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true };
   try {
     const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
     for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;

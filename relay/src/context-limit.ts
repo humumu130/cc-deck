@@ -1,4 +1,13 @@
+import { withContextWindowSuffix } from "./models.js"; // 单向依赖（models.ts 不依赖本文件，无环）
+
 // 上下文窗口上限：按模型名集中查表，随 context_usage 下发，客户端不存映射表。
+//
+// 显示链必须走 contextLimitOfEffective（W-CTXFIX B1，2026-10-10）：托管会话的
+// 存储模型是有意裸名（models.ts「存储/显示保持裸名」），CLI 实际按 spawn 链重挂
+// 的 [1m] 名跑——裸名直查会把 1M 窗口按 200K 档显示（水位虚高 5 倍，#22 沙盒
+// 实证：spawn 已带 [1m] 而面板 limit 仍 200000）。外部会话（bridge 转录路径）
+// 例外：其 model 来自转录 message.model = CLI 实际口径（用户带不带后缀如实反映），
+// 裸名直查即正确，勿改 effective。
 //
 // #166（2026-09-23，推翻 #72 的 200K 一刀切结论）：窗口必须按模型查，用户切换
 // 模型时 relay 下一次 usage 更新即自动跟随（所有调用点都传当回合 model）。
@@ -43,6 +52,14 @@ export function contextLimitOf(model: string | undefined): number {
   if (m.startsWith("glm-4.6")) return 200_000; // 官方
   if (m.startsWith("glm-4.5")) return 128_000; // 官方（含 4.5-air）
   return CONTEXT_LIMIT_DEFAULT;
+}
+
+// 显示链专用口径（W-CTXFIX B1，2026-10-10）：按「CLI 实际 spawn 的模型」查表——
+// 先经 withContextWindowSuffix 重挂再查，与 spawn 链共用同一个前缀判定函数
+//（models.ts，唯一事实源），杜绝「谁该升 1M 档」的规则在两处漂移。裸名存储的
+// 托管会话显示链（onContext / SNAPSHOT 回放 / history 还原）一律走这里。
+export function contextLimitOfEffective(model: string | undefined): number {
+  return contextLimitOf(withContextWindowSuffix(model) ?? model);
 }
 
 // 回放还原水位时的真实性上限（#72 follow-up）：真实 per-call 水位可以短暂越窗

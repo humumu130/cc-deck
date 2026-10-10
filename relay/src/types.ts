@@ -246,6 +246,11 @@ export interface SessionState {
   artifacts?: ArtifactItem[]; // #35 会话输出物清单（内存态；外部会话重启走 transcript 回放重建）
   artifacts_truncated?: boolean; // #35 输出物超 200 条被截断保最新（汇总行提示用）
   compacting?: boolean;      // #363 true = CLI 正在压缩上下文（PreCompact hook 置位，Compacting conversation…）；下一事件/转录增长/8min 兜底清位
+  // W-CTXFIX B3（2026-10-10）：压缩前任务状态摘要（context-watchdog.ts 看门狗在水位
+  // ≥85% 时向会话发摘要指令、捕获该回合 assistant 输出固化于此）。CLI auto-compact
+  // 发生后由此注回下一回合首帧（只注一次，运行态标志不落 state）。随 SESSION_UPDATED
+  // /SNAPSHOT 下发，回放还原——重启后保留可查（web-console 会话详情折叠块展示）
+  pre_compact_summary?: string;
   // #49 置顶会话：pinned = 用户置顶（写穿 data/pinned-sessions.json，跨重启保留）。
   // saved = 休眠标记：relay 重启后置顶会话只登记不拉起（agent 为空、可见不可操作），
   // 端上渲染「已保存」卡片，点击发 COMMAND_RESUME_SESSION 按需 resume 拉起；
