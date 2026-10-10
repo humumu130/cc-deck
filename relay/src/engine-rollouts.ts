@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { closeSync, openSync, readdirSync, readSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { closeSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { basename, join, relative } from "node:path";
 import { deriveTitle } from "./history.js";
 import type { LogEntry, SessionEngine, SessionStatus } from "./types.js";
 
@@ -266,14 +266,90 @@ function rolloutFiles(root: string, pattern: RegExp): string[] {
   return out;
 }
 
+// W-PERF CPU 烧蚀根治（2026-10-10）：本扫描器每 5s 一拍（bridge engineScanTimer）。
+// 原实现 cursor 只存内存——relay 每次重启后首拍对全部 rollout 文件从 0 全量
+// 读+toString+split+JSON.parse（实测 246MB/53 文件 = 2.75s CPU 100% 打满；
+// sessions 上 GB 的机器一次重启烧 10s+，且事件循环被饿死 HTTP 不可达）。
+// 三件根治（都是增量收口，不靠降频掩盖）：
+//   ① cursor 持久化到 dataDir（重启零重读，boot 即热）
+//   ② 单拍读预算（默认 32MB，CCR_ENGINE_SCAN_BUDGET_KB 可调）——冷启动首见
+//      大根目录时一拍最多读这么多，余量下拍续读（cursor 天然支持断点续读），
+//      任何情况下不把事件循环饿死超过一个预算的解析耗时
+//   ③ 零增长 stat 门槛——size 无变化的文件跳过 open/read（稳态主路径）
+export const ENGINE_SCAN_BUDGET_BYTES = (() => {
+  const kb = Number(process.env.CCR_ENGINE_SCAN_BUDGET_KB);
+  return kb > 0 ? kb * 1024 : 32 * 1024 * 1024;
+})();
+
+interface RolloutCursor {
+  offset: number;
+  carry: string;
+  profile: EngineRolloutProfile;
+  size?: number; // 上次见到的文件大小（零增长 stat 门槛）
+}
+
+// 持久化结构（dataDir/engine-cursors-<engine>.json）：relPath → 断点 + 会话画像。
+// profile 一并落盘：重启后不重读也能保住 prompt/title/activity 状态。
+interface CursorDump {
+  version: 1;
+  files: Record<string, { offset: number; carry: string; profile: EngineRolloutProfile }>;
+}
+
 export class RolloutScanner {
   private readonly cursors = new Map<string, RolloutCursor>();
+  private persistFile: string | null = null;
+  private loaded = false;
+  private dirty = false;
 
-  constructor(private readonly spec: EngineScanSpec, private readonly root: string) {}
+  constructor(private readonly spec: EngineScanSpec, private readonly root: string, persistFile?: string) {
+    this.persistFile = persistFile ?? null;
+  }
+
+  // 懒加载：首拍前恢复上次运行的断点（文件缺失/损坏/版本不符静默重来——
+  // 重读一遍的代价只是回到旧世界，不阻断启动）
+  private ensureLoaded(): void {
+    if (this.loaded) return;
+    this.loaded = true;
+    if (!this.persistFile) return;
+    try {
+      const dump = JSON.parse(readFileSync(this.persistFile, "utf8")) as CursorDump;
+      if (dump.version !== 1 || !dump.files || typeof dump.files !== "object") return;
+      for (const [rel, entry] of Object.entries(dump.files)) {
+        if (!entry || typeof entry.offset !== "number" || !entry.profile) continue;
+        if (!(entry.offset >= 0) || typeof entry.carry !== "string") continue;
+        const filePath = join(this.root, rel);
+        this.cursors.set(filePath, { offset: entry.offset, carry: entry.carry, profile: { ...entry.profile, filePath } });
+      }
+    } catch { /* 无文件/损坏：从零开始（等价旧行为） */ }
+  }
+
+  // 落盘（脏时）：tmp+rename 原子替换。carry 超长（超大单行 JSON 半行）时回退
+  // offset 到该行行首重存，避免持久化文件被单行撑爆——代价是重启后那一行重读一遍。
+  private save(): void {
+    if (!this.persistFile || !this.dirty) return;
+    this.dirty = false;
+    try {
+      const files: CursorDump["files"] = {};
+      for (const [filePath, cursor] of this.cursors) {
+        let offset = cursor.offset;
+        let carry = cursor.carry;
+        if (carry.length > 65_536) {
+          offset = Math.max(0, offset - Buffer.byteLength(carry, "utf8"));
+          carry = "";
+        }
+        files[relative(this.root, filePath)] = { offset, carry, profile: cursor.profile };
+      }
+      const tmp = `${this.persistFile}.tmp`;
+      writeFileSync(tmp, JSON.stringify({ version: 1 as const, files }));
+      renameSync(tmp, this.persistFile);
+    } catch { /* 落盘失败不影响扫描（下次再试） */ }
+  }
 
   scan(now = Date.now()): EngineRolloutProfile[] {
+    this.ensureLoaded();
     const files = rolloutFiles(this.root, this.spec.filePattern);
     const seen = new Set(files);
+    let budget = ENGINE_SCAN_BUDGET_BYTES;
     for (const filePath of files) {
       let size = 0;
       let mtime = now;
@@ -288,39 +364,54 @@ export class RolloutScanner {
       if (!cursor || size < cursor.offset) {
         cursor = { offset: 0, carry: "", profile: initialProfile(this.spec, filePath) };
         this.cursors.set(filePath, cursor);
+        this.dirty = true;
       }
-      let fd: number | undefined;
-      try {
-        fd = openSync(filePath, "r");
-        const remaining = size - cursor.offset;
-        if (remaining > 0) {
-          const buffer = Buffer.alloc(Math.min(remaining, 1024 * 1024));
-          let position = cursor.offset;
-          let carry = cursor.carry;
-          while (position < size) {
-            const read = readSync(fd, buffer, 0, Math.min(buffer.length, size - position), position);
-            if (read <= 0) break;
-            position += read;
-            const lines = (carry + buffer.subarray(0, read).toString("utf8")).split(/\r?\n/);
-            carry = lines.pop() ?? "";
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              try { applyRecord(this.spec, cursor.profile, JSON.parse(line) as RolloutRecord); } catch {}
+      // 零增长门槛：大小没变且已读到尾 = 上拍之后无新字节，open/read 全跳
+      const unchanged = cursor.size === size && cursor.offset >= size;
+      cursor.size = size;
+      if (!unchanged && budget > 0) {
+        let fd: number | undefined;
+        try {
+          fd = openSync(filePath, "r");
+          const remaining = size - cursor.offset;
+          if (remaining > 0) {
+            const buffer = Buffer.alloc(Math.min(remaining, 1024 * 1024));
+            let position = cursor.offset;
+            let carry = cursor.carry;
+            while (position < size) {
+              if (budget <= 0) break; // 本拍预算用尽：cursor 已记账，下拍从此续读
+              const want = Math.min(buffer.length, size - position, budget);
+              const read = readSync(fd, buffer, 0, want, position);
+              if (read <= 0) break;
+              position += read;
+              budget -= read;
+              const lines = (carry + buffer.subarray(0, read).toString("utf8")).split(/\r?\n/);
+              carry = lines.pop() ?? "";
+              for (const line of lines) {
+                if (!line.trim()) continue;
+                try { applyRecord(this.spec, cursor.profile, JSON.parse(line) as RolloutRecord); } catch {}
+              }
             }
+            if (position !== cursor.offset || carry !== cursor.carry) this.dirty = true;
+            cursor.offset = position;
+            cursor.carry = carry;
           }
-          cursor.offset = position;
-          cursor.carry = carry;
+        } catch {
+          continue;
+        } finally {
+          if (fd !== undefined) try { closeSync(fd); } catch {}
         }
-        if (cursor.profile.startedAt === 0) cursor.profile.startedAt = mtime || now;
-        if (cursor.profile.updatedAt === 0) cursor.profile.updatedAt = mtime || now;
-      } catch {
-        continue;
-      } finally {
-        if (fd !== undefined) try { closeSync(fd); } catch {}
       }
+      if (cursor.profile.startedAt === 0) cursor.profile.startedAt = mtime || now;
+      if (cursor.profile.updatedAt === 0) cursor.profile.updatedAt = mtime || now;
     }
-    for (const filePath of this.cursors.keys()) if (!seen.has(filePath)) this.cursors.delete(filePath);
-    return [...this.cursors.values()].map((cursor) => ({ ...cursor.profile }));
+    for (const filePath of this.cursors.keys()) if (!seen.has(filePath)) { this.cursors.delete(filePath); this.dirty = true; }
+    this.save();
+    // 预算耗尽拍：首见但一个字节都没读到的文件不外发——带空 cwd/未命名的半成品
+    // 卡会闪进列表（5s 后下一拍带真实 cwd/title 再出，宁可晚一拍不出残卡）
+    return [...this.cursors.values()]
+      .filter((cursor) => !((cursor.size ?? 0) > 0 && cursor.offset === 0))
+      .map((cursor) => ({ ...cursor.profile }));
   }
 }
 
