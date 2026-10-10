@@ -130,11 +130,12 @@ try {
 
   // ---------- P0 配置面静态断言 ----------
   console.log("P0 配置面（plugin-config 独立件）");
-  assert(PLUGIN_CFG_KEYS.length === 5 && (PLUGIN_CFG_KEYS as readonly string[]).includes("duty"),
-    "P0① PLUGIN_CFG_KEYS 五键含 duty（019 §6.2 第五键）");
+  assert(PLUGIN_CFG_KEYS.length === 6 && (PLUGIN_CFG_KEYS as readonly string[]).includes("duty"),
+    "P0① PLUGIN_CFG_KEYS 六键含 duty（019 §6.2 第五键；W-CTXFIX 第六键 preCompactSummary）");
   const dflt = readPluginConfig();
   assert(dflt.duty === true && dflt.taskGuard === false && dflt.qNotify === true && dflt.restorePoint === false && dflt.deliverables === true,
     "P0② 缺省值五键齐+duty 缺省 true（kill-switch 语义：显式 false 才关）");
+  assert(dflt.preCompactSummary === true, "P0②b preCompactSummary 缺省 true（W-CTXFIX：默认开启、设置域可关）");
   assert(pluginConfigPath() === process.env.CCR_CONFIG_FILE,
     "P0③ CCR_CONFIG_FILE override 生效（配置读写全落测试 tmp，零生产触达）");
   writeFileSync(pluginConfigPath(), JSON.stringify({ duty: false, unknown_key: 1 }) + "\n");

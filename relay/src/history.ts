@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Envelope, EventType, LogEntry, SessionEngine, SessionState } from "./types.js";
-import { contextLimitOf, REPLAY_CONTEXT_MAX } from "./context-limit.js";
+import { contextLimitOfEffective, REPLAY_CONTEXT_MAX } from "./context-limit.js";
 
 const MAX_SESSIONS_KEPT = 30;
 const MAX_LOGS_PER_SESSION = 300;
@@ -187,15 +187,21 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         // context_limit，导致 mid-turn 与 idle 会话的水位条全部消失（只有恰逢回合
         // 完成的会话重新拿到）。载荷显式携带才还原，与下发侧 spread 语义一致。
         // follow-up（同夜实弹验证）：limit 不信任历史帧（旧映射 bug 写过 1M），一律
-        // 按 contextLimitOf 重算；usage 超 REPLAY_CONTEXT_MAX 的按旧聚合污染丢弃
-        // （真值由新回合首个 message_delta 写回）
+        // 按模型名重算（W-CTXFIX B1 起 = contextLimitOfEffective）；usage 超
+        // REPLAY_CONTEXT_MAX 的按旧聚合污染丢弃（真值由新回合首个 message_delta 写回）
+        // W-CTXFIX B1（2026-10-10）：托管会话存档 model 是有意裸名、CLI 实按 [1m]
+        // 重挂名跑——重算走 effective 口径（context-limit.ts 头注释），同 onContext
         const cu = (p as { context_usage?: unknown }).context_usage;
         if (typeof cu === "number" && cu > 0 && cu <= REPLAY_CONTEXT_MAX) {
           s.context_usage = cu;
-          s.context_limit = contextLimitOf(s.model);
+          s.context_limit = contextLimitOfEffective(s.model);
         }
         if (p.todos) s.todos = p.todos;
         if (p.subagents) s.subagents = p.subagents;
+        // W-CTXFIX B3：压缩前摘要跨重启还原（任务书要求 resume/revive 后保留可查）
+        if ((p as { pre_compact_summary?: string }).pre_compact_summary) {
+          s.pre_compact_summary = (p as { pre_compact_summary?: string }).pre_compact_summary!;
+        }
         if ((p as { relay_session_id?: string }).relay_session_id) s.relay_session_id = (p as { relay_session_id?: string }).relay_session_id!;
         if ((p as { permission_mode?: SessionState["permission_mode"] }).permission_mode) s.permission_mode = (p as { permission_mode?: SessionState["permission_mode"] }).permission_mode;
         break;

@@ -54,7 +54,9 @@ import { normKey, taskDoneLabel, truncate } from "./summarizer.js";
 import type { AgentLike } from "./agent-adapter.js";
 
 // 上下文窗口上限：口径与证据见 context-limit.ts（#72，session-manager/history 共用）
-import { contextLimitOf } from "./context-limit.js";
+import { contextLimitOf, contextLimitOfEffective } from "./context-limit.js";
+// W-CTXFIX B3：压缩前任务摘要看门狗（阈值/文案/状态机判定集中在该模块）
+import { compactPrompt, wdThreshold, wdDropRatio, wdCooldownMs, wdCaptureTimeoutMs, wrapPreCompactReminder } from "./context-watchdog.js";
 import { AllowRuleStore } from "./allow-rules.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
@@ -82,6 +84,7 @@ import type {
   SessionActivityPayload,
   SessionEngine,
   SessionState,
+  SessionStatus,
   StatusDockState,
   SubagentInfo,
   TodoItem,
@@ -454,6 +457,17 @@ interface ManagedSession {
   // unacked 对账取出（对账条在回显之后才入账）。unacked.refs 仍记（看门狗重放/
   // resume 续带用），两处数据源各管一段
   pendingImgRefs?: string[];
+  // W-CTXFIX B3（2026-10-10）：context 看门狗运行态（全内存，重启即清——摘要产物
+  // pre_compact_summary 落 state 持久，这里只管「正在摘要/待注回」过程状态）
+  ctxWd?: {
+    armed?: boolean;        // 摘要指令已入队，当前回合未结束（本回合文本不捕，防误收）
+    pending?: boolean;      // 捕获窗开启（armed 在回合终态升级而来）：assistant 文本入 capture
+    since?: number;         // armed/pending 起点时刻（超时放弃判定）
+    lastWatermark?: number; // 上一次 per-call 水位（骤降判定基准；undefined = 尚无基准不判）
+    lastPromptAt?: number;  // 上次摘要指令发出时刻（冷却窗判定）
+    reinjectPending?: boolean; // CLI 已实际压缩、有摘要待注回：下一回合首帧注入后清除
+    capture: string[];      // pending 期间收到的 assistant 完整正文（收口时 join）
+  };
 }
 
 interface WatchdogState {
@@ -2261,6 +2275,15 @@ export class SessionManager {
           // 路径，同 #54b 口径；unacked 记合成文——重放时盘上文件仍在，指令照常有效）
           const orig = cmd.payload.text;
           let text = orig;
+          // W-CTXFIX B3：待注回摘要拼进本条消息首帧（system-reminder 形态，只注一次）。
+          // 单点收敛：在此拼好 text，后续三个出口（resumePending 排队 / resumeAgent
+          // 换流 / 直发 sendMessage）自然全部携带；echo 仍展示用户原文不含前缀
+          if (s.ctxWd?.reinjectPending && s.state.pre_compact_summary) {
+            s.ctxWd.reinjectPending = false;
+            text = wrapPreCompactReminder(s.state.pre_compact_summary) + text;
+            this.pushExternalLog(s.state.session_id, "system", "已注入压缩前任务状态摘要（外置记忆存档）");
+            this.emitUpdated(s, true);
+          }
           let echo: string | undefined;
           const files = sanitizeFiles(cmd.payload.files);
           if (files && files.length > 0) {
@@ -3170,6 +3193,9 @@ export class SessionManager {
           }
           managed.state.status = effStatus;
           managed.state.action_summary = summary;
+          // W-CTXFIX B3：看门狗两段态在回合边界推进（armed→pending / pending 收口）。
+          // 摘要指令入队后当前回合的正文不捕（防误收），当前回合终态才开捕获窗
+          if (changed) this.ctxWatchdogOnTurnBoundary(managed, effStatus);
           // R1a：状态变化同步刷 activity 状态舱（先落 status 再刷 dock——终态守卫
           // 按「已落的新状态」判定，resume 翻回 WORKING 不被误冻结）
           this.applyActivity(managed, mapActivityState({
@@ -3289,8 +3315,19 @@ export class SessionManager {
           if (!mine()) return;
           touch("context");
           if (tokens > 0) managed.state.context_usage = tokens;
-          managed.state.context_limit = contextLimitOf(managed.state.model);
+          // W-CTXFIX B1（2026-10-10）：state.model 有意裸名存储、CLI 实按 spawn 链
+          // 重挂的 [1m] 名跑——显示链必须走 effective 口径（context-limit.ts 头注释
+          // 是完整理由），否则 1M 窗口按 200K 档显示、水位虚高 5 倍（#22 沙盒实证）
+          managed.state.context_limit = contextLimitOfEffective(managed.state.model);
+          // W-CTXFIX B3：阈值/骤降判定挂点（B1 修好 limit 口径后才可信，故排其后）
+          this.ctxWatchdogOnContext(managed, tokens);
           this.emitUpdated(managed, false);
+        },
+        // W-CTXFIX B3：摘要捕获——只在捕获窗（ctxWd.pending）开着时收正文，
+        // 全文由 agent-adapter 终态回调给（onLog 载荷 400 字截断不够落盘）
+        onAssistantText: (text) => {
+          if (!mine()) return;
+          if (managed.ctxWd?.pending) managed.ctxWd.capture.push(text);
         },
         onLog: (kind, text, meta) => {
           if (!mine()) return;
@@ -3390,6 +3427,11 @@ export class SessionManager {
             managed.state.last_error = reason;
             this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason });
           }
+          // W-CTXFIX B3：回合终态真入口在 onTurnEnd（onStatusChange 的 DONE 帧只是
+          // 旁路回显）——看门狗两段态推进必须挂这里，否则 armed 永远等不到升级
+          //（沙盒实证：指令已入队、摘要回合已开、armed 恒挂）。onStatusChange 挂点
+          // 保留（WAITING 等非终态边界仍走它），boundary 幂等双挂无害
+          this.ctxWatchdogOnTurnBoundary(managed, managed.state.status);
           // R1c：终态收口（waiting_request 已清）→ waiting 通知 resolved（统一同步点）
           this.syncWaitingNotification(managed);
           // M12-6 值守：Leader 回合终态=统一值守检查点（019 §3.2 回合结束拦截——
@@ -6160,6 +6202,99 @@ export class SessionManager {
   }
 
   // at：本帧对应的真实活动时刻（水合/回放路径传入，缺省当下——#157，语义同 setTodos）
+  // ===== W-CTXFIX B3（2026-10-10）：context 看门狗——压缩前任务摘要固化与注回 =====
+  // 链路与状态机说明见 context-watchdog.ts 头注释。运行态全在 s.ctxWd（内存），
+  // 产物落 s.state.pre_compact_summary（持久+下发+回放）。挂点：onContext（阈值/
+  // 骤降判定）、onAssistantText（捕获）、onStatusChange（回合边界推进状态机）、
+  // COMMAND_MESSAGE（首帧注回）。
+
+  private ctxWdOf(s: ManagedSession): NonNullable<ManagedSession["ctxWd"]> {
+    if (!s.ctxWd) s.ctxWd = { capture: [] };
+    return s.ctxWd;
+  }
+
+  /** 看门狗总开关（plugin-config 第六键 preCompactSummary，缺省 true） */
+  private ctxWdEnabled(): boolean {
+    return readPluginConfig().preCompactSummary !== false;
+  }
+
+  /** onContext 挂点：惰性超时 → 骤降判定（置注回标志）→ 阈值触发（发摘要指令） */
+  private ctxWatchdogOnContext(s: ManagedSession, tokens: number): void {
+    if (!this.ctxWdEnabled() || s.state.external) return;
+    const limit = s.state.context_limit ?? 0;
+    if (limit <= 0 || tokens <= 0) return;
+    const wd = this.ctxWdOf(s);
+    const now = Date.now();
+    // 惰性超时：armed/pending 悬挂（流死/摘要回合无正文）超时放弃，状态机归零。
+    // 不定时器——onContext 本就逐调用刷新，下一帧顺手清即可
+    if ((wd.armed || wd.pending) && wd.since && now - wd.since > wdCaptureTimeoutMs()) {
+      wd.armed = false;
+      wd.pending = false;
+      wd.since = undefined;
+      wd.capture = [];
+      this.pushExternalLog(s.state.session_id, "system", "压缩前摘要流程超时放弃");
+    }
+    // 骤降判定：per-call 水位单帧降幅超 limit×30% = CLI 已实际压缩（正常回合间
+    // 波动是缓存重算的跳高不跳低，骤降只有全量压缩一种成因）。有摘要且未注回 →
+    // 置标志，等下一回合首帧注入（COMMAND_MESSAGE 入口单点拼装）
+    if (
+      wd.lastWatermark !== undefined &&
+      wd.lastWatermark - tokens > limit * wdDropRatio() &&
+      s.state.pre_compact_summary &&
+      !wd.reinjectPending
+    ) {
+      wd.reinjectPending = true;
+      this.pushExternalLog(s.state.session_id, "system", "检测到上下文已压缩，任务状态摘要将在下一条消息自动注入");
+      this.emitUpdated(s, true);
+    }
+    wd.lastWatermark = tokens;
+    // 阈值触发。任何条件不满足都静默跳过（下一帧水位再说），不排队不重试
+    if (tokens < limit * wdThreshold()) return;
+    if (wd.armed || wd.pending || wd.reinjectPending) return; // 流程已在途/待注回
+    if (s.state.status !== "WORKING" || s.state.compacting) return; // 回合态不符
+    if (wd.lastPromptAt && now - wd.lastPromptAt < wdCooldownMs()) return; // 冷却窗（指令本身占水位，防风暴）
+    const prompt = compactPrompt();
+    wd.armed = true;
+    wd.since = now;
+    wd.lastPromptAt = now;
+    wd.capture = [];
+    // 直发 + unacked 入账（#7 重放账同款：流死重放保必达；CLI 消费时回显出队）。
+    // echo 短文案：面板时间线显示一行系统动作，指令全文不刷屏
+    s.agent?.sendMessage(prompt, undefined, "【relay】上下文水位告警，已请求任务状态摘要");
+    s.unacked.push({ text: prompt, ts: now });
+    this.pushExternalLog(s.state.session_id, "system", `上下文水位 ${Math.round((tokens / limit) * 100)}%，已请求压缩前任务状态摘要`);
+    this.emitUpdated(s, true);
+  }
+
+  /** onStatusChange 挂点：回合终态边界推进两段态（armed→pending 升级 / pending 收口） */
+  private ctxWatchdogOnTurnBoundary(s: ManagedSession, newStatus: SessionStatus): void {
+    const wd = s.ctxWd;
+    if (!wd) return;
+    if (newStatus === "WORKING") return; // 只在回合终态边界推进
+    const now = Date.now();
+    if (wd.armed) {
+      // 摘要指令发出后的第一个回合终态：开捕获窗（此后 assistant 正文属于摘要回合）
+      wd.armed = false;
+      wd.pending = true;
+      wd.since = now;
+      wd.capture = [];
+      return;
+    }
+    if (wd.pending) {
+      // 摘要回合结束：收口。无正文（模型直出 DONE/超时）= 本轮放弃，冷却已计，
+      // 下次到阈值再试；有正文才写 state 并落痕
+      const text = wd.capture.join("\n").trim();
+      wd.pending = false;
+      wd.since = undefined;
+      wd.capture = [];
+      if (text) {
+        s.state.pre_compact_summary = text;
+        this.pushExternalLog(s.state.session_id, "system", "压缩前任务状态摘要已固化");
+      }
+      this.emitUpdated(s, true);
+    }
+  }
+
   private emitUpdated(s: ManagedSession, force: boolean, at?: number): void {
     const now = Date.now();
     if (!force && now - s.lastUpdateEmit < UPDATE_THROTTLE_MS) return;
@@ -6175,7 +6310,10 @@ export class SessionManager {
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
-      ...(s.state.context_usage !== undefined ? { context_usage: s.state.context_usage, context_limit: s.state.context_limit ?? contextLimitOf(s.state.model) } : {}),
+      ...(s.state.context_usage !== undefined ? { context_usage: s.state.context_usage, context_limit: s.state.context_limit ?? contextLimitOfEffective(s.state.model) } : {}),
+      // W-CTXFIX B3：压缩前摘要随增量帧携带（有值才带，≤500 字帧增量可接受）——
+      // 面板折叠块与回放还原共用此载荷，SNAPSHOT 走 cloneState 全量天然带上
+      ...(s.state.pre_compact_summary ? { pre_compact_summary: s.state.pre_compact_summary } : {}),
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),

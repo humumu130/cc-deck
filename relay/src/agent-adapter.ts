@@ -305,6 +305,11 @@ export interface AgentCallbacks {
   // (input+cache_read+cache_creation) = 该次调用实际送入的上下文。回合 result 的
   // 聚合 usage 不能当水位用（重回合恒超窗口上限）。可选：非会话级实现方无需关心
   onContext?(tokens: number): void;
+  // W-CTXFIX B3（2026-10-10）：主流程 assistant 消息的完整正文（终态 text 块，非
+  // onLog 的 400 字截断口径）。可选：消费方 = context-watchdog 摘要捕获（压缩前任务
+  // 状态摘要须全文落 state）。每条 assistant 消息的每个 text 块触发一次（一回合
+  // 多段正文多次触发，拼接由调用方负责）；z.ai 内置工具桥文本不触发（非正文）
+  onAssistantText?(text: string): void;
   // TodoWrite 工具调用：最新任务清单全量替换
   onTodos(todos: TodoItem[]): void;
   // #112 子 Agent 工作状态（SDK 托管会话）：主流程 Task/Agent 工具派生 + parent
@@ -566,8 +571,15 @@ export class AgentSession {
       case "assistant": {
         // #72 per-call 水位先于块处理上报（assistant.usage 兜底路径：GLM 后端此处
         // 恒零、真实值在 message_delta，见 watermarkFromUsage 注释；其它后端可能在此给真值）
-        const wm = watermarkFromUsage((msg.message as { usage?: Partial<TokenUsage> }).usage);
-        if (wm > 0) this.cb.onContext?.(wm);
+        // W-CTXFIX B2（2026-10-10）：子代理消息的水位不刷主卡——onContext 写的是
+        // 主流程窗口占用（session-manager 覆盖式写 state.context_usage），子代理每次
+        // 调用有自己的窗口，混入即主卡 meter 跳变（W-CTXDIAG 实证：主流程 29% 与
+        // 子代理 84% 反复横跳，「拥挤」假象）。stream_event 路径（handleStreamEvent
+        // 入口 :781 附近）已有同款过滤，此处补齐 assistant 完整消息路径
+        if (!parent) {
+          const wm = watermarkFromUsage((msg.message as { usage?: Partial<TokenUsage> }).usage);
+          if (wm > 0) this.cb.onContext?.(wm);
+        }
         let ti = 0;
         for (const block of msg.message.content) {
           if ((block as { type?: string }).type === "thinking") {
@@ -601,6 +613,10 @@ export class AgentSession {
                   full: fullText(body, 400),
                   id,
                 });
+                // W-CTXFIX B3：完整正文回调（摘要捕获等需要全文的消费方；onLog 载荷
+                // 400 字截断不够 500 字摘要落盘）。子代理消息不触发（parent 判空，
+                // 外层 case 已有 parent 变量——assistant 分支入口）
+                if (!parent) this.cb.onAssistantText?.(body);
               }
               for (const sg of segs) {
                 if (sg.kind === "tool_use") this.lastSummary = `zai 内置 ${sg.tool.slice(4)}`;
