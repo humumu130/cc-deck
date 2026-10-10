@@ -511,13 +511,17 @@ if (process.env.CC_DECK_DAEMON === "1") {
   // daemon 模式 stdout 落 relay.log：token/带 token 的 URL 不写日志（防泄露），扫码走 /cc-deck
   console.log("  连接:  运行 /cc-deck 显示二维码（token 不写入日志）");
 } else {
+  // P2-4（2026-10-10 安全小修批）：token 只截断显示——桌面壳把 stdout 重定向进
+  // embedded-relay.log 常驻文件，整份贴日志排查问题时不再带出完整 token；
+  // 完整值只经配对场景出现（/cc-deck 扫码、壳内配对页）
+  const maskToken = (t: string): string => (t.length > 10 ? `${t.slice(0, 6)}…${t.slice(-4)}` : "…");
   if (cfg.tokenGenerated) {
-    console.log(`  token:  ${cfg.token}  (未设置 CCR_TOKEN，本次随机生成)`);
+    console.log(`  token:  ${maskToken(cfg.token)}  (未设置 CCR_TOKEN，本次随机生成；完整值走 /cc-deck 配对，不落日志)`);
   }
   for (const list of Object.values(networkInterfaces())) {
     for (const net of list ?? []) {
       if (net.family === "IPv4" && !net.internal) {
-        console.log(`  控制台: http://${net.address}:${cfg.port}/?token=${cfg.token}`);
+        console.log(`  控制台: http://${net.address}:${cfg.port}/?token=${maskToken(cfg.token)}（截断显示，浏览器打开请用配对页完整 token）`);
       }
     }
   }

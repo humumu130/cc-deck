@@ -330,7 +330,13 @@ export function serveArtifact(name: string, res: import("node:http").ServerRespo
   }
   if (real !== realRoot && !real.startsWith(realRoot + sep)) return false;
   if (relative(realRoot, real).split(sep).length > 2) return false;
-  const type = MIME[extname(real).toLowerCase()] ?? "application/octet-stream";
+  const ext = extname(real).toLowerCase();
+  const type = MIME[ext] ?? "application/octet-stream";
+  // P2-1（2026-10-10 安全小修批）：html/svg 允许内联预览但脚本必须不执行——CSP `sandbox`
+  // （无 allow-scripts/allow-same-origin）使内联页面运行在不透明源，JS/表单/同源访问全断；
+  // 其余类型加 X-Content-Type-Options: nosniff 防浏览器按内容嗅探改判类型。
+  // Content-Disposition 保持不动（内联预览体验；壳内产物预览本就走无 token iframe sandbox）。
+  const scriptCapable = type.startsWith("text/html") || type === "image/svg+xml";
   let fd: number;
   try {
     fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -341,7 +347,14 @@ export function serveArtifact(name: string, res: import("node:http").ServerRespo
     const st = fstatSync(fd);
     if (!st.isFile()) return false;
     const data = readFileSync(fd);
-    res.writeHead(200, { "content-type": type, "content-length": st.size, "cache-control": "no-store" });
+    const headers: Record<string, string | number> = {
+      "content-type": type,
+      "content-length": st.size,
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    };
+    if (scriptCapable) headers["content-security-policy"] = "sandbox";
+    res.writeHead(200, headers);
     res.end(data);
     return true;
   } catch {

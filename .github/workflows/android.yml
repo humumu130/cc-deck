@@ -90,5 +90,5 @@ jobs:
           # 默认 GITHUB_TOKEN 即 github.token（token 参数缺省值），无需任何 secrets
           files: |
             expo-app/android/app/build/outputs/apk/release/CC-Deck-${{ github.ref_name }}.apk
-            expo-app/android/app/build/outputs/apk/release/CC-Deck-${{ github.ref_name }}-arm64.apk
+            expo-app/android/app/build/outputs/apk/release/CC-Deck-${{ github.ref_name }}-v7a.apk
           generate_release_notes: true

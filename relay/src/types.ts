@@ -274,7 +274,6 @@ export interface SessionState {
   // 行为逐字节不变）；"codex" = CodexAgentSession（codex exec 一回合一进程，
   // resume 锚 = codex thread_id）。随 SESSION_CREATED 首帧流经事件流，回放还原
   engine?: SessionEngine;
-  engine_model?: string;
   engine_provider?: string;
   engine_role?: string;
   // #26 M3 两层联动（§6.2 组挂起→成员会话全 parked）：成员会话随组挂起休眠时

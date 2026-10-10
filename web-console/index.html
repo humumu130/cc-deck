@@ -5566,7 +5566,7 @@ function orgRenderDrawer() {
     const lanes = [], laneIdx = new Map();
     for (const e of ents) {
       const st = e.status || "backlog";
-      if (!laneIdx.has(st)) { laneIdx.set(st, lanes.length); lanes.push({ st, lb: BOARD_LANE[st] || st, list: [] }); }
+      if (!laneIdx.has(st)) { laneIdx.set(st, lanes.length); lanes.push({ st, lb: BOARD_LANE[st] || escapeHtml(st), list: [] }); }
       lanes[laneIdx.get(st)].list.push(e);
     }
     lanes.sort((a, b) => (BOARD_LANE_ORD[a.st] ?? 99) - (BOARD_LANE_ORD[b.st] ?? 99) ||
@@ -6617,12 +6617,15 @@ function render() {
         othHeadDone = true;
       }
       const dormant = isDormant(s);
+      // 审计注入面 M2（2026-10-10 防御纵深）：status 枚举白名单——越界值不进
+      // className/style 属性位（假 relay/数据污染场景，与 L10082 假 relay 转义口径一致）
+      const stSafe = s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" || s.status === "DONE" ? s.status : "";
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
       d.dataset.protocol = ctx.legacyMode ? "legacy" : "v" + ctx.schemaVersion;
       // #161 对齐手机 bgLive 口径：非 WORKING 且子 Agent 在跑（不限 DONE）——灯转黄呼吸
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status !== "WORKING" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
+      d.className = "card " + stSafe + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status !== "WORKING" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
       // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
       // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
@@ -6660,7 +6663,7 @@ function render() {
       const avaColor = srcColorByKey(ctx.cfg);
       const avaBlock =
         '<div class="q-ava" style="background:color-mix(in srgb, ' + avaColor + ' 16%, var(--panel-2)); color:' + avaColor + '">' + avaChar +
-        '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span></div>';
+        '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + stSafe.toLowerCase() + ')"></span></div>';
       // r2 取值链（#60 现有口径行式合并，两行容量取最新）：waiting 文（红）> WORKING
       // 实时（走秒+↓tokens+摘要，.lv-sec 类保 :6058 每秒直更链）> dock 最近活动文本
       // （比回合摘要更实时，dockActivityOf E1 链）> 回合摘要 > 「…」（#170 永不空白同口径）
@@ -7278,16 +7281,20 @@ function todosTabHtml(s) {
     if (!items.length) continue;
     html += '<div class="todo-group" data-sec="' + cls + '"><div class="todo-gt ' + cls + '">' + label + "</div>";
     for (const t of items) {
-      const mark = t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○";
-      const dragAttrs = t.status === "completed"
+      // 审计注入面 M3（2026-10-10 防御纵深）：id 数字校验 + status 枚举白名单——
+      // 越界值不进 data-tid/class 属性位（假 relay/数据污染场景，同 M2 口径）
+      const stSafe = t.status === "completed" || t.status === "in_progress" || t.status === "pending" ? t.status : "pending";
+      const idSafe = t.id != null && /^\d+$/.test(String(t.id)) ? String(t.id) : "";
+      const mark = stSafe === "completed" ? "✓" : stSafe === "in_progress" ? "◐" : "○";
+      const dragAttrs = stSafe === "completed"
         ? ""
         : ' draggable="true" data-odr="' + escapeHtml(todoKeyOf(t)) + '"';
-      html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + dragAttrs + '>' +
-        (t.status !== "completed" ? '<span class="todo-grip" title="拖动调整执行优先级">⠿</span>' : "") +
+      html += '<div class="todo-item ' + stSafe + '"' + (idSafe ? ' data-tid="' + idSafe + '"' : "") + dragAttrs + '>' +
+        (stSafe !== "completed" ? '<span class="todo-grip" title="拖动调整执行优先级">⠿</span>' : "") +
         '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
         /* #97 任务编号 #N 前缀（对齐手机端）：权威任务存储 id 由此可见，
            转录 #NNN 可点跳转的锚；旧 TodoWrite 清单无 id 不显示 */
-        escapeHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content)) + "</span>" +
+        escapeHtml((t.id != null ? "#" + t.id + " " : "") + (stSafe === "in_progress" && t.active_form ? t.active_form : t.content)) + "</span>" +
         '<button class="todo-del" data-c="' + escapeHtml(t.content) + '" title="隐藏该条">✕</button></div>';
     }
     html += "</div>";

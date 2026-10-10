@@ -389,8 +389,14 @@ export interface ProjectGroup {
   status: "pending" | "active" | "parked" | "archived";
   created_at: number;
   updated_at: number;
-  headcount?: { session_id: string; role: string; joined_at: number }[];
-  note?: string;
+  // 对齐 relay wire（projects.ts ProjectHeadcountEntry）：joined_at 是幽灵字段
+  // （relay 全库不存在），engine/model/provider 随条目下发
+  headcount?: { session_id: string; role: string; engine?: string; model?: string; provider?: string }[];
+  // wire 有而 expo 未消费，先补声明防漂移（组挂起/结项/暂缓建议时刻 + 结项一句话）
+  parked_at?: number;
+  archived_at?: number;
+  hold_suggested_at?: number;
+  archive_note?: string;
 }
 
 // 待决议确认卡（SNAPSHOT.org_confirms / ORG_CONFIRM_UPDATED）：Leader 只提案，

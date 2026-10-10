@@ -13,7 +13,7 @@ module.exports = nova
       ...base,
       expo: {
         ...base.expo,
-        name: "CC Deck 新版",
+        name: "CC Deck Nova",
         slug: "cc-deck-nova",
         android: { ...base.expo.android, package: "online.humumu.ccdeck.nova" },
         ios: { ...base.expo.ios, bundleIdentifier: "online.humumu.ccdeck.nova" },
