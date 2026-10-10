@@ -29,6 +29,10 @@
 - **闭环**：✓ → squash 一笔回 dev；✗ → 在分支上继续修 → bump 重打 tag 再包。**dev 只收用户验证通过的一笔**，验证迭代全程留在分支上，dev 不出现「并进 dev 又连修三笔」。
 - **多 worker 批**：开临时汇集分支（`feat/<批次slug>`，把各 worker 分支 merge 进去）→ 汇集分支打 tag 出包 → 验证过 → 各 worker 分支分别 squash 回 dev（一 worker 一笔），汇集分支即删。
 
+### 版本单一事实源（2026-10-10 A1 收敛，审查 P1-1）
+
+仓库根 `VERSION` = 唯一版本正源：bump 只改它 + `node scripts/version.mjs --write`（七落点含 plugin.json/marketplace.json）。`relay/scripts/build-plugin.mjs` 同读 VERSION 回写各清单（显式传版本参数仅应急），不再是第二事实源。发版/出包前双闸拦截漂移：pre-commit 钩子（`git config core.hooksPath scripts/hooks`，**新机器/新 clone 需执行一次**）+ `scripts/check-bundle-sync.sh`（bundle 两两一致 + 同参重建对比 + 版本闸）。
+
 ### 更新说明军规（cc-deck 特化落点）
 
 通用六军规/排版结构/通道精度见全局 ~/.claude/CLAUDE.md「更新说明军规」节（2026-09-21 定立、2026-09-22 补措辞语气条，权威，持续打磨）。本节只记项目特化：

@@ -63,6 +63,26 @@ const targets = [
     set: (s) => s.replace(/("version":\s*)"(?:.+?)"/, `$1"${canonical}"`),
   },
   {
+    // 插件清单版本（2026-10-10 A1 收敛，审查 P1-1）：plugin.json 此前是
+    // relay/scripts/build-plugin.mjs 的「第二事实源」（打包时反读它回写三线），
+    // 与 VERSION 并存且互不回写——test.7 批起 VERSION 停在 test.4、五处守卫全红
+    // （63b92a7 bump 漏刷 VERSION 即漂移坐实）。收敛后 plugin.json 降为纯落点，
+    // build-plugin.mjs 也改读 VERSION（见该文件步骤 2），两机制同源幂等
+    name: "plugin.json version",
+    file: "cc-plugins/plugins/cc-deck/.claude-plugin/plugin.json",
+    get: (s) => /"version":\s*"(.+?)"/.exec(s)?.[1],
+    set: (s) => s.replace(/("version":\s*)"(?:.+?)"/, `$1"${canonical}"`),
+  },
+  {
+    // marketplace 清单版本（2026-10-10 A1 收敛，同上）：scope 到 cc-deck 插件块，
+    // 未来加第二个 plugin 时首个 "version" 通配不会误伤
+    name: "marketplace.json version",
+    file: ".claude-plugin/marketplace.json",
+    get: (s) => /"name":\s*"cc-deck"[\s\S]{0,200}?"version":\s*"(.+?)"/.exec(s)?.[1],
+    set: (s) =>
+      s.replace(/("name":\s*"cc-deck"[\s\S]{0,200}?"version":\s*)"(?:.+?)"/, `$1"${canonical}"`),
+  },
+  {
     // 主页（cloudflare worker /dl/）三处版本展示：hero 徽章 / lead 行 / 桌面卡副标——
     // 用户定立的发版纪律：每次发版主页版本信息必须同步（2026-09-09），纳入单一事实源自动化
     // 预发通道容忍（2026-10-07 ⑥d）：canonical 带 -test.N 预发段时 `[\d.]+` 只吃到

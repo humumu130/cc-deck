@@ -54,6 +54,32 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! node --check cc-plug
   FAIL=1
 fi
 
+# bundle 重建对比（2026-10-10 A2，审查 P1-3 的防再犯）：B1/B2 两两一致只锁「两份
+# 副本互相同步」，锁不住「bundle 是别处源码状态所出」——test.7-nova tag 的 bundle
+# 即为合并后工作树所出、与 tag 源码不符，从 tag 拉热修分支重打包会静默回退旧 relay
+# （丢 #148 ext- 收养、丢 rollout cursor 持久化）。esbuild 确定性已实证（同参重建
+# 与部署位逐字节一致），故以「当前 relay/src 同参重建 vs 部署位」比 SHA：不等 =
+# 部署位过期/异源，重跑 relay/scripts/build-plugin.mjs 刷新。esbuild 参数单源在
+# relay/scripts/bundle-options.mjs（build-plugin 与 rebuild-bundle 共用），杜绝
+# 参数漂移让本闸失真
+if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ]; then
+  REBUILD_DIR="$(node relay/scripts/rebuild-bundle.mjs)" || { echo "❌ bundle 重建失败（源码/esbuild 参数错误）"; FAIL=1; }
+  if [ -n "${REBUILD_DIR:-}" ]; then
+    RB=$( { shasum -a 256 "$REBUILD_DIR/relay.mjs" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+    if [ "$RB" = "MISSING" ]; then
+      echo "❌ 重建产物缺失（rebuild-bundle.mjs 未产出 relay.mjs）"
+      FAIL=1
+    elif [ "$B1" != "$RB" ]; then
+      echo "❌ 部署位 bundle ≠ 当前 relay/src 重建产物（bundle 过期/异源）："
+      echo "    部署位 B1 = $B1"
+      echo "    同参重建  = $RB"
+      echo "    重跑 relay/scripts/build-plugin.mjs 刷新部署位后重来"
+      FAIL=1
+    fi
+    rm -rf "$REBUILD_DIR"
+  fi
+fi
+
 # bundle 冒烟（#190，2026-09-24 事故的防再犯）：node --check 只逮语法，逮不住
 # 「语法合法但加载即炸」——当日热替换进 Mac App 的 bundle 缺 build-plugin.mjs 的
 # createRequire banner（绕过脚本直接 esbuild 的产物），tweetnacl 的 require("crypto")
