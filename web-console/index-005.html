@@ -334,13 +334,12 @@
     .windowbar-winbtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
     html.mac-tauri .windowbar { padding-left: 78px; }
     html.mac-tauri .window-dots, html.win-tauri .window-dots { display: none; }
-    /* W15：Windows 走系统标准标题栏（tauri.windows.conf decorations=true），自绘三钮
-       退役（windowbar-winbtns 维持基础 display:none）——win-tauri 下 windowbar 纯工具条；
-       标题让位（系统标题栏已示名），原 flex:1 间隔职责移交 source-switcher 的 auto 右距 */
-    html.win-tauri .window-title { display: none; }
-    html.win-tauri .source-switcher { margin-right: auto; }
-    /* FB1：win-tauri 下标题退役、switcher 贴窗左沿，浮窗默认右锚会向左探出窗沿 ~160px
-       被 desktop-frame overflow:hidden 裁掉半幅——改左锚，向右展开 */
+    /* W-NOVAUI ②：nova 壳 decorations=false（对齐生产 conf），系统标题栏退役——win-tauri
+       复活自绘三钮与自绘标题，顶栏单行承载（用户实测：系统栏+胶囊行两层，要求并一行）；
+       switcher 位置由 window-title 的 flex:1 弹性推右（原 FB2 退役期的 auto 右距冗余删除） */
+    html.win-tauri .windowbar-winbtns { display: flex; }
+    /* FB1：switcher 右缘后有 hint/link/winbtns 一串占位，source-menu 右锚不探窗沿；左锚
+       （向右展开）为 W15 退役态补丁，现状无害保留 */
     html.win-tauri .windowbar .source-menu { right: auto; left: 0; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
@@ -424,13 +423,13 @@
     .source-filter-cta:hover { border-color: var(--info); background: var(--hover); color: var(--text); }
     .source-filter-cta strong {flex: 0 0 auto; color: var(--info); font-size: var(--fs-E); font-weight: 700; white-space: nowrap;}
     .desktop-shell { display: flex; min-width: min(960px, 100%); flex: 1; min-height: 0; }
-    .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
+    /* W-NOVAUI ⑪⑫⑬ rail 桌面化三键：容器收窄 72→62（图标列 44+8×2 恰合不挤）；active 去常驻
+       描边回落透明（选中反馈由 --selected-bg 柔和底承载，微信侧边导航式）；左缘竖条指示器退役 */
+    .domain-rail { display: flex; flex: 0 0 62px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
     .rail-btn:hover { color: var(--text); background: var(--hover); }
-    .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
-    .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--selected-line); }
-    /* FB20 项目域可配置：默认隐藏 rail 项目入口（设置·通用「显示项目浏览器」开才现身） */
-    body:not([data-project-rail="on"]) .rail-btn[data-domain="project"] { display: none; }
+    .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); }
+    /* W-NOVAUI ④：项目入口恒显（用户实测缺项目入口；FB20 开关整链退役，见 settingsToggleState 注释） */
     .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 10px/15px var(--mono); text-align: center; }
     .rail-spring { flex: 1; }
     .theme-toggle { margin-top: 7px; margin-bottom: 0; color: var(--dim); }
@@ -438,10 +437,11 @@
     .theme-toggle-icon { display: block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
     /* #162-F1 高度链：desktop-frame(column) 的 flex 子项 min-height 默认 auto 不收缩，长对话把
        三列按内容高撑开、composer 被推过视口折叠线——min-height:0 放行收缩；active 网格同时锁
-       单行 minmax(0,1fr)，三列恒分剩余高（inspector-collapsed 只改 columns，rows 同样适用） */
+       单行 minmax(0,1fr)，两列恒分剩余高（rows 同样适用）。
+       W-NOVAUI ③：inspector 退出 grid 列改 overlay 浮层（absolute 贴右缘，宽走 --inspector-w）——
+       展开不再挤压对话列（用户实测：往左展开遮盖挤压第三列）；screen 兼作定位父级 */
     .desktop-screen { display: none; flex: 1; min-width: 0; min-height: 0; }
-    .desktop-screen.active { display: grid; grid-template-columns: 296px minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr); }
-    .desktop-screen.inspector-collapsed { grid-template-columns: 296px minmax(0, 1fr) 42px; }
+    .desktop-screen.active { display: grid; position: relative; grid-template-columns: 296px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
     .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
     .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
     .queue-head h2 {flex: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-D);}
@@ -581,11 +581,13 @@
     .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
     .secondary-btn:hover { background: var(--hover); }
     .danger-btn { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
-    .inspector { position: relative; overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); transition: background .18s ease, padding .18s ease; }
+    /* W-NOVAUI ③：inspector 浮层化——absolute 贴 screen 右缘全高，宽走 --inspector-w（JS 拖宽
+       设变量，默认 320 与旧三列档一致）；collapsed 42px 窄条把手恒覆盖基础宽（同类后写胜出） */
+    .inspector { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; width: var(--inspector-w, 320px); overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); transition: background .18s ease, padding .18s ease; }
     .inspector h3 {margin: 0 0 14px; color: var(--text-strong); font-size: var(--fs-D);}
     .inspector-toggle {position: absolute; top: 11px; right: 10px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: color .18s ease, background .18s ease, border-color .18s ease;}
     .inspector-toggle:hover { color: var(--text); background: var(--hover); }
-    .inspector.collapsed { overflow: hidden; padding: 12px 6px; }
+    .inspector.collapsed { width: 42px; overflow: hidden; padding: 12px 6px; }
     .inspector.collapsed > :not(.inspector-toggle) { display: none; }
     .inspector.collapsed .inspector-toggle { position: static; width: 100%; height: 34px; background: transparent; }
     /* FB6 检查器外扩：左沿拖拽调宽（260-640px 夹紧，折叠态隐藏；宽度与折叠态按屏记忆） */
@@ -595,9 +597,15 @@
     .inspector.collapsed .inspector-resizer { display: none; }
     /* FB6 恢复：拖宽/折叠过的屏在窄窗 resize 重放时保持用户选择（JS 持久化，此处只管视觉） */
     /* FB10 界面字号：全界面缩放档（WebView/浏览器 zoom 均支持，布局字号同步等比） */
-    body[data-ui-scale="90"] .desktop-frame, body[data-ui-scale="90"] .mobile-frame { zoom: .9; }
-    body[data-ui-scale="110"] .desktop-frame, body[data-ui-scale="110"] .mobile-frame { zoom: 1.1; }
-    body[data-ui-scale="125"] .desktop-frame, body[data-ui-scale="125"] .mobile-frame { zoom: 1.25; }
+    /* FB10 字号档 + W-NOVAUI ⑧ 高度补偿：zoom 后实际占位 = 100vh×zoom（1.1 档溢出出滚动条、
+       0.9 档下方空白）——desktop-frame 锚 100vh，各档 height 除回系数保视觉满屏等比；
+       mobile-frame 非 100vh（内容撑高）无此问题，只缩放不补偿 */
+    body[data-ui-scale="90"] .desktop-frame { zoom: .9; height: calc(100vh / 0.9); }
+    body[data-ui-scale="90"] .mobile-frame { zoom: .9; }
+    body[data-ui-scale="110"] .desktop-frame { zoom: 1.1; height: calc(100vh / 1.1); }
+    body[data-ui-scale="110"] .mobile-frame { zoom: 1.1; }
+    body[data-ui-scale="125"] .desktop-frame { zoom: 1.25; height: calc(100vh / 1.25); }
+    body[data-ui-scale="125"] .mobile-frame { zoom: 1.25; }
     /* FB5 引擎置灰：未就绪引擎行整体降不透明度（状态 tag 仍可读，不再与已接引擎同权重） */
     .settings-row.engine-off { opacity: .55; }
     .settings-row.engine-off .engine-badge { filter: saturate(.35); }
@@ -2234,22 +2242,16 @@
                   get: () => idleDimMin,
                   set: (v) => { idleDimMin = v; renderMyList(); },
                 };
-                // B11 分组折叠态：collapsedGroups 记「默认展开、点击收起」的组（active）；项目组语义
-                // 相反——默认折叠，projExpanded 记手动展开过的（nova-fix4 B18）。均持久 localStorage；
-                // observer 完整性检查据 _collapsedIdleIds 放行缺卡防重渲死循环（折叠未展开不进 DOM）
+                // B11 分组折叠态：collapsedGroups 记「默认展开、点击收起」的组（active），
+                // 持久 localStorage；observer 完整性检查据 _collapsedIdleIds 放行缺卡防重渲
+                // 死循环（折叠未展开不进 DOM）。
+                // W-NOVAUI ⑤：闲置会话铺平（用户实测按项目分组太乱）——项目组/折叠语义整链退役
                 const GRP_COLLAPSE_KEY = "cc-deck-005-grp-collapsed";
                 let collapsedGroups = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_COLLAPSE_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
                 function persistCollapsedGroups() { try { localStorage.setItem(GRP_COLLAPSE_KEY, JSON.stringify([...collapsedGroups])); } catch (_) {} }
-                const GRP_PROJ_EXPAND_KEY = "cc-deck-005-grp-proj-expanded";
-                let projExpanded = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_PROJ_EXPAND_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
                 function toggleGroupCollapse(key) {
-                  if (key.startsWith("project:")) {
-                    if (projExpanded.has(key)) projExpanded.delete(key); else projExpanded.add(key);
-                    try { localStorage.setItem(GRP_PROJ_EXPAND_KEY, JSON.stringify([...projExpanded])); } catch (_) {}
-                  } else {
-                    if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
-                    persistCollapsedGroups();
-                  }
+                  if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
+                  persistCollapsedGroups();
                   renderMyList();
                 }
                 function myCardItem(session) {
@@ -2381,9 +2383,9 @@
                     list.replaceChildren(ph);
                     return;
                   }
-                  // B18 活跃优先两级分组（nova-fix4）：顶部「进行中」收全部活跃会话
-                  // （WORKING/WAITING/ERROR 不论项目、按置顶+recency 排）；其余（闲置）按项目
-                  // 分组沉底、默认折叠（projExpanded 记手动展开）。旧「待处理/其他」外层组退役。
+                  // B18 活跃优先：顶部「进行中」组收全部活跃会话（WORKING/WAITING/ERROR，按置顶
+                  // +recency 排）。W-NOVAUI ⑤：闲置会话不再按项目分组——铺平直排（用户实测项目
+                  // 分组折叠太乱），置顶/时间序保持不变
                   const isActive = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                   const activePool = sessions.filter(isActive); // 已按置顶+recency 排，不再按 reason 重排
                   const idleAll = sessions.filter((x) => !isActive(x));
@@ -2393,24 +2395,14 @@
                   const activeMarkup = activePool.length
                     ? '<div class="session-group' + (activeOpen ? "" : " collapsed") + '" data-session-group="active">' + grpHead("active", "进行中", activePool.length, activeOpen) + '<div class="grp-body">' + activePool.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>"
                     : "";
-                  // ⑥a-2 项目组：闲置会话按项目归属直接分组（默认折叠，无外层「其他会话」壳）
-                  const projectNames = [...new Set(idleAll.map((x) => getSessionProject(x)))];
-                  const projMarkup = projectNames.map((name) => {
-                    const inProject = idleAll.filter((x) => getSessionProject(x) === name);
-                    const pkey = "project:" + name;
-                    const open = projExpanded.has(pkey);
-                    return '<div class="session-group' + (open ? "" : " collapsed") + '" data-session-group="project" data-session-project="' + esc(name) + '">' + grpHead(pkey, esc(name), inProject.length, open) + '<div class="grp-body">' + inProject.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>";
-                  }).join("");
+                  const idleMarkup = idleAll.map((x) => myCardMarkup(myCardItem(x))).join("");
                   // 折叠未展开时这些卡有意不进 DOM——observer 完整性检查据此放行，防「缺卡→重渲→
-                  // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）
+                  // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）；闲置铺平后只涉 active 组
                   const collapsedHidden = [];
                   if (!activeOpen) collapsedHidden.push(...activePool.map((x) => x.session_id));
-                  for (const name of projectNames) {
-                    if (!projExpanded.has("project:" + name)) collapsedHidden.push(...idleAll.filter((x) => getSessionProject(x) === name).map((x) => x.session_id));
-                  }
                   S._collapsedIdleIds = collapsedHidden.length ? new Set(collapsedHidden) : null;
                   const template = document.createElement("template");
-                  template.innerHTML = activeMarkup + projMarkup;
+                  template.innerHTML = activeMarkup + idleMarkup;
                   list.replaceChildren(template.content);
                 }
 
@@ -3926,7 +3918,7 @@
                     }
                     const filterBtn = ev.target.closest("#d-session [data-session-filter]"); // FB17：筛选芯片开浮菜单
                     if (filterBtn) { ev.stopPropagation(); openSessionFilterMenu(filterBtn); return; }
-                    const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中/项目组统一走此链）
+                    const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中组；W-NOVAUI ⑤ 项目组已退役）
                     if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
                     const taskHide = ev.target.closest("[data-task-hide]");
                     if (taskHide) { ev.stopPropagation(); const cs = curSession(); if (cs) { hiddenTaskKeys.add(cs.session_id + "#" + taskHide.dataset.taskHide); renderTasks(); } return; } // #B3-9
@@ -5667,13 +5659,15 @@
       }
 
       // FB6 检查器恢复+外扩：折叠态与拖宽值按屏持久化（localStorage），载入即还原；
-      // 左沿 resizer 拖拽调宽 260-640px，折叠时清内联列宽让 collapsed 类接管
+      // 左沿 resizer 拖拽调宽 260-640px。W-NOVAUI ③：宽度落点从 grid 内联列宽改 --inspector-w
+      // 变量（浮层化后 screen 只有两列，inspector 宽由自身 width 承载；collapsed 类 42px 覆盖）
       function inspectorStateKey(screen) { return "cc-deck-005-inspector-" + (screen.id || "x"); }
       function inspectorWidthKey(screen) { return "cc-deck-005-inspector-w-" + (screen.id || "x"); }
       function applyInspectorWidth(screen) {
         let w = null;
         try { w = Number(localStorage.getItem(inspectorWidthKey(screen))); } catch (_) {}
-        screen.style.gridTemplateColumns = Number.isFinite(w) && w >= 260 && w <= 640 ? "296px minmax(0, 1fr) " + Math.round(w) + "px" : "";
+        if (Number.isFinite(w) && w >= 260 && w <= 640) screen.style.setProperty("--inspector-w", Math.round(w) + "px");
+        else screen.style.removeProperty("--inspector-w");
       }
       function setInspectorCollapsed(screen, collapsed) {
         const inspector = screen.querySelector(".inspector");
@@ -5681,8 +5675,7 @@
         if (!inspector || !button) return;
         screen.classList.toggle("inspector-collapsed", collapsed);
         inspector.classList.toggle("collapsed", collapsed);
-        if (collapsed) screen.style.gridTemplateColumns = ""; // 内联列宽会让 collapsed 类的 42px 失效
-        else applyInspectorWidth(screen);
+        if (!collapsed) applyInspectorWidth(screen); // 展开回放记忆宽；收起只切类（42px 由类覆盖）
         button.textContent = collapsed ? "›" : "‹";
         button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
         button.setAttribute("aria-label", button.title);
@@ -5716,7 +5709,7 @@
             try { resizer.setPointerCapture(ev.pointerId); } catch (_) {}
             const onMove = (e) => {
               const w = Math.max(260, Math.min(640, startW - (e.clientX - startX)));
-              screen.style.gridTemplateColumns = "296px minmax(0, 1fr) " + Math.round(w) + "px";
+              screen.style.setProperty("--inspector-w", Math.round(w) + "px");
             };
             const onUp = () => {
               resizer.removeEventListener("pointermove", onMove);
@@ -5753,7 +5746,7 @@
       let lastNonSettingsDomain = "session"; // FB9：设置 queue × 的返程票
       function setDesktopDomain(domain) {
         closeTransientOverlays();
-        if (domain === "project" && document.body.dataset.projectRail !== "on") domain = "session"; // FB20：项目域隐藏期间外部跳转兜底
+        // W-NOVAUI ④：FB20 隐藏期兜底随开关退役——rail 项目入口恒显，project 域直达不再改写
         if (domain !== "settings") lastNonSettingsDomain = domain;
         const screen = document.querySelector(`#d-${domain}`);
         if (!screen) return;
@@ -5996,12 +5989,12 @@ function connectLan(ctx) {
         extensions: "验收 · 登记 · 产物",
         about: "版本 · 检查更新 · 手机 App",
       };
-      // FB9/FB20：设置开关键统一账——slug 映射 + 每键默认值（project-rail 默认关，FB20 Leader 口径）
-      const SETTINGS_TOGGLE_KEYS = { sound: "notify-sound", notify: "desktop-notify", "project-rail": "project-rail" };
+      // FB9：设置开关键统一账——slug 映射（W-NOVAUI ④：project-rail 键随开关退役删除，
+      // rail 项目入口恒显不再可配置）
+      const SETTINGS_TOGGLE_KEYS = { sound: "notify-sound", notify: "desktop-notify" };
       function settingsToggleState(key) {
         const slug = SETTINGS_TOGGLE_KEYS[key] || key;
-        const offDefault = key === "project-rail";
-        try { const v = localStorage.getItem("cc-deck-005-" + slug); return v === null ? !offDefault : v !== "0"; } catch (_) { return !offDefault; }
+        try { const v = localStorage.getItem("cc-deck-005-" + slug); return v === null ? true : v !== "0"; } catch (_) { return true; }
       }
       // FB9 通知反馈：短滴声（WebAudio 合成，零外部资源）+ 桌面通知（权限授予才弹，静音防与 OS 双响）
       let dingCtx = null;
@@ -6038,8 +6031,6 @@ function connectLan(ctx) {
         try { new Notification(String(title || "CC Deck"), { body: String(body || "").slice(0, 120), silent: true, tag: "cc-deck-notify" }); } catch (_) {}
       }
       window.__ccDeck005NotifyFx = { ding: playNotifyDing, desktop: desktopNotifyText, soundOn: () => settingsToggleState("sound") };
-      // FB20 项目域可配置：rail 上项目入口显隐（body 属性 + CSS 落位，默认隐藏）
-      function applyProjectRail(on) { document.body.dataset.projectRail = on ? "on" : "off"; }
       // FB10 界面字号：zoom 档位（小/标准/大/特大），body 属性 + CSS 落位，localStorage 记忆
       function applyUiScale(scale, announce = false) {
         const v = ["90", "100", "110", "125"].includes(scale) ? scale : "100";
@@ -6170,11 +6161,17 @@ function connectLan(ctx) {
         body.innerHTML = `
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音">开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知">开</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-grid"></use></svg></span><div><strong>显示项目浏览器</strong><p>rail 项目域入口 · 关闭后从侧栏隐藏（FB20）</p></div><button class="toggle-control${settingsToggleState("project-rail") ? " active" : ""}" data-settings-toggle="project-rail" type="button" aria-pressed="${settingsToggleState("project-rail")}" title="切换项目浏览器显隐">开</button></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>全界面等比缩放 · 立即生效（FB10）</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="segment-bar" role="tablist"><button type="button" class="active">通用</button><button type="button">快捷键</button></div><div class="workspace-pane active"><div class="settings-list"><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音">开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知">开</button></div><div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>全界面等比缩放 · 立即生效（FB10）</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘K" : "K"}</span><div><strong>全局搜索</strong><p>${MOD_KEY("K")}</p></div></div><div class="settings-row"><span class="avatar">${IS_MAC ? "⌘N" : "N"}</span><div><strong>新建会话</strong><p>${MOD_KEY("N")}</p></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>桌面专属 · 全局快捷键</p></div><span class="kbd-chip">${toggleHotkeyDisplay()}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换会话</strong><p>在会话列表中上下移动</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ↑↓" : "Ctrl + ↑↓"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><div><strong>切换数据源</strong><p>在多个源之间快速切换</p></div><span class="kbd-chip">${IS_MAC ? "⌘ + ←→" : "Ctrl + ←→"}</span></div></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${(window.__shellVer || CONSOLE_VERSION) + " 通道"}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
         wireCardDensityControls(body);
+        // W-NOVAUI ⑦：通用面板拆「通用/快捷键」两页签（用户实测单页太长要滚动）——
+        // 面板内 segment-bar 走 wireSegmentTabs（setupStubTabs 对 settings-panel 内 bar 让位）
+        const generalPanel = body.querySelector('[data-settings-panel="general"]');
+        if (generalPanel) {
+          wireSegmentTabs([...generalPanel.querySelectorAll(".segment-bar button")], [...generalPanel.querySelectorAll(":scope > .workspace-pane")]);
+        }
         // FB9 设置 queue 头 ×：返回进入设置前的域（设置无独立关闭语义，等价「关门走人」）
         queue.querySelector(".queue-head .icon-btn")?.addEventListener("click", () => setDesktopDomain(lastNonSettingsDomain));
         // FB9/FB3 移动设置「扫码添加新设备」与桌面同链（云形态输码 / LAN 弹配对四件套）
@@ -6228,11 +6225,7 @@ function connectLan(ctx) {
             toggle.textContent = next ? "开" : "关";
             toggle.setAttribute("aria-pressed", String(next));
             try { localStorage.setItem("cc-deck-005-" + (SETTINGS_TOGGLE_KEYS[key] || key), next ? "1" : "0"); } catch (_) {}
-            if (key === "project-rail") { // FB20：立即生效——rail 显隐 + 藏域时退回会话
-              applyProjectRail(next);
-              if (!next && document.querySelector("#d-project.active")) setDesktopDomain("session");
-              showToast("项目浏览器已" + (next ? "显示 · rail 可见" : "隐藏"));
-            } else if (key === "sound") {
+            if (key === "sound") {
               showToast("通知声音已" + (next ? "开启" : "关闭"));
               if (next) playNotifyDing();
             } else {
@@ -7687,7 +7680,10 @@ function connectLan(ctx) {
             showToast(wasActive ? "当前源 · " + name + "（配对新源走下方入口）" : "已切换数据源 · " + name);
             return;
           }
-          const modeBtn = target.closest("[data-source-mode]");
+          // W-NOVAUI ①真因：限定 .source-mode 容器内按钮——FB1 模式记忆把 data-source-mode 写在
+          // body 上（:7679），裸 closest("[data-source-mode]") 对任意点击都命中 body 祖先，本分支
+          // 永远抢跑 return，把「管理与配对新源」等 menu 内后续分支全部吞掉（nova 实测点了没反应）
+          const modeBtn = target.closest(".source-mode [data-source-mode]");
           if (modeBtn) {
             const nextMode = modeBtn.dataset.sourceMode === "aggregate" ? "aggregate" : "single";
             document.body.dataset.sourceMode = nextMode;
@@ -7698,12 +7694,22 @@ function connectLan(ctx) {
           }
           const manage = target.closest("[data-source-settings]");
           if (manage) {
+            // W-NOVAUI ①：直落连接子面板（setDesktopDomain 只切域不置 tab，nova 实测点了没反应感）
             event.preventDefault();
             closeSourceMenu(switcher);
-            if (document.querySelector("#stage-desktop.active")) setDesktopDomain("settings");
-            else openMobileRoot("settings");
+            openCloudPairUI();
             return;
           }
+        }
+        // W-NOVAUI ②：自绘三钮接 tauri v2 窗口 API（withGlobalTauri 已开；#365 权限已授权）
+        const winBtn = target.closest("[data-w]");
+        if (winBtn) {
+          const tauriWin = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null;
+          if (!tauriWin) return; // 浏览器态无壳 API：静默兜底
+          if (winBtn.dataset.w === "min") void tauriWin.minimize();
+          else if (winBtn.dataset.w === "max") void tauriWin.toggleMaximize();
+          else if (winBtn.dataset.w === "close") void tauriWin.close();
+          return;
         }
         const badge = target.closest(".source-badge");
         if (badge) { openSourceMenu(); return; }
@@ -7786,7 +7792,7 @@ function connectLan(ctx) {
       } catch (_) {}
       ensureThemeSymbols();
       setupSettingsDomain(); // ⑥c-1：先建六面板（含连接三子 tab），setupStubTabs 对 settings 域让位
-      applyProjectRail(settingsToggleState("project-rail")); // FB20：rail 项目入口显隐首帧即位（默认隐藏）
+      // W-NOVAUI ④：rail 项目入口恒显（FB20 显隐链全退役，无首帧即位调用）
       setupStubTabs();
       wireCardDensityControls();
       applyTheme(savedTheme);
