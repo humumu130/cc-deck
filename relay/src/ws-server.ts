@@ -690,6 +690,8 @@ export function startServer(
             "exp-regroup",
             // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）
             "exp-export", "exp-import",
+            // W-KWP1 件三：岗位模板库只读查看（org role list/show 的 HTTP 面；写面 P2）
+            "role-list", "role-show",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

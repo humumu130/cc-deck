@@ -379,6 +379,8 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org exp restore <id>                           恢复淘汰条目
 #   org exp export [path]                          导出经验库备份（全量+计数校验和；缺省 org/exports/experience-<时间戳>.json）
 #   org exp import <path>                          导入备份（normKey 合并去重：撞车 bump 不覆盖；坏文件/超 5MB 整单拒绝零写入）
+#   org role list                                  岗位模板库查看（内置+用户合并视图，W-KWP1；用户库同 slug 覆盖内置）
+#   org role show <slug>                           单岗位模板详情（name/audience/rows 逐行）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 # 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
@@ -558,6 +560,26 @@ elif op in ("bump","retire","restore"):
     d={"action":"exp-"+op,"id":args[0]}
 else:
     print("未知 exp 子命令: "+op, file=sys.stderr); sys.exit(1)
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  role)
+    # W-KWP1 岗位模板库只读查看（写面 P2：模板编辑走手编 org/role-templates.json）
+    [ $# -ge 1 ] || { echo "用法: org role list|show ..." >&2; exit 1; }
+    op="$1"; shift
+    body="$(python3 - "$op" "$@" <<'PY'
+import json, sys
+op = sys.argv[1]
+args = sys.argv[2:]
+if op == "list":
+    d={"action":"role-list"}
+elif op == "show":
+    if not args:
+        print("用法: org role show <slug>", file=sys.stderr); sys.exit(1)
+    d={"action":"role-show","slug":args[0]}
+else:
+    print("未知 role 子命令: "+op, file=sys.stderr); sys.exit(1)
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"
