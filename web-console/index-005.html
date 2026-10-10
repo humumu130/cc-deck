@@ -999,13 +999,14 @@
     .metric:first-child { border-left: 0; }
     .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
     .metric span {color: var(--dim); font-size: var(--fs-B);}
+    /* W-PROJAGG：总览 4 卡 = 可点速览卡（点卡切下方 mini 列表），选中态/悬停沿全局 selected/hover 语言 */
+    .project-overview .metric { cursor: pointer; font: inherit; text-align: left; transition: background .18s ease; }
+    .project-overview .metric:hover { background: var(--hover); }
+    .project-overview .metric.selected { background: var(--selected-bg); box-shadow: inset 0 -2px 0 var(--brand); }
+    .project-overview .metric.selected span { color: var(--text-strong); }
+    .mini-list-link { display: inline-block; margin: 10px 0 2px; padding: 0; border: 0; background: transparent; color: var(--brand); cursor: pointer; font-size: var(--fs-C); }
+    .mini-list-link:hover { text-decoration: underline; }
     .readonly-banner {padding: 8px 10px; margin-bottom: 14px; border: 1px solid color-mix(in srgb, var(--readonly-line) 55%, transparent); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: var(--fs-B);} /* FB7：虚线清为低对比实线 */
-    .aggregate-grid { display: grid; gap: 0; }
-    .aggregate-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
-    .aggregate-card h4 {grid-column: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-B);}
-    .aggregate-card p {grid-column: 1; margin: 2px 0 0; color: var(--dim); font-size: var(--fs-C);}
-    .aggregate-card p + p { margin-top: 1px; }
-    .aggregate-card button { grid-column: 2; grid-row: 1 / span 3; margin-top: 0; }
     .notice { display: flex; gap: 9px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; cursor: pointer; }
     .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
@@ -1318,10 +1319,10 @@
     .notice .notify-line strong { color: var(--text); font-weight: 600; display: inline; }
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge {font-size: var(--fs-C);}
-    .member-card, .task-card, .notice, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
-    .member-card:hover, .notice:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .member-card, .notice, .aggregate-card { box-shadow: none; }
-    .member-card:hover, .notice:hover, .aggregate-card:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .member-card, .task-card, .notice, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .member-card:hover, .notice:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .member-card, .notice { box-shadow: none; }
+    .member-card:hover, .notice:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .team-member-large { background: transparent; }
     .task-card:hover { border-color: var(--border-strong); background: var(--hover); transform: none; box-shadow: none; }
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
@@ -4943,27 +4944,66 @@
                   } else window.__ccDeck005SetWindowbarHint?.("project", "—");
                 }
 
-                function overviewMarkup(entry) {
+                // W-PROJAGG：总览 = 4 张并排速览卡（会话/团队/输出物/验收单，可点切换、默认会话）
+                // + 选中卡对应的 mini 精简列表（最近 5~8 条 + 总计数，条目只读）。第三列定位 =
+                // 只读速览，与主区 tab 全量管理视图互补：mini 底部「在 X 中查看全部 →」经
+                // bridge.clickTab 复用同一切换路径（先例 5412 行通知跳 tab）。
+                const OVERVIEW_MINI_TAKE = 6;
+                let overviewMini = "sessions";
+                const overviewJumpLink = (tabLabel) =>
+                  '<button class="mini-list-link" type="button" data-overview-jump="' + escapeHtml(tabLabel) + '">在' + escapeHtml(tabLabel) + "中查看全部 →</button>";
+
+                function overviewMiniMarkup(entry) {
+                  if (overviewMini === "team") {
+                    if (!entry.group) return '<div class="readonly-banner">该目录未立项。立项确认在团队域发起（组织命令），项目页不产生第二写面。</div>' + overviewJumpLink("团队");
+                    const g = entry.group;
+                    const headcount = Array.isArray(g.headcount) ? g.headcount : [];
+                    const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认立项" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
+                    const rows = headcount.slice(0, OVERVIEW_MINI_TAKE).map((m) => {
+                      const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
+                      const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
+                      return '<div class="queue-card"><div class="row"><i class="status-dot ' + (s ? (STATUS_DOT[s.status] || "done") : "waiting") + '"></i><strong>' + escapeHtml(title) + '</strong><span class="tag">' + escapeHtml(m && m.role ? m.role : "角色未标注") + "</span></div></div>";
+                    }).join("");
+                    return '<div class="queue-group">' + escapeHtml(g.name || "编制") + " · " + headcount.length + " 人 · " + escapeHtml(statusText) + "</div>"
+                      + (rows || '<div class="readonly-banner">编制为空 · 成员在团队域维护。</div>') + overviewJumpLink("团队");
+                  }
+                  if (overviewMini === "artifacts") {
+                    const artifacts = artifactsOf(entry);
+                    if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>' + overviewJumpLink("输出物");
+                    const anchor = normDir(entry.anchor);
+                    const rows = artifacts.slice(0, OVERVIEW_MINI_TAKE).map((a) => {
+                      const pN = normDir(a.path);
+                      const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
+                      return '<div class="artifact-row">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>";
+                    }).join("");
+                    return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows + overviewJumpLink("输出物");
+                  }
+                  if (overviewMini === "accepts") {
+                    if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>' + overviewJumpLink("验收单");
+                    const rows = bridge.accepts.slice(0, OVERVIEW_MINI_TAKE).map((a) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + (Number(a.total) || 0) + " 项 · 已回填 " + (Number(a.judged) || 0) + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
+                    return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows + overviewJumpLink("验收单");
+                  }
+                  // sessions（默认卡）
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                  if (!sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>' + overviewJumpLink("会话");
+                  const rows = sessions.slice(0, OVERVIEW_MINI_TAKE).map((s) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(relTime(Number(s.updated_at))) + " · " + escapeHtml(bridge.relayName) + "</p></div>").join("");
+                  return '<div class="queue-group">会话 · ' + sessions.length + "</div>" + rows + overviewJumpLink("会话");
+                }
+
+                function overviewMarkup(entry) {
                   const artifacts = artifactsOf(entry);
-                  const actions = projectActionItems(entry);
-                  const sessionLines = sessions.slice(0, 2).map((s) => "<p>" + escapeHtml(s.title || s.initial_prompt || s.session_id) + " · " + (STATUS_WORD[s.status] || "完成") + "</p>").join("") || "<p>暂无会话</p>";
-                  const teamLines = entry.group
-                    ? "<p>" + escapeHtml(entry.group.name) + " · " + (Array.isArray(entry.group.headcount) ? entry.group.headcount.length : 0) + " 编制</p><p>" + (entry.group.status === "active" ? "进行中" : entry.group.status === "pending" ? "待确认立项" : "已挂起/归档") + "</p>"
-                    : "<p>该目录未立项</p><p>立项确认在团队域发起</p>";
-                  const artifactLines = artifacts.slice(0, 2).map((a) => "<p>" + escapeHtml(basename(a.path)) + " · " + escapeHtml(relTime(a.last_at)) + '</p><div class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div>").join("") || "<p>暂无输出物</p>";
-                  const accLines = bridge.accepts.slice(0, 2).map((a) => "<p>" + escapeHtml(a.title) + " · " + (a.submitted ? "回填 " + (Number(a.judged) || 0) + "/" + (Number(a.total) || 0) : "待填 " + (Number(a.total) || 0) + " 项") + "</p>").join("") || "<p>暂无验收单</p>";
-                  const metric = (icon, label, num) => icon
-                    ? '<div class="metric"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg><span>' + label + " " + num + "</span></div>"
-                    : '<div class="metric"><span>' + label + " " + num + "</span></div>"; // ⑥a-3 原型终态：icon 行内式替代大数字（需行动项无 icon，随原型）
+                  const card = (key, icon, label, num) =>
+                    '<button class="metric' + (overviewMini === key ? " selected" : "") + '" type="button" data-overview-card="' + key + '" aria-pressed="' + (overviewMini === key) + '">'
+                    + (icon ? '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg>' : "")
+                    + "<span>" + escapeHtml(label) + " " + num + "</span></button>";
                   return '<div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div>'
-                    + '<div class="project-overview">' + metric("chat", "会话", entry.sessions.length) + metric("users", "团队", entry.group ? 1 : 0) + metric("package", "输出物", artifacts.length) + metric("", "需行动", actions.length) + "</div>"
-                    + '<div class="aggregate-grid">'
-                    + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话</h4>' + sessionLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (sessions[0] ? ' data-jump-session="' + escapeHtml(sessions[0].session_id) + '"' : "") + '>在会话中查看</button></div>'
-                    + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队</h4>' + teamLines + '<button class="secondary-btn" type="button" data-domain-jump="team">在团队中查看</button></div>'
-                    + '<div class="aggregate-card"><h4><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物</h4>' + artifactLines + '<button class="secondary-btn" type="button" data-domain-jump="session"' + (artifacts[0] ? ' data-jump-session="' + escapeHtml(artifacts[0].session.session_id) + '"' : "") + '>查看来源</button></div>'
-                    + '<div class="aggregate-card"><h4>✓ 验收单</h4>' + accLines + '<button class="secondary-btn" type="button" data-domain-jump="notify">在原域处理</button></div>'
-                    + "</div>";
+                    + '<div class="project-overview">'
+                    + card("sessions", "chat", "会话", entry.sessions.length)
+                    + card("team", "users", "团队", entry.group ? 1 : 0)
+                    + card("artifacts", "package", "输出物", artifacts.length)
+                    + card("accepts", "check", "验收单", bridge.accepts.length)
+                    + "</div>"
+                    + overviewMiniMarkup(entry);
                 }
 
                 function sessionsTabMarkup(entry) {
@@ -5104,6 +5144,11 @@
                   if (open) { bridge.openAcceptance(open.dataset.openAcceptance); return; }
                   const queueCard = target.closest("[data-project-key]");
                   if (queueCard) { selectedKey = queueCard.dataset.projectKey || ""; render(); return; }
+                  // W-PROJAGG：总览速览卡切换 mini 列表；「查看全部」跳主区对应 tab（segment-bar 同路）
+                  const miniCard = target.closest("[data-overview-card]");
+                  if (miniCard) { overviewMini = miniCard.dataset.overviewCard || "sessions"; render(); return; }
+                  const miniJump = target.closest("[data-overview-jump]");
+                  if (miniJump) { bridge.clickTab("#d-project .segment-bar", miniJump.dataset.overviewJump); return; }
                   const jump = target.closest("[data-domain-jump]");
                   if (jump) {
                     bridge.railJump(jump.dataset.domainJump);
