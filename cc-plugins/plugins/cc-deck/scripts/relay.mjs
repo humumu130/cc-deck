@@ -10662,6 +10662,7 @@ function reduceHistory(events) {
     switch (e.type) {
       case "SESSION_UPDATED": {
         const p = e.payload;
+        if (typeof p.updated_at === "number" && p.updated_at > 0) s.updated_at = p.updated_at;
         s.status = p.status;
         s.action_summary = p.action_summary;
         if (p.stats) s.stats = p.stats;
@@ -10981,7 +10982,9 @@ function serveArtifact(name, res) {
   }
   if (real !== realRoot && !real.startsWith(realRoot + sep)) return false;
   if (relative(realRoot, real).split(sep).length > 2) return false;
-  const type = MIME[extname(real).toLowerCase()] ?? "application/octet-stream";
+  const ext = extname(real).toLowerCase();
+  const type = MIME[ext] ?? "application/octet-stream";
+  const scriptCapable = type.startsWith("text/html") || type === "image/svg+xml";
   let fd2;
   try {
     fd2 = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -10992,7 +10995,14 @@ function serveArtifact(name, res) {
     const st2 = fstatSync(fd2);
     if (!st2.isFile()) return false;
     const data = readFileSync4(fd2);
-    res.writeHead(200, { "content-type": type, "content-length": st2.size, "cache-control": "no-store" });
+    const headers = {
+      "content-type": type,
+      "content-length": st2.size,
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    };
+    if (scriptCapable) headers["content-security-policy"] = "sandbox";
+    res.writeHead(200, headers);
     res.end(data);
     return true;
   } catch {
@@ -45534,14 +45544,17 @@ var AgentSession = class {
       origin: { kind: "human" }
     });
   }
-  sendMessage(text, images, echo) {
+  sendMessage(text, images, echo, ackId) {
     this.pushUserMessage(text, images);
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     if (echo !== void 0) {
-      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200), ...ackId ? { ackId } : {} });
     } else {
       const full = fullText(text, 200);
-      this.cb.onLog("user_message", truncate(text, 200) + marker, { full: full === void 0 ? void 0 : full + marker });
+      this.cb.onLog("user_message", truncate(text, 200) + marker, {
+        full: full === void 0 ? void 0 : full + marker,
+        ...ackId ? { ackId } : {}
+      });
     }
     if (this.pending.size === 0) this.cb.onStatusChange("WORKING", this.lastSummary);
   }
@@ -45975,9 +45988,9 @@ engine=${opts.label}
 cwd=${opts.cwd}`;
     if (opts.initialPrompt !== void 0) this.execTurn(opts.initialPrompt);
   }
-  sendMessage(text, _images, echo) {
+  sendMessage(text, _images, echo, ackId) {
     if (this.ended) return;
-    this.opts.cb.onLog("user_message", echo ?? text.slice(0, 200), { full: echo ?? text });
+    this.opts.cb.onLog("user_message", echo ?? text.slice(0, 200), { full: echo ?? text, ...ackId ? { ackId } : {} });
     if (this.proc) {
       this.queued.push(text);
       return;
@@ -47555,18 +47568,19 @@ var CodexAgentSession = class {
     this.bin = bin;
     if (initialPrompt !== void 0) this.execTurn(initialPrompt, materializeImages(opts?.images));
   }
-  sendMessage(text, images, echo) {
+  sendMessage(text, images, echo, ackId) {
     if (this.ended) {
       console.warn("[codex] \u4F1A\u8BDD\u5DF2\u7ED3\u675F\uFF0C\u6D88\u606F\u4E22\u5F03");
       return;
     }
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     if (echo !== void 0) {
-      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200), ...ackId ? { ackId } : {} });
     } else {
       const full = fullText(text, 200);
       this.cb.onLog("user_message", truncate(text, 200) + marker, {
-        full: full === void 0 ? void 0 : full + marker
+        full: full === void 0 ? void 0 : full + marker,
+        ...ackId ? { ackId } : {}
       });
     }
     if (images && images.length > 0) {
@@ -49512,8 +49526,9 @@ provider=${opts.provider ?? "default"}` : void 0,
             if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
               s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
-              s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo);
-              s.unacked.push({ text, images: imgPayload.length ? imgPayload : void 0, refs: imgRefs.length ? imgRefs : void 0, ts: Date.now() });
+              const msgId2 = randomUUID8();
+              s.unacked.push({ id: msgId2, text, images: imgPayload.length ? imgPayload : void 0, refs: imgRefs.length ? imgRefs : void 0, ts: Date.now(), hold: "turn" });
+              s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo, msgId2);
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
             }
@@ -49527,8 +49542,16 @@ provider=${opts.provider ?? "default"}` : void 0,
             s.state.status = "WORKING";
           }
           s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
-          s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo);
-          s.unacked.push({ text, images: imgPayload.length ? imgPayload : void 0, refs: imgRefs.length ? imgRefs : void 0, ts: Date.now() });
+          const msgId = randomUUID8();
+          s.unacked.push({
+            id: msgId,
+            text,
+            images: imgPayload.length ? imgPayload : void 0,
+            refs: imgRefs.length ? imgRefs : void 0,
+            ts: Date.now(),
+            hold: s.state.relay_session_id ? void 0 : "init"
+          });
+          s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo, msgId);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -50227,6 +50250,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             managed.state.turn_started_at = void 0;
           }
         }
+        managed.unacked = managed.unacked.filter((m) => m.hold !== "init");
         managed.state.model = model;
         if (isManagedMode(permissionMode)) managed.state.permission_mode = permissionMode;
         this.emitUpdated(managed, true);
@@ -50343,17 +50367,19 @@ provider=${opts.provider ?? "default"}` : void 0,
       onLog: (kind, text, meta) => {
         if (!mine()) return;
         touch(kind);
+        const { ackId, ...logMeta } = meta ?? {};
         if (kind === "user_message") {
           if (managed.pendingImgRefs?.length) {
-            meta = { ...meta, images: managed.pendingImgRefs };
+            logMeta.images = managed.pendingImgRefs;
             managed.pendingImgRefs = void 0;
           }
-          const key = text.replace(/（\+\d+ 图）$/, "").trim().replace(/\s+/g, " ").slice(0, 200);
-          const i2 = managed.unacked.findIndex((m) => m.text.trim().replace(/\s+/g, " ").slice(0, 200) === key);
-          if (i2 >= 0) managed.unacked.splice(i2, 1);
+          if (ackId) {
+            const i2 = managed.unacked.findIndex((m) => m.id === ackId);
+            if (i2 >= 0 && !managed.unacked[i2].hold) managed.unacked.splice(i2, 1);
+          }
         }
-        const entry = { ts: Date.now(), kind, text, ...meta };
-        const i = meta?.id ? managed.logs.findIndex((e) => e.id === meta.id) : -1;
+        const entry = { ts: Date.now(), kind, text, ...logMeta };
+        const i = logMeta.id ? managed.logs.findIndex((e) => e.id === logMeta.id) : -1;
         if (i >= 0) managed.logs[i] = entry;
         else {
           managed.logs.push(entry);
@@ -50365,7 +50391,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             state: managed.state.status,
             activityKind: kind === "thinking" ? "assistant_text" : kind,
             activityText: text,
-            ...meta?.tool ? { tool: meta.tool } : {},
+            ...logMeta.tool ? { tool: logMeta.tool } : {},
             ts: entry.ts,
             now: entry.ts,
             task: { todos: managed.state.todos },
@@ -50378,6 +50404,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (!mine()) return;
         managed.pendingInitial = void 0;
         if (managed.wd.phase === "recovering") return;
+        if (ok2) managed.unacked = managed.unacked.filter((m) => m.hold !== "turn");
         const delivered = ok2 && reason !== "interrupted";
         const homeLost = !ok2 && /No conversation found/i.test(reason);
         if (homeLost) {
@@ -50471,7 +50498,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.gaveUp = false;
-      s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now() });
+      s.unacked.push({ id: randomUUID8(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn" });
       this.emitUpdated(s, true);
       return;
     }
@@ -50548,7 +50575,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.lastProgressKind = "";
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
-    s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now() });
+    s.unacked.push({ id: randomUUID8(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn" });
     initTimer = setTimeout(() => {
       initTimer = null;
       if (inited || s.agent !== agent || agent.ended || this.sessions.get(s.state.session_id) !== s) return;
@@ -51108,7 +51135,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const tripped = !!s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil;
     const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
     if (!tripped && !parkedPinned) return false;
-    if (queueMessage !== void 0) s.unacked.push({ text: queueMessage, ts: Date.now() });
+    if (queueMessage !== void 0) s.unacked.push({ id: randomUUID8(), text: queueMessage, ts: Date.now() });
     const why = tripped ? `\u6062\u590D\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\u5DF2\u7194\u65AD\uFF0C\u7EA6 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 6e4))} \u5206\u949F\u540E\u81EA\u52A8\u91CD\u8BD5` : "\u4F1A\u8BDD\u4E3A\u7F6E\u9876\u4F11\u7720\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF09";
     this.pushExternalLog(
       s.state.session_id,
@@ -54737,8 +54764,9 @@ var Bridge = class _Bridge {
   titleScanned = /* @__PURE__ */ new Set();
   pollTerminalLineBusy = false;
   // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
-  // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 32KB + 尾 64KB 两窗扫描
-  //（标题多在会话前段；长会话后期任务切换的新标题在尾部），取文件序最新一条
+  // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 48KB + 尾 48KB 两窗扫描
+  //（96KB 缓冲前半留头、后半让尾窗覆写；标题多在会话前段，长会话后期任务切换的
+  // 新标题在尾部），取文件序最新一条
   scanTranscriptTitles(p) {
     try {
       const size = statSync9(p).size;
@@ -54746,7 +54774,7 @@ var Bridge = class _Bridge {
       const fd2 = openSync4(p, "r");
       try {
         readSync3(fd2, buf, 0, buf.length, 0);
-        if (size > buf.length) readSync3(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
+        if (size > buf.length) readSync3(fd2, buf, buf.length / 2, buf.length / 2, size - buf.length / 2);
       } catch {
       } finally {
         try {
@@ -57093,9 +57121,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       const ips = localIps();
       const hostTrusted = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let allowOrigin = "";
-      const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb && origin === "null") allowOrigin = "*";
-      else if (origin) {
+      if (origin) {
         try {
           const u = new URL(origin);
           if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostTrusted(u.hostname)) allowOrigin = origin;
@@ -57144,9 +57170,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       const ips = localIps();
       const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let acao = "";
-      const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb2 && origin === "null") acao = "*";
-      else if (origin) {
+      if (origin) {
         try {
           const u = new URL(origin);
           if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
@@ -57596,9 +57620,7 @@ async function handlePluginConfig(req, res) {
   const ips = localIps();
   const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
   let acao = "";
-  const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-  if (origin && reqLb && origin === "null") acao = "*";
-  else if (origin) {
+  if (origin) {
     try {
       const u = new URL(origin);
       if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
@@ -58933,13 +58955,14 @@ console.log(
 if (process.env.CC_DECK_DAEMON === "1") {
   console.log("  \u8FDE\u63A5:  \u8FD0\u884C /cc-deck \u663E\u793A\u4E8C\u7EF4\u7801\uFF08token \u4E0D\u5199\u5165\u65E5\u5FD7\uFF09");
 } else {
+  const maskToken = (t) => t.length > 10 ? `${t.slice(0, 6)}\u2026${t.slice(-4)}` : "\u2026";
   if (cfg.tokenGenerated) {
-    console.log(`  token:  ${cfg.token}  (\u672A\u8BBE\u7F6E CCR_TOKEN\uFF0C\u672C\u6B21\u968F\u673A\u751F\u6210)`);
+    console.log(`  token:  ${maskToken(cfg.token)}  (\u672A\u8BBE\u7F6E CCR_TOKEN\uFF0C\u672C\u6B21\u968F\u673A\u751F\u6210\uFF1B\u5B8C\u6574\u503C\u8D70 /cc-deck \u914D\u5BF9\uFF0C\u4E0D\u843D\u65E5\u5FD7)`);
   }
   for (const list of Object.values(networkInterfaces3())) {
     for (const net of list ?? []) {
       if (net.family === "IPv4" && !net.internal) {
-        console.log(`  \u63A7\u5236\u53F0: http://${net.address}:${cfg.port}/?token=${cfg.token}`);
+        console.log(`  \u63A7\u5236\u53F0: http://${net.address}:${cfg.port}/?token=${maskToken(cfg.token)}\uFF08\u622A\u65AD\u663E\u793A\uFF0C\u6D4F\u89C8\u5668\u6253\u5F00\u8BF7\u7528\u914D\u5BF9\u9875\u5B8C\u6574 token\uFF09`);
       }
     }
   }
