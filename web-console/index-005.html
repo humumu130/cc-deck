@@ -27,6 +27,7 @@
       --text-strong: #E8EFF8;
       --text: #C4D0DE;
       --dim: #A8B9CA;
+      --card-sub: #A9B5C7;
       --faint: #90A6BD;
       --progress-fill: #7793AE;
       --brand: #E2855E;
@@ -80,6 +81,8 @@
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
       --me-bg: #15273B;
+      --bubble-me-bg: #101B2B;
+      --me-line: #1B2739;
       --me-line: #4E6D8E;
       --action-ink: #211B0E;
       --done-ink: #082116;
@@ -173,6 +176,7 @@
       --text-strong: #15283D;
       --text: #30465B;
       --dim: #334B61;
+      --card-sub: #4A5670;
       --faint: #3F566C;
       --progress-fill: #607D99;
       --brand: #C86440;
@@ -226,7 +230,8 @@
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
       --me-bg: #FFFFFF;
-      --me-line: #C6D3DF;
+      --bubble-me-bg: #F1F4F9;
+      --me-line: #D9DFE9;
       --action-ink: #3C2600;
       --done-ink: #073C27;
       --badge-ink: #FFFFFF;
@@ -314,13 +319,17 @@
     .mode-stage { display: none; }
     .mode-stage.active { display: block; }
     .desktop-frame { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100%; height: 100vh; background: var(--bg1); }
-    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+    /* W-TOPBAR ⑦：顶栏与侧栏同色融合（微信式去割裂）——border-bottom 退役、背景
+       --chrome→--rail；rail 自身 border-right 保留（第二列分界，不是割裂源） */
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--rail); }
     .window-dots { display: flex; gap: 6px; }
     .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
-    .window-title {flex: 1; color: var(--faint); font-size: var(--fs-B);}
-    .window-link {color: var(--dim); font-size: var(--fs-E);}
-    /* FB2：workspace-head 的 sub 行整体并入顶栏——域提示文字（路径/最近活动/等待语）随源胶囊
-       同行展示，与 ⌘K 提示共栖右侧簇；空文本零占位 */
+    /* W-TOPBAR ②：源胶囊固定左位（紧跟应用名，不随右侧内容变化）——标题退 flex，
+       弹性占位 .windowbar-spring 吸收自由宽（自身也是拖拽区）；⌘K 教学提示退役 */
+    .window-title {flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-B); white-space: nowrap; text-overflow: ellipsis;}
+    .windowbar-spring { flex: 1 1 0; min-width: 0; }
+    /* FB2 遗产：域提示文字仍在顶栏右簇的只剩 team/project/notify/settings 四域静态摘要；
+       会话域（工作目录/最近活动）已迁第三列 head（.head-meta），顶栏不再随会话抖动 */
     .windowbar-hint {flex: 0 1 auto; min-width: 0; max-width: 340px; overflow: hidden; color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap;}
     .windowbar-hint:empty { display: none; }
     /* #158-②③ windowbar 桌面化：Tauri 壳内真拖拽区+Windows 三钮（浏览器保持原型装饰零变化） */
@@ -336,11 +345,10 @@
     html.mac-tauri .window-dots, html.win-tauri .window-dots { display: none; }
     /* W-NOVAUI ②：nova 壳 decorations=false（对齐生产 conf），系统标题栏退役——win-tauri
        复活自绘三钮与自绘标题，顶栏单行承载（用户实测：系统栏+胶囊行两层，要求并一行）；
-       switcher 位置由 window-title 的 flex:1 弹性推右（原 FB2 退役期的 auto 右距冗余删除） */
+       W-TOPBAR ②：switcher 固定左位后不再靠 window-title flex:1 推右 */
     html.win-tauri .windowbar-winbtns { display: flex; }
-    /* FB1：switcher 右缘后有 hint/link/winbtns 一串占位，source-menu 右锚不探窗沿；左锚
-       （向右展开）为 W15 退役态补丁，现状无害保留 */
-    html.win-tauri .windowbar .source-menu { right: auto; left: 0; }
+    /* W-TOPBAR ②：switcher 移左后 source-menu 改左锚（向右展开，右侧全是空弹簧不会探窗沿；
+       原 FB1 右锚防探沿前提已随 switcher 右位退役） */
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
     .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -355,7 +363,7 @@
     .source-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
     .source-dot.status-reconnecting { background: var(--working); color: var(--working); }
     .source-dot.status-disconnected { background: var(--error); color: var(--error); }
-    .source-menu { position: absolute; top: calc(100% + 8px); right: 0; display: none; width: 276px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .source-menu { position: absolute; top: calc(100% + 8px); left: 0; display: none; width: 276px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
     .source-menu.open { display: block; }
     .source-menu-head {padding: 4px 6px 7px; color: var(--faint); font: var(--fs-C) var(--mono); letter-spacing: .04em; text-transform: uppercase;}
     .source-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
@@ -434,7 +442,12 @@
     .domain-rail { display: flex; flex: 0 0 62px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
     .rail-btn:hover { color: var(--text); background: var(--hover); }
-    .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); }
+    /* W-TOPBAR ④ rail 选中语义对齐微信桌面端：选中主体=图标本身着品牌色（暗色 #E2855E /
+       浅色 #C86440，各自底色上都清晰可辨），常驻淡白矩形底退役；底色只做按压反馈——
+       :active 按住瞬显、松开即消（全部 rail 图标同规则；theme-toggle 永不 .active 不受染） */
+    .rail-btn:active { background: var(--hover); }
+    .rail-btn.active { color: var(--brand); background: transparent; }
+    .rail-btn.active:hover { color: var(--brand-hover); }
     /* W-NOVAUI ④：项目入口恒显（用户实测缺项目入口；FB20 开关整链退役，见 settingsToggleState 注释） */
     .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 10px/15px var(--mono); text-align: center; }
     .rail-spring { flex: 1; }
@@ -447,8 +460,14 @@
        W-NOVAUI ③：inspector 退出 grid 列改 overlay 浮层（absolute 贴右缘，宽走 --inspector-w）——
        展开不再挤压对话列（用户实测：往左展开遮盖挤压第三列）；screen 兼作定位父级 */
     .desktop-screen { display: none; flex: 1; min-width: 0; min-height: 0; }
-    .desktop-screen.active { display: grid; position: relative; grid-template-columns: 296px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+    .desktop-screen.active { display: grid; position: relative; grid-template-columns: var(--queue-w, 327px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
     .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
+    /* W-TOPBAR ⑤：第二列拖宽把手——7px 热区骑在列界上（视觉同 inspector-resizer：悬停/拖动
+       显 1px 短线）；挂 screen 层而非 queue 内——notify 等域会 replaceChildren 重建 queue，
+       挂列内会被抹掉；位置锚屏级 --queue-w（JS 钳 180-420px、按屏记忆、双击回默认） */
+    .queue-resizer { position: absolute; left: var(--queue-w, 327px); margin-left: -3px; top: 0; bottom: 0; z-index: 5; width: 7px; cursor: col-resize; }
+    .queue-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
+    .queue-resizer:hover::after, .queue-resizer:active::after { background: var(--border-strong); }
     .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
     .queue-head h2 {flex: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-D);}
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
@@ -506,8 +525,11 @@
     .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
     .workspace-title-row { display: flex; align-items: center; gap: 8px; }
     /* W-NOVAFIX B3：Postman 式一行制——sub 并入标题行（源胶囊/路径随行右对齐），独立 sub 行退役
-       FB2 再进一步：sub 整行出舱入顶栏（.windowbar-hint），标题行只留标签簇 */
+       FB2：sub 整行出舱入顶栏（.windowbar-hint）；W-TOPBAR ②③：会话域 sub（工作目录/最近活动）
+       回迁标题行右端 .head-meta（顶栏不再随会话抖动），其余域仍走顶栏 hint */
     .workspace-title-row h2 {flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-page); text-overflow: ellipsis; white-space: nowrap;}
+    .head-meta { flex: 0 1 auto; min-width: 0; max-width: 42%; margin-left: auto; overflow: hidden; color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .head-meta:empty { display: none; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
     .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .segment-bar button:hover { color: var(--text); }
@@ -517,8 +539,19 @@
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
-    /* B12+B22 head 右端动作位：过程/思考开关 + 模型胶囊（标题行尾部，不进 tablist 的 segment-bar） */
-    .head-actions { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; margin: 0 -2px 0 2px; }
+    /* W-TOPBAR ③：胶囊信息分层——状态/身份留 head（status tag + engine 徽章），配置类迁
+       输入框区：过程/思考开关在 composer 左侧 .composer-tools，模型胶囊在 composer 右侧
+       （用户点名主流软件惯例位）；.head-actions 旧动作位退役 */
+    .composer-tools { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+    /* W-TOPBAR ③ 胶囊同族规格：head 状态/身份标签与 composer 配置开关/模型胶囊共用一套形状
+       语言（固定高/同内距/全圆角/同字号），语义差异只走配色（状态色/开关 on 态/品牌点）——
+       修「7 种胶囊形状各不相同」：原先 tag 25px、engine 19px、capsule 24px、conv-mini 26px 混杂 */
+    #d-session .workspace-title-row .tag,
+    #d-session .workspace-title-row .engine-badge,
+    #d-session .composer-tools .conv-mini,
+    #d-session #session-model-capsule {
+      height: 24px; min-height: 0; padding: 0 10px; line-height: 1; border-radius: 999px; font-size: var(--fs-C);
+    }
     .head-capsule { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-height: 24px; padding: 0 10px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--text); cursor: pointer; font: var(--fs-C) var(--mono); white-space: nowrap; }
     .head-capsule:hover { border-color: var(--border-strong); color: var(--text-strong); }
     .head-capsule[hidden] { display: none; }
@@ -550,6 +583,31 @@
     .composer-stopbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid rgba(236,116,114,.4); border-radius: 8px; background: rgba(236,116,114,.1); color: var(--error); cursor: pointer; }
     .composer-stopbtn:hover { background: rgba(236,116,114,.18); border-color: rgba(236,116,114,.55); }
     .composer-stopbtn:focus-visible { outline: none; }
+    /* W-TOPBAR ⑥ 会话输入卡分区（旧版 #inputcard 同构，只落会话域不影响手机/团队）：
+       上层输入区加高（≤52px 行高区），下层按钮/提示行——附件钮+提示文字贴左下
+       （提示小号弱化），模型胶囊/停止/发送居右；输入内容与按钮行互不干扰 */
+    .composer[data-composer="session"] { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 2px; min-height: 78px; padding: 6px 10px 8px 12px; border-radius: 10px; }
+    .composer[data-composer="session"] .composer-top { display: flex; align-items: center; flex: 1 1 auto; min-height: 44px; }
+    .composer[data-composer="session"] .composer-input { padding: 4px 0; }
+    .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+    .composer-bottom .composer-spring { flex: 1 1 0; min-width: 0; }
+    .composer-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    /* W-TOPBAR ⑥ 子 Agent 活性面板（旧壳 #142 同构移植）：状态栏下续行，标题行即折叠
+       开关（subAgent N + 尾部箭头），条目=呼吸点/✓ + 描述 + 当前动作 + 走秒；无子 Agent 不占位 */
+    .agbox { flex: 0 0 auto; padding: 0 20px 6px; background: var(--footer); }
+    .agbox[hidden] { display: none; }
+    .aghead { display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px 3px 0; border-radius: 6px; color: var(--faint); cursor: pointer; user-select: none; font-size: var(--fs-C); letter-spacing: .04em; }
+    .aghead:hover { color: var(--dim); }
+    .aghead .caret { font-size: 9px; }
+    .agrow { display: flex; align-items: center; gap: 8px; padding: 2px 0 0 13px; font-size: var(--fs-B); min-width: 0; }
+    .agrow .ad { flex: 1; min-width: 0; overflow: hidden; color: var(--working); text-overflow: ellipsis; white-space: nowrap; }
+    .agrow.done .ad { color: var(--dim); }
+    .agrow .aa { flex: none; max-width: 46%; overflow: hidden; color: var(--dim); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    .agrow.done .aa { color: var(--faint); }
+    .agrow .at { flex: none; color: var(--faint); font-size: var(--fs-C); font-variant-numeric: tabular-nums; }
+    .agdot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+    .agrow .ag-done-mark { flex: none; color: var(--done); font-size: 10px; }
+    .agmore { padding: 3px 0 0 13px; color: var(--faint); font-size: var(--fs-C); }
     .composer-stopbtn .icon-inline { width: 14px; height: 14px; }
     .composer-stopbtn[hidden] { display: none; }
     .primary-btn, .secondary-btn, .danger-btn {min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: var(--fs-E);}
@@ -591,19 +649,23 @@
     .secondary-btn:hover { background: var(--hover); }
     .danger-btn { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     /* W-NOVAUI ③：inspector 浮层化——absolute 贴 screen 右缘全高，宽走 --inspector-w（JS 拖宽
-       设变量，默认 320 与旧三列档一致）；collapsed 42px 窄条把手恒覆盖基础宽（同类后写胜出） */
+       设变量，默认 320 与旧三列档一致）；W-TOPBAR ①收起改整块 display:none（42px 竖条退役） */
     .inspector { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; width: var(--inspector-w, 320px); overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); transition: background .18s ease, padding .18s ease; }
     .inspector h3 {margin: 0 0 14px; color: var(--text-strong); font-size: var(--fs-D);}
     .inspector-toggle {position: absolute; top: 11px; right: 10px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: color .18s ease, background .18s ease, border-color .18s ease;}
     .inspector-toggle:hover { color: var(--text); background: var(--hover); }
-    .inspector.collapsed { width: 42px; overflow: hidden; padding: 12px 6px; }
-    .inspector.collapsed > :not(.inspector-toggle) { display: none; }
-    .inspector.collapsed .inspector-toggle { position: static; width: 100%; height: 34px; background: transparent; }
-    /* FB6 检查器外扩：左沿拖拽调宽（260-640px 夹紧，折叠态隐藏；宽度与折叠态按屏记忆） */
+    /* W-TOPBAR ①：收起=完全隐藏（零残留——原 42px 竖条残在第三列边缘遮内容，用户点名退役）；
+       展开入口外移到各屏 workspace-head 右端 .inspector-expand 把手（见 initInspectors） */
+    .inspector.collapsed { display: none; }
+    /* FB6 检查器外扩：左沿拖拽调宽（260-640px 夹紧；宽度与折叠态按屏记忆） */
     .inspector-resizer { position: absolute; left: -3px; top: 0; bottom: 0; z-index: 5; width: 7px; cursor: col-resize; }
     .inspector-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
     .inspector-resizer:hover::after, .inspector-resizer:active::after { background: var(--border-strong); }
-    .inspector.collapsed .inspector-resizer { display: none; }
+    /* W-TOPBAR ①：head 右端展开把手——仅收起态可见（.inspector-collapsed 挂在 screen 上），
+       点击复用地基 [data-inspector-toggle] 全局委托，零新增监听；视觉克制（26px 方钮） */
+    .inspector-expand { display: none; place-items: center; flex: 0 0 auto; width: 26px; height: 24px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: color .18s ease, background .18s ease, border-color .18s ease; }
+    .inspector-expand:hover { color: var(--text); background: var(--hover); }
+    .inspector-collapsed .inspector-expand { display: grid; }
     /* FB6 恢复：拖宽/折叠过的屏在窄窗 resize 重放时保持用户选择（JS 持久化，此处只管视觉） */
     /* FB10 界面字号：全界面缩放档（WebView/浏览器 zoom 均支持，布局字号同步等比） */
     /* FB10 字号档 + W-NOVAUI ⑧ 高度补偿：zoom 后实际占位 = 100vh×zoom（1.1 档溢出出滚动条、
@@ -671,9 +733,15 @@
     /* 任务面板四态分区（旧版 :6543 排序语义：已完成→进行中→待审查→待办；「待验证」旧词随 2026-10-05 泳道词表退役为「待审查」）符号色 */
     .check-row b.run { color: var(--working); }
     .check-row b.verify { color: var(--brand); }
-    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: var(--fs-A);}
-    .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-    .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
+    /* W-TOPBAR ⑨：我方气泡对齐旧版 0.6——去阴影（用户「有阴影很割裂」）、底色单列
+       --bubble-me-bg 取旧 --panel-2 双主题值（「纯白太突兀，旧版舒服」）、形制 14px 圆角
+       右上收 5px、边框 --me-line 改旧 --border 同值；时间戳气泡下方右对齐（.msg-user-row） */
+    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);}
+    .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
+    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 14px; border-top-right-radius: 5px; }
+    .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 11px; }
+    .msg-user-row .bubble.me { margin-bottom: 0; }
+    .msg-user-row .mt { margin-top: 4px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
     .bubble strong { color: var(--text-strong); }
     /* ---------- #164 对话流域：旧壳消息生态全量移植（MD 渲染/语法着色/过程组/思考卡/工具行） ---------- */
     .message-ai {margin: 0 0 15px; color: var(--text); font-size: var(--fs-A);}
@@ -682,7 +750,9 @@
     .message-author .ai-ava { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; }
     .message-author strong {font-size: var(--fs-B);}
     .message-author .role-label {color: var(--faint); font-size: var(--fs-micro); font-weight: 400;}
-    .message-author time {margin-left: auto; color: var(--faint); font: calc(var(--fs-B) - 1px) var(--mono);}
+    /* W-TOPBAR ⑨①：AI 时间戳贴名字（旧版 .ai-head 行内 .mt：去 margin-left:auto 推右，
+       靠行 gap 9px 自然间隔；10.5px faint tabular-nums 同旧版字面） */
+    .message-author time { color: var(--faint); font-size: 10.5px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
     /* #164 头像列基线（旧壳 ai-body 37px 同构）：正文与过程消息共用同一左基线 = 头像列右侧小缩进
        （28px 头像 + 9px 间隙）；工具行 .tico 图标列同宽 28px、其左缘即该基线 */
     .message-body { min-width: 0; padding-left: 37px; line-height: 1.55; }
@@ -1254,14 +1324,18 @@
        小号淡色一档，三徽全空整行不渲染——标题不再被徽章族挤压截断）/
        srow-cta「处理」浮层按钮（绝对定位挂卡不占文档流；未读数角标已按用户拍板删除）。
        hover .06s 瞬时淡底（扫过即现即逝）、选中持续淡底，走 --q-row-* 暗亮双值 ---------- */
-    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: var(--fs-A); --srow-sub-size: var(--fs-B); --srow-badge-size: var(--fs-C); }
+    /* W-TOPBAR ⑤ 三行层级对齐旧版 0.6 会话卡（#54 层级 + 旧版间距节奏，用户点名基准）：
+       标题行 15px/650（旧 .card-title 15px/650）→ 动作行 11.5px --card-sub（旧 .card-summary
+       11.5px/lh16/上距4）→ 标签行 10.5px --faint（旧 .card-stats 11px 再降半档）；
+       行间 --srow-gap 4px、卡内纵 pad 10px、行盒 16px 钉高，密度档同比例缩放 */
+    body { --srow-pad-block: 10px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 4px; --srow-name-size: 15px; --srow-sub-size: 11.5px; --srow-badge-size: 10.5px; }
+    body[data-card-density="compact"] { --srow-pad-block: 6px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 2px; --srow-name-size: 14px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
+    body[data-card-density="relaxed"] { --srow-pad-block: 13px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 6px; --srow-name-size: 16px; --srow-sub-size: 12.5px; --srow-badge-size: 11.5px; }
     /* 满宽行（用户直馈 2026-10-05：「左右都浪费横向空间」——蒙版贯穿整列去卡感；
        radius 拍板归零：「既然蒙版贯穿整行了，还需要圆角吗？微信上没有圆角」）：
        会话域列容器水平 padding 归零（.queue 通用类不动，team/project/settings 卡片域零触碰）；
        行零圆角矩形蒙版条、背景/hover/selected 满宽贯穿；组头文字对齐行内容起点（14px） */
     #d-session .queue { padding: 16px 0; }
-    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; }
-    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; }
     #d-session .queue-card { display: flex; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 14px; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
     /* 行形态 display:flex 会压过 [hidden] 的 UA display:none——源筛选/搜索隐藏链（card.hidden）保真 */
     #d-session .queue-card[hidden] { display: none; }
@@ -1275,12 +1349,12 @@
     #d-session .srow-ava .status-dot { --dot-halo: var(--faint); position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; box-shadow: 0 0 0 2px var(--bg1), 0 0 0 3px color-mix(in srgb, var(--dot-halo) 20%, transparent); }
     #d-session .srow-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--srow-gap); }
     #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); text-overflow: ellipsis; white-space: nowrap; }
+    #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
     /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
-    #d-session .srow-time {flex: none; margin-left: auto; color: var(--faint); font: calc(var(--fs-B) - 1px) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
+    #d-session .srow-time {flex: none; margin-left: auto; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
     #d-session .queue-card:hover .srow-time, #d-session .queue-card:focus-within .srow-time { opacity: 0; }
-    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); font-size: var(--srow-sub-size); line-height: 16px; }
+    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--card-sub, var(--dim)); font-size: var(--srow-sub-size); line-height: 16px; min-height: 16px; }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
     /* B2 批2 A#bg-live：r2 走秒行 warn 呼吸点 + ⑂N tag（task-ref chip 形制；bgCount>0 恒显，含 WORKING 态） */
@@ -1450,7 +1524,8 @@
     .mobile-settings-detail { padding-top: 3px; }
     .mobile-settings-detail h3 {margin: 12px 0; color: var(--text-strong); font-size: var(--fs-page);}
     .settings-detail-back { margin-bottom: 4px; }
-    body[data-source-mode="single"] #d-session .workspace-title-row .source-badge, body[data-source-mode="single"] #d-project .workspace-title-row .source-badge, body[data-source-mode="single"] #m-detail .mobile-head .source-badge { display: none; }
+    /* W-TOPBAR ③：#d-session .source-badge 分段退役（head 不再挂数据源胶囊，顶栏唯一身份） */
+    body[data-source-mode="single"] #d-project .workspace-title-row .source-badge, body[data-source-mode="single"] #m-detail .mobile-head .source-badge { display: none; }
     html[data-source-mode="aggregate"] .identity-cluster { flex-direction: row-reverse; justify-content: flex-end; }
     ::-webkit-scrollbar { width: 9px; height: 9px; }
     ::-webkit-scrollbar-track { background: var(--scroll-track); }
@@ -1492,7 +1567,7 @@
     .message-ai .msg-copy { position: absolute; right: 0; top: 0; z-index: 2; pointer-events: none; }
     .message-ai:hover .msg-copy, .message-ai .msg-copy:focus-visible { opacity: 1; pointer-events: auto; }
     /* #B3-14 排队注入 chip 行（dock 下）：working 色小胶囊，展开态换行显全文 */
-    .pend-row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; padding: 7px 16px 9px; }
+    .pend-row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; padding: 9px 16px 7px; }
     .pend-row[hidden] { display: none; }
     .pend-chip {display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--working) 10%, transparent); color: var(--working); cursor: pointer; font: var(--fs-C) var(--mono); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
     .pend-chip:hover { border-color: var(--working); }
@@ -1564,7 +1639,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title" data-tauri-drag-region>CC Deck · Command Bridge</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span class="source-trigger-summary" data-current-summary>—</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><span class="window-link">⌘K 全局搜索</span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title" data-tauri-drag-region>CC Deck · Command Bridge</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>当前源</strong><span class="source-trigger-summary" data-current-summary>—</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -1579,7 +1654,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><input type="search" placeholder="搜索" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter aria-label="筛选会话 · 当前全部">全部</button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
+                            <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">会话</h2><span class="tag action" id="session-status">加载中</span><span class="identity-cluster" id="session-identity"></span><span class="head-meta" id="session-head-meta"></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -1587,7 +1662,8 @@
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · 写入验收文档</strong><p class="wait-copy">将把验收证据写入 release-check.md，会话才能继续。</p><div class="wait-actions"><button>拒绝并说明</button><button class="allow" data-allow>允许一次</button></div></div>
               </div>
               <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true"></span><span class="session-state-flow"><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div>
-              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><input class="composer-input" type="text" placeholder="拖入/粘贴即附 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></footer>
+              <div class="agbox" id="session-agbox" hidden></div>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><input class="composer-input" type="text" placeholder="发送消息 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><div class="composer-bottom"><span class="composer-tools" id="composer-tools"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button></span><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
             <script>
@@ -2571,8 +2647,8 @@
                   if (!s) {
                     UI.title.textContent = "会话";
                     UI.statusTag.textContent = "未选择"; UI.statusTag.className = "tag"; UI.statusTag.hidden = false;
-                    UI.identity.innerHTML = '<span class="source-badge">' + esc(S.relayName) + '</span>';
-                    UI.modelCapsule = null; // B22 胶囊随会话渲染（engine-badge 旁），无会话不挂
+                    // W-TOPBAR ③：head 身份收敛——数据源身份只在顶栏源胶囊（head 不再复述 relayName）
+                    UI.identity.innerHTML = "";
                     UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…");
                     updateModelCapsule(null);
                     return;
@@ -2584,9 +2660,10 @@
                   if (s.status === "DONE") UI.statusTag.hidden = true;
                   else { UI.statusTag.hidden = false; UI.statusTag.textContent = st[0]; UI.statusTag.className = "tag " + st[1]; }
                   const eng = ENGINES[s.engine || "claude"] || [s.engine || "Claude", ""];
-                  // B22 模型胶囊挂 engine-badge 旁（identity-cluster 内随 innerHTML 重建，重建后重取引用）
-                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + esc(eng[0]) + '</span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><span class="source-badge">' + esc(S.relayName) + '</span>' + (s.external ? '<span class="tag info">CLI</span>' : "");
-                  UI.modelCapsule = UI.identity.querySelector("#session-model-capsule");
+                  // W-TOPBAR ③ head 身份收敛：只剩 engine 徽章一颗；数据源归顶栏源胶囊、外部会话
+                  // 「CLI」标从独立 tag 降为徽章内文字后缀（身份类三胶囊 → 一颗）
+                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
+                  // B22 模型胶囊已静态落 composer 右侧（W-TOPBAR ③），不再随 renderHeader 重建
                   UI.subHint((s.cwd ? shortPath(s.cwd) + " · " : "") + "最近活动 " + relTime(s.updated_at || s.started_at));
                   updateModelCapsule(s);
                 }
@@ -2674,6 +2751,7 @@
                     if (tok) tok.hidden = true;
                     dockTerminalWatch(dock, null);
                     renderPendChips(null); // #B3-14
+                    renderSubagents(null); // W-TOPBAR ⑥ 无会话撤面板
                     return;
                   }
                   // B21 一行流式：态图标（旋转/呼吸/✓/⚠，CSS 按 data-session-state 承载）+ 摘要 + 走秒 + token
@@ -2687,20 +2765,49 @@
                   if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
-                  renderPendChips(s); // #B3-14 排队注入 chip 行（dock 下，B19 居右=用户侧语义）
+                  renderPendChips(s); // #B3-14 排队注入 chip 行（W-TOPBAR ⑥ 修正到状态栏上方）
+                  renderSubagents(s); // W-TOPBAR ⑥ 子 Agent 活性面板（状态栏下续行）
                 }
-                // #B3-14 排队注入气泡（旧壳 pendbox 语义 005 化）：pending_inputs 渲染为 dock 下
-                // chip 行，点击展开全文；展开态按文本记忆（Set）——排队区随 SESSION_UPDATED 重建
-                // DOM，无记忆则展开即被收回（旧壳 2026-09-16 用户反馈③同坑）。清空时连记忆一并回收。
+                // W-TOPBAR ⑥ 子 Agent 活性面板（旧壳 #142 同构移植）：新壳此前桌面域未做
+                // （仅列表卡 ⑂N 徽标 + 手机域单行简版，subagents 数据合并不展示）——参考旧壳
+                // 补齐：状态栏下续行，标题行即折叠开关（subAgent N + 尾部箭头，呼吸点只属于
+                // 具体条目）；条目=呼吸点/✓ + 描述 + 最近工具 + 走秒；>4 条溢出提示；
+                // 折叠态模块级记忆（renderDock 高频重建不丢态，pendOpen 先例）。
+                // 防御同旧壳：ended_at>0 才算结束（ended_at:0 falsy 坑，run 判定与取时同口径）。
+                let agCollapsed = false;
+                function renderSubagents(s) {
+                  const box = document.getElementById("session-agbox");
+                  if (!box) return;
+                  const subs = s && Array.isArray(s.subagents) ? s.subagents : [];
+                  if (!subs.length) { box.hidden = true; box.textContent = ""; return; }
+                  box.hidden = false;
+                  const shown = subs.slice(-4);
+                  const more = subs.length - shown.length;
+                  box.innerHTML = '<span class="aghead" data-ag-toggle role="button" tabindex="0">subAgent ' + subs.length + ' <span class="caret">' + (agCollapsed ? "▸" : "▾") + "</span></span>" +
+                    (agCollapsed ? "" : shown.map((a) => {
+                      const run = !(a.ended_at > 0);
+                      const dur = a.started_at > 0 ? fmtDur(Math.max(0, (a.ended_at > 0 ? a.ended_at : Date.now()) - a.started_at)) : "";
+                      return '<div class="agrow' + (run ? "" : " done") + '">' + (run ? '<i class="agdot"></i>' : '<span class="ag-done-mark">✓</span>') +
+                        '<span class="ad">' + esc(a.desc || a.kind || "子任务") + "</span>" +
+                        (a.act && run ? '<span class="aa" title="当前动作">' + esc(a.act) + "</span>" : "") +
+                        '<span class="at" data-ag-at data-started="' + (a.started_at || 0) + '" data-ended="' + (a.ended_at || 0) + '">' + dur + "</span></div>";
+                    }).join("") + (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : ""));
+                }
+                function toggleSubagents() { agCollapsed = !agCollapsed; renderSubagents(curSession()); }
+                // #B3-14 排队注入气泡（旧壳 pendbox 语义 005 化）：pending_inputs 渲染为 chip 行，
+                // W-TOPBAR ⑥：位置修正到状态栏上方（旧壳 pendbox 在 liverow 之前——排队是用户侧
+                // 待发内容，不属于状态栏）；点击展开全文；展开态按文本记忆（Set）——排队区随
+                // SESSION_UPDATED 重建 DOM，无记忆则展开即被收回（旧壳 2026-09-16 用户反馈③同坑）。
+                // 清空时连记忆一并回收。
                 const pendOpen = new Set();
                 function renderPendChips(s) {
                   const dock = UI.dock;
                   if (!dock) return;
-                  let row = dock.nextElementSibling;
+                  let row = dock.previousElementSibling;
                   if (!row || !row.classList.contains("pend-row")) {
                     row = document.createElement("div");
                     row.className = "pend-row";
-                    dock.after(row);
+                    dock.before(row);
                   }
                   const pi = s && Array.isArray(s.pending_inputs) ? s.pending_inputs : [];
                   if (!pi.length) { row.hidden = true; row.textContent = ""; pendOpen.clear(); return; }
@@ -2732,6 +2839,11 @@
                   if (s.status === "DONE" && s.duration_ms) { el.textContent = fmtDur(s.duration_ms); return; }
                   const base = s.status === "WORKING" ? (s.turn_started_at || s.started_at) : (s.waiting_started_at || s.updated_at || s.started_at);
                   el.textContent = base ? fmtDur(Math.max(0, Date.now() - base)) : "";
+                  // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，不重建面板）
+                  document.querySelectorAll("#session-agbox [data-ag-at]").forEach((at) => {
+                    const st = Number(at.dataset.started) || 0, ed = Number(at.dataset.ended) || 0;
+                    if (st > 0) at.textContent = fmtDur(Math.max(0, (ed > 0 ? ed : Date.now()) - st));
+                  });
                 }
                 function ctxMeterHtml(s) {
                   const pct = ctxPct(s);
@@ -2832,8 +2944,11 @@
                     const imgHtml = imgs.length
                       ? '<div class="ub-imgs">' + imgs.slice(0, 8).map((ref) => bubbleImgHtml(s, ref)).join("") + "</div>"
                       : "";
-                    return '<div class="bubble me" data-x="' + ke + '"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" + imgHtml +
-                      (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>";
+                    // W-TOPBAR ⑨①：包一层 .msg-user-row（column+右对齐，旧壳 .msg-user 同构），
+                    // 时间戳沿用旧版位=气泡下方右对齐；data-x 随 wrapper 顶层（替换链不变）
+                    return '<div class="msg-user-row" data-x="' + ke + '"><div class="bubble me"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" + imgHtml +
+                      (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>" +
+                      (e.ts ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
                     const eng = ENGINES[(s && s.engine) || "claude"] || ["Claude"];
@@ -2895,8 +3010,8 @@
                   const old = UI.convPane.querySelector('[data-x="' + cssEsc(k) + '"]');
                   if (old && n) old.replaceWith(n);
                 }
-                // B12 过程/思考开关迁 workspace-head 右端（head-actions 内静态钮，不再随对话重建；
-                // 手机 m-detail 仍走自带 .conv-ctrl 行——手机 head 无动作位）
+                // B12 过程/思考开关 → W-TOPBAR ③ 迁 composer 左侧（composer-tools 静态钮，不再随对话
+                // 重建，也不占 head；手机 m-detail 仍走自带 .conv-ctrl 行——手机 head 无动作位）
                 function updateConvCtrl() {
                   const pane = UI.convPane;
                   if (pane) pane.classList.toggle("proc-off", !procShow);
@@ -4263,8 +4378,8 @@
                   UI = {
                     section, sessionList, workspace, body, panes,
                     tabs: [...section.querySelectorAll(".segment-bar button")],
-                    title: $id("session-title"), statusTag: $id("session-status"), identity: $id("session-identity"), subHint: (text) => window.__ccDeck005SetWindowbarHint?.("session", text), // FB2：sub 元素出舱，写顶栏 hint
-                    headActions: $id("session-head-actions"),
+                    title: $id("session-title"), statusTag: $id("session-status"), identity: $id("session-identity"), subHint: (text) => window.__ccDeck005SetWindowbarHint?.("session", text), // FB2 出舱入顶栏；W-TOPBAR ②会话域由地基改路由到 head-meta
+                    headActions: $id("composer-tools"), // W-TOPBAR ③：过程/思考开关落 composer 左侧（旧 head-actions 位退役）
                     dock: $id("session-state-dock"),
                     composer: section.querySelector('[data-composer="session"]'),
                     sendBtn: section.querySelector("[data-composer-send]"),
@@ -4286,20 +4401,27 @@
                   }
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }
                   setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
-                  // B12 head 右端过程/思考开关（head-actions）；B22 模型胶囊在 identity-cluster 内
-                  // 随 renderHeader 重建，点击走容器级委托一次绑定
+                  // B12 过程/思考开关（W-TOPBAR ③ 近 composer 左侧 composer-tools，容器级委托一次绑定）；
+                  // B22 模型胶囊同样静态落 footer（composer 右侧），不再随 renderHeader 重建 → 直接绑
                   if (UI.headActions) {
                     UI.headActions.addEventListener("click", (ev) => {
                       const tgl = ev.target.closest(".conv-mini[data-conv-toggle]");
                       if (tgl) toggleConv(tgl.dataset.convToggle);
                     });
                   }
-                  if (UI.identity) {
-                    UI.identity.addEventListener("click", (ev) => {
-                      const cap = ev.target.closest("#session-model-capsule");
-                      if (!cap) return;
+                  UI.modelCapsule = $id("session-model-capsule"); // W-TOPBAR ③：静态引用，ready 一次取定
+                  if (UI.modelCapsule) {
+                    UI.modelCapsule.addEventListener("click", () => {
                       const menu = document.getElementById("b2-model-menu");
-                      if (menu) closeModelMenu(); else openModelMenu(cap);
+                      if (menu) closeModelMenu(); else openModelMenu(UI.modelCapsule);
+                    });
+                  }
+                  const agbox = document.getElementById("session-agbox"); // W-TOPBAR ⑥ 子 Agent 面板折叠
+                  if (agbox) {
+                    agbox.addEventListener("click", (ev) => { if (ev.target.closest("[data-ag-toggle]")) toggleSubagents(); });
+                    agbox.addEventListener("keydown", (ev) => {
+                      if (ev.key !== "Enter" && ev.key !== " ") return;
+                      if (ev.target.closest("[data-ag-toggle]")) { ev.preventDefault(); toggleSubagents(); }
                     });
                   }
                   if (UI.sessionList) { // B11 组头键盘可达（role=button）
@@ -5738,7 +5860,8 @@
           }
         } catch (_) {}
       }
-      // #158-⌘文案 Windows 显示 Ctrl+：启动时全树替换静态 ⌘ 文案（windowbar ⌘K 全局搜索/设置卡 ⌘K 搜索 · ⌘N 新建会话）；
+      // #158-⌘文案 Windows 显示 Ctrl+：启动时全树替换静态 ⌘ 文案（设置卡 ⌘K 搜索 · ⌘N 新建会话；
+      // W-TOPBAR ②：windowbar ⌘K 教学提示已退役，walker 全树扫不受影响）；
       // 动态模板走 MOD_KEY 分支。只改命中 text node，禁对容器整体 textContent 赋值——会摧毁子树
       if (!IS_MAC) {
         const swap = (s) => s.replaceAll("⌘K", "Ctrl+K").replaceAll("⌘N", "Ctrl+N").replaceAll("⌘", "Ctrl+");
@@ -5882,7 +6005,7 @@
         if (!inspector || !button) return;
         screen.classList.toggle("inspector-collapsed", collapsed);
         inspector.classList.toggle("collapsed", collapsed);
-        if (!collapsed) applyInspectorWidth(screen); // 展开回放记忆宽；收起只切类（42px 由类覆盖）
+        if (!collapsed) applyInspectorWidth(screen); // 展开回放记忆宽；收起只切类（整块 display:none）
         button.textContent = collapsed ? "›" : "‹";
         button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
         button.setAttribute("aria-label", button.title);
@@ -5905,6 +6028,16 @@
           button.type = "button";
           button.dataset.inspectorToggle = "true";
           inspector.prepend(button);
+          // W-TOPBAR ①：收起零残留后，展开入口外移到 workspace-head 标题行右端；
+          // 复用 [data-inspector-toggle] 地基全局委托（免新增监听），仅收起态由 CSS 显形
+          const expand = document.createElement("button");
+          expand.className = "inspector-expand";
+          expand.type = "button";
+          expand.dataset.inspectorToggle = "true";
+          expand.textContent = "›";
+          expand.title = "展开证据检查器";
+          expand.setAttribute("aria-label", expand.title);
+          screen.querySelector(".workspace-title-row")?.append(expand);
           const resizer = document.createElement("div"); // FB6 外扩
           resizer.className = "inspector-resizer";
           resizer.title = "拖动调整检查器宽度";
@@ -5930,6 +6063,48 @@
         });
         applyInspectorBreakpoint();
         window.addEventListener("resize", applyInspectorBreakpoint);
+      }
+
+      // W-TOPBAR ⑤：第二列拖宽——queue 右缘 7px 把手，横向拖实时调宽（钳 180-420px），
+      // 宽度按屏记忆（localStorage），双击把手恢复默认 327px（W-TOPBAR ⑧：rail 62px 之半
+      // +31px，用户拍板加宽）。有第二列的屏（会话/团队等
+      // 带列表列的域）统一生效；落点与 inspector 拖宽同范式（屏级 CSS 变量 + pointer capture）
+      function queueWidthKey(screen) { return "cc-deck-005-queue-w-" + (screen.id || "x"); }
+      function applyQueueWidth(screen) {
+        let w = null;
+        try { w = Number(localStorage.getItem(queueWidthKey(screen))); } catch (_) {}
+        if (Number.isFinite(w) && w >= 327 && w <= 420) screen.style.setProperty("--queue-w", Math.round(w) + "px"); // ⑧ 下限同步 327（旧记忆 <327 视为无效回默认）
+        else screen.style.removeProperty("--queue-w");
+      }
+      function initQueueResizers() {
+        document.querySelectorAll(".desktop-screen").forEach((screen) => {
+          const queue = screen.querySelector(".queue");
+          if (!queue) return;
+          applyQueueWidth(screen);
+          const resizer = document.createElement("div");
+          resizer.className = "queue-resizer";
+          resizer.title = "拖动调整列表宽度 · 双击恢复默认";
+          resizer.addEventListener("pointerdown", (ev) => {
+            ev.preventDefault();
+            try { resizer.setPointerCapture(ev.pointerId); } catch (_) {}
+            const onMove = (e) => {
+              const w = Math.max(327, Math.min(420, e.clientX - screen.getBoundingClientRect().left)); // ⑧ 下限同步默认 327
+              screen.style.setProperty("--queue-w", Math.round(w) + "px");
+            };
+            const onUp = () => {
+              resizer.removeEventListener("pointermove", onMove);
+              resizer.removeEventListener("pointerup", onUp);
+              try { localStorage.setItem(queueWidthKey(screen), String(parseInt(getComputedStyle(screen).getPropertyValue("--queue-w")) || queue.getBoundingClientRect().width)); } catch (_) {}
+            };
+            resizer.addEventListener("pointermove", onMove);
+            resizer.addEventListener("pointerup", onUp);
+          });
+          resizer.addEventListener("dblclick", () => {
+            screen.style.removeProperty("--queue-w");
+            try { localStorage.removeItem(queueWidthKey(screen)); } catch (_) {}
+          });
+          screen.append(resizer); // 挂 screen 层：域脚本 replaceChildren 重建 queue 不丢把手
+        });
       }
 
 
@@ -5974,9 +6149,13 @@
       }
       function renderWindowbarHint() {
         const el = document.getElementById("windowbar-hint");
-        if (!el) return;
         const active = document.querySelector(".desktop-screen.active")?.id.replace(/^d-/, "");
-        el.textContent = active ? (windowbarHintStore[active] || "") : "";
+        const text = active ? (windowbarHintStore[active] || "") : "";
+        // W-TOPBAR ②：会话域提示（工作目录/最近活动，随会话切换变来变去）改路由第三列 head
+        // 的 .head-meta——顶栏源胶囊右侧不再抖动；其余域维持顶栏右簇静态摘要
+        const meta = document.getElementById("session-head-meta");
+        if (meta) meta.textContent = active === "session" ? text : "";
+        if (el) el.textContent = active === "session" ? "" : text;
       }
       window.__ccDeck005SetWindowbarHint = setWindowbarHint;
 
@@ -8223,6 +8402,7 @@ function connectLan(ctx) {
       else if (typeof viewportQuery.addListener === "function") viewportQuery.addListener(applyViewportMode);
       if (window.__ccDeck005B4) window.__ccDeck005B4.jumpMode = setMode; // 手机脚本 jumpDesktop 借道
       initInspectors();
+      initQueueResizers(); // W-TOPBAR ⑤ 第二列拖宽
       initSettingsLiveData();
       initSourceModeState(); // FB1：源显示模式恢复（body 态 + 五壳按钮）
       refreshSourceSwitchers(); // FB1：占位文案即刻退役
