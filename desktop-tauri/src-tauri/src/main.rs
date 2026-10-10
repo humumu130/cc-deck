@@ -1226,8 +1226,23 @@ fn main() {
             }
             // #66 子进程监督常驻（WANT 门控：从未启用/用户手动停时静默空转）
             supervise_embedded_relay(app.handle().clone());
+            // W-NOVAVAR B2（W-AUDIT-CONTRACT P1-2）：nova 变体壳侧标记。判定走运行时
+            // config.identifier（--config overlay 在构建期已 merge 进 generate_context!：
+            // 标准 = online.humumu.ccdeck.tauri / nova = online.humumu.ccdeck.nova）——
+            // 不引环境变量/Cargo feature，nova overlay 就是唯一事实源。页面侧
+            // （index-005.html）据 window.__CCDECK_NOVA 追加挂 nova-tauri 类：自绘三钮等
+            // decorations=false 专属 UI 只认 .nova-tauri，标准 Windows 壳（系统标题栏，
+            // 用户拍板 tauri.windows.conf.json decorations:true）不被 win-tauri 泛匹配
+            // 误开——双标题栏回归根修。initialization_script 在页面任何脚本前执行，
+            // 标记先于类挂载 IIFE 就位。
+            let nova_marker = if app.config().identifier.ends_with(".nova") {
+                "\nwindow.__CCDECK_NOVA = 1; // W-NOVAVAR B2: nova variant marker（decorations=false 壳专属 UI 开关）"
+            } else {
+                ""
+            };
+            let init_script = format!("{INIT_SCRIPT}{nova_marker}");
             let win = tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
-                .initialization_script(INIT_SCRIPT)
+                .initialization_script(&init_script)
                 // 只允许壳内源；等价 Electron will-navigate 的本地白名单（防页面被导航带离）。
                 // 平台差异（#72 mac 白屏根因）：Windows/Linux 是 http://tauri.localhost
                 // （host=tauri.localhost），macOS 是 tauri://localhost（scheme=tauri、

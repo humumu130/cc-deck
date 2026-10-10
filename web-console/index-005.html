@@ -334,13 +334,16 @@
     .windowbar-winbtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
     html.mac-tauri .windowbar { padding-left: 78px; }
     html.mac-tauri .window-dots, html.win-tauri .window-dots { display: none; }
-    /* W-NOVAUI ②：nova 壳 decorations=false（对齐生产 conf），系统标题栏退役——win-tauri
-       复活自绘三钮与自绘标题，顶栏单行承载（用户实测：系统栏+胶囊行两层，要求并一行）；
-       switcher 位置由 window-title 的 flex:1 弹性推右（原 FB2 退役期的 auto 右距冗余删除） */
-    html.win-tauri .windowbar-winbtns { display: flex; }
+    /* W-NOVAVAR B2（原 W-NOVAUI ②）：自绘三钮是 nova 壳 decorations=false 的专属 UI，
+       限定 .nova-tauri（壳侧 INIT_SCRIPT 注入 __CCDECK_NOVA 后挂载）——此前挂
+       .win-tauri 泛匹配，标准 Windows 壳（系统标题栏，tauri.windows.conf.json
+       decorations:true 用户拍板）会双标题栏回归。nova 壳顶栏单行承载（用户实测：
+       系统栏+胶囊行两层，要求并一行）；switcher 位置由 window-title 的 flex:1 弹性推右 */
+    html.nova-tauri .windowbar-winbtns { display: flex; }
     /* FB1：switcher 右缘后有 hint/link/winbtns 一串占位，source-menu 右锚不探窗沿；左锚
-       （向右展开）为 W15 退役态补丁，现状无害保留 */
-    html.win-tauri .windowbar .source-menu { right: auto; left: 0; }
+       （向右展开）为 W15 退役态补丁，现状无害保留。同款限定 nova：三钮占位只在 nova
+       壳复现（标准 win 壳 winbtns 常隐，hint/link 占位仍在，右锚默认口径不受影响） */
+    html.nova-tauri .windowbar .source-menu { right: auto; left: 0; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
     .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -5708,10 +5711,15 @@
       const connectionChips = [...document.querySelectorAll(".connection-chip")];
       const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
       // #158-②③ 桌面壳平台化：class 供 mac 圆点让位/⌘文案/路径展示分支（浏览器不加 class）。
-      // W15：Windows 改系统标准标题栏后自绘三钮退役（winbtns 常隐），此处只挂平台 class
+      // W15：Windows 标准壳走系统标题栏（自绘三钮退役，winbtns 常隐）；W-NOVAVAR B2：
+      // nova 壳（decorations=false，壳侧 INIT_SCRIPT 注入 __CCDECK_NOVA，此脚本之前已就位）
+      // 叠加 nova-tauri——自绘三钮等无框专属 UI 只认 .nova-tauri，标准 win-tauri 不再
+      // 误开（P1-2 双标题栏根修）
       const IS_MAC = /Mac/i.test(navigator.userAgent);
       if (window.__TAURI__?.window) {
-        document.documentElement.classList.add(IS_MAC ? "mac-tauri" : "win-tauri");
+        const tauriClasses = [IS_MAC ? "mac-tauri" : "win-tauri"];
+        if (window.__CCDECK_NOVA) tauriClasses.push("nova-tauri");
+        document.documentElement.classList.add(...tauriClasses);
       }
       const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
       let mobileReturn = "inbox";

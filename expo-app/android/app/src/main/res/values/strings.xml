@@ -1,3 +1,6 @@
+<!-- W-NOVAVAR B1：app_name 改由 build.gradle defaultConfig 的 resValue 按变体提供
+     （标准 = CC Deck / nova = CC Deck 新版）——静态条目与 resValue 同名会报 duplicate
+     resource，二选一后真源在 gradle（随 APP_VARIANT 切换，见 defaultConfig 分支注释）。
+     manifest 的 android:label 经 ${appLabel} placeholder 指回 @string/app_name。 -->
 <resources>
-  <string name="app_name">CC Deck</string>
 </resources>
