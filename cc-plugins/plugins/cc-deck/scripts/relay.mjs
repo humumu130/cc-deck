@@ -14073,6 +14073,24 @@ function createGroup(input, dir) {
   }
   return { ok: true, group, needsConfirm, confirm };
 }
+function sanitizeHeadcount(raw) {
+  if (raw === void 0) return { ok: true };
+  if (!Array.isArray(raw)) return { ok: false, error: "headcount \u5FC5\u987B\u662F\u6570\u7EC4" };
+  if (raw.length > 8) return { ok: false, error: "headcount \u8D85\u4E0A\u9650\uFF088 \u5E2D\uFF09" };
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return { ok: false, error: "headcount \u6761\u76EE\u5FC5\u987B\u662F\u5BF9\u8C61" };
+    const sid = typeof item.session_id === "string" ? item.session_id.trim() : "";
+    if (!sid) return { ok: false, error: "headcount \u6761\u76EE\u7F3A session_id" };
+    if (seen.has(sid)) continue;
+    seen.add(sid);
+    const roleRaw = item.role;
+    const role = typeof roleRaw === "string" && roleRaw.trim() ? roleRaw.trim().slice(0, 24) : "worker";
+    out.push({ session_id: sid, role });
+  }
+  return { ok: true, ...out.length ? { headcount: out } : {} };
+}
 function handleOrgActionCreate(payload, dir) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false, error: "org action payload \u65E0\u6548" };
@@ -14085,7 +14103,9 @@ function handleOrgActionCreate(payload, dir) {
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir \u5FC5\u586B" };
   if (!isAbsolute2(anchor)) return { ok: false, error: "anchor_dir \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
   if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
-  return createGroup({ name, anchor_dir: anchor, tier, ...raw.mixed_engine === true ? { mixed_engine: true } : {} }, dir);
+  const hc2 = sanitizeHeadcount(raw.headcount);
+  if (!hc2.ok) return { ok: false, error: hc2.error };
+  return createGroup({ name, anchor_dir: anchor, tier, ...hc2.headcount ? { headcount: hc2.headcount } : {}, ...raw.mixed_engine === true ? { mixed_engine: true } : {} }, dir);
 }
 var adaptOrgAction = handleOrgActionCreate;
 function setGroupStatus(id2, to2, note, dir) {
@@ -47001,6 +47021,18 @@ function saveUploadImages(dataDir2, sessionId, images) {
   }
   return saved;
 }
+function imageRefsOf(savedPaths) {
+  return savedPaths.map((p) => path2.basename(p)).filter(Boolean);
+}
+var IMG_REF_RE = /^img-[a-z0-9]{0,8}-\d{13}-[1-4]\.(png|jpg|gif|webp)$/i;
+function resolveUploadImage(dataDir2, sessionId, name) {
+  if (typeof name !== "string" || !IMG_REF_RE.test(name)) return null;
+  if (name.slice(4).split("-")[0].toLowerCase() !== sidKeyOf(sessionId).toLowerCase()) return null;
+  const dir = tmpUploadDir(dataDir2);
+  const p = path2.join(dir, name);
+  if (path2.dirname(p) !== dir) return null;
+  return p;
+}
 function saveUploadFiles(dataDir2, sessionId, files) {
   if (files.length === 0) return [];
   const dir = tmpUploadDir(dataDir2);
@@ -49370,6 +49402,8 @@ provider=${opts.provider ?? "default"}` : void 0,
               return { command_id: cmd.command_id, ok: false, error: "\u6587\u4EF6\u4FDD\u5B58\u5931\u8D25\uFF08\u4E34\u65F6\u76EE\u5F55\u4E0D\u53EF\u5199\uFF09" };
             }
           }
+          const imgPayload = sanitizeImages(cmd.payload.images) ?? [];
+          const imgRefs = imgPayload.length > 0 ? imageRefsOf(saveUploadImages(this.cfg.dataDir, cmd.payload.session_id, imgPayload)) : [];
           if (this.isLeaderSession(cmd.payload.session_id)) {
             const dispatchId = randomUUID8();
             this.pushOpenDispatch(cmd.payload.session_id, { id: dispatchId, tier: "\u54A8\u8BE2", actor: "user" });
@@ -49386,19 +49420,21 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!s.agent || s.agent.ended || s.wd.gaveUp) {
             if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
-              s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
-              s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
+              s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
+              s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo);
+              s.unacked.push({ text, images: imgPayload.length ? imgPayload : void 0, refs: imgRefs.length ? imgRefs : void 0, ts: Date.now() });
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
             }
-            this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
+            this.resumeAgent(s, text, imgPayload.length ? imgPayload : void 0, echo, imgRefs.length ? imgRefs : void 0);
             return { command_id: cmd.command_id, ok: true };
           }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
-          s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
-          s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
+          s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
+          s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo);
+          s.unacked.push({ text, images: imgPayload.length ? imgPayload : void 0, refs: imgRefs.length ? imgRefs : void 0, ts: Date.now() });
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -49781,8 +49817,10 @@ provider=${opts.provider ?? "default"}` : void 0,
         }
         case "COMMAND_ARTIFACT_FETCH": {
           const s = this.require(cmd.payload.session_id);
-          const key = resolve8(String(cmd.payload.path ?? "")).toLowerCase();
-          const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
+          const rawPath = String(cmd.payload.path ?? "");
+          const imgHit = resolveUploadImage(this.cfg.dataDir, s.state.session_id, rawPath);
+          const key = imgHit ? "" : resolve8(rawPath).toLowerCase();
+          const hit = imgHit ? { path: imgHit } : (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
           if (!hit) {
             return { command_id: cmd.command_id, ok: false, error: "\u8DEF\u5F84\u672A\u767B\u8BB0\u5728\u8BE5\u4F1A\u8BDD\u7684\u8F93\u51FA\u7269\u6E05\u5355\u91CC\uFF0C\u65E0\u6743\u62C9\u53D6" };
           }
@@ -49790,7 +49828,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           try {
             st2 = statSync7(hit.path);
           } catch {
-            return { command_id: cmd.command_id, ok: false, error: "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
+            return { command_id: cmd.command_id, ok: false, error: imgHit ? "\u56FE\u7247\u5DF2\u8FC7\u671F\uFF08\u4E34\u65F6\u9644\u4EF6\u5B9A\u671F\u6E05\u626B\uFF09" : "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
           }
           if (!st2.isFile()) return { command_id: cmd.command_id, ok: false, error: "\u4E0D\u662F\u5E38\u89C4\u6587\u4EF6" };
           if (st2.size > ARTIFACT_FETCH_MAX_BYTES) {
@@ -50210,6 +50248,10 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (!mine()) return;
         touch(kind);
         if (kind === "user_message") {
+          if (managed.pendingImgRefs?.length) {
+            meta = { ...meta, images: managed.pendingImgRefs };
+            managed.pendingImgRefs = void 0;
+          }
           const key = text.replace(/（\+\d+ 图）$/, "").trim().replace(/\s+/g, " ").slice(0, 200);
           const i2 = managed.unacked.findIndex((m) => m.text.trim().replace(/\s+/g, " ").slice(0, 200) === key);
           if (i2 >= 0) managed.unacked.splice(i2, 1);
@@ -50305,7 +50347,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
   // echo（#62 文件消息）：客户端可见回显文本——正文已合成路径指令时传原文本短回显，
   // 不暴露临时路径（同 #54b 口径）；不传则回显截断正文 + 图片计数
-  resumeAgent(s, firstMessage, images, echo) {
+  resumeAgent(s, firstMessage, images, echo, refs) {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("\u4F1A\u8BDD\u5DF2\u7ED3\u675F\u4E14\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF0C\u65E0\u6CD5\u6062\u590D\uFF08\u6A21\u578B\u5C1A\u672A\u5B8C\u6210\u521D\u59CB\u5316\uFF09");
@@ -50333,7 +50375,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.gaveUp = false;
-      s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+      s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now() });
       this.emitUpdated(s, true);
       return;
     }
@@ -50401,7 +50443,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.lastProgressKind = "";
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
-    s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+    s.unacked.push({ text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now() });
     initTimer = setTimeout(() => {
       initTimer = null;
       if (inited || s.agent !== agent || agent.ended || this.sessions.get(s.state.session_id) !== s) return;
@@ -50464,7 +50506,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }, resumeInitTimeoutMs());
     initTimer.unref?.();
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
-    this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
+    this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker, void 0, refs?.length ? { images: refs } : void 0);
     this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
     this.emitUpdated(s, true);
   }
@@ -51288,6 +51330,25 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (action === "create") {
       const anchor = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
       const tier = payload.tier === "\u8F7B\u7ACB\u9879" || payload.tier === "\u6B63\u7ECF\u7ACB\u9879" ? payload.tier : "\u968F\u624B\u529E";
+      if (Array.isArray(payload.headcount)) {
+        for (const item of payload.headcount) {
+          const sid = item && typeof item === "object" && typeof item.session_id === "string" ? item.session_id.trim() : "";
+          if (!sid) continue;
+          const s = this.sessions.get(sid);
+          if (!s) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `\u968F\u56E2\u7F16\u5236\u62D2\u7EDD\uFF1A\u4F1A\u8BDD ${sid.slice(0, 8)} \u4E0D\u5728\u518C`);
+            return { ok: false, error: `\u968F\u56E2\u7F16\u5236\u91CC\u7684\u4F1A\u8BDD ${sid.slice(0, 8)} \u4E0D\u5728\u518C\uFF08\u6210\u5458\u9700\u5148\u6709\u4F1A\u8BDD\u5361\uFF09` };
+          }
+          if (s.state.external) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `\u968F\u56E2\u7F16\u5236\u62D2\u7EDD\uFF1A\u5916\u90E8\u4F1A\u8BDD\u4E0D\u53EF\u5165\u7F16`);
+            return { ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u4E0D\u53EF\u5165\u7F16\uFF08\u6210\u5458\u53EA\u80FD\u662F\u6258\u7BA1\u4F1A\u8BDD\uFF09" };
+          }
+          if (this.isLeaderSession(sid)) {
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `\u968F\u56E2\u7F16\u5236\u62D2\u7EDD\uFF1ALeader \u4E0D\u53EF\u5165\u7F16`);
+            return { ok: false, error: "Leader \u4E0D\u53EF\u5165\u7F16\uFF08\u5206\u8BCA\u8005\u4E0D\u63A5\u6D3B\uFF09" };
+          }
+        }
+      }
       const r = adaptOrgAction(payload);
       if (!r.ok) {
         this.auditOrgCommand(actor, device, action, anchor, tier, false, r.error);
@@ -52784,7 +52845,8 @@ provider=${opts.provider ?? "default"}` : void 0,
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
-        this.resumeAgent(s, text, images.length ? images : void 0);
+        const refs = pending.flatMap((m) => m.refs ?? []);
+        this.resumeAgent(s, text, images.length ? images : void 0, void 0, refs.length ? refs : void 0);
       } else {
         this.closeOpenDispatches(s.state.session_id, "done", "\u6D41\u4E2D\u65AD\u6062\u590D\u5F85\u547D\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
         this.reviveSaved(s);
@@ -54103,7 +54165,8 @@ var Bridge = class _Bridge {
     }
     return false;
   }
-  // 从 pending 里出队所有被 text 覆盖的条目（单条精确 / 合并形态包含），返回被出队的原文
+  // 从 pending 里出队所有被 text 覆盖的条目（单条精确 / 合并形态包含），返回被出队的
+  // 原文与随行图引用（FB14：气泡缩略数据源；正文与 refs 一一同序配对）
   consumePendingTexts(id2, text) {
     const state = this.mgr.getExternal(id2);
     const list = state?.pending_inputs ?? [];
@@ -54113,7 +54176,7 @@ var Bridge = class _Bridge {
     if (kept2.length === list.length) return [];
     this.mgr.setExternalPending(id2, kept2);
     for (const p of list) if (key.includes(normKey(pBody(p)))) this.dropEnqueuedKey(id2, pBody(p));
-    return list.filter((p) => key.includes(normKey(pBody(p)))).map((p) => p.text);
+    return list.filter((p) => key.includes(normKey(pBody(p)))).map((p) => ({ text: p.text, ...p.refs?.length ? { refs: p.refs } : {} }));
   }
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
   onQueueEnqueue(id2, content) {
@@ -54132,7 +54195,7 @@ var Bridge = class _Bridge {
       for (const p of hits2) {
         this.dropEnqueuedKey(id2, pBody(p));
         this.noteUserMsg(id2, pBody(p), "promote");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
+        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3), ...p.refs?.length ? { images: p.refs } : {} });
       }
       this.resetStuckWatch(id2);
       return;
@@ -54170,8 +54233,8 @@ var Bridge = class _Bridge {
     const consumed = this.consumePendingTexts(id2, text);
     if (consumed.length) {
       for (const t of consumed) {
-        if (!this.recentlyLogged(id2, t)) this.mgr.pushExternalLog(id2, "user_message", truncate(t, 300), void 0, { full: truncate(t, 2e3) });
-        this.noteUserMsg(id2, t, "promote");
+        if (!this.recentlyLogged(id2, t.text)) this.mgr.pushExternalLog(id2, "user_message", truncate(t.text, 300), void 0, { full: truncate(t.text, 2e3), ...t.refs?.length ? { images: t.refs } : {} });
+        this.noteUserMsg(id2, t.text, "promote");
       }
       this.resetStuckWatch(id2);
     } else {
@@ -54307,6 +54370,7 @@ var Bridge = class _Bridge {
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
     let body = text.trim();
     const savedImgs = images && images.length ? saveUploadImages(this.opts.dataDir, sessionId, images) : [];
+    const imgRefs = imageRefsOf(savedImgs);
     if (savedImgs.length) {
       body = body ? `${body}
 \uFF08\u56FE\u7247\u5DF2\u4FDD\u5B58\uFF1A${savedImgs.join("\u3001")}\u2014\u2014\u8BF7\u7528 Read \u5DE5\u5177\u67E5\u770B\u540E\u518D\u7EE7\u7EED\uFF09` : `\u8BF7\u7528 Read \u5DE5\u5177\u67E5\u770B\u56FE\u7247\uFF1A${savedImgs.join("\u3001")}`;
@@ -54337,13 +54401,13 @@ var Bridge = class _Bridge {
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2);
       if (!alive2) {
-        return this.resumeExternal(sessionId, body, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`, echoText);
+        return this.resumeExternal(sessionId, body, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`, echoText, imgRefs.length ? imgRefs : void 0);
       }
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
     q2.push(body);
     this.inputQueue.set(sessionId, q2);
-    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: echoText, ts: Date.now(), ...body !== echoText ? { body } : {} }]);
+    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: echoText, ts: Date.now(), ...body !== echoText ? { body } : {}, ...imgRefs.length ? { refs: imgRefs } : {} }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
         this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6CE8\u5165\u7EC8\u7AEF\uFF08CLI \u8FD0\u884C\u4E2D\uFF0C\u81EA\u52A8\u6392\u961F\u8DDF\u968F\uFF09\uFF1A${truncate(echoText, 80)}`);
@@ -54360,13 +54424,13 @@ var Bridge = class _Bridge {
   // 会话连发 N 条 = N 个重复标签（用户 Mac 一晚叠了 15 个）。窗口内后续消息只进
   // pending，恢复进程空闲时 flushQueue 自动带上
   resumeSpawns = /* @__PURE__ */ new Map();
-  resumeExternal(sessionId, text, why, echo) {
+  resumeExternal(sessionId, text, why, echo, refs) {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
     const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
     const shown = echo ?? text.trim();
-    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: shown, ts: Date.now(), ...shown !== text.trim() ? { body: text.trim() } : {} }]);
+    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: shown, ts: Date.now(), ...shown !== text.trim() ? { body: text.trim() } : {}, ...refs?.length ? { refs } : {} }]);
     if (inWindow) {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(shown, 80)}`);
       return { ok: true };
@@ -54415,7 +54479,7 @@ var Bridge = class _Bridge {
       this.mgr.setExternalPending(sessionId, list);
       this.dropEnqueuedKey(sessionId, pBody(promoted));
       this.noteUserMsg(sessionId, pBody(promoted), "promote");
-      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: truncate(promoted.text, 2e3) });
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: truncate(promoted.text, 2e3), ...promoted.refs?.length ? { images: promoted.refs } : {} });
       this.resetStuckWatch(sessionId);
       return true;
     }
@@ -54431,7 +54495,7 @@ var Bridge = class _Bridge {
           for (const h of hits2) {
             this.dropEnqueuedKey(sessionId, pBody(h));
             this.noteUserMsg(sessionId, pBody(h), "promote");
-            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3), ...h.refs?.length ? { images: h.refs } : {} });
           }
           this.noteUserMsg(sessionId, prompt, "promote");
           this.resetStuckWatch(sessionId);
@@ -54449,7 +54513,7 @@ var Bridge = class _Bridge {
       for (const h of subHits) {
         this.dropEnqueuedKey(sessionId, pBody(h));
         this.noteUserMsg(sessionId, pBody(h), "promote");
-        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3), ...h.refs?.length ? { images: h.refs } : {} });
       }
       this.resetStuckWatch(sessionId);
       return true;
@@ -55358,7 +55422,7 @@ var Bridge = class _Bridge {
       const qi2 = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
       if (qi2 === -1) {
         this.noteUserMsg(id2, pBody(p), "promote");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
+        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3), ...p.refs?.length ? { images: p.refs } : {} });
       } else {
         avail.splice(qi2, 1);
         kept2.push(p);
