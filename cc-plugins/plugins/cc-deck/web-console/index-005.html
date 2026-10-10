@@ -1553,6 +1553,16 @@
     .activity-row time {color: var(--faint); font: var(--fs-B) var(--mono);}
     .activity-row i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
     .task-flag {display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--brand-hover); font-size: var(--fs-C);}
+    /* W-EXPP2 经验库 pane（团队域第五 tab）：行卡片沿用 .task-card 地基，徽章/筛选/改归组表单为域内新增 */
+    .exp-filters { display: flex; gap: 8px; margin: 0 0 10px; }
+    .exp-filter { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font-size: var(--fs-E); }
+    .exp-row .inspector-title strong { font-weight: 400; font-size: var(--fs-B); line-height: 1.45; }
+    .exp-row p { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 6px 0 0; color: var(--dim); font-size: var(--fs-C); }
+    .exp-badge { display: inline-flex; align-items: center; padding: 1px 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); color: var(--dim); font-size: var(--fs-C); white-space: nowrap; }
+    .exp-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; }
+    .exp-form label { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: var(--fs-E); }
+    .exp-form input, .exp-form select { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font-size: var(--fs-E); }
+    .exp-hint { flex-basis: 100%; color: var(--faint); font-size: var(--fs-C); }
     .demo-state-badge {position: absolute; z-index: 18; top: 42px; right: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface2); color: var(--dim); font: 700 var(--fs-micro) var(--mono); pointer-events: none;}
     .mobile-frame .demo-state-badge { top: 12px; right: 12px; }
     .demo-empty-state { display: grid; place-items: center; gap: 8px; min-height: 120px; padding: 22px 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface1); color: var(--dim); text-align: center; }
@@ -1828,6 +1838,7 @@
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
+                  experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
                   imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
@@ -2276,6 +2287,7 @@
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
+                  S.experiences = Array.isArray(p.experience) ? p.experience.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null; // W-EXPP2
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
                   if (!S.sessions.has(S.selected)) S.selected = "";
@@ -3759,6 +3771,35 @@
                   if (s.started_at) html += '<div class="kv-row"><b>' + relTime(s.started_at) + "</b><span>开始时间</span></div>";
                   if (s.finished_at && s.started_at) html += '<div class="kv-row"><b>' + fmtDur(s.finished_at - s.started_at) + "</b><span>用时</span></div>";
                   html += "</div>"; // 关闭会话信息节
+                  // W-EXPP2 经验注入分节（设计 §7.1 两处详情视图之一）：该会话角色×项目
+                  // 会注入的条目视图（与 relay matchPredicate 同源谓词：active + 角色轴
+                  // any|engine_role + 项目轴 global|锚点）。派单承接会话才注入（engine_role
+                  // 缺席=Leader/用户会话，设计开放问题 4 不喂）；经验域未随快照=旧 relay 隐节
+                  if (Array.isArray(S.experiences)) {
+                    html += '<div class="more-section"><h4 class="more-section-title">经验注入</h4>';
+                    if (!s.engine_role) {
+                      html += '<div class="kv-row"><b>—</b><span>非派单承接会话，不注入团队经验</span></div>';
+                    } else {
+                      const expAnchor = (() => {
+                        const norm = (v) => String(v || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                        const hit = (S.projects || []).find((p) => norm(p.anchor_dir) && s.cwd && norm(s.cwd).startsWith(norm(p.anchor_dir)));
+                        return hit ? norm(hit.anchor_dir) : norm(s.cwd);
+                      })();
+                      const hits = S.experiences.filter((e) => e.status === "active"
+                        && (e.role_scope === "any" || e.role_scope === String(s.engine_role).toLowerCase())
+                        && (e.project_scope === "global" || e.project_scope.replace(/\/+$/, "") === expAnchor));
+                      if (!hits.length) {
+                        html += '<div class="kv-row"><b>0 条</b><span>当前角色×项目无可注入经验</span></div>';
+                      } else {
+                        const expKind = { pitfall: "坑", practice: "法", preference: "好", fact: "实" };
+                        for (const e of hits.slice(0, 12)) {
+                          html += '<div class="kv-row"><b><span class="tag ' + (e.kind === "pitfall" ? "danger" : e.kind === "practice" ? "done" : e.kind === "preference" ? "info" : "") + '" style="margin-right:5px">' + esc(expKind[e.kind] || e.kind) + "</span>" + esc(e.text) + "</b><span>" + esc((e.role_scope === "any" ? "通用" : e.role_scope) + " · " + (e.project_scope === "global" ? "全局" : "本项目") + " · 用 " + (Number(e.use_count) || 0) + " 次") + "</span></div>";
+                        }
+                        if (hits.length > 12) html += '<div class="kv-row"><b>…</b><span>其余 ' + (hits.length - 12) + " 条按权重择优注入</span></div>";
+                      }
+                    }
+                    html += "</div>";
+                  }
                   html += '<div class="more-section"><h4 class="more-section-title">用量统计</h4>';
                   const changes = s.file_changes || {};
                   const fileCount = (changes.added || 0) + (changes.modified || 0);
@@ -4636,7 +4677,7 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
               <footer class="workspace-footer"><div data-team-actions></div><div class="readonly-banner" data-team-feedback role="status" aria-live="polite">决议仅由你点击确认或否决后发起。</div></footer>
             </section>
@@ -4649,7 +4690,12 @@
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "在办"], ["parked", "已挂起"], ["archived", "已结项"]]);
                 const confirmKinds = new Map([["project-create", "正经立项"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
                 const engines = new Map([["claude", ["Claude", "claude"]], ["codex", ["Codex", "codex"]], ["trae", ["Trae", "trae"]], ["qwen-code", ["Qwen Code", "qwen"]], ["codebuddy", ["CodeBuddy", "codebuddy"]], ["zcode", ["ZCode", "zcode"]]]);
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set() };
+                // W-EXPP2 经验库域（SNAPSHOT.experience 覆盖式锚定 + EXPERIENCE_UPDATED 帧；
+                // experiences=null=旧 relay/未锚定不渲染；experience_enabled=false=总开关关置灰）。
+                // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
+                // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
+                // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null };
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -4714,6 +4760,115 @@
                     return '<div class="activity-row"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i aria-hidden="true"></i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
                   }).join("") + "</div>";
                 }
+                // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
+                // 数据源：SNAPSHOT.experience（覆盖式锚定）+ EXPERIENCE_UPDATED 帧（帧双载
+                // 恒带 entries 全量，覆盖式消费——团队域对组织数据一贯吃全量，B3 口径）。
+                // 操作=退役/恢复（两步武装确认）/补申报改归组（行内表单，D1-6 组合动作走
+                // COMMAND_ORG_ACTION {action:"exp-regroup"}）。总开关关=整 pane 置灰说明。
+                const EXP_KINDS = new Map([["pitfall", ["坑", "danger"]], ["practice", ["法", "done"]], ["preference", ["好", "info"]], ["fact", ["实", ""]]]);
+                function updateExperiences(items) {
+                  state.experiences = Array.isArray(items) ? entities(items).filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null;
+                }
+                function expProjectName(anchor) {
+                  const norm = (v) => String(v || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+                  const hit = (state.projects ?? []).find((p) => norm(p.anchor_dir) === norm(anchor));
+                  if (hit) return hit.name || hit.id;
+                  return norm(anchor).split("/").filter(Boolean).pop() || "全局";
+                }
+                function expFmtTime(ts) {
+                  const d = new Date(Number(ts) || 0);
+                  if (!Number.isFinite(d.getTime()) || d.getTime() <= 0) return "—";
+                  const p = (n) => String(n).padStart(2, "0");
+                  return p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+                }
+                function expFiltered() {
+                  return (state.experiences ?? []).filter((e) => {
+                    if (state.expFilter.status === "active" && e.status !== "active") return false;
+                    if (state.expFilter.status === "retired" && e.status !== "retired") return false;
+                    if (state.expFilter.scope === "global" && e.project_scope !== "global") return false;
+                    if (state.expFilter.scope !== "all" && state.expFilter.scope !== "global" && String(e.project_scope || "").replace(/\/+$/, "") !== String(state.expFilter.scope).replace(/\/+$/, "")) return false;
+                    return true;
+                  }).sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                }
+                function expCanOp() {
+                  return Boolean(state.command && state.online && !state.unsupported.has("COMMAND_ORG_ACTION") && state.experienceEnabled !== false);
+                }
+                function expRow(e) {
+                  const kind = EXP_KINDS.get(e.kind) || [e.kind, ""];
+                  const armed = state.expArm === e.id;
+                  const flight = state.expFlights.has(e.id);
+                  const active = e.status === "active";
+                  const formOpen = state.expForm === e.id;
+                  const anchors = (state.projects ?? []).map((p) => '<option value="' + escape(p.anchor_dir || "") + '"' + (p.anchor_dir === e.project_scope ? " selected" : "") + ">" + escape(p.name || p.id) + "</option>").join("");
+                  const merged = Array.isArray(e.merged_from) && e.merged_from.length ? '<span class="exp-badge" title="收编自 ' + escape(e.merged_from.join("、")) + '">并 ' + e.merged_from.length + "</span>" : "";
+                  return '<div class="task-card exp-row" data-exp-id="' + escape(e.id) + '">' +
+                    '<div class="inspector-title"><strong title="' + escape(e.id) + '">' + escape(e.text) + '</strong><span class="tag ' + kind[1] + '">' + escape(kind[0]) + "</span></div>" +
+                    "<p>" + '<span class="exp-badge">' + escape(e.role_scope === "any" ? "通用" : e.role_scope || "any") + "</span>" +
+                    '<span class="exp-badge">' + escape(e.project_scope === "global" ? "全局" : expProjectName(e.project_scope)) + "</span>" +
+                    '<span class="exp-badge">用 ' + (Number(e.use_count) || 0) + " 次</span>" +
+                    '<span class="exp-badge">' + expFmtTime(e.last_used_at || e.created_at) + "</span>" + merged +
+                    '<span class="tag ' + (active ? "done" : "faint") + '">' + (active ? "在役" : "已退役") + "</span></p>" +
+                    (expCanOp() ? '<div class="identity-cluster">' + (active
+                      ? '<button type="button" class="danger-btn" data-exp-retire="' + escape(e.id) + '"' + (flight ? " disabled" : "") + ">" + (armed ? "确认退役？" : "退役") + "</button>"
+                      : '<button type="button" class="secondary-btn" data-exp-restore="' + escape(e.id) + '"' + (flight ? " disabled" : "") + ">" + (armed ? "确认恢复？" : "恢复") + "</button>") +
+                      '<button type="button" class="secondary-btn" data-exp-regroup="' + escape(e.id) + '">' + (formOpen ? "收起" : "补申报/改归组") + "</button></div>" : "") +
+                    (formOpen ? '<div class="exp-form">' +
+                      '<label>角色轴 <input data-exp-form-role value="' + escape(e.role_scope || "any") + '" list="exp-role-list" placeholder="any=跨角色" aria-label="角色轴"></label>' +
+                      '<label>项目轴 <select data-exp-form-project aria-label="项目轴"><option value="global"' + (e.project_scope === "global" ? " selected" : "") + ">全局</option>" + anchors + "</select></label>" +
+                      '<button type="button" class="primary-btn" data-exp-form-go="' + escape(e.id) + '"' + (flight ? " disabled" : "") + ">提交改归组</button>" +
+                      '<span class="exp-hint">正文与类型继承原条；新条入库、旧条退役（可恢复）。</span></div>' : "") +
+                    "</div>";
+                }
+                function experienceMarkup() {
+                  if (state.experienceEnabled === false) return banner("经验库总开关已关闭（relay 设置）——注入与整理均已停，此面板暂不可用。");
+                  if (state.experiences === null) return banner(state.online ? "此 relay 无经验库数据（旧版本 relay 或经验域未随快照下发）" : "正在连接…（经验库数据待同步）");
+                  const head = '<div class="pane-summary">团队经验 <span class="faint">在役 ' + state.experiences.filter((e) => e.status === "active").length + " · 共 " + state.experiences.length + " 条</span></div>" +
+                    '<div class="exp-filters">' +
+                    '<select class="exp-filter" data-exp-filter-scope aria-label="范围筛选"><option value="all"' + (state.expFilter.scope === "all" ? " selected" : "") + ">全部范围</option>" +
+                    '<option value="global"' + (state.expFilter.scope === "global" ? " selected" : "") + ">全局</option>" +
+                    (state.projects ?? []).map((p) => '<option value="' + escape(p.anchor_dir || "") + '"' + (state.expFilter.scope === p.anchor_dir ? " selected" : "") + ">" + escape(p.name || p.id) + "</option>").join("") + "</select>" +
+                    '<select class="exp-filter" data-exp-filter-status aria-label="状态筛选"><option value="active"' + (state.expFilter.status === "active" ? " selected" : "") + ">在役</option>" +
+                    '<option value="retired"' + (state.expFilter.status === "retired" ? " selected" : "") + ">已退役</option>" +
+                    '<option value="all"' + (state.expFilter.status === "all" ? " selected" : "") + ">全部</option></select>" +
+                    '<datalist id="exp-role-list"><option value="any"></option><option value="worker"></option><option value="pm"></option><option value="reviewer"></option><option value="qa"></option></datalist></div>';
+                  if (!state.experiences.length) return head + banner("经验库为空——worker 回执「经验：<一句话>（#kind）」申报入库，或 CLI org exp append。");
+                  const list = expFiltered();
+                  if (!list.length) return head + banner("当前筛选无条目");
+                  return head + list.map(expRow).join("");
+                }
+                function expOp(type, id) { // 退役/恢复：两步武装确认（不裸奔），飞行中去重
+                  if (!expCanOp() || state.expFlights.has(id)) return;
+                  if (state.expArm !== id) {
+                    state.expArm = id;
+                    clearTimeout(state.expArmTimer);
+                    state.expArmTimer = setTimeout(() => { state.expArm = null; render(); }, 4000);
+                    render();
+                    return;
+                  }
+                  clearTimeout(state.expArmTimer);
+                  state.expArm = null;
+                  state.expFlights.add(id);
+                  render();
+                  state.command("COMMAND_ORG_ACTION", { action: type, id }).then((ack) => {
+                    state.expFlights.delete(id);
+                    const ok = ack && ack.ok === true && !(typeof ack.error === "string" && ack.error.trim());
+                    if (!ok && /unknown.?command|unsupported|不支持/i.test(String(ack && ack.error))) state.unsupported.add("COMMAND_ORG_ACTION");
+                    toast(ok ? (type === "exp-retire" ? "已退役（可恢复）" : "已恢复") : "操作失败：" + String((ack && ack.error) || "未收到回执"));
+                    render(); // 权威收敛走 EXPERIENCE_UPDATED 帧，此处只清飞行态
+                  }).catch(() => { state.expFlights.delete(id); render(); });
+                }
+                function expRegroupSubmit(id, role, project) { // D1-6 组合动作：relay 单漏斗 append+retire+merged_from
+                  if (!expCanOp() || state.expFlights.has(id)) return;
+                  state.expFlights.add(id);
+                  render();
+                  state.command("COMMAND_ORG_ACTION", { action: "exp-regroup", old_id: id, role_scope: role || undefined, project_scope: project || undefined }).then((ack) => {
+                    state.expFlights.delete(id);
+                    const ok = ack && ack.ok === true;
+                    if (ok) { state.expForm = null; toast("已改归组：新条入库、旧条退役（可恢复）"); }
+                    else toast("改归组失败：" + String((ack && ack.error) || "未收到回执"));
+                    render();
+                  }).catch(() => { state.expFlights.delete(id); render(); });
+                }
                 function render() {
                   if (!state.mounted) return;
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
@@ -4744,6 +4899,7 @@
                   panes[1].innerHTML = boardMarkup(project);
                   panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>";
                   panes[3].innerHTML = activityHtml;
+                  panes[4].innerHTML = experienceMarkup(); // W-EXPP2 经验库第五 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
                   const decisionButtons = (confirm) => {
@@ -4833,6 +4989,9 @@
                   state.sessions = new Map((Array.isArray(payload.sessions) ? payload.sessions : []).filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
                   updateProjects(payload.projects);
                   updateConfirms(payload.org_confirms);
+                  // W-EXPP2 经验域锚定（字段存在=锚定，空数组也成立；缺席=旧 relay 不渲染）
+                  updateExperiences(payload.experience);
+                  state.experienceEnabled = payload.experience_enabled !== false;
                   for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
                   if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   render();
@@ -4845,6 +5004,9 @@
                   if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups) && payload.delta === undefined) { updateProjects(payload.groups); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
                   if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(payload.pending); render(); return true; }
                   if (message?.type === "BOARD_UPDATED" && payload?.delta === undefined && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  // W-EXPP2 经验域帧：帧双载恒带 entries 全量 → 覆盖式消费（未锚定=experiences
+                  // null 时同帧即锚定——SNAPSHOT 先行兜底过，此处权威刷新）；expArm/expForm 保持
+                  if (message?.type === "EXPERIENCE_UPDATED" && Array.isArray(payload?.entries)) { updateExperiences(payload.entries); render(); return true; }
                   return false;
                 }
                 function bind({ command = null, online = false } = {}) {
@@ -5003,7 +5165,7 @@
                 function mount() {
                   if (state.mounted) return;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
-                  if (panes.length !== 4) return;
+                  if (panes.length !== 5) return; // W-EXPP2：四 tab → 五 tab（经验）
                   panes.forEach((pane) => pane.removeAttribute("data-stub"));
                   root.removeAttribute("data-stub");
                   state.mounted = true;
@@ -5022,6 +5184,27 @@
                     const confirm = event.target.closest("[data-team-pick-confirm]");
                     if (confirm) { state.confirmSelected = confirm.dataset.teamPickConfirm; render(); return; }
                     if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true);
+                    // W-EXPP2 经验库操作（两步武装 + 行内改归组表单）
+                    const expRetire = event.target.closest("[data-exp-retire]");
+                    if (expRetire) { expOp("exp-retire", expRetire.dataset.expRetire); return; }
+                    const expRestore = event.target.closest("[data-exp-restore]");
+                    if (expRestore) { expOp("exp-restore", expRestore.dataset.expRestore); return; }
+                    const expRegroup = event.target.closest("[data-exp-regroup]");
+                    if (expRegroup) { state.expForm = state.expForm === expRegroup.dataset.expRegroup ? null : expRegroup.dataset.expRegroup; state.expArm = null; render(); return; }
+                    const expGo = event.target.closest("[data-exp-form-go]");
+                    if (expGo) {
+                      const row = expGo.closest(".exp-row");
+                      const role = row?.querySelector("[data-exp-form-role]")?.value?.trim() ?? "";
+                      const proj = row?.querySelector("[data-exp-form-project]")?.value ?? "";
+                      expRegroupSubmit(expGo.dataset.expFormGo, role, proj);
+                      return;
+                    }
+                  });
+                  root.addEventListener("change", (event) => {
+                    const scope = event.target.closest("[data-exp-filter-scope]");
+                    if (scope) { state.expFilter.scope = scope.value; render(); return; }
+                    const status = event.target.closest("[data-exp-filter-status]");
+                    if (status) { state.expFilter.status = status.value; render(); return; }
                   });
                   root.addEventListener("keydown", (event) => {
                     if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-team-project]")) { event.preventDefault(); select(event.target.dataset.teamProject); }
@@ -8247,7 +8430,7 @@ function connectLan(ctx) {
             const api = this.api(); if (api) { try { api.snapshot(p, { relayName: this.ctxName(context) }); } catch {} }
             return;
           }
-          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED") return;
+          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED") return; // W-EXPP2：经验域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
           const api = this.api(); if (!api) return;
           const p = message.payload || {};
           const teamContext = { relayName: this.ctxName(context) };

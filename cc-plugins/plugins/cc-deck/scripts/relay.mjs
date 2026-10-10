@@ -47363,6 +47363,7 @@ function appendExperience(input, dir) {
     created_at: now,
     last_used_at: now,
     updated_at: now,
+    ...input.merged_from?.length ? { merged_from: [...new Set(input.merged_from.filter((x) => typeof x === "string" && x.trim() !== ""))] } : {},
     source: input.source
   };
   store.entries.push(entry);
@@ -47530,6 +47531,18 @@ function parseExperienceDeclaration(line) {
 }
 var gcLastRunAt = 0;
 var gcLastRoundHadActions = true;
+var gcSummaryHook = null;
+function setExperienceGcSummaryHook(fn) {
+  gcSummaryHook = fn;
+}
+function notifyGcRound(ts2, s) {
+  if (!gcSummaryHook) return;
+  try {
+    gcSummaryHook(s);
+  } catch (e) {
+    console.warn(`[experience] GC \u6536\u53E3\u56DE\u8C03\u5F02\u5E38\uFF08\u5FFD\u7565\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 function runExperienceGc(trigger, now, dir) {
   if (!readPluginConfig().experience) return { ran: false, actions: [], reason: "\u603B\u5F00\u5173\u5173\u95ED" };
   const { store, corrupted } = loadExperience(dir);
@@ -47576,6 +47589,7 @@ function runExperienceGc(trigger, now, dir) {
       appendGcLog({ ts: now, trigger, mode: "auto", actions: [archiveOnly], snapshot_ref: now }, dir);
       gcLastRunAt = now;
       gcLastRoundHadActions = true;
+      notifyGcRound(now, { ts: now, retired: 0, merged: 0, demoted: 0 });
       return { ran: true, actions: [archiveOnly], reason: "\u4EC5\u5F52\u6863" };
     }
     gcLastRoundHadActions = false;
@@ -47627,6 +47641,7 @@ function runExperienceGc(trigger, now, dir) {
   appendGcLog({ ts: now, trigger, mode: "auto", actions, snapshot_ref: affected.length > 0 ? now : void 0 }, dir);
   gcLastRunAt = now;
   gcLastRoundHadActions = true;
+  notifyGcRound(now, { ts: now, retired: neverUsedRetireIds.length, merged: retireIds.size, demoted: demoteIds.length });
   return { ran: true, actions, reason: "ok" };
 }
 function startExperienceGc(dir) {
@@ -48848,6 +48863,7 @@ var SessionManager = class {
     this.loadNotifications();
     this.reconcileOrphanConfirms();
     setConfirmCreatedHook((c2) => this.recordOrgConfirmNotification(c2));
+    setExperienceGcSummaryHook((s) => this.onExperienceGcRound(s));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -51863,6 +51879,21 @@ provider=${opts.provider ?? "default"}` : void 0,
         project_scope: e.anchor ?? "global",
         source: { actor: "agent", session_id: key, dispatch_id: e.id }
       });
+      if (r.ok) {
+        this.emitExperience();
+        try {
+          this.upsertNotification("system", r.entry.id, void 0, {
+            title: `\u7ECF\u9A8C\u5165\u5E93\uFF08${parsed.kind}\uFF09${r.restored ? "\xB7 \u590D\u6D3B" : ""}`,
+            body: truncate(parsed.text, 120),
+            severity: "info",
+            group: "activity",
+            actionable: false,
+            domain: "experience",
+            returnPath: "experience"
+          });
+        } catch {
+        }
+      }
       appendDispatch({
         ts: Date.now(),
         id: randomUUID9(),
@@ -52677,6 +52708,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       const lesson = r.data?.lesson;
       return { ok: true, data: { entity_id: lesson?.id ?? "", gid } };
     }
+    if (action.startsWith("exp-")) {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
   // org 命令审计行（dispatch-log 台账通道，append-only；org.ts 口径：审计不进
@@ -52964,6 +52999,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             }
           });
           this.auditExpAction("exp-append", r, str2("project_scope") || "global");
+          if (r.ok) this.emitExperience();
           return r.ok ? { ok: true, data: { entry: r.entry, ...r.restored ? { restored: true } : {} } } : r;
         }
         case "exp-bump": {
@@ -52971,7 +53007,10 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!id2) return { ok: false, error: "id \u5FC5\u586B" };
           const r = bumpExperiences([id2]);
           const hit = r.bumped.length > 0;
-          if (hit) this.auditExpAction("exp-bump", { ok: true }, "global");
+          if (hit) {
+            this.auditExpAction("exp-bump", { ok: true }, "global");
+            this.emitExperience();
+          }
           return hit ? { ok: true, data: { id: id2, ...r.restored.includes(id2) ? { restored: true } : {} } } : { ok: false, error: `\u7ECF\u9A8C\u6761\u76EE\u4E0D\u5B58\u5728\u6216\u5904\u4E8E\u574F JSON \u4FDD\u62A4\u6001: ${id2}` };
         }
         case "exp-retire": {
@@ -52979,6 +53018,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!id2) return { ok: false, error: "id \u5FC5\u586B" };
           const r = retireExperience(id2);
           this.auditExpAction("exp-retire", r, "global");
+          if (r.ok) this.emitExperience();
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
         }
         case "exp-restore": {
@@ -52986,7 +53026,38 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!id2) return { ok: false, error: "id \u5FC5\u586B" };
           const r = restoreExperience(id2);
           this.auditExpAction("exp-restore", r, "global");
+          if (r.ok) this.emitExperience();
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "exp-regroup": {
+          const oldId = str2("old_id");
+          if (!oldId) return { ok: false, error: "old_id \u5FC5\u586B\uFF08\u88AB\u6539\u5F52\u7EC4\u7684\u65E7\u6761\u76EE id\uFF09" };
+          const oldEntry = listExperience().find((x) => x.id === oldId);
+          if (!oldEntry) return { ok: false, error: `\u65E7\u6761\u76EE\u4E0D\u5B58\u5728: ${oldId}` };
+          const text = str2("text") || oldEntry.text;
+          const kind = str2("kind") || oldEntry.kind;
+          if (!["pitfall", "practice", "preference", "fact"].includes(kind)) return { ok: false, error: "kind \u5FC5\u987B\u662F pitfall|practice|preference|fact" };
+          const roleScope = str2("role_scope") || oldEntry.role_scope;
+          const projectScope = str2("project_scope") || oldEntry.project_scope;
+          if (roleScope === oldEntry.role_scope && projectScope === oldEntry.project_scope && text === oldEntry.text) {
+            return { ok: false, error: "\u65B0\u6761\u4E0E\u65E7\u6761\u540C scope \u540C\u6587\uFF08\u6539\u5F52\u7EC4\u987B\u81F3\u5C11\u6362 role/project \u8F74\uFF1B\u7EAF\u6539\u5B57\u8BF7\u8D70 retire+append \u4E24\u6B65\uFF09" };
+          }
+          const r = appendExperience({
+            text,
+            kind,
+            role_scope: roleScope,
+            project_scope: projectScope,
+            merged_from: [oldId],
+            source: { actor: "user", session_id: str2("session_id") }
+          });
+          if (!r.ok) {
+            this.auditExpAction("exp-regroup", r, projectScope);
+            return r;
+          }
+          const rr2 = retireExperience(oldId);
+          this.auditExpAction("exp-regroup", rr2.ok ? r : { ok: false, error: `\u65B0\u6761 ${r.entry.id} \u5DF2\u5165\u5E93\u4F46\u65E7\u6761\u9000\u5F79\u5931\u8D25\uFF1A${rr2.error}` }, projectScope);
+          this.emitExperience();
+          return rr2.ok ? { ok: true, data: { entry: r.entry, retired: oldId } } : { ok: false, error: `\u65B0\u6761\u5DF2\u5165\u5E93\uFF08${r.entry.id}\uFF09\u4F46\u65E7\u6761\u9000\u5F79\u5931\u8D25\uFF1A${rr2.error}\u2014\u2014\u8BF7\u5728\u9762\u677F\u624B\u52A8\u9000\u5F79\u65E7\u6761 ${oldId}` };
         }
         case "exp-list": {
           const status = str2("status");
@@ -53015,6 +53086,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!p2) return { ok: false, error: "path \u5FC5\u586B\uFF08\u5BFC\u51FA\u6587\u4EF6\u7EDD\u5BF9\u8DEF\u5F84\uFF09" };
           const r = importExperience(p2);
           this.auditExpAction("exp-import", r, "global");
+          if (r.ok) this.emitExperience();
           return r.ok ? { ok: true, data: r.data } : r;
         }
         case "project-detail": {
@@ -53281,6 +53353,50 @@ provider=${opts.provider ?? "default"}` : void 0,
       ],
       delta
     });
+  }
+  // ── W-EXPP2 experience 域广播：发射侧单点 diff（emitOrgState/emitBoard M13-2 同款，
+  // lastXxxBroadcast 只作 diff 基线不参与业务判定）──
+  // 帧双载沿 PROJECTS_UPDATED 同构（types.ts ExperienceUpdatedPayload）：entries 恒
+  // 全量（覆盖式锚定/旧形消费），delta 已知时并出（端上增量 merge）。触发点=全部
+  // exp-* 漏斗成功边 + 申报捕获入库 + GC 轮回调（onExperienceGcRound）；无基线
+  //（mgr 重启后首帧）diffById 返 null → 只发 entries 全量（端上覆盖式=锚定帧）。
+  // 调用方对「条目可达数百条」的全量帧体积已核账（types.ts SNAPSHOT.experience 注释）。
+  lastExperienceBroadcast = null;
+  emitExperience() {
+    try {
+      const entries = listExperience();
+      const delta = this.diffById(this.lastExperienceBroadcast, entries);
+      this.lastExperienceBroadcast = entries;
+      this.bus.emitTransient("EXPERIENCE_UPDATED", {
+        entries,
+        ...delta ? {
+          entity_refs: [.../* @__PURE__ */ new Set([...delta.upserts.map((e) => e.id), ...delta.removes])],
+          delta
+        } : {}
+      });
+    } catch (e) {
+      console.warn(`[experience] \u5E7F\u64AD\u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u4E0D\u963B\u65AD\u52A8\u4F5C\u4E3B\u8DEF\u5F84\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // GC 轮收口（experience.ts notifyGcRound 递出）：广播增量恒发（降权/归档也是面板
+  // 可见变化）；淘汰/合并非零才发通知（D1-4 摘要一行——「变更可见」覆盖「变更消失」，
+  // 降权是可逆软动作不吵）。通知 kind=system/group=activity/actionable=false（信息面，
+  // 操作入口在经验库面板），stableKey=exp-gc-<ts> 一轮一行天然去重。
+  onExperienceGcRound(s) {
+    this.emitExperience();
+    if (s.retired === 0 && s.merged === 0) return;
+    try {
+      this.upsertNotification("system", `exp-gc-${s.ts}`, String(s.ts), {
+        title: "\u7ECF\u9A8C\u6574\u7406",
+        body: truncate(`\u6DD8\u6C70 ${s.retired}\u3001\u5408\u5E76 ${s.merged}\uFF0C\u5747\u53EF\u6062\u590D\uFF08\u7ECF\u9A8C\u5E93\u9762\u677F\u53EF\u64CD\u4F5C\uFF09`, 160),
+        severity: "info",
+        group: "activity",
+        actionable: false,
+        domain: "experience",
+        returnPath: "experience"
+      });
+    } catch {
+    }
   }
   // M12-5 引擎 preflight（拉起前纯静态检查，失败即 error 拒派）：裁定「派单前 error」
   // 口径——preflight 是 which/路径/env 级同步探测，纯静态无进程无账可记，dispatched
@@ -58315,6 +58431,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             "exp-retire",
             "exp-restore",
             "exp-list",
+            // W-EXPP2 面板组合动作（D1-6 补申报/改归组）：HTTP 面与 WS 面同权开放
+            "exp-regroup",
             // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）
             "exp-export",
             "exp-import"
@@ -58541,6 +58659,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          // W-EXPP2 经验库：全量条目锚定帧 + 总开关（空数组也下发——端上以字段存在性
+          // 判断能力；cloud-client 云通道快照同步携带，#117 教训）
+          experience: listExperience(),
+          experience_enabled: readPluginConfig().experience,
           // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
           // 下发——端上以字段存在性判断能力）
           notifications: mgr2.notificationsList(),
@@ -59238,6 +59360,10 @@ var CloudClient = class {
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
+        // W-EXPP2 经验库：全量条目锚定帧 + 总开关（与 ws-server 直连快照同源同步，
+        // #117 教训——云桥手机经验分节同样靠快照兜底；空数组也下发）
+        experience: listExperience(),
+        experience_enabled: readPluginConfig().experience,
         // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
         // 通知列表同样靠快照兜底；空数组也下发）
         notifications: this.mgr.notificationsList(),
