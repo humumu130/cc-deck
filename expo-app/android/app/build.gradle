@@ -89,7 +89,25 @@ android {
 
     namespace 'com.humumu.ccwatch'
     defaultConfig {
-        applicationId 'com.humumu.ccwatch'
+        // W-NOVAVAR B1（W-AUDIT-CONTRACT P0-1）：APP_VARIANT=nova 出独立包名双装变体，
+        // 与 JS 侧 app.config.js 同一开关（-PAPP_VARIANT=nova 或环境变量皆可）。此前
+        // applicationId 硬编码 com.humumu.ccwatch——nova 包会静默覆盖已装正式包。
+        // 取整套 applicationId 而非 applicationIdSuffix：与 app.config.js:18、桌面
+        // tauri.nova.conf.json:4 的 identifier 三方同域（suffix 会造出第三个名字
+        // com.humumu.ccwatch.nova）；nova id 从未发过包，零升级兼容包袱；签名共用
+        // debug.keystore 不受影响。namespace 不随变体动：R/BuildConfig 的 Java 包与
+        // applicationId 解耦（AGP 8 硬约束），动它会碎 MainActivity/.MainApplication。
+        // appLabel placeholder 是 manifest android:label 的唯一注入口（${appLabel} 此前
+        // 无人定义，标准包 manifest merge 也过不了——一并接活）；resValue app_name 与
+        // strings.xml 静态条目互斥（同名 = duplicate resource 构建错），静态条目已移除。
+        if (((project.findProperty("APP_VARIANT") ?: System.getenv("APP_VARIANT") ?: "") as String) == "nova") {
+            applicationId "online.humumu.ccdeck.nova"
+            resValue "string", "app_name", "CC Deck 新版"
+        } else {
+            applicationId "com.humumu.ccwatch"
+            resValue "string", "app_name", "CC Deck"
+        }
+        manifestPlaceholders = [appLabel: "@string/app_name"]
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 101
