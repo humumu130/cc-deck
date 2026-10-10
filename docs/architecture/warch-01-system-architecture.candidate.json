@@ -1,0 +1,485 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "cc-deck 系统架构与信任边界",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1380,
+      705
+    ]
+  },
+  "components": [
+    {
+      "id": "cloudb",
+      "type": "cloud",
+      "label": "云桥",
+      "sublabel": "CF Worker KV · ECS",
+      "tag": "只见 E2E 密文",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        190,
+        60
+      ]
+    },
+    {
+      "id": "phone",
+      "type": "frontend",
+      "label": "手机 App",
+      "sublabel": "Expo · iOS / Android",
+      "tag": "多源连接",
+      "pos": [
+        40,
+        180
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "workbench",
+      "type": "frontend",
+      "label": "桌面 · 网页工作台",
+      "sublabel": "Tauri 壳 · web-console",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "e2e",
+      "type": "security",
+      "label": "E2E 收发",
+      "sublabel": "cloud-client · nacl box",
+      "tag": "seal {n,c}",
+      "pos": [
+        420,
+        100
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "relay",
+      "type": "backend",
+      "label": "Relay 核心",
+      "sublabel": "ws-server · session-manager · event-bus",
+      "tag": "SNAPSHOT · COMMAND",
+      "pos": [
+        560,
+        240
+      ],
+      "size": [
+        240,
+        76
+      ]
+    },
+    {
+      "id": "org",
+      "type": "backend",
+      "label": "组织 · 派单面",
+      "sublabel": "Leader 常驻 · org / projects / routing",
+      "tag": "确认卡",
+      "pos": [
+        280,
+        420
+      ],
+      "size": [
+        230,
+        64
+      ]
+    },
+    {
+      "id": "registry",
+      "type": "backend",
+      "label": "EngineRegistry",
+      "sublabel": "六类枚举 · preflight 门禁",
+      "tag": "ZCode fail-closed",
+      "pos": [
+        840,
+        140
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "base",
+      "type": "backend",
+      "label": "JsonProcess 基座",
+      "sublabel": "唯一持进程 · 域订阅",
+      "tag": "AgentCallbacks",
+      "pos": [
+        840,
+        280
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "extscan",
+      "type": "backend",
+      "label": "外部会话收编",
+      "sublabel": "bridge.ts · hooks 主入 + 60s 扫描",
+      "tag": "external:true · pid 对位",
+      "pos": [
+        840,
+        450
+      ],
+      "size": [
+        200,
+        64
+      ]
+    },
+    {
+      "id": "claude",
+      "type": "external",
+      "label": "Claude",
+      "sublabel": "Agent SDK · 常驻流",
+      "pos": [
+        1140,
+        60
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "codex",
+      "type": "external",
+      "label": "Codex",
+      "sublabel": "exec --json · thread 续锚",
+      "pos": [
+        1140,
+        190
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "tqc",
+      "type": "external",
+      "label": "Trae · Qwen · CodeBuddy",
+      "sublabel": "一回合一进程",
+      "tag": "smoke 待验",
+      "pos": [
+        1140,
+        300
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "extcli",
+      "type": "external",
+      "label": "外部 CLI 会话",
+      "sublabel": "~/.claude/projects · 只读收编",
+      "tag": "Codex rollout 规划中",
+      "pos": [
+        1140,
+        450
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "orgdata",
+      "type": "database",
+      "label": "org 资产",
+      "sublabel": "org.json · boards · dispatch-log",
+      "pos": [
+        250,
+        610
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "events",
+      "type": "database",
+      "label": "events.ndjson",
+      "sublabel": "事件审计 · 断线重放",
+      "pos": [
+        540,
+        610
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "taskstore",
+      "type": "database",
+      "label": "task-store",
+      "sublabel": "CLI 原生任务 · 只读",
+      "pos": [
+        810,
+        610
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "artstore",
+      "type": "database",
+      "label": "artifact store",
+      "sublabel": "输出物登记 · 拉取",
+      "pos": [
+        1050,
+        610
+      ],
+      "size": [
+        170,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "工作机 · 源机器（业务真相）",
+      "wraps": [
+        "e2e",
+        "relay",
+        "org",
+        "registry",
+        "base",
+        "extscan",
+        "claude",
+        "codex",
+        "tqc",
+        "extcli",
+        "orgdata",
+        "events",
+        "taskstore",
+        "artstore"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "phone-lan",
+      "from": "phone",
+      "to": "relay",
+      "label": "LAN WS 直连",
+      "variant": "default",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "phone-cloud",
+      "from": "phone",
+      "to": "cloudb",
+      "label": "E2E 密文 · 8位码配对",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "workbench-lan",
+      "from": "workbench",
+      "to": "relay",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "cloud-forward",
+      "from": "cloudb",
+      "to": "e2e",
+      "label": "{to,from,data} 密文",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "e2e-relay",
+      "from": "e2e",
+      "to": "relay",
+      "label": "解封命令 · 封事件",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "relay-registry",
+      "from": "relay",
+      "to": "registry",
+      "label": "新会话 · 命令",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "registry-claude",
+      "from": "registry",
+      "to": "claude",
+      "label": "SDK 常驻流",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "claude-events",
+      "from": "claude",
+      "to": "relay",
+      "label": "SDK 事件",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [
+        [
+          1225,
+          15
+        ],
+        [
+          680,
+          15
+        ]
+      ]
+    },
+    {
+      "id": "registry-base",
+      "from": "registry",
+      "to": "base",
+      "label": "create() · preflight",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "base-codex",
+      "from": "base",
+      "to": "codex",
+      "label": "stdin · 回合进程",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -30
+    },
+    {
+      "id": "base-tqc",
+      "from": "base",
+      "to": "tqc",
+      "label": "stdin · 重注入",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": 25
+    },
+    {
+      "id": "base-events",
+      "from": "base",
+      "to": "relay",
+      "label": "AgentCallbacks 域事件",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelAt": [
+        820,
+        360
+      ]
+    },
+    {
+      "id": "extcli-scan",
+      "from": "extcli",
+      "to": "extscan",
+      "label": "hook · 60s 扫描",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": -33
+    },
+    {
+      "id": "extscan-relay",
+      "from": "extscan",
+      "to": "relay",
+      "fromSide": "left",
+      "toSide": "bottom"
+    },
+    {
+      "id": "relay-org",
+      "from": "relay",
+      "to": "org",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "org-orgdata",
+      "from": "org",
+      "to": "orgdata",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "relay-events-ndjson",
+      "from": "relay",
+      "to": "events",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "relay-taskstore",
+      "from": "relay",
+      "to": "taskstore",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "relay-artstore",
+      "from": "relay",
+      "to": "artstore",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "多源连接与信任边界",
+      "items": [
+        "LAN 与云桥并存 · 优先 LAN 静默回落云桥",
+        "云桥只见密文 · CF Worker KV / ECS 双部署",
+        "8位码一次性配对 · relay_id 三出口必带"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Provider 抽象 · 多引擎",
+      "items": [
+        "Registry 六类枚举 · preflight 门禁 fail-closed",
+        "基座唯一持进程 · AgentCallbacks 域订阅上报",
+        "Claude 常驻 / Codex 续锚 / 其余一回合进程"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "外部收编 · 数据边界",
+      "items": [
+        "hooks 主入 ext-<id> · 60s 孤儿扫描只读收编",
+        "pid 三源对位 · Codex rollout 扫描属规划",
+        "events.ndjson 审计事实源 · 客户端只是投影"
+      ]
+    }
+  ]
+}

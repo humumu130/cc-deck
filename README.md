@@ -165,7 +165,7 @@ claude plugin install cc-deck@cc-deck-plugins
 - 实线 `→`：同网直连（同一局域网 / 本机），token 鉴权，仅限可信局域网
 - 绿色粗线 `⇒`：跨网云通道，端到端密文——桥只按公钥派生的设备 id 路由，无法解密、不落盘；手表外出时直连云桥 `/wan` 端点透传，网页被拦自动降级 HTTP 长轮询
 - 虚线：ᛒ 蓝牙透传（手机 ↔ 手表）；手表为开发中版本，PC ② 为示意（更多同款 PC 各自连云桥）
-- 详细模块图 / 数据流时序 / 持久化机制见 [docs/architecture.md](docs/architecture.md)
+- 详细模块图 / 数据流时序 / 持久化机制见 [docs/architecture/architecture.md](docs/architecture/architecture.md)
 
 ## 安全模型
 
@@ -277,13 +277,13 @@ cd relay && node scripts/build-plugin.mjs
 
 </details>
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（架构文档）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（文档与图纸归档）。
 
 CI：[relay](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml) · [android](https://github.com/humumu130/cc-deck/actions/workflows/android.yml) · [desktop](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)。版本号与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## Roadmap
 
-- **矩阵式团队模式**（设计定稿 · 开发中）：多个 Claude 会话组队协作——你只对 Leader 提一句话需求，它分诊、立项、派单、汇总；项目组间物理隔离并行不干扰，结项经验回流复用。设计定稿与流程图见 [v8-team-matrix.html](docs/v8-team-matrix.html) / [v8-team-diagrams.html](docs/v8-team-diagrams.html)
+- **矩阵式团队模式**（设计定稿 · 开发中）：多个 Claude 会话组队协作——你只对 Leader 提一句话需求，它分诊、立项、派单、汇总；项目组间物理隔离并行不干扰，结项经验回流复用。设计定稿与流程图见 [v8-team-matrix.html](docs/v8-team-matrix.html) / [v8-team-diagrams.html](docs/architecture/v8-team-diagrams.html)
 
 <details>
 <summary>矩阵式团队模式 · 设计速览</summary>

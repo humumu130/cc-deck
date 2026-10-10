@@ -1,6 +1,6 @@
 # Leader 独立评审：v2-system-design.md（0.8）vs 现状架构 —— 差距/优化/推翻
 
-> 2026-10-05。评审对象：~/dev/cc-deck/docs/v2-system-design.md（336 行，2026-09-23 定稿 0.8）+ v2-legacy-audit.md。
+> 2026-10-05。评审对象：~/dev/cc-deck/docs/architecture/v2-system-design.md（336 行，2026-09-23 定稿 0.8）+ v2-legacy-audit.md。
 > 对照基准：m2 已实装（projects.ts/org.ts M1-M4 + beads bfa3668）、083-org-model-final（PM 重角色/A/B 模式）、005（UI 宪法）、006（引擎适配规范）、引擎一期在途、018 六批、用户两条流锚定。
 > 盲评纪律：独立完成，未与 PM 交流结论。
 

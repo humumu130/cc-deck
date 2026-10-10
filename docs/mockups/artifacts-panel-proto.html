@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc-deck · 005 输出物面板重设计原型</title>
+<!--
+  输出物面板（产物中心）双端重设计原型 · w7
+  ─ 对象：index-005.html 会话域「输出物」tab（桌面 pane2 + 手机 m-detail arts pane）
+  ─ 语言：005 token 体系原样提取（index-005.html :14-283），暗亮双主题
+  ─ 吸收：旧壳 index.html #35 fico 六类分色 / #79 artViewer / #222 文件夹分组；
+          expo-app 手机端（用户点名好看）：ext-chip、×N 文件夹行、左缘引导线子列、
+          ArtSheet 三段式底部抽屉、ArtView 全屏预览、空态与「全局输出物目录」入口
+  ─ 预置：URL hash —— #f=desktop|mobile & t=dark|light & s=normal|empty|legacy|busy & o=目录1,目录2（展开组）
+  ─ 自包含：系统字体栈 + 内联 SVG，无外链、无脚本依赖
+-->
+<style>
+  /* ===== 005 token 体系（index-005.html :14-283 原样，新增 art-* 类型色见块尾） ===== */
+  :root {
+    --bg0: #07111D; --bg1: #0B1624; --surface1: #101E2F; --surface2: #15273B;
+    --hover: #1D344D; --line: #2A4058; --line-soft: #203247;
+    --text-strong: #E8EFF8; --text: #C4D0DE; --dim: #9AABBE; --faint: #8298B0;
+    --progress-fill: #7793AE;
+    --brand: #E2855E; --brand-hover: #F0A06A; --brand-strong: #B85B38; --brand-soft: #3A251F;
+    --done: #4BCB91; --working: #E9B84C; --error: #EC7472; --info: #7EAFE8;
+    --ctx-safe: #4BCB91; --ctx-attention: #E9B84C; --ctx-critical: #EC7472;
+    --ctx-safe-fill: #79E3B4; --ctx-attention-fill: #F4C95F; --ctx-critical-fill: #FF8A87;
+    --ctx-track: #3A5570; --source: #8F9DB1; --chrome: #070D15; --rail: #06101B;
+    --queue-deep: #0E1B2B; --workspace-top: #0B1726; --footer: #0E1B2B; --inspector-top: #0F2031;
+    --phone-frame: #02060A;
+    --glow-brand: rgba(226,133,94,.14); --glow-blue: rgba(41,94,137,.08);
+    --surface-veil: rgba(16,30,47,.9); --source-switcher-bg: #101E2F;
+    --frame-line: rgba(103,137,170,.34); --frame-highlight: rgba(255,255,255,.035);
+    --window-dot: #36414D; --rail-shadow: rgba(1,8,16,.16); --panel-shadow: rgba(1,8,16,.1);
+    --card-border: rgba(71,101,132,.48); --card-veil: rgba(21,39,59,.78);
+    --border-strong: #4E6D8E; --selected-line: #AFC0D2; --selected-bg: rgba(232,239,248,.08);
+    --shadow-hover: 0 10px 24px rgba(1,8,16,.28); --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
+    --status-done-glow: rgba(75,203,145,.35); --status-error-glow: rgba(236,116,114,.25);
+    --status-working-glow: rgba(233,184,76,.35);
+    --q-row-hov: rgba(148,163,190,.07); --q-row-sel: rgba(148,163,190,.14);
+    --tag-border: rgba(111,139,166,.18); --tag-bg: rgba(83,103,126,.19); --tag-ink: #D7E3EF;
+    --action-bg: rgba(226,133,94,.16); --done-bg: rgba(75,203,145,.12); --info-bg: rgba(126,175,232,.13);
+    --me-bg: #15273B; --me-line: #4E6D8E; --action-ink: #211B0E; --done-ink: #082116;
+    --badge-ink: #FFFFFF;
+    --wait-bg: rgba(233,184,76,.08); --wait-line: rgba(233,184,76,.5);
+    --allowed-bg: rgba(75,203,145,.08); --allowed-line: rgba(75,203,145,.45);
+    --lane-bg: rgba(13,24,38,.72); --notice-icon-bg: rgba(236,116,114,.13);
+    --readonly-bg: rgba(126,175,232,.07); --readonly-line: rgba(126,175,232,.38);
+    --mobile-head-bg: rgba(11,22,36,.82); --mobile-nav-bg: rgba(16,30,47,.96);
+    --mobile-active-bg: rgba(226,133,94,.08); --composer-bg: #0E1B2B;
+    --scroll-track: rgba(4,12,21,.22); --scroll-thumb: rgba(120,146,173,.34);
+    --scroll-thumb-hover: rgba(143,170,198,.55);
+    --source-bg: rgba(143,157,177,.08); --source-line: rgba(143,157,177,.24);
+    --identity-bg: rgba(143,157,177,.1); --identity-line: rgba(143,157,177,.34);
+    --identity-ink: #B9C8D8;
+    --source-company: #3B7C68; --source-company-bg: rgba(75,203,145,.16); --source-company-ink: #9AE2C2;
+    --source-home: #5B8FA8; --source-home-bg: rgba(91,143,168,.16); --source-home-ink: #A8D6EA;
+    --engine-claude: #A97A62; --engine-codex: #8DABFF; --engine-trae: #58C9B1;
+    --engine-qwen: #B493FF; --engine-codebuddy: #4BA8F0; --engine-zcode: #E58DB0;
+    --avatar-worker-bg: #243C59; --avatar-worker-text: #9FC4F4;
+    --avatar-architect-bg: #3A3157; --avatar-architect-text: #C9B6FF;
+    --avatar-qa-bg: #24493F; --avatar-qa-text: #9AE2C2;
+    --pm-ink: #24140F; --on-brand: #FFFAF6; --brand-highlight: rgba(255,255,255,.18);
+    --brand-shadow: rgba(226,133,94,.25); --focus-ring: rgba(226,133,94,.13);
+    --danger-line: rgba(236,116,114,.4); --danger-bg: rgba(236,116,114,.12);
+    --frame-shadow: rgba(137,164,190,.2); --notch-shadow: rgba(0,0,0,.4);
+    --connection-warn-bg: rgba(233,184,76,.13); --connection-error-bg: rgba(236,116,114,.13);
+    --toast-line: #4E6D8E; --toast-bg-top: #15273B; --toast-bg-bottom: #101E2F;
+    --toast-highlight: rgba(255,255,255,.06);
+    --shadow: 0 26px 80px rgba(0, 0, 0, .42); --small-shadow: 0 12px 30px rgba(0, 0, 0, .28);
+    --card-shadow: 0 8px 22px rgba(1, 8, 16, .2);
+    --artifact-group-bg: rgba(16, 30, 47, .62); --artifact-group-line: rgba(103, 137, 170, .34);
+    --artifact-muted-bg: rgba(83, 103, 126, .12); --artifact-failed-bg: rgba(236, 116, 114, .12);
+    --artifact-failed-line: rgba(236, 116, 114, .42); --artifact-complete-bg: rgba(75, 203, 145, .1);
+    --artifact-sheet-backdrop: rgba(1, 8, 16, .56);
+    --radius: 10px; --radius-sm: 7px; --radius-lg: 14px;
+    --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Microsoft YaHei", monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    /* ── 新增：产物六类分色（005 色板语言内派生：doc 紫 / code=info / sheet=working /
+       image=done / pkg 中性 / accept=brand 橙；亮色同名换深值） ── */
+    --art-doc: #B7A5F0; --art-sheet: #E9B84C; --art-code: #7EAFE8; --art-image: #4BCB91;
+    --art-pkg: #A9BCD1; --art-accept: #F0A06A; --art-gen: #8298B0;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg0: #F1F5F8; --bg1: #F8FAFC; --surface1: #E8EFF5; --surface2: #FFFFFF;
+    --hover: #DDE8F1; --line: #C6D3DF; --line-soft: #DCE5EC;
+    --text-strong: #15283D; --text: #30465B; --dim: #334B61; --faint: #4B6278;
+    --progress-fill: #607D99;
+    --brand: #C86440; --brand-hover: #D9754D; --brand-strong: #A94725; --brand-soft: #FBE7DE;
+    --done: #168D60; --working: #A56D00; --error: #C84C51; --info: #3978B8;
+    --ctx-safe: #168D60; --ctx-attention: #A56D00; --ctx-critical: #C84C51;
+    --ctx-safe-fill: #168D60; --ctx-attention-fill: #A56D00; --ctx-critical-fill: #C84C51;
+    --ctx-track: #C6D3DF; --source: #6E8194; --chrome: #E5ECF2; --rail: #EDF3F7;
+    --queue-deep: #E3EBF2; --workspace-top: #F8FBFD; --footer: #E8EFF5; --inspector-top: #EDF3F7;
+    --phone-frame: #172636;
+    --glow-brand: rgba(200,100,64,.1); --glow-blue: rgba(58,120,184,.08);
+    --surface-veil: rgba(232,239,245,.92); --source-switcher-bg: #E8EFF5;
+    --frame-line: #B8C8D6; --frame-highlight: rgba(255,255,255,.8);
+    --window-dot: #A5B5C3; --rail-shadow: rgba(50,74,96,.08); --panel-shadow: rgba(50,74,96,.08);
+    --card-border: #C6D3DF; --card-veil: #FFFFFF; --border-strong: #7895AE;
+    --selected-line: #7895AE; --selected-bg: #F3F7FA;
+    --shadow-hover: 0 8px 20px rgba(50,74,96,.14); --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
+    --status-done-glow: rgba(22,141,96,.24); --status-error-glow: rgba(200,76,81,.2);
+    --status-working-glow: rgba(165,109,0,.22);
+    --q-row-hov: rgba(16,24,40,.05); --q-row-sel: rgba(16,24,40,.09);
+    --tag-border: rgba(96,117,138,.24); --tag-bg: rgba(132,151,169,.16); --tag-ink: #2D4358;
+    --action-bg: rgba(200,100,64,.14); --done-bg: rgba(22,141,96,.11); --info-bg: rgba(57,120,184,.11);
+    --me-bg: #FFFFFF; --me-line: #C6D3DF; --action-ink: #3C2600; --done-ink: #073C27;
+    --badge-ink: #FFFFFF;
+    --wait-bg: rgba(165,109,0,.1); --wait-line: rgba(165,109,0,.42);
+    --allowed-bg: rgba(22,141,96,.09); --allowed-line: rgba(22,141,96,.34);
+    --lane-bg: #EDF3F7; --notice-icon-bg: rgba(200,76,81,.1);
+    --readonly-bg: rgba(57,120,184,.08); --readonly-line: rgba(57,120,184,.34);
+    --mobile-head-bg: rgba(248,250,252,.94); --mobile-nav-bg: rgba(232,239,245,.97);
+    --mobile-active-bg: rgba(200,100,64,.08); --composer-bg: #E8EFF5;
+    --scroll-track: rgba(96,117,138,.12); --scroll-thumb: rgba(96,117,138,.34);
+    --scroll-thumb-hover: rgba(96,117,138,.52);
+    --source-bg: rgba(110,129,148,.1); --source-line: rgba(110,129,148,.3);
+    --identity-bg: #F3F6F8; --identity-line: #B8C8D6; --identity-ink: #40566B;
+    --source-company: #20735B; --source-company-bg: rgba(22,141,96,.14); --source-company-ink: #146044;
+    --source-home: #2D718B; --source-home-bg: rgba(45,113,139,.14); --source-home-ink: #245D73;
+    --engine-claude: #B85232; --engine-codex: #4B6FCA; --engine-trae: #168C78;
+    --engine-qwen: #7652C4; --engine-codebuddy: #2679B5; --engine-zcode: #B14E77;
+    --avatar-worker-bg: #DCEAF7; --avatar-worker-text: #315D88;
+    --avatar-architect-bg: #EEE8FF; --avatar-architect-text: #624CA4;
+    --avatar-qa-bg: #DDF3EA; --avatar-qa-text: #247456;
+    --pm-ink: #3A2117; --on-brand: #FFFFFF; --brand-highlight: rgba(255,255,255,.28);
+    --brand-shadow: rgba(200,100,64,.2); --focus-ring: rgba(200,100,64,.14);
+    --danger-line: rgba(200,76,81,.36); --danger-bg: rgba(200,76,81,.1);
+    --frame-shadow: rgba(50,74,96,.2); --notch-shadow: rgba(18,35,52,.28);
+    --connection-warn-bg: rgba(165,109,0,.11); --connection-error-bg: rgba(200,76,81,.1);
+    --toast-line: #C6D3DF; --toast-bg-top: #FFFFFF; --toast-bg-bottom: #F1F5F8;
+    --toast-highlight: rgba(255,255,255,.7);
+    --shadow: 0 24px 62px rgba(50, 74, 96, .18); --small-shadow: 0 10px 24px rgba(50, 74, 96, .16);
+    --card-shadow: 0 6px 16px rgba(50, 74, 96, .1);
+    --artifact-group-bg: #F7FAFC; --artifact-group-line: #C6D3DF;
+    --artifact-muted-bg: #EEF3F7; --artifact-failed-bg: #FCEBEC;
+    --artifact-failed-line: #C84C51; --artifact-complete-bg: #E8F5EF;
+    --artifact-sheet-backdrop: rgba(50, 74, 96, .28);
+    --art-doc: #6D5BD8; --art-sheet: #A56D00; --art-code: #3978B8; --art-image: #168D60;
+    --art-pkg: #5B7186; --art-accept: #C86440; --art-gen: #6E8399;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-width: 320px; min-height: 100%; }
+  body {
+    margin: 0; color: var(--text);
+    background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%),
+                radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0);
+    font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
+  .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .icon-inline { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: var(--scroll-track); }
+  ::-webkit-scrollbar-thumb { border-radius: 6px; background: var(--scroll-thumb); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
+
+  /* ===== 原型工具条（非产品件：形态/主题/场景预置） ===== */
+  .proto-bar { position: sticky; top: 0; z-index: 90; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 5px 14px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); font: 11px var(--mono); }
+  .proto-tag { padding: 2px 7px; border: 1px solid var(--brand); border-radius: 999px; color: var(--brand-hover); font: 700 9px var(--mono); letter-spacing: .06em; }
+  .proto-title { color: var(--text-strong); font-weight: 700; }
+  .proto-title small { margin-left: 6px; color: var(--faint); font-weight: 400; }
+  .proto-sp { flex: 1; }
+  .proto-seg { display: flex; gap: 3px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); }
+  .proto-seg button { min-height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font: 11px var(--mono); }
+  .proto-seg button.active { background: var(--selected-bg); color: var(--text-strong); box-shadow: inset 0 0 0 1px var(--selected-line); }
+  .proto-select { height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 11px var(--mono); }
+  .proto-btn { min-height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font: 11px var(--mono); }
+  .proto-btn:hover { background: var(--hover); color: var(--text); }
+  .proto-hash { max-width: 300px; overflow: hidden; color: var(--faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ===== 桌面形态：005 三列骨架 ===== */
+  .stage { display: none; }
+  .stage.active { display: block; }
+  .desktop-frame { position: relative; display: flex; flex-direction: column; overflow: hidden; height: calc(100vh - 42px); width: 100%; border-right: 1px solid var(--line-soft); border-left: 1px solid var(--line-soft); background: var(--bg1); }
+  .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
+  .window-dots { display: flex; gap: 6px; }
+  .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
+  .window-title { flex: 1; color: var(--faint); font-size: 11px; }
+  .desktop-shell { display: grid; flex: 1; min-height: 0; grid-template-columns: 64px 300px minmax(0, 1fr) 280px; }
+  .domain-rail { display: flex; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); }
+  .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; }
+  .rail-btn:hover { color: var(--text); background: var(--hover); }
+  .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
+  .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--selected-line); }
+  .rail-spring { flex: 1; }
+  /* desktop-screen 类已废弃，grid 布局已移至 desktop-shell */
+  .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); }
+  .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+  .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
+  .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 11px var(--mono); letter-spacing: .04em; }
+  .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; }
+  .queue-card:hover { border-color: var(--border-strong); background: var(--hover); }
+  .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+  .queue-card .row { display: flex; align-items: center; gap: 7px; }
+  .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
+  .status-dot.working { background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+  .status-dot.waiting { background: var(--working); }
+  @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: 10px; white-space: nowrap; }
+  .tag.action { background: var(--action-bg); color: var(--brand-strong); }
+  .tag.done { background: var(--done-bg); color: var(--done); }
+  .tag.info { background: var(--info-bg); color: var(--info); }
+  .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; line-height: 1; }
+  .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
+  .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
+  .engine-badge.claude { color: var(--engine-claude); }
+  .source-badge { padding: 3px 6px; border: 1px solid var(--source-company); border-radius: 5px; background: var(--source-company-bg); color: var(--source-company-ink); }
+  .identity-cluster { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+  .workspace { display: flex; min-width: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
+  .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
+  .workspace-title-row { display: flex; align-items: center; gap: 8px; }
+  .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
+  .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
+  .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
+  .segment-bar button:hover { color: var(--text); }
+  .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
+  .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
+  .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 18px 22px 26px; }
+  .pane-summary { margin-bottom: 4px; color: var(--text-strong); font-size: 12px; font-weight: 700; }
+  .secondary-btn, .primary-btn { min-height: 30px; padding: 0 11px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
+  .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
+  .secondary-btn:hover { background: var(--hover); }
+  .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); }
+  .primary-btn:hover { filter: brightness(1.05); }
+  .icon-btn { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+  .icon-btn:hover { color: var(--text); background: var(--hover); }
+  .readonly-banner { padding: 8px 10px; margin-bottom: 14px; border: 1px dashed var(--readonly-line); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: 10px; }
+  .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
+  .progress i { display: block; height: 100%; border-radius: inherit; background: var(--progress-fill); }
+  .progress.done i { background: var(--done); }
+
+  /* ===== 输出物面板（桌面）· 重设计主体 ===== */
+  .af-cap { margin: 0 0 12px; color: var(--dim); font-size: 10px; }
+  .af-sum { display: flex; align-items: center; gap: 12px; padding: 2px 2px 14px; margin-bottom: 10px; flex-wrap: wrap; }
+  .af-sum-n { color: var(--text-strong); font: 700 13px var(--sans); font-variant-numeric: tabular-nums; }
+  .af-sum-n small { margin-left: 4px; color: var(--dim); font: 10px var(--mono); font-weight: 400; }
+  .af-sum-sp { flex: 1; }
+  .af-trunc { padding: 7px 2px 0; color: var(--working); font-size: 10.5px; }
+  /* 六类分色图例 = 过滤器（点选筛类型，再点还原） */
+  .af-legend { display: flex; align-items: center; gap: 6px; padding: 0 2px 10px; flex-wrap: wrap; }
+  .af-legend-k { color: var(--faint); font: 10px var(--mono); }
+  .af-lg { display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 0 8px; border: 1px solid var(--tag-border); border-radius: 999px; background: transparent; color: var(--dim); cursor: pointer; font: 10px var(--mono); }
+  .af-lg i { width: 8px; height: 8px; border-radius: 3px; background: var(--tk); }
+  .af-lg b { color: var(--text); font-weight: 700; }
+  .af-lg:hover { border-color: var(--border-strong); background: var(--hover); }
+  .af-lg.on { border-color: color-mix(in srgb, var(--tk) 45%, transparent); background: color-mix(in srgb, var(--tk) 12%, transparent); color: var(--text-strong); }
+  .k-doc { --tk: var(--art-doc); } .k-sheet { --tk: var(--art-sheet); } .k-code { --tk: var(--art-code); }
+  .k-image { --tk: var(--art-image); } .k-pkg { --tk: var(--art-pkg); } .k-accept { --tk: var(--art-accept); }
+  .k-gen { --tk: var(--art-gen); } .k-dir { --tk: var(--brand); }
+  .k-dir .m-chip { background: color-mix(in srgb, var(--brand) 10%, transparent); } /* 文件夹 chip 加品牌淡底，读作「文件夹」而非空盒 */
+  /* 行骨架：类型 tile + 名/徽章（主行）+ 次行灰字 meta（目录/尺寸/时间） */
+  .art-list { display: grid; gap: 2px; }
+  .art-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; transition: background .12s ease; }
+  .art-row:hover { background: var(--q-row-hov); }
+  .art-row:last-child { border-bottom-color: transparent; }
+  .art-tile { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 7px; background: color-mix(in srgb, var(--tk) 14%, transparent); color: var(--tk); }
+  .art-tile .icon-inline { width: 14px; height: 14px; }
+  .art-thumb { flex: 0 0 40px; width: 40px; height: 30px; overflow: hidden; border: 1px solid var(--card-border); border-radius: 5px; background: var(--surface1); }
+  .art-thumb svg, .art-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .art-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .art-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .art-name { overflow: hidden; color: var(--text-strong); font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+  .art-badge { flex: none; padding: 1px 6px; border-radius: 4px; font-size: 10px; line-height: 1.5; white-space: nowrap; }
+  .b-new { background: color-mix(in srgb, var(--done) 13%, transparent); color: var(--done); }
+  .b-mod { background: var(--tag-bg); color: var(--dim); }
+  .b-dead { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+  .b-out { background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
+  .b-cnt { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); font-weight: 700; }
+  .art-meta { display: flex; align-items: center; gap: 8px; color: var(--faint); font: 10px var(--mono); font-variant-numeric: tabular-nums; }
+  .art-meta .dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .art-meta .dir.rtl { direction: rtl; text-align: left; }
+  .art-acts { display: flex; flex: none; align-items: center; gap: 3px; opacity: 0; transition: opacity .14s ease; }
+  .art-row:hover .art-acts, .art-row:focus-within .art-acts { opacity: 1; }
+  .art-act { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+  .art-act:hover { border-color: var(--line); background: var(--hover); color: var(--text); }
+  .art-act .icon-inline { width: 14px; height: 14px; }
+  .art-row.dead .art-name { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 55%, transparent); }
+  .art-row.dead .art-tile { opacity: .55; }
+  .art-row.downloading { background: var(--artifact-muted-bg); }
+  .art-row.downloading .art-meta { color: var(--brand); }
+  .art-err { flex: none; color: var(--error); font-size: 10px; white-space: nowrap; }
+  .art-retry { flex: none; min-height: 24px; padding: 0 8px; border: 1px solid var(--danger-line); border-radius: 6px; background: transparent; color: var(--error); cursor: pointer; font-size: 10px; }
+  .art-retry:hover { background: var(--danger-bg); border-color: var(--error); }
+  /* 文件夹分组：头行 + 左缘引导线子列（expo artKids / 旧壳 fkids 同构） */
+  .art-group { margin-top: 16px; }
+  .art-group:first-of-type { margin-top: 10px; }
+  .art-folder { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; min-height: 50px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; transition: background .12s ease; }
+  .af-frow { display: flex; align-items: center; gap: 4px; }
+  .art-folder:hover { background: var(--q-row-hov); }
+  .art-folder .art-name { font-weight: 650; }
+  .art-folder .art-meta { color: var(--faint); }
+  .art-chev { flex: none; width: 12px; color: var(--brand); font-size: 11px; line-height: 1; transition: transform .16s ease; }
+  .art-group.open .art-chev { transform: rotate(90deg); }
+  .art-kids { display: none; margin: 0 0 4px 13px; border-left: 1px solid var(--line-soft); padding-left: 6px; }
+  .art-group.open .art-kids { display: grid; gap: 2px; }
+  .art-kids .art-row { min-height: 46px; padding: 6px 10px; }
+  /* 组级批量下载条（005 artifact-batch 色档 + 旧壳进度形态） */
+  .art-batch { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 26px; margin: 2px 0 6px 13px; padding: 4px 9px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 11px var(--mono); }
+  .art-batch.complete { background: var(--artifact-complete-bg); color: var(--done); }
+  .art-batch.partial { background: var(--artifact-failed-bg); color: var(--error); }
+  .art-batch-progress { position: relative; flex: none; width: 88px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); }
+  .art-batch-progress i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: var(--brand); transition: width .3s ease; }
+  .art-batch-retry { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+  .art-empty { display: grid; justify-items: center; gap: 6px; padding: 56px 20px; color: var(--dim); text-align: center; }
+  .art-empty .empty-ic { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 6px; border: 1px dashed var(--line); border-radius: 12px; background: var(--surface1); color: var(--faint); }
+  .art-empty .empty-ic .icon-inline { width: 20px; height: 20px; }
+  .art-empty strong { color: var(--text); font-size: 12px; }
+  .art-empty p { margin: 0; max-width: 340px; color: var(--dim); font-size: 10.5px; }
+  .art-pool-link { border: 0; background: transparent; color: var(--brand-hover); cursor: pointer; font-size: 11px; font-weight: 600; }
+  .art-pool-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .af-foot { padding: 16px 2px 6px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 10px; text-align: center; }
+
+  /* 桌面 artViewer 在线预览浮层（旧壳 #79 + 005 浮层语言） */
+  .av-backdrop { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; padding: 28px; background: var(--artifact-sheet-backdrop); }
+  .av-backdrop.open { display: flex; }
+  .av-panel { display: flex; flex-direction: column; width: min(880px, 94vw); max-height: min(660px, 88vh); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: var(--shadow); }
+  .av-bar { display: flex; align-items: center; gap: 10px; flex: none; padding: 11px 14px; border-bottom: 1px solid var(--line-soft); background: var(--surface1); }
+  .av-name { overflow: hidden; color: var(--text-strong); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+  .av-sub { flex: none; color: var(--faint); font: 10px var(--mono); }
+  .av-body { flex: 1; min-height: 0; overflow: auto; padding: 22px 26px; }
+  .av-md { max-width: 620px; margin: 0 auto; color: var(--text); font-size: 12.5px; line-height: 1.7; }
+  .av-md h1 { margin: 0 0 4px; color: var(--text-strong); font-size: 17px; }
+  .av-md .dt { margin: 0 0 14px; color: var(--faint); font: 10px var(--mono); }
+  .av-md h3 { margin: 18px 0 6px; color: var(--text-strong); font-size: 12px; }
+  .av-md li { margin: 3px 0; }
+  .av-md .note { color: var(--faint); font-size: 10.5px; }
+  .av-md code { padding: 1px 5px; border-radius: 4px; background: var(--tag-bg); font: 10.5px var(--mono); }
+  .av-pre { margin: 0; color: var(--text); font: 11px/1.7 var(--mono); white-space: pre-wrap; }
+  .av-imgwrap { display: grid; place-items: center; min-height: 340px; }
+  .av-imgwrap svg { max-width: 100%; max-height: 480px; border: 1px solid var(--card-border); border-radius: 10px; }
+  .av-fb { display: grid; justify-items: center; gap: 10px; margin: 90px auto 0; max-width: 320px; color: var(--dim); text-align: center; font-size: 11px; }
+  .av-fb .ok { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 999px; background: var(--done-bg); color: var(--done); font-size: 22px; }
+
+  /* 检查器列（005 inspector 形态） */
+  .inspector { position: relative; overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); }
+  .inspector h3 { margin: 0 0 14px; color: var(--text-strong); font-size: 12px; }
+  .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
+  .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
+  .inspector-title { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 700; }
+  .inspector-copy { color: var(--dim); font-size: 10px; }
+  .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
+  .check-row b { color: var(--done); }
+  .insp-art { display: flex; align-items: center; gap: 7px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
+  .insp-art:last-child { border-bottom: 0; }
+  .insp-art .art-tile { flex: 0 0 20px; width: 20px; height: 20px; border-radius: 5px; }
+  .insp-art .art-tile .icon-inline { width: 11px; height: 11px; }
+  .insp-art span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .insp-art time { flex: none; margin-left: auto; color: var(--faint); font: 10px var(--mono); }
+
+  /* ===== 手机形态（005 stage-mobile / m-detail 骨架） ===== */
+  #stage-mobile { padding: 30px 16px 46px; }
+  .phone-stage { display: flex; justify-content: center; }
+  .phone { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 393px; max-width: 100%; height: min(844px, calc(100vh - 130px)); min-height: 640px; border: 1px solid var(--frame-line); border-radius: 26px; background: var(--bg1); box-shadow: var(--frame-shadow), var(--shadow); }
+  .mobile-status { display: flex; justify-content: space-between; flex: none; padding: 9px 20px 3px; color: var(--dim); font: 10px var(--mono); }
+  .mobile-head { display: flex; align-items: center; gap: 8px; flex: none; padding: 12px 14px 11px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); }
+  .mobile-back { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 17px; line-height: 1; }
+  .mobile-head h2 { flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: 15px; }
+  .mobile-head h2 small { display: block; overflow: hidden; margin-top: 3px; color: var(--dim); font-size: 10px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-detail-tabs { display: flex; gap: 17px; overflow-x: auto; flex: none; padding: 0 14px; border-bottom: 1px solid var(--line-soft); scrollbar-width: none; }
+  .mobile-detail-tabs::-webkit-scrollbar { display: none; }
+  .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
+  .mobile-detail-tabs button.active { color: var(--text-strong); font-weight: 700; }
+  .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
+  .mobile-content { flex: 1; min-height: 0; overflow: auto; padding: 14px 14px 20px; }
+  .session-state-dock { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; padding: 8px 14px; border-top: 1px solid var(--line-soft); border-left: 2px solid var(--working); color: var(--dim); font: 10px var(--mono); }
+  .session-state-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--working); }
+  .session-state-label { color: var(--text-strong); font-weight: 700; }
+  .session-state-elapsed { flex: 0 0 auto; margin-left: auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+  .mobile-detail-composer { display: flex; gap: 7px; flex: none; padding: 10px 12px calc(10px + 8px); border-top: 1px solid var(--line-soft); background: var(--composer-bg); }
+  .composer { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
+  .composer-input::placeholder { color: var(--faint); }
+  .mobile-detail-composer .primary-btn { padding: 0 12px; min-height: 34px; }
+
+  /* ===== 输出物面板（手机）· 重设计主体：expo 行语言 → 005 tokens ===== */
+  .m-sum { display: flex; align-items: baseline; gap: 10px; padding: 2px 2px 10px; }
+  .m-sum-n { color: var(--text-strong); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .m-sum-n small { margin-left: 4px; color: var(--dim); font: 10px var(--mono); font-weight: 400; }
+  .m-trunc { padding: 0 2px 8px; color: var(--working); font-size: 11px; }
+  .m-row { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 54px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 8px; background: transparent; cursor: pointer; text-align: left; transition: background .1s ease; }
+  .m-row:active { background: var(--q-row-sel); }
+  .m-row:hover { background: var(--q-row-hov); }
+  .m-row:last-child { border-bottom-color: transparent; }
+  .m-chip { display: grid; place-items: center; flex: 0 0 auto; min-width: 34px; height: 22px; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--tk) 45%, transparent); border-radius: 6px; color: var(--tk); font: 700 9.5px var(--mono); letter-spacing: .02em; }
+  .m-chip .icon-inline { width: 13px; height: 13px; }
+  .m-thumb { flex: 0 0 46px; width: 46px; height: 46px; overflow: hidden; border: 1px solid var(--card-border); border-radius: 9px; background: var(--surface1); }
+  .m-thumb svg { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .m-main { flex: 1; min-width: 0; }
+  .m-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .m-name { overflow: hidden; color: var(--text-strong); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .m-badge { flex: none; padding: 1px 5px; border-radius: 4px; font-size: 10px; line-height: 1.4; white-space: nowrap; }
+  .m-meta { overflow: hidden; margin-top: 2px; color: var(--faint); font: 11px var(--mono); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+  .m-row.dead .m-name { color: var(--dim); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--dim) 55%, transparent); }
+  .m-row.dead .m-chip { opacity: .55; }
+  .m-folder { min-height: 50px; width: auto; flex: 1; min-width: 0; }
+  .m-frow { display: flex; align-items: center; gap: 2px; }
+  .m-folder .m-name { font-size: 12.5px; font-weight: 700; }
+  .m-dots { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; font-size: 16px; line-height: 1; }
+  .m-dots:hover { background: var(--hover); color: var(--text); }
+  .m-chev { flex: none; width: 11px; color: var(--brand); font-size: 10px; line-height: 1; transition: transform .16s ease; }
+  .art-group.open .m-chev { transform: rotate(90deg); }
+  .m-kids { display: none; margin: 0 0 2px 14px; border-left: 1px solid var(--line-soft); padding-left: 8px; }
+  .art-group.open .m-kids { display: grid; gap: 1px; }
+  .m-kids .m-row { min-height: 46px; }
+  .m-foot { padding: 18px 4px 4px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 10.5px; text-align: center; }
+  .m-pool { display: block; margin: 10px auto 0; border: 0; background: transparent; color: var(--brand-hover); cursor: pointer; font-size: 12px; font-weight: 600; }
+  .m-pool:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .m-empty { display: grid; justify-items: center; gap: 8px; flex: 1; align-content: center; padding: 20px; color: var(--dim); text-align: center; }
+  .m-empty strong { color: var(--text); font-size: 12.5px; }
+  .m-empty p { margin: 0; font-size: 11px; }
+
+  /* 手机 ArtSheet 三段式底部抽屉（expo #83 形态 → 005 语言） */
+  .sheet-backdrop { position: fixed; inset: 0; z-index: 70; display: none; align-items: flex-end; justify-content: center; background: var(--artifact-sheet-backdrop); }
+  .sheet-backdrop.open { display: flex; }
+  .m-sheet { width: 393px; max-width: 100%; padding: 6px 15px calc(16px + env(safe-area-inset-bottom)); border: 1px solid var(--line); border-bottom: 0; border-radius: 16px 16px 0 0; background: var(--surface2); box-shadow: var(--shadow); animation: sheet-up .22s ease; }
+  @keyframes sheet-up { from { transform: translateY(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+  .sheet-grab { display: block; width: 36px; height: 4px; margin: 4px auto 10px; border-radius: 2px; background: var(--line); }
+  .sheet-title-row { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
+  .sheet-title-row .m-name { flex: 1; font-size: 14px; font-weight: 600; }
+  .sheet-meta { margin: 6px 0 0; color: var(--dim); font: 11px var(--mono); font-variant-numeric: tabular-nums; }
+  .sheet-cta { display: grid; place-items: center; width: 100%; min-height: 42px; margin-top: 13px; border: 0; border-radius: 10px; background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); cursor: pointer; font-size: 13px; font-weight: 600; box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); }
+  .sheet-cta:active { filter: brightness(.95); }
+  .sheet-cta.dead { border: 1px solid color-mix(in srgb, var(--error) 34%, transparent); background: var(--surface1); color: var(--error); box-shadow: none; cursor: default; }
+  .sheet-cta.busy { filter: saturate(.6); cursor: wait; }
+  .sheet-cap { margin: 7px 0 0; color: var(--faint); font-size: 10px; text-align: center; }
+  .sheet-err { margin: 7px 0 0; color: var(--error); font-size: 11px; text-align: center; }
+  .sheet-path { margin: 12px 0 0; padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface1); color: var(--text); font: 11px/1.5 var(--mono); overflow-wrap: anywhere; }
+  .sheet-path small { display: block; margin-top: 3px; color: var(--faint); }
+  .sheet-sec-row { display: flex; gap: 10px; margin-top: 11px; }
+  .sheet-sec { flex: 1; min-height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface1); color: var(--dim); cursor: pointer; font-size: 12px; font-weight: 600; }
+  .sheet-sec:hover { background: var(--hover); color: var(--text); }
+
+  /* 手机 ArtView 全屏预览（expo #79 分级 → 005 语言） */
+  .mview-backdrop { position: fixed; inset: 0; z-index: 80; display: none; background: var(--bg0); }
+  .mview-backdrop.open { display: flex; }
+  .mview { display: flex; flex-direction: column; width: 393px; max-width: 100%; height: min(844px, 96vh); margin: auto; overflow: hidden; border: 1px solid var(--frame-line); border-radius: 26px; background: var(--bg1); box-shadow: var(--shadow); animation: view-in .18s ease; }
+  @keyframes view-in { from { transform: scale(.97); opacity: .5; } to { transform: none; opacity: 1; } }
+  .mview-head { display: flex; align-items: center; gap: 9px; flex: none; padding: 11px 14px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); }
+  .mview-head .m-name { flex: 1; font-size: 13px; font-weight: 600; }
+  .mview-head .sz { flex: none; color: var(--faint); font: 10px var(--mono); }
+  .mview-act { border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; padding: 4px 4px; }
+  .mview-act:hover { color: var(--text); }
+  .mview-close { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+  .mview-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+  .mview-body .av-md { font-size: 13px; }
+
+  /* toast（005 语言） */
+  .toast { position: fixed; right: 22px; bottom: 22px; z-index: 95; max-width: 360px; padding: 11px 14px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+  .toast.show { opacity: 1; transform: none; }
+  .proto-note { max-width: 1180px; margin: 14px auto 0; padding: 0 16px 30px; color: var(--faint); font: 10px/1.8 var(--mono); }
+</style>
+</head>
+<body>
+
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol>
+  <symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol>
+  <symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line></symbol>
+  <symbol id="icon-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></symbol>
+  <symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 6h18v14H3Z"></path><path d="M3 6l2-3h14l2 3M8 10h8M10 14h4"></path></symbol>
+  <symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></symbol>
+  <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></symbol>
+  <symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol>
+  <symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol>
+  <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol>
+  <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol>
+  <symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol>
+  <symbol id="icon-share" viewBox="0 0 24 24"><path d="M12 3v12"></path><path d="m7.5 7.5 4.5-4.5 4.5 4.5"></path><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"></path></symbol>
+  <symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol>
+  <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>
+  <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol>
+  <symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol>
+  <symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol>
+  <symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol>
+</svg>
+
+<!-- 原型工具条 -->
+<div class="proto-bar" role="toolbar" aria-label="原型预置">
+  <span class="proto-tag">PROTO</span>
+  <span class="proto-title">005 输出物面板 · 双端重设计<small>w7 · 005 token + 旧版（expo 手机端 / 桌面 #35·#79·#222）设计意图</small></span>
+  <span class="proto-sp"></span>
+  <div class="proto-seg" role="group" aria-label="形态">
+    <button type="button" data-proto-form="desktop">桌面形态</button>
+    <button type="button" data-proto-form="mobile">手机形态</button>
+  </div>
+  <label class="proto-title" style="font-weight:400;color:var(--dim)">场景
+    <select class="proto-select" data-proto-scene>
+      <option value="normal">正常数据</option>
+      <option value="busy">批量下载态</option>
+      <option value="empty">空态</option>
+      <option value="legacy">旧 relay 无能力</option>
+    </select>
+  </label>
+  <button type="button" class="proto-btn" data-proto-theme>主题 ⇄</button>
+  <span class="proto-hash" data-proto-hash></span>
+</div>
+
+<!-- ═══════════ 桌面形态 ═══════════ -->
+<section class="stage active" id="stage-desktop" aria-label="桌面形态">
+  <div class="desktop-frame">
+    <div class="windowbar"><div class="window-dots"><i></i><i></i><i></i></div><span class="window-title">CC Deck — 会话域 · 输出物</span><span style="color:var(--faint);font-size:10px">v0.6.0-test</span></div>
+    <div class="desktop-shell">
+      <nav class="domain-rail" aria-label="域导航">
+        <button class="rail-btn" type="button" title="通知"><svg class="icon-nav" aria-hidden="true"><use href="#icon-clip"></use></svg></button>
+        <button class="rail-btn active" type="button" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
+        <button class="rail-btn" type="button" title="团队"><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></button>
+        <button class="rail-btn" type="button" title="项目"><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></button>
+        <button class="rail-btn" type="button" title="设置"><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></button>
+        <span class="rail-spring"></span>
+      </nav>
+      <section class="queue" aria-label="会话队列">
+        <div class="queue-head"><h2>会话</h2><span class="tag action">2</span></div>
+        <div class="queue-group">今天</div>
+        <div class="queue-card selected"><div class="row"><span class="status-dot working"></span><strong>发版准备 · v0.6.0-test</strong><span class="tag info">Claude</span></div></div>
+        <div class="queue-card"><div class="row"><span class="status-dot waiting"></span><strong>输出物面板走查</strong><span class="tag action">待审查</span></div></div>
+        <div class="queue-group">昨天</div>
+        <div class="queue-card"><div class="row"><span class="status-dot done"></span><strong>验收单回填 · #119</strong><span class="tag done">完成</span></div></div>
+        <div class="queue-card"><div class="row"><span class="status-dot done"></span><strong>公司网中继排障</strong></div></div>
+      </section>
+      <section class="workspace" aria-label="会话工作区">
+        <header class="workspace-head">
+          <div class="workspace-title-row">
+            <h2>发版准备 · v0.6.0-test</h2>
+            <span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司源</span></span>
+            <span class="tag action">待审查</span>
+          </div>
+          <div class="workspace-sub">~/dev/cc-deck · test 通道 · 本回合已运行 6m</div>
+          <div class="segment-bar" role="tablist" aria-label="会话视图">
+            <button type="button" role="tab">对话</button>
+            <button type="button" role="tab">任务</button>
+            <button type="button" role="tab" class="active" aria-selected="true">输出物</button>
+            <button type="button" role="tab">用量</button>
+            <button type="button" role="tab">⋯</button>
+          </div>
+        </header>
+        <div class="workspace-body" id="d-af-body"><!-- JS 渲染 --></div>
+      </section>
+      <aside class="inspector" aria-label="证据检查器">
+        <h3>证据检查器</h3>
+        <div class="inspector-block">
+          <div class="inspector-title"><span>验收进度</span><span>2/3</span></div>
+          <div class="progress"><i style="width:66%"></i></div>
+          <div class="inspector-copy">还有 1 项待确认收单</div>
+        </div>
+        <div class="inspector-block">
+          <div class="inspector-title"><span>任务清单</span><span>6/9</span></div>
+          <div class="check-row"><b>✓</b><span>版本号同步</span></div>
+          <div class="check-row"><b>✓</b><span>独立出包</span></div>
+          <div class="check-row"><span>○</span><span>公司网检查更新</span></div>
+        </div>
+        <div class="inspector-block">
+          <div class="inspector-title"><span>输出物</span><span id="insp-art-count">15</span></div>
+          <div id="insp-art-rows"><!-- JS 渲染（六类分色迷你行） --></div>
+          <div class="inspector-copy" style="margin-top:8px">最近交付置顶 · 与「输出物」页同源</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 手机形态（005 m-detail · 输出物 tab） ═══════════ -->
+<section class="stage" id="stage-mobile" aria-label="手机形态">
+  <div class="phone-stage">
+    <div class="phone">
+      <div class="mobile-status"><span>9:41</span><span>▰ ◒ 100%</span></div>
+      <header class="mobile-head">
+        <button class="mobile-back" type="button" aria-label="返回">‹</button>
+        <h2>发版准备 · v0.6.0-test<small>~/dev/cc-deck · 3 分钟前活跃</small></h2>
+        <span class="tag action">待审查</span>
+      </header>
+      <div class="mobile-detail-tabs" role="tablist" aria-label="会话视图">
+        <button type="button" role="tab">对话</button>
+        <button type="button" role="tab">任务</button>
+        <button type="button" role="tab" class="active" aria-selected="true">输出物</button>
+        <button type="button" role="tab">用量</button>
+        <button type="button" role="tab">⋯</button>
+      </div>
+      <div class="mobile-content" id="m-af-body"><!-- JS 渲染 --></div>
+      <div class="session-state-dock"><i class="session-state-dot"></i><span class="session-state-label">已暂停</span><span>当前任务 · 回填验收证据</span><span class="session-state-elapsed">2m</span></div>
+      <div class="mobile-detail-composer">
+        <div class="composer"><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div>
+        <button class="primary-btn" type="button">发送</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 桌面 artViewer -->
+<div class="av-backdrop" id="av-backdrop" role="dialog" aria-modal="true" aria-label="输出物预览">
+  <div class="av-panel">
+    <div class="av-bar">
+      <span class="art-tile" id="av-tile"></span>
+      <span class="av-name" id="av-name"></span>
+      <span class="av-sub" id="av-sub"></span>
+      <span style="flex:1"></span>
+      <button class="secondary-btn" type="button" data-av-act="locate">在文件夹中定位</button>
+      <button class="primary-btn" type="button" data-av-act="download">下载</button>
+      <button class="icon-btn" type="button" data-av-act="close" aria-label="关闭预览"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+    </div>
+    <div class="av-body" id="av-body"></div>
+  </div>
+</div>
+
+<!-- 手机 ArtSheet / ArtView 由 JS 注入 #layer-host -->
+<div id="layer-host"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<p class="proto-note">hash 预置：<code>#f=desktop|mobile</code> 形态 · <code>#t=dark|light</code> 主题 · <code>#s=normal|busy|empty|legacy</code> 场景 · <code>#o=docs,release</code> 展开哪些目录（桌面/手机同键）。<br>
+桌面：行单击=在线预览 · 悬停行尾=查看/下载 · 文件夹头=批量下载与 ⋯；手机：点行=底部抽屉 · CTA=全屏预览 · 文件夹行=开合 · ⋯=目录抽屉。Esc 关闭浮层。</p>
+
+<script>
+(() => {
+  "use strict";
+  // ---------- 工具 ----------
+  const $ = (s, r) => (r || document).querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const svgUse = (id) => '<svg class="icon-inline" aria-hidden="true"><use href="#' + id + '"></use></svg>';
+  const NOW = Date.now();
+  const M = 60000, H = 3600000;
+  const relTime = (ts) => { const m = Math.floor((NOW - ts) / M); if (m <= 0) return "刚刚"; if (m < 60) return m + " 分钟前"; const h = Math.floor(m / 60); if (h < 24) return h + " 小时前"; if (h < 48) return "昨天"; const d = new Date(ts); return (d.getFullYear() === new Date().getFullYear() ? "" : d.getFullYear() + "年") + (d.getMonth() + 1) + "月" + d.getDate() + "日"; };
+  const sizeStr = (n) => { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; };
+
+  // ---------- 六类分型（expo ART_EXT / 005 artifactIconFor 口径合并，新增「验」= 验收单） ----------
+  const EXT_KIND = {
+    doc: "md markdown txt text rst adoc pdf doc docx rtf pages key ppt pptx log",
+    sheet: "csv tsv xlsx numbers json jsonl yaml yml toml ini cfg conf env db sqlite",
+    code: "ts tsx js jsx mjs cjs py rs go java kt kts swift c h cpp hpp cc cs rb php vue svelte sh zsh bash fish ps1 bat sql css scss less styl html htm xml astro lua dart nim zig ex exs hs ml scala tf proto graphql",
+    image: "png jpg jpeg gif svg webp bmp ico tiff tif heic avif",
+    pkg: "zip tar gz tgz bz2 xz 7z rar dmg iso jar war apk ipa exe msi",
+  };
+  const EXT_SET = {}; for (const k in EXT_KIND) EXT_SET[k] = new Set(EXT_KIND[k].split(" "));
+  const KIND_META = {
+    doc: { label: "文", icon: "file-text" }, sheet: { label: "表", icon: "table" },
+    code: { label: "码", icon: "code" }, image: { label: "图", icon: "image" },
+    pkg: { label: "包", icon: "archive" }, accept: { label: "验", icon: "accept" }, gen: { label: "其", icon: "clip" },
+  };
+  const extOf = (name) => { const m = /\.([A-Za-z0-9]+)$/.exec(String(name || "")); return m ? m[1].toLowerCase() : ""; };
+  function kindOf(name) {
+    if (/^acceptance[-_]/i.test(String(name || "").split(/[\\/]/).pop() || "")) return "accept"; // 验收单（交付链专属形态，brand 橙）
+    const e = extOf(name);
+    for (const k of ["doc", "sheet", "image", "pkg"]) if (EXT_SET[k].has(e)) return k;
+    if (EXT_SET.code.has(e)) return "code";
+    return "gen";
+  }
+  const pkgIcon = (name) => ["apk", "ipa", "dmg", "exe", "msi"].includes(extOf(name)) ? "package" : "archive";
+  const iconFor = (a) => { const k = a.kind; return k === "pkg" ? pkgIcon(a.name) : KIND_META[k].icon; };
+
+  // ---------- 样例数据（cwd 相对路径；dead=已不在磁盘；cached=已拉取缓存） ----------
+  const CWD = "~/dev/cc-deck";
+  const DATA = [
+    { p: "docs/release-notes.md", op: "create", size: 12400, at: NOW - 3 * M },
+    { p: "docs/acceptance-119.html", op: "create", size: 48200, at: NOW - 26 * M },
+    { p: "docs/ui-review.md", op: "edit", size: 8900, at: NOW - 52 * M },
+    { p: "ui/ArtifactsPanel.tsx", op: "edit", size: 21300, at: NOW - 8 * M },
+    { p: "ui/artifacts.module.css", op: "edit", size: 7400, at: NOW - 9 * M },
+    { p: "ui/preview-dark.png", op: "create", size: 184300, at: NOW - 12 * M, thumb: "dark" },
+    { p: "ui/preview-light.png", op: "create", size: 179800, at: NOW - 13 * M, thumb: "light" },
+    { p: "release/cc-deck-0.6.0-test.apk", op: "create", size: 38.2 * 1048576, at: NOW - 95 * M },
+    { p: "release/cc-deck-0.6.0-test.zip", op: "create", size: 52.7 * 1048576, at: NOW - 96 * M },
+    { p: "release/notes-excerpt.txt", op: "edit", size: 3200, at: NOW - 97 * M },
+    { p: "data/metrics.csv", op: "create", size: 15600, at: NOW - 40 * M },
+    { p: "data/bundle-sizes.json", op: "edit", size: 2100, at: NOW - 41 * M },
+    { p: "README.md", op: "edit", size: 15600, at: NOW - 4 * H, cached: true },
+    { p: "acceptance-118.html", op: "edit", size: 44100, at: NOW - 27 * H },
+    { p: "coverage/lcov.info", op: "edit", size: 981000, at: NOW - 49 * H, dead: true },
+  ].map((a) => { const name = a.p.split("/").pop(); return { ...a, name, kind: kindOf(name) }; });
+
+  // 分组投影（expo artifactRowsOf 口径：同目录 ≥2 聚组；组与散件按最近活跃降序混排）
+  function layout(list) {
+    const byDir = new Map(), loose = [];
+    for (const a of list) { const i = a.p.lastIndexOf("/"); const dir = i > 0 ? a.p.slice(0, i) : ""; if (!dir) { loose.push(a); continue; } if (!byDir.has(dir)) byDir.set(dir, []); byDir.get(dir).push(a); }
+    const groups = [];
+    for (const [dir, files] of byDir) {
+      files.sort((a, b) => b.at - a.at);
+      if (files.length >= 2) groups.push({ dir, leaf: dir.split("/").pop(), files, at: files[0].at, size: files.reduce((t, f) => t + f.size, 0) });
+      else loose.push(files[0]);
+    }
+    loose.sort((a, b) => b.at - a.at);
+    groups.sort((a, b) => b.at - a.at);
+    return { groups, loose };
+  }
+
+  // ---------- 状态 ----------
+  const state = { form: "desktop", theme: "dark", scene: "normal", open: new Set(["docs"]), filter: null, av: null, busyGroups: new Map(), deadRetry: new Set() };
+
+  // ---------- 假缩略图 / 预览内容（内联 SVG，无外链） ----------
+  function thumbSvg(kind, w, h) {
+    const k = kind === "light";
+    const bg = k ? "#F8FAFC" : "#0B1624", panel = k ? "#E8EFF5" : "#15273B", panel2 = k ? "#FFFFFF" : "#101E2F",
+      line = k ? "#C6D3DF" : "#2A4058", ink = k ? "#30465B" : "#C4D0DE", faint = k ? "#8B9BAB" : "#5E7A94";
+    const rows = [0, 1, 2, 3].map((i) => '<rect x="18" y="' + (52 + i * 26) + '" width="' + (150 - (i % 2) * 36) + '" height="8" rx="3" fill="' + (i === 0 ? "#E2855E" : faint) + '"/>').join("");
+    return '<svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="截图缩略图">' +
+      '<rect width="240" height="160" fill="' + bg + '"/>' +
+      '<rect x="10" y="10" width="46" height="140" rx="8" fill="' + panel + '"/>' +
+      '<rect x="20" y="24" width="26" height="8" rx="3" fill="' + (k ? "#3978B8" : "#7EAFE8") + '"/>' +
+      '<rect x="20" y="42" width="26" height="8" rx="3" fill="' + faint + '"/>' +
+      '<rect x="20" y="60" width="26" height="8" rx="3" fill="' + faint + '"/>' +
+      '<rect x="66" y="10" width="164" height="30" rx="8" fill="' + panel + '"/>' +
+      '<rect x="76" y="21" width="56" height="8" rx="3" fill="' + ink + '"/>' +
+      '<rect x="178" y="19" width="42" height="12" rx="6" fill="#E2855E"/>' +
+      '<rect x="66" y="48" width="164" height="102" rx="8" fill="' + panel2 + '" stroke="' + line + '"/>' +
+      rows +
+      '<rect x="18" y="52" width="0" height="0"/>' +
+      '<rect x="150" y="118" width="70" height="20" rx="6" fill="' + (k ? "#168D60" : "#4BCB91") + '"/>' +
+      '</svg>';
+  }
+  const PREVIEWS = {
+    "docs/release-notes.md": () => '<div class="av-md"><h1>v0.6.0-test 更新说明</h1><p class="dt">2026-10-08 · test 通道 · 346 项提交</p><h3>新增</h3><ul><li>输出物面板双端重设计：六类分色、在线预览、按目录批量下载</li><li>验收单云端通道（提交后 60 秒自动回流）</li></ul><h3>优化</h3><ul><li>检查更新失败时给出可读原因与直链</li><li>手机端输出物行点开即拉取预览，不再重复下载</li></ul><h3>修复</h3><ul><li>另修复公司网退出后用量不刷新、长路径溢出等一批问题</li></ul><p class="note">完整变更见 <code>docs/changelog.md</code></p></div>',
+    "docs/ui-review.md": () => '<div class="av-md"><h1>输出物面板走查意见</h1><p class="dt">2026-10-07 · iQ 视觉审查</p><ul><li>六类分色后扫视明显恢复：紫文 / 蓝码 / 绿图一眼可分</li><li>图片行建议保留缩略 + 点开放大两级</li><li>批量下载进度条建议留在组尾，成功态 4 秒后淡出</li></ul></div>',
+    "README.md": () => '<div class="av-md"><h1>cc-deck</h1><p class="dt">Command Bridge · 零外部资源</p><ul><li>多源会话桥：家庭网 / 公司网 / 流量云三通道</li><li>输出物实时登记，手机端可拉取预览</li></ul></div>',
+    "release/notes-excerpt.txt": () => '<pre class="av-pre">v0.6.0-test 摘要\n────────────────\n· 输出物面板重设计（双端）\n· 验收单云通道 60s 回流\n· 检查更新失败可读化\n\n（全文见 release-notes.md）</pre>',
+    "docs/acceptance-119.html": () => '<div class="av-md"><h1>验收单 · #119 输出物面板重设计</h1><p class="dt">2026-10-08 · 前置：安装 v0.6.0-test</p><h3>验收表</h3><ul><li>① 桌面端：输出物页六类图标分色显示</li><li>② 手机端：图片行显示缩略，点开可放大</li><li>③ 批量下载：进度与失败重试可用</li></ul><p class="note">通过标准动词开头 · 结果肉眼可察</p></div>',
+    "acceptance-118.html": () => '<div class="av-md"><h1>验收单 · #118 云通道回流</h1><p class="dt">2026-10-07</p><ul><li>① 公司网打开云通道链接可填表</li><li>② 提交后 60 秒内会话收到通知</li></ul></div>',
+    "data/metrics.csv": () => '<pre class="av-pre">view,visitors,conv\ndesktop,1204,3.1%\nmobile,866,2.4%\nweb,402,1.8%</pre>',
+    "data/bundle-sizes.json": () => '<pre class="av-pre">{\n  "console": "412 KB",\n  "mobile-shell": "188 KB",\n  "relay": "96 KB"\n}</pre>',
+    "ui/ArtifactsPanel.tsx": () => '<pre class="av-pre">export function ArtifactsPanel({ sid }: { sid: string }) {\n  const arts = useArtifacts(sid);        // #35 登记账\n  const rows = artifactRowsOf(arts);     // #222 分组投影\n  return &lt;ArtifactList rows={rows} /&gt;;\n}</pre>',
+    "ui/artifacts.module.css": () => '<pre class="av-pre">.row {\n  display: flex;\n  gap: 10px;\n  min-height: 44px;\n  align-items: center;\n}</pre>',
+  };
+  const previewFor = (a) => {
+    if (a.kind === "image") return '<div class="av-imgwrap">' + thumbSvg(a.thumb, 480, 320) + '</div>';
+    const fn = PREVIEWS[a.p];
+    return fn ? fn() : '<div class="av-fb"><span class="ok">✓</span><span>已下载到「下载」目录（' + sizeStr(a.size) + '）</span><span style="color:var(--faint);font-size:10px">复杂格式会尝试用系统应用打开</span></div>';
+  };
+
+  // ---------- 徽章 ----------
+  const badgeHtml = (a, inGroup) => {
+    let h = "";
+    if (inGroup) h += a.op === "create" ? '<span class="art-badge b-new">新建</span>' : '<span class="art-badge b-mod">修改</span>';
+    if (a.dead) h += '<span class="art-badge b-dead">已不在磁盘</span>';
+    if (a.outside) h += '<span class="art-badge b-out">cwd 外</span>';
+    return h;
+  };
+
+  // ---------- 桌面渲染 ----------
+  function renderDesktop() {
+    const body = $("#d-af-body");
+    if (state.scene === "empty" || state.scene === "legacy") {
+      const legacy = state.scene === "legacy";
+      body.innerHTML =
+        '<div class="pane-summary">输出物</div><div class="af-cap">' + (legacy ? "当前 relay 版本不支持输出物同步" : "会话写入文件后自动登记") + '</div>' +
+        '<div class="art-empty"><span class="empty-ic">' + svgUse(legacy ? "gear" : "package") + '</span>' +
+        '<strong>' + (legacy ? "升级 relay 后可见输出物" : "当前会话还没有文档产出") + '</strong>' +
+        '<p>' + (legacy ? "这台设备连接的 relay 版本较旧，没有产物同步能力；升级后此处自动出现清单。" : "让会话写一份文档、导一张图或出一次包，交付物会登记在这里。") + '</p>' +
+        '<button class="art-pool-link" type="button" data-pool-link>查看全局输出物目录 ›</button></div>';
+      renderInspector([], 0);
+      return;
+    }
+    const filterFn = state.filter ? (a) => a.kind === state.filter : null;
+    const list = DATA.filter((a) => state.deadRetry.has(a.p) ? false : true).filter(filterFn || (() => true));
+    const { groups, loose } = layout(list);
+    const visible = list.length;
+    const kinds = ["doc", "sheet", "code", "image", "pkg", "accept"];
+    const counts = {}; kinds.forEach((k) => counts[k] = DATA.filter((a) => a.kind === k).length);
+
+    let h = '<div class="pane-summary">输出物</div>';
+    h += '<div class="af-cap">会话写入的交付物自动登记 · 单击预览 · 双击本地打开 · 可按目录批量下载</div>';
+    h += '<div class="af-sum"><span class="af-sum-n">' + visible + ' 个文件' + (groups.length ? ' <small>· ' + groups.length + ' 个文件夹</small>' : "") + '</span><span class="af-sum-sp"></span>' +
+      '<button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + ' 全部下载</button></div>';
+    h += '<div class="af-legend" role="group" aria-label="按类型过滤"><span class="af-legend-k">类型</span>' +
+      kinds.map((k) => '<button type="button" class="af-lg k-' + k + (state.filter === k ? " on" : "") + '" data-af-filter="' + k + '" aria-pressed="' + (state.filter === k) + '" title="只看' + KIND_META[k].label + '类"><i></i>' + KIND_META[k].label + ' <b>' + counts[k] + '</b></button>').join("") +
+      (state.filter ? '<button type="button" class="af-lg" data-af-filter="" style="--tk:var(--dim)"><i></i>还原</button>' : "") + '</div>';
+    if (state.filter === null) { /* 全量 */ } else if (!visible) { h += '<div class="art-empty" style="padding:30px 16px"><strong>该类型暂无文件</strong></div>'; }
+
+    const rowHtml = (a, inGroup) => {
+      const dir = inGroup ? "" : (a.p.includes("/") ? a.p.slice(0, a.p.lastIndexOf("/") + 1) : "（工作目录）");
+      const busy = state.busyGroups.get(groupKeyOf(a)) === "running" && a.dlState === "current";
+      const failed = a.batchFailed;
+      const metaParts = [];
+      if (dir) metaParts.push(dir);
+      metaParts.push(sizeStr(a.size));
+      metaParts.push(relTime(a.at));
+      const metaHtml = metaParts.map((txt, i) => '<span' + (i === 0 && a.outside ? ' class="dir rtl"' : i === 0 ? ' class="dir"' : '') + '>' + esc(txt) + '</span>').join("");
+      return '<div class="art-row k-' + a.kind + (a.dead ? " dead" : "") + (busy ? " downloading" : "") + '" data-af-path="' + esc(a.p) + '" role="button" tabindex="0" aria-label="预览 ' + esc(a.name) + '">' +
+        (a.kind === "image" && a.thumb ? '<span class="art-thumb">' + thumbSvg(a.thumb) + '</span>' : '<span class="art-tile">' + svgUse(iconFor(a)) + '</span>') +
+        '<span class="art-main"><span class="art-name-row"><span class="art-name">' + esc(a.name) + '</span>' + badgeHtml(a, inGroup) + '</span>' +
+        '<span class="art-meta">' + metaHtml + '</span></span>' +
+        (failed ? '<span class="art-err">拉取失败</span><button class="art-retry" type="button" data-af-retry="' + esc(a.p) + '">重试</button>' : "") +
+        '<span class="art-acts">' +
+        '<button class="art-act" type="button" data-af-view="' + esc(a.p) + '" aria-label="在线预览" title="在线预览">' + svgUse("eye") + '</button>' +
+        '<button class="art-act" type="button" data-af-dl="' + esc(a.p) + '" aria-label="下载" title="下载">' + svgUse("download") + '</button></span></div>';
+    };
+    const groupKeyOf = (a) => { const i = a.p.lastIndexOf("/"); return i > 0 ? a.p.slice(0, i) : ""; };
+
+    for (const g of groups) {
+      const open = state.open.has(g.dir);
+      const folderMetaParts = [g.dir + "/", sizeStr(g.size), "最近 " + relTime(g.at)];
+      const folderMetaHtml = folderMetaParts.map((txt, i) => '<span' + (i === 0 ? ' class="dir"' : '') + '>' + esc(txt) + '</span>').join("");
+      h += '<div class="art-group k-dir' + (open ? " open" : "") + '" data-af-group="' + esc(g.dir) + '">' +
+        '<div class="af-frow">' +
+        '<button class="art-folder" type="button" data-af-toggle="' + esc(g.dir) + '" aria-expanded="' + open + '">' +
+        '<span class="art-chev">▸</span><span class="art-tile">' + svgUse("folder") + '</span>' +
+        '<span class="art-main"><span class="art-name-row"><span class="art-name">' + esc(g.leaf) + '</span><span class="art-badge b-cnt">×' + g.files.length + '</span></span>' +
+        '<span class="art-meta">' + folderMetaHtml + '</span></span></button>' +
+        '<button class="secondary-btn" type="button" data-af-batch="' + esc(g.dir) + '" style="min-height:26px;flex:none">' + svgUse("download") + ' 批量下载</button>' +
+        '<button class="art-act" type="button" data-af-gmenu="' + esc(g.dir) + '" aria-label="更多操作" title="更多操作" style="flex:none">⋯</button></div>' +
+        '<div class="art-kids">' + g.files.map((a) => rowHtml(a, true)).join("") + '</div>' +
+        '<div class="art-batch" data-af-batchbar="' + esc(g.dir) + '"><span>尚未下载 · 仅组内文件</span><span></span></div></div>';
+    }
+    if (loose.length) h += '<div class="art-group open" style="margin-top:14px"><div class="art-kids" style="display:grid;margin-left:6px;border-left:1px dashed var(--line-soft)">' + loose.map((a) => rowHtml(a, false)).join("") + '</div></div>';
+    h += '<div class="af-foot">仅收录文档、表格、图片与安装包等交付物 · ' + DATA.length + ' 项已登记' + (state.scene === "normal" ? "" : "") + ' · 清单来自来源会话实时同步</div>';
+    body.innerHTML = h;
+    renderInspector(list, visible);
+
+    if (state.scene === "busy") applyBusyScene();
+  }
+
+  function renderInspector(list, count) {
+    $("#insp-art-count").textContent = count;
+    const rows = (list || []).slice().sort((a, b) => b.at - a.at).slice(0, 4);
+    $("#insp-art-rows").innerHTML = rows.map((a) => '<div class="insp-art k-' + a.kind + '"><span class="art-tile">' + svgUse(iconFor(a)) + '</span><span>' + esc(a.name) + '</span><time>' + relTime(a.at) + '</time></div>').join("") || '<div class="inspector-copy">暂无登记</div>';
+  }
+
+  // 批量下载态（scene=busy 预置：release 组 partial；ui 组下载中）
+  function applyBusyScene() {
+    const setBar = (dir, cls, html) => { const bar = $('[data-af-batchbar="' + dir + '"]'); if (!bar) return; bar.className = "art-batch" + (cls ? " " + cls : ""); bar.innerHTML = html; };
+    setBar("docs", "complete", "<span>已下载 3 个文件</span><span></span>");
+    setBar("release", "partial", "<span>已下载 2 个 · 有失败项</span><button class=\"art-batch-retry\" type=\"button\" data-af-batch-retry=\"release\">重试失败项</button>");
+    const apk = $('[data-af-path="release/cc-deck-0.6.0-test.apk"]');
+    if (apk) apk.insertAdjacentHTML("beforeend", '<span class="art-err">拉取失败</span><button class="art-retry" type="button" data-af-retry="release/cc-deck-0.6.0-test.apk">重试</button>'); // 失败≠已删除：只加错误项，不套 dead 删除线
+    setBar("ui", "", "<span>已下载 1/4 · 进行中</span><span class=\"art-batch-progress\"><i style=\"width:28%\"></i></span>");
+  }
+
+  // ---------- 手机渲染 ----------
+  function renderMobile() {
+    const body = $("#m-af-body");
+    if (state.scene === "empty" || state.scene === "legacy") {
+      const legacy = state.scene === "legacy";
+      body.innerHTML = '<div class="m-empty"><strong>' + (legacy ? "升级 relay 后可见输出物" : "当前会话还没有文档产出") + '</strong><p>' + (legacy ? "这台设备的 relay 版本较旧，暂无产物同步能力。" : "让会话写文档 / 出图 / 出包后自动登记。") + '</p><button class="m-pool" type="button" data-pool-link>查看全局输出物目录 ›</button></div>';
+      return;
+    }
+    const list = DATA.filter((a) => !state.deadRetry.has(a.p));
+    const { groups, loose } = layout(list);
+    let h = '<div class="m-sum"><span class="m-sum-n">' + list.length + ' 个文件<small>· ' + groups.length + ' 个文件夹</small></span></div>';
+    const rowHtml = (a, inGroup) => {
+      const dir = inGroup ? "" : (a.p.includes("/") ? a.p.slice(0, a.p.lastIndexOf("/") + 1) : "工作目录");
+      const meta = [dir, sizeStr(a.size), relTime(a.at)].filter(Boolean).join(" · ");
+      const chip = (a.kind === "image" && a.thumb) ? '<span class="m-thumb">' + thumbSvg(a.thumb) + '</span>' : '<span class="m-chip">' + esc(extOf(a.name).slice(0, 4) || "·") + '</span>';
+      return '<button class="m-row k-' + a.kind + (a.dead ? " dead" : "") + '" type="button" data-m-art="' + esc(a.p) + '" aria-label="查看 ' + esc(a.name) + '">' + chip +
+        '<span class="m-main"><span class="m-name-row"><span class="m-name">' + esc(a.name) + '</span>' + badgeHtml(a, inGroup) + '</span>' +
+        '<span class="m-meta">' + esc(meta) + '</span></span></button>';
+    };
+    for (const g of groups) {
+      const open = state.open.has(g.dir);
+      h += '<div class="art-group' + (open ? " open" : "") + '" data-af-group="' + esc(g.dir) + '">' +
+        '<div class="m-frow">' +
+        '<button class="m-row m-folder k-dir" type="button" data-af-toggle="' + esc(g.dir) + '" aria-expanded="' + open + '" aria-label="文件夹 ' + esc(g.leaf) + '，' + g.files.length + ' 个文件">' +
+        '<span class="m-chev">▸</span><span class="m-chip">' + svgUse("folder") + '</span>' +
+        '<span class="m-main"><span class="m-name-row"><span class="m-name">' + esc(g.leaf) + '</span><span class="art-badge b-cnt">×' + g.files.length + '</span></span>' +
+        '<span class="m-meta">' + esc([g.dir, sizeStr(g.size), relTime(g.at)].filter(Boolean).join(" · ")) + '</span></span></button>' +
+        '<button class="m-dots" type="button" data-m-fol="' + esc(g.dir) + '" aria-label="文件夹操作">⋯</button></div>' +
+        '<div class="m-kids">' + g.files.map((a) => rowHtml(a, true)).join("") + '</div></div>';
+    }
+    if (loose.length) h += '<div class="art-group open"><div class="m-kids" style="display:grid;margin-left:2px;border-left:1px dashed var(--line-soft)">' + loose.map((a) => rowHtml(a, false)).join("") + '</div></div>';
+    h += '<div class="m-foot">仅收录文档、表格等交付物 · 点文件可拉取到手机预览<button class="m-pool" type="button" data-pool-link>查看全局输出物目录 ›</button></div>';
+    body.innerHTML = h;
+  }
+
+  // ---------- 手机 ArtSheet / ArtView / FolSheet ----------
+  const host = $("#layer-host");
+  function artByPath(p) { return DATA.find((a) => a.p === p); }
+  function openArtSheet(p) {
+    const a = artByPath(p); if (!a) return;
+    const meta = [(a.op === "create" ? "新建" : "修改"), sizeStr(a.size), relTime(a.at), (a.firstAt && a.firstAt !== a.at) ? "首次 " + relTime(a.firstAt) : ""].filter(Boolean).join(" · ");
+    host.insertAdjacentHTML("beforeend",
+      '<div class="sheet-backdrop open" data-sheet><div class="m-sheet" role="dialog" aria-modal="true" aria-label="输出物详情">' +
+      '<span class="sheet-grab"></span>' +
+      '<div class="sheet-title-row"><span class="m-chip k-' + a.kind + '" style="--tk:var(--art-' + a.kind + ')">' + (a.kind === "image" && a.thumb ? svgUse("image") : esc(extOf(a.name).slice(0, 4) || "·")) + '</span>' +
+      '<span class="m-name">' + esc(a.name) + '</span>' + (a.dead ? '<span class="art-badge b-dead">已不在磁盘</span>' : "") + '</div>' +
+      '<p class="sheet-meta">' + esc(meta) + '</p>' +
+      '<button class="sheet-cta' + (a.dead ? " dead" : "") + '" type="button" data-sheet-cta>' + (a.dead ? "文件已不在磁盘" : a.cached ? "查看（已缓存）" : "拉取到手机查看") + '</button>' +
+      '<p class="sheet-cap">文件在电脑上 · 实时拉取预览（≤20MB，不落云存储）</p>' +
+      '<div class="sheet-path">' + esc(CWD + "/" + a.p) + '<small>相对 ' + esc(a.p) + '</small></div>' +
+      '<div class="sheet-sec-row"><button class="sheet-sec" type="button" data-sheet-copy>复制路径</button><button class="sheet-sec" type="button" data-sheet-share>分享文件</button></div>' +
+      '</div></div>');
+    const sheet = host.lastElementChild;
+    sheet.addEventListener("click", (ev) => { if (ev.target === sheet) closeLayer(sheet); });
+    $('[data-sheet-copy]', sheet).addEventListener("click", () => { const b = $('[data-sheet-copy]', sheet); b.textContent = "已复制 ✓"; toast("已复制路径 · " + a.p); setTimeout(() => { b.textContent = "复制路径"; }, 1500); });
+    $('[data-sheet-share]', sheet).addEventListener("click", () => toast("原型示意：进入系统分享面板（" + a.name + "）"));
+    $('[data-sheet-cta]', sheet).addEventListener("click", () => {
+      if (a.dead) return;
+      const cta = $('[data-sheet-cta]', sheet);
+      if (!a.cached) { cta.classList.add("busy"); cta.textContent = "拉取中…"; setTimeout(() => { closeLayer(sheet); openArtView(a); }, 650); }
+      else { closeLayer(sheet); openArtView(a); }
+    });
+  }
+  function openFolSheet(dir) {
+    const g = layout(DATA.filter((a) => !state.deadRetry.has(a.p))).groups.find((x) => x.dir === dir); if (!g) return;
+    const open = state.open.has(dir);
+    host.insertAdjacentHTML("beforeend",
+      '<div class="sheet-backdrop open" data-sheet><div class="m-sheet" role="dialog" aria-modal="true" aria-label="文件夹详情">' +
+      '<span class="sheet-grab"></span>' +
+      '<div class="sheet-title-row"><span class="m-chip k-dir" style="--tk:var(--brand)">' + svgUse("folder") + '</span><span class="m-name">' + esc(g.leaf) + '</span><span class="art-badge b-cnt">×' + g.files.length + '</span></div>' +
+      '<p class="sheet-meta">' + esc([g.dir, sizeStr(g.size), relTime(g.at)].filter(Boolean).join(" · ")) + '</p>' +
+      '<button class="sheet-cta" type="button" data-fol-toggle>' + (open ? "收起文件夹" : "展开查看") + '</button>' +
+      '<p class="sheet-cap">' + (open ? "收起后 " + g.files.length + " 个文件折叠为文件夹行" : "展开列出 " + g.files.length + " 个文件") + '</p>' +
+      '<div class="sheet-path">' + esc(CWD + "/" + g.dir) + '</div>' +
+      '<div class="sheet-sec-row"><button class="sheet-sec" type="button" data-fol-copy>复制目录路径</button></div>' +
+      '</div></div>');
+    const sheet = host.lastElementChild;
+    sheet.addEventListener("click", (ev) => { if (ev.target === sheet) closeLayer(sheet); });
+    $('[data-fol-toggle]', sheet).addEventListener("click", () => { toggleGroup(dir); closeLayer(sheet); });
+    $('[data-fol-copy]', sheet).addEventListener("click", () => { const b = $('[data-fol-copy]', sheet); b.textContent = "已复制 ✓"; toast("已复制目录路径 · " + dir); setTimeout(() => { b.textContent = "复制目录路径"; }, 1500); });
+  }
+  function openArtView(a) {
+    host.insertAdjacentHTML("beforeend",
+      '<div class="mview-backdrop open"><div class="mview" role="dialog" aria-modal="true" aria-label="预览 ' + esc(a.name) + '">' +
+      '<div class="mview-head"><span class="m-name">' + esc(a.name) + '</span><span class="sz">' + sizeStr(a.size) + '</span>' +
+      '<button class="mview-act" type="button" data-mv-share>分享</button><button class="mview-close" type="button" aria-label="关闭预览">✕</button></div>' +
+      '<div class="mview-body">' + previewFor(a) + '</div></div></div>');
+    const layer = host.lastElementChild;
+    $(".mview-close", layer).addEventListener("click", () => closeLayer(layer));
+    $('[data-mv-share]', layer).addEventListener("click", () => toast("原型示意：分享 " + a.name));
+  }
+  function closeLayer(el) { el.remove(); }
+  host.addEventListener("click", (ev) => { const b = ev.target.closest("[data-sheet]"); if (b && ev.target === b) b.remove(); });
+
+  // ---------- 桌面 artViewer ----------
+  function openViewer(p) {
+    const a = artByPath(p); if (!a) return;
+    state.av = a;
+    const tile = $("#av-tile"); tile.className = "art-tile k-" + a.kind; tile.innerHTML = svgUse(iconFor(a));
+    $("#av-name").textContent = a.name;
+    $("#av-sub").textContent = sizeStr(a.size) + " · " + relTime(a.at) + (a.cached ? " · 已缓存" : "");
+    $("#av-body").innerHTML = previewFor(a);
+    $("#av-backdrop").classList.add("open");
+  }
+  function closeViewer() { $("#av-backdrop").classList.remove("open"); state.av = null; }
+  $("#av-backdrop").addEventListener("click", (ev) => { if (ev.target === $("#av-backdrop")) closeViewer(); });
+  document.querySelectorAll("[data-av-act]").forEach((b) => b.addEventListener("click", () => {
+    const a = state.av; if (!a) return;
+    if (b.dataset.avAct === "close") closeViewer();
+    else if (b.dataset.avAct === "download") toast("原型示意：下载 " + a.name + "（壳内落「下载」目录并打开）");
+    else toast("原型示意：在文件夹中定位 " + (a.p.includes("/") ? a.p.slice(0, a.p.lastIndexOf("/")) : CWD));
+  }));
+
+  // ---------- 批量下载模拟 ----------
+  function runBatch(dir) {
+    const group = $('[data-af-group="' + dir + '"]'); if (!group || group.dataset.running === "1") return;
+    group.dataset.running = "1";
+    state.open.add(dir); group.classList.add("open"); syncHash();
+    const files = [...group.querySelectorAll(".art-kids .art-row")];
+    const bar = $('[data-af-batchbar="' + dir + '"]');
+    const setBar = (cls, html) => { bar.className = "art-batch" + (cls ? " " + cls : ""); bar.innerHTML = html; };
+    setBar("", "<span>已排队 · " + files.length + " 个文件</span><span></span>");
+    let i = 0, done = 0;
+    const step = () => {
+      if (i >= files.length) { setBar("complete", "<span>已下载 " + done + " 个文件</span><span></span>"); group.dataset.running = "0"; toast("已下载 " + done + " 个文件 · " + dir + "/"); return; }
+      const f = files[i];
+      f.classList.add("downloading");
+      setBar("", '<span>已下载 ' + done + "/" + files.length + ' · 进行中</span><span class="art-batch-progress"><i style="width:' + Math.round((i / files.length) * 100) + '%"></i></span>');
+      setTimeout(() => { f.classList.remove("downloading"); done++; i++; step(); }, 480);
+    };
+    step();
+  }
+
+  // ---------- 事件委托 ----------
+  document.addEventListener("click", (ev) => {
+    const t = ev.target;
+    const view = t.closest("[data-af-view]"); if (view) { ev.stopPropagation(); openViewer(view.dataset.afView); return; }
+    const dl = t.closest("[data-af-dl]"); if (dl) { ev.stopPropagation(); toast("原型示意：下载 " + artByPath(dl.dataset.afDl).name); return; }
+    const retry = t.closest("[data-af-retry]"); if (retry) { ev.stopPropagation(); state.deadRetry.add(retry.dataset.afRetry); toast("重试拉取中…"); setTimeout(() => { toast("已下载 · " + artByPath(retry.dataset.afRetry).name); rerender(); }, 700); return; }
+    const batchRetry = t.closest("[data-af-batch-retry]"); if (batchRetry) { ev.stopPropagation(); runBatch(batchRetry.dataset.afBatchRetry); return; }
+    const batch = t.closest("[data-af-batch]"); if (batch) { ev.stopPropagation(); runBatch(batch.dataset.afBatch); return; }
+    const gmenu = t.closest("[data-af-gmenu]"); if (gmenu) { ev.stopPropagation(); toast("原型示意：⋯ 菜单 = 展开/收起 · 在文件夹中定位 · 复制目录路径"); return; }
+    const allDl = t.closest("[data-af-all-dl]"); if (allDl) { ev.stopPropagation(); toast("原型示意：将按目录分组依次下载全部 " + DATA.length + " 个文件"); return; }
+    const lg = t.closest("[data-af-filter]"); if (lg) { ev.stopPropagation(); state.filter = lg.dataset.afFilter || null; rerender(); return; }
+    const tog = t.closest("[data-af-toggle]"); if (tog) { ev.stopPropagation(); toggleGroup(tog.dataset.afToggle); return; }
+    const mArt = t.closest("[data-m-art]"); if (mArt) { ev.stopPropagation(); openArtSheet(mArt.dataset.mArt); return; }
+    const mFol = t.closest("[data-m-fol]"); if (mFol) { ev.stopPropagation(); openFolSheet(mFol.dataset.mFol); return; }
+    const pool = t.closest("[data-pool-link]"); if (pool) { ev.stopPropagation(); toast("原型示意：进入产物池（全项目输出物聚合，005 缺口 M）"); return; }
+    const dRow = t.closest("#d-af-body .art-row"); if (dRow) { openViewer(dRow.dataset.afPath); return; }
+  });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { closeViewer(); [...host.children].forEach((c) => c.remove()); } });
+
+  function toggleGroup(dir) { if (state.open.has(dir)) state.open.delete(dir); else state.open.add(dir); syncHash(); rerender(); }
+
+  // ---------- toast ----------
+  let toastTimer = 0;
+  function toast(msg) { const el = $("#toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600); }
+
+  // ---------- 形态 / 主题 / 场景 / hash ----------
+  function rerender() { if (state.form === "desktop") renderDesktop(); else renderMobile(); }
+  function applyTheme() { document.documentElement.dataset.theme = state.theme; $("[data-proto-theme]").innerHTML = (state.theme === "dark" ? svgUse("sun") : svgUse("moon")) + " 主题 ⇄"; }
+  function applyForm() {
+    document.querySelectorAll("[data-proto-form]").forEach((b) => b.classList.toggle("active", b.dataset.protoForm === state.form));
+    $("#stage-desktop").classList.toggle("active", state.form === "desktop");
+    $("#stage-mobile").classList.toggle("active", state.form === "mobile");
+  }
+  function applyScene() { $("[data-proto-scene]").value = state.scene; }
+  function syncHash() {
+    const parts = ["f=" + state.form, "t=" + state.theme, "s=" + state.scene];
+    if (state.open.size) parts.push("o=" + [...state.open].join(","));
+    const h = "#" + parts.join("&");
+    history.replaceState(null, "", h);
+    $("[data-proto-hash]").textContent = h;
+  }
+  function applyHash() {
+    state.filter = null; // hash 是预置的完整事实源：切预置即还原类型过滤
+    const q = new URLSearchParams(location.hash.replace(/^#/, ""));
+    if (["desktop", "mobile"].includes(q.get("f"))) state.form = q.get("f");
+    if (["dark", "light"].includes(q.get("t"))) state.theme = q.get("t");
+    if (["normal", "busy", "empty", "legacy"].includes(q.get("s"))) state.scene = q.get("s");
+    const o = q.get("o"); if (o !== null && o !== "") state.open = new Set(o.split(","));
+  }
+  document.querySelectorAll("[data-proto-form]").forEach((b) => b.addEventListener("click", () => { state.form = b.dataset.protoForm; applyForm(); syncHash(); rerender(); }));
+  $("[data-proto-theme]").addEventListener("click", () => { state.theme = state.theme === "dark" ? "light" : "dark"; applyTheme(); syncHash(); });
+  $("[data-proto-scene]").addEventListener("change", (ev) => { state.scene = ev.target.value; syncHash(); rerender(); });
+
+  // ---------- 启动 ----------
+  applyHash(); applyTheme(); applyForm(); applyScene(); rerender(); syncHash();
+  // hash 变更即时重放预置（同文档导航也算），保证 URL 预置始终生效
+  window.addEventListener("hashchange", () => { applyHash(); applyTheme(); applyForm(); applyScene(); rerender(); });
+})();
+</script>
+</body>
+</html>

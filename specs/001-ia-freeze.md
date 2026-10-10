@@ -18,8 +18,8 @@
 
 ### 拍板依据
 
-- `docs/v8-ui-mockup.html` 的 V8 增量段已经将项目列为桌面 rail 和手机底栏入口。
-- `docs/v8-ui-interactive-v2.html` 的可点击原型已按四 Tab实现，`PH_ROOT` 也将会话、团队、项目、设置定义为四个 root。
+- `docs/mockups/v8-ui-mockup.html` 的 V8 增量段已经将项目列为桌面 rail 和手机底栏入口。
+- `docs/mockups/v8-ui-interactive-v2.html` 的可点击原型已按四 Tab实现，`PH_ROOT` 也将会话、团队、项目、设置定义为四个 root。
 - 桌面 rail 与手机底栏需要共享同一张一级导航地图；保留三 Tab 会使项目在桌面存在、手机消失，造成跨端信息架构不一致。
 - 项目只读聚合、联动回原域的边界可以避免项目域成为第二套会话/团队写面。
 

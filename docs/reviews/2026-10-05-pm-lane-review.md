@@ -3,7 +3,7 @@
 ## 现状证据
 - 005 桌面团队看板当前固定五列：`待认领 / 进行中 / 待验收 / 待装机 / 完成`，见 `specs/005-prototype-a.html:1096-1097`。
 - 手机不是五列，而是列表/任务 pane 形态；当前仍泄漏“就绪待装机/待收单”语义，见 `specs/005-prototype-a.html:1136-1138`、`:1205-1206`。
-- 后端 `BoardEntry` 只有 `todo/doing/done`，并明确把“待装机”列为旧词表，见 `relay/src/projects.ts:63-85`；V2 目标五态为 `backlog/claimed/submitted/ready_to_install/done`，见 `docs/v2-system-design.md:84-121`。
+- 后端 `BoardEntry` 只有 `todo/doing/done`，并明确把“待装机”列为旧词表，见 `relay/src/projects.ts:63-85`；V2 目标五态为 `backlog/claimed/submitted/ready_to_install/done`，见 `docs/architecture/v2-system-design.md:84-121`。
 - 004 当前还把五泳道写进正常态，并要求组头数字等于实际卡数，见 `specs/004-design-spec-a.md:91`、`:197`。
 
 ## 三项判定
@@ -16,7 +16,7 @@
 ### 2. 数量：不新增第六条顶层泳道
 - **不采纳“待审查”独立第六列**：它不是 V2 新状态，而是 `submitted/待验收` 内的责任阶段；新增列会把产品视图状态与五态机再次分叉。
 - 在“待验收”卡内增加阶段徽标/过滤：`待审查` → `待验收单`（或“验收准备”）；有 reviewer/verifier 或项目策略要求时才显示“待审查”。
-- 建议协议字段：`review_required`、`review_status[pending|passed|not_required]`；字段只影响投影与行动位，不新增 task terminal state。审查失败沿 V2 `task.reject(reason)` 回到执行态，保持 `submitted→claimed` 语义（`docs/v2-system-design.md:129-152`）。
+- 建议协议字段：`review_required`、`review_status[pending|passed|not_required]`；字段只影响投影与行动位，不新增 task terminal state。审查失败沿 V2 `task.reject(reason)` 回到执行态，保持 `submitted→claimed` 语义（`docs/architecture/v2-system-design.md:129-152`）。
 
 ### 3. 空泳道与 tier/workflow 门控
 - 五态是数据模型，不等于每个项目必须渲染五列。新增 `workflow_profile[engineering|delivery|custom]`；不要复用 `ProjectTier`，因为现有 tier 是“轻立项/正经立项”治理档位（`relay/src/projects.ts:23-24`）。

@@ -955,7 +955,7 @@
     </aside>
   </div>
 
-  <div class="tip">💡 与 Claude Code 内置子 Agent / teams 的区别一句话：内置是<b>「一个会话进程内的并行」</b>（父会话死则全死、只在终端里、同模型）；团队模式是<b>「总线上的对等成员」</b>（每个成员是 relay 上独立会话、互不连坐、手机指挥、状态持久化在 relay、可异构模型混编）。详见 docs/team-mode-design.md。</div>
+  <div class="tip">💡 与 Claude Code 内置子 Agent / teams 的区别一句话：内置是<b>「一个会话进程内的并行」</b>（父会话死则全死、只在终端里、同模型）；团队模式是<b>「总线上的对等成员」</b>（每个成员是 relay 上独立会话、互不连坐、手机指挥、状态持久化在 relay、可异构模型混编）。详见 docs/design/team-mode-design.md。</div>
   <div class="tip" style="margin-top:10px">🔗 三端同源：手机、桌面、网页看到的板，全部由 <b>relay 同一事件流</b>渲染（BOARD_* 事件 + 既有 last_seq 断线补发）——桌面/网页本就是同一份 web-console 代码（EXE/Mac 是壳），团队视图也只做一份；手机端是独立 App，渲染竖排形态。</div>
   <div class="tip" style="margin-top:10px">🔌 <b>异构模型</b>：每个成员可绑<b>不同厂商</b>的模型（编制卡上选型，凭证只存 relay 本地、永不下发端上）。默认路由：Leader 强模型 · worker 走包月便宜档 · <b>验收换厂商</b>——流程独立之外再加认知独立（同厂商模型会犯一样的错）。换模型 = 同一套接替机制（板 + git 是记忆，transcript 是消耗品）：池烧穿或限流时，同身份换个模型重 spawn 即继续。</div>
 </div>
