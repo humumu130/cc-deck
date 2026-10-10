@@ -544,6 +544,21 @@
     .queue-card p {overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: var(--fs-B); text-overflow: ellipsis; white-space: nowrap;}
     .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
     .queue-card .tag { margin-top: 0; }
+    /* W-PROJP1 P1-1：项目卡副行 flex 化（仅带 project-card-sub 类的副行，其余 <p> 元数据行不受影响）——
+       快捷钮行内尾随（D2-4 定案，弃 absolute 右缘案），32px 命中区以负 margin 垂直出槽（卡定高 76px
+       overflow:hidden 内不越界，紧凑档 58px 也容得下 ±7px 出槽），省略号转移到内层 span 保路径截断 */
+    .queue-card p.project-card-sub { display: flex; align-items: center; gap: 5px; overflow: visible; }
+    .queue-card p.project-card-sub > .project-card-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .project-open-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; margin: -7px 0; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
+    .project-open-btn:hover { color: var(--text-strong); background: var(--hover); }
+    .project-open-btn .icon-inline { width: 15px; height: 15px; vertical-align: 0; }
+    /* W-PROJP1 P1-2：「未立项」置底折叠组头——同 queue-group 标签语言 + 折叠箭头（art-chev 同源 ▸），
+       hot 点仅在折叠态显示（「抽屉里有要处理的」提示，不强行展开） */
+    button.queue-group.project-unfiled-toggle { display: flex; align-items: center; gap: 6px; width: calc(100% - 6px); padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
+    button.queue-group.project-unfiled-toggle:hover { color: var(--text-strong); }
+    .project-unfiled-toggle .unfiled-chev { flex: none; font-size: 9px; line-height: 1; transition: transform .15s ease; }
+    .project-unfiled-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
+    .project-unfiled-toggle .status-dot { margin-left: auto; }
     .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
     .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
     .status-dot.waiting { background: var(--working); }
@@ -5071,9 +5086,12 @@
                   return '<span class="engine-badge ' + escapeHtml(pair[1]) + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + engineIcon(pair[1]) + '"></use></svg>' + escapeHtml(pair[0]) + "</span>";
                 };
                 const toast = (() => {
-                  const node = document.getElementById("toast");
+                  // W-PROJP1：node 惰性获取——#toast 节点在本域 script 块之后才入 DOM（:5988），
+                  // 初始化时一次性 getElementById 恒为 null，域内 toast 全链哑火（含本批快捷钮容错提示）
+                  let node = null;
                   let timer = null;
                   return (message) => {
+                    node = node || document.getElementById("toast");
                     if (!node) return;
                     const host = document.querySelector("#stage-mobile.active") ? document.querySelector(".mobile-frame") : document.querySelector(".desktop-frame");
                     if (host && node.parentElement !== host) host.append(node);
@@ -5271,6 +5289,11 @@
                 };
                 let selectedKey = "";
 
+                // W-PROJP1 P1-2：「未立项」置底折叠组——纯端上视图态不上 relay（同键位自定义的存储层级），
+                // localStorage 记忆折叠态；键 null/缺省=折叠（默认），"0"=展开（B11 collapsedGroups 同思路单键化）
+                const PROJECT_UNFILED_KEY = "cc-deck-005-project-unfiled-collapsed";
+                let unfiledCollapsed = (() => { try { return localStorage.getItem(PROJECT_UNFILED_KEY) !== "0"; } catch (_) { return true; } })();
+
                 // #158-批4a：目录归一比较兼容 \ 分隔（Windows 数据 \ 与拼 / 不匹配会让项目前缀
                 // 归组/子目录匹配失效）；展示输出统一 displayPath（桌面 Windows 形态反斜杠）
                 const displayPath = window.__ccDeck005PathUi.displayPath;
@@ -5290,14 +5313,17 @@
                   const sessions = [...bridge.sessions.values()].filter((s) => s && typeof s.session_id === "string" && typeof s.cwd === "string");
                   const entries = bridge.projects.map((group) => ({ key: "g:" + group.id, group, name: String(group.name || group.id), anchor: String(group.anchor_dir || ""), sessions: sessions.filter((s) => underAnchor(s.cwd, group.anchor_dir)) }));
                   const matched = new Set(sessions.filter((s) => entries.some((e) => underAnchor(s.cwd, e.anchor))).map((s) => s.session_id));
+                  // W-PROJP1 P1-2：未立项分桶保留首个会话原始 cwd（nativeCwd）。路径三口径（设计 §0.5/1.4/附录 2）：
+                  // dir(normDir 产物)=分桶 key 与比较口径；entry.anchor 沿用 dir 供展示/前缀逻辑；
+                  // nativeCwd=壳桥调用口径——openPath/probePath 吃原生形态（Windows 反斜杠），不 display 化不归一化
                   const byCwd = new Map();
                   for (const session of sessions) {
                     if (matched.has(session.session_id)) continue;
                     const dir = normDir(session.cwd) || "/";
-                    if (!byCwd.has(dir)) byCwd.set(dir, []);
-                    byCwd.get(dir).push(session);
+                    if (!byCwd.has(dir)) byCwd.set(dir, { list: [], nativeCwd: String(session.cwd || "") });
+                    byCwd.get(dir).list.push(session);
                   }
-                  for (const [dir, list] of byCwd) entries.push({ key: "c:" + dir, group: null, name: basename(dir) || dir, anchor: dir, sessions: list });
+                  for (const [dir, bucket] of byCwd) entries.push({ key: "c:" + dir, group: null, name: basename(dir) || dir, anchor: dir, nativeCwd: bucket.nativeCwd, sessions: bucket.list });
                   const latest = (entry) => Math.max(0, ...entry.sessions.map((s) => Number(s.updated_at) || 0));
                   return entries.sort((a, b) => latest(b) - latest(a) || (Number(b.group?.updated_at) || 0) - (Number(a.group?.updated_at) || 0));
                 }
@@ -5347,9 +5373,12 @@
                 }
 
                 function renderQueue(entries) {
-                  const activeList = entries.filter((e) => !e.group || e.group.status === "active");
+                  // W-PROJP1 P1-2：未立项（group:null）从活跃项目拆出置底折叠组（设计 §3 方案 a），
+                  // 组序：活跃项目 → 待确认立项 → 挂起/归档 → 未立项。降噪靠折叠不靠过滤，所有卡始终可回。
+                  const activeList = entries.filter((e) => e.group && e.group.status === "active");
                   const pendingList = entries.filter((e) => e.group && e.group.status === "pending");
                   const parkedList = entries.filter((e) => e.group && (e.group.status === "parked" || e.group.status === "archived"));
+                  const unfiledList = entries.filter((e) => !e.group);
                   const card = (entry) => {
                     const hot = entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR");
                     const dot = entry.sessions.length === 0 ? "" : hot ? "waiting" : "done";
@@ -5357,11 +5386,27 @@
                     // FB8 三行制：行1 状态+名+行动 tag；行2 目录+计数；行3 引擎徽章+组态（与会话卡同语言）
                     const engines = [...new Set(entry.sessions.map((s) => s.engine).filter(Boolean))].slice(0, 4);
                     const working = entry.sessions.filter((s) => s.status === "WORKING").length;
-                    return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + "</div><p>" + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未立项") + "</p>"
+                    // W-PROJP1 P1-1：快捷链接（reveal 定位高亮）。openPath/probePath 吃原生路径（#158-批4a 口径）：
+                    // 组卡 anchor 即 anchor_dir 原值；未立项卡 anchor 是 normDir 产物（分桶 key），必须取分桶保留的
+                    // nativeCwd（设计 §1.4/附录 2 坑）。显隐沿 :3684 惯例——恒渲染按钮、无壳桥或无原生路径时
+                    // display:none（浏览器端不动作），title 悬浮展示全路径（displayPath 原生形态）。
+                    // svg 内联（同产物域 svgUse 输出形态）——本项目域 script 块与产物域不共顶层作用域，
+                    // 借 svgUse 会 ReferenceError 且被订阅循环 try/catch 吞掉（render 整链静默死，实测踩坑）
+                    const nativePath = entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || "");
+                    const shellOpen = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
+                    const openBtn = '<button class="project-open-btn" type="button" data-project-open="' + escapeHtml(nativePath) + '" aria-label="在文件夹中定位" title="在文件夹中定位 · ' + escapeHtml(displayPath(nativePath)) + '"' + (nativePath && shellOpen ? "" : ' style="display:none"') + '><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg></button>';
+                    return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + '</div><p class="project-card-sub"><span class="project-card-path">' + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未立项") + "</span>" + openBtn + "</p>"
                       + (engines.length || working ? '<div class="identity-cluster">' + engines.map((e2) => engineBadge(e2)).join("") + (working ? '<span class="source-badge">进行中 ' + working + "</span>" : "") + "</div>" : "") + "</div>";
                   };
                   const group = (label, list) => list.length ? '<div class="queue-group">' + escapeHtml(label) + " · " + list.length + "</div>" + list.map(card).join("") : "";
-                  const markup = group("活跃项目", activeList) + group("待确认立项", pendingList) + group("挂起/归档", parkedList);
+                  // 未立项组头：折叠箭头 + 「未立项 · N」（贴卡副行既有徽标词汇，D2-2）+ hot 点——
+                  // 折叠态下组内有 WAITING/ERROR 时亮「抽屉里有要处理的」，不强行展开（卡状态点同词汇）
+                  const unfiledHot = unfiledList.some((entry) => entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR"));
+                  const unfiledMarkup = unfiledList.length
+                    ? '<button class="queue-group project-unfiled-toggle" type="button" data-project-unfiled-toggle aria-expanded="' + (!unfiledCollapsed) + '"><span class="unfiled-chev">▸</span>未立项 · ' + unfiledList.length + (unfiledCollapsed && unfiledHot ? '<i class="status-dot waiting"></i>' : "") + "</button>"
+                      + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
+                    : "";
+                  const markup = group("活跃项目", activeList) + group("待确认立项", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
                   els.queue.replaceChildren(nodesFrom(markup));
                 }
 
@@ -5547,7 +5592,8 @@
                   }
                   const entries = deriveEntries();
                   if (!selectedKey || !entries.some((e) => e.key === selectedKey)) {
-                    const hot = entries.find((e) => projectActionItems(e).length > 0) || entries[0];
+                    // W-PROJP1：默认选中优先有行动项 → 立项组卡（未立项卡默认收在折叠组里，选中看不见）
+                    const hot = entries.find((e) => projectActionItems(e).length > 0) || entries.find((e) => e.group) || entries[0];
                     selectedKey = hot ? hot.key : "";
                   }
                   renderQueue(entries);
@@ -5571,6 +5617,31 @@
                   }
                   const open = target.closest("[data-open-acceptance]");
                   if (open) { bridge.openAcceptance(open.dataset.openAcceptance); return; }
+                  // W-PROJP1 P1-2：未立项折叠组头开关——先于卡片选中分支（组头不是卡，stopPropagation 防外溢）
+                  const unfiledToggle = target.closest("[data-project-unfiled-toggle]");
+                  if (unfiledToggle) {
+                    event.stopPropagation();
+                    unfiledCollapsed = !unfiledCollapsed;
+                    try { localStorage.setItem(PROJECT_UNFILED_KEY, unfiledCollapsed ? "1" : "0"); } catch (_) {}
+                    render();
+                    return;
+                  }
+                  // W-PROJP1 P1-1：快捷链接——先于卡片选中分支，点击不触发选卡（选卡会切第三列总览，误触代价高）
+                  const openBtn = target.closest("[data-project-open]");
+                  if (openBtn) {
+                    event.stopPropagation();
+                    const native = openBtn.dataset.projectOpen || "";
+                    if (!native) { toast("无目录可定位"); return; }
+                    if (!window.ccDeck || typeof window.ccDeck.openPath !== "function") return; // 浏览器端按钮应已隐藏，兜底不动作
+                    // #106 先探后开（产物域同款）：probePath 微秒级只读 stat——目录不在本机（已删/外置盘未挂载/
+                    // 远程源）明确提示，不给 openPath 报错上屏；旧壳无 probePath（升级窗口期）按「在」回落 openPath
+                    const probe = typeof window.ccDeck.probePath === "function" ? window.ccDeck.probePath(native).catch(() => true) : Promise.resolve(true);
+                    probe.then((ok) => {
+                      if (!ok) { toast("目录不存在（可能已删除或未挂载）"); return; }
+                      window.ccDeck.openPath(native, true).catch((er) => toast(String((er && er.message) || er).slice(0, 80)));
+                    });
+                    return;
+                  }
                   const queueCard = target.closest("[data-project-key]");
                   if (queueCard) { selectedKey = queueCard.dataset.projectKey || ""; render(); return; }
                   // W-PROJAGG：总览速览卡切换 mini 列表；「查看全部」跳主区对应 tab（segment-bar 同路）
