@@ -24,6 +24,7 @@
     },
     "android": {
       "package": "com.humumu.ccwatch",
+      "versionCode": 69910,
       "adaptiveIcon": {
         "backgroundColor": "#050B12",
         "foregroundImage": "./assets/android-icon-foreground.png",

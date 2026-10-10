@@ -343,7 +343,19 @@
     .windowbar-winbtns button:hover { background: var(--hover); color: var(--text); }
     .windowbar-winbtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
     html.mac-tauri .windowbar { padding-left: 78px; }
-    html.mac-tauri .window-dots, html.win-tauri .window-dots { display: none; }
+    /* 件十-B（2026-10-10 test.10 反馈）：Mac nova 壳顶栏缺红黄绿——根因=decorations:false
+       无框窗无系统灯 + 本规则把自绘 dots 按平台一刀切隐藏（mac-tauri 泛匹配），nova 又只
+       显右侧 winbtns → Mac 用户面对 Windows 式右钮、左上空。修法 a（自绘灯）：标准 Mac 壳
+       （系统标题栏在）维持隐 dots；nova Mac 显示左上自绘红黄绿（data-w 点击映射
+       close/min/max，与右侧 winbtns 二选一互斥显形），78px 系统灯旧位正好回填 */
+    html.mac-tauri:not(.nova-tauri) .window-dots, html.win-tauri .window-dots { display: none; }
+    html.mac-tauri.nova-tauri .window-dots { display: flex; }
+    html.mac-tauri.nova-tauri .windowbar-winbtns { display: none; }
+    html.mac-tauri.nova-tauri .window-dots i { cursor: pointer; }
+    html.mac-tauri.nova-tauri .window-dots i[data-w="close"] { background: #FF5F57; }
+    html.mac-tauri.nova-tauri .window-dots i[data-w="min"] { background: #FEBC2E; }
+    html.mac-tauri.nova-tauri .window-dots i[data-w="max"] { background: #28C840; }
+    html.mac-tauri.nova-tauri .window-dots i:hover { filter: brightness(.86); }
     /* W-NOVAVAR B2（原 W-NOVAUI ②）：自绘三钮是 nova 壳 decorations=false 的专属 UI，
        限定 .nova-tauri（壳侧 INIT_SCRIPT 注入 __CCDECK_NOVA 后挂载）——此前挂
        .win-tauri 泛匹配，标准 Windows 壳（系统标题栏，tauri.windows.conf.json
@@ -521,7 +533,11 @@
     .session-list-tools button[data-session-filter] { border: 0; padding: 0 9px; border-radius: 999px; background: var(--surface2); }
     .session-list-tools button[data-session-filter]:hover { background: var(--hover); color: var(--text); }
     .session-list-tools button:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
-    .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 2px; }
+    /* 件九（2026-10-10 test.10 反馈）：卡 hover/选中底色右不贴缘——原 padding-right:2px
+       + 经典滚动条占位（headless 实测右差 11 = 9 条宽 + 2 padding，左缘 0）。padding 清零
+       后 overlay 滚动条环境（Mac 默认）左右全对称；经典滚动条环境仅剩条宽，thin+主题色
+       弱化存在感 */
+    .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
     .queue-group {margin: 12px 3px 6px; color: var(--faint); font: var(--fs-D) var(--mono); letter-spacing: .04em;}
     /* #169 追加令1：任务 tab 四组分组标题——无横线分隔，改左侧 3px 状态色条（进行中黄/已完成绿/待验证蓝/待办中性灰）。
        只作用于任务明细列表（detail-panel-list）内的组标题，会话列表/通知中心等其它 queue-group 不动 */
@@ -532,7 +548,11 @@
     .detail-panel-list > .queue-group.group-verify::before { background: var(--info); }
     /* 组内明细行相对组标题缩进一档，对齐标题文字起点（色条 3px + 缩进 10px） */
     .detail-panel-list > .check-row { margin-left: 10px; }
-    .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    /* 件七（2026-10-10 test.10 反馈）：卡内垂直居中通病根治——原 block + min-height:57
+       撑高后内容顶对齐（实测设置卡 top8/bottom40、项目卡 top8/bottom20），改 flex column
+       + justify-center：单行卡（设置导航）塌到内容高、两行卡（row+p）纵排不变整体居中、
+       #d-session 有横排 flex 特化不受影响 */
+    .queue-card { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     /* #160 空闲置灰（旧壳 #96 同口径）：DONE/ERROR 静默超阈值分钟降透明度退后，
@@ -566,6 +586,15 @@
     .status-dot.working { background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
     @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
     .tag {display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: var(--fs-C); white-space: nowrap;}
+    .tag.mini { padding: 1px 6px; font-size: var(--fs-D); color: var(--dim); } /* 件十二扩充 A：列表行类型徽章小号 */
+    /* 件十五（2026-10-10 用户反馈）：关于页链接/行高 + 分段控件收缩贴合 */
+    .about-link { color: var(--brand-strong); text-decoration: none; }
+    .about-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+    .about-sep { margin: 0 4px; color: var(--faint); }
+    [data-settings-panel="about"] .settings-row { min-height: 68px; } /* 行高一致（qr 占位行原 78；qr 44 盒+行距实测 68，三行对齐） */
+    [data-settings-panel="about"] .qr-placeholder { width: 44px; height: 44px; box-sizing: border-box; font-size: var(--fs-micro); }
+    .settings-row .density-control { flex: 0 0 auto; display: inline-flex; width: max-content; } /* 容器收缩贴合四段，消右侧空白（曾被行内拉伸规则撑满） */
+    .settings-row .density-control button { flex: 1 0 auto; }
     .tag.action { background: var(--action-bg); color: var(--brand-strong); }
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
@@ -573,8 +602,22 @@
     /* #172-F1 高度链：workspace 是 column flex 容器（grid 子项），缺 min-height:0 时内容撑开会把
        footer(composer) 推出视口——补 min-height:0 放行收缩（与 #162 同族，162 修 desktop-screen 级） */
     .workspace { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
-    .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
-    .workspace-title-row { display: flex; align-items: center; gap: 8px; }
+    /* 件四（2026-10-10 test.10 反馈）：三域 head 高度统一 + 紧凑化。原 padding 17/11、
+       bar margin-top 14、button pb 8 偏松（会话页 h=111 全域最高）；收紧四处联动后以
+       会话页自然高度为准，团队/项目（单行 title-row，无 head-sub）经 min-height+title-row
+       弹性吸收撑齐——flex column + 标题行 flex:1 把多余空间吃在标题区，segment-bar 恒钉底，
+       active 下划线与底缘几何关系不随域漂移。px 基准按默认字号档（FB10 非 100% 档时
+       会话页仍随字长高，团队/项目停在下限，轻微差允许）。
+       min-height 只 scope 三域：通知中心 head 无 segment-bar（自然高 ~53px），全局
+       min-height 会白撑它 40px 挤内容区 */
+    .workspace-head { flex: 0 0 auto; display: flex; flex-direction: column; padding: 10px 20px 8px; border-bottom: 1px solid var(--line-soft); }
+    #d-session .workspace-head, #d-team .workspace-head, #d-project .workspace-head { min-height: 93px; }
+    .workspace-title-row { display: flex; align-items: center; gap: 8px; flex: 1 0 auto; }
+    /* 件十-A（2026-10-10 test.10 反馈）：会话域两簇（identity/开关钮）对齐 h2 行——
+       ws-title-main 纵排（h2+head-sub）下拉 center 基准，右簇悬在两行中间（实测中心
+       20.5 vs h2 中心 12.5）；flex-start 后簇顶=h2 顶、中心天然重合（簇高≈h2 行高）。
+       team/project 单行 title-row center 本就正确，不 scope 内 */
+    #d-session .workspace-title-row { align-items: flex-start; }
     /* W-NOVAFIX B3：Postman 式一行制——sub 并入标题行（源胶囊/路径随行右对齐），独立 sub 行退役
        FB2：sub 整行出舱入顶栏（.windowbar-hint）；W-TOPBAR ②③：会话域 sub（工作目录/最近活动）
        回迁标题行右端 .head-meta（顶栏不再随会话抖动），其余域仍走顶栏 hint */
@@ -584,13 +627,13 @@
     .ws-title-main { display: flex; flex-direction: column; justify-content: center; flex: 0 1 auto; min-width: 0; }
     .head-sub { max-width: 100%; overflow: hidden; color: var(--faint); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap; }
     .head-sub:empty { display: none; }
-    .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
-    .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
+    .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 8px; }
+    .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 6px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .segment-bar button:hover { color: var(--text); }
     .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
     .segment-bar .faint, .metric b, .mobile-summary b { font-variant-numeric: tabular-nums; }
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
-    .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
+    .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 22px; }
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
     /* B12+B22 head 右端动作位：过程/思考开关 + 模型胶囊（标题行尾部）。
@@ -627,6 +670,16 @@
     .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
     /* #169 发送常驻（旧壳 #48 sendBtn 形态 005 化：中性面板+描边+品牌色➤，不做实底大色块） */
     .composer-sendbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); color: var(--brand); cursor: pointer; }
+    /* 件八（2026-10-10 test.10 反馈）：输入框高度折叠开关——发送钮左侧 unfold 双箭头钮，
+       多行（默认，composer 两行分区）/单行紧凑（top+bottom 同行、隐 hint）两态切换，
+       localStorage 记忆（ccd_composer_compact） */
+    .composer-unfold { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease, transform .15s ease; }
+    .composer-unfold:hover { background: var(--hover); color: var(--text-strong); }
+    .composer-unfold .icon-inline { width: 14px; height: 14px; }
+    .composer.compact .composer-unfold { transform: rotate(180deg); } /* 折叠态箭头倒置 */
+    .composer.compact { flex-direction: row; align-items: center; min-height: 0; gap: 8px; }
+    .composer.compact .composer-top { min-height: 34px; }
+    .composer.compact .composer-hint { display: none; }
     .composer-sendbtn:hover:not(:disabled) { background: var(--hover); border-color: var(--brand); }
     .composer-sendbtn:focus-visible { outline: none; }
     .composer-sendbtn:disabled { opacity: .4; cursor: default; }
@@ -639,6 +692,11 @@
        上层输入区加高（≤52px 行高区），下层按钮/提示行——附件钮+提示文字贴左下
        （提示小号弱化），模型胶囊/停止/发送居右；输入内容与按钮行互不干扰 */
     .composer[data-composer="session"] { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 2px; min-height: 78px; padding: 6px 10px 8px 12px; border-radius: 10px; }
+    /* 件八：单行紧凑态（unfold 钮切换）——特异度压过上方 session 特化（compact 修饰符
+       同级但源序靠后必胜），两分区（top+bottom）并一行、隐提示语、下压最小高 */
+    .composer.compact[data-composer="session"] { flex-direction: row; align-items: center; gap: 8px; min-height: 0; }
+    .composer.compact[data-composer="session"] .composer-top { min-height: 34px; flex: 1 1 auto; }
+    .composer.compact[data-composer="session"] .composer-hint { display: none; }
     .composer[data-composer="session"] .composer-top { display: flex; align-items: center; flex: 1 1 auto; min-height: 44px; }
     .composer[data-composer="session"] .composer-input { padding: 4px 0; }
     .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
@@ -704,23 +762,31 @@
        设变量，默认 320 与旧三列档一致）；W-TOPBAR ①收起改整块 display:none（42px 竖条退役） */
     .inspector { position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; width: var(--inspector-w, 320px); overflow: hidden auto; padding: 16px 14px; background-color: var(--inspector-top); background-image: linear-gradient(180deg, var(--inspector-top), var(--surface1)); border-left: 1px solid var(--line-soft); box-shadow: -5px 0 18px var(--panel-shadow); transition: background .18s ease, padding .18s ease; }
     .inspector h3 {margin: 0 0 14px; color: var(--text-strong); font-size: var(--fs-D);}
-    /* W-UIFB ⑨：第四列收起把手美化（i=11）——描边盒退役改 ghost 形（默认无边框仅淡箭头，
-       悬停浮出底色），箭头本身放大一档；折叠态通栏样式保持 */
-    .inspector-toggle {position: absolute; top: 9px; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--faint); cursor: pointer; font-size: 15px; line-height: 1; transition: color .18s ease, background .18s ease, border-color .18s ease;}
-    .inspector-toggle:hover { color: var(--text); background: var(--hover); }
-    .inspector-toggle:hover { color: var(--text); background: var(--hover); }
+    /* 件六（2026-10-10 test.10 反馈）：检查器把手两态统一重做——同一组件贴缝骑放（16×56
+       竖条、圆角朝突出向、无边框 ghost、chevron 18px），位置=第三列右缘缝：
+       展开态 .inspector-toggle 骑面板左缘（›=面板将向右收起退出）、收起态 .inspector-expand
+       贴 screen 右缘（‹=面板将向左展开进入）；箭头指向=面板移动方向（用户拍板语义）。
+       U12 的「标题行右端 ›」形态废弃（用户最新意见：把手贴缘不在标题行）。
+       W-UIFB ⑨ ghost 语言延续：默认无边框仅淡箭头，悬停浮出底色 */
+    .inspector-toggle, .inspector-expand { position: absolute; top: 50%; transform: translateY(-50%); z-index: 6; display: grid; place-items: center; width: 16px; height: 56px; padding: 0; border: 0; border-radius: 8px 0 0 8px; background: transparent; color: var(--faint); cursor: pointer; font-size: 18px; line-height: 1; transition: color .18s ease, background .18s ease; }
+    .inspector-toggle:hover, .inspector-expand:hover { color: var(--text-strong); background: var(--hover); }
+    /* 两钮都挂 screen（inspector overflow:hidden 会裁骑缝负偏移）；收起钮读 --inspector-w
+       贴面板左缘，拖宽实时跟随——与展开把手同缝两态 */
+    .inspector-toggle { right: calc(var(--inspector-w, 320px) - 8px); }
+    .inspector-toggle:hover { background: color-mix(in srgb, var(--surface2) 88%, transparent); box-shadow: -3px 0 10px var(--panel-shadow); }
     /* W-TOPBAR ①：收起=完全隐藏（零残留——原 42px 竖条残在第三列边缘遮内容，用户点名退役）；
-       展开入口外移到各屏 workspace-head 右端 .inspector-expand 把手（见 initInspectors） */
+       展开入口外移到第三列右缘贴边把手（见 initInspectors） */
     .inspector.collapsed { display: none; }
     /* FB6 检查器外扩：左沿拖拽调宽（260-640px 夹紧；宽度与折叠态按屏记忆） */
     .inspector-resizer { position: absolute; left: -3px; top: 0; bottom: 0; z-index: 5; width: 7px; cursor: col-resize; }
     .inspector-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
     .inspector-resizer:hover::after, .inspector-resizer:active::after { background: var(--border-strong); }
-    /* W-TOPBAR ①：head 右端展开把手——仅收起态可见（.inspector-collapsed 挂在 screen 上），
-       点击复用地基 [data-inspector-toggle] 全局委托，零新增监听；视觉克制（26px 方钮） */
-    .inspector-expand { display: none; place-items: center; flex: 0 0 auto; width: 26px; height: 24px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: color .18s ease, background .18s ease, border-color .18s ease; }
-    .inspector-expand:hover { color: var(--text); background: var(--hover); }
+    /* 件六：收起态贴边展开把手——仅收起态可见（.inspector-collapsed 挂在 screen 上），
+       骑 screen 右缘竖向居中，点击复用地基 [data-inspector-toggle] 全局委托，零新增监听 */
+    .inspector-expand { right: 0; display: none; }
+    .inspector-expand:hover { background: var(--hover); box-shadow: -3px 0 10px var(--panel-shadow); }
     .inspector-collapsed .inspector-expand { display: grid; }
+    .inspector-collapsed .inspector-toggle { display: none; } /* 收起态两钮互换显形 */
     /* FB6 恢复：拖宽/折叠过的屏在窄窗 resize 重放时保持用户选择（JS 持久化，此处只管视觉） */
     /* FB10 界面字号：全界面缩放档（WebView/浏览器 zoom 均支持，布局字号同步等比） */
     /* FB10 字号档 + W-NOVAUI ⑧ 高度补偿：zoom 后实际占位 = 100vh×zoom（1.1 档溢出出滚动条、
@@ -874,6 +940,12 @@
     .think .th-body {margin-top: 7px; color: var(--dim); font-size: calc(var(--fs-F) + 1px); line-height: 1.55;}
     /* 工具行（过程消息：图标 + 名称 + 摘要 + 展开/复制；#162-F2 的 timeline-tool 形态随之退役） */
     .trow {margin: 4px 0; font-size: var(--fs-B); opacity: .9; min-width: 0;}
+    /* #47 任务生命周期行（TaskCreate/TaskUpdate，2026-10-10）：data-role=task 不进过程组，
+       proc-off 只藏 .procgrp 故天然常显；方框勾+brand 色与工具齿轮行拉开辨识 */
+    .trow.task-life { opacity: 1; }
+    .trow.task-life .tico { color: var(--brand); }
+    .trow.task-life .tico .icon-inline { width: 13px; height: 13px; vertical-align: -2px; }
+    .timeline-note.task-life .icon-inline { width: 12px; height: 12px; vertical-align: -2px; color: var(--brand); }
     .tline { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; color: var(--dim); border-radius: 8px; padding: 3px 0; }
     .tline:hover { background: rgba(148,163,190,.07); }
     .tline .tico { flex: none; color: var(--faint); width: 28px; text-align: center; }
@@ -1182,6 +1254,24 @@
     .notice strong {display: block; color: var(--text-strong); font-size: var(--fs-A-item);}
     .notice p {margin: 4px 0 0; color: var(--dim); font-size: var(--fs-B);}
     .notice .tag { margin-top: 7px; }
+    /* 件十二扩充（2026-10-10 用户详述）：通知类型枚举徽章/统计 chip 行/轻量跳转钮/×ghost */
+    .notify-kind-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand-strong); font-size: var(--fs-C); white-space: nowrap; }
+    .notify-kind-badge .icon-inline { width: 11px; height: 11px; }
+    .notify-stat-line { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 0; color: var(--dim); font-size: var(--fs-B); }
+    .notify-stat b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .notify-stat-sep { color: var(--faint); }
+    .notify-jump-btn { display: inline-flex; align-items: center; gap: 3px; min-height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--brand-strong); cursor: pointer; font-size: var(--fs-E); transition: background .15s ease, color .15s ease; }
+    .notify-jump-btn:hover { background: var(--hover); color: var(--brand); }
+    .notify-jump-btn .jump-chev { font-size: 14px; line-height: 1; }
+    .notify-source-card .notify-x { background: transparent; border: 0; color: var(--faint); } /* B4：关闭语义 ghost 化 */
+    .notify-source-card .notify-x:hover { background: var(--hover); color: var(--text-strong); }
+    .nrow-r3 .source-badge { font-size: var(--fs-C); opacity: .75; } /* C4：源标签小号灰居后 */
+    /* 件十二-B：轻行时间戳（右侧弱色）+ 第三列详情头（来源 kicker+动作提示） */
+    .notice .nrow-time { display: block; margin-top: 3px; color: var(--faint); font: var(--fs-B) var(--mono); font-variant-numeric: tabular-nums; }
+    .notify-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+    .notify-detail-head .notify-source-kicker { display: inline-flex; align-items: center; gap: 6px; color: var(--info); font-size: var(--fs-B); }
+    .notify-detail-head .notify-source-kicker .icon-inline { width: 14px; height: 14px; }
+    .notify-detail-head .notify-detail-jump-hint { color: var(--faint); font-size: var(--fs-B); }
     .notify-source-list { display: grid; gap: 0; }
     /* #80b 通知项行化基础（srow 同律：无框通栏/瞬淡底/零圆角/零分隔线/行内容起点 14px） */
     .notify-source-card { display: flex; position: relative; align-items: flex-start; gap: 11px; min-width: 0; padding: 10px 14px; border: 0; border-radius: 0; background: none; box-shadow: none; transition: background .06s linear, opacity .18s ease; cursor: default; }
@@ -1277,6 +1367,11 @@
     /* #158-批3 连接诊断小字（桌面形态）：err/缺 Node 可点跳 nodejs.org，ok 态绿字 */
     .settings-row p.relay-diag { margin-top: 2px; line-height: 1.45; }
     .settings-row p.relay-diag[data-diag="err"], .settings-row p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+    /* #45 连接行行级分享钮（2026-10-10）：旧壳 srv-share 语义回归——恒渲染、未在线置灰，
+       点击开 B1 配对弹窗（QR/8 位码/链接/设备列表四件套）；行内小号描边钮，不挤状态 tag */
+    .settings-row .row-share { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
+    .settings-row .row-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
+    .settings-row .row-share:disabled { opacity: .38; cursor: default; }
     .settings-row p.relay-diag[data-diag="ok"] { color: var(--done); }
     .settings-row .chev { margin-left: auto; color: var(--faint); }
     .mobile-frame { position: relative; width: 100%; overflow: hidden; background: var(--bg1); }
@@ -1435,7 +1530,7 @@
     #d-session .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
     /* W-UIFB ⑨：会话卡之间 hairline 分割线（用户追加，微信式细淡线）——相邻卡上缘 65% 透明
        line-soft，浅色呈极淡灰、深色呈微亮线；组头/空态横幅处天然断开不画 */
-    #d-session .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line-soft) 65%, transparent); }
+    #d-session .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); } /* 件七：分割线加粗一档（原 line-soft 65% 几乎不可见） */
     #d-session .queue-card.selected { border-color: transparent; background: var(--q-row-sel); box-shadow: none; }
     /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
@@ -1449,6 +1544,18 @@
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
     #d-session .srow-time {flex: none; margin-left: auto; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
     #d-session .queue-card:hover .srow-time, #d-session .queue-card:focus-within .srow-time { opacity: 0; }
+    /* 件五（2026-10-10 test.10 反馈）：右键菜单可发现性——卡 hover 行尾「⋯」微钮（时间戳
+       hover 淡出让位是既有 ：1471 行为，此处即占其位），点击等效右键菜单（触控板/无右键
+       用户入口）；键盘可达（button 原生 Enter）。件五补（用户补充意见）：行尾扩「置顶图钉 +
+       关闭 ×」钮组（与项目卡 project-open-btn 同语言），32px 命中区（伪元素外扩 5px） */
+    #d-session .srow-more, #d-session .srow-pin, #d-session .srow-close { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--faint); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
+    #d-session .srow-more::before, #d-session .srow-pin::before, #d-session .srow-close::before { content: ""; position: absolute; inset: -5px; }
+    #d-session .srow-more:hover, #d-session .srow-pin:hover, #d-session .srow-close:hover { background: var(--hover); color: var(--text-strong); }
+    #d-session .srow-pin svg, #d-session .srow-close svg { width: 13px; height: 13px; }
+    #d-session .srow-pin.on { color: var(--brand); }
+    #d-session .srow-close:hover { color: var(--error); background: var(--danger-bg); }
+    #d-session .queue-card:hover .srow-more, #d-session .queue-card:hover .srow-pin, #d-session .queue-card:hover .srow-close,
+    #d-session .queue-card:focus-within .srow-more, #d-session .queue-card:focus-within .srow-pin, #d-session .queue-card:focus-within .srow-close { opacity: 1; }
     #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--card-sub, var(--dim)); font-size: var(--srow-sub-size); line-height: 16px; min-height: 16px; }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
@@ -1478,6 +1585,10 @@
     .row-menu button:disabled { opacity: .45; cursor: default; }
     .row-menu button:disabled:hover { background: transparent; color: var(--text); }
     .row-menu button:disabled.danger:hover { color: var(--danger); }
+    /* 件五补（2026-10-10）：删除确认浮层（row-menu 同壳）——hover × 与菜单「删除」统一
+       走确认，不可裸删 */
+    .row-menu .row-del-tip { max-width: 200px; padding: 6px 10px 4px; color: var(--text); font-size: var(--fs-E); line-height: 1.45; }
+    .row-menu .row-del-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 6px 6px; }
     /* 行内改名输入（菜单「重命名」→ 标题原位替换，Enter/失焦回写数据重渲） */
     .row-rename-input { flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
     /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */
@@ -1486,14 +1597,24 @@
     body.file-drag-over::after {content: "松开把文件加进输入栏"; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; z-index: 80; border: 2px dashed var(--brand); border-radius: 14px; background: color-mix(in srgb, var(--brand) 7%, transparent); color: var(--brand); font: 600 var(--fs-A) var(--sans); letter-spacing: .02em; pointer-events: none;}
     /* 回到底按钮（旧版 :9404-9420 语义：离底 >80px 停 300ms 复核浮现+滚动中先收+平滑回底） */
     #d-session .workspace { position: relative; }
-    .back-to-bottom {position: fixed; right: 18px; bottom: 64px; z-index: 20; min-height: 26px; padding: 0 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface2); color: var(--text-strong); cursor: pointer; font-size: var(--fs-E); box-shadow: var(--card-shadow);}
-    .back-to-bottom[hidden] { display: none; }
+    /* 件十一（2026-10-10 用户反馈）：回到底部升级为圆形 FAB（原 26px 文本胶囊钮形态
+       不符+fixed bottom:64 会遮 composer）——40px 圆钮、icon 下箭头、挂 workspace
+       absolute（footer 上方右侧不遮输入框）、透明度+位移淡入淡出（替代 hidden 硬切）、
+       离底期间有新消息点亮未读点（点击/滚近底熄灭） */
+    .workspace { position: relative; }
+    .back-to-bottom { position: absolute; right: 18px; bottom: 122px; z-index: 20; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface2); color: var(--dim); cursor: pointer; box-shadow: var(--card-shadow); opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .18s ease, visibility .18s ease, transform .18s ease, border-color .15s ease, color .15s ease; }
+    .back-to-bottom.show { opacity: 1; visibility: visible; transform: translateY(0); }
     .back-to-bottom:hover { border-color: var(--brand); color: var(--brand); }
+    .back-to-bottom .icon-inline { width: 16px; height: 16px; }
+    .back-to-bottom .unread-dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); border: 2px solid var(--bg1); opacity: 0; transform: scale(.5); transition: opacity .15s ease, transform .15s ease; }
+    .back-to-bottom.has-unread .unread-dot { opacity: 1; transform: scale(1); }
     /* 行变量三档语义（原 --density-card-* 卡变量改造为行变量；档位循环与设置键不变）：
        紧凑=压缩两行（头像 26px/字号降档，对齐手机「简洁列表」）——见上方 body 三条 */
     /* 组头 sticky（旧版 #78 同拍板）：滚动时组名钉在列表顶，底色盖住穿行的行淡底 */
     #d-session .session-list .queue-group { position: sticky; top: 0; z-index: 2; margin: 10px 0 6px; padding: 2px 14px; background: var(--surface1); }
-    #d-team .queue-card, #d-project .queue-card, #d-settings .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
+    /* 件七：#d-settings 剔除 density 固定高——设置导航卡走内容高（9px×2+行高），固定高
+       76px 与「高度调小一档」冲突；team/project 卡保留固定高（flex column 居中已治通病） */
+    #d-team .queue-card, #d-project .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
     #d-notify .notice { block-size: var(--density-notice-block-size); overflow: hidden; }
     /* order6：队列行瘦身配套——紧凑档卡高压到 48px，块向 padding 同步收一档防内容裁切；
        标题行与 tag 同排（tag 的 margin-top:7px 是旧独立行排布的遗留） */
@@ -1575,7 +1696,11 @@
     .demo-error-actions button {padding: 4px 7px; border: 1px solid var(--danger-line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: var(--fs-E);}
     .demo-error-actions button:hover { border-color: var(--error); }
     @keyframes demo-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
-    .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; border-radius: 0; transition: background .06s linear; }
+    /* 件七：设置导航卡贴合+分割线（参照会话面板卡语言）——高度调小一档（内容高+9px×2，
+       原 min-height:57 时代 76px）；block-size:auto 挣脱 :1516 的 density 固定高（ID 特化
+       优先级高于本处类选择器，不显式覆盖会钉住卡高） */
+    .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; border-radius: 0; margin-bottom: 0; padding: 9px 12px; block-size: auto; transition: background .06s linear; }
+    .settings-nav .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
     .settings-nav .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
     .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--brand); }
     /* #df2-E 面板底部动作右下角：panel 尾按钮右靠 + workspace-footer 全线右对齐（composer 场景 flex:1 不受影响） */
@@ -1739,11 +1864,11 @@
 </head>
 <body data-card-density="standard" data-source-mode="single">
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"></path></symbol><symbol id="icon-unfold" viewBox="0 0 24 24"><polyline points="7 9 12 4 17 9"></polyline><polyline points="7 15 12 20 17 15"></polyline></symbol><symbol id="icon-chev-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol></svg>
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -1767,7 +1892,7 @@
               </div>
               <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true"></span><span class="session-state-flow"><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div>
               <div class="agbox" id="session-agbox" hidden></div>
-              <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><input class="composer-input" type="text" placeholder="发送消息 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><div class="composer-bottom"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><input class="composer-input" type="text" placeholder="发送消息 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><div class="composer-bottom"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-unfold" type="button" data-composer-unfold title="切换单行/多行输入" aria-label="切换单行/多行输入"><svg class="icon-inline" aria-hidden="true"><use href="#icon-unfold"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
             <script>
@@ -1891,6 +2016,12 @@
                 // #164 textBodyHtml（esc+br）退役：对话域正文一律走 mdHtml（任务 tab 的 taskRefHtml 保留 .tag 胶囊形态）
                 function taskRefHtml(text) { return esc(text).replace(/#(\d{1,4})(?!\w)/g, '<span class="tag" data-task-ref="$1" style="cursor:pointer" title="定位任务清单">#$1</span>'); }
                 function toolIcon(t) { return /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t || "") ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t || "") ? "▤" : "⚙"; }
+                // #47 任务生命周期行（2026-10-10）：TaskCreate=创建、TaskUpdate=状态变更/完成
+                // （completed 即完成态）；TaskGet/TaskList 只读查询不算生命周期，仍归过程。
+                // 图标选 sprite 的 icon-accept（方框勾）：任务卡+勾的复合形，创建到完成全周期
+                // 语义都盖得住；齿轮（toolIcon 兜底 ⚙）退回纯工具行专用
+                function isTaskLifeTool(t) { return t === "TaskCreate" || t === "TaskUpdate"; }
+                function taskLifeIcon() { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg>'; }
                 // ---------- #164 轻量 Markdown + 语法高亮 + 链接化（旧壳 :7548-7845 全量移植，escapeHtml→esc） ----------
                 // 任务号口径与 005 既有 taskRefHtml 一致（#NNN 1~4 位），渲染成 .task-ref 可点段
                 //（旧壳 .task-ref 形态；005 列表/任务 tab 的 .tag 胶囊不复用到正文行内）。
@@ -2477,7 +2608,7 @@
                     tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
                     bg: bgCount(session), // #164 后台子 Agent 在跑数（⑂N 徽标）
                     engine: esc(engine[0]), engineClass: engine[1],
-                    source: esc(S.relayName),
+                    source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(S.relayName) : S.relayName), // 件十三：localhost→本机 映射统一
                     time: activityTime ? fmtListTime(activityTime) : "",
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
@@ -2501,7 +2632,7 @@
                 function myCardMarkup(item) {
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -2681,9 +2812,90 @@
                 }
                 async function copySessionId(sid) { return copyWithFallback(sid, "会话 ID 已复制"); }
                 window.__ccDeck005CopyUi = { copyWithFallback }; // 跨 IIFE 共享（手机「更多」复制钮同链，同 __ccDeck005PathUi 口径）
+                // 件五补（2026-10-10 用户补充意见）：置顶 toggle 提取共用——右键菜单 pin 项与
+                // 行尾图钉微钮同链（COMMAND_PIN_SESSION + 乐观归位 + toast），零重复。
+                // 翻转用发送时的意图值而非二次推导：relay 先 emit UPDATED 再回 ACK（:2785→:2792
+                // 顺序保证），ack 处理时回显常已把 s.pinned 写成新值，基线原 `s.pinned !== true`
+                // 再取反会读新值翻反（点「置顶」显示成取消——E2E 实锤的基线竞态，提取时修掉）
+                async function doPinToggle(s) {
+                  const next = s.pinned !== true;
+                  const ack = await commandAck("COMMAND_PIN_SESSION", { session_id: s.session_id, pinned: next });
+                  const v = ackVerdict(ack);
+                  if (v.ok) {
+                    s.pinned = next; // 与 UPDATED 回显同值幂等；回显未到则乐观归位防双帧间隙
+                    renderMyList();
+                    b2Toast(next ? "已置顶 · 组内排最前" : "已取消置顶");
+                  } else b2Toast(v.error);
+                }
+                // 件五补：删除确认浮层（row-menu 同壳浮层）——hover × 与右键菜单「删除」同走，
+                // 不可裸删（任务书口径；菜单项曾裸删，一并收进确认）
+                function openDeleteConfirm(card, s) {
+                  closeRowMenu();
+                  document.getElementById("row-del-confirm")?.remove();
+                  const rect = card.getBoundingClientRect();
+                  const pop = document.createElement("div");
+                  pop.className = "row-menu";
+                  pop.id = "row-del-confirm";
+                  pop.setAttribute("role", "alertdialog");
+                  pop.setAttribute("aria-label", "确认删除会话");
+                  pop.innerHTML = '<div class="row-del-tip">删除会话「' + esc(String(s.title || s.session_id).slice(0, 18)) + '」？</div>'
+                    + '<div class="row-del-actions"><button type="button" data-del-cancel>取消</button><button type="button" class="danger" data-del-ok>删除</button></div>';
+                  pop.addEventListener("click", async (ev) => {
+                    if (ev.target.closest("[data-del-cancel]")) { pop.remove(); return; }
+                    if (!ev.target.closest("[data-del-ok]")) return;
+                    pop.remove();
+                    if (s.status === "WORKING" || s.status === "WAITING") { b2Toast("会话运行中，不能删除"); return; } // 前端预拦，relay 同规则
+                    const ack = await commandAck("COMMAND_DELETE", { session_id: s.session_id });
+                    const v = ackVerdict(ack);
+                    if (v.ok) {
+                      S.sessions.delete(s.session_id);
+                      if (S.selected === s.session_id) S.selected = "";
+                      renderMyList();
+                      b2Toast("会话已删除");
+                    } else b2Toast(v.error);
+                  });
+                  document.body.appendChild(pop);
+                  const pr = pop.getBoundingClientRect();
+                  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pr.width - 8)) + "px";
+                  pop.style.top = Math.max(8, rect.top - pr.height - 6) + "px";
+                  const dismiss = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener("pointerdown", dismiss, true); } };
+                  document.addEventListener("pointerdown", dismiss, true);
+                }
                 function setupRowMenu() {
                   if (!UI || !UI.sessionList || UI.sessionList.dataset.rowMenuBound) return;
                   UI.sessionList.dataset.rowMenuBound = "1";
+                  // 件五（2026-10-10 test.10 反馈）：行尾「⋯」微钮点击等效右键——CDP 实测右键菜单
+                  // 功能正常（绑定/卡片属性/弹出全通），用户反馈实为可发现性问题；派发 contextmenu
+                  // 复用下方整套菜单构建/定位/项状态逻辑（零重复）。stopImmediatePropagation 防止
+                  // 微钮点击同时走卡片选中链（同容器委托的前后注册顺序，immediate 才拦得住）。
+                  // 件五补：行尾三钮各走各链——⋯=菜单、图钉=doPinToggle、×=openDeleteConfirm
+                  UI.sessionList.addEventListener("click", (e) => {
+                    const more = e.target.closest(".srow-more");
+                    const pinBtn = e.target.closest(".srow-pin");
+                    const closeBtn = e.target.closest(".srow-close");
+                    if (!more && !pinBtn && !closeBtn) return;
+                    e.stopImmediatePropagation();
+                    const card = (more || pinBtn || closeBtn).closest("[data-session-card]");
+                    if (!card) return;
+                    const s = S.sessions.get(card.getAttribute("data-session-card"));
+                    if (!s) return;
+                    if (pinBtn) { doPinToggle(s); return; }
+                    if (closeBtn) { openDeleteConfirm(card, s); return; }
+                    const r = more.getBoundingClientRect();
+                    card.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: Math.round(r.left), clientY: Math.round(r.bottom + 2) }));
+                  });
+                  // 件五补：标题双击进行内编辑（startRowRename 既有链：Enter 确认/Esc 取消/
+                  // COMMAND_RENAME→title-overrides.json 落盘）。relay RENAME 对 historical/ext
+                  // 均放行（:2592 仅拦空题），与菜单「重命名」放开口径一致，双击不另设只读闸
+                  UI.sessionList.addEventListener("dblclick", (e) => {
+                    const strong = e.target.closest(".srow-r1 strong");
+                    if (!strong) return;
+                    const card = strong.closest("[data-session-card]");
+                    const s = card && S.sessions.get(card.getAttribute("data-session-card"));
+                    if (!s) return;
+                    e.preventDefault();
+                    startRowRename(card, s);
+                  });
                   // 关闭五路：Escape / 外部 pointerdown（capture）/ 滚动（capture）/ 窗口失焦 / 尺寸变化
                   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRowMenu(); }, true);
                   document.addEventListener("pointerdown", (e) => { if (rowMenu && !rowMenu.contains(e.target)) closeRowMenu(); }, true);
@@ -2705,10 +2917,17 @@
                     rowMenu.setAttribute("role", "menu");
                     rowMenu.dataset.targetCard = sid;
                     rowMenu.innerHTML =
-                      '<button type="button" role="menuitem" data-row-action="pin"' + (writable ? "" : " disabled") + ">" + (session.pinned ? "取消置顶" : "置顶") + "</button>"
-                      + '<button type="button" role="menuitem" data-row-action="rename"' + (writable ? "" : " disabled") + ">重命名</button>"
+                      // 件五（2026-10-10）：置顶仅托管会话——relay COMMAND_PIN_SESSION 拒外部会话
+                      //（:2773「由 CLI 自身维护」），客户端曾照常渲染可点项=点了必报错（前后端
+                      // 能力不对齐）；ext 卡不渲染该项与其余三项（删除/重命名 relay 对 ext 放行）对齐。
+                      // pin/rename 对历史托管会话也恒可点：relay 只拦 ext 不拦 historical——置顶是
+                      // 列表整理（#49 写穿清单）、改名落 title-overrides.json 权威覆盖回放，
+                      // canCmd 的只读置灰对两者过度收紧（historical 会话曾因此点不动——E2E 实锤），
+                      // 与行尾图钉/双击改名入口同口径
+                      (session.external ? "" : '<button type="button" role="menuitem" data-row-action="pin">' + (session.pinned ? "取消置顶" : "置顶") + "</button>")
+                      + '<button type="button" role="menuitem" data-row-action="rename">重命名</button>'
                       + '<button type="button" role="menuitem" data-row-action="copyid">复制 ID</button>'
-                      + '<button type="button" role="menuitem" class="danger" data-row-action="del"' + (writable ? "" : " disabled") + ">删除</button>";
+                      + '<button type="button" role="menuitem" class="danger" data-row-action="del">删除</button>';
                     rowMenu.addEventListener("click", async (ev) => {
                       const btn = ev.target.closest("button[data-row-action]");
                       if (!btn) return;
@@ -2718,28 +2937,14 @@
                       if (!s) return;
                       const action = btn.dataset.rowAction;
                       if (action === "pin") {
-                        const ack = await commandAck("COMMAND_PIN_SESSION", { session_id: s.session_id, pinned: s.pinned !== true });
-                        const v = ackVerdict(ack);
-                        if (v.ok) {
-                          s.pinned = s.pinned !== true;
-                          renderMyList(); // UPDATED 帧亦会回显，此处乐观归位防双帧间隙
-                          b2Toast(s.pinned ? "已置顶 · 组内排最前" : "已取消置顶");
-                        } else b2Toast(v.error);
+                        await doPinToggle(s); // 件五补：与行尾图钉同链
                       } else if (action === "rename") {
                         const target = UI.sessionList.querySelector('[data-session-card="' + cssEsc(s.session_id) + '"]');
                         if (target) startRowRename(target, s);
                       } else if (action === "copyid") {
                         copySessionId(s.session_id);
                       } else if (action === "del") {
-                        if (s.status === "WORKING" || s.status === "WAITING") { b2Toast("会话运行中，不能删除"); return; } // 前端预拦，relay 同规则
-                        const ack = await commandAck("COMMAND_DELETE", { session_id: s.session_id });
-                        const v = ackVerdict(ack);
-                        if (v.ok) {
-                          S.sessions.delete(s.session_id);
-                          if (S.selected === s.session_id) S.selected = "";
-                          renderMyList();
-                          b2Toast("会话已删除");
-                        } else b2Toast(v.error);
+                        openDeleteConfirm(card, s); // 件五补：确认浮层统一（不可裸删，与 hover × 同链）
                       }
                     });
                     document.body.appendChild(rowMenu);
@@ -2762,7 +2967,10 @@
                     // W-TOPBAR ③（合并裁决保留）：head 身份收敛——数据源身份只在顶栏源胶囊；
                     // statusTag 引用随元素退役（W-UIFB ③）一并删除
                     UI.identity.innerHTML = "";
-                    UI.modelCapsule = null; // B22 胶囊随会话渲染（engine-badge 旁），无会话不挂
+                    // 件八（2026-10-10）：不再置 null——胶囊已静态落 composer（ready 一次取定），
+                    // 此处置 null 会永久断引用（updateModelCapsule 读 null 恒 return → 胶囊恒
+                    // hidden，用户实测「模型切换缺失」根因）；无会话时 updateModelCapsule(null)
+                    // 走 ok=false → hidden=true 的正常隐藏路径
                     UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…");
                     updateModelCapsule(null);
                     return;
@@ -2993,8 +3201,10 @@
                       html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
                     }
                   }
-                  // FB6：innerHTML 会吞掉检查器折叠钮/拖宽条（地基 initInspectors 挂的）——摘下回填
-                  const inspectorCtrls = [...UI.inspector.querySelectorAll(".inspector-toggle, .inspector-resizer")];
+                  // FB6：innerHTML 会吞掉检查器拖宽条（地基 initInspectors 挂的）——摘下回填。
+                  // 件六：收起钮已挂 screen（骑缝会被 overflow 裁 + 拖宽跟随），不在本面板内，
+                  // 不再需要摘回
+                  const inspectorCtrls = [...UI.inspector.querySelectorAll(".inspector-resizer")];
                   UI.inspector.innerHTML = html;
                   inspectorCtrls.forEach((ctrl) => UI.inspector.prepend(ctrl));
                 }
@@ -3086,7 +3296,8 @@
                   if (role === "ai-tool") {
                     const t = e.tool || "";
                     const isTaskTool = /^Task/.test(t); // Task* 行：摘要单行省略 + 展开看任务描述（旧壳 #204 口径）
-                    return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">' + toolIcon(t) + '</span><span class="tname">' + esc(t || "tool") + '</span><span' + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefRow(e.text) + "</span>" +
+                    const taskLife = isTaskLifeTool(t); // #47 任务生命周期行：data-role=task 不进过程组，proc-off 不影响（常显）
+                    return '<div class="trow' + (taskLife ? " task-life" : "") + '" data-role="' + (taskLife ? "task" : "proc") + '" data-x="' + ke + '"><div class="tline"><span class="tico">' + (taskLife ? taskLifeIcon() : toolIcon(t)) + '</span><span class="tname">' + esc(t || "tool") + '</span><span' + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefRow(e.text) + "</span>" +
                       (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + esc(e.text || "") + '" title="复制命令">⧉</span>' : "") +
                       (e.detail ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开 ▾") + "</span>" : "") +
                       "</div>" + (open && e.detail ? '<div class="tdetail">' + esc(e.detail) + "</div>" : "") + "</div>";
@@ -3380,7 +3591,20 @@
                     if (!e) return;
                     const old = pane.querySelector('[data-x="' + cssEsc(e.id) + '"]');
                     const n = entryNode(e, s);
-                    if (old && n) old.replaceWith(n); // 组内条目原位更新（detail/diff 后到）
+                    if (old && n) {
+                      old.replaceWith(n); // 组内条目原位更新（detail/diff 后到）
+                      // #47 编号回填原位更新坑（2026-10-10）：无号 TaskCreate 行可能已续入过程组
+                      // （增量追加按当时的 proc 角色归组），同 id 替换成生命周期行后若留组内，
+                      // proc-off 会连组藏掉任务行、组头步数也虚计——非过程行一律迁出组体
+                      if (n.dataset.role !== "proc" && n.parentElement && n.parentElement.classList.contains("proc-body")) {
+                        const grp = n.parentElement.closest(".procgrp");
+                        if (grp) {
+                          grp.after(n);
+                          procHeadUpdate(grp);
+                          if (!grp.querySelector(".proc-body .trow")) grp.remove(); // 组被迁空即拆，防空「过程 · 0 步」壳
+                        }
+                      }
+                    }
                     else if (n) {
                       const prev = list[list.indexOf(e) - 1];
                       appendEntryNode(pane, n, prev && dayKey(prev.ts) !== dayKey(e.ts) ? daySepNode(e.ts) : null);
@@ -3388,6 +3612,11 @@
                   }
                   syncWaitCard(false);
                   autoScroll();
+                  // 件十一：新消息落地而用户离底超一屏（正读历史）→ FAB 点亮未读点
+                  // （点击回底/滚近底由 btb 侧熄灭）；近底跟随场景不点
+                  if (UI.body && UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight > UI.body.clientHeight) {
+                    document.querySelector(".back-to-bottom")?.classList.add("has-unread");
+                  }
                 }
 
                 // ---------- 渲染：任务 tab（todosTabHtml 四组制 + VERIFY_RE） ----------
@@ -4373,6 +4602,20 @@
                   // composer：发送/停止/历史/IME
                   UI.sendBtn.addEventListener("click", sendMessage);
                   if (UI.stopBtn) UI.stopBtn.addEventListener("click", stopSession);
+                  // 件八（2026-10-10 test.10 反馈）：输入框高度折叠开关——多行（默认）/单行
+                  // 紧凑两态，localStorage 记忆；compact 类驱动 CSS 换行（composer row 单行）。
+                  // 全局查（desktop 仅一处 composer-bottom unfold，与 section 作用域解耦）
+                  const unfoldBtn = document.querySelector("[data-composer-unfold]");
+                  if (unfoldBtn) {
+                    const applyCompact = (on) => {
+                      UI.composer.classList.toggle("compact", on);
+                      try { localStorage.setItem("ccd_composer_compact", on ? "1" : "0"); } catch (_) {}
+                    };
+                    let compact = false;
+                    try { compact = localStorage.getItem("ccd_composer_compact") === "1"; } catch (_) {}
+                    applyCompact(compact); // 载入还原
+                    unfoldBtn.addEventListener("click", () => applyCompact(!UI.composer.classList.contains("compact")));
+                  }
                   let composing = false, commitLockUntil = 0;
                   UI.input.addEventListener("compositionstart", () => { composing = true; });
                   UI.input.addEventListener("compositionend", () => { composing = false; commitLockUntil = Date.now() + 150; });
@@ -4445,24 +4688,27 @@
                   });
                   window.addEventListener("blur", () => { dragDepth = 0; document.body.classList.remove("file-drag-over"); });
 
-                  // 回到底部按钮（离底 >80px 停 300ms 复核浮现）
+                  // 回到底部 FAB（件十一升级：40px 圆钮+icon+淡入淡出+未读点；离底 >80px
+                  // 停 300ms 复核浮现——显隐走 .show 类不再用 hidden 硬切）
                   const btb = document.createElement("button");
                   btb.type = "button";
                   btb.className = "back-to-bottom";
-                  btb.hidden = true;
-                  btb.textContent = "↓ 回到底部";
+                  btb.setAttribute("aria-label", "跳到最新消息");
+                  btb.title = "跳到最新消息";
+                  btb.innerHTML = '<svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-down"></use></svg><span class="unread-dot" aria-hidden="true"></span>';
                   UI.workspace.appendChild(btb);
                   let settleTimer = 0;
                   const nearBottom = () => UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight < 80;
                   const sessionActive = () => !!document.querySelector("#stage-desktop.active #d-session.active");
                   const onScroll = () => {
-                    if (!sessionActive()) { btb.hidden = true; return; }
-                    btb.hidden = true;
+                    if (!sessionActive()) { btb.classList.remove("show", "has-unread"); return; }
+                    btb.classList.remove("show");
                     clearTimeout(settleTimer);
-                    if (!nearBottom()) settleTimer = setTimeout(() => { if (!nearBottom() && sessionActive()) btb.hidden = false; }, 300);
+                    if (!nearBottom()) settleTimer = setTimeout(() => { if (!nearBottom() && sessionActive()) btb.classList.add("show"); }, 300);
+                    else btb.classList.remove("has-unread"); // 滚近底：未读点熄灭
                   };
                   UI.body.addEventListener("scroll", onScroll);
-                  btb.addEventListener("click", () => { btb.hidden = true; UI.body.scrollTo({ top: UI.body.scrollHeight, behavior: "smooth" }); });
+                  btb.addEventListener("click", () => { btb.classList.remove("show", "has-unread"); UI.body.scrollTo({ top: UI.body.scrollHeight, behavior: "smooth" }); });
 
                   // 1s 本地计时：dock 回合计时 + 自建列表卡的运行秒数
                   setInterval(() => {
@@ -4529,14 +4775,11 @@
                   }
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }
                   setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
-                  // B12 过程/思考开关（head-actions 容器级委托一次绑定；原 W-TOPBAR ③ composer-tools
-                  // 位随 i=3 用户意见退役）；B22 模型胶囊同样静态落 footer（composer 右侧）→ 直接绑
-                  if (UI.headActions) {
-                    UI.headActions.addEventListener("click", (ev) => {
-                      const tgl = ev.target.closest(".conv-mini[data-conv-toggle]");
-                      if (tgl) toggleConv(tgl.dataset.convToggle);
-                    });
-                  }
+                  // B12 过程/思考开关：head-actions 点击由 #164 的 UI.section 域内委托统一接
+                  // （4201 convTgl 分支，自带 stopPropagation）。本处曾再绑一层容器级委托——
+                  // 双绑定点击翻两次=开关死钮（test.11 探针实锤：桌面 ⚙ 过程/✦ 思考点了没反应，
+                  // 用户的 proc-off 态实来自手机端共用的 ccd_proc_show），2026-10-10 #47 批拆除
+                  // 冗余层；B22 模型胶囊静态落 footer（composer 右侧）→ 直接绑
                   UI.modelCapsule = $id("session-model-capsule"); // W-TOPBAR ③：静态引用，ready 一次取定
                   if (UI.modelCapsule) {
                     UI.modelCapsule.addEventListener("click", () => {
@@ -5412,7 +5655,7 @@
 
                 function renderHead(entry) {
                   els.name.textContent = entry ? entry.name : "项目";
-                  els.source.textContent = bridge.relayName;
+                  els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                   if (entry) {
                     window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进总览指标
                   } else window.__ccDeck005SetWindowbarHint?.("project", "—");
@@ -5460,7 +5703,7 @@
                   // sessions（默认卡）
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
                   if (!sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>' + overviewJumpLink("会话");
-                  const rows = sessions.slice(0, OVERVIEW_MINI_TAKE).map((s) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(relTime(Number(s.updated_at))) + " · " + escapeHtml(bridge.relayName) + "</p></div>").join("");
+                  const rows = sessions.slice(0, OVERVIEW_MINI_TAKE).map((s) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(relTime(Number(s.updated_at))) + " · " + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</p></div>").join("");
                   return '<div class="queue-group">会话 · ' + sessions.length + "</div>" + rows + overviewJumpLink("会话");
                 }
 
@@ -5483,7 +5726,7 @@
                 function sessionsTabMarkup(entry) {
                   if (!entry.sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>';
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || displayPath(s.cwd) || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></div></div>").join("");
+                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || displayPath(s.cwd) || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></div></div>").join("");
                   return '<div class="queue-group">会话 · ' + entry.sessions.length + "</div>" + rows;
                 }
 
@@ -5517,7 +5760,7 @@
                     // #158-批4a：前缀比较归一化（a.path 原生 \ 与 anchor 归一 / 不匹配会整串显示）
                     const pN = normDir(a.path);
                     const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
-                    return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span></span></div>";
+                    return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></span></div>";
                   }).join("");
                   return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows;
                 }
@@ -5581,7 +5824,7 @@
                   if (waiting) {
                     els.queue.replaceChildren(bannerNode(waiting));
                     els.name.textContent = "项目";
-                    els.source.textContent = bridge.relayName;
+                    els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                     window.__ccDeck005SetWindowbarHint?.("project", waiting);
                     setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
                     els.riskCount.style.display = "none";
@@ -5695,6 +5938,19 @@
                 let notifySeenInit = false;
 
                 const KIND_LABEL = { waiting: "待处理", "org-confirm": "确认", dispatch: "派单", acceptance: "验收", system: "系统" };
+                // 件十二扩充 B2：通知类型枚举（icon+标签一体，全链统一语言）——类型盘点自
+                // relay 通知产生源：acceptance=验收单（端上合成）、org-confirm=团队决议/编制
+                // 确认、dispatch=派单/接替回执、waiting=会话待处理、system=系统/上下文告警。
+                // 图标全部复用既有 sprite（accept 方框勾=验收单、users=团队、send=派单、
+                // bell=待处理、info=系统），零新增 symbol
+                const KIND_META = {
+                  acceptance: { icon: "accept", label: "验收单" },
+                  "org-confirm": { icon: "users", label: "团队确认" },
+                  dispatch: { icon: "send", label: "派单" },
+                  waiting: { icon: "bell", label: "待处理" },
+                  system: { icon: "info", label: "系统" },
+                };
+                const kindMetaOf = (kind) => KIND_META[kind] || KIND_META.system;
                 const sessionOf = (item) => {
                   const sid = item.sourceContext && typeof item.sourceContext.sessionId === "string" ? item.sourceContext.sessionId : "";
                   return sid ? bridge.sessions.get(sid) || null : null;
@@ -5725,7 +5981,7 @@
                   if (!hasAcceptanceChannel) {
                     for (const acceptance of bridge.accepts) {
                       if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
-                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : " · 打开表单页回填"), ts: Number(acceptance.created_at) || 0, unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: Number(acceptance.created_at) || 0, unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3：「打开表单页回填」冗余提示删除（jump 按钮承载）
                     }
                   }
                   rows.sort((a, b) => Number(b.active) - Number(a.active) || b.ts - a.ts);
@@ -5750,31 +6006,41 @@
                       + (jump.teamAction ? ' data-notify-team-action="' + escapeHtml(jump.teamAction) + '"' : ""))
                   : "";
 
+                // 件十二-B：第二列选中态（key）——点轻行联动第三列详情卡；null=未选中（空态）
+                let selectedNotifyKey = null;
                 function queueMarkup(rows) {
                   const actionRows = rows.filter((r) => r.active);
                   const attentionRows = rows.filter((r) => !r.active && r.unresolved);
                   const dynamicRows = rows.filter((r) => !r.unresolved);
+                  // 件十二-B：第二列=通知流轻行（一眼可扫：icon+标题+类别+时间）——body 摘要与
+                  // 清除 ×/动作全部下沉第三列详情卡，两列不再重复渲染同一批通知
                   const notice = (row, groupKey, selected) => {
-                    const jump = jumpOf(row);
-                    return '<div class="notice' + (selected ? " selected" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-active="' + (row.active ? "true" : "false") + '" data-notify-group="' + groupKey + '"' + jumpAttrs(jump)
-                      + ' title="' + (row.active ? "整卡可点 · " + (jump ? jump.label : "处理") : "历史动态 · 无需处理") + '">'
-                      + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + (row.active ? "alert" : "info") + '"></use></svg></span>'
-                      + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + (row.active ? '<span class="tag action">' + escapeHtml(KIND_LABEL[row.kind] || "需处理") + "</span>" : "") + "</div>"
-                      + '<p class="notify-line">' + (row.body ? escapeHtml(row.body) : "无补充详情") + '</p></div>'
-                      + '<button class="notify-x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">✕</button></div>';
+                    const doneTs = !row.unresolved && row.source ? (row.source.resolved_at || row.source.handled_at || row.source.dismissed_at || row.ts) : row.ts;
+                    return '<div class="notice' + (selected ? " selected" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '" data-notify-group="' + groupKey + '"'
+                      + ' title="' + (selected ? "当前选中 · 详情在右侧" : "点击查看来源详情与处理动作") + '">'
+                      + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + kindMetaOf(row.kind).icon + '"></use></svg></span>'
+                      + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + '<span class="tag mini">' + escapeHtml(kindMetaOf(row.kind).label) + "</span>" + "</div>"
+                      + '<span class="nrow-time">' + escapeHtml(relTime(doneTs)) + "</span></div></div>";
                   };
-                  const group = (label, groupKey, items, selectedFirst) => items.length
-                    ? '<div class="queue-group">' + escapeHtml(label) + ' · <span data-notify-group-count="' + groupKey + '">' + items.length + "</span></div>" + items.map((row, index) => notice(row, groupKey, selectedFirst && index === 0)).join("")
+                  const group = (label, groupKey, items) => items.length
+                    ? '<div class="queue-group">' + escapeHtml(label) + ' · <span data-notify-group-count="' + groupKey + '">' + items.length + "</span></div>" + items.map((row) => notice(row, groupKey, row.key === selectedNotifyKey)).join("")
                     : "";
                   return '<div class="queue-head"><h2>通知</h2><button class="icon-btn" type="button" data-notify-clear title="全部清除（含需行动项）" aria-label="全部清除通知">×</button></div>'
-                    + group("需你行动", "action", actionRows, true)
-                    + group("注意", "attention", attentionRows, false)
-                    + group("动态", "dynamic", dynamicRows, false);
+                    + group("需你行动", "action", actionRows)
+                    + group("注意", "attention", attentionRows)
+                    + group("动态", "dynamic", dynamicRows);
                 }
 
                 function copyRowsOf(row) {
-                  const text = row.kind === "org-confirm" ? "理由：" + (row.body || "—")
-                    : row.kind === "acceptance" ? row.body
+                  // 件十二扩充 B1/B3：验收单统计「共 N 项 · 已回填 M」合并同一行（chip 带），
+                  // 「打开表单页回填」冗余提示删除（打开验收单 jump 按钮已承载该动作）
+                  if (row.kind === "acceptance") {
+                    const m = /共 (\d+) 项 · 已回填 (\d+)/.exec(String(row.body || ""));
+                    if (m) return '<div class="notify-stat-line"><span class="notify-stat"><b>' + escapeHtml(m[1]) + "</b> 项</span><span class=\"notify-stat-sep\">·</span><span class=\"notify-stat\"><b>" + escapeHtml(m[2]) + "</b> 已回填</span></div>";
+                  }
+                  const confirmBody = row.kind === "org-confirm" ? (String(row.body || "").startsWith("理由：") ? String(row.body) : "理由：" + (row.body || "—"))
+                    : "";
+                  const text = row.kind === "org-confirm" ? confirmBody
                     : row.body ? "详情：" + row.body : "";
                   return String(text).split(" · ").filter(Boolean).map((seg) => {
                     const at = seg.indexOf("：");
@@ -5784,39 +6050,44 @@
 
                 function sourceCard(row) {
                   const jump = jumpOf(row);
-                  const kicker = row.kind === "org-confirm" ? "来源团队 · 组织确认"
-                    : row.kind === "acceptance" ? "来源 · 验收单"
-                    : row.sessionTitle ? "来源会话 · " + row.sessionTitle
-                    : row.kind === "dispatch" ? "来源 · 派单回执"
-                    : "来源 · 中枢";
-                  const kickerIcon = kicker.startsWith("来源团队") ? "users" : "chat";
-                  const stateLabel = row.active ? "需行动" : row.unresolved ? "需关注" : "历史动态";
+                  const km = kindMetaOf(row.kind);
                   const doneTs = !row.unresolved && row.source ? (row.source.resolved_at || row.source.handled_at || row.source.dismissed_at || row.ts) : row.ts;
                   const canAck = !row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported;
                   const light = canAck ? '<button class="notify-light-action" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
                   const lightDone = !row.synth && !row.unresolved ? '<button class="notify-light-action" type="button" disabled>已处理</button>' : "";
+                  // 件十二扩充 B4：跳转钮从 primary-btn 重设计为轻量链接钮（brand 文字+› 尾缀，
+                  // 无边框 hover 浮底——贴面板 ghost 语言，不再块状突兀）
                   const jumpButton = jump ? (jump.acceptance
-                    ? '<button class="primary-btn" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + "</button>"
-                    : '<button class="primary-btn" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + "</button>") : "";
+                    ? '<button class="notify-jump-btn" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + '<span class="jump-chev">›</span></button>'
+                    : '<button class="notify-jump-btn" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + '<span class="jump-chev">›</span></button>') : "";
                   const actions = light || lightDone || jumpButton ? '<div class="notify-actions">' + light + lightDone + jumpButton + "</div>" : "";
                   return '<article class="notify-source-card' + (row.unresolved ? "" : " resolved") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-active="' + (row.active ? "true" : "false") + '">'
-                    + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + (row.active ? "alert" : "info") + '"></use></svg></span>'
+                    + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
                     + '<div class="notify-row-main"><div class="nrow-r1"><h3>' + escapeHtml(row.title) + '</h3><span class="nrow-time">' + escapeHtml(relTime(doneTs)) + "</span></div>"
-                    + '<span class="notify-source-kicker"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + kickerIcon + '"></use></svg>' + escapeHtml(kicker.replace(/^来源会话 · /, "").replace(/^来源团队 · /, "")) + "</span>"
                     + '<div class="notify-copy">' + copyRowsOf(row) + "</div>"
-                    + '<div class="nrow-r3">' + (row.engine ? engineBadge(row.engine) : "") + '<span class="source-badge">' + escapeHtml(bridge.relayName) + "</span>" + '<span class="notify-state" data-notify-status>' + stateLabel + "</span></div></div>"
+                    // 件十二扩充 C：元信息行重做——类型枚举徽章（icon+label）在前，源标签小号灰
+                    // 在后（本机命名件十三已统一）；「需行动」状态标签删除（C1，通知本就是需行动）
+                    + '<div class="nrow-r3"><span class="notify-kind-badge"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg>' + escapeHtml(km.label) + '</span>' + (row.engine ? engineBadge(row.engine) : "") + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></div></div>"
                     + '<button class="notify-x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">✕</button>'
                     + actions + "</article>";
                 }
 
-                function listMarkup(rows) {
-                  const live = rows.filter((r) => r.unresolved);
-                  const history = rows.filter((r) => !r.unresolved);
-                  const groupHead = (name, items) => '<div class="notify-source-group-head"><span class="notify-source-group-name">' + escapeHtml(name) + "</span>" + '<span class="notify-source-group-stat">' + (items.some((r) => r.active) ? "<b>" + items.filter((r) => r.active).length + "</b> 项需行动 · " : "无待办 · ") + items.length + " 条动态</span></div>";
-                  let markup = "";
-                  if (live.length) markup += '<div class="notify-source-group">' + groupHead(bridge.relayName, live) + live.map(sourceCard).join("") + "</div>";
-                  if (history.length) markup += '<div class="notify-source-group">' + groupHead("历史动态", history) + history.map(sourceCard).join("") + "</div>";
-                  return markup;
+                // 件十二-B：第三列=选中通知的来源详情卡（原全量卡列表与第二列重复渲染，
+                // 分工不清——详情含 kicker/copy/动作钮/回来源域跳转，全部下沉此处）
+                function detailMarkup(rows) {
+                  const selected = rows.find((r) => r.key === selectedNotifyKey) || null;
+                  if (!selected) {
+                    return rows.length
+                      ? '<div class="readonly-banner">选择左侧通知查看来源详情与处理动作。</div>'
+                      : '<div class="readonly-banner">暂无需要你行动的通知 · 行动项到达时在左侧列表提示。</div>';
+                  }
+                  const jump = jumpOf(selected);
+                  // 件十二扩充 C3：详情头类型枚举徽章（icon+label，与卡内元信息行同语言）
+                  const km = kindMetaOf(selected.kind);
+                  return '<div class="notify-detail-head"><span class="notify-kind-badge"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg>' + escapeHtml(km.label) + "</span>"
+                    + (selected.sessionTitle ? '<span class="notify-detail-jump-hint">来源会话 · ' + escapeHtml(selected.sessionTitle) + "</span>" : "")
+                    + (jump ? '<span class="notify-detail-jump-hint">或「' + escapeHtml(jump.label) + "」回来源处理</span>" : "") + "</div>"
+                    + sourceCard(selected);
                 }
 
                 function nodesFrom(markup) {
@@ -5895,9 +6166,14 @@
                       window.__ccDeck005NotifyFx.desktop(fresh[0].title, fresh[0].body);
                     }
                   }
+                  // 件十二-B：选中失效（清除/消失）回落到第一条需行动行——回落须在两列渲染前
+                  if (selectedNotifyKey && !rows.some((r) => r.key === selectedNotifyKey)) {
+                    const firstActive = rows.find((r) => r.active);
+                    selectedNotifyKey = firstActive ? firstActive.key : null;
+                  }
                   queue.replaceChildren(nodesFrom(queueMarkup(rows)));
                   if (!rows.length) list.replaceChildren(emptyState("暂无需要你行动的通知"));
-                  else list.replaceChildren(nodesFrom(listMarkup(rows)));
+                  else list.replaceChildren(nodesFrom(detailMarkup(rows)));
                   for (const r of rows) seenNotifyKeys.add(r.key);
                   notifySeenInit = true;
                   syncCounts(rows.filter((r) => r.active).length);
@@ -5972,6 +6248,15 @@
                   if (jump) { focusSource(jump); return; }
                   const card = target.closest("[data-notify-card]");
                   if (card && !target.closest("button")) {
+                    // 件十二-B：第二列轻行点击=选中联动第三列详情（原整卡跳转语义下沉到详情卡
+                    // 的「回来源域处理」按钮，跳转判定保留兼容旧 jump 属性卡）
+                    if (card.dataset.notifyKey && card.closest("[data-notification-queue]")) {
+                      if (selectedNotifyKey !== card.dataset.notifyKey) {
+                        selectedNotifyKey = card.dataset.notifyKey;
+                        render();
+                      }
+                      return;
+                    }
                     if (card.dataset.notifyActive === "true" && (card.hasAttribute("data-notify-jump") || card.hasAttribute("data-notify-open-acceptance"))) focusSource(card);
                     else if (card.dataset.notifyActive !== "true") toast("历史动态 · 已归档，无需处理");
                   }
@@ -6228,20 +6513,19 @@
       }
       function setInspectorCollapsed(screen, collapsed) {
         const inspector = screen.querySelector(".inspector");
-        const button = inspector?.querySelector(".inspector-toggle");
-        if (!inspector || !button) return;
+        if (!inspector) return;
         screen.classList.toggle("inspector-collapsed", collapsed);
         inspector.classList.toggle("collapsed", collapsed);
         if (!collapsed) applyInspectorWidth(screen); // 展开回放记忆宽；收起只切类（整块 display:none）
-        button.textContent = collapsed ? "›" : "‹";
-        button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
-        button.setAttribute("aria-label", button.title);
+        // 件六：两态把手文案恒定（收起钮 ›/展开把手 ‹——箭头指向=面板移动方向），
+        // 不再随态切换文案（两钮本就各自只在自己态显形）
       }
 
       function applyInspectorBreakpoint() {
-        // W-NOVAFIX B4：窄窗强制收起退役（会跟手动展开打架）——默认展开，手动选择恒受尊重
+        // 件六：默认语义反转——所有域第四列默认收起；localStorage 记过 "expanded"（用户
+        // 展开过）才展开。旧键 "collapsed" 语义兼容（仍收起）
         desktopScreens.forEach((screen) => {
-          setInspectorCollapsed(screen, screen.dataset.inspectorManual === "collapsed");
+          setInspectorCollapsed(screen, screen.dataset.inspectorManual !== "expanded");
         });
       }
 
@@ -6249,22 +6533,26 @@
         desktopScreens.forEach((screen) => {
           const inspector = screen.querySelector(".inspector");
           if (!inspector) return;
-          try { if (localStorage.getItem(inspectorStateKey(screen)) === "collapsed") screen.dataset.inspectorManual = "collapsed"; } catch (_) {} // FB6 恢复
+          try { if (localStorage.getItem(inspectorStateKey(screen)) === "expanded") screen.dataset.inspectorManual = "expanded"; } catch (_) {} // 件六：只认展开记忆，默认收起
+          // 件六：两态把手都挂 screen（inspector overflow:hidden 会裁骑缝负偏移）——
+          // 收起钮经 --inspector-w 变量贴面板左缘（拖宽实时跟随），展开把手贴 screen 右缘
           const button = document.createElement("button");
           button.className = "inspector-toggle";
           button.type = "button";
           button.dataset.inspectorToggle = "true";
-          inspector.prepend(button);
-          // W-TOPBAR ①：收起零残留后，展开入口外移到 workspace-head 标题行右端；
+          button.textContent = "›"; // 面板将向右收起退出
+          button.title = "收起证据检查器";
+          button.setAttribute("aria-label", button.title);
+          screen.appendChild(button);
           // 复用 [data-inspector-toggle] 地基全局委托（免新增监听），仅收起态由 CSS 显形
           const expand = document.createElement("button");
           expand.className = "inspector-expand";
           expand.type = "button";
           expand.dataset.inspectorToggle = "true";
-          expand.textContent = "›";
+          expand.textContent = "‹"; // 面板将向左展开进入
           expand.title = "展开证据检查器";
           expand.setAttribute("aria-label", expand.title);
-          screen.querySelector(".workspace-title-row")?.append(expand);
+          screen.appendChild(expand);
           const resizer = document.createElement("div"); // FB6 外扩
           resizer.className = "inspector-resizer";
           resizer.title = "拖动调整检查器宽度";
@@ -6579,7 +6867,7 @@ function connectLan(ctx) {
 
       function setupStubTabs() {
         document.querySelectorAll(".segment-bar, .mobile-detail-tabs, .mobile-team-tabs").forEach((bar) => {
-          if (bar.closest(".settings-panel")) return; // ⑥c-1：设置域已由 setupSettingsDomain 重建六面板，不让位 stub
+          if (bar.closest(".settings-panel") || bar.closest("#d-settings")) return; // ⑥c-1：设置域已由 setupSettingsDomain 重建六面板，不让位 stub。件十四（2026-10-10）：原排除只查 .settings-panel——设置域 head 的「连接/设备/配对记录」segment-bar 在 workspace-head 不在 panel 内，漏网被 stub 包摄：六面板被裹进 originalPane + 建「×× · 此面板即将开放」占位 pane 与真面板争 body（切连接卡子 tab 再切设置卡 → 别卡第三列显示「即将开放」占位，用户实测复现）；排除补 #d-settings 根修
           const buttons = [...bar.querySelectorAll("button")];
           const host = bar.closest(".workspace, .mobile-screen");
           const body = host?.querySelector(".workspace-body, .mobile-content");
@@ -6792,7 +7080,7 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane" data-settings-panel="shortcuts"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-search"></use></svg></span><div><strong>全局搜索</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">${escapeHtml(keyDisplay("search"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-plus-doc"></use></svg></span><div><strong>新建会话</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">${escapeHtml(keyDisplay("new"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-panel"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>全局快捷键 · 最小化时唤回窗口</p></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">${escapeHtml(toggleHotkeyDisplay())}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-arrows-v"></use></svg></span><div><strong>切换会话</strong><p>会话列表内上下移动 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("↑↓"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>切换数据源</strong><p>多源间快速切换 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("←→"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-code"></use></svg></span><div><strong>恢复默认键位</strong><p>清除全部自定义，回到出厂键位</p></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p>Command Bridge · 零外部资源</p></div><span class="tag info" data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p><a class="about-link" data-about-link="https://cc.humumu.online">项目主页</a><span class="about-sep">·</span><a class="about-link" data-about-link="https://github.com/humumu130/cc-deck">仓库地址</a></p></div><span class="tag info" data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
         wireCardDensityControls(body);
         // FB9 设置 queue 头 ×：返回进入设置前的域（设置无独立关闭语义，等价「关门走人」）
         queue.querySelector(".queue-head .icon-btn")?.addEventListener("click", () => setDesktopDomain(lastNonSettingsDomain));
@@ -6828,7 +7116,7 @@ function connectLan(ctx) {
           panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === key));
           cards.forEach((card, cardIndex) => card.classList.toggle("selected", cardIndex === index));
           if (title) title.textContent = SETTINGS_TITLES[index] || "设置";
-          setWindowbarHint("settings", SETTINGS_SUBS[key] || ""); // FB2：面板副题随 sub 出舱入顶栏
+          setWindowbarHint("settings", ""); // 件十二-A：设置域顶栏不挂 hint（副题 mono 文本曾被误读为按钮点击无反应；面板语义由第二列卡承载，与其他域统一）
           if (segmentBar) segmentBar.style.display = key === "connections" ? "flex" : "none";
         };
         cards.forEach((card, index) => { card.dataset.settingsIndex = String(index); });
@@ -6861,12 +7149,22 @@ function connectLan(ctx) {
             openLanPairDialog();
             return;
           }
+          if (event.target.closest("[data-settings-share]")) {
+            // #45 行级分享（2026-10-10）：与「＋ 配对新设备」同链——云形态输码 / LAN 弹 B1 四件套
+            if (cloudMode) { openCloudPairUI(); return; }
+            openLanPairDialog();
+            return;
+          }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
+          // 件十五：关于页项目主页/仓库链接——统一走 __ccDeck005OpenUrl（桌面 openExternal /
+          // 浏览器直开，既有跨形态打开链）
+          const aboutLink = event.target.closest("[data-about-link]");
+          if (aboutLink) { void window.__ccDeck005OpenUrl(aboutLink.dataset.aboutLink); return; }
           // FB9 footer 两钮接线：帮助走仓库 README 外链；验证按桥的实连态给结论（不伪造通过）
           if (event.target.closest("[data-settings-help]")) { void window.__ccDeck005OpenUrl("https://github.com/humumu130/cc-deck#readme"); return; }
           if (event.target.closest("[data-settings-verify]")) {
             const b = window.__ccDeck005B4;
-            if (b && b.connection === "online" && b.hasSnapshot) showToast("验证完成 · relay " + b.relayName + " 在线 · " + (b.sessions ? b.sessions.size : 0) + " 会话在册");
+            if (b && b.connection === "online" && b.hasSnapshot) showToast("验证完成 · " + (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(b.relayName) : b.relayName) + " 在线 · " + (b.sessions ? b.sessions.size : 0) + " 会话在册");
             else if (b && b.connection === "connecting") showToast("验证中 · relay 连接建立中，快照到达后自动同步");
             else showToast("验证未通过 · relay 未连接（自动重连中）");
             return;
@@ -6925,8 +7223,14 @@ function connectLan(ctx) {
               const shellDiag = !!(window.ccDeck && typeof window.ccDeck.relayStatus === "function");
               const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
               const desktopForm = !!(window.__TAURI__ || window.ccDeck);
+              // #45 行级分享钮（2026-10-10）：旧壳 srv-share 语义对位——恒渲染、未在线置灰，
+              // 点击开 B1 配对弹窗（openLanPairDialog，QR/码/链接/设备四件套）；云形态行由
+              // cloudSettingsRows 渲染（未配对时自带输码表单），不进此分支
+              const shareOn = connState === "online";
+              const shareBtn = '<button class="row-share" data-settings-share type="button"' + (shareOn ? "" : " disabled")
+                + ' title="' + (shareOn ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "relay 未在线 · 连接后可分享") + '">分享</button>';
               connLive.innerHTML =
-                `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · ${esc(bridge.relayName)}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div><span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
+                `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay${esc(window.__ccDeck005SourceDisplayName && window.__ccDeck005SourceDisplayName(bridge.relayName) !== "本机" ? " · " + bridge.relayName : "")}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div>${shareBtn}<span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
                 `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>` +
                 `<div class="settings-row"><span class="avatar">▣</span><div><strong>${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}</strong><p>${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
               if (shellDiag) void refreshRelayDiag();
@@ -7071,7 +7375,8 @@ function connectLan(ctx) {
         const bridge = window.__ccDeck005B4;
         const snapOk = !!(bridge && bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured");
         const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
-        const relayName = bridge ? String(bridge.relayName || "relay") : "relay";
+        const relayNameRaw = bridge ? String(bridge.relayName || "relay") : "relay";
+        const relayName = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(relayNameRaw) : relayNameRaw; // 件十三：命名映射统一
         const desktopForm = !!(window.__TAURI__ || window.ccDeck);
         const dot = (on) => '<span class="source-dot' + (on ? "" : " status-disconnected") + '"></span>';
         return '<div class="pair-dev">' + dot(snapOk) + '<strong>本机 relay · ' + esc(relayName) + '</strong><small>端口 ' + esc(String(relayPort)) + '</small></div>'
@@ -8727,7 +9032,7 @@ function connectLan(ctx) {
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
       const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
-      const sourceBadge = () => `<span class="source-badge">${esc(bridge.relayName || location.host)}</span>`;
+      const sourceBadge = () => `<span class="source-badge">${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || location.host) : (bridge.relayName || location.host))}</span>`; // 件十三：命名映射统一
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
       const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
         const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -8886,7 +9191,10 @@ function connectLan(ctx) {
           return '<div class="message-ai"><div class="message-author"><strong>' + esc(eng) + "</strong>" + (e.ts ? "<time>" + mFmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' + mNlBr(e.text) + (e.streaming && s && s.status === "WORKING" ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") + "</div></div>";
         }
         if (e.kind === "thinking") return "";
-        if (e.kind === "tool_use") return '<div class="timeline-note">' + esc(mToolIcon(e.tool) + " " + (e.tool || "tool") + " · " + oneLine(e.text)) + "</div>";
+        if (e.kind === "tool_use") {
+          const tl = isTaskLifeTool(e.tool); // #47 移动端任务行：timeline-note 本就不进 proc 组（常显），只换任务图标
+          return '<div class="timeline-note' + (tl ? " task-life" : "") + '">' + (tl ? taskLifeIcon() + " " : "") + esc((tl ? "" : mToolIcon(e.tool) + " ") + (e.tool || "tool") + " · " + oneLine(e.text)) + "</div>";
+        }
         if (e.kind === "tool_result") return '<div class="timeline-note">↳ ' + esc(oneLine(e.text)) + "</div>";
         return '<div class="timeline-note">' + esc(oneLine(e.text)) + "</div>";
       }
@@ -9330,7 +9638,7 @@ function connectLan(ctx) {
             : name === "连接与设备"
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
-                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(bridge.relayName || "")}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
+                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
             : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
