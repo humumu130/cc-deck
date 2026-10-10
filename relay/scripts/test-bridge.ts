@@ -1472,7 +1472,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 
 // ── 45 段：防抢发（type guard）——看门狗补发回车前快照 CLI 输入框：
 //     框内只有滞留消息→照常补发；有疑似人工输入→等停手再补；持续输入→本轮放弃；
-//     框内已无滞留消息→跳过；快照不可用→unknown（#180：不盲发，暂缓重试、连续 3 轮放弃）；
+//     框内已无滞留消息→跳过；快照不可用→unknown（W-CROSSQUEUE：无法证明有人在打字
+//     →按无人输入直接补发，DONE 空闲自愈清计数）；
 //     CCR_TYPE_GUARD=off→不快照。
 //     纯逻辑部分用真实 CLI 控制台快照样本（Windows Terminal + Claude CLI 2.1.x 实测采集）
 {
@@ -1535,7 +1536,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const vChaos = await guardCompensateEnter([MSG1], async () => (i++ % 2 ? CHAOS_A : CHAOS_B), { cfg: cfg45 });
   assert(vChaos.kind === "timeout", "45 continuously changing box → give up this round");
   assert((await guardCompensateEnter([MSG1], cap(CAP_EMPTY), { cfg: cfg45 })).kind === "skip-absent", "45 known absent → skip");
-  assert((await guardCompensateEnter([MSG1], cap(null), { cfg: cfg45 })).kind === "unknown", "45 capture unavailable → unknown (caller defers per #180)");
+  assert((await guardCompensateEnter([MSG1], cap(null), { cfg: cfg45 })).kind === "unknown", "45 capture unavailable → unknown (caller decides handling)");
   let aborted = false;
   assert(
     (await guardCompensateEnter([MSG1, MSG2], cap(CAP_WRAP), { cfg: cfg45, abort: () => aborted })).kind === "enter-after-wait",
@@ -1630,20 +1631,26 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     assert(enters45() === beforeD, "45d message gone from box → skip enter");
     assert(logs45().some((t) => t.includes("跳过本次补发回车")), "45d skip log emitted");
     await settle();
-    // e. 快照不可用（旧注入器/编译失败/识别失败）→ #180 反转 fail-open：不盲发回车；
-    //    暂缓重试，连续 3 轮不可用 → 放弃自动补发（交用户下次发送一并提交，消息不丢）
+    // e. 快照不可用（旧注入器/编译失败/识别失败）→ 无法证明有人在打字 = 按无人输入
+    //    直接补发（W-CROSSQUEUE 反转 #180 fail-closed：跨机快照恒不可用曾 3 连放弃
+    //    把消息挂死——吞消息是最差结局），且不再推「暂不补发」类警告
     const beforeE = enters45();
     delete process.env.CCR_FAKE_PEEK_FILE;
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     await wait(8000);
-    assert(enters45() === beforeE, "45e capture unavailable → NO direct enter (#180 fail-open reversed)");
-    assert(logs45().some((t) => t.includes("暂不补发回车以免打断输入")), "45e defer log emitted");
-    // 预置 blind=2（跳过 2×60s 真实限速等待）：下一轮 unknown 应翻 given_up 并停止重试
-    (bridge as unknown as { stuckWatch: Map<string, { lastTry: number; tries: number; skips: number; blind: number; given_up: boolean }> })
-      .stuckWatch.set(sid, { lastTry: 0, tries: 0, skips: 0, blind: 2, given_up: false });
+    assert(enters45() > beforeE, "45e capture unavailable → direct enter (no proof of typing, never swallow)");
+    assert(logs45().some((t) => t.includes("按无人输入直接补发回车")), "45e unknown → direct-enter log");
+    assert(!logs45().some((t) => t.includes("暂不补发回车")), "45e no defer warning anymore");
+    assert(!logs45().some((t) => t.includes("连续不可用")), "45e no give-up log anymore");
+    // e2. given_up（模拟 tries 上限放弃）翻空闲 DONE：unknown 仍自愈直发（3099 行放行
+    //     + 清计数绕 tries 闸，2026-10-10 空闲自愈语义保留）
+    mgr.setExternalStatus(sid, "DONE", "闲");
+    (bridge as unknown as { stuckWatch: Map<string, { lastTry: number; tries: number; skips: number; given_up: boolean }> })
+      .stuckWatch.set(sid, { lastTry: 0, tries: 3, skips: 0, given_up: true });
+    const beforeE2 = enters45();
     await wait(8000);
-    assert(logs45().some((t) => t.includes("防抢发检测连续不可用")), "45e 3rd blind round → give up auto-enter");
-    assert(enters45() === beforeE, "45e never enters while capture unavailable");
+    assert(enters45() > beforeE2, "45e2 given_up + DONE + unknown → self-heal direct enter");
+    mgr.setExternalStatus(sid, "WORKING", "跑");
     process.env.CCR_FAKE_PEEK_FILE = PEEK;
     await settle();
     // f. CCR_TYPE_GUARD=off → 不快照直接补发

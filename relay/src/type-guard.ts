@@ -1,8 +1,10 @@
 // 防抢发（type guard）：排队消息滞留看门狗在补发回车前，先快照 CLI 输入框，
 // 确认框内没有"非我们注入的内容"（= 真人正在打字 / 已敲未发的半截输入）才补发；
 // 检测到人工输入则暂缓回车，等输入框静止（停手）后再补。纯逻辑模块：快照函数与
-// 配置由调用方注入，便于单测；快照不可用返回 unknown——#180 起调用方不 fail-open
-// （检测不可用 = 不补发，宁让滞留消息多等也不打断人工输入）。
+// 配置由调用方注入，便于单测；快照不可用返回 unknown——unknown 的处置权在调用方
+// （W-CROSSQUEUE 2026-10-10 起 bridge 看门狗路径按「无人现场输入」直发；守门只对
+// 「快照成功且见到外来内容」成立。原 #180 fail-closed 语义在跨机场景把偶发放大成
+// 消息永久挂死，已反转，见 bridge.ts guardedStuckEnter）。
 //
 // 快照格式（injector.captureConsoleBottom）：屏幕可见区末尾若干行，每行一行。
 // CLI 输入框识别（Claude CLI TUI，实测 2.1.x Windows/macOS 同构）：
@@ -108,7 +110,7 @@ export type GuardVerdict =
   | { kind: "skip-absent" }                              // 框内已无滞留消息（人工提交/清空）→ 不补发
   | { kind: "timeout"; waitedMs: number }                // 持续输入未停手 → 放弃本轮
   | { kind: "aborted" }                                  // 等待期间会话状态变化 → 静默退出
-  | { kind: "unknown" };                                 // 快照不可用/识别失败 → 调用方保守处理（#180：不补发）
+  | { kind: "unknown" };                                 // 快照不可用/识别失败 → 处置权在调用方（bridge 看门狗按无人输入直发，W-CROSSQUEUE）
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
