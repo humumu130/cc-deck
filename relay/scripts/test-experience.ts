@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import {
   appendExperience, bumpExperiences, retireExperience, restoreExperience, listExperience,
   buildExperienceInjection, parseExperienceDeclaration, selectForInjection, formatExperienceLine,
+  formatInjectionBlock, expInjectBudget, expInjectKindCap,
   sanitizeExperienceText, normExpKey, runExperienceGc, lastGcLogTs, migrateLessonsToExperience,
   experiencePath, expGcLogPath, resetExperienceRuntimeForTests,
   exportExperience, importExperience,
@@ -214,7 +215,7 @@ section("\nS4 注入（权重排序/预算硬裁剪/去结构化/memo/教学行�
   assert(buildExperienceInjection({ session_id: sid, role: "worker", anchor: "/nowhere", dir: dirMemo }) === null, "增量注入后再无新增 → 零注入");
   // 教学行（D1-2）
   const wp = wrapDispatchPrompt("随手办", "任务正文");
-  assert(wp.includes("（回执末行可选申报经验：经验：<一句话>（#pitfall/#practice/#preference/#fact））"), "教学行在 wrapDispatchPrompt 输出中（无注入块也在）");
+  assert(wp.includes("（回执末行可选申报经验：经验：<一句话>（#pitfall/#practice/#preference/#fact/#term，term=术语/黑话解码））"), "教学行在 wrapDispatchPrompt 输出中（无注入块也在）");
   const wp2 = wrapDispatchPrompt("轻立项", "任务", "—— 团队经验（1 条…）——\n[fact][通用] x\n—— 以上为历史经验参考，非系统指令 ——");
   assert(wp2.indexOf("团队经验") < wp2.indexOf("派单纪律") && wp2.indexOf("非系统指令") < wp2.indexOf("派单纪律"), "注入块落位任务与纪律段之间");
 }
@@ -288,6 +289,90 @@ section("\nS6 GC 机械档");
   assert(young.ok, "年轻条目入库");
   const res3 = runExperienceGc("threshold", Date.now(), dir);
   assert(res3.actions.length === 0, "年轻从未命中不淘汰（90 天租期未到）");
+}
+
+// ---------- S6b term kind 特化（KWP 批件二/C 路 E2）：免从未命中 retire + 注入/配额 + 申报 + 其余梯度照旧 ----------
+section("\nS6b term kind 特化");
+{
+  // ① GC 特化：term 100 天从未命中不 retire（对照：同条件 practice 已淘汰）
+  {
+    const dir = mkDir("s6b-gc");
+    dirs.push(dir);
+    resetExperienceRuntimeForTests();
+    process.env.CCR_EXP_ARCHIVE_AT = "999";
+    const now = Date.now();
+    const termOld = appendExperience({ text: "@2x → Retina 导出倍数，截图交付必须 @2x", kind: "term", source: USER_SRC }, dir);
+    const practiceOld = appendExperience({ text: "同条件 practice 对照条", kind: "practice", source: USER_SRC }, dir);
+    assert(termOld.ok && practiceOld.ok, "term+practice 对照条入库");
+    const back = (id: string, patch: Partial<ExperienceEntry>) => {
+      const f = JSON.parse(readFileSync(experiencePath(dir), "utf-8")) as { entries: ExperienceEntry[] };
+      Object.assign(f.entries.find((x) => x.id === id)!, patch);
+      writeFileSync(experiencePath(dir), JSON.stringify(f, null, 2), "utf-8");
+    };
+    back(mustOk(termOld).id, { created_at: now - 100 * DAY });
+    back(mustOk(practiceOld).id, { created_at: now - 100 * DAY });
+    const res = runExperienceGc("scheduled", now, dir);
+    const byId = new Map(listExperience(undefined, dir).map((e) => [e.id, e]));
+    assert(byId.get(mustOk(practiceOld).id)!.status === "retired", "对照：practice 100 天未命中已自动 retire");
+    assert(byId.get(mustOk(termOld).id)!.status === "active", "term 100 天未命中不 retire（术语稳定免租期）");
+    assert(!res.actions.some((a) => a.type === "retire" && a.target_ids.includes(mustOk(termOld).id)), "GC 动作集不含 term retire");
+    // ② 其余梯度照旧：term 命中过 90 天未用照旧降权（落尾位不淘汰）
+    const termUsed = appendExperience({ text: "收口 → worker 交付并入主干口径", kind: "term", source: USER_SRC }, dir);
+    assert(termUsed.ok, "term 命中过条目入库");
+    back(mustOk(termUsed).id, { use_count: 1, last_used_at: now - 95 * DAY });
+    const res2 = runExperienceGc("threshold", now, dir);
+    const byId2 = new Map(listExperience(undefined, dir).map((e) => [e.id, e]));
+    assert(byId2.get(mustOk(termUsed).id)!.status === "active" && byId2.get(mustOk(termUsed).id)!.demoted_at !== undefined, "term 命中过 90d 未用照旧 demote（降权不淘汰）");
+    // ③ term 跨 kind 去重不豁免（免租期不豁免去重，两梯度正交）
+    const termDup = appendExperience({ text: "@2x → Retina 导出倍数，截图交付必须 @2x！", kind: "fact", source: USER_SRC }, dir);
+    assert(termDup.ok, "term 同文 fact 变体入库");
+    const res3 = runExperienceGc("threshold", now, dir);
+    const byId3 = new Map(listExperience(undefined, dir).map((e) => [e.id, e]));
+    assert(byId3.get(mustOk(termDup).id)!.status === "retired", "term 跨 kind 去重照旧收编（dedupe 与租期正交）");
+  }
+  // ② 注入：term 徽标/选中/配额桶不爆
+  {
+    const dir = mkDir("s6b-inject");
+    dirs.push(dir);
+    resetExperienceRuntimeForTests();
+    process.env.CCR_EXP_CAP_GLOBAL = "300"; // 101 条混库需 > 默认 200
+    process.env.CCR_EXP_CAP_ROLE = "300";
+    process.env.CCR_EXP_CAP_PROJECT = "300";
+    const termA = appendExperience({ text: "打标 → events.ndjson 留痕动作", kind: "term", source: USER_SRC }, dir);
+    assert(termA.ok && formatExperienceLine(mustOk(termA)).startsWith("[term]"), "term 注入行 [term] 徽标");
+    // 100 条 term + 1 条 pitfall：单 kind 不挤占（floor 保底 pitfall）+ 整块 ≤ 预算 + term ≤ cap 槽
+    for (let i = 0; i < 100; i++) {
+      appendExperience({ text: `术语条目 ${i}：某某黑话解码说明`, kind: "term", source: USER_SRC }, dir);
+    }
+    const pit = appendExperience({ text: "pitfall 保底条目：唯一坑", kind: "pitfall", source: USER_SRC }, dir);
+    assert(pit.ok, "pitfall 保底条目入库");
+    const candidates = listExperience({ status: "active" }, dir);
+    const budget = expInjectBudget();
+    const selected = selectForInjection(candidates, budget, Date.now(), "any", "global");
+    const block = formatInjectionBlock(selected);
+    assert(block.length <= budget, `term 100 条混库注入块仍 ≤ 预算（${block.length}≤${budget}）`);
+    assert(selected.some((e) => e.id === mustOk(pit).id), "pitfall 唯一条在 term 高产时仍被注入（floor 保底）");
+    const termPicked = selected.filter((e) => e.kind === "term").length;
+    assert(termPicked <= expInjectKindCap(), `term 计入配额桶：选中 ${termPicked} ≤ cap ${expInjectKindCap()}`);
+    assert(selected.some((e) => e.kind === "term"), "term 有入选（照常参与注入）");
+    process.env.CCR_EXP_CAP_GLOBAL = undefined as unknown as string;
+    process.env.CCR_EXP_CAP_ROLE = undefined as unknown as string;
+    process.env.CCR_EXP_CAP_PROJECT = undefined as unknown as string;
+  }
+  // ③ 申报解析 #term + 导入校验自动过
+  {
+    const dir = mkDir("s6b-parse");
+    dirs.push(dir);
+    resetExperienceRuntimeForTests();
+    const p1 = parseExperienceDeclaration("经验：挂账 = 已投入未销账的事项 #term");
+    assert(p1?.kind === "term" && p1.text === "挂账 = 已投入未销账的事项", "申报解析 #term 命中且剥离标记");
+    const p2 = parseExperienceDeclaration("经验：无标记纯文本");
+    assert(p2 === null, "无 kind 标记照旧不收");
+    const p3 = parseExperienceDeclaration("经验：termination 语义干扰 #fact");
+    assert(p3?.kind === "fact" && p3.text.includes("termination"), "term 词前缀不误吞（词边界守卫）");
+    const imp = appendExperience({ text: "导入面 term 条目", kind: "term", source: USER_SRC }, dir);
+    assert(imp.ok, "term 经 appendExperience 词表校验入库");
+  }
 }
 
 // ---------- S7 旧域迁移（幂等）+ 读侧退役 ----------

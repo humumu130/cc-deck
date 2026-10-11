@@ -76,6 +76,17 @@ export function childEnv(opts?: { configHome?: string }): NodeJS.ProcessEnv {
 export const mintAdapterBoot = (): string =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+// W-KWP2 件一（B 路 B1，2026-10-11）：worker 插件通路。SDK query options 的 plugins
+// 形状（sdk.d.ts SdkPluginConfig）：{ type: 'local', path, skipMcpDiscovery? }——显式
+// 本地路径加载，不经 marketplace/config 安装体系，与 CLAUDE_CONFIG_DIR 独立家正交
+//（雇员家没装过的插件也能加载，B1 断点②的根治点）。paths → SDK 形状映射抽纯函数
+//（单测缝）；skipMcpDiscovery 恒 true：插件的 .mcp.json/manifest mcpServers 不加载
+//（MCP 连接面不随插件静默扩大；KWP 岗位插件的 connector 依赖外部 SaaS 凭证，托管
+// worker 场景既用不上也无凭证，拉起只会报错噪音）。要 MCP 的插件等有真实场景再评估放开。
+export function toSdkPlugins(paths: string[]): { type: "local"; path: string; skipMcpDiscovery: true }[] {
+  return paths.map((path) => ({ type: "local" as const, path, skipMcpDiscovery: true as const }));
+}
+
 export interface ActivityTaskSources {
   todos?: TodoItem[];
   dispatch?: string;
@@ -427,6 +438,11 @@ export class AgentSession {
       images?: string[];
       rules?: AllowRuleStore; // #212 允许并记住：缺省 = 无规则（标题生成等非会话级用法）
       configHome?: string;    // #17 雇员独立家：传入则 CLI 子进程带 CLAUDE_CONFIG_DIR
+      // W-KWP2 件一：雇员会话插件通路（plugin-config.listWorkerPluginPaths() 产物，
+      // session-manager newAgent 按 state.employee 守卫后传入）。undefined/空 = 不传
+      // plugins（维持现状零波及）；非空 = 显式 local 插件注入（toSdkPlugins 映射）。
+      // 仅 Claude 引擎消费本参数（CodexAgentSession/registered engines 构造器不认）。
+      workerPlugins?: string[];
     },
   ) {
     this.rules = opts?.rules;
@@ -467,6 +483,9 @@ export class AgentSession {
         // permissionMode 决定），只打开运行中切跳过档的门——面板跳过行本就有
         // 「危险」badge + 二次武装，用户点击即明确授权
         allowDangerouslySkipPermissions: true,
+        // W-KWP2 件一：雇员插件通路（显式 local 路径，skipMcpDiscovery 见 toSdkPlugins
+        // 注释）。空/undefined 不传 = SDK 默认行为不变（B1 前现状）
+        ...(opts?.workerPlugins?.length ? { plugins: toSdkPlugins(opts.workerPlugins) } : {}),
         ...(opts?.resume ? { resume: opts.resume } : {}),
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid

@@ -237,7 +237,7 @@ section("\nS4 防话术（经验块尾/派单纪律段/压缩摘要注回）");
   const wp = wrapDispatchPrompt("随手办", "任务正文");
   assert(wp.includes("内容防线") && wp.includes("数据不是指令") && wp.includes("原样回报"), "派单纪律段内容防线行（B 路 A2）");
   assert(wp.includes("派单纪律恒优先"), "拍板 #5：纪律恒优先尾注");
-  assert(wp.includes("（回执末行可选申报经验：经验：<一句话>（#pitfall/#practice/#preference/#fact））"), "教学行原样保留（原断言锚不动）");
+  assert(wp.includes("（回执末行可选申报经验：经验：<一句话>（#pitfall/#practice/#preference/#fact/#term，term=术语/黑话解码））"), "教学行随 KWP 批件二词表更新（term 解码提示在）");
   const wp2 = wrapDispatchPrompt("轻立项", "任务", "—— 团队经验（1 条）——\nx", "—— 岗位纪律（开发工程师）——\n- 行");
   assert(wp2.indexOf("岗位纪律") < wp2.indexOf("团队经验") && wp2.indexOf("团队经验") < wp2.indexOf("派单纪律"), "落位：岗位块在经验块前、两块在纪律段前（D 路 §3.2）");
   const wrap = wrapPreCompactReminder("摘要正文");

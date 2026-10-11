@@ -389,8 +389,8 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
 #   org member-retire <gid> <sid> [reason]         成员级退休（编制除名；本组悬账按中断收口，路由档案保留）
 #   org member-add <gid> <sid> [role] [engine] [model] [provider]  复拉入编（可覆盖引擎选择）
-#   org exp append <text> <kind> [role] [project]  经验申报（W-EXPP1 团队经验库；kind=pitfall|practice|preference|fact，role/project 缺省 any/global）
-#   org exp list [status|kind|role|/path]          经验库查询（参数按形状识别：active/retired、四 kind、角色名、锚路径）
+#   org exp append <text> <kind> [role] [project]  经验申报（W-EXPP1 团队经验库；kind=pitfall|practice|preference|fact|term，role/project 缺省 any/global；term=术语解码条目免自动淘汰）
+#   org exp list [status|kind|role|/path]          经验库查询（参数按形状识别：active/retired、五 kind、角色名、锚路径）
 #   org exp bump <id>                              经验加权（use_count+1；retired 条目触发复活）
 #   org exp retire <id>                            经验淘汰（可恢复，不物理删）
 #   org exp restore <id>                           恢复淘汰条目
@@ -566,7 +566,7 @@ elif op == "list":
     d={"action":"exp-list"}
     for a in args:
         if a in ("active","retired"): d["status"]=a
-        elif a in ("pitfall","practice","preference","fact"): d["kind"]=a
+        elif a in ("pitfall","practice","preference","fact","term"): d["kind"]=a
         elif a.startswith("/"): d["project"]=a
         else: d["role"]=a
 elif op == "export":

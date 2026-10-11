@@ -28,6 +28,8 @@
     "test:experience": "tsx scripts/test-experience.ts",
     "test:experience-broadcast": "tsx scripts/test-experience-broadcast.ts",
     "test:role-templates": "tsx scripts/test-role-templates.ts",
+    "test:worker-plugins": "tsx scripts/test-worker-plugins.ts",
+    "test:worker-plugins-e2e": "tsx scripts/test-worker-plugins-e2e.ts",
     "test:team-rules": "tsx scripts/test-team-rules.ts",
     "test:autorevive": "tsx scripts/test-autorevive.ts",
     "test:settings": "tsx scripts/test-settings.ts",

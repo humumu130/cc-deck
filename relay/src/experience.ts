@@ -30,8 +30,12 @@ import { readPluginConfig } from "./plugin-config.js";
 
 // ---------- 类型（条目 schema 按设计 §2.2） ----------
 
-/** 四类经验（设计 §2.1）：同构存储，kind 只影响展示图标与 GC 淘汰梯度（fact 先过期） */
-export const EXPERIENCE_KINDS = ["pitfall", "practice", "preference", "fact"] as const;
+/** 经验 kind 词表（设计 §2.1 四类 + KWP 批件二 term，2026-10-11）：同构存储，kind 只影响
+ * 展示图标与 GC 淘汰梯度（fact 先过期；term 免从未命中自动 retire——术语稳定不过期，
+ * 见 GC 衰减梯度区注释）。term = 术语/黑话/代号解码条目（「@2x → Retina 导出倍数…」），
+ * 来源 C 路 E2（research-kwp-memory-fusion.md §4：cc-deck 黑话事实住 CLAUDE.md 三层人肉
+ * 维护，结构化进库白得去重/GC 导出/注入链；任务书解码失误成本比闲聊解码高）。 */
+export const EXPERIENCE_KINDS = ["pitfall", "practice", "preference", "fact", "term"] as const;
 export type ExperienceKind = (typeof EXPERIENCE_KINDS)[number];
 export type ExperienceStatus = "active" | "retired";
 
@@ -111,7 +115,10 @@ export function expGcSaturatedMs(): number { return envNum("CCR_EXP_GC_SATURATED
 export function expGcSizeBytes(): number { return envNum("CCR_EXP_GC_SIZE_BYTES", 256 * 1024); }
 /** 阈值轨水位：active ≥ 全局软上限 × 此比例即时触发 */
 export const EXP_GC_THRESHOLD_RATIO = 0.8;
-/** 衰减梯度（§3.3.2/开放问题 8 分 kind）：从未命中 90 天自动 retire；命中过 fact 45 天/其余 90 天未用降权 */
+/** 衰减梯度（§3.3.2/开放问题 8 分 kind）：从未命中 90 天自动 retire（**term 豁免**——
+ * 术语稳定，「@2x 90 天没用」不构成失效信号，KWP 批件二/C 路 E2 硬前置；term 永不自动
+ * retire，仅手动 exp-retire 淘汰）；命中过 fact 45 天/其余 90 天未用降权（term 照旧——
+ * 降权只落注入尾位不淘汰，预算有剩余时照注入） */
 export const EXP_NEVER_USED_RETIRE_DAYS = 90;
 export const EXP_FACT_UNUSED_DEMOTE_DAYS = 45;
 export const EXP_UNUSED_DEMOTE_DAYS = 90;
@@ -676,7 +683,8 @@ export function buildExperienceInjection(input: ExperienceInjectionInput): { blo
 // ---------- 申报解析（§3.1②：回执末行「经验：<一句话>（#kind）」，带 kind 才收） ----------
 
 const DECLARATION_RE = /^经验[:：]\s*(.+)$/;
-const KIND_TAG_RE = /#(pitfall|practice|preference|fact)(?![A-Za-z-])/i;
+// 词表随 EXPERIENCE_KINDS 演进（KWP 批件二 +term）：worker 也可申报术语解码条目
+const KIND_TAG_RE = /#(pitfall|practice|preference|fact|term)(?![A-Za-z-])/i;
 
 /** 单行解析（纯函数）：无「经验：」前缀 / 无 kind 标记 → null（REL 建-4：无标记纯文本不收） */
 export function parseExperienceDeclaration(line: string): { text: string; kind: ExperienceKind } | null {
@@ -686,7 +694,7 @@ export function parseExperienceDeclaration(line: string): { text: string; kind: 
   if (!kindMatch) return null;
   const kind = kindMatch[1]!.toLowerCase() as ExperienceKind;
   const text = m[1]!
-    .replace(/#(?:pitfall|practice|preference|fact)/gi, "")
+    .replace(/#(?:pitfall|practice|preference|fact|term)/gi, "")
     .replace(/[（(]\s*[）)]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -771,13 +779,18 @@ export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?:
     }
   }
   // ② 衰减梯度（§3.3.2-2）：从未命中 90d → 自动 retire（风险≈0 的前提=复活环在，
-  //    D1-3）；命中过超期未用 → 降权标记（fact 45d / 其余 90d）。365d 提案 retire 属
+  //    D1-3；**term 豁免**——术语/黑话/代号稳定不过期，90 天未命中不是失效信号，
+  //    KWP 批件二/C 路 E2 硬前置，term 仅手动淘汰）；命中过超期未用 → 降权标记
+  //    （fact 45d / 其余 90d，term 照旧——降权是排序尾位不是淘汰）。365d 提案 retire 属
   //    语义档提案制（P2），P1 不做——自动路径只到「可逆 retire+日志+恢复」为止。
   const demoteIds: string[] = [];
   const neverUsedRetireIds: string[] = [];
   for (const e of store.entries) {
     if (e.status !== "active" || retireIds.has(e.id)) continue;
     if (e.use_count === 0) {
+      // term 免从未命中自动 retire（租期梯度整体跳过；dedupe 收编不豁免——重复术语
+      // 照旧并入前条，去重与租期是两个正交梯度）
+      if (e.kind === "term") continue;
       // 租期锚 = max(created_at, restored_at)：人工恢复重授租期（见 ExperienceEntry.restored_at）
       const leaseAnchor = Math.max(e.created_at, e.restored_at ?? 0);
       if (now - leaseAnchor >= EXP_NEVER_USED_RETIRE_DAYS * DAY) neverUsedRetireIds.push(e.id);
