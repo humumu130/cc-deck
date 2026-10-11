@@ -272,6 +272,30 @@ async function tmuxSendKeys(target: string, ...keys: string[]): Promise<InjectRe
   return r.ok ? { ok: true } : { ok: false, error: `tmux send-keys 失败: ${r.error}` };
 }
 
+// ---------- 注入验证三件套（2026-10-12 凌晨，用户远程通路命脉）：
+// 此前 macOS tmux 路径写入与回车均 fire-and-forget——回车偶发丢失时正文永远躺在
+// CLI 输入栏（用户实测「偶尔卡在输入栏」，明早上班远程命脉）。修=写入重试一次 +
+// 回车后 capture-pane 验证正文离开输入区（未离开重试回车≤3 次）+ 仍失败显式报错
+// （不再静默假成功）。空白归一匹配：正文尾部跨 wrap 行仍可命中（capture 保留视觉
+// 换行，连续子串匹配会断）。回车重试安全边界：CLI 对空输入回车是 no-op，不会误发。
+
+function tmuxNorm(s: string): string {
+  return s.replace(/\s+/g, "");
+}
+
+async function tmuxBottomText(target: string, lines = 8): Promise<string> {
+  const r = await runTmux(["capture-pane", "-p", "-t", target]);
+  if (!r.ok) return "";
+  return tmuxNorm(r.text.split(/\r?\n/).filter((l) => l.trim()).slice(-lines).join(""));
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function tmuxVerifySubmitted(target: string, tail: string): Promise<boolean> {
+  const bottom = await tmuxBottomText(target);
+  return !!bottom && !bottom.includes(tail);
+}
+
 function runAppleScript(script: string): Promise<InjectResult> {
   return new Promise((resolve) => {
     // CCR_OSASCRIPT_CMD：测试用假 osascript（node 脚本记录 argv）；生产恒为系统 osascript
@@ -395,9 +419,23 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
   // 再单独补 Enter（-l 不自带回车，与 do script 语义对齐）
   const target = await resolveTmuxTarget(pid);
   if (target) {
-    const w = await tmuxSendKeys(target, "-l", "--", text);
+    // 写入：失败重试一次（tmux 瞬时竞态）；显式错误即刻上报不假成功
+    let w = await tmuxSendKeys(target, "-l", "--", text);
+    if (!w.ok) {
+      await sleep(300);
+      w = await tmuxSendKeys(target, "-l", "--", text);
+    }
     if (!w.ok) return w;
-    return tmuxSendKeys(target, "Enter");
+    // 提交：回车后验证正文已离开输入区（空白归一跨 wrap 匹配）；未离开重试≤2 次；
+    // 三次仍未生效 → 显式失败（用户手机端可见「发送失败」而非无限排队假象）
+    const tail = tmuxNorm(text.slice(-24));
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const e = await tmuxSendKeys(target, "Enter");
+      if (!e.ok) return e;
+      await sleep(450);
+      if (await tmuxVerifySubmitted(target, tail)) return { ok: true };
+    }
+    return { ok: false, error: "注入提交未生效（回车 3 次正文仍在输入区）——请在 CLI 手动回车" };
   }
   // do script 单次整段注入（无 keystroke 的长度可靠性问题，不切分；自带 Return 提交）
   return runAppleScript(buildDoScript(pid, text));
