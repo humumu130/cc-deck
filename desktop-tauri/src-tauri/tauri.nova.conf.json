@@ -4,6 +4,7 @@
   "identifier": "online.humumu.ccdeck.nova",
   "mainBinaryName": "cc-deck-nova",
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -15,6 +16,7 @@
         "minHeight": 700,
         "create": false,
         "decorations": false,
+        "transparent": true,
         "theme": "Dark",
         "dragDropEnabled": false
       }
