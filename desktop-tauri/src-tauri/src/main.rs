@@ -41,7 +41,8 @@ const DEFAULT_TOGGLE_KEY: &str = "alt+d";
 
 /// 页面启动前注入的桥（等价 desktop/preload.js）：probeLocal 优先走 window.ccDeck；
 /// 外链兜底：捕获阶段拦 target=_blank 与 window.open，转交壳侧系统浏览器打开
-const INIT_SCRIPT: &str = r#"
+const INIT_SCRIPT: &str = r##"
+try { window.__TAURI__.core.invoke("web_diag", { msg: "init-script url=" + location.href + " rs=" + document.readyState }); } catch (e) { /* __TAURI__ 可能未就绪 */ }
 if (!window.ccDeck) {
   window.ccDeck = {
     probeLocal: () => window.__TAURI__.core.invoke("probe_local"),
@@ -68,7 +69,7 @@ window.open = (url) => {
   window.ccDeck.openExternal(String(url)).catch(() => {});
   return null;
 };
-"#;
+"##;
 
 /// 本机 relay 探测（等价 Electron 的 cc-deck:probe-local）：
 /// GET http://127.0.0.1:<relay_port>/local-info，1.5s 超时，返回 { ok, port, token } 或 null；
@@ -312,6 +313,27 @@ fn app_version(app: tauri::AppHandle) -> String {
     app.config().version.clone().unwrap_or_else(|| "unknown".into())
 }
 
+/// W-UIPOLISH ②诊断设施（保留无碍，页面不主动调用即零副作用）：壳内页面诊断通道——
+/// 排查壳内渲染/加载问题时，在 INIT_SCRIPT 临时挂 invoke("web_diag") 即可把页面态
+/// 转发到 stdout 与 /tmp 文件（stdout 重定向全缓冲会时序错乱，文件 append 实时）。
+/// W-UIPOLISH ②真机循环凭此通道拿到壳内断言（radius/teamSource/timeRight 等）。
+#[tauri::command]
+fn web_diag(msg: String) {
+    println!("[web-diag] {msg}");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true)
+        .open("/tmp/wuipolish/web-diag.log")
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{msg}");
+    }
+}
+
+/// W-UIPOLISH ③诊断设施（同上保留）：程序化全屏切换——壳内三态验证用
+#[tauri::command]
+fn web_fullscreen(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    window.set_fullscreen(on).map_err(|e| e.to_string())
+}
+
 /// #240 IME 激活点击：web 传来 msginput 中心点的「WebView 本地坐标」（CSS px，左上原点），
 /// 壳构造原生 NSEvent（mouseDown+mouseUp）经 NSApp sendEvent 派发——走 WebView 原生
 /// hit-test 才会激活 NSTextInputClient（第三方输入法如微信输入法的组字上下文），
@@ -332,6 +354,12 @@ fn window_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
 fn save_window_state(app: &tauri::AppHandle) {
     let Some(path) = window_state_path(app) else { return };
     let Some(win) = app.get_webview_window("main") else { return };
+    // W-UIPOLISH ③（test.14 用户实测「启动即全屏」根因）：全屏/最大化态不落盘——
+    // 此两态 outer_size=整屏物理像素，存了下次启动就被 restore 成同尺寸普通窗＝假全屏。
+    // 跳过保存保留最近一次普通态记忆；退出全屏后的下一次关窗/退出才刷新记忆
+    if win.is_fullscreen().unwrap_or(false) || win.is_maximized().unwrap_or(false) {
+        return;
+    }
     let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { return };
     if size.width == 0 || size.height == 0 { return; }
     let json = format!("{{\"x\":{},\"y\":{},\"w\":{},\"h\":{}}}", pos.x, pos.y, size.width, size.height);
@@ -360,6 +388,13 @@ fn restore_window_state(win: &tauri::WebviewWindow) {
         Ok(monitors) => monitors.iter().any(|m| {
             let (mp, ms) = (m.position(), m.size());
             let (mw, mh) = (ms.width as i32, ms.height as i32);
+            // W-UIPOLISH ③ 脏数据迁移：test.14 前 save 不辨全屏态，已中招机器的
+            // window-state.json 存着全屏尺寸（宽高恰好=某显示器整屏）。恢复前识别
+            // 「盖满任一显示器」即丢弃回 conf 默认窗口态——用户手动拖大到整屏不会
+            // 精确等值，误伤面趋零
+            if x == mp.x && y == mp.y && w == ms.width && h == ms.height {
+                return false;
+            }
             x + w as i32 > mp.x && x < mp.x + mw && y + h as i32 > mp.y && y < mp.y + mh
         }),
         Err(_) => false,
@@ -1234,7 +1269,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
@@ -1300,10 +1335,20 @@ fn main() {
                 // （host=tauri.localhost），macOS 是 tauri://localhost（scheme=tauri、
                 // host=localhost）——旧写法只认前者，mac 首次导航即被拦 → WebView
                 // 透明不渲染，窗口只剩壁纸
-                .on_navigation(|url| match url.host_str() {
-                    Some("tauri.localhost") => true,
-                    Some("localhost") => url.scheme() == "tauri",
-                    _ => false,
+                .on_navigation(|url| {
+                    // W-UIPOLISH ②：白名单补 127.0.0.1——tauri dev 内置 server 的 frontendDist
+                    // 形态是 http://127.0.0.1/index-005.html（[nav] 日志实锤），原白名单只认
+                    // tauri.localhost / localhost+tauri scheme → dev 壳初始导航被拦 = 透明空窗
+                    //（页面 INIT_SCRIPT/load 全不跑、webview 零内容）。回环地址与 localhost
+                    // 信任等价（壳内资产形态，外站无法伪装 host）；release bundle 不受影响
+                    //（tauri://localhost 原路径照旧）
+                    println!("[nav] {}://{}{}", url.scheme(), url.host_str().unwrap_or("-"), url.path());
+                    match url.host_str() {
+                        Some("tauri.localhost") => true,
+                        Some("localhost") => url.scheme() == "tauri",
+                        Some("127.0.0.1") => url.scheme() == "http",
+                        _ => false,
+                    }
                 })
                 .build()?;
             // W-UIFIX B：窗口尺寸/位置记忆恢复（conf 默认 1440×900 建窗后立即套用，
@@ -1324,8 +1369,15 @@ fn main() {
             // 手法）。网页侧 #sideHead 让位高度 38px 与此对应，改动需联动
             #[cfg(target_os = "macos")]
             {
-                use tauri_plugin_decorum::WebviewWindowExt;
-                let _ = win.set_traffic_lights_inset(16.0, 18.0);
+                // W-UIPOLISH ②：nova 变体跳过 decorum 灯位重排——nova 用页面自绘三钮
+                //（W-TEST11，html.mac-tauri.nova-tauri .window-dots），系统灯不存在，
+                // inset 无的放矢；且 W-UIPOLISH ② 起 nova 窗口 transparent:true，
+                // decorum 对透明窗口的 titlebar view 操作摸 nil（cocoa setAutoresizingMask_
+                // null deref，二分实验实锤：关 inset 即稳）。标准 mac 壳（Overlay 系统灯）保留
+                if !app.config().identifier.ends_with(".nova") {
+                    use tauri_plugin_decorum::WebviewWindowExt;
+                    let _ = win.set_traffic_lights_inset(16.0, 18.0);
+                }
             }
             Ok(())
         })
