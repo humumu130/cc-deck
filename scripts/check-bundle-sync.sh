@@ -148,7 +148,7 @@ if [ -n "$LAST_TAG" ]; then
     echo "❌ versionCode 倒退：当前 $VC_NOW < 最近 tag $LAST_TAG 的 $VC_LAST（对旧基线出包？）"
     FAIL=1
   else
-    echo "✅ versionCode 单调（当前 $VC_NOW ≥ $LAST_TAG 的 $VC_LAST）"
+    echo "✅ versionCode 单调（当前 ${VC_NOW} ≥ ${LAST_TAG} 的 ${VC_LAST}）"
   fi
 fi
 
