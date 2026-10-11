@@ -53384,6 +53384,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    if (action.startsWith("rule-")) {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
   // org 命令审计行（dispatch-log 台账通道，append-only；org.ts 口径：审计不进
@@ -53811,6 +53815,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (p.direct === true) {
             const r = appendRule({ ...draft });
             this.auditRuleAction("rule-append", r, draft.scope);
+            if (r.ok) this.emitRules();
             return r.ok ? { ok: true, data: { entry: r.entry } } : r;
           }
           const c = addConfirm({
@@ -53837,6 +53842,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!id2) return { ok: false, error: "id \u5FC5\u586B" };
           const r = retireRule(id2);
           this.auditRuleAction("rule-retire", r, "team");
+          if (r.ok) this.emitRules();
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
         }
         case "rule-supersede": {
@@ -53852,6 +53858,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             created_by: str2("created_by") === "agent" ? "agent" : "user"
           });
           this.auditRuleAction("rule-supersede", r, scope || "team");
+          if (r.ok) this.emitRules();
           return r.ok ? { ok: true, data: { entry: r.entry, superseded: r.superseded } } : r;
         }
         case "exp-promote": {
@@ -53870,6 +53877,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             created_by: str2("created_by") === "agent" ? "agent" : "user"
           });
           this.auditRuleAction("exp-promote", r, exp.project_scope === "global" ? "team" : exp.project_scope);
+          if (r.ok) this.emitRules();
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
         }
         case "project-detail": {
@@ -54065,6 +54073,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           });
           if (!r.ok) return fail("\u89C4\u5219\u5165\u5E93", r);
           this.auditRuleAction("rule-append", r, typeof c.payload.scope === "string" ? c.payload.scope : "team", `\u786E\u8BA4\u5361 ${c.id} \u901A\u8FC7\u5165\u5E93 ${r.entry.id}`);
+          this.emitRules();
           break;
         }
       }
@@ -54171,6 +54180,28 @@ provider=${opts.provider ?? "default"}` : void 0,
       });
     } catch (e) {
       console.warn(`[experience] \u5E7F\u64AD\u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u4E0D\u963B\u65AD\u52A8\u4F5C\u4E3B\u8DEF\u5F84\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // ── W-RULES2 rules 域广播：emitExperience 同款单点 diff（帧双载 RulesUpdatedPayload，
+  // types.ts）。触发点=全部 rule-* 漏斗写成功边（direct append/retire/supersede/exp-promote）
+  // + 确认卡 rule-append ✓ 落库（applyConfirmEffects）；提案出卡不广播（零写入，卡面走
+  // ORG_CONFIRM_UPDATED）。无基线（mgr 重启后首帧）diffById 返 null → 只发 entries 全量。
+  // 规则库零 GC 全史几十条级，全量帧体积已核账（types.ts SNAPSHOT.rules 注释）。
+  lastRulesBroadcast = null;
+  emitRules() {
+    try {
+      const entries = listRules();
+      const delta = this.diffById(this.lastRulesBroadcast, entries);
+      this.lastRulesBroadcast = entries;
+      this.bus.emitTransient("RULES_UPDATED", {
+        entries,
+        ...delta ? {
+          entity_refs: [.../* @__PURE__ */ new Set([...delta.upserts.map((e) => e.id), ...delta.removes])],
+          delta
+        } : {}
+      });
+    } catch (e) {
+      console.warn(`[team-rules] \u5E7F\u64AD\u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u4E0D\u963B\u65AD\u52A8\u4F5C\u4E3B\u8DEF\u5F84\uFF09: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   // GC 轮收口（experience.ts notifyGcRound 递出）：广播增量恒发（降权/归档也是面板
@@ -59479,6 +59510,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // 判断能力；cloud-client 云通道快照同步携带，#117 教训）
           experience: listExperience(),
           experience_enabled: readPluginConfig().experience,
+          // W-RULES2 团队铁律库：全量条目锚定帧 + 总开关（experience 同款口径——空数组
+          // 也下发，端上以字段存在性判断能力；cloud-client 云通道快照同步携带，#117 教训）
+          rules: listRules(),
+          rules_enabled: readPluginConfig().rules,
           // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
           // 下发——端上以字段存在性判断能力）
           notifications: mgr2.notificationsList(),
@@ -60180,6 +60215,10 @@ var CloudClient = class {
         // #117 教训——云桥手机经验分节同样靠快照兜底；空数组也下发）
         experience: listExperience(),
         experience_enabled: readPluginConfig().experience,
+        // W-RULES2 团队铁律库：全量条目锚定帧 + 总开关（与 ws-server 直连快照同源同步，
+        // #117 教训——云桥手机规则分节同样靠快照兜底；空数组也下发）
+        rules: listRules(),
+        rules_enabled: readPluginConfig().rules,
         // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
         // 通知列表同样靠快照兜底；空数组也下发）
         notifications: this.mgr.notificationsList(),
