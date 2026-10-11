@@ -42,6 +42,8 @@ docs/
 | [v8-team-diagram-flow.html](architecture/v8-team-diagram-flow.html) / [org](architecture/v8-team-diagram-org.html) / [state](architecture/v8-team-diagram-state.html) | 三图单页版；archify 源在 [v8-team-diagram-src/](architecture/v8-team-diagram-src/) | 团队模式开发者 | 现行 |
 | [warch-01-system-architecture.html](architecture/warch-01-system-architecture.html) | 系统架构与信任边界图（含源 candidate.json + @2x PNG） | 所有人 | 现行（2026-10-09 换壳批重画） |
 | [warch-02-team-dispatch-flow.html](architecture/warch-02-team-dispatch-flow.html) | 团队派单流程图（含源 + @2x PNG） | 团队模式开发者 | 现行 |
+| [warch-03-kwp-injection-chain.html](architecture/warch-03-kwp-injection-chain.html) | KWP 知识注入链路图：五段注入序、三线构建器预算/memo 语义、确认卡审批面、exp-promote 升格与申报回流闭环（含源 + @2x PNG） | 团队模式/KWP 读者 | 现行（#60 批，2026-10-11） |
+| [warch-04-kwp-rules-experience-spectrum.html](architecture/warch-04-kwp-rules-experience-spectrum.html) | 经验与规则知识谱系图：硬约束×软参考两域、信任面与来源、生命周期对照（零 GC vs GC 梯度）、exp-promote 升格通道（含源 + @2x PNG） | 团队模式/KWP 读者 | 现行（#60 批，2026-10-11） |
 | [019-fig-duty-workflow.html](architecture/019-fig-duty-workflow.html) | Leader 值守 v3 工作流程图（配套 [specs/019-pm-duty.md](../specs/019-pm-duty.md)） | 值守机制读者 | 现行 |
 
 ## design/ — 功能设计文档
