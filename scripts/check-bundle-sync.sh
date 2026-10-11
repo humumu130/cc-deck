@@ -144,8 +144,8 @@ VC_NOW=$(node -pe "JSON.parse(require('fs').readFileSync('expo-app/app.json','ut
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
 if [ -n "$LAST_TAG" ]; then
   VC_LAST=$(git show "$LAST_TAG:expo-app/app.json" 2>/dev/null | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).expo?.android?.versionCode ?? 0" 2>/dev/null || echo 0)
-  if [ "$VC_NOW" -lt "$VC_LAST" ] 2>/dev/null; then
-    echo "❌ versionCode 倒退：当前 $VC_NOW < 最近 tag $LAST_TAG 的 $VC_LAST（对旧基线出包？）"
+  if [ "$VC_NOW" -lt "${VC_LAST}" ] 2>/dev/null; then
+    echo "❌ versionCode 倒退：当前 $VC_NOW < 最近 tag $LAST_TAG 的 ${VC_LAST}（对旧基线出包？）"
     FAIL=1
   else
     echo "✅ versionCode 单调（当前 ${VC_NOW} ≥ ${LAST_TAG} 的 ${VC_LAST}）"
