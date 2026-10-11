@@ -654,7 +654,15 @@
     /* W-UIFB ③（合并裁决，用户 i=3 最新意见）：目录·最近活动从标题行右端（test.8 head-meta）
        改为标题正下方纵排（小几号灰字单行）——ws-title-main 承载 h2+sub；sub 空文本零占位 */
     .ws-title-main { display: flex; flex-direction: column; justify-content: center; flex: 0 1 auto; min-width: 0; }
-    .head-sub { max-width: 100%; overflow: hidden; color: var(--faint); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    /* 件十六（2026-10-11 用户拍板）：Agent 标签紧贴会话名（同行 2-3 字距，不再独占下行）——
+       ws-title-line 横排 h2+identity；信息行序=工作目录→水位胶囊→活跃时间（胶囊从 head-actions
+       迁入 sub 行，目录/活跃分段 span 夹胶囊） */
+    .ws-title-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .ws-title-line h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ws-title-line .identity-cluster { flex: none; }
+    .head-sub { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; color: var(--faint); font: var(--fs-B) var(--mono); }
+    .head-sub > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .head-sub .head-ctx-meter { flex: none; min-height: 20px; font-size: var(--fs-D); }
     .head-sub:empty { display: none; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 8px; }
     .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 6px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
@@ -679,6 +687,8 @@
     /* W-UIFB ④：模型胶囊去边框（i=4）——无边框软底 chip；名右小号灰 chevron 提示可展开 */
     .head-capsule { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--tag-bg); color: var(--text); cursor: pointer; font: var(--fs-C) var(--mono); white-space: nowrap; }
     .head-capsule:hover { background: var(--hover); color: var(--text-strong); }
+    .head-capsule:disabled { opacity: .45; cursor: not-allowed; } /* UIPOLISH3 件三：CLI 会话权限胶囊置灰（relay 硬限制 tooltip 说明） */
+    .head-capsule:disabled:hover { background: var(--tag-bg); color: var(--text); }
     .head-capsule[hidden] { display: none; }
     .head-capsule .cap-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
     .head-capsule .cap-chev { flex: none; width: 10px; height: 10px; color: var(--faint); }
@@ -1262,6 +1272,59 @@
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
     .lane-head {display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: var(--fs-D); font-weight: 700;}
     .task-card { min-width: 0; padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+    /* UIPOLISH3 件四⑤+件五/六/七/八：看板卡精简——紧凑双行（标题/备注截断 + 执行者行），
+    状态标签删除（泳道已表达），引擎未知不显示（词表内才渲染），执行者行=引擎点+名，
+    无主卡「未指派」警示色（backlog 无主是常态不标）。进行中泳道按 worker 分区排队：
+    lane-subhead 分区头 + q-num 序号徽章 + running 点（dispatch 回执 join） */
+    #d-team .task-card.compact { padding: 7px 9px; }
+    #d-team .task-card.compact > strong { font-size: var(--fs-B); }
+    #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
+    /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；向上弹防
+       workspace-body 底缘裁剪，pointer-events:none 防闪烁，z-index 盖过后续泳道卡 */
+    #d-team .task-card.compact { position: relative; }
+    #d-team .task-card .task-pop { display: none; position: absolute; z-index: 30; left: 3px; right: 3px; bottom: calc(100% + 4px); padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); pointer-events: none; text-align: left; }
+    #d-team .task-card:hover .task-pop { display: block; }
+    #d-team .task-pop b { display: block; color: var(--text-strong); font-size: var(--fs-B); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop p { display: block; margin: 4px 0 0; color: var(--dim); font-size: var(--fs-D); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop span { display: block; margin-top: 5px; color: var(--faint); font-size: var(--fs-D); white-space: normal; }
+    /* 追加⑨：甬道拉高吃满可用纵向——看板 pane flex 列布局，board flex:1 吃满 pane 剩余高
+       （min-height:100% 百分比参照链断裂：pane 高度 auto 时百分比失效，故走 flex），
+       grid stretch 等高，底缘贴容器底 */
+    #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; }
+    #d-team .workspace-body > .workspace-pane.board-pane .board { flex: 1 1 auto; grid-template-rows: minmax(0, 1fr); } /* grid 行显式 1fr：行高随容器拉伸（默认 auto 只吃内容高） */
+    /* 追加⑫：筛选全局语言化——状态轴 chips（经验/铁律两 tab 同款），范围轴 select 胶囊皮肤
+       （appearance:none 去 native 观感+chev 背景箭头） */
+    .exp-chips { display: inline-flex; gap: 4px; align-items: center; }
+    .exp-chip { padding: 2px 10px; border: 1px solid var(--line-soft); border-radius: 999px; background: none; color: var(--dim); cursor: pointer; font-size: var(--fs-D); line-height: 18px; }
+    .exp-chip:hover { color: var(--text); background: var(--hover); }
+    .exp-chip.on { background: var(--tag-bg); border-color: transparent; color: var(--text-strong); font-weight: 600; }
+    select.exp-filter { appearance: none; -webkit-appearance: none; padding: 2px 22px 2px 10px; border: 1px solid var(--line-soft); border-radius: 999px; background-color: transparent; color: var(--dim); font-size: var(--fs-D); line-height: 18px; cursor: pointer; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="6" viewBox="0 0 8 6"><path d="M0 0l4 6 4-6z" fill="%23888"/></svg>'); background-repeat: no-repeat; background-position: right 8px center; }
+    select.exp-filter:hover { color: var(--text); border-color: var(--border-strong); }
+    #d-team .task-owner { display: flex; align-items: center; gap: 5px; min-width: 0; margin-top: 5px; color: var(--dim); font-size: var(--fs-D); white-space: nowrap; }
+    #d-team .task-owner > b { min-width: 0; overflow: hidden; font-weight: 550; color: var(--text); text-overflow: ellipsis; }
+    #d-team .task-owner .engine-badge { flex: none; }
+    #d-team .task-owner.unassigned { color: var(--working); }
+    #d-team .task-owner .q-num { flex: none; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 999px; background: var(--tag-bg); color: var(--dim); font: 600 10px/15px var(--mono); text-align: center; font-style: normal; }
+    #d-team .task-owner .q-run { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--working); box-shadow: 0 0 0 2px color-mix(in srgb, var(--working) 22%, transparent); }
+    #d-team .lane-subhead { display: flex; align-items: center; gap: 5px; margin: 9px 2px 5px; color: var(--dim); font-size: var(--fs-D); font-weight: 700; }
+    #d-team .lane-subhead:first-child { margin-top: 1px; }
+    #d-team .lane-subhead .subhead-count { color: var(--faint); font-weight: 400; }
+    /* UIPOLISH3 件四⑩：团队卡状态徽章与指示灯整合——单元素状态胶囊（点色随态，替代裸灯+文字 tag 两件套） */
+    .team-state-pill { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 1px 8px 1px 6px; border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-size: var(--fs-D); line-height: 18px; }
+    .team-state-pill i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+    .team-state-pill[data-state="active"] { color: var(--text-strong); }
+    .team-state-pill[data-state="active"] i { background: var(--done); }
+    .team-state-pill[data-state="pending"] i { background: var(--waiting); }
+    .team-state-pill[data-state="parked"] i { background: var(--working); }
+    /* UIPOLISH3 件四②：刷新从底部常驻栏改 head 圆圈箭头小钮 */
+    #d-team .head-refresh { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: none; color: var(--dim); cursor: pointer; }
+    #d-team .head-refresh:hover { color: var(--text-strong); background: var(--hover); }
+    #d-team .head-refresh:disabled { opacity: .45; cursor: not-allowed; }
+    #d-team .head-refresh .icon-inline { width: 13px; height: 13px; }
+    /* UIPOLISH3 件四⑥：成员 tab 矩形卡片网格（每行 2+，参照旧原型）——只改 pane 内成员列表，
+    右栏 inspector 成员块保持行式 */
+    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 8px; }
+    #d-team .workspace-pane .member-card { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); border-bottom: 1px solid var(--line-soft); }
     .task-card strong, .task-card p {display: block; min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-B);}
     .task-card strong { font-size: var(--fs-A-item); }
     .task-card p { margin: 5px 0 0; color: var(--dim); }
@@ -1972,7 +2035,7 @@
 </head>
 <body data-card-density="standard" data-source-mode="single">
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"></path></symbol><symbol id="icon-unfold" viewBox="0 0 24 24"><polyline points="7 9 12 4 17 9"></polyline><polyline points="7 15 12 20 17 15"></polyline></symbol><symbol id="icon-chev-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"></path></symbol><symbol id="icon-unfold" viewBox="0 0 24 24"><polyline points="7 9 12 4 17 9"></polyline><polyline points="7 15 12 20 17 15"></polyline></symbol><symbol id="icon-chev-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></symbol><symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"></path><path d="M21 3v5h-5"></path></symbol></svg>
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
@@ -1991,7 +2054,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索名称、摘要、目录" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><h2 id="session-title">会话</h2><div class="head-sub" id="session-head-sub"></div></div><span class="identity-cluster" id="session-identity"></span><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -2473,6 +2536,7 @@
                   const sid = m.session_id || "";
                   switch (m.type) {
                     case "SNAPSHOT": onSnapshot(m.payload); break;
+                    case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
                     case "SESSION_CREATED": onSessionCreated(sid, m.payload); break;
                     case "SESSION_UPDATED": onSessionUpdated(sid, m.payload); break;
                     case "SESSION_HEARTBEAT": onHeartbeat(sid, m.payload); break;
@@ -2522,6 +2586,22 @@
                   if (!S.sessions.has(S.selected)) S.selected = "";
                   renderMyList();
                   renderAll();
+                }
+                // UIPOLISH3 件二：项目组增量并入 S.projects（列表分组数据面与团队域同新鲜度）。
+                // v2 投影 delta 形态（upserts/removes）与 legacy 全量 groups 双兼容，与地基
+                // bridge PROJECTS_UPDATED 分支（:9362 同款判定）同口径
+                function onProjectsUpdated(p) {
+                  if (!p || typeof p !== "object") return;
+                  const byId = new Map((Array.isArray(S.projects) ? S.projects : []).map((g) => [g && g.id, g]));
+                  if (p.delta !== undefined) {
+                    for (const g of (Array.isArray(p.delta && p.delta.upserts) ? p.delta.upserts : [])) if (g && typeof g.id === "string") byId.set(g.id, g);
+                    for (const id of (Array.isArray(p.delta && p.delta.removes) ? p.delta.removes : [])) byId.delete(String(id));
+                  } else if (Array.isArray(p.groups)) {
+                    byId.clear();
+                    for (const g of p.groups) if (g && typeof g.id === "string") byId.set(g.id, g);
+                  } else return;
+                  S.projects = [...byId.values()];
+                  renderMyList();
                 }
                 function onSessionCreated(sid, p) {
                   if (!sid || S.sessions.has(sid)) return;
@@ -2695,12 +2775,25 @@
                 // 持久 localStorage；observer 完整性检查据 _collapsedIdleIds 放行缺卡防重渲
                 // 死循环（折叠未展开不进 DOM）。
                 // W-NOVAUI ⑤：闲置会话铺平（用户实测按项目分组太乱）——项目组/折叠语义整链退役
+                // UIPOLISH3 件二（2026-10-11 用户拍板）：团队组收纳回归——在办团队编制成员的
+                // work 会话收进「团队名 · N」组、默认折叠；折叠态独立 expandedTeams（集合=
+                // 用户展开过的组，默认折叠语义与 collapsedGroups 相反，独立键持久防互染）。
+                // toggleGroupCollapse 按 key 前缀分发（team:* → expandedTeams，其余 → collapsedGroups），
+                // B11 点击委托链零改动
                 const GRP_COLLAPSE_KEY = "cc-deck-005-grp-collapsed";
                 let collapsedGroups = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_COLLAPSE_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
                 function persistCollapsedGroups() { try { localStorage.setItem(GRP_COLLAPSE_KEY, JSON.stringify([...collapsedGroups])); } catch (_) {} }
+                const TEAM_EXPAND_KEY = "cc-deck-005-team-expanded";
+                let expandedTeams = (() => { try { const v = JSON.parse(localStorage.getItem(TEAM_EXPAND_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
+                function persistExpandedTeams() { try { localStorage.setItem(TEAM_EXPAND_KEY, JSON.stringify([...expandedTeams])); } catch (_) {} }
                 function toggleGroupCollapse(key) {
-                  if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
-                  persistCollapsedGroups();
+                  if (typeof key === "string" && key.startsWith("team:")) {
+                    if (expandedTeams.has(key)) expandedTeams.delete(key); else expandedTeams.add(key);
+                    persistExpandedTeams();
+                  } else {
+                    if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
+                    persistCollapsedGroups();
+                  }
                   renderMyList();
                 }
                 function myCardItem(session) {
@@ -2869,29 +2962,69 @@
                   // 置顶是「钉在列表最顶」不是「组内优先」。改两段式：先抽空 pinned 池平铺最顶（跨组、
                   // 恒展开不可折叠——钉选不该被组折叠藏掉），其余会话再走活跃/闲置两段。多置顶次序：
                   // relay 无 pinned_at 字段（MERGE_KEYS 仅 boolean），沿用 recency 序，真·置顶时间序
-                  // 待 relay 加字段（开放问题见回执）。地基 renderSessionList 同步两段式。
+                  // 待 relay 加字段（开放问题见回执）。
+                  // UIPOLISH3 件二（2026-10-11 用户拍板）：团队收纳——在办团队（status=active，与
+                  // relay 现役判定 :6682 同口径）编制成员会话收进团队组：组头「团队名 · N」（N=该组
+                  // 当前会话卡数，与「进行中」组计数同口径），默认折叠点开展开；顶部展开区只留置顶
+                  // （恒顶跨区，先抽先赢）+非编制会话（PM/Leader 不可入编、外部会话不可入编=天然
+                  // 留顶）。组内不按状态分子组（活跃前置+recency 平铺），组序=团队创建序（created_at，
+                  // 同创按名稳定序）；无成员团队不出组（筛选/搜索滤空同口径——团队组跟随过滤，不绕过）。
+                  // 地基 renderSessionList 不做团队分组（transient 首屏、ctx 无 projects 字段，见回执）
                   const isActive = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                   const pinnedPool = sessions.filter((x) => x.pinned === true); // 已按置顶+recency 排
                   const unpinned = sessions.filter((x) => x.pinned !== true);
-                  const activePool = unpinned.filter(isActive); // 不再按 reason 重排
-                  const idleAll = unpinned.filter((x) => !isActive(x));
+                  const teamOf = (() => {
+                    const map = new Map(); // sid -> group（异常多组重复入编时先创建者赢）
+                    const actives = (Array.isArray(S.projects) ? S.projects : [])
+                      .filter((g) => g && g.status === "active" && Array.isArray(g.headcount))
+                      .sort((a, b) => Number(a.created_at || 0) - Number(b.created_at || 0));
+                    for (const g of actives) {
+                      for (const h of g.headcount) {
+                        if (h && typeof h.session_id === "string" && !map.has(h.session_id)) map.set(h.session_id, g);
+                      }
+                    }
+                    return map;
+                  })();
+                  const topUnpinned = [];
+                  const teamSections = new Map(); // gid -> {gid, key, name, created_at, members[]}
+                  for (const x of unpinned) {
+                    const g = teamOf.get(x.session_id);
+                    if (!g) { topUnpinned.push(x); continue; }
+                    let sec = teamSections.get(g.id);
+                    if (!sec) { sec = { gid: g.id, key: "team:" + g.id, name: String(g.name || g.id), created_at: Number(g.created_at || 0), members: [] }; teamSections.set(g.id, sec); }
+                    sec.members.push(x);
+                  }
+                  const teamList = [...teamSections.values()].sort((a, b) => a.created_at - b.created_at || a.name.localeCompare(b.name));
+                  for (const t of teamList) t.members.sort((a, b) => Number(isActive(b)) - Number(isActive(a)) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  const activePool = topUnpinned.filter(isActive); // 不再按 reason 重排
+                  const idleAll = topUnpinned.filter((x) => !isActive(x));
                   // B11 组头（可折叠）：caret + 文件夹图标 + 名 · 计数；卡体包 .grp-body，折叠态 CSS 隐藏
                   const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span> · <span data-session-group-count>' + count + "</span></div>";
+                  // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
+                  // 加头=降格成可折叠组；组头间距由「进行中」组头自然承担）。恒在 DOM（不参与折叠记账）
+                  const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
+                  let teamMarkup = "";
+                  const teamHidden = [];
+                  for (const t of teamList) {
+                    const open = expandedTeams.has(t.key);
+                    // 与 B11 active 组同机制：折叠不进 DOM（省心跳重渲），observer 完整性
+                    // 检查经 _collapsedIdleIds 放行缺卡
+                    if (!open) teamHidden.push(...t.members.map((x) => x.session_id));
+                    teamMarkup += '<div class="session-group' + (open ? "" : " collapsed") + '" data-session-group="' + esc(t.key) + '">' + grpHead(t.key, esc(t.name), t.members.length, open) + '<div class="grp-body">' + (open ? t.members.map((x) => myCardMarkup(myCardItem(x))).join("") : "") + "</div></div>";
+                  }
                   const activeOpen = !collapsedGroups.has("active");
                   const activeMarkup = activePool.length
                     ? '<div class="session-group' + (activeOpen ? "" : " collapsed") + '" data-session-group="active">' + grpHead("active", "进行中", activePool.length, activeOpen) + '<div class="grp-body">' + activePool.map((x) => myCardMarkup(myCardItem(x))).join("") + "</div></div>"
                     : "";
-                  // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
-                  // 加头=降格成可折叠组；组头间距由「进行中」组头自然承担）。恒在 DOM（不参与折叠记账）
-                  const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
                   const idleMarkup = idleAll.map((x) => myCardMarkup(myCardItem(x))).join("");
                   // 折叠未展开时这些卡有意不进 DOM——observer 完整性检查据此放行，防「缺卡→重渲→
-                  // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）；闲置铺平后只涉 active 组
+                  // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）；团队折叠组并入同记账
                   const collapsedHidden = [];
                   if (!activeOpen) collapsedHidden.push(...activePool.map((x) => x.session_id));
+                  collapsedHidden.push(...teamHidden);
                   S._collapsedIdleIds = collapsedHidden.length ? new Set(collapsedHidden) : null;
                   const template = document.createElement("template");
-                  template.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;
+                  template.innerHTML = pinnedMarkup + teamMarkup + activeMarkup + idleMarkup; // 团队组顶层优先呈现（默认折叠不抢纵向空间）
                   list.replaceChildren(template.content);
                 }
 
@@ -2966,7 +3099,7 @@
                   if (v.ok) {
                     s.pinned = next; // 与 UPDATED 回显同值幂等；回显未到则乐观归位防双帧间隙
                     renderMyList();
-                    b2Toast(next ? "已置顶 · 组内排最前" : "已取消置顶");
+                    b2Toast(next ? "已置顶 · 排列表最顶" : "已取消置顶");
                   } else b2Toast(v.error);
                 }
                 // 件五补：删除确认浮层（row-menu 同壳浮层）——hover × 与右键菜单「删除」同走，
@@ -3059,14 +3192,14 @@
                     rowMenu.setAttribute("role", "menu");
                     rowMenu.dataset.targetCard = sid;
                     rowMenu.innerHTML =
-                      // 件五（2026-10-10）：置顶仅托管会话——relay COMMAND_PIN_SESSION 拒外部会话
-                      //（:2773「由 CLI 自身维护」），客户端曾照常渲染可点项=点了必报错（前后端
-                      // 能力不对齐）；ext 卡不渲染该项与其余三项（删除/重命名 relay 对 ext 放行）对齐。
-                      // pin/rename 对历史托管会话也恒可点：relay 只拦 ext 不拦 historical——置顶是
-                      // 列表整理（#49 写穿清单）、改名落 title-overrides.json 权威覆盖回放，
-                      // canCmd 的只读置灰对两者过度收紧（historical 会话曾因此点不动——E2E 实锤），
-                      // 与行尾图钉/双击改名入口同口径
-                      (session.external ? "" : '<button type="button" role="menuitem" data-row-action="pin">' + (session.pinned ? "取消置顶" : "置顶") + "</button>")
+                      // UIPOLISH3 件一（2026-10-11 用户拍板）：置顶全量解锁——原「ext 不渲染置顶项」
+                      // 与 relay ext 拦截同批退役（置顶是纯列表整理：pinned 标记+文件写穿，与托管/
+                      // 外部无关，无技术理由禁止）；行尾图钉微钮本就恒渲染（doPinToggle 直发命令），
+                      // 菜单项从此与微钮同口径。pin/rename 对历史托管会话也恒可点：relay 只拦 ext
+                      // 不拦 historical——置顶是列表整理（#49 写穿清单）、改名落 title-overrides.json
+                      // 权威覆盖回放，canCmd 的只读置灰对两者过度收紧（historical 会话曾因此点不动
+                      // ——E2E 实锤），与行尾图钉/双击改名入口同口径
+                      '<button type="button" role="menuitem" data-row-action="pin">' + (session.pinned ? "取消置顶" : "置顶") + "</button>"
                       + '<button type="button" role="menuitem" data-row-action="rename">重命名</button>'
                       + '<button type="button" role="menuitem" data-row-action="copyid">复制 ID</button>'
                       + '<button type="button" role="menuitem" class="danger" data-row-action="del">删除</button>';
@@ -3135,6 +3268,7 @@
                     // 走 ok=false → hidden=true 的正常隐藏路径
                     UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…");
                     updateModelCapsule(null);
+                    updatePermCapsule(null); // UIPOLISH3 件三：无会话权限胶囊隐藏
                     updateCtxMeter(null); // UIPOLISH2 件四：无会话水位胶囊隐藏
                     return;
                   }
@@ -3147,8 +3281,16 @@
                   // W-UIFB ③（合并裁决）：徽章加 sprite 图标（b2EngineIconFor，与第二列同款）；
                   // 模型胶囊维持 W-TOPBAR ③ 静态落 composer 位（U5 验收 pass 形态），不随 renderHeader 重建
                   UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>' + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
-                  UI.subHint((s.cwd ? shortPath(s.cwd) + " · " : "") + "最近活动 " + relTime(s.updated_at || s.started_at));
+                  // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
+                  {
+                    const el = UI.subDirEl && UI.subDirEl.isConnected ? UI.subDirEl : ($id("session-head-sub") || null);
+                    const dir = el && el.querySelector("[data-sub-dir]");
+                    const time = el && el.querySelector("[data-sub-time]");
+                    if (dir) dir.textContent = s.cwd ? shortPath(s.cwd) : "";
+                    if (time) time.textContent = s.cwd ? "活跃 " + relTime(s.updated_at || s.started_at) : "最近活动 " + relTime(s.updated_at || s.started_at);
+                  }
                   updateModelCapsule(s);
+                  updatePermCapsule(s); // UIPOLISH3 件三：随 head 同步权限胶囊（态回显主路径）
                   updateCtxMeter(s); // UIPOLISH2 件四：随 head 同步水位（renderAll 全量链 + SESSION_HEARTBEAT 也会进这里）
                 }
                 // ---------- B22 模型切换胶囊（engine-badge 旁）→ source-menu 同壳列表 → COMMAND_MODEL ----------
@@ -3210,6 +3352,73 @@
                   });
                 }
                 function closeModelMenu() { const m = document.getElementById("b2-model-menu"); if (m) m.remove(); }
+                // ---------- UIPOLISH3 件三（#67）：权限模式切换胶囊（head actions）→ COMMAND_PERM ----------
+                // relay 词表四档（isManagedMode）：任务书写三档、词表以 relay 为准（#217：跳过档只能
+                // 创建会话时开，运行时切 bypass SDK 拒——错误人话回显会话日志，ack 先行受理）。措辞
+                // 与 relay PERM_MODE_ZH 逐字对齐。外部/CLI 会话 relay 硬拒（hooks 单向桥接）→ 胶囊
+                // 置灰+tooltip 说明不硬闯；历史/无命令通道卡隐藏（模型胶囊同口径）。
+                const PERM_MODES = [
+                  { key: "default", zh: "标准（每次确认）" },
+                  { key: "acceptEdits", zh: "自动接受编辑" },
+                  { key: "plan", zh: "规划（只读）" },
+                  { key: "bypassPermissions", zh: "跳过权限确认" },
+                ];
+                function updatePermCapsule(s) {
+                  const cap = UI.permCapsule;
+                  if (!cap) return;
+                  if (!s || !canCmd(s)) { cap.hidden = true; return; } // 无会话/历史只读卡：隐藏
+                  const txt = cap.querySelector("[data-perm-text]");
+                  if (s.external) {
+                    // 件十六c（2026-10-11 用户拍板）：右缘「CLI 会话」置灰胶囊删除——engine 徽章
+                    // 「Claude · CLI」已表达身份，去重（原 tooltip 语义并入隐藏，不再占右缘位）
+                    cap.hidden = true;
+                    cap.disabled = false;
+                    return;
+                  }
+                  cap.hidden = false;
+                  cap.disabled = false;
+                  const cur = s.permission_mode || "default";
+                  const mode = PERM_MODES.find((m) => m.key === cur);
+                  if (txt) txt.textContent = mode ? mode.zh : cur;
+                  cap.title = "当前权限模式：" + (mode ? mode.zh : cur) + " · 点击切换";
+                }
+                function closePermMenu() { const m = document.getElementById("b2-perm-menu"); if (m) m.remove(); }
+                function openPermMenu(anchor) {
+                  closePermMenu();
+                  const s = curSession();
+                  if (!anchor || !s || s.external || !canCmd(s)) return;
+                  const menu = document.createElement("div");
+                  menu.id = "b2-perm-menu";
+                  menu.className = "model-menu"; // 与模型菜单同壳样式（独立 id 防互误伤）
+                  menu.setAttribute("role", "menu");
+                  const cur = s.permission_mode || "default";
+                  let html = '<div class="source-menu-head">权限模式 · 切换即生效</div>';
+                  for (const m of PERM_MODES) {
+                    html += '<button type="button" class="source-option' + (m.key === cur ? " active" : "") + '" data-perm-pick="' + m.key + '" role="menuitem"><strong>' + m.zh + "</strong>" + (m.key === cur ? "<small>当前</small>" : "") + "</button>";
+                  }
+                  menu.innerHTML = html;
+                  document.body.appendChild(menu);
+                  const r = anchor.getBoundingClientRect();
+                  menu.classList.add("open");
+                  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+                  menu.style.left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8)) + "px";
+                  menu.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - mh - 8)) + "px";
+                  menu.addEventListener("click", async (ev) => {
+                    const pick = ev.target.closest("[data-perm-pick]");
+                    if (!pick) return;
+                    closePermMenu();
+                    const s2 = curSession();
+                    if (!s2 || pick.dataset.permPick === (s2.permission_mode || "default")) return;
+                    const ack = await commandAck("COMMAND_PERM", { session_id: s2.session_id, mode: pick.dataset.permPick });
+                    const v = ackVerdict(ack);
+                    if (v.ok) {
+                      s2.permission_mode = pick.dataset.permPick; // 乐观回显；UPDATED 帧权威归位（SDK 异步失败仅落会话日志=relay 现行为）
+                      renderHeader();
+                      const zh = (PERM_MODES.find((m) => m.key === pick.dataset.permPick) || {}).zh || pick.dataset.permPick;
+                      b2Toast("权限模式已切换：" + zh);
+                    } else b2Toast("切换失败：" + v.error);
+                  });
+                }
                 async function applyModelSwitch(model) {
                   const s = curSession();
                   if (!s || !capsuleSupported(s)) return;
@@ -4786,10 +4995,11 @@
                   document.addEventListener("click", (ev) => {
                     if (!ev.target.closest("#b2-create-pop") && !ev.target.closest("#d-session .queue-head")) closeCreatePop();
                     if (!ev.target.closest("#b2-model-menu") && !ev.target.closest("#session-model-capsule")) closeModelMenu();
+                    if (!ev.target.closest("#b2-perm-menu") && !ev.target.closest("#session-perm-capsule")) closePermMenu(); // UIPOLISH3 件三
                     if (!ev.target.closest(".artifact-menu-wrap")) document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open"));
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closeArtViewer(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); closeArtViewer(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
                   });
 
                   // composer：发送/停止/历史/IME
@@ -4941,9 +5151,16 @@
                     section, sessionList, workspace, body, panes,
                     tabs: [...section.querySelectorAll(".segment-bar button")],
                     title: $id("session-title"), statusTag: null, identity: $id("session-identity"), // W-UIFB ③：状态胶囊退役（i=3），statusTag 置空防旧引用
-                    subHint: (text) => { // W-UIFB ③：会话域 sub 回归标题正下方 .head-sub（i=3），顶栏 hint 会话位清零防残留
+                    subHint: (text) => { // W-UIFB ③：会话域 sub 回归标题正下方 .head-sub（i=3），顶栏 hint 会话位清零防残留。
+                      // 件十六：sub 行结构化（目录 span + 水位胶囊 + 活跃 span）——单文本入参落到目录段，
+                      // 时间段清空（连接态文案整段落 dir 段）
                       const el = $id("session-head-sub");
-                      if (el) el.textContent = String(text || "");
+                      if (el) {
+                        const dir = el.querySelector("[data-sub-dir]");
+                        const time = el.querySelector("[data-sub-time]");
+                        if (dir) dir.textContent = String(text || "");
+                        if (time) time.textContent = "";
+                      }
                       window.__ccDeck005SetWindowbarHint?.("session", "");
                     },
                     headActions: $id("session-head-actions"), // W-UIFB（合并裁决）：开关随 i=3 定位 head 右侧
@@ -4979,6 +5196,14 @@
                     UI.modelCapsule.addEventListener("click", () => {
                       const menu = document.getElementById("b2-model-menu");
                       if (menu) closeModelMenu(); else openModelMenu(UI.modelCapsule);
+                    });
+                  }
+                  // UIPOLISH3 件三：权限胶囊同款静态接线（open/close 与模型菜单同构互不干扰）
+                  UI.permCapsule = $id("session-perm-capsule");
+                  if (UI.permCapsule) {
+                    UI.permCapsule.addEventListener("click", () => {
+                      const menu = document.getElementById("b2-perm-menu");
+                      if (menu) closePermMenu(); else openPermMenu(UI.permCapsule);
                     });
                   }
                   // UIPOLISH2 件四：水位胶囊点击 → 「更多」tab 完整水位计（jumpToTask 的 tabs.click 同款链；
@@ -5093,9 +5318,9 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
-              <footer class="workspace-footer"><div data-team-actions></div><div class="readonly-banner" data-team-feedback role="status" aria-live="polite">决议仅由你点击确认或否决后发起。</div></footer>
+              <!-- UIPOLISH3 件四②：底部常驻栏废除（决议内联到确认卡、刷新上 head、反馈走 toast） -->
             </section>
             <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>待你确认</span></div><div data-team-confirms><div class="readonly-banner">暂无待确认事项</div></div></div><div class="inspector-block"><div class="inspector-title"><span>团队编制</span><span data-team-member-count>0</span></div><div class="member-list" data-team-members><div class="readonly-banner">暂无编制数据</div></div></div><div class="inspector-block"><div class="inspector-title"><span>最近派单回执</span></div><div class="team-activity" data-team-activity><div class="readonly-banner">暂无派单回执</div></div></div></aside>
             <script data-team-script>
@@ -5104,7 +5329,12 @@
                 const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "在办"], ["parked", "已挂起"], ["archived", "已结项"]]);
-                const confirmKinds = new Map([["project-create", "正经立项"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
+                const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
+                // 件十（2026-10-11 用户实锤）：tier 措辞口语化——显示层映射「正经立项→正式项目 /
+                // 轻立项→轻量项目」；存储值保持旧词（创建载荷 option value/relay 校验/org CLI 参数
+                // 全不动，旧数据零迁移）。新增显示点一律走 tierDisplay()
+                const TIER_DISPLAY = new Map([["正经立项", "正式项目"], ["轻立项", "轻量项目"]]);
+                const tierDisplay = (t) => TIER_DISPLAY.get(t) || t || "";
                 const engines = new Map([["claude", ["Claude", "claude"]], ["codex", ["Codex", "codex"]], ["trae", ["Trae", "trae"]], ["qwen-code", ["Qwen Code", "qwen"]], ["codebuddy", ["CodeBuddy", "codebuddy"]], ["zcode", ["ZCode", "zcode"]]]);
                 // W-EXPP2 经验库域（SNAPSHOT.experience 覆盖式锚定 + EXPERIENCE_UPDATED 帧；
                 // experiences=null=旧 relay/未锚定不渲染；experience_enabled=false=总开关关置灰）。
@@ -5118,7 +5348,13 @@
                 // W-NOVAFIX B5：空态分档——未连接「正在连接…」；已连接无团队数据「此 relay 无团队数据」
                 const projectsEmpty = () => (state.projects === null ? (state.online ? "此 relay 无团队数据" : "正在连接…（团队数据待同步）") : "暂无项目组");
                 const entities = (items) => [...new Map((Array.isArray(items) ? items : []).filter((item) => item && typeof item.id === "string" && item.id).map((item) => [item.id, item])).values()];
-                const feedback = (text) => { query("[data-team-feedback]").textContent = text; };
+                // UIPOLISH3 件四②：底部常驻栏废除，反馈行走 toast（B4 在场）——原 [data-team-feedback]
+                // 常驻 footer 随栏退役；toast() 原 fallback=feedback 会互递归，故 fallback 改 console
+                const toast = (text) => {
+                  if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast(text);
+                  else console.info("[team] " + text);
+                };
+                const feedback = toast;
                 const group = () => state.projects?.find((item) => item.id === state.selected);
                 const engine = (key) => engines.get(key) || [key || "引擎未知", ""];
                 const engineBadge = (key) => { const value = engine(key); return '<span class="engine-badge ' + value[1] + '">' + escape(value[0]) + "</span>"; };
@@ -5129,28 +5365,72 @@
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
                   const session = state.sessions.get(member.session_id) || {};
-                  return { name: session.title || member.session_id, role: member.role || "角色未标注", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit };
+                  // 件十一：成员灯数据源=成员会话 run status（与会话卡 status-dot 唯一事实源同
+                  // 语义）；查无会话数据=缺省灰（offline）。
+                  // 件十⑤：别名解耦——显示名优先 nick（role 在 p 行小字自然弱化），无别名=现状
+                  return { name: member.nick || session.title || member.session_id, role: member.role || "角色未标注", nick: member.nick || "", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit, status: ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "" };
                 }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
                   if (!used || !limit || limit <= 0) return "";
                   const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
+                  if (!Number.isFinite(pct)) return ""; // 件十六防护：脏数据（NaN 比例）宁缺毋滥——NaN% 内联失效会退化成全宽条（全员等长观感的候选根因）
                   const tone = pct >= 85 ? "critical" : pct >= 60 ? "attention" : "safe";
                   return '<div class="mini-context-meter ' + tone + '" data-context-waterline><i><b style="width:' + pct + '%"></b></i><span>' + pct + "%</span></div>";
                 }
                 function memberMarkup(member) {
                   const info = memberInfo(member);
                   const roleClass = /^(pm|leader)$/i.test(info.role) ? "pm" : /^(qa|reviewer|验收)$/i.test(info.role) ? "qa" : "worker";
-                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + "</div>" + memberCtxMeter(info) + "</div></div>";
+                  // 件六同源漏网：引擎词表外/缺失不渲染徽章（原兜底「引擎未知」上卡=噪音，与看板卡同口径）
+                  const engBadgeHtml = info.engine && engines.has(info.engine) ? engineBadge(info.engine) : "";
+                  // 件十一：头像角点=状态灯（status-dot 同源绘画卡，working 橘呼吸/waiting 黄/done 绿/
+                  // 查无=缺省灰）——原 avatar-engine-dot 引擎色点（claude 橘）被误读为运行灯，空闲成员
+                  // 也亮橘=「成员灯与绘画卡矛盾」根因；引擎语义已有 engine-badge 表达不丢失
+                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + "</div>" + memberCtxMeter(info) + "</div></div>";
                 }
-                function taskMarkup(task, project) {
-                  const member = members(project).find((item) => item.session_id === task.owner_session);
-                  const info = memberInfo(member || { session_id: task.owner_session || "未指派", role: "执行者" });
-                  const status = legacyStatuses.get(task.status) || task.status;
-                  const label = lanes.find((lane) => lane[0] === status)?.[1] || "未知状态：" + String(task.status ?? "未标注");
-                  const tagClass = status === "done" ? "done" : status === "claimed" ? "info" : "action";
-                  return '<div class="task-card" data-team-task="' + escape(task.id) + '"><strong>' + escape(task.text || task.id) + '</strong><p>' + escape(task.note || "") + '</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><span><b>' + escape(info.name) + " · " + escape(info.role) + "</b> " + escape(engine(info.engine)[0]) + " · " + escape(srcName(state.source)) + '</span></div><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + '<span class="tag ' + tagClass + '">' + escape(label) + '</span></div>' + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + "</div>";
+                // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
+                // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
+                // （件六：原 engine() 兜底「引擎未知」上卡=噪音）；执行者行=引擎点+成员名
+                // （headcount 映射）；queueCtx=件八排队注入 {ordinal, running}。
+                // 追加⑦a：无主卡文本前缀 [角色名]/[成员名] 解析映射 headcount（role 或名**唯一**
+                // 命中才绑，歧义不绑保持未指派；显示剥前缀、浮层留全文；纯显示层不写回 relay）。
+                // 追加⑧：紧凑卡信息补偿=hover 展开浮层（标题全文/描述全文/执行者/时间；向上弹
+                // 防 workspace-body 底缘裁剪；定夺理由见回执——侧滑详情需新面板+路由态，浮层轻）
+                function taskOwnerResolve(task, project) {
+                  if (task.owner_session) {
+                    const m = members(project).find((item) => item.session_id === task.owner_session);
+                    return { member: m || null, text: String(task.text || task.id), resolved: Boolean(m) };
+                  }
+                  const pm2 = /^\[([^\[\]]{1,16})\]\s*/.exec(String(task.text || ""));
+                  if (!pm2) return { member: null, text: String(task.text || task.id), resolved: false };
+                  const key = pm2[1].trim().toLowerCase();
+                  const hits = members(project).filter((item) => {
+                    const info = memberInfo(item);
+                    return (info.role || "").toLowerCase() === key || (info.name || "").toLowerCase() === key || (info.nick || "").toLowerCase() === key; // 件十⑤：别名也参与前缀定位
+                  });
+                  if (hits.length !== 1) return { member: null, text: String(task.text || task.id), resolved: false }; // 零命中/多命中（如同 role 多 worker）不绑
+                  return { member: hits[0], text: String(task.text || task.id).slice(pm2[0].length), resolved: true };
+                }
+                function taskMarkup(task, project, queueCtx) {
+                  const r = taskOwnerResolve(task, project);
+                  const hasOwner = r.resolved; // ⑦a：前缀映射命中视同有主
+                  const info = memberInfo(r.member || (task.owner_session ? { session_id: task.owner_session, role: "执行者" } : { session_id: "", role: "" }));
+                  const engKnown = Boolean(info.engine && engines.has(info.engine)); // 件六：词表外/缺失不渲染引擎
+                  const ownerBits = [];
+                  if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
+                  if (queueCtx && queueCtx.ordinal) ownerBits.push('<i class="q-num">' + queueCtx.ordinal + "</i>");
+                  if (engKnown) ownerBits.push(engineBadge(info.engine));
+                  ownerBits.push(hasOwner ? "<b>" + escape(info.name) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : "<b>未指派</b>");
+                  const fullText = String(task.text || task.id);
+                  const created = expFmtTime(task.ts);
+                  const updated = expFmtTime(task.updated_at);
+                  // 件十九：泳道迁移时间线（历史条目无 transitions=从当下起记，如实显示已有部分）
+                  const laneName = (st) => (lanes.find((l) => l[0] === (legacyStatuses.get(st) || st)) || [])[1] || st;
+                  const timeline = Array.isArray(task.transitions) && task.transitions.length
+                    ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
+                    : "";
+                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(r.text || fullText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(info.name) + " · " + escape(info.role || "") : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
@@ -5158,9 +5438,56 @@
                   const loading = state.loads.get(project?.id);
                   // W-NOVAFIX B5：空态分档——projectsEmpty 见域顶定义（render/boardMarkup 共用）
                   const empty = !project ? projectsEmpty() : board ? tasks.length ? "" : "任务板暂无任务" : loading === "loading" ? "正在加载任务板…" : loading && loading !== "ready" ? loading : "尚未取得任务板，请接入详情命令通道或点击刷新详情。";
+                  // 件八：派单回执收敛行（同 dispatch_id 取末行）→ claimed 卡运行中/排队区分
+                  const dispatchStatus = new Map((state.receipts.get(project?.id) || []).map((r) => [r && r.id, r && r.status]).filter(([id, st]) => id && typeof st === "string"));
+                  const laneBody = (status, items, showUnassignedHead) => {
+                    if (status !== "claimed") {
+                      // ⑦b：backlog 泳道无主卡归「未指派」组头（组头唯一允许泳道），有主卡平铺在前
+                      const split = [[], []];
+                      for (const t of items) (taskOwnerResolve(t, project).resolved ? split[0] : split[1]).push(t);
+                      let html3 = split[0].map((t) => taskMarkup(t, project)).join("");
+                      if (split[1].length && showUnassignedHead) html3 += '<div class="lane-subhead">未指派<span class="subhead-count">' + split[1].length + "</span></div>";
+                      html3 += split[1].map((t) => taskMarkup(t, project)).join("");
+                      return html3;
+                    }
+                    // 进行中泳道按 worker 分区（件八，用户推荐形态的落地修正：已指派未开始
+                    // 的卡实际在 claimed——dispatch 建卡直接 claimed，不在 backlog；分区随之
+                    // 放进行中泳道而非待认领）。组内 ts 升序=排队序；运行中（回执 join）置顶
+                    const groups = new Map(); // sid -> {name, cards[]}
+                    const orphans = []; // owner 失联（sid 不在编制——离编/数据残留）
+                    const unassigned = []; // 无主卡（件七显示面）
+                    for (const t of items) {
+                      if (!t.owner_session) { unassigned.push(t); continue; }
+                      const m = members(project).find((x) => x.session_id === t.owner_session);
+                      if (!m) { orphans.push(t); continue; }
+                      const info = memberInfo(m);
+                      if (!groups.has(t.owner_session)) groups.set(t.owner_session, { name: info.name, cards: [] });
+                      groups.get(t.owner_session).cards.push(t);
+                    }
+                    let html2 = "";
+                    for (const g of groups.values()) {
+                      const ordered = g.cards.slice().sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+                      const runningIdx = ordered.findIndex((t) => dispatchStatus.get(t.dispatch_id) === "running");
+                      if (runningIdx > 0) ordered.unshift(...ordered.splice(runningIdx, 1)); // 运行中置顶=当前活
+                      html2 += '<div class="lane-subhead">' + escape(g.name) + '<span class="subhead-count">' + ordered.length + "</span></div>";
+                      html2 += ordered.map((t, i) => taskMarkup(t, project, { ordinal: ordered.length > 1 ? i + 1 : 0, running: dispatchStatus.get(t.dispatch_id) === "running" })).join("");
+                    }
+                    if (orphans.length) {
+                      html2 += '<div class="lane-subhead">失联执行者<span class="subhead-count">' + orphans.length + "</span></div>";
+                      html2 += orphans.map((t) => taskMarkup(t, project)).join("");
+                    }
+                    if (unassigned.length) {
+                      if (showUnassignedHead) html2 += '<div class="lane-subhead">未指派<span class="subhead-count">' + unassigned.length + "</span></div>"; // ⑦b：组头仅待认领泳道
+                      html2 += unassigned.map((t) => taskMarkup(t, project)).join("");
+                    }
+                    return html2;
+                  };
                   const columns = lanes.map(([status, label]) => {
                     const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
-                    return '<div class="lane"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + items.map((task) => taskMarkup(task, project)).join("") + "</div>";
+                    // 追加⑦b：「未指派」分组头只在待认领泳道渲染（进行中的必有 owner 口径）；
+                    // 其他泳道的真无主卡平铺泳道尾部（卡面保留未指派警示，不设组头）
+                    const body = laneBody(status, items, status === "backlog");
+                    return '<div class="lane"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + body + "</div>";
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + '<div class="board">' + columns + "</div>" + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
@@ -5246,9 +5573,9 @@
                     '<select class="exp-filter" data-exp-filter-scope aria-label="范围筛选"><option value="all"' + (state.expFilter.scope === "all" ? " selected" : "") + ">全部范围</option>" +
                     '<option value="global"' + (state.expFilter.scope === "global" ? " selected" : "") + ">全局</option>" +
                     (state.projects ?? []).map((p) => '<option value="' + escape(p.anchor_dir || "") + '"' + (state.expFilter.scope === p.anchor_dir ? " selected" : "") + ">" + escape(p.name || p.id) + "</option>").join("") + "</select>" +
-                    '<select class="exp-filter" data-exp-filter-status aria-label="状态筛选"><option value="active"' + (state.expFilter.status === "active" ? " selected" : "") + ">在役</option>" +
-                    '<option value="retired"' + (state.expFilter.status === "retired" ? " selected" : "") + ">已退役</option>" +
-                    '<option value="all"' + (state.expFilter.status === "all" ? " selected" : "") + ">全部</option></select>" +
+                    // 追加⑫：状态轴 chips 化（原生 select 观感退役；范围轴动态项目多保留胶囊 select）
+                    '<div class="exp-chips" role="group" aria-label="状态筛选">' +
+                    ["active", "retired", "all"].map((k) => '<button type="button" class="exp-chip' + (state.expFilter.status === k ? " on" : "") + '" data-exp-chip-status="' + k + '">' + ({ active: "在役", retired: "已退役", all: "全部" })[k] + "</button>").join("") + "</div>" +
                     '<datalist id="exp-role-list"><option value="any"></option><option value="worker"></option><option value="pm"></option><option value="reviewer"></option><option value="qa"></option></datalist></div>';
                   if (!state.experiences.length) return head + banner("经验库为空——worker 回执「经验：<一句话>（#kind）」申报入库，或 CLI org exp append。");
                   const list = expFiltered();
@@ -5426,9 +5753,9 @@
                   const list = rulesFiltered();
                   const hasLeader = state.rules.some((e) => e.status === "active" && e.audience === "leader");
                   const filters = '<div class="exp-filters">' +
-                    '<select class="exp-filter" data-rules-filter-status aria-label="状态筛选"><option value="active"' + (state.rulesFilter.status === "active" ? " selected" : "") + ">在役</option>" +
-                    '<option value="archived"' + (state.rulesFilter.status === "archived" ? " selected" : "") + ">归档（退役/替代）</option>" +
-                    '<option value="all"' + (state.rulesFilter.status === "all" ? " selected" : "") + ">全部</option></select>" +
+                    // 追加⑫：铁律状态轴同款 chips 化（范围轴保留胶囊 select）
+                    '<div class="exp-chips" role="group" aria-label="状态筛选">' +
+                    ["active", "archived", "all"].map((k) => '<button type="button" class="exp-chip' + (state.rulesFilter.status === k ? " on" : "") + '" data-rules-chip-status="' + k + '">' + ({ active: "在役", archived: "归档", all: "全部" })[k] + "</button>").join("") + "</div>" +
                     '<select class="exp-filter" data-rules-filter-scope aria-label="范围筛选"><option value="all"' + (state.rulesFilter.scope === "all" ? " selected" : "") + ">全部范围</option>" +
                     '<option value="team"' + (state.rulesFilter.scope === "team" ? " selected" : "") + ">团队</option>" +
                     (state.projects ?? []).map((p) => {
@@ -5539,13 +5866,17 @@
                   query("[data-team-count]").textContent = String(count);
                   query("[data-team-projects]").innerHTML = state.projects?.length ? state.projects.map((item) => {
                     const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
-                    return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><i class="status-dot ' + (item.status === "pending" ? "waiting" : item.status === "active" ? "done" : "") + '"></i><strong>' + escape(item.name || item.id) + '</strong><span class="tag">' + escape(groupStatuses.get(item.status) || item.status) + '</span></div><p>' + members(item).length + " 个编制席位 · " + pending + ' 项待确认</p><div class="identity-cluster">' + sourceBadge() + "</div></div>";
+                    // UIPOLISH3 件四⑨⑩（2026-10-11 用户反馈）：统计行图标化（席位/待确认→图标+数字，
+                    // 长「8个编制席位」截断根治）；状态灯+「在办」tag 两件套整合为单枚状态胶囊
+                    // （点色随态，灯丑根治）。title 恒带全文字（hover/读屏可达）
+                    return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div><p title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + (pending ? '&nbsp;&nbsp;<svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg> ' + pending : "") + '</p><div class="identity-cluster">' + sourceBadge() + "</div></div>";
                   }).join("") : banner(projectsEmpty());
                   query("[data-team-title]").textContent = project?.name || "团队";
-                  query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? (state.online ? "无团队数据" : "正在连接") : "暂无项目组";
+                  // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
+                  // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = srcName(state.source); // W-UIPOLISH ⑧：团队名称旁源徽标同走映射（用户实锤漏网点）
-                  window.__ccDeck005SetWindowbarHint?.("team", project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
+                  window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
@@ -5553,6 +5884,7 @@
                   query("[data-team-activity]").innerHTML = activityHtml;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
                   panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
+                  if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
                   panes[1].innerHTML = boardMarkup(project);
                   panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>";
                   panes[3].innerHTML = activityHtml;
@@ -5560,18 +5892,25 @@
                   panes[5].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第六 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
+                  // UIPOLISH3 件四②（2026-10-11 用户拍板）：底部常驻栏废除——决议钮下沉到每张
+                  // 确认卡内联（待确认独立化，「查看并决议」中转钮随之退役：卡片本就全量展示
+                  // payload）；刷新改 head 圆圈箭头小钮（data-team-refresh 属性复用，mount 委托
+                  // 零改动）。feedback 反馈行走 toast（见域顶 feedback 重定义）。
                   const decisionButtons = (confirm) => {
                     const disabled = !state.command || !state.online || state.flights.has(confirm.id) || state.accepted.has(confirm.id) || state.unsupported.has("COMMAND_ORG_CONFIRM");
-                    return '<div class="identity-cluster"><button type="button" class="primary-btn" data-team-decision="' + escape(confirm.id) + '" data-approve="true"' + (disabled ? " disabled" : "") + '>确认</button><button type="button" class="danger-btn" data-team-decision="' + escape(confirm.id) + '" data-approve="false"' + (disabled ? " disabled" : "") + ">否决</button></div>";
+                    const why = !state.command || !state.online ? ' title="决议命令通道未接入或来源离线"' : state.unsupported.has("COMMAND_ORG_CONFIRM") ? ' title="当前来源不支持团队决议命令"' : "";
+                    return '<div class="identity-cluster"><button type="button" class="primary-btn" data-team-decision="' + escape(confirm.id) + '" data-approve="true"' + (disabled ? " disabled" : "") + why + '>确认</button><button type="button" class="danger-btn" data-team-decision="' + escape(confirm.id) + '" data-approve="false"' + (disabled ? " disabled" : "") + why + ">否决</button></div>";
                   };
+                  // UIPOLISH3 件四④：看板下方待确认区空间优化——无待确认整块不渲染（原恒渲染
+                  // 「暂无待确认事项」banner 占一截），有单才出现
                   const confirmCards = count ? state.confirms.map((confirm) => {
                     const owner = state.projects?.find((item) => item.id === confirm.payload?.gid);
-                    return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + escape(confirmKinds.get(confirm.kind) || confirm.kind) + " · " + escape(confirm.title) + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div><p>" + escape(confirm.reason) + (owner ? " · " + escape(owner.name || owner.id) : "") + '</p><div class="inspector-copy">' + escape(JSON.stringify(confirm.payload || {})) + '</div><button type="button" class="secondary-btn" data-team-pick-confirm="' + escape(confirm.id) + '">查看并决议</button></div>';
-                  }).join("") : banner("暂无待确认事项");
-                  query("[data-team-confirms]").innerHTML = confirmCards;
-                  panes[1].innerHTML += '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>";
-                  const selectedConfirm = state.confirms.find((confirm) => confirm.id === state.confirmSelected);
-                  query("[data-team-actions]").innerHTML = (project ? '<button type="button" class="secondary-btn" data-team-refresh' + (!canDetail || state.loads.get(project.id) === "loading" ? " disabled" : "") + ">刷新详情</button>" : "") + (selectedConfirm ? '<div class="inspector-title"><strong>' + escape(confirmKinds.get(selectedConfirm.kind) || selectedConfirm.kind) + " · " + escape(selectedConfirm.title) + '</strong><span class="tag action">' + (state.accepted.has(selectedConfirm.id) ? "等待权威更新" : state.flights.has(selectedConfirm.id) ? "提交中" : "待你确认") + "</span></div>" + decisionButtons(selectedConfirm) : banner("暂无待确认事项")) + (!state.command || !state.online ? banner("决议命令通道未接入或来源离线；确认按钮不可用。") : state.unsupported.has("COMMAND_ORG_CONFIRM") ? banner("当前来源不支持团队决议命令。") : "");
+                    return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + escape(confirmKinds.get(confirm.kind) || confirm.kind) + " · " + escape(confirm.title) + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div><p>" + escape(confirm.reason) + (owner ? " · " + escape(owner.name || owner.id) : "") + '</p><div class="inspector-copy">' + escape(JSON.stringify(confirm.payload || {})) + "</div>" + decisionButtons(confirm) + "</div>";
+                  }).join("") : "";
+                  query("[data-team-confirms]").innerHTML = count ? confirmCards : banner("暂无待确认事项");
+                  panes[1].innerHTML += count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "";
+                  const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
+                  if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
                 }
                 function updateConfirms(items) {
@@ -5654,7 +5993,16 @@
                   updateRules(payload.rules);
                   state.rulesEnabled = payload.rules_enabled !== false;
                   for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
-                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  // 件十八：receipts 过滤与 relay project-detail 同口径放宽——anchor 匹配 ∪ sid ∈ 编制
+                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) {
+                    const memberSids2 = new Set((Array.isArray(project.headcount) ? project.headcount : []).map((h) => h && h.session_id));
+                    state.receipts.set(project.id, entities(payload.receipts.filter((entry) => {
+                      if (!entry) return false;
+                      const a = typeof entry.project_anchor === "string" ? entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") : "";
+                      if (a && a === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, "")) return true;
+                      return memberSids2.has(entry.session_id);
+                    })).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  }
                   render();
                   if (state.selected) void requestDetail(state.selected);
                   return true;
@@ -5697,7 +6045,6 @@
                 const TEAM_ROLE_PRESETS = ["worker", "PM", "reviewer", "qa"];
                 // W-UIFB 追加⑮：手动成员行 agent 类型清单（与 sessionItem 引擎映射同六引擎口径）
                 const TEAM_ENGINE_OPTIONS = [["claude", "Claude"], ["codex", "Codex"], ["trae", "Trae"], ["qwen-code", "Qwen Code"], ["codebuddy", "CodeBuddy"], ["zcode", "ZCode"]];
-                const toast = (text) => { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast(text); else feedback(text); }; // B4 toast 在场用之，否则落 footer 反馈行
                 const cssEscape = (value) => String(value).replace(/["\\]/g, "\\$&"); // 属性选择器内引号安全（B2 cssEsc 同款）
                 function teamCandidates() {
                   return [...state.sessions.values()]
@@ -5743,7 +6090,7 @@
                   let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的立项会在确认卡上请你决议</p>';
                   html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名">';
                   html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
-                  html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻立项（单卡简化态）</option><option value="正经立项">正经立项（每次创建都需确认）</option></select>';
+                  html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻量项目（单卡简化态）</option><option value="正经立项">正式项目（每次创建都需确认）</option></select>';
                   // W-UIFB 追加⑬：成员编制入分组盒（字段区/编制区分层）；追加⑮：组内「+ 添加成员」
                   // 手动行（agent 类型+角色名），候选勾选与手动行合计 ≤8 席
                   html += '<div class="create-group"><div class="create-label">成员编制 · 最多 8 席</div>';
@@ -5854,6 +6201,11 @@
                     if (expRestore) { expOp("exp-restore", expRestore.dataset.expRestore); return; }
                     const expRegroup = event.target.closest("[data-exp-regroup]");
                     if (expRegroup) { state.expForm = state.expForm === expRegroup.dataset.expRegroup ? null : expRegroup.dataset.expRegroup; state.expArm = null; render(); return; }
+                    // 追加⑫：状态轴 chips 切换（经验/铁律；原 select change 链保留范围轴）
+                    const expChip = event.target.closest("[data-exp-chip-status]");
+                    if (expChip) { state.expFilter.status = expChip.dataset.expChipStatus; render(); return; }
+                    const ruleChip = event.target.closest("[data-rules-chip-status]");
+                    if (ruleChip) { state.rulesFilter.status = ruleChip.dataset.rulesChipStatus; render(); return; }
                     const expGo = event.target.closest("[data-exp-form-go]");
                     if (expGo) {
                       const row = expGo.closest(".exp-row");
@@ -7011,7 +7363,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.15";
+      const CONSOLE_VERSION = "0.7.0-test.17";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。

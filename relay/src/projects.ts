@@ -28,6 +28,10 @@ export type ProjectTier = "轻立项" | "正经立项";
 export interface ProjectHeadcountEntry {
   session_id: string;
   role: string;
+  /** W-UIPOLISH3 件十⑤（2026-10-11 用户拍板）：可选别名——成员卡显示名优先 nick
+   * （名称与角色解耦：有别名=别名为主角色降小字，无别名=名称即会话题名现状）。
+   * role 保持自由文本不建枚举；存量成员不迁移（缺省=无别名显示不回退）。 */
+  nick?: string;
   engine?: SessionEngine;
   model?: string;
   provider?: string;
@@ -102,6 +106,9 @@ export interface BoardEntry {
   /** #087 beads 思想采纳（009 §5 裁决，M1 字段）：依赖卡 id 引用——依赖全 done 才可派
    *（computeReady 判定；坏引用容错按未就绪处理不炸） */
   depends_on?: string[];
+  /** W-UIPOLISH3 件十九（2026-10-11 用户追加）：泳道迁移时间线——每次状态落定追加一行
+   * {status, ts}（新建含首道；append-only 不回改）。历史条目无此字段=时间线从当下起记。 */
+  transitions?: { status: BoardEntryStatus; ts: number }[];
   /** beads gate 思想（009 §2/§5：CI/定时/外部等待映射 blocked）：字段在场=blocked 可判定。
    * 红线：无自动放行/关闭路径——清除只能由人显式 upsert（gate:null），确认卡仍是用户决策唯一写面 */
   gate?: { reason: string; opened_at: number };
@@ -344,7 +351,9 @@ function sanitizeHeadcount(raw: unknown): { ok: true; headcount?: ProjectHeadcou
     seen.add(sid);
     const roleRaw = (item as { role?: unknown }).role;
     const role = typeof roleRaw === "string" && roleRaw.trim() ? roleRaw.trim().slice(0, 24) : "worker";
-    out.push({ session_id: sid, role });
+    const nickRaw = (item as { nick?: unknown }).nick;
+    const nick = typeof nickRaw === "string" && nickRaw.trim() ? nickRaw.trim().slice(0, 24) : undefined;
+    out.push({ session_id: sid, role, ...(nick ? { nick } : {}) });
   }
   return { ok: true, ...(out.length ? { headcount: out } : {}) };
 }
@@ -415,7 +424,7 @@ export function addMember(
   gid: string,
   sessionId: string,
   role: string,
-  selectionOrDir?: { engine?: SessionEngine; model?: string; provider?: string } | string,
+  selectionOrDir?: { engine?: SessionEngine; model?: string; provider?: string; nick?: string } | string,
   dir?: string,
 ): TransitionResult {
   const selection = typeof selectionOrDir === "string" ? undefined : selectionOrDir;
@@ -425,11 +434,12 @@ export function addMember(
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   const current = g.headcount.find((h) => h.session_id === sessionId);
   if (!current) {
-    g.headcount.push({ session_id: sessionId, role, ...selection });
+    g.headcount.push({ session_id: sessionId, role, ...(selection?.nick ? { nick: selection.nick } : {}), ...selection });
     g.updated_at = Date.now();
     if (!saveGroup(g, dataDir)) return { ok: false, error: "索引写入失败" };
   } else if (selection || current.role !== role) {
     current.role = role;
+    if (selection?.nick !== undefined) { if (selection.nick) current.nick = selection.nick; else delete current.nick; } // 空串=清除别名
     if (selection?.engine !== undefined) current.engine = selection.engine;
     if (selection?.model !== undefined) current.model = selection.model;
     if (selection?.provider !== undefined) current.provider = selection.provider;
@@ -600,6 +610,9 @@ export function upsertBoardEntry(
       const t = resolveStatusTransition(e, entry.status, entry.review_required);
       if (!t.ok) return { ok: false, error: t.error };
       e.status = t.status;
+      // 件十九：迁移时间线追加（append-only；状态无变化不记重复行）
+      if (!e.transitions) e.transitions = [];
+      if (e.transitions[e.transitions.length - 1]?.status !== t.status) e.transitions.push({ status: t.status, ts: now });
       if (t.review_required === true) e.review_required = true;
       else if (t.review_required === false) delete e.review_required;
     } else if (entry.review_required !== undefined) {
@@ -632,6 +645,7 @@ export function upsertBoardEntry(
       ts: now,
       updated_at: now,
       note: entry.note,
+      transitions: [{ status: t.status, ts: now }], // 件十九：首道入线
       ...(t.review_required === true ? { review_required: true } : {}),
       ...(deps && deps.length > 0 ? { depends_on: deps } : {}),
       ...(entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}),
@@ -658,6 +672,9 @@ export function moveBoardEntry(
   const t = resolveStatusTransition(e, to);
   if (!t.ok) return { ok: false, error: t.error };
   e.status = t.status;
+  // 件十九：迁移时间线追加（append-only；状态无变化不记重复行）
+  if (!e.transitions) e.transitions = [];
+  if (e.transitions[e.transitions.length - 1]?.status !== t.status) e.transitions.push({ status: t.status, ts: Date.now() });
   if (t.review_required === true) e.review_required = true;
   else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();

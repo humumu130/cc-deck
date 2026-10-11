@@ -1448,6 +1448,9 @@ export class SessionManager {
       state.title = ov;
       state.title_locked = true;
     }
+    // UIPOLISH3 件一：置顶回放（pinned-sessions.json 权威）——journal 压缩丢 CREATED 帧
+    // 的外部会话走不到 applyPinned（不在回放表里），新建时按文件补挂 pinned 标记
+    if (readPinnedSessions(this.cfg.dataDir).includes(id)) state.pinned = true;
     this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
     this.applyDeclaredDeliverables(id);
     this.bus.emit(id, "SESSION_CREATED", {
@@ -2804,13 +2807,13 @@ export class SessionManager {
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_PIN_SESSION": {
-          // #49 置顶/取消置顶：写穿 pinned-sessions.json。托管会话专用（外部 CLI 会话
-          // 生命周期由用户终端自管，重启后 hooks 重新接入，无需休眠恢复）。休眠态
-          // （saved）也可 unpin——摘掉 saved 让卡片退回普通历史会话
+          // #49 置顶/取消置顶：写穿 pinned-sessions.json。休眠态（saved）也可 unpin——
+          // 摘掉 saved 让卡片退回普通历史会话。
+          // UIPOLISH3 件一（2026-10-11 用户拍板）：外部 CLI 会话解锁置顶——原「由 CLI 自身
+          // 维护」的拦截无技术依据（置顶是纯列表整理：state.pinned 标记 + 文件写穿 +
+          // SESSION_UPDATED 回显，与托管/外部无关），CLI sid 一视同仁；applyPinned 重启
+          // 登记对 ext 只补 pinned 标记不做休眠登记（ext 无 agent 不可 resume）。
           const s = this.require(cmd.payload.session_id);
-          if (s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持置顶（由 CLI 自身维护）" };
-          }
           const pinned = cmd.payload.pinned === true;
           s.state.pinned = pinned || undefined;
           if (!pinned) s.state.saved = undefined;
@@ -3958,12 +3961,15 @@ export class SessionManager {
     let saved = 0;
     for (const s of this.sessions.values()) {
       const pinned = file.includes(s.state.session_id);
-      if (pinned && !s.state.external) {
+      // UIPOLISH3 件一：外部会话置顶跨重启保留——只补 pinned 标记（列表恒顶），不做
+      // 休眠登记（ext 无 agent、生命周期归用户终端，saved/「点击恢复」语义不适用）。
+      // 回放表外的 ext 新建走 ensureExternal 补挂（readPinnedSessions 同源权威）
+      if (pinned) {
         keep.push(s.state.session_id);
         const was = s.state.pinned;
         s.state.pinned = true;
-        if (!s.agent) {
-          // 休眠登记：relay 刚启动，置顶会话一律无 agent
+        if (!s.agent && !s.state.external) {
+          // 休眠登记：relay 刚启动，置顶会话一律无 agent（仅托管——ext 不休眠）
           s.state.saved = true;
           s.state.status = "DONE";
           s.state.done_reason = "已保存（重启休眠）";
@@ -5518,10 +5524,21 @@ export class SessionManager {
               else if (typeof g0 === "object" && !Array.isArray(g0) && typeof g0.reason === "string" && g0.reason.trim() !== "") gateVal = { reason: g0.reason };
               else return { ok: false, error: "gate 须为 {reason:string} 或 null（显式清除）" };
             }
+            // UIPOLISH3 件七（2026-10-11 用户看板实测「进行中/完成卡显示未指派」）：原白名单漏
+            // owner_session——store 层支持但漏斗滤掉，CLI/PM 手工建的 claimed 卡永远无主。
+            // 补透传 + 编制校验（headcount 是成员权威，sid 不在编制即拒，防 ghost 绑定）
+            const owner = str("owner_session");
+            if (owner) {
+              const g = findGroup(gid);
+              if (!g || !g.headcount.some((h) => h.session_id === owner)) {
+                return { ok: false, error: `owner_session 不在「${g?.name || gid}」编制内（先 member-add 入编，或核对会话 id）` };
+              }
+            }
             const u = upsertBoardEntry(gid, {
               id: str("entry_id") || undefined,
               text,
               ...(status ? { status } : {}),
+              ...(owner ? { owner_session: owner } : {}),
               ...(str("note") ? { note: str("note") } : {}),
               ...(deps !== undefined ? { depends_on: deps } : {}),
               ...(gateVal !== undefined ? { gate: gateVal } : {}),
@@ -5792,11 +5809,17 @@ export class SessionManager {
           if (!g) return { ok: false, error: `项目组不存在: ${str("id")}` };
           // §3.1 项目组详情四分节的服务端数据源：状态/编制（group 内）+ 板 + 回执流；
           // M3 熟手池（§5 成员卡进化：经验 N 次·上次·在忙/空闲）——路由表档案 join
-          // 会话运行态，服务端拼好端上零 join
+          // 会话运行态，服务端拼好端上零 join。
+          // W-UIPOLISH3 件十八（2026-10-11 用户实锤活动 tab 恒空）：原过滤只认 project_anchor
+          // 严格相等——随手办派给成员（无 gid）旧版台账行不带 anchor 的全被滤掉。放宽为
+          // anchor 匹配 ∪ session_id ∈ 编制（成员关联兜住 anchor 缺失行；生产实证 0/16 命中
+          // 的历史行因 sid 也对不上编制不可追溯，见回执）
+          const memberSids = new Set(g.headcount.map((h) => h.session_id));
           const receipts = readDispatchLog()
             .filter((e) => {
-              const a = e.project_anchor ?? "";
-              return a.replace(/\/+$/, "") === g.anchor_dir.replace(/\/+$/, "");
+              const a = (e.project_anchor ?? "").replace(/\/+$/, "");
+              if (a && a === g.anchor_dir.replace(/\/+$/, "")) return true;
+              return memberSids.has(e.session_id);
             })
             .slice(-30)
             .reverse();
@@ -5888,6 +5911,8 @@ export class SessionManager {
             ...(engineValue ? { engine: engineValue } : {}),
             ...(typeof p.model === "string" && p.model.trim() ? { model: p.model.trim() } : {}),
             ...(typeof p.provider === "string" && p.provider.trim() ? { provider: p.provider.trim() } : {}),
+            // 件十⑤：可选别名（成员名与角色解耦；空串=清除）
+            ...(typeof p.nick === "string" ? { nick: p.nick.trim().slice(0, 24) } : {}),
           };
           if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
           const g = findGroup(gid);
