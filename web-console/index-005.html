@@ -7566,6 +7566,53 @@ function connectLan(ctx) {
           + '<div class="pair-dev">' + dot(true) + '<strong>' + (desktopForm ? "桌面 App（本机）" : "浏览器 · 本页设备") + '</strong><small>token 已就绪</small></div>'
           + '<div class="pair-dev"><span class="source-dot status-reconnecting"></span><strong>云桥</strong><small>状态未随网页端下发</small></div>';
       }
+      // 私网段 hostname 判定（LAN 分享路可信域；对齐旧壳 index.html PRIV_IP_RE 口径
+      // ——回环/公网域名不进 LAN 路：手机够不着，交给云桥）
+      const PRIV_IP_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+      // 0.7 批1 件2：手机 App 扫码真因修复——配对 QR 换 v2 智能码。旧 QR 落 app2 网页
+      // 链接，手机 parseScanPayload 只认 JSON 智能码 / ws 直连格式，必然解析失败。
+      // 智能码 = ccdeck-add v2 {lan, cloud} 双路并存，手机扫码侧 probeLanWs 2.5s 真实
+      // 握手探测自主择路（同网直连 / 跨网云桥）。构建口径对齐旧壳 buildSmartShareParts
+      // （index.html :11696）：LAN 路取探测 lan_ip 组 ws 直连址（私网段 hostname 才可信
+      // ——公网域名/回环手机够不着，交给云路）；云路仅 relay 接了云桥才有（CLOUD_INFO
+      // 拿桥址+桥 token+relay 身份）。配对码一次性短时效——只领一枚，8 位码框与 QR
+      // 云路共用（两处分领会互踢码）；弹层仍开则到期前 30s 重领重画。
+      function buildSmartPairParts() {
+        const t = String((ctx.cfg && ctx.cfg.token) || relayToken || "");
+        let lan = null;
+        try {
+          let host = "", port = 0;
+          if (shellProbe && localRelayInfo) { host = localRelayInfo.lanIp || ""; port = localRelayInfo.port || 8787; }
+          else if (isHttpPage && location.hostname) { host = location.hostname; port = Number(location.port) || (location.protocol === "https:" ? 443 : 80); }
+          if (host && t && PRIV_IP_RE.test(host)) lan = { url: "ws://" + host + ":" + port + "/ws", token: t };
+        } catch (_) {}
+        return fetchLanPairCode().then((pc) => {
+          const code = pc.code;
+          const b4 = window.__ccDeck005B4;
+          const cloudQ = b4 && typeof b4.sendCommand === "function"
+            ? b4.sendCommand("COMMAND_CLOUD_INFO", {}).then((ci) => {
+                const info = ci && ci.ok && ci.cloudInfo;
+                return info && info.cloud && info.bridge && info.rd && info.rk
+                  ? { bridge: String(info.bridge), bt: String(info.bt || ""), rd: String(info.rd), rk: String(info.rk), code }
+                  : null;
+              })
+            : Promise.resolve(null);
+          return cloudQ.then((cloud) => ({ code, ttlMs: pc.ttlMs, lan, cloud }));
+        });
+      }
+      // 智能码落 QR：lan/cloud 至少一路在场才调（全空维持 app2 链接兜底不动）
+      function drawSmartPairQr(cv, parts) {
+        const payload = JSON.stringify(Object.assign(
+          { t: "ccdeck-add", v: 2 },
+          parts.lan ? { lan: parts.lan } : {},
+          parts.cloud ? { cloud: parts.cloud } : {},
+        ));
+        if (!drawPairQr(cv, payload)) return false;
+        const col = cv.closest(".pair-qr-col");
+        const small = col && col.querySelector("small");
+        if (small) small.textContent = "手机扫码即连 · 同网直连 / 跨网云桥自动择路";
+        return true;
+      }
       function openLanPairDialog() {
         document.querySelectorAll("[data-pair-pop], [data-pair-back]").forEach((el) => el.remove());
         const back = document.createElement("div");
@@ -7578,6 +7625,7 @@ function connectLan(ctx) {
         pop.setAttribute("aria-modal", "true");
         pop.setAttribute("aria-label", "配对新设备");
         const link = lanShareLink();
+        let smartTimer = null;
         pop.innerHTML = '<div class="source-menu-head">配对新设备</div>'
           + '<div class="pair-grid">'
           + '<div class="pair-qr-col"><canvas data-pair-qr width="10" height="10"></canvas><small>手机扫码直接加入</small></div>'
@@ -7588,7 +7636,7 @@ function connectLan(ctx) {
           + '<div class="source-menu-head">已连接设备</div>'
           + '<div class="pair-devs">' + pairDeviceRows() + '</div>'
           + '<div class="pair-foot"><a class="pair-cloud-link" data-pair-cloud>云通道配对页 ↗</a><button class="primary-btn" type="button" data-pair-close>完成</button></div>';
-        const close = () => { pop.remove(); back.remove(); };
+        const close = () => { if (smartTimer) clearTimeout(smartTimer); pop.remove(); back.remove(); };
         back.addEventListener("click", close);
         pop.addEventListener("click", async (event) => {
           if (event.target.closest("[data-pair-copy]") || event.target.closest(".pair-link-row input")) {
@@ -7606,20 +7654,37 @@ function connectLan(ctx) {
         });
         const host = document.querySelector(".mode-stage.active") || document.body;
         host.append(back, pop);
-        // ①二维码：lanShareLink 落码图（qr.js 由 relay/Tauri 同源投放；加载失败留白不阻断）
+        // ①二维码：先落 app2 链接（即时兜底，浏览器打开配对页链路不变；qr.js 加载
+        // 失败留白不阻断），智能码就绪后重画——手机 App 只认 ccdeck-add 智能码
+        //（0.7 批1 件2 真因修复），两路全败维持链接并如实提示
         const cv = pop.querySelector("[data-pair-qr]");
         if (cv && !drawPairQr(cv, link)) cv.closest(".pair-qr-col")?.querySelector("small")?.replaceWith(Object.assign(document.createElement("small"), { textContent: "码图不可用 · 用下方链接" }));
-        // ②8 位配对码：本机 relay 领码（一次性短时效）；领码失败（旧 relay 未开配对 / 桌面壳跨源被拦）降级提示
-        void fetchLanPairCode().then(({ code, ttlMs }) => {
+        // ②8 位配对码 + 智能码同源同码（一次性码分领互踢）：领码成功即填码框，
+        // lan/cloud 任一路就绪即重画 QR；弹层仍开则在到期前 30s 重领重画。
+        // 领码失败（旧 relay 未开配对 / 桌面壳跨源被拦）降级提示
+        const applySmart = () => {
           const digits = pop.querySelector("[data-pair-code]");
           const note = pop.querySelector("[data-pair-code-note]");
-          if (!digits || !note) return;
-          digits.textContent = (code.slice(0, 4) + " " + code.slice(4)).trim();
-          const mins = Math.max(1, Math.round(ttlMs / 60000));
-          note.textContent = "手机 App「添加电脑」输入 · " + mins + " 分钟内有效";
-        }).catch(() => {
+          return buildSmartPairParts().then((parts) => {
+            if (!pop.isConnected) return;
+            if (smartTimer) { clearTimeout(smartTimer); smartTimer = null; } // 重领前必清旧续期器（防 QR 画失败等分支双倍重领）
+            if (digits) digits.textContent = (parts.code.slice(0, 4) + " " + parts.code.slice(4)).trim();
+            const mins = Math.max(1, Math.round((parts.ttlMs || 300000) / 60000));
+            if (note) note.textContent = "手机 App「添加电脑」输入 · " + mins + " 分钟内有效";
+            if (cv && (parts.lan || parts.cloud)) {
+              drawSmartPairQr(cv, parts);
+              const ttl = parts.ttlMs || 300000;
+              if (ttl > 40000) smartTimer = setTimeout(() => { void applySmart().catch(() => {}); }, ttl - 30000);
+            }
+          });
+        };
+        void applySmart().catch(() => {
+          if (!pop.isConnected) return;
           const note = pop.querySelector("[data-pair-code-note]");
           if (note) note.textContent = "领码失败 · 用二维码或链接配对";
+          const col = cv && cv.closest(".pair-qr-col");
+          const small = col && col.querySelector("small");
+          if (small) small.textContent = "智能码未就绪 · 本码供浏览器打开配对页";
         });
       }
       async function bootstrapConnection() {

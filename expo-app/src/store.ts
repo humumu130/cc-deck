@@ -10,6 +10,7 @@ import { uuid } from "./fmt";
 import { applyBoardFrame, applyProjectsFrame, isExperienceEntry, mergeById } from "./org-delta";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
+import nacl from "tweetnacl";
 import { fgSupported, notifyAlert, startForegroundService, stopForegroundService } from "./notify";
 import { httpBaseOf } from "./slash";
 import { artPoolItemsOf, artPoolListUrl, artPoolUrl, poolNameOk, type ArtPoolItem } from "./artpool";
@@ -38,7 +39,9 @@ export interface CloudConfig {
   // 本机在桥上的设备 id（relay peers 里的键）。relay 对 pair_req 有防冒名校验
   //（from 必须 = devId(pubkey,"wb")），凭配对码远程配对的条目以 "wb-" 身份入列，
   // openCloud 必须用同一身份 hello 才会被认；LAN 配对（COMMAND_PAIR_START）落的是
-  // "ph-" 身份，缺省回落之（旧条目无此字段 = "ph-"，行为不变）
+  // "ph-" 身份，缺省回落之——0.7 批 1 件 3 起回落值不再是全设备共用的
+  // devId(pubkey,"ph")，改为按（本机公钥, relayDev）派生（cloudDevFor），
+  // 跨 relay 并发云连接在桥上互不顶替
   dev?: string;
 }
 
@@ -1191,8 +1194,9 @@ class RelayStore {
     if (!conn.lanHint || !conn.cloudCfg) return "";
     const keys = await this.keysSoon();
     if (!keys) return "";
-    // dev 身份与云通道 openCloud 同口径：配对码配对的 wb-、其余 ph-
-    const dev = conn.cloudCfg.dev ?? devId(keys.publicKey, "ph");
+    // dev 身份与云通道 openCloud 同口径：显式登记（配对落库 stamp）优先，否则按
+    // （本机公钥, relayDev）派生（0.7 批 1 件 3——跨 relay 并发不互踢，见 cloudDevFor）
+    const dev = resolveCloudDev(conn.cloudCfg, keys.publicKey);
     try {
       const base = `http://${conn.lanHint}`;
       const h = await (await fetch(`${base}/api/lan-hello`, { signal: AbortSignal.timeout(2000) })).json() as { ok?: boolean; relay_dev?: string; nonce?: string };
@@ -1342,10 +1346,11 @@ class RelayStore {
 
   private openCloud(conn: SourceConn, cloud: CloudConfig) {
     const keys = this.devKeys!;
-    // 本机在桥上的身份须与 relay peers 里的登记一致（relay 按 dev 查 peers 取公钥
-    // 验密）：配对码远程配对落的是 "wb-" 身份（见 CloudConfig.dev），LAN 配对落
-    // "ph-"。旧条目无 dev 字段回落 "ph-"，行为不变
-    const dev = cloud.dev ?? devId(keys.publicKey, "ph");
+    // 本机在桥上的身份：显式登记（配对落库 stamp）优先，否则按（本机公钥,
+    // relayDev）派生。0.7 批 1 件 3：不再全条目共用 devId(本机公钥,"ph")——跨
+    // relay 并发连接在桥上互不顶替；存量条目换 dev 首连经 relay 双身份兼容
+    // （cloud-client.ts peers 查 miss 逐公钥试解）自动登记别名，无需重新配对
+    const dev = resolveCloudDev(cloud, keys.publicKey);
     const url =
       cloud.url +
       (cloud.url.includes("?") ? "&" : "?") +
@@ -2191,10 +2196,10 @@ class RelayStore {
           token: bt,
           relayDev: r.rd,
           relayPubkey: r.rk,
-          // #105：App 配对身份用本机 keys 的 ph-（手机）——沿用桥侧回执 dev 会落
-          // wb-（网页前缀），relay 已配对列表把手机误标「网页」（用户实测反馈）。
-          // 云通道验密只要求 dev 与 peers 公钥一致——deviceKeys 恒定，两侧天然同步
-          dev: devId(this.devKeys!.publicKey, "ph"),
+          // 0.7 批 1 件 3：落库即登记（本机公钥, relayDev）派生身份（cloudDevFor）
+          //——与本机其他 relay 的云条目互不共用桥 dev，聚合多源并发不再互踢；
+          // relay 侧首连经双身份兼容登记别名，无需重新配对
+          dev: cloudDevFor(r.rd, this.devKeys!.publicKey),
         },
       });
       return null;
@@ -3253,6 +3258,43 @@ function parseEmpHome(st: unknown): EmployeeHomeSettings | null {
   return { employee_home: s.employee_home, value: typeof s.value === "string" ? s.value : null, source: s.source };
 }
 
+// ---------- 云桥设备身份（0.7 批 1 件 3：互踢残留根治） ----------
+// 旧口径：所有云条目回落同一 devId(本机公钥,"ph")——聚合模式多条云连接并发时在
+// 桥上同 dev 相互顶替（cloud-bridge router 一设备一连接，新连接 close(4000) 顶掉
+// 旧的），被踢方退避重连再顶回，互踢死循环（设计文档 §2.2）。同 relay 重复条目
+// 已由 #401b mergeByIdentity 在加载/快照/探测三处归并；本修复消除跨 relay 残留：
+// dev 按（本机公钥, relayDev）二元派生——每台 relay 一条独立桥身份，并发连接互
+// 不顶替，互踢失去前提。
+//
+// relay 侧兼容性（零 relay 改动的前提，cloud-client.ts「双身份兼容」2026-09-16
+// #105）：peers 按连接上报 dev 查不到时，逐 peer 公钥试解 hello 密文，解得开即认
+// 并把新 dev 登记为别名——本机密钥未换，存量条目换 dev 首连自动完成登记，无需
+// 重新配对。边界：relay < #105 的旧版会把未知 dev 拒为未配对——多源云用户在该
+// 版本本就被互踢锁死（无回归面），单源旧版用户不在 0.7 支持面（legacy/v0.6）。
+//
+// 哈希：SHA-512（nacl.hash 纯 JS，node 测试直跑可用，不经 expo-crypto 原生层）
+// 前 8 字节 hex——与 devId 同长度口径；输入全 ASCII（base64 公钥 + "|" + rl- hex），
+// 按字节直编无需 UTF-8 层。桥侧 dev ≤64 字符约束（MAX_DEV）内。
+function devHash16(s: string): string {
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
+  return [...nacl.hash(bytes).slice(0, 8)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+// 云条目的桥上设备身份：ph-<hash(本机公钥|relayDev) 前 16 hex>。确定性纯函数
+//（同设备同 relay 恒同值），无需持久化；relayDev 是 relay 全局唯一身份即条目的
+// 规范化目标——同 relay 条目（#401b 已归并为一条）恒得同 dev，跨 relay 必不同，
+// 不同设备对同一 relay 也必不同（公钥入串）
+export function cloudDevFor(relayDev: string, publicKeyB64: string): string {
+  return "ph-" + devHash16(publicKeyB64 + "|" + relayDev);
+}
+
+// 连接时取用身份：条目已显式登记（配对落库 stamp）优先，否则按上式派生。
+// 显式 dev 为空串/缺失一律走派生（旧数据兼容）
+export function resolveCloudDev(cloud: CloudConfig | null | undefined, publicKeyB64: string): string {
+  return cloud?.dev || cloudDevFor(cloud?.relayDev ?? "", publicKeyB64);
+}
+
 // ---------- 服务器条目归并（#398 同目标写法归并 + #401 补强同源身份归并） ----------
 
 // wsUrl → LAN 目标（host 归一化：localhost / ::1 / [::1] 与 127.0.0.1 视为同一回环；
@@ -3302,7 +3344,8 @@ function sameTargetEntry(a: ServerEntry, b: ServerEntry): boolean {
 // 跨网落云通道——桥地址条目的 wsUrl 本探不了 LAN）；cloud 取幸存者优先的组内
 // 首个非空；幸存者名是自动 host 名而组内另有具名时取具名。remap 记录被并条目
 // id → 幸存者 id；无归并时原样返回同一引用（调用方据此跳过落盘）
-function mergeByIdentity(list: ServerEntry[], preferId?: string | null): { list: ServerEntry[]; remap: Map<string, string> } {
+// 导出仅测试用途（scripts/test-401c-clouddev.ts 回归断言）；生产调用走三处内联
+export function mergeByIdentity(list: ServerEntry[], preferId?: string | null): { list: ServerEntry[]; remap: Map<string, string> } {
   const remap = new Map<string, string>();
   const survivorOf = new Map<string, ServerEntry>();
   const dropped = new Set<string>();
@@ -3350,7 +3393,8 @@ function mergeByIdentity(list: ServerEntry[], preferId?: string | null): { list:
 // 启动归并清理：同目标重复条目只保留先出现的（列表序稳定），后出现的 token/cloud
 // 补进幸存者（幸存者已有值不覆盖）后丢弃。remap 记录被并条目 id → 幸存者 id，
 // 供调用方修正 ccr_active 指针；无重复时原样返回同一引用（调用方据此跳过落盘）
-function dedupeServers(list: ServerEntry[]): { list: ServerEntry[]; remap: Map<string, string> } {
+// 导出仅测试用途（同上）
+export function dedupeServers(list: ServerEntry[]): { list: ServerEntry[]; remap: Map<string, string> } {
   const out: ServerEntry[] = [];
   const remap = new Map<string, string>();
   for (const e of list) {
