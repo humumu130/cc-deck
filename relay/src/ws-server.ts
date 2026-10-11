@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
+import { SNAPSHOT_LOGS_LAN } from "./session-manager.js"; // W-INJECT④：LAN 快照宽窗（云端 CF 安全默认不动）
 import type { RelayConfig } from "./config.js";
 import { Bridge, parseGateTools } from "./bridge.js";
 import { SNAPSHOT_SCHEMA_VERSION, type BridgeEvent, type Command, type CommandAckPayload, type Envelope } from "./types.js";
@@ -925,7 +926,10 @@ export function startServer(
       // #408 大帧根治：日志不再全量内联（随历史膨胀，实测 3 会话即 0.63MiB，规模
       // 上去必撞 CF 桥 1MiB 单帧硬限），改预算装配（每会话最近 K 条 + 总字节上限，
       // 与云通道同一构建）。客户端 timelines 接受截断语义；logs_truncated 标记供 UI 提示
-      const snapLogs = mgr.buildSnapshotLogs();
+      // W-INJECT 问题④：LAN 直连走宽窗（4MB/1200）——重启/冷启动后面板转录不再被
+      // #408 云端安全窗口（50 条/会话）替换出「历史回滚数小时」；云端 buildSnapshotLogs()
+      // 默认值不动（CF 桥 1MiB 单帧硬限）
+      const snapLogs = mgr.buildSnapshotLogs(SNAPSHOT_LOGS_LAN.budgetBytes, SNAPSHOT_LOGS_LAN.perSessionCap);
       const snapshot: Envelope = {
         seq: bus.lastSeq(),
         session_id: "",

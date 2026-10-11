@@ -17,6 +17,7 @@ import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
 import { Bridge } from "../src/bridge.js";
+import { SNAPSHOT_LOGS_LAN } from "../src/session-manager.js";
 import { buildDoScriptExpr, buildCaptureScript, mapAppleError } from "../src/injector.js";
 import type { BridgeEvent, Command, Envelope } from "../src/types.js";
 
@@ -249,8 +250,38 @@ const sessionLogText = (id: string) =>
   assert(true, "⑥ 注入成功后 300ms 级补发纯回车（提交快路径命中）");
   void before;
 
+  // ⑦ W-INJECT 问题④：历史回滚根治——LAN 快照宽窗 vs 云端安全默认（#408 口径不动）
+  {
+    const idHist = "ext-tir-hist-1";
+    const sh = mgr.ensureExternal(idHist, "/tmp/tir", "历史窗口验证", "tir-hist-1");
+    sh.status = "DONE";
+    for (let i = 0; i < 300; i++) {
+      mgr.pushExternalLog(idHist, "user_message", `历史消息 ${i}`, undefined, { full: `历史消息 ${i}` });
+    }
+    const wide = mgr.buildSnapshotLogs(SNAPSHOT_LOGS_LAN.budgetBytes, SNAPSHOT_LOGS_LAN.perSessionCap);
+    assert((wide.logs[idHist]?.length ?? 0) === 300 && !wide.logs_truncated[idHist], "⑦ LAN 快照宽窗全量携带 300 条（重启重建不回滚）");
+    const cloud = mgr.buildSnapshotLogs();
+    assert((cloud.logs[idHist]?.length ?? 0) <= 60 && !!cloud.logs_truncated[idHist], "⑦ 云端默认窗口保持 #408 安全值（50 帽 + truncated 标记，CF 1MiB 不破）");
+    void sh;
+  }
+
   await close();
 }
 
-console.log("\n全部通过：W-INJECT 专项（自愈/恢复/落盘重投/快路径）");
+// ⑧ W-INJECT 问题⑤：上下文窗口解析——别名裸名/GLM 直传全走 1M 档（生产实锤：
+// ext-ab91190d model=claude-sonnet-5 落 200K、usage 346K 水位假 100%）
+{
+  const { contextLimitOf, contextLimitOfEffective } = await import("../src/context-limit.js");
+  const { withContextWindowSuffix } = await import("../src/models.js");
+  assert(contextLimitOfEffective("claude-sonnet-5") === 1_000_000, "⑧ 别名裸名 claude-sonnet-5 → 1M（生产缺口修补）");
+  assert(contextLimitOfEffective("GLM-5.3") === 1_000_000, "⑧ GLM-5.3 直传 → 1M");
+  assert(contextLimitOfEffective("claude-sonnet-4-5-20250929") === 1_000_000, "⑧ 旧别名 sonnet-4-5 → 1M（回归保持）");
+  assert(contextLimitOfEffective("claude-sonnet-4-5-20250929[1m]") === 1_000_000, "⑧ 已带 [1m] → 1M（不重挂）");
+  assert(contextLimitOfEffective("glm-4.5-air") === 128_000, "⑧ glm-4.5 官方 128K 档不误升");
+  assert(contextLimitOf("未知模型-xyz") === 200_000, "⑧ 未知模型默认 200K 档不变");
+  assert(withContextWindowSuffix("claude-sonnet-5") === "claude-sonnet-5[1m]", "⑧ 重挂规则覆盖 sonnet-5（spawn/显示同源）");
+  assert(withContextWindowSuffix("claude-opus-5") === "claude-opus-5[1m]", "⑧ 重挂规则覆盖 opus-5");
+}
+
+console.log("\n全部通过：W-INJECT 专项（自愈/恢复/落盘重投/快路径/历史窗口/上下文档位）");
 process.exit(0);

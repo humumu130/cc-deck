@@ -5,7 +5,12 @@ import type { Envelope, EventType, LogEntry, SessionEngine, SessionState } from 
 import { contextLimitOfEffective, REPLAY_CONTEXT_MAX } from "./context-limit.js";
 
 const MAX_SESSIONS_KEPT = 30;
-const MAX_LOGS_PER_SESSION = 300;
+// W-INJECT 问题④：300→1500。300 条对活跃会话只覆盖 1~3 小时（流式帧供给下实测 4 个
+// 会话恰好卡死 300），重启重放/面板重建的转录窗口起点被推进数小时=用户看到的「历史
+// 回滚」（2026-10-11 深夜生产实锤：2c5a9c26 等 4 会话 log_count 恰=300、末条 LOG 落后
+// 末条 UPD 2~7 小时）。1500 ≈ 数天常规量；文件量级 8.5MB→~25MB，远低于压缩触发阈
+//（CCR_EVENTS_COMPACT_MB 默认 64MB），boot 解析无感
+const MAX_LOGS_PER_SESSION = 1500;
 const MAX_STATE_EVENTS_PER_SESSION = 50;
 
 // ---------- 加载 ----------
@@ -259,7 +264,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         const li = p.id ? rs.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs.logs[li] = entry;
         else rs.logs.push(entry);
-        if (rs.logs.length > 500) rs.logs.splice(0, rs.logs.length - 500);
+        if (rs.logs.length > 1500) rs.logs.splice(0, rs.logs.length - 1500); // W-INJECT④：对齐 MAX_LOGS_PER_SESSION
         break;
       }
       default:

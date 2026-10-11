@@ -671,6 +671,16 @@ function dutyContinuationMs(): number {
 // sessions/信封余量充足（<900KB）；条数与字节双帽保证历史再大单帧也确定性有界。
 const SNAPSHOT_LOGS_BUDGET_BYTES = 512 * 1024;
 const SNAPSHOT_LOGS_PER_SESSION = 50;
+// W-INJECT 问题④：LAN 直连宽窗版（ws-server 用）。#408 的 512KB/50 是 CF 桥 1MiB 单帧
+// 硬限下的云端安全值——LAN ws 无此限（maxPayload 只管入站），重启/冷启动后面板转录
+// 被每会话 50 条窗口替换=用户可见「历史回滚数小时」（生产实锤）。云端默认值不动
+const SNAPSHOT_LOGS_BUDGET_BYTES_LAN = 4 * 1024 * 1024;
+const SNAPSHOT_LOGS_PER_SESSION_LAN = 1200;
+
+export const SNAPSHOT_LOGS_LAN = {
+  budgetBytes: SNAPSHOT_LOGS_BUDGET_BYTES_LAN,
+  perSessionCap: SNAPSHOT_LOGS_PER_SESSION_LAN,
+};
 
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
@@ -1973,7 +1983,11 @@ export class SessionManager {
     if (model) s.state.model = model;
     if (contextUsage !== undefined) {
       s.state.context_usage = contextUsage;
-      s.state.context_limit = contextLimitOf(model ?? s.state.model);
+      // W-INJECT 问题⑤：外部会话也走 Effective 链——转录 model 是别名裸名
+      //（claude-sonnet-5 等，GLM 别名舰队实跑 1M 窗），裸名直查落 200K 档=水位假满、
+      // context-watchdog 误判压缩。W-CTXFIX B1 的「外部例外」前提（名字=CLI 实际
+      // 口径）在别名方案下失真，统一按重挂规则升档
+      s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
     }
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
@@ -1982,7 +1996,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       usage,
       ...(model ? { model } : {}),
-      ...(contextUsage !== undefined ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {}),
+      ...(contextUsage !== undefined ? { context_usage: contextUsage, context_limit: contextLimitOfEffective(model ?? s.state.model) } : {}), // W-INJECT⑤
       updated_at: s.state.updated_at,
     });
   }
@@ -2144,7 +2158,7 @@ export class SessionManager {
       s.logs[i] = entry;
     } else {
       s.logs.push(entry);
-      if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
+      if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500); // W-INJECT④：500→1500 对齐重放/文件窗
     }
     this.bus.emit(id, "SESSION_LOG", entry);
   }
@@ -3460,7 +3474,7 @@ export class SessionManager {
           if (i >= 0) managed.logs[i] = entry;
           else {
             managed.logs.push(entry);
-            if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+            if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
           }
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
@@ -3511,7 +3525,7 @@ export class SessionManager {
             // 不在/被删」（记录钉死绝对路径，UI 开关切不回去）——两种成因都给指引
             const entry = { kind: "system" as const, text: "会话记录不在当前配置的家目录——若改过 CCR_EMPLOYEE_CONFIG_DIR 请切回原值再试；也可能是该会话记录的独立家目录已被删除（原记录无损保留，可另派新单）", ts: Date.now() };
             managed.logs.push(entry);
-            if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+            if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
             this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           }
           this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
