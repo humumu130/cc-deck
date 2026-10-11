@@ -371,6 +371,20 @@
     /* FB1 左锚口径更新（W-TOPBAR ②）：switcher 移左后菜单向右展开、右侧全是空弹簧，
        右锚防探沿前提已消失；但 nova 壳三钮占位仍在，左锚保留并同款限定 nova */
     html.nova-tauri .windowbar .source-menu { right: auto; left: 0; }
+    /* W-UIPOLISH ②：nova 无框窗四角圆角——壳侧窗口 transparent:true（tauri.nova.conf.json），
+       body 背景透明让圆角外露桌面，frame 圆角 + overflow:hidden（既有）裁出四角。
+       全屏时退直角（is-native-fullscreen 由 resize 判定挂 html，见 tauri class 挂载段）——
+       全屏圆角会留透明缺角，直角才对。限定 .nova-tauri：标准 mac 壳（系统标题栏自带
+       圆角）与 win 壳（decorations:true）不受影响。frame 底色维持基础规则 --bg1（与
+       从前一致，body 的氛围渐变本就被满窗 frame 遮住从未可见）；阴影由壳窗口 shadow
+       承载，网页不再加 box-shadow 防双影 */
+    html.nova-tauri, html.nova-tauri body { background: transparent; }
+    /* 浅色主题 body 有 (0,2,1) 特异度背景（1844 区），nova 透明需同权压制 */
+    html.nova-tauri[data-theme="light"], html.nova-tauri[data-theme="light"] body { background: transparent; }
+    html.nova-tauri .desktop-frame { border-radius: 10px; }
+    html.nova-tauri.is-native-fullscreen .desktop-frame { border-radius: 0; }
+    html.nova-tauri .desktop-frame { border-radius: 10px; }
+    html.nova-tauri.is-native-fullscreen .desktop-frame { border-radius: 0; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell, .icon-nav { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
     /* W-UIFB ⑤：rail 图标整体微增大（+2px，用户原话「增益增大一点点」——只动桌面图标栏，
@@ -670,6 +684,7 @@
     .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
     .composer-input:focus-visible { outline: none; }
     .composer-input::placeholder { color: var(--faint); }
+    .composer[data-composer="session"] .composer-input::placeholder { font-size: var(--fs-A-item); } /* W-UIPOLISH ④：排队提示等占位文案 14→13px（--fs-A 降一档），弱化不打扰 */
     .composer-clip, .composer-img { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
     .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
     .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
@@ -1256,7 +1271,9 @@
     .mini-list-link { display: inline-block; margin: 10px 0 2px; padding: 0; border: 0; background: transparent; color: var(--brand); cursor: pointer; font-size: var(--fs-C); }
     .mini-list-link:hover { text-decoration: underline; }
     .readonly-banner {padding: 8px 10px; margin-bottom: 14px; border: 1px solid color-mix(in srgb, var(--readonly-line) 55%, transparent); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: var(--fs-B);} /* FB7：虚线清为低对比实线 */
-    .notice { display: flex; gap: 9px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; cursor: pointer; }
+    /* W-UIPOLISH ⑤：行加左右 10px padding——内容不顶格（hover/选中色块仍满宽，
+       与 sticky 组头满宽背景相容；容器级 padding 会让组头钉顶两侧透行故不用） */
+    .notice { display: flex; gap: 9px; padding: 10px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; cursor: pointer; }
     .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
     .notice strong {display: block; color: var(--text-strong); font-size: var(--fs-A-item);}
@@ -1276,7 +1293,9 @@
     .nrow-r3 .source-badge { font-size: var(--fs-C); opacity: .75; } /* C4：源标签小号灰居后 */
     /* 件十二-B：轻行时间戳（右侧弱色）+ 第三列详情头（来源 kicker+动作提示） */
     .notice .nrow-time { display: block; margin-top: 3px; color: var(--faint); font: var(--fs-B) var(--mono); font-variant-numeric: tabular-nums; }
-    .notify-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+    /* W-UIPOLISH ⑥a：详情头「验收单」等类别胶囊加左右 14px——此前 margin 左右 0 从列缘
+       顶格起（用户实锤贴左缘），与下方详情卡 12px/14px 内缩对齐 */
+    .notify-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 0 14px 12px; }
     .notify-detail-head .notify-source-kicker { display: inline-flex; align-items: center; gap: 6px; color: var(--info); font-size: var(--fs-B); }
     .notify-detail-head .notify-source-kicker .icon-inline { width: 14px; height: 14px; }
     .notify-detail-head .notify-detail-jump-hint { color: var(--faint); font-size: var(--fs-B); }
@@ -1294,7 +1313,10 @@
     .notify-source-card[data-notify-active="false"] .notice-icon, .mobile-notify-card .avatar:has(.icon-info) { color: var(--dim); background: var(--surface2); }
     section.artifact-source .source-badge::before { display: none; }
     section.artifact-source .source-badge.unreachable { color: var(--working); border-color: var(--working); background: transparent; }
-    .notify-source-card .notice-icon { flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--error) 13%, var(--surface2)); }
+    /* W-UIPOLISH ⑥b：详情卡图标容器补 grid 居中——此前只有 .notice 祖先链的 grid 规则
+       （1261）覆盖不到 notify-source-card，icon 按 inline baseline 排版→单据图案偏左上
+       （用户实锤）；display:grid + place-items 修到几何居中 */
+    .notify-source-card .notice-icon { display: grid; place-items: center; flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--error) 13%, var(--surface2)); }
     .notify-source-card .notice-icon .icon-inline { width: 16px; height: 16px; }
     .nrow-r1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
     .nrow-r1 h3 { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); text-overflow: ellipsis; white-space: nowrap; }
@@ -1512,9 +1534,9 @@
     body[data-card-density="relaxed"] { --fs-A: calc(16px * var(--ui-scale)); --fs-A-item: calc(15px * var(--ui-scale)); --fs-B: calc(14px * var(--ui-scale)); --fs-C: calc(13px * var(--ui-scale)); --fs-D: calc(15.5px * var(--ui-scale)); --fs-E: calc(14px * var(--ui-scale)); --fs-F: calc(14px * var(--ui-scale)); --fs-page: calc(18px * var(--ui-scale)); --fs-cta: calc(15px * var(--ui-scale)); --fs-micro: calc(12px * var(--ui-scale)); }
     /* W-UIFIX C：密度定卡高/纵向 pad 乘 --ui-scale（overflow:hidden 钉高容器，字大不乘必裁）；
        横向 pad 不乘（列宽骨架不动） */
-    body { --density-card-block-size: calc(76px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: calc(54px * var(--ui-scale)); }
-    body[data-card-density="compact"] { --density-card-block-size: calc(58px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: calc(48px * var(--ui-scale)); }
-    body[data-card-density="relaxed"] { --density-card-block-size: calc(86px * var(--ui-scale)); --density-card-pad-block: calc(10px * var(--ui-scale)); --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: calc(62px * var(--ui-scale)); }
+    body { --density-card-block-size: calc(76px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: calc(58px * var(--ui-scale)); } /* W-UIPOLISH ⑦：通知行高 +4px（54→58），compact/relaxed 同步 */
+    body[data-card-density="compact"] { --density-card-block-size: calc(58px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: calc(52px * var(--ui-scale)); }
+    body[data-card-density="relaxed"] { --density-card-block-size: calc(86px * var(--ui-scale)); --density-card-pad-block: calc(10px * var(--ui-scale)); --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: calc(66px * var(--ui-scale)); }
     /* ---------- #005-UI 会话列微信式通栏行（参照旧版 #78 拍板演进移植，005 命名体系
        srow-* 前缀，勿搬旧版 q-*）：无框通栏、行间零分隔线（纯留白分行）；三段式骨架 =
        srow-ava（源色淡化头像 + 状态灯叠角）/ srow-main 三行制（用户直馈 2026-10-05：
@@ -1554,7 +1576,9 @@
     #d-session .srow-ava { position: relative; display: grid; place-items: center; flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--srow-ava-c, var(--source)) 16%, var(--surface2)); color: var(--srow-ava-c, var(--text-strong)); font: 700 var(--srow-ava-font)/1 var(--mono); user-select: none; }
     #d-session .srow-ava .status-dot { --dot-halo: var(--faint); position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; box-shadow: 0 0 0 2px var(--bg1), 0 0 0 3px color-mix(in srgb, var(--dot-halo) 20%, transparent); }
     #d-session .srow-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--srow-gap); }
-    #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    /* W-UIPOLISH ①：r1 挂 relative 作行钮浮层锚——时间戳贴真右上角（此前三钮 opacity:0
+       仍占流内位，时间被顶离右缘 60px+ 成「居中偏右」；浮层化后 hover 淡出时间让位不变） */
+    #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; position: relative; }
     #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: calc(18px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
     /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
@@ -1564,7 +1588,12 @@
        hover 淡出让位是既有 ：1471 行为，此处即占其位），点击等效右键菜单（触控板/无右键
        用户入口）；键盘可达（button 原生 Enter）。件五补（用户补充意见）：行尾扩「置顶图钉 +
        关闭 ×」钮组（与项目卡 project-open-btn 同语言），32px 命中区（伪元素外扩 5px） */
-    #d-session .srow-more, #d-session .srow-pin, #d-session .srow-close { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--faint); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
+    /* W-UIPOLISH ①：行钮浮层化（absolute 不占流）——right 三级 0/28/56px（22px 钮宽+6 间隙），
+       top 50% 垂直居中；::before 扩点击域语义不变（absolute 父仍是其子 absolute 的包含块） */
+    #d-session .srow-more, #d-session .srow-pin, #d-session .srow-close { position: absolute; top: 50%; transform: translateY(-50%); flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--faint); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
+    #d-session .srow-close { right: 0; }
+    #d-session .srow-pin { right: 28px; }
+    #d-session .srow-more { right: 56px; }
     #d-session .srow-more::before, #d-session .srow-pin::before, #d-session .srow-close::before { content: ""; position: absolute; inset: -5px; }
     #d-session .srow-more:hover, #d-session .srow-pin:hover, #d-session .srow-close:hover { background: var(--hover); color: var(--text-strong); }
     #d-session .srow-pin svg, #d-session .srow-close svg { width: 13px; height: 13px; }
@@ -4979,7 +5008,10 @@
                 const group = () => state.projects?.find((item) => item.id === state.selected);
                 const engine = (key) => engines.get(key) || [key || "引擎未知", ""];
                 const engineBadge = (key) => { const value = engine(key); return '<span class="engine-badge ' + value[1] + '">' + escape(value[0]) + "</span>"; };
-                const sourceBadge = () => '<span class="source-badge">' + escape(state.source) + "</span>";
+                // W-UIPOLISH ⑧：源名统一走 sourceDisplayName 映射（localhost→本机）——
+                // 件十三只清了 9 处，团队域整域漏网（用户实锤团队名称旁仍挂 localhost）
+                const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
+                const sourceBadge = () => '<span class="source-badge">' + escape(srcName(state.source)) + "</span>";
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
                   const session = state.sessions.get(member.session_id) || {};
@@ -5004,7 +5036,7 @@
                   const status = legacyStatuses.get(task.status) || task.status;
                   const label = lanes.find((lane) => lane[0] === status)?.[1] || "未知状态：" + String(task.status ?? "未标注");
                   const tagClass = status === "done" ? "done" : status === "claimed" ? "info" : "action";
-                  return '<div class="task-card" data-team-task="' + escape(task.id) + '"><strong>' + escape(task.text || task.id) + '</strong><p>' + escape(task.note || "") + '</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><span><b>' + escape(info.name) + " · " + escape(info.role) + "</b> " + escape(engine(info.engine)[0]) + " · " + escape(state.source) + '</span></div><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + '<span class="tag ' + tagClass + '">' + escape(label) + '</span></div>' + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + "</div>";
+                  return '<div class="task-card" data-team-task="' + escape(task.id) + '"><strong>' + escape(task.text || task.id) + '</strong><p>' + escape(task.note || "") + '</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><span><b>' + escape(info.name) + " · " + escape(info.role) + "</b> " + escape(engine(info.engine)[0]) + " · " + escape(srcName(state.source)) + '</span></div><div class="identity-cluster">' + engineBadge(info.engine) + sourceBadge() + '<span class="tag ' + tagClass + '">' + escape(label) + '</span></div>' + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + "</div>";
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
@@ -5398,7 +5430,7 @@
                   query("[data-team-title]").textContent = project?.name || "团队";
                   query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? (state.online ? "无团队数据" : "正在连接") : "暂无项目组";
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
-                  query("[data-team-source]").textContent = state.source;
+                  query("[data-team-source]").textContent = srcName(state.source); // W-UIPOLISH ⑧：团队名称旁源徽标同走映射（用户实锤漏网点）
                   window.__ccDeck005SetWindowbarHint?.("team", project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
@@ -6849,6 +6881,17 @@
         const tauriClasses = [IS_MAC ? "mac-tauri" : "win-tauri"];
         if (window.__CCDECK_NOVA) tauriClasses.push("nova-tauri");
         document.documentElement.classList.add(...tauriClasses);
+        // W-UIPOLISH ②：nova 圆角的全屏退直角——窗口盖满屏幕且无菜单栏偏移（screenY≤8，
+        // 全屏态菜单栏隐藏窗口顶到 0；窗口态恒 y≥25 菜单栏高）才挂 is-native-fullscreen，
+        // frame 圆角清零防四角透明缺角。仅比宽高会误伤「窗口恰好=逻辑分辨率」的机器
+        //（1440×900 屏 + conf 默认 1440×900 窗口，真机实测误判）；resize 即判即切。
+        // 8px 容差吸收系统菜单/坞隐显的像素差
+        const fsSync = () => {
+          const full = window.innerWidth >= screen.width - 8 && window.innerHeight >= screen.height - 8 && window.screenY <= 8;
+          document.documentElement.classList.toggle("is-native-fullscreen", full);
+        };
+        window.addEventListener("resize", fsSync);
+        fsSync();
       }
       const MOD_KEY = (k) => IS_MAC ? "⌘" + k : "Ctrl+" + k;
       let mobileReturn = "inbox";
@@ -8111,7 +8154,7 @@ function connectLan(ctx) {
           tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
           engine: escapeHtml(engine[0]),
           engineClass: engine[1],
-          source: escapeHtml(ctx.relayName),
+          source: escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(ctx.relayName) : ctx.relayName), // W-UIPOLISH ⑧：件十三漏网——地基列表卡源名同走映射（B2 让位期间仍会渲染）
           time: activityTime ? fmtListTimeBase(activityTime) : "",
           selected: session.session_id === ctx.selectedSessionId,
           pinned: session.pinned === true,
