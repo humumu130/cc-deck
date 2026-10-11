@@ -20,6 +20,12 @@ W1=$( { shasum -a 256 web-console/index.html 2>/dev/null || echo "MISSING MISSIN
 W2=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 W3=$( { shasum -a 256 web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 W4=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+# relay-service 静态面（2026-10-11 用户实锤 P0：桌面壳页面从 relay HTTP 加载=
+# ~/.cc-deck/relay-service/web-console/，该目录 10/8 后漏同步停在 test.4-dev——
+# 用户看了一整天旧界面，15 件修复「全没解决」实为此幻象。部署脚本只拷 relay.mjs
+# 不拷 web-console 的盲区在此堵死：源≠部署位即红，修复=cp 同步）
+S1=$( { shasum -a 256 ~/.cc-deck/relay-service/web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+S2=$( { shasum -a 256 ~/.cc-deck/relay-service/web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
@@ -29,6 +35,9 @@ FAIL=0
 [ "$W1" = "MISSING" ] && { echo "❌ web-console/index.html 源不存在"; FAIL=1; }
 [ "$W3" = "$W4" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index-005.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
 [ "$W3" = "MISSING" ] && { echo "❌ web-console/index-005.html 源不存在"; FAIL=1; }
+[ "$W1" = "$S1" ] || { echo "❌ relay-service 静态面 ≠ web-console/index.html 源（cp web-console/index.html ~/.cc-deck/relay-service/web-console/ 同步后重启壳）"; FAIL=1; }
+[ "$W3" = "$S2" ] || { echo "❌ relay-service 静态面 ≠ web-console/index-005.html 源（cp web-console/index-005.html ~/.cc-deck/relay-service/web-console/ 同步后重启壳）"; FAIL=1; }
+[ "$S1" = "MISSING" ] && { echo "⚠️  relay-service/web-console 不存在（relay-service 未部署？）"; }
 
 # git 工作区必须干净（发版前未提交改动 = 产物与仓库不一致的风险源）
 if [ -n "$(git status --porcelain)" ]; then
