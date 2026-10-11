@@ -1684,6 +1684,20 @@
     .exp-form label { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: var(--fs-E); }
     .exp-form input, .exp-form select { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font-size: var(--fs-E); }
     .exp-hint { flex-basis: 100%; color: var(--faint); font-size: var(--fs-C); }
+    /* W-RULES2 团队铁律 pane（团队域第六 tab）：复用 .task-card/.exp-badge/.exp-filters/.exp-form 地基，规则域新增强度两类 */
+    .rule-row.rd-off { opacity: .62; }
+    .rule-row .exp-badge.rd-aud-leader { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, transparent); opacity: .85; }
+    .rule-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+    .rule-toolbar .exp-badge { margin-left: auto; }
+    .rule-count { color: var(--faint); font-size: var(--fs-C); font-variant-numeric: tabular-nums; }
+    .rule-count.over { color: var(--error); font-weight: 700; }
+    .rule-form textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font-size: var(--fs-E); line-height: 1.5; resize: vertical; }
+    .rule-preview { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+    .rule-prow { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 5px 7px; border: 1px solid var(--line-soft); border-radius: 7px; font-size: var(--fs-C); }
+    .rule-prow.rd-pbad { border-color: color-mix(in srgb, var(--error) 45%, transparent); background: color-mix(in srgb, var(--error) 7%, transparent); }
+    .rule-pn { color: var(--faint); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    .rule-pt { flex: 1; min-width: 0; color: var(--text-strong); overflow-wrap: anywhere; }
+    .rule-pflag { flex-basis: 100%; color: var(--error); font-size: var(--fs-C); line-height: 1.5; }
     .demo-state-badge {position: absolute; z-index: 18; top: 42px; right: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface2); color: var(--dim); font: 700 var(--fs-micro) var(--mono); pointer-events: none;}
     .mobile-frame .demo-state-badge { top: 12px; right: 12px; }
     .demo-empty-state { display: grid; place-items: center; gap: 8px; min-height: 120px; padding: 22px 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface1); color: var(--dim); text-align: center; }
@@ -4920,7 +4934,7 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
               <footer class="workspace-footer"><div data-team-actions></div><div class="readonly-banner" data-team-feedback role="status" aria-live="polite">决议仅由你点击确认或否决后发起。</div></footer>
             </section>
@@ -4938,7 +4952,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null };
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false };
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -5112,6 +5126,244 @@
                     render();
                   }).catch(() => { state.expFlights.delete(id); render(); });
                 }
+                // ---------- W-RULES2 团队铁律 pane（团队域第六 tab；relay rules 域 P2 端面）----------
+                // 数据源：SNAPSHOT.rules（覆盖式锚定）+ RULES_UPDATED 帧（帧双载恒带 entries
+                // 全量，覆盖式消费——B3 吃全量口径）。操作=新增/退役（两步武装）/替代（旧指新，
+                // 行内表单）+ markdown 批量导入（预览标红→确认批量直写）。写面 direct:true=
+                // 面板用户主权面（org CLI direct 同信任级，表单/导入预览即用户审定）。P1 无
+                // 恢复/删除语义（retired/superseded 终态 append-only）——「恢复」正解=重立新条。
+                // leader 受众条目管理面全量可见，以徽章+图例说明注入面（置灰说明口径）。
+                const RULE_ROLE_VOCAB = ["worker", "pm", "team_pm", "review", "review_pm"]; // BIZ_ROLE_VOCAB 镜像（fail-closed 词表）
+                const RULES_IMPORT_TEMPLATE = ["# 团队铁律批量导入", "## 全员", "- （示例）交付前必须完成自测，缺项在回执写明", "## 角色：worker", "- （示例）动工前先认领任务单，不重复开工", "## Leader", "- （示例）派单必须附带验收点"].join("\n");
+                function updateRules(items) {
+                  state.rules = Array.isArray(items) ? entities(items).filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null;
+                }
+                function ruleAudLabel(aud) {
+                  if (aud === "all") return "全员";
+                  if (aud === "leader") return "Leader";
+                  if (typeof aud === "string" && aud.startsWith("role:")) return "角色:" + aud.slice(5);
+                  return aud || "?";
+                }
+                function ruleScopeName(scope) {
+                  if (scope === "team") return "团队";
+                  if (typeof scope === "string" && scope.startsWith("project:")) return expProjectName(scope.slice(8));
+                  return scope || "?";
+                }
+                function ruleNormKey(text) { // team-rules.ts normRuleKey 客户端镜像（预览去重；权威在 relay store）
+                  return String(text || "").trim().toLowerCase().normalize("NFKC")
+                    .replace(/[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{L}\p{N}]/gu, "")
+                    .slice(0, 64);
+                }
+                function parseRulesMarkdown(md) { // B 路格式宽容解析（旧壳同款）：任意级标题认节/列表符剥除/裸行也收
+                  const out = [];
+                  let aud = null;
+                  for (const rawLine of String(md || "").split(/\r?\n/)) {
+                    const line = rawLine.trim();
+                    if (!line) continue;
+                    const h = line.match(/^#{1,6}\s+(.+)$/);
+                    if (h) {
+                      const t = h[1].trim();
+                      const roleM = t.match(/^角色[:：]\s*(.+)$/);
+                      if (/^全员$/.test(t)) aud = "all";
+                      else if (/^leader$/i.test(t)) aud = "leader";
+                      else if (roleM) aud = "role:" + roleM[1].trim().toLowerCase();
+                      else aud = null;
+                      continue;
+                    }
+                    if (!aud) continue;
+                    const text = line.replace(/^[-*•]\s*/, "").replace(/^\d+[.、)）]\s*/, "").trim();
+                    if (text) out.push({ text, audience: aud });
+                  }
+                  return out;
+                }
+                function rulePreviewFlags(text, audience, scope) { // 导入预览标红（客户端预检；relay store 闸仍权威）
+                  const flags = [];
+                  if (text.length > 120) flags.push("超 120 字（" + text.length + "）——精简或拆条");
+                  if (audience.startsWith("role:")) {
+                    const role = audience.slice(5);
+                    if (!RULE_ROLE_VOCAB.includes(role)) flags.push("角色词表外（" + role + "）——可用：" + RULE_ROLE_VOCAB.join("/"));
+                  }
+                  const all = state.rules ?? [];
+                  const key = ruleNormKey(text);
+                  const dup = all.find((e) => e.status === "active" && e.scope === scope && e.audience === audience && ruleNormKey(e.text) === key);
+                  if (dup) flags.push("与在役规则重复（" + dup.id + "）——改规则用「替代」，或先退役旧条");
+                  const bucket = all.filter((e) => e.status === "active" && e.scope === scope && (audience === "leader" ? false : e.audience === audience)).length;
+                  const cap = scope === "team" ? (audience.startsWith("role:") ? 4 : 6) : 4;
+                  if (!dup && bucket >= cap) flags.push("该范围在役规则已满 " + bucket + "/" + cap + " 条——先退役/替代精简再导入");
+                  return flags;
+                }
+                function rulesCanOp() {
+                  return Boolean(state.command && state.online && !state.unsupported.has("COMMAND_ORG_ACTION") && state.rulesEnabled !== false);
+                }
+                function rulesFiltered() {
+                  return (state.rules ?? []).filter((e) => {
+                    if (state.rulesFilter.status === "active" && e.status !== "active") return false;
+                    if (state.rulesFilter.status === "archived" && e.status === "active") return false;
+                    if (state.rulesFilter.scope === "team" && e.scope !== "team") return false;
+                    if (state.rulesFilter.scope !== "all" && state.rulesFilter.scope !== "team" && String(e.scope || "").replace(/\/+$/, "") !== String(state.rulesFilter.scope).replace(/\/+$/, "")) return false;
+                    return true;
+                  }).sort((a, b) => (Number(a.created_at) || 0) - (Number(b.created_at) || 0)); // active 按 created_at 升序（拍板口径）
+                }
+                function ruleRow(e) {
+                  const armed = state.rulesArm === e.id;
+                  const flight = state.rulesFlights.has(e.id);
+                  const active = e.status === "active";
+                  const formOpen = state.rulesForm === e.id;
+                  const sup = e.status === "superseded" && e.superseded_by ? '<span class="exp-badge" title="替代链">→ ' + escape(e.superseded_by) + "</span>" : "";
+                  return '<div class="task-card exp-row rule-row' + (active ? "" : " rd-off") + '" data-rule-id="' + escape(e.id) + '">' +
+                    '<div class="inspector-title"><strong title="' + escape(e.id) + '">' + escape(e.text) + '</strong><span class="tag ' + (active ? "done" : "faint") + '">' + (active ? "在役" : e.status === "retired" ? "已退役" : "已替代") + "</span></div>" +
+                    "<p>" + '<span class="exp-badge' + (e.audience === "leader" ? ' rd-aud-leader" title="仅注入 Leader 会话——worker 派单不可见' : "") + '">' + escape(ruleAudLabel(e.audience)) + "</span>" +
+                    '<span class="exp-badge">' + escape(ruleScopeName(e.scope)) + "</span>" +
+                    '<span class="exp-badge">' + expFmtTime(e.created_at) + "</span>" + sup + "</p>" +
+                    (rulesCanOp() && active ? '<div class="identity-cluster">' +
+                      '<button type="button" class="danger-btn" data-rule-retire="' + escape(e.id) + '"' + (flight ? " disabled" : "") + ">" + (armed ? "确认退役？" : "退役") + "</button>" +
+                      '<button type="button" class="secondary-btn" data-rule-supersede="' + escape(e.id) + '">' + (formOpen ? "收起" : "替代（旧指新）") + "</button></div>" : "") +
+                    (rulesCanOp() && active && formOpen ? '<div class="exp-form rule-form">' +
+                      '<textarea data-rule-sp-text rows="2" placeholder="新规则文本（受众/范围缺省继承旧条，≤120 字）"></textarea>' +
+                      '<span class="rule-count">0/120</span>' +
+                      '<button type="button" class="primary-btn" data-rule-sp-go="' + escape(e.id) + '"' + (flight ? " disabled" : "") + ">提交替代</button>" +
+                      '<span class="exp-hint">替代=新条入库 + 旧条停注并指向新条（替代链）。</span></div>' : "") +
+                    (!active ? '<span class="exp-hint">终态条目（append-only 审计）——需恢复请以同义文本重立新条。</span>' : "") +
+                    "</div>";
+                }
+                function rulesMarkup() {
+                  if (state.rulesEnabled === false) return banner("团队规则总开关已关闭（relay 设置）——注入已停，此面板暂不可用。");
+                  if (state.rules === null) return banner(state.online ? "此 relay 无规则库数据（旧版本 relay 或规则域未随快照下发）" : "正在连接…（团队铁律数据待同步）");
+                  const head = '<div class="rule-toolbar">' +
+                    '<button type="button" class="secondary-btn" data-rules-add-toggle' + (rulesCanOp() ? "" : " disabled") + ">＋ 新增</button>" +
+                    '<button type="button" class="secondary-btn" data-rules-imp-toggle' + (rulesCanOp() ? "" : " disabled") + ">⇪ 批量导入</button>" +
+                    '<span class="exp-badge">在役 ' + state.rules.filter((e) => e.status === "active").length + " · 团队全员 " + state.rules.filter((e) => e.status === "active" && e.scope === "team" && e.audience === "all").length + "/6 · 共 " + state.rules.length + " 条</span></div>";
+                  const addForm = !state.rulesAddOpen ? "" : '<div class="exp-form rule-form">' +
+                    '<textarea data-rules-add-text rows="2" placeholder="一句话红线（祈使句，≤120 字）"></textarea>' +
+                    '<span class="rule-count">0/120</span>' +
+                    '<label>受众 <select data-rules-add-aud><option value="all">全员</option><option value="leader">Leader</option>' +
+                    RULE_ROLE_VOCAB.map((r) => '<option value="role:' + r + '">角色:' + r + "</option>").join("") + "</select></label>" +
+                    '<label>范围 <select data-rules-add-scope><option value="team">团队</option>' +
+                    (state.projects ?? []).map((p) => '<option value="project:' + escape(p.anchor_dir || "") + '">项目:' + escape(p.name || p.id) + "</option>").join("") + "</select></label>" +
+                    '<button type="button" class="primary-btn" data-rules-add-go>入库</button>' +
+                    '<span class="exp-hint">面板入库=用户直写（org CLI 同信任级）；同主题在役规则会拒收，改规则请用「替代」。</span></div>';
+                  const impForm = !state.rulesImpOpen ? "" : '<div class="exp-form rule-form">' +
+                    '<textarea data-rules-imp-text rows="6" placeholder="粘贴 markdown：&#10;## 全员&#10;- 条目…&#10;## 角色：worker&#10;- 条目…&#10;## Leader&#10;- 条目…"></textarea>' +
+                    '<button type="button" class="primary-btn" data-rules-imp-parse>生成预览</button>' +
+                    '<button type="button" class="secondary-btn" data-rules-imp-tpl>复制模板</button>' +
+                    '<span class="exp-hint">格式：## 全员 / ## 角色：&lt;name&gt; / ## Leader 分节 + 列表项；导入均为团队范围，逐条过数值闸（超限/重复标红）。</span>' +
+                    (state.rulesImpPreview ? (
+                      state.rulesImpPreview.length
+                        ? '<div class="rule-preview">' + state.rulesImpPreview.map((it, i) =>
+                            '<div class="rule-prow' + (it.flags.length ? " rd-pbad" : "") + '">' +
+                            '<span class="rule-pn">' + (i + 1) + "</span>" +
+                            '<span class="rule-pt">' + escape(it.text) + "</span>" +
+                            '<span class="exp-badge">' + escape(ruleAudLabel(it.audience)) + "</span>" +
+                            (it.flags.length ? '<span class="rule-pflag">' + it.flags.map((f) => escape(f)).join("；") + "</span>" : "") +
+                            "</div>").join("") + "</div>" +
+                          '<button type="button" class="primary-btn" data-rules-imp-go>确认导入 ' + state.rulesImpPreview.filter((it) => !it.flags.length).length + "/" + state.rulesImpPreview.length + " 条</button>" +
+                          '<span class="exp-hint">标红条目不会提交；导入走逐条数值闸，失败项逐条报出。</span>'
+                        : banner("未解析出任何条目——检查分节头（## 全员 / ## 角色：x / ## Leader）与条目行。")
+                    ) : "") + "</div>";
+                  if (!state.rules.length) return head + addForm + impForm + banner("规则库为空——新增一条红线，或用「批量导入」粘贴 markdown。");
+                  const list = rulesFiltered();
+                  const hasLeader = state.rules.some((e) => e.status === "active" && e.audience === "leader");
+                  const filters = '<div class="exp-filters">' +
+                    '<select class="exp-filter" data-rules-filter-status aria-label="状态筛选"><option value="active"' + (state.rulesFilter.status === "active" ? " selected" : "") + ">在役</option>" +
+                    '<option value="archived"' + (state.rulesFilter.status === "archived" ? " selected" : "") + ">归档（退役/替代）</option>" +
+                    '<option value="all"' + (state.rulesFilter.status === "all" ? " selected" : "") + ">全部</option></select>" +
+                    '<select class="exp-filter" data-rules-filter-scope aria-label="范围筛选"><option value="all"' + (state.rulesFilter.scope === "all" ? " selected" : "") + ">全部范围</option>" +
+                    '<option value="team"' + (state.rulesFilter.scope === "team" ? " selected" : "") + ">团队</option>" +
+                    (state.projects ?? []).map((p) => {
+                      const anchor = "project:" + String(p.anchor_dir || "").replace(/\/+$/, "");
+                      return '<option value="' + escape(anchor) + '"' + (state.rulesFilter.scope === anchor ? " selected" : "") + ">项目:" + escape(p.name || p.id) + "</option>";
+                    }).join("") + "</select></div>";
+                  return head + addForm + impForm + filters +
+                    (hasLeader ? banner("Leader 徽章条目仅注入 Leader 会话，worker 派单不可见（管理面全量可见不隐藏）。") : "") +
+                    (list.length ? list.map(ruleRow).join("") : banner("当前筛选无条目"));
+                }
+                function ruleOp(type, id) { // 退役：两步武装确认（经验库 expOp 同款）+ 飞行去重
+                  if (!rulesCanOp() || state.rulesFlights.has(id)) return;
+                  if (state.rulesArm !== id) {
+                    state.rulesArm = id;
+                    clearTimeout(state.rulesArmTimer);
+                    state.rulesArmTimer = setTimeout(() => { state.rulesArm = null; render(); }, 4000);
+                    render();
+                    return;
+                  }
+                  clearTimeout(state.rulesArmTimer);
+                  state.rulesArm = null;
+                  state.rulesFlights.add(id);
+                  render();
+                  state.command("COMMAND_ORG_ACTION", { action: type, id }).then((ack) => {
+                    state.rulesFlights.delete(id);
+                    const ok = ack && ack.ok === true && !(typeof ack.error === "string" && ack.error.trim());
+                    if (!ok && /unknown.?command|unsupported|不支持/i.test(String(ack && ack.error))) state.unsupported.add("COMMAND_ORG_ACTION");
+                    toast(ok ? "已退役（终态；恢复请重立新条）" : "操作失败：" + String((ack && ack.error) || "未收到回执"));
+                    render(); // 权威收敛走 RULES_UPDATED 帧，此处只清飞行态
+                  }).catch(() => { state.rulesFlights.delete(id); render(); });
+                }
+                function ruleSupersedeSubmit(id, text) { // 替代（旧指新）：relay 单漏斗原子落两变
+                  if (!rulesCanOp() || state.rulesFlights.has(id)) return;
+                  if (!text) { toast("新规则文本必填"); return; }
+                  state.rulesFlights.add(id);
+                  render();
+                  state.command("COMMAND_ORG_ACTION", { action: "rule-supersede", id, text, created_by: "user" }).then((ack) => {
+                    state.rulesFlights.delete(id);
+                    const ok = ack && ack.ok === true;
+                    if (!ok && /unknown.?command|unsupported|不支持/i.test(String(ack && ack.error))) state.unsupported.add("COMMAND_ORG_ACTION");
+                    if (ok) { state.rulesForm = null; toast("已替代：新条入库、旧条停注指向新条"); }
+                    else toast("替代失败：" + String((ack && ack.error) || "未收到回执"));
+                    render();
+                  }).catch(() => { state.rulesFlights.delete(id); render(); });
+                }
+                function ruleAddSubmit(text, audience, scope) { // 新增：面板用户直写（direct）
+                  if (!rulesCanOp()) return;
+                  if (!text) { toast("规则文本必填"); return; }
+                  if (text.length > 120) { toast("超 120 字（" + text.length + "）——精简或拆条"); return; }
+                  const fid = "add";
+                  if (state.rulesFlights.has(fid)) return;
+                  state.rulesFlights.add(fid);
+                  render();
+                  state.command("COMMAND_ORG_ACTION", { action: "rule-append", text, audience, scope, direct: true, created_by: "user" }).then((ack) => {
+                    state.rulesFlights.delete(fid);
+                    const ok = ack && ack.ok === true;
+                    if (!ok && /unknown.?command|unsupported|不支持/i.test(String(ack && ack.error))) state.unsupported.add("COMMAND_ORG_ACTION");
+                    if (ok) { state.rulesAddOpen = false; toast("规则已入库"); }
+                    else toast("入库失败：" + String((ack && ack.error) || "未收到回执"));
+                    render();
+                  }).catch(() => { state.rulesFlights.delete(fid); render(); });
+                }
+                function rulesImportParse() { // 生成预览：逐条客户端预检标红（服务端闸仍权威）
+                  const pane = query("[data-rules-imp-text]");
+                  state.rulesImpText = pane ? pane.value : "";
+                  state.rulesImpPreview = parseRulesMarkdown(state.rulesImpText).map((it) => ({ ...it, flags: rulePreviewFlags(it.text, it.audience, "team") }));
+                  render();
+                }
+                function rulesImportConfirm() { // 批量导入：无旗标条目逐条 direct 入库
+                  if (!rulesCanOp() || state.rulesImpFlight || !Array.isArray(state.rulesImpPreview)) return;
+                  const items = state.rulesImpPreview.filter((it) => it && !it.flags.length);
+                  if (!items.length) { toast("没有可导入的条目（全部标红）"); return; }
+                  state.rulesImpFlight = true;
+                  render();
+                  let okN = 0;
+                  const errs = [];
+                  const run = (i) => {
+                    if (i >= items.length) {
+                      state.rulesImpFlight = false;
+                      if (!errs.length) { state.rulesImpOpen = false; state.rulesImpPreview = null; state.rulesImpText = ""; toast("已导入 " + okN + " 条"); }
+                      else toast("导入 " + okN + "/" + items.length + " 条；失败：" + errs.slice(0, 2).join("；") + (errs.length > 2 ? " 等 " + errs.length + " 项" : ""));
+                      render();
+                      return;
+                    }
+                    const it = items[i];
+                    state.command("COMMAND_ORG_ACTION", { action: "rule-append", text: it.text, audience: it.audience, scope: "team", direct: true, created_by: "user" }).then((ack) => {
+                      const ok = ack && ack.ok === true && !(typeof ack.error === "string" && ack.error.trim());
+                      if (ok) okN += 1;
+                      else errs.push("「" + (it.text.length > 16 ? it.text.slice(0, 16) + "…" : it.text) + "」：" + String((ack && ack.error) || "未收到回执"));
+                      run(i + 1);
+                    }).catch((e) => {
+                      errs.push("「" + (it.text.length > 16 ? it.text.slice(0, 16) + "…" : it.text) + "」：" + String(e?.message || e));
+                      run(i + 1);
+                    });
+                  };
+                  run(0);
+                }
                 function render() {
                   if (!state.mounted) return;
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
@@ -5143,6 +5395,7 @@
                   panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>";
                   panes[3].innerHTML = activityHtml;
                   panes[4].innerHTML = experienceMarkup(); // W-EXPP2 经验库第五 tab
+                  panes[5].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第六 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
                   const decisionButtons = (confirm) => {
@@ -5235,6 +5488,9 @@
                   // W-EXPP2 经验域锚定（字段存在=锚定，空数组也成立；缺席=旧 relay 不渲染）
                   updateExperiences(payload.experience);
                   state.experienceEnabled = payload.experience_enabled !== false;
+                  // W-RULES2 铁律域锚定（experience 同款口径）
+                  updateRules(payload.rules);
+                  state.rulesEnabled = payload.rules_enabled !== false;
                   for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
                   if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   render();
@@ -5250,6 +5506,8 @@
                   // W-EXPP2 经验域帧：帧双载恒带 entries 全量 → 覆盖式消费（未锚定=experiences
                   // null 时同帧即锚定——SNAPSHOT 先行兜底过，此处权威刷新）；expArm/expForm 保持
                   if (message?.type === "EXPERIENCE_UPDATED" && Array.isArray(payload?.entries)) { updateExperiences(payload.entries); render(); return true; }
+                  // W-RULES2 铁律域帧（EXPERIENCE_UPDATED 同构）：覆盖式消费；rulesArm/rulesForm 保持
+                  if (message?.type === "RULES_UPDATED" && Array.isArray(payload?.entries)) { updateRules(payload.entries); render(); return true; }
                   return false;
                 }
                 function bind({ command = null, online = false } = {}) {
@@ -5408,7 +5666,7 @@
                 function mount() {
                   if (state.mounted) return;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
-                  if (panes.length !== 5) return; // W-EXPP2：四 tab → 五 tab（经验）
+                  if (panes.length !== 6) return; // W-EXPP2+W-RULES2：四 tab → 五 tab（经验）→ 六 tab（铁律）
                   panes.forEach((pane) => pane.removeAttribute("data-stub"));
                   root.removeAttribute("data-stub");
                   state.mounted = true;
@@ -5442,12 +5700,58 @@
                       expRegroupSubmit(expGo.dataset.expFormGo, role, proj);
                       return;
                     }
+                    // W-RULES2 团队铁律操作（两步武装 + 替代行内表单 + 新增/导入面板）
+                    const ruleRetire = event.target.closest("[data-rule-retire]");
+                    if (ruleRetire) { ruleOp("rule-retire", ruleRetire.dataset.ruleRetire); return; }
+                    const ruleSup = event.target.closest("[data-rule-supersede]");
+                    if (ruleSup) { state.rulesForm = state.rulesForm === ruleSup.dataset.ruleSupersede ? null : ruleSup.dataset.ruleSupersede; state.rulesArm = null; render(); return; }
+                    const ruleSpGo = event.target.closest("[data-rule-sp-go]");
+                    if (ruleSpGo) {
+                      const row = ruleSpGo.closest(".rule-row");
+                      const text = row?.querySelector("[data-rule-sp-text]")?.value?.trim() ?? "";
+                      ruleSupersedeSubmit(ruleSpGo.dataset.ruleSpGo, text);
+                      return;
+                    }
+                    const addTg = event.target.closest("[data-rules-add-toggle]");
+                    if (addTg) { state.rulesAddOpen = !state.rulesAddOpen; if (state.rulesAddOpen) state.rulesImpOpen = false; render(); return; }
+                    const impTg = event.target.closest("[data-rules-imp-toggle]");
+                    if (impTg) { state.rulesImpOpen = !state.rulesImpOpen; if (state.rulesImpOpen) { state.rulesAddOpen = false; state.rulesImpPreview = null; } render(); return; }
+                    if (event.target.closest("[data-rules-add-go]")) {
+                      const text = (query("[data-rules-add-text]")?.value || "").trim();
+                      const aud = query("[data-rules-add-aud]")?.value || "all";
+                      const scope = query("[data-rules-add-scope]")?.value || "team";
+                      ruleAddSubmit(text, aud, scope);
+                      return;
+                    }
+                    if (event.target.closest("[data-rules-imp-parse]")) { rulesImportParse(); return; }
+                    if (event.target.closest("[data-rules-imp-go]")) { rulesImportConfirm(); return; }
+                    const impTpl = event.target.closest("[data-rules-imp-tpl]");
+                    if (impTpl) {
+                      const done = () => { const old = impTpl.textContent; impTpl.textContent = "已复制"; setTimeout(() => { impTpl.textContent = old; }, 1500); };
+                      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(RULES_IMPORT_TEMPLATE).then(done, () => {});
+                      return;
+                    }
                   });
                   root.addEventListener("change", (event) => {
                     const scope = event.target.closest("[data-exp-filter-scope]");
                     if (scope) { state.expFilter.scope = scope.value; render(); return; }
                     const status = event.target.closest("[data-exp-filter-status]");
                     if (status) { state.expFilter.status = status.value; render(); return; }
+                    // W-RULES2 铁律筛选
+                    const rScope = event.target.closest("[data-rules-filter-scope]");
+                    if (rScope) { state.rulesFilter.scope = rScope.value; render(); return; }
+                    const rStatus = event.target.closest("[data-rules-filter-status]");
+                    if (rStatus) { state.rulesFilter.status = rStatus.value; render(); return; }
+                  });
+                  root.addEventListener("input", (event) => {
+                    // W-RULES2 字数计数器（新增表单/替代表单实时 0/120）
+                    const t = event.target.closest("[data-rules-add-text],[data-rule-sp-text]");
+                    if (!t) return;
+                    const counter = t.closest(".rule-form")?.querySelector(".rule-count");
+                    if (counter) {
+                      counter.textContent = t.value.length + "/120";
+                      counter.classList.toggle("over", t.value.length > 120);
+                    }
                   });
                   root.addEventListener("keydown", (event) => {
                     if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-team-project]")) { event.preventDefault(); select(event.target.dataset.teamProject); }
@@ -8800,7 +9104,7 @@ function connectLan(ctx) {
             const api = this.api(); if (api) { try { api.snapshot(p, { relayName: this.ctxName(context) }); } catch {} }
             return;
           }
-          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED") return; // W-EXPP2：经验域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
+          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED" && message.type !== "RULES_UPDATED") return; // W-EXPP2/W-RULES2：经验域+规则域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
           const api = this.api(); if (!api) return;
           const p = message.payload || {};
           const teamContext = { relayName: this.ctxName(context) };

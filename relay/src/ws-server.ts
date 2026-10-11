@@ -22,6 +22,7 @@ import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listGroups, listPendingConfirms } from "./projects.js";
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
+import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
@@ -956,6 +957,10 @@ export function startServer(
           // 判断能力；cloud-client 云通道快照同步携带，#117 教训）
           experience: listExperience(),
           experience_enabled: readPluginConfig().experience,
+          // W-RULES2 团队铁律库：全量条目锚定帧 + 总开关（experience 同款口径——空数组
+          // 也下发，端上以字段存在性判断能力；cloud-client 云通道快照同步携带，#117 教训）
+          rules: listRules(),
+          rules_enabled: readPluginConfig().rules,
           // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
           // 下发——端上以字段存在性判断能力）
           notifications: mgr.notificationsList(),

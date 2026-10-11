@@ -10,6 +10,7 @@ import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
 import { listGroups, listPendingConfirms } from "./projects.js";
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 云通道同源携带
+import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 云通道同源携带
 import { listModels } from "./models.js";
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
@@ -450,6 +451,10 @@ export class CloudClient {
         // #117 教训——云桥手机经验分节同样靠快照兜底；空数组也下发）
         experience: listExperience(),
         experience_enabled: readPluginConfig().experience,
+        // W-RULES2 团队铁律库：全量条目锚定帧 + 总开关（与 ws-server 直连快照同源同步，
+        // #117 教训——云桥手机规则分节同样靠快照兜底；空数组也下发）
+        rules: listRules(),
+        rules_enabled: readPluginConfig().rules,
         // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
         // 通知列表同样靠快照兜底；空数组也下发）
         notifications: this.mgr.notificationsList(),
