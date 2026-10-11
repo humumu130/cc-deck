@@ -1,7 +1,10 @@
-// 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；
-// 分区收纳连接（状态卡+服务器列表）、配对、显示与关于
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+// 设置域 tab 页（W-EXPOLISH 件三：三域占位页内容化；原 SettingsDrawer 抽屉整体
+// 迁宿主退役，git mv 保历史）。分区收纳连接（服务器列表）、配对、记住的规则、
+// 权限、显示与关于——内容几何零改动，抽屉壳（scrim/侧滑/动画/225px 窄板）退役：
+// 设置升独立 tab 后单入口（会话页左上角 logo = 切设置 tab），原「左缘右滑呼出」
+// 手势随抽屉退役（设置已有常驻 tab 入口）。左上角 logo 呼出语义不变，落点改 tab。
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
@@ -11,7 +14,8 @@ import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
-import type { AllowRule, PairedDeviceInfo } from "../protocol";
+import type { AllowRule, ExperienceEntry, PairedDeviceInfo } from "../protocol";
+import { ExpLibraryModal } from "./OrgZone";
 import { connStateNote, connStateTone, pairErrNote, peerKindLabel, peerRelTime } from "../protocol";
 import { PERM_CAP_STATE_LABEL, permissionModesText, permissionSummariesOf, type PermCapState } from "../permission";
 import { fgSupported } from "../notify";
@@ -123,6 +127,7 @@ const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回�
 const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
 const ICON_HOME = "M3 11 12 4l9 7M5 10v10h14V10"; // 小屋（#17 第二批 雇员独立家）
 const ICON_PHONE = "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM10.5 18.5h3"; // 手机（0.7 批 2 设备列表入口）
+const ICON_BOOK = "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"; // 书本（W-EXPOLISH 件五 经验库入口）
 
 // 扫描框角标（ScanScreen 取景框同语言 mini 版）：四角 L 亮角 + 中部扫描横线，
 // 纯 View 线条绘制（App 无 svg 依赖，与既有图形语言一致）
@@ -262,39 +267,16 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
   );
 }
 
-export default function SettingsDrawer({
-  visible,
-  onClose,
+export default function SettingsPage({
   onSetup,
-  onScan,
   onEdit,
 }: {
-  visible: boolean;
-  onClose: () => void;
   onSetup: () => void;
-  onScan: () => void; // 扫码添加服务器（#276）：开设置页并直接拉起扫码
   onEdit: (e: ServerEntry) => void;
 }) {
-  const { c, mode, toggle } = useTheme();
+  const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const [x] = useState(new Animated.Value(0));
-  const visRef = useRef(visible);
-  visRef.current = visible;
-  // 面板上左滑收起：面板跟手拖动（x: 0 关 / 1 开），松手按位移/速度决定收起或弹回
-  const pan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, g) => visRef.current && g.dx < -12 && Math.abs(g.dy) < 14,
-      onPanResponderMove: (_, g) => x.setValue(Math.min(1, Math.max(0, 1 + g.dx / 240))),
-      onPanResponderRelease: (_, g) => {
-        if (g.dx < -60 || g.vx < -0.4) onClose();
-        else Animated.timing(x, { toValue: 1, duration: 160, useNativeDriver: true }).start();
-      },
-      onPanResponderTerminate: () => {
-        if (visRef.current) Animated.timing(x, { toValue: 1, duration: 160, useNativeDriver: true }).start();
-      },
-    }),
-  ).current;
   const processFont = useProcessFont();
   const aggregate = useAggregate();
   // #129 回车发送开关（会话输入框回车键行为）
@@ -375,30 +357,24 @@ export default function SettingsDrawer({
     });
   };
 
+  // 页面挂载即刷新（配对完成后 cloudMsg 变化也会触发条目更新）——tab 页按需挂载，
+  // 切走即卸载，回来重挂载等价原「每次展开时刷新」
   useEffect(() => {
-    Animated.timing(x, { toValue: visible ? 1 : 0, duration: 210, useNativeDriver: true }).start();
-  }, [visible, x]);
-
-  // 每次展开时刷新（配对完成后 cloudMsg 变化也会触发条目更新）
-  useEffect(() => {
-    if (!visible) return;
     void store.loadServers().then(setServers);
     void store.activeServerId().then(setActiveId);
-  }, [visible, snap.cloudMsg]);
+  }, [snap.cloudMsg]);
 
   const pick = (e: ServerEntry) => {
-    // 2026-09-16 二稿回退：行点击恢复「切换选中光标」（连接/切面板）；进编辑走行尾铅笔
+    // 2026-09-16 二稿回退：行点击恢复「切换选中光标」（连接/切面板）；进编辑走行尾铅笔。
+    // 抽屉时代的 onClose() 收板随抽屉退役：tab 页连接后原地停留
     if (!e.token && !e.cloud) {
-      onClose();
       onEdit(e);
       return;
     }
     void store.connectServer(e).then(() => setActiveId(e.id));
-    onClose();
   };
 
   const edit = (e: ServerEntry) => {
-    onClose();
     onEdit(e);
   };
 
@@ -437,24 +413,21 @@ export default function SettingsDrawer({
     }, 8000);
   };
 
-  const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-240, 0] });
-  const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
-
   // 新设备配对码：信任设备向 relay 领一次性码，供网页端新浏览器输入。
-  // 抽屉打开即自动领码（relay 侧多码并存互不作废），常驻展示 + 倒计时 + 刷新
+  // 页面挂载即自动领码（relay 侧多码并存互不作废），常驻展示 + 倒计时 + 刷新
   const [pairErr, setPairErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const pc = snap.pairCode;
   const pairLeft = pc ? Math.max(0, Math.floor((pc.expiresAt - now) / 1000)) : 0;
-  // 倒计时 1Hz 时钟：仅抽屉可见且码未到期时运行，到期即停表（避免常驻耗电）
+  // 倒计时 1Hz 时钟：仅页面在挂载（tab 激活）且码未到期时运行，到期即停表（避免常驻耗电）
   useEffect(() => {
-    if (!visible || !pc || pc.expiresAt <= Date.now()) return;
+    if (!pc || pc.expiresAt <= Date.now()) return;
     const t = setInterval(() => {
       setNow(Date.now());
       if (pc.expiresAt - Date.now() <= 0) clearInterval(t);
     }, 1000);
     return () => clearInterval(t);
-  }, [visible, pc, pc?.code]);
+  }, [pc, pc?.code]);
   const genPairCode = async () => {
     setPairErr(await store.requestPairCode());
   };
@@ -469,11 +442,11 @@ export default function SettingsDrawer({
     } catch {}
   };
   const pairing = useRef(false);
-  // 抽屉打开即领码；开着期间码到期（pairLeft 归零）自动续领。importOpen 时暂停：
-  // ImportPicker 正按用户选定的源领码（认快照里新出现的 pairCode），抽屉若同时为
+  // 页面挂载即领码；开着期间码到期（pairLeft 归零）自动续领。importOpen 时暂停：
+  // ImportPicker 正按用户选定的源领码（认快照里新出现的 pairCode），页面若同时为
   // 活动源续领会抢出另一个码、有串到别的 relay 的风险
   useEffect(() => {
-    if (!visible || !snap.connected || importOpen) return;
+    if (!snap.connected || importOpen) return;
     if (pc && pc.expiresAt - Date.now() > 2000) return;
     if (pairing.current) return;
     pairing.current = true;
@@ -483,13 +456,10 @@ export default function SettingsDrawer({
       .finally(() => {
         pairing.current = false;
       });
-  }, [visible, snap.connected, pc, pairLeft === 0, importOpen]);
+  }, [snap.connected, pc, pairLeft === 0, importOpen]);
 
-  // #313 关于弹窗：抽屉「ⓘ 关于」行呼出；检查更新从抽屉行迁入弹窗。抽屉收起时一并收弹窗
+  // #313 关于弹窗：「关于」行呼出；检查更新从抽屉行迁入弹窗。tab 页卸载即整体收弹窗
   const [aboutOpen, setAboutOpen] = useState(false);
-  useEffect(() => {
-    if (!visible) setAboutOpen(false);
-  }, [visible]);
 
   // #313 显示设置区折叠：低频项收纳腾空间（记忆上次选择）。#130 默认改折叠：
   // 仅没存过偏好的新会话用默认，存过 "0"/"1" 的老用户原样尊重
@@ -535,6 +505,23 @@ export default function SettingsDrawer({
     .filter((s) => s.state === "online" && permissionSummariesOf(s.sourceCapabilities?.permission).length > 0)
     .map((s) => ({ src: s, sums: permissionSummariesOf(s.sourceCapabilities?.permission) }));
   const permMultiSrc = permSections.length > 1;
+
+  // W-EXPOLISH 件五 经验库数据面（原组织区内嵌分节口径原样：旧 relay experiences=null
+  // 不进 → 整节隐藏；总开关关的源照进，弹层里置灰说明；条目只出 active）
+  const expSections = useMemo(() => {
+    const out: { src: SourceStatus; entries: ExperienceEntry[]; enabled: boolean }[] = [];
+    for (const src of snap.sources) {
+      if (!src.experiences) continue;
+      out.push({ src, entries: src.experiences, enabled: src.experienceEnabled !== false });
+    }
+    return out;
+  }, [snap.sources]);
+  const expTotal = useMemo(
+    () => expSections.reduce((n, x) => n + x.entries.filter((e) => e.status === "active").length, 0),
+    [expSections],
+  );
+  // 经验库只读弹层开关（入口行呼出）
+  const [expOpen, setExpOpen] = useState(false);
   // P81-8EFIX：unverified 用 c.working（#FFD60A 琥珀，与 web --working 同值同义）——
   // 原误用 c.waiting（expo 主题里 waiting=#F0524F 是红！跨端 token 同名异色陷阱，
   // 三态梯度坍缩成两红）。#95 Leader 亲审甄别
@@ -547,11 +534,8 @@ export default function SettingsDrawer({
   // 关于区检查更新行已删（#130 收敛进关于弹窗），upd 不再需要
 
   return (
-    <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
-      <Animated.View style={[d.scrim, { opacity: scrimOp }]}>
-        <Pressable style={FILL} onPress={onClose} />
-      </Animated.View>
-      <Animated.View style={[d.panel, { transform: [{ translateX }], paddingTop: 18 + insets.top }]} {...pan.panHandlers}>
+    <View style={[d.page, { paddingTop: insets.top }]}>
+      <View style={d.content}>
         <View style={d.head}>
           <View style={d.logo}>
             <LogoMark size={20} />
@@ -596,7 +580,7 @@ export default function SettingsDrawer({
         {/* 状态卡已删（#36 用户点单）：常驻首行撤销——状态与重连并入下方各连接行。
             未配置任何源时仍需一个入口（否则空态无路可走），保留仅此场景的引导行 */}
         {!srvCollapsed && servers.length === 0 ? (
-          <Pressable style={d.connCard} android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }} onPress={() => { onClose(); onSetup(); }}>
+          <Pressable style={d.connCard} android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }} onPress={onSetup}>
             <View style={[d.connDot, { backgroundColor: c.faint }]} />
             <View style={d.connMain}>
               <Text style={d.connNameT}>未配置</Text>
@@ -699,7 +683,7 @@ export default function SettingsDrawer({
             <Pressable
               style={d.ghostBtn}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-              onPress={() => { onClose(); onSetup(); }}
+              onPress={onSetup}
             >
               <Svg style={d.ghostBorder} pointerEvents="none">
                 <Rect x="1" y="1" width="98%" height="38" rx="11" stroke={withA(c.dim, 0.35)} strokeWidth={1} strokeDasharray="4 4" fill="none" />
@@ -953,6 +937,33 @@ export default function SettingsDrawer({
             胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
         </>
         ) : null}
+        {/* W-EXPOLISH 件五 经验库分节（原组织区内嵌分节迁此，连接/显示分节同语言）：
+            只读入口行（N 条计数）+ 电脑端说明，点开走只读弹层（原列表行语言不设截断）。
+            旧 relay（experiences=null）整节隐藏——同权限节降级范式 */}
+        {expSections.length ? (
+          <>
+            <View style={d.secHead}>
+              <Text style={d.secTitleT}>经验库{expTotal ? ` · ${expTotal}` : ""}</Text>
+              <View style={d.secToggle} />
+            </View>
+            <Pressable
+              style={[d.setItem, d.setRow]}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              onPress={() => setExpOpen(true)}
+              accessibilityLabel={`查看经验库（只读），${expTotal} 条`}
+            >
+              <View style={d.setL}>
+                <LineIcon path={ICON_BOOK} />
+                <Text style={d.setLabel}>经验库</Text>
+              </View>
+              <View style={d.aboutRight}>
+                <Text style={d.aboutVerT}>{expTotal} 条</Text>
+                <Text style={d.aboutT}>›</Text>
+              </View>
+            </Pressable>
+            <Text style={d.srvEmpty}>手机只读 · 管理请用电脑端</Text>
+          </>
+        ) : null}
         {/* #313 关于区：版本（呼出弹窗——本版特性/检查更新/反馈都在里面）、反馈两行。
             #130 「检查更新」行从抽屉移除：与关于弹窗内同款按钮重复，功能不砍只收敛入口 */}
         <View style={d.secHead}>
@@ -988,7 +999,7 @@ export default function SettingsDrawer({
         </Pressable>
         <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>
         </ScrollView>
-      </Animated.View>
+      </View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ScanScreen visible={scanOpen} onClose={() => setScanOpen(false)} onResult={applyScan} />
       {/* #53 连接图标图例（问号入口）：AboutModal 同款底部 sheet */}
@@ -996,6 +1007,8 @@ export default function SettingsDrawer({
       <ImportPicker visible={importOpen} target={importTarget} onClose={() => setImportOpen(false)} />
       {/* 0.7 批 2 已配对设备（议题①消费面）：清单 + 本机标识 + 踢出两步确认 */}
       <DevicesModal visible={devicesOpen} onClose={() => setDevicesOpen(false)} />
+      {/* W-EXPOLISH 件五 经验库只读弹层（分节入口行呼出；原组织区行语言，不设截断） */}
+      <ExpLibraryModal visible={expOpen} onClose={() => setExpOpen(false)} exps={expSections} />
       {/* 0.7 批 2 择路提示：面板顶部浮动胶囊（探测/择路结果 3s 自清） */}
       {routeHint ? (
         <View style={[d.routeToast, { top: 70 + insets.top }]} pointerEvents="none">
@@ -1226,12 +1239,9 @@ function ensurePlugBlink() {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  root: { ...FILL, zIndex: 60, flexDirection: "row" },
-  scrim: { ...FILL, backgroundColor: "#000" },
-  panel: {
-    width: 225, height: "100%", backgroundColor: c.bg,
-    borderRightWidth: 1, borderColor: c.line, paddingTop: 18, paddingHorizontal: 16,
-  },
+  // tab 页容器（原抽屉 root/scrim/panel 退役）：全宽 + 顶安全区（JSX 注入 insets）
+  page: { flex: 1, backgroundColor: c.bg },
+  content: { flex: 1, paddingHorizontal: 16, paddingTop: 14 },
   // #130 头部减重：logo 42→36、间距收紧；三枚静默图标钮（扫码/刷新/问号）统一
   // tintSoft 底去描边——与会话页返回钮、思考开关同一体系
   head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: c.line },
@@ -1256,7 +1266,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   secToggleT: { color: c.dim, fontSize: 11 },
   // #48 通道含义问号（连接区标题旁，点击弹解释）——#130 去 16px 描边圈，改 tintSoft 软底
   secHelpT: { color: c.dim, fontSize: 11, backgroundColor: c.tintSoft, borderRadius: 8, width: 16, height: 16, textAlign: "center", lineHeight: 14, overflow: "hidden" },
-  srvScroll: { maxHeight: 236 },
+  // 服务器列表滚动容器：抽屉时代 236px 帽（窄板腾空间）随抽屉退役——tab 页整页
+  // 滚动，列表自然展开
+  srvScroll: {},
   srvRow: {
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
     borderRadius: 12, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",

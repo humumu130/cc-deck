@@ -74,7 +74,7 @@ function normAddr(raw: string): string {
   return `ws://${v}`;
 }
 
-// 扫描框角标（SettingsDrawer/ScanScreen 同语言 mini 版）：四角 L 亮角 + 中部扫描
+// 扫描框角标（SettingsPage/ScanScreen 同语言 mini 版）：四角 L 亮角 + 中部扫描
 // 横线，纯 View 线条绘制（无 svg 依赖），白置主按钮上
 function ScanGlyph({ color, size = 18 }: { color: string; size?: number }) {
   const corner = { position: "absolute", width: size * 0.31, height: size * 0.31, borderColor: color } as const;
@@ -842,7 +842,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvMenuItem: { paddingHorizontal: 12, paddingVertical: 9 },
   srvMenuItemT: { color: c.text, fontSize: 13 },
   safe: { flex: 1, backgroundColor: c.bg },
-  // 0.7 批 2 择路提示浮层（页顶浮动胶囊，SettingsDrawer routeToast 同语言）
+  // 0.7 批 2 择路提示浮层（页顶浮动胶囊，SettingsPage routeToast 同语言）
   routeToast: {
     position: "absolute", left: 16, right: 16, top: 8, zIndex: 10, alignItems: "center",
     paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12,
@@ -943,7 +943,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   backT: { color: c.dim, fontSize: 14 },
 });
 
-// #60 后台保活豁免卡：迁至 src/KeepAliveCard.tsx（#85 抽共享，SettingsDrawer 同显）
+// #60 后台保活豁免卡：迁至 src/KeepAliveCard.tsx（#85 抽共享，SettingsPage 同显）
 
 // 编辑态顶部状态行（2026-09-16 方案 A 对齐小优化①）：详情页不再只是表单——
 // 进页先看到这条源连没连上、走的哪条通道。数据取 useRelay 快照 sources（与

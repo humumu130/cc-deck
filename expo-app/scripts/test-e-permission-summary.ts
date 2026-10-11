@@ -13,7 +13,8 @@
 //        桩层动态 import；「ACK 失败不建卡」的硬保证=ok 才放行，其余两态 settle
 //        一律不造本地会话状态）
 //   I.   三面源码字面锚（readFileSync）：NewSessionModal settle 的 forbidden
-//        人话通路/降级提示/permission 透传；SettingsDrawer 权限节条件渲染整节
+//        人话通路/降级提示/permission 透传；SettingsPage（原 SettingsDrawer，
+//        W-EXPOLISH 迁 tab 宿主）权限节条件渲染整节
 //        隐藏；DetailScreen PERM_MODE_ZH 双键八值对齐三端统一词表（PERM-SYNC 后单一
 //        词表源，旧局部 PERM_LABEL 已删）
 //
@@ -257,7 +258,7 @@ async function main(): Promise<void> {
   SECTION("I. 三面源码字面锚");
   const srcOf = (p: string): string => readFileSync(new URL(p, import.meta.url), "utf8");
   const modalSrc = srcOf("../src/screens/NewSessionModal.tsx");
-  const drawerSrc = srcOf("../src/screens/SettingsDrawer.tsx");
+  const drawerSrc = srcOf("../src/screens/SettingsPage.tsx"); // W-EXPOLISH：抽屉迁 tab 页（git mv 保历史），权限节锚随迁
   const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
   // PERM-SYNC 双端同表对照：web-console/index.html:3359 PERM_MODE_ZH（peer 域只读锚定，
   // 不触碰文件本身）；三端词表逐字一致的第三端（桌面）由 web 半回单覆盖

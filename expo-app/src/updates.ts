@@ -101,7 +101,7 @@ function parseSemver(v: string): { core: number[]; pre: string | null } {
   const m = String(v).replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([\w.]+))?$/);
   if (!m) return { core: [0, 0, 0], pre: String(v) || null };
   return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
-}// 更新通道（与 SettingsDrawer 通道角标同规则：-test/-snap 后缀判定）：
+}// 更新通道（与 SettingsPage 通道角标同规则：-test/-snap 后缀判定）：
 // test → 读 ECS 专属清单；snap/release → 读双镜像主清单；dev → 不参与更新检查
 export type UpdateChannel = "test" | "snap" | "release" | "dev";
 export function channelOf(v: string): UpdateChannel {

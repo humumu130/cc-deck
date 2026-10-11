@@ -32,7 +32,11 @@ import {
   type UpdateInfo,
 } from "./src/updates";
 import ListScreen, { splitPending, type ListBackHandle } from "./src/screens/ListScreen";
-import BottomTabs, { DomainPlaceholder, type TabKey } from "./src/bottom-tabs";
+import BottomTabs, { type TabKey } from "./src/bottom-tabs";
+import NotifCenterPage from "./src/screens/NotifCenterPage";
+import { TeamTab, ProjectsTab } from "./src/screens/OrgTabs";
+import SettingsPage from "./src/screens/SettingsPage";
+import { notifActionableOf } from "./src/notify-jump";
 import ArtPoolModal from "./src/screens/ArtPoolModal";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -604,8 +608,9 @@ function Shell() {
   const snap = useRelay();
   const [ready, setReady] = useState(false);
   const [hasCfg, setHasCfg] = useState(false);
-  // 底部导航（0.7 批 1 骨架，设计 §3）：四域平级切换，根层=会话域。团队/项目/设置
-  // 为占位框架（后续批填充）；「通知」仍走会话页铃铛弹层（任务书四域口径）
+  // 底部导航（0.7 批 1 骨架，设计 §3；W-EXPOLISH 起五域）：会话/团队/项目/通知/设置
+  // 平级切换，根层=会话域。通知域 = 原铃铛弹层内容升 tab（NotifCenterPage）；
+  // 团队/项目/设置域内容化（OrgTabs/SettingsPage），占位卡框架退役
   const [tab, setTab] = useState<TabKey>("sessions");
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
@@ -684,10 +689,16 @@ function Shell() {
   const listBackRef = useRef<ListBackHandle | null>(null);
   const detailBackRef = useRef<DetailBackHandle>(null);
   // 会话 tab badge（待处理数）：与列表「待处理」段同口径（splitPending 纯投影，
-  // 通知未决绑定会话计入），待处理 >0 才显角标
+  // 通知未决绑定会话计入），待处理 >0 才显角标——W-EXPOLISH 红线：口径不变
   const pendingCount = useMemo(
     () => splitPending(snap.sessions, { notifications: snap.notifications }).pending.length,
     [snap.sessions, snap.notifications],
+  );
+  // 通知 tab badge（未处理数）：与通知页/原铃铛同口径（notifActionableOf，全源平铺，
+  // 三戳全空才算未决）——badge 与页面内容同源，两处计数必一致
+  const notifPendingCount = useMemo(
+    () => notifActionableOf(snap.sources.flatMap((x) => x.notifications ?? [])).length,
+    [snap.sources],
   );
 
   // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
@@ -920,9 +931,10 @@ function Shell() {
       ) : null}
       {hasCfg && !setup ? (
         <>
-          {/* 底部导航骨架（0.7 批 1）：域内容区（flex）+ TabBar；会话域保持挂载
-              （display 切换，滚动位置/内部状态记忆保留），占位域按需挂载。详情层
-              仍为全屏覆盖（盖过底栏），从任一域推入、返回回原 tab */}
+          {/* 底部导航骨架（0.7 批 1 起；W-EXPOLISH 五域）：域内容区（flex）+ TabBar；
+              会话域保持挂载（display 切换，滚动位置/内部状态记忆保留），其余域按需
+              挂载（切走即卸载，状态回默认——通知折叠区/设置服务器列表重取即最新）。
+              详情层仍为全屏覆盖（盖过底栏），从任一域推入、返回回原 tab */}
           <View style={st.tabRoot}>
             <View style={st.tabPane}>
               <View style={[st.domain, tab !== "sessions" && st.domainHidden]}>
@@ -934,20 +946,29 @@ function Shell() {
                     connText={snap.connText}
                     onOpen={openDetail}
                     onNew={() => setSheet(true)}
-                    onSetup={() => { setSetupScan(false); setSetup("new"); }}
-                    onScanServer={() => { setSetupScan(true); setSetup("new"); }}
-                    onEditServer={(id) => { setSetupScan(false); setSetup(id); }}
+                    onOpenSettings={() => setTab("settings")}
                     onOpenArtPool={() => setArtPoolOpen(true)}
                   />
                 )}
               </View>
               {tab !== "sessions" ? (
                 <View style={st.domain}>
-                  <DomainPlaceholder tab={tab} />
+                  {tab === "team" ? (
+                    <TeamTab onOpenSession={openDetail} />
+                  ) : tab === "projects" ? (
+                    <ProjectsTab onOpenSession={openDetail} />
+                  ) : tab === "notifications" ? (
+                    <NotifCenterPage onOpenSession={openDetail} />
+                  ) : (
+                    <SettingsPage
+                      onSetup={() => { setSetupScan(false); setSetup("new"); }}
+                      onEdit={(e) => { setSetupScan(false); setSetup(e.id); }}
+                    />
+                  )}
                 </View>
               ) : null}
             </View>
-            <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount }} />
+            <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount, notifications: notifPendingCount }} />
           </View>
           {detail ? (
             <Animated.View

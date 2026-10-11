@@ -2582,38 +2582,8 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               </Pressable>
             </View>
           </View>
-          {/* W-EXPO 005 化头部活动舱（对齐 index-005 .session-state-dock）：上缘 hairline +
-              左缘 2px 状态色；两行制 = 当前任务行（dim）+ 活动行（呼吸点·状态词·耗时·
-              token 内联「· 34k/200k」）。呼吸点走 #148 低频步进（每秒 2 次提交，禁逐帧
-              Animated）；token 行在终端实时行（零宽前缀）时隐藏防双计；终态（DONE/ERROR）
-              不入舱——StatusStrip 已承载收口（DONE ✓ 8s 尾窗 / ERROR ⚠ 常驻） */}
-          {dock && (dock.state === "WORKING" || dock.state === "WAITING") ? (
-            <View style={[d.dock, { borderLeftColor: dockColor }]}>
-              <View style={d.dockRow}>
-                <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
-                <Text style={[d.dockStateT, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
-                {dock.elapsedMs !== undefined ? <Text style={d.dockElapsed}>· {fmtElapsed(dock.elapsedMs)}</Text> : null}
-                {(() => {
-                  // A0-1 token 内联：有水位且非终端实时行才显（实时行自带 ↓token）
-                  const used = s?.context_usage ?? 0;
-                  if (!used || isLiveLine(s?.action_summary)) return null;
-                  const limit = s?.context_limit ?? CONTEXT_LIMIT_FALLBACK;
-                  return <Text style={d.dockTok}>· {fmtTok(used)}/{fmtTok(limit)}</Text>;
-                })()}
-              </View>
-              {(() => {
-                const task = dock.summary || s?.action_summary || "";
-                if (!task) return null;
-                const t = isLiveLine(task) ? task.slice(1) : task;
-                return <Text style={d.dockTask} numberOfLines={1}>当前任务 · {t}</Text>;
-              })()}
-              {dock.actText ? (
-                <Text style={d.dockAct} numberOfLines={1}>
-                  {dock.actKind === "tool_use" ? "⚙ " : ""}{dock.actTool ? `${dock.actTool} · ` : ""}{dock.actText}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
+          {/* W-EXPOLISH 件四：头部活动舱已迁输入区上沿（单行制，见底部栈 dockLine）——
+              header 只留标题+元信息+权限胶囊 */}
         </View>
       </View>
 
@@ -3276,6 +3246,37 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
            （手势导航机型 ≈30+）叠 cmdbar paddingVertical 10 显得空，让位量适度
            削减 12（保底 6：手势条仍不至于压输入区） */}
       <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : Math.max(6, insets.bottom - 12) }}>
+        {/* W-EXPOLISH 件四：活动舱从 header 迁输入区上沿（对齐桌面 composer 前状态坞
+            #dockActivityRow 单行制）——呼吸点·状态词·走秒·token 内联·当前操作一行流，
+            单行截断；落位=审批横幅/模板行/附件行之上、消息流之下。header 只留标题+
+            元信息+权限胶囊。终态（DONE/ERROR）不入舱（StatusStrip 收口不变）；终端
+            实时行（零宽前缀）隐藏 token 防双计；呼吸点 #148 低频步进（原口径迁移） */}
+        {dock && (dock.state === "WORKING" || dock.state === "WAITING") ? (
+          <View style={[d.dockLine, { borderLeftColor: dockColor }]}>
+            <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
+            <Text style={[d.dockLineState, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
+            {dock.elapsedMs !== undefined ? <Text style={d.dockLineMeta}>· {fmtElapsed(dock.elapsedMs)}</Text> : null}
+            {(() => {
+              // token 内联：有水位且非终端实时行才显（实时行自带 ↓token，防双计）
+              const used = s?.context_usage ?? 0;
+              if (!used || isLiveLine(s?.action_summary)) return null;
+              const limit = s?.context_limit ?? CONTEXT_LIMIT_FALLBACK;
+              return <Text style={d.dockLineMeta}>· {fmtTok(used)}/{fmtTok(limit)}</Text>;
+            })()}
+            {(() => {
+              // 一行流尾段：当前操作优先（工具动作 ⚙ tool · 文本），缺省回落当前任务/
+              // 摘要（桌面 dar-t 同位；终端实时行去零宽前缀）
+              const act = dock.actText
+                ? `${dock.actKind === "tool_use" ? "⚙ " : ""}${dock.actTool ? `${dock.actTool} · ` : ""}${dock.actText}`
+                : (() => {
+                    const t = dock.summary || s?.action_summary || "";
+                    return t ? (isLiveLine(t) ? t.slice(1) : t) : "";
+                  })();
+              if (!act) return null;
+              return <Text style={d.dockLineAct} numberOfLines={1}>{act}</Text>;
+            })()}
+          </View>
+        ) : null}
         {bannerVisible ? (
           wr!.questions?.length ? (
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
@@ -3669,16 +3670,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
   // E3a done 收口条（与 stripErr 同形同号级，色走 done）
   stripDone: { flex: 1, color: c.done, fontSize: 12.5, fontWeight: "600" },
-  // E3a 头部活动舱：行高恒定（lineHeight 锁定）+ 单行截断，390 宽不抖；紧凑三行
-  //（状态/摘要/活动）随内容 0~3 行，能力门控缺行不占位
-  // W-EXPO 005 化活动舱（.session-state-dock）：上缘 hairline + 左缘 2px 状态色
-  dock: { marginTop: 8, borderTopWidth: 1, borderTopColor: c.line, borderLeftWidth: 2, borderLeftColor: c.dim, paddingLeft: 10, paddingVertical: 7 },
-  dockRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  dockStateT: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
-  dockElapsed: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
-  dockTok: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
-  dockTask: { fontSize: 10.5, color: c.dim, lineHeight: 15, marginTop: 1 },
-  dockAct: { fontSize: 10.5, color: c.faint, lineHeight: 14, marginTop: 1 },
+  // W-EXPOLISH 件四：输入区上沿单行活动舱（对齐桌面 composer 前状态坞 #dockActivityRow
+  // 单行制）：左缘 2px 状态色（005 session-state-dock 语言保留）+ 一行流（呼吸点·
+  // 状态词·走秒·token·当前操作），行高恒定 15，动作文本 flex 收缩单行截断——
+  // 原头部两行制（dock/dockRow/dockStateT/dockElapsed/dockTok/dockTask/dockAct）退役
+  dockLine: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 5 },
+  dockLineState: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
+  dockLineMeta: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
+  dockLineAct: { flex: 1, minWidth: 0, fontSize: 11, color: c.dim, lineHeight: 15 },
   stripBtnWarn: {
     height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
     borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center",

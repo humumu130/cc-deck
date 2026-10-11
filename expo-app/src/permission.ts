@@ -1,5 +1,5 @@
 // P81-8E 权限摘要 expo 呈现纯函数（expo 域）。
-// 零依赖纯 TS（不 import react/react-native）——SettingsDrawer/NewSessionModal/
+// 零依赖纯 TS（不 import react/react-native）——SettingsPage/NewSessionModal/
 // DetailScreen 消费 + scripts/test-e-permission-summary.ts 直跑断言共用同一条映射
 // 路径（notify-jump.ts / artpool.ts 同范式：测的就是跑的）。
 //

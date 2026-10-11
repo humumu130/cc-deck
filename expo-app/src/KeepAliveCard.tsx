@@ -1,4 +1,4 @@
-// #60/#85 后台保活豁免卡（2026-09-21 从 SetupScreen 抽出共享，SettingsDrawer 同显）：
+// #60/#85 后台保活豁免卡（2026-09-21 从 SetupScreen 抽出共享，SettingsPage 同显）：
 // 一键拉起系统「忽略电池优化」对话框（允许即写入 doze 白名单——ColorOS freezer
 // 冻结 FGS 的实证有效豁免）。不做已优化/受限两态显示：ColorOS 的
 // isIgnoringBatteryOptimizations 被定制语义污染（实测白名单已清空仍返回 true），

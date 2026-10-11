@@ -1,19 +1,17 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
+import { Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
 import { FadeIn, PressScale } from "../motion";
-import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type ExperienceEntry, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
-import { notifActionableOf, notifDoneAt, splitResolvedRows, jumpTargetOf, type NotifJumpTarget } from "../notify-jump";
+import { hasActivityCapability, type SessionState, type SessionStatus } from "../protocol";
 import RenameModal from "./RenameModal";
-import SettingsDrawer from "./SettingsDrawer";
 
 // 硬件返回句柄（#282）：返回键收敛为 App.tsx 顶层单订阅统一分发，抽屉/图例浮层
 // 是否开着只有本组件知道——经 ref 暴露 requestBack 供父级分发时调用
@@ -27,9 +25,7 @@ interface Props {
   connText: string;
   onOpen: (sid: string) => void; // 待确认悬浮清单（#306）的直达跳转由 App.tsx 层直接走 openDetail(sid, "todos")
   onNew: () => void;
-  onSetup: () => void;
-  onScanServer: () => void; // 抽屉「扫码添加」（#276）：开设置页直接拉起扫码
-  onEditServer: (id: string) => void;
+  onOpenSettings: () => void; // 左上角 logo = 设置入口（W-EXPOLISH 件三：抽屉退役，落点改设置 tab）
   onOpenArtPool: () => void; // #72 E 线 入口①：产物池常驻胶囊（三重门显隐），App.tsx 开 ArtPoolModal
   ref?: Ref<ListBackHandle>;
 }
@@ -137,6 +133,17 @@ function clipSrcName(name: string): string {
     if (w > 6) return name.slice(0, i > 0 ? i : 1).trimEnd() + "…";
   }
   return name;
+}
+
+// W-EXPOLISH 件一 徽标行收敛（纯函数，scripts/test-expolish-tabs.ts 断言）：
+// 会话卡 r3 元信息（目录/组织/已保存/历史…）超 max 个折叠为「+N」——卡行数不再随
+// 徽标数量膨胀（统一紧凑密度的行数钳制面）。顺序保持（先到先显），hidden 计数
+// = 截掉条数；max ≤0 视为不限（防御）。
+export function foldMeta(metas: string[], max = 3): { shown: string[]; hidden: number } {
+  if (!Number.isFinite(max) || max <= 0 || metas.length <= max) {
+    return { shown: metas, hidden: 0 };
+  }
+  return { shown: metas.slice(0, max), hidden: metas.length - max };
 }
 
 // ---------- E2a 列表只读投影（纯函数段，零 RN 依赖） ----------
@@ -249,72 +256,26 @@ export function splitPending(sessions: SessionState[], opts?: SplitOptions): Pen
 }
 /* E2A-QUEUE-END */
 
-// E2B-COMMANDS-START
-// #018-E2b root 写链路纯函数段（自包含零 RN 依赖；W1b 347768d W1B-COMMANDS 同构
-// 参照——两端同语义不共享代码）。§5.4 硬条款：ACK 必须核 ok === true，HTTP 200/
-// 已发送/退出 0 都不算成功；无自动重试风暴（重试=用户重点；store 全局纪律已封顶：
-// 4s 超时重发同 command_id 一次 → 6s 收摊回调一次，调用方只呈现不自动重发）。
-// payload 口径对齐 relay 实况：
-//   COMMAND_NOTIFICATION_ACK {notification_key, action:"handled"|"dismissed"}（B0 冻结词表）
-//   COMMAND_ORG_CONFIRM      {confirm_id, approve:boolean}（relay 咽喉 ===true 严判）
-// 通知不清零（B3a 口径）：本段与消费组件均无清池操作——打开/浏览/重连/动作失败
-// 回滚零删行；badge 收缩只随 handled/dismissed 权威账。
-export interface AckLike { ok?: unknown; error?: unknown; err?: unknown }
-export interface AckVerdict { ok: boolean; error: string | null; kind: "ok" | "rejected" | "unconfirmed" }
-
-// ACK 严格判定三态：ack 缺失（发送失败/超时收摊）→ unconfirmed（可重试文案）；
-// ok === true 才成功；其余一律 rejected（error/err 字符串透传，非串兜底文案）
-export function ackVerdict(ack: AckLike | null | undefined): AckVerdict {
-  if (ack == null || typeof ack !== "object") {
-    return { ok: false, error: "命令未确认（超时或源未连接），可重试", kind: "unconfirmed" };
-  }
-  if (ack.ok === true) return { ok: true, error: null, kind: "ok" };
-  const msg = typeof ack.error === "string" && ack.error ? ack.error
-    : typeof ack.err === "string" && ack.err ? ack.err : null;
-  return { ok: false, error: msg ?? "命令被拒绝", kind: "rejected" };
-}
-
-// 旧 relay 未知命令错误三签名（ws 白名单拒发 "invalid command shape" / 旧
-// handleCommand default "unsupported command" / org 咽喉 "unsupported org action: x"）。
-// 命中 = 该源 relay 版本没有这条命令（非暂时性故障）→ 能力位记忆，静默降级防弹窗轰炸
-export function unknownCommandError(err: unknown): boolean {
-  return typeof err === "string" && /invalid command shape|^unsupported command|unsupported org action/.test(err);
-}
-
-export type CmdCaps = Record<string, boolean>;
-// 能力位记忆（纯对象进出）：未知命令错误后记住「此源不再发该命令」
-export function cmdCapRemember(caps: unknown, cmd: string): CmdCaps {
-  const next: CmdCaps = { ...((caps && typeof caps === "object" ? caps : {}) as CmdCaps) };
-  next[cmd] = false;
-  return next;
-}
-export function cmdCapBlocked(caps: unknown, cmd: string): boolean {
-  return !!(caps && typeof caps === "object" && (caps as CmdCaps)[cmd] === false);
-}
-// 恢复条件：①relay 身份变更（同一连接换指另一台 relay 实例）②快照 schema_version>=1
-//（relay 升级新命令面上线）。旧 relay 恒 legacy（version 0）→ 记忆稳定不被快照冲掉
-export function cmdCapRecoverOnSnapshot(caps: unknown, snapshotLike: unknown, identityChanged: boolean): CmdCaps {
-  const p = (snapshotLike && typeof snapshotLike === "object" ? snapshotLike : {}) as Record<string, unknown>;
-  const v = typeof p.schema_version === "number" && Number.isFinite(p.schema_version) ? p.schema_version : 0;
-  if (identityChanged !== true && v < 1) return (caps && typeof caps === "object" ? caps : {}) as CmdCaps;
-  return {};
-}
-
-// 双击闸：飞行中同键再点 → skip（expo/W1b 同语义同 fixture，不共享代码）
-export function ackTapGuard(inFlight: Set<string> | null | undefined, flightKey: string): "go" | "skip" {
-  return inFlight && inFlight.has(flightKey) ? "skip" : "go";
-}
-// 组织确认复合飞行键：confirm_id 是源域命名空间，跨源可能撞名
-export function orgFlightKey(srcId: string, confirmId: string): string {
-  return String(srcId) + "/" + String(confirmId);
-}
-
-// 组织确认 payload 组装（relay 咽喉 confirm-decide：approve 必须真布尔——
-// `payload.approve === true` 严格判，字符串 "1"/数字 1 会判否决）；confirm_id 空串/null 拒发
-export function orgConfirmPayload(confirmId: unknown, approve: unknown): { confirm_id: string; approve: boolean } | null {
-  if (typeof confirmId !== "string" || !confirmId.trim()) return null;
-  return { confirm_id: confirmId, approve: approve === true };
-}
+// E2B-COMMANDS-START（W-EXPOLISH 起为 re-export shim：实现迁 src/org-commands.ts——
+// 组织域组件（组织区/组详情/团队·项目 tab）与通知 tab 页从本屏拆出后仍需同一套
+// ACK 严格判定门，纯函数落独立零依赖文件避免反向 import 整个 RN 屏模块。
+// 既有引用面（NewSessionModal/test-e-permission-summary 等）经此 re-export 保持不变。
+// §5.4 硬条款：ACK 必须核 ok === true，HTTP 200/已发送/退出 0 都不算成功；无自动重试
+// 风暴（重试=用户重点；store 全局纪律已封顶：4s 超时重发同 command_id 一次 → 6s 收摊
+// 回调一次，调用方只呈现不自动重发）。
+export {
+  ackVerdict,
+  unknownCommandError,
+  cmdCapRemember,
+  cmdCapBlocked,
+  cmdCapRecoverOnSnapshot,
+  ackTapGuard,
+  orgFlightKey,
+  orgConfirmPayload,
+  type AckLike,
+  type AckVerdict,
+  type CmdCaps,
+} from "../org-commands";
 
 // notifActionableOf 迁入 ../notify-jump（M13-6E：与 done 判定/分区/回跳判定同模块，
 // 断言脚本直跑同路径；本文件 re-export 保持既有引用面不变）
@@ -781,32 +742,10 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
   );
 }
 
-// E2a 活动指标块：store activity 最后值的只读投影——状态/动作/耗时/审批四行，
-// 各自按 activity_capabilities 门控显隐；activity 缺失=整块不渲染（不显示假
-// 「空闲」），capability 全关（legacy 归一化产物）= 空块同效不渲染。行高恒定
-//（lineHeight 定值）+ 单行 ellipsis 截断 + tabular 数字，390 宽小屏不抖卡高
-function ActivityBlock({ s }: { s: SessionState }) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const m = activityMetricsOf(s);
-  if (!m) return null;
-  const lines: [string, string, string][] = [];
-  if (m.state !== undefined) lines.push(["状态", STATUS_ZH[m.state] ?? m.state, statusColor(m.state, c)]);
-  if (m.summary !== undefined) lines.push(["动作", m.summary || "—", c.dim]);
-  if (m.elapsedMs !== undefined) lines.push(["耗时", fmtElapsed(m.elapsedMs), c.dim]);
-  if (m.approvalPending !== undefined) lines.push(["审批", m.approvalPending ? "待审批" : "—", m.approvalPending ? c.waiting : c.faint]);
-  if (!lines.length) return null;
-  return (
-    <View style={styles.actBlock}>
-      {lines.map(([k, v, vc]) => (
-        <Text key={k} style={styles.actLine} numberOfLines={1}>
-          <Text style={styles.actKey}>{k} </Text>
-          <Text style={[styles.actVal, { color: vc }]}>{v}</Text>
-        </Text>
-      ))}
-    </View>
-  );
-}
+// W-EXPOLISH 件一：卡片上的活动指标块（原 ActivityBlock，状态/动作/耗时/审批 0~4 行
+// 门控伸缩）退役——它是「同密度卡高不一」的主源（4 行时卡高近翻倍，用户真机点单
+// 「没必要这样搞」）。状态 tag（r3）/ 审批与摘要（r2）/ 耗时（r2 走秒）本就有等价
+// 呈现位，逐项明细在详情页；activityMetricsOf 纯投影保留（test-e2a-list 断言面）。
 
 const SessionCard = memo(function SessionCard({
   s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge, orgTag,
@@ -845,6 +784,14 @@ const SessionCard = memo(function SessionCard({
   // 也按正常卡处理（本来就没停，无从恢复）。休眠卡降透明度 + 点按发恢复命令
   const dormant =
     s.pinned === true && s.saved === true && s.status !== "WORKING" && s.status !== "WAITING";
+  // W-EXPOLISH 件一 r3 文本元信息收敛：目录/组织/已保存/历史超 3 个折叠「+N」
+  //（源胶囊/状态 tag/水位恒显不占折叠额）
+  const r3Meta = foldMeta([
+    ...(s.cwd ? [`📁 ${folderOf(s.cwd)}`] : []),
+    ...(orgTag ? [`◈ ${orgTag}`] : []),
+    ...(dormant ? ["已保存"] : []),
+    ...(s.historical && !s.external ? ["历史"] : []),
+  ], 3);
   return (
     <SwipeRow
       sid={s.session_id}
@@ -896,8 +843,6 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
-          {/* E2a 活动指标块（紧凑档）：activity 缺失/能力全关时自返回 null */}
-          <ActivityBlock s={s} />
           <View style={styles.footC}>
             {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
@@ -941,16 +886,15 @@ const SessionCard = memo(function SessionCard({
                   <Text style={styles.srowSum} numberOfLines={1}>{s.action_summary || "…"}</Text>
                 )}
               </View>
-              {/* E2a 活动指标块：activity 缺失/能力全关时自返回 null */}
-              <ActivityBlock s={s} />
-              {/* r3 徽章行：状态 tag + 源胶囊 + 组织/目录/外部·历史 + 水位 mini */}
+              {/* r3 徽章行：状态 tag + 源胶囊 + 元信息（foldMeta 超 3 个折叠 +N，行高恒定）
+                  ——状态灯/源/水位恒显，文本元信息超量折叠不膨胀（W-EXPOLISH 件一） */}
               <View style={styles.srowR3}>
                 <StatusTag s={s} />
                 {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-                {s.cwd ? <Text style={styles.srowMeta} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
-                {orgTag ? <Text style={styles.srowMeta} numberOfLines={1}>◈ {orgTag}</Text> : null}
-                {dormant ? <Text style={styles.srowMeta}>已保存</Text> : null}
-                {s.historical && !s.external ? <Text style={styles.srowMeta}>历史</Text> : null}
+                {r3Meta.shown.map((m, i) => (
+                  <Text key={i} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
+                ))}
+                {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
                 <View style={{ flex: 1 }} />
                 <CtxMini s={s} />
               </View>
@@ -962,253 +906,13 @@ const SessionCard = memo(function SessionCard({
   );
 });
 
-// ---------- #26 M2 组织区（v3.1 矩阵式）----------
-// 与 web-console 组织域同口径：确认卡（Leader 只提案 → 用户 ✓/✗ 决议，§4「用户是
-// 指挥/验收者」）、项目组三态 chips（结项=archived 单向终态不占常驻位）、组详情弹窗
-// （编制/任务板/回执流）。旧 relay 快照无 projects 字段（null）→ 整区不渲染，兼容
-const ORG_ST_ZH: Record<string, string> = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
-const ORG_CF_KIND_ZH: Record<string, string> = {
-  "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活",
-};
-// chips 排序：待确认 → 在办 → 已挂起（同 web 端 org zone 顺序契约）
-const ORG_ST_ORD: Record<string, number> = { pending: 0, active: 1, parked: 2 };
-function orgStColor(st: string, c: ThemeColors): string {
-  return st === "active" ? c.done : st === "pending" ? c.waiting : c.faint;
-}
+// W-EXPOLISH 迁出锚：组织域（组织区/组详情弹窗/决议 ACK 门）→ screens/ 组织模块与
+// 团队·项目 tab 宿主；通知中心弹层（含 ACK 门）→
+// ./NotifCenterPage.tsx（通知 tab 宿主，会话页铃铛入口同步退役）；设置抽屉 →
+// ./SettingsPage.tsx（设置 tab 宿主，logo 落点改切 tab）。卡片组织徽标（orgTag）
+// 仍需组名映射，projNameById 保留在本屏。
 
-// 组织区（列表顶条件区，随待填验收单卡同位）：确认卡行 + 项目组 chips + 经验分节
-//（W-EXPP2：只读——手机不做操作，退役/恢复/改归组走电脑端，P2 范围外注明）
-function OrgZone({ confirms, groups, exps, onDecide, onOpenGroup }: {
-  confirms: { src: SourceStatus; cf: OrgConfirm }[];
-  groups: { src: SourceStatus; g: ProjectGroup }[];
-  exps: { src: SourceStatus; entries: ExperienceEntry[]; enabled: boolean }[];
-  onDecide: (srcId: string, confirmId: string, approve: boolean) => void;
-  onOpenGroup: (src: SourceStatus, g: ProjectGroup) => void;
-}) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  if (!confirms.length && !groups.length && !exps.length) return null;
-  const sorted = [...groups].sort((a, b) => (ORG_ST_ORD[a.g.status] ?? 9) - (ORG_ST_ORD[b.g.status] ?? 9));
-  return (
-    <View style={styles.orgZone}>
-      {confirms.map(({ src, cf }) => (
-        <View key={cf.id} style={styles.orgCf}>
-          <Text style={styles.orgCfKind}>{ORG_CF_KIND_ZH[cf.kind] ?? cf.kind}</Text>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.orgCfTitle} numberOfLines={1}>{cf.title}</Text>
-            {cf.reason ? <Text style={styles.orgCfReason} numberOfLines={1}>{cf.reason}</Text> : null}
-          </View>
-          <Pressable
-            style={[styles.orgCfBtn, { backgroundColor: c.done }]}
-            hitSlop={8}
-            accessibilityLabel={`同意确认卡：${cf.title}`}
-            onPress={() => onDecide(src.id, cf.id, true)}
-          >
-            <Text style={[styles.orgCfBtnT, { color: c.onDone }]}>✓</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.orgCfBtn, styles.orgCfBtnR, { borderColor: withA(c.error, 0.5) }]}
-            hitSlop={8}
-            accessibilityLabel={`否决确认卡：${cf.title}`}
-            onPress={() => onDecide(src.id, cf.id, false)}
-          >
-            <Text style={[styles.orgCfBtnT, { color: c.error }]}>✗</Text>
-          </Pressable>
-        </View>
-      ))}
-      <View style={styles.orgChips}>
-        {sorted.map(({ src, g }) => (
-          <Pressable
-            key={g.id}
-            style={[
-              styles.orgChip,
-              g.status === "active" && { borderColor: withA(c.done, 0.5), backgroundColor: withA(c.done, 0.08) },
-              g.status === "pending" && { borderColor: withA(c.waiting, 0.5), backgroundColor: withA(c.waiting, 0.08) },
-            ]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-            accessibilityLabel={`项目组 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${(g.headcount ?? []).length + 1} 人，点按查看详情`}
-            onPress={() => onOpenGroup(src, g)}
-          >
-            <Text style={[styles.orgChipT, { color: orgStColor(g.status, c) }]} numberOfLines={1}>{g.name}</Text>
-            <Text style={styles.orgChipSt}>·{ORG_ST_ZH[g.status] ?? g.status}·{(g.headcount ?? []).length + 1}人</Text>
-          </Pressable>
-        ))}
-      </View>
-      {exps.length ? (
-        <View style={styles.orgExp}>
-          {exps.map(({ src, entries, enabled }) => {
-            const actives = entries.filter((e) => e.status === "active");
-            return (
-              <View key={src.id}>
-                {!enabled ? (
-                  <Text style={styles.orgExpNote}>经验库总开关已关闭（relay 设置）——注入与整理均已停</Text>
-                ) : actives.length === 0 ? (
-                  <Text style={styles.orgExpNote}>经验库为空（worker 回执申报入库）</Text>
-                ) : (
-                  <>
-                    {actives.slice(0, 6).map((e) => {
-                      const kindColor = e.kind === "pitfall" ? c.error : e.kind === "practice" ? c.done : e.kind === "preference" ? c.brandA : c.faint;
-                      const kindZh = e.kind === "pitfall" ? "坑" : e.kind === "practice" ? "法" : e.kind === "preference" ? "好" : "实";
-                      const scopeP = e.project_scope === "global" ? "全局" : (e.project_scope.split("/").filter(Boolean).pop() || "项目");
-                      const scopeR = e.role_scope === "any" ? "通用" : e.role_scope;
-                      return (
-                        <View key={e.id} style={styles.orgExpRow}>
-                          <Text style={[styles.orgExpKind, { color: kindColor }]}>{kindZh}</Text>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.orgExpText} numberOfLines={2}>{e.text}</Text>
-                            <Text style={styles.orgExpMeta} numberOfLines={1}>
-                              {scopeR} · {scopeP} · 用 {e.use_count ?? 0} 次
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                    {actives.length > 6 ? (
-                      <Text style={styles.orgExpNote}>其余 {actives.length - 6} 条见电脑端经验库</Text>
-                    ) : null}
-                  </>
-                )}
-              </View>
-            );
-          })}
-          <Text style={styles.orgExpNote}>手机只读 · 退役/恢复/改归组请用电脑端经验库</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-// 组详情弹窗（对齐 web 端 org drawer）：状态/档位 → 编制（组内会话可点入）→ 任务板
-//（轻立项单列简化态 / 正经立项三段；挂起=冻结只读）→ 最近派单回执流（§3.5 过程不
-// 回灌只收回执一行）。板不随快照（帧预算纪律）——COMMAND_PROJECT_DETAIL 按需拉取；
-// 状态行优先取源快照实时值（PROJECTS_UPDATED 即时反映），拉取结果兜底
-function GroupModal({ srcId, target, onClose, onOpenSession, highlightEntryId }: {
-  srcId: string;
-  target: { gid: string; name: string };
-  onClose: () => void;
-  onOpenSession: (sid: string) => void;
-  highlightEntryId?: string; // M13-6E 验收回跳：命中台账卡高亮定位（orgDetail 现拉板内查无=不高亮，防御）
-}) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const snap = useRelay();
-  // undefined=加载中 / null=失败 / 对象=详情
-  const [detail, setDetail] = useState<{ group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | null | undefined>(undefined);
-  useEffect(() => {
-    setDetail(undefined);
-    // send 当即失败（未连接/源不在）没有 ACK 回调，直接落失败态
-    if (!store.orgDetail(srcId, target.gid, setDetail)) setDetail(null);
-  }, [srcId, target.gid]);
-  const g = detail?.group;
-  const board = detail?.board;
-  const ents = board?.entries ?? [];
-  // #26 M3 熟手池（§5 成员卡进化）：路由表档案 join 运行态，服务端拼好（detail.pool）；
-  // 旧版 relay 无 pool 字段 → 空数组回落（编制快照仍在 group.headcount，不丢信息）
-  const pool = useMemo(() => detail?.pool ?? [], [detail]);
-  const liveG = useMemo(() => {
-    for (const src of snap.sources) {
-      const hit = (src.projects ?? []).find((x) => x.id === target.gid);
-      if (hit) return hit;
-    }
-    return g;
-  }, [snap.sources, target.gid, g]);
-  const entRow = (e: BoardEntry) => (
-    <View key={e.id} style={[styles.gmEnt, e.id === highlightEntryId && styles.gmEntHi]}>
-      <Text style={styles.gmEntT} numberOfLines={2}>{e.text}</Text>
-      {e.note ? <Text style={styles.gmEntNote} numberOfLines={1}>{e.note}</Text> : null}
-    </View>
-  );
-  return (
-    <Modal visible animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.gmWrap}>
-        <View style={styles.gmHead}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.gmTitle} numberOfLines={1}>{target.name}</Text>
-            <View style={styles.gmTags}>
-              <Text style={[styles.gmTag, { color: orgStColor(liveG?.status ?? "", c) }]}>
-                {ORG_ST_ZH[liveG?.status ?? ""] ?? liveG?.status ?? "…"}
-              </Text>
-              <Text style={styles.gmTag}>{liveG?.tier ?? g?.tier ?? ""}</Text>
-            </View>
-          </View>
-          <Pressable hitSlop={10} onPress={onClose} accessibilityLabel="关闭项目组详情">
-            <Text style={styles.gmClose}>✕</Text>
-          </Pressable>
-        </View>
-        <ScrollView contentContainerStyle={styles.gmBody} showsVerticalScrollIndicator={false}>
-          {detail === undefined ? (
-            <Text style={styles.gmEmpty}>加载中…</Text>
-          ) : detail === null ? (
-            <Text style={styles.gmEmpty}>详情拉取失败（源可能已断开或 relay 版本过旧）</Text>
-          ) : (
-            <>
-              {/* 熟手池：经验 N 次 · 上次 · 在忙/空闲/随组挂起/已退休（退休=只剩路由表档案，
-                  不可点）；空闲/随组挂起可点开（消息/派单即拉起）；Leader 兼管不占行 */}
-              <Text style={styles.gmSec}>熟手池 · {pool.length} 人（Leader 兼管）</Text>
-              {pool.length ? pool.map((p) => {
-                const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
-                const stColor = p.busy ? c.waiting : p.parked || !p.resumable ? c.faint : c.done;
-                const body = (
-                  <View style={[styles.gmSess, !p.resumable ? { opacity: 0.62 } : null]}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.gmSessT} numberOfLines={1}>
-                        {p.title || p.session_id.slice(0, 8)}{p.rating === "bad" ? "（差评·避开）" : ""}
-                      </Text>
-                      <Text style={styles.gmSessSt} numberOfLines={1}>
-                        {`${p.count} 次 · 上次 ${fmtLastActive(p.last_ts)}`}
-                        {p.tags?.length ? ` · ${p.tags.map((t) => "#" + t).join(" ")}` : ""}
-                      </Text>
-                    </View>
-                    <Text style={[styles.gmSessSt, { color: stColor }]}>{st}</Text>
-                  </View>
-                );
-                return p.resumable ? (
-                  <Pressable
-                    key={p.session_id}
-                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-                    onPress={() => { onClose(); onOpenSession(p.session_id); }}
-                  >
-                    {body}
-                  </Pressable>
-                ) : (
-                  <View key={p.session_id}>{body}</View>
-                );
-              }) : <Text style={styles.gmEmpty}>熟手池为空（首次派单后积累）</Text>}
-              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=D18 五态段（freeze §1.2） */}
-              <Text style={styles.gmSec}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
-              {ents.length === 0 ? (
-                <Text style={styles.gmEmpty}>板为空</Text>
-              ) : g?.tier === "轻立项" ? (
-                <View style={styles.gmCol}>{ents.map(entRow)}</View>
-              ) : (
-                ([["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待复核"], ["ready_to_install", "待装机"], ["done", "完成"]] as const).map(([st, lb]) => (
-                  <View key={st} style={styles.gmColGroup}>
-                    <Text style={styles.gmColH}>{lb} {ents.filter((e) => e.status === st).length}</Text>
-                    <View style={styles.gmCol}>{ents.filter((e) => e.status === st).map(entRow)}</View>
-                  </View>
-                ))
-              )}
-              {/* 回执流：readDispatchLog 按 project_anchor 过滤，最近 30 条新在前 */}
-              <Text style={styles.gmSec}>最近派单回执</Text>
-              {(detail.receipts ?? []).length ? detail.receipts!.map((r) => (
-                <View key={r.id + r.ts} style={[styles.gmRec, { borderLeftColor: r.status === "failed" ? c.error : c.line }]}>
-                  <Text style={styles.gmRecB}>[{r.tier}] {r.status}</Text>
-                  {r.receipt ? <Text style={styles.gmRecT} numberOfLines={5}>{r.receipt}</Text> : null}
-                  {/* 对齐 web（index.html 回执流）：target 归 meta 行、过滤 org-leader、
-                      截 8 位——整段 UUID 上屏既占行又不可辨 */}
-                  <Text style={styles.gmRecMeta}>{r.ts ? new Date(r.ts).toLocaleString() : ""}{r.target && r.target !== "org-leader" ? ` · ${r.target.slice(0, 8)}` : ""}</Text>
-                </View>
-              )) : <Text style={styles.gmEmpty}>暂无派单回执</Text>}
-            </>
-          )}
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, onOpenArtPool, ref }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onOpenSettings, onOpenArtPool, ref }: Props) {
   const { c } = useTheme();
   const { mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -1317,55 +1021,36 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     () => sessions.find((s) => s.session_id === pendingDel)?.title ?? "",
     [sessions, pendingDel],
   );
-  const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
-  // E2b 通知中心开关（声明前置：requestBack 返回栈句柄在其上方引用）
-  const [notifOpen, setNotifOpen] = useState(false);
   // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分不同来源）。
-  // 抽屉关上时重读——切服务器不重挂载本页，副标题要跟着换
+  // 抽屉时代「关上时重读」；抽屉退役（W-EXPOLISH 件三）后改随活动源变化重读——
+  // srcMenu 切源 / 设置页改连不重挂载本页，副标题要跟着换
   const [activeName, setActiveName] = useState("");
   useEffect(() => {
-    if (drawerOpen) return;
     void Promise.all([store.loadServers(), store.activeServerId()])
       .then(([list, id]) => {
         const active = list.find((e) => e.id === id) ?? list[0];
         setActiveName(active?.name?.trim() ?? "");
       })
       .catch(() => {});
-  }, [drawerOpen]);
+  }, [snap.activeSourceId, snap.sources.length]);
 
-  // 硬件返回（#282）：抽屉/图例开着时先关浮层而不是退出 App（列表页是根路由）。
+  // 硬件返回（#282）：图例开着时先关浮层而不是退出 App（列表页是根路由）。
   // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发。
-  // E2b：通知中心 Modal 纳入返回栈最前位——返回键只关浮层，列表分组/滚动位/
-  // 未决计数零触碰（通知中心打开不清零，返回也不重置）
+  // 抽屉/通知中心随 W-EXPOLISH 迁出（通知升 tab、抽屉退役），返回栈只剩图例浮窗
   useImperativeHandle(ref, () => ({
     requestBack: () => {
-      if (notifOpen) {
-        setNotifOpen(false);
-        return true;
-      }
       if (legendOpen) {
         setLegendOpen(false);
         return true;
       }
-      if (drawerOpen) {
-        setDrawerOpen(false);
-        return true;
-      }
       return false;
     },
-  }), [notifOpen, drawerOpen, legendOpen]);
+  }), [legendOpen]);
 
-  // 左缘手势条：从屏幕左缘右滑呼出侧边栏（透明覆盖条，只认横向滑动，不拦点击/竖向滚动）
-  const edgePan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dx > 12 && Math.abs(g.dy) < 14,
-      onPanResponderRelease: (_, g) => {
-        if (g.dx > 36 || g.vx > 0.35) setDrawerOpen(true);
-      },
-    }),
-  ).current;
+  // 左缘手势条随抽屉退役（W-EXPOLISH 件三）：它的唯一用途是呼出设置抽屉，设置升
+  // 独立 tab 后手势与常驻 tab 入口重复——移除，避免维护第二入口路径
   const sorted = useMemo(() => {
     // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
     // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失。
@@ -1520,29 +1205,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }, [badgeOn, grouped, snap.sources]);
   const srcBadgeOf = srcBadgeMap ?? (() => null);
 
-  // #26 M2 组织域：待决议确认卡 + 项目组 chips（结项不占常驻位）——跨源平铺
-  // （src+item 对），组名映射供卡片组织徽标（project_gid → 组名，无组回落档位）
-  const orgConfirms = useMemo(() => {
-    const out: { src: SourceStatus; cf: OrgConfirm }[] = [];
-    for (const src of snap.sources) for (const cf of src.orgConfirms ?? []) out.push({ src, cf });
-    return out;
-  }, [snap.sources]);
-  const orgGroups = useMemo(() => {
-    const out: { src: SourceStatus; g: ProjectGroup }[] = [];
-    for (const src of snap.sources)
-      for (const g of src.projects ?? []) if (g.status !== "archived") out.push({ src, g });
-    return out;
-  }, [snap.sources]);
-  // W-EXPP2 经验域（orgZone 分节只读）：跨源平铺——旧 relay（null）源不进；总开关关
-  // 的源照进（分节里置灰说明），条目只出 active（retired 归档面在电脑端）
-  const orgExps = useMemo(() => {
-    const out: { src: SourceStatus; entries: ExperienceEntry[]; enabled: boolean }[] = [];
-    for (const src of snap.sources) {
-      if (!src.experiences) continue;
-      out.push({ src, entries: src.experiences, enabled: src.experienceEnabled !== false });
-    }
-    return out;
-  }, [snap.sources]);
+  // #26 M2 组织域（W-EXPOLISH 件三：组织区/决议/组详情迁团队·项目 tab——
+  // 见文件头迁出锚）。本屏保留组名映射：会话卡的组织徽标（orgTag）依赖
+  // project_gid → 组名（无组回落派单档位）
   const projNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const src of snap.sources) for (const g of src.projects ?? []) m.set(g.id, g.name);
@@ -1552,89 +1217,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     (s: SessionState) => (s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null),
     [projNameById],
   );
-  // 组详情弹窗：点 chip 打开 → COMMAND_PROJECT_DETAIL 按需拉取
-  const [orgOpen, setOrgOpen] = useState<{ srcId: string; gid: string; name: string; entryId?: string } | null>(null);
-  // E2b：确认卡决议走 ACK 严格判定门（W1b 同构）——approve 经 orgConfirmPayload
-  // 强转真布尔（relay 咽喉 ===true 严判）、双击闸、失败可见态；unknownCommandError
-  // 记能力位后该源决议降级禁用（不再弹错轰炸）；成功不本地造状态，等
-  // ORG_CONFIRM_UPDATED 权威帧收敛（与 store orgConfirm 注释同口径）。无自动重试
-  //（重试=用户重点；store 全局 4s 重发一次+6s 收摊封顶）
-  const [orgFlight, setOrgFlight] = useState<Set<string>>(new Set());
-  const [orgErr, setOrgErr] = useState<{ key: string; msg: string } | null>(null);
-  const [orgCaps, setOrgCaps] = useState<CmdCaps>({});
-  const ORG_CMD = "COMMAND_ORG_CONFIRM";
-  const ORG_CAP_MSG = "该源 relay 版本不支持确认卡决议，升级 relay 后可用";
-  const orgDecide = useCallback((srcId: string, confirmId: string, approve: boolean) => {
-    const fk = orgFlightKey(srcId, confirmId);
-    if (ackTapGuard(orgFlight, fk) === "skip") return;
-    const payload = orgConfirmPayload(confirmId, approve);
-    if (!payload) return;
-    if (cmdCapBlocked(orgCaps, ORG_CMD)) {
-      setOrgErr({ key: fk, msg: ORG_CAP_MSG });
-      return;
-    }
-    setOrgFlight((prev) => new Set(prev).add(fk));
-    setOrgErr(null);
-    const settle = (v: AckVerdict): void => {
-      setOrgFlight((prev) => {
-        const n = new Set(prev);
-        n.delete(fk);
-        return n;
-      });
-      if (v.ok) return; // 成功等权威帧，不本地造状态
-      if (unknownCommandError(v.error)) {
-        setOrgCaps((prev) => cmdCapRemember(prev, ORG_CMD));
-        setOrgErr({ key: fk, msg: ORG_CAP_MSG });
-        return;
-      }
-      setOrgErr({ key: fk, msg: v.error ?? "决议未生效，可重试" });
-    };
-    const sent = store.orgConfirm(srcId, confirmId, payload.approve, (r) => settle(ackVerdict(r)));
-    if (!sent) settle(ackVerdict(null)); // 未连接：同 unconfirmed 口径可见可重试
-  }, [orgFlight, orgCaps]);
-
-  // E2b：通知中心（root 通知动作宿主）。池=全源 notifications 只读平铺——
-  // **不清零硬条款**（B3a 口径）：打开/浏览/关闭/重连/动作失败回滚零删行（本组件
-  // 无任何清池 state；badge 与行动行只随 handled/dismissed 权威账收缩）。
-  // 动作走 store.ackNotification（E3b 真链路：乐观+失败回滚+onDone），本层 ACK
-  // 严格判定后呈现行内错误；无自动重试（重试=重点按钮），双击闸防重复 ACK
-  const notifRows = useMemo(() => {
-    const out: { srcId: string; srcName: string; item: NotificationItem }[] = [];
-    for (const src of snap.sources)
-      for (const n of src.notifications ?? [])
-        out.push({ srcId: src.id, srcName: displaySrcName(src.name), item: n });
-    return out;
-  }, [snap.sources]);
-  const notifPending = useMemo(() => notifActionableOf(notifRows.map((r) => r.item)), [notifRows]);
-  const [notifFlight, setNotifFlight] = useState<Set<string>>(new Set());
-  const [notifErr, setNotifErr] = useState<Map<string, string>>(new Map());
-  const notifAct = useCallback((key: string, action: "handled" | "dismissed") => {
-    if (ackTapGuard(notifFlight, key) === "skip") return;
-    setNotifFlight((prev) => new Set(prev).add(key));
-    const settle = (msg: string | null): void => {
-      setNotifFlight((prev) => {
-        const n = new Set(prev);
-        n.delete(key);
-        return n;
-      });
-      setNotifErr((prev) => {
-        const n = new Map(prev);
-        if (msg) n.set(key, msg);
-        else n.delete(key);
-        return n;
-      });
-    };
-    const sent = store.ackNotification(key, action, (r) => {
-      const v = ackVerdict({ ok: r.ok, error: r.err });
-      if (v.ok) {
-        settle(null);
-        return;
-      }
-      // 乐观回滚由 store 负责（E3b 行回来）；本层只呈现行内错误，不自动重试
-      settle(unknownCommandError(v.error) ? "该源 relay 版本不支持通知动作" : v.error ?? "未生效，可重试");
-    });
-    if (!sent) settle(ackVerdict(null).error); // 未连接：unconfirmed 文案
-  }, [notifFlight]);
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
@@ -1678,8 +1260,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         <Pressable
           style={styles.logoBtn}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
-          onPress={() => setDrawerOpen(true)}
+          onPress={onOpenSettings}
           hitSlop={6}
+          accessibilityLabel="打开设置"
         >
           <View style={styles.logo}>
             <LogoMark size={19} />
@@ -1733,7 +1316,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                   onPress={() => {
                     setSrcMenu(false);
                     if (entry) void store.connectServer(entry);
-                    else setDrawerOpen(true); // 快照有/落库无（异常态）：引导去设置看
+                    else onOpenSettings(); // 快照有/落库无（异常态）：引导去设置 tab 看
                   }}
                 >
                   <View style={[styles.srcMenuDot, { backgroundColor: stc }]} />
@@ -1745,7 +1328,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             <Pressable
               style={styles.srcMenuManage}
               android_ripple={{ color: c.tintSoft, borderless: false }}
-              onPress={() => { setSrcMenu(false); setDrawerOpen(true); }}
+              onPress={() => { setSrcMenu(false); onOpenSettings(); }}
             >
               <Text style={styles.srcMenuManageT}>管理连接（编辑 / 删除）…</Text>
             </Pressable>
@@ -1819,31 +1402,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Text>
           </Pressable>
         ) : null}
-        {notifPending.length > 0 ? (
-          // E2b 通知中心入口：badge=未决行动项计数（只随权威账收缩，打开不清零）
-          <Pressable
-            style={styles.bellBtn}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-            onPress={() => setNotifOpen(true)}
-            hitSlop={4}
-            accessibilityLabel={`通知中心，${notifPending.length} 项需行动`}
-          >
-            <Text style={styles.bellT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
-          </Pressable>
-        ) : null}
+        {/* E2b 通知中心铃铛入口退役（W-EXPOLISH 件二）：通知升独立 tab——单入口纪律
+            （统计行双胶囊时代结束），未决计数改挂通知 tab badge（App 层同口径计算） */}
         {snap.sources.some(artPoolGate) ? (
           /* #72 E 线 入口①（常驻钮）：产物池=全局目录视图（与会话账正交的单源），
              三重门（探测 yes && deliverables && online）任一源过即显——降级=下线不
-             灰置（探测 no/未探明的源整体隐藏，W 线同口径）。bellBtn 同款形制=
-             统计行胶囊既有常驻钮语言 */
+             灰置（探测 no/未探明的源整体隐藏，W 线同口径）。统计行胶囊常驻钮语言
+             （原铃铛钮同形制，W-EXPOLISH 起中性命名 chipBtn——铃铛已退役） */
           <Pressable
-            style={styles.bellBtn}
+            style={styles.chipBtn}
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
             onPress={onOpenArtPool}
             hitSlop={4}
             accessibilityLabel="打开全局输出物目录"
           >
-            <Text style={styles.bellT} numberOfLines={1}>输出物</Text>
+            <Text style={styles.chipT} numberOfLines={1}>输出物</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1869,8 +1442,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         // G5（冲刺审查）：任务完成汇报悬浮钮（列表页抬高让开 FAB，bottom=insets+124）
         // 非空时末卡右缘被遮——条件让位 +52（浮钮形态用户拍板 #17 勿改，只让内容让路）
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 0, paddingTop: 6 }}
-        // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）
-        // #26 M2 组织区（确认卡 + 项目组 chips）与之同位平铺；OrgZone 空数据自返回 null
+        // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）。
+        // 组织区（确认卡/chips/经验）随 W-EXPOLISH 迁团队 tab（screens/ 组织模块）
         ListHeaderComponent={
           <>
             {accPending.length > 0 ? (
@@ -1900,22 +1473,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                 <Text style={styles.accCloseT}>×</Text>
               </Pressable>
             </Pressable>
-            ) : null}
-            <OrgZone
-              confirms={orgConfirms}
-              groups={orgGroups}
-              exps={orgExps}
-              onDecide={orgDecide}
-              onOpenGroup={(src, g) => setOrgOpen({ srcId: src.id, gid: g.id, name: g.name })}
-            />
-            {orgErr ? (
-              // E2b：决议失败可见态（ACK 判定门产出）——行内错误可关闭，无自动重试
-              <View style={styles.orgErrRow}>
-                <Text style={styles.orgErrT} numberOfLines={2}>{orgErr.msg}</Text>
-                <Pressable hitSlop={8} accessibilityLabel="关闭决议错误提示" onPress={() => setOrgErr(null)}>
-                  <Text style={styles.orgErrClose}>×</Text>
-                </Pressable>
-              </View>
             ) : null}
           </>
         }
@@ -1980,7 +1537,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         }
       />
 
-      <View style={styles.edgeZone} {...edgePan.panHandlers} />
+      {/* 左缘手势条随抽屉退役（W-EXPOLISH 件三）：透明覆盖条已删 */}
 
       <PressScale style={[styles.fab, { bottom: insets.bottom + 24 }]} ripple="rgba(255,255,255,0.18)" haptic onPress={onNew}>
         <View style={styles.fabGrad}>
@@ -1988,8 +1545,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </View>
       </PressScale>
 
-      {/* 删除撤销条（#247）：4s 窗口，撤销即恢复卡片；抽屉/图例打开时收起（层级 60 之下防穿模） */}
-      <UndoBar shown={!!pendingDel && !drawerOpen && !legendOpen} title={pendingTitle} onUndo={undoDelete} />
+      {/* 删除撤销条（#247）：4s 窗口，撤销即恢复卡片；图例打开时收起（层级 60 之下防穿模） */}
+      <UndoBar shown={!!pendingDel && !legendOpen} title={pendingTitle} onUndo={undoDelete} />
 
       <RenameModal
         visible={!!renameTarget}
@@ -1999,14 +1556,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           if (renameTarget) store.send("COMMAND_RENAME", { session_id: renameTarget.session_id, title });
           setRenameSid(null);
         }}
-      />
-
-      <SettingsDrawer
-        visible={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onSetup={onSetup}
-        onScan={onScanServer}
-        onEdit={(e) => onEditServer(e.id)}
       />
 
       {/* 状态图例浮窗：统计行 ？ 呼出，点任意处收起 */}
@@ -2029,217 +1578,24 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </Pressable>
       ) : null}
 
-      {/* #26 M2 项目组详情弹窗（点组织区 chip 呼出） */}
-      {orgOpen ? (
-        <GroupModal
-          srcId={orgOpen.srcId}
-          target={{ gid: orgOpen.gid, name: orgOpen.name }}
-          highlightEntryId={orgOpen.entryId}
-          onClose={() => setOrgOpen(null)}
-          onOpenSession={onOpen}
-        />
-      ) : null}
-
-      {/* E2b 通知中心（铃铛/返回键呼出；打开/关闭零清零，池只读自快照）。
-          M13-6E onJump：回跳前先收通知中心（返回键分发面恢复），再 onOpen 打开
-          归因会话（导航聚焦）；target 仅 session 落点（jumpTargetOf 已把关） */}
-      <NotifCenterModal
-        open={notifOpen}
-        onClose={() => setNotifOpen(false)}
-        rows={notifRows}
-        flight={notifFlight}
-        errs={notifErr}
-        onAct={notifAct}
-        onJump={(t, srcId) => {
-          setNotifOpen(false);
-          if (t.type === "session") { onOpen(t.sid); return; }
-          // task 落点：组详情打开后高亮定位台账卡（orgDetail 现拉全量为准）；组不在
-          // 该源 projects 在册（缓存悬空）=不跳不假造（M12-7 unknown-target 同哲学）
-          const g = (snap.sources.find((x) => x.id === srcId)?.projects ?? []).find((pg) => pg.id === t.gid);
-          if (!g) return;
-          setOrgOpen({ srcId, gid: t.gid, name: g.name, entryId: t.entryId });
-        }}
-      />
+      {/* 通知中心/组详情弹窗随 W-EXPOLISH 迁通知·团队·项目 tab（screens/ 对应宿主页） */}
     </SafeAreaView>
   );
 }
 
-// E2b 通知中心 Modal：全源通知池只读列表 + actionable 未决行「知道了/忽略」动作。
-// 池只读自 store 快照——本组件无任何清池路径（打开/浏览/关闭/重连不清零）；
-// 动作经 ACK 严格判定门（notifAct）：失败行内错误可重试，飞行中按钮转「…」；
-// 旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造。
-// M13-6E resolved 分离：已处理行（三时间戳任一）拆入「已处理 N」折叠分区（默认
-// 收起防长跑堆积），灰态+处理时刻（fmtLastActive 行语言）；main/resolved 两区各保
-// 池序不重排。M13-6E 验收回跳：acceptance 域未处理行经 jumpTargetOf 归因命中时
-// 显示「定位来源 ›」点击面（关中心→onJump 打开原会话）；归因缺失=无点击面降级。
-function NotifCenterModal({ open, onClose, rows, flight, errs, onAct, onJump }: {
-  open: boolean;
-  onClose: () => void;
-  rows: { srcId: string; srcName: string; item: NotificationItem }[];
-  flight: Set<string>;
-  errs: Map<string, string>;
-  onAct: (key: string, action: "handled" | "dismissed") => void;
-  onJump: (target: NotifJumpTarget, srcId: string) => void;
-}) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const snap = useRelay();
-  const pendingKeys = useMemo(
-    () => new Set(notifActionableOf(rows.map((r) => r.item)).map((n) => n.key)),
-    [rows],
-  );
-  // M13-6E 分区：done 行拆入「已处理 N」折叠区（默认收起；展开态组件本地内存级，
-  // 关闭即回默认——同 confirmDismissedKey 不落盘哲学）
-  const { main, resolved } = useMemo(() => splitResolvedRows(rows, (r) => notifDoneAt(r.item)), [rows]);
-  const [resolvedOpen, setResolvedOpen] = useState(false);
-  // 关闭即回默认收起：再开通知中心永远「默认折叠」（规格①口径；展开态不跨开合保留）
-  useEffect(() => {
-    if (!open) setResolvedOpen(false);
-  }, [open]);
-  const renderRow = (row: { srcId: string; srcName: string; item: NotificationItem }) => {
-    const { srcId, srcName, item } = row;
-    const actionable = pendingKeys.has(item.key);
-    const busy = flight.has(item.key);
-    const err = errs.get(item.key);
-    const doneAt = notifDoneAt(item);
-    // 回跳点击面口径对齐 web（canJmp=actionable 且未收口；已处理区=归档语义纯展示）。
-    // 落点解析与 web notifJumpTarget 同链：dispatch 域板缓存反查→task；降级 sessionId
-    // →session；解析不出=null 无按钮（不假造）。源板缓存取自该行 srcId 对应源
-    const jump = actionable && doneAt === null
-      ? jumpTargetOf(item, { sessions: snap.sessions, srcId, boards: snap.sources.find((x) => x.id === srcId)?.boards })
-      : null;
-    return (
-      <View key={`${srcId}/${item.key}`} style={styles.notiRow}>
-        <View style={styles.notiRowHead}>
-          {actionable ? <View style={styles.notiDot} /> : null}
-          <Text style={[styles.notiRowTitle, !actionable && { color: c.dim }]} numberOfLines={1}>{item.title}</Text>
-          {doneAt !== null ? <Text style={styles.notiDoneAt}>{fmtLastActive(doneAt)}</Text> : null}
-          <Text style={styles.notiSrc} numberOfLines={1}>{srcName}</Text>
-        </View>
-        {item.body ? <Text style={styles.notiBody} numberOfLines={2}>{item.body}</Text> : null}
-        {err ? <Text style={styles.notiErrT} numberOfLines={2}>{err}</Text> : null}
-        {jump ? (
-          // M13-6E 验收回跳（规格②，web nr-jmp 行同语义）：点击关通知中心→导航聚焦
-          //（task=组详情定位台账卡 / session=打开原会话）；降级路径无此按钮不假造
-          <Pressable
-            style={styles.notiJumpBtn}
-            hitSlop={6}
-            accessibilityLabel={`定位来源：${item.title}`}
-            onPress={() => onJump(jump, srcId)}
-          >
-            <Text style={styles.notiJumpT}>定位来源 ›</Text>
-          </Pressable>
-        ) : null}
-        {actionable ? (
-          <View style={styles.notiActRow}>
-            <Pressable
-              style={[styles.notiBtn, { backgroundColor: c.done, opacity: busy ? 0.5 : 1 }]}
-              disabled={busy}
-              accessibilityLabel={`知道了：${item.title}`}
-              onPress={() => onAct(item.key, "handled")}
-            >
-              <Text style={[styles.notiBtnT, { color: c.onDone }]}>{busy ? "…" : "知道了"}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.notiBtn, styles.notiBtnGhost, { borderColor: withA(c.dim, 0.5), opacity: busy ? 0.5 : 1 }]}
-              disabled={busy}
-              accessibilityLabel={`忽略：${item.title}`}
-              onPress={() => onAct(item.key, "dismissed")}
-            >
-              <Text style={[styles.notiBtnT, { color: c.dim }]}>{busy ? "…" : "忽略"}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-    );
-  };
-  return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.notiMask} onPress={onClose}>
-        <Pressable style={styles.notiSheet} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.notiHead}>
-            <Text style={styles.notiTitle}>通知中心</Text>
-            <Text style={styles.notiSub}>{pendingKeys.size > 0 ? `${pendingKeys.size} 项需行动` : "暂无待行动项"}</Text>
-            <Pressable hitSlop={10} accessibilityLabel="关闭通知中心" onPress={onClose}>
-              <Text style={styles.notiClose}>×</Text>
-            </Pressable>
-          </View>
-          <ScrollView style={styles.notiList} contentContainerStyle={{ paddingBottom: 24 }}>
-            {rows.length === 0 ? (
-              <Text style={styles.notiEmpty}>暂无通知</Text>
-            ) : (
-              <>
-                {main.map(renderRow)}
-                {resolved.length > 0 ? (
-                  // M13-6E「已处理 N」折叠分区（规格①）：默认收起防长跑堆积；
-                  // 行不删除（不清零硬条款不破——拆区≠删行，池仍只读自快照）
-                  <View>
-                    <Pressable
-                      style={styles.notiResolvedHead}
-                      hitSlop={8}
-                      accessibilityLabel={resolvedOpen ? "收起已处理通知" : `展开已处理通知 ${resolved.length} 条`}
-                      onPress={() => setResolvedOpen((v) => !v)}
-                    >
-                      <Text style={styles.notiResolvedT}>已处理 {resolved.length} {resolvedOpen ? "▴" : "▾"}</Text>
-                    </Pressable>
-                    {resolvedOpen ? resolved.map(renderRow) : null}
-                  </View>
-                ) : null}
-              </>
-            )}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
+// W-EXPOLISH：通知中心弹层整体迁 ./NotifCenterPage.tsx（通知 tab 宿主），数据面/
+// 分区/回跳/动作 ACK 门原样保持，此处不再保留弹层形态。
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
-  // ═══════ E2b：通知中心入口/Modal + 决议错误行 ═══════
-  bellBtn: {
+  // 统计行常驻钮（输出物入口；原铃铛钮同形制，W-EXPOLISH 起中性命名）
+  chipBtn: {
     backgroundColor: c.tintSoft, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 6,
   },
-  bellT: { color: c.brandA, fontSize: 11, fontWeight: "700" },
-  notiMask: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
-  notiSheet: {
-    backgroundColor: c.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16,
-    borderWidth: 1, borderColor: c.line, maxHeight: "78%",
-  },
-  notiHead: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
-  },
-  notiTitle: { color: c.text, fontSize: 15, fontWeight: "700", flex: 1 },
-  notiSub: { color: c.brandA, fontSize: 11, fontWeight: "600" },
-  notiClose: { color: c.faint, fontSize: 20, fontWeight: "600", paddingLeft: 6 },
-  notiList: { paddingHorizontal: 14 },
-  notiEmpty: { color: c.faint, fontSize: 12, textAlign: "center", paddingVertical: 32 },
-  notiRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line, gap: 4 },
-  notiRowHead: { flexDirection: "row", alignItems: "center", gap: 6 },
-  notiDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
-  notiRowTitle: { color: c.text, fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  notiSrc: { color: c.faint, fontSize: 10, marginLeft: "auto" },
-  notiBody: { color: c.dim, fontSize: 12, lineHeight: 17 },
-  notiActRow: { flexDirection: "row", gap: 8, marginTop: 2 },
-  notiBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  notiBtnGhost: { backgroundColor: "transparent", borderWidth: 1 },
-  notiBtnT: { fontSize: 12, fontWeight: "600" },
-  notiErrT: { color: c.error, fontSize: 11, lineHeight: 15 },
+  chipT: { color: c.brandA, fontSize: 11, fontWeight: "700" },
+  // ═══════ E2b：通知中心入口/Modal + 决议错误行 ═══════
   // M13-6E：已处理行时间戳（复用 notiSrc 灰态小字语言）+「已处理 N」折叠分区头
-  notiDoneAt: { color: c.faint, fontSize: 10 },
-  notiResolvedHead: { paddingVertical: 10, alignItems: "center" },
-  notiResolvedT: { color: c.faint, fontSize: 11, fontWeight: "600" },
   // M13-6E：acceptance 域回跳按钮（未处理行「定位来源 ›」——ghost 同款形制小号化）
-  notiJumpBtn: { alignSelf: "flex-start", borderRadius: 8, borderWidth: 1, borderColor: withA(c.dim, 0.5), paddingHorizontal: 10, paddingVertical: 4, marginTop: 2 },
-  notiJumpT: { color: c.dim, fontSize: 11, fontWeight: "600" },
-  orgErrRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 10, borderWidth: 1, borderColor: withA(c.error, 0.45),
-    backgroundColor: c.panel, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8,
-  },
-  orgErrT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
-  orgErrClose: { color: c.faint, fontSize: 15, fontWeight: "600" },
   // #137 待填验收单卡（列表顶部条件卡）：卡片形制对齐会话卡（panel 底/line 边/
   // 12 圆角），品牌色只点「验收单」标签与「去填写」动作（#102 品牌色克制）
   accCard: {
@@ -2352,10 +1708,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   secCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
   // E2a 活动指标块：四行定高小字（行距 gap 3、lineHeight 定值、单行 ellipsis），
   // 键淡值常——activity 缺失/能力全关时整块不渲染
-  actBlock: { marginTop: 4, marginBottom: 1, paddingLeft: 6, gap: 3 },
-  actLine: { fontSize: 11, lineHeight: 14 },
-  actKey: { color: c.faint, fontSize: 10 },
-  actVal: { fontSize: 11, fontVariant: ["tabular-nums"] },
   grpBar: { width: 3, height: 13, borderRadius: 1.5 },
   grpName: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2, flexShrink: 1 },
   grpDot: { width: 6, height: 6, borderRadius: 3 },
@@ -2421,10 +1773,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ctxCellT: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"], color: c.faint },
   // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
   liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5, paddingLeft: 6 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7） */
-  titleC: { color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
-  sumC: { color: c.faint, fontSize: 11, marginTop: 2 },
+  titleC: { lineHeight: 19, color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
+  sumC: { lineHeight: 14, color: c.faint, fontSize: 11, marginTop: 2 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  folderC: { fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
+  folderC: { lineHeight: 13, fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
     alignItems: "center", justifyContent: "center",
@@ -2439,14 +1791,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   avaT: { fontSize: 15, fontWeight: "700" },
   srowMain: { flex: 1, minWidth: 0, gap: 3 },
   srowR1: { flexDirection: "row", alignItems: "center", gap: 6 },
-  srowTitle: { flex: 1, color: c.textStrong, fontSize: 13.5, fontWeight: "600" },
+  srowTitle: { lineHeight: 19, flex: 1, color: c.textStrong, fontSize: 13.5, fontWeight: "600" },
   srowR2: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 16 },
   srowSum: { flex: 1, color: c.dim, fontSize: 12, lineHeight: 16 },
   srowBgTag: { color: c.working, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
   srowR3: { flexDirection: "row", alignItems: "center", gap: 5 },
   srowTag: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1 },
-  srowTagT: { fontSize: 10, fontWeight: "600" },
-  srowMeta: { color: c.faint, fontSize: 10 },
+  srowTagT: { lineHeight: 14, fontSize: 10, fontWeight: "600" },
+  srowMeta: { lineHeight: 14, color: c.faint, fontSize: 10 },
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 6 }, /* #83 同缩进 */
@@ -2463,7 +1815,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
   emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
-  edgeZone: { position: "absolute", left: 0, top: 0, bottom: 0, width: 22, zIndex: 5 },
   // 列表底部上拉刷新提示行（#255）：滚到底自动触发，也可点按
   footHint: { alignItems: "center", paddingVertical: 10 },
   footHintT: { color: c.faint, fontSize: 12 },
@@ -2489,63 +1840,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #26 M2 组织区（v3.1 矩阵式）：确认卡 + 项目组 chips——确认卡形制对齐验收单卡
   // （panel 底/line 边/12 圆角），动作色沿用审批按钮（done ✓ / error ✗）；chips 沿
   // 折叠空闲胶囊形制，状态只到描边+tint（pending 黄 / active 绿 / parked 中性）
-  orgZone: { gap: 6, marginBottom: 8 },
-  orgCf: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingVertical: 9, paddingHorizontal: 12,
-    borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
-  },
-  orgCfKind: { color: c.brandA, fontSize: 10, fontWeight: "700", flexShrink: 0 },
-  orgCfTitle: { color: c.text, fontSize: 12.5, fontWeight: "600" },
-  orgCfReason: { color: c.faint, fontSize: 10.5, marginTop: 1 },
-  orgCfBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  orgCfBtnR: { borderWidth: 1, backgroundColor: "transparent" },
-  orgCfBtnT: { fontSize: 15, fontWeight: "700" },
-  orgChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  orgChip: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
-    borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft, maxWidth: 210, overflow: "hidden",
-  },
-  orgChipT: { fontSize: 11.5, fontWeight: "600", maxWidth: 120 },
-  orgChipSt: { color: c.faint, fontSize: 9.5 },
   // W-EXPP2 经验分节（orgZone 内只读列表）：行=kind 徽标+两行文本+meta 行；徽章色随
   // kind（坑 error/法 done/好 brandA/实 faint），对齐 web 壳 exp 行语言
-  orgExp: { gap: 4, marginTop: 2, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line },
-  orgExpRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 4 },
-  orgExpKind: { fontSize: 10, fontWeight: "700", flexShrink: 0, marginTop: 1 },
-  orgExpText: { color: c.text, fontSize: 12, lineHeight: 17 },
-  orgExpMeta: { color: c.faint, fontSize: 10, marginTop: 1 },
-  orgExpNote: { color: c.faint, fontSize: 10, marginTop: 2 },
   // 组详情弹窗（gm*）：头部（名称+状态/档位 tags）→ 编制行 → 板段 → 回执流
-  gmWrap: { flex: 1, backgroundColor: c.bg },
-  gmHead: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
-  },
-  gmTitle: { color: c.text, fontSize: 15, fontWeight: "700" },
-  gmTags: { flexDirection: "row", gap: 6, marginTop: 4 },
-  gmTag: { color: c.dim, fontSize: 10.5, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 999, borderWidth: 1, borderColor: c.line },
-  gmClose: { color: c.dim, fontSize: 17, padding: 4 },
-  gmBody: { padding: 16, paddingBottom: 40 },
-  gmSec: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 0.3, marginTop: 16, marginBottom: 7 },
-  gmSess: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingHorizontal: 6, borderRadius: 9 },
-  gmDot: { width: 8, height: 8, borderRadius: 4 },
-  gmSessT: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 },
-  gmSessSt: { color: c.faint, fontSize: 10 },
-  gmCol: { gap: 5 },
-  gmColGroup: { marginBottom: 8 },
-  gmColH: { color: c.faint, fontSize: 10.5, fontWeight: "700", marginBottom: 4 },
-  gmEnt: { borderWidth: 1, borderColor: c.line, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: c.panel },
   // M13-6E 验收回跳定位高亮（web jump-flash 闪烁的 expo 静态对等——动画差异备案）
-  gmEntHi: { borderWidth: 1.5, borderColor: c.brandA, backgroundColor: c.tintSoft },
-  gmEntT: { color: c.text, fontSize: 12 },
-  gmEntNote: { color: c.faint, fontSize: 10.5, marginTop: 2 },
-  gmRec: { borderLeftWidth: 2, borderLeftColor: c.line, paddingLeft: 8, paddingVertical: 3, marginBottom: 6 },
-  gmRecB: { color: c.text, fontSize: 11.5, fontWeight: "600" },
-  gmRecT: { color: c.dim, fontSize: 11, marginTop: 1 },
-  gmRecMeta: { color: c.faint, fontSize: 10, marginTop: 1 },
-  gmEmpty: { color: c.faint, fontSize: 11.5, paddingVertical: 4 },
 });
 
 // 连接中三点（2026-09-16；#116 wave 式）。#148 同源降级：原 native 逐帧插值
