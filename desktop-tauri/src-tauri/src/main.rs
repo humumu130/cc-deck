@@ -317,6 +317,58 @@ fn app_version(app: tauri::AppHandle) -> String {
 /// hit-test 才会激活 NSTextInputClient（第三方输入法如微信输入法的组字上下文），
 /// JS programmatic focus 不触发（实测：caret 闪、IME 悬浮条假活、打字全丢；系统
 /// 输入法无恙，故仅第三方 IME 用户受害）。窗口本地坐标避开多屏 y 翻转；
+/// W-UIFIX B（2026-10-11 test.11 真机反馈「界面显示不完整」根修配套）：窗口尺寸/位置记忆。
+/// 物理像素存 app_config_dir/window-state.json（mac: ~/Library/Application Support/<identifier>/，
+/// nova 与标准壳 identifier 不同天然分仓不互踩）。保存口=CloseRequested（hide 到托盘前，
+/// mac 常态关窗每口保鲜）+ ExitRequested（托盘退出/app 级退出，窗口尚存）；Destroyed/Exit
+/// 时窗口对象已失效拿不到尺寸，不设口。恢复口=setup 建窗后立即（同帧生效无闪烁），
+/// 恢复前校验位置与任一显示器可视区相交——换屏/拔屏/文件脏数据时回 conf 默认，防窗口飞出看不见。
+/// 状态结构手搓 JSON（Cargo.toml 只有 serde_json 直依赖，不引 serde derive）：
+/// {"x":i32,"y":i32,"w":u32,"h":u32} 物理像素
+fn window_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|d| d.join("window-state.json"))
+}
+
+fn save_window_state(app: &tauri::AppHandle) {
+    let Some(path) = window_state_path(app) else { return };
+    let Some(win) = app.get_webview_window("main") else { return };
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { return };
+    if size.width == 0 || size.height == 0 { return; }
+    let json = format!("{{\"x\":{},\"y\":{},\"w\":{},\"h\":{}}}", pos.x, pos.y, size.width, size.height);
+    if let Some(dir) = path.parent() { let _ = std::fs::create_dir_all(dir); }
+    let _ = std::fs::write(&path, json);
+}
+
+fn restore_window_state(win: &tauri::WebviewWindow) {
+    let app = win.app_handle();
+    let Some(path) = window_state_path(app) else { return };
+    let Ok(txt) = std::fs::read_to_string(&path) else { return };
+    let Ok(v) = serde_json::from_str::<Value>(&txt) else { return };
+    let (Some(x64), Some(y64), Some(w64), Some(h64)) = (
+        v.get("x").and_then(Value::as_i64),
+        v.get("y").and_then(Value::as_i64),
+        v.get("w").and_then(Value::as_u64),
+        v.get("h").and_then(Value::as_u64),
+    ) else { return };
+    // i64/u64 收敛回 tauri Pixel 类型（i32/u32）；越界脏数据回默认
+    let (x, y) = (i32::try_from(x64).ok(), i32::try_from(y64).ok());
+    let (Some(x), Some(y)) = (x, y) else { return };
+    let (Ok(w), Ok(h)) = (u32::try_from(w64), u32::try_from(h64)) else { return };
+    if w == 0 || h == 0 { return; }
+    use tauri::PhysicalPosition;
+    let visible = match app.available_monitors() {
+        Ok(monitors) => monitors.iter().any(|m| {
+            let (mp, ms) = (m.position(), m.size());
+            let (mw, mh) = (ms.width as i32, ms.height as i32);
+            x + w as i32 > mp.x && x < mp.x + mw && y + h as i32 > mp.y && y < mp.y + mh
+        }),
+        Err(_) => false,
+    };
+    if !visible { return; }
+    let _ = win.set_size(tauri::PhysicalSize::new(w, h));
+    let _ = win.set_position(PhysicalPosition::new(x, y));
+}
+
 /// app 内部 sendEvent 不经 HID，零辅助功能权限。仅 macOS；其他平台返回 Err
 /// 由 web 侧回落 JS focus（Windows WebView2 无此病，#19 eval focus 已够）。
 #[tauri::command]
@@ -1254,7 +1306,9 @@ fn main() {
                     _ => false,
                 })
                 .build()?;
-            // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
+            // W-UIFIX B：窗口尺寸/位置记忆恢复（conf 默认 1440×900 建窗后立即套用，
+            // 有状态文件且位置可见才覆盖——同帧生效用户无感）
+            restore_window_state(&win);            // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
             //（窗口样式仍带 WS_CAPTION），此处显式去框兜底；标题栏职责移交网页自绘。
             // #74 mac 例外：走 tauri.macos.conf 的 Overlay（系统红黄绿 + 内容全幅），
             // 这里再 set false 会把圆点一起扒掉——mac 跳过。
@@ -1279,6 +1333,8 @@ fn main() {
         // 真退出（托盘退出/无托盘直关）时带走内嵌 relay，不留孤儿 node
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // W-UIFIX B：hide 到托盘/真退出前都先存窗口状态（mac 常态关窗口，尺寸保鲜）
+                save_window_state(window.app_handle());
                 if !QUITTING.load(Ordering::SeqCst) && TRAY_OK.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();
@@ -1295,6 +1351,11 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("CC Deck Tauri 壳构建失败")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                // W-UIFIX B：app 级退出（托盘退出/Dock 退出）兜底存窗口状态——
+                // 此时窗口对象尚存；Exit 阶段窗口已销毁拿不到尺寸
+                save_window_state(app_handle);
+            }
             if let tauri::RunEvent::Exit = event {
                 kill_embedded_relay();
                 let _ = app_handle;

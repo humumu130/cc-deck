@@ -323,8 +323,10 @@
        W-UIFB ②（合并裁决）：test.9 验收 i=2 浅色残留=border 之外的浅色投影所致，
        投影规则已撤（:1545 区）；背景维持 --rail 融合形态 */
     .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--rail); }
-    .window-dots { display: flex; gap: 6px; }
-    .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--window-dot); }
+    /* W-UIFIX A（2026-10-11 test.11 真机反馈「比其他软件小多了」）：9px→12px 对齐 macOS
+       系统灯标准直径，间距 6→8px；色值本就是 mac 标准三色（下方 nova 覆盖段） */
+    .window-dots { display: flex; gap: 8px; }
+    .window-dots i { width: 12px; height: 12px; border-radius: 50%; background: var(--window-dot); }
     /* W-TOPBAR ②：源胶囊固定左位（紧跟应用名，不随右侧内容变化）——标题退 flex，
        弹性占位 .windowbar-spring 吸收自由宽（自身也是拖拽区）；⌘K 教学提示退役 */
     .window-title {flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-B); white-space: nowrap; text-overflow: ellipsis;}
@@ -350,6 +352,9 @@
        close/min/max，与右侧 winbtns 二选一互斥显形），78px 系统灯旧位正好回填 */
     html.mac-tauri:not(.nova-tauri) .window-dots, html.win-tauri .window-dots { display: none; }
     html.mac-tauri.nova-tauri .window-dots { display: flex; }
+    /* W-UIFIX A：78px 左缩进是标准 mac 壳给系统灯让位的历史规则——nova 自绘灯不需要
+       （用户实测「位置不对左侧一大片空白」），收回 10px 贴缘感 */
+    html.mac-tauri.nova-tauri .windowbar { padding-left: 10px; }
     html.mac-tauri.nova-tauri .windowbar-winbtns { display: none; }
     html.mac-tauri.nova-tauri .window-dots i { cursor: pointer; }
     html.mac-tauri.nova-tauri .window-dots i[data-w="close"] { background: #FF5F57; }
@@ -561,7 +566,7 @@
     .queue-card.idle:hover { opacity: .8; }
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
     .queue-card strong {flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-A-item); text-overflow: ellipsis; white-space: nowrap;}
-    .queue-card p {overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: var(--fs-B); text-overflow: ellipsis; white-space: nowrap;}
+    .queue-card p {overflow: hidden; overflow-wrap: break-word; min-height: calc(18px * var(--ui-scale)); margin: 4px 138px 0 14px; color: var(--dim); font-size: var(--fs-B); text-overflow: ellipsis; white-space: nowrap;}
     .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
     .queue-card .tag { margin-top: 0; }
     /* W-PROJP1 P1-1：项目卡副行 flex 化（仅带 project-card-sub 类的副行，其余 <p> 元数据行不受影响）——
@@ -783,21 +788,24 @@
     .inspector-resizer:hover::after, .inspector-resizer:active::after { background: var(--border-strong); }
     /* 件六：收起态贴边展开把手——仅收起态可见（.inspector-collapsed 挂在 screen 上），
        骑 screen 右缘竖向居中，点击复用地基 [data-inspector-toggle] 全局委托，零新增监听 */
-    .inspector-expand { right: 0; display: none; }
+    /* W-UIFIX E（2026-10-11 test.11 真机反馈「找不到呼出的」）：ghost 形态太隐蔽——
+       常驻微可见（淡底+左描边+放大热区 16×56→20×72），hover 仍加强不回退 */
+    .inspector-expand { right: 0; display: none; width: 20px; height: 72px; border: 1px solid var(--line-soft); border-right: 0; background: color-mix(in srgb, var(--surface2) 55%, transparent); color: var(--dim); font-size: 20px; }
     .inspector-expand:hover { background: var(--hover); box-shadow: -3px 0 10px var(--panel-shadow); }
     .inspector-collapsed .inspector-expand { display: grid; }
     .inspector-collapsed .inspector-toggle { display: none; } /* 收起态两钮互换显形 */
     /* FB6 恢复：拖宽/折叠过的屏在窄窗 resize 重放时保持用户选择（JS 持久化，此处只管视觉） */
-    /* FB10 界面字号：全界面缩放档（WebView/浏览器 zoom 均支持，布局字号同步等比） */
-    /* FB10 字号档 + W-NOVAUI ⑧ 高度补偿：zoom 后实际占位 = 100vh×zoom（1.1 档溢出出滚动条、
-       0.9 档下方空白）——desktop-frame 锚 100vh，各档 height 除回系数保视觉满屏等比；
-       mobile-frame 非 100vh（内容撑高）无此问题，只缩放不补偿 */
-    body[data-ui-scale="90"] .desktop-frame { zoom: .9; height: calc(100vh / 0.9); }
-    body[data-ui-scale="90"] .mobile-frame { zoom: .9; }
-    body[data-ui-scale="110"] .desktop-frame { zoom: 1.1; height: calc(100vh / 1.1); }
-    body[data-ui-scale="110"] .mobile-frame { zoom: 1.1; }
-    body[data-ui-scale="125"] .desktop-frame { zoom: 1.25; height: calc(100vh / 1.25); }
-    body[data-ui-scale="125"] .mobile-frame { zoom: 1.25; }
+    /* W-UIFIX C（2026-10-11 test.11 真机反馈「字号设置大小应该只是改变字号，不应该影响整个
+       页面布局」）：FB10 的 zoom 整体缩放退役——zoom 连布局骨架一起放大（列宽/定高/窗口栏
+       全部变），大档内容区被等比挤压、用户实测界面显示不完整。改纯排版缩放：--ui-scale 只乘
+       字号类变量（--fs-全系、--srow-全系字号项与头像字）与文字耦合几何（行盒行高/密度定卡高/
+       纵向 pad）；列宽/flex 骨架/窗口栏/头像框等布局定值不缩放——字号变大布局不变。
+       注意：注释内禁写「星号+斜杠」序列（曾致本条注释提前闭合、body 基础规则被吞——
+       100 档 --ui-scale 无定义、calc 全链 invalid，headless CDP 实锤） */
+    body { --ui-scale: 1; }
+    body[data-ui-scale="90"] { --ui-scale: 0.9; }
+    body[data-ui-scale="110"] { --ui-scale: 1.1; }
+    body[data-ui-scale="125"] { --ui-scale: 1.25; }
     /* FB5 引擎置灰：未就绪引擎行整体降不透明度（状态 tag 仍可读，不再与已接引擎同权重） */
     .settings-row.engine-off { opacity: .55; }
     .settings-row.engine-off .engine-badge { filter: saturate(.35); }
@@ -1213,7 +1221,7 @@
     .task-assignee > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .task-assignee .assignee-meta { color: var(--dim); font-weight: 400; }
     .task-assignee b { color: var(--text); font-weight: 600; }
-    .queue-card-meta {display: block; height: 18px; min-width: 0; overflow: hidden; margin: 2px 0 0 14px; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-B); line-height: 18px;}
+    .queue-card-meta {display: block; height: calc(18px * var(--ui-scale)); min-width: 0; overflow: hidden; margin: 2px 0 0 14px; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-B); line-height: calc(18px * var(--ui-scale));}
     .member-list { display: grid; grid-template-columns: 1fr; gap: 0; min-width: 0; }
     .member-card { display: flex; min-width: 0; gap: 8px; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; overflow: hidden; }
     .member-card > div { min-width: 0; }
@@ -1498,12 +1506,15 @@
        --fs-micro = 非阅读微字（计数点/箭头 glyph/kicker），不参与文本层级、几何耦合不改。
        豁免（不入类）：KPI 数字读数（usage-summary-number/metric b/kv b）、图标 glyph、
        相对 em 排版（md-h1~h4/x-full/code .88em）、头像字（--srow-ava-font/.avatar）。 */
-    body { --fs-A: 14px; --fs-A-item: 13px; --fs-B: 12px; --fs-C: 11px; --fs-D: 13.5px; --fs-E: 12px; --fs-F: 12px; --fs-page: 16px; --fs-cta: 13px; --fs-micro: 10px; }
-    body[data-card-density="compact"] { --fs-A: 12px; --fs-A-item: 11px; --fs-B: 10px; --fs-C: 9px; --fs-D: 11.5px; --fs-E: 10px; --fs-F: 10px; --fs-page: 14px; --fs-cta: 11px; --fs-micro: 8px; }
-    body[data-card-density="relaxed"] { --fs-A: 16px; --fs-A-item: 15px; --fs-B: 14px; --fs-C: 13px; --fs-D: 15.5px; --fs-E: 14px; --fs-F: 14px; --fs-page: 18px; --fs-cta: 15px; --fs-micro: 12px; }
-    body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 54px; }
-    body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 48px; }
-    body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 62px; }
+    /* W-UIFIX C：--fs 全系乘 --ui-scale（字号档生效面）；density 三档各自基准同乘 */
+    body { --fs-A: calc(14px * var(--ui-scale)); --fs-A-item: calc(13px * var(--ui-scale)); --fs-B: calc(12px * var(--ui-scale)); --fs-C: calc(11px * var(--ui-scale)); --fs-D: calc(13.5px * var(--ui-scale)); --fs-E: calc(12px * var(--ui-scale)); --fs-F: calc(12px * var(--ui-scale)); --fs-page: calc(16px * var(--ui-scale)); --fs-cta: calc(13px * var(--ui-scale)); --fs-micro: calc(10px * var(--ui-scale)); }
+    body[data-card-density="compact"] { --fs-A: calc(12px * var(--ui-scale)); --fs-A-item: calc(11px * var(--ui-scale)); --fs-B: calc(10px * var(--ui-scale)); --fs-C: calc(9px * var(--ui-scale)); --fs-D: calc(11.5px * var(--ui-scale)); --fs-E: calc(10px * var(--ui-scale)); --fs-F: calc(10px * var(--ui-scale)); --fs-page: calc(14px * var(--ui-scale)); --fs-cta: calc(11px * var(--ui-scale)); --fs-micro: calc(8px * var(--ui-scale)); }
+    body[data-card-density="relaxed"] { --fs-A: calc(16px * var(--ui-scale)); --fs-A-item: calc(15px * var(--ui-scale)); --fs-B: calc(14px * var(--ui-scale)); --fs-C: calc(13px * var(--ui-scale)); --fs-D: calc(15.5px * var(--ui-scale)); --fs-E: calc(14px * var(--ui-scale)); --fs-F: calc(14px * var(--ui-scale)); --fs-page: calc(18px * var(--ui-scale)); --fs-cta: calc(15px * var(--ui-scale)); --fs-micro: calc(12px * var(--ui-scale)); }
+    /* W-UIFIX C：密度定卡高/纵向 pad 乘 --ui-scale（overflow:hidden 钉高容器，字大不乘必裁）；
+       横向 pad 不乘（列宽骨架不动） */
+    body { --density-card-block-size: calc(76px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: calc(54px * var(--ui-scale)); }
+    body[data-card-density="compact"] { --density-card-block-size: calc(58px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: calc(48px * var(--ui-scale)); }
+    body[data-card-density="relaxed"] { --density-card-block-size: calc(86px * var(--ui-scale)); --density-card-pad-block: calc(10px * var(--ui-scale)); --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: calc(62px * var(--ui-scale)); }
     /* ---------- #005-UI 会话列微信式通栏行（参照旧版 #78 拍板演进移植，005 命名体系
        srow-* 前缀，勿搬旧版 q-*）：无框通栏、行间零分隔线（纯留白分行）；三段式骨架 =
        srow-ava（源色淡化头像 + 状态灯叠角）/ srow-main 三行制（用户直馈 2026-10-05：
@@ -1515,15 +1526,20 @@
        标题行 15px/650（旧 .card-title 15px/650）→ 动作行 11.5px --card-sub（旧 .card-summary
        11.5px/lh16/上距4）→ 标签行 10.5px --faint（旧 .card-stats 11px 再降半档）；
        行间 --srow-gap 4px、卡内纵 pad 10px、行盒 16px 钉高，密度档同比例缩放 */
-    body { --srow-pad-block: 10px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 4px; --srow-name-size: 15px; --srow-sub-size: 11.5px; --srow-badge-size: 10.5px; }
-    body[data-card-density="compact"] { --srow-pad-block: 6px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 2px; --srow-name-size: 14px; --srow-sub-size: 11px; --srow-badge-size: 10px; }
-    body[data-card-density="relaxed"] { --srow-pad-block: 13px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 6px; --srow-name-size: 16px; --srow-sub-size: 12.5px; --srow-badge-size: 11.5px; }
+    /* W-UIFIX C：--srow 的字号项（ava-font/name/sub/badge）乘 --ui-scale；几何项
+       （pad/ava 框/gap）不乘——头像框与图标保持骨架稳定，头像字随档协调 */
+    body { --srow-pad-block: calc(10px * var(--ui-scale)); --srow-ava: 34px; --srow-ava-font: calc(15px * var(--ui-scale)); --srow-gap: 4px; --srow-name-size: calc(15px * var(--ui-scale)); --srow-sub-size: calc(11.5px * var(--ui-scale)); --srow-badge-size: calc(10.5px * var(--ui-scale)); }
+    body[data-card-density="compact"] { --srow-pad-block: calc(6px * var(--ui-scale)); --srow-ava: 26px; --srow-ava-font: calc(12px * var(--ui-scale)); --srow-gap: 2px; --srow-name-size: calc(14px * var(--ui-scale)); --srow-sub-size: calc(11px * var(--ui-scale)); --srow-badge-size: calc(10px * var(--ui-scale)); }
+    body[data-card-density="relaxed"] { --srow-pad-block: calc(13px * var(--ui-scale)); --srow-ava: 38px; --srow-ava-font: calc(16px * var(--ui-scale)); --srow-gap: 6px; --srow-name-size: calc(16px * var(--ui-scale)); --srow-sub-size: calc(12.5px * var(--ui-scale)); --srow-badge-size: calc(11.5px * var(--ui-scale)); }
     /* 满宽行（用户直馈 2026-10-05：「左右都浪费横向空间」——蒙版贯穿整列去卡感；
        radius 拍板归零：「既然蒙版贯穿整行了，还需要圆角吗？微信上没有圆角」）：
        会话域列容器水平 padding 归零（.queue 通用类不动，team/project/settings 卡片域零触碰）；
        行零圆角矩形蒙版条、背景/hover/selected 满宽贯穿；组头文字对齐行内容起点（14px） */
     #d-session .queue { padding: 16px 0; }
-    #d-session .queue-card { display: flex; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 14px; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
+    /* W-UIFIX D（2026-10-11 test.11 真机反馈「显示布局特别乱，而且高度很高」根修：
+       基础 .queue-card 为 team/project 卡改了 flex-direction:column，本覆盖没重置方向——
+       会话卡 avatar 与文字行纵排堆叠、卡高翻倍错乱。显式钉回 row + flex-start 两轴 */
+    #d-session .queue-card { display: flex; flex-direction: row; justify-content: flex-start; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 14px; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
     /* 行形态 display:flex 会压过 [hidden] 的 UA display:none——源筛选/搜索隐藏链（card.hidden）保真 */
     #d-session .queue-card[hidden] { display: none; }
     /* 微信电脑端「扫过见底」：hover 瞬时淡底；选中持续淡底（原描边/悬浮抬升档废止） */
@@ -1539,7 +1555,7 @@
     #d-session .srow-ava .status-dot { --dot-halo: var(--faint); position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; box-shadow: 0 0 0 2px var(--bg1), 0 0 0 3px color-mix(in srgb, var(--dot-halo) 20%, transparent); }
     #d-session .srow-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--srow-gap); }
     #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+    #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: calc(18px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
     /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
     #d-session .srow-time {flex: none; margin-left: auto; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
@@ -1556,7 +1572,7 @@
     #d-session .srow-close:hover { color: var(--error); background: var(--danger-bg); }
     #d-session .queue-card:hover .srow-more, #d-session .queue-card:hover .srow-pin, #d-session .queue-card:hover .srow-close,
     #d-session .queue-card:focus-within .srow-more, #d-session .queue-card:focus-within .srow-pin, #d-session .queue-card:focus-within .srow-close { opacity: 1; }
-    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--card-sub, var(--dim)); font-size: var(--srow-sub-size); line-height: 16px; min-height: 16px; }
+    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--card-sub, var(--dim)); font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
     /* B2 批2 A#bg-live：r2 走秒行 warn 呼吸点 + ⑂N tag（task-ref chip 形制；bgCount>0 恒显，含 WORKING 态） */
@@ -1564,7 +1580,7 @@
     #d-session .srow-r2 .tag.bg-live-tag { flex: none; padding: 1px 6px; font-size: var(--srow-badge-size); font-weight: 600; border-color: color-mix(in srgb, var(--working) 45%, transparent); background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
     /* r3 徽章行：footnote 级（用户直馈二次微调：高度再降一档——字号/行高/徽章 padding
        整体压缩，比摘要行明显更小更淡）；三徽全空整行不渲染（高度自适应不虚胖） */
-    #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: 12px; }
+    #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: calc(12px * var(--ui-scale)); }
     #d-session .srow-r3 > * { flex: none; margin-top: 0; }
     #d-session .srow-r3 .tag { padding: 1px 5px; font-size: var(--srow-badge-size); }
     #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .source-badge { padding: 1px 4px; font-size: var(--srow-badge-size); }
@@ -1590,7 +1606,7 @@
     .row-menu .row-del-tip { max-width: 200px; padding: 6px 10px 4px; color: var(--text); font-size: var(--fs-E); line-height: 1.45; }
     .row-menu .row-del-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 6px 6px; }
     /* 行内改名输入（菜单「重命名」→ 标题原位替换，Enter/失焦回写数据重渲） */
-    .row-rename-input { flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
+    .row-rename-input { flex: 1 1 auto; min-width: 0; height: calc(20px * var(--ui-scale)); padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
     /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */
     #d-session .srow-r3 .tag.pin-flag { background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--brand); }
     /* 文档级拖入蒙层（旧版 :8706-8740 语义：拖文件进窗口任意处即亮，防浏览器默认打开文件白屏） */
@@ -7433,7 +7449,8 @@ function connectLan(ctx) {
         try { new Notification(String(title || "CC Deck"), { body: String(body || "").slice(0, 120), silent: true, tag: "cc-deck-notify" }); } catch (_) {}
       }
       window.__ccDeck005NotifyFx = { ding: playNotifyDing, desktop: desktopNotifyText, soundOn: () => settingsToggleState("sound") };
-      // FB10 界面字号：zoom 档位（小/标准/大/特大），body 属性 + CSS 落位，localStorage 记忆
+      // FB10 界面字号：四档（小/标准/大/特大），body 属性 + CSS --ui-scale 落位（W-UIFIX C：
+      // 纯排版缩放，zoom 整体缩放退役），localStorage 记忆
       function applyUiScale(scale, announce = false) {
         const v = ["90", "100", "110", "125"].includes(scale) ? scale : "100";
         document.body.dataset.uiScale = v;
@@ -7563,7 +7580,7 @@ function connectLan(ctx) {
         body.innerHTML = `
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-bell"></use></svg></span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>全界面等比缩放 · 立即生效（FB10）</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-bell"></use></svg></span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>只改文字大小，布局不变 · 立即生效</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="shortcuts"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-search"></use></svg></span><div><strong>全局搜索</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">${escapeHtml(keyDisplay("search"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-plus-doc"></use></svg></span><div><strong>新建会话</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">${escapeHtml(keyDisplay("new"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-panel"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>全局快捷键 · 最小化时唤回窗口</p></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">${escapeHtml(toggleHotkeyDisplay())}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-arrows-v"></use></svg></span><div><strong>切换会话</strong><p>会话列表内上下移动 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("↑↓"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>切换数据源</strong><p>多源间快速切换 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("←→"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-code"></use></svg></span><div><strong>恢复默认键位</strong><p>清除全部自定义，回到出厂键位</p></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
