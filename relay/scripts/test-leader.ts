@@ -76,6 +76,15 @@ async function main() {
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
   const prevCwdEnv = process.env.CCR_CWD;
   const prevResumeInit = process.env.CCR_RESUME_INIT_MS;
+  // #63 基线红修复：钉回 json 读档。本测试断言的是派单台账**语义**（target 原串
+  // "org-leader"、同毫秒派单的 FIFO 插入序），而 SQLITE-FLIP（2026-10-06）后缺省
+  // sqlite 档读投影：target 经 member 归因（咨询单无归因=空串，read-mode.ts 头注
+  // 备案有损映射）、ORDER BY created_at,updated_at,id 在同毫秒行上落到随机 UUID
+  //（插入序不保 → L6 FIFO/failed 断言 flaky，110/3 与 112/1 双跑实锤）。json 是
+  // read-mode.ts 钦定回滚档；投影自身语义由 test-storage-driver/shadow 套件覆盖，
+  // 不在本测试职责内
+  const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
+  process.env.CCR_STORAGE_READ_MODE = "json";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   delete process.env.CCR_CWD; // sticky 豁免分支的前提（设了 CCR_CWD 时该分支本就跳过）
@@ -649,6 +658,7 @@ async function main() {
     }
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
+    if (prevReadMode === undefined) delete process.env.CCR_STORAGE_READ_MODE; else process.env.CCR_STORAGE_READ_MODE = prevReadMode;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;
     if (prevCwdEnv === undefined) delete process.env.CCR_CWD; else process.env.CCR_CWD = prevCwdEnv;
     if (prevResumeInit === undefined) delete process.env.CCR_RESUME_INIT_MS; else process.env.CCR_RESUME_INIT_MS = prevResumeInit;
