@@ -1423,6 +1423,11 @@ export class Bridge {
     }
 
     const q = this.inputQueue.get(sessionId) ?? [];
+    // W-INJECT P0：新消息（队列空+无在途 pending）= 新一轮提交回合，清 tries/given_up
+    // 账本——上轮封顶（given_up）后无晋升永不复位，会把新一轮的 #111 验证链/看门狗补发
+    // 全部挡死（「首条永不发出、第二条才顶出」的死锁腿之一）；用户主动发新消息即最明确
+    // 的「链路活着」信号，账本归零不会放大风暴
+    if (q.length === 0 && !(state.pending_inputs ?? []).length) this.stuckWatch.delete(sessionId);
     // W-INJECT：队列条目与 pending 同构（回显 text + 注入全文 body + 图引用），
     // 落盘/回种一份账本两用；此前队列只存 body 字符串，重启即蒸发无法重建回显
     const item: QueuedInput = { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}), ...(imgRefs.length ? { refs: imgRefs } : {}) };
@@ -1659,9 +1664,18 @@ export class Bridge {
   // 提前到 ~300ms：吞回车场景 ~0.8-1.8s 即补发提交；框净（CLI 原生排队）skip-absent
   // 不补发（111② 契约）；框有外来输入 timeout 交回验证链/看门狗。
   // WAITING（权限弹窗在悬）不补——回车会误触弹窗。
-  private scheduleSubmitEnter(sessionId: string, pid: number, text: string): void {
+  // W-INJECT P0（2026-10-12 用户实测「idle 会话首条消息永不发出，第二条才顶出去」）：
+  // 守门版此前对三类判定全部静默放弃——①unknown（快照不可用，fail-open 只在慢层看门狗）
+  // ②timeout（WORKING 回合流式输出被 foreignResidual 误判为人工输入，让路至 maxMs，实测
+  // 93s 才发出）③skip-absent（300ms 时正文未渲染完的竞态）。三类都落在「首条注入+CLI 忙/慢」
+  // 的窗口里=首条黑洞。现在分级收口：enter/enter-after-wait 照发；unknown 立即盲发（对齐
+  // 看门狗 W-CROSSQUEUE 直发语义）；timeout/skip-absent 让路一轮（round 0→1 复核）后仍滞留
+  // 直接补发——总时延有界 ≤~2.5s，抢发风险窗等价收敛，吞消息为零（宁扰勿吞既定口径）。
+  // tries 共享封顶账保持（fire 才计账），111 段 got-4 防线不动。
+  private scheduleSubmitEnter(sessionId: string, pid: number, text: string, round = 0): void {
     const prev = this.submitEnterTimers.get(sessionId);
     if (prev) clearTimeout(prev);
+    const delay = round === 0 ? 300 : 1100;
     const t = setTimeout(() => {
       this.submitEnterTimers.delete(sessionId);
       const st = this.mgr.getExternal(sessionId);
@@ -1678,22 +1692,50 @@ export class Bridge {
         },
       })
         .then((v) => {
-          if (v.kind !== "enter" && v.kind !== "enter-after-wait") return; // 框净/有外来输入/快照不可用：交回验证链与看门狗
           const s2 = this.mgr.getExternal(sessionId);
-          if (!s2 || s2.cli_pid !== pid || s2.status === "WAITING") return;
-          if (!(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
-          // 计入 stuckWatch tries：submit-enter 是「该消息的第 1 发提交补偿」（快路径），
-          // 与 #111 验证链/看门狗共享 3 次封顶账——否则总额超限（111 段 got 4 实锤）。
-          // 不打异常日志：这是预期提交完成路径，非滞留异常
-          const wPrev = this.stuckWatch.get(sessionId);
-          const tryNext = (wPrev?.tries ?? 0) + 1;
-          this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: wPrev?.skips ?? 0, given_up: tryNext >= 3 });
-          void injectEnter(pid).then((r) => {
-            if (!r.ok) this.onInjectFail(sessionId, r.error);
-          });
+          const stillPending = !!s2 && s2.cli_pid === pid && s2.status !== "WAITING" &&
+            (s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text));
+          const fire = (why: string): void => {
+            if (!stillPending) return;
+            // 计入 stuckWatch tries：submit-enter 是「该消息的第 1 发提交补偿」（快路径），
+            // 与 #111 验证链/看门狗共享 3 次封顶账——否则总额超限（111 段 got 4 实锤）。
+            // 不打异常日志：这是预期提交完成路径，非滞留异常
+            const wPrev = this.stuckWatch.get(sessionId);
+            const tryNext = (wPrev?.tries ?? 0) + 1;
+            this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: wPrev?.skips ?? 0, given_up: tryNext >= 3 });
+            void injectEnter(pid).then((r) => {
+              if (!r.ok) this.onInjectFail(sessionId, r.error);
+            });
+            void why;
+          };
+          if (v.kind === "enter" || v.kind === "enter-after-wait") {
+            fire("guard-enter");
+            return;
+          }
+          if (v.kind === "unknown") {
+            // 快照不可用 ≠ 有人在打字（W-CROSSQUEUE 同判）：慢层看门狗同场景本就直发，
+            // 快路径没有理由更保守——首条消息不应为等慢层多吞 10s
+            fire("unknown-failopen");
+            return;
+          }
+          if (v.kind === "timeout") {
+            // 流式回合被 foreignResidual 误判为人工输入（让路至 maxMs，生产实测 93s）：
+            // 让路一轮复核，仍滞留直接补发——总时延有界 ≤~1.5s，绝不静默吞
+            if (round === 0) {
+              this.scheduleSubmitEnter(sessionId, pid, text, 1);
+              return;
+            }
+            fire("round1-timeout");
+            return;
+          }
+          // skip-absent：框内已无我们的文本。两种成因——已提交/已进 CLI 原生队列（正常态，
+          // 补发=误发无关草稿，111 段「natively-queued never compensated」红线）或正文未
+          // 渲染完的竞态。后者由 #111 验证链 1s 二次 capture 兜住（彼时已渲染则 enter 判定
+          // 照发）——此处保持静默，不与原生队列语义打架
+          // aborted：状态变化，静默退出（看门狗兜底）
         })
         .finally(() => this.stuckGuarding.delete(sessionId));
-    }, 300);
+    }, delay);
     t.unref?.();
     this.submitEnterTimers.set(sessionId, t);
   }

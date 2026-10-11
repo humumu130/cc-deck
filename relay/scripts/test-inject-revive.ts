@@ -61,7 +61,9 @@ writeFileSync(
     'appendFileSync(process.env.CCR_INJECT_LOG, JSON.stringify(args) + "\\n");',
     'if (args.some((a) => String(a).includes("FORCE_FAIL"))) process.exit(1);',
     'if (args[1] === "--peek") {',
-    '  // 防抢发守门读屏：框内 = CCR_FAKE_BOX 指定的文本（守门判定 enter 需框内只有已知文本）',
+    '  // 防抢发守门读屏：框内 = CCR_FAKE_BOX 指定的文本（守门判定 enter 需框内只有已知文本）；',
+    '  // 未设 = 快照不可用（exit 1 → capture null → unknown，⑨a 的判定源）',
+    '  if (!process.env.CCR_FAKE_BOX) process.exit(1);',
     '  try { writeFileSync(args[2], ["✶ Working…", "─".repeat(40), "❯ " + (process.env.CCR_FAKE_BOX ?? ""), "─".repeat(40)].join("\\n")); } catch {}',
     "  process.exit(0);",
     "}",
@@ -249,6 +251,65 @@ const sessionLogText = (id: string) =>
   }, 6000);
   assert(true, "⑥ 注入成功后 300ms 级补发纯回车（提交快路径命中）");
   void before;
+
+  // ⑨ W-INJECT P0：idle 会话首条消息 3 秒内发出（守门误判三面收口）
+  {
+    // a) 快照不可用（unknown）→ 立即盲发（fail-open，对齐看门狗直发语义）
+    const idA = "ext-tir-p0-unknown";
+    const sa = mgr.ensureExternal(idA, "/tmp/tir", "P0 unknown 验证", "tir-p0-a");
+    mgr.setExternalCliPid(idA, process.pid);
+    sa.status = "DONE";
+    delete process.env.CCR_FAKE_BOX; // 无屏可读 = unknown
+    const t0a = Date.now();
+    bridge.extInput(idA, "首条消息unknown");
+    let enterA = -1;
+    await waitLog(() => {
+      const lg = fakeLog();
+      const ti = lg.findIndex((a) => a.some((x) => String(x).includes("首条消息unknown")));
+      const ei = lg.slice(ti + 1).findIndex((a) => a.length >= 2 && a[1] === "");
+      if (ti >= 0 && ei >= 0) { enterA = Date.now() - t0a; return true; }
+      return false;
+    }, 6000);
+    assert(enterA >= 0 && enterA <= 3000, `⑨a idle+快照不可用：首条 3 秒内补发提交回车（实测 ${enterA}ms）`);
+
+    // b) 框内无我们文本（skip-absent）→ 保持静默：已进 CLI 原生队列的正常态，补发回车
+    //    =误发无关草稿（111 段红线「natively-queued never compensated」）；未渲染竞态由
+    //    #111 验证链 1s 二次 capture 兜住（彼时已渲染→enter 判定照发）
+    const idB = "ext-tir-p0-skipabsent";
+    const sb = mgr.ensureExternal(idB, "/tmp/tir", "P0 skip-absent 验证", "tir-p0-b");
+    mgr.setExternalCliPid(idB, process.pid);
+    sb.status = "DONE";
+    process.env.CCR_FAKE_BOX = "别人的草稿内容"; // 框内没有我们的文本 → skip-absent
+    bridge.extInput(idB, "首条消息skipabsent");
+    await wait(2500); // 覆盖 submit-enter 两轮 + #111 快窗
+    {
+      const lg = fakeLog();
+      const ti = lg.findIndex((a) => a.some((x) => String(x).includes("首条消息skipabsent")));
+      const entered = ti >= 0 && lg.slice(ti + 1).some((a) => a.length >= 2 && a[1] === "");
+      assert(!entered, "⑨b skip-absent 保持静默（原生队列语义，不误发回车）");
+    }
+    process.env.CCR_FAKE_BOX = undefined as unknown as string;
+
+    // c) tries 账本死锁破除：上轮 given_up 后，新消息入队即清账（#111/看门狗不被挡）
+    const idC = "ext-tir-p0-ledger";
+    const sc = mgr.ensureExternal(idC, "/tmp/tir", "P0 账本验证", "tir-p0-c");
+    mgr.setExternalCliPid(idC, process.pid);
+    sc.status = "DONE";
+    (bridge as unknown as { stuckWatch: Map<string, { tries: number; given_up: boolean }> }).stuckWatch.set(idC, { tries: 3, given_up: true });
+    process.env.CCR_FAKE_BOX = "账本轮新消息";
+    bridge.extInput(idC, "账本轮新消息");
+    assert(
+      !(bridge as unknown as { stuckWatch: Map<string, unknown> }).stuckWatch.has(idC),
+      "⑨c 新消息入队即清 tries/given_up 账本（死锁腿拔除）",
+    );
+    await waitLog(() => {
+      const lg = fakeLog();
+      const ti = lg.findIndex((a) => a.some((x) => String(x).includes("账本轮新消息")));
+      return ti >= 0 && lg.slice(ti + 1).some((a) => a.length >= 2 && a[1] === "");
+    }, 6000);
+    assert(true, "⑨c given_up 后新消息补偿链存活（提交回车照发）");
+    delete process.env.CCR_FAKE_BOX;
+  }
 
   // ⑦ W-INJECT 问题④：历史回滚根治——LAN 快照宽窗 vs 云端安全默认（#408 口径不动）
   {
