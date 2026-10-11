@@ -137,10 +137,11 @@ async function main(): Promise<void> {
   eq(r5.hidden, 2, "foldMeta 超两个折 +2");
   eq(fold(["a"], 0).hidden, 0, "foldMeta max≤0 防御不折叠");
 
-  // ---------- ② 五域 + 通知 badge 计数口径（件二） ----------
+  // ---------- ② 四域 + 通知 badge 计数口径（件六：通知回顶栏铃铛） ----------
   const TABS = tabs.TABS as { key: string; label: string }[];
-  eq(TABS.length, 5, "五域表");
-  eq(TABS[3].key, "notifications", "第四域=通知");
+  eq(TABS.length, 4, "四域表（件六回四域）");
+  eq(TABS[3].key, "settings", "第四域=设置");
+  check(!TABS.some((t) => t.key === "notifications"), "通知不占底栏域（件六）");
   const pool = [
     { key: "n1", actionable: true, title: "a" },
     { key: "n2", actionable: true, resolved_at: 123, title: "b" },
@@ -162,7 +163,7 @@ async function main(): Promise<void> {
   check(org.ORG_ST_ZH && org.ORG_ST_ZH.pending === "待确认", "ORG_ST_ZH 词表随迁");
   check(typeof orgTabs.TeamTab === "function", "TeamTab 导出");
   check(typeof orgTabs.ProjectsTab === "function", "ProjectsTab 导出");
-  check(typeof notifPage.default === "function", "NotifCenterPage 默认导出（通知 tab 宿主）");
+  check(typeof notifPage.default === "function", "NotifCenterSheet 默认导出（通知 sheet 弹层宿主，件六复用件）");
   check(typeof settingsPage.default === "function", "SettingsPage 默认导出（设置 tab 宿主）");
   // ListScreen re-export 面（NewSessionModal/test-e-permission-summary 依赖）
   check(typeof (list as Record<string, unknown>).ackVerdict === "function", "ListScreen re-export ackVerdict");
@@ -190,10 +191,13 @@ async function main(): Promise<void> {
   check(listSrc.includes("foldMeta(["), "r3 元信息走 foldMeta 收敛");
   // 件一红线：摘要行 numberOfLines 钳制保持单行
   check(listSrc.includes("numberOfLines={1}>{s.action_summary"), "摘要行 numberOfLines=1 钳制保持");
-  // 件二：铃铛/通知弹层退役 + splitPending 口径不动
-  check(!listSrc.includes("NotifCenterModal"), "通知中心弹层已迁出");
-  check(!listSrc.includes("bellBtn"), "铃铛入口已退役（通知升 tab 单入口）");
-  check(listSrc.includes("未决计数改挂通知 tab badge"), "通知 badge 迁移注记在场");
+  // 件六：通知回顶栏铃铛 + sheet 弹层（件二 tab 形态撤销，组件保留复用）
+  check(!listSrc.includes("NotifCenterModal"), "旧 NotifCenterModal 名面清零（复用件为 NotifCenterSheet）");
+  check(!listSrc.includes("bellBtn"), "旧 bellBtn 命名清零（铃铛用中性 chipBtn 形制）");
+  check(listSrc.includes("<NotifCenterSheet"), "通知 sheet 弹层挂载（铃铛位）");
+  check(listSrc.includes("通知 · "), "铃铛胶囊「通知 · N」badge 在场");
+  check(listSrc.includes("notifActionableOf(snap.sources.flatMap"), "铃铛 badge 与弹层 rows 同源同函数");
+  check(listSrc.includes("if (notifOpen)"), "返回栈最前位收通知弹层");
   // 件三：组织区/抽屉/边缘手势退役 + logo 落点改 tab
   check(!listSrc.includes("SettingsDrawer"), "设置抽屉消费面已迁出");
   check(!listSrc.includes("OrgZone"), "组织区已迁出列表屏");
@@ -201,17 +205,16 @@ async function main(): Promise<void> {
   check(listSrc.includes("onOpenSettings"), "logo 落点改设置 tab 回调");
 
   const appSrc = srcOf("../App.tsx");
-  check(appSrc.includes("notifications: notifPendingCount"), "通知 tab badge 接线（App 层）");
+  check(!appSrc.includes("notifPendingCount") && !appSrc.includes("NotifCenterSheet"),
+    "通知不占底栏域/不挂 App 层（件六，铃铛+badge 归 ListScreen）");
   check(appSrc.includes("sessions: pendingCount"), "会话 tab badge 口径不变（红线）");
-  check(appSrc.includes("notifActionableOf(snap.sources.flatMap"), "badge 与通知页同源同函数");
-  check(appSrc.includes("<NotifCenterPage"), "通知域宿主接线");
   check(appSrc.includes("<TeamTab") && appSrc.includes("<ProjectsTab"), "团队/项目域宿主接线");
   check(appSrc.includes("<SettingsPage"), "设置域宿主接线");
   check(!appSrc.includes("DomainPlaceholder"), "占位域已退役");
 
   const tabsSrc = srcOf("../src/bottom-tabs.tsx");
   check(!tabsSrc.includes("DomainPlaceholder"), "bottom-tabs 占位域框架已删");
-  check(tabsSrc.includes("notifications"), "bottom-tabs 五域键在场");
+  check(!tabsSrc.includes("notifications"), "bottom-tabs 无通知域键（件六回四域）");
 
   const pageSrc = srcOf("../src/screens/SettingsPage.tsx");
   check(pageSrc.includes("export default function SettingsPage"), "设置页导出名（抽屉形态退役）");
@@ -219,10 +222,12 @@ async function main(): Promise<void> {
   check(pageSrc.includes("permissionSummariesOf(s.sourceCapabilities?.permission)"), "权限节随迁完好（test-e-permission 锚同款）");
 
   const notifSrc = srcOf("../src/screens/NotifCenterPage.tsx");
+  check(notifSrc.includes("Modal visible={open}"), "贴底弹层形态（件六：open/onClose props）");
   check(notifSrc.includes("store.ackNotification"), "通知动作真链路（E3b）随迁");
   check(notifSrc.includes("splitResolvedRows"), "已处理折叠分区随迁");
   check(notifSrc.includes("jumpTargetOf"), "验收回跳判定随迁");
-  check(notifSrc.includes("GroupModal"), "task 落点宿主组详情（迁 tab 后仍可达）");
+  check(notifSrc.includes("GroupModal"), "task 落点宿主组详情（弹层内可达）");
+  check(notifSrc.includes("关闭即回默认"), "已处理折叠「关闭回默认」语义保持");
 
   const orgTabsSrc = srcOf("../src/screens/OrgTabs.tsx");
   check(orgTabsSrc.includes("useOrgDecide"), "团队 tab 决议 ACK 门接线");
@@ -256,7 +261,31 @@ async function main(): Promise<void> {
   check(expPageSrc.includes("<ExpLibraryModal"), "弹层接线（入口行 → 只读列表）");
   check(expPageSrc.includes("experiences) continue"), "旧 relay null 源不进（整节隐藏降级范式）");
 
-  console.log(`ok - ${tests} assertions passed（W-EXPOLISH：卡高钳制 + 通知升 tab + 三域内容化）`);
+  // ---------- ⑦ P0 定版：Yoga owner 断言崩根因修复 ----------
+  // 崩溃签名（模拟器实测钉死）：连接成功 SNAPSHOT 大渲染期 SIGABRT——
+  // YogaLayoutableShadowNode.cpp:709 YGNodeGetOwner(child)!=&yogaNode_（真机侧
+  // 同根因表现为 addViewAt: failed to insert view）。二分定案：元凶=ListHeaderComponent
+  // 的元素形态（内联 JSX/useMemo 节点）——Fabric 下 header 元素与 cell clone 交互
+  // 触发 Yoga owner 冲突；display 切换/条件插拔/collapsable 均被二分证伪非元凶。
+  const p0Tabs = srcOf("../src/bottom-tabs.tsx");
+  check(p0Tabs.includes("badgeOff: { display: \"none\" }"), "badge 常挂 display 切换（无害保留）");
+  const p0List = srcOf("../src/screens/ListScreen.tsx");
+  check(p0List.includes("ListHeaderComponent={AccHeader}") && p0List.includes("function AccHeader()"),
+    "header 改组件形态（AccHeader 自取数据、身份恒定）——定版修复");
+  check(!p0List.includes("ListHeaderComponent={\n"), "内联 JSX header（元素形态）清零");
+  check(!p0List.includes("ListHeaderComponent={listHeader}"), "useMemo 节点 header（元素形态变体）清零");
+  check(!p0List.includes("stickyHeaderIndices={"), "吸顶 re-parent 面保持移除（防复发，段头随滚动走）");
+  check(p0List.includes("function AccHeader()") && p0List.includes("ccr_acc_seen"), "AccHeader 数据面自包含（seen 键不变）");
+  check(p0List.includes("statusItems.map"), "统计行原生条件形态（二分证伪 display 切换后回滚）");
+
+  // ---------- ⑧ 件七：新增按钮统一每域右上角 ＋（FAB 退役） ----------
+  check(!p0List.includes("<PressScale") && !p0List.includes("fabGrad"), "右下悬浮 FAB 退役");
+  check(p0List.includes("accessibilityLabel=\"新建会话\""), "会话页顶栏右上角 ＋（原 FAB 行为）");
+  check(p0List.includes("plusBtn"), "顶栏 ＋ 钮样式面在场");
+  check(orgTabsSrc.includes("onAdd={addOnDesk}") && orgTabsSrc.includes("请在电脑端操作"),
+    "团队/项目页右上角 ＋（现状能力=电脑端指引）");
+
+  console.log(`ok - ${tests} assertions passed（W-EXPOLISH：卡高钳制 + 通知回铃铛（件六迭代）+ 三域内容化 + dock 迁位 + 经验库迁设置）`);
 }
 
 main()

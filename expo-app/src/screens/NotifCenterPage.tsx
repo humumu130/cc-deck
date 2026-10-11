@@ -1,20 +1,19 @@
-// 通知中心 tab 页（W-EXPOLISH 件二：通知升独立 tab，五域第四域）。
-// 原 NotifCenterModal（ListScreen 底部弹层）整体迁宿主：池+分组+已处理折叠数据面
-// 原样保留，呈现从弹层改 tab 页常驻。会话页铃铛入口同步退役（单入口纪律）——badge
-//（未处理数）挂通知 tab，由 App.tsx 以同一 notifActionableOf 口径计算。
-// 硬条款原样保持：
-//   不清零（B3a）：打开/浏览/切 tab/重连/动作失败回滚零删行——本组件无任何清池
+// 通知中心弹层（W-EXPOLISH 件六用户拍板：通知放底部太挤、主流做法右上角通知——
+// 撤销件二的通知 tab，本组件保留复用，呈现从 tab 页改回贴底 sheet 弹层，挂回
+// ListScreen 顶栏铃铛位；文件名留 NotifCenterPage 记录形态变迁史）。数据面自
+// 原 NotifCenterModal 逐字迁移，硬条款原样保持：
+//   不清零（B3a）：打开/浏览/关闭/重连/动作失败回滚零删行——本组件无任何清池
 //   state；badge 与行动行只随 handled/dismissed 权威账收缩。池只读自 store 快照。
 //   动作经 ACK 严格判定门（org-commands）：失败行内错误可重试，飞行中按钮转「…」；
 //   旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造。
 //   M13-6E resolved 分离：已处理行拆入「已处理 N」折叠分区（默认收起），main/resolved
-//   两区各保池序不重排；切走 tab 重挂载即回默认折叠（同原「关闭即回默认」语义）。
-//   M13-6E 验收回跳：task 落点 = 本页宿主 GroupModal 定位台账卡（原弹层落在
-//   ListScreen 的同款行为）；session 落点 = onOpenSession 打开原会话（App 层
-//   openDetail，详情层盖过 tab 栏，返回回本 tab）。
+//   两区各保池序不重排；关闭即回默认折叠（原规格①语义）。
+//   M13-6E 验收回跳：task 落点 = 本弹层宿主 GroupModal 定位台账卡；session 落点 =
+//   onOpenSession 打开原会话（ListScreen onOpen → App openDetail）。
+//   通知 badge（未处理数）挂顶栏铃铛（ListScreen 统计行「通知 · N」胶囊），计数与
+//   本弹层 rows 同源同函数（notifActionableOf）。
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { withA, type ThemeColors } from "../theme";
 import { fmtLastActive, displaySrcName } from "../fmt";
@@ -24,7 +23,11 @@ import { store, useRelay } from "../store";
 import type { NotificationItem } from "../protocol";
 import { GroupModal } from "./OrgZone";
 
-export default function NotifCenterPage({ onOpenSession }: { onOpenSession: (sid: string) => void }) {
+export default function NotifCenterSheet({ open, onClose, onOpenSession }: {
+  open: boolean;
+  onClose: () => void;
+  onOpenSession: (sid: string) => void;
+}) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const snap = useRelay();
@@ -42,9 +45,12 @@ export default function NotifCenterPage({ onOpenSession }: { onOpenSession: (sid
     [rows],
   );
   // M13-6E 分区：done 行拆入「已处理 N」折叠区（默认收起；展开态本地内存级——
-  // 切 tab 重挂载即回默认，同原弹层「关闭即回默认收起」口径）
+  // 关闭即回默认收起，原规格①口径）
   const { main, resolved } = useMemo(() => splitResolvedRows(rows, (r) => notifDoneAt(r.item)), [rows]);
   const [resolvedOpen, setResolvedOpen] = useState(false);
+  useEffect(() => {
+    if (!open) setResolvedOpen(false);
+  }, [open]);
 
   // 动作 ACK 门（原 ListScreen notifAct 迁入）：双击闸防重复 ACK；乐观回滚由 store
   // 负责（E3b 行回来），本层只呈现行内错误；无自动重试（重试=重点按钮）
@@ -77,16 +83,17 @@ export default function NotifCenterPage({ onOpenSession }: { onOpenSession: (sid
     if (!sent) settle(ackVerdict(null).error); // 未连接：unconfirmed 文案
   }, [flight]);
 
-  // 验收回跳 task 落点：组详情弹窗宿主在本页（原弹层时代落在 ListScreen）
+  // 验收回跳 task 落点：组详情弹窗宿主在本弹层（session 落点先收本弹层再跳——
+  // Modal 在最上层，不收会盖住打开的详情页；原 NotifCenterModal 同款顺序）
   const [gmOpen, setGmOpen] = useState<{ srcId: string; gid: string; name: string; entryId?: string } | null>(null);
   const onJump = useCallback((target: NotifJumpTarget, srcId: string) => {
-    if (target.type === "session") { onOpenSession(target.sid); return; }
+    if (target.type === "session") { onClose(); onOpenSession(target.sid); return; }
     // task 落点：组详情打开后高亮定位台账卡；组不在该源 projects 在册（缓存悬空）
     // =不跳不假造（M12-7 unknown-target 同哲学）
     const g = (snap.sources.find((x) => x.id === srcId)?.projects ?? []).find((pg) => pg.id === target.gid);
     if (!g) return;
     setGmOpen({ srcId, gid: target.gid, name: g.name, entryId: target.entryId });
-  }, [snap.sources, onOpenSession]);
+  }, [snap.sources, onOpenSession, onClose]);
 
   const renderRow = (row: { srcId: string; srcName: string; item: NotificationItem }) => {
     const { srcId, srcName, item } = row;
@@ -147,12 +154,17 @@ export default function NotifCenterPage({ onOpenSession }: { onOpenSession: (sid
   };
 
   return (
-    <SafeAreaView style={styles.page} edges={["top"]}>
-      <View style={styles.head}>
-        <Text style={styles.headT}>通知中心</Text>
-        <Text style={styles.headSub}>{pendingKeys.size > 0 ? `${pendingKeys.size} 项需行动` : "暂无待行动项"}</Text>
-      </View>
-      <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.notiMask} onPress={onClose}>
+        <Pressable style={styles.notiSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.head}>
+            <Text style={styles.headT}>通知中心</Text>
+            <Text style={styles.headSub}>{pendingKeys.size > 0 ? `${pendingKeys.size} 项需行动` : "暂无待行动项"}</Text>
+            <Pressable hitSlop={10} accessibilityLabel="关闭通知中心" onPress={onClose}>
+              <Text style={styles.headClose}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
         {rows.length === 0 ? (
           <Text style={styles.notiEmpty}>暂无通知</Text>
         ) : (
@@ -185,23 +197,29 @@ export default function NotifCenterPage({ onOpenSession }: { onOpenSession: (sid
           onOpenSession={onOpenSession}
         />
       ) : null}
-    </SafeAreaView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
-// 样式：noti* 自原 NotifCenterModal（ListScreen makeStyles）原样迁入；page/head 为
-// tab 页容器新增（弹层 mask/sheet 形制退役）
+// 样式：noti* 行族自原 NotifCenterModal 原样迁入；mask/sheet 为贴底弹层形态
+//（件六回弹层——原 tab 页 page 容器退役）
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
-    page: { flex: 1, backgroundColor: c.bg },
-    head: {
-      flexDirection: "row", alignItems: "baseline", gap: 8,
-      paddingHorizontal: 16, paddingTop: 9, paddingBottom: 6,
-      borderBottomWidth: 1, borderBottomColor: c.line,
+    notiMask: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
+    notiSheet: {
+      backgroundColor: c.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16,
+      borderWidth: 1, borderColor: c.line, maxHeight: "78%",
     },
-    headT: { color: c.text, fontSize: 15, fontWeight: "700" },
+    head: {
+      flexDirection: "row", alignItems: "center", gap: 8,
+      paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
+    },
+    headT: { color: c.text, fontSize: 15, fontWeight: "700", flex: 1 },
     headSub: { color: c.brandA, fontSize: 11, fontWeight: "600" },
-    list: { flex: 1, paddingHorizontal: 14 },
+    headClose: { color: c.faint, fontSize: 20, fontWeight: "600", paddingLeft: 6 },
+    list: { paddingHorizontal: 14 },
     notiEmpty: { color: c.faint, fontSize: 12, textAlign: "center", paddingVertical: 32 },
     notiRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line, gap: 4 },
     notiRowHead: { flexDirection: "row", alignItems: "center", gap: 6 },

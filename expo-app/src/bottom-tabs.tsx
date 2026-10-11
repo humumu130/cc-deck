@@ -3,25 +3,24 @@
 // 深度耦合手写壳（App.tsx 单点 BackHandler 分发 + navPhase 详情滑入），导航库迁移
 // 风险大于收益；theme.ts navBg token 已备（005 --mobile-nav-bg 直译）。
 //
-// 五域（W-EXPOLISH 件二/件三，任务书口径）：会话 = ListScreen 宿主；通知 = 原会话页
-// 铃铛弹层（NotifCenterModal）升 tab 常驻；团队/项目/设置 = 占位卡内容化
-// （OrgTabs / SettingsPage 宿主）。规格对齐桌面 mobile-nav：高 62px 内容区 + 底缘
-// 安全区、图标 20px、44px 触区、选中语义 = 图标本体染品牌色无底（微信式）、
-// badge 15px 红底白字右上角。
+// 四域（W-EXPOLISH 件六用户拍板回四域：通知放底部太挤，主流做法右上角通知——
+// 通知改挂 ListScreen 顶栏铃铛 + sheet 弹层，NotifCenterPage 组件保留复用）：
+// 会话 = ListScreen 宿主；团队/项目/设置 = 内容化页（OrgTabs/SettingsPage 宿主，
+// 件三保留）。规格对齐桌面 mobile-nav：高 62px 内容区 + 底缘安全区、图标 20px、
+// 44px 触区、选中语义 = 图标本体染品牌色无底（微信式）、badge 15px 红底白字右上角。
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "./theme-context";
 import type { ThemeColors } from "./theme";
 
-export type TabKey = "sessions" | "team" | "projects" | "notifications" | "settings";
+export type TabKey = "sessions" | "team" | "projects" | "settings";
 
-// 导出仅测试用途（scripts/test-expo1-nav-scan.ts 断言五域表完整性）
+// 导出仅测试用途（scripts/test-expo1-nav-scan.ts 断言四域表完整性）
 export const TABS: { key: TabKey; label: string }[] = [
   { key: "sessions", label: "会话" },
   { key: "team", label: "团队" },
   { key: "projects", label: "项目" },
-  { key: "notifications", label: "通知" },
   { key: "settings", label: "设置" },
 ];
 
@@ -50,12 +49,6 @@ function TabIcon({ tab, color }: { tab: TabKey; color: string }) {
       ) : tab === "projects" ? (
         // folder
         <Path {...common} d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-      ) : tab === "notifications" ? (
-        // bell（lucide 铃铛，同线性口径）
-        <>
-          <Path {...common} d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-          <Path {...common} d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-        </>
       ) : (
         // settings（齿轮）
         <>
@@ -99,11 +92,13 @@ export default function BottomTabs({
           >
             <View style={st.iconWrap}>
               <TabIcon tab={t.key} color={color} />
-              {badge > 0 ? (
-                <View style={st.badge}>
-                  <Text style={st.badgeT}>{badge > 99 ? "99+" : badge}</Text>
-                </View>
-              ) : null}
+              {/* P0 加固（Fabric addViewAt 闪退）：badge 常挂 display 切换，不再条件
+                  插拔——连接成功 SNAPSHOT 一帧内多 sibling 条件插入是 Fabric re-parent
+                  冲突高发面（真机+模拟器复现「连上即崩循环」）；badge 为 absolute 定位，
+                  display:none 无布局副作用 */}
+              <View style={[st.badge, badge <= 0 && st.badgeOff]} pointerEvents="none">
+                <Text style={st.badgeT}>{badge > 99 ? "99+" : badge}</Text>
+              </View>
             </View>
             <Text style={[st.label, active && st.labelOn, { color }]}>{t.label}</Text>
           </Pressable>
@@ -139,6 +134,8 @@ const makeStyles = (c: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
     },
+    // P0 加固：badge 隐藏态 = display 切换（不插拔节点）
+    badgeOff: { display: "none" },
     badgeT: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
     label: { fontSize: 10, fontWeight: "600" },
     labelOn: { fontWeight: "700" },

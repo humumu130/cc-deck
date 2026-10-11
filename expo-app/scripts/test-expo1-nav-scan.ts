@@ -102,17 +102,17 @@ async function main(): Promise<void> {
   const scan = await import("../src/screens/ScanScreen.tsx");
   const parse = scan.parseScanPayload;
 
-  // ---------- 件 1：五域表完整性（W-EXPOLISH 件二：通知升 tab，占位域退役） ----------
+  // ---------- 件 1：四域表完整性（W-EXPOLISH 件六回四域：通知改挂顶栏铃铛） ----------
   const TABS = tabs.TABS;
-  check(Array.isArray(TABS) && TABS.length === 5, "五域 tab");
+  check(Array.isArray(TABS) && TABS.length === 4, "四域 tab");
   check(
-    JSON.stringify(TABS.map((t: { key: string }) => t.key)) === JSON.stringify(["sessions", "team", "projects", "notifications", "settings"]),
-    "域顺序：会话/团队/项目/通知/设置",
+    JSON.stringify(TABS.map((t: { key: string }) => t.key)) === JSON.stringify(["sessions", "team", "projects", "settings"]),
+    "域顺序：会话/团队/项目/设置",
   );
-  check(new Set(TABS.map((t: { key: string }) => t.key)).size === 5, "tab 键唯一");
+  check(new Set(TABS.map((t: { key: string }) => t.key)).size === 4, "tab 键唯一");
   check(TABS.every((t: { label: string }) => typeof t.label === "string" && t.label.length > 0), "每域有标签");
-  check((tabs.TABS as { key: string; label: string }[]).find((t) => t.key === "notifications")?.label === "通知", "通知域标签");
-  check((tabs as Record<string, unknown>).DomainPlaceholder === undefined, "占位域组件已退役（五域全内容化）");
+  check(!(tabs.TABS as { key: string }[]).some((t) => t.key === "notifications"), "通知不占底栏域（件六）");
+  check((tabs as Record<string, unknown>).DomainPlaceholder === undefined, "占位域组件已退役（四域全内容化）");
 
   // ---------- 件 2：index-005 新出码形状 → parseScanPayload ----------
   // 双路智能码（index-005 drawSmartPairQr 的 JSON.stringify(Object.assign(...)) 形状逐字对齐）
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
   check(!!parse(imp)?.import, "ccdeck-import 不回归");
   check(parse("ws://192.168.1.9:8787/ws?token=t")?.wsUrl === "ws://192.168.1.9:8787/ws", "裸 ws 带参形式不回归");
 
-  console.log(`ok - ${tests} assertions passed（底部导航五域表（W-EXPOLISH 通知升 tab）+ 智能码五格式消费）`);
+  console.log(`ok - ${tests} assertions passed（底部导航四域表（件六通知回铃铛）+ 智能码五格式消费）`);
 }
 
 main()
