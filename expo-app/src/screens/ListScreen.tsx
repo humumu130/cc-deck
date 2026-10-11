@@ -9,8 +9,10 @@ import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
-import { FadeIn, PressScale } from "../motion";
+import { FadeIn } from "../motion";
 import { hasActivityCapability, type SessionState, type SessionStatus } from "../protocol";
+import { notifActionableOf } from "../notify-jump";
+import NotifCenterSheet from "./NotifCenterPage";
 import RenameModal from "./RenameModal";
 
 // 硬件返回句柄（#282）：返回键收敛为 App.tsx 顶层单订阅统一分发，抽屉/图例浮层
@@ -145,6 +147,7 @@ export function foldMeta(metas: string[], max = 3): { shown: string[]; hidden: n
   }
   return { shown: metas.slice(0, max), hidden: metas.length - max };
 }
+
 
 // ---------- E2a 列表只读投影（纯函数段，零 RN 依赖） ----------
 // 数据源全部是 store 现有状态（activity / activity_capabilities / aggregate /
@@ -891,8 +894,10 @@ const SessionCard = memo(function SessionCard({
               <View style={styles.srowR3}>
                 <StatusTag s={s} />
                 {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-                {r3Meta.shown.map((m, i) => (
-                  <Text key={i} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
+                {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
+                    display 切换不插拔 */}
+                {r3Meta.shown.map((m) => (
+                  <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
                 ))}
                 {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
                 <View style={{ flex: 1 }} />
@@ -1023,6 +1028,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
+  // W-EXPOLISH 件六：通知中心入口回挂顶栏铃铛（用户拍板：通知放底部太挤，主流做法
+  // 右上角通知——件二的通知 tab 撤销，弹层组件 NotifCenterSheet 保留复用）
+  const [notifOpen, setNotifOpen] = useState(false);
   // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分不同来源）。
   // 抽屉时代「关上时重读」；抽屉退役（W-EXPOLISH 件三）后改随活动源变化重读——
   // srcMenu 切源 / 设置页改连不重挂载本页，副标题要跟着换
@@ -1036,18 +1044,30 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       .catch(() => {});
   }, [snap.activeSourceId, snap.sources.length]);
 
-  // 硬件返回（#282）：图例开着时先关浮层而不是退出 App（列表页是根路由）。
+  // 通知 badge（未处理数）：与弹层 rows 同源同口径（notifActionableOf，全源平铺，
+  // 三戳全空才算未决）——铃铛胶囊「通知 · N」只随权威账收缩，打开不清零
+  const notifPending = useMemo(
+    () => notifActionableOf(snap.sources.flatMap((x) => x.notifications ?? [])),
+    [snap.sources],
+  );
+
+  // 硬件返回（#282）：浮层开着时先关浮层而不是退出 App（列表页是根路由）。
   // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发。
-  // 抽屉/通知中心随 W-EXPOLISH 迁出（通知升 tab、抽屉退役），返回栈只剩图例浮窗
+  // 通知中心弹层纳入返回栈最前位——返回键只关浮层，列表分组/滚动位/未决计数零触碰
+  // （打开不清零，返回也不重置）；抽屉已随件三退役，返回栈=通知弹层+图例浮窗
   useImperativeHandle(ref, () => ({
     requestBack: () => {
+      if (notifOpen) {
+        setNotifOpen(false);
+        return true;
+      }
       if (legendOpen) {
         setLegendOpen(false);
         return true;
       }
       return false;
     },
-  }), [legendOpen]);
+  }), [notifOpen, legendOpen]);
 
   // 左缘手势条随抽屉退役（W-EXPOLISH 件三）：它的唯一用途是呼出设置抽屉，设置升
   // 独立 tab 后手势与常驻 tab 入口重复——移除，避免维护第二入口路径
@@ -1083,9 +1103,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   for (const s of sessions) {
     counts[s.status] = (counts[s.status] ?? 0) + 1;
   }
+  // P0 加固（Fabric addViewAt 闪退）：统计 chip 从「过滤 0 值动态 map」改「定长四槽
+  // 常挂 + display 切换」——连接成功 SNAPSHOT 一帧内 0→N 个 chip 连环插入是 re-parent
+  // 冲突高发面（真机+模拟器复现连上即崩循环）。槽序=STATUS_ORDER，视觉零差异
   const statusItems = (["WORKING", "WAITING", "ERROR", "DONE"] as const)
     .filter((k) => (counts[k] ?? 0) > 0)
     .map((k) => ({ k, n: counts[k], color: statusColor(k, c) }));
+  const artPoolOn = useMemo(() => snap.sources.some(artPoolGate), [snap.sources]);
 
   // #357 连接 chip 三态色（用户定）：已连接=绿 / 连接中·重连中=黄 / 连不上=红
   const connColor =
@@ -1105,50 +1129,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       return !v;
     });
   };
-  // #137 待填验收单 badge：跨源汇总未完成且未点开过的单，列表顶部条件卡。
-  // seen 本地记（AsyncStorage，per 单 id）——浏览器填完后 relay 侧 done 已置，
-  // 但 SNAPSHOT 只在重连时下发，只看 done 的话 badge 会在快照刷新前多挂一阵；
-  // 点开即视为已知，先行收起（下一张未 seen 的单自动顶上）
-  const [accSeen, setAccSeen] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    void AsyncStorage.getItem("ccr_acc_seen").then((v) => {
-      if (!v) return;
-      try { setAccSeen(new Set(JSON.parse(v) as string[])); } catch {}
-    });
-  }, []);
-  const accPending = useMemo(() => {
-    const out: { src: SourceStatus; a: AcceptanceSummary }[] = [];
-    for (const src of snap.sources)
-      // #195 消失条件改「提交过即消」（submitted；留空行也算提交）——旧判定
-      // !done 要求全行判完，实际填单常留「未测」空行 → 卡永久滞留。旧 relay 无
-      // submitted 字段（undefined）回退 done 判定
-      for (const a of src.acceptances ?? [])
-        if (!(a.submitted || a.done) && !accSeen.has(a.id)) out.push({ src, a });
-    out.sort((x, y) => y.a.created_at - x.a.created_at); // 新单在前，卡显示最新一张
-    return out;
-  }, [snap.sources, accSeen]);
-  const seenAcc = (id: string) => {
-    setAccSeen((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev).add(id);
-      void AsyncStorage.setItem("ccr_acc_seen", JSON.stringify([...next]));
-      return next;
-    });
-  };
-  const openAcc = (item: { src: SourceStatus; a: AcceptanceSummary }) => {
-    // 链接按源当前通道择路（同出单工具双发口径）：LAN 通道 = 同网直连表单页；
-    // 云通道/未知 = CF Worker /view KV 页面。#28 起云链接需带 per-sheet 密钥
-    // fragment（…html#<key>，SNAPSHOT key 字段；新 Worker 缺 key 提交 403）——
-    // 旧 relay 无 key 字段（undefined）退回无后缀链接（旧 Worker 本就不验）
-    const url = item.src.channel === "lan" && item.src.lanHint
-      ? `http://${item.src.lanHint}/acceptance/${item.a.id}`
-      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html${item.a.key ? `#${item.a.key}` : ""}`;
-    void Linking.openURL(url).catch(() => undefined);
-    seenAcc(item.a.id);
-  };
-  // #195 手动删除通知：不点开表单直接收卡（本地 seen 隐藏，不动 relay 侧单子与
-  // 填报数据——「删通知」而非「删单」；下张待填单自动顶上）
-  const dismissAcc = (id: string) => seenAcc(id);
   // #140 折叠空闲与闲置变灰联动（用户拍板口径）：只折「已变灰」的真闲置卡——
   // isIdleSession 与卡片蒙层同一判定（DONE/ERROR 且静默超 idleDimMin，#100 后台
   // 在跑豁免）。刚收工的会话处在交流窗口期，点折叠也不从面板消失；idleDimMin<0
@@ -1186,12 +1166,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ? { h: "src" as const, key: r.key, name: r.name, color: r.color, online: r.online, count: r.count }
         : { h: false as const, key: r.key, s: r.s },
   ), [projection]);
-  // 段头/组头吸顶（E2a 390 宽稳定口径）：头行定高+自带底色，滚动叠加不跳动
-  const stickyIndices = useMemo(
-    () => rows.reduce<number[]>((acc, r, i) => { if (r.h !== false) acc.push(i); return acc; }, []),
-    [rows],
-  );
-
   // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启且未
   // 走分组头（降级/单在线源混排）时恒显；配色与分组头共用 sourcePalette，同屏稳定
   const srcBadgeMap = useMemo(() => {
@@ -1253,6 +1227,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     lastFootRefresh.current = Date.now();
     refresh();
   };
+
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -1346,6 +1321,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               与 web THEME_ICONS 同款；深色显太阳=点击切浅、浅色显月牙） */}
           <ThemeGlyph dark={mode === "dark"} />
         </Pressable>
+        {/* W-EXPOLISH 件七：新增按钮统一「每域列表右上角 ＋」（对齐桌面 list-header
+            右上角加号同语言）——会话页右下 FAB 退役（少一个悬浮遮挡元素，跨端动作
+            位置肌肉记忆统一）；44px 触区，行为=原 FAB（新建会话弹层） */}
+        <Pressable
+          style={styles.plusBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+          onPress={onNew}
+          hitSlop={4}
+          accessibilityLabel="新建会话"
+        >
+          <PlusMark size={20} color={c.brandA} />
+        </Pressable>
       </View>
       <View style={styles.statRow}>
         {/* #52 聚合胶囊（替代 #26 电脑图标）：开关与数量合一——聚合开=「聚合 · N」
@@ -1402,13 +1389,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Text>
           </Pressable>
         ) : null}
-        {/* E2b 通知中心铃铛入口退役（W-EXPOLISH 件二）：通知升独立 tab——单入口纪律
-            （统计行双胶囊时代结束），未决计数改挂通知 tab badge（App 层同口径计算） */}
-        {snap.sources.some(artPoolGate) ? (
-          /* #72 E 线 入口①（常驻钮）：产物池=全局目录视图（与会话账正交的单源），
-             三重门（探测 yes && deliverables && online）任一源过即显——降级=下线不
-             灰置（探测 no/未探明的源整体隐藏，W 线同口径）。统计行胶囊常驻钮语言
-             （原铃铛钮同形制，W-EXPOLISH 起中性命名 chipBtn——铃铛已退役） */
+        {notifPending.length > 0 ? (
+          <Pressable
+            style={styles.chipBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+            onPress={() => setNotifOpen(true)}
+            hitSlop={4}
+            accessibilityLabel={`通知中心，${notifPending.length} 项需行动`}
+          >
+            <Text style={styles.chipT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
+          </Pressable>
+        ) : null}
+        {artPoolOn ? (
           <Pressable
             style={styles.chipBtn}
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
@@ -1422,13 +1414,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       </View>
 
       <FlatList
+        // P0 加固②：stickyHeaderIndices 退役——FlatList Android 吸顶的 re-parent
+        // 在 Fabric 下触发 Yoga owner 断言崩（YogaLayoutableShadowNode.cpp:709
+        // YGNodeGetOwner!=yogaNode，SIGABRT，连接后 ~100s SNAPSHOT 大渲染期必崩，
+        // 真机侧同根因表现为 addViewAt: failed to insert view）。段头改随滚动走
         // 密度切换强制重挂载：行高在极简(~40px)↔标准(~90px)间剧变时，
         // VirtualizedList 复用旧 cell 的陈旧布局度量导致整列空白（#392 回归，
         // 冷启动正常、仅切换路径复现）。key 换代即整体重建，窗口/度量全新
         key={density}
         data={rows}
         keyExtractor={(r) => r.key}
-        stickyHeaderIndices={stickyIndices}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1439,43 +1434,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             progressBackgroundColor={c.panel}
           />
         }
-        // G5（冲刺审查）：任务完成汇报悬浮钮（列表页抬高让开 FAB，bottom=insets+124）
-        // 非空时末卡右缘被遮——条件让位 +52（浮钮形态用户拍板 #17 勿改，只让内容让路）
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 0, paddingTop: 6 }}
-        // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）。
-        // 组织区（确认卡/chips/经验）随 W-EXPOLISH 迁团队 tab（screens/ 组织模块）
-        ListHeaderComponent={
-          <>
-            {accPending.length > 0 ? (
-              <Pressable
-              style={styles.accCard}
-              android_ripple={{ color: c.tintSoft, borderless: false }}
-              accessibilityLabel={`验收单待填：${accPending[0].a.title}，点击打开填写页面`}
-              onPress={() => openAcc(accPending[0])}
-            >
-              <View style={styles.accTag}>
-                <Text style={styles.accTagT}>验收单</Text>
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.accTitle} numberOfLines={1}>{accPending[0].a.title}</Text>
-                <Text style={styles.accSub} numberOfLines={1}>
-                  {`待填 ${accPending[0].a.judged}/${accPending[0].a.total}`}
-                  {accPending.length > 1 ? ` · 另有 ${accPending.length - 1} 张` : ""}
-                </Text>
-              </View>
-              <Text style={styles.accGo}>去填写 ›</Text>
-              <Pressable
-                style={styles.accClose}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
-                accessibilityLabel="不再提示该验收单"
-                onPress={() => dismissAcc(accPending[0].a.id)}
-              >
-                <Text style={styles.accCloseT}>×</Text>
-              </Pressable>
-            </Pressable>
-            ) : null}
-          </>
-        }
+        // G5（冲刺审查）：任务完成汇报悬浮钮（列表页让位 +52，浮钮形态用户拍板 #17）；
+        // W-EXPOLISH 件七 FAB 退役后底部余量 120→64（无悬浮钮遮挡，UndoBar 浮层除外）
+        contentContainerStyle={{ paddingBottom: insets.bottom + 64 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 0, paddingTop: 6 }}
+        // #137 待填验收单条件卡：统计行下方、会话列表顶部（AccHeader 组件形态，见上）
+        // P0 定版：header 用「组件形态」（AccHeader 自取数据、身份恒定）——元素形态
+        //（内联 JSX/useMemo 节点）在 Fabric 下与 cell clone 交互触发 Yoga owner 断言崩
+        //（YogaLayoutableShadowNode.cpp:709，连接后大渲染期必现），组件形态为 RN 文档口径
+        ListHeaderComponent={AccHeader}
         onScrollBeginDrag={() => { scrollArmed.current = true; }}
         onEndReached={footRefresh}
         onEndReachedThreshold={0.2}
@@ -1539,11 +1505,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
       {/* 左缘手势条随抽屉退役（W-EXPOLISH 件三）：透明覆盖条已删 */}
 
-      <PressScale style={[styles.fab, { bottom: insets.bottom + 24 }]} ripple="rgba(255,255,255,0.18)" haptic onPress={onNew}>
-        <View style={styles.fabGrad}>
-          <PlusMark size={20} color={c.fabPlus} />
-        </View>
-      </PressScale>
+      {/* 右下角悬浮 FAB 退役（W-EXPOLISH 件七）：新建入口统一到顶栏右上角 ＋ */}
 
       {/* 删除撤销条（#247）：4s 窗口，撤销即恢复卡片；图例打开时收起（层级 60 之下防穿模） */}
       <UndoBar shown={!!pendingDel && !legendOpen} title={pendingTitle} onUndo={undoDelete} />
@@ -1578,13 +1540,97 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </Pressable>
       ) : null}
 
-      {/* 通知中心/组详情弹窗随 W-EXPOLISH 迁通知·团队·项目 tab（screens/ 对应宿主页） */}
+      {/* W-EXPOLISH 件六：通知中心 sheet 弹层（铃铛/返回键呼出；组件保留复用——
+          原件二 tab 页改贴底弹层形态回挂。打开/关闭零清零，池只读自快照。
+          onJump：session 落点 onOpen 打开归因会话（导航聚焦）；task 落点由弹层内
+          宿主 GroupModal 定位台账卡（target 仅该落点，jumpTargetOf 已把关） */}
+      {/* P0 加固④：弹层改条件挂载——常挂 `<Modal visible={false}>`（内层 useRelay
+          每帧重渲）在 Fabric 0.86 是 Yoga owner 断言崩的触发面之一（上游
+          facebook/react-native#52349 未修；test.15 时代同款常挂 Modal 同崩）。
+          notifOpen 时才挂载，打开语义不变 */}
+      {notifOpen ? (
+        <NotifCenterSheet
+          open
+          onClose={() => setNotifOpen(false)}
+          onOpenSession={onOpen}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
 
 // W-EXPOLISH：通知中心弹层整体迁 ./NotifCenterPage.tsx（通知 tab 宿主），数据面/
 // 分区/回跳/动作 ACK 门原样保持，此处不再保留弹层形态。
+
+// P0 定版：验收单条件卡（原 ListScreen 内联 header）独立组件化——ListHeaderComponent
+// 用组件形态（身份恒定）；数据自取（snap.sources + AsyncStorage seen），与原实现
+// 逐字节同口径（#195 submitted 消失条件 / #28 云链接择路 / AsyncStorage key 不变）
+function AccHeader() {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const snap = useRelay();
+  const [accSeen, setAccSeen] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void AsyncStorage.getItem("ccr_acc_seen").then((v) => {
+      if (!v) return;
+      try { setAccSeen(new Set(JSON.parse(v) as string[])); } catch {}
+    });
+  }, []);
+  const accPending = useMemo(() => {
+    const out: { src: SourceStatus; a: AcceptanceSummary }[] = [];
+    for (const src of snap.sources)
+      for (const a of src.acceptances ?? [])
+        if (!(a.submitted || a.done) && !accSeen.has(a.id)) out.push({ src, a });
+    out.sort((x, y) => y.a.created_at - x.a.created_at); // 新单在前，卡显示最新一张
+    return out;
+  }, [snap.sources, accSeen]);
+  const seenAcc = useCallback((id: string) => {
+    setAccSeen((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev).add(id);
+      void AsyncStorage.setItem("ccr_acc_seen", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+  const openAcc = useCallback((item: { src: SourceStatus; a: AcceptanceSummary }) => {
+    // 链接按源当前通道择路（同出单工具双发口径）；#28 起云链接带 per-sheet 密钥
+    const url = item.src.channel === "lan" && item.src.lanHint
+      ? `http://${item.src.lanHint}/acceptance/${item.a.id}`
+      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html${item.a.key ? `#${item.a.key}` : ""}`;
+    void Linking.openURL(url).catch(() => undefined);
+    seenAcc(item.a.id);
+  }, [seenAcc]);
+  const dismissAcc = useCallback((id: string) => seenAcc(id), [seenAcc]);
+  if (!accPending.length) return null;
+  return (
+    <Pressable
+      style={styles.accCard}
+      android_ripple={{ color: c.tintSoft, borderless: false }}
+      accessibilityLabel={`验收单待填：${accPending[0].a.title}，点击打开填写页面`}
+      onPress={() => openAcc(accPending[0])}
+    >
+      <View style={styles.accTag}>
+        <Text style={styles.accTagT}>验收单</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.accTitle} numberOfLines={1}>{accPending[0].a.title}</Text>
+        <Text style={styles.accSub} numberOfLines={1}>
+          {`待填 ${accPending[0].a.judged}/${accPending[0].a.total}`}
+          {accPending.length > 1 ? ` · 另有 ${accPending.length - 1} 张` : ""}
+        </Text>
+      </View>
+      <Text style={styles.accGo}>去填写 ›</Text>
+      <Pressable
+        style={styles.accClose}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
+        accessibilityLabel="不再提示该验收单"
+        onPress={() => dismissAcc(accPending[0].a.id)}
+      >
+        <Text style={styles.accCloseT}>×</Text>
+      </Pressable>
+    </Pressable>
+  );
+}
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
@@ -1672,6 +1718,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
   statChips: { flexDirection: "row", gap: 9 },
   statChip: { flexDirection: "row", alignItems: "center", gap: 3.5 },
+  // P0 加固：常挂件的隐藏态 = display 切换（不插拔节点；display:none 不占 flex 位）
+  statChipOff: { display: "none" },
   statDot: { width: 7, height: 7, borderRadius: 4 },
   statChipT: { fontSize: 11.5 },
   // ？ 图例按钮：淡色小圆圈问号
@@ -1818,7 +1866,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 列表底部上拉刷新提示行（#255）：滚到底自动触发，也可点按
   footHint: { alignItems: "center", paddingVertical: 10 },
   footHintT: { color: c.faint, fontSize: 12 },
-  fab: { position: "absolute", right: 30, borderRadius: 16, elevation: 8 },
+  // W-EXPOLISH 件七：右下悬浮新增钮退役——新建统一顶栏右上角 ＋
+  plusBtn: {
+    width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    marginRight: -4, overflow: "hidden",
+  },
   // 删除撤销条（#247）：底部浮条；右侧留出让任务汇报悬浮钮（44dp@right12）的空档。
   // zIndex 50：高于列表/边缘手势条（5），低于抽屉/图例（60）——配合打开时隐藏双保险
   undoBar: {
@@ -1831,12 +1883,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 8, backgroundColor: c.tintStrong, paddingHorizontal: 12, paddingVertical: 5,
   },
   undoBtnT: { color: c.brandA, fontSize: 12.5, fontWeight: "700" },
-  // FAB 底/描边/十字色随主题（theme.ts fabBg/fabLine/fabPlus）：深色维持原近黑观感，
-  // 浅色改品牌蓝主操作口径（2026-09-18 亮色黑底突兀反馈）
-  fabGrad: {
-    width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.fabBg, borderWidth: 1, borderColor: c.fabLine,
-  },
   // #26 M2 组织区（v3.1 矩阵式）：确认卡 + 项目组 chips——确认卡形制对齐验收单卡
   // （panel 底/line 边/12 圆角），动作色沿用审批按钮（done ✓ / error ✗）；chips 沿
   // 折叠空闲胶囊形制，状态只到描边+tint（pending 黄 / active 绿 / parked 中性）

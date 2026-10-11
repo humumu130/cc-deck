@@ -6,7 +6,7 @@
 // 数据面/决议 ACK 门 = OrgZone 模块 useOrgData/useOrgDecide（原 ListScreen 口径）。
 // 手机只读边界（W-EXPP2 口径）不变：退役/恢复/改归组走电脑端经验库。
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { withA, type ThemeColors } from "../theme";
@@ -15,8 +15,9 @@ import type { ProjectGroup } from "../protocol";
 import type { SourceStatus } from "../store";
 import { GroupModal, ORG_ST_ZH, OrgZone, orgStColor, useOrgData, useOrgDecide } from "./OrgZone";
 
-// 页面骨架共享：SafeArea 顶 + 标题行 + 滚动内容（与通知 tab 同构）
-function OrgPageShell({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
+// 页面骨架共享：SafeArea 顶 + 标题行（右上角 ＋ 钮，W-EXPOLISH 件七统一新增入口——
+// 对齐桌面 list-header 同语言；现状无端侧建团/立项能力，点按给电脑端指引）+ 滚动内容
+function OrgPageShell({ title, sub, onAdd, children }: { title: string; sub: string; onAdd: () => void; children: React.ReactNode }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   return (
@@ -24,6 +25,15 @@ function OrgPageShell({ title, sub, children }: { title: string; sub: string; ch
       <View style={styles.head}>
         <Text style={styles.headT}>{title}</Text>
         <Text style={styles.headSub}>{sub}</Text>
+        <Pressable
+          style={styles.plusBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+          onPress={onAdd}
+          hitSlop={4}
+          accessibilityLabel={`新建（${title}）`}
+        >
+          <Text style={styles.plusT}>＋</Text>
+        </Pressable>
       </View>
       <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 28 }}>
         {children}
@@ -31,6 +41,9 @@ function OrgPageShell({ title, sub, children }: { title: string; sub: string; ch
     </SafeAreaView>
   );
 }
+
+// 建团/立项深交互指引（件三边界：发起面在电脑端；＋ 钮点按反馈）
+const addOnDesk = () => Alert.alert("建团 / 立项", "请在电脑端操作——手机端发起入口后续版本开放");
 
 // 深交互指引（快赢批边界声明）：派单/建团等发起面在电脑端，手机只读+决议
 function DeskHint({ lines }: { lines: string[] }) {
@@ -57,6 +70,7 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
     <OrgPageShell
       title="团队"
       sub={pendingN > 0 ? `${pendingN} 张确认卡待决议` : `${groups.length} 个项目组`}
+      onAdd={addOnDesk}
     >
       {empty ? (
         <View style={styles.emptyCard}>
@@ -112,7 +126,7 @@ export function ProjectsTab({ onOpenSession }: { onOpenSession: (sid: string) =>
     return [...bySrc.values()];
   }, [groups]);
   return (
-    <OrgPageShell title="项目" sub={groups.length > 0 ? `${groups.length} 个项目组` : "尚未立项"}>
+    <OrgPageShell title="项目" sub={groups.length > 0 ? `${groups.length} 个项目组` : "尚未立项"} onAdd={addOnDesk}>
       {sections.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyT}>还没有项目</Text>
@@ -168,7 +182,10 @@ const makeStyles = (c: ThemeColors) =>
       borderBottomWidth: 1, borderBottomColor: c.line,
     },
     headT: { color: c.text, fontSize: 15, fontWeight: "700" },
-    headSub: { color: c.brandA, fontSize: 11, fontWeight: "600" },
+    headSub: { color: c.brandA, fontSize: 11, fontWeight: "600", flex: 1 },
+    // 件七：右上角 ＋（36px 触区 + hitSlop；head 行高内已居中）
+    plusBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", marginLeft: 6, overflow: "hidden" },
+    plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
     list: { flex: 1, paddingHorizontal: 14, paddingTop: 8 },
     // 空态卡（原 DomainPlaceholder 语义弱化版：一句状态 + 一句指引）
     emptyCard: {
