@@ -654,7 +654,15 @@
     /* W-UIFB ③（合并裁决，用户 i=3 最新意见）：目录·最近活动从标题行右端（test.8 head-meta）
        改为标题正下方纵排（小几号灰字单行）——ws-title-main 承载 h2+sub；sub 空文本零占位 */
     .ws-title-main { display: flex; flex-direction: column; justify-content: center; flex: 0 1 auto; min-width: 0; }
-    .head-sub { max-width: 100%; overflow: hidden; color: var(--faint); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    /* 件十六（2026-10-11 用户拍板）：Agent 标签紧贴会话名（同行 2-3 字距，不再独占下行）——
+       ws-title-line 横排 h2+identity；信息行序=工作目录→水位胶囊→活跃时间（胶囊从 head-actions
+       迁入 sub 行，目录/活跃分段 span 夹胶囊） */
+    .ws-title-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .ws-title-line h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ws-title-line .identity-cluster { flex: none; }
+    .head-sub { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; color: var(--faint); font: var(--fs-B) var(--mono); }
+    .head-sub > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .head-sub .head-ctx-meter { flex: none; min-height: 20px; font-size: var(--fs-D); }
     .head-sub:empty { display: none; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 8px; }
     .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 6px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
@@ -1271,6 +1279,27 @@
     #d-team .task-card.compact { padding: 7px 9px; }
     #d-team .task-card.compact > strong { font-size: var(--fs-B); }
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
+    /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；向上弹防
+       workspace-body 底缘裁剪，pointer-events:none 防闪烁，z-index 盖过后续泳道卡 */
+    #d-team .task-card.compact { position: relative; }
+    #d-team .task-card .task-pop { display: none; position: absolute; z-index: 30; left: 3px; right: 3px; bottom: calc(100% + 4px); padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); pointer-events: none; text-align: left; }
+    #d-team .task-card:hover .task-pop { display: block; }
+    #d-team .task-pop b { display: block; color: var(--text-strong); font-size: var(--fs-B); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop p { display: block; margin: 4px 0 0; color: var(--dim); font-size: var(--fs-D); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop span { display: block; margin-top: 5px; color: var(--faint); font-size: var(--fs-D); white-space: normal; }
+    /* 追加⑨：甬道拉高吃满可用纵向——看板 pane flex 列布局，board flex:1 吃满 pane 剩余高
+       （min-height:100% 百分比参照链断裂：pane 高度 auto 时百分比失效，故走 flex），
+       grid stretch 等高，底缘贴容器底 */
+    #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; }
+    #d-team .workspace-body > .workspace-pane.board-pane .board { flex: 1 1 auto; grid-template-rows: minmax(0, 1fr); } /* grid 行显式 1fr：行高随容器拉伸（默认 auto 只吃内容高） */
+    /* 追加⑫：筛选全局语言化——状态轴 chips（经验/铁律两 tab 同款），范围轴 select 胶囊皮肤
+       （appearance:none 去 native 观感+chev 背景箭头） */
+    .exp-chips { display: inline-flex; gap: 4px; align-items: center; }
+    .exp-chip { padding: 2px 10px; border: 1px solid var(--line-soft); border-radius: 999px; background: none; color: var(--dim); cursor: pointer; font-size: var(--fs-D); line-height: 18px; }
+    .exp-chip:hover { color: var(--text); background: var(--hover); }
+    .exp-chip.on { background: var(--tag-bg); border-color: transparent; color: var(--text-strong); font-weight: 600; }
+    select.exp-filter { appearance: none; -webkit-appearance: none; padding: 2px 22px 2px 10px; border: 1px solid var(--line-soft); border-radius: 999px; background-color: transparent; color: var(--dim); font-size: var(--fs-D); line-height: 18px; cursor: pointer; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="6" viewBox="0 0 8 6"><path d="M0 0l4 6 4-6z" fill="%23888"/></svg>'); background-repeat: no-repeat; background-position: right 8px center; }
+    select.exp-filter:hover { color: var(--text); border-color: var(--border-strong); }
     #d-team .task-owner { display: flex; align-items: center; gap: 5px; min-width: 0; margin-top: 5px; color: var(--dim); font-size: var(--fs-D); white-space: nowrap; }
     #d-team .task-owner > b { min-width: 0; overflow: hidden; font-weight: 550; color: var(--text); text-overflow: ellipsis; }
     #d-team .task-owner .engine-badge { flex: none; }
@@ -2025,7 +2054,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索名称、摘要、目录" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><h2 id="session-title">会话</h2><div class="head-sub" id="session-head-sub"></div></div><span class="identity-cluster" id="session-identity"></span><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -3252,7 +3281,14 @@
                   // W-UIFB ③（合并裁决）：徽章加 sprite 图标（b2EngineIconFor，与第二列同款）；
                   // 模型胶囊维持 W-TOPBAR ③ 静态落 composer 位（U5 验收 pass 形态），不随 renderHeader 重建
                   UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>' + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
-                  UI.subHint((s.cwd ? shortPath(s.cwd) + " · " : "") + "最近活动 " + relTime(s.updated_at || s.started_at));
+                  // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
+                  {
+                    const el = UI.subDirEl && UI.subDirEl.isConnected ? UI.subDirEl : ($id("session-head-sub") || null);
+                    const dir = el && el.querySelector("[data-sub-dir]");
+                    const time = el && el.querySelector("[data-sub-time]");
+                    if (dir) dir.textContent = s.cwd ? shortPath(s.cwd) : "";
+                    if (time) time.textContent = s.cwd ? "活跃 " + relTime(s.updated_at || s.started_at) : "最近活动 " + relTime(s.updated_at || s.started_at);
+                  }
                   updateModelCapsule(s);
                   updatePermCapsule(s); // UIPOLISH3 件三：随 head 同步权限胶囊（态回显主路径）
                   updateCtxMeter(s); // UIPOLISH2 件四：随 head 同步水位（renderAll 全量链 + SESSION_HEARTBEAT 也会进这里）
@@ -3333,10 +3369,10 @@
                   if (!s || !canCmd(s)) { cap.hidden = true; return; } // 无会话/历史只读卡：隐藏
                   const txt = cap.querySelector("[data-perm-text]");
                   if (s.external) {
-                    cap.hidden = false;
-                    cap.disabled = true;
-                    if (txt) txt.textContent = "CLI 会话";
-                    cap.title = "外部 CLI 会话由终端自身管理，不支持远程切换权限模式";
+                    // 件十六c（2026-10-11 用户拍板）：右缘「CLI 会话」置灰胶囊删除——engine 徽章
+                    // 「Claude · CLI」已表达身份，去重（原 tooltip 语义并入隐藏，不再占右缘位）
+                    cap.hidden = true;
+                    cap.disabled = false;
                     return;
                   }
                   cap.hidden = false;
@@ -5115,9 +5151,16 @@
                     section, sessionList, workspace, body, panes,
                     tabs: [...section.querySelectorAll(".segment-bar button")],
                     title: $id("session-title"), statusTag: null, identity: $id("session-identity"), // W-UIFB ③：状态胶囊退役（i=3），statusTag 置空防旧引用
-                    subHint: (text) => { // W-UIFB ③：会话域 sub 回归标题正下方 .head-sub（i=3），顶栏 hint 会话位清零防残留
+                    subHint: (text) => { // W-UIFB ③：会话域 sub 回归标题正下方 .head-sub（i=3），顶栏 hint 会话位清零防残留。
+                      // 件十六：sub 行结构化（目录 span + 水位胶囊 + 活跃 span）——单文本入参落到目录段，
+                      // 时间段清空（连接态文案整段落 dir 段）
                       const el = $id("session-head-sub");
-                      if (el) el.textContent = String(text || "");
+                      if (el) {
+                        const dir = el.querySelector("[data-sub-dir]");
+                        const time = el.querySelector("[data-sub-time]");
+                        if (dir) dir.textContent = String(text || "");
+                        if (time) time.textContent = "";
+                      }
                       window.__ccDeck005SetWindowbarHint?.("session", "");
                     },
                     headActions: $id("session-head-actions"), // W-UIFB（合并裁决）：开关随 i=3 定位 head 右侧
@@ -5275,7 +5318,7 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="tag" data-team-status>等待数据</span><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
               <!-- UIPOLISH3 件四②：底部常驻栏废除（决议内联到确认卡、刷新上 head、反馈走 toast） -->
             </section>
@@ -5286,7 +5329,12 @@
                 const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "在办"], ["parked", "已挂起"], ["archived", "已结项"]]);
-                const confirmKinds = new Map([["project-create", "正经立项"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
+                const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
+                // 件十（2026-10-11 用户实锤）：tier 措辞口语化——显示层映射「正经立项→正式项目 /
+                // 轻立项→轻量项目」；存储值保持旧词（创建载荷 option value/relay 校验/org CLI 参数
+                // 全不动，旧数据零迁移）。新增显示点一律走 tierDisplay()
+                const TIER_DISPLAY = new Map([["正经立项", "正式项目"], ["轻立项", "轻量项目"]]);
+                const tierDisplay = (t) => TIER_DISPLAY.get(t) || t || "";
                 const engines = new Map([["claude", ["Claude", "claude"]], ["codex", ["Codex", "codex"]], ["trae", ["Trae", "trae"]], ["qwen-code", ["Qwen Code", "qwen"]], ["codebuddy", ["CodeBuddy", "codebuddy"]], ["zcode", ["ZCode", "zcode"]]]);
                 // W-EXPP2 经验库域（SNAPSHOT.experience 覆盖式锚定 + EXPERIENCE_UPDATED 帧；
                 // experiences=null=旧 relay/未锚定不渲染；experience_enabled=false=总开关关置灰）。
@@ -5317,13 +5365,17 @@
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
                   const session = state.sessions.get(member.session_id) || {};
-                  return { name: session.title || member.session_id, role: member.role || "角色未标注", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit };
+                  // 件十一：成员灯数据源=成员会话 run status（与会话卡 status-dot 唯一事实源同
+                  // 语义）；查无会话数据=缺省灰（offline）。
+                  // 件十⑤：别名解耦——显示名优先 nick（role 在 p 行小字自然弱化），无别名=现状
+                  return { name: member.nick || session.title || member.session_id, role: member.role || "角色未标注", nick: member.nick || "", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit, status: ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "" };
                 }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
                   if (!used || !limit || limit <= 0) return "";
                   const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
+                  if (!Number.isFinite(pct)) return ""; // 件十六防护：脏数据（NaN 比例）宁缺毋滥——NaN% 内联失效会退化成全宽条（全员等长观感的候选根因）
                   const tone = pct >= 85 ? "critical" : pct >= 60 ? "attention" : "safe";
                   return '<div class="mini-context-meter ' + tone + '" data-context-waterline><i><b style="width:' + pct + '%"></b></i><span>' + pct + "%</span></div>";
                 }
@@ -5332,26 +5384,53 @@
                   const roleClass = /^(pm|leader)$/i.test(info.role) ? "pm" : /^(qa|reviewer|验收)$/i.test(info.role) ? "qa" : "worker";
                   // 件六同源漏网：引擎词表外/缺失不渲染徽章（原兜底「引擎未知」上卡=噪音，与看板卡同口径）
                   const engBadgeHtml = info.engine && engines.has(info.engine) ? engineBadge(info.engine) : "";
-                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="avatar-engine-dot ' + engine(info.engine)[1] + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + "</div>" + memberCtxMeter(info) + "</div></div>";
+                  // 件十一：头像角点=状态灯（status-dot 同源绘画卡，working 橘呼吸/waiting 黄/done 绿/
+                  // 查无=缺省灰）——原 avatar-engine-dot 引擎色点（claude 橘）被误读为运行灯，空闲成员
+                  // 也亮橘=「成员灯与绘画卡矛盾」根因；引擎语义已有 engine-badge 表达不丢失
+                  return '<div class="member-card"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div><strong>' + escape(info.name) + '</strong><p>' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + "</div>" + memberCtxMeter(info) + "</div></div>";
                 }
-                // UIPOLISH3 件五/六/七/八 + 件四⑤（2026-10-11 用户看板实测反馈）：
+                // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
                 // （件六：原 engine() 兜底「引擎未知」上卡=噪音）；执行者行=引擎点+成员名
-                // （headcount 映射），无主卡在 backlog 是常态不标、在其它泳道显「未指派」
-                // 警示（件七显示面，数据面根因=orgAction board upsert 白名单漏 owner_session，
-                // relay 侧同批补口）；queueCtx=件八排队注入 {ordinal, running}
+                // （headcount 映射）；queueCtx=件八排队注入 {ordinal, running}。
+                // 追加⑦a：无主卡文本前缀 [角色名]/[成员名] 解析映射 headcount（role 或名**唯一**
+                // 命中才绑，歧义不绑保持未指派；显示剥前缀、浮层留全文；纯显示层不写回 relay）。
+                // 追加⑧：紧凑卡信息补偿=hover 展开浮层（标题全文/描述全文/执行者/时间；向上弹
+                // 防 workspace-body 底缘裁剪；定夺理由见回执——侧滑详情需新面板+路由态，浮层轻）
+                function taskOwnerResolve(task, project) {
+                  if (task.owner_session) {
+                    const m = members(project).find((item) => item.session_id === task.owner_session);
+                    return { member: m || null, text: String(task.text || task.id), resolved: Boolean(m) };
+                  }
+                  const pm2 = /^\[([^\[\]]{1,16})\]\s*/.exec(String(task.text || ""));
+                  if (!pm2) return { member: null, text: String(task.text || task.id), resolved: false };
+                  const key = pm2[1].trim().toLowerCase();
+                  const hits = members(project).filter((item) => {
+                    const info = memberInfo(item);
+                    return (info.role || "").toLowerCase() === key || (info.name || "").toLowerCase() === key || (info.nick || "").toLowerCase() === key; // 件十⑤：别名也参与前缀定位
+                  });
+                  if (hits.length !== 1) return { member: null, text: String(task.text || task.id), resolved: false }; // 零命中/多命中（如同 role 多 worker）不绑
+                  return { member: hits[0], text: String(task.text || task.id).slice(pm2[0].length), resolved: true };
+                }
                 function taskMarkup(task, project, queueCtx) {
-                  const hasOwner = Boolean(task.owner_session);
-                  const member = hasOwner ? members(project).find((item) => item.session_id === task.owner_session) : null;
-                  const info = memberInfo(member || (hasOwner ? { session_id: task.owner_session, role: "执行者" } : { session_id: "", role: "" }));
+                  const r = taskOwnerResolve(task, project);
+                  const hasOwner = r.resolved; // ⑦a：前缀映射命中视同有主
+                  const info = memberInfo(r.member || (task.owner_session ? { session_id: task.owner_session, role: "执行者" } : { session_id: "", role: "" }));
                   const engKnown = Boolean(info.engine && engines.has(info.engine)); // 件六：词表外/缺失不渲染引擎
-                  const status = legacyStatuses.get(task.status) || task.status;
                   const ownerBits = [];
                   if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
                   if (queueCtx && queueCtx.ordinal) ownerBits.push('<i class="q-num">' + queueCtx.ordinal + "</i>");
                   if (engKnown) ownerBits.push(engineBadge(info.engine));
                   ownerBits.push(hasOwner ? "<b>" + escape(info.name) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : "<b>未指派</b>");
-                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '"><strong>' + escape(task.text || task.id) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + "</div>";
+                  const fullText = String(task.text || task.id);
+                  const created = expFmtTime(task.ts);
+                  const updated = expFmtTime(task.updated_at);
+                  // 件十九：泳道迁移时间线（历史条目无 transitions=从当下起记，如实显示已有部分）
+                  const laneName = (st) => (lanes.find((l) => l[0] === (legacyStatuses.get(st) || st)) || [])[1] || st;
+                  const timeline = Array.isArray(task.transitions) && task.transitions.length
+                    ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
+                    : "";
+                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(r.text || fullText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(info.name) + " · " + escape(info.role || "") : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
@@ -5361,8 +5440,16 @@
                   const empty = !project ? projectsEmpty() : board ? tasks.length ? "" : "任务板暂无任务" : loading === "loading" ? "正在加载任务板…" : loading && loading !== "ready" ? loading : "尚未取得任务板，请接入详情命令通道或点击刷新详情。";
                   // 件八：派单回执收敛行（同 dispatch_id 取末行）→ claimed 卡运行中/排队区分
                   const dispatchStatus = new Map((state.receipts.get(project?.id) || []).map((r) => [r && r.id, r && r.status]).filter(([id, st]) => id && typeof st === "string"));
-                  const laneBody = (status, items) => {
-                    if (status !== "claimed") return items.map((task) => taskMarkup(task, project)).join("");
+                  const laneBody = (status, items, showUnassignedHead) => {
+                    if (status !== "claimed") {
+                      // ⑦b：backlog 泳道无主卡归「未指派」组头（组头唯一允许泳道），有主卡平铺在前
+                      const split = [[], []];
+                      for (const t of items) (taskOwnerResolve(t, project).resolved ? split[0] : split[1]).push(t);
+                      let html3 = split[0].map((t) => taskMarkup(t, project)).join("");
+                      if (split[1].length && showUnassignedHead) html3 += '<div class="lane-subhead">未指派<span class="subhead-count">' + split[1].length + "</span></div>";
+                      html3 += split[1].map((t) => taskMarkup(t, project)).join("");
+                      return html3;
+                    }
                     // 进行中泳道按 worker 分区（件八，用户推荐形态的落地修正：已指派未开始
                     // 的卡实际在 claimed——dispatch 建卡直接 claimed，不在 backlog；分区随之
                     // 放进行中泳道而非待认领）。组内 ts 升序=排队序；运行中（回执 join）置顶
@@ -5390,14 +5477,17 @@
                       html2 += orphans.map((t) => taskMarkup(t, project)).join("");
                     }
                     if (unassigned.length) {
-                      html2 += '<div class="lane-subhead">未指派<span class="subhead-count">' + unassigned.length + "</span></div>";
+                      if (showUnassignedHead) html2 += '<div class="lane-subhead">未指派<span class="subhead-count">' + unassigned.length + "</span></div>"; // ⑦b：组头仅待认领泳道
                       html2 += unassigned.map((t) => taskMarkup(t, project)).join("");
                     }
                     return html2;
                   };
                   const columns = lanes.map(([status, label]) => {
                     const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
-                    return '<div class="lane"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + laneBody(status, items) + "</div>";
+                    // 追加⑦b：「未指派」分组头只在待认领泳道渲染（进行中的必有 owner 口径）；
+                    // 其他泳道的真无主卡平铺泳道尾部（卡面保留未指派警示，不设组头）
+                    const body = laneBody(status, items, status === "backlog");
+                    return '<div class="lane"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + body + "</div>";
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + '<div class="board">' + columns + "</div>" + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
@@ -5483,9 +5573,9 @@
                     '<select class="exp-filter" data-exp-filter-scope aria-label="范围筛选"><option value="all"' + (state.expFilter.scope === "all" ? " selected" : "") + ">全部范围</option>" +
                     '<option value="global"' + (state.expFilter.scope === "global" ? " selected" : "") + ">全局</option>" +
                     (state.projects ?? []).map((p) => '<option value="' + escape(p.anchor_dir || "") + '"' + (state.expFilter.scope === p.anchor_dir ? " selected" : "") + ">" + escape(p.name || p.id) + "</option>").join("") + "</select>" +
-                    '<select class="exp-filter" data-exp-filter-status aria-label="状态筛选"><option value="active"' + (state.expFilter.status === "active" ? " selected" : "") + ">在役</option>" +
-                    '<option value="retired"' + (state.expFilter.status === "retired" ? " selected" : "") + ">已退役</option>" +
-                    '<option value="all"' + (state.expFilter.status === "all" ? " selected" : "") + ">全部</option></select>" +
+                    // 追加⑫：状态轴 chips 化（原生 select 观感退役；范围轴动态项目多保留胶囊 select）
+                    '<div class="exp-chips" role="group" aria-label="状态筛选">' +
+                    ["active", "retired", "all"].map((k) => '<button type="button" class="exp-chip' + (state.expFilter.status === k ? " on" : "") + '" data-exp-chip-status="' + k + '">' + ({ active: "在役", retired: "已退役", all: "全部" })[k] + "</button>").join("") + "</div>" +
                     '<datalist id="exp-role-list"><option value="any"></option><option value="worker"></option><option value="pm"></option><option value="reviewer"></option><option value="qa"></option></datalist></div>';
                   if (!state.experiences.length) return head + banner("经验库为空——worker 回执「经验：<一句话>（#kind）」申报入库，或 CLI org exp append。");
                   const list = expFiltered();
@@ -5663,9 +5753,9 @@
                   const list = rulesFiltered();
                   const hasLeader = state.rules.some((e) => e.status === "active" && e.audience === "leader");
                   const filters = '<div class="exp-filters">' +
-                    '<select class="exp-filter" data-rules-filter-status aria-label="状态筛选"><option value="active"' + (state.rulesFilter.status === "active" ? " selected" : "") + ">在役</option>" +
-                    '<option value="archived"' + (state.rulesFilter.status === "archived" ? " selected" : "") + ">归档（退役/替代）</option>" +
-                    '<option value="all"' + (state.rulesFilter.status === "all" ? " selected" : "") + ">全部</option></select>" +
+                    // 追加⑫：铁律状态轴同款 chips 化（范围轴保留胶囊 select）
+                    '<div class="exp-chips" role="group" aria-label="状态筛选">' +
+                    ["active", "archived", "all"].map((k) => '<button type="button" class="exp-chip' + (state.rulesFilter.status === k ? " on" : "") + '" data-rules-chip-status="' + k + '">' + ({ active: "在役", archived: "归档", all: "全部" })[k] + "</button>").join("") + "</div>" +
                     '<select class="exp-filter" data-rules-filter-scope aria-label="范围筛选"><option value="all"' + (state.rulesFilter.scope === "all" ? " selected" : "") + ">全部范围</option>" +
                     '<option value="team"' + (state.rulesFilter.scope === "team" ? " selected" : "") + ">团队</option>" +
                     (state.projects ?? []).map((p) => {
@@ -5782,10 +5872,11 @@
                     return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div><p title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + (pending ? '&nbsp;&nbsp;<svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg> ' + pending : "") + '</p><div class="identity-cluster">' + sourceBadge() + "</div></div>";
                   }).join("") : banner(projectsEmpty());
                   query("[data-team-title]").textContent = project?.name || "团队";
-                  query("[data-team-status]").textContent = project ? groupStatuses.get(project.status) || project.status : state.projects === null ? (state.online ? "无团队数据" : "正在连接") : "暂无项目组";
+                  // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
+                  // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = srcName(state.source); // W-UIPOLISH ⑧：团队名称旁源徽标同走映射（用户实锤漏网点）
-                  window.__ccDeck005SetWindowbarHint?.("team", project ? [project.tier, window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
+                  window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = members(project).map(memberMarkup).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
@@ -5793,6 +5884,7 @@
                   query("[data-team-activity]").innerHTML = activityHtml;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
                   panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
+                  if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
                   panes[1].innerHTML = boardMarkup(project);
                   panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>";
                   panes[3].innerHTML = activityHtml;
@@ -5901,7 +5993,16 @@
                   updateRules(payload.rules);
                   state.rulesEnabled = payload.rules_enabled !== false;
                   for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
-                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) state.receipts.set(project.id, entities(payload.receipts.filter((entry) => entry && typeof entry.project_anchor === "string" && entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, ""))).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  // 件十八：receipts 过滤与 relay project-detail 同口径放宽——anchor 匹配 ∪ sid ∈ 编制
+                  if (Array.isArray(payload.receipts)) for (const project of state.projects || []) {
+                    const memberSids2 = new Set((Array.isArray(project.headcount) ? project.headcount : []).map((h) => h && h.session_id));
+                    state.receipts.set(project.id, entities(payload.receipts.filter((entry) => {
+                      if (!entry) return false;
+                      const a = typeof entry.project_anchor === "string" ? entry.project_anchor.replace(/[\\/]/g, "/").replace(/\/+$/, "") : "";
+                      if (a && a === String(project.anchor_dir || "").replace(/[\\/]/g, "/").replace(/\/+$/, "")) return true;
+                      return memberSids2.has(entry.session_id);
+                    })).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  }
                   render();
                   if (state.selected) void requestDetail(state.selected);
                   return true;
@@ -5989,7 +6090,7 @@
                   let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的立项会在确认卡上请你决议</p>';
                   html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名">';
                   html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
-                  html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻立项（单卡简化态）</option><option value="正经立项">正经立项（每次创建都需确认）</option></select>';
+                  html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻量项目（单卡简化态）</option><option value="正经立项">正式项目（每次创建都需确认）</option></select>';
                   // W-UIFB 追加⑬：成员编制入分组盒（字段区/编制区分层）；追加⑮：组内「+ 添加成员」
                   // 手动行（agent 类型+角色名），候选勾选与手动行合计 ≤8 席
                   html += '<div class="create-group"><div class="create-label">成员编制 · 最多 8 席</div>';
@@ -6100,6 +6201,11 @@
                     if (expRestore) { expOp("exp-restore", expRestore.dataset.expRestore); return; }
                     const expRegroup = event.target.closest("[data-exp-regroup]");
                     if (expRegroup) { state.expForm = state.expForm === expRegroup.dataset.expRegroup ? null : expRegroup.dataset.expRegroup; state.expArm = null; render(); return; }
+                    // 追加⑫：状态轴 chips 切换（经验/铁律；原 select change 链保留范围轴）
+                    const expChip = event.target.closest("[data-exp-chip-status]");
+                    if (expChip) { state.expFilter.status = expChip.dataset.expChipStatus; render(); return; }
+                    const ruleChip = event.target.closest("[data-rules-chip-status]");
+                    if (ruleChip) { state.rulesFilter.status = ruleChip.dataset.rulesChipStatus; render(); return; }
                     const expGo = event.target.closest("[data-exp-form-go]");
                     if (expGo) {
                       const row = expGo.closest(".exp-row");

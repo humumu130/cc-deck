@@ -167,8 +167,8 @@ export const ORG_CLAUDE_MD_M2_SECTION = `${ORG_CLAUDE_MD_M2_MARKER}（2026-09-27
 - 用户的一切来意先分诊，五响应（响应四档 + 第五态）：
   1. 咨询：问题/分析，不改代码——对话内直接答；发现 spec 勘误顺手修（转随手办零确认）。
   2. 随手办：30 秒~几分钟小改——\`~/.cc-deck/bin/org dispatch <项目目录> "<任务>"\` 派 worker（不建组、不建 worktree）。
-  3. 轻立项：几小时~几天小功能——\`org create <名> <目录> 轻立项\`（首次须用户确认，同类免确认信任累积）。
-  4. 正经立项：复杂项目——\`org create <名> <目录> 正经立项\`（每次须用户确认，防误判档烧钱）。
+  3. 轻立项（客户端显示为「轻量项目」）：几小时~几天小功能——\`org create <名> <目录> 轻立项\`（首次须用户确认，同类免确认信任累积）。
+  4. 正经立项（客户端显示为「正式项目」）：复杂项目——\`org create <名> <目录> 正经立项\`（每次须用户确认，防误判档烧钱）。
   5. 建议暂缓：依赖未就绪/时机不对——\`org hold <组id|-> "<理由>" "<解除条件>"\`（用户点头才挂起）。
 - 其他指令：\`org status\`（全景）/ \`org set <id> active|parked|archived\`（状态迁移，你说先放放=挂起）/ \`org tier <id> <档> "<理由>"\`（升降级）/ \`org board ...\`（任务板维护）/ \`org detail <id>\`（编制/板/回执流）。
 - 确认卡：正经立项/升降级/有悬账结项会出确认单，等用户在客户端 ✓/✗——你只提案不决议，不代用户决定。
@@ -376,9 +376,9 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 # Leader 只提案不决议——确认卡 ✓/✗ 由用户在客户端点。
 # 用法：
 #   org status                                     团队全景：项目组索引/待决确认单/进行中派单
-#   org create <name> <anchor> <轻立项|正经立项>    立项（正经/首次轻 → 用户确认卡；幂等种子防漂移 CLAUDE.md）
+#   org create <name> <anchor> <轻立项|正经立项>    立项（档位显示名：轻立项=轻量项目、正经立项=正式项目；正经/首次轻 → 用户确认卡；幂等种子防漂移 CLAUDE.md）
 #   org set <id> <active|parked|archived> [note]   状态迁移（结项有悬账/未完 → 出确认卡附核对清单）
-#   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡）
+#   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡；参数为存储档位词）
 #   org hold <id|-> <reason> [condition]           建议暂缓（id=- 无组暂缓仅台账；点头即挂起）
 #   org dispatch <anchor> <task> [gid] [title] [skills] 派单 worker（无 gid=随手办；有 gid=项目组任务+板联动；skills=逗号分隔技能标签，优先派带标签熟手）
 #   org board upsert <gid> <text> [todo|doing|done]

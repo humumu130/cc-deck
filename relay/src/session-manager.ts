@@ -5809,11 +5809,17 @@ export class SessionManager {
           if (!g) return { ok: false, error: `项目组不存在: ${str("id")}` };
           // §3.1 项目组详情四分节的服务端数据源：状态/编制（group 内）+ 板 + 回执流；
           // M3 熟手池（§5 成员卡进化：经验 N 次·上次·在忙/空闲）——路由表档案 join
-          // 会话运行态，服务端拼好端上零 join
+          // 会话运行态，服务端拼好端上零 join。
+          // W-UIPOLISH3 件十八（2026-10-11 用户实锤活动 tab 恒空）：原过滤只认 project_anchor
+          // 严格相等——随手办派给成员（无 gid）旧版台账行不带 anchor 的全被滤掉。放宽为
+          // anchor 匹配 ∪ session_id ∈ 编制（成员关联兜住 anchor 缺失行；生产实证 0/16 命中
+          // 的历史行因 sid 也对不上编制不可追溯，见回执）
+          const memberSids = new Set(g.headcount.map((h) => h.session_id));
           const receipts = readDispatchLog()
             .filter((e) => {
-              const a = e.project_anchor ?? "";
-              return a.replace(/\/+$/, "") === g.anchor_dir.replace(/\/+$/, "");
+              const a = (e.project_anchor ?? "").replace(/\/+$/, "");
+              if (a && a === g.anchor_dir.replace(/\/+$/, "")) return true;
+              return memberSids.has(e.session_id);
             })
             .slice(-30)
             .reverse();
@@ -5905,6 +5911,8 @@ export class SessionManager {
             ...(engineValue ? { engine: engineValue } : {}),
             ...(typeof p.model === "string" && p.model.trim() ? { model: p.model.trim() } : {}),
             ...(typeof p.provider === "string" && p.provider.trim() ? { provider: p.provider.trim() } : {}),
+            // 件十⑤：可选别名（成员名与角色解耦；空串=清除）
+            ...(typeof p.nick === "string" ? { nick: p.nick.trim().slice(0, 24) } : {}),
           };
           if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
           const g = findGroup(gid);
