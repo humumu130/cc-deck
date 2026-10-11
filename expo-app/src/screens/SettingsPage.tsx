@@ -1266,9 +1266,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   secToggleT: { color: c.dim, fontSize: 11 },
   // #48 通道含义问号（连接区标题旁，点击弹解释）——#130 去 16px 描边圈，改 tintSoft 软底
   secHelpT: { color: c.dim, fontSize: 11, backgroundColor: c.tintSoft, borderRadius: 8, width: 16, height: 16, textAlign: "center", lineHeight: 14, overflow: "hidden" },
-  // 服务器列表滚动容器：抽屉时代 236px 帽（窄板腾空间）随抽屉退役——tab 页整页
-  // 滚动，列表自然展开
-  srvScroll: {},
+  // 服务器列表滚动容器：P0 加固③恢复有界帽（320）——嵌套 ScrollView 无界展开在
+  // Fabric 触发 Yoga owner 断言崩（YogaLayoutableShadowNode.cpp:709，崩栈
+  // ScrollViewShadowNode::layout；连接 SNAPSHOT 大渲染期必崩实测实锤），有界滚动
+  // 视口恢复原抽屉时代的稳定布局语义
+  srvScroll: { maxHeight: 320 },
   srvRow: {
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
     borderRadius: 12, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",
