@@ -130,8 +130,8 @@ try {
 
   // ---------- P0 配置面静态断言 ----------
   console.log("P0 配置面（plugin-config 独立件）");
-  assert(PLUGIN_CFG_KEYS.length === 7 && (PLUGIN_CFG_KEYS as readonly string[]).includes("duty"),
-    "P0① PLUGIN_CFG_KEYS 七键含 duty（019 §6.2 第五键；W-CTXFIX 第六键 preCompactSummary；W-EXPP1 第七键 experience）");
+  assert(PLUGIN_CFG_KEYS.length === 8 && (PLUGIN_CFG_KEYS as readonly string[]).includes("duty"),
+    "P0① PLUGIN_CFG_KEYS 八键含 duty（019 §6.2 第五键；W-CTXFIX 第六键 preCompactSummary；W-EXPP1 第七键 experience；W-RULES1 第八键 rules）");
   const dflt = readPluginConfig();
   assert(dflt.duty === true && dflt.taskGuard === false && dflt.qNotify === true && dflt.restorePoint === false && dflt.deliverables === true,
     "P0② 缺省值五键齐+duty 缺省 true（kill-switch 语义：显式 false 才关）");

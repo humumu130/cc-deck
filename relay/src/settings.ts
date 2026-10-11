@@ -245,3 +245,33 @@ export function resolveEmployeeHome(dataDir: string, freshInstall?: boolean): Em
     source: "default",
   };
 }
+
+// ---------- W-RULES1 雇员家轻种子（2026-10-11，拍板表 #7 / C 路 §6.3） ----------
+// 隐藏断链修复：雇员独立家开启后，用户全局 CLAUDE.md（~/.claude/CLAUDE.md）对雇员会话
+// 静默失联（CLI 不再加载默认家）——用户军规对 worker 全部失效且无任何报错。处置口径
+//（C 路 §6.3 拍板）：**不做自动同步**（用户全局文件是用户地盘，机器拷贝=越权写），
+// 只在 claude-home 种一份断链说明（无 CLAUDE.md 时一次性写入，存在即认绝不覆盖——
+// org/项目 CLAUDE.md 幂等种子同纪律），把「拷不拷、拷什么」的决定权留给用户。
+// 团队规则走派单注入（org/rules.json）不受此断链影响——说明行一并写明，防误解。
+const EMPLOYEE_HOME_SEED = `# 雇员独立家说明（系统生成，可删除）
+
+本目录是 cc-deck 雇员会话的独立配置家：用户全局 CLAUDE.md（~/.claude/CLAUDE.md）**不会**在此自动加载——个人全局纪律（自测要求、措辞军规等）如需对 worker 生效，请人工拷贝到本文件。
+团队规则（用户审定的红线）不依赖本文件：随派单自动注入（~/.cc-deck/org/rules.json）。
+`;
+
+/** 雇员家断链说明种子（启动序一次性调用，index.ts）。开关关/目录不可建/已存在 → 静默
+ * 跳过（尽力而为：种子是提示面，写失败不阻断启动）。返回是否新写了种子（测试用）。 */
+export function ensureEmployeeHomeSeed(dataDir: string): boolean {
+  try {
+    const st = resolveEmployeeHome(dataDir);
+    if (!st.enabled || !st.value) return false;
+    if (existsSync(join(st.value, "CLAUDE.md"))) return false;
+    mkdirSync(st.value, { recursive: true });
+    writeFileSync(join(st.value, "CLAUDE.md"), EMPLOYEE_HOME_SEED, "utf-8");
+    console.log(`[settings] 雇员家断链说明已种子：${join(st.value, "CLAUDE.md")}（用户全局 CLAUDE.md 不在独立家自动加载）`);
+    return true;
+  } catch (e) {
+    console.warn(`[settings] 雇员家种子写入失败（跳过，不影响启动）: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}

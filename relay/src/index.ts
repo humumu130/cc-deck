@@ -6,7 +6,7 @@ import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync,
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
-import { resolveEmployeeHome, writeSettingsFile } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, ensureEmployeeHomeSeed } from "./settings.js";
 import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
@@ -250,6 +250,9 @@ if (cliArgs.has("--stop")) {
   if (st.source !== "env" && st.enabled) {
     console.log(`[config] 雇员独立家已开启（${st.source === "file" ? "设置项" : "新装默认"}）：${st.value}`);
   }
+  // W-RULES1 雇员家轻种子（拍板 #7/C 路 §6.3）：独立家开启且无 CLAUDE.md 时种断链
+  // 说明（存在即认绝不覆盖；自动同步用户全局文件=越权写，不做）
+  ensureEmployeeHomeSeed(cfg.dataDir);
 }
 
 // #158 批1（2026-10-08）：sqlite 原生驱动 boot 探测——0.7.0-test.3 Windows 包实锤

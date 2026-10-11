@@ -359,6 +359,7 @@ function kindLabel(kind: OrgConfirm["kind"]): string {
     case "suggest-hold": return "暂缓建议";
     case "archive": return "结项确认";
     case "revive": return "复活确认";
+    case "rule-append": return "规则提案"; // W-RULES1：团队规则确认卡通知标签
   }
 }
 

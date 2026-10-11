@@ -25,8 +25,12 @@ import { join } from "node:path";
 // 零残留（deliverables 键同款语义；M12-4 收口自动账本就不经经验库、无需停写）。
 // 缺省 true（#107 决策反转先例：默认关用户几个月发现不了）；用户 CLI 直写
 //（org exp append）不拦——显式人为意图不受自动面总闸连坐。
-export const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience"] as const;
-export type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean; duty: boolean; preCompactSummary: boolean; experience: boolean };
+// W-RULES1 第八键 rules（2026-10-11）：团队规则库总闸（relay/src/team-rules.ts，拍板
+// verdict-rules-20261011）——关=派单规则注入停零残留；用户 CLI 直写（org rule append）
+// 不拦（experience 键同款语义）。缺省 true（#107 先例）。relay 侧专属键，hooks 侧
+// guard-lib CONFIG_DEFAULTS 不含（duty/preCompactSummary 同款）。
+export const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience", "rules"] as const;
+export type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean; duty: boolean; preCompactSummary: boolean; experience: boolean; rules: boolean };
 // 测试缝（P71）：缺省 ~/.cc-deck/config.json；CCR_CONFIG_FILE 注入后读写全落指定
 // 文件——值守产品门测试绝不触生产配置（同 CCR_DATA_DIR/CCR_ORG_DIR 隔离范式）
 export function pluginConfigPath(): string {
@@ -35,7 +39,7 @@ export function pluginConfigPath(): string {
 // 导出供 cloud-client 云通道 SNAPSHOT 同源携带（手机走云桥也要拿到开关）+
 // session-manager feedPM 产品门（P71）读取
 export function readPluginConfig(): PluginConfig {
-  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true };
+  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true, rules: true };
   try {
     const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
     for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;

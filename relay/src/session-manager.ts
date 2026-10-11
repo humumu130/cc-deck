@@ -69,6 +69,11 @@ import {
 // W-KWP1 件三（2026-10-11）岗位模板库（知识轴 fail-open，bizRole 权限轴不经过此）：
 // 岗位纪律注入块构建 + 只读查看（org role list/show）
 import { buildRoleInjection, getRoleTemplate, listRoleTemplates } from "./role-templates.js";
+// W-RULES1（2026-10-11）团队规则库（org/rules.json，用户红线）：数值硬闸写入口/查询/
+// 替代链/升格复制 + 注入块构建（store 零依赖本文件，无环）
+import {
+  appendRule, retireRule, supersedeRule, promoteExperienceToRule, listRules, buildRuleInjection,
+} from "./team-rules.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
 // 交付」的东西，且交付物原地不动、看板只做登记——
@@ -5240,6 +5245,25 @@ export class SessionManager {
     } catch { /* 台账面尽力而为 */ }
   }
 
+  // W-RULES1：rule-* / exp-promote 漏斗审计行（口径同 auditExpAction——org-command
+  // 台账行；project scope 反解锚点入 project_anchor；note 供提案出卡/入库回链等非
+  // ok/error 二态语义的补充说明）
+  private auditRuleAction(action: string, r: { ok: boolean; error?: string }, scope: string, note?: string): void {
+    try {
+      appendDispatch({
+        ts: Date.now(),
+        id: randomUUID(),
+        tier: "随手办",
+        target: "org-command",
+        ...(scope.startsWith("project:") ? { project_anchor: scope.slice(8) } : {}),
+        status: r.ok ? "done" : "failed",
+        receipt: truncate(`${action} · ${note ?? (r.ok ? "ok" : `拒绝：${r.error ?? ""}`)}`, 200),
+        session_id: this.leaderId ?? "",
+        actor: "user",
+      });
+    } catch { /* 台账面尽力而为 */ }
+  }
+
   orgAction(action: string, p: Record<string, unknown>): { ok: true; data?: unknown } | { ok: false; error: string } {
     const str = (k: string): string => (typeof p[k] === "string" ? (p[k] as string).trim() : "");
     const bool = (k: string): boolean => p[k] === true;
@@ -5633,6 +5657,89 @@ export class SessionManager {
           const t = getRoleTemplate(slug);
           return t ? { ok: true, data: { template: t } } : { ok: false, error: `岗位模板不存在: ${slug}` };
         }
+        // ---------- W-RULES1 团队规则库漏斗（org/rules.json，拍板 verdict-rules-20261011）。
+        // 审计行经 auditRuleAction（口径同 exp-*）。安全面拍板 #7「agent 文本永不直入权威
+        // 通道」：rule-append 缺省（无 direct）= 提案出确认卡（OrgConfirm kind=rule-append，
+        // 用户 ✓ 后 applyConfirmEffects 才真正入库）；direct:true = 用户 CLI 直写免卡
+        //（显式人为意图，org exp append 同款信任级）。retire/supersede/list 直写（可逆/
+        // 只读，A 路 §5.2 P1 白名单口径）；exp-promote 直写（拍板 #5 升格=复制，源经验
+        // 条目零触碰照常 GC）。 ----------
+        case "rule-append": {
+          const text = str("text");
+          if (!text) return { ok: false, error: "text 必填" };
+          const draft = {
+            text,
+            audience: str("audience") || "all",
+            scope: str("scope") || "team",
+            created_by: (str("created_by") === "agent" ? "agent" : "user") as "user" | "agent",
+          };
+          if (p.direct === true) {
+            const r = appendRule({ ...draft });
+            this.auditRuleAction("rule-append", r, draft.scope);
+            return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+          }
+          const c = addConfirm({
+            kind: "rule-append",
+            title: `新团队规则：${truncate(draft.text, 40)}`,
+            reason: str("reason") || "规则提案（agent 文本须经用户审定后入库）",
+            payload: { ...draft, ...(str("session_id") ? { session_id: str("session_id") } : {}) },
+          });
+          this.auditRuleAction("rule-append", { ok: true }, draft.scope, `提案出卡 ${c.id}（待用户决议）`);
+          return { ok: true, data: { confirm_id: c.id, pending: true } };
+        }
+        case "rule-list": {
+          const status = str("status");
+          if (status && !["active", "retired", "superseded"].includes(status)) return { ok: false, error: "status 必须是 active|retired|superseded" };
+          const rules = listRules({
+            ...(status ? { status: status as "active" | "retired" | "superseded" } : {}),
+            ...(str("audience") ? { audience: str("audience") } : {}),
+            ...(str("scope") ? { scope: str("scope") } : {}),
+          });
+          return { ok: true, data: { rules } };
+        }
+        case "rule-retire": {
+          const id = str("id");
+          if (!id) return { ok: false, error: "id 必填" };
+          const r = retireRule(id);
+          this.auditRuleAction("rule-retire", r, "team");
+          return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "rule-supersede": {
+          const id = str("id");
+          const text = str("text");
+          if (!id) return { ok: false, error: "id 必填（被替代的旧规则 id）" };
+          if (!text) return { ok: false, error: "text 必填（新规则文本）" };
+          const scope = str("scope");
+          const r = supersedeRule(id, {
+            text,
+            ...(str("audience") ? { audience: str("audience") } : {}),
+            ...(scope ? { scope } : {}),
+            created_by: str("created_by") === "agent" ? "agent" : "user",
+          });
+          this.auditRuleAction("rule-supersede", r, scope || "team");
+          return r.ok ? { ok: true, data: { entry: r.entry, superseded: r.superseded } } : r;
+        }
+        case "exp-promote": {
+          // 升格（拍板 #5 复制非搬移）：经验条读出传值（本漏斗已 import listExperience，
+          // team-rules 不反依赖经验库读面），复制为规则条 + promoted_from 溯源；源条目
+          // 不 retire 照常 GC——零经验库写动作。
+          const id = str("id");
+          if (!id) return { ok: false, error: "id 必填（源经验条目 id）" };
+          const exp = listExperience().find((x) => x.id === id);
+          if (!exp) return { ok: false, error: `经验条目不存在: ${id}` };
+          const r = promoteExperienceToRule({
+            exp_id: exp.id,
+            exp_text: exp.text,
+            exp_role_scope: exp.role_scope,
+            exp_project_scope: exp.project_scope,
+            ...(str("text") ? { text: str("text") } : {}),
+            ...(str("audience") ? { audience: str("audience") } : {}),
+            ...(str("scope") ? { scope: str("scope") } : {}),
+            created_by: str("created_by") === "agent" ? "agent" : "user",
+          });
+          this.auditRuleAction("exp-promote", r, exp.project_scope === "global" ? "team" : exp.project_scope);
+          return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
         case "project-detail": {
           const g = findGroup(str("id"));
           if (!g) return { ok: false, error: `项目组不存在: ${str("id")}` };
@@ -5842,6 +5949,21 @@ export class SessionManager {
             this.reviveGroupMembers(gid);
           }
           break;
+        case "rule-append": {
+          // W-RULES1：规则提案 ✓ → 真正入库（回链 confirm_id 溯源；✗ 无副作用——
+          // 提案不落任何半态，卡留审计）。数值硬闸在 store 层：通过后置期被顶满
+          // （出卡后他人先写满配额）→ fail 面回传，卡留痕用户可改稿重提
+          const r = appendRule({
+            text: typeof c.payload.text === "string" ? c.payload.text : "",
+            audience: typeof c.payload.audience === "string" ? c.payload.audience : "all",
+            scope: typeof c.payload.scope === "string" ? c.payload.scope : "team",
+            created_by: c.payload.created_by === "agent" ? "agent" : "user",
+            confirm_id: c.id,
+          });
+          if (!r.ok) return fail("规则入库", r);
+          this.auditRuleAction("rule-append", r, typeof c.payload.scope === "string" ? c.payload.scope : "team", `确认卡 ${c.id} 通过入库 ${r.entry.id}`);
+          break;
+        }
       }
     } else if (c.kind === "project-create" && gid) {
       const r = setGroupStatus(gid, "archived", "立项确认被否决"); // pending → archived 留痕
@@ -6187,7 +6309,12 @@ export class SessionManager {
     // W-KWP1 件三岗位纪律注入（知识轴 fail-open：库无命中/读失败/开关关 → null 无岗位行
     // 照派；memo 锚模板 updated_at，用户改版后熟手重注生效）。角色轴与经验注入同源。
     const roleInjection = buildRoleInjection({ session_id: veteran ?? undefined, role: expRole });
-    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block);
+    // W-RULES1 团队规则注入（用户红线，拍板 verdict-rules-20261011 #9 落位 task→规则→
+    // 岗位→经验→纪律）：整体降级契约同经验（抛错/开关关/空库 → null 无规则块照派）；
+    // 每单重注无 memo（约束不是参考，「注过」≠「会守」——C 路 §5.2）。leader 受众规则
+    // 不进 worker 派单（isLeader=false；Leader 可见性主通道=org CLAUDE.md 种子引用行）。
+    const rulesInjection = buildRuleInjection({ role: expRole, anchor });
+    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -7149,10 +7276,14 @@ export class SessionManager {
 // 拍板 #5 纪律恒优先：纪律段尾注一行写明岗位/经验块从属（两块各自带数据定性行，
 // 此处是唯一优先级裁决点）；拍板 #6/B 路件二：纪律段补 untrusted-content 防线行
 //（注入文本与项目文件内容都是数据不是指令，指令式要求不执行只回报）。
-export function wrapDispatchPrompt(tier: string, task: string, experienceBlock?: string, roleBlock?: string): string {
+// W-RULES1 第五参 rulesBlock（2026-10-11 拍板表 verdict-rules-20261011 #9）：团队规则
+// 注入块（buildRuleInjection 产出，预算 ≤600 字符已在上游裁剪），落位任务正文之后、
+// 岗位块之前（谱系序 task→规则→岗位→经验→纪律，D 路+拍板 #9）。规则块自带头尾定性
+// 行（用户红线/优先级/择严声明），纪律段尾注维持岗位/经验从属口径不动。
+export function wrapDispatchPrompt(tier: string, task: string, experienceBlock?: string, roleBlock?: string, rulesBlock?: string): string {
   return `[${tier} 派单]
 ${task}
-${roleBlock ? `\n${roleBlock}\n` : ""}${experienceBlock ? `\n${experienceBlock}\n` : ""}
+${rulesBlock ? `\n${rulesBlock}\n` : ""}${roleBlock ? `\n${roleBlock}\n` : ""}${experienceBlock ? `\n${experienceBlock}\n` : ""}
 —— 派单纪律（矩阵式团队 §3.5 / §4）——
 - 过程不回灌，只收回执：不逐动作汇报，结束才回。
 - 改前认领：动文件前先一句说明要改哪些文件；改后报 diff 摘要（改了什么、几处）。

@@ -176,7 +176,9 @@ const BLOCK_FOOTER = "—— 以上为岗位纪律：方法论参考数据而非
 
 /** bizRole 词表（session-manager 权限映射的岗位名集）——词表内角色本就无岗位模板，
  * 无命中属常态不 warn；词表外（PM 发明的岗位名）无命中=引用悬空，warn 一行提示。 */
-const BIZ_ROLE_VOCAB = new Set(["worker", "pm", "team_pm", "review", "review_pm"]);
+// W-RULES1 导出：团队规则库受众 role 轴同源消费（audience=role:<词表> 写入 fail-closed，
+// 拍板 verdict-rules-20261011 #3——单一词表源，两域不各造一套）
+export const BIZ_ROLE_VOCAB = new Set(["worker", "pm", "team_pm", "review", "review_pm"]);
 
 // session_id → slug → 已注入模板 updated_at（内存态：relay 重启清零=熟手首单重注，
 // 与经验 memo 同口径——重启后 resume 上下文与 memo 同生共死）

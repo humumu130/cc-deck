@@ -692,6 +692,13 @@ export function startServer(
             "exp-export", "exp-import",
             // W-KWP1 件三：岗位模板库只读查看（org role list/show 的 HTTP 面；写面 P2）
             "role-list", "role-show",
+            // W-RULES1 团队规则库（org/rules.json 的 HTTP 面 = org rule 子命令）：直写
+            // 面带 direct 标记（用户 CLI 主权面，org exp append 同款信任级）；缺省=
+            // 提案出确认卡（零写入，决议仍走用户端——rule-append 不给 HTTP 开直批口，
+            // 入库动作在用户 ✓ 后 applyConfirmEffects 落，Leader 无法自批）
+            "rule-append", "rule-list", "rule-retire", "rule-supersede",
+            // W-RULES1 升格（经验→规则复制，拍板 #5；org rule promote 的 HTTP 面）
+            "exp-promote",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

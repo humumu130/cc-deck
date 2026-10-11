@@ -191,22 +191,39 @@ export const ORG_CLAUDE_MD_M2P1_SECTION = `${ORG_CLAUDE_MD_M2P1_MARKER}（2026-0
   relay 重启即蒸发、org status 里看不见 = 等于没说。
 `;
 
+// W-RULES1（2026-10-11，拍板表 #8）：团队规则库 Leader 可见性主通道=本文件种子引用行
+//（org CLAUDE.md 随 Leader 会话 cwd 自动加载，零注入链成本；memo 注入为可选增强 P2）。
+// 按标记幂等追加（M2/M2P1 同机制：不重排不删既有条目）。
+export const ORG_CLAUDE_MD_RULES_MARKER = "## 团队规则库";
+export const ORG_CLAUDE_MD_RULES_SECTION = `${ORG_CLAUDE_MD_RULES_MARKER}（2026-10-11 起，W-RULES1）
+
+- 同目录 rules.json 是用户审定的团队/项目红线（audience 三档 all/leader/role:xxx），
+  每次派单自动注入对应 worker——规则是红线不是参考，worker 必须遵守。
+- 查看：\`org rule list\`。立新规则：用户 CLI 直写 \`org rule append "<一句话>"\`；
+  你（Leader）认为该立规时只提案不代立——规则变更优先请用户拍板，用户红线的主权在用户。
+- 改规则用 \`org rule supersede <id> "<新文本>"\`（旧条停注留痕），退役用
+  \`org rule retire <id>\`；经验库反复命中的条目可升格 \`org rule promote <经验id>\`
+  （复制为规则，源经验保留）。
+`;
+
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会
 // 抹掉积累。existsSync 为准（内容不比对，存在即认）。增量按标记追加（M2 → M2 补强，
 // 缺哪个补哪个，已有内容零写入——同 id 收敛语义）。
 export function ensureOrgClaudeMd(dir?: string): "created" | "exists" | "upgraded" {
   const p = orgFilePath("CLAUDE.md", dir);
   if (!existsSync(p)) {
-    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION, "utf-8");
+    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION + "\n" + ORG_CLAUDE_MD_RULES_SECTION, "utf-8");
     return "created";
   }
   const cur = readFileSync(p, "utf-8");
   const hasM2 = cur.includes(ORG_CLAUDE_MD_M2_MARKER);
   const hasM2P1 = cur.includes(ORG_CLAUDE_MD_M2P1_MARKER);
-  if (hasM2 && hasM2P1) return "exists";
+  const hasRules = cur.includes(ORG_CLAUDE_MD_RULES_MARKER);
+  if (hasM2 && hasM2P1 && hasRules) return "exists";
   const parts = [cur.trimEnd()];
   if (!hasM2) parts.push(ORG_CLAUDE_MD_M2_SECTION);
   if (!hasM2P1) parts.push(ORG_CLAUDE_MD_M2P1_SECTION);
+  if (!hasRules) parts.push(ORG_CLAUDE_MD_RULES_SECTION);
   writeFileSync(p, parts.join("\n\n"), "utf-8");
   return "upgraded";
 }
@@ -381,6 +398,11 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org exp import <path>                          导入备份（normKey 合并去重：撞车 bump 不覆盖；坏文件/超 5MB 整单拒绝零写入）
 #   org role list                                  岗位模板库查看（内置+用户合并视图，W-KWP1；用户库同 slug 覆盖内置）
 #   org role show <slug>                           单岗位模板详情（name/audience/rows 逐行）
+#   org rule append <text> [audience] [scope]      立团队规则（W-RULES1；audience=all|leader|role:worker…，scope=team|项目路径，用户直写免卡）
+#   org rule list [status] [audience|scope]        规则库查询（active/retired/superseded、all/leader/role:x、team/路径）
+#   org rule retire <id>                           规则退役（停注可溯，不物理删）
+#   org rule supersede <id> <text> [audience] [scope]  替代（新条入库+旧条停注指新）
+#   org rule promote <exp_id> [text] [audience] [scope]  经验升格为规则（复制非搬移，promoted_from 溯源）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 # 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
@@ -393,7 +415,7 @@ port="\${CCR_PORT:-\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[
 : "\${port:=8787}"
 
 action="\${1:-}"
-[ -z "$action" ] && { sed -n '3,27p' "$0" | sed 's/^# //' >&2; exit 1; }
+[ -z "$action" ] && { sed -n '3,33p' "$0" | sed 's/^# //' >&2; exit 1; }
 shift || true
 
 abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
@@ -580,6 +602,64 @@ elif op == "show":
     d={"action":"role-show","slug":args[0]}
 else:
     print("未知 role 子命令: "+op, file=sys.stderr); sys.exit(1)
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  rule)
+    # W-RULES1 团队规则库（~/.cc-deck/org/rules.json）：append 直写带 direct 标记
+    #（用户 CLI 主权面免卡；agent 提案走无 direct 的 HTTP 面出确认卡）。
+    # audience: all|leader|role:worker|role:pm|role:team_pm|role:review|role:review_pm
+    # scope: team | 项目目录路径（相对路径按当前目录补全）
+    [ $# -ge 1 ] || { echo "用法: org rule append|list|retire|supersede|promote ..." >&2; exit 1; }
+    op="$1"; shift
+    body="$(python3 - "$op" "$@" <<'PY'
+import json, sys, os
+op = sys.argv[1]
+args = sys.argv[2:]
+def aud(v):
+    return v.lower() if v else ""
+def scope(v):
+    if not v:
+        return ""
+    if v == "team":
+        return "team"
+    if v.startswith("project:"):
+        return v
+    if v.startswith("/"):
+        return "project:" + v.rstrip("/")
+    return "project:" + os.path.abspath(v).rstrip("/")
+if op == "append":
+    if len(args) < 1:
+        print("用法: org rule append <text> [audience] [scope]", file=sys.stderr); sys.exit(1)
+    d={"action":"rule-append","text":args[0],"direct":True,"created_by":"user"}
+    if len(args)>1 and args[1]: d["audience"]=aud(args[1])
+    if len(args)>2 and args[2]: d["scope"]=scope(args[2])
+elif op == "list":
+    d={"action":"rule-list"}
+    for a in args:
+        if a in ("active","retired","superseded"): d["status"]=a
+        elif a=="team" or a.startswith("project:") or a.startswith("/"): d["scope"]=scope(a)
+        else: d["audience"]=aud(a)
+elif op == "retire":
+    if len(args) < 1:
+        print("用法: org rule retire <id>", file=sys.stderr); sys.exit(1)
+    d={"action":"rule-retire","id":args[0]}
+elif op == "supersede":
+    if len(args) < 2:
+        print("用法: org rule supersede <旧id> <新text> [audience] [scope]", file=sys.stderr); sys.exit(1)
+    d={"action":"rule-supersede","id":args[0],"text":args[1],"created_by":"user"}
+    if len(args)>2 and args[2]: d["audience"]=aud(args[2])
+    if len(args)>3 and args[3]: d["scope"]=scope(args[3])
+elif op == "promote":
+    if len(args) < 1:
+        print("用法: org rule promote <经验id> [text] [audience] [scope]", file=sys.stderr); sys.exit(1)
+    d={"action":"exp-promote","id":args[0],"created_by":"user"}
+    if len(args)>1 and args[1]: d["text"]=args[1]
+    if len(args)>2 and args[2]: d["audience"]=aud(args[2])
+    if len(args)>3 and args[3]: d["scope"]=scope(args[3])
+else:
+    print("未知 rule 子命令: "+op, file=sys.stderr); sys.exit(1)
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"

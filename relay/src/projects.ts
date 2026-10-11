@@ -135,7 +135,12 @@ export type ConfirmKind =
   | "tier-change" // 升降级（一句理由 + 增量编制/验收点）
   | "suggest-hold" // 第五态建议暂缓（一句理由 + 触发条件，点头即挂起）
   | "archive" // 结项（附断言核对清单）
-  | "revive"; // 复活边（读档重建）
+  | "revive" // 复活边（读档重建）
+  // W-RULES1（2026-10-11）：团队规则提案（拍板 verdict-rules-20261011 #7 安全面——agent
+  // 文本永不直入权威通道：orgAction rule-append 缺省出本卡，用户 ✓ 才真正入 rules.json；
+  // payload 携带规则草稿 text/audience/scope/created_by，决议副作用在
+  // applyConfirmEffects case "rule-append" 落库并回链 confirm_id
+  | "rule-append";
 
 export interface OrgConfirm {
   id: string;
