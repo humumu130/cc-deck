@@ -209,6 +209,13 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         }
         if ((p as { relay_session_id?: string }).relay_session_id) s.relay_session_id = (p as { relay_session_id?: string }).relay_session_id!;
         if ((p as { permission_mode?: SessionState["permission_mode"] }).permission_mode) s.permission_mode = (p as { permission_mode?: SessionState["permission_mode"] }).permission_mode;
+        // W-INJECT：pid 帧回放还原（setExternalCliPid 现随 pid 变更落帧）。cli_pid 在册
+        // 才能让下方「外部会话非终态收殓」的活体判定真正走到活分支（保持 WORKING 不标
+        // historical）；存量事件流无 pid 帧 → 恒空走旧路径，由 bridge 存活自愈兜底
+        {
+          const cp = (p as { cli_pid?: unknown }).cli_pid;
+          if (typeof cp === "number" && Number.isInteger(cp) && cp > 0) s.cli_pid = cp;
+        }
         break;
       }
       case "SESSION_WAITING": {

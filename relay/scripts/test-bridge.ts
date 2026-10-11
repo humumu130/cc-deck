@@ -1392,12 +1392,12 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
       // ps 的 tty 列右补空格：定位命令必须 tr 掉，否则 ends with 永远失配（注入静默无效的根因）
       assert(s1.includes(`ps -o tty= -p 5555 | tr -d '[:space:]'`), "42 strips ps trailing space before tty match");
       assert(s1.includes("tty of t ends with targetTty"), "42 selects tab by tty");
-      assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in t`), "42 do script literal escapes quotes and backslashes");
+      assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in hitTab`), "42 do script literal escapes quotes and backslashes");
       assert(!s1.includes("System Events") && !s1.includes("keystroke"), "42 no System Events / keystroke");
       assert(!s1.includes("frontmost") && !s1.includes("activate"), "42 no focus stealing");
       // ② 换行折叠为单行 do script
       assert((await injectText(5555, "第一行\n第二行")).ok, "42 multiline inject ok");
-      assert(appleLog().at(-1)!.includes('do script ("第一行 第二行") in t'), "42 newlines folded to single do script");
+      assert(appleLog().at(-1)!.includes('do script ("第一行 第二行") in hitTab'), "42 newlines folded to single do script");
       // ③ 超长文本单次注入（do script 无 keystroke 的可靠性切分问题）
       const before3 = appleLog().length;
       assert((await injectText(5555, "长".repeat(801) + "尾")).ok, "42 long text inject ok");
@@ -1565,7 +1565,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
       const { captureConsoleBottom, buildCaptureScript } = await import("../src/injector.js");
       const cap8 = await captureConsoleBottom(5555, 5);
       assert(cap8?.length === 5 && cap8[0] === "row25" && cap8[4] === "row29", "45 mac capture takes tail rows via contents");
-      assert(buildCaptureScript(5555).includes("return contents of (contents of t)") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty (double deref for real value)");
+      assert(buildCaptureScript(5555).includes("return contents of (contents of hitTab)") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty (double deref for real value)");
+      // W-INJECT：capture 定位落空必须显式报错（TTY-NOT-FOUND），不再静默 exit 0
+      assert(buildCaptureScript(5555).includes("TTY-NOT-FOUND"), "W-INJECT capture script errors loudly on tty miss");
     } finally {
       delete process.env.CCR_TEST_PLATFORM;
       delete process.env.CCR_OSASCRIPT_CMD;

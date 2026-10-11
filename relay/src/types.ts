@@ -233,6 +233,10 @@ export interface SessionState {
   done_reason?: string;
   duration_ms?: number;
   historical?: boolean;       // true = Relay 重启前遗留的历史会话，不可操作
+  // W-INJECT：historical 的来源标记。#50 idle 归档（12h 无活动刻意沉底降权）置位——
+  // 存活自愈（reviveAliveExternals）见到它不翻案（旧终端挂着是用户已知状态），hook 回归
+  // （ensureExternal）或手动恢复才清。缺省 = 重启收养/误标来源，活 pid 即可翻案
+  idle_archived?: boolean;
   external?: boolean;         // true = 用户自开 CLI 会话（hooks 桥接），仅单向可见 + 远程审批
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）

@@ -182,10 +182,14 @@ function pidAlive(pid: number): boolean {
   }
 }
 
+// W-INJECT：排队注入条目（与 pending_inputs 同构，落盘/回种两用）。text=客户端回显短文，
+// body=注入 CLI 全文（带图消息双文本口径，对账一律 body 形态）
+type QueuedInput = { text: string; ts: number; body?: string; refs?: string[] };
+
 export class Bridge {
   private pending = new Map<string, Pending>();   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
   private turnStart = new Map<string, number>();  // ext session_id -> 本回合开始时间
-  private inputQueue = new Map<string, string[]>(); // ext session_id -> 排队中的输入（忙时攒，回合结束注入）
+  private inputQueue = new Map<string, QueuedInput[]>(); // ext session_id -> 排队中的输入（忙时攒，回合结束注入；W-INJECT 起落盘防丢）
   private flushing = new Set<string>();           // 正在逐条注入的会话（防并发交错）
   private named = new Set<string>();              // 已取到 CC 会话名的外部会话
   private nameMisses = new Map<string, number>(); // 取名失败计数（超过 8 次放弃，避免每事件扫目录）
@@ -232,6 +236,20 @@ export class Bridge {
   // relay 重启后 cli_pid 补水失效、远程发消息全被拒
   private pidCacheFile = "";
 
+  // W-INJECT：排队消息落盘文件（dataDir/ext-input-queue.json）。inputQueue 此前纯内存，
+  // relay 重启/注入失败即蒸发（「排队中」气泡 + 消息双双消失）——落盘后重启回种、失败重投
+  private queueFile = "";
+  // W-INJECT：连续注入失败计数（重投上限闸）。3 连败 = 链路真断，转显式失败终态；
+  // 注入成功/消息晋升即清零
+  private injectFails = new Map<string, number>();
+  // W-INJECT：无 pid 滞留提示一次性标记（防每轮 flush 刷屏；pid 重定位即清）
+  private noPidNote = new Set<string>();
+  // W-INJECT：given_up 后的宽限期失败判定定时器（给最后一次补发回车留晋升窗口）
+  private stuckFailTimers = new Map<string, NodeJS.Timeout>();
+  // W-INJECT：粘贴后立即提交——注入成功后的补发回车定时器（ integrated Return 被
+  // TUI 吞掉时的快路径，详见 scheduleSubmitEnter）
+  private submitEnterTimers = new Map<string, NodeJS.Timeout>();
+
   // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
   private get resumeWindowMs(): number {
     return Number(process.env.CCR_RESUME_WINDOW_MS) > 0 ? Number(process.env.CCR_RESUME_WINDOW_MS) : 120_000;
@@ -246,6 +264,7 @@ export class Bridge {
     private opts: BridgeOptions,
   ) {
     this.pidCacheFile = path.join(opts.dataDir, "cli-pids.json");
+    this.queueFile = path.join(opts.dataDir, "ext-input-queue.json");
     this.stuckAfterMs = Number(process.env.CCR_STUCK_AFTER_MS) > 0 ? Number(process.env.CCR_STUCK_AFTER_MS) : 90_000;
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 60_000;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
@@ -264,6 +283,9 @@ export class Bridge {
     this.hydratePidsFromCache();
     this.reconcilePidsFromSessions();
     this.healExternal();
+    // W-INJECT：先回种落盘排队（revive 的重投触发要见到非空队列），再跑存活自愈
+    this.loadQueueDisk();
+    this.reviveAliveExternals(); // W-INJECT：重启收养误标 historical 的活 pid 自愈（先于孤儿扫描）
     this.adoptOrphans();
     this.scanExternalEngines();
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
@@ -271,8 +293,10 @@ export class Bridge {
       this.hydratePidsFromCache();
       this.reconcilePidsFromSessions();
       this.healExternal();
+      this.reviveAliveExternals(); // W-INJECT：迟定位 pid 的补自愈
       this.adoptOrphans();
       this.sweepIdleArchive();
+      this.sweepStaleQueued(); // W-INJECT：超 24h 未投递的落盘排队清理
     }, 60_000);
     this.healTimer.unref?.();
     const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5_000;
@@ -359,7 +383,9 @@ export class Bridge {
   // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
   // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
   // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
-  // 回到那个终端继续用时，hook 事件/转录增长路径自动翻活（清 historical）
+  // 回到那个终端继续用时，hook 事件/转录增长路径自动翻活（清 historical）。
+  // W-INJECT：置位时同步打 idle_archived 来源标记——存活自愈（reviveAliveExternals）
+  // 靠它区分「刻意沉底」（不翻案）与「重启收养误标」（活 pid 翻案）
   private sweepIdleArchive(): void {
     const idleMs = Number(process.env.CCR_IDLE_ARCHIVE_MS) > 0 ? Number(process.env.CCR_IDLE_ARCHIVE_MS) : 12 * 3600_000;
     const now = Date.now();
@@ -368,7 +394,34 @@ export class Bridge {
       const last = Math.max(s.updated_at ?? 0, this.lastHookAt.get(s.session_id) ?? 0);
       if (!last || now - last < idleMs) continue;
       const st = this.mgr.getExternal(s.session_id);
-      if (st) st.historical = true;
+      if (st && !st.idle_archived) {
+        st.historical = true;
+        st.idle_archived = true;
+      }
+    }
+  }
+
+  // W-INJECT 存活自愈：historical 外部卡若 CLI 进程实际活着 → 翻案清只读。
+  // 根因（2026-10-11 用户实锤「重启后活跃会话变历史只读收不到消息」）：relay 重启重放时
+  // cli_pid 从不进事件流（setExternalCliPid 只改内存），history.ts 的活体判定恒 false，
+  // WORKING 外部卡全部被收殓成 DONE+historical「会话已结束」——哪怕终端进程活得好好的；
+  // 而 healExternal 只管 ERROR 卡、reconcilePidsFromSessions 只管无 pid/死 pid 卡，
+  // 活 pid 的 historical 永挂，直到用户去终端敲一下（hook 事件才清）。
+  // boot + 60s 周期各跑一轮（pid 缓存/会话文件迟定位的给补自愈）。
+  // #50 idle 归档（idle_archived 标记）是刻意沉底，不翻案——hook 回归或手动恢复才清。
+  private reviveAliveExternals(): void {
+    const candidates = this.mgr.snapshot().filter((s) => s.external && s.historical && !s.idle_archived);
+    if (!candidates.length) return;
+    for (const s of candidates) {
+      const st = this.mgr.getExternal(s.session_id);
+      if (!st?.historical || st.idle_archived) continue;
+      const pid = st.cli_pid;
+      if (!pid || !pidAlive(pid)) continue;
+      st.historical = false;
+      this.mgr.pushExternalLog(s.session_id, "system", "检测到终端进程仍在运行，会话恢复可交互");
+      this.mgr.emitExternalSync(s.session_id);
+      // 有落盘排队消息的：进程活着即可投递，直接触发重投（重启丢消息的闭环口）
+      if ((this.inputQueue.get(s.session_id)?.length ?? 0) > 0) void this.flushQueue(s.session_id);
     }
   }
 
@@ -687,6 +740,13 @@ export class Bridge {
         this.mgr.pushExternalLog(s.session_id, "system", "上下文已压缩，续接为新会话（本条目归档）");
       }
       this.mgr.setExternalCliPid(id, ev.cli_pid);
+      // W-INJECT：pid 重定位/刷新即清「等待定位」一次性标记；有落盘排队且状态可注入
+      // 时直接触发重投（重启回种 → hook 重连 → 自动补发的闭环口）
+      this.noPidNote.delete(id);
+      if ((this.inputQueue.get(id)?.length ?? 0) > 0 && !this.flushing.has(id)) {
+        const qst = this.mgr.getExternal(id);
+        if (qst && (qst.status === "DONE" || qst.status === "WORKING" || qst.status === "ERROR")) void this.flushQueue(id);
+      }
     }
     if (ev.transcript_path) {
       this.transcriptPaths.set(this.extId(ev), ev.transcript_path);
@@ -970,6 +1030,9 @@ export class Bridge {
         this.mgr.finishExternal(id, "disconnected", now - turn, idleSince);
         const dropped = this.inputQueue.get(id)?.length ?? 0;
         this.inputQueue.delete(id);
+        this.saveQueueDisk();
+        this.noPidNote.delete(id);
+        this.injectFails.delete(id);
         this.disarmVerify(id);
         if (s.pending_inputs?.length) this.mgr.setExternalPending(id, []);
         this.mgr.pushExternalLog(id, "system", `CLI 进程已退出（未见主动结束上报），会话保留可恢复${dropped ? `，弃 ${dropped} 条排队消息` : ""}`);
@@ -1360,12 +1423,16 @@ export class Bridge {
     }
 
     const q = this.inputQueue.get(sessionId) ?? [];
-    q.push(body);
+    // W-INJECT：队列条目与 pending 同构（回显 text + 注入全文 body + 图引用），
+    // 落盘/回种一份账本两用；此前队列只存 body 字符串，重启即蒸发无法重建回显
+    const item: QueuedInput = { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}), ...(imgRefs.length ? { refs: imgRefs } : {}) };
+    q.push(item);
     this.inputQueue.set(sessionId, q);
+    this.saveQueueDisk();
     // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）。
     // 带图消息双文本：text=短回显（客户端可见面一律不暴露临时路径），body=注入 CLI 的
     // 全文——晋升/看门狗/防抢发守门对账用 body（pBody），CLI 侧回流的只有 body 形态
-    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}), ...(imgRefs.length ? { refs: imgRefs } : {}) }]);
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { ...item }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
         this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(echoText, 80)}`);
@@ -1533,49 +1600,163 @@ export class Bridge {
   private async flushQueue(sessionId: string): Promise<void> {
     if (this.flushing.has(sessionId)) return;
     this.flushing.add(sessionId);
+    // W-INJECT：出队受阻旗标。队列保留语义（无 pid/注入失败不再弃队）引入后，finally 的
+    // 「尾部新入队兜底重触发」会把「受阻 break」变成同步无限递归（flush→break→finally→
+    // flush→…实测 Maximum call stack 爆栈）——只有正常打空（或 Waiting/状态门外 break）
+    // 才允许兜底重入；受阻后的重投触发权在 handleEvent（pid 重定位）/reviveAliveExternals
+    let blocked = false;
     try {
       while (true) {
         const state = this.mgr.getExternal(sessionId);
         const q = this.inputQueue.get(sessionId);
         if (!q || q.length === 0) break;
         // 注入的下一条已进 WAITING（权限弹窗/审批挂起）：剩余留给下一次 Stop 后 flush（ERROR 放行，误标会话）
-        if (!state || (state.status !== "DONE" && state.status !== "WORKING" && state.status !== "ERROR")) break;
-        if (!state.cli_pid) {
-          this.inputQueue.delete(sessionId);
-          this.mgr.pushExternalLog(sessionId, "system", "排队消息被弃（进程定位丢失）");
+        if (!state || (state.status !== "DONE" && state.status !== "WORKING" && state.status !== "ERROR")) {
+          blocked = true;
           break;
         }
-        const text = q.shift()!;
+        if (!state.cli_pid) {
+          // W-INJECT：不再弃队——消息落盘保留，等 pid 重定位（hook 重连/存活自愈）后
+          // handleEvent/reviveAliveExternals 触发重投。此前这里直接弃光（「排队消息被弃
+          // （进程定位丢失）」），重启窗口里的排队消息全灭且只留一条日志。一次性留痕防刷屏
+          if (!this.noPidNote.has(sessionId)) {
+            this.noPidNote.add(sessionId);
+            this.mgr.pushExternalLog(sessionId, "system", `${q.length} 条排队消息等待进程定位，会话恢复活动后自动发送`);
+          }
+          blocked = true;
+          break;
+        }
+        const item = q.shift()!;
+        const text = pBody(item);
         const r = await injectText(state.cli_pid, text);
         if (!r.ok) {
+          q.unshift(item); // W-INJECT：失败回队（含本条），重投账目完整（此前头部消息静默蒸发）
           this.onInjectFail(sessionId, r.error);
+          blocked = true; // 重投触发权交 handleEvent/revive（hook 重连后），finally 不再兜底
           return;
         }
+        this.noPidNote.delete(sessionId);
+        this.injectFails.delete(sessionId); // 注入成功：连续失败计数清零
+        this.saveQueueDisk();
         this.armVerify(sessionId, text);
+        this.scheduleSubmitEnter(sessionId, state.cli_pid, text); // W-INJECT：粘贴后立即提交快路径
         await sleep(400); // 等 UserPromptSubmit 翻状态/给连续注入留节奏
       }
     } finally {
       this.flushing.delete(sessionId);
-      // flush 尾部新入队的消息兜底再触发一轮
+      // flush 尾部新入队的消息兜底再触发一轮（受阻出队时禁用，见 blocked 注释）
       const q = this.inputQueue.get(sessionId);
       const state = this.mgr.getExternal(sessionId);
-      if (q && q.length > 0 && state?.status === "DONE") void this.flushQueue(sessionId);
+      if (!blocked && q && q.length > 0 && state?.status === "DONE") void this.flushQueue(sessionId);
     }
   }
 
-  // 注入失败：CLI 进程多半已死/换壳，清定位缓存与队列，等下次 hook 事件重新定位
+  // W-INJECT：注入成功 ≠ 提交成功。macOS Terminal 通道 do script 的「文本+回车」整段
+  // 写入 tty，CLI 忙时（回合渲染中）尾随回车会被 TUI 当粘贴段吞掉——文字滞留输入框，
+  // 原提交只能等 1s 验证窗 + 读屏判定 + 补发（实测 3~7s，用户「发出去几秒才真正发出」
+  // 的根因，2026-10-11 现场样本：文字进框、回车迟迟不来、手敲回车才发出去）。
+  // 这里注入完成后 ~300ms 直接补一发纯回车（单独 osascript 写 \r，实测必达）：
+  // integrated Return 若已提交（空闲命中），纯回车落空框 no-op；被吞则此发即提交。
+  // WAITING（权限弹窗在悬）不补——回车会误触弹窗，交验证链/看门狗兜底。
+  private scheduleSubmitEnter(sessionId: string, pid: number, text: string): void {
+    const prev = this.submitEnterTimers.get(sessionId);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+      this.submitEnterTimers.delete(sessionId);
+      const st = this.mgr.getExternal(sessionId);
+      if (!st || st.cli_pid !== pid) return; // pid 已换代/清（失败或重定位），不盲发
+      if (st.status === "WAITING") return;
+      // 已晋升（integrated Return 生效）：无事发生
+      if (!(st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
+      void injectEnter(pid).then((r) => {
+        if (!r.ok) this.onInjectFail(sessionId, r.error);
+      });
+    }, 300);
+    t.unref?.();
+    this.submitEnterTimers.set(sessionId, t);
+  }
+
+  // W-INJECT：注入失败的重新分诊。旧行为=清定位 + 弃光队列 + 清光 pending（消息蒸发，
+  // 只剩一条日志）；新行为分级：
+  //   连败 <3：清定位，队列+pending 保留（落盘），等 hook 重连/存活自愈后自动重投；
+  //   连败 ≥3：链路真断——队列与同文本 pending 一并转显式失败终态（逐条落失败日志，
+  //            「排队中」气泡撤下），杜绝无限排队。
+  // 计数在注入成功（flushQueue）/消息晋升（promotePending）时清零。
   private onInjectFail(sessionId: string, error?: string): void {
     this.mgr.clearExternalCliPid(sessionId);
-    const dropped = this.inputQueue.get(sessionId)?.length ?? 0;
-    this.inputQueue.delete(sessionId);
-    if (this.mgr.getExternal(sessionId)?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
     this.clearPidCache(sessionId);
+    const fails = (this.injectFails.get(sessionId) ?? 0) + 1;
+    this.injectFails.set(sessionId, fails);
+    const q = this.inputQueue.get(sessionId) ?? [];
     const why = error === "pid-reuse" ? "进程定位失效（PID 被系统复用）" : (error ?? "未知");
+    if (fails >= 3) {
+      const texts = q.map((p) => pBody(p));
+      this.inputQueue.delete(sessionId);
+      this.saveQueueDisk();
+      const st = this.mgr.getExternal(sessionId);
+      if (st?.pending_inputs?.length) {
+        const qkeys = new Set(texts.map((t) => normKey(t)));
+        const kept = st.pending_inputs.filter((p) => !qkeys.has(normKey(pBody(p))));
+        if (kept.length !== st.pending_inputs.length) this.mgr.setExternalPending(sessionId, kept);
+      }
+      this.mgr.pushExternalLog(
+        sessionId,
+        "system",
+        `注入连续 ${fails} 次失败（${why}），${texts.length} 条排队消息停止投递${texts.length ? `：${texts.map((t) => truncate(t, 60)).join("／")}` : ""}——请到终端窗口检查后重发`,
+      );
+      return;
+    }
+    this.saveQueueDisk();
     this.mgr.pushExternalLog(
       sessionId,
       "system",
-      `注入失败（${why}），已清除进程定位${dropped ? `并弃 ${dropped} 条排队消息` : ""}；该会话下次活动后可重试`,
+      `注入失败（${why}），已清除进程定位；${q.length} 条排队消息保留，会话恢复活动后自动重投（第 ${fails}/3 次）`,
     );
+  }
+
+  // ---------- W-INJECT 排队消息落盘（防丢 + 重启回种 + 重投） ----------
+
+  private saveQueueDisk(): void {
+    try {
+      const out: Record<string, QueuedInput[]> = {};
+      for (const [id, q] of this.inputQueue) if (q.length) out[id] = q;
+      writeFileSync(this.queueFile, JSON.stringify(out));
+    } catch {}
+  }
+
+  // relay 重启回种：adopt 收养过的会话才回（防僵尸 id 堆积）；pending_inputs 不进事件流
+  //（重放后为空），从同一账本重建「排队中」回显，重连端可见
+  private loadQueueDisk(): void {
+    try {
+      const raw = JSON.parse(readFileSync(this.queueFile, "utf-8")) as Record<string, QueuedInput[]>;
+      for (const [id, list] of Object.entries(raw)) {
+        if (!Array.isArray(list) || list.length === 0) continue;
+        if (!this.mgr.getExternal(id)) continue;
+        const clean = list.filter((p) => p && typeof p.ts === "number" && typeof (p.body ?? p.text) === "string");
+        if (!clean.length) continue;
+        this.inputQueue.set(id, clean);
+        const st = this.mgr.getExternal(id)!;
+        if (!(st.pending_inputs ?? []).length) {
+          this.mgr.setExternalPending(id, clean.map((p) => ({ ...p })));
+        }
+        console.log(`[queue-restore] ${id} ${clean.length} 条排队消息回种`);
+      }
+    } catch {}
+  }
+
+  // 24h 未投递的落盘排队清理（会话永久消失时的僵尸账本回收）
+  private sweepStaleQueued(): void {
+    const cutoff = Date.now() - 24 * 3600_000;
+    let changed = false;
+    for (const [id, q] of this.inputQueue) {
+      const kept = q.filter((p) => p.ts >= cutoff);
+      if (kept.length === q.length) continue;
+      if (kept.length) this.inputQueue.set(id, kept);
+      else this.inputQueue.delete(id);
+      changed = true;
+      this.mgr.pushExternalLog(id, "system", `${q.length - kept.length} 条超过 24 小时未能投递的排队消息已清理`);
+    }
+    if (changed) this.saveQueueDisk();
   }
 
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
@@ -2340,8 +2521,10 @@ export class Bridge {
     const st = this.mgr.getExternal(sessionId);
     if (!st) return;
     const q = this.inputQueue.get(sessionId) ?? [];
-    q.push(`[移动端删除任务] 用户删除了任务清单条目：「${truncate(text, 120)}」。请将该条目从你的本地任务列表同步删除（任务工具置 deleted 或移除），不要重新创建或继续处理它。本条为系统通知，简短确认即可。`);
+    const body = `[移动端删除任务] 用户删除了任务清单条目：「${truncate(text, 120)}」。请将该条目从你的本地任务列表同步删除（任务工具置 deleted 或移除），不要重新创建或继续处理它。本条为系统通知，简短确认即可。`;
+    q.push({ text: truncate(text, 60), ts: Date.now(), body });
     this.inputQueue.set(sessionId, q);
+    this.saveQueueDisk();
     if ((st.status === "DONE" || st.status === "WORKING" || st.status === "ERROR") && !this.flushing.has(sessionId)) {
       void this.flushQueue(sessionId);
     }
@@ -2589,7 +2772,7 @@ export class Bridge {
     const avail = [...(this.inputQueue.get(id) ?? [])];
     const kept: PendingInput[] = [];
     for (const p of state.pending_inputs) {
-      const qi = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
+      const qi = avail.findIndex((t) => normKey(pBody(t)) === normKey(pBody(p)));
       if (qi === -1) {
         this.noteUserMsg(id, pBody(p), "promote");
         // FB14：回合收尾清扫晋升同权随行图引用
@@ -2626,6 +2809,9 @@ export class Bridge {
     this.mgr.pushExternalLog(id, "system", "会话结束" + (ev.reason ? ` (${ev.reason})` : ""));
     const dropped = this.inputQueue.get(id)?.length ?? 0;
     this.inputQueue.delete(id);
+    this.saveQueueDisk();
+    this.noPidNote.delete(id);
+    this.injectFails.delete(id);
     this.askFallback.delete(id);
     if (state.pending_inputs?.length) this.mgr.setExternalPending(id, []);
     if (dropped) this.mgr.pushExternalLog(id, "system", `会话结束，弃 ${dropped} 条排队消息`);
@@ -3028,7 +3214,7 @@ export class Bridge {
           if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
           this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait"
             ? `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`
-            : "注入后 3 秒仍滞留输入框，已补发回车（#111 主动验证）");
+            : "注入后仍滞留输入框，已补发回车（#111 主动验证）", [text]);
           if (round < 2) this.armVerify(sessionId, text, round + 1); // 回车再被吞的兜验（3 轮总窗 ~4s，超窗交看门狗）
         }
       })
@@ -3037,8 +3223,11 @@ export class Bridge {
 
   // #111 晋升成功即重置滞留看门狗：补发生效说明链路活着，下一条滞留消息应继续享受
   // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
+  // W-INJECT：晋升同时清注入连续失败计数（链路证活，重投上限闸归零）
+  // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
   private resetStuckWatch(sessionId: string): void {
     this.stuckWatch.delete(sessionId);
+    this.injectFails.delete(sessionId); // W-INJECT：晋升=链路证活，重投上限闸归零
   }
 
 
@@ -3111,13 +3300,14 @@ export class Bridge {
         void this.guardedStuckEnter(id, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id));
         continue;
       }
-      this.fireStuckEnter(id, pid);
+      this.fireStuckEnter(id, pid, undefined, stuckTexts);
     }
   }
 
   // 真正补发回车（三路入口：守门通过 / 守门关闭 / 快照不可用按无人输入直发；
-  // #211 tries 闸防叠发）
-  private fireStuckEnter(id: string, pid: number, msg?: string): void {
+  // #211 tries 闸防叠发）。texts=本次滞留的排队消息全文——第 3 次补发仍不晋升时
+  // 转 W-INJECT 显式失败终态（清「排队中」+ 落失败日志），杜绝无限排队
+  private fireStuckEnter(id: string, pid: number, msg?: string, texts?: string[]): void {
     const w = this.stuckWatch.get(id);
     // #211 上限闸（收口点）：真补发满 3 次后无论来源（看门狗 sweep / #111 主动验证轮）
     // 都不得再发——验证链的守门在途期间看门狗第 3 发先行落地置位时，仍在飞的验证轮
@@ -3129,7 +3319,10 @@ export class Bridge {
     // 「暂停自动补发」只在 tries===3 跃迁时打一次：入口闸保证 tries 封顶 3、后续不再
     // 发，日志承诺与实际行为一致（原实现验证轮仍会静默叠发，与之矛盾）
     if (tries === 3) {
-      this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
+      this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发");
+      // W-INJECT：给这最后一发回车 15s 晋升宽限（CLI 忙时提交到 UPS 回流有延迟），
+      // 仍滞留才转显式失败（清 pending 气泡 + 逐条失败日志）
+      this.scheduleStuckFail(id, texts ?? [], "已自动重试 3 次仍滞留输入框");
     } else {
       this.mgr.pushExternalLog(id, "system", msg ?? "排队消息疑似滞留输入框，已补发回车");
     }
@@ -3138,13 +3331,44 @@ export class Bridge {
     });
   }
 
+  // W-INJECT：滞留消息显式失败终态。宽限期后仍在 pending → 撤下「排队中」气泡 +
+  // 逐条落失败日志（会话事件流 = 通知面）。此前 given_up 只留一条日志，气泡永挂
+  // 「排队中」（2026-10-11 用户实锤「一直排队」）。定时器按会话去重，晋升即自然落空
+  private scheduleStuckFail(id: string, texts: string[], why: string): void {
+    if (!texts.length) return;
+    const prev = this.stuckFailTimers.get(id);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+      this.stuckFailTimers.delete(id);
+      const st = this.mgr.getExternal(id);
+      if (!st) return;
+      const still = texts.filter((tx) => (st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(tx)));
+      if (!still.length) return; // 宽限期内已晋升/已清：收工
+      const keys = new Set(still.map((tx) => normKey(tx)));
+      const kept = (st.pending_inputs ?? []).filter((p) => !keys.has(normKey(pBody(p))));
+      this.mgr.setExternalPending(id, kept);
+      for (const tx of still) {
+        this.mgr.pushExternalLog(id, "system", `消息未能送达终端（${why}）：${truncate(tx, 120)}——请到终端窗口确认后重发`);
+      }
+    }, 15_000);
+    t.unref?.();
+    this.stuckFailTimers.set(id, t);
+  }
+
   // 守门后的跳过（框内已无滞留消息）：不补发、不计数补发次数；连续跳过多次后停手，
   // 防无 hook 会话 pending 永不晋升时每 60s 刷一条日志
-  private bumpStuckSkips(id: string, msg: string): void {
+  private bumpStuckSkips(id: string, msg: string, texts: string[] = []): void {
     const w = this.stuckWatch.get(id);
     const skips = (w?.skips ?? 0) + 1;
     this.stuckWatch.set(id, { lastTry: Date.now(), tries: w?.tries ?? 0, skips, given_up: (w?.given_up ?? false) || skips >= 3 });
-    this.mgr.pushExternalLog(id, "system", skips >= 3 ? "输入框多次未见该排队消息，暂停自动补发（下次发送消息时会一并提交）" : msg);
+    if (skips >= 3) {
+      this.mgr.pushExternalLog(id, "system", "输入框多次未见该排队消息，暂停自动补发");
+      // W-INJECT：skips 型放弃同样转显式失败（框净 = 消息既不在框也不在 CLI 队列的
+      // 幻影挂起），同走 15s 宽限防误杀慢晋升
+      this.scheduleStuckFail(id, texts, "多次验证均未见消息进入终端");
+    } else {
+      this.mgr.pushExternalLog(id, "system", msg);
+    }
   }
 
   // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
@@ -3162,7 +3386,7 @@ export class Bridge {
       },
     });
     if (v.kind === "skip-absent") {
-      this.bumpStuckSkips(id, "输入框已无该排队消息（可能已随人工输入提交或被清空），跳过本次补发回车");
+      this.bumpStuckSkips(id, "输入框已无该排队消息（可能已随人工输入提交或被清空），跳过本次补发回车", texts);
       return;
     }
     if (v.kind === "timeout") {
@@ -3171,7 +3395,7 @@ export class Bridge {
     }
     if (v.kind === "aborted") return; // 状态变化，静默退出（下轮看门狗重判）
     if (v.kind === "enter-after-wait") {
-      this.fireStuckEnter(id, pid, `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`);
+      this.fireStuckEnter(id, pid, `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`, texts);
       return;
     }
     if (v.kind === "unknown") {
@@ -3184,13 +3408,13 @@ export class Bridge {
         // given_up（tries/skips 上限放弃）翻空闲的自愈口：清计数给一次干净直发
         //（fireStuckEnter 内 tries 闸要求先清计数；放行依据见 sweep 3099 行注释）
         this.stuckWatch.set(id, { lastTry: Date.now(), tries: 0, skips: 0, given_up: false });
-        this.fireStuckEnter(id, pid, "快照不可用但 CLI 已空闲（无人打字），按空闲安全语义补发回车");
+        this.fireStuckEnter(id, pid, "快照不可用但 CLI 已空闲（无人打字），按空闲安全语义补发回车", texts);
         return;
       }
-      this.fireStuckEnter(id, pid, "快照不可用（无法确认有人在输入），按无人输入直接补发回车");
+      this.fireStuckEnter(id, pid, "快照不可用（无法确认有人在输入），按无人输入直接补发回车", texts);
       return;
     }
-    this.fireStuckEnter(id, pid); // enter：快照确认框内只有滞留消息
+    this.fireStuckEnter(id, pid, undefined, texts); // enter：快照确认框内只有滞留消息
   }
 }
 

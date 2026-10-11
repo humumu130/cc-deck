@@ -1411,6 +1411,9 @@ export class SessionManager {
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
       existing.state.historical = false;
+      // W-INJECT：hook 回归 = 用户回到那个终端干活，#50 idle 归档沉底同步翻案
+      //（不清的话 reviveAliveExternals 的豁免挡着，卡面停在「历史」）
+      existing.state.idle_archived = undefined;
       // #53 兜底：手动命名权威在 title-overrides.json（该会话改名帧可能已被压缩挤掉）
       const ov = this.titleOverrides[id];
       if (ov && existing.state.title !== ov) {
@@ -2163,6 +2166,16 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s || s.state.cli_pid === pid) return;
     s.state.cli_pid = pid;
+    // W-INJECT：pid 帧随事件流落盘。此前 cli_pid 纯内存（不进任何事件），重启重放时
+    // state.cli_pid 恒空 → history.ts 的活体判定（pid 存活则保持 WORKING 不标 historical）
+    // 永远走不到 → 全部活 CLI 误判「会话已结束」+ historical 只读（2026-10-11 用户实锤：
+    // 重启后活跃会话变历史只读收不到消息）。载荷按部分帧纪律带 status/action_summary
+    //（#93：客户端直采 payload.status，缺了会覆写成 undefined 崩渲染）
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      cli_pid: pid,
+    });
   }
 
   clearExternalCliPid(id: string): void {
@@ -2823,7 +2836,25 @@ export class SessionManager {
           // saved 保留可重试
           const s = this.require(cmd.payload.session_id);
           if (s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持恢复" };
+            // W-INJECT：外部会话恢复 = 重启收养误标 historical 的手动翻案通道（此前
+            // 一律「外部会话不支持恢复」拒死，客户端对误标只读卡毫无办法）。CLI 进程
+            // 活着 → 清只读标记即恢复可交互（进程在，无需也不应新开终端）；进程真死
+            // → 明确报错。真实「拉起+投递」在发消息路径的 resumeExternal（恢复语义与
+            // 消息投递绑定，点卡不该凭空开窗）
+            const pid = s.state.cli_pid;
+            let alive = false;
+            if (pid) {
+              try { process.kill(pid, 0); alive = true; } catch (e) {
+                alive = (e as NodeJS.ErrnoException).code === "EPERM";
+              }
+            }
+            if (!alive) {
+              return { command_id: cmd.command_id, ok: false, error: "该会话的终端进程已结束，无法在此恢复；在电脑终端里 claude --resume 后发消息即可重新接入" };
+            }
+            s.state.historical = false;
+            s.state.idle_archived = undefined;
+            this.emitUpdated(s, true);
+            return { command_id: cmd.command_id, ok: true };
           }
           if (s.agent && !s.agent.ended) {
             if (s.state.saved) {
