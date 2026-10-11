@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
 import { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
-import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, ExperienceEntry, LogEntry, NotificationItem, NotificationsUpdatedPayload, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, ExperienceEntry, LogEntry, NotificationItem, NotificationsUpdatedPayload, PairedDeviceInfo, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
 export { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
 import { uuid } from "./fmt";
 import { applyBoardFrame, applyProjectsFrame, isExperienceEntry, mergeById } from "./org-delta";
@@ -189,6 +189,8 @@ interface PendingCmd {
     // 75-E COMMAND_CREATE 成功 ACK 的实际引擎（75-R relay 落地才有；旧 relay 不带 =
     // undefined，端上 engineDowngradeNote 字段存在性消费不误报）
     engine?: string;
+    // 议题① COMMAND_PEERS 成功 ACK 携带：已配对设备清单（设备列表页数据源）
+    peers?: PairedDeviceInfo[];
   }) => void;
 }
 
@@ -305,6 +307,9 @@ export interface Snapshot {
   confirmDismissedKey: string | null;
   // #316 手表配对请求（LAN 源瞬态事件）：非空 = 全局弹窗显示名称+6 位比对码
   watchPair: { requestId: string; name: string; code: string; sourceId: string } | null;
+  // 议题①设备清单版本号（PAIRED_DEVICE 瞬态帧驱动，add/kick 均自增）：设备列表页
+  // 打开期间据此自动重拉（配对/踢出由任一端发起都即时收敛，不靠手动刷新）
+  peersRev: number;
 }
 
 // 任务完成汇报（#204/#254）：relay TASK_DONE 事件驱动，悬浮框 + 系统通知共用。
@@ -344,6 +349,7 @@ const emptySnapshot: Snapshot = {
   taskDoneQueue: [],
   confirmDismissedKey: null,
   watchPair: null,
+  peersRev: 0,
 };
 
 const LAN_PROBE_MS = 4000;
@@ -714,6 +720,21 @@ class RelayStore {
       await AsyncStorage.setItem("ccr_device_keys", JSON.stringify(kp));
     } catch {}
     return kp;
+  }
+
+  // ---------- 设备列表（0.7 批 2 议题①消费面） ----------
+
+  // 本机在某源 peers 表里的身份（设备列表「本机」行判定）：云源 = 派生 dev
+  //（cloudDevFor 同款口径），LAN 源 = devId(pubkey,"ph")。密钥未就绪/源不存在
+  // 回 null（调用方不显示本机标记——不猜测）
+  localPeerId(sourceId: string): { dev: string; name: string } | null {
+    const conn = this.conns.get(sourceId);
+    const keys = this.devKeys;
+    if (!conn || !keys) return null;
+    const dev = conn.cloudCfg
+      ? resolveCloudDev(conn.cloudCfg, keys.publicKey)
+      : devId(keys.publicKey, "ph");
+    return { dev, name: deviceDisplayName() };
   }
 
   // ---------- 多服务器配置（ccr_conns 列表 + ccr_active 指针；旧 ccr_conn 自动迁移） ----------
@@ -1761,7 +1782,7 @@ class RelayStore {
       // 其余按 ACK 原样；p 不存在（已被超时收摊）则丢弃
       if (p?.onAck) {
         const dup = !ack.ok && !!ack.error && ack.error.startsWith("duplicate");
-        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}), ...(ack.permission ? { permission: ack.permission } : {}), ...(typeof ack.engine === "string" && ack.engine ? { engine: ack.engine } : {}) }); } catch {}
+        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}), ...(ack.permission ? { permission: ack.permission } : {}), ...(typeof ack.engine === "string" && ack.engine ? { engine: ack.engine } : {}), ...(Array.isArray(ack.peers) ? { peers: ack.peers } : {}) }); } catch {}
       }
       if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
@@ -2543,12 +2564,14 @@ class RelayStore {
         break;
       }
       // 议题①（2026-09-09）配对设备变更（瞬态帧，seq:0 不补发）：add = 新设备获得
-      // 全权的瞬间，回调通知持有者；kick = 管理员移除设备，手机端无需动作
+      // 全权的瞬间，回调通知持有者；kick = 管理员移除设备，手机端无需动作。
+      // 0.7 批 2：add/kick 均自增 peersRev——设备列表页打开期间自动重拉清单
       case "PAIRED_DEVICE": {
         const p = msg.payload as { dev?: unknown; name?: unknown; action?: unknown };
         if (p.action === "add" && typeof p.dev === "string" && p.dev) {
           this.onPairedDevice?.({ dev: p.dev, name: typeof p.name === "string" ? p.name : "" });
         }
+        if (p.action === "add" || p.action === "kick") this.emit({ peersRev: this.snap.peersRev + 1 });
         break;
       }
       // #40 M4 派单完成回调（瞬态 seq:0 不补发）：worker 派单收口（回合 done/failed）
@@ -2841,7 +2864,7 @@ class RelayStore {
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
   // relay 幂等去重兜底，不跨源串扰。onAck（0.4.4）：需要结果语义的调用方注入
-  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string }; engine?: string }) => void, cmdId?: string): boolean {
+  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string }; engine?: string; peers?: PairedDeviceInfo[] }) => void, cmdId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
     // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
     // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器

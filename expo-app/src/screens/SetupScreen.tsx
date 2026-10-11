@@ -7,7 +7,7 @@ import { withA, type ThemeColors } from "../theme";
 import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, identityOf, type ServerEntry } from "../store";
-import { ackTapGuard, capabilityCardModel, capsuleSubline, todoSurface } from "../protocol"; // E4a 只读投影 + E4b ACK 可见面（纯函数，protocol.ts 段）
+import { ackTapGuard, capabilityCardModel, capsuleSubline, pairErrNote, todoSurface } from "../protocol"; // E4a 只读投影 + E4b ACK 可见面（纯函数，protocol.ts 段）
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
@@ -114,6 +114,17 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   // 单元=视图过滤（#27 同则）：手动表单常开
   const [manualOpen, setManualOpen] = useState(!!editId);
   const [editOverride, setEditOverride] = useState<string | null | undefined>(undefined);
+  // 0.7 批 2 择路提示浮层（扫码智能码探测/择路结果，3s 自清——与设置抽屉同语言）
+  const [routeHint, setRouteHint] = useState<string | null>(null);
+  const routeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showRouteHint = (t: string) => {
+    if (routeTimer.current) clearTimeout(routeTimer.current);
+    setRouteHint(t);
+    routeTimer.current = setTimeout(() => setRouteHint(null), 3000);
+  };
+  // 0.7 批 2 连错计数（本地口径）：配对码「无效/过期」类失败自增，成功清零；
+  // 网络类错误不计数不清零。≥3 次时 pairErrNote 追加锁定预警
+  const pairFailsRef = useRef(0);
   const effEditId: string | null = newMode ? null : (editOverride !== undefined ? editOverride : (editId ?? null));
   const dirty = (() => {
     if (newMode) return !!wsUrl.trim();
@@ -225,9 +236,14 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     const fin = (e2: string | null) => {
       setPairing(false);
       if (e2) {
-        setErr(e2);
+        // 0.7 批 2 错误分层（pairErrNote）：过期→引导重领、无效→引导核对；码错类
+        // 本地连错自增（≥3 追加锁定预警，对齐 relay pairFails 连续 5 次静默 10 分钟
+        // 的端上预告）；判定标准与 pairErrNote 内部同源（含「无效/过期」）
+        if (e2.includes("无效") || e2.includes("过期")) pairFailsRef.current += 1;
+        setErr(pairErrNote(e2, pairFailsRef.current));
         return;
       }
+      pairFailsRef.current = 0;
       void reload();
       if (onClose) onClose();
     };
@@ -387,6 +403,12 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
         setImportTarget(t);
         setImportOpen(true);
       },
+      // 0.7 批 2 择路提示：探测/择路结果浮层（探测 2.5s 原本无反馈，用户只觉得卡）
+      onRoute: (stage) => showRouteHint(
+        stage === "probing" ? "正在检测同网直连…"
+          : stage === "lan" ? "同一局域网 · 直连中"
+            : "跨网 · 走云桥接入",
+      ),
       onDirect: (base, tk) => {
         setManualOpen(true); // 回填可见：连接失败停留本页时表单即是现场
         setWsUrl(base);
@@ -471,6 +493,12 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   return (
     <SafeAreaView style={s.safe} edges={onClose ? ["top"] : []}>
       <View style={{ flex: 1 }}>
+        {/* 0.7 批 2 择路提示浮层（页顶部浮动胶囊，与设置抽屉同语言） */}
+        {routeHint ? (
+          <View style={s.routeToast} pointerEvents="none">
+            <Text style={s.routeToastT}>{routeHint}</Text>
+          </View>
+        ) : null}
         <ScrollView
           contentContainerStyle={{ ...s.wrap, paddingBottom: 36 + kb }}
           keyboardShouldPersistTaps="handled"
@@ -814,6 +842,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvMenuItem: { paddingHorizontal: 12, paddingVertical: 9 },
   srvMenuItemT: { color: c.text, fontSize: 13 },
   safe: { flex: 1, backgroundColor: c.bg },
+  // 0.7 批 2 择路提示浮层（页顶浮动胶囊，SettingsDrawer routeToast 同语言）
+  routeToast: {
+    position: "absolute", left: 16, right: 16, top: 8, zIndex: 10, alignItems: "center",
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12,
+    backgroundColor: withA("#02050A", 0.78),
+  },
+  routeToastT: { color: "#EDEDF2", fontSize: 12, fontWeight: "600" },
   wrap: { alignItems: "center", paddingTop: 10, paddingBottom: 24, paddingHorizontal: 16 },
   logo: {
     width: 64, height: 64, borderRadius: 19, alignItems: "center", justifyContent: "center", marginBottom: 16,

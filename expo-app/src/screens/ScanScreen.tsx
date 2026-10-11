@@ -145,6 +145,10 @@ export interface ScanRouteCtx {
   // 直连码表单回填钩子（仅设置页需要表单同步，连接失败停留本页时不误导；缺省跳过）。
   // 返回值=新条目采用的显示名（表单已手输名称则尊重；空/缺省回落 host）
   onDirect?: (base: string, token: string) => string | undefined;
+  // 0.7 批 2 择路状态播报（智能码专属）：探测期约 2.5s 原本是无反馈黑窗（扫码页已关，
+  // 用户只觉得卡），挂载方据此显示浮动提示——probing=正在检测同网直连；lan=探测命中
+  // 走局域网直连；cloud=直连不可用走云桥接入。缺省不播报（旧调用方零改动）
+  onRoute?: (stage: "probing" | "lan" | "cloud") => void;
 }
 
 function hostOf(wsUrl: string): string {
@@ -265,11 +269,16 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
       );
     };
     void (async () => {
-      if (lan && (await probeLanWs(lan.url, lan.token))) {
-        directAdd(lan.url, lan.token);
-        return;
+      if (lan) {
+        ctx.onRoute?.("probing");
+        if (await probeLanWs(lan.url, lan.token)) {
+          ctx.onRoute?.("lan");
+          directAdd(lan.url, lan.token);
+          return;
+        }
       }
       if (cloud) {
+        ctx.onRoute?.("cloud");
         cloudAdd();
         return;
       }

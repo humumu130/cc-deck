@@ -65,16 +65,25 @@ const makeStyles = (c: ThemeColors) =>
       backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45), overflow: "hidden",
     },
     kaBtnT: { color: c.brandA, fontSize: 12.5, fontWeight: "700" },
+    // 0.7 批 2 card 形态（服务器卡同语言）：panel 底 + 圆角 12 + 细边框，内边距对齐
+    // srvMain（9/12）——保活卡融入连接区卡片流（原 hairline 行形态与卡片列表视觉断开）。
+    // 行方向自持（原 kaRow 的 row 布局不随外层形态带过来）
+    kaCard: {
+      flexDirection: "row", alignItems: "center", gap: 6,
+      borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: c.panel,
+      paddingVertical: 9, paddingHorizontal: 12, marginBottom: 8, overflow: "hidden",
+    },
   });
 
 // detail=true 完整说明（SetupScreen 添加连接场景）；false 单行（设置抽屉常驻，教育
-// 文案收进 ⓘ）。style 透传外层定位（限宽/边距由使用方布局决定）
-export default function KeepAliveCard({ detail = false, style }: { detail?: boolean; style?: StyleProp<ViewStyle> }) {
+// 文案收进 ⓘ）。card=true 卡形态（0.7 批 2：设置抽屉连接区尾部融入服务器卡流，面板底
+// 圆角与服务器卡同语言；优先级低于 detail）。style 透传外层定位（限宽/边距由使用方决定）
+export default function KeepAliveCard({ detail = false, card = false, style }: { detail?: boolean; card?: boolean; style?: StyleProp<ViewStyle> }) {
   const { c } = useTheme();
   const s = useThemeStyles(makeStyles);
   if (!detail) {
     return (
-      <View style={[s.kaRow, style]}>
+      <View style={[card ? s.kaCard : s.kaRow, style]}>
         <View style={[s.kaDot, { backgroundColor: c.working }]} />
         <Text style={s.kaTitle}>后台保活</Text>
         <Pressable hitSlop={8} onPress={kaHelp} accessibilityLabel="后台保活说明">

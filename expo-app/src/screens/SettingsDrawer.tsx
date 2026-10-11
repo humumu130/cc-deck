@@ -11,7 +11,8 @@ import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
-import type { AllowRule } from "../protocol";
+import type { AllowRule, PairedDeviceInfo } from "../protocol";
+import { connStateNote, connStateTone, pairErrNote, peerKindLabel, peerRelTime } from "../protocol";
 import { PERM_CAP_STATE_LABEL, permissionModesText, permissionSummariesOf, type PermCapState } from "../permission";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
@@ -121,6 +122,7 @@ const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; // 半月（空闲变灰
 const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回车发送）
 const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
 const ICON_HOME = "M3 11 12 4l9 7M5 10v10h14V10"; // 小屋（#17 第二批 雇员独立家）
+const ICON_PHONE = "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM10.5 18.5h3"; // 手机（0.7 批 2 设备列表入口）
 
 // 扫描框角标（ScanScreen 取景框同语言 mini 版）：四角 L 亮角 + 中部扫描横线，
 // 纯 View 线条绘制（App 无 svg 依赖，与既有图形语言一致）
@@ -332,6 +334,16 @@ export default function SettingsDrawer({
   const [scanOpen, setScanOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
+  // 0.7 批 2 已配对设备弹层（连接区入口行呼出）
+  const [devicesOpen, setDevicesOpen] = useState(false);
+  // 0.7 批 2 择路提示：智能码探测/择路结果的浮动反馈（探测 2.5s 原本是无反馈黑窗）
+  const [routeHint, setRouteHint] = useState<string | null>(null);
+  const routeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showRouteHint = (t: string) => {
+    if (routeTimer.current) clearTimeout(routeTimer.current);
+    setRouteHint(t);
+    routeTimer.current = setTimeout(() => setRouteHint(null), 3000);
+  };
   const applyScan = (r: ScanResult) => {
     void routeScanResult(r, {
       onError: (msg) => Alert.alert("扫码未完成", msg),
@@ -343,6 +355,12 @@ export default function SettingsDrawer({
         setImportTarget(t);
         setImportOpen(true);
       },
+      onRoute: (stage) =>
+        showRouteHint(
+          stage === "probing" ? "正在检测同网直连…"
+            : stage === "lan" ? "同一局域网 · 直连中"
+              : "跨网 · 走云桥接入",
+        ),
     });
   };
   // 服务器列表折叠：多服务器时腾出空间（记忆上次选择）
@@ -592,10 +610,19 @@ export default function SettingsDrawer({
             const active = e.id === activeId;
             const st = snap.sources.find((x) => x.id === e.id);
             const online = st?.state === "online";
-            const connecting = st?.state === "connecting" || st?.state === "reconnecting";
-            // #46 通道标记（用户定稿）：云桥条目 ☁️ / LAN 源 LAN / 手动直连不显示
-            // #53 通道标记：云桥 ☁️ / LAN 源 LanGlyph 胶囊（与插头/云同风格统一）/ 直连不显示
+            const unpaired = st?.state === "unpaired";
+            // 0.7 批 2 状态灯四态（对齐桌面 conn 图标语义）：绿=在线 / 黄=连接中
+            // （含重连，闪烁）/ 红=配对失效（唯一不能自愈须人工重配的态）/ 灰=未连接
+            const tone = connStateTone(st?.state);
+            const toneColor = tone === "online" ? c.done : tone === "busy" ? c.working : tone === "bad" ? c.error : c.faint;
+            const busy = tone === "busy";
+            // #46/#53 通道标记：云桥 ☁️ / LAN 源 LAN 胶囊 / 手动直连不显示。
+            // 0.7 批 2 徽章恒显（类型徽章=配置属性，离线也可见；在线时上报 channel
+            // 优先——真实通道与配置推断可能不同）
             const chanTag = e.cloud ? "cloud" : isLanUrl(e.wsUrl) ? "lan" : "";
+            const chan = online ? (st?.channel ?? chanTag) : chanTag;
+            const badge = chan === "cloud" ? "☁" : chan === "lan" ? "LAN" : "";
+            const displayName = st?.relayName && e.name === defaultHostName(e) ? st.relayName : e.name;
             return (
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
                 {/* #337 身份色（登记后固定，与状态解耦）#130 从 7dp 圆点改为卡片
@@ -608,24 +635,22 @@ export default function SettingsDrawer({
                   delayLongPress={400}
                   onPress={() => {
                     if (delArm === e.id) setDelArm(null);
+                    // 配对失效：连接重试只会反复吃 nack（unpaired 不自动重试），
+                    // 点按直接进编辑页重新配对（配对码在那儿输）
+                    if (unpaired && e.cloud) { edit(e); return; }
                     pick(e);
                   }}
                 >
                   <View style={d.srvHead}>
-                    {/* #46 双元素：通道标记 + 连接状态插头（绿=已连/灰=可点触发/
-                        黄闪=连接中），状态文案类元素全撤——失败原因走弹窗 */}
-  <Text style={d.srvName} numberOfLines={1}>{(() => { const st = snap.sources.find((x) => x.id === e.id); return st?.relayName && e.name === defaultHostName(e) ? st.relayName : e.name; })()}</Text>
-                    {/* #81+#96 通道=动态属性，仅已连接显示真实通道（上报 channel 优先、
-                        配置推断兜底）；#96 起不独立占位——缩成插头右下角小角标 */}
+                    <Text style={d.srvName} numberOfLines={1}>{displayName}</Text>
+                    {/* 状态灯（四态）+ 通道角标：busy 黄闪复用共享节拍，bad 红/常显 */}
                     {(() => {
-                      const chan = online ? (st?.channel ?? chanTag) : "";
-                      const badge = chan === "cloud" ? "☁" : chan === "lan" ? "LAN" : "";
-                      const body = connecting ? (
+                      const body = busy ? (
                         (() => {
                           ensurePlugBlink();
                           return (
                             <Animated.View style={{ opacity: plugBlink }}>
-                              <PlugGlyph size={13} color={c.working} />
+                              <PlugGlyph size={13} color={toneColor} />
                             </Animated.View>
                           );
                         })()
@@ -633,9 +658,9 @@ export default function SettingsDrawer({
                         <Pressable
                           hitSlop={8}
                           onPress={() => { if (!online) triggerConnect(e); }}
-                          accessibilityLabel={`${e.name} ${online ? "已连接" : "点击连接"}${badge ? `（${badge === "LAN" ? "局域网直连" : "云桥中转"}）` : ""}`}
+                          accessibilityLabel={`${displayName} ${online ? "已连接" : unpaired ? "配对失效，点按重新配对" : "点击连接"}${badge ? `（${badge === "LAN" ? "局域网直连" : "云桥中转"}）` : ""}`}
                         >
-                          <PlugGlyph size={13} color={online ? c.done : c.faint} />
+                          <PlugGlyph size={13} color={toneColor} />
                         </Pressable>
                       );
                       return (
@@ -648,7 +673,10 @@ export default function SettingsDrawer({
                       );
                     })()}
                   </View>
-
+                  {/* 0.7 批 2 副行状态词：状态灯的文本回声（unpaired 染红点明须人工重配） */}
+                  <Text style={[d.srvNoteT, unpaired && d.srvNoteBadT]} numberOfLines={1}>
+                    {connStateNote(st?.state)}
+                  </Text>
                 </Pressable>
                 {delArm === e.id ? (
                   /* #46 长按亮删除（替常驻 ✕）：确认按钮 3.5s 自动收回 */
@@ -686,8 +714,25 @@ export default function SettingsDrawer({
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         {/* #85 后台保活豁免卡（常驻可见——原入口只在添加连接页，配好的人看不到）：
-            手机管家「允许后台活动」管不住系统冻结层，断线频发时一键授予系统级豁免 */}
-        {fgSupported() ? <KeepAliveCard style={d.kaSlot} /> : null}
+            手机管家「允许后台活动」管不住系统冻结层，断线频发时一键授予系统级豁免。
+            0.7 批 2 卡形态：融入服务器卡流（panel 底圆角与卡同语言，原 hairline 行
+            形态与卡片列表视觉断开） */}
+        {fgSupported() ? <KeepAliveCard card /> : null}
+
+        {/* 0.7 批 2 已配对设备入口（议题①消费面）：弹层列已配对设备（名称/平台/
+            版本/最后活跃），本机标识 + 踢出（两步确认） */}
+        <Pressable
+          style={d.devEntry}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => setDevicesOpen(true)}
+          accessibilityLabel="已配对设备"
+        >
+          <View style={d.setL}>
+            <LineIcon path={ICON_PHONE} />
+            <Text style={d.setLabel}>已配对设备</Text>
+          </View>
+          <Text style={d.aboutT}>›</Text>
+        </Pressable>
 
         {/* L6 段头统一：纯段头（不可折叠）与可折叠段头（secHead+▾/▸）同结构同规格——
             同字号字重字色、同上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
@@ -949,6 +994,14 @@ export default function SettingsDrawer({
       {/* #53 连接图标图例（问号入口）：AboutModal 同款底部 sheet */}
       <ConnLegendModal visible={legendOpen} onClose={() => setLegendOpen(false)} />
       <ImportPicker visible={importOpen} target={importTarget} onClose={() => setImportOpen(false)} />
+      {/* 0.7 批 2 已配对设备（议题①消费面）：清单 + 本机标识 + 踢出两步确认 */}
+      <DevicesModal visible={devicesOpen} onClose={() => setDevicesOpen(false)} />
+      {/* 0.7 批 2 择路提示：面板顶部浮动胶囊（探测/择路结果 3s 自清） */}
+      {routeHint ? (
+        <View style={[d.routeToast, { top: 70 + insets.top }]} pointerEvents="none">
+          <Text style={d.routeToastT}>{routeHint}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -991,6 +1044,151 @@ function ConnLegendModal({ visible, onClose }: { visible: boolean; onClose: () =
             {row(<PlugGlyph size={15} color={c.done} />, "已连接")}
             {row(<PlugGlyph size={15} color={c.working} />, "连接中")}
             {row(<PlugGlyph size={15} color={c.faint} />, "未连接 · 点击可连接")}
+            {/* 0.7 批 2 第四态：配对失效（红灯）——唯一须人工重新配对的态 */}
+            {row(<PlugGlyph size={15} color={c.error} />, "配对失效 · 点按重新配对")}
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// 0.7 批 2 已配对设备弹层（议题①消费面）：AboutModal 同款贴底 sheet。
+// 数据 = COMMAND_PEERS 按源拉取（在线源 chips 切换，默认活动源∩在线）；本机行
+// 高亮禁踢（localPeerId 比对派生 dev）；踢出两步确认（3.5s arm，规则删除同款）；
+// peersRev 变化（任一端配对/踢出经 PAIRED_DEVICE 广播）自动重拉，双端即时收敛。
+// 旧 relay / 云桥未启用：relay 回 ok:false「云桥未启用」→ err 行如实显示
+function DevicesModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { c } = useTheme();
+  const m = useThemeStyles(makeStyles);
+  const snap = useRelay();
+  // 发命令的前提是源在线（离线源 send 直接拒绝）——候选源只列在线源
+  const liveSources = snap.sources.filter((s) => s.state === "online");
+  const [srcId, setSrcId] = useState<string | null>(null);
+  const [peers, setPeers] = useState<PairedDeviceInfo[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [local, setLocal] = useState<{ dev: string; name: string } | null>(null);
+  const [kickArm, setKickArm] = useState<string | null>(null);
+  const kickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 选中源：手动选择优先（失效自动回落）；缺省活动源∩在线，再退第一个在线源
+  const effId =
+    (srcId && liveSources.some((s) => s.id === srcId) ? srcId : null) ??
+    (snap.activeSourceId && liveSources.some((s) => s.id === snap.activeSourceId)
+      ? snap.activeSourceId
+      : liveSources[0]?.id) ??
+    null;
+
+  useEffect(() => {
+    if (!visible) return;
+    if (!effId) {
+      setPeers(null);
+      setErr(null);
+      setLocal(null);
+      return;
+    }
+    setPeers(null);
+    setErr(null);
+    setLocal(store.localPeerId(effId));
+    store.send("COMMAND_PEERS", {}, effId, (r) => {
+      if (r.ok) setPeers(Array.isArray(r.peers) ? r.peers : []);
+      else setErr(r.err || "读取失败，请稍后重试");
+    });
+    // snap.peersRev：设备增删（本端或另一端发起）广播到达即重拉——弹层开着时自动收敛
+  }, [visible, effId, snap.peersRev]);
+
+  const kick = (dev: string) => {
+    if (!effId) return;
+    store.send("COMMAND_PEER_KICK", { dev }, effId, (r) => {
+      if (!r.ok) Alert.alert("踢出失败", r.err || "请稍后重试");
+      // ok：relay 广播 PAIRED_DEVICE kick → peersRev 自增 → 上方 useEffect 自动重拉
+    });
+  };
+  const armKick = (dev: string) => {
+    if (kickArm === dev) {
+      setKickArm(null);
+      if (kickTimer.current) clearTimeout(kickTimer.current);
+      kick(dev);
+      return;
+    }
+    setKickArm(dev);
+    if (kickTimer.current) clearTimeout(kickTimer.current);
+    kickTimer.current = setTimeout(() => setKickArm((cur) => (cur === dev ? null : cur)), 3500);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={m.abMask} onPress={onClose}>
+        <View style={{ width: "100%", maxHeight: "82%" }}>
+          <Pressable style={m.abSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={m.legHead}>
+              <Text style={m.legHeadT}>已配对设备</Text>
+              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="关闭">
+                <Text style={m.legCloseT}>✕</Text>
+              </Pressable>
+            </View>
+            {liveSources.length > 1 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={m.devSrcRow}>
+                {liveSources.map((s) => (
+                  <Pressable
+                    key={s.id}
+                    style={[m.devSrcChip, s.id === effId && m.devSrcChipOn]}
+                    onPress={() => setSrcId(s.id)}
+                    accessibilityLabel={`查看 ${s.relayName || s.name} 的设备`}
+                  >
+                    <Text style={[m.devSrcChipT, s.id === effId && m.devSrcChipTOn]} numberOfLines={1}>
+                      {s.relayName || s.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+            {liveSources.length === 0 ? (
+              <Text style={m.srvEmpty}>连接电脑后可查看</Text>
+            ) : err ? (
+              <Text style={m.pairErrT}>{err}</Text>
+            ) : peers === null ? (
+              <Text style={m.srvEmpty}>读取中…</Text>
+            ) : peers.length === 0 ? (
+              <Text style={m.srvEmpty}>该服务器尚未配对任何设备</Text>
+            ) : (
+              <ScrollView style={m.devList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                {peers.map((p) => {
+                  const isLocal = !!local && p.dev === local.dev;
+                  const armed = kickArm === p.dev;
+                  return (
+                    <View key={p.dev} style={[m.devCard, isLocal && m.devCardLocal]}>
+                      <View style={m.devHead}>
+                        <View style={m.devKindBadge}>
+                          <Text style={m.devKindT}>{peerKindLabel(p.kind)}</Text>
+                        </View>
+                        <Text style={m.devName} numberOfLines={1}>{p.meta?.name || p.name}</Text>
+                        {isLocal ? (
+                          <View style={m.devLocalBadge}>
+                            <Text style={m.devLocalT}>本机</Text>
+                          </View>
+                        ) : (
+                          <Pressable
+                            style={m.devKick}
+                            hitSlop={6}
+                            onPress={() => armKick(p.dev)}
+                            accessibilityLabel={`踢出设备 ${p.meta?.name || p.name}`}
+                          >
+                            <Text style={armed ? m.devKickArmT : m.devKickT}>{armed ? "确认踢出？" : "踢出"}</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                      <Text style={m.devSub} numberOfLines={1}>
+                        {[p.meta?.platform, p.meta?.app].filter(Boolean).join(" · ") || "未知设备"}
+                      </Text>
+                      <Text style={m.devTime}>
+                        最后活跃 {peerRelTime(p.last_seen)} · 配对于 {peerRelTime(p.paired_at)}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <Text style={m.devFootNote}>踢出后设备立即断开，需重新配对才能接入。</Text>
+              </ScrollView>
+            )}
           </Pressable>
         </View>
       </Pressable>
@@ -1072,6 +1270,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 随名称长短漂移：短名靠左长名靠右不齐）；图标间距收小 6→4
   srvHead: { flexDirection: "row", alignItems: "center", gap: 4 },
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
+  // 0.7 批 2 服务器卡副行状态词（状态灯的文本回声；unpaired 染红点明须人工重配）
+  srvNoteT: { color: c.faint, fontSize: 10, marginTop: 2 },
+  srvNoteBadT: { color: c.error },
   srvEditBtn: {
     backgroundColor: "transparent", alignItems: "center", justifyContent: "center",
     paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9,
@@ -1105,8 +1306,44 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ghostBtn: { height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   ghostBorder: { ...FILL },
   ghostT: { color: c.dim, fontSize: 12.5 },
-  // #130 保活卡与上方列表的呼吸距
-  kaSlot: { marginTop: 2 },
+  // #130 保活卡与上方列表的呼吸距（0.7 批 2 起卡形态自带 marginBottom，占位样式退役）
+  // 0.7 批 2 设备入口行（setItem 同构单行）+ 择路浮动胶囊 + 设备弹层
+  devEntry: { paddingVertical: 11 },
+  routeToast: {
+    position: "absolute", left: 16, right: 16, alignItems: "center",
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12,
+    backgroundColor: withA("#02050A", 0.78),
+  },
+  routeToastT: { color: "#EDEDF2", fontSize: 12, fontWeight: "600" },
+  devSrcRow: { marginBottom: 10 },
+  devSrcChip: {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 9,
+    backgroundColor: c.tintSoft, marginRight: 6, maxWidth: 150,
+  },
+  devSrcChipOn: { backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45) },
+  devSrcChipT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },
+  devSrcChipTOn: { color: c.brandA },
+  devList: { flex: 1 },
+  devCard: {
+    borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: c.panel2,
+    paddingHorizontal: 11, paddingVertical: 9, marginBottom: 8,
+  },
+  devCardLocal: { borderColor: withA(c.brandA, 0.45), backgroundColor: c.tintStrong },
+  devHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  devKindBadge: {
+    borderWidth: 1, borderColor: c.line, borderRadius: 5,
+    paddingHorizontal: 4, paddingVertical: 1, backgroundColor: c.tintSoft,
+  },
+  devKindT: { color: c.dim, fontSize: 9, fontWeight: "600", lineHeight: 11 },
+  devName: { color: c.text, fontSize: 13, fontWeight: "700", flex: 1, minWidth: 0 },
+  devLocalBadge: { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1.5, backgroundColor: withA(c.brandA, 0.16) },
+  devLocalT: { color: c.brandA, fontSize: 9, fontWeight: "700" },
+  devKick: { marginLeft: 2 },
+  devKickT: { color: c.faint, fontSize: 11 },
+  devKickArmT: { color: c.error, fontSize: 11, fontWeight: "700" },
+  devSub: { color: c.dim, fontSize: 10.5, marginTop: 3 },
+  devTime: { color: c.faint, fontSize: 9.5, marginTop: 2 },
+  devFootNote: { color: c.faint, fontSize: 10, textAlign: "center", paddingVertical: 6 },
   cloudHint: {
     marginTop: 8, alignItems: "center", paddingVertical: 7, borderRadius: 10,
     borderWidth: 1, borderColor: withA(c.working, 0.35), backgroundColor: withA(c.working, 0.07),

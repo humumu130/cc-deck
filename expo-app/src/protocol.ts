@@ -751,7 +751,11 @@ export type CommandType =
   | "COMMAND_ORG_ACTION"
   | "COMMAND_NOTIFICATION_ACK"
   | "COMMAND_ENGINE_PROFILE_UPDATE"
-  | "COMMAND_ARTIFACT_GROUP_FETCH"; // B0 types-only commands; old relay ignores/rejects
+  | "COMMAND_ARTIFACT_GROUP_FETCH"
+  // 议题①可信设备清单/踢除（relay session-manager COMMAND_PEERS/COMMAND_PEER_KICK，
+  // LAN token / 云 E2E 已配对信道均可发）；旧 relay 回 ok:false「云桥未启用」
+  | "COMMAND_PEERS"
+  | "COMMAND_PEER_KICK";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {
@@ -759,6 +763,28 @@ export interface CloudPairInfo {
   token: string;
   relay_dev: string;
   relay_pubkey: string;
+}
+
+// ---------- 设备列表（0.7 批 2）：与 relay/src/types.ts PairedDeviceInfo/PeerMeta 同构 ----------
+// #42 设备身份元数据：pair_req 帧可选自报字段（名称/平台/UA/应用版本），relay 校验截断后
+// 随 addPeer 持久化；存量设备无 meta = 端上降级显示「未知设备」
+export interface PeerMeta {
+  name?: string;      // 设备自报名（App 用设备实名，浏览器沿用设备名）
+  platform?: string;  // App：OS+型号（"android·Pixel 8"）；浏览器：平台（"Windows"）
+  ua?: string;        // 浏览器 UA 截断摘要；App 不报
+  app?: string;       // 应用标识+版本（"CC Deck 0.3.35" / 网页控制台标识）
+}
+
+// COMMAND_PEERS 成功 ACK 携带的设备条目（relay 派生 kind 优先采信 meta 自报身份，
+// dev 前缀降级兜底）；last_seen 0 = 未知（relay 重启后清零）
+export interface PairedDeviceInfo {
+  dev: string;
+  name: string;
+  pubkey: string;
+  kind: "phone" | "web" | "watch" | "other";
+  paired_at: number;
+  last_seen: number;
+  meta?: PeerMeta;
 }
 
 export interface CommandAck {
@@ -782,6 +808,8 @@ export interface CommandAck {
   engine?: string;
   // #26 M2/M3 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts, pool }
   data?: unknown;
+  // 议题①仅 COMMAND_PEERS 成功 ACK 携带：已配对设备清单（云桥未启用 = ok:true+空数组）
+  peers?: PairedDeviceInfo[];
 }
 
 // ─── E4a 只读投影（源胶囊副行 / 通知域分组 / 能力卡）：纯函数零依赖，
@@ -926,4 +954,71 @@ export function todoSurface(items: readonly NotificationItem[] | null | undefine
  * node 直测锁定「重复点击不双发」的调用面语义 */
 export function ackTapGuard(inFlight: ReadonlySet<string>, key: string): "skip" | "go" {
   return inFlight.has(key) ? "skip" : "go";
+}
+
+// ─── E2-连接面只读投影（0.7 批 2：服务器卡四态灯 / 配对码错误分层 / 设备卡标签）：
+// 纯函数零依赖，test-expo2-devices.ts 直跑 import（e4a 同款先例，无需模块桩） ───
+
+/** 连接状态灯四态（0.7 批 2，对齐桌面 conn 图标语义的色相语言）：
+ * online=绿（已连）/ busy=黄（连接中·含重连，UI 层叠加闪烁）/ bad=红（配对失效——
+ * 唯一不能自愈、必须人工重新配对的态）/ off=灰（未连接·已断开）。
+ * store 六态归四色：connecting|reconnecting 并入 busy，idle|offline 并入 off */
+export type ConnTone = "online" | "busy" | "bad" | "off";
+export function connStateTone(state: string | null | undefined): ConnTone {
+  if (state === "online") return "online";
+  if (state === "connecting" || state === "reconnecting") return "busy";
+  if (state === "unpaired") return "bad";
+  return "off";
+}
+
+/** 服务器卡副行状态词（SRC_STATE_TEXT 手机端收敛版 + unpaired 人工引导）：
+ * idle 显示「点按连接」行动语义，unpaired 点明「需重新配对」 */
+export function connStateNote(state: string | null | undefined): string {
+  switch (state) {
+    case "online": return "在线";
+    case "connecting": return "连接中…";
+    case "reconnecting": return "重连中…";
+    case "offline": return "已断开 · 点按重连";
+    case "unpaired": return "配对失效 · 点按重新配对";
+    default: return "点按连接";
+  }
+}
+
+/** 设备卡类型标签（COMMAND_PEERS 下发 kind 的人话映射，relay peerKind 已按 meta
+ * 自报优先派生——端上只翻译不推断） */
+export function peerKindLabel(kind: string): string {
+  switch (kind) {
+    case "phone": return "手机";
+    case "web": return "网页";
+    case "watch": return "手表";
+    default: return "设备";
+  }
+}
+
+/** 设备卡时间列（last_seen/paired_at 相对时间；0 = 未知——relay 重启后 last_seen
+ * 内存态清零，不显示「0 分钟前」假数据） */
+export function peerRelTime(ts: number, now: number = Date.now()): string {
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
+  const s = Math.max(0, Math.floor((now - ts) / 1000));
+  if (s < 60) return "刚刚";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} 小时前`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} 天前`;
+  return new Date(ts).toLocaleDateString();
+}
+
+/** 配对码输入错误分层文案（0.7 批 2 交付 3）：relay nack 的原文（「配对码无效或已
+ * 过期」）按用户动作改写——过期→引导重领；无效→引导核对；连错 ≥3 次（本地计数）
+ * 追加锁定预警（relay 侧连续 5 次错码进入 10 分钟静默期，pairFails 语义的端上
+ * 预告，relay 零改动）。其余原文透传（网络类错误不包装） */
+export function pairErrNote(raw: string | null, fails: number): string {
+  if (!raw) return "";
+  let head: string;
+  if (raw.includes("过期")) head = "配对码已过期 · 请在电脑端重新领取新码再试";
+  else if (raw.includes("无效")) head = "配对码无效 · 请核对电脑端弹出的 8 位码";
+  else return raw;
+  return fails >= 3 ? `${head}\n已连续输错 ${fails} 次 · 连续 5 次将暂停配对 10 分钟` : head;
 }
