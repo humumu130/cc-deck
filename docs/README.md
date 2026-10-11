@@ -91,6 +91,8 @@ docs/
 | 文件 | 是什么 | 给谁看 | 状态 |
 |---|---|---|---|
 | [release-system-design.md](operations/release-system-design.md) | 打包发版体系设计：三段式流程/通道模型/护栏对照 | 发版执行者 | 现行权威 |
+| [flow-hardening.md](operations/flow-hardening.md) | 需求→交付十环流程硬化：核验分级 L1-L4、实锤案例→堵漏装置对照、出包前自验清单（配套 scripts/verify-receipt-claims.mjs + check-deploy-complete.sh） | Leader/worker | 现行权威（2026-10-11 W-FLOW 批） |
+| [feedback-ledger.md](operations/feedback-ledger.md) | 用户反馈闭环台账：一行一反馈，四态收口，test.11 十五件批示范 | Leader | 现行·持续追加 |
 | [engine-adapters-smoke-checklist.md](operations/engine-adapters-smoke-checklist.md) | 引擎适配器装机冒烟清单（权威设计在 [specs/006](../specs/006-engine-adapters-spec.md)） | 装机验证者 | 现行 checklist |
 | [mixed-team-playbook.md](operations/mixed-team-playbook.md) | 混编团队协作实践手册：Leader↔PM↔worker 协作范式 | 多会话协作者 | 现行方法论 |
 | [v2-dev-plan.md](operations/v2-dev-plan.md) | V2 开发计划表（41 单·可直派 worker 版） | Leader/worker | 施工中 |
