@@ -25,7 +25,9 @@ if (args[1] === "--peek") {
     process.exit(1);
   }
 }
-if (args[0] === "-e" && String(args[1]).includes("return contents of (contents of t)") && process.env.CCR_FAKE_PEEK_FILE) {
+// W-INJECT：capture 脚本定位变量改 hitTab（find-then-act 重构），匹配串同步；
+// 旧串保留兼容历史脚本形态断言
+if (args[0] === "-e" && (String(args[1]).includes("return contents of (contents of hitTab)") || String(args[1]).includes("return contents of (contents of t)")) && process.env.CCR_FAKE_PEEK_FILE) {
   try {
     process.stdout.write(readFileSync(process.env.CCR_FAKE_PEEK_FILE, "utf8"));
   } catch {}

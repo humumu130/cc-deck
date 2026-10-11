@@ -52,6 +52,10 @@ export function withContextWindowSuffix(model: string | undefined): string | und
   if (!model) return model;
   const m = model.trim();
   if (!m || /\[1m\]$/i.test(m)) return m;
-  if (/^(glm-5|claude-sonnet-4-5|claude-opus-5|claude-haiku-4-5)/i.test(m)) return `${m}[1m]`;
+  // W-INJECT 问题⑤：claude-sonnet-4-5 硬编码漏新代性别名（claude-sonnet-5 生产实锤：
+  // ext 会话 model=claude-sonnet-5 落 200K 档、usage 346K 假 100%）。泛化到
+  // claude-{sonnet|opus|haiku}-<数字> 全代际——GLM 别名舰队统一 [1m] 开 1M 口径，
+  // 个别真小窗型号可 CCR_CONTEXT_LIMIT 一票覆盖
+  if (/^(glm-5|claude-(?:sonnet|opus|haiku)-\d)/i.test(m)) return `${m}[1m]`;
   return m;
 }

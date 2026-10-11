@@ -48,7 +48,7 @@ events.push(mk(++seq, sid, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "�
     assert(!("engine" in (reduceHistory(claudeEv).get("eng-2")?.state ?? {})), "无引擎载荷不带键（claude 缺省语义不变）");
   }
 }
-for (let i = 0; i < 350; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
+for (let i = 0; i < 1600; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` })); // W-INJECT④：撞 1500 新帽（旧 350 撞旧 300）
 for (let i = 0; i < 80; i++) events.push(mk(++seq, sid, "SESSION_UPDATED", { status: "WORKING", action_summary: `u${i}`, stats: null }));
 events.push(mk(++seq, sid, "SESSION_HEARTBEAT", { elapsed_ms: 1, action_summary: "h" }));
 events.push(mk(++seq, sid, "SESSION_DONE", { terminal_reason: "success", duration_ms: 100, stats: { files_changed: 1, lines_added: 2, lines_deleted: 3 } }));
@@ -56,7 +56,7 @@ events.push(mk(++seq, sid, "SESSION_DONE", { terminal_reason: "success", duratio
 const compacted = compactEvents(events);
 assert(!compacted.some((e) => e.type === "SESSION_HEARTBEAT"), "丢弃心跳");
 const logs = compacted.filter((e) => e.type === "SESSION_LOG");
-assert(logs.length === 300 && (logs[0].payload as { text: string }).text === "log50", "每会话日志保留最后 300 条");
+assert(logs.length === 1500 && (logs[0].payload as { text: string }).text === "log100", "每会话日志保留最后 1500 条（W-INJECT④ 300→1500 防历史回滚）");
 const nonCreatedStates = compacted.filter((e) => e.type !== "SESSION_CREATED" && e.type !== "SESSION_LOG");
 assert(nonCreatedStates.length === 50, "非 CREATED 状态事件保留最后 50 条");
 assert(compacted.some((e) => e.type === "SESSION_CREATED") && compacted.some((e) => e.type === "SESSION_DONE"), "保留 CREATED/DONE");
@@ -70,7 +70,7 @@ assert(!!rs, "会话重建");
 assert(rs!.state.title === "测试", "标题恢复");
 assert(rs!.state.status === "DONE" && rs!.state.done_reason === "success", "终态恢复");
 assert(rs!.state.stats.lines_added === 2 && rs!.state.stats.lines_deleted === 3, "统计恢复");
-assert(rs!.logs.length === 301, "时间线 = 300 日志 + 1 完成事件");
+assert(rs!.logs.length === 1501, "时间线 = 1500 日志 + 1 完成事件");
 
 // UPDATED 载荷显式 updated_at 消费（#157 起下发恒带）：水合帧≠活动时刻，重放若一律
 // 取信封 ts 会把水合时刻固化成活跃时刻——二次重启后闲置置灰（memberActivity/
@@ -152,7 +152,7 @@ console.log("compactEventsFile:");
   assert(!!r1 && r1.after < r1.before, `超阈值压缩生效（${r1?.before}→${r1?.after} 字节）`);
   const after = loadEvents(cpath);
   assert(!after.some((e) => e.type === "SESSION_HEARTBEAT"), "压缩后心跳丢弃");
-  assert(after.filter((e) => e.type === "SESSION_LOG").length === 300, "日志留最后 300 条");
+  assert(after.filter((e) => e.type === "SESSION_LOG").length === 400, "日志全保（400<1500 帽，W-INJECT④）");
   assert(after.some((e) => e.type === "SESSION_CREATED") && after.some((e) => e.type === "SESSION_DONE"), "CREATED/DONE 保留");
   assert(after.every((e, i, a) => i === 0 || a[i - 1].seq <= e.seq), "压缩后 seq 有序");
   assert(compactEventsFile(cpath, 0) === null, "已最简幂等（再压 null 不白写）");

@@ -161,32 +161,44 @@ export function buildDoScript(pid: number, command: string): string {
   return buildDoScriptExpr(pid, `"${escapeApple(command)}"`);
 }
 
+// W-INJECT 静默假成功根治：旧脚本 locate+do 全在 try 里、循环落空自然走完 exit 0——
+// CLI 的 tty 不在 Terminal.app（tmux 非默认 socket/iTerm2/VS Code 终端/tty 已换代）时
+// relay 拿到 ok:true 而消息从未落地，pending 永挂「排队中」（redbook 同族根因的残留面，
+// W-RB-FIX 只治了 tmux 宿主这一分支）。改为先定位后执行：命中才 do script（执行错误
+// 不再被 try 吞），未命中 error 非零退出 → 调用方拿到显式失败走 onInjectFail 重投/转失败
 export function buildDoScriptExpr(pid: number, expr: string): string {
   return [
     "tell application \"Terminal\"",
     `	set targetTty to do shell script "ps -o tty= -p ${pid} | tr -d '[:space:]'"`,
+    "	set hitTab to missing value",
     "	repeat with w in windows",
     "		repeat with t in tabs of w",
     "			try",
     "				if tty of t ends with targetTty then",
-    `					do script (${expr}) in t`,
+    "					set hitTab to t",
     "					exit repeat",
     "				end if",
     "			end try",
     "		end repeat",
+    "		if hitTab is not missing value then exit repeat",
     "	end repeat",
+    "	if hitTab is missing value then error \"TTY-NOT-FOUND:\" & targetTty",
+    `	do script (${expr}) in hitTab`,
     "end tell",
   ].join("\n");
 }
 
 // Automation 权限拒绝（-25211/-1743）：relay 跑在 sshd/nohup 上下文时 tell Terminal
 // 会被 TCC 拦——翻译成人话（导出供测试）。辅助功能（-1719）已不再需要，保留映射兜底旧错。
+// W-INJECT：TTY-NOT-FOUND = do-script 定位落空（CLI 不在 Terminal.app 里），同样翻译成人话
 export function mapAppleError(stderr: string): string | undefined {
   return /-25211\b|-1743\b/.test(stderr)
     ? "Mac relay 需在 Terminal 窗口内运行（sshd/nohup 上下文无权自动化 Terminal；或给对应进程授 Terminal 自动化权限）"
     : /-1719\b/.test(stderr)
       ? "需要在 Mac 系统设置→隐私与安全性→辅助功能中授权（旧 keystroke 路径遗留，do script 理论上不再需要）"
-      : undefined;
+      : /TTY-NOT-FOUND/.test(stderr)
+        ? "未在 Terminal.app 找到该会话的终端标签（CLI 可能运行在 tmux/iTerm2 等其他终端里，或进程已重启）"
+        : undefined;
 }
 
 // ---------- tmux 宿主支持（W-RB-FIX）：CLI 跑在 tmux pane 里时 Terminal.app 定位
@@ -525,15 +537,20 @@ export function buildCaptureScript(pid: number): string {
   return [
     "tell application \"Terminal\"",
     `	set targetTty to do shell script "ps -o tty= -p ${pid} | tr -d '[:space:]'"`,
+    "	set hitTab to missing value",
     "	repeat with w in windows",
     "		repeat with t in tabs of w",
     "			try",
     "				if tty of t ends with targetTty then",
-    "					return contents of (contents of t)",
+    "					set hitTab to t",
+    "					exit repeat",
     "				end if",
     "			end try",
     "		end repeat",
+    "		if hitTab is not missing value then exit repeat",
     "	end repeat",
+    "	if hitTab is missing value then error \"TTY-NOT-FOUND:\" & targetTty",
+    "	return contents of (contents of hitTab)",
     "end tell",
   ].join("\n");
 }

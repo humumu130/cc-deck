@@ -103,6 +103,8 @@ export class CloudClient {
   private phones = new Map<string, PhoneState>();
   // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
   private wanWatches = new Map<string, { lastSeq: number; active: boolean }>();
+  // W-CLOUD①：route miss 后的单次补发 resume 定时器（防环：补发成功→active→不再叠加）
+  private routeRetryTimers = new Map<string, NodeJS.Timeout>();
   private unpairedNotice = new Map<string, number>();
   // 0.4.4 跨网回传的出码端在线判定：未配对网页端不发 hello（phones 无记录），但
   // 连接 onopen 必发一帧 pair_req（空码=在场信标）。TTL 取 180s：覆盖合并码浮层的
@@ -411,8 +413,35 @@ export class CloudClient {
       for (const env of replay) this.sendSealed(dev, env);
       return;
     }
+    // W-CLOUD③：快照总量自适应夹紧。#408 只给日志上了预算（512KB），快照其余载荷
+    //（sessions/experience/rules/projects/acceptances…）不受它管——随数据增长单帧
+    // 会顶穿 CF 桥 1MiB 硬限，手机整帧收不到=hello 循环（2026-10-12 凌晨生产实锤：
+    // 手机 hello last_seq=0 反复、lastSeq 永不推进）。三级夹紧：序列化实测 >700KB
+    // 先砍半日志预算重装；仍超则裸快照（会话状态必达，日志放弃，logs_truncated
+    // 全量标记——客户端本就接受截断语义）。串行化成本 ~400KB×至多 2 次，恢复是
+    // 低频动作，可接受
     const snapSeq = this.bus.lastSeq();
-    const snapLogs = this.mgr.buildSnapshotLogs();
+    let snapLogs = this.mgr.buildSnapshotLogs();
+    let snapPayload: Record<string, unknown> | null = null;
+    const payloadSize = (p: Record<string, unknown>): number => Buffer.byteLength(JSON.stringify(p));
+    {
+      const probe: Record<string, unknown> = {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
+      };
+      if (payloadSize(probe) > 700 * 1024) {
+        snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
+        const probe2: Record<string, unknown> = {
+          sessions: this.mgr.snapshot(),
+          logs: snapLogs.logs,
+          ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
+        };
+        if (payloadSize(probe2) > 700 * 1024) {
+          snapLogs = { logs: {}, logs_truncated: { "*": -1 } };
+        }
+      }
+    }
     const snapshot: Envelope = {
       seq: snapSeq,
       session_id: "",
@@ -481,14 +510,45 @@ export class CloudClient {
     }
     // 桥告知目标手机不在线：标记下线等对方 ping/hello 恢复，避免持续向虚空加密下发
     if (f.type === "ROUTE_MISS" && f.to) {
-      const st = this.phones.get(f.to) ?? this.wanWatches.get(f.to);
+      const to = f.to; // 窄化捕获（setTimeout 闭包内 TS 不保 string）
+      const st = this.phones.get(to) ?? this.wanWatches.get(to);
       if (st?.active) {
         st.active = false;
-        console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
+        console.log(`[cloud] route miss dev=${to}, mark inactive`);
+        // W-CLOUD①：miss 后单次主动补发 resume。手机侧 fastRetry 断桥 800ms 重连 +
+        // open 即 hello——miss 常落在「手机旧连接刚死、新连接尚未注册（或刚注册但本帧
+        // 已按旧路由投递）」的窄窗；8s 后补发一发，彼时路由多半已重建，手机无需等
+        // 下一拍 hello/ping 才拿到 SNAPSHOT/补发（明早「服务端健康⇒手机必连上」语义
+        // 的服务端侧兜底）。只在仍 inactive 时补，天然防环（补发成功→active→后续
+        // miss 不再叠加；真离线设备至多多收这一帧，无风暴面）
+        //
+        // W-CLOUD①-补：账本回退。onEnv 在帧交付桥即推进 st.lastSeq（此时无法感知
+        // 桥侧路由失败），ROUTE_MISS 异步回来时 in-flight 帧已黑洞但账本已记「达」——
+        // 按账本重放=空集，miss 窗口内事件永久丢失（005 测试实测：probe seq=5、账本
+        // 5、replayAfter(5)=∅）。重放起点回退 20 帧：覆盖多帧在飞窗，客户端按自身
+        // last_seq 去重，多发无害。下限钳 1：0 会落 resumePhone 的「全量重建」语义
+        //（SNAPSHOT 的 logs 来自 mgr 会话，直发 bus 的事件不在其中，照样丢）；钳 1
+        // 走 replay 路径（整段缓冲 ≤500 帧有界）——缓冲为空的极端由 replay 空集
+        // 自然无害（无历史可补即无可丢）
+        const retryFrom = Math.max(1, st.lastSeq - 20);
+        if (this.phones.has(to)) {
+          const prev = this.routeRetryTimers.get(to);
+          if (prev) clearTimeout(prev);
+          const t = setTimeout(() => {
+            this.routeRetryTimers.delete(to);
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+            const s2 = this.phones.get(to);
+            if (!s2 || s2.active) return; // hello/ping 已激活：无事可做
+            console.log(`[cloud] route retry after miss: resume ${to} from_seq=${retryFrom}`);
+            this.resumePhone(to, retryFrom);
+          }, 8_000);
+          t.unref?.();
+          this.routeRetryTimers.set(to, t);
+        }
       }
       // 0.4.4：sighting 也一并作废——目标已不在线，别让 180s 窗口内的推送假成功
       //（页面 pending 期会重发信标，误删可快速自愈）
-      this.wbSightings.delete(f.to);
+      this.wbSightings.delete(to);
       return;
     }
     // #373 /wan 手表明文透传信封（桥可信通道）：{t:"wan", from, frame:"<relay协议明文JSON文本>"}
@@ -766,8 +826,35 @@ export class CloudClient {
       for (const env of replay) this.sendWan(dev, env);
       return;
     }
+    // W-CLOUD③：快照总量自适应夹紧。#408 只给日志上了预算（512KB），快照其余载荷
+    //（sessions/experience/rules/projects/acceptances…）不受它管——随数据增长单帧
+    // 会顶穿 CF 桥 1MiB 硬限，手机整帧收不到=hello 循环（2026-10-12 凌晨生产实锤：
+    // 手机 hello last_seq=0 反复、lastSeq 永不推进）。三级夹紧：序列化实测 >700KB
+    // 先砍半日志预算重装；仍超则裸快照（会话状态必达，日志放弃，logs_truncated
+    // 全量标记——客户端本就接受截断语义）。串行化成本 ~400KB×至多 2 次，恢复是
+    // 低频动作，可接受
     const snapSeq = this.bus.lastSeq();
-    const snapLogs = this.mgr.buildSnapshotLogs();
+    let snapLogs = this.mgr.buildSnapshotLogs();
+    let snapPayload: Record<string, unknown> | null = null;
+    const payloadSize = (p: Record<string, unknown>): number => Buffer.byteLength(JSON.stringify(p));
+    {
+      const probe: Record<string, unknown> = {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
+      };
+      if (payloadSize(probe) > 700 * 1024) {
+        snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
+        const probe2: Record<string, unknown> = {
+          sessions: this.mgr.snapshot(),
+          logs: snapLogs.logs,
+          ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
+        };
+        if (payloadSize(probe2) > 700 * 1024) {
+          snapLogs = { logs: {}, logs_truncated: { "*": -1 } };
+        }
+      }
+    }
     const snapshot: Envelope = {
       seq: snapSeq,
       session_id: "",
@@ -790,6 +877,8 @@ export class CloudClient {
     this.unsubscribe();
     if (this.timer) clearTimeout(this.timer);
     if (this.hbTimer) clearInterval(this.hbTimer);
+    for (const t of this.routeRetryTimers.values()) clearTimeout(t);
+    this.routeRetryTimers.clear();
     this.ws?.close();
   }
 }

@@ -24,7 +24,9 @@ function assert(cond: boolean, msg: string): void {
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // 等注入落盘用轮询而非固定 wait：高负载下 fake-injector 子进程 spawn 可达秒级，
 // 固定窗口（800/1500ms）反复偶发假阴性（18/21/30/31/32 段连续 flake 实录）
-const waitLog = async (pred: () => boolean, ms = 4000): Promise<void> => {
+// 默认窗 4s→8s（W-INJECT）：同机负载（并行套件/生产 relay/会话进程）下 fake-injector
+// spawn 可达秒级（本文件头注释前科），4s 窗跑出假阴性——只影响等待时长，不断言弱化
+const waitLog = async (pred: () => boolean, ms = 8000): Promise<void> => {
   const end = Date.now() + ms;
   while (Date.now() < end && !pred()) await wait(100);
 };
@@ -99,7 +101,11 @@ const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
 let cloudOnline = false; // 33 段置 true：云通道手机计入"在线"门控
-const { bridge } = startServer(bus, mgr, cfg, { holdMs: 1200, questionHoldMs: 800, gateToolsRaw: "Bash,Edit", cloudHasPhones: () => cloudOnline });
+// holdMs 1200→5000（W-INJECT）：17.5 段从 PreToolUse 到 CONTINUE 有 600ms 固定等待+ack
+// 往返，同机高负载（生产 relay/并行套件/会话进程）下 >1200ms 即挂起超时自动放行，CONTINUE
+// 撞「no such pending request」假失败（mine 三跑两挂、base 也挂过同族 29 段实录）。
+// 只动套件参数，生产默认 590s 不变
+const { bridge } = startServer(bus, mgr, cfg, { holdMs: 5000, questionHoldMs: 800, gateToolsRaw: "Bash,Edit", cloudHasPhones: () => cloudOnline });
 await wait(300);
 
 const http = `http://127.0.0.1:${cfg.port}`;
@@ -346,7 +352,9 @@ const renId = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "我�
 const ack23 = await waitAck(renId);
 assert(ack23.ok, "RENAME acked");
 await wait(150);
-const upd23 = events.filter((e) => e.type === "SESSION_UPDATED").at(-1) as Envelope<"SESSION_UPDATED", { title?: string; title_locked?: boolean }> | undefined;
+// W-INJECT：pid 帧是新增的合法 UPDATED 帧型（setExternalCliPid 变更即落帧），可能排
+// 在 rename 帧之后——断言改取「最后一个带 title 的帧」，不再假设 rename 帧是最新帧
+const upd23 = [...events].reverse().find((e) => e.type === "SESSION_UPDATED" && (e.payload as { title?: string }).title !== undefined) as Envelope<"SESSION_UPDATED", { title?: string; title_locked?: boolean }> | undefined;
 assert(upd23?.payload.title === "我的会话" && upd23?.payload.title_locked === true, "UPDATE carries title + title_locked");
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.title === "我的会话", "state renamed");
 
@@ -1392,12 +1400,12 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
       // ps 的 tty 列右补空格：定位命令必须 tr 掉，否则 ends with 永远失配（注入静默无效的根因）
       assert(s1.includes(`ps -o tty= -p 5555 | tr -d '[:space:]'`), "42 strips ps trailing space before tty match");
       assert(s1.includes("tty of t ends with targetTty"), "42 selects tab by tty");
-      assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in t`), "42 do script literal escapes quotes and backslashes");
+      assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in hitTab`), "42 do script literal escapes quotes and backslashes");
       assert(!s1.includes("System Events") && !s1.includes("keystroke"), "42 no System Events / keystroke");
       assert(!s1.includes("frontmost") && !s1.includes("activate"), "42 no focus stealing");
       // ② 换行折叠为单行 do script
       assert((await injectText(5555, "第一行\n第二行")).ok, "42 multiline inject ok");
-      assert(appleLog().at(-1)!.includes('do script ("第一行 第二行") in t'), "42 newlines folded to single do script");
+      assert(appleLog().at(-1)!.includes('do script ("第一行 第二行") in hitTab'), "42 newlines folded to single do script");
       // ③ 超长文本单次注入（do script 无 keystroke 的可靠性切分问题）
       const before3 = appleLog().length;
       assert((await injectText(5555, "长".repeat(801) + "尾")).ok, "42 long text inject ok");
@@ -1565,7 +1573,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
       const { captureConsoleBottom, buildCaptureScript } = await import("../src/injector.js");
       const cap8 = await captureConsoleBottom(5555, 5);
       assert(cap8?.length === 5 && cap8[0] === "row25" && cap8[4] === "row29", "45 mac capture takes tail rows via contents");
-      assert(buildCaptureScript(5555).includes("return contents of (contents of t)") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty (double deref for real value)");
+      assert(buildCaptureScript(5555).includes("return contents of (contents of hitTab)") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty (double deref for real value)");
+      // W-INJECT：capture 定位落空必须显式报错（TTY-NOT-FOUND），不再静默 exit 0
+      assert(buildCaptureScript(5555).includes("TTY-NOT-FOUND"), "W-INJECT capture script errors loudly on tty miss");
     } finally {
       delete process.env.CCR_TEST_PLATFORM;
       delete process.env.CCR_OSASCRIPT_CMD;
@@ -1781,7 +1791,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr2.setAgentFactory((cwd, model, cb, prompt, opts) => { created2++; return makeFakeFactory()(cwd, model, cb, prompt, opts); });
   mgr2.adopt(replayedFor(mgr));
   const applied = mgr2.applyPinned();
-  assert(applied.saved === 2, "46c applyPinned 休眠登记 2 个置顶会话（不拉起）");
+  assert(applied.saved === 2, `46c applyPinned 休眠登记 2 个置顶会话（不拉起，got ${applied.saved}）`);
   assert(created2 === 0, "46c 重启登记零 SDK 拉起（工厂未被调用）");
   const stA2 = mgr2.snapshot().find((s) => s.session_id === sidA)!;
   assert(stA2.pinned === true && stA2.saved === true, "46c 休眠卡 pinned+saved");
@@ -1932,6 +1942,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   await waitLog(() => enters111() >= 1, 5000);
   assert(enters111() >= 1, "111 stuck text compensated by fast verify");
   assert(Date.now() - t0 < 2500, `111 verify compensation is fast (${Date.now() - t0}ms < 2500ms, watchdog earliest 2s+phase)`);
+  // W-INJECT：submit-enter（静默快路径）可能先于 #111 验证链满足上方 enter 计数——
+  // 日志断言前等验证链日志落地（600ms 级），不再隐含「enter 与日志同拍」假设
+  await waitLog(() => sysLogFrom("#111 主动验证", 0), 5000);
   assert(sysLogFrom("#111 主动验证", 0), "111 verify compensation logged");
   // 持久滞留（不晋升、框不净空）→ 验证 2 轮是 #111 本体、时钟确定；第 3 发（看门狗，
   // 共享 tries 计数）直接调 sweep 消 5s 节拍相位（49 段先例），3 次后 given_up 停手
@@ -1961,7 +1974,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留丙", B, "  ⏵⏵ bypass permissions on"].join("\n"));
   const v3 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留丙" });
   assert((await waitAck(v3)).ok, "111 third msg acked");
-  await waitLog(() => enters111() >= entersAfterCap + 1, 5000);
+  // W-INJECT：同上——enter 可由静默 submit-enter 先打（无日志），新鲜补偿日志等验证链/看门狗落地
+  await waitLog(() => (enters111() >= entersAfterCap + 1) && (sysLogFrom("#111 主动验证", evIdx3) || sysLogFrom("已补发回车", evIdx3)), 6000);
   assert(enters111() >= entersAfterCap + 1, "111 post-promotion stuck still gets fast verify (watchdog reset)");
   // reset 判别放宽（#84 CI flaky）：本质是「tries 回 1 后的新鲜补发日志」——任何路径
   // tries=1/2 都打日志，无 reset 时 tries≥4 静默。CI 慢机注入链可超 2s 首窗阈值，

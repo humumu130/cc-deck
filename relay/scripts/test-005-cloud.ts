@@ -222,6 +222,64 @@ assert(
   "已配对 005 端仍正常收到该事件",
 );
 
+// ---------- 7) W-CLOUD①：route miss → 8s 主动补发 resume（服务端健康⇒手机必连上） ----------
+// 形状复刻生产实锤（2026-10-11 深夜 relay-service.log）：设备 ws 断开（桥 unregister 路由
+// 消失）→ relay 恰在此刻向它广播投递 → 桥回 ROUTE_MISS → 旧实现 mark inactive 后只能
+// 等设备下一拍 hello/ping；新实现在 8s 后设备重连注册（未发 hello，复刻 fastRetry open→
+// hello 在路上的时序）时主动 resume——设备在新连接上直接收帧，无需自己开口要
+{
+  const kp2 = W!.genKp();
+  const dev2 = W!.devId(kp2.publicKey, "wb");
+  const inbox2: Record<string, unknown>[] = [];
+  const attach2 = (ws: WebSocket) => {
+    ws.on("message", (raw) => {
+      try {
+        const f = JSON.parse(String(raw)) as { data?: SealedBox };
+        if (!f.data) return;
+        const inner = W!.unseal<Record<string, unknown>>(f.data, identity.keypair.publicKey, kp2.secretKey);
+        if (inner) inbox2.push(inner);
+      } catch {}
+    });
+    ws.on("error", () => undefined);
+  };
+  let ws2 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${dev2}`);
+  attach2(ws2);
+  await new Promise<void>((r) => ws2.on("open", r));
+  const { code: code2 } = pairCodes.issue();
+  ws2.send(JSON.stringify({ to: identity.relayDev, data: { t: "pair_req", code: code2, pubkey: kp2.publicKey, name: "wb-retry" } }));
+  assert(await waitFor(() => inbox2.some((m) => m.t === "pair_ack")), "⑦ 设备2 输码配对");
+  const send2 = (obj: unknown) => ws2.send(JSON.stringify({ to: identity.relayDev, data: W!.seal(obj, identity.keypair.publicKey, kp2.secretKey) }));
+  send2({ t: "hello", last_seq: 0 });
+  assert(await waitFor(() => inbox2.some((m) => m.type === "SNAPSHOT")), "⑦ 设备2 hello 全量快照（激活态）");
+  // 断开（桥 unregister → relay 侧路由失效）→ 立即广播一条事件 → relay 投递吃 ROUTE_MISS
+  const cloudAny = cloud as unknown as { phones: Map<string, { active: boolean; lastSeq: number }> };
+  const nBefore = inbox2.length;
+  ws2.close();
+  await wait(300); // 桥侧 unregister 落定
+  bus.emit("sess-route-retry", "SESSION_LOG", { kind: "system", text: "005-route-miss-probe" });
+  await wait(500); // relay 投递 → 桥 ROUTE_MISS → mark inactive + 8s 补发定时器
+  console.log(`[dbg⑦] after miss: phones.has(dev2)=${cloudAny.phones.has(dev2)} active=${cloudAny.phones.get(dev2)?.active} lastSeq=${cloudAny.phones.get(dev2)?.lastSeq}`);
+  // 8s 窗口内重连注册（复刻 fastRetry：只重连，不发 hello——旧实现在此形态下永远收不到帧）
+  ws2 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${dev2}`);
+  attach2(ws2);
+  await new Promise<void>((r) => ws2.on("open", r));
+  const nAtReconnect = inbox2.length;
+  assert(
+    await waitFor(() => inbox2.length > nAtReconnect, 14_000),
+    "⑦ route miss 后重建设备在 8s 补发窗口内主动收到 resume 帧（无需 hello/ping）",
+  );
+  // 回退越界（retryFrom=0）→ resumePhone 落全量 SNAPSHOT；探针事件在快照 logs 里
+  //（账本连续性=手机最终看得到 miss 期间的事件，帧形态不限）
+  assert(
+    inbox2.slice(nBefore).some((m) =>
+      (m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "005-route-miss-probe") ||
+      (m.type === "SNAPSHOT" && Object.values((m.payload as { logs?: Record<string, { text?: string }[]> }).logs ?? {}).some((ls) => ls.some((l) => l.text === "005-route-miss-probe"))),
+    ),
+    "⑦ 补发携带 miss 期间的事件（SNAPSHOT/logs 或增量帧，账目连续）",
+  );
+  ws2.close();
+}
+
 // ---------- 清理 ----------
 rogueWs.close();
 webWs.close();

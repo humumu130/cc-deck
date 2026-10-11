@@ -672,6 +672,16 @@ function dutyContinuationMs(): number {
 // sessions/信封余量充足（<900KB）；条数与字节双帽保证历史再大单帧也确定性有界。
 const SNAPSHOT_LOGS_BUDGET_BYTES = 512 * 1024;
 const SNAPSHOT_LOGS_PER_SESSION = 50;
+// W-INJECT 问题④：LAN 直连宽窗版（ws-server 用）。#408 的 512KB/50 是 CF 桥 1MiB 单帧
+// 硬限下的云端安全值——LAN ws 无此限（maxPayload 只管入站），重启/冷启动后面板转录
+// 被每会话 50 条窗口替换=用户可见「历史回滚数小时」（生产实锤）。云端默认值不动
+const SNAPSHOT_LOGS_BUDGET_BYTES_LAN = 4 * 1024 * 1024;
+const SNAPSHOT_LOGS_PER_SESSION_LAN = 1200;
+
+export const SNAPSHOT_LOGS_LAN = {
+  budgetBytes: SNAPSHOT_LOGS_BUDGET_BYTES_LAN,
+  perSessionCap: SNAPSHOT_LOGS_PER_SESSION_LAN,
+};
 
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
@@ -1412,6 +1422,9 @@ export class SessionManager {
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
       existing.state.historical = false;
+      // W-INJECT：hook 回归 = 用户回到那个终端干活，#50 idle 归档沉底同步翻案
+      //（不清的话 reviveAliveExternals 的豁免挡着，卡面停在「历史」）
+      existing.state.idle_archived = undefined;
       // #53 兜底：手动命名权威在 title-overrides.json（该会话改名帧可能已被压缩挤掉）
       const ov = this.titleOverrides[id];
       if (ov && existing.state.title !== ov) {
@@ -1974,7 +1987,11 @@ export class SessionManager {
     if (model) s.state.model = model;
     if (contextUsage !== undefined) {
       s.state.context_usage = contextUsage;
-      s.state.context_limit = contextLimitOf(model ?? s.state.model);
+      // W-INJECT 问题⑤：外部会话也走 Effective 链——转录 model 是别名裸名
+      //（claude-sonnet-5 等，GLM 别名舰队实跑 1M 窗），裸名直查落 200K 档=水位假满、
+      // context-watchdog 误判压缩。W-CTXFIX B1 的「外部例外」前提（名字=CLI 实际
+      // 口径）在别名方案下失真，统一按重挂规则升档
+      s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
     }
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
@@ -1983,7 +2000,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       usage,
       ...(model ? { model } : {}),
-      ...(contextUsage !== undefined ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {}),
+      ...(contextUsage !== undefined ? { context_usage: contextUsage, context_limit: contextLimitOfEffective(model ?? s.state.model) } : {}), // W-INJECT⑤
       updated_at: s.state.updated_at,
     });
   }
@@ -2145,7 +2162,7 @@ export class SessionManager {
       s.logs[i] = entry;
     } else {
       s.logs.push(entry);
-      if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
+      if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500); // W-INJECT④：500→1500 对齐重放/文件窗
     }
     this.bus.emit(id, "SESSION_LOG", entry);
   }
@@ -2167,6 +2184,16 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s || s.state.cli_pid === pid) return;
     s.state.cli_pid = pid;
+    // W-INJECT：pid 帧随事件流落盘。此前 cli_pid 纯内存（不进任何事件），重启重放时
+    // state.cli_pid 恒空 → history.ts 的活体判定（pid 存活则保持 WORKING 不标 historical）
+    // 永远走不到 → 全部活 CLI 误判「会话已结束」+ historical 只读（2026-10-11 用户实锤：
+    // 重启后活跃会话变历史只读收不到消息）。载荷按部分帧纪律带 status/action_summary
+    //（#93：客户端直采 payload.status，缺了会覆写成 undefined 崩渲染）
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      cli_pid: pid,
+    });
   }
 
   clearExternalCliPid(id: string): void {
@@ -2838,7 +2865,25 @@ export class SessionManager {
           // saved 保留可重试
           const s = this.require(cmd.payload.session_id);
           if (s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持恢复" };
+            // W-INJECT：外部会话恢复 = 重启收养误标 historical 的手动翻案通道（此前
+            // 一律「外部会话不支持恢复」拒死，客户端对误标只读卡毫无办法）。CLI 进程
+            // 活着 → 清只读标记即恢复可交互（进程在，无需也不应新开终端）；进程真死
+            // → 明确报错。真实「拉起+投递」在发消息路径的 resumeExternal（恢复语义与
+            // 消息投递绑定，点卡不该凭空开窗）
+            const pid = s.state.cli_pid;
+            let alive = false;
+            if (pid) {
+              try { process.kill(pid, 0); alive = true; } catch (e) {
+                alive = (e as NodeJS.ErrnoException).code === "EPERM";
+              }
+            }
+            if (!alive) {
+              return { command_id: cmd.command_id, ok: false, error: "该会话的终端进程已结束，无法在此恢复；在电脑终端里 claude --resume 后发消息即可重新接入" };
+            }
+            s.state.historical = false;
+            s.state.idle_archived = undefined;
+            this.emitUpdated(s, true);
+            return { command_id: cmd.command_id, ok: true };
           }
           if (s.agent && !s.agent.ended) {
             if (s.state.saved) {
@@ -3444,7 +3489,7 @@ export class SessionManager {
           if (i >= 0) managed.logs[i] = entry;
           else {
             managed.logs.push(entry);
-            if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+            if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
           }
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
@@ -3495,7 +3540,7 @@ export class SessionManager {
             // 不在/被删」（记录钉死绝对路径，UI 开关切不回去）——两种成因都给指引
             const entry = { kind: "system" as const, text: "会话记录不在当前配置的家目录——若改过 CCR_EMPLOYEE_CONFIG_DIR 请切回原值再试；也可能是该会话记录的独立家目录已被删除（原记录无损保留，可另派新单）", ts: Date.now() };
             managed.logs.push(entry);
-            if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+            if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
             this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           }
           this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
