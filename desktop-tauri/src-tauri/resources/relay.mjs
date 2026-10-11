@@ -10338,8 +10338,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join36, sep as sep8 } from "node:path";
-import { writeFileSync as writeFileSync23, openSync as openSync5, readFileSync as readFileSync31, rmSync as rmSync5, existsSync as existsSync26, readdirSync as readdirSync13, statSync as statSync12 } from "node:fs";
+import { join as join37, sep as sep8 } from "node:path";
+import { writeFileSync as writeFileSync24, openSync as openSync5, readFileSync as readFileSync32, rmSync as rmSync5, existsSync as existsSync27, readdirSync as readdirSync14, statSync as statSync12 } from "node:fs";
 import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -10412,6 +10412,25 @@ function resolveEmployeeHome(dataDir2, freshInstall) {
     value: def.employeeHome ? parseEmployeeConfigDir("auto", dataDir2) : null,
     source: "default"
   };
+}
+var EMPLOYEE_HOME_SEED = `# \u96C7\u5458\u72EC\u7ACB\u5BB6\u8BF4\u660E\uFF08\u7CFB\u7EDF\u751F\u6210\uFF0C\u53EF\u5220\u9664\uFF09
+
+\u672C\u76EE\u5F55\u662F cc-deck \u96C7\u5458\u4F1A\u8BDD\u7684\u72EC\u7ACB\u914D\u7F6E\u5BB6\uFF1A\u7528\u6237\u5168\u5C40 CLAUDE.md\uFF08~/.claude/CLAUDE.md\uFF09**\u4E0D\u4F1A**\u5728\u6B64\u81EA\u52A8\u52A0\u8F7D\u2014\u2014\u4E2A\u4EBA\u5168\u5C40\u7EAA\u5F8B\uFF08\u81EA\u6D4B\u8981\u6C42\u3001\u63AA\u8F9E\u519B\u89C4\u7B49\uFF09\u5982\u9700\u5BF9 worker \u751F\u6548\uFF0C\u8BF7\u4EBA\u5DE5\u62F7\u8D1D\u5230\u672C\u6587\u4EF6\u3002
+\u56E2\u961F\u89C4\u5219\uFF08\u7528\u6237\u5BA1\u5B9A\u7684\u7EA2\u7EBF\uFF09\u4E0D\u4F9D\u8D56\u672C\u6587\u4EF6\uFF1A\u968F\u6D3E\u5355\u81EA\u52A8\u6CE8\u5165\uFF08~/.cc-deck/org/rules.json\uFF09\u3002
+`;
+function ensureEmployeeHomeSeed(dataDir2) {
+  try {
+    const st2 = resolveEmployeeHome(dataDir2);
+    if (!st2.enabled || !st2.value) return false;
+    if (existsSync(join(st2.value, "CLAUDE.md"))) return false;
+    mkdirSync(st2.value, { recursive: true });
+    writeFileSync(join(st2.value, "CLAUDE.md"), EMPLOYEE_HOME_SEED, "utf-8");
+    console.log(`[settings] \u96C7\u5458\u5BB6\u65AD\u94FE\u8BF4\u660E\u5DF2\u79CD\u5B50\uFF1A${join(st2.value, "CLAUDE.md")}\uFF08\u7528\u6237\u5168\u5C40 CLAUDE.md \u4E0D\u5728\u72EC\u7ACB\u5BB6\u81EA\u52A8\u52A0\u8F7D\uFF09`);
+    return true;
+  } catch (e) {
+    console.warn(`[settings] \u96C7\u5458\u5BB6\u79CD\u5B50\u5199\u5165\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF0C\u4E0D\u5F71\u54CD\u542F\u52A8\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
 }
 
 // src/config.ts
@@ -10905,10 +10924,10 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { randomUUID as randomUUID9 } from "node:crypto";
-import { appendFileSync as appendFileSync3, existsSync as existsSync21, mkdirSync as mkdirSync16, readFileSync as readFileSync24, realpathSync as realpathSync3, statSync as statSync8, writeFileSync as writeFileSync16 } from "node:fs";
+import { randomUUID as randomUUID10 } from "node:crypto";
+import { appendFileSync as appendFileSync3, existsSync as existsSync22, mkdirSync as mkdirSync17, readFileSync as readFileSync25, realpathSync as realpathSync3, statSync as statSync8, writeFileSync as writeFileSync17 } from "node:fs";
 import { homedir as homedir12 } from "node:os";
-import { isAbsolute as isAbsolute7, join as join30, resolve as resolve8, sep as sep6 } from "node:path";
+import { isAbsolute as isAbsolute7, join as join31, resolve as resolve8, sep as sep6 } from "node:path";
 
 // src/artifacts.ts
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync as readFileSync5, realpathSync } from "node:fs";
@@ -13600,19 +13619,32 @@ var ORG_CLAUDE_MD_M2P1_SECTION = `${ORG_CLAUDE_MD_M2P1_MARKER}\uFF082026-09-28 \
   \u90FD\u8981\u843D \`org hold <\u7EC4id|-> "<\u7406\u7531>" "<\u89E3\u9664\u6761\u4EF6>"\`\u3002\u6682\u7F13\u53EA\u8BB0\u5728\u4F1A\u8BDD\u4EFB\u52A1\u6E05\u5355\u91CC =
   relay \u91CD\u542F\u5373\u84B8\u53D1\u3001org status \u91CC\u770B\u4E0D\u89C1 = \u7B49\u4E8E\u6CA1\u8BF4\u3002
 `;
+var ORG_CLAUDE_MD_RULES_MARKER = "## \u56E2\u961F\u89C4\u5219\u5E93";
+var ORG_CLAUDE_MD_RULES_SECTION = `${ORG_CLAUDE_MD_RULES_MARKER}\uFF082026-10-11 \u8D77\uFF0CW-RULES1\uFF09
+
+- \u540C\u76EE\u5F55 rules.json \u662F\u7528\u6237\u5BA1\u5B9A\u7684\u56E2\u961F/\u9879\u76EE\u7EA2\u7EBF\uFF08audience \u4E09\u6863 all/leader/role:xxx\uFF09\uFF0C
+  \u6BCF\u6B21\u6D3E\u5355\u81EA\u52A8\u6CE8\u5165\u5BF9\u5E94 worker\u2014\u2014\u89C4\u5219\u662F\u7EA2\u7EBF\u4E0D\u662F\u53C2\u8003\uFF0Cworker \u5FC5\u987B\u9075\u5B88\u3002
+- \u67E5\u770B\uFF1A\`org rule list\`\u3002\u7ACB\u65B0\u89C4\u5219\uFF1A\u7528\u6237 CLI \u76F4\u5199 \`org rule append "<\u4E00\u53E5\u8BDD>"\`\uFF1B
+  \u4F60\uFF08Leader\uFF09\u8BA4\u4E3A\u8BE5\u7ACB\u89C4\u65F6\u53EA\u63D0\u6848\u4E0D\u4EE3\u7ACB\u2014\u2014\u89C4\u5219\u53D8\u66F4\u4F18\u5148\u8BF7\u7528\u6237\u62CD\u677F\uFF0C\u7528\u6237\u7EA2\u7EBF\u7684\u4E3B\u6743\u5728\u7528\u6237\u3002
+- \u6539\u89C4\u5219\u7528 \`org rule supersede <id> "<\u65B0\u6587\u672C>"\`\uFF08\u65E7\u6761\u505C\u6CE8\u7559\u75D5\uFF09\uFF0C\u9000\u5F79\u7528
+  \`org rule retire <id>\`\uFF1B\u7ECF\u9A8C\u5E93\u53CD\u590D\u547D\u4E2D\u7684\u6761\u76EE\u53EF\u5347\u683C \`org rule promote <\u7ECF\u9A8Cid>\`
+  \uFF08\u590D\u5236\u4E3A\u89C4\u5219\uFF0C\u6E90\u7ECF\u9A8C\u4FDD\u7559\uFF09\u3002
+`;
 function ensureOrgClaudeMd(dir) {
   const p = orgFilePath("CLAUDE.md", dir);
   if (!existsSync12(p)) {
-    writeFileSync5(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION, "utf-8");
+    writeFileSync5(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION + "\n" + ORG_CLAUDE_MD_RULES_SECTION, "utf-8");
     return "created";
   }
   const cur = readFileSync10(p, "utf-8");
   const hasM2 = cur.includes(ORG_CLAUDE_MD_M2_MARKER);
   const hasM2P1 = cur.includes(ORG_CLAUDE_MD_M2P1_MARKER);
-  if (hasM2 && hasM2P1) return "exists";
+  const hasRules = cur.includes(ORG_CLAUDE_MD_RULES_MARKER);
+  if (hasM2 && hasM2P1 && hasRules) return "exists";
   const parts = [cur.trimEnd()];
   if (!hasM2) parts.push(ORG_CLAUDE_MD_M2_SECTION);
   if (!hasM2P1) parts.push(ORG_CLAUDE_MD_M2P1_SECTION);
+  if (!hasRules) parts.push(ORG_CLAUDE_MD_RULES_SECTION);
   writeFileSync5(p, parts.join("\n\n"), "utf-8");
   return "upgraded";
 }
@@ -13714,6 +13746,11 @@ var ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org exp import <path>                          \u5BFC\u5165\u5907\u4EFD\uFF08normKey \u5408\u5E76\u53BB\u91CD\uFF1A\u649E\u8F66 bump \u4E0D\u8986\u76D6\uFF1B\u574F\u6587\u4EF6/\u8D85 5MB \u6574\u5355\u62D2\u7EDD\u96F6\u5199\u5165\uFF09
 #   org role list                                  \u5C97\u4F4D\u6A21\u677F\u5E93\u67E5\u770B\uFF08\u5185\u7F6E+\u7528\u6237\u5408\u5E76\u89C6\u56FE\uFF0CW-KWP1\uFF1B\u7528\u6237\u5E93\u540C slug \u8986\u76D6\u5185\u7F6E\uFF09
 #   org role show <slug>                           \u5355\u5C97\u4F4D\u6A21\u677F\u8BE6\u60C5\uFF08name/audience/rows \u9010\u884C\uFF09
+#   org rule append <text> [audience] [scope]      \u7ACB\u56E2\u961F\u89C4\u5219\uFF08W-RULES1\uFF1Baudience=all|leader|role:worker\u2026\uFF0Cscope=team|\u9879\u76EE\u8DEF\u5F84\uFF0C\u7528\u6237\u76F4\u5199\u514D\u5361\uFF09
+#   org rule list [status] [audience|scope]        \u89C4\u5219\u5E93\u67E5\u8BE2\uFF08active/retired/superseded\u3001all/leader/role:x\u3001team/\u8DEF\u5F84\uFF09
+#   org rule retire <id>                           \u89C4\u5219\u9000\u5F79\uFF08\u505C\u6CE8\u53EF\u6EAF\uFF0C\u4E0D\u7269\u7406\u5220\uFF09
+#   org rule supersede <id> <text> [audience] [scope]  \u66FF\u4EE3\uFF08\u65B0\u6761\u5165\u5E93+\u65E7\u6761\u505C\u6CE8\u6307\u65B0\uFF09
+#   org rule promote <exp_id> [text] [audience] [scope]  \u7ECF\u9A8C\u5347\u683C\u4E3A\u89C4\u5219\uFF08\u590D\u5236\u975E\u642C\u79FB\uFF0Cpromoted_from \u6EAF\u6E90\uFF09
 # \u76F8\u5BF9\u8DEF\u5F84 anchor \u4EE5\u5F53\u524D\u76EE\u5F55\u8865\u5168\uFF08deliver \u540C\u53E3\u5F84\uFF09\u3002\u7531 relay \u7269\u5316\u4E0E\u5347\u7EA7\uFF08ensureOrgCli\uFF09\u3002
 set -euo pipefail
 # \u51B2\u523A F-09\uFF1ACCR_DATA_DIR/CCR_PORT/CCR_TOKEN \u73AF\u5883\u8986\u76D6\uFF08\u6C99\u76D2/\u591A\u5B9E\u4F8B\u9694\u79BB\uFF09\u3002
@@ -13726,7 +13763,7 @@ port="\${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1
 : "\${port:=8787}"
 
 action="\${1:-}"
-[ -z "$action" ] && { sed -n '3,27p' "$0" | sed 's/^# //' >&2; exit 1; }
+[ -z "$action" ] && { sed -n '3,33p' "$0" | sed 's/^# //' >&2; exit 1; }
 shift || true
 
 abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
@@ -13913,6 +13950,64 @@ elif op == "show":
     d={"action":"role-show","slug":args[0]}
 else:
     print("\u672A\u77E5 role \u5B50\u547D\u4EE4: "+op, file=sys.stderr); sys.exit(1)
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  rule)
+    # W-RULES1 \u56E2\u961F\u89C4\u5219\u5E93\uFF08~/.cc-deck/org/rules.json\uFF09\uFF1Aappend \u76F4\u5199\u5E26 direct \u6807\u8BB0
+    #\uFF08\u7528\u6237 CLI \u4E3B\u6743\u9762\u514D\u5361\uFF1Bagent \u63D0\u6848\u8D70\u65E0 direct \u7684 HTTP \u9762\u51FA\u786E\u8BA4\u5361\uFF09\u3002
+    # audience: all|leader|role:worker|role:pm|role:team_pm|role:review|role:review_pm
+    # scope: team | \u9879\u76EE\u76EE\u5F55\u8DEF\u5F84\uFF08\u76F8\u5BF9\u8DEF\u5F84\u6309\u5F53\u524D\u76EE\u5F55\u8865\u5168\uFF09
+    [ $# -ge 1 ] || { echo "\u7528\u6CD5: org rule append|list|retire|supersede|promote ..." >&2; exit 1; }
+    op="$1"; shift
+    body="$(python3 - "$op" "$@" <<'PY'
+import json, sys, os
+op = sys.argv[1]
+args = sys.argv[2:]
+def aud(v):
+    return v.lower() if v else ""
+def scope(v):
+    if not v:
+        return ""
+    if v == "team":
+        return "team"
+    if v.startswith("project:"):
+        return v
+    if v.startswith("/"):
+        return "project:" + v.rstrip("/")
+    return "project:" + os.path.abspath(v).rstrip("/")
+if op == "append":
+    if len(args) < 1:
+        print("\u7528\u6CD5: org rule append <text> [audience] [scope]", file=sys.stderr); sys.exit(1)
+    d={"action":"rule-append","text":args[0],"direct":True,"created_by":"user"}
+    if len(args)>1 and args[1]: d["audience"]=aud(args[1])
+    if len(args)>2 and args[2]: d["scope"]=scope(args[2])
+elif op == "list":
+    d={"action":"rule-list"}
+    for a in args:
+        if a in ("active","retired","superseded"): d["status"]=a
+        elif a=="team" or a.startswith("project:") or a.startswith("/"): d["scope"]=scope(a)
+        else: d["audience"]=aud(a)
+elif op == "retire":
+    if len(args) < 1:
+        print("\u7528\u6CD5: org rule retire <id>", file=sys.stderr); sys.exit(1)
+    d={"action":"rule-retire","id":args[0]}
+elif op == "supersede":
+    if len(args) < 2:
+        print("\u7528\u6CD5: org rule supersede <\u65E7id> <\u65B0text> [audience] [scope]", file=sys.stderr); sys.exit(1)
+    d={"action":"rule-supersede","id":args[0],"text":args[1],"created_by":"user"}
+    if len(args)>2 and args[2]: d["audience"]=aud(args[2])
+    if len(args)>3 and args[3]: d["scope"]=scope(args[3])
+elif op == "promote":
+    if len(args) < 1:
+        print("\u7528\u6CD5: org rule promote <\u7ECF\u9A8Cid> [text] [audience] [scope]", file=sys.stderr); sys.exit(1)
+    d={"action":"exp-promote","id":args[0],"created_by":"user"}
+    if len(args)>1 and args[1]: d["text"]=args[1]
+    if len(args)>2 and args[2]: d["audience"]=aud(args[2])
+    if len(args)>3 and args[3]: d["scope"]=scope(args[3])
+else:
+    print("\u672A\u77E5 rule \u5B50\u547D\u4EE4: "+op, file=sys.stderr); sys.exit(1)
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"
@@ -46844,12 +46939,12 @@ function applyCloudSubmits(id2, submits) {
 import { readFileSync as readFileSync17 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
 import { join as join24 } from "node:path";
-var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience"];
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience", "rules"];
 function pluginConfigPath() {
   return process.env.CCR_CONFIG_FILE ?? join24(homedir9(), ".cc-deck", "config.json");
 }
 function readPluginConfig() {
-  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true };
+  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true, rules: true };
   try {
     const raw = JSON.parse(readFileSync17(pluginConfigPath(), "utf-8"));
     for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
@@ -48085,8 +48180,321 @@ function buildRoleInjection(input) {
   }
 }
 
+// src/team-rules.ts
+import { existsSync as existsSync20, mkdirSync as mkdirSync15, readFileSync as readFileSync22, readdirSync as readdirSync10, renameSync as renameSync6, writeFileSync as writeFileSync13 } from "node:fs";
+import { randomUUID as randomUUID8 } from "node:crypto";
+import { join as join28 } from "node:path";
+function envNum4(name, fallback, min = 1) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= min ? n : fallback;
+}
+function ruleMaxTeam() {
+  return envNum4("CCR_RULE_MAX_TEAM", 6);
+}
+function ruleMaxProject() {
+  return envNum4("CCR_RULE_MAX_PROJECT", 4);
+}
+function ruleMaxRole() {
+  return envNum4("CCR_RULE_MAX_ROLE", 4);
+}
+function ruleMaxText() {
+  return envNum4("CCR_RULE_MAX_TEXT", 120);
+}
+function rulesInjectBudget() {
+  return envNum4("CCR_RULES_INJECT_BUDGET", 600, 50);
+}
+var RULE_NORM_KEY_CHARS = 64;
+function rulesPath(dir) {
+  return join28(dir ?? orgDir(), "rules.json");
+}
+function atomicWrite2(path6, content) {
+  const tmp = `${path6}.tmp-${Date.now()}`;
+  writeFileSync13(tmp, content, "utf-8");
+  renameSync6(tmp, path6);
+}
+function findCorruptMarker2(dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    const hit = readdirSync10(d2).find((f) => f.startsWith("rules.json.corrupt-"));
+    return hit ? join28(d2, hit) : null;
+  } catch {
+    return null;
+  }
+}
+function loadRules(dir) {
+  const marker = findCorruptMarker2(dir);
+  if (marker) {
+    console.warn(`[team-rules] \u89C4\u5219\u5E93\u5904\u4E8E\u574F JSON \u4FDD\u62A4\u6001\uFF08\u7559\u8BC1\uFF1A${marker}\uFF09\uFF0C\u62D2\u7EDD\u4E00\u5207\u5199\u64CD\u4F5C\u2014\u2014\u8BF7\u4EBA\u5DE5\u68C0\u67E5\u540E\u5220\u9664\u7559\u8BC1\u6587\u4EF6`);
+    return { store: { version: 1, rules: [] }, corrupted: true };
+  }
+  const p = rulesPath(dir);
+  if (!existsSync20(p)) return { store: { version: 1, rules: [] }, corrupted: false };
+  try {
+    const raw = JSON.parse(readFileSync22(p, "utf-8"));
+    if (Array.isArray(raw?.rules)) return { store: { version: 1, rules: raw.rules }, corrupted: false };
+    return corruptAndRefuse2(p, dir, "\u7ED3\u6784\u975E\u6CD5\uFF08rules \u975E\u6570\u7EC4\uFF09");
+  } catch (e) {
+    return corruptAndRefuse2(p, dir, e instanceof Error ? e.message : String(e));
+  }
+}
+function corruptAndRefuse2(p, dir, why) {
+  const renamed = `${p}.corrupt-${Date.now()}`;
+  try {
+    renameSync6(p, renamed);
+  } catch (e) {
+    console.warn(`[team-rules] \u574F\u6587\u4EF6\u7559\u8BC1\u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u62D2\u7EDD\u5199\u64CD\u4F5C\u4ECD\u751F\u6548`);
+  }
+  console.warn(`[team-rules] \u89C4\u5219\u5E93 JSON \u635F\u574F\uFF08${why}\uFF09\u2192 \u5DF2\u6539\u540D ${renamed} \u7559\u8BC1\uFF1B\u62D2\u7EDD\u4E00\u5207\u5199\u64CD\u4F5C\uFF0C\u8981\u6C42\u4EBA\u5DE5\u4ECB\u5165`);
+  return { store: { version: 1, rules: [] }, corrupted: true };
+}
+function saveRules(s, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync15(d2, { recursive: true });
+    atomicWrite2(rulesPath(d2), JSON.stringify(s, null, 2) + "\n");
+    return true;
+  } catch (e) {
+    console.warn(`[team-rules] \u89C4\u5219\u5E93\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function normRuleKey(text) {
+  return text.trim().toLowerCase().normalize("NFKC").replace(/[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{L}\p{N}]/gu, "").slice(0, RULE_NORM_KEY_CHARS);
+}
+function normAnchor2(p) {
+  return p.replace(/\/+$/, "");
+}
+function anchorExists2(anchor, dir) {
+  const a = normAnchor2(anchor);
+  if (!a.startsWith("/")) return false;
+  for (const g2 of listGroups(dir)) if (normAnchor2(g2.anchor_dir) === a) return true;
+  return false;
+}
+function parseAudience(raw) {
+  const t = (raw ?? "all").trim().toLowerCase() || "all";
+  if (t === "all" || t === "leader") return { ok: true, value: t };
+  if (t.startsWith("role:")) {
+    const role = t.slice(5).trim();
+    if (BIZ_ROLE_VOCAB.has(role)) return { ok: true, value: `role:${role}` };
+    return { ok: false, error: `audience \u975E\u6CD5\uFF08${t}\uFF09\uFF1Arole \u8BCD\u8868\u4E3A ${[...BIZ_ROLE_VOCAB].join("/")}\uFF08fail-closed\uFF1A\u8BCD\u8868\u5916\u89D2\u8272\u6C38\u4E0D\u6CE8\u5165\u4F46\u4F1A\u8BEF\u4EE5\u4E3A\u5728\u7BA1\uFF09` };
+  }
+  return { ok: false, error: `audience \u975E\u6CD5\uFF08${t}\uFF09\uFF1A\u5FC5\u987B\u662F all | leader | role:<${[...BIZ_ROLE_VOCAB].join("/")}>` };
+}
+function parseScope(raw, dir) {
+  const t = (raw ?? "team").trim() || "team";
+  if (t === "team") return { ok: true, value: "team" };
+  const m = t.match(/^project:(.+)$/);
+  const anchor = normAnchor2(m ? m[1] : t);
+  if (!anchorExists2(anchor, dir)) {
+    return { ok: false, error: `scope \u975E\u6CD5\uFF08${t}\uFF09\uFF1Aproject \u951A\u70B9\u5FC5\u987B\u662F\u5B58\u5728\u8FC7\u7684\u9879\u76EE\u76EE\u5F55\uFF08\u7EDD\u5BF9\u8DEF\u5F84\uFF09` };
+  }
+  return { ok: true, value: `project:${anchor}` };
+}
+function formatRuleLine(e) {
+  const aud = e.audience === "all" ? "\u5168\u5458" : e.audience === "leader" ? "Leader" : `\u89D2\u8272:${e.audience.slice(5)}`;
+  const proj = e.scope.startsWith("project:") ? "\u672C\u9879\u76EE" : "";
+  return `[${[aud, proj].filter(Boolean).join("\xB7")}] ${sanitizeExperienceText(e.text)}`;
+}
+var RULE_BLOCK_HEADER = (n) => `\u2014\u2014 \u56E2\u961F\u89C4\u5219\uFF08${n} \u6761\xB7\u7528\u6237\u5BA1\u5B9A\u7EA2\u7EBF\uFF0C\u5FC5\u987B\u9075\u5B88\uFF09\u2014\u2014`;
+var RULE_BLOCK_FOOTER = "\u2014\u2014 \u4EE5\u4E0A\u56E2\u961F\u89C4\u5219\u662F\u7528\u6237\u7EA2\u7EBF\uFF1A\u8FDD\u53CD\u5373\u4EFB\u52A1\u5931\u8D25\uFF1B\u4F18\u5148\u4E8E\u4E0B\u65B9\u7ECF\u9A8C\u4E0E\u5C97\u4F4D\u53C2\u8003\uFF0C\u4E0E\u6D3E\u5355\u7EAA\u5F8B\u51B2\u7A81\u65F6\u62E9\u4E25\u6267\u884C\uFF08\u89C4\u5219\u53EA\u53EF\u52A0\u4E25\u4E0D\u53EF\u653E\u5BBD\uFF09\u2014\u2014";
+var RULE_BLOCK_OVERHEAD = RULE_BLOCK_HEADER(0).length + RULE_BLOCK_FOOTER.length + 3;
+function teamAllBucketChars(rules) {
+  let total = RULE_BLOCK_OVERHEAD;
+  for (const e of rules) {
+    if (e.status === "active" && e.scope === "team" && e.audience === "all") total += formatRuleLine(e).length + 1;
+  }
+  return total;
+}
+function buildEntry(input, now, dir) {
+  const text = sanitizeExperienceText(typeof input.text === "string" ? input.text : "");
+  if (!text) return { ok: false, error: "text \u5FC5\u586B\uFF08sanitize \u540E\u4E3A\u7A7A\uFF09" };
+  if (text.length > ruleMaxText()) {
+    return { ok: false, error: `text \u8D85 ${ruleMaxText()} \u5B57\uFF08\u5F53\u524D ${text.length}\uFF09\u2014\u2014\u89C4\u5219\u662F\u4E00\u53E5\u8BDD\u7EA2\u7EBF\uFF0C\u7CBE\u7B80\u6216\u62C6\u6761` };
+  }
+  const aud = parseAudience(input.audience);
+  if (!aud.ok) return aud;
+  const scope = parseScope(input.scope, dir);
+  if (!scope.ok) return scope;
+  return {
+    ok: true,
+    entry: {
+      id: `rule-${randomUUID8().slice(0, 8)}`,
+      text,
+      audience: aud.value,
+      scope: scope.value,
+      status: "active",
+      ...input.promoted_from ? { promoted_from: input.promoted_from } : {},
+      ...input.confirm_id ? { confirm_id: input.confirm_id } : {},
+      created_by: input.created_by,
+      created_at: now,
+      updated_at: now
+    }
+  };
+}
+function appendRule(input, dir) {
+  const { store, corrupted } = loadRules(dir);
+  if (corrupted) return { ok: false, error: "\u89C4\u5219\u5E93\u5904\u4E8E\u574F JSON \u4FDD\u62A4\u6001\uFF08\u7559\u8BC1\u6587\u4EF6\u5728\uFF09\uFF0C\u62D2\u7EDD\u5199\u64CD\u4F5C\u2014\u2014\u8BF7\u4EBA\u5DE5\u4ECB\u5165" };
+  const now = Date.now();
+  const built = buildEntry({ ...input, created_by: input.created_by ?? "user" }, now, dir);
+  if (!built.ok) return built;
+  const entry = built.entry;
+  const key = normRuleKey(entry.text);
+  const dup = store.rules.find(
+    (e) => e.status === "active" && e.scope === entry.scope && e.audience === entry.audience && normRuleKey(e.text) === key
+  );
+  if (dup) return { ok: false, error: `\u540C\u4E3B\u9898\u89C4\u5219\u5DF2\u5B58\u5728\uFF08${dup.id}\uFF09\u2014\u2014\u6539\u89C4\u5219\u7528 supersede\uFF08\u66FF\u4EE3\u94FE\uFF09\uFF0C\u91CD\u590D\u7EA2\u7EBF\u5148 retire \u65E7\u6761`, duplicate_of: dup.id };
+  const teamCount = store.rules.filter((e) => e.status === "active" && e.scope === "team").length;
+  if (entry.scope === "team" && teamCount >= ruleMaxTeam()) {
+    return { ok: false, error: `\u56E2\u961F active \u89C4\u5219\u5DF2\u8FBE\u4E0A\u9650 ${ruleMaxTeam()} \u6761\u2014\u2014\u5148 retire/supersede \u7CBE\u7B80\u518D\u7ACB\u65B0\uFF08\u94C1\u5F8B\u662F\u7A00\u7F3A\u54C1\uFF09` };
+  }
+  if (entry.scope.startsWith("project:")) {
+    const projCount = store.rules.filter((e) => e.status === "active" && e.scope === entry.scope).length;
+    if (projCount >= ruleMaxProject()) return { ok: false, error: `\u8BE5\u9879\u76EE active \u89C4\u5219\u5DF2\u8FBE\u4E0A\u9650 ${ruleMaxProject()} \u6761\u2014\u2014\u5148\u7CBE\u7B80\u518D\u7ACB\u65B0` };
+  }
+  if (entry.audience.startsWith("role:")) {
+    const roleCount = store.rules.filter((e) => e.status === "active" && e.audience === entry.audience).length;
+    if (roleCount >= ruleMaxRole()) return { ok: false, error: `\u89D2\u8272 ${entry.audience.slice(5)} \u7684 active \u89C4\u5219\u5DF2\u8FBE\u4E0A\u9650 ${ruleMaxRole()} \u6761\u2014\u2014\u5148\u7CBE\u7B80\u518D\u7ACB\u65B0` };
+  }
+  if (entry.scope === "team" && entry.audience === "all") {
+    const total = teamAllBucketChars(store.rules) + formatRuleLine(entry).length + 1;
+    if (total > rulesInjectBudget()) {
+      return { ok: false, error: `\u56E2\u961F\u5168\u5458\u89C4\u5219\u6CE8\u5165\u9884\u7B97\u5C06\u8D85\u9650\uFF08${total} > ${rulesInjectBudget()} \u5B57\u7B26\uFF09\u2014\u2014\u5148\u7CBE\u7B80\uFF08retire/supersede\uFF09\u518D\u8FFD\u52A0\uFF08\u89C4\u5219\u6CE8\u5165\u96F6\u622A\u65AD\u786C\u6027\u8D28\uFF09` };
+    }
+  }
+  store.rules.push(entry);
+  if (!saveRules(store, dir)) return { ok: false, error: "\u89C4\u5219\u5E93\u5199\u5165\u5931\u8D25\uFF08\u89C1 relay \u65E5\u5FD7\uFF09" };
+  return { ok: true, entry };
+}
+function retireRule(id2, dir) {
+  const { store, corrupted } = loadRules(dir);
+  if (corrupted) return { ok: false, error: "\u89C4\u5219\u5E93\u5904\u4E8E\u574F JSON \u4FDD\u62A4\u6001\uFF0C\u62D2\u7EDD\u5199\u64CD\u4F5C\u2014\u2014\u8BF7\u4EBA\u5DE5\u4ECB\u5165" };
+  const e = store.rules.find((x) => x.id === id2);
+  if (!e) return { ok: false, error: `\u89C4\u5219\u4E0D\u5B58\u5728: ${id2}` };
+  if (e.status !== "active") return { ok: true, entry: e };
+  e.status = "retired";
+  e.updated_at = Date.now();
+  if (!saveRules(store, dir)) return { ok: false, error: "\u89C4\u5219\u5E93\u5199\u5165\u5931\u8D25\uFF08\u89C1 relay \u65E5\u5FD7\uFF09" };
+  return { ok: true, entry: e };
+}
+function supersedeRule(oldId, input, dir) {
+  const { store, corrupted } = loadRules(dir);
+  if (corrupted) return { ok: false, error: "\u89C4\u5219\u5E93\u5904\u4E8E\u574F JSON \u4FDD\u62A4\u6001\uFF0C\u62D2\u7EDD\u5199\u64CD\u4F5C\u2014\u2014\u8BF7\u4EBA\u5DE5\u4ECB\u5165" };
+  const old = store.rules.find((x) => x.id === oldId);
+  if (!old) return { ok: false, error: `\u89C4\u5219\u4E0D\u5B58\u5728: ${oldId}` };
+  if (old.status !== "active") return { ok: false, error: `\u89C4\u5219 ${oldId} \u5DF2\u662F ${old.status}\uFF0C\u53EA\u6709 active \u89C4\u5219\u53EF\u88AB\u66FF\u4EE3` };
+  const now = Date.now();
+  const built = buildEntry(
+    {
+      text: input.text,
+      audience: input.audience ?? old.audience,
+      scope: input.scope ?? old.scope,
+      created_by: input.created_by ?? "user",
+      confirm_id: input.confirm_id
+    },
+    now,
+    dir
+  );
+  if (!built.ok) return built;
+  const entry = built.entry;
+  if (entry.scope === "team" && entry.audience === "all") {
+    const others = store.rules.filter((e) => !(e.id === oldId));
+    const total = teamAllBucketChars(others) + formatRuleLine(entry).length + 1;
+    if (total > rulesInjectBudget()) {
+      return { ok: false, error: `\u66FF\u4EE3\u540E\u56E2\u961F\u5168\u5458\u89C4\u5219\u6CE8\u5165\u9884\u7B97\u5C06\u8D85\u9650\uFF08${total} > ${rulesInjectBudget()} \u5B57\u7B26\uFF09\u2014\u2014\u65B0\u6587\u672C\u8BF7\u66F4\u7CBE\u7B80` };
+    }
+  }
+  old.status = "superseded";
+  old.superseded_by = entry.id;
+  old.updated_at = now;
+  store.rules.push(entry);
+  if (!saveRules(store, dir)) return { ok: false, error: "\u89C4\u5219\u5E93\u5199\u5165\u5931\u8D25\uFF08\u89C1 relay \u65E5\u5FD7\uFF09" };
+  return { ok: true, entry, superseded: oldId };
+}
+function promoteExperienceToRule(input, dir) {
+  const derivedScope = input.exp_project_scope === "global" || !input.exp_project_scope ? "team" : `project:${normAnchor2(input.exp_project_scope)}`;
+  const derivedAudience = !input.exp_role_scope || input.exp_role_scope === "any" ? "all" : `role:${input.exp_role_scope.trim().toLowerCase()}`;
+  if (!input.audience && derivedAudience.startsWith("role:")) {
+    const role = derivedAudience.slice(5);
+    if (!BIZ_ROLE_VOCAB.has(role)) {
+      return { ok: false, error: `\u6E90\u7ECF\u9A8C role_scope\u300C${role}\u300D\u5728\u89C4\u5219\u53D7\u4F17\u8BCD\u8868\u5916\uFF08${[...BIZ_ROLE_VOCAB].join("/")}\uFF09\u2014\u2014\u5347\u683C\u987B\u663E\u5F0F\u6307\u5B9A audience\uFF08fail-closed\uFF1A\u8BCD\u8868\u5916\u89D2\u8272\u7684\u89C4\u5219\u6C38\u4E0D\u6CE8\u5165\uFF09` };
+    }
+  }
+  return appendRule(
+    {
+      text: input.text ?? input.exp_text,
+      audience: input.audience ?? derivedAudience,
+      scope: input.scope ?? derivedScope,
+      created_by: input.created_by ?? "user",
+      promoted_from: input.exp_id,
+      confirm_id: input.confirm_id
+    },
+    dir
+  );
+}
+function listRules(filter, dir) {
+  const { store } = loadRules(dir);
+  let out = store.rules;
+  if (filter?.status) out = out.filter((e) => e.status === filter.status);
+  if (filter?.audience) out = out.filter((e) => e.audience === filter.audience);
+  if (filter?.scope) out = out.filter((e) => e.scope === normAnchor2(filter.scope) || e.scope === filter.scope);
+  return out;
+}
+function matchRule(e, role, anchor, isLeader) {
+  if (e.status !== "active") return false;
+  const r = role.trim().toLowerCase();
+  if (e.audience === "all") {
+  } else if (e.audience === "leader") {
+    if (!isLeader) return false;
+  } else if (e.audience.startsWith("role:")) {
+    if (e.audience.slice(5).toLowerCase() !== r) return false;
+  } else {
+    return false;
+  }
+  if (e.scope === "team") {
+  } else if (e.scope.startsWith("project:")) {
+    if (normAnchor2(e.scope.slice(8)) !== normAnchor2(anchor)) return false;
+  } else {
+    return false;
+  }
+  return true;
+}
+function buildRuleInjection(input) {
+  try {
+    if (!readPluginConfig().rules) return null;
+    const { store, corrupted } = loadRules(input.dir);
+    if (corrupted || store.rules.length === 0) return null;
+    const matched = store.rules.filter((e) => matchRule(e, input.role, input.anchor, input.isLeader ?? false)).sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
+    if (matched.length === 0) return null;
+    const budget = input.budget ?? rulesInjectBudget();
+    const lines = [];
+    let total = RULE_BLOCK_OVERHEAD;
+    for (const e of matched) {
+      const line = formatRuleLine(e);
+      const cost = line.length + 1;
+      if (total + cost > budget) break;
+      total += cost;
+      lines.push(line);
+    }
+    if (lines.length === 0) {
+      console.warn(`[team-rules] \u6CE8\u5165\u9884\u7B97 ${budget} \u5185\u88C5\u4E0D\u4E0B\u4EFB\u4F55\u89C4\u5219\u884C\uFF08\u5934\u5C3E ${RULE_BLOCK_OVERHEAD}\uFF09\uFF0C\u672C\u5355\u65E0\u89C4\u5219\u5757`);
+      return null;
+    }
+    const dropped = matched.length - lines.length;
+    if (dropped > 0) {
+      const droppedIds = matched.slice(lines.length).map((e) => e.id).join(",");
+      console.warn(`[team-rules] \u6CE8\u5165\u9884\u7B97\u622A\u9664 ${dropped} \u6761\uFF08${droppedIds}\uFF09\u2014\u2014\u8BF7\u7CBE\u7B80\u89C4\u5219\u96C6\uFF08retire/supersede\uFF09\uFF0C\u89C4\u5219\u6CE8\u5165\u5E94\u96F6\u622A\u65AD`);
+    }
+    return { block: [RULE_BLOCK_HEADER(lines.length), ...lines, RULE_BLOCK_FOOTER].join("\n"), count: lines.length, dropped };
+  } catch (e) {
+    console.warn(`[team-rules] \u89C4\u5219\u6CE8\u5165\u5757\u6784\u5EFA\u5931\u8D25\uFF08\u964D\u7EA7\u65E0\u89C4\u5219\u5757\uFF0C\u6D3E\u5355\u7167\u53D1\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 // src/todo-hidden.ts
-import { readFileSync as readFileSync22, writeFileSync as writeFileSync13 } from "node:fs";
+import { readFileSync as readFileSync23, writeFileSync as writeFileSync14 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
 var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
@@ -48096,7 +48504,7 @@ var keySets = /* @__PURE__ */ new Map();
 function load2() {
   if (fileCache) return fileCache;
   try {
-    const raw = JSON.parse(readFileSync22(FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync23(FILE, "utf-8"));
     fileCache = {};
     for (const [k3, v] of Object.entries(raw)) {
       if (Array.isArray(v)) {
@@ -48128,14 +48536,14 @@ function addHiddenTodoKey(sessionId, key) {
   disk[sessionId] = capped;
   fileCache = disk;
   try {
-    writeFileSync13(FILE, JSON.stringify(disk));
+    writeFileSync14(FILE, JSON.stringify(disk));
   } catch {
   }
 }
 
 // src/decision-notify.ts
-import { mkdirSync as mkdirSync15, readFileSync as readFileSync23, writeFileSync as writeFileSync14 } from "node:fs";
-import { join as join28 } from "node:path";
+import { mkdirSync as mkdirSync16, readFileSync as readFileSync24, writeFileSync as writeFileSync15 } from "node:fs";
+import { join as join29 } from "node:path";
 var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"];
 function isDecisionNotificationKind(value) {
   return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
@@ -48169,8 +48577,8 @@ function enabledEnv() {
 function ledgerPathOf(options) {
   const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ?? process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
   if (override) return override;
-  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join28(process.cwd(), "data");
-  return join28(dataDir2, "decision-notifications.json");
+  const dataDir2 = options.dataDir ?? process.env.CCR_DATA_DIR ?? join29(process.cwd(), "data");
+  return join29(dataDir2, "decision-notifications.json");
 }
 function defaultNotificationGroup(kind) {
   return kind === "system" ? "activity" : "action";
@@ -48215,7 +48623,7 @@ function normalizeDecisionNotification(item) {
 }
 function readDecisionNotificationLedger(path6) {
   try {
-    const raw = JSON.parse(readFileSync23(path6, "utf-8"));
+    const raw = JSON.parse(readFileSync24(path6, "utf-8"));
     const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.notifications) ? raw.notifications : [];
     const notifications = list.map(normalizeDecisionNotification).filter((item) => item !== null);
     return { notifications };
@@ -48224,8 +48632,8 @@ function readDecisionNotificationLedger(path6) {
   }
 }
 function writeDecisionNotificationLedger(path6, ledger) {
-  mkdirSync15(join28(path6, ".."), { recursive: true });
-  writeFileSync14(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
+  mkdirSync16(join29(path6, ".."), { recursive: true });
+  writeFileSync15(path6, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
 }
 function confirmRevision(confirm) {
   const revision = confirm.revision;
@@ -48260,6 +48668,8 @@ function kindLabel(kind) {
       return "\u7ED3\u9879\u786E\u8BA4";
     case "revive":
       return "\u590D\u6D3B\u786E\u8BA4";
+    case "rule-append":
+      return "\u89C4\u5219\u63D0\u6848";
   }
 }
 function compact(text, max = 160) {
@@ -48407,10 +48817,10 @@ var DecisionNotificationWatcher = class {
 
 // src/agent-codex.ts
 import { spawn as spawn4 } from "node:child_process";
-import { randomUUID as randomUUID8 } from "node:crypto";
-import { existsSync as existsSync20, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync15 } from "node:fs";
+import { randomUUID as randomUUID9 } from "node:crypto";
+import { existsSync as existsSync21, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync16 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter as delimiter3, dirname as dirname10, join as join29 } from "node:path";
+import { delimiter as delimiter3, dirname as dirname10, join as join30 } from "node:path";
 var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
 var CODEX_ACTIVITY_CAPABILITIES = {
   native_status: true,
@@ -48505,7 +48915,7 @@ function resolveCodexCliPath() {
     cachedBin = null;
     return null;
   }
-  if (fromEnv && existsSync20(fromEnv)) {
+  if (fromEnv && existsSync21(fromEnv)) {
     cachedBin = fromEnv;
     return cachedBin;
   }
@@ -48513,8 +48923,8 @@ function resolveCodexCliPath() {
   const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
   for (const d2 of dirs) {
     for (const n of names) {
-      const p = join29(d2, n);
-      if (existsSync20(p)) {
+      const p = join30(d2, n);
+      if (existsSync21(p)) {
         cachedBin = p;
         return p;
       }
@@ -48525,13 +48935,13 @@ function resolveCodexCliPath() {
 }
 function materializeImages(images) {
   if (!images || images.length === 0) return [];
-  const dir = mkdtempSync(join29(tmpdir(), "ccr-codex-img-"));
+  const dir = mkdtempSync(join30(tmpdir(), "ccr-codex-img-"));
   const out = [];
   images.forEach((b64, i) => {
     if (typeof b64 !== "string" || b64.length === 0) return;
     try {
-      const p = join29(dir, `${i}.img`);
-      writeFileSync15(p, Buffer.from(b64, "base64"));
+      const p = join30(dir, `${i}.img`);
+      writeFileSync16(p, Buffer.from(b64, "base64"));
       out.push(p);
     } catch {
     }
@@ -48539,7 +48949,7 @@ function materializeImages(images) {
   return out;
 }
 var CodexAgentSession = class {
-  id = randomUUID8();
+  id = randomUUID9();
   startedAt = Date.now();
   stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   ended = false;
@@ -48804,7 +49214,7 @@ function sanitizeImportPushEntry(raw) {
 }
 function expandHome(p) {
   if (p === "~") return homedir12();
-  if (p.startsWith("~/")) return join30(homedir12(), p.slice(2));
+  if (p.startsWith("~/")) return join31(homedir12(), p.slice(2));
   return p;
 }
 function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
@@ -48818,7 +49228,7 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   };
   const tryMkdir = (abs) => {
     try {
-      mkdirSync16(abs, { recursive: true });
+      mkdirSync17(abs, { recursive: true });
       return isUsableDir(abs);
     } catch {
       return false;
@@ -48885,7 +49295,7 @@ function sanitizeFiles(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync24(join30(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync25(join31(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48896,13 +49306,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync16(join30(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync17(join31(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync24(join30(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync25(join31(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48913,14 +49323,14 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync16(join30(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync17(join31(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 var DELIVERABLES_CAP = 300;
 function readDeliverables(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync24(join30(dataDir2, "deliverables.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync25(join31(dataDir2, "deliverables.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter(
       (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
     ) : [];
@@ -48932,13 +49342,13 @@ function appendDeliverable(dataDir2, e) {
   const list = readDeliverables(dataDir2).filter((x) => !(x.sid === e.sid && x.path === e.path));
   list.push(e);
   try {
-    writeFileSync16(join30(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    writeFileSync17(join31(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
   } catch {
   }
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync24(join30(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync25(join31(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -48951,11 +49361,11 @@ function readTitleOverrides(dataDir2) {
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
-  return join30(dataDir2, "pinned-sessions.json");
+  return join31(dataDir2, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync24(pinnedSessionsPath(dataDir2), "utf-8"));
+    const raw = JSON.parse(readFileSync25(pinnedSessionsPath(dataDir2), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -48963,7 +49373,7 @@ function readPinnedSessions(dataDir2) {
 }
 function writePinnedSessions(dataDir2, ids) {
   try {
-    writeFileSync16(pinnedSessionsPath(dataDir2), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
+    writeFileSync17(pinnedSessionsPath(dataDir2), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
   } catch {
   }
 }
@@ -49046,13 +49456,13 @@ function resumeBreakerCapMs() {
 }
 function transcriptPathFor(cwd, sdkId, configHome) {
   const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-  const base = configHome ?? join30(homedir12(), ".claude");
-  return join30(base, "projects", slug, `${sdkId}.jsonl`);
+  const base = configHome ?? join31(homedir12(), ".claude");
+  return join31(base, "projects", slug, `${sdkId}.jsonl`);
 }
 function transcriptHasAssistant(cwd, sdkId, configHome) {
   try {
     const p = transcriptPathFor(cwd, sdkId, configHome);
-    return readFileSync24(p, "utf-8").includes('"type":"assistant"');
+    return readFileSync25(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
   }
@@ -49227,7 +49637,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 与 M4 DISPATCH_DONE / ORG_CONFIRM_UPDATED 等既有瞬时通道并存：那些管在线弹，
   // 这边持久落账管离线兜底与列表沉淀（任务书对账：不双发靠 stableKey 一单一行）。
   notificationsPath() {
-    return join30(this.cfg.dataDir, "notifications.json");
+    return join31(this.cfg.dataDir, "notifications.json");
   }
   // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
   // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
@@ -49237,7 +49647,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
   loadNotifications() {
     try {
-      const raw = JSON.parse(readFileSync24(this.notificationsPath(), "utf-8"));
+      const raw = JSON.parse(readFileSync25(this.notificationsPath(), "utf-8"));
       const list = Array.isArray(raw.notifications) ? raw.notifications : [];
       for (const item of list) {
         if (item && typeof item.key === "string" && item.key) this.notifications.set(item.key, item);
@@ -49256,8 +49666,8 @@ provider=${opts.provider ?? "default"}` : void 0,
   persistNotifications() {
     this.trimNotifications();
     try {
-      mkdirSync16(this.cfg.dataDir, { recursive: true });
-      writeFileSync16(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
+      mkdirSync17(this.cfg.dataDir, { recursive: true });
+      writeFileSync17(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
     } catch (e) {
       console.warn(`[notify] \u901A\u77E5\u8D26\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -49451,11 +49861,11 @@ provider=${opts.provider ?? "default"}` : void 0,
   // P2-6 把「读失败」伪装成「空清单」再放行批量收口的通道，闸门处必须区分「读不
   // 出来」与「真的没有」（只读消费 confirms.json 文件本身，projects.ts 结构不动）
   readConfirmsForReconcile() {
-    const path6 = join30(orgDir(), "confirms.json");
-    if (!existsSync21(path6)) return null;
+    const path6 = join31(orgDir(), "confirms.json");
+    if (!existsSync22(path6)) return null;
     let raw;
     try {
-      raw = readFileSync24(path6, "utf-8");
+      raw = readFileSync25(path6, "utf-8");
     } catch {
       return null;
     }
@@ -49482,9 +49892,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join30(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join31(this.cfg.dataDir, ".tmp-titlegen");
     try {
-      mkdirSync16(titleCwd, { recursive: true });
+      mkdirSync17(titleCwd, { recursive: true });
     } catch {
     }
     void generateTitle(task, this.cfg.model, (sid) => {
@@ -50520,7 +50930,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           const imgPayload = sanitizeImages(cmd.payload.images) ?? [];
           const imgRefs = imgPayload.length > 0 ? imageRefsOf(saveUploadImages(this.cfg.dataDir, cmd.payload.session_id, imgPayload)) : [];
           if (this.isLeaderSession(cmd.payload.session_id)) {
-            const dispatchId = randomUUID9();
+            const dispatchId = randomUUID10();
             this.pushOpenDispatch(cmd.payload.session_id, { id: dispatchId, tier: "\u54A8\u8BE2", actor: "user" });
             appendDispatch({
               ts: Date.now(),
@@ -50536,7 +50946,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
               s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
-              const msgId2 = randomUUID9();
+              const msgId2 = randomUUID10();
               s.unacked.push({ id: msgId2, text, images: imgPayload.length ? imgPayload : void 0, refs: imgRefs.length ? imgRefs : void 0, ts: Date.now(), hold: "turn" });
               s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo, msgId2);
               this.emitUpdated(s, true);
@@ -50552,7 +50962,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             s.state.status = "WORKING";
           }
           s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
-          const msgId = randomUUID9();
+          const msgId = randomUUID10();
           s.unacked.push({
             id: msgId,
             text,
@@ -50761,7 +51171,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           s.state.updated_at = Date.now();
           this.titleOverrides[s.state.session_id] = title;
           try {
-            writeFileSync16(join30(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+            writeFileSync17(join31(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
           } catch {
           }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
@@ -50963,7 +51373,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
           const ref = cmd.command_id;
           try {
-            const buf = readFileSync24(hit.path);
+            const buf = readFileSync25(hit.path);
             const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
             for (let seq = 0; seq < total; seq++) {
               this.bus.emitTransient(
@@ -51057,7 +51467,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir12()) {
       this.cfg.defaultCwd = cwd;
       try {
-        writeFileSync16(join30(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+        writeFileSync17(join31(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
       } catch {
       }
     }
@@ -51522,7 +51932,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.gaveUp = false;
-      s.unacked.push({ id: randomUUID9(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn" });
+      s.unacked.push({ id: randomUUID10(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn" });
       this.emitUpdated(s, true);
       return;
     }
@@ -51599,7 +52009,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.lastProgressKind = "";
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
-    s.unacked.push({ id: randomUUID9(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn" });
+    s.unacked.push({ id: randomUUID10(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn" });
     initTimer = setTimeout(() => {
       initTimer = null;
       if (inited || s.agent !== agent || agent.ended || this.sessions.get(s.state.session_id) !== s) return;
@@ -51860,7 +52270,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (this.titleOverrides[anchor.leader_session_id]) {
         delete this.titleOverrides[anchor.leader_session_id];
         try {
-          writeFileSync16(join30(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+          writeFileSync17(join31(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
         } catch {
         }
       }
@@ -52025,7 +52435,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   setTitleOverride(id2, title) {
     this.titleOverrides[id2] = title;
     try {
-      writeFileSync16(join30(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+      writeFileSync17(join31(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
     } catch {
     }
     const s = this.sessions.get(id2);
@@ -52125,7 +52535,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
       appendDispatch({
         ts: Date.now(),
-        id: randomUUID9(),
+        id: randomUUID10(),
         tier: e.tier,
         target: "org-command",
         ...e.anchor ? { project_anchor: e.anchor } : {},
@@ -52177,7 +52587,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           });
           appendDispatch({
             ts: Date.now(),
-            id: randomUUID9(),
+            id: randomUUID10(),
             tier: e.tier,
             target: "org-command",
             ...e.anchor ? { project_anchor: e.anchor } : {},
@@ -52229,7 +52639,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const tripped = !!s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil;
     const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
     if (!tripped && !parkedPinned) return false;
-    if (queueMessage !== void 0) s.unacked.push({ id: randomUUID9(), text: queueMessage, ts: Date.now() });
+    if (queueMessage !== void 0) s.unacked.push({ id: randomUUID10(), text: queueMessage, ts: Date.now() });
     const why = tripped ? `\u6062\u590D\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\u5DF2\u7194\u65AD\uFF0C\u7EA6 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 6e4))} \u5206\u949F\u540E\u81EA\u52A8\u91CD\u8BD5` : "\u4F1A\u8BDD\u4E3A\u7F6E\u9876\u4F11\u7720\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF09";
     this.pushExternalLog(
       s.state.session_id,
@@ -52370,7 +52780,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 直接写 notification ledger」），非 EventBus。
   appendDutyRound(r) {
     try {
-      appendFileSync3(join30(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
+      appendFileSync3(join31(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
         kind: "PM_DUTY_ROUND",
         v: 1,
         feed_id: r.feed_id,
@@ -52451,8 +52861,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!dutyEnabled() || !this.leaderId) return;
     if (readPluginConfig().duty === false) {
       this.appendDutyRound({
-        feed_id: randomUUID9(),
-        feed_generation: randomUUID9(),
+        feed_id: randomUUID10(),
+        feed_generation: randomUUID10(),
         trigger: [trigger],
         result: "disabled",
         reason: "global_switch",
@@ -52463,8 +52873,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     const leader2 = this.sessions.get(this.leaderId);
     if (leader2?.state.status === "WORKING") return;
     const from = Date.now();
-    const feedId = randomUUID9();
-    const generation = randomUUID9();
+    const feedId = randomUUID10();
+    const generation = randomUUID10();
     this.dutyEpoch += 1;
     let verdict;
     try {
@@ -52590,7 +53000,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     try {
       const dir = acceptanceDir();
       return listAcceptances(50).filter((s) => !s.submitted).map((s) => {
-        const p = join30(dir, `${s.id}.json`);
+        const p = join31(dir, `${s.id}.json`);
         let mtime = 0;
         try {
           mtime = statSync8(p).mtimeMs;
@@ -52951,7 +53361,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   auditOrgCommand(actor, device, action, anchor, tier, ok2, receipt) {
     appendDispatch({
       ts: Date.now(),
-      id: randomUUID9(),
+      id: randomUUID10(),
       tier,
       target: "org-command",
       ...anchor ? { project_anchor: anchor } : {},
@@ -52972,12 +53382,31 @@ provider=${opts.provider ?? "default"}` : void 0,
     try {
       appendDispatch({
         ts: Date.now(),
-        id: randomUUID9(),
+        id: randomUUID10(),
         tier: "\u968F\u624B\u529E",
         target: "org-command",
         ...projectScope !== "global" ? { project_anchor: projectScope } : {},
         status: r.ok ? "done" : "failed",
         receipt: truncate(`${action} \xB7 ${r.ok ? "ok" : `\u62D2\u7EDD\uFF1A${r.error ?? ""}`}`, 200),
+        session_id: this.leaderId ?? "",
+        actor: "user"
+      });
+    } catch {
+    }
+  }
+  // W-RULES1：rule-* / exp-promote 漏斗审计行（口径同 auditExpAction——org-command
+  // 台账行；project scope 反解锚点入 project_anchor；note 供提案出卡/入库回链等非
+  // ok/error 二态语义的补充说明）
+  auditRuleAction(action, r, scope, note) {
+    try {
+      appendDispatch({
+        ts: Date.now(),
+        id: randomUUID10(),
+        tier: "\u968F\u624B\u529E",
+        target: "org-command",
+        ...scope.startsWith("project:") ? { project_anchor: scope.slice(8) } : {},
+        status: r.ok ? "done" : "failed",
+        receipt: truncate(`${action} \xB7 ${note ?? (r.ok ? "ok" : `\u62D2\u7EDD\uFF1A${r.error ?? ""}`)}`, 200),
         session_id: this.leaderId ?? "",
         actor: "user"
       });
@@ -53106,7 +53535,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!id2) {
             appendDispatch({
               ts: Date.now(),
-              id: randomUUID9(),
+              id: randomUUID10(),
               tier: "\u6682\u7F13",
               target: "org-leader",
               status: "done",
@@ -53330,6 +53759,86 @@ provider=${opts.provider ?? "default"}` : void 0,
           const t = getRoleTemplate(slug);
           return t ? { ok: true, data: { template: t } } : { ok: false, error: `\u5C97\u4F4D\u6A21\u677F\u4E0D\u5B58\u5728: ${slug}` };
         }
+        // ---------- W-RULES1 团队规则库漏斗（org/rules.json，拍板 verdict-rules-20261011）。
+        // 审计行经 auditRuleAction（口径同 exp-*）。安全面拍板 #7「agent 文本永不直入权威
+        // 通道」：rule-append 缺省（无 direct）= 提案出确认卡（OrgConfirm kind=rule-append，
+        // 用户 ✓ 后 applyConfirmEffects 才真正入库）；direct:true = 用户 CLI 直写免卡
+        //（显式人为意图，org exp append 同款信任级）。retire/supersede/list 直写（可逆/
+        // 只读，A 路 §5.2 P1 白名单口径）；exp-promote 直写（拍板 #5 升格=复制，源经验
+        // 条目零触碰照常 GC）。 ----------
+        case "rule-append": {
+          const text = str2("text");
+          if (!text) return { ok: false, error: "text \u5FC5\u586B" };
+          const draft = {
+            text,
+            audience: str2("audience") || "all",
+            scope: str2("scope") || "team",
+            created_by: str2("created_by") === "agent" ? "agent" : "user"
+          };
+          if (p.direct === true) {
+            const r = appendRule({ ...draft });
+            this.auditRuleAction("rule-append", r, draft.scope);
+            return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+          }
+          const c = addConfirm({
+            kind: "rule-append",
+            title: `\u65B0\u56E2\u961F\u89C4\u5219\uFF1A${truncate(draft.text, 40)}`,
+            reason: str2("reason") || "\u89C4\u5219\u63D0\u6848\uFF08agent \u6587\u672C\u987B\u7ECF\u7528\u6237\u5BA1\u5B9A\u540E\u5165\u5E93\uFF09",
+            payload: { ...draft, ...str2("session_id") ? { session_id: str2("session_id") } : {} }
+          });
+          this.auditRuleAction("rule-append", { ok: true }, draft.scope, `\u63D0\u6848\u51FA\u5361 ${c.id}\uFF08\u5F85\u7528\u6237\u51B3\u8BAE\uFF09`);
+          return { ok: true, data: { confirm_id: c.id, pending: true } };
+        }
+        case "rule-list": {
+          const status = str2("status");
+          if (status && !["active", "retired", "superseded"].includes(status)) return { ok: false, error: "status \u5FC5\u987B\u662F active|retired|superseded" };
+          const rules = listRules({
+            ...status ? { status } : {},
+            ...str2("audience") ? { audience: str2("audience") } : {},
+            ...str2("scope") ? { scope: str2("scope") } : {}
+          });
+          return { ok: true, data: { rules } };
+        }
+        case "rule-retire": {
+          const id2 = str2("id");
+          if (!id2) return { ok: false, error: "id \u5FC5\u586B" };
+          const r = retireRule(id2);
+          this.auditRuleAction("rule-retire", r, "team");
+          return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "rule-supersede": {
+          const id2 = str2("id");
+          const text = str2("text");
+          if (!id2) return { ok: false, error: "id \u5FC5\u586B\uFF08\u88AB\u66FF\u4EE3\u7684\u65E7\u89C4\u5219 id\uFF09" };
+          if (!text) return { ok: false, error: "text \u5FC5\u586B\uFF08\u65B0\u89C4\u5219\u6587\u672C\uFF09" };
+          const scope = str2("scope");
+          const r = supersedeRule(id2, {
+            text,
+            ...str2("audience") ? { audience: str2("audience") } : {},
+            ...scope ? { scope } : {},
+            created_by: str2("created_by") === "agent" ? "agent" : "user"
+          });
+          this.auditRuleAction("rule-supersede", r, scope || "team");
+          return r.ok ? { ok: true, data: { entry: r.entry, superseded: r.superseded } } : r;
+        }
+        case "exp-promote": {
+          const id2 = str2("id");
+          if (!id2) return { ok: false, error: "id \u5FC5\u586B\uFF08\u6E90\u7ECF\u9A8C\u6761\u76EE id\uFF09" };
+          const exp = listExperience().find((x) => x.id === id2);
+          if (!exp) return { ok: false, error: `\u7ECF\u9A8C\u6761\u76EE\u4E0D\u5B58\u5728: ${id2}` };
+          const r = promoteExperienceToRule({
+            exp_id: exp.id,
+            exp_text: exp.text,
+            exp_role_scope: exp.role_scope,
+            exp_project_scope: exp.project_scope,
+            ...str2("text") ? { text: str2("text") } : {},
+            ...str2("audience") ? { audience: str2("audience") } : {},
+            ...str2("scope") ? { scope: str2("scope") } : {},
+            created_by: str2("created_by") === "agent" ? "agent" : "user"
+          });
+          this.auditRuleAction("exp-promote", r, exp.project_scope === "global" ? "team" : exp.project_scope);
+          return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
         case "project-detail": {
           const g2 = findGroup(str2("id"));
           if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${str2("id")}` };
@@ -53513,6 +54022,18 @@ provider=${opts.provider ?? "default"}` : void 0,
             this.reviveGroupMembers(gid);
           }
           break;
+        case "rule-append": {
+          const r = appendRule({
+            text: typeof c.payload.text === "string" ? c.payload.text : "",
+            audience: typeof c.payload.audience === "string" ? c.payload.audience : "all",
+            scope: typeof c.payload.scope === "string" ? c.payload.scope : "team",
+            created_by: c.payload.created_by === "agent" ? "agent" : "user",
+            confirm_id: c.id
+          });
+          if (!r.ok) return fail("\u89C4\u5219\u5165\u5E93", r);
+          this.auditRuleAction("rule-append", r, typeof c.payload.scope === "string" ? c.payload.scope : "team", `\u786E\u8BA4\u5361 ${c.id} \u901A\u8FC7\u5165\u5E93 ${r.entry.id}`);
+          break;
+        }
       }
     } else if (c.kind === "project-create" && gid) {
       const r = setGroupStatus(gid, "archived", "\u7ACB\u9879\u786E\u8BA4\u88AB\u5426\u51B3");
@@ -53713,7 +54234,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!anchorSt.isDirectory()) {
       return { ok: false, error: `\u951A\u8DEF\u5F84\u4E0D\u662F\u76EE\u5F55: ${anchor}\uFF08\u662F\u4E2A\u6587\u4EF6\u2014\u2014\u6D3E\u5355\u9700\u8981\u76EE\u5F55\u951A\uFF0C\u8BF7\u6838\u5BF9\u8DEF\u5F84\u62FC\u5199\uFF09` };
     }
-    let dispatchId = randomUUID9();
+    let dispatchId = randomUUID10();
     if (input.redispatch_of) {
       const root = input.redispatch_of.trim().replace(/#r\d+$/, "");
       if (!root) return { ok: false, error: "redispatch_of \u5FC5\u586B\u539F\u5355 dispatch_id" };
@@ -53812,7 +54333,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
     const roleInjection = buildRoleInjection({ session_id: veteran ?? void 0, role: expRole });
-    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block);
+    const rulesInjection = buildRuleInjection({ role: expRole, anchor });
+    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId;
     if (veteran) {
@@ -54203,7 +54725,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     wd.lastPromptAt = now;
     wd.capture = [];
     s.agent?.sendMessage(prompt, void 0, "\u3010relay\u3011\u4E0A\u4E0B\u6587\u6C34\u4F4D\u544A\u8B66\uFF0C\u5DF2\u8BF7\u6C42\u4EFB\u52A1\u72B6\u6001\u6458\u8981");
-    s.unacked.push({ id: randomUUID9(), text: prompt, ts: now });
+    s.unacked.push({ id: randomUUID10(), text: prompt, ts: now });
     this.pushExternalLog(s.state.session_id, "system", `\u4E0A\u4E0B\u6587\u6C34\u4F4D ${Math.round(tokens / limit * 100)}%\uFF0C\u5DF2\u8BF7\u6C42\u538B\u7F29\u524D\u4EFB\u52A1\u72B6\u6001\u6458\u8981`);
     this.emitUpdated(s, true);
   }
@@ -54415,7 +54937,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       lane === "ended" ? `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2\u65AD\u5F00\u4E14 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u72B6\u6001\u672A\u6536\u5C3E\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D` : `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u8FDB\u7A0B\u6811 CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D`
     );
     const takeoverReceipt = truncate(lane === "ended" ? `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u6D41\u5DF2\u65AD\u5F00 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF0C\u81EA\u52A8\u6062\u590D` : `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6740\u6811\u6062\u590D`, 200);
-    const takeoverId = randomUUID9();
+    const takeoverId = randomUUID10();
     appendDispatch({
       ts: Date.now(),
       id: takeoverId,
@@ -54444,7 +54966,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         );
         this.notifyConfirm(sid, `\u4F1A\u8BDD\u300C${s.state.title || sid.slice(0, 8)}\u300D\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u624B\u52A8\u5904\u7406`);
         const gaveUpReceipt = truncate(`\u770B\u95E8\u72D7\uFF1A1 \u5C0F\u65F6\u5185\u81EA\u6108 ${s.wd.recoveries.length} \u6B21\u8FBE\u4E0A\u9650\uFF0C\u505C\u6B62\u81EA\u52A8\u5E72\u9884`, 200);
-        const gaveUpId = randomUUID9();
+        const gaveUpId = randomUUID10();
         appendDispatch({
           ts: Date.now(),
           id: gaveUpId,
@@ -54594,10 +55116,12 @@ provider=${opts.provider ?? "default"}` : void 0,
     return JSON.parse(JSON.stringify(s.state));
   }
 };
-function wrapDispatchPrompt(tier, task, experienceBlock, roleBlock) {
+function wrapDispatchPrompt(tier, task, experienceBlock, roleBlock, rulesBlock) {
   return `[${tier} \u6D3E\u5355]
 ${task}
-${roleBlock ? `
+${rulesBlock ? `
+${rulesBlock}
+` : ""}${roleBlock ? `
 ${roleBlock}
 ` : ""}${experienceBlock ? `
 ${experienceBlock}
@@ -54615,9 +55139,9 @@ ${experienceBlock}
 
 // src/ws-server.ts
 import { createServer } from "node:http";
-import { randomUUID as randomUUID11 } from "node:crypto";
-import { readFileSync as readFileSync28, writeFileSync as writeFileSync20, mkdirSync as mkdirSync19, existsSync as existsSync23, readdirSync as readdirSync12, statSync as statSync11 } from "node:fs";
-import { join as join33, dirname as dirname11, sep as sep7 } from "node:path";
+import { randomUUID as randomUUID12 } from "node:crypto";
+import { readFileSync as readFileSync29, writeFileSync as writeFileSync21, mkdirSync as mkdirSync20, existsSync as existsSync24, readdirSync as readdirSync13, statSync as statSync11 } from "node:fs";
+import { join as join34, dirname as dirname11, sep as sep7 } from "node:path";
 import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
@@ -54633,15 +55157,15 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
-import { randomUUID as randomUUID10 } from "node:crypto";
-import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync27, readdirSync as readdirSync11, statSync as statSync10, writeFileSync as writeFileSync19 } from "node:fs";
+import { randomUUID as randomUUID11 } from "node:crypto";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync28, readdirSync as readdirSync12, statSync as statSync10, writeFileSync as writeFileSync20 } from "node:fs";
 import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn5, execFileSync } from "node:child_process";
-import { existsSync as existsSync22, mkdirSync as mkdirSync17, appendFileSync as appendFileSync4, readFileSync as readFileSync25, writeFileSync as writeFileSync17, rmSync as rmSync4 } from "node:fs";
-import path4, { join as join31 } from "node:path";
+import { existsSync as existsSync23, mkdirSync as mkdirSync18, appendFileSync as appendFileSync4, readFileSync as readFileSync26, writeFileSync as writeFileSync18, rmSync as rmSync4 } from "node:fs";
+import path4, { join as join32 } from "node:path";
 import { homedir as homedir13, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path4.dirname(fileURLToPath2(import.meta.url));
@@ -54659,7 +55183,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync25(injectCs, "utf8").includes("--peek");
+    return readFileSync26(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -54671,29 +55195,29 @@ function ensureInjector() {
   if (ready) return true;
   const srcPeek = peekCapableSource();
   try {
-    mkdirSync17(binDir, { recursive: true });
-    if (existsSync22(exe2) && !existsSync22(exe2 + ".v2") && srcPeek) {
+    mkdirSync18(binDir, { recursive: true });
+    if (existsSync23(exe2) && !existsSync23(exe2 + ".v2") && srcPeek) {
       try {
         rmSync4(exe2, { force: true });
       } catch {
       }
     }
     let compiled = false;
-    if (!existsSync22(exe2)) {
+    if (!existsSync23(exe2)) {
       const src = injectCs.replace(/\//g, "\\");
       execFileSync(CSC, ["-nologo", `-out:${exe2}`, src], { timeout: 3e4, windowsHide: true });
       compiled = true;
     }
     if (compiled && srcPeek) {
       try {
-        writeFileSync17(exe2 + ".v2", "1");
+        writeFileSync18(exe2 + ".v2", "1");
       } catch {
       }
     }
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
-  ready = existsSync22(exe2);
+  ready = existsSync23(exe2);
   if (ready && !peekSupported()) {
     console.warn("[injector] \u9632\u62A2\u53D1\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08inject.exe \u65E0 --peek \u80FD\u529B\uFF1A\u65E7\u7248\u4EA7\u7269\u4FDD\u7559\u6216\u7F16\u8BD1\u5931\u8D25\uFF09\u2014\u2014\u6EDE\u7559\u8865\u53D1\u56DE\u8F66\u5C06\u6309 #180 \u4FDD\u5B88\u8DF3\u8FC7");
   }
@@ -54848,7 +55372,7 @@ function runAppleScript(script) {
       clearTimeout(timer);
       if (code === 0) return resolve9({ ok: true });
       try {
-        appendFileSync4(join31(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync4(join32(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
       resolve9({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
@@ -54893,8 +55417,8 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join31(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
-    writeFileSync17(tmp, body, "utf8");
+    const tmp = join32(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    writeFileSync18(tmp, body, "utf8");
     return new Promise((resolve9) => {
       const child = spawn5("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
@@ -54978,7 +55502,7 @@ function peekSupported() {
   if (process.env.CCR_INJECT_CMD) return true;
   if (isDarwin()) return true;
   if (process.platform !== "win32") return false;
-  return existsSync22(exe2) && existsSync22(exe2 + ".v2");
+  return existsSync23(exe2) && existsSync23(exe2 + ".v2");
 }
 function buildCaptureScript(pid) {
   return [
@@ -55034,11 +55558,11 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join31(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join32(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync25(tmp, "utf8");
+    const text = readFileSync26(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
@@ -55148,8 +55672,8 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
 
 // src/engine-rollouts.ts
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync26, readdirSync as readdirSync10, readSync as readSync2, renameSync as renameSync6, statSync as statSync9, writeFileSync as writeFileSync18 } from "node:fs";
-import { basename as basename6, join as join32, relative as relative3 } from "node:path";
+import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync27, readdirSync as readdirSync11, readSync as readSync2, renameSync as renameSync7, statSync as statSync9, writeFileSync as writeFileSync19 } from "node:fs";
+import { basename as basename6, join as join33, relative as relative3 } from "node:path";
 var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
 var ENGINE_SCAN_SPECS = [
   { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
@@ -55159,7 +55683,7 @@ var ENGINE_SCAN_SPECS = [
   { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") }
 ];
 function engineRoot(spec, home) {
-  return process.env[spec.envRoot] || join32(home, spec.homeDirName, "sessions");
+  return process.env[spec.envRoot] || join33(home, spec.homeDirName, "sessions");
 }
 var clip = (text, cap) => {
   const compact2 = text.replace(/\s+/g, " ").trim();
@@ -55325,12 +55849,12 @@ function rolloutFiles(root, pattern) {
     if (depth > 6) return;
     let entries;
     try {
-      entries = readdirSync10(dir, { withFileTypes: true });
+      entries = readdirSync11(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const p = join32(dir, entry.name);
+      const p = join33(dir, entry.name);
       if (entry.isDirectory()) walk(p, depth + 1);
       else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
     }
@@ -55361,12 +55885,12 @@ var RolloutScanner = class {
     this.loaded = true;
     if (!this.persistFile) return;
     try {
-      const dump = JSON.parse(readFileSync26(this.persistFile, "utf8"));
+      const dump = JSON.parse(readFileSync27(this.persistFile, "utf8"));
       if (dump.version !== 1 || !dump.files || typeof dump.files !== "object") return;
       for (const [rel, entry] of Object.entries(dump.files)) {
         if (!entry || typeof entry.offset !== "number" || !entry.profile) continue;
         if (!(entry.offset >= 0) || typeof entry.carry !== "string") continue;
-        const filePath = join32(this.root, rel);
+        const filePath = join33(this.root, rel);
         this.cursors.set(filePath, { offset: entry.offset, carry: entry.carry, profile: { ...entry.profile, filePath } });
       }
     } catch {
@@ -55389,8 +55913,8 @@ var RolloutScanner = class {
         files[relative3(this.root, filePath)] = { offset, carry, profile: cursor.profile };
       }
       const tmp = `${this.persistFile}.tmp`;
-      writeFileSync18(tmp, JSON.stringify({ version: 1, files }));
-      renameSync6(tmp, this.persistFile);
+      writeFileSync19(tmp, JSON.stringify({ version: 1, files }));
+      renameSync7(tmp, this.persistFile);
     } catch {
     }
   }
@@ -55563,7 +56087,7 @@ var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync27(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync28(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -55572,7 +56096,7 @@ function cliSessionIdle(pid) {
 function cliSessionStatus(pid) {
   try {
     const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync27(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync28(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -55793,11 +56317,11 @@ var Bridge = class _Bridge {
     try {
       const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir14(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync11(root, { withFileTypes: true })) {
+      for (const dir of readdirSync12(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync11(path5.join(root, dir.name));
+          files = readdirSync12(path5.join(root, dir.name));
         } catch {
           continue;
         }
@@ -55972,7 +56496,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync27(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync28(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -55992,7 +56516,7 @@ var Bridge = class _Bridge {
       const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir14(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync11(dir);
+        files = readdirSync12(dir);
       } catch {
         return;
       }
@@ -56002,7 +56526,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync27(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync28(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -56472,7 +56996,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync27(path5.join(homedir14(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync28(path5.join(homedir14(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -56797,9 +57321,9 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync27(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync28(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
-      writeFileSync19(this.pidCacheFile, JSON.stringify(raw));
+      writeFileSync20(this.pidCacheFile, JSON.stringify(raw));
     } catch {
     }
   }
@@ -56858,10 +57382,10 @@ var Bridge = class _Bridge {
   readCcSessionName(cliSessionId) {
     try {
       const dir = path5.join(homedir14(), ".claude", "sessions");
-      for (const f of readdirSync11(dir)) {
+      for (const f of readdirSync12(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync27(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync28(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -57481,7 +58005,7 @@ var Bridge = class _Bridge {
     );
     if (!shouldGate) {
       if (questions.length) {
-        const requestId2 = randomUUID10();
+        const requestId2 = randomUUID11();
         this.mgr.setExternalWaiting(id2, {
           request_id: requestId2,
           tool_name: ev2.tool_name ?? "tool",
@@ -57500,7 +58024,7 @@ var Bridge = class _Bridge {
       });
       return { decision: "pass" };
     }
-    const requestId = randomUUID10();
+    const requestId = randomUUID11();
     const remember = questions.length ? void 0 : suggestPattern(ev2.tool_name ?? "tool", input);
     const payload = {
       request_id: requestId,
@@ -57594,7 +58118,7 @@ var Bridge = class _Bridge {
         return { decision: "pass" };
       }
       this.mgr.setExternalWaiting(id2, {
-        request_id: randomUUID10(),
+        request_id: randomUUID11(),
         tool_name: toolName,
         input_summary: msg,
         suggestions: [],
@@ -57847,14 +58371,14 @@ var Bridge = class _Bridge {
     if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
     let names;
     try {
-      names = readdirSync11(dir);
+      names = readdirSync12(dir);
     } catch {
       return null;
     }
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync27(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync28(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -58289,13 +58813,13 @@ var BUILTIN_COMMANDS = [
 function listCustomCommands(dir, source) {
   let entries;
   try {
-    entries = readdirSync12(dir, { withFileTypes: true });
+    entries = readdirSync13(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync28(p, "utf-8").slice(0, 400);
+      const head = readFileSync29(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -58307,11 +58831,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join33(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join34(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync12(join33(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join33(dir, e.name, g2)), source });
+        for (const g2 of readdirSync13(join34(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join34(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -58325,12 +58849,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync23(join33(p, "web-console", "index.html"))) ?? webRootCandidates[1];
-  const consoleHtml = join33(webRoot, "web-console", "index.html");
-  const consoleHtml005 = join33(webRoot, "web-console", "index-005.html");
-  const naclJs = join33(webRoot, "web-console", "nacl.js");
-  const qrJs = join33(webRoot, "web-console", "qr.js");
-  const mobileDir = join33(webRoot, "mobile") + sep7;
+  const webRoot = webRootCandidates.find((p) => p && existsSync24(join34(p, "web-console", "index.html"))) ?? webRootCandidates[1];
+  const consoleHtml = join34(webRoot, "web-console", "index.html");
+  const consoleHtml005 = join34(webRoot, "web-console", "index-005.html");
+  const naclJs = join34(webRoot, "web-console", "nacl.js");
+  const qrJs = join34(webRoot, "web-console", "qr.js");
+  const mobileDir = join34(webRoot, "mobile") + sep7;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -58364,7 +58888,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync28(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync29(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
@@ -58388,45 +58912,45 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync23(consoleHtml)) {
+      if (!existsSync24(consoleHtml)) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync28(consoleHtml);
+      const html = readFileSync29(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
     if (req.method === "GET" && url.pathname === "/app2") {
-      if (!existsSync23(consoleHtml005)) {
+      if (!existsSync24(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync28(consoleHtml005));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
-      if (!existsSync23(naclJs)) {
+      if (!existsSync24(naclJs)) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync28(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
-      if (!existsSync23(qrJs)) {
+      if (!existsSync24(qrJs)) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync28(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join33(webRoot, "web-console", url.pathname.slice(1));
-      if (!existsSync23(file)) {
+      const file = join34(webRoot, "web-console", url.pathname.slice(1));
+      if (!existsSync24(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync28(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync29(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -58470,11 +58994,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join33(cfg2.dataDir, "relay-name");
+      const file = join34(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync28(file, "utf8").trim().slice(0, 40);
+          name = readFileSync29(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -58494,7 +59018,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
               res.writeHead(400).end('{"error":"\u540D\u79F0\u9700 1-40 \u5B57\u4E14\u4E0D\u542B\u6362\u884C/\u5C16\u62EC\u53F7"}');
               return;
             }
-            writeFileSync20(file, clean, "utf8");
+            writeFileSync21(file, clean, "utf8");
             res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, name: clean }));
           } catch {
             res.writeHead(400).end();
@@ -58684,7 +59208,17 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             "exp-import",
             // W-KWP1 件三：岗位模板库只读查看（org role list/show 的 HTTP 面；写面 P2）
             "role-list",
-            "role-show"
+            "role-show",
+            // W-RULES1 团队规则库（org/rules.json 的 HTTP 面 = org rule 子命令）：直写
+            // 面带 direct 标记（用户 CLI 主权面，org exp append 同款信任级）；缺省=
+            // 提案出确认卡（零写入，决议仍走用户端——rule-append 不给 HTTP 开直批口，
+            // 入库动作在用户 ✓ 后 applyConfirmEffects 落，Leader 无法自批）
+            "rule-append",
+            "rule-list",
+            "rule-retire",
+            "rule-supersede",
+            // W-RULES1 升格（经验→规则复制，拍板 #5；org rule promote 的 HTTP 面）
+            "exp-promote"
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(
@@ -58760,8 +59294,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join33(homedir15(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join33(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join34(homedir15(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join34(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -58838,7 +59372,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       return;
     }
-    const requestId = randomUUID11();
+    const requestId = randomUUID12();
     const name = (url.searchParams.get("name") ?? "\u624B\u8868").slice(0, 24);
     const code = String(Math.floor(1e5 + Math.random() * 9e5));
     const entry = { name, code, ws: ws2, timer: setTimeout(() => resolvePairing(requestId, "timeout"), PAIR_TTL_MS) };
@@ -59079,12 +59613,12 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync28(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync29(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
-      mkdirSync19(dirname11(pluginConfigPath()), { recursive: true });
-      writeFileSync20(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
+      mkdirSync20(dirname11(pluginConfigPath()), { recursive: true });
+      writeFileSync21(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
     } catch {
       res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
       return;
@@ -59160,32 +59694,32 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync24, readFileSync as readFileSync29, writeFileSync as writeFileSync21 } from "node:fs";
-import { join as join34 } from "node:path";
+import { existsSync as existsSync25, readFileSync as readFileSync30, writeFileSync as writeFileSync22 } from "node:fs";
+import { join as join35 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join34(dataDir2, "cloud-keypair.json");
+  const kpPath = join35(dataDir2, "cloud-keypair.json");
   let keypair;
-  if (existsSync24(kpPath)) {
-    keypair = JSON.parse(readFileSync29(kpPath, "utf-8"));
+  if (existsSync25(kpPath)) {
+    keypair = JSON.parse(readFileSync30(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync21(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync22(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join34(dataDir2, "wan-secret");
+  const wanSecretPath = join35(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync24(wanSecretPath)) wanSecret = readFileSync29(wanSecretPath, "utf-8").trim();
+  if (existsSync25(wanSecretPath)) wanSecret = readFileSync30(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
-    writeFileSync21(wanSecretPath, wanSecret, "utf-8");
+    writeFileSync22(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join34(dataDir2, "cloud-peers.json");
+  const peersPath = join35(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
-  if (existsSync24(peersPath)) {
+  if (existsSync25(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync29(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync30(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -59193,7 +59727,7 @@ function loadOrCreateIdentity(dataDir2) {
   const persistPeers = () => {
     const obj = {};
     for (const [k3, v] of peers) obj[k3] = v;
-    writeFileSync21(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+    writeFileSync22(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
   let lastPeerFlush = 0;
   return {
@@ -59965,23 +60499,23 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync25, readFileSync as readFileSync30, writeFileSync as writeFileSync22 } from "node:fs";
-import { join as join35 } from "node:path";
+import { existsSync as existsSync26, readFileSync as readFileSync31, writeFileSync as writeFileSync23 } from "node:fs";
+import { join as join36 } from "node:path";
 import { homedir as homedir17 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join35(homedir17(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join36(homedir17(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
-  if (!existsSync25(dir)) return "skip-no-dir";
-  const file = join35(dir, "settings.json");
+  if (!existsSync26(dir)) return "skip-no-dir";
+  const file = join36(dir, "settings.json");
   let obj;
-  if (!existsSync25(file)) {
+  if (!existsSync26(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync30(file, "utf-8"));
+      obj = JSON.parse(readFileSync31(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -59994,7 +60528,7 @@ function ensureTodoToolsEnv() {
   }
   obj.env = { ...env, [TODO_TOOLS_ENV_KEY]: "1" };
   try {
-    writeFileSync22(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
+    writeFileSync23(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
     return "written";
   } catch {
     return "error";
@@ -60017,9 +60551,9 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join36(cfg.dataDir, "relay.lock");
+  const lockPath = join37(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync31(lockPath, "utf8").trim());
+    const prev = Number(readFileSync32(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -60033,12 +60567,12 @@ process.on("unhandledRejection", (reason) => {
     }
   }
   try {
-    writeFileSync23(lockPath, String(process.pid));
+    writeFileSync24(lockPath, String(process.pid));
   } catch {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync31(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
+      if (Number(readFileSync32(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
     } catch {
     }
   };
@@ -60079,7 +60613,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync31(join36(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync32(join37(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -60130,14 +60664,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync5(join36(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync5(join37(cfg.dataDir, "relay.log"), "a");
   const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join36(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join37(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -60150,7 +60684,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync26("/proc")) return readFileSync31(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync27("/proc")) return readFileSync32(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync3("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -60160,9 +60694,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join36(cfg.dataDir, "relay.pid");
+  const pidFile = join37(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync31(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync32(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -60185,14 +60719,15 @@ if (cliArgs.has("--stop")) {
   if (st2.source !== "env" && st2.enabled) {
     console.log(`[config] \u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u5F00\u542F\uFF08${st2.source === "file" ? "\u8BBE\u7F6E\u9879" : "\u65B0\u88C5\u9ED8\u8BA4"}\uFF09\uFF1A${st2.value}`);
   }
+  ensureEmployeeHomeSeed(cfg.dataDir);
 }
 probeSqliteDriverAtBoot();
-var persistPath = join36(cfg.dataDir, "events.ndjson");
+var persistPath = join37(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
-    for (const f of readdirSync13(dir)) {
+    for (const f of readdirSync14(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join36(dir, f);
+      const p = join37(dir, f);
       try {
         if (Date.now() - statSync12(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
@@ -60201,7 +60736,7 @@ function sweepTmpImages(dir) {
   } catch {
   }
 }
-var tmpImageDir = join36(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join37(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var prior = loadEvents(persistPath);
@@ -60284,7 +60819,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync31(join36(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync32(join37(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -60307,7 +60842,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync31(join36(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync32(join37(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -60341,15 +60876,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync23(join36(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync24(join37(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync23(join36(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join36(homedir18(), ".cc-deck", "data");
+    writeFileSync24(join37(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join37(homedir18(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
-    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync26(hookHome)) {
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync27(hookHome)) {
       try {
-        writeFileSync23(join36(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync24(join37(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -60374,7 +60909,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join36(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join37(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );
