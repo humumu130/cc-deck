@@ -203,6 +203,13 @@ async function main(): Promise<void> {
       projects: null,
       orgConfirms: [],
       boards: new Map(),
+      experiences: null, // W-EXPP2（null=旧 relay 不支持口径，测试不触经验域）
+      experienceEnabled: true,
+      anchoredBoards: new Set(), // M13-4ADD：缺字段则 SNAPSHOT 分支 anchoredBoards.clear 即炸
+      boardResync: new Set(),
+      artPool: "no", // #72 预探明缺省——"pending" 会触发 probeArtPool 真 fetch（测试不测池）
+      artPoolData: [],
+      artPoolProbing: false,
       sessions: new Map<string, SessionState>(),
       timelines: new Map(),
       reconnectDelay: 0,
