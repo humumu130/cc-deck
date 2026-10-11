@@ -20,6 +20,7 @@ import {
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionPolicyEnabled } from "./permission-policy.js";
+import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
@@ -2267,7 +2268,11 @@ export class SessionManager {
           // spawn 传值收口（effective→MANAGED 实参——JSONL 降级后 CLI 收 acceptEdits
           // 而非伪装 bypass；claude 沙盒 bypass 恒等=多数路径零变）。
           const engineForPolicy = engineResolved ?? "claude";
-          const perm = evaluatePermission({
+          // P81-2 开卡求值闸。kill-switch 接线修正（2026-10-11）：本路径此前未接
+          // permissionPolicyEnabled()——env=off 时策略应整体回退 P81 前（pm 硬传），
+          // 实测却仍 forbidden（用户派单被卡）。对齐 6341 口径：policyOn=false ⇒ perm=null
+          // 跳过求值与 forbid 面，下游 EFFECTIVE_TO_MANAGED 走 bypass 恒等回退。
+          const perm = permissionPolicyEnabled() ? evaluatePermission({
             requested_mode: pm ?? null,
             engine: engineForPolicy,
             role: "team_pm",
@@ -2276,26 +2281,31 @@ export class SessionManager {
             policy_source: "explicit",
             dir_scope: dirScope,
             env: envScope,
-          });
-          // 审计落库（§6.3 拒绝也写审计；session_id 拒=null 成功=新会话）
-          const auditBase = {
-            requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode,
-            native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine,
-            reason: perm.reason, policy_source: perm.policy_source,
-            environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by,
-            session_id: null as string | null, command_id: cmd.command_id, created_at: Date.now(),
-          };
-          if (perm.effective_mode === "forbidden") {
-            appendPermissionAudit(auditStore(this.cfg.dataDir), auditBase);
+          }) : null;
+          // 审计落库（§6.3 拒绝也写审计；session_id 拒=null 成功=新会话）。policy off
+          // ⇒ perm=null，仅 forbidden 分支会落拒绝审计，null 不进该路径。
+          if (perm && perm.effective_mode === "forbidden") {
+            const denyRow: PermissionAuditRow = {
+              requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode,
+              native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine,
+              reason: perm.reason, policy_source: perm.policy_source,
+              environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by,
+              session_id: null, command_id: cmd.command_id, created_at: Date.now(),
+            };
+            appendPermissionAudit(auditStore(this.cfg.dataDir), denyRow);
             return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
           }
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
+          const spawnPmMode: Parameters<typeof this.create>[2] = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : (pm ?? "bypassPermissions");
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, spawnPmMode, cmd.payload.autoMkdir === true, {
             ...(engineResolved ? { engine: engineResolved } : {}),
             ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
             ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
             ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
           });
-          appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
+          const okRow: PermissionAuditRow = perm
+            ? { requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode, native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine, reason: perm.reason, policy_source: perm.policy_source, environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() }
+            : { requested_mode: pm ?? null, normalized_mode: null, effective_mode: spawnPmMode, native_mode: null, capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy, reason: "p81_policy_off", policy_source: "explicit", environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() };
+          appendPermissionAudit(auditStore(this.cfg.dataDir), okRow);
           return {
             command_id: cmd.command_id,
             ok: true,
@@ -2303,7 +2313,9 @@ export class SessionManager {
             // #75 实际引擎回显+降级显式标记（端上据此显示降级徽标，不静默——提案 §6.2）
             ...(engineResolved ? { engine: engineResolved } : {}),
             ...(degraded ? { degraded: true, degraded_reason: degradedReason } : {}),
-            permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason },
+            permission: perm
+              ? { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason }
+              : { normalized: "", effective: spawnPmMode, native_mode: null, reason: "p81_policy_off" },
           };
         }
         case "COMMAND_MESSAGE": {
