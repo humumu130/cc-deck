@@ -20,6 +20,8 @@ git add -A
 git commit -m "chore: bump $V
 
 Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>" | tail -1
+echo "[3.5/7] relay-service 静态面同步（桌面壳页面来源，S1/S2 闸前置）"
+cp web-console/index.html web-console/index-005.html ~/.cc-deck/relay-service/web-console/
 echo "[4/7] 守卫（不绿即停，绝不 tag）"
 bash scripts/check-bundle-sync.sh | tail -2
 bash scripts/check-bundle-sync.sh | grep -q "✅ bundle 同步检查通过" || { echo "ERR: 守卫未过，已停止（可 git reset --soft HEAD~1 回退 bump 后修）"; exit 1; }
