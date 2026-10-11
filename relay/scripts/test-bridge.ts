@@ -24,7 +24,9 @@ function assert(cond: boolean, msg: string): void {
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // 等注入落盘用轮询而非固定 wait：高负载下 fake-injector 子进程 spawn 可达秒级，
 // 固定窗口（800/1500ms）反复偶发假阴性（18/21/30/31/32 段连续 flake 实录）
-const waitLog = async (pred: () => boolean, ms = 4000): Promise<void> => {
+// 默认窗 4s→8s（W-INJECT）：同机负载（并行套件/生产 relay/会话进程）下 fake-injector
+// spawn 可达秒级（本文件头注释前科），4s 窗跑出假阴性——只影响等待时长，不断言弱化
+const waitLog = async (pred: () => boolean, ms = 8000): Promise<void> => {
   const end = Date.now() + ms;
   while (Date.now() < end && !pred()) await wait(100);
 };
@@ -99,7 +101,11 @@ const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
 let cloudOnline = false; // 33 段置 true：云通道手机计入"在线"门控
-const { bridge } = startServer(bus, mgr, cfg, { holdMs: 1200, questionHoldMs: 800, gateToolsRaw: "Bash,Edit", cloudHasPhones: () => cloudOnline });
+// holdMs 1200→5000（W-INJECT）：17.5 段从 PreToolUse 到 CONTINUE 有 600ms 固定等待+ack
+// 往返，同机高负载（生产 relay/并行套件/会话进程）下 >1200ms 即挂起超时自动放行，CONTINUE
+// 撞「no such pending request」假失败（mine 三跑两挂、base 也挂过同族 29 段实录）。
+// 只动套件参数，生产默认 590s 不变
+const { bridge } = startServer(bus, mgr, cfg, { holdMs: 5000, questionHoldMs: 800, gateToolsRaw: "Bash,Edit", cloudHasPhones: () => cloudOnline });
 await wait(300);
 
 const http = `http://127.0.0.1:${cfg.port}`;
@@ -346,7 +352,9 @@ const renId = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "我�
 const ack23 = await waitAck(renId);
 assert(ack23.ok, "RENAME acked");
 await wait(150);
-const upd23 = events.filter((e) => e.type === "SESSION_UPDATED").at(-1) as Envelope<"SESSION_UPDATED", { title?: string; title_locked?: boolean }> | undefined;
+// W-INJECT：pid 帧是新增的合法 UPDATED 帧型（setExternalCliPid 变更即落帧），可能排
+// 在 rename 帧之后——断言改取「最后一个带 title 的帧」，不再假设 rename 帧是最新帧
+const upd23 = [...events].reverse().find((e) => e.type === "SESSION_UPDATED" && (e.payload as { title?: string }).title !== undefined) as Envelope<"SESSION_UPDATED", { title?: string; title_locked?: boolean }> | undefined;
 assert(upd23?.payload.title === "我的会话" && upd23?.payload.title_locked === true, "UPDATE carries title + title_locked");
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.title === "我的会话", "state renamed");
 
