@@ -73,6 +73,7 @@ import { buildRoleInjection, getRoleTemplate, listRoleTemplates } from "./role-t
 // 替代链/升格复制 + 注入块构建（store 零依赖本文件，无环）
 import {
   appendRule, retireRule, supersedeRule, promoteExperienceToRule, listRules, buildRuleInjection,
+  type RuleEntry, // W-RULES2：emitRules diff 基线类型
 } from "./team-rules.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
@@ -5220,6 +5221,15 @@ export class SessionManager {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // ---------- W-RULES2 团队规则库面板通道：rule-* 动作直通 orgAction 单漏斗 ----------
+    // 与 exp-* 同款（M12 教义「不建第二事实源」；P1 只放通了 HTTP 面，WS 面在此补齐
+    // ——web 双壳/expo 面板走 COMMAND_ORG_ACTION，无此直通则面板全瘫）。rule-append
+    // 的 direct 语义=面板用户主权面（配对即用户授权，org CLI direct 同信任级）；
+    // 审计行/广播在漏斗 case 内单点（auditRuleAction + emitRules），此处不重复记账。
+    if (action.startsWith("rule-")) {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
 
@@ -5697,6 +5707,7 @@ export class SessionManager {
           if (p.direct === true) {
             const r = appendRule({ ...draft });
             this.auditRuleAction("rule-append", r, draft.scope);
+            if (r.ok) this.emitRules(); // W-RULES2：direct 落库后广播（端上 ≤实时可见）
             return r.ok ? { ok: true, data: { entry: r.entry } } : r;
           }
           const c = addConfirm({
@@ -5723,6 +5734,7 @@ export class SessionManager {
           if (!id) return { ok: false, error: "id 必填" };
           const r = retireRule(id);
           this.auditRuleAction("rule-retire", r, "team");
+          if (r.ok) this.emitRules(); // W-RULES2
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
         }
         case "rule-supersede": {
@@ -5738,6 +5750,7 @@ export class SessionManager {
             created_by: str("created_by") === "agent" ? "agent" : "user",
           });
           this.auditRuleAction("rule-supersede", r, scope || "team");
+          if (r.ok) this.emitRules(); // W-RULES2：替代=两变（旧指新+新条入库）一次广播
           return r.ok ? { ok: true, data: { entry: r.entry, superseded: r.superseded } } : r;
         }
         case "exp-promote": {
@@ -5759,6 +5772,7 @@ export class SessionManager {
             created_by: str("created_by") === "agent" ? "agent" : "user",
           });
           this.auditRuleAction("exp-promote", r, exp.project_scope === "global" ? "team" : exp.project_scope);
+          if (r.ok) this.emitRules(); // W-RULES2：升格复制入库后广播
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
         }
         case "project-detail": {
@@ -5983,6 +5997,7 @@ export class SessionManager {
           });
           if (!r.ok) return fail("规则入库", r);
           this.auditRuleAction("rule-append", r, typeof c.payload.scope === "string" ? c.payload.scope : "team", `确认卡 ${c.id} 通过入库 ${r.entry.id}`);
+          this.emitRules(); // W-RULES2：确认卡 ✓ 落库后广播（提案出卡时不发——零写入）
           break;
         }
       }
@@ -6104,6 +6119,32 @@ export class SessionManager {
       });
     } catch (e) {
       console.warn(`[experience] 广播失败（忽略，不阻断动作主路径）: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // ── W-RULES2 rules 域广播：emitExperience 同款单点 diff（帧双载 RulesUpdatedPayload，
+  // types.ts）。触发点=全部 rule-* 漏斗写成功边（direct append/retire/supersede/exp-promote）
+  // + 确认卡 rule-append ✓ 落库（applyConfirmEffects）；提案出卡不广播（零写入，卡面走
+  // ORG_CONFIRM_UPDATED）。无基线（mgr 重启后首帧）diffById 返 null → 只发 entries 全量。
+  // 规则库零 GC 全史几十条级，全量帧体积已核账（types.ts SNAPSHOT.rules 注释）。
+  private lastRulesBroadcast: RuleEntry[] | null = null;
+
+  emitRules(): void {
+    try {
+      const entries = listRules();
+      const delta = this.diffById(this.lastRulesBroadcast, entries);
+      this.lastRulesBroadcast = entries;
+      this.bus.emitTransient("RULES_UPDATED", {
+        entries,
+        ...(delta
+          ? {
+              entity_refs: [...new Set([...delta.upserts.map((e) => e.id), ...delta.removes])],
+              delta,
+            }
+          : {}),
+      });
+    } catch (e) {
+      console.warn(`[team-rules] 广播失败（忽略，不阻断动作主路径）: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

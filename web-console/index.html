@@ -1244,6 +1244,53 @@
   #expdrawer .ed-form .ed-go:disabled { opacity: .5; cursor: default; }
   #expdrawer .ed-hint { flex-basis: 100%; font-size: 10px; color: var(--faint); }
   .exp-entry.exp-off { opacity: .55; }
+  /* ---------- W-RULES2 团队铁律抽屉（P2 面板）：expdrawer 同形右缘抽屉（rd-* 独立命名不与 ed-* 缠绕） ---------- */
+  #rulesdrawer { position: fixed; inset: 0; z-index: 61; background: rgba(2,5,10,.45); display: flex; justify-content: flex-end; }
+  #rulesdrawer .rd-panel { width: min(470px, 94vw); background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: -10px 0 34px rgba(0,0,0,.35); }
+  #rulesdrawer .rd-head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  #rulesdrawer .rd-head b { flex: 1; min-width: 0; font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #rulesdrawer .rd-src { flex: none; font-size: 10px; color: var(--faint); }
+  #rulesdrawer .rd-body { flex: 1; overflow-y: auto; padding: 10px 15px 20px; }
+  #rulesdrawer .rd-banner { margin: 8px 0; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 8px; color: var(--dim); font-size: 11.5px; line-height: 1.5; }
+  #rulesdrawer .rd-legend { border-style: solid; border-color: color-mix(in srgb, var(--info, #3b82f6) 35%, transparent); font-size: 10.5px; }
+  #rulesdrawer .rd-toolbar { display: flex; align-items: center; gap: 7px; margin: 2px 0 8px; }
+  #rulesdrawer .rd-toolbar .mini { font-size: 10.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  #rulesdrawer .rd-toolbar .mini:hover { border-color: var(--text); }
+  #rulesdrawer .rd-toolbar .rd-on { border-color: color-mix(in srgb, var(--brand) 60%, transparent); color: var(--brand); }
+  #rulesdrawer .rd-count { font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  #rulesdrawer .rd-count.over { color: var(--err, #e5484d); font-weight: 700; }
+  #rulesdrawer .rd-filters { display: flex; align-items: center; gap: 7px; margin: 4px 0 10px; }
+  #rulesdrawer .rd-filters select { min-height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 11px; }
+  #rulesdrawer .rd-row { padding: 8px 9px; margin-bottom: 7px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+  #rulesdrawer .rd-row.rd-off { opacity: .62; }
+  #rulesdrawer .rd-row-top { display: flex; align-items: baseline; gap: 6px; }
+  #rulesdrawer .rd-text { flex: 1; min-width: 0; font-size: 12px; color: var(--text); line-height: 1.45; overflow-wrap: anywhere; }
+  #rulesdrawer .rd-status { flex: none; font-size: 10px; color: var(--faint); }
+  #rulesdrawer .rd-status.on { color: var(--ok, #30a46c); }
+  #rulesdrawer .rd-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; }
+  #rulesdrawer .rd-badge { font-size: 9.5px; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+  #rulesdrawer .rd-badge.rd-aud-leader { color: var(--info, #3b82f6); border-color: color-mix(in srgb, var(--info, #3b82f6) 40%, transparent); opacity: .85; }
+  #rulesdrawer .rd-ops { display: flex; gap: 6px; margin-top: 7px; }
+  #rulesdrawer .rd-ops .mini, #rulesdrawer .rd-formline .mini { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  #rulesdrawer .rd-ops .mini:hover, #rulesdrawer .rd-formline .mini:hover { border-color: var(--text); }
+  #rulesdrawer .rd-ops .rd-danger { color: var(--err, #e5484d); }
+  #rulesdrawer .rd-ops .mini:disabled, #rulesdrawer .rd-formline .mini:disabled { opacity: .5; cursor: default; }
+  #rulesdrawer .rd-form { display: flex; flex-direction: column; gap: 7px; margin: 8px 0; padding: 9px; border: 1px dashed var(--border); border-radius: 8px; }
+  #rulesdrawer .rd-form textarea, #rulesdrawer .rd-form input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg, #fff); color: var(--text); font-size: 11.5px; line-height: 1.5; resize: vertical; min-width: 0; }
+  #rulesdrawer .rd-formline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  #rulesdrawer .rd-formline label { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--dim); }
+  #rulesdrawer .rd-formline select { min-height: 25px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 11px; }
+  #rulesdrawer .rd-form .rd-go { font-size: 10.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text-strong); cursor: pointer; }
+  #rulesdrawer .rd-form .rd-go:disabled { opacity: .5; cursor: default; }
+  #rulesdrawer .rd-hint { font-size: 10px; color: var(--faint); line-height: 1.5; }
+  #rulesdrawer .rd-preview { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+  #rulesdrawer .rd-prow { display: flex; align-items: baseline; gap: 6px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 7px; font-size: 11px; }
+  #rulesdrawer .rd-prow.rd-pbad { border-color: color-mix(in srgb, var(--err, #e5484d) 45%, transparent); background: color-mix(in srgb, var(--err, #e5484d) 7%, transparent); }
+  #rulesdrawer .rd-pn { flex: none; color: var(--faint); font-size: 9.5px; font-variant-numeric: tabular-nums; }
+  #rulesdrawer .rd-pt { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+  #rulesdrawer .rd-pflag { flex-basis: 100%; color: var(--err, #e5484d); font-size: 10px; line-height: 1.5; }
+  .rules-entry.exp-off { opacity: .55; }
   /* #018-W1b 远程立项轻模态（orgnew）：复用 orgdrawer 的遮罩语汇，居中窄卡 */
   #orgnew { position: fixed; inset: 0; z-index: 62; background: rgba(2,5,10,.45); display: flex; align-items: center; justify-content: center; }
   #orgnew .on-panel { width: min(360px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
@@ -3363,6 +3410,7 @@ function ensureCtx(cfg) {
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
       experiences: null, experienceEnabled: undefined, // W-EXPP2 经验库（SNAPSHOT.experience；null = 旧 relay 不支持，入口不渲染）
+      rules: null, rulesEnabled: undefined, // W-RULES2 团队铁律库（SNAPSHOT.rules；null = 旧 relay 不支持，入口不渲染）
       projectionV2: false, // M13-3 v2 投影协议位（SNAPSHOT source_capabilities.projection_v2；缺省/undefined = 旧 relay → 覆盖式，一切照旧）
       permCaps: null, // P81-8W 权限能力摘要（SNAPSHOT source_capabilities.permission[]；null = 旧 relay 不发 → 摘要区整体隐藏）
       engineCatalog: null, // #75-W 引擎目录（SNAPSHOT source_capabilities.engine_catalog；null = 旧 relay 不发 → checkbox 兼容面+降级摘要）
@@ -4835,7 +4883,10 @@ function onEvent(ctx, msg) {
       // W-EXPP2 经验库锚定（空数组也下发=支持位；缺席=旧 relay null 不渲染入口）
       ctx.experiences = Array.isArray(msg.payload.experience) ? msg.payload.experience.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null;
       ctx.experienceEnabled = msg.payload.experience_enabled !== false;
-      renderOrgZone(); // 经验库入口行随快照收敛（函数内有 key 去重闸）
+      // W-RULES2 团队铁律锚定（experience 同款口径：空数组=支持位，缺席=旧 relay）
+      ctx.rules = Array.isArray(msg.payload.rules) ? msg.payload.rules.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null;
+      ctx.rulesEnabled = msg.payload.rules_enabled !== false;
+      renderOrgZone(); // 经验库/铁律入口行随快照收敛（函数内有 key 去重闸）
       ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
       renderEmpHome(); // 同上：雇员独立家卡
@@ -4972,6 +5023,19 @@ function onEvent(ctx, msg) {
         ctx.experiences = p.entries.filter((e) => e && typeof e.id === "string" && typeof e.text === "string");
       }
       expRenderDrawer(); // 抽屉开着时实时收敛（函数内有打开闸）
+      break;
+    }
+    case "RULES_UPDATED": {
+      // W-RULES2 团队铁律变更帧（EXPERIENCE_UPDATED 同构形）：v2 锚定后 delta merge，
+      // 否则 entries 全量覆盖式；未锚定收到纯 delta 丢弃等快照自愈
+      const p = msg.payload;
+      if (p && p.delta !== undefined && ctx.projectionV2) {
+        if (!Array.isArray(ctx.rules)) break;
+        ctx.rules = mergeEntityDelta(ctx.rules, p.delta);
+      } else if (Array.isArray(p && p.entries)) {
+        ctx.rules = p.entries.filter((e) => e && typeof e.id === "string" && typeof e.text === "string");
+      }
+      rulesRenderDrawer(); // 抽屉开着时实时收敛（函数内有打开闸）
       break;
     }
     case "BOARD_UPDATED": {
@@ -5694,6 +5758,385 @@ function orgCtxs() {
   return [...ctxs.values()].filter((c) => Array.isArray(c.projects) && c.status === "online");
 }
 
+// ---------- W-RULES2 团队铁律（P2 面板）：orgzone 入口 + 抽屉（列表/筛选/新增/退役/
+// 替代/markdown 批量导入）。数据源 SNAPSHOT.rules + RULES_UPDATED 帧（case 在帧分发
+// 处，v2 delta merge/覆盖式双路径）。操作走 COMMAND_ORG_ACTION {action:"rule-*"}——
+// P2 补齐了 relay orgCommand 的 WS rule-* 直通（此前只有 HTTP 面）。写面 direct:true =
+// 面板用户主权面（org CLI direct 同信任级；表单/导入预览即用户审定动作）。P1 无恢复/
+// 删除语义（retired/superseded 是终态，append-only 审计；「恢复」正解=重立新条），
+// 故不设恢复/删除钮。leader 受众条目不隐藏（管理面全量可见），以徽章+图例说明注入面。
+// 生命周期动词表：active→(退役)→retired；active→(替代)→superseded(指新)+新条 active。 ----------
+const RULE_ROLE_VOCAB = ["worker", "pm", "team_pm", "review", "review_pm"]; // BIZ_ROLE_VOCAB 镜像（fail-closed 词表）
+const rulesDrawer = { open: false, src: "", status: "active", scope: "all", arm: null, armTimer: 0, form: null, flight: new Set(), addOpen: false, impOpen: false, impText: "", impPreview: null, impFlight: false };
+function rulesCtxs() {
+  return orgCtxs().filter((c) => c.rules !== null);
+}
+function rulesCloseDrawer() {
+  rulesDrawer.open = false;
+  if (rulesDrawer.armTimer) { clearTimeout(rulesDrawer.armTimer); rulesDrawer.armTimer = 0; }
+  const d = $("rulesdrawer");
+  if (d) d.remove();
+  renderOrgZone();
+  if (orgFocusBack) { try { orgFocusBack.focus(); } catch {} orgFocusBack = null; }
+}
+function rulesOpenDrawer(ctx) {
+  rulesCloseDrawer();
+  rulesDrawer.open = true;
+  rulesDrawer.src = ctx.cfg.id;
+  rulesDrawer.status = "active"; rulesDrawer.scope = "all"; rulesDrawer.arm = null; rulesDrawer.form = null;
+  rulesDrawer.addOpen = false; rulesDrawer.impOpen = false; rulesDrawer.impText = ""; rulesDrawer.impPreview = null; rulesDrawer.impFlight = false;
+  if (!$("rulesdrawer")) orgFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null; // P58 焦点归还锚
+  const d = document.createElement("div");
+  d.id = "rulesdrawer";
+  d.innerHTML = '<div class="rd-panel"><div class="rd-head"><b>团队铁律</b><span class="rd-src"></span><button class="rd-close mini" title="关闭">✕</button></div><div class="rd-body"></div></div>';
+  d.addEventListener("click", (e) => {
+    if (e.target === d || e.target.closest(".rd-close")) { rulesCloseDrawer(); return; }
+    const arm = e.target.closest("[data-rule-retire]");
+    if (arm) { rulesOp("rule-retire", arm.dataset.ruleRetire); return; }
+    const sp = e.target.closest("[data-rule-supersede]");
+    if (sp) { rulesDrawer.form = rulesDrawer.form === sp.dataset.ruleSupersede ? null : sp.dataset.ruleSupersede; rulesDrawer.arm = null; rulesRenderDrawer(); return; }
+    const spGo = e.target.closest("[data-rule-sp-go]");
+    if (spGo) {
+      const row = spGo.closest(".rd-row");
+      const text = row ? ((row.querySelector("[data-rule-sp-text]") || {}).value || "") : "";
+      rulesSupersedeSubmit(spGo.dataset.ruleSpGo, text.trim());
+      return;
+    }
+    const addTg = e.target.closest("[data-rules-add-toggle]");
+    if (addTg) { rulesDrawer.addOpen = !rulesDrawer.addOpen; if (rulesDrawer.addOpen) { rulesDrawer.impOpen = false; } rulesRenderDrawer(); return; }
+    const impTg = e.target.closest("[data-rules-imp-toggle]");
+    if (impTg) { rulesDrawer.impOpen = !rulesDrawer.impOpen; if (rulesDrawer.impOpen) { rulesDrawer.addOpen = false; rulesDrawer.impPreview = null; } rulesRenderDrawer(); return; }
+    const addGo = e.target.closest("[data-rules-add-go]");
+    if (addGo) {
+      const panel = addGo.closest(".rd-addform");
+      const text = ((panel.querySelector("[data-rules-add-text]") || {}).value || "").trim();
+      const aud = ((panel.querySelector("[data-rules-add-aud]") || {}).value || "all");
+      const scope = ((panel.querySelector("[data-rules-add-scope]") || {}).value || "team");
+      rulesAddSubmit(text, aud, scope);
+      return;
+    }
+    const impParse = e.target.closest("[data-rules-imp-parse]");
+    if (impParse) {
+      const panel = impParse.closest(".rd-impform");
+      rulesDrawer.impText = (panel.querySelector("[data-rules-imp-text]") || {}).value || "";
+      rulesDrawer.impPreview = parseRulesMarkdown(rulesDrawer.impText).map((it) => ({ ...it, flags: rulePreviewFlags(ctx, it.text, it.audience, "team") }));
+      rulesRenderDrawer();
+      return;
+    }
+    const impGo = e.target.closest("[data-rules-imp-go]");
+    if (impGo) { void rulesConfirmImport(ctx); return; }
+    const impTpl = e.target.closest("[data-rules-imp-tpl]");
+    if (impTpl) { rulesCopyTemplate(impTpl); return; }
+  });
+  d.addEventListener("change", (e) => {
+    const st = e.target.closest(".rd-f-status");
+    if (st) { rulesDrawer.status = st.value; rulesRenderDrawer(); return; }
+    const sc = e.target.closest(".rd-f-scope");
+    if (sc) { rulesDrawer.scope = sc.value; rulesRenderDrawer(); return; }
+  });
+  d.addEventListener("input", (e) => {
+    const t = e.target.closest("[data-rules-add-text],[data-rule-sp-text]");
+    if (!t) return;
+    const counter = t.closest(".rd-addform, .rd-spform")?.querySelector(".rd-count");
+    if (counter) {
+      counter.textContent = t.value.length + "/" + 120;
+      counter.classList.toggle("over", t.value.length > 120);
+    }
+  });
+  document.body.appendChild(d);
+  rulesRenderDrawer();
+}
+function ruleAudLabel(aud) {
+  if (aud === "all") return "全员";
+  if (aud === "leader") return "Leader";
+  if (typeof aud === "string" && aud.startsWith("role:")) return "角色:" + aud.slice(5);
+  return aud || "?";
+}
+function ruleScopeName(ctx, scope) {
+  if (scope === "team") return "团队";
+  if (typeof scope === "string" && scope.startsWith("project:")) {
+    const norm = (v) => String(v || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+    const g = (Array.isArray(ctx.projects) ? ctx.projects : []).find((x) => norm(x.anchor_dir) === norm(scope.slice(8)));
+    if (g) return g.name || g.id;
+    return norm(scope).split("/").filter(Boolean).pop() || "项目";
+  }
+  return scope || "?";
+}
+// normRuleKey 客户端镜像（team-rules.ts 同算法：trim+小写+NFKC+去标点空白+前 64 字）——
+// 导入预览去重标红用；入库权威判定仍在 relay store 层（预览红≠必拒，仅提示）
+function ruleNormKey(text) {
+  return String(text || "").trim().toLowerCase().normalize("NFKC")
+    .replace(/[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{L}\p{N}]/gu, "")
+    .slice(0, 64);
+}
+const RULES_IMPORT_TEMPLATE = [
+  "# 团队铁律批量导入",
+  "## 全员",
+  "- （示例）交付前必须完成自测，缺项在回执写明",
+  "## 角色：worker",
+  "- （示例）动工前先认领任务单，不重复开工",
+  "## Leader",
+  "- （示例）派单必须附带验收点",
+].join("\n");
+function rulesCopyTemplate(btn) {
+  const done = () => { const old = btn.textContent; btn.textContent = "已复制"; setTimeout(() => { btn.textContent = old; }, 1500); };
+  if (navigator.clipboard?.writeText) { navigator.clipboard.writeText(RULES_IMPORT_TEMPLATE).then(done, () => {}); }
+}
+function parseRulesMarkdown(md) {
+  // B 路格式：`## 全员` / `## 角色：<name>` / `## Leader` 分节 + 列表项。宽容解析：
+  // 任意级标题认节、列表符（- * • / 有序）剥除、裸行也收（粘贴散文本容错）；未知节
+  // 与节前内容忽略（多为说明文字，硬拒会逼用户手工清洗）
+  const out = [];
+  let aud = null;
+  for (const rawLine of String(md || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const h = line.match(/^#{1,6}\s+(.+)$/);
+    if (h) {
+      const t = h[1].trim();
+      const roleM = t.match(/^角色[:：]\s*(.+)$/);
+      if (/^全员$/.test(t)) aud = "all";
+      else if (/^leader$/i.test(t)) aud = "leader";
+      else if (roleM) aud = "role:" + roleM[1].trim().toLowerCase();
+      else aud = null;
+      continue;
+    }
+    if (!aud) continue;
+    const text = line.replace(/^[-*•]\s*/, "").replace(/^\d+[.、)）]\s*/, "").trim();
+    if (text) out.push({ text, audience: aud });
+  }
+  return out;
+}
+// 导入预览标红（客户端预检，服务端 store 闸仍是权威）：超长 / 重复 / 角色词表外 / 桶容量
+function rulePreviewFlags(ctx, text, audience, scope) {
+  const flags = [];
+  if (text.length > 120) flags.push("超 120 字（" + text.length + "）——规则是一句话红线，精简或拆条");
+  if (audience.startsWith("role:")) {
+    const role = audience.slice(5);
+    if (!RULE_ROLE_VOCAB.includes(role)) flags.push("角色词表外（" + role + "）——可用：" + RULE_ROLE_VOCAB.join("/"));
+  }
+  const all = Array.isArray(ctx.rules) ? ctx.rules : [];
+  const key = ruleNormKey(text);
+  const dup = all.find((e) => e && e.status === "active" && e.scope === scope && e.audience === audience && ruleNormKey(e.text) === key);
+  if (dup) flags.push("与在役规则重复（" + dup.id + "）——改规则用「替代」，或先退役旧条");
+  const bucket = all.filter((e) => e && e.status === "active" && e.scope === scope && (audience === "leader" ? false : e.audience === audience)).length;
+  const cap = scope === "team" ? (audience.startsWith("role:") ? 4 : 6) : 4;
+  if (!dup && bucket >= cap) flags.push("该范围在役规则已满 " + bucket + "/" + cap + " 条——先退役/替代精简再导入");
+  return flags;
+}
+function rulesFiltered(ctx) {
+  const list = Array.isArray(ctx.rules) ? ctx.rules : [];
+  return list.filter((e) => {
+    if (!e || typeof e.id !== "string") return false;
+    if (rulesDrawer.status === "active" && e.status !== "active") return false;
+    if (rulesDrawer.status === "archived" && e.status === "active") return false;
+    if (rulesDrawer.scope === "team" && e.scope !== "team") return false;
+    if (rulesDrawer.scope !== "all" && rulesDrawer.scope !== "team" && String(e.scope || "").replace(/\/+$/, "") !== String(rulesDrawer.scope).replace(/\/+$/, "")) return false;
+    return true;
+  }).sort((a, b) => (a.created_at || 0) - (b.created_at || 0)); // active 按 created_at 升序（拍板口径）
+}
+function ruleRowHtml(ctx, e) {
+  const armed = rulesDrawer.arm === e.id;
+  const flight = rulesDrawer.flight.has(e.id);
+  const canOp = ctx.status === "online" && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_ORG_ACTION") && ctx.rulesEnabled !== false;
+  const active = e.status === "active";
+  const formOpen = rulesDrawer.form === e.id;
+  const anchors = (Array.isArray(ctx.projects) ? ctx.projects : []).map((g) =>
+    '<option value="' + escapeHtml(g.anchor_dir || "") + '"' + (g.anchor_dir === e.scope ? " selected" : "") + ">" + escapeHtml(g.name || g.id) + "</option>").join("");
+  const audBadge = '<span class="rd-badge' + (e.audience === "leader" ? " rd-aud-leader" : "") + '"' +
+    (e.audience === "leader" ? ' title="仅注入 Leader 会话——worker 派单不可见"' : "") + ">" + escapeHtml(ruleAudLabel(e.audience)) + "</span>";
+  const sup = e.status === "superseded" && e.superseded_by
+    ? '<span class="rd-badge" title="替代链">→ ' + escapeHtml(e.superseded_by) + "</span>" : "";
+  const t = new Date(e.created_at || 0);
+  const time = Number.isFinite(t.getTime()) && t.getTime() > 0
+    ? String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0") + " " + String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0") : "—";
+  return '<div class="rd-row' + (active ? "" : " rd-off") + '">' +
+    '<div class="rd-row-top"><span class="rd-text" title="' + escapeHtml(e.id) + '">' + escapeHtml(e.text) + "</span>" +
+    '<span class="rd-status ' + (active ? "on" : "off") + '">' + (active ? "在役" : e.status === "retired" ? "已退役" : "已替代") + "</span></div>" +
+    '<div class="rd-meta">' + audBadge +
+    '<span class="rd-badge">' + escapeHtml(ruleScopeName(ctx, e.scope)) + "</span>" +
+    '<span class="rd-badge">' + time + "</span>" + sup + "</div>" +
+    (canOp && active ? '<div class="rd-ops">' +
+      '<button class="mini rd-danger" data-rule-retire="' + escapeHtml(e.id) + '"' + (flight ? " disabled" : "") + ">" + (armed ? "确认退役？" : "退役") + "</button>" +
+      '<button class="mini" data-rule-supersede="' + escapeHtml(e.id) + '">' + (formOpen ? "收起" : "替代（旧指新）") + "</button></div>" : "") +
+    (canOp && active && formOpen ? '<div class="rd-form rd-spform">' +
+      '<input data-rule-sp-text placeholder="新规则文本（受众/范围缺省继承旧条）" maxlength="240">' +
+      '<span class="rd-count">0/120</span>' +
+      '<button class="mini rd-go" data-rule-sp-go="' + escapeHtml(e.id) + '"' + (flight ? " disabled" : "") + ">提交替代</button>" +
+      '<span class="rd-hint">替代=新条入库 + 旧条停注并指向新条（替代链）。</span></div>' : "") +
+    (!active ? '<div class="rd-hint">终态条目（append-only 审计）——需恢复请以同义文本重立新条。</div>' : "") +
+    "</div>";
+}
+function rulesRenderDrawer() {
+  const d = $("rulesdrawer");
+  if (!d || !rulesDrawer.open) return;
+  const ctx = ctxs.get(rulesDrawer.src);
+  if (!ctx) { rulesCloseDrawer(); return; }
+  const srcName = d.querySelector(".rd-src");
+  if (srcName) srcName.textContent = srcDisplayName(ctx.cfg);
+  const body = d.querySelector(".rd-body");
+  if (!body) return;
+  if (ctx.rulesEnabled === false) {
+    body.innerHTML = '<div class="rd-banner">团队规则总开关已关闭（relay 设置）——注入已停，此面板暂不可用。</div>';
+    return;
+  }
+  if (ctx.rules === null) {
+    body.innerHTML = '<div class="rd-banner">此 relay 无规则库数据（旧版本 relay 或规则域未随快照下发）。</div>';
+    return;
+  }
+  const all = ctx.rules.filter((e) => e && typeof e.id === "string");
+  const activeN = all.filter((e) => e.status === "active").length;
+  const teamActive = all.filter((e) => e.status === "active" && e.scope === "team" && e.audience === "all").length;
+  const head = '<div class="rd-toolbar">' +
+    '<button class="mini' + (rulesDrawer.addOpen ? " rd-on" : "") + '" data-rules-add-toggle>＋ 新增</button>' +
+    '<button class="mini' + (rulesDrawer.impOpen ? " rd-on" : "") + '" data-rules-imp-toggle>⇪ 批量导入</button>' +
+    '<span class="rd-count">在役 ' + activeN + " · 团队全员 " + teamActive + "/6 · 共 " + all.length + " 条</span></div>";
+  const addForm = !rulesDrawer.addOpen ? "" : '<div class="rd-form rd-addform">' +
+    '<textarea data-rules-add-text rows="2" placeholder="一句话红线（祈使句，≤120 字）"></textarea>' +
+    '<div class="rd-formline"><span class="rd-count">0/120</span>' +
+    '<label>受众 <select data-rules-add-aud><option value="all">全员</option><option value="leader">Leader</option>' +
+    RULE_ROLE_VOCAB.map((r) => '<option value="role:' + r + '">角色:' + r + "</option>").join("") + "</select></label>" +
+    '<label>范围 <select data-rules-add-scope><option value="team">团队</option>' +
+    (Array.isArray(ctx.projects) ? ctx.projects : []).map((g) => '<option value="project:' + escapeHtml(g.anchor_dir || "") + '">项目:' + escapeHtml(g.name || g.id) + "</option>").join("") + "</select></label>" +
+    '<button class="mini rd-go" data-rules-add-go' + (ctx.status === "online" ? "" : " disabled") + ">入库</button></div>" +
+    '<span class="rd-hint">面板入库=用户直写（org CLI 同信任级）；同主题在役规则会拒收，改规则请用「替代」。</span></div>';
+  const impForm = !rulesDrawer.impOpen ? "" : '<div class="rd-form rd-impform">' +
+    '<textarea data-rules-imp-text rows="6" placeholder="粘贴 markdown：&#10;## 全员&#10;- 条目…&#10;## 角色：worker&#10;- 条目…&#10;## Leader&#10;- 条目…"></textarea>' +
+    '<div class="rd-formline">' +
+    '<button class="mini rd-go" data-rules-imp-parse' + (ctx.status === "online" ? "" : " disabled") + ">生成预览</button>" +
+    '<button class="mini" data-rules-imp-tpl>复制模板</button></div>' +
+    '<span class="rd-hint">格式：## 全员 / ## 角色：&lt;name&gt; / ## Leader 分节 + 列表项；导入均为团队范围，逐条过数值闸（超限/重复标红）。</span>' +
+    (rulesDrawer.impPreview ? (
+      rulesDrawer.impPreview.length
+        ? '<div class="rd-preview">' + rulesDrawer.impPreview.map((it, i) =>
+            '<div class="rd-prow' + (it.flags.length ? " rd-pbad" : "") + '">' +
+            '<span class="rd-pn">' + (i + 1) + "</span>" +
+            '<span class="rd-pt">' + escapeHtml(it.text) + "</span>" +
+            '<span class="rd-badge">' + escapeHtml(ruleAudLabel(it.audience)) + "</span>" +
+            (it.flags.length ? '<span class="rd-pflag">' + it.flags.map((f) => escapeHtml(f)).join("；") + "</span>" : "") +
+            "</div>").join("") + "</div>" +
+          '<div class="rd-formline"><button class="mini rd-go" data-rules-imp-go>' +
+            "确认导入 " + rulesDrawer.impPreview.filter((it) => !it.flags.length).length + "/" + rulesDrawer.impPreview.length + " 条</button>" +
+            '<span class="rd-hint">标红条目不会提交；导入走逐条数值闸，失败项会在结果里逐条报出。</span></div>'
+        : '<div class="rd-banner">未解析出任何条目——检查分节头（## 全员 / ## 角色：x / ## Leader）与条目行。</div>'
+    ) : "") + "</div>";
+  if (!all.length) {
+    body.innerHTML = head + addForm + impForm + '<div class="rd-banner">规则库为空——新增一条红线，或用「批量导入」粘贴 markdown。</div>';
+    return;
+  }
+  const list = rulesFiltered(ctx);
+  const hasLeader = all.some((e) => e.status === "active" && e.audience === "leader");
+  body.innerHTML = head + addForm + impForm +
+    '<div class="rd-filters">' +
+    '<select class="rd-f-status"><option value="active"' + (rulesDrawer.status === "active" ? " selected" : "") + ">在役</option>" +
+    '<option value="archived"' + (rulesDrawer.status === "archived" ? " selected" : "") + ">归档（退役/替代）</option>" +
+    '<option value="all"' + (rulesDrawer.status === "all" ? " selected" : "") + ">全部</option></select>" +
+    '<select class="rd-f-scope"><option value="all"' + (rulesDrawer.scope === "all" ? " selected" : "") + ">全部范围</option>" +
+    '<option value="team"' + (rulesDrawer.scope === "team" ? " selected" : "") + ">团队</option>" +
+    (Array.isArray(ctx.projects) ? ctx.projects : []).map((g) => {
+      const anchor = "project:" + String(g.anchor_dir || "").replace(/\/+$/, "");
+      return '<option value="' + escapeHtml(anchor) + '"' + (rulesDrawer.scope === anchor ? " selected" : "") + ">项目:" + escapeHtml(g.name || g.id) + "</option>";
+    }).join("") + "</select>" +
+    '<span class="rd-count">在役 ' + activeN + " · 共 " + all.length + " 条</span></div>" +
+    (hasLeader ? '<div class="rd-banner rd-legend">Leader 徽章条目仅注入 Leader 会话，worker 派单不可见（管理面全量可见不隐藏）。</div>' : "") +
+    (list.length ? list.map((e) => ruleRowHtml(ctx, e)).join("") : '<div class="rd-banner">当前筛选无条目</div>');
+}
+async function rulesOp(type, id) { // 退役：两步武装确认 + 飞行去重；权威收敛走 RULES_UPDATED 帧
+  const ctx = ctxs.get(rulesDrawer.src);
+  if (!ctx || ctx.status !== "online") return;
+  if (rulesDrawer.flight.has(id)) return;
+  if (rulesDrawer.arm !== id) {
+    rulesDrawer.arm = id;
+    if (rulesDrawer.armTimer) clearTimeout(rulesDrawer.armTimer);
+    rulesDrawer.armTimer = setTimeout(() => { rulesDrawer.arm = null; rulesRenderDrawer(); }, 4000);
+    rulesRenderDrawer();
+    return;
+  }
+  if (rulesDrawer.armTimer) { clearTimeout(rulesDrawer.armTimer); rulesDrawer.armTimer = 0; }
+  rulesDrawer.arm = null;
+  rulesDrawer.flight.add(id);
+  rulesRenderDrawer();
+  try {
+    const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", { action: type, id });
+    const v = ackVerdict(ack);
+    if (v.ok) toast("已退役（终态；恢复请重立新条）", 2400);
+    else if (unknownCommandError(v.error)) { ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_ACTION"); toast("当前源 relay 版本较旧，不支持规则操作"); }
+    else toast("操作失败: " + v.error);
+  } finally {
+    rulesDrawer.flight.delete(id);
+    rulesRenderDrawer(); // RULES_UPDATED 帧回来自动收敛，此处清飞行态
+  }
+}
+async function rulesSupersedeSubmit(id, text) { // 替代（旧指新）：一次提交两变，relay 单漏斗原子落
+  const ctx = ctxs.get(rulesDrawer.src);
+  if (!ctx || ctx.status !== "online" || rulesDrawer.flight.has(id) || !text) {
+    if (!text) toast("新规则文本必填");
+    return;
+  }
+  rulesDrawer.flight.add(id);
+  rulesRenderDrawer();
+  try {
+    const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", { action: "rule-supersede", id, text, created_by: "user" });
+    const v = ackVerdict(ack);
+    if (v.ok) { rulesDrawer.form = null; toast("已替代：新条入库、旧条停注指向新条", 2400); }
+    else if (unknownCommandError(v.error)) { ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_ACTION"); toast("当前源 relay 版本较旧，不支持替代"); }
+    else toast("替代失败: " + v.error);
+  } finally {
+    rulesDrawer.flight.delete(id);
+    rulesRenderDrawer();
+  }
+}
+async function rulesAddSubmit(text, audience, scope) { // 新增：面板用户直写（direct；表单即用户审定）
+  const ctx = ctxs.get(rulesDrawer.src);
+  if (!ctx || ctx.status !== "online" || !text) {
+    if (!text) toast("规则文本必填");
+    return;
+  }
+  if (text.length > 120) { toast("超 120 字（" + text.length + "）——精简或拆条"); return; }
+  const fid = "add";
+  if (rulesDrawer.flight.has(fid)) return;
+  rulesDrawer.flight.add(fid);
+  rulesRenderDrawer();
+  try {
+    const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", { action: "rule-append", text, audience, scope, direct: true, created_by: "user" });
+    const v = ackVerdict(ack);
+    if (v.ok) { rulesDrawer.addOpen = false; toast("规则已入库", 2200); }
+    else if (unknownCommandError(v.error)) { ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_ACTION"); toast("当前源 relay 版本较旧，不支持规则操作"); }
+    else toast("入库失败: " + v.error);
+  } finally {
+    rulesDrawer.flight.delete(fid);
+    rulesRenderDrawer();
+  }
+}
+async function rulesConfirmImport(ctx) { // 批量导入：预览无旗标条目逐条 direct 入库（服务端闸仍逐条把关）
+  if (!ctx || ctx.status !== "online" || rulesDrawer.impFlight || !Array.isArray(rulesDrawer.impPreview)) return;
+  const items = rulesDrawer.impPreview.filter((it) => it && !it.flags.length);
+  if (!items.length) { toast("没有可导入的条目（全部标红）"); return; }
+  rulesDrawer.impFlight = true;
+  rulesRenderDrawer();
+  let okN = 0;
+  const errs = [];
+  try {
+    for (const it of items) {
+      try {
+        const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", { action: "rule-append", text: it.text, audience: it.audience, scope: "team", direct: true, created_by: "user" });
+        const v = ackVerdict(ack);
+        if (v.ok) okN += 1;
+        else errs.push("「" + truncateStr(it.text, 16) + "」：" + String(v.error || "未收到回执"));
+      } catch (e) {
+        errs.push("「" + truncateStr(it.text, 16) + "」：" + String(e?.message || e));
+      }
+    }
+    if (!errs.length) { rulesDrawer.impOpen = false; rulesDrawer.impPreview = null; rulesDrawer.impText = ""; toast("已导入 " + okN + " 条", 2400); }
+    else toast("导入 " + okN + "/" + items.length + " 条；失败：" + errs.slice(0, 2).join("；") + (errs.length > 2 ? " 等 " + errs.length + " 项" : ""), 4200);
+  } finally {
+    rulesDrawer.impFlight = false;
+    rulesRenderDrawer();
+  }
+}
+function truncateStr(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; }
+
+
 function renderOrgZone() {
   const box = $("orgzone");
   if (!box) return;
@@ -5710,7 +6153,9 @@ function renderOrgZone() {
     groups.map((x) => x.ctx.cfg.id + x.g.id + x.g.status + x.g.tier + ":" + (x.g.headcount || []).length).join(",") +
     (orgDrawer.open ? "|d" + orgDrawer.gid : "") +
     (expDrawer.open ? "|x" + expDrawer.src : "") + // W-EXPP2
-    "|" + expCtxs().map((c) => c.cfg.id + (c.experiences ? c.experiences.length : 0) + (c.experienceEnabled === false ? "off" : "on")).join(",");
+    "|" + expCtxs().map((c) => c.cfg.id + (c.experiences ? c.experiences.length : 0) + (c.experienceEnabled === false ? "off" : "on")).join(",") +
+    "|" + rulesCtxs().map((c) => c.cfg.id + (c.rules ? c.rules.length : 0) + (c.rulesEnabled === false ? "off" : "on")).join(",") + // W-RULES2
+    (rulesDrawer.open ? "|r" + rulesDrawer.src : "");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   let html = "";
@@ -5747,6 +6192,17 @@ function renderOrgZone() {
       return '<button class="org-new exp-entry' + (off ? " exp-off" : "") + '" data-exp-open="' + escapeHtml(c.cfg.id) + '"' +
         (off ? ' title="经验库总开关已关闭（relay 设置）——注入与整理均已停"' : ' title="团队经验库（查看/退役/恢复/改归组）"') + ">" +
         "经验库" + (off ? "（已关）" : " · " + n) + "</button>";
+    }).join("") + "</div>";
+  }
+  // W-RULES2 团队铁律入口行：有规则域数据的源各一枚（经验库同款口径；开关关=置灰+说明）
+  const rls = rulesCtxs();
+  if (rls.length) {
+    html += '<div class="org-newrow">' + rls.map((c) => {
+      const off = c.rulesEnabled === false;
+      const n = c.rules ? c.rules.filter((e) => e && e.status === "active").length : 0;
+      return '<button class="org-new rules-entry' + (off ? " exp-off" : "") + '" data-rules-open="' + escapeHtml(c.cfg.id) + '"' +
+        (off ? ' title="团队规则总开关已关闭（relay 设置）——注入已停，此面板只读"' : ' title="团队铁律（查看/新增/退役/替代/批量导入）"') + ">" +
+        "团队铁律" + (off ? "（已关）" : " · " + n) + "</button>";
     }).join("") + "</div>";
   }
   box.innerHTML = html;
@@ -5902,6 +6358,8 @@ document.addEventListener("click", (e) => {
   if (nb) { orgOpenCreate(); return; }
   const xb = e.target.closest("button[data-exp-open]");
   if (xb) { const c = ctxs.get(xb.dataset.expOpen); if (c) expOpenDrawer(c); return; } // W-EXPP2 经验库入口
+  const rb = e.target.closest("button[data-rules-open]");
+  if (rb) { const c = ctxs.get(rb.dataset.rulesOpen); if (c) rulesOpenDrawer(c); return; } // W-RULES2 团队铁律入口
   // #018-W1b 通知「知道了」：委托绑定（通知区 innerHTML 整体重建，行上挂不了监听）
   const nk = e.target.closest("button[data-nack-key]");
   if (nk) {
