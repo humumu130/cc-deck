@@ -10569,7 +10569,7 @@ function withContextWindowSuffix(model) {
   if (!model) return model;
   const m = model.trim();
   if (!m || /\[1m\]$/i.test(m)) return m;
-  if (/^(glm-5|claude-sonnet-4-5|claude-opus-5|claude-haiku-4-5)/i.test(m)) return `${m}[1m]`;
+  if (/^(glm-5|claude-(?:sonnet|opus|haiku)-\d)/i.test(m)) return `${m}[1m]`;
   return m;
 }
 
@@ -10600,7 +10600,7 @@ var REPLAY_CONTEXT_MAX = 15e5;
 
 // src/history.ts
 var MAX_SESSIONS_KEPT = 30;
-var MAX_LOGS_PER_SESSION = 300;
+var MAX_LOGS_PER_SESSION = 1500;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
 function loadEvents(path6) {
   if (!existsSync4(path6)) return [];
@@ -10745,6 +10745,10 @@ function reduceHistory(events) {
         }
         if (p.relay_session_id) s.relay_session_id = p.relay_session_id;
         if (p.permission_mode) s.permission_mode = p.permission_mode;
+        {
+          const cp2 = p.cli_pid;
+          if (typeof cp2 === "number" && Number.isInteger(cp2) && cp2 > 0) s.cli_pid = cp2;
+        }
         break;
       }
       case "SESSION_WAITING": {
@@ -10792,7 +10796,7 @@ function reduceHistory(events) {
         const li = p.id ? rs2.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs2.logs[li] = entry;
         else rs2.logs.push(entry);
-        if (rs2.logs.length > 500) rs2.logs.splice(0, rs2.logs.length - 500);
+        if (rs2.logs.length > 1500) rs2.logs.splice(0, rs2.logs.length - 1500);
         break;
       }
       default:
@@ -13601,8 +13605,8 @@ var ORG_CLAUDE_MD_M2_SECTION = `${ORG_CLAUDE_MD_M2_MARKER}\uFF082026-09-27 \u8D7
 - \u7528\u6237\u7684\u4E00\u5207\u6765\u610F\u5148\u5206\u8BCA\uFF0C\u4E94\u54CD\u5E94\uFF08\u54CD\u5E94\u56DB\u6863 + \u7B2C\u4E94\u6001\uFF09\uFF1A
   1. \u54A8\u8BE2\uFF1A\u95EE\u9898/\u5206\u6790\uFF0C\u4E0D\u6539\u4EE3\u7801\u2014\u2014\u5BF9\u8BDD\u5185\u76F4\u63A5\u7B54\uFF1B\u53D1\u73B0 spec \u52D8\u8BEF\u987A\u624B\u4FEE\uFF08\u8F6C\u968F\u624B\u529E\u96F6\u786E\u8BA4\uFF09\u3002
   2. \u968F\u624B\u529E\uFF1A30 \u79D2~\u51E0\u5206\u949F\u5C0F\u6539\u2014\u2014\`~/.cc-deck/bin/org dispatch <\u9879\u76EE\u76EE\u5F55> "<\u4EFB\u52A1>"\` \u6D3E worker\uFF08\u4E0D\u5EFA\u7EC4\u3001\u4E0D\u5EFA worktree\uFF09\u3002
-  3. \u8F7B\u7ACB\u9879\uFF1A\u51E0\u5C0F\u65F6~\u51E0\u5929\u5C0F\u529F\u80FD\u2014\u2014\`org create <\u540D> <\u76EE\u5F55> \u8F7B\u7ACB\u9879\`\uFF08\u9996\u6B21\u987B\u7528\u6237\u786E\u8BA4\uFF0C\u540C\u7C7B\u514D\u786E\u8BA4\u4FE1\u4EFB\u7D2F\u79EF\uFF09\u3002
-  4. \u6B63\u7ECF\u7ACB\u9879\uFF1A\u590D\u6742\u9879\u76EE\u2014\u2014\`org create <\u540D> <\u76EE\u5F55> \u6B63\u7ECF\u7ACB\u9879\`\uFF08\u6BCF\u6B21\u987B\u7528\u6237\u786E\u8BA4\uFF0C\u9632\u8BEF\u5224\u6863\u70E7\u94B1\uFF09\u3002
+  3. \u8F7B\u7ACB\u9879\uFF08\u5BA2\u6237\u7AEF\u663E\u793A\u4E3A\u300C\u8F7B\u91CF\u9879\u76EE\u300D\uFF09\uFF1A\u51E0\u5C0F\u65F6~\u51E0\u5929\u5C0F\u529F\u80FD\u2014\u2014\`org create <\u540D> <\u76EE\u5F55> \u8F7B\u7ACB\u9879\`\uFF08\u9996\u6B21\u987B\u7528\u6237\u786E\u8BA4\uFF0C\u540C\u7C7B\u514D\u786E\u8BA4\u4FE1\u4EFB\u7D2F\u79EF\uFF09\u3002
+  4. \u6B63\u7ECF\u7ACB\u9879\uFF08\u5BA2\u6237\u7AEF\u663E\u793A\u4E3A\u300C\u6B63\u5F0F\u9879\u76EE\u300D\uFF09\uFF1A\u590D\u6742\u9879\u76EE\u2014\u2014\`org create <\u540D> <\u76EE\u5F55> \u6B63\u7ECF\u7ACB\u9879\`\uFF08\u6BCF\u6B21\u987B\u7528\u6237\u786E\u8BA4\uFF0C\u9632\u8BEF\u5224\u6863\u70E7\u94B1\uFF09\u3002
   5. \u5EFA\u8BAE\u6682\u7F13\uFF1A\u4F9D\u8D56\u672A\u5C31\u7EEA/\u65F6\u673A\u4E0D\u5BF9\u2014\u2014\`org hold <\u7EC4id|-> "<\u7406\u7531>" "<\u89E3\u9664\u6761\u4EF6>"\`\uFF08\u7528\u6237\u70B9\u5934\u624D\u6302\u8D77\uFF09\u3002
 - \u5176\u4ED6\u6307\u4EE4\uFF1A\`org status\`\uFF08\u5168\u666F\uFF09/ \`org set <id> active|parked|archived\`\uFF08\u72B6\u6001\u8FC1\u79FB\uFF0C\u4F60\u8BF4\u5148\u653E\u653E=\u6302\u8D77\uFF09/ \`org tier <id> <\u6863> "<\u7406\u7531>"\`\uFF08\u5347\u964D\u7EA7\uFF09/ \`org board ...\`\uFF08\u4EFB\u52A1\u677F\u7EF4\u62A4\uFF09/ \`org detail <id>\`\uFF08\u7F16\u5236/\u677F/\u56DE\u6267\u6D41\uFF09\u3002
 - \u786E\u8BA4\u5361\uFF1A\u6B63\u7ECF\u7ACB\u9879/\u5347\u964D\u7EA7/\u6709\u60AC\u8D26\u7ED3\u9879\u4F1A\u51FA\u786E\u8BA4\u5355\uFF0C\u7B49\u7528\u6237\u5728\u5BA2\u6237\u7AEF \u2713/\u2717\u2014\u2014\u4F60\u53EA\u63D0\u6848\u4E0D\u51B3\u8BAE\uFF0C\u4E0D\u4EE3\u7528\u6237\u51B3\u5B9A\u3002
@@ -13724,9 +13728,9 @@ var ORG_CLI_TEMPLATE = `#!/bin/bash
 # Leader \u53EA\u63D0\u6848\u4E0D\u51B3\u8BAE\u2014\u2014\u786E\u8BA4\u5361 \u2713/\u2717 \u7531\u7528\u6237\u5728\u5BA2\u6237\u7AEF\u70B9\u3002
 # \u7528\u6CD5\uFF1A
 #   org status                                     \u56E2\u961F\u5168\u666F\uFF1A\u9879\u76EE\u7EC4\u7D22\u5F15/\u5F85\u51B3\u786E\u8BA4\u5355/\u8FDB\u884C\u4E2D\u6D3E\u5355
-#   org create <name> <anchor> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879>    \u7ACB\u9879\uFF08\u6B63\u7ECF/\u9996\u6B21\u8F7B \u2192 \u7528\u6237\u786E\u8BA4\u5361\uFF1B\u5E42\u7B49\u79CD\u5B50\u9632\u6F02\u79FB CLAUDE.md\uFF09
+#   org create <name> <anchor> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879>    \u7ACB\u9879\uFF08\u6863\u4F4D\u663E\u793A\u540D\uFF1A\u8F7B\u7ACB\u9879=\u8F7B\u91CF\u9879\u76EE\u3001\u6B63\u7ECF\u7ACB\u9879=\u6B63\u5F0F\u9879\u76EE\uFF1B\u6B63\u7ECF/\u9996\u6B21\u8F7B \u2192 \u7528\u6237\u786E\u8BA4\u5361\uFF1B\u5E42\u7B49\u79CD\u5B50\u9632\u6F02\u79FB CLAUDE.md\uFF09
 #   org set <id> <active|parked|archived> [note]   \u72B6\u6001\u8FC1\u79FB\uFF08\u7ED3\u9879\u6709\u60AC\u8D26/\u672A\u5B8C \u2192 \u51FA\u786E\u8BA4\u5361\u9644\u6838\u5BF9\u6E05\u5355\uFF09
-#   org tier <id> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879> <reason>        \u5347\u964D\u7EA7\uFF08\u5FC5\u987B\u5E26\u4E00\u53E5\u7406\u7531\uFF1B\u786E\u8BA4\u5361\uFF09
+#   org tier <id> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879> <reason>        \u5347\u964D\u7EA7\uFF08\u5FC5\u987B\u5E26\u4E00\u53E5\u7406\u7531\uFF1B\u786E\u8BA4\u5361\uFF1B\u53C2\u6570\u4E3A\u5B58\u50A8\u6863\u4F4D\u8BCD\uFF09
 #   org hold <id|-> <reason> [condition]           \u5EFA\u8BAE\u6682\u7F13\uFF08id=- \u65E0\u7EC4\u6682\u7F13\u4EC5\u53F0\u8D26\uFF1B\u70B9\u5934\u5373\u6302\u8D77\uFF09
 #   org dispatch <anchor> <task> [gid] [title] [skills] \u6D3E\u5355 worker\uFF08\u65E0 gid=\u968F\u624B\u529E\uFF1B\u6709 gid=\u9879\u76EE\u7EC4\u4EFB\u52A1+\u677F\u8054\u52A8\uFF1Bskills=\u9017\u53F7\u5206\u9694\u6280\u80FD\u6807\u7B7E\uFF0C\u4F18\u5148\u6D3E\u5E26\u6807\u7B7E\u719F\u624B\uFF09
 #   org board upsert <gid> <text> [todo|doing|done]
@@ -14243,7 +14247,9 @@ function sanitizeHeadcount(raw) {
     seen.add(sid);
     const roleRaw = item.role;
     const role = typeof roleRaw === "string" && roleRaw.trim() ? roleRaw.trim().slice(0, 24) : "worker";
-    out.push({ session_id: sid, role });
+    const nickRaw = item.nick;
+    const nick = typeof nickRaw === "string" && nickRaw.trim() ? nickRaw.trim().slice(0, 24) : void 0;
+    out.push({ session_id: sid, role, ...nick ? { nick } : {} });
   }
   return { ok: true, ...out.length ? { headcount: out } : {} };
 }
@@ -14309,11 +14315,15 @@ function addMember(gid, sessionId, role, selectionOrDir, dir) {
   if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
   const current = g2.headcount.find((h) => h.session_id === sessionId);
   if (!current) {
-    g2.headcount.push({ session_id: sessionId, role, ...selection });
+    g2.headcount.push({ session_id: sessionId, role, ...selection?.nick ? { nick: selection.nick } : {}, ...selection });
     g2.updated_at = Date.now();
     if (!saveGroup(g2, dataDir2)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
   } else if (selection || current.role !== role) {
     current.role = role;
+    if (selection?.nick !== void 0) {
+      if (selection.nick) current.nick = selection.nick;
+      else delete current.nick;
+    }
     if (selection?.engine !== void 0) current.engine = selection.engine;
     if (selection?.model !== void 0) current.model = selection.model;
     if (selection?.provider !== void 0) current.provider = selection.provider;
@@ -14424,6 +14434,8 @@ function upsertBoardEntry(gid, entry, dir) {
       const t = resolveStatusTransition(e, entry.status, entry.review_required);
       if (!t.ok) return { ok: false, error: t.error };
       e.status = t.status;
+      if (!e.transitions) e.transitions = [];
+      if (e.transitions[e.transitions.length - 1]?.status !== t.status) e.transitions.push({ status: t.status, ts: now });
       if (t.review_required === true) e.review_required = true;
       else if (t.review_required === false) delete e.review_required;
     } else if (entry.review_required !== void 0) {
@@ -14454,6 +14466,8 @@ function upsertBoardEntry(gid, entry, dir) {
       ts: now,
       updated_at: now,
       note: entry.note,
+      transitions: [{ status: t.status, ts: now }],
+      // 件十九：首道入线
       ...t.review_required === true ? { review_required: true } : {},
       ...deps && deps.length > 0 ? { depends_on: deps } : {},
       ...entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}
@@ -14472,6 +14486,8 @@ function moveBoardEntry(gid, entryId, to2, dir) {
   const t = resolveStatusTransition(e, to2);
   if (!t.ok) return { ok: false, error: t.error };
   e.status = t.status;
+  if (!e.transitions) e.transitions = [];
+  if (e.transitions[e.transitions.length - 1]?.status !== t.status) e.transitions.push({ status: t.status, ts: Date.now() });
   if (t.review_required === true) e.review_required = true;
   else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
@@ -49508,6 +49524,12 @@ function dutyContinuationMs() {
 }
 var SNAPSHOT_LOGS_BUDGET_BYTES = 512 * 1024;
 var SNAPSHOT_LOGS_PER_SESSION = 50;
+var SNAPSHOT_LOGS_BUDGET_BYTES_LAN = 4 * 1024 * 1024;
+var SNAPSHOT_LOGS_PER_SESSION_LAN = 1200;
+var SNAPSHOT_LOGS_LAN = {
+  budgetBytes: SNAPSHOT_LOGS_BUDGET_BYTES_LAN,
+  perSessionCap: SNAPSHOT_LOGS_PER_SESSION_LAN
+};
 var SessionManager = class {
   constructor(bus2, cfg2) {
     this.bus = bus2;
@@ -50091,6 +50113,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const existing = this.sessions.get(id2);
     if (existing) {
       existing.state.historical = false;
+      existing.state.idle_archived = void 0;
       const ov3 = this.titleOverrides[id2];
       if (ov3 && existing.state.title !== ov3) {
         existing.state.title = ov3;
@@ -50125,6 +50148,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       state.title = ov2;
       state.title_locked = true;
     }
+    if (readPinnedSessions(this.cfg.dataDir).includes(id2)) state.pinned = true;
     this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
     this.applyDeclaredDeliverables(id2);
     this.bus.emit(id2, "SESSION_CREATED", {
@@ -50622,7 +50646,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (model) s.state.model = model;
     if (contextUsage !== void 0) {
       s.state.context_usage = contextUsage;
-      s.state.context_limit = contextLimitOf(model ?? s.state.model);
+      s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
     }
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
@@ -50631,7 +50655,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       stats: { ...s.state.stats },
       usage,
       ...model ? { model } : {},
-      ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {},
+      ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOfEffective(model ?? s.state.model) } : {},
+      // W-INJECT⑤
       updated_at: s.state.updated_at
     });
   }
@@ -50770,7 +50795,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.logs[i] = entry;
     } else {
       s.logs.push(entry);
-      if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
+      if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500);
     }
     this.bus.emit(id2, "SESSION_LOG", entry);
   }
@@ -50790,6 +50815,11 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s || s.state.cli_pid === pid) return;
     s.state.cli_pid = pid;
+    this.bus.emit(id2, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      cli_pid: pid
+    });
   }
   clearExternalCliPid(id2) {
     const s = this.sessions.get(id2);
@@ -50876,7 +50906,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             };
           }
           const engineForPolicy = engineResolved ?? "claude";
-          const perm = evaluatePermission({
+          const perm = permissionPolicyEnabled() ? evaluatePermission({
             requested_mode: pm2 ?? null,
             engine: engineForPolicy,
             role: "team_pm",
@@ -50885,35 +50915,37 @@ provider=${opts.provider ?? "default"}` : void 0,
             policy_source: "explicit",
             dir_scope: dirScope,
             env: envScope
-          });
-          const auditBase = {
-            requested_mode: perm.requested_mode,
-            normalized_mode: perm.normalized_mode,
-            effective_mode: perm.effective_mode,
-            native_mode: perm.native_mode,
-            capability_state: perm.capability_state,
-            engine: perm.engine,
-            reason: perm.reason,
-            policy_source: perm.policy_source,
-            environment: envScope,
-            dir_scope: dirScope,
-            tier: "\u968F\u624B\u529E",
-            actor: by,
-            session_id: null,
-            command_id: cmd.command_id,
-            created_at: Date.now()
-          };
-          if (perm.effective_mode === "forbidden") {
-            appendPermissionAudit(auditStore(this.cfg.dataDir), auditBase);
+          }) : null;
+          if (perm && perm.effective_mode === "forbidden") {
+            const denyRow = {
+              requested_mode: perm.requested_mode,
+              normalized_mode: perm.normalized_mode,
+              effective_mode: perm.effective_mode,
+              native_mode: perm.native_mode,
+              capability_state: perm.capability_state,
+              engine: perm.engine,
+              reason: perm.reason,
+              policy_source: perm.policy_source,
+              environment: envScope,
+              dir_scope: dirScope,
+              tier: "\u968F\u624B\u529E",
+              actor: by,
+              session_id: null,
+              command_id: cmd.command_id,
+              created_at: Date.now()
+            };
+            appendPermissionAudit(auditStore(this.cfg.dataDir), denyRow);
             return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
           }
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, EFFECTIVE_TO_MANAGED[perm.effective_mode], cmd.payload.autoMkdir === true, {
+          const spawnPmMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : pm2 ?? "bypassPermissions";
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, spawnPmMode, cmd.payload.autoMkdir === true, {
             ...engineResolved ? { engine: engineResolved } : {},
             ...cmd.payload.model ? { model: cmd.payload.model } : {},
             ...cmd.payload.provider ? { provider: cmd.payload.provider } : {},
             ...degraded ? { degraded: true, degraded_reason: degradedReason } : {}
           });
-          appendPermissionAudit(auditStore(this.cfg.dataDir), { ...auditBase, session_id });
+          const okRow = perm ? { requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode, native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine, reason: perm.reason, policy_source: perm.policy_source, environment: envScope, dir_scope: dirScope, tier: "\u968F\u624B\u529E", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() } : { requested_mode: pm2 ?? null, normalized_mode: null, effective_mode: spawnPmMode, native_mode: null, capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy, reason: "p81_policy_off", policy_source: "explicit", environment: envScope, dir_scope: dirScope, tier: "\u968F\u624B\u529E", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() };
+          appendPermissionAudit(auditStore(this.cfg.dataDir), okRow);
           return {
             command_id: cmd.command_id,
             ok: true,
@@ -50921,7 +50953,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             // #75 实际引擎回显+降级显式标记（端上据此显示降级徽标，不静默——提案 §6.2）
             ...engineResolved ? { engine: engineResolved } : {},
             ...degraded ? { degraded: true, degraded_reason: degradedReason } : {},
-            permission: { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason }
+            permission: perm ? { normalized: perm.normalized_mode ?? "", effective: perm.effective_mode, native_mode: perm.native_mode, reason: perm.reason } : { normalized: "", effective: spawnPmMode, native_mode: null, reason: "p81_policy_off" }
           };
         }
         case "COMMAND_MESSAGE": {
@@ -51340,9 +51372,6 @@ provider=${opts.provider ?? "default"}` : void 0,
         }
         case "COMMAND_PIN_SESSION": {
           const s = this.require(cmd.payload.session_id);
-          if (s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u4E0D\u652F\u6301\u7F6E\u9876\uFF08\u7531 CLI \u81EA\u8EAB\u7EF4\u62A4\uFF09" };
-          }
           const pinned2 = cmd.payload.pinned === true;
           s.state.pinned = pinned2 || void 0;
           if (!pinned2) s.state.saved = void 0;
@@ -51363,7 +51392,23 @@ provider=${opts.provider ?? "default"}` : void 0,
         case "COMMAND_RESUME_SESSION": {
           const s = this.require(cmd.payload.session_id);
           if (s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u4E0D\u652F\u6301\u6062\u590D" };
+            const pid = s.state.cli_pid;
+            let alive2 = false;
+            if (pid) {
+              try {
+                process.kill(pid, 0);
+                alive2 = true;
+              } catch (e) {
+                alive2 = e.code === "EPERM";
+              }
+            }
+            if (!alive2) {
+              return { command_id: cmd.command_id, ok: false, error: "\u8BE5\u4F1A\u8BDD\u7684\u7EC8\u7AEF\u8FDB\u7A0B\u5DF2\u7ED3\u675F\uFF0C\u65E0\u6CD5\u5728\u6B64\u6062\u590D\uFF1B\u5728\u7535\u8111\u7EC8\u7AEF\u91CC claude --resume \u540E\u53D1\u6D88\u606F\u5373\u53EF\u91CD\u65B0\u63A5\u5165" };
+            }
+            s.state.historical = false;
+            s.state.idle_archived = void 0;
+            this.emitUpdated(s, true);
+            return { command_id: cmd.command_id, ok: true };
           }
           if (s.agent && !s.agent.ended) {
             if (s.state.saved) {
@@ -51841,7 +51886,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (i >= 0) managed.logs[i] = entry;
         else {
           managed.logs.push(entry);
-          if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+          if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
         }
         this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
         if (kind !== "user_message") {
@@ -51868,7 +51913,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (homeLost) {
           const entry = { kind: "system", text: "\u4F1A\u8BDD\u8BB0\u5F55\u4E0D\u5728\u5F53\u524D\u914D\u7F6E\u7684\u5BB6\u76EE\u5F55\u2014\u2014\u82E5\u6539\u8FC7 CCR_EMPLOYEE_CONFIG_DIR \u8BF7\u5207\u56DE\u539F\u503C\u518D\u8BD5\uFF1B\u4E5F\u53EF\u80FD\u662F\u8BE5\u4F1A\u8BDD\u8BB0\u5F55\u7684\u72EC\u7ACB\u5BB6\u76EE\u5F55\u5DF2\u88AB\u5220\u9664\uFF08\u539F\u8BB0\u5F55\u65E0\u635F\u4FDD\u7559\uFF0C\u53EF\u53E6\u6D3E\u65B0\u5355\uFF09", ts: Date.now() };
           managed.logs.push(entry);
-          if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+          if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
         }
         this.closeOpenDispatches(
@@ -52245,11 +52290,11 @@ provider=${opts.provider ?? "default"}` : void 0,
     let saved = 0;
     for (const s of this.sessions.values()) {
       const pinned2 = file.includes(s.state.session_id);
-      if (pinned2 && !s.state.external) {
+      if (pinned2) {
         keep.push(s.state.session_id);
         const was = s.state.pinned;
         s.state.pinned = true;
-        if (!s.agent) {
+        if (!s.agent && !s.state.external) {
           s.state.saved = true;
           s.state.status = "DONE";
           s.state.done_reason = "\u5DF2\u4FDD\u5B58\uFF08\u91CD\u542F\u4F11\u7720\uFF09";
@@ -53634,10 +53679,18 @@ provider=${opts.provider ?? "default"}` : void 0,
               else if (typeof g0 === "object" && !Array.isArray(g0) && typeof g0.reason === "string" && g0.reason.trim() !== "") gateVal = { reason: g0.reason };
               else return { ok: false, error: "gate \u987B\u4E3A {reason:string} \u6216 null\uFF08\u663E\u5F0F\u6E05\u9664\uFF09" };
             }
+            const owner = str2("owner_session");
+            if (owner) {
+              const g2 = findGroup(gid);
+              if (!g2 || !g2.headcount.some((h) => h.session_id === owner)) {
+                return { ok: false, error: `owner_session \u4E0D\u5728\u300C${g2?.name || gid}\u300D\u7F16\u5236\u5185\uFF08\u5148 member-add \u5165\u7F16\uFF0C\u6216\u6838\u5BF9\u4F1A\u8BDD id\uFF09` };
+              }
+            }
             const u = upsertBoardEntry(gid, {
               id: str2("entry_id") || void 0,
               text,
               ...status ? { status } : {},
+              ...owner ? { owner_session: owner } : {},
               ...str2("note") ? { note: str2("note") } : {},
               ...deps !== void 0 ? { depends_on: deps } : {},
               ...gateVal !== void 0 ? { gate: gateVal } : {}
@@ -53883,9 +53936,11 @@ provider=${opts.provider ?? "default"}` : void 0,
         case "project-detail": {
           const g2 = findGroup(str2("id"));
           if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${str2("id")}` };
+          const memberSids = new Set(g2.headcount.map((h) => h.session_id));
           const receipts = readDispatchLog().filter((e) => {
-            const a = e.project_anchor ?? "";
-            return a.replace(/\/+$/, "") === g2.anchor_dir.replace(/\/+$/, "");
+            const a = (e.project_anchor ?? "").replace(/\/+$/, "");
+            if (a && a === g2.anchor_dir.replace(/\/+$/, "")) return true;
+            return memberSids.has(e.session_id);
           }).slice(-30).reverse();
           const pool = routingFor(g2.id).map((e) => {
             const s = this.sessions.get(e.session_id);
@@ -53969,7 +54024,9 @@ provider=${opts.provider ?? "default"}` : void 0,
           const selection = {
             ...engineValue ? { engine: engineValue } : {},
             ...typeof p.model === "string" && p.model.trim() ? { model: p.model.trim() } : {},
-            ...typeof p.provider === "string" && p.provider.trim() ? { provider: p.provider.trim() } : {}
+            ...typeof p.provider === "string" && p.provider.trim() ? { provider: p.provider.trim() } : {},
+            // 件十⑤：可选别名（成员名与角色解耦；空串=清除）
+            ...typeof p.nick === "string" ? { nick: p.nick.trim().slice(0, 24) } : {}
           };
           if (!gid || !sid) return { ok: false, error: "gid/sid \u5FC5\u586B" };
           const g2 = findGroup(gid);
@@ -55342,21 +55399,25 @@ function buildDoScriptExpr(pid, expr) {
   return [
     'tell application "Terminal"',
     `	set targetTty to do shell script "ps -o tty= -p ${pid} | tr -d '[:space:]'"`,
+    "	set hitTab to missing value",
     "	repeat with w in windows",
     "		repeat with t in tabs of w",
     "			try",
     "				if tty of t ends with targetTty then",
-    `					do script (${expr}) in t`,
+    "					set hitTab to t",
     "					exit repeat",
     "				end if",
     "			end try",
     "		end repeat",
+    "		if hitTab is not missing value then exit repeat",
     "	end repeat",
+    '	if hitTab is missing value then error "TTY-NOT-FOUND:" & targetTty',
+    `	do script (${expr}) in hitTab`,
     "end tell"
   ].join("\n");
 }
 function mapAppleError(stderr) {
-  return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : void 0;
+  return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : /TTY-NOT-FOUND/.test(stderr) ? "\u672A\u5728 Terminal.app \u627E\u5230\u8BE5\u4F1A\u8BDD\u7684\u7EC8\u7AEF\u6807\u7B7E\uFF08CLI \u53EF\u80FD\u8FD0\u884C\u5728 tmux/iTerm2 \u7B49\u5176\u4ED6\u7EC8\u7AEF\u91CC\uFF0C\u6216\u8FDB\u7A0B\u5DF2\u91CD\u542F\uFF09" : void 0;
 }
 function runTmux(args, timeoutMs = 5e3) {
   return new Promise((resolve9) => {
@@ -55417,6 +55478,19 @@ async function resolveTmuxTarget(pid) {
 async function tmuxSendKeys(target, ...keys) {
   const r = await runTmux(["send-keys", "-t", target, ...keys]);
   return r.ok ? { ok: true } : { ok: false, error: `tmux send-keys \u5931\u8D25: ${r.error}` };
+}
+function tmuxNorm(s) {
+  return s.replace(/\s+/g, "");
+}
+async function tmuxBottomText(target, lines = 8) {
+  const r = await runTmux(["capture-pane", "-p", "-t", target]);
+  if (!r.ok) return "";
+  return tmuxNorm(r.text.split(/\r?\n/).filter((l) => l.trim()).slice(-lines).join(""));
+}
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function tmuxVerifySubmitted(target, tail2) {
+  const bottom = await tmuxBottomText(target);
+  return !!bottom && !bottom.includes(tail2);
 }
 function runAppleScript(script) {
   return new Promise((resolve9) => {
@@ -55508,9 +55582,20 @@ async function injectTextMac(pid, rawText) {
   if (!text) return { ok: false, error: "\u7A7A\u6D88\u606F" };
   const target = await resolveTmuxTarget(pid);
   if (target) {
-    const w2 = await tmuxSendKeys(target, "-l", "--", text);
+    let w2 = await tmuxSendKeys(target, "-l", "--", text);
+    if (!w2.ok) {
+      await sleep(300);
+      w2 = await tmuxSendKeys(target, "-l", "--", text);
+    }
     if (!w2.ok) return w2;
-    return tmuxSendKeys(target, "Enter");
+    const tail2 = tmuxNorm(text.slice(-24));
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const e = await tmuxSendKeys(target, "Enter");
+      if (!e.ok) return e;
+      await sleep(450);
+      if (await tmuxVerifySubmitted(target, tail2)) return { ok: true };
+    }
+    return { ok: false, error: "\u6CE8\u5165\u63D0\u4EA4\u672A\u751F\u6548\uFF08\u56DE\u8F66 3 \u6B21\u6B63\u6587\u4ECD\u5728\u8F93\u5165\u533A\uFF09\u2014\u2014\u8BF7\u5728 CLI \u624B\u52A8\u56DE\u8F66" };
   }
   return runAppleScript(buildDoScript(pid, text));
 }
@@ -55572,15 +55657,20 @@ function buildCaptureScript(pid) {
   return [
     'tell application "Terminal"',
     `	set targetTty to do shell script "ps -o tty= -p ${pid} | tr -d '[:space:]'"`,
+    "	set hitTab to missing value",
     "	repeat with w in windows",
     "		repeat with t in tabs of w",
     "			try",
     "				if tty of t ends with targetTty then",
-    "					return contents of (contents of t)",
+    "					set hitTab to t",
+    "					exit repeat",
     "				end if",
     "			end try",
     "		end repeat",
+    "		if hitTab is not missing value then exit repeat",
     "	end repeat",
+    '	if hitTab is missing value then error "TTY-NOT-FOUND:" & targetTty',
+    "	return contents of (contents of hitTab)",
     "end tell"
   ].join("\n");
 }
@@ -55706,7 +55796,7 @@ function foreignResidual(box, knownTexts) {
   const residuals = ["", " "].map((sep9) => maskNoise(removeKnownTexts(stripped.join(sep9), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
-var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   const cfg2 = opts.cfg ?? guardConfig();
   const abort = opts.abort ?? (() => false);
@@ -55730,7 +55820,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
     }
     if (Date.now() - t02 >= cfg2.maxMs) return { kind: "timeout", waitedMs: Date.now() - t02 };
     if (abort()) return { kind: "aborted" };
-    await sleep(cfg2.pollMs);
+    await sleep2(cfg2.pollMs);
   }
 }
 
@@ -56147,7 +56237,7 @@ function transcriptFirstTs(p) {
 }
 var DEFAULT_HOLD_MS = 59e4;
 var QUESTION_HOLD_MS = 9e4;
-var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
@@ -56180,6 +56270,7 @@ var Bridge = class _Bridge {
     this.mgr = mgr2;
     this.opts = opts;
     this.pidCacheFile = path5.join(opts.dataDir, "cli-pids.json");
+    this.queueFile = path5.join(opts.dataDir, "ext-input-queue.json");
     this.stuckAfterMs = Number(process.env.CCR_STUCK_AFTER_MS) > 0 ? Number(process.env.CCR_STUCK_AFTER_MS) : 9e4;
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 6e4;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 6e4;
@@ -56193,14 +56284,18 @@ var Bridge = class _Bridge {
     this.hydratePidsFromCache();
     this.reconcilePidsFromSessions();
     this.healExternal();
+    this.loadQueueDisk();
+    this.reviveAliveExternals();
     this.adoptOrphans();
     this.scanExternalEngines();
     this.healTimer = setInterval(() => {
       this.hydratePidsFromCache();
       this.reconcilePidsFromSessions();
       this.healExternal();
+      this.reviveAliveExternals();
       this.adoptOrphans();
       this.sweepIdleArchive();
+      this.sweepStaleQueued();
     }, 6e4);
     this.healTimer.unref?.();
     const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5e3;
@@ -56215,7 +56310,7 @@ var Bridge = class _Bridge {
   turnStart = /* @__PURE__ */ new Map();
   // ext session_id -> 本回合开始时间
   inputQueue = /* @__PURE__ */ new Map();
-  // ext session_id -> 排队中的输入（忙时攒，回合结束注入）
+  // ext session_id -> 排队中的输入（忙时攒，回合结束注入；W-INJECT 起落盘防丢）
   flushing = /* @__PURE__ */ new Set();
   // 正在逐条注入的会话（防并发交错）
   named = /* @__PURE__ */ new Set();
@@ -56267,6 +56362,19 @@ var Bridge = class _Bridge {
   // 否则插件形态下（bundle 在插件缓存目录）按模块路径解析会读错文件，
   // relay 重启后 cli_pid 补水失效、远程发消息全被拒
   pidCacheFile = "";
+  // W-INJECT：排队消息落盘文件（dataDir/ext-input-queue.json）。inputQueue 此前纯内存，
+  // relay 重启/注入失败即蒸发（「排队中」气泡 + 消息双双消失）——落盘后重启回种、失败重投
+  queueFile = "";
+  // W-INJECT：连续注入失败计数（重投上限闸）。3 连败 = 链路真断，转显式失败终态；
+  // 注入成功/消息晋升即清零
+  injectFails = /* @__PURE__ */ new Map();
+  // W-INJECT：无 pid 滞留提示一次性标记（防每轮 flush 刷屏；pid 重定位即清）
+  noPidNote = /* @__PURE__ */ new Set();
+  // W-INJECT：given_up 后的宽限期失败判定定时器（给最后一次补发回车留晋升窗口）
+  stuckFailTimers = /* @__PURE__ */ new Map();
+  // W-INJECT：粘贴后立即提交——注入成功后的补发回车定时器（ integrated Return 被
+  // TUI 吞掉时的快路径，详见 scheduleSubmitEnter）
+  submitEnterTimers = /* @__PURE__ */ new Map();
   // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
   get resumeWindowMs() {
     return Number(process.env.CCR_RESUME_WINDOW_MS) > 0 ? Number(process.env.CCR_RESUME_WINDOW_MS) : 12e4;
@@ -56346,7 +56454,9 @@ var Bridge = class _Bridge {
   // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
   // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
   // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
-  // 回到那个终端继续用时，hook 事件/转录增长路径自动翻活（清 historical）
+  // 回到那个终端继续用时，hook 事件/转录增长路径自动翻活（清 historical）。
+  // W-INJECT：置位时同步打 idle_archived 来源标记——存活自愈（reviveAliveExternals）
+  // 靠它区分「刻意沉底」（不翻案）与「重启收养误标」（活 pid 翻案）
   sweepIdleArchive() {
     const idleMs = Number(process.env.CCR_IDLE_ARCHIVE_MS) > 0 ? Number(process.env.CCR_IDLE_ARCHIVE_MS) : 12 * 36e5;
     const now = Date.now();
@@ -56355,7 +56465,32 @@ var Bridge = class _Bridge {
       const last = Math.max(s.updated_at ?? 0, this.lastHookAt.get(s.session_id) ?? 0);
       if (!last || now - last < idleMs) continue;
       const st2 = this.mgr.getExternal(s.session_id);
-      if (st2) st2.historical = true;
+      if (st2 && !st2.idle_archived) {
+        st2.historical = true;
+        st2.idle_archived = true;
+      }
+    }
+  }
+  // W-INJECT 存活自愈：historical 外部卡若 CLI 进程实际活着 → 翻案清只读。
+  // 根因（2026-10-11 用户实锤「重启后活跃会话变历史只读收不到消息」）：relay 重启重放时
+  // cli_pid 从不进事件流（setExternalCliPid 只改内存），history.ts 的活体判定恒 false，
+  // WORKING 外部卡全部被收殓成 DONE+historical「会话已结束」——哪怕终端进程活得好好的；
+  // 而 healExternal 只管 ERROR 卡、reconcilePidsFromSessions 只管无 pid/死 pid 卡，
+  // 活 pid 的 historical 永挂，直到用户去终端敲一下（hook 事件才清）。
+  // boot + 60s 周期各跑一轮（pid 缓存/会话文件迟定位的给补自愈）。
+  // #50 idle 归档（idle_archived 标记）是刻意沉底，不翻案——hook 回归或手动恢复才清。
+  reviveAliveExternals() {
+    const candidates = this.mgr.snapshot().filter((s) => s.external && s.historical && !s.idle_archived);
+    if (!candidates.length) return;
+    for (const s of candidates) {
+      const st2 = this.mgr.getExternal(s.session_id);
+      if (!st2?.historical || st2.idle_archived) continue;
+      const pid = st2.cli_pid;
+      if (!pid || !pidAlive(pid)) continue;
+      st2.historical = false;
+      this.mgr.pushExternalLog(s.session_id, "system", "\u68C0\u6D4B\u5230\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF0C\u4F1A\u8BDD\u6062\u590D\u53EF\u4EA4\u4E92");
+      this.mgr.emitExternalSync(s.session_id);
+      if ((this.inputQueue.get(s.session_id)?.length ?? 0) > 0) void this.flushQueue(s.session_id);
     }
   }
   // 外部会话 ERROR 自愈：外部 CLI 是独立进程，relay 重启/重放把它标成 ERROR 属误伤
@@ -56635,6 +56770,11 @@ var Bridge = class _Bridge {
         this.mgr.pushExternalLog(s.session_id, "system", "\u4E0A\u4E0B\u6587\u5DF2\u538B\u7F29\uFF0C\u7EED\u63A5\u4E3A\u65B0\u4F1A\u8BDD\uFF08\u672C\u6761\u76EE\u5F52\u6863\uFF09");
       }
       this.mgr.setExternalCliPid(id2, ev2.cli_pid);
+      this.noPidNote.delete(id2);
+      if ((this.inputQueue.get(id2)?.length ?? 0) > 0 && !this.flushing.has(id2)) {
+        const qst = this.mgr.getExternal(id2);
+        if (qst && (qst.status === "DONE" || qst.status === "WORKING" || qst.status === "ERROR")) void this.flushQueue(id2);
+      }
     }
     if (ev2.transcript_path) {
       this.transcriptPaths.set(this.extId(ev2), ev2.transcript_path);
@@ -56894,6 +57034,9 @@ var Bridge = class _Bridge {
         this.mgr.finishExternal(id2, "disconnected", now - turn2, idleSince);
         const dropped = this.inputQueue.get(id2)?.length ?? 0;
         this.inputQueue.delete(id2);
+        this.saveQueueDisk();
+        this.noPidNote.delete(id2);
+        this.injectFails.delete(id2);
         this.disarmVerify(id2);
         if (s.pending_inputs?.length) this.mgr.setExternalPending(id2, []);
         this.mgr.pushExternalLog(id2, "system", `CLI \u8FDB\u7A0B\u5DF2\u9000\u51FA\uFF08\u672A\u89C1\u4E3B\u52A8\u7ED3\u675F\u4E0A\u62A5\uFF09\uFF0C\u4F1A\u8BDD\u4FDD\u7559\u53EF\u6062\u590D${dropped ? `\uFF0C\u5F03 ${dropped} \u6761\u6392\u961F\u6D88\u606F` : ""}`);
@@ -57142,7 +57285,7 @@ var Bridge = class _Bridge {
         this.onInjectFail(sessionId, r.error);
         return;
       }
-      await sleep2(400);
+      await sleep3(400);
       const pid2 = this.mgr.getExternal(sessionId)?.cli_pid;
       if (!pid2) return;
       const r2 = await injectText(pid2, msg);
@@ -57198,9 +57341,11 @@ var Bridge = class _Bridge {
       }
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
-    q2.push(body);
+    const item = { text: echoText, ts: Date.now(), ...body !== echoText ? { body } : {}, ...imgRefs.length ? { refs: imgRefs } : {} };
+    q2.push(item);
     this.inputQueue.set(sessionId, q2);
-    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: echoText, ts: Date.now(), ...body !== echoText ? { body } : {}, ...imgRefs.length ? { refs: imgRefs } : {} }]);
+    this.saveQueueDisk();
+    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { ...item }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
         this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6CE8\u5165\u7EC8\u7AEF\uFF08CLI \u8FD0\u884C\u4E2D\uFF0C\u81EA\u52A8\u6392\u961F\u8DDF\u968F\uFF09\uFF1A${truncate(echoText, 80)}`);
@@ -57341,46 +57486,166 @@ var Bridge = class _Bridge {
   async flushQueue(sessionId) {
     if (this.flushing.has(sessionId)) return;
     this.flushing.add(sessionId);
+    let blocked = false;
     try {
       while (true) {
         const state = this.mgr.getExternal(sessionId);
         const q2 = this.inputQueue.get(sessionId);
         if (!q2 || q2.length === 0) break;
-        if (!state || state.status !== "DONE" && state.status !== "WORKING" && state.status !== "ERROR") break;
-        if (!state.cli_pid) {
-          this.inputQueue.delete(sessionId);
-          this.mgr.pushExternalLog(sessionId, "system", "\u6392\u961F\u6D88\u606F\u88AB\u5F03\uFF08\u8FDB\u7A0B\u5B9A\u4F4D\u4E22\u5931\uFF09");
+        if (!state || state.status !== "DONE" && state.status !== "WORKING" && state.status !== "ERROR") {
+          blocked = true;
           break;
         }
-        const text = q2.shift();
+        if (!state.cli_pid) {
+          if (!this.noPidNote.has(sessionId)) {
+            this.noPidNote.add(sessionId);
+            this.mgr.pushExternalLog(sessionId, "system", `${q2.length} \u6761\u6392\u961F\u6D88\u606F\u7B49\u5F85\u8FDB\u7A0B\u5B9A\u4F4D\uFF0C\u4F1A\u8BDD\u6062\u590D\u6D3B\u52A8\u540E\u81EA\u52A8\u53D1\u9001`);
+          }
+          blocked = true;
+          break;
+        }
+        const item = q2.shift();
+        const text = pBody(item);
         const r = await injectText(state.cli_pid, text);
         if (!r.ok) {
+          q2.unshift(item);
           this.onInjectFail(sessionId, r.error);
+          blocked = true;
           return;
         }
+        this.noPidNote.delete(sessionId);
+        this.injectFails.delete(sessionId);
+        this.saveQueueDisk();
         this.armVerify(sessionId, text);
-        await sleep2(400);
+        this.scheduleSubmitEnter(sessionId, state.cli_pid, text);
+        await sleep3(400);
       }
     } finally {
       this.flushing.delete(sessionId);
       const q2 = this.inputQueue.get(sessionId);
       const state = this.mgr.getExternal(sessionId);
-      if (q2 && q2.length > 0 && state?.status === "DONE") void this.flushQueue(sessionId);
+      if (!blocked && q2 && q2.length > 0 && state?.status === "DONE") void this.flushQueue(sessionId);
     }
   }
-  // 注入失败：CLI 进程多半已死/换壳，清定位缓存与队列，等下次 hook 事件重新定位
+  // W-INJECT：注入成功 ≠ 提交成功。macOS Terminal 通道 do script 的「文本+回车」整段
+  // 写入 tty，CLI 忙时（回合渲染中）尾随回车会被 TUI 当粘贴段吞掉——文字滞留输入框，
+  // 原提交只能等 1s 验证窗 + 读屏判定 + 补发（实测 3~7s，用户「发出去几秒才真正发出」
+  // 的根因，2026-10-11 现场样本：文字进框、回车迟迟不来、手敲回车才发出去）。
+  // 这里把同一套防抢发守门（读屏判定框内是否只有我们的文本）的触发点从 1s 验证窗
+  // 提前到 ~300ms：吞回车场景 ~0.8-1.8s 即补发提交；框净（CLI 原生排队）skip-absent
+  // 不补发（111② 契约）；框有外来输入 timeout 交回验证链/看门狗。
+  // WAITING（权限弹窗在悬）不补——回车会误触弹窗。
+  scheduleSubmitEnter(sessionId, pid, text) {
+    const prev = this.submitEnterTimers.get(sessionId);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+      this.submitEnterTimers.delete(sessionId);
+      const st2 = this.mgr.getExternal(sessionId);
+      if (!st2 || st2.cli_pid !== pid) return;
+      if (st2.status === "WAITING") return;
+      if (!(st2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
+      if (this.stuckGuarding.has(sessionId)) return;
+      this.stuckGuarding.add(sessionId);
+      void guardCompensateEnter([text], () => captureConsoleBottom(pid), {
+        abort: () => {
+          const s2 = this.mgr.getExternal(sessionId);
+          return !s2 || s2.cli_pid !== pid || s2.status === "WAITING" || this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0;
+        }
+      }).then((v) => {
+        if (v.kind !== "enter" && v.kind !== "enter-after-wait") return;
+        const s2 = this.mgr.getExternal(sessionId);
+        if (!s2 || s2.cli_pid !== pid || s2.status === "WAITING") return;
+        if (!(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
+        const wPrev = this.stuckWatch.get(sessionId);
+        const tryNext = (wPrev?.tries ?? 0) + 1;
+        this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: wPrev?.skips ?? 0, given_up: tryNext >= 3 });
+        void injectEnter(pid).then((r) => {
+          if (!r.ok) this.onInjectFail(sessionId, r.error);
+        });
+      }).finally(() => this.stuckGuarding.delete(sessionId));
+    }, 300);
+    t.unref?.();
+    this.submitEnterTimers.set(sessionId, t);
+  }
+  // W-INJECT：注入失败的重新分诊。旧行为=清定位 + 弃光队列 + 清光 pending（消息蒸发，
+  // 只剩一条日志）；新行为分级：
+  //   连败 <3：清定位，队列+pending 保留（落盘），等 hook 重连/存活自愈后自动重投；
+  //   连败 ≥3：链路真断——队列与同文本 pending 一并转显式失败终态（逐条落失败日志，
+  //            「排队中」气泡撤下），杜绝无限排队。
+  // 计数在注入成功（flushQueue）/消息晋升（promotePending）时清零。
   onInjectFail(sessionId, error) {
     this.mgr.clearExternalCliPid(sessionId);
-    const dropped = this.inputQueue.get(sessionId)?.length ?? 0;
-    this.inputQueue.delete(sessionId);
-    if (this.mgr.getExternal(sessionId)?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
     this.clearPidCache(sessionId);
+    const fails = (this.injectFails.get(sessionId) ?? 0) + 1;
+    this.injectFails.set(sessionId, fails);
+    const q2 = this.inputQueue.get(sessionId) ?? [];
     const why = error === "pid-reuse" ? "\u8FDB\u7A0B\u5B9A\u4F4D\u5931\u6548\uFF08PID \u88AB\u7CFB\u7EDF\u590D\u7528\uFF09" : error ?? "\u672A\u77E5";
+    if (fails >= 3) {
+      const texts = q2.map((p) => pBody(p));
+      this.inputQueue.delete(sessionId);
+      this.saveQueueDisk();
+      const st2 = this.mgr.getExternal(sessionId);
+      if (st2?.pending_inputs?.length) {
+        const qkeys = new Set(texts.map((t) => normKey(t)));
+        const kept2 = st2.pending_inputs.filter((p) => !qkeys.has(normKey(pBody(p))));
+        if (kept2.length !== st2.pending_inputs.length) this.mgr.setExternalPending(sessionId, kept2);
+      }
+      this.mgr.pushExternalLog(
+        sessionId,
+        "system",
+        `\u6CE8\u5165\u8FDE\u7EED ${fails} \u6B21\u5931\u8D25\uFF08${why}\uFF09\uFF0C${texts.length} \u6761\u6392\u961F\u6D88\u606F\u505C\u6B62\u6295\u9012${texts.length ? `\uFF1A${texts.map((t) => truncate(t, 60)).join("\uFF0F")}` : ""}\u2014\u2014\u8BF7\u5230\u7EC8\u7AEF\u7A97\u53E3\u68C0\u67E5\u540E\u91CD\u53D1`
+      );
+      return;
+    }
+    this.saveQueueDisk();
     this.mgr.pushExternalLog(
       sessionId,
       "system",
-      `\u6CE8\u5165\u5931\u8D25\uFF08${why}\uFF09\uFF0C\u5DF2\u6E05\u9664\u8FDB\u7A0B\u5B9A\u4F4D${dropped ? `\u5E76\u5F03 ${dropped} \u6761\u6392\u961F\u6D88\u606F` : ""}\uFF1B\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u53EF\u91CD\u8BD5`
+      `\u6CE8\u5165\u5931\u8D25\uFF08${why}\uFF09\uFF0C\u5DF2\u6E05\u9664\u8FDB\u7A0B\u5B9A\u4F4D\uFF1B${q2.length} \u6761\u6392\u961F\u6D88\u606F\u4FDD\u7559\uFF0C\u4F1A\u8BDD\u6062\u590D\u6D3B\u52A8\u540E\u81EA\u52A8\u91CD\u6295\uFF08\u7B2C ${fails}/3 \u6B21\uFF09`
     );
+  }
+  // ---------- W-INJECT 排队消息落盘（防丢 + 重启回种 + 重投） ----------
+  saveQueueDisk() {
+    try {
+      const out = {};
+      for (const [id2, q2] of this.inputQueue) if (q2.length) out[id2] = q2;
+      writeFileSync20(this.queueFile, JSON.stringify(out));
+    } catch {
+    }
+  }
+  // relay 重启回种：adopt 收养过的会话才回（防僵尸 id 堆积）；pending_inputs 不进事件流
+  //（重放后为空），从同一账本重建「排队中」回显，重连端可见
+  loadQueueDisk() {
+    try {
+      const raw = JSON.parse(readFileSync28(this.queueFile, "utf-8"));
+      for (const [id2, list] of Object.entries(raw)) {
+        if (!Array.isArray(list) || list.length === 0) continue;
+        if (!this.mgr.getExternal(id2)) continue;
+        const clean = list.filter((p) => p && typeof p.ts === "number" && typeof (p.body ?? p.text) === "string");
+        if (!clean.length) continue;
+        this.inputQueue.set(id2, clean);
+        const st2 = this.mgr.getExternal(id2);
+        if (!(st2.pending_inputs ?? []).length) {
+          this.mgr.setExternalPending(id2, clean.map((p) => ({ ...p })));
+        }
+        console.log(`[queue-restore] ${id2} ${clean.length} \u6761\u6392\u961F\u6D88\u606F\u56DE\u79CD`);
+      }
+    } catch {
+    }
+  }
+  // 24h 未投递的落盘排队清理（会话永久消失时的僵尸账本回收）
+  sweepStaleQueued() {
+    const cutoff = Date.now() - 24 * 36e5;
+    let changed = false;
+    for (const [id2, q2] of this.inputQueue) {
+      const kept2 = q2.filter((p) => p.ts >= cutoff);
+      if (kept2.length === q2.length) continue;
+      if (kept2.length) this.inputQueue.set(id2, kept2);
+      else this.inputQueue.delete(id2);
+      changed = true;
+      this.mgr.pushExternalLog(id2, "system", `${q2.length - kept2.length} \u6761\u8D85\u8FC7 24 \u5C0F\u65F6\u672A\u80FD\u6295\u9012\u7684\u6392\u961F\u6D88\u606F\u5DF2\u6E05\u7406`);
+    }
+    if (changed) this.saveQueueDisk();
   }
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
@@ -58021,8 +58286,10 @@ var Bridge = class _Bridge {
     const st2 = this.mgr.getExternal(sessionId);
     if (!st2) return;
     const q2 = this.inputQueue.get(sessionId) ?? [];
-    q2.push(`[\u79FB\u52A8\u7AEF\u5220\u9664\u4EFB\u52A1] \u7528\u6237\u5220\u9664\u4E86\u4EFB\u52A1\u6E05\u5355\u6761\u76EE\uFF1A\u300C${truncate(text, 120)}\u300D\u3002\u8BF7\u5C06\u8BE5\u6761\u76EE\u4ECE\u4F60\u7684\u672C\u5730\u4EFB\u52A1\u5217\u8868\u540C\u6B65\u5220\u9664\uFF08\u4EFB\u52A1\u5DE5\u5177\u7F6E deleted \u6216\u79FB\u9664\uFF09\uFF0C\u4E0D\u8981\u91CD\u65B0\u521B\u5EFA\u6216\u7EE7\u7EED\u5904\u7406\u5B83\u3002\u672C\u6761\u4E3A\u7CFB\u7EDF\u901A\u77E5\uFF0C\u7B80\u77ED\u786E\u8BA4\u5373\u53EF\u3002`);
+    const body = `[\u79FB\u52A8\u7AEF\u5220\u9664\u4EFB\u52A1] \u7528\u6237\u5220\u9664\u4E86\u4EFB\u52A1\u6E05\u5355\u6761\u76EE\uFF1A\u300C${truncate(text, 120)}\u300D\u3002\u8BF7\u5C06\u8BE5\u6761\u76EE\u4ECE\u4F60\u7684\u672C\u5730\u4EFB\u52A1\u5217\u8868\u540C\u6B65\u5220\u9664\uFF08\u4EFB\u52A1\u5DE5\u5177\u7F6E deleted \u6216\u79FB\u9664\uFF09\uFF0C\u4E0D\u8981\u91CD\u65B0\u521B\u5EFA\u6216\u7EE7\u7EED\u5904\u7406\u5B83\u3002\u672C\u6761\u4E3A\u7CFB\u7EDF\u901A\u77E5\uFF0C\u7B80\u77ED\u786E\u8BA4\u5373\u53EF\u3002`;
+    q2.push({ text: truncate(text, 60), ts: Date.now(), body });
     this.inputQueue.set(sessionId, q2);
+    this.saveQueueDisk();
     if ((st2.status === "DONE" || st2.status === "WORKING" || st2.status === "ERROR") && !this.flushing.has(sessionId)) {
       void this.flushQueue(sessionId);
     }
@@ -58213,7 +58480,7 @@ var Bridge = class _Bridge {
     const avail = [...this.inputQueue.get(id2) ?? []];
     const kept2 = [];
     for (const p of state.pending_inputs) {
-      const qi2 = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
+      const qi2 = avail.findIndex((t) => normKey(pBody(t)) === normKey(pBody(p)));
       if (qi2 === -1) {
         this.noteUserMsg(id2, pBody(p), "promote");
         this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3), ...p.refs?.length ? { images: p.refs } : {} });
@@ -58245,6 +58512,9 @@ var Bridge = class _Bridge {
     this.mgr.pushExternalLog(id2, "system", "\u4F1A\u8BDD\u7ED3\u675F" + (ev2.reason ? ` (${ev2.reason})` : ""));
     const dropped = this.inputQueue.get(id2)?.length ?? 0;
     this.inputQueue.delete(id2);
+    this.saveQueueDisk();
+    this.noPidNote.delete(id2);
+    this.injectFails.delete(id2);
     this.askFallback.delete(id2);
     if (state.pending_inputs?.length) this.mgr.setExternalPending(id2, []);
     if (dropped) this.mgr.pushExternalLog(id2, "system", `\u4F1A\u8BDD\u7ED3\u675F\uFF0C\u5F03 ${dropped} \u6761\u6392\u961F\u6D88\u606F`);
@@ -58606,15 +58876,18 @@ var Bridge = class _Bridge {
         const s2 = this.mgr.getExternal(sessionId);
         if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
         if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
-        this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait" ? `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09` : "\u6CE8\u5165\u540E 3 \u79D2\u4ECD\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08#111 \u4E3B\u52A8\u9A8C\u8BC1\uFF09");
+        this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait" ? `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09` : "\u6CE8\u5165\u540E\u4ECD\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08#111 \u4E3B\u52A8\u9A8C\u8BC1\uFF09", [text]);
         if (round < 2) this.armVerify(sessionId, text, round + 1);
       }
     }).finally(() => this.stuckGuarding.delete(sessionId));
   }
   // #111 晋升成功即重置滞留看门狗：补发生效说明链路活着，下一条滞留消息应继续享受
   // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
+  // W-INJECT：晋升同时清注入连续失败计数（链路证活，重投上限闸归零）
+  // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
   resetStuckWatch(sessionId) {
     this.stuckWatch.delete(sessionId);
+    this.injectFails.delete(sessionId);
   }
   // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
   // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
@@ -58658,18 +58931,20 @@ var Bridge = class _Bridge {
         void this.guardedStuckEnter(id2, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id2));
         continue;
       }
-      this.fireStuckEnter(id2, pid);
+      this.fireStuckEnter(id2, pid, void 0, stuckTexts);
     }
   }
   // 真正补发回车（三路入口：守门通过 / 守门关闭 / 快照不可用按无人输入直发；
-  // #211 tries 闸防叠发）
-  fireStuckEnter(id2, pid, msg) {
+  // #211 tries 闸防叠发）。texts=本次滞留的排队消息全文——第 3 次补发仍不晋升时
+  // 转 W-INJECT 显式失败终态（清「排队中」+ 落失败日志），杜绝无限排队
+  fireStuckEnter(id2, pid, msg, texts) {
     const w2 = this.stuckWatch.get(id2);
     if ((w2?.tries ?? 0) >= 3) return;
     const tries = (w2?.tries ?? 0) + 1;
     this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, given_up: tries >= 3 });
     if (tries === 3) {
-      this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
+      this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1");
+      this.scheduleStuckFail(id2, texts ?? [], "\u5DF2\u81EA\u52A8\u91CD\u8BD5 3 \u6B21\u4ECD\u6EDE\u7559\u8F93\u5165\u6846");
     } else {
       this.mgr.pushExternalLog(id2, "system", msg ?? "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66");
     }
@@ -58677,13 +58952,41 @@ var Bridge = class _Bridge {
       if (!r.ok) this.onInjectFail(id2, r.error);
     });
   }
+  // W-INJECT：滞留消息显式失败终态。宽限期后仍在 pending → 撤下「排队中」气泡 +
+  // 逐条落失败日志（会话事件流 = 通知面）。此前 given_up 只留一条日志，气泡永挂
+  // 「排队中」（2026-10-11 用户实锤「一直排队」）。定时器按会话去重，晋升即自然落空
+  scheduleStuckFail(id2, texts, why) {
+    if (!texts.length) return;
+    const prev = this.stuckFailTimers.get(id2);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+      this.stuckFailTimers.delete(id2);
+      const st2 = this.mgr.getExternal(id2);
+      if (!st2) return;
+      const still = texts.filter((tx2) => (st2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(tx2)));
+      if (!still.length) return;
+      const keys = new Set(still.map((tx2) => normKey(tx2)));
+      const kept2 = (st2.pending_inputs ?? []).filter((p) => !keys.has(normKey(pBody(p))));
+      this.mgr.setExternalPending(id2, kept2);
+      for (const tx2 of still) {
+        this.mgr.pushExternalLog(id2, "system", `\u6D88\u606F\u672A\u80FD\u9001\u8FBE\u7EC8\u7AEF\uFF08${why}\uFF09\uFF1A${truncate(tx2, 120)}\u2014\u2014\u8BF7\u5230\u7EC8\u7AEF\u7A97\u53E3\u786E\u8BA4\u540E\u91CD\u53D1`);
+      }
+    }, 15e3);
+    t.unref?.();
+    this.stuckFailTimers.set(id2, t);
+  }
   // 守门后的跳过（框内已无滞留消息）：不补发、不计数补发次数；连续跳过多次后停手，
   // 防无 hook 会话 pending 永不晋升时每 60s 刷一条日志
-  bumpStuckSkips(id2, msg) {
+  bumpStuckSkips(id2, msg, texts = []) {
     const w2 = this.stuckWatch.get(id2);
     const skips = (w2?.skips ?? 0) + 1;
     this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, given_up: (w2?.given_up ?? false) || skips >= 3 });
-    this.mgr.pushExternalLog(id2, "system", skips >= 3 ? "\u8F93\u5165\u6846\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09" : msg);
+    if (skips >= 3) {
+      this.mgr.pushExternalLog(id2, "system", "\u8F93\u5165\u6846\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1");
+      this.scheduleStuckFail(id2, texts, "\u591A\u6B21\u9A8C\u8BC1\u5747\u672A\u89C1\u6D88\u606F\u8FDB\u5165\u7EC8\u7AEF");
+    } else {
+      this.mgr.pushExternalLog(id2, "system", msg);
+    }
   }
   // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
   // 守门只对「快照成功且见到外来内容」成立（timeout/enter-after-wait 路径）；
@@ -58699,7 +59002,7 @@ var Bridge = class _Bridge {
       }
     });
     if (v.kind === "skip-absent") {
-      this.bumpStuckSkips(id2, "\u8F93\u5165\u6846\u5DF2\u65E0\u8BE5\u6392\u961F\u6D88\u606F\uFF08\u53EF\u80FD\u5DF2\u968F\u4EBA\u5DE5\u8F93\u5165\u63D0\u4EA4\u6216\u88AB\u6E05\u7A7A\uFF09\uFF0C\u8DF3\u8FC7\u672C\u6B21\u8865\u53D1\u56DE\u8F66");
+      this.bumpStuckSkips(id2, "\u8F93\u5165\u6846\u5DF2\u65E0\u8BE5\u6392\u961F\u6D88\u606F\uFF08\u53EF\u80FD\u5DF2\u968F\u4EBA\u5DE5\u8F93\u5165\u63D0\u4EA4\u6216\u88AB\u6E05\u7A7A\uFF09\uFF0C\u8DF3\u8FC7\u672C\u6B21\u8865\u53D1\u56DE\u8F66", texts);
       return;
     }
     if (v.kind === "timeout") {
@@ -58708,20 +59011,20 @@ var Bridge = class _Bridge {
     }
     if (v.kind === "aborted") return;
     if (v.kind === "enter-after-wait") {
-      this.fireStuckEnter(id2, pid, `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09`);
+      this.fireStuckEnter(id2, pid, `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09`, texts);
       return;
     }
     if (v.kind === "unknown") {
       const stNow = this.mgr.getExternal(id2);
       if (stNow?.status === "DONE") {
         this.stuckWatch.set(id2, { lastTry: Date.now(), tries: 0, skips: 0, given_up: false });
-        this.fireStuckEnter(id2, pid, "\u5FEB\u7167\u4E0D\u53EF\u7528\u4F46 CLI \u5DF2\u7A7A\u95F2\uFF08\u65E0\u4EBA\u6253\u5B57\uFF09\uFF0C\u6309\u7A7A\u95F2\u5B89\u5168\u8BED\u4E49\u8865\u53D1\u56DE\u8F66");
+        this.fireStuckEnter(id2, pid, "\u5FEB\u7167\u4E0D\u53EF\u7528\u4F46 CLI \u5DF2\u7A7A\u95F2\uFF08\u65E0\u4EBA\u6253\u5B57\uFF09\uFF0C\u6309\u7A7A\u95F2\u5B89\u5168\u8BED\u4E49\u8865\u53D1\u56DE\u8F66", texts);
         return;
       }
-      this.fireStuckEnter(id2, pid, "\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08\u65E0\u6CD5\u786E\u8BA4\u6709\u4EBA\u5728\u8F93\u5165\uFF09\uFF0C\u6309\u65E0\u4EBA\u8F93\u5165\u76F4\u63A5\u8865\u53D1\u56DE\u8F66");
+      this.fireStuckEnter(id2, pid, "\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08\u65E0\u6CD5\u786E\u8BA4\u6709\u4EBA\u5728\u8F93\u5165\uFF09\uFF0C\u6309\u65E0\u4EBA\u8F93\u5165\u76F4\u63A5\u8865\u53D1\u56DE\u8F66", texts);
       return;
     }
-    this.fireStuckEnter(id2, pid);
+    this.fireStuckEnter(id2, pid, void 0, texts);
   }
 };
 function parseGateTools(raw) {
@@ -59478,7 +59781,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     if (replay && replay.length <= 200) {
       for (const env of replay) ws2.send(JSON.stringify(env));
     } else {
-      const snapLogs = mgr2.buildSnapshotLogs();
+      const snapLogs = mgr2.buildSnapshotLogs(SNAPSHOT_LOGS_LAN.budgetBytes, SNAPSHOT_LOGS_LAN.perSessionCap);
       const snapshot = {
         seq: bus2.lastSeq(),
         session_id: "",
@@ -59925,6 +60228,8 @@ var CloudClient = class {
   phones = /* @__PURE__ */ new Map();
   // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
   wanWatches = /* @__PURE__ */ new Map();
+  // W-CLOUD①：route miss 后的单次补发 resume 定时器（防环：补发成功→active→不再叠加）
+  routeRetryTimers = /* @__PURE__ */ new Map();
   unpairedNotice = /* @__PURE__ */ new Map();
   // 0.4.4 跨网回传的出码端在线判定：未配对网页端不发 hello（phones 无记录），但
   // 连接 onopen 必发一帧 pair_req（空码=在场信标）。TTL 取 180s：覆盖合并码浮层的
@@ -60176,7 +60481,27 @@ var CloudClient = class {
       return;
     }
     const snapSeq = this.bus.lastSeq();
-    const snapLogs = this.mgr.buildSnapshotLogs();
+    let snapLogs = this.mgr.buildSnapshotLogs();
+    let snapPayload = null;
+    const payloadSize = (p) => Buffer.byteLength(JSON.stringify(p));
+    {
+      const probe = {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
+      };
+      if (payloadSize(probe) > 700 * 1024) {
+        snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
+        const probe2 = {
+          sessions: this.mgr.snapshot(),
+          logs: snapLogs.logs,
+          ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
+        };
+        if (payloadSize(probe2) > 700 * 1024) {
+          snapLogs = { logs: {}, logs_truncated: { "*": -1 } };
+        }
+      }
+    }
     const snapshot = {
       seq: snapSeq,
       session_id: "",
@@ -60243,12 +60568,28 @@ var CloudClient = class {
       return;
     }
     if (f.type === "ROUTE_MISS" && f.to) {
-      const st2 = this.phones.get(f.to) ?? this.wanWatches.get(f.to);
+      const to2 = f.to;
+      const st2 = this.phones.get(to2) ?? this.wanWatches.get(to2);
       if (st2?.active) {
         st2.active = false;
-        console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
+        console.log(`[cloud] route miss dev=${to2}, mark inactive`);
+        const retryFrom = Math.max(1, st2.lastSeq - 20);
+        if (this.phones.has(to2)) {
+          const prev = this.routeRetryTimers.get(to2);
+          if (prev) clearTimeout(prev);
+          const t = setTimeout(() => {
+            this.routeRetryTimers.delete(to2);
+            if (!this.ws || this.ws.readyState !== wrapper_default.OPEN) return;
+            const s2 = this.phones.get(to2);
+            if (!s2 || s2.active) return;
+            console.log(`[cloud] route retry after miss: resume ${to2} from_seq=${retryFrom}`);
+            this.resumePhone(to2, retryFrom);
+          }, 8e3);
+          t.unref?.();
+          this.routeRetryTimers.set(to2, t);
+        }
       }
-      this.wbSightings.delete(f.to);
+      this.wbSightings.delete(to2);
       return;
     }
     const wanEnv = f.data;
@@ -60469,7 +60810,27 @@ var CloudClient = class {
       return;
     }
     const snapSeq = this.bus.lastSeq();
-    const snapLogs = this.mgr.buildSnapshotLogs();
+    let snapLogs = this.mgr.buildSnapshotLogs();
+    let snapPayload = null;
+    const payloadSize = (p) => Buffer.byteLength(JSON.stringify(p));
+    {
+      const probe = {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
+      };
+      if (payloadSize(probe) > 700 * 1024) {
+        snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
+        const probe2 = {
+          sessions: this.mgr.snapshot(),
+          logs: snapLogs.logs,
+          ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
+        };
+        if (payloadSize(probe2) > 700 * 1024) {
+          snapLogs = { logs: {}, logs_truncated: { "*": -1 } };
+        }
+      }
+    }
     const snapshot = {
       seq: snapSeq,
       session_id: "",
@@ -60491,6 +60852,8 @@ var CloudClient = class {
     this.unsubscribe();
     if (this.timer) clearTimeout(this.timer);
     if (this.hbTimer) clearInterval(this.hbTimer);
+    for (const t of this.routeRetryTimers.values()) clearTimeout(t);
+    this.routeRetryTimers.clear();
     this.ws?.close();
   }
 };
