@@ -55,10 +55,15 @@ const INJECT_LOG = join(DATA, "inject.log");
 writeFileSync(
   FAKE,
   [
-    'import { appendFileSync } from "node:fs";',
+    'import { appendFileSync, writeFileSync } from "node:fs";',
     "const args = process.argv.slice(2);",
     'appendFileSync(process.env.CCR_INJECT_LOG, JSON.stringify(args) + "\\n");',
     'if (args.some((a) => String(a).includes("FORCE_FAIL"))) process.exit(1);',
+    'if (args[1] === "--peek") {',
+    '  // 防抢发守门读屏：框内 = CCR_FAKE_BOX 指定的文本（守门判定 enter 需框内只有已知文本）',
+    '  try { writeFileSync(args[2], ["✶ Working…", "─".repeat(40), "❯ " + (process.env.CCR_FAKE_BOX ?? ""), "─".repeat(40)].join("\\n")); } catch {}',
+    "  process.exit(0);",
+    "}",
     "process.exit(0);",
   ].join("\n"),
 );
@@ -204,6 +209,7 @@ const sessionLogText = (id: string) =>
   mgr.setExternalCliPid(idRestore, process.pid);
   sr.status = "DONE";
   sr.historical = true; // 同时验证回种+自愈联动
+  process.env.CCR_FAKE_BOX = "重启前的排队消息"; // 守门读屏：框内=我们的文本 → 补发回车
   writeFileSync(
     qfile,
     JSON.stringify({ [idRestore]: [{ text: "重启前的排队消息", ts: Date.now() }] }),
@@ -231,6 +237,7 @@ const sessionLogText = (id: string) =>
   const st = mgr.ensureExternal(idFast, "/tmp/tir", "快路径验证", "tir-fast-1");
   mgr.setExternalCliPid(idFast, process.pid);
   st.status = "DONE";
+  process.env.CCR_FAKE_BOX = "快路径消息";
   const before = fakeLog().length;
   bridge.extInput(idFast, "快路径消息");
   await waitLog(() => {

@@ -1791,7 +1791,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr2.setAgentFactory((cwd, model, cb, prompt, opts) => { created2++; return makeFakeFactory()(cwd, model, cb, prompt, opts); });
   mgr2.adopt(replayedFor(mgr));
   const applied = mgr2.applyPinned();
-  assert(applied.saved === 2, "46c applyPinned 休眠登记 2 个置顶会话（不拉起）");
+  assert(applied.saved === 2, `46c applyPinned 休眠登记 2 个置顶会话（不拉起，got ${applied.saved}）`);
   assert(created2 === 0, "46c 重启登记零 SDK 拉起（工厂未被调用）");
   const stA2 = mgr2.snapshot().find((s) => s.session_id === sidA)!;
   assert(stA2.pinned === true && stA2.saved === true, "46c 休眠卡 pinned+saved");
@@ -1942,6 +1942,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   await waitLog(() => enters111() >= 1, 5000);
   assert(enters111() >= 1, "111 stuck text compensated by fast verify");
   assert(Date.now() - t0 < 2500, `111 verify compensation is fast (${Date.now() - t0}ms < 2500ms, watchdog earliest 2s+phase)`);
+  // W-INJECT：submit-enter（静默快路径）可能先于 #111 验证链满足上方 enter 计数——
+  // 日志断言前等验证链日志落地（600ms 级），不再隐含「enter 与日志同拍」假设
+  await waitLog(() => sysLogFrom("#111 主动验证", 0), 5000);
   assert(sysLogFrom("#111 主动验证", 0), "111 verify compensation logged");
   // 持久滞留（不晋升、框不净空）→ 验证 2 轮是 #111 本体、时钟确定；第 3 发（看门狗，
   // 共享 tries 计数）直接调 sweep 消 5s 节拍相位（49 段先例），3 次后 given_up 停手
@@ -1971,7 +1974,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留丙", B, "  ⏵⏵ bypass permissions on"].join("\n"));
   const v3 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留丙" });
   assert((await waitAck(v3)).ok, "111 third msg acked");
-  await waitLog(() => enters111() >= entersAfterCap + 1, 5000);
+  // W-INJECT：同上——enter 可由静默 submit-enter 先打（无日志），新鲜补偿日志等验证链/看门狗落地
+  await waitLog(() => (enters111() >= entersAfterCap + 1) && (sysLogFrom("#111 主动验证", evIdx3) || sysLogFrom("已补发回车", evIdx3)), 6000);
   assert(enters111() >= entersAfterCap + 1, "111 post-promotion stuck still gets fast verify (watchdog reset)");
   // reset 判别放宽（#84 CI flaky）：本质是「tries 回 1 后的新鲜补发日志」——任何路径
   // tries=1/2 都打日志，无 reset 时 tries≥4 静默。CI 慢机注入链可超 2s 首窗阈值，

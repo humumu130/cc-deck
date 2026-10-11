@@ -1655,9 +1655,10 @@ export class Bridge {
   // 写入 tty，CLI 忙时（回合渲染中）尾随回车会被 TUI 当粘贴段吞掉——文字滞留输入框，
   // 原提交只能等 1s 验证窗 + 读屏判定 + 补发（实测 3~7s，用户「发出去几秒才真正发出」
   // 的根因，2026-10-11 现场样本：文字进框、回车迟迟不来、手敲回车才发出去）。
-  // 这里注入完成后 ~300ms 直接补一发纯回车（单独 osascript 写 \r，实测必达）：
-  // integrated Return 若已提交（空闲命中），纯回车落空框 no-op；被吞则此发即提交。
-  // WAITING（权限弹窗在悬）不补——回车会误触弹窗，交验证链/看门狗兜底。
+  // 这里把同一套防抢发守门（读屏判定框内是否只有我们的文本）的触发点从 1s 验证窗
+  // 提前到 ~300ms：吞回车场景 ~0.8-1.8s 即补发提交；框净（CLI 原生排队）skip-absent
+  // 不补发（111② 契约）；框有外来输入 timeout 交回验证链/看门狗。
+  // WAITING（权限弹窗在悬）不补——回车会误触弹窗。
   private scheduleSubmitEnter(sessionId: string, pid: number, text: string): void {
     const prev = this.submitEnterTimers.get(sessionId);
     if (prev) clearTimeout(prev);
@@ -1668,9 +1669,30 @@ export class Bridge {
       if (st.status === "WAITING") return;
       // 已晋升（integrated Return 生效）：无事发生
       if (!(st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
-      void injectEnter(pid).then((r) => {
-        if (!r.ok) this.onInjectFail(sessionId, r.error);
-      });
+      if (this.stuckGuarding.has(sessionId)) return; // 守门在途（验证链/看门狗抢先）：交回它们
+      this.stuckGuarding.add(sessionId);
+      void guardCompensateEnter([text], () => captureConsoleBottom(pid), {
+        abort: () => {
+          const s2 = this.mgr.getExternal(sessionId);
+          return !s2 || s2.cli_pid !== pid || s2.status === "WAITING" || this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0;
+        },
+      })
+        .then((v) => {
+          if (v.kind !== "enter" && v.kind !== "enter-after-wait") return; // 框净/有外来输入/快照不可用：交回验证链与看门狗
+          const s2 = this.mgr.getExternal(sessionId);
+          if (!s2 || s2.cli_pid !== pid || s2.status === "WAITING") return;
+          if (!(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
+          // 计入 stuckWatch tries：submit-enter 是「该消息的第 1 发提交补偿」（快路径），
+          // 与 #111 验证链/看门狗共享 3 次封顶账——否则总额超限（111 段 got 4 实锤）。
+          // 不打异常日志：这是预期提交完成路径，非滞留异常
+          const wPrev = this.stuckWatch.get(sessionId);
+          const tryNext = (wPrev?.tries ?? 0) + 1;
+          this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: wPrev?.skips ?? 0, given_up: tryNext >= 3 });
+          void injectEnter(pid).then((r) => {
+            if (!r.ok) this.onInjectFail(sessionId, r.error);
+          });
+        })
+        .finally(() => this.stuckGuarding.delete(sessionId));
     }, 300);
     t.unref?.();
     this.submitEnterTimers.set(sessionId, t);
