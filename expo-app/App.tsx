@@ -31,7 +31,8 @@ import {
   type DownloadSnapshot,
   type UpdateInfo,
 } from "./src/updates";
-import ListScreen, { type ListBackHandle } from "./src/screens/ListScreen";
+import ListScreen, { splitPending, type ListBackHandle } from "./src/screens/ListScreen";
+import BottomTabs, { DomainPlaceholder, type TabKey } from "./src/bottom-tabs";
 import ArtPoolModal from "./src/screens/ArtPoolModal";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -603,6 +604,9 @@ function Shell() {
   const snap = useRelay();
   const [ready, setReady] = useState(false);
   const [hasCfg, setHasCfg] = useState(false);
+  // 底部导航（0.7 批 1 骨架，设计 §3）：四域平级切换，根层=会话域。团队/项目/设置
+  // 为占位框架（后续批填充）；「通知」仍走会话页铃铛弹层（任务书四域口径）
+  const [tab, setTab] = useState<TabKey>("sessions");
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
@@ -679,6 +683,12 @@ function Shell() {
   }, []);
   const listBackRef = useRef<ListBackHandle | null>(null);
   const detailBackRef = useRef<DetailBackHandle>(null);
+  // 会话 tab badge（待处理数）：与列表「待处理」段同口径（splitPending 纯投影，
+  // 通知未决绑定会话计入），待处理 >0 才显角标
+  const pendingCount = useMemo(
+    () => splitPending(snap.sessions, { notifications: snap.notifications }).pending.length,
+    [snap.sessions, snap.notifications],
+  );
 
   // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
   // ListScreen 抽屉+图例/TaskDoneFloat/SetupScreen 各自订阅全部并入）。按
@@ -702,11 +712,16 @@ function Shell() {
     }
     // 详情开 → 关详情（动画窗口期被相位守卫拒绝时不消费，500ms 兜底放行后恢复）
     if (detail) return (detailBackRef.current?.requestBack() ?? false) || closeDetail();
+    // 底部导航（0.7 批 1）：非会话域 tab 返回即回会话域（根层=会话列表，逐层出栈）
+    if (tab !== "sessions") {
+      setTab("sessions");
+      return true;
+    }
     // 列表抽屉/图例浮窗开 → 关浮层（列表页挂载时才可能）
     if (listBackRef.current?.requestBack()) return true;
     // 根路由列表：不消费，交给系统默认
     return false;
-  }, [setup, hasCfg, tdExpanded, cfExpanded, detail, closeDetail]);
+  }, [setup, hasCfg, tdExpanded, cfExpanded, detail, tab, closeDetail]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
@@ -905,20 +920,35 @@ function Shell() {
       ) : null}
       {hasCfg && !setup ? (
         <>
-          {(!detail || navPhase !== "idle") && (
-            <ListScreen
-              ref={listBackRef}
-              sessions={snap.sessions}
-              connected={snap.connected}
-              connText={snap.connText}
-              onOpen={openDetail}
-              onNew={() => setSheet(true)}
-              onSetup={() => { setSetupScan(false); setSetup("new"); }}
-              onScanServer={() => { setSetupScan(true); setSetup("new"); }}
-              onEditServer={(id) => { setSetupScan(false); setSetup(id); }}
-              onOpenArtPool={() => setArtPoolOpen(true)}
-            />
-          )}
+          {/* 底部导航骨架（0.7 批 1）：域内容区（flex）+ TabBar；会话域保持挂载
+              （display 切换，滚动位置/内部状态记忆保留），占位域按需挂载。详情层
+              仍为全屏覆盖（盖过底栏），从任一域推入、返回回原 tab */}
+          <View style={st.tabRoot}>
+            <View style={st.tabPane}>
+              <View style={[st.domain, tab !== "sessions" && st.domainHidden]}>
+                {(!detail || navPhase !== "idle") && (
+                  <ListScreen
+                    ref={listBackRef}
+                    sessions={snap.sessions}
+                    connected={snap.connected}
+                    connText={snap.connText}
+                    onOpen={openDetail}
+                    onNew={() => setSheet(true)}
+                    onSetup={() => { setSetupScan(false); setSetup("new"); }}
+                    onScanServer={() => { setSetupScan(true); setSetup("new"); }}
+                    onEditServer={(id) => { setSetupScan(false); setSetup(id); }}
+                    onOpenArtPool={() => setArtPoolOpen(true)}
+                  />
+                )}
+              </View>
+              {tab !== "sessions" ? (
+                <View style={st.domain}>
+                  <DomainPlaceholder tab={tab} />
+                </View>
+              ) : null}
+            </View>
+            <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount }} />
+          </View>
           {detail ? (
             <Animated.View
               style={[st.navLayer, { transform: [{ translateX: navX }] }]}
@@ -978,6 +1008,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   bootT: { color: c.faint, fontSize: 16, fontWeight: "600" },
   // 详情层：盖在列表上，滑入/滑出只动 translateX（native 驱动）
   navLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, elevation: 8 },
+  // 底部导航骨架（0.7 批 1）：tabRoot 纵向 = 域内容区(flex) + TabBar；domain 绝对
+  // 铺满域内容区，display 切换保持挂载（滚动位置记忆）
+  tabRoot: { flex: 1 },
+  tabPane: { flex: 1 },
+  domain: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  domainHidden: { display: "none" },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
