@@ -521,6 +521,16 @@ export class CloudClient {
         // 下一拍 hello/ping 才拿到 SNAPSHOT/补发（明早「服务端健康⇒手机必连上」语义
         // 的服务端侧兜底）。只在仍 inactive 时补，天然防环（补发成功→active→后续
         // miss 不再叠加；真离线设备至多多收这一帧，无风暴面）
+        //
+        // W-CLOUD①-补：账本回退。onEnv 在帧交付桥即推进 st.lastSeq（此时无法感知
+        // 桥侧路由失败），ROUTE_MISS 异步回来时 in-flight 帧已黑洞但账本已记「达」——
+        // 按账本重放=空集，miss 窗口内事件永久丢失（005 测试实测：probe seq=5、账本
+        // 5、replayAfter(5)=∅）。重放起点回退 20 帧：覆盖多帧在飞窗，客户端按自身
+        // last_seq 去重，多发无害。下限钳 1：0 会落 resumePhone 的「全量重建」语义
+        //（SNAPSHOT 的 logs 来自 mgr 会话，直发 bus 的事件不在其中，照样丢）；钳 1
+        // 走 replay 路径（整段缓冲 ≤500 帧有界）——缓冲为空的极端由 replay 空集
+        // 自然无害（无历史可补即无可丢）
+        const retryFrom = Math.max(1, st.lastSeq - 20);
         if (this.phones.has(to)) {
           const prev = this.routeRetryTimers.get(to);
           if (prev) clearTimeout(prev);
@@ -529,8 +539,8 @@ export class CloudClient {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
             const s2 = this.phones.get(to);
             if (!s2 || s2.active) return; // hello/ping 已激活：无事可做
-            console.log(`[cloud] route retry after miss: resume ${to} last_seq=${s2.lastSeq}`);
-            this.resumePhone(to, s2.lastSeq);
+            console.log(`[cloud] route retry after miss: resume ${to} from_seq=${retryFrom}`);
+            this.resumePhone(to, retryFrom);
           }, 8_000);
           t.unref?.();
           this.routeRetryTimers.set(to, t);

@@ -252,11 +252,13 @@ assert(
   send2({ t: "hello", last_seq: 0 });
   assert(await waitFor(() => inbox2.some((m) => m.type === "SNAPSHOT")), "⑦ 设备2 hello 全量快照（激活态）");
   // 断开（桥 unregister → relay 侧路由失效）→ 立即广播一条事件 → relay 投递吃 ROUTE_MISS
+  const cloudAny = cloud as unknown as { phones: Map<string, { active: boolean; lastSeq: number }> };
   const nBefore = inbox2.length;
   ws2.close();
   await wait(300); // 桥侧 unregister 落定
   bus.emit("sess-route-retry", "SESSION_LOG", { kind: "system", text: "005-route-miss-probe" });
   await wait(500); // relay 投递 → 桥 ROUTE_MISS → mark inactive + 8s 补发定时器
+  console.log(`[dbg⑦] after miss: phones.has(dev2)=${cloudAny.phones.has(dev2)} active=${cloudAny.phones.get(dev2)?.active} lastSeq=${cloudAny.phones.get(dev2)?.lastSeq}`);
   // 8s 窗口内重连注册（复刻 fastRetry：只重连，不发 hello——旧实现在此形态下永远收不到帧）
   ws2 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${dev2}`);
   attach2(ws2);
@@ -266,9 +268,14 @@ assert(
     await waitFor(() => inbox2.length > nAtReconnect, 14_000),
     "⑦ route miss 后重建设备在 8s 补发窗口内主动收到 resume 帧（无需 hello/ping）",
   );
+  // 回退越界（retryFrom=0）→ resumePhone 落全量 SNAPSHOT；探针事件在快照 logs 里
+  //（账本连续性=手机最终看得到 miss 期间的事件，帧形态不限）
   assert(
-    inbox2.slice(nBefore).some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "005-route-miss-probe"),
-    "⑦ 补发携带 miss 期间的事件（resume 账目连续）",
+    inbox2.slice(nBefore).some((m) =>
+      (m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "005-route-miss-probe") ||
+      (m.type === "SNAPSHOT" && Object.values((m.payload as { logs?: Record<string, { text?: string }[]> }).logs ?? {}).some((ls) => ls.some((l) => l.text === "005-route-miss-probe"))),
+    ),
+    "⑦ 补发携带 miss 期间的事件（SNAPSHOT/logs 或增量帧，账目连续）",
   );
   ws2.close();
 }
