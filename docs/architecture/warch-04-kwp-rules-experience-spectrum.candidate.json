@@ -1,0 +1,527 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "cc-deck 经验与规则知识谱系",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1240,
+      656
+    ],
+    "repository": {
+      "url": "https://github.com/humumu130/cc-deck.git",
+      "provider": "github",
+      "revision": "3fde9902493fda26798742e19fe368829341a550"
+    },
+    "views": [
+      {
+        "id": "spectrum",
+        "label": "两域对照",
+        "focus": [
+          "exp-store",
+          "rules-store",
+          "wrap-prompt"
+        ],
+        "note": "同一注入锚点，两种信任面与生命周期"
+      },
+      {
+        "id": "exp-cycle",
+        "label": "经验生命周期",
+        "focus": [
+          "worker-declare",
+          "exp-import",
+          "exp-cli",
+          "exp-store",
+          "exp-gc"
+        ],
+        "note": "申报→入库→衰减→复活，格式门自动收"
+      },
+      {
+        "id": "rules-intake",
+        "label": "规则收入面",
+        "focus": [
+          "rules-cli",
+          "confirm-card",
+          "rules-store",
+          "user-claude-md"
+        ],
+        "note": "fail-closed 审批 vs CLI 直写，全局层不进库"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "exp-cli",
+      "type": "external",
+      "label": "用户 CLI · exp",
+      "sublabel": "append/retire/restore/bump 直写",
+      "pos": [
+        40,
+        48
+      ],
+      "size": [
+        176,
+        56
+      ],
+      "sources": [
+        {
+          "path": "relay/src/org.ts",
+          "line": 562,
+          "label": "exp append"
+        }
+      ]
+    },
+    {
+      "id": "worker-declare",
+      "type": "external",
+      "label": "worker 申报",
+      "sublabel": "回执末行 #kind 格式门",
+      "pos": [
+        40,
+        148
+      ],
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "relay/src/experience.ts",
+          "line": 690,
+          "label": "parseExperienceDeclaration"
+        }
+      ]
+    },
+    {
+      "id": "exp-import",
+      "type": "external",
+      "label": "导入恢复",
+      "sublabel": "撞车 bump 不覆盖 · 整单校验",
+      "pos": [
+        40,
+        256
+      ],
+      "size": [
+        176,
+        56
+      ],
+      "sources": [
+        {
+          "path": "relay/src/experience.ts",
+          "line": 1111,
+          "label": "importExperience"
+        }
+      ]
+    },
+    {
+      "id": "exp-store",
+      "type": "database",
+      "label": "org/experience.json",
+      "sublabel": "五类 kind · use_count 加权",
+      "tag": "≤200 字 · 软上限 200/100/100",
+      "pos": [
+        340,
+        92
+      ],
+      "size": [
+        190,
+        80
+      ],
+      "sources": [
+        {
+          "path": "relay/src/experience.ts",
+          "line": 134,
+          "label": "experiencePath"
+        }
+      ]
+    },
+    {
+      "id": "exp-gc",
+      "type": "backend",
+      "label": "机械档 GC",
+      "sublabel": "90d retire（term 豁免）· 45d/90d 降权",
+      "tag": ">500 归档 · 复活环",
+      "pos": [
+        340,
+        244
+      ],
+      "size": [
+        190,
+        76
+      ],
+      "sources": [
+        {
+          "path": "relay/src/experience.ts",
+          "line": 755,
+          "label": "runExperienceGc"
+        }
+      ]
+    },
+    {
+      "id": "promote-channel",
+      "type": "backend",
+      "label": "exp-promote 升格",
+      "sublabel": "复制非搬移 · promoted_from",
+      "tag": "源条照常 GC",
+      "pos": [
+        340,
+        406
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "relay/src/team-rules.ts",
+          "line": 434,
+          "label": "promoteExperienceToRule"
+        }
+      ]
+    },
+    {
+      "id": "user-claude-md",
+      "type": "database",
+      "label": "全局 CLAUDE.md",
+      "sublabel": "硬约束全局层 · 会话自动加载",
+      "tag": "不另立第三存储（拍板 #2）",
+      "pos": [
+        700,
+        56
+      ],
+      "size": [
+        200,
+        64
+      ],
+      "sources": [
+        {
+          "path": "relay/src/team-rules.ts",
+          "line": 10,
+          "label": "谱系定位注释"
+        }
+      ]
+    },
+    {
+      "id": "rules-cli",
+      "type": "external",
+      "label": "用户 CLI · rule",
+      "sublabel": "append direct 直写免卡",
+      "pos": [
+        700,
+        164
+      ],
+      "size": [
+        176,
+        56
+      ],
+      "sources": [
+        {
+          "path": "relay/src/org.ts",
+          "line": 635,
+          "label": "rule append"
+        }
+      ]
+    },
+    {
+      "id": "confirm-card",
+      "type": "security",
+      "label": "确认卡 rule-append",
+      "sublabel": "agent 提案 · 用户 ✓ 落库",
+      "tag": "fail-closed 审批面",
+      "pos": [
+        700,
+        264
+      ],
+      "size": [
+        176,
+        72
+      ],
+      "sources": [
+        {
+          "path": "relay/src/projects.ts",
+          "line": 143,
+          "label": "ConfirmKind"
+        }
+      ]
+    },
+    {
+      "id": "rules-store",
+      "type": "database",
+      "label": "org/rules.json",
+      "sublabel": "≤120 字 · 团队6/项目4/角色4",
+      "tag": "零 GC · append-only 永续",
+      "pos": [
+        990,
+        120
+      ],
+      "size": [
+        200,
+        92
+      ],
+      "sources": [
+        {
+          "path": "relay/src/team-rules.ts",
+          "line": 100,
+          "label": "rulesPath"
+        }
+      ]
+    },
+    {
+      "id": "wrap-prompt",
+      "type": "backend",
+      "label": "wrapDispatchPrompt 注入",
+      "sublabel": "规则每单重注 ｜ 经验 memo 增量",
+      "tag": "规则＞经验/岗位 · 纪律恒优先",
+      "pos": [
+        620,
+        552
+      ],
+      "size": [
+        210,
+        88
+      ],
+      "sources": [
+        {
+          "path": "relay/src/session-manager.ts",
+          "line": 7304,
+          "label": "wrapDispatchPrompt"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "软参考域 · 知识（格式门自动收 · GC 衰减）",
+      "wraps": [
+        "exp-cli",
+        "exp-import",
+        "worker-declare",
+        "exp-store",
+        "exp-gc"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "硬约束域 · 规则（审定收 · 零 GC 永续）",
+      "wraps": [
+        "user-claude-md",
+        "rules-cli",
+        "confirm-card",
+        "rules-store"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "exp-cli-write",
+      "from": "exp-cli",
+      "to": "exp-store"
+    },
+    {
+      "id": "exp-import-merge",
+      "from": "exp-import",
+      "to": "exp-store",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          322,
+          284
+        ],
+        [
+          322,
+          132
+        ]
+      ]
+    },
+    {
+      "id": "declare-auto",
+      "from": "worker-declare",
+      "to": "exp-store",
+      "label": "#kind 才收",
+      "labelAt": [
+        263,
+        208
+      ]
+    },
+    {
+      "id": "declare-propose",
+      "from": "worker-declare",
+      "to": "confirm-card",
+      "label": "agent 提案规则（出卡）",
+      "fromSide": "left",
+      "toSide": "left",
+      "via": [
+        [
+          16,
+          184
+        ],
+        [
+          16,
+          32
+        ],
+        [
+          660,
+          32
+        ],
+        [
+          660,
+          300
+        ]
+      ],
+      "labelAt": [
+        394,
+        32
+      ]
+    },
+    {
+      "id": "gc-trigger",
+      "from": "exp-store",
+      "to": "exp-gc",
+      "label": "触发",
+      "labelAt": [
+        402,
+        208
+      ]
+    },
+    {
+      "id": "gc-writeback",
+      "from": "exp-gc",
+      "to": "exp-store",
+      "label": "可逆回写",
+      "variant": "dashed",
+      "labelAt": [
+        505,
+        208
+      ]
+    },
+    {
+      "id": "exp-feed",
+      "from": "exp-store",
+      "to": "promote-channel",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          572,
+          132
+        ],
+        [
+          572,
+          442
+        ]
+      ]
+    },
+    {
+      "id": "promote-to-rules",
+      "from": "promote-channel",
+      "to": "rules-store",
+      "label": "复制入库 · promoted_from",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [
+        [
+          435,
+          532
+        ],
+        [
+          940,
+          532
+        ],
+        [
+          940,
+          166
+        ]
+      ],
+      "labelAt": [
+        700,
+        532
+      ]
+    },
+    {
+      "id": "cli-rule",
+      "from": "rules-cli",
+      "to": "rules-store",
+      "label": "直写",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          920,
+          192
+        ],
+        [
+          920,
+          166
+        ]
+      ],
+      "labelAt": [
+        898,
+        192
+      ]
+    },
+    {
+      "id": "confirm-approve",
+      "from": "confirm-card",
+      "to": "rules-store",
+      "label": "✓ 落库",
+      "variant": "security",
+      "labelAt": [
+        908,
+        300
+      ]
+    },
+    {
+      "id": "rules-inject",
+      "from": "rules-store",
+      "to": "wrap-prompt",
+      "label": "每单重注无 memo",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          1218,
+          166
+        ],
+        [
+          1218,
+          596
+        ]
+      ],
+      "labelAt": [
+        1050,
+        596
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "谱系判据",
+      "items": [
+        "硬约束＝审定红线（违反即失败）；软参考＝方法论参考",
+        "规则＞经验/岗位；与派单纪律冲突择严（只可加严）"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "信任面与来源",
+      "items": [
+        "经验＝格式门自动收；规则＝确认卡审批，direct 免卡",
+        "全局层＝CLAUDE.md 自动加载，不进 rules.json"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "生命周期对照",
+      "items": [
+        "规则零 GC：retire/supersede 显式，append-only 永续",
+        "经验 GC 梯度：90d/45d 衰减、term 豁免、复活环可逆"
+      ]
+    }
+  ]
+}

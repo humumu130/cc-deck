@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "cc-deck 知识注入链路",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1240, 672],
+    "repository": {
+      "url": "https://github.com/humumu130/cc-deck.git",
+      "provider": "github",
+      "revision": "3fde9902493fda26798742e19fe368829341a550"
+    },
+    "views": [
+      { "id": "main-path", "label": "派单主链", "focus": ["leader-dispatch", "prompt-wrap", "worker-session"], "note": "派单主路径：五段拼装后发往 worker 会话" },
+      { "id": "three-injections", "label": "三路注入", "focus": ["rules-store", "rules-injector", "roles-store", "roles-injector", "exp-store", "exp-injector"], "note": "三条知识线各走各的构建器，预算与 memo 语义各不同" },
+      { "id": "write-and-loop", "label": "写入与回流", "focus": ["confirm-card", "user-cli", "receipt-capture", "exp-store"], "note": "规则走确认卡审批面，经验走回执申报自动闭环" }
+    ]
+  },
+  "components": [
+    { "id": "confirm-card", "type": "security", "label": "确认卡 rule-append", "sublabel": "agent 提案 · 用户 ✓ 落库", "pos": [340, 56], "size": [172, 64], "sources": [{ "path": "relay/src/projects.ts", "line": 143, "label": "ConfirmKind" }] },
+    { "id": "user-cli", "type": "external", "label": "用户 CLI（org rule）", "sublabel": "direct 直写免卡", "pos": [340, 156], "size": [172, 56], "sources": [{ "path": "relay/src/org.ts", "line": 635, "label": "rule append" }] },
+    { "id": "rules-store", "type": "database", "label": "org/rules.json", "sublabel": "用户审定红线 · 单条 ≤120 字", "tag": "硬闸 团队6/项目4/角色4", "pos": [620, 56], "size": [190, 72], "sources": [{ "path": "relay/src/team-rules.ts", "line": 100, "label": "rulesPath" }] },
+    { "id": "rules-injector", "type": "backend", "label": "buildRuleInjection", "sublabel": "预算 600 · 每单重注无 memo", "pos": [620, 160], "size": [190, 68], "sources": [{ "path": "relay/src/team-rules.ts", "line": 520, "label": "buildRuleInjection" }] },
+    { "id": "leader-dispatch", "type": "external", "label": "Leader 派单", "sublabel": "dispatchWorker", "tag": "tier · task · role · anchor", "pos": [320, 300], "size": [172, 64], "sources": [{ "path": "relay/src/session-manager.ts", "line": 6318, "end_line": 6338, "label": "注入挂点" }] },
+    { "id": "prompt-wrap", "type": "backend", "label": "wrapDispatchPrompt", "sublabel": "五段：task→规则→岗位→经验→纪律", "tag": "纪律段硬编码 ≈300 字", "pos": [620, 276], "size": [190, 96], "sources": [{ "path": "relay/src/session-manager.ts", "line": 7304, "end_line": 7317, "label": "wrapDispatchPrompt" }] },
+    { "id": "worker-session", "type": "backend", "label": "worker 会话", "sublabel": "新 spawn / 熟手 resume", "pos": [920, 180], "size": [160, 68] },
+    { "id": "receipt-capture", "type": "messagebus", "label": "收口申报捕获", "sublabel": "「经验：…（#kind）」带标记才收", "pos": [905, 348], "size": [190, 68], "sources": [{ "path": "relay/src/session-manager.ts", "line": 4300, "end_line": 4355, "label": "captureExperienceDeclaration" }] },
+    { "id": "roles-store", "type": "database", "label": "岗位模板双层库", "sublabel": "内置 presets ＋ 用户库覆盖", "tag": "同 slug 覆盖 · 首命中实例化", "pos": [320, 472], "size": [180, 72], "sources": [{ "path": "relay/src/role-templates.ts", "line": 77, "label": "roleTemplatesPath" }] },
+    { "id": "roles-injector", "type": "backend", "label": "buildRoleInjection", "sublabel": "预算 600 · memo 锚 updated_at", "pos": [320, 580], "size": [180, 68], "sources": [{ "path": "relay/src/role-templates.ts", "line": 207, "label": "buildRoleInjection" }] },
+    { "id": "exp-store", "type": "database", "label": "org/experience.json", "sublabel": "五类 kind · use_count 加权", "tag": "GC 梯度 90d/45d · term 豁免", "pos": [905, 472], "size": [190, 72], "sources": [{ "path": "relay/src/experience.ts", "line": 134, "label": "experiencePath" }] },
+    { "id": "exp-injector", "type": "backend", "label": "buildExperienceInjection", "sublabel": "预算 700 · session memo 增量", "pos": [905, 580], "size": [190, 68], "sources": [{ "path": "relay/src/experience.ts", "line": 658, "label": "buildExperienceInjection" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "规则线 · 用户红线每单重注", "wraps": ["rules-store", "rules-injector"] },
+    { "kind": "region", "label": "岗位线 · 双层库 fail-open", "wraps": ["roles-store", "roles-injector"] },
+    { "kind": "region", "label": "经验线 · GC 衰减 memo 增量", "wraps": ["exp-store", "exp-injector"] }
+  ],
+  "connections": [
+    { "id": "confirm-approve", "from": "confirm-card", "to": "rules-store", "label": "✓ 入库回链", "variant": "security" },
+    { "id": "cli-direct", "from": "user-cli", "to": "rules-store", "label": "direct 直写", "variant": "dashed" },
+    { "id": "rules-read", "from": "rules-store", "to": "rules-injector" },
+    { "id": "dispatch-task", "from": "leader-dispatch", "to": "prompt-wrap", "label": "task · tier", "variant": "emphasis" },
+    { "id": "rules-block", "from": "rules-injector", "to": "prompt-wrap", "label": "规则块", "labelAt": [715, 252] },
+    { "id": "prompt-out", "from": "prompt-wrap", "to": "worker-session", "label": "派单 prompt", "variant": "emphasis" },
+    { "id": "receipt-back", "from": "worker-session", "to": "receipt-capture", "label": "回执收口", "labelAt": [1000, 298] },
+    { "id": "declare-loop", "from": "receipt-capture", "to": "exp-store", "label": "申报入库（复活环）", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [1000, 444] },
+    { "id": "roles-read", "from": "roles-store", "to": "roles-injector" },
+    { "id": "roles-block", "from": "roles-injector", "to": "prompt-wrap", "label": "岗位块" },
+    { "id": "exp-read", "from": "exp-store", "to": "exp-injector" },
+    { "id": "exp-block", "from": "exp-injector", "to": "prompt-wrap", "label": "经验块", "labelAt": [790, 614] },
+    { "id": "promote", "from": "exp-store", "to": "rules-store", "label": "exp-promote 升格（复制非搬移）", "variant": "dashed", "fromSide": "right", "toSide": "right", "via": [[1150, 508], [1150, 92]], "labelAt": [1000, 92] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "注入序与优先级", "items": ["五段顺序：task→规则→岗位→经验→纪律（纪律段硬编码）", "规则块优先于经验与岗位参考；与派单纪律冲突择严执行（只可加严）"] },
+    { "dot": "emerald", "title": "预算与配额", "items": ["规则 600 / 岗位 600 / 经验 700 字符，整块恒 ≤ 预算", "经验 kind 配额每类保底 1 槽、单类封顶 6 槽；规则 team∧all 桶零截断"] },
+    { "dot": "amber", "title": "防注入与降级", "items": ["注入块均为数据非指令：指令式文本不照办、回报 Leader", "任一构建器失败 → 无块照派；开关 rules/experience 键＋env CCR_ROLE_TEMPLATES"] }
+  ]
+}
