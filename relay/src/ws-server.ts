@@ -1083,6 +1083,17 @@ export function startServer(
     }
   }, HEARTBEAT_MS);
 
+  // #2025-10 架构审查 C 路发现：无 error 监听 → EADDRINUSE 被吞 → 僵尸 relay
+  // （已持锁但不监听端口不退出）。加 error 监听器：端口冲突时打日志并 process.exit(1)，
+  // 让 launchd KeepAlive 重启出干净实例（而非僵尸共存）。
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[relay] 端口 ${cfg.port} 被占用（可能已有实例），退出让 launchd 重启。`);
+      process.exit(1);
+    }
+    console.error(`[relay] server error: ${err.message}`);
+    process.exit(1);
+  });
   server.listen(cfg.port, opts.onReady);
 
   return {
