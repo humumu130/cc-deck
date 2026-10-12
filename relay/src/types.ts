@@ -180,6 +180,12 @@ export interface TodoItem {
   status: "pending" | "in_progress" | "completed";
   active_form?: string;
   updated_at?: number;    // 任务文件 mtime（毫秒）：手机端"近3天"展示窗口用
+  // W-TASKFLOW（2026-10-12 唯一事实源强制）：看板镜像条目标记——relay 内存合成
+  //（board-mirror.ts 单向投影：org 看板=团队任务唯一事实源，PM 会话清单=镜像视图）。
+  // 磁盘 CLI 任务存储（~/.claude/tasks/）不产这两个字段，出现即镜像；旧端忽略未知
+  // 字段零影响。禁止反向写：镜像只随看板重合成，任何会话清单改动不回写看板。
+  source?: "board";
+  board_ref?: { gid: string; entry_id: string };
 }
 
 // 定时任务（CLI 会话目录 .claude/scheduled_tasks.json 的宽容解析快照；

@@ -1731,6 +1731,11 @@
   .todo-item.completed .todo-tx { color: var(--faint); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.22); }
   .todo-item.in_progress .todo-tx { color: var(--text); }
   .todo-item.pending .todo-tx { color: var(--dim); }
+  /* W-TASKFLOW 看板镜像徽标：source="board" 条目前置小 chip——团队看板单向投影标记 */
+  .todo-src { flex: none; display: inline-block; font-style: normal; font-size: 10px; line-height: 1;
+    padding: 2px 5px; margin-right: 6px; border-radius: 4px; transform: translateY(-1px);
+    color: var(--brand); background: rgba(217,119,87,.12); border: 1px solid rgba(217,119,87,.3);
+    font-weight: 600; }
   /* #12 空态提示垂直居中（任务/定时 tab，均为 #timeline 唯一子元素）：min-height:100% 撑满
      可视区 + flex 纵排居中；<br> 在 flex 化后不再生成盒，两行仍按匿名 item 自然堆叠 */
   .todo-empty, .tl-empty {
@@ -8045,6 +8050,9 @@ function todosTabHtml(s) {
       html += '<div class="todo-item ' + stSafe + '"' + (idSafe ? ' data-tid="' + idSafe + '"' : "") + dragAttrs + '>' +
         (stSafe !== "completed" ? '<span class="todo-grip" title="拖动调整执行优先级">⠿</span>' : "") +
         '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
+        /* W-TASKFLOW 看板镜像徽标：source="board" 条目=团队看板单向投影（唯一事实源），
+           双跑期与本地自建任务同屏可辨；镜像条目只读（状态随看板重合成，本地改动不回写） */
+        (t.source === "board" ? '<i class="todo-src" title="团队看板镜像（以看板为准单向同步）">板</i>' : "") +
         /* #97 任务编号 #N 前缀（对齐手机端）：权威任务存储 id 由此可见，
            转录 #NNN 可点跳转的锚；旧 TodoWrite 清单无 id 不显示 */
         escapeHtml((t.id != null ? "#" + t.id + " " : "") + (stSafe === "in_progress" && t.active_form ? t.active_form : t.content)) + "</span>" +

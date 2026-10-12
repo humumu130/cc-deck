@@ -300,7 +300,7 @@ async function main() {
     assert(log2.filter((e) => e.id === "dsp-win").some((e) => e.status === "done"), "dispatched 悬账 → 补记 done");
     assert(log2.filter((e) => e.id === "dsp-run").some((e) => e.status === "done"), "running 悬账 → 补记 done");
     const rej2 = log2.filter((e) => e.id === "dsp-run").find((e) => e.status === "done");
-    assert(rej2?.receipt === "relay 重启，回合中断", "补记回执语义");
+    assert((rej2?.receipt ?? "").endsWith("relay 重启，回合中断"), "补记回执语义（task_ref 头 tolerated）");
     assert(log2.filter((e) => e.id === "dsp-gid").some((e) => e.status === "done"), "gid 悬账同样补记 done");
     assert((routingFor("g-x").find((x) => x.session_id === "s-old")?.count ?? -1) === 3, "断档补记不写路由表（count 不动）");
     assert(loadBoard("g-x").entries[0]?.status === "backlog", "断档补记板条退 todo（F-08 中断口径——活没交付不能停 doing）");
@@ -390,7 +390,7 @@ async function main() {
     assert(pz.ok === true && listGroups().find((g) => g.id === gidZ)?.status === "parked", "组挂起直达");
     assert(hack.sessions.get(wZ1)?.state.org_parked === gidZ, "成员会话两层联动：org_parked 落组 id");
     assert(hack.sessions.get(wZ1)?.state.status === "DONE", "挂起成员收口 DONE（退休进熟手池）");
-    assert(readDispatchLog().some((e) => e.id === "dsp-z-inflight" && e.status === "failed" && e.receipt === "项目组挂起，回合中断"), "悬账收口：中断≠干砸（failed+写实回执）");
+    assert(readDispatchLog().some((e) => e.id === "dsp-z-inflight" && e.status === "failed" && (e.receipt ?? "").endsWith("项目组挂起，回合中断")), "悬账收口：中断≠干砸（failed+写实回执，task_ref 头 tolerated）");
     assert((routingFor(gidZ).find((x) => x.session_id === wZ1)?.failed ?? 1) === failedBefore, "路由表不被挂起中断污染");
     const frz = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-z"), prompt: "冻结中偷活", gid: gidZ });
     assert(frz.ok === false, "挂起组拒派单（M2 护栏不回归）");
@@ -472,7 +472,7 @@ async function main() {
     hack.openDispatches.set(wZ4, [{ id: "dsp-int-x", tier: "正经立项", gid: gidZ, anchor: projZ }]);
     upsertBoardEntry(gidZ, { text: "用户手停的活", status: "claimed", dispatch_id: "dsp-int-x" });
     cbFor(projZ)!.onTurnEnd(true, "interrupted", 5);
-    assert(readDispatchLog().some((e) => e.id === "dsp-int-x" && e.status === "done" && e.receipt === "interrupted"), "用户中断收口：台账 done+写实回执");
+    assert(readDispatchLog().some((e) => e.id === "dsp-int-x" && e.status === "done" && (e.receipt ?? "").endsWith("interrupted")), "用户中断收口：台账 done+写实回执（task_ref 头 tolerated）");
     assert(loadBoard(gidZ).entries.find((x) => x.dispatch_id === "dsp-int-x")?.status === "backlog", "审查修正：中断板退 todo（半成品不进 done，结项核对可见）——与其余四路径口径统一");
     assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "中断不抬 count（≠交付记账）");
     assert(!hack.openDispatches.has(wZ4), "中断收口 FIFO 清空");
@@ -480,7 +480,7 @@ async function main() {
     // c) onSessionEnd 兜底 = 中断口径（未开工/被打断的流关闭，不写熟手账）
     hack.openDispatches.set(wZ4, [{ id: "dsp-fall-x", tier: "正经立项", gid: gidZ, anchor: projZ }]);
     cbFor(projZ)!.onSessionEnd("stopped");
-    assert(readDispatchLog().some((e) => e.id === "dsp-fall-x" && e.status === "done" && e.receipt === "stopped"), "流关闭兜底收口 done");
+    assert(readDispatchLog().some((e) => e.id === "dsp-fall-x" && e.status === "done" && (e.receipt ?? "").endsWith("stopped")), "流关闭兜底收口 done（task_ref 头 tolerated）");
     assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "兜底收口同样不写熟手账");
 
     // d) 结项编制解散（§2.2）：eps 零悬账零未完 → 一句话归档 + 成员归属解除 +
@@ -529,7 +529,7 @@ async function main() {
     assert(pEta.ok === true, "eta 挂起");
     assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-p")?.status === "backlog", "挂起板退窗口：在跑条目退 todo（不永挂 doing）");
     assert(loadBoard(gidEta).frozen === true, "挂起后板冻结");
-    assert(readDispatchLog().some((x) => x.id === "dsp-eta-p" && x.status === "failed" && x.receipt === "项目组挂起，回合中断"), "悬账 failed+写实回执");
+    assert(readDispatchLog().some((x) => x.id === "dsp-eta-p" && x.status === "failed" && (x.receipt ?? "").endsWith("项目组挂起，回合中断")), "悬账 failed+写实回执（task_ref 头 tolerated）");
 
     // b) 兜底收口板方向：流关闭台账 done（中断≠交付）但板退 todo——结项核对才看得见未完
     mgr.orgAction("project-status", { id: gidEta, to: "active" });
@@ -539,7 +539,7 @@ async function main() {
     hack.openDispatches.set(wEta, [{ id: "dsp-eta-f", tier: "正经立项", gid: gidEta, anchor: etaAnchor }]);
     upsertBoardEntry(gidEta, { text: "流死在半路", status: "claimed", dispatch_id: "dsp-eta-f" });
     cbFor(etaAnchor)!.onSessionEnd("stopped");
-    assert(readDispatchLog().some((x) => x.id === "dsp-eta-f" && x.status === "done" && x.receipt === "stopped"), "兜底台账 done（回执写实）");
+    assert(readDispatchLog().some((x) => x.id === "dsp-eta-f" && x.status === "done" && (x.receipt ?? "").endsWith("stopped")), "兜底台账 done（回执写实，task_ref 头 tolerated）");
     assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-f")?.status === "backlog", "兜底板退 todo（不虚标 done）");
 
     // c) 陈旧暂缓卡：出卡后组被直达挂起 → 点头 → 组不动、成员标记不被重打
@@ -680,7 +680,7 @@ async function main() {
     await wait(300); // 已进等待窗口（此时挂起 = 正中竞态靶心）
     const pRc = mgr.orgAction("project-status", { id: gidRc, to: "parked", note: "恢复窗口内挂起" });
     assert(pRc.ok === true, "窗口内挂起直达（前置）");
-    assert(readDispatchLog().some((x) => x.id === "dsp-rc-ab" && x.status === "failed" && x.receipt === "项目组挂起，回合中断"), "悬账由挂起收口（非看门狗）");
+    assert(readDispatchLog().some((x) => x.id === "dsp-rc-ab" && x.status === "failed" && (x.receipt ?? "").endsWith("项目组挂起，回合中断")), "悬账由挂起收口（非看门狗，task_ref 头 tolerated）");
     const createdBefore = created.length;
     await recP;
     assert(wdActions.some((x) => x.sid === wRc && x.action === "recover_abandon"), "看门狗发出 recover_abandon（放弃恢复事件面）");
@@ -709,7 +709,7 @@ async function main() {
     upsertBoardEntry(gidEta, { text: "看门狗接管的活", status: "claimed", dispatch_id: "dsp-eta-wd" });
     await (mgr as unknown as { recoverFromStall(s: never, lane: string, stalled: number, cpu: number): Promise<void> })
       .recoverFromStall(hack.sessions.get(wEta) as never, "slow", 1000, 0);
-    assert(readDispatchLog().some((x) => x.id === "dsp-eta-wd" && x.status === "done" && x.receipt === "流中断恢复待命，回合中断"), "看门狗接管：无未回显 → 台账 done+写实回执（F-06）");
+    assert(readDispatchLog().some((x) => x.id === "dsp-eta-wd" && x.status === "done" && (x.receipt ?? "").endsWith("流中断恢复待命，回合中断")), "看门狗接管：无未回显 → 台账 done+写实回执（F-06，task_ref 头 tolerated）");
     assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-wd")?.status === "backlog", "板退 todo（F-06：活没交付不能停 done，结项核对可见）");
     assert((routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? -1) === 3, "中断收口不写路由（count 不动）");
 
@@ -803,7 +803,7 @@ async function main() {
     assert(readDispatchLog().every((x) => x.id !== "dsp-ph-x"), "他组悬账不陪葬（phi 的单没被 tau 侧退休收口）");
     assert(hack.sessions.get(wT2)?.state.status === "WORKING", "会话仍在干活（未休眠）");
     wT2cb.onTurnEnd(true, "phi 干完", 8); // wT2 自己的流回调（ta7 的 resume 流；cbFor 此刻会命中 wT1 流，不能用）
-    assert(readDispatchLog().some((x) => x.id === "dsp-ph-x" && x.status === "done" && x.receipt === "phi 干完"), "他组回合自然收口（写实回执）");
+    assert(readDispatchLog().some((x) => x.id === "dsp-ph-x" && x.status === "done" && (x.receipt ?? "").endsWith("phi 干完")), "他组回合自然收口（写实回执，task_ref 头 tolerated）");
     assert((routingFor(gidPh).find((x) => x.session_id === wT2)?.count ?? 0) === 1, "phi 路由入账（跨组正交面）");
     assert(!hack.openDispatches.has(wT2), "FIFO 清空");
 
@@ -1012,7 +1012,7 @@ async function main() {
       assert(mgr.deleteSession(d16.session_id!) === true, "deleteSession 成功（worker 卡可删）");
       assert(!hack.openDispatches.has(d16.session_id!), "FIFO 键随删卡消失（不再进程内常驻）");
       const e16 = readDispatchLog().filter((e) => e.id === "dsp-del-16").at(-1);
-      assert(e16?.status === "failed" && e16?.receipt === "会话删除，回合中断", "台账残条写实收口（failed·会话删除，回合中断）");
+      assert(e16?.status === "failed" && (e16?.receipt ?? "").endsWith("会话删除，回合中断"), "台账残条写实收口（failed·会话删除，回合中断，task_ref 头 tolerated）");
       assert(mgr.snapshot().find((s) => s.session_id === d16.session_id) === undefined, "卡已删（闭环）");
     }
 

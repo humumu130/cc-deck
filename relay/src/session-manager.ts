@@ -49,6 +49,8 @@ import { resolveEmployeeHome, writeSettingsFile } from "./settings.js";
 import type { EmployeeHomeSettingsPayload } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
+// W-TASKFLOW（2026-10-12 唯一事实源强制）：看板→PM 会话清单单向镜像 + 对账看门 v2
+import { escalateClaimed, mergeBoardMirror, mirrorDiff, isMirrorMarked } from "./board-mirror.js";
 import { killTree, snapshotTree, treeCpuMs } from "./proc-tree.js";
 import { saveUploadFiles, saveUploadImages, imageRefsOf, resolveUploadImage, type UploadBlob } from "./uploads.js";
 import { normKey, taskDoneLabel, truncate } from "./summarizer.js";
@@ -823,6 +825,7 @@ export class SessionManager {
     const c = setInterval(() => {
       this.pollCronTasks();
       this.pollTaskStore();
+      this.reconcileBoardMirror(); // W-TASKFLOW 对账看门 v2：30s 兜底对账（健康零动作）
     }, CRON_POLL_INTERVAL_MS);
     c.unref();
     const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
@@ -1581,11 +1584,21 @@ export class SessionManager {
   // at：事件真实发生时刻——relay 重启后的 transcript 水合（firstRead 重建清单）必须
   // 传转录时间戳，缺省才用当下（#157：水合刷 Date.now() 会把全表最后活跃时间伪造成
   // 重启时刻，闲置置灰判定全失效——公司 relay 晨启批量"当前时间"的根因）
+  //
+  // W-TASKFLOW（2026-10-12 唯一事实源强制）：PM（Leader）会话的任务清单在此咽喉
+  // 自动合成看板镜像——入参 todos 一律是磁盘自建集（CLI 任务存储口径），mergeBoardMirror
+  // 幂等剥离旧镜像+拼当前看板投影（board-mirror.ts 纯读单向）。所有上游（pollTaskStore
+  // 轮询 / onTodos 流 / notifyConfirm 追加 / REFRESH 重发）天然过此点，无一漏挂；
+  // pollTaskStore 的 lastStoreTodos 缓存与 TASK_DONE 完成汇报基于入参磁盘集——镜像
+  // 不污染既有判定。非 Leader 会话零变化。禁止反向写：本点只读看板产内存镜像，
+  // 会话清单侧任何改动（CLI 任务操作/隐藏）不回写看板（同步器单向性，测试件锁死）。
   setTodos(id: string, todos: TodoItem[], at?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    const disk = todos.filter((t) => !isMirrorMarked(t)); // 防重入：入参混入旧镜像先剥（幂等基，宽松判定）
+    const merged = id === this.leaderId ? mergeBoardMirror(disk) : disk;
     const hidden = hiddenTodoKeys(id);
-    const list = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
+    const list = hidden.size ? merged.filter((t) => !hidden.has(normKey(t.content))) : merged;
     s.state.todos = list;
     s.state.updated_at = at ?? Date.now();
     this.emitUpdated(s, true, at);
@@ -4160,6 +4173,9 @@ export class SessionManager {
     this.setTitleOverride(id, ORG_LEADER_TITLE);
     this.leaderId = id;
     this.leaderEnsured = true;
+    // W-TASKFLOW：Leader 就位即合成看板镜像首帧（不等 30s 轮询——客户端连入的
+    // 首个 SNAPSHOT 就带完整「磁盘自建+看板镜像」清单）
+    this.syncBoardMirror();
     // 首建即置顶：驱逐豁免（evictOldSessions）+ 重启休眠登记（applyPinned）都吃 pinned
     this.pinLeaderFile(id);
     // #22① 首建 init 看门狗：create 路径此前无超时（resumeAgent 有 45s init 超时，
@@ -4239,6 +4255,9 @@ export class SessionManager {
     this.setTitleOverride(id, ORG_LEADER_TITLE);
     this.leaderId = id;
     this.leaderEnsured = true;
+    // W-TASKFLOW：Leader 就位即合成看板镜像首帧（不等 30s 轮询——客户端连入的
+    // 首个 SNAPSHOT 就带完整「磁盘自建+看板镜像」清单）
+    this.syncBoardMirror();
   }
 
   // events 被压缩挤掉（>30 会话）或用户删卡后的重建：从锚合成休眠卡，零 spawn。
@@ -4286,6 +4305,9 @@ export class SessionManager {
     this.setTitleOverride(id, ORG_LEADER_TITLE);
     this.leaderId = id;
     this.leaderEnsured = true;
+    // W-TASKFLOW：Leader 就位即合成看板镜像首帧（不等 30s 轮询——客户端连入的
+    // 首个 SNAPSHOT 就带完整「磁盘自建+看板镜像」清单）
+    this.syncBoardMirror();
     this.emitUpdated(managed, true);
     return { ok: true, session_id: id, created: false, rebuilt: true };
   }
@@ -4434,10 +4456,18 @@ export class SessionManager {
         : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
     for (const e of es) {
+      // W-TASKFLOW task_ref（2026-10-12 用户拍板）：回执头部携带 [task_ref:卡id]——
+      // 台账/通知文本与板卡、派单 prompt 头同键，回执流按 ref 精确对卡（废除按标题
+      // 模糊对账的启发式）。卡定位按 dispatch_id（relay 内部精确键）；无 gid/无卡
+      // （随手办/悬空）无 ref 头，receipt 原样。
+      const taskRef = e.gid
+        ? (() => { try { return loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id)?.id ?? ""; } catch { return ""; } })()
+        : "";
+      const refReceipt = taskRef ? `[task_ref:${taskRef}] ${receipt}` : receipt;
       appendDispatch({
         ts: Date.now(), id: e.id, tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
-        status, receipt: truncate(receipt, 200), session_id: key,
+        status, receipt: truncate(refReceipt, 200), session_id: key,
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
         ...(e.actor ? { actor: e.actor } : {}),
         // M12-5 引擎字段同 id 透传（收敛末行不丢——读侧末行赢，收口行不带会把
@@ -4448,7 +4478,8 @@ export class SessionManager {
       });
       // #40 M4 派单完成回调（谁派活谁收通知）：收口即通知——端上广播帧恒发；
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
-      this.notifyDispatchClosed(e, status, receipt, key);
+      // W-TASKFLOW：通知文本同带 [task_ref] 头（回执流四处同键）
+      this.notifyDispatchClosed(e, status, refReceipt, key);
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
@@ -6158,6 +6189,7 @@ export class SessionManager {
           delta: { entries: { upserts: [], removes: [] }, lessons: { upserts: [], removes: lessonIds }, meta: { frozen: board.frozen, updated_at: board.updated_at } } satisfies BoardDelta,
         } : {}),
       });
+      this.syncBoardMirror(); // W-TASKFLOW：板变更即推——镜像随广播同拍重合成（不等 30s 轮询）
       return;
     }
     const entries = this.diffById(prev.entries, outBoard.entries) ?? { upserts: [], removes: [] };
@@ -6174,6 +6206,66 @@ export class SessionManager {
       ],
       delta,
     });
+    this.syncBoardMirror(); // W-TASKFLOW：板变更即推——镜像随广播同拍重合成（不等 30s 轮询）
+  }
+
+  // W-TASKFLOW：Leader 会话的看板镜像重合成（emitBoard 挂点 + 对账看门强制回写共用）。
+  // 从当前 todos 剥旧镜像得磁盘自建集，再经 setTodos 咽喉（对 Leader 自动拼新投影）——
+  // 单一合并路径无第二实现。Leader 不在/历史态 no-op。
+  private syncBoardMirror(): void {
+    if (!this.leaderId) return;
+    const s = this.sessions.get(this.leaderId);
+    if (!s || s.state.historical) return;
+    const disk = (s.state.todos ?? []).filter((t) => !isMirrorMarked(t));
+    this.setTodos(this.leaderId, disk);
+  }
+
+  // W-TASKFLOW 对账看门 v2（v1=dutySnapshot 只报告不搬；v2=强制以看板为准回写+报警）。
+  // 节拍：随 pollCronTasks/pollTaskStore 同 interval（30s）。健康态零动作（syncBoardMirror
+  // 挂点已把镜像推平，看门是兜底——竞态窗口/外部改 state/同步器故障时纠偏）。
+  // 裁决方向恒定：看板赢。发现镜像缺/陈旧/残留 → syncBoardMirror 强制回写 + 每差异卡
+  // 一行通知（upsertNotification stableKey 幂等：同卡在账静默不轰炸）+ 派单台账一行
+  //（tier=看门狗先例口径，#25-P7）。
+  // 顺带扫 claimed>48h 超窗（生命周期定案超时升级）：escalateClaimed 纯读 → 用户
+  // 通知面（PM 值守 90min 催办两轮仍无进展 → 捅到用户；一卡一账 stableKey 防重）。
+  reconcileBoardMirror(): void {
+    if (!this.leaderId) return;
+    const s = this.sessions.get(this.leaderId);
+    if (!s || s.state.historical) return;
+    const diff = mirrorDiff(s.state.todos ?? []);
+    if (!diff.clean) {
+      this.syncBoardMirror(); // 强制以看板为准回写（唯一裁决方向）
+      const n = diff.missing.length + diff.stale.length + diff.extra.length;
+      for (const m of [...diff.missing, ...diff.stale, ...diff.extra].slice(0, 20)) {
+        this.upsertNotification("system", `board-mirror:${m.board_ref.gid}:${m.board_ref.entry_id}`, undefined, {
+          title: "任务镜像已强制同步（以看板为准）",
+          body: `对账发现 PM 会话清单与团队看板不同步（缺 ${diff.missing.length} / 陈旧 ${diff.stale.length} / 残留 ${diff.extra.length}），已按看板强制回写：${truncate(m.content, 80)}`,
+          severity: "info",
+          group: "attention",
+          actionable: false,
+          sessionId: this.leaderId,
+          domain: "task",
+          returnPath: "/",
+        });
+      }
+      appendDispatch({
+        ts: Date.now(), id: randomUUID(), tier: "看门狗", target: "board-mirror",
+        status: "done", session_id: this.leaderId,
+        receipt: truncate(`[W-TASKFLOW] 板镜像对账修复 ${n} 处（缺${diff.missing.length}/陈旧${diff.stale.length}/残留${diff.extra.length}），已强制以看板为准回写 PM 会话清单`, 200),
+      });
+    }
+    for (const c of escalateClaimed(Date.now())) {
+      this.upsertNotification("system", `board-escalate:${c.gid}:${c.entry_id}`, undefined, {
+        title: `任务超时升级：${c.group_name} 有卡挂起超 48 小时`,
+        body: `[${c.group_name}] ${c.text}（claimed ${Math.round(c.age_ms / 3600_000)}h 无进展）——PM 催办未收口，请人工核查`,
+        severity: "waiting",
+        group: "attention",
+        actionable: true,
+        sessionId: this.leaderId,
+        domain: "task",
+        returnPath: "/",
+      });
+    }
   }
 
   // ── W-EXPP2 experience 域广播：发射侧单点 diff（emitOrgState/emitBoard M13-2 同款，
@@ -6458,7 +6550,15 @@ export class SessionManager {
     // 每单重注无 memo（约束不是参考，「注过」≠「会守」——C 路 §5.2）。leader 受众规则
     // 不进 worker 派单（isLeader=false；Leader 可见性主通道=org CLAUDE.md 种子引用行）。
     const rulesInjection = buildRuleInjection({ role: expRole, anchor });
-    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
+    // W-TASKFLOW task_ref 全链路匹配键（2026-10-12 用户拍板）：gid 派单的 prompt 头部
+    // 注入结构化头——[task_ref:卡id] [gid:组id] 标题。卡 id 预生成（新卡）或取认领卡
+    //（entry_id），建卡点带同 id 落板：prompt/板卡/回执/台账文本四处同键，人读与工具
+    // 匹配都不再靠标题启发式。随手办（无 gid）无板卡 → 不注入（task_ref 是板卡匹配键）。
+    const taskRefId = input.gid ? (input.entry_id ?? `t-${randomUUID().slice(0, 8)}`) : "";
+    const taskRefHead = taskRefId
+      ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}\n`
+      : "";
+    const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId: string;
     if (veteran) {
@@ -6537,7 +6637,8 @@ export class SessionManager {
       upsertBoardEntry(input.gid, input.entry_id
         ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
           { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
-        : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
+        : // W-TASKFLOW task_ref：新卡带预生成 id（与 prompt 头注入的 [task_ref:...] 同键）
+          { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);

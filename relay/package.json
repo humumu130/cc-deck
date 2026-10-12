@@ -31,6 +31,7 @@
     "test:worker-plugins": "tsx scripts/test-worker-plugins.ts",
     "test:worker-plugins-e2e": "tsx scripts/test-worker-plugins-e2e.ts",
     "test:team-rules": "tsx scripts/test-team-rules.ts",
+    "test:board-mirror": "tsx scripts/test-board-mirror.ts",
     "test:rules-broadcast": "tsx scripts/test-rules-broadcast.ts",
     "test:autorevive": "tsx scripts/test-autorevive.ts",
     "test:settings": "tsx scripts/test-settings.ts",

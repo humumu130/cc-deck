@@ -4151,7 +4151,9 @@
                   const emit = (label, items, mk, groupClass, groupKey) => {
                     if (!items.length) return;
                     html += '<div class="queue-group' + (groupClass ? " " + groupClass : "") + '" data-task-group="' + groupKey + '">' + label + "</div>";
-                    for (const t of items) html += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + ">" + mk(t) + "<span>" + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
+                    // W-TASKFLOW 看板镜像徽标：source="board" 条目=团队看板单向投影（唯一事实源），双跑期可辨
+                    const srcChip = (t) => (t.source === "board" ? '<i style="font-style:normal;font-size:10px;line-height:1;padding:2px 5px;margin-right:6px;border-radius:4px;color:var(--brand);background:rgba(226,133,94,.12);border:1px solid rgba(226,133,94,.3);font-weight:600" title="团队看板镜像（以看板为准单向同步）">板</i>' : "");
+                    for (const t of items) html += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + ">" + mk(t) + "<span>" + srcChip(t) + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
                   };
                   emit("已完成 · " + doneList.length + "/" + doneAll.length, doneList, () => "<b>✓</b>", "group-done", "done");
                   emit("进行中 · " + ip.length, ip, () => '<b class="run">◐</b>', "group-working", "working");
