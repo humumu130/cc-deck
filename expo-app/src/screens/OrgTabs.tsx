@@ -68,9 +68,10 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
       onAdd={() => setWizardOpen(true)}
       addLabel="新建团队（分步向导）"
     >
-      {/* ① 确认卡队列置顶（跨源平铺；多源时逐卡标源名防歧义） */}
+      {/* ① 确认卡队列置顶（A9：节头对齐详情页 ① 节语言；跨源平铺；多源时逐卡标源名防歧义） */}
       {confirms.length ? (
         <View style={styles.cfQueue}>
+          <Text style={styles.cfH}>待你确认 · {confirms.length}</Text>
           {confirms.map(({ src, cf }) => (
             <View key={cf.id}>
               {multiSrc ? <Text style={styles.cfSrc} numberOfLines={1}>{displaySrcName(src.relayName || src.name)}</Text> : null}
@@ -107,20 +108,24 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
                   <Text style={[styles.stPillT, { color: stColor }]}>{ORG_ST_ZH[g.status] ?? g.status}</Text>
                 </View>
               </View>
+              {/* A1：去 emoji——席位数字提亮（text 位），待确认品牌色（有才显）；胶囊退为状态锚 */}
               <Text style={styles.teamMeta} numberOfLines={1}>
-                👥 {(g.headcount ?? []).length + 1}{pend ? `   ⏳ 待确认 ${pend}` : ""} · {tierZh(g.tier)} · {displaySrcName(src.relayName || src.name)}
+                <Text style={styles.teamMetaStrong}>{(g.headcount ?? []).length + 1} 人</Text>
+                {pend ? <Text style={styles.teamMetaPend}> · 待确认 {pend}</Text> : ""}
+                {" · "}{tierZh(g.tier)} · {displaySrcName(src.relayName || src.name)}
               </Text>
             </Pressable>
           );
         })
       ) : !confirms.length ? (
         <View style={styles.emptyCard}>
+          <Text style={styles.emptyIcon}>◎</Text>
           <Text style={styles.emptyT}>还没有团队</Text>
           <Text style={styles.emptyS}>点右上角 ＋ 新建团队，或在电脑端建团后到这里决议确认卡</Text>
         </View>
       ) : null}
       <View style={styles.hint}>
-        <Text style={styles.hintT}>派单发起 / 任务板操作 / 经验与铁律管理请用电脑端</Text>
+        <Text style={styles.hintT}>派单发起、任务板操作、经验与铁律管理请用电脑端</Text>
         <Text style={styles.hintT}>点团队卡看看板、编制、活动、经验与铁律</Text>
       </View>
       {detailOpen ? (
@@ -224,7 +229,8 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
             </View>
           </View>
           <Text style={styles.teamMeta} numberOfLines={1}>
-            {shortDirOf(g.anchor_dir)} · {n} 会话 · 1 团队 · {displaySrcName(src.relayName || src.name)}
+            <Text style={styles.teamMetaStrong}>{n} 会话</Text>
+            {" · "}{shortDirOf(g.anchor_dir)} · {displaySrcName(src.relayName || src.name)}
           </Text>
         </Pressable>
         <View style={styles.actRow}>
@@ -261,6 +267,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
         groups.map((pair) => projCard(pair))
       ) : !unfiledN ? (
         <View style={styles.emptyCard}>
+          <Text style={styles.emptyIcon}>◈</Text>
           <Text style={styles.emptyT}>还没有项目</Text>
           <Text style={styles.emptyS}>点右上角 ＋ 立项（与建团同流程）；已结项不占列表</Text>
         </View>
@@ -270,6 +277,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
         <View>
           <Pressable
             style={styles.unfiledHead}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
             accessibilityLabel={`未立项 ${unfiledN} 个会话，点按${unfiledOpen ? "收起" : "展开"}`}
             onPress={toggleUnfiled}
           >
@@ -291,7 +299,8 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
                       <Text style={styles.unfiledTag}>未立项</Text>
                     </View>
                     <Text style={styles.teamMeta} numberOfLines={1}>
-                      {b.dir} · {b.items.length} 会话 · 最近 {displayLastAt(b.items)}
+                      <Text style={styles.teamMetaStrong}>{b.items.length} 会话</Text>
+                      {" · "}{b.dir} · 最近 {displayLastAt(b.items)}
                     </Text>
                   </Pressable>
                   {open ? (
@@ -369,12 +378,14 @@ const makeStyles = (c: ThemeColors) =>
       borderBottomWidth: 1, borderBottomColor: c.line,
     },
     headT: { color: c.text, fontSize: 15, fontWeight: "700" },
-    headSub: { color: c.brandA, fontSize: 11, fontWeight: "600", flex: 1 },
-    plusBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", marginLeft: 6, overflow: "hidden" },
+    // W-POLISH-MOBILE A2：副语降为 dim（品牌色克制——原 brandA 与 ＋ 钮双色抢锚点）；
+    headSub: { color: c.dim, fontSize: 11, fontWeight: "600", flex: 1 },
+    plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.1), borderWidth: 1, borderColor: withA(c.brandA, 0.32), overflow: "hidden" },
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
-    list: { flex: 1, paddingHorizontal: 14, paddingTop: 8 },
-    // 确认卡队列
+    list: { flex: 1, paddingHorizontal: 14, paddingTop: 10 },
+    // 确认卡队列（A9：队列加节头，与详情页 ① 节语言一致）
     cfQueue: { gap: 8, marginBottom: 12 },
+    cfH: { color: c.faint, fontSize: 11, fontWeight: "700", marginBottom: 1 },
     cfSrc: { color: c.dim, fontSize: 10.5, fontWeight: "700", marginBottom: -3 },
     errRow: {
       flexDirection: "row", alignItems: "center", gap: 8,
@@ -383,44 +394,49 @@ const makeStyles = (c: ThemeColors) =>
     },
     errT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
     errX: { color: c.faint, fontSize: 15, fontWeight: "600" },
-    // 团队/项目卡（同形制）：r1 名称+状态胶囊 / r2 元信息行
+    // 团队/项目卡（同形制）：r1 名称+状态胶囊 / r2 元信息行（A1：去 emoji，席位数字
+    // 提亮 text 色、待确认品牌色——信息进对视觉位，胶囊退为状态锚不抢色）
     teamCard: {
       borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
-      paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, overflow: "hidden",
+      paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8, gap: 5, overflow: "hidden",
     },
     projCard: {
       borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
-      paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, gap: 8, overflow: "hidden",
+      paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8, gap: 8, overflow: "hidden",
     },
     teamR1: { flexDirection: "row", alignItems: "center", gap: 8 },
     teamName: { color: c.text, fontSize: 13.5, fontWeight: "700", flex: 1, minWidth: 0 },
-    stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1.5, flexShrink: 0 },
+    stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
     stPillDot: { width: 6, height: 6, borderRadius: 3 },
     stPillT: { fontSize: 10, fontWeight: "700" },
-    teamMeta: { color: c.faint, fontSize: 10.5, marginTop: 3 },
-    // 项目卡动作行（件三：新建会话于此目录 / 查看项目会话）
-    actRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+    teamMeta: { color: c.faint, fontSize: 10.5, marginTop: 0 },
+    teamMetaStrong: { color: c.dim, fontWeight: "700", fontVariant: ["tabular-nums"] },
+    teamMetaPend: { color: c.brandA, fontWeight: "700", fontVariant: ["tabular-nums"] },
+    // 项目卡动作行（A4：触达 36+主钮字重 700）
+    actRow: { flexDirection: "row", gap: 8, marginTop: 6 },
     actBtn: {
-      flex: 1, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center",
+      flex: 1, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center",
       backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.35), overflow: "hidden",
     },
     actBtnSub: { backgroundColor: c.tintSoft, borderColor: c.line },
-    actBtnT: { color: c.brandA, fontSize: 11.5, fontWeight: "600" },
-    actBtnTSub: { color: c.dim },
-    // 未立项折叠组
-    unfiledHead: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 4, marginTop: 4 },
-    unfiledChev: { color: c.faint, fontSize: 12 },
-    unfiledT: { color: c.faint, fontSize: 11.5, fontWeight: "700" },
-    unfiledTag: { color: c.faint, fontSize: 10, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 999, borderWidth: 1, borderColor: c.line, flexShrink: 0 },
+    actBtnT: { color: c.brandA, fontSize: 11.5, fontWeight: "700" },
+    actBtnTSub: { color: c.dim, fontWeight: "600" },
+    // 未立项折叠组（A5：触达加高+chev 提号）
+    unfiledHead: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 11, paddingHorizontal: 4, marginTop: 4, borderRadius: 9, overflow: "hidden" },
+    unfiledChev: { color: c.faint, fontSize: 13 },
+    unfiledT: { color: c.dim, fontSize: 11.5, fontWeight: "700" },
+    unfiledTag: { color: c.faint, fontSize: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: c.line, flexShrink: 0 },
     unfiledNote: { gap: 6 },
     unfiledNoteT: { color: c.faint, fontSize: 10.5, lineHeight: 15 },
-    // 空态卡
+    // 空态卡（A3：图标锚+标题提亮——「不是白板」）
     emptyCard: {
-      alignItems: "center", paddingVertical: 34, paddingHorizontal: 22,
-      borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
+      alignItems: "center", paddingVertical: 38, paddingHorizontal: 22,
+      borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel, gap: 7,
     },
-    emptyT: { color: c.faint, fontSize: 14, fontWeight: "600", marginBottom: 6 },
+    emptyIcon: { color: withA(c.faint, 0.5), fontSize: 30, fontWeight: "600", lineHeight: 34 },
+    emptyT: { color: c.dim, fontSize: 14, fontWeight: "700" },
     emptyS: { color: c.faint, fontSize: 11.5, lineHeight: 17, textAlign: "center" },
-    hint: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.tintSoft, gap: 3, marginTop: 4 },
+    // A6：hint callout 化（左竖线语言，与卡片区隔）
+    hint: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.tintSoft, gap: 3, marginTop: 4, borderLeftWidth: 2, borderLeftColor: withA(c.brandA, 0.55) },
     hintT: { color: c.faint, fontSize: 10.5, lineHeight: 15 },
   });
