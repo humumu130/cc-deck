@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -1296,6 +1296,86 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
   );
 }
 
+// W-PORT-B P0-1（桌面 B22 胶囊同能力·bottom-sheet 形态）：模型切换面板——模型列表
+// （engine_catalog 按引擎取，当前 ✓ 高亮）+ 自定义模型名输入行 + 「下一回合生效」
+// 说明。发送纪律与权限面板同款：ACK ok 静默，relay COMMAND_MODEL 成功即置
+// state.model + emitUpdated 权威帧归位（chip 文案随 s.model 变化=可见反馈）；
+// 失败走全局错误 toast。模型名校验前移（relay 同则 /^[\w.\/-]{1,80}$/）——非法
+// 名本地拦下不白发
+function ModelSheet({ open, cur, models, onPick, onClose }: {
+  open: boolean;
+  cur: string;
+  models: string[];
+  onPick: (model: string) => void;
+  onClose: () => void;
+}) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const [custom, setCustom] = useState("");
+  useEffect(() => { if (!open) setCustom(""); }, [open]);
+  const applyCustom = () => {
+    const v = custom.trim().replace(/\[1m\]$/, "");
+    if (!v || !/^[\w.\/-]{1,80}$/.test(v)) return; // 非法名按钮置灰，双保险
+    onPick(v);
+  };
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={open ? onClose : undefined}>
+      <Pressable style={d.permScrim} onPress={onClose}>
+        <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
+          <View style={d.permGrab} />
+          <View style={d.permTitleRow}>
+            <Text style={d.permTitle}>切换模型 · 下一回合生效</Text>
+            <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="关闭模型切换面板">
+              <Text style={d.permX}>✕</Text>
+            </Pressable>
+          </View>
+          {models.length ? models.map((m) => {
+            const on = m === cur;
+            return (
+              <Pressable
+                key={m}
+                style={[d.permRow, on && d.permRowCur]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
+                onPress={() => { if (!on) onPick(m); onClose(); }}
+                accessibilityLabel={`模型 ${m}${on ? "，当前" : ""}`}
+              >
+                <Text style={d.modelRowT} numberOfLines={1}>{m}</Text>
+                {on ? <Text style={d.permCheck}>✓</Text> : null}
+              </Pressable>
+            );
+          }) : (
+            <Text style={d.modelEmpty}>未收到该引擎的模型列表，可直接输入模型名</Text>
+          )}
+          {/* 自定义模型名（桌面同款：列表外的模型名手输直用） */}
+          <View style={d.modelCustomRow}>
+            <TextInput
+              style={d.modelCustomInput}
+              placeholder="自定义模型名…"
+              placeholderTextColor={c.faint}
+              value={custom}
+              onChangeText={setCustom}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="done"
+              onSubmitEditing={applyCustom}
+              accessibilityLabel="自定义模型名"
+            />
+            <Pressable
+              style={[d.modelApplyBtn, !/^[\w.\/-]{1,80}$/.test(custom.trim().replace(/\[1m\]$/, "")) && { opacity: 0.45 }]}
+              disabled={!/^[\w.\/-]{1,80}$/.test(custom.trim().replace(/\[1m\]$/, ""))}
+              android_ripple={{ color: withA(c.brandA, 0.25), borderless: false, radius: 8 }}
+              onPress={applyCustom}
+            >
+              <Text style={d.modelApplyT}>应用</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // #332 任务明细浮窗：转录 #NNN 点击弹出（方案二，替代 #264 直接跳转）——状态/内容/
 // active_form 一屏速览，「查看任务列表」作次入口沿用跳转定位。数据取 s.todos 全量：
 // 已完成列表的近 1 天窗口截断不影响查明细（旧跳转对窗口外任务只能切 tab 空落）。
@@ -1697,6 +1777,8 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // #216 终态（dev 0.6.1/0.6.2 定稿）：三~五段修的守卫链全数拆除，胶囊
   // onPress 直连 setPermPanel——守卫在真机上误伤正常点击（六段修定案）
   const [permPanel, setPermPanel] = useState(false);
+  // W-PORT-B P0-1：模型切换面板 state（桌面 B22 同能力）
+  const [modelSheet, setModelSheet] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // 件五：发送乐观回显（用户实测痛点——手机发出后消息消失 ~5s 才在排队区出现，发送
@@ -2259,6 +2341,23 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
+  // W-PORT-B P0-1：模型切换可用门与模型清单（桌面 capsuleSupported 同口径：external
+  // 或 claude 系引擎放行——relay COMMAND_MODEL 对显式他引擎拒收，错误如实回显）。
+  // 清单=engine_catalog 按会话引擎取（外部会话回退 claude 清单，桌面同款）；无目录
+  // （旧 relay）空清单=面板只剩自定义输入行，不冒充清单
+  const modelSupported = canCmd && !s.historical && (external || !s.engine || s.engine === "claude");
+  const modelList = useMemo(() => {
+    const eng = external ? "claude" : s.engine || "claude";
+    const src = s.src ? snap.sources.find((x) => x.id === s.src) : undefined;
+    const cat = (src ?? snap.sources.find((x) => x.id === snap.activeSourceId))?.sourceCapabilities?.engine_catalog;
+    return cat?.find((e) => e.id === eng)?.models ?? [];
+  }, [external, s.engine, s.src, snap.sources, snap.activeSourceId]);
+  const pickModel = useCallback((model: string) => {
+    store.send("COMMAND_MODEL", { session_id: sid, model }, undefined, (r) => {
+      if (r.ok) return; // 成功静默：relay 置 state.model + emitUpdated 权威帧归位，chip 文案即变
+      store.notifyCmdError(`模型切换未生效（${r.err || "命令未确认"}）`);
+    });
+  }, [sid]);
   // #36 权限模式：胶囊四态（幽灵/点亮/警示）+ 面板直选，替代 subFilterRow 循环 chip
   const perm = (s.permission_mode ?? "default") as PermMode;
   // E3a 等待条去重：渲染层只认 dedupeWaitingBars 产出（同 request 只一条，键=
@@ -2514,6 +2613,21 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                 自动/规划=品牌蓝点亮+两字短标签、跳过=waiting 红警示+盾内感叹号
                 （危险档必须 ambient 常显视口顶——读转录/切 tab 都看得见） */}
             <View style={d.permCluster}>
+              {/* W-PORT-B P0-1：模型切换 chip（R2 元信息行右锚，权限胶囊旁）——中性幽灵
+                  形态（模型是低频操作，视觉弱于权限状态灯）；文案=当前模型尾段或「默认模型」 */}
+              {modelSupported ? (
+                <Pressable
+                  style={d.modelChip}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                  onPress={() => setModelSheet(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  accessibilityLabel={`模型 ${s.model || "默认模型"}，点按切换（下一回合生效）`}
+                >
+                  <Text style={d.modelChipT} numberOfLines={1}>
+                    {s.model ? String(s.model).split(/[/:]/).pop() : "默认模型"}
+                  </Text>
+                </Pressable>
+              ) : null}
               {!external && canCmd && !s.historical ? (
                 <Pressable
                   style={[
@@ -3585,6 +3699,14 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         onPick={(m) => store.send("COMMAND_PERM", { session_id: sid, mode: m })}
         onClose={() => setPermPanel(false)}
       />
+      {/* W-PORT-B P0-1：模型切换面板（PermPanel 同范式 bottom-sheet，受控显隐） */}
+      <ModelSheet
+        open={modelSheet}
+        cur={s.model || ""}
+        models={modelList}
+        onPick={pickModel}
+        onClose={() => setModelSheet(false)}
+      />
 
       {/* #216 同构修：弹层改常驻受控（勿改回条件挂卸，见各组件头注释） */}
       <ContentMenu text={menuText} onClose={() => setMenuText(null)} />
@@ -3818,6 +3940,26 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permBadgeT: { color: c.waiting, fontSize: 9, lineHeight: 11, fontWeight: "600" },
   permDesc: { color: c.dim, fontSize: 10, lineHeight: 13, marginTop: 1 },
   permCheck: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  // W-PORT-B P0-1：模型 chip（R2 右锚幽灵胶囊）与 ModelSheet 内部件
+  modelChip: {
+    height: 22, paddingHorizontal: 8, borderRadius: 8, justifyContent: "center",
+    borderWidth: 1, borderColor: c.line,
+    maxWidth: 120, marginRight: 2,
+  },
+  modelChipT: { color: c.dim, fontSize: 10, lineHeight: 12, fontWeight: "600" },
+  modelRowT: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5, lineHeight: 16 },
+  modelEmpty: { color: c.faint, fontSize: 10.5, lineHeight: 14, paddingVertical: 8 },
+  modelCustomRow: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8,
+    borderWidth: 1, borderColor: c.line, borderRadius: 10, backgroundColor: c.bg,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  modelCustomInput: { flex: 1, color: c.text, fontSize: 12.5, paddingVertical: 7, paddingHorizontal: 0 },
+  modelApplyBtn: {
+    backgroundColor: withA(c.brandA, 0.16), borderRadius: 8, paddingHorizontal: 12,
+    paddingVertical: 6, alignItems: "center", justifyContent: "center",
+  },
+  modelApplyT: { color: c.brandA, fontSize: 11.5, fontWeight: "700" },
   // 危险确认区：左缘 3px 红从属条（视觉上从属跳过行）+ 整宽双按钮
   permConfirm: {
     backgroundColor: withA(c.waiting, 0.06), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
