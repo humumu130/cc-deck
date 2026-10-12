@@ -354,7 +354,7 @@ function allowWaiting(session: SessionState): boolean {
 
 function kindLabel(kind: OrgConfirm["kind"]): string {
   switch (kind) {
-    case "project-create": return "立项确认";
+    case "project-create": return "新建项目确认"; // W-WINPAIR-R9 文案件：「立项」口语词治理（用户点名）
     case "tier-change": return "档位变更";
     case "suggest-hold": return "暂缓建议";
     case "archive": return "结项确认";
