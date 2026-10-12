@@ -11,7 +11,7 @@ import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
-import { compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
+import { compactEventsFile, loadEvents, rewriteFile, bootReplayFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
@@ -282,9 +282,12 @@ function sweepTmpImages(dir: string): void {
 const tmpImageDir = join(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
-const prior = loadEvents(persistPath);
-const kept = compactEvents(prior);
-if (prior.length !== kept.length) rewriteFile(persistPath, kept); // 启动时压缩
+// W-P0-FIX P0-3：boot 单遍流式重放（原三遍串联 loadEvents→compactEvents→
+// reduceHistory 的等价合并；41MB 级 events 下消除 prior 全量数组驻留与重复 parse，
+// 等价契约由 test-history-stream.ts 锁死）
+const boot = await bootReplayFile(persistPath);
+const kept = boot.kept;
+if (boot.compacted) rewriteFile(persistPath, kept); // 启动时压缩
 // #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
 // 月增 ~100MB（心跳+流式帧稳定供给）。每 6h 查大小，超阈值（CCR_EVENTS_COMPACT_MB
 // 缺省 64，下限 16 防误配 0）压一次——客户端重连走内存 replay 零感知，详见
@@ -295,7 +298,7 @@ const compactEventsTick = (): void => {
   if (r) console.log(`[events] 运行期压缩：${(r.before / 1048576).toFixed(1)}MB → ${(r.after / 1048576).toFixed(1)}MB`);
 };
 setInterval(compactEventsTick, 6 * 3600_000).unref?.();
-const replayed = reduceHistory(kept);
+const replayed = boot.sessions; // 单遍流式产物（= reduceHistory(kept) 等价）
 
 const bus = new EventBus({ preload: kept, persistPath });
 const mgr = new SessionManager(bus, cfg);

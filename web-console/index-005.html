@@ -4139,13 +4139,27 @@
                 // ---------- 渲染：任务 tab（todosTabHtml 四组制 + VERIFY_RE） ----------
                 // #B3-9 任务行 ✕ 逐条隐藏：sid#tid 键本地记忆（仅本端视图层，不回写 relay）
                 const hiddenTaskKeys = new Set();
+                // W-P0-FIX P0-4 SSOT P2（task-lifecycle.md §7 切数据源）：当前会话存在看板镜像
+                //（source="board"）时任务 tab 默认只显镜像（团队任务唯一事实源），本地自建条目
+                // 降权折叠为「本地草稿」组（点按展开）；无镜像会话（非团队/无板）保持原四组视图
+                const ssotBoardMode = () => {
+                  const sc = curSession();
+                  const ts = Array.isArray(sc && sc.todos) ? sc.todos : [];
+                  return ts.some((t) => t && t.source === "board");
+                };
+                window.__ccDeck005SsotDraftOpen = window.__ccDeck005SsotDraftOpen || false;
                 function renderTasks() {
                   const pane = UI.panes[1];
                   const s = curSession();
                   if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
                   const allTodos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
-                  const todos = allTodos.filter((t) => !hiddenTaskKeys.has(s.session_id + "#" + t.id));
-                  if (!todos.length) { pane.innerHTML = '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'; return; }
+                  const visible0 = allTodos.filter((t) => !hiddenTaskKeys.has(s.session_id + "#" + t.id));
+                  const ssot = ssotBoardMode();
+                  // P2 切源：镜像主显；本地条目折叠组（本地草稿在镜像在场时非团队真相，降权）
+                  const localTodos = ssot ? visible0.filter((t) => t.source !== "board") : [];
+                  const todos = ssot ? visible0.filter((t) => t.source === "board") : visible0;
+                  if (!todos.length && !localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'; return; }
+                  if (!todos.length && localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务进度 · 团队看板</div><div class="readonly-banner">团队看板暂无任务 · 本地草稿 ' + localTodos.length + ' 条（见下方折叠组）</div>' + ssotDraftHtml(localTodos); wireSsotDraft(); return; }
                   const doneAll = todos.filter((t) => t.status === "completed");
                   const doneWindow = doneAll.length && doneAll.every((t) => typeof t.updated_at === "number") ? doneAll.filter((t) => (t.updated_at || 0) >= Date.now() - 86400e3) : doneAll;
                   const doneList = doneWindow.slice(-15);
@@ -4170,7 +4184,24 @@
                   emit("待办 · " + pd.length, pd, () => "<span>○</span>", "", "pending");
                   html += "</div>";
                   if (doneList.length < doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + doneAll.length + " 条）</div>";
+                  if (localTodos.length) html += ssotDraftHtml(localTodos);
                   pane.innerHTML = html;
+                  if (localTodos.length) wireSsotDraft();
+                }
+                // P0-4 本地草稿折叠组（SSOT P2：默认收起、点按展开、行内 ✕ 照旧）
+                function ssotDraftHtml(items) {
+                  const open = !!window.__ccDeck005SsotDraftOpen;
+                  let h = '<div class="queue-group" style="margin-top:10px"><button type="button" class="mini-list-link" data-ssot-draft-toggle style="width:100%;text-align:left">' + (open ? "▾" : "▸") + " 本地草稿 · " + items.length + '（PM 自建，非团队任务真相 · 团队任务以看板为准）</button></div>';
+                  if (!open) return h;
+                  h += '<div class="detail-panel-list">';
+                  for (const t of items) {
+                    h += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + "><span>" + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
+                  }
+                  return h + "</div>";
+                }
+                function wireSsotDraft() {
+                  const tg = UI.panes[1] && UI.panes[1].querySelector("[data-ssot-draft-toggle]");
+                  if (tg) tg.addEventListener("click", () => { window.__ccDeck005SsotDraftOpen = !window.__ccDeck005SsotDraftOpen; renderTasks(); });
                 }
                 function jumpToTask(n) { // #279④ #NNN → 任务 tab 定位（#B3-18 落点 jump-flash 闪高 1.5s）
                   if (UI.tabs[1]) UI.tabs[1].click();

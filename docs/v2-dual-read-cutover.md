@@ -39,6 +39,11 @@
 5. **回退演练**：演练环境执行一次 §6 回退路径并记录耗时与数据零丢失证明。✅ **CUT-1（2026-10-06，`npm run rehearse:rollback`）**：mkdtemp 全链四域零丢失断言全过（group/confirm/lesson/dispatch 键集+抽样全等，含 decided 终态面）+§6 第 4 步缺口发现能力实证（shadow-diff 抓被删 confirm 单）；复跑 3 次稳定（worker）+Leader 亲跑复现 PASS。附发现：dispatch 投影 `target`+`session_id` 恒空串（既有备案 target 外新发现有损面；**微裁 2026-10-06**：记档为 M1-3 写切换批次已知待办——StoragePort 写侧接线时随补，不单独立项）。
 6. **性能不回退**：sqlite 档读路径在真实数据量级（当前生产 events 规模）下不慢于 json 档基线（bench 口径：四读函数×1000 次取样）。✅ **终裁 A+B（2026-10-06 用户拍板「按建议」：收口放行+判据补绝对差无感阈值）**：m2 实况档（events 1.9 万行）四函数 16~41% 相对差，但**绝对差 3~25μs**（两域噪声 floor 级，无用户可感知影响）——判据修订为「绝对差不慢于 50μs/函数 或 相对差不超 20%（取宽者）」双通道；synth ×10 放大档 43~103%（绝对 0.03~0.8ms，行级编解码 vs 单次 parse 结构性差）为**放大器证据非实况判据**（生产数据量级才是本闸门口径）；翻转一次性 ensureStore 442/771ms 为冷启动一次性（可接受）。瓶颈定位与三选项分析见 CUT-1 归档（docs/reviews/2026-10-06-cut1-worker-k.md）。✅ **第六闸读税双清收口（2026-10-06，翻转前置条件闭环）**：READMODE-FIX `#136`（portCache 命中分支补灌账）+ STAT-SHORTCUT `#139`（statThenRead mtimeNs+size 短路 memo + 四导入器 skipped 分支 listLoss→COUNT 下推，420 倍热路径税拔除）——ensureStore 重复快进 30.1→7.2ms/次；剩余为七域 observe 目录扫描+逐域 query 架构性固定成本。勘误备案：30ms 基线的 fixture 为病态形态（8000 events 全坏行→loss 表 8001 行放大 listLoss 税），生产 events 合法流 loss≈0，真实读税远低于估计。
 
+## 4b. 工具件（W-P0-FIX P0-2，2026-10-13）
+
+- `npm run check:db-cutover`：六闸机器可判面检查（闸1 shadow 近 7 天新增类差异/闸4 冷备份成对与时效；闸2/5/6 提示人工跑套件与 bench；闸3 M1-3 状态静态呈报）——全绿才呈拍板。
+- `npm run backup:pre-cutover`：§5 口径冷备份执行件（tar+sha256 成对；`--dry` 预演）。
+
 ## 5. 冷备份口径
 
 - 时点：M12-8 验收通过后、默认档翻转前，一次性全量快照 `<orgDir>` 与 `<dataDir>`（含 events.ndjson/notifications/acceptances/boards/confirms/deliverables）。
