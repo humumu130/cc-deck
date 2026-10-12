@@ -257,13 +257,14 @@ await hook({ event: "UserPromptSubmit", prompt: "看看这个目录", cli_pid: p
 await wait(150);
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === process.pid, "cli_pid captured");
 
-// 16. WORKING 时 EXT_INPUT → 立即注入（CLI 原生排队），带"已注入终端"日志
+// 16. WORKING 时 EXT_INPUT → 立即注入（CLI 原生排队）；W-INJECT P0 尾声起不再发
+// "已注入终端"system 日志（回显由 pending_inputs 承载，system 行=重复噪音，用户体感啰嗦已删）
 const busyId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "忙时直发A" });
 assert((await waitAck(busyId)).ok, "EXT_INPUT while WORKING acked");
 await waitLog(() => fakeLog().some((a) => a[1] === "忙时直发A"));
 const fl16 = fakeLog().filter((a) => a[1] === "忙时直发A");
 assert(fl16.length === 1 && fl16[0][0] === String(process.pid) && !fl16[0].includes("noenter"), "busy injection direct with enter");
-assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已注入终端")), "busy injection logged");
+assert(!events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已注入终端")), "busy injection NOT logged（已注入终端噪音行已删，回显走 pending_inputs）");
 const pendOf = (sid: string) => mgr.snapshot().find((s) => s.session_id === sid)?.pending_inputs ?? [];
 assert(pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "busy inject echoed in pending_inputs");
 

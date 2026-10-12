@@ -1453,9 +1453,8 @@ export class Bridge {
     // 全文——晋升/看门狗/防抢发守门对账用 body（pBody），CLI 侧回流的只有 body 形态
     this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { ...item }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
-      if (state.status !== "DONE") {
-        this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(echoText, 80)}`);
-      }
+      // W-INJECT P0 尾声：删除「已注入终端（CLI 运行中，自动排队跟随）」提示行——发送方
+      // 回显已由 pending_inputs 承载（排队 chip），再来一条 system 日志是重复噪音（用户体感啰嗦）
       void this.flushQueue(sessionId);
     } else {
       this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(echoText, 80)}`);

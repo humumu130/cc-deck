@@ -436,22 +436,36 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
     // capture；后台 600ms 首验，未提交则在 1.5s/3s 补发两次，仍失败写本地
     // 诊断日志（不进会话流）。极端情况由既有 stuckWatch 慢看门兜底。
     // UX 口径：用户发送即见「已发送/排队」，不再同步等待验证链。
+    // [injector] ms 打点（W-INJECT P0 尾声·延迟量化）：与 bridge.ts [submit] 前缀同风格，
+    // write/enter/补偿各段耗时进 stdout——延迟实测量化（<200ms 口径的验证数据源），不进会话流
+    const t0 = Date.now();
     let w = await tmuxSendKeys(target, "-l", "--", text);
+    let wRetried = false;
     if (!w.ok) {
       await sleep(200);
+      wRetried = true;
       w = await tmuxSendKeys(target, "-l", "--", text);
     }
     if (!w.ok) return w;
+    const tWrite = Date.now();
     const e = await tmuxSendKeys(target, "Enter");
     if (!e.ok) return e;
     const tail = tmuxNorm(text.slice(-24));
+    console.log(`[injector] optimistic-write sid-target=${target} write=${tWrite - t0}ms${wRetried ? "(retry)" : ""} enter=${Date.now() - tWrite}ms sync-total=${Date.now() - t0}ms len=${text.length}`);
     void (async () => {
+      let round = 0;
       for (const delay of [600, 1500, 3000]) {
         await sleep(delay);
+        round++;
         try {
-          if (await tmuxVerifySubmitted(target, tail)) return;
+          const tV = Date.now();
+          if (await tmuxVerifySubmitted(target, tail)) {
+            console.log(`[injector] verify-ok round=${round} at=${Date.now() - t0}ms (verify ${Date.now() - tV}ms)`);
+            return;
+          }
           const r = await tmuxSendKeys(target, "Enter");
           if (!r.ok) return;
+          console.log(`[injector] compensate-enter round=${round} at=${Date.now() - t0}ms (verify ${Date.now() - tV}ms)`);
         } catch {}
       }
       console.warn(`[injector] 提交补偿未生效 target=${target} tail=${tail.slice(0, 12)}（已 4 次回车）`);
