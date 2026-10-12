@@ -2084,6 +2084,16 @@
     .session-group > .queue-group:hover .grp-folder { color: var(--dim); }
     .session-group > .queue-group .grp-folder .icon-inline { width: 13px; height: 13px; fill: currentColor; stroke: none; }
     .session-group.collapsed > .grp-body { display: none; }
+    /* W-UIPOLISH4 件十五（2026-10-12 用户截图「组间区分度为零」）：组头强化（背景条+
+       加重字重+计数徽章）、组间 hairline 分隔、折叠箭头显性化。团队组与「进行中」组
+       同机制同皮（研发组/观察席并列时组界一眼可辨）。 */
+    .session-group + .session-group { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+    .session-group > .queue-group { margin: 0 0 4px; padding: 5px 8px 4px; border-radius: 7px; background: color-mix(in srgb, var(--surface2) 52%, transparent); font-weight: 650; color: var(--text); }
+    .session-group > .queue-group:hover { background: var(--hover); color: var(--text-strong); }
+    .session-group > .queue-group .grp-caret { width: 10px; font-size: 10px; color: var(--dim); }
+    .session-group > .queue-group:hover .grp-caret { color: var(--text); }
+    .session-group > .queue-group .grp-folder { color: var(--dim); }
+    .session-group > .queue-group .grp-count { margin-left: 2px; padding: 1px 7px 2px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-weight: 600; font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
     .session-list-tools button.active { color: var(--text-strong); border-color: var(--border-strong); background: var(--hover); }
     /* #B3-17 入场工具类：新挂载节点 translateY(4px)+fade */
     @keyframes b3EnterKf { from { opacity: 0; transform: translateY(4px); } }
@@ -3093,7 +3103,7 @@
                   const activePool = topUnpinned.filter(isActive); // 不再按 reason 重排
                   const idleAll = topUnpinned.filter((x) => !isActive(x));
                   // B11 组头（可折叠）：caret + 文件夹图标 + 名 · 计数；卡体包 .grp-body，折叠态 CSS 隐藏
-                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span> · <span data-session-group-count>' + count + "</span></div>";
+                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span><span class="grp-count" data-session-group-count>' + count + "</span></div>"; /* 件十五：计数徽章化（· 分隔符退役） */
                   // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
                   // 加头=降格成可折叠组；组头间距由「进行中」组头自然承担）。恒在 DOM（不参与折叠记账）
                   const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
