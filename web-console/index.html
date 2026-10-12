@@ -6266,7 +6266,12 @@ function orgRenderDrawer() {
   // 尚无路由记录，由任务板 doing 条目 + 会话列表承载，这里不重复陈列
   const pool = Array.isArray(orgDrawer.data.pool) ? orgDrawer.data.pool : [];
   const poolRow = (p) => {
-    const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
+    // W-UIPOLISH4 件十五附带（2026-10-12 用户报「面板把会话完结错映射成成员退休」）：
+    // 原 !resumable 一律「已退休（档案）」——resumable 只代表「有无 SDK resume 句柄」，
+    // 会话完结（观察席常态）≠退休。退休事实源=编制 headcount：在册+不可拉起=「已完结 ·
+    // 编制在」（除名走 member-retire 流程）；不在册才是真档案位。
+    const inRoster = (Array.isArray(g.headcount) ? g.headcount : []).some((h) => h && h.session_id === p.session_id);
+    const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : inRoster ? "已完结 · 编制在" : "已除名（档案）";
     const stCls = p.busy ? "od-pl-busy" : p.parked || !p.resumable ? "od-pl-dim" : "od-pl-free";
     const last = p.last_ts ? new Date(p.last_ts).toLocaleDateString() : "—";
     const nm = escapeHtml(p.title || String(p.session_id || "").slice(0, 8));
