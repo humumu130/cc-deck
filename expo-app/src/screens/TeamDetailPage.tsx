@@ -266,7 +266,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     if (!items.length) return null;
     return (
       <View key={st} style={styles.lane}>
-        <Text style={styles.laneH}>{label} · {items.length}</Text>
+        <Text style={styles.laneH}>{label} · <Text style={styles.laneHN}>{items.length}</Text></Text>
         {g?.tier === "轻立项" ? (
           <View style={styles.laneBody}>{items.map(boardCard)}</View>
         ) : st === "backlog" ? (() => {
@@ -378,7 +378,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     const scopeP = e.project_scope === "global" ? "全局" : projNameOf(e.project_scope);
     return (
       <View key={e.id} style={styles.legRow}>
-        <Text style={[styles.legKind, { color: kindColor }]}>{kindZh}</Text>
+        <Text style={[styles.legKind, { color: kindColor, backgroundColor: withA(kindColor, 0.13) }]}>{kindZh}</Text>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.legText} numberOfLines={2}>{e.text}</Text>
           <Text style={styles.legMeta} numberOfLines={1}>
@@ -393,7 +393,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   const ruleAudZh = (a: string) => (a === "all" ? "全员" : a === "leader" ? "Leader" : a.startsWith("role:") ? `角色:${a.slice(5)}` : a);
   const ruleRow = (r: RuleEntry) => (
     <View key={r.id} style={styles.legRow}>
-      <Text style={[styles.legKind, { color: c.brandA }]}>律</Text>
+      <Text style={[styles.legKind, { color: c.brandA, backgroundColor: withA(c.brandA, 0.13) }]}>律</Text>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.legText} numberOfLines={3}>{r.text}</Text>
         <Text style={styles.legMeta} numberOfLines={1}>
@@ -408,7 +408,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
       <SafeAreaView style={styles.page}>
         {/* 头部：‹返回 + 组名 + 状态胶囊/档位 + 刷新（状态点色随态，件九/件十口径） */}
         <View style={styles.head}>
-          <Pressable hitSlop={10} accessibilityLabel="返回团队列表" onPress={onClose} style={styles.back}>
+          <Pressable android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} hitSlop={8} accessibilityLabel="返回团队列表" onPress={onClose} style={styles.back}>
             <Text style={styles.backT}>‹</Text>
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -422,7 +422,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
               {src ? <Text style={styles.headTag} numberOfLines={1}>{displaySrcName(src.relayName || src.name)}</Text> : null}
             </View>
           </View>
-          <Pressable hitSlop={8} accessibilityLabel="刷新团队详情" onPress={fetchDetail} style={styles.refresh}>
+          <Pressable android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} hitSlop={6} accessibilityLabel="刷新团队详情" onPress={fetchDetail} style={styles.refresh}>
             <Text style={styles.refreshT}>⟳</Text>
           </Pressable>
         </View>
@@ -487,8 +487,9 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
                   {receipts.map((r) => (
                     <View key={r.id + r.ts} style={[styles.actRow, { borderLeftColor: r.status === "failed" ? c.error : c.line }]}>
                       <Text style={styles.actHead} numberOfLines={1}>
-                        {fmtMdHm(r.ts)} · <Text style={{ color: r.status === "failed" ? c.error : c.text }}>{RECEIPT_ST_ZH[r.status] ?? r.status}</Text>
-                        {r.target && r.target !== "org-leader" ? ` · ${r.target.slice(0, 8)}` : ""} · {tierZh(r.tier) || r.tier}
+                        <Text style={styles.actHeadTime}>{fmtMdHm(r.ts)}</Text>
+                        {" · "}<Text style={{ color: r.status === "failed" ? c.error : c.text }}>{RECEIPT_ST_ZH[r.status] ?? r.status}</Text>
+                        {r.target && r.target !== "org-leader" ? ` · ${memberName(r.target)}` : ""} · {tierZh(r.tier) || r.tier}
                       </Text>
                       {r.receipt ? <Text style={styles.actText} numberOfLines={6}>{r.receipt}</Text> : null}
                     </View>
@@ -572,23 +573,26 @@ const makeStyles = (c: ThemeColors) =>
       flexDirection: "row", alignItems: "center", gap: 6,
       paddingHorizontal: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
     },
-    back: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+    // B6：返回/刷新加容器底与 ripple（裸符号 affordance 弱）
+    back: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 10, overflow: "hidden" },
     backT: { color: c.brandA, fontSize: 24, fontWeight: "600", marginTop: -2 },
     headT: { color: c.text, fontSize: 15.5, fontWeight: "700" },
     headTags: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" },
-    stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1.5 },
+    stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
     stPillDot: { width: 6, height: 6, borderRadius: 3 },
     stPillT: { fontSize: 10, fontWeight: "700" },
-    headTag: { color: c.dim, fontSize: 10, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 999, borderWidth: 1, borderColor: c.line },
-    refresh: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+    headTag: { color: c.dim, fontSize: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: c.line },
+    refresh: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 10, overflow: "hidden" },
     refreshT: { color: c.dim, fontSize: 19 },
-    body: { padding: 14, paddingBottom: 44, gap: 7 },
+    // B1：节间距节奏（gap 7→8 + 节头 marginTop 10→14，七节分堆更清）
+    body: { padding: 14, paddingBottom: 44, gap: 8 },
     sec: { marginBottom: 6 },
-    secH: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 0.3, marginTop: 10, marginBottom: 4 },
-    secHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10, marginBottom: 4, paddingVertical: 2 },
+    secH: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 14, marginBottom: 5 },
+    secHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 5, paddingVertical: 2, borderRadius: 8 },
     secChev: { color: c.faint, fontSize: 12 },
     secGap: { gap: 6 },
-    empty: { color: c.faint, fontSize: 11.5, lineHeight: 16, paddingVertical: 4 },
+    // B5：空态容器化（不是白板——tintSoft 底轻卡居中）
+    empty: { color: c.faint, fontSize: 11.5, lineHeight: 16, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, backgroundColor: c.tintSoft, overflow: "hidden" },
     errRow: {
       flexDirection: "row", alignItems: "center", gap: 8,
       borderRadius: 10, borderWidth: 1, borderColor: withA(c.error, 0.45),
@@ -596,17 +600,18 @@ const makeStyles = (c: ThemeColors) =>
     },
     errT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
     errX: { color: c.faint, fontSize: 15, fontWeight: "600" },
-    // 看板
+    // 看板（B2：泳道头计数数字品牌色强化）
     board: { gap: 4 },
     lane: { marginBottom: 4 },
     laneH: { color: c.text, fontSize: 12, fontWeight: "700", marginBottom: 5 },
+    laneHN: { color: c.brandA, fontVariant: ["tabular-nums"] },
     laneSub: { color: c.faint, fontSize: 10.5, fontWeight: "700", marginTop: 6, marginBottom: 4 },
     laneBody: { gap: 6 },
     claimGrp: { marginBottom: 6 },
     claimGrpH: { color: c.dim, fontSize: 11, fontWeight: "700", marginBottom: 4 },
     tCard: {
       borderRadius: 10, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
-      paddingHorizontal: 10, paddingVertical: 8, gap: 4, overflow: "hidden",
+      paddingHorizontal: 10, paddingVertical: 9, gap: 4, overflow: "hidden",
     },
     tCardHi: { borderWidth: 1.5, borderColor: c.brandA, backgroundColor: c.tintSoft },
     tCardT: { color: c.text, fontSize: 12.5, lineHeight: 17, fontWeight: "600" },
@@ -635,14 +640,15 @@ const makeStyles = (c: ThemeColors) =>
     memCtx: { flexDirection: "row", alignItems: "center", gap: 7, paddingLeft: 41 },
     memCtxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: withA(c.faint, 0.25), overflow: "hidden" },
     memCtxT: { fontSize: 9.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
-    // 活动流
+    // 活动流（B3：时间 faint 化与状态分色；目标显示成员名）
     actRow: { borderLeftWidth: 2, borderLeftColor: c.line, paddingLeft: 8, paddingVertical: 3 },
     actHead: { color: c.text, fontSize: 11, fontWeight: "600" },
+    actHeadTime: { color: c.faint, fontWeight: "500", fontVariant: ["tabular-nums"] },
     actText: { color: c.dim, fontSize: 11, lineHeight: 15.5, marginTop: 2 },
-    // 经验/铁律行（ExpLibraryModal 行语言同源）
+    // 经验/铁律行（B4：kind 字徽章化——kindColor 底色胶囊，与桌面 exp-badge 同语言）
     legRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 4 },
-    legKind: { fontSize: 10, fontWeight: "700", flexShrink: 0, marginTop: 1 },
-    legText: { color: c.text, fontSize: 12, lineHeight: 17 },
+    legKind: { fontSize: 10, fontWeight: "700", flexShrink: 0, marginTop: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
+    legText: { color: c.text, fontSize: 12.5, lineHeight: 17 },
     legMeta: { color: c.faint, fontSize: 10, marginTop: 1 },
     legNote: { color: c.faint, fontSize: 10, lineHeight: 14, marginBottom: 4 },
     // 熟手池
