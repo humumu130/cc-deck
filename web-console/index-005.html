@@ -747,6 +747,8 @@
     #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 3px; }
     #d-session .workspace-title-row .identity-cluster .engine-badge .engine-icon { width: 10px; height: 10px; }
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
+    #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
+    #d-session #session-extmode-capsule[data-ext-on] .cap-dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); } /* 开态绿点示 approvals 正在推送 */
     .head-capsule:hover { background: var(--hover); color: var(--text-strong); }
     .head-capsule:disabled { opacity: .45; cursor: not-allowed; } /* UIPOLISH3 件三：CLI 会话权限胶囊置灰（relay 硬限制 tooltip 说明） */
     .head-capsule:disabled:hover { background: var(--tag-bg); color: var(--text); }
@@ -1017,6 +1019,11 @@
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
     .msg-user-row .bubble.me { margin-bottom: 0; }
     .msg-user-row .mt { margin-top: 4px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+    /* W-PORT-A R-4 发送乐观回显：气泡内状态行（发送中微降 / 未送达红角），与 .mt 同位不占额外行 */
+    .msg-echo .bubble.me { opacity: .88; }
+    .msg-echo .echo-state { margin-top: 3px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: right; }
+    .msg-echo.echo-fail .bubble.me { opacity: 1; border-color: var(--danger, #e5484d); }
+    .msg-echo.echo-fail .echo-state { color: var(--danger, #e5484d); }
     .bubble strong { color: var(--text-strong); }
     /* ---------- #164 对话流域：旧壳消息生态全量移植（MD 渲染/语法着色/过程组/思考卡/工具行） ---------- */
     .message-ai {margin: 0 0 15px; color: var(--text); font-size: var(--fs-A);}
@@ -2157,7 +2164,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索名称、摘要、目录" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active" title="对话" aria-label="对话"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-chat"></use></svg><span class="tab-txt">对话</span></button><button title="任务" aria-label="任务"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-accept"></use></svg><span class="tab-txt">任务</span></button><button title="输出物" aria-label="输出物"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-package"></use></svg><span class="tab-txt">输出物</span></button><button title="更多" aria-label="更多"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-more-h"></use></svg><span class="tab-txt">更多</span></button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button><button type="button" class="head-capsule" id="session-extmode-capsule" hidden title="远程审批开关（外部 CLI 会话：开=权限请求推到本端远程决议）"><span class="cap-dot" aria-hidden="true"></span><span data-extmode-text>远程审批</span></button></span></div><div class="segment-bar"><button class="active" title="对话" aria-label="对话"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-chat"></use></svg><span class="tab-txt">对话</span></button><button title="任务" aria-label="任务"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-accept"></use></svg><span class="tab-txt">任务</span></button><button title="输出物" aria-label="输出物"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-package"></use></svg><span class="tab-txt">输出物</span></button><button title="更多" aria-label="更多"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-more-h"></use></svg><span class="tab-txt">更多</span></button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -2230,6 +2237,7 @@
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
+                  echo: new Map(), // W-PORT-A R-4 发送乐观回显：sid → [{key, text, ts, state:"sending"|"fail"}]（回显对账/超时自撤，见 renderConversation）
                   imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
@@ -2611,8 +2619,8 @@
                   S.ackWaiters.clear();
                 }
 
-                function sendCmd(type, payload) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）
-                  const w = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs;
+                function sendCmd(type, payload, wsOverride) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）；W-PORT-A R-2：wsOverride=新建弹窗显式目标源通道（云源创建走云 shim，最高优先）
+                  const w = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs);
                   if (!w || w.readyState !== 1) { b2Toast("relay 未连接，命令未发送"); return null; }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
                   w.send(JSON.stringify(cmd));
@@ -2790,6 +2798,15 @@
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
                   if (s) s.updated_at = entry.ts || Date.now();
+                  // W-PORT-A R-4 回显对账：本会话自己发出的 user 消息回显到达 → 撤最早同文 sending 态 echo
+                  if (msgRoleOf(entry.kind) === "user") {
+                    const eq = S.echo.get(sid);
+                    if (eq && eq.length) {
+                      const txt = String(entry.full ?? entry.text ?? "");
+                      const i = eq.findIndex((x) => x.state === "sending" && x.text === txt);
+                      if (i >= 0) { eq.splice(i, 1); if (!eq.length) S.echo.delete(sid); if (UI && sid === S.selected) renderConversation(); }
+                    }
+                  }
                   const out = pushLog(sid, entry);
                   if (UI && sid === S.selected && out !== "skip") applyDomLog(sid, out, entry.id);
                 }
@@ -3486,9 +3503,36 @@
                   { key: "plan", zh: "规划（只读）" },
                   { key: "bypassPermissions", zh: "跳过权限确认" },
                 ];
+                // W-PORT-A R-6：外部 CLI 会话「远程审批」胶囊——COMMAND_EXT_MODE 开关（手机 #56 同命令面）。
+                // 开=本机 CLI 的权限请求推到本端远程决议（wait-card 审批链）；关=CLI 本机自行处理。
+                // 乐观回显 s.remote_mode，UPDATED 帧权威归位（MERGE_KEYS 已含 remote_mode）。
+                function updateExtModeCapsule(s) {
+                  const cap = UI.extModeCapsule;
+                  if (!cap) return;
+                  if (!s || !s.external || !canCmd(s)) { cap.hidden = true; delete cap.dataset.extOn; return; }
+                  const on = s.remote_mode === true;
+                  cap.hidden = false;
+                  const txt = cap.querySelector("[data-extmode-text]");
+                  if (txt) txt.textContent = "远程审批 " + (on ? "开" : "关");
+                  cap.title = on ? "远程审批已开：CLI 的权限请求会推到这里决议（点击关闭）" : "远程审批已关：CLI 权限请求在本机处理（点击开启推送）";
+                  if (on) cap.dataset.extOn = "1"; else delete cap.dataset.extOn;
+                }
+                async function toggleExtMode() {
+                  const s = curSession();
+                  if (!s || !s.external || !canCmd(s)) return;
+                  const next = !(s.remote_mode === true);
+                  const ack = await commandAck("COMMAND_EXT_MODE", { session_id: s.session_id, enabled: next }); // relay 侧字段名=enabled（session-manager COMMAND_EXT_MODE 读 payload.enabled；types 注释笔误以实现为准）
+                  const v = ackVerdict(ack);
+                  if (v.ok) {
+                    s.remote_mode = next; // 乐观回显；UPDATED 权威归位
+                    updateExtModeCapsule(s);
+                    b2Toast(next ? "远程审批已开：权限请求将推到这里" : "远程审批已关");
+                  } else b2Toast("切换失败：" + v.error);
+                }
                 function updatePermCapsule(s) {
                   const cap = UI.permCapsule;
                   if (!cap) return;
+                  updateExtModeCapsule(s); // W-PORT-A R-6：远程审批胶囊随 head 同步（external 专属）
                   if (!s || !canCmd(s)) { cap.hidden = true; return; } // 无会话/历史只读卡：隐藏
                   const txt = cap.querySelector("[data-perm-text]");
                   if (s.external) {
@@ -3930,6 +3974,16 @@
                   }
                   frag.querySelectorAll(".procgrp").forEach(procHeadUpdate);
                   pane.appendChild(frag);
+                  // W-PORT-A R-4：发送乐观回显气泡（时间线权威流之后、wait-card 之前；惰性超时清理同拍）
+                  echoSweep(s.session_id);
+                  const eqs = S.echo.get(s.session_id) || [];
+                  for (const eq of eqs) {
+                    const row = document.createElement("div");
+                    row.className = "msg-user-row msg-echo" + (eq.state === "fail" ? " echo-fail" : "");
+                    row.dataset.echoKey = eq.key;
+                    row.innerHTML = '<div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : "发送中…") + "</div></div>";
+                    pane.appendChild(row);
+                  }
                   if (s.status === "DONE" && s._terminal === "interrupted") pane.appendChild(noteNode("已停止 · 生成在此中断"));
                   if (s.status === "ERROR" && s.last_error) pane.appendChild(noteNode("⚠ " + oneLine(s.last_error)));
                   syncWaitCard(true);
@@ -4597,6 +4651,23 @@
                   el.style.height = "auto";
                   el.style.height = Math.min(el.scrollHeight, 132) + "px";
                 }
+                // W-PORT-A R-4：echo 三路生命周期 helper——选中判定 / 失败标记 / 惰性超时清理（渲染时顺带）
+                function sidIsSelected(sid) { return UI && S.selected === sid; }
+                function markEchoFail(sid, text) {
+                  const eq = S.echo.get(sid);
+                  if (!eq || !eq.length) return;
+                  const i = eq.findIndex((x) => x.state === "sending" && x.text === text);
+                  if (i >= 0) { eq[i].state = "fail"; eq[i].ts = Date.now(); if (sidIsSelected(sid)) renderConversation(); }
+                }
+                function echoSweep(sid) { // 惰性清理：sending 30s 无回显 / fail 15s 展示窗 → 自撤
+                  const eq = S.echo.get(sid);
+                  if (!eq) return false;
+                  const now = Date.now();
+                  const keep = eq.filter((x) => now - x.ts < (x.state === "fail" ? 15_000 : 30_000));
+                  if (keep.length === eq.length) return false;
+                  if (keep.length) S.echo.set(sid, keep); else S.echo.delete(sid);
+                  return true;
+                }
                 function sendMessage() {
                   const s = curSession();
                   if (!s) { b2Toast("先从左侧选择会话"); return; }
@@ -4609,7 +4680,16 @@
                   const payload = Object.assign({ session_id: s.session_id, text }, imgs.length ? { images: imgs } : {}, files.length ? { files } : {});
                   const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", payload);
                   if (id) {
-                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) b2Toast("发送失败: " + v.error); }; // #150 R3：自发命令失败回执（R2 删无主 toast 后补漏——超时 null/ok:false 才 toast，成功静默；输入框清空维持现状不并入 waiter）
+                    // W-PORT-A R-4 发送乐观回显：0.5s 内本地气泡占位（手机件五同款语义，桌面简化为
+                    // 回显对账+ACK 失败标记+超时自撤三路）——relay 回显到达即撤（onLog 对账），
+                    // ACK 失败/超时转「未送达」红角标，15s 后自撤防永久假消息
+                    if (text) {
+                      const eq = S.echo.get(s.session_id) || [];
+                      eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text, ts: Date.now(), state: "sending" });
+                      S.echo.set(s.session_id, eq);
+                      if (sidIsSelected(s.session_id)) renderConversation();
+                    }
+                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) { b2Toast("发送失败: " + v.error); markEchoFail(s.session_id, text); } }; // #150 R3：自发命令失败回执（R2 删无主 toast 后补漏——超时 null/ok:false 才 toast，成功静默；输入框清空维持现状不并入 waiter）+ R-4 失败转未送达
                     const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
                     S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
@@ -4816,14 +4896,30 @@
                 function buildCreateHtml() {
                   const chosen = S.engineChoice || defaultEngineId();
                   let html = '<h3>新建会话</h3><p class="create-sub">选择引擎与工作目录，创建新会话</p>';
+                  // W-PORT-A R-2：聚合/云链在线时透出「创建到」目标源行（手机 NewSessionModal 批3 同语义——
+                  // 聚合视角下新建不再只能落当前视角源，云源在线即可选云）
+                  {
+                    const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    if (st && st.cloudPaired && st.cloudStatus === "online") {
+                      const lanName = String(S.relayName || location.host || "本机");
+                      const cloudName = String(st.cloudRelayName || st.cloudWsUrl || "远程源");
+                      html += '<div class="create-label">创建到</div><select class="create-field" data-create-field="source" aria-label="目标源">'
+                        + '<option value="local">本机 · ' + esc(lanName) + "</option>"
+                        + '<option value="cloud">远程 · ' + esc(cloudName) + "</option>"
+                        + "</select>";
+                    }
+                  }
                   // 件九：引擎墙退役——收起态一枚胶囊（状态点·引擎徽章·可用性小字），
                   // 分组浮层走 openEngineMenu（可用置顶 / 不可用灰置+原因），引擎区六行 → 一行
                   {
-                    const entry = catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null;
-                    const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["Claude", "claude"];
+                    // W-PORT-A R-7：auto 档（跟随源默认）——选中态收起胶囊显「自动」，与手机 75-E
+                    // 「auto=不发 engine，relay 按 role/源默认」同口径；显式选引擎维持件九形态
+                    const isAuto = chosen === "auto";
+                    const entry = isAuto ? null : (catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null);
+                    const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["自动", "claude"];
                     const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
                     html += '<div class="create-label">引擎</div>'
-                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + (entry && entry.state !== "ready" ? " na" : "") + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + '</span><span class="ep-meta">' + esc(entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "") + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + (!isAuto && entry && entry.state !== "ready" ? " na" : "") + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
@@ -4849,7 +4945,7 @@
                   if (!S.engineChoice) {
                     let lastEng = null;
                     try { lastEng = localStorage.getItem("cc-deck-005-last-engine"); } catch (_) {}
-                    S.engineChoice = lastEng && catalogEntries().some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId();
+                    S.engineChoice = lastEng === "auto" ? "auto" : (lastEng && catalogEntries().some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId()); // R-7：auto 记忆直取（不查 ready）
                   }
                   const back = document.createElement("div");
                   back.className = "pair-pop-backdrop";
@@ -4893,6 +4989,7 @@
                   const ready = catalogEntries().filter((e) => e.state === "ready");
                   const na = catalogEntries().filter((e) => e.state !== "ready");
                   let html = "";
+                  html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge claude">自动</span><strong>自动 · 跟随源默认</strong><small>由源端配置决定引擎（不携带 engine 字段）</small></button>'; // W-PORT-A R-7：auto 档置顶恒可选
                   if (ready.length) {
                     html += '<div class="source-menu-head">可用 · ' + ready.length + "</div>";
                     for (const e of ready) {
@@ -4921,12 +5018,36 @@
                 }
                 function pickEngine(btnOrId) {
                   const id = typeof btnOrId === "string" ? btnOrId : btnOrId.dataset.engineChoice;
+                  if (id === "auto") { // W-PORT-A R-7：auto 档特判——不查 catalog（恒可选），模型二层清空禁用
+                    S.engineChoice = "auto";
+                    closeEngineMenu();
+                    const pop0 = document.getElementById("b2-create-pop");
+                    if (pop0) {
+                      const trig0 = pop0.querySelector("[data-engine-trigger]");
+                      if (trig0) {
+                        const badge0 = trig0.querySelector(".engine-badge");
+                        if (badge0) { badge0.className = "engine-badge claude"; badge0.textContent = "自动"; }
+                        const dot0 = trig0.querySelector(".ep-dot");
+                        if (dot0) dot0.classList.remove("na");
+                        const metaEl0 = trig0.querySelector(".ep-meta");
+                        const rc = catalogEntries().filter((e) => e.state === "ready").length;
+                        if (metaEl0) metaEl0.textContent = "跟随源默认 · " + rc + " 个引擎可用";
+                      }
+                      const selM = pop0.querySelector("[data-create-field='model']");
+                      if (selM) { selM.value = ""; selM.disabled = true; selM.setAttribute("aria-disabled", "true"); }
+                      const prompt0 = pop0.querySelector("[data-create-field='prompt']");
+                      if (prompt0) prompt0.focus();
+                    }
+                    return;
+                  }
                   const entry = catalogEntries().find((e) => e.id === id);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   S.engineChoice = id;
                   closeEngineMenu(); // 件九：选中即收浮层
                   const pop = document.getElementById("b2-create-pop");
                   if (!pop) return;
+                  const selM2 = pop.querySelector("[data-create-field='model']"); // R-7：显式引擎恢复模型二层可选
+                  if (selM2) { selM2.disabled = !createModelsFor(id).length; if (!selM2.disabled) selM2.removeAttribute("aria-disabled"); }
                   const trig = pop.querySelector("[data-engine-trigger]"); // 件九：收起态胶囊随选同步
                   if (trig && entry) {
                     const meta = ENGINES[entry.id] || [entry.label || entry.id, ""];
@@ -4958,16 +5079,25 @@
                   const autoMkdir = !!(pop.querySelector("[data-create-field='autoMkdir']") || {}).checked;
                   if (!prompt.trim()) { b2Toast("请输入初始指令"); return; }
                   const eng = S.engineChoice || defaultEngineId();
-                  const entry = catalogEntries().find((e) => e.id === eng);
+                  const isAutoEng = eng === "auto"; // W-PORT-A R-7：auto=跟随源默认，不携带 engine、跳过 ready 检查
+                  const entry = isAutoEng ? null : catalogEntries().find((e) => e.id === eng);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
+                  // W-PORT-A R-2：目标源路由——「创建到」选了云源时走云 shim（显式通道最高优先）；
+                  // 本机/未显示该行时维持 sendCmd 视角通道（RouteWs/主连接既有语义）
+                  let wsOverride = null;
+                  const srcSel = pop.querySelector("[data-create-field='source']");
+                  if (srcSel && srcSel.value === "cloud") {
+                    wsOverride = window.__ccDeck005WsFor ? window.__ccDeck005WsFor("cloud") : null;
+                    if (!wsOverride) { b2Toast("远程源不在线，无法在远程创建"); return; }
+                  }
                   const payload = { cwd: cwd || S.homedir || ".", prompt: prompt.trim() };
-                  if (eng && eng !== "claude") payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）
+                  if (eng && eng !== "claude" && !isAutoEng) payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）；auto=跟随源默认（R-7）
                   if (model) payload.model = model; // B10 模型二层
                   // FB15 智能默认：本次引擎/模型记忆为下次新建的预填（引擎须仍 ready 才回填）
                   try { localStorage.setItem("cc-deck-005-last-engine", eng || ""); localStorage.setItem("cc-deck-005-last-model", model || ""); } catch (_) {}
                   if (skipPerm) payload.permissionMode = "bypassPermissions"; // B10 跳权限（relay #217：非 skip 启动的会话后续不可切跳过，创建时定）
                   if (autoMkdir) payload.autoMkdir = true; // #208 目录不存在时 relay 侧 mkdir -p
-                  const id = sendCmd("COMMAND_CREATE", payload);
+                  const id = sendCmd("COMMAND_CREATE", payload, wsOverride); // R-2：目标源通道（本机=null 走既有路由）
                   if (!id) return;
                   // #368：创建已受理即记忆本次 cwd，下次新建预填；B10 历史目录列表同步 MRU
                   if (cwd) pushCreateCwd(cwd);
@@ -5411,6 +5541,8 @@
                     });
                   }
                   // UIPOLISH3 件三：权限胶囊同款静态接线（open/close 与模型菜单同构互不干扰）
+                  UI.extModeCapsule = $id("session-extmode-capsule"); // W-PORT-A R-6：远程审批开关（external 专属）
+                  if (UI.extModeCapsule) UI.extModeCapsule.addEventListener("click", () => void toggleExtMode());
                   UI.permCapsule = $id("session-perm-capsule");
                   if (UI.permCapsule) {
                     UI.permCapsule.addEventListener("click", () => {
@@ -5513,7 +5645,19 @@
                     if (imgs.length > IMG_MAX || files.length > FILE_MAX) return { sent: false, error: "附件超限（图 " + IMG_MAX + " / 文件 " + FILE_MAX + "）" };
                     const payload = Object.assign({ session_id: s.session_id, text: body }, imgs.length ? { images: imgs } : {}, files.length ? { files } : {});
                     const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", payload);
-                    if (id) { S.staged = []; renderTray(); return { sent: true }; }
+                    if (id) {
+                      // W-PORT-A R-4：手机渲染路径同享乐观回显（与桌面 sendMessage 同构——echo push + ACK 失败标记）
+                      if (body) {
+                        const eq = S.echo.get(sid) || [];
+                        eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text: body, ts: Date.now(), state: "sending" });
+                        S.echo.set(sid, eq);
+                        if (sidIsSelected(sid)) renderConversation();
+                      }
+                      const sf = (ack) => { const v = ackVerdict(ack); if (!v.ok) markEchoFail(sid, body); };
+                      const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sf(null); } }, 10000);
+                      S.ackWaiters.set(id, { res: sf, t: wd2 });
+                      S.staged = []; renderTray(); return { sent: true };
+                    }
                     return { sent: false, error: "relay 未连接，命令未发送" };
                   },
                   stopPrompt(sid) { // #169 手机停止钮（与桌面 stopSession 同命令面）
@@ -10052,7 +10196,7 @@ function connectLan(ctx) {
       });
       // W-WINPAIR 只读诊断锚（排障/走查共用）：源切换态一目了然（视角/云源/云态/LAN 连接态）
       window.__ccDeck005SourceState = () => ({ view: viewSource(), shellCloud: !!shellCloud, cloudMode: !!cloudMode,
-        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status,
+        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status, cloudRelayName: String(cloudCtx.relayName || ""),
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });
@@ -10075,6 +10219,12 @@ function connectLan(ctx) {
         const bs = window.__ccDeck005B4 && window.__ccDeck005B4.sessions.get(sid);
         if (bs && bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source)) return cloudCtx.status === "online" ? cloudCmdShim : null;
         return window.__ccDeck005MainWs || ctx.ws;
+      };
+      // W-PORT-A R-2：目标源显式通道（新建弹窗「创建到」行消费）——cloud=云 shim（在线才有），
+      // local=LAN socket。与 RouteWs（按会话归属路由）互补：CREATE 类无 session_id 的命令按显式选择走。
+      window.__ccDeck005WsFor = (source) => {
+        if (source === "cloud") return cloudCtx.status === "online" ? cloudCmdShim : null;
+        return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
       };
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
