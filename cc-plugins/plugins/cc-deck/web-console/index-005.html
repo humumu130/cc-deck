@@ -2538,13 +2538,20 @@
                   return { ok: false, error: (typeof ack.error === "string" && ack.error) || "命令被拒绝" };
                 }
 
-                function handleFrame(m) {
+                function handleFrame(m, evSource) {
                   if (!m || !m.type) return;
                   if (m.type === "COMMAND_ACK") { onAck(m.payload || m); return; }
                   if (m.type === "ARTIFACT_CHUNK") { onArtifactChunk(m.payload || {}); return; }
                   const sid = m.session_id || "";
                   switch (m.type) {
-                    case "SNAPSHOT": onSnapshot(m.payload); break;
+                    // W-WINPAIR-R2：聚合视角 SNAPSHOT merge——S.sessions 保留另一源会话（不清场），其余字段 last-write
+                    case "SNAPSHOT": {
+                      const agg = (window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource;
+                      const keep = agg ? new Map(S.sessions) : null;
+                      onSnapshot(m.payload);
+                      if (keep) for (const [id, v] of keep) if (!S.sessions.has(id)) S.sessions.set(id, v);
+                      break;
+                    }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
                     case "SESSION_CREATED": onSessionCreated(sid, m.payload); break;
                     case "SESSION_UPDATED": onSessionUpdated(sid, m.payload); break;
@@ -2575,7 +2582,7 @@
                     if (ev.state === "close") failB2Flights();
                     return;
                   }
-                  if (ev.kind === "frame") handleFrame(ev.frame);
+                  if (ev.kind === "frame" && window.__ccDeck005FrameAllowed(ev)) handleFrame(ev.frame, ev.source); // W-WINPAIR-R2：按视角门控（aggregate 放行全部+merge）
                 });
 
                 // ---------- 事件处理（v1 onEvent 的 B2 子集） ----------
@@ -6475,7 +6482,7 @@
                 }
 
                 const SESSION_MERGE_TYPES = new Set(["SESSION_UPDATED", "SESSION_HEARTBEAT", "SESSION_DONE", "SESSION_ERROR", "SESSION_WAITING", "SESSION_WAITING_RESOLVED"]);
-                function handleFrame(frame) {
+                function handleFrame(frame, evSource) {
                   if (!frame || typeof frame.type !== "string") return;
                   if (frame.type === "COMMAND_ACK") {
                     const waiter = ackWaiters.get(frame.command_id);
@@ -6483,7 +6490,16 @@
                     return;
                   }
                   let changed = false;
-                  if (frame.type === "SNAPSHOT") { applySnapshot(frame.payload); changed = true; }
+                  if (frame.type === "SNAPSHOT") {
+                    // W-WINPAIR-R2：聚合视角 SNAPSHOT 不清场——两源会话并存（另一源的重连快照
+                    // 不得把本源会话从聚合视图里抹掉），其余字段随 applySnapshot last-write
+                    if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
+                      const keep = new Map(bridge.sessions);
+                      applySnapshot(frame.payload);
+                      for (const [id, v] of keep) if (!bridge.sessions.has(id)) bridge.sessions.set(id, v);
+                    } else applySnapshot(frame.payload);
+                    changed = true;
+                  }
                   else if (frame.type === "NOTIFICATIONS_UPDATED") {
                     const items = frame.payload && Array.isArray(frame.payload.items) ? frame.payload.items : [];
                     bridge.notifications = items.map(normalizeNotification).filter(Boolean);
@@ -6525,7 +6541,7 @@
                     for (const fn of subscribers) { try { fn("connection"); } catch (_) {} }
                     return;
                   }
-                  if (ev.kind === "frame") handleFrame(ev.frame);
+                  if (ev.kind === "frame" && window.__ccDeck005FrameAllowed(ev)) handleFrame(ev.frame, ev.source); // W-WINPAIR-R2：按视角门控（aggregate 放行全部+merge）
                 });
 
                 // ---------- 项目域聚合与渲染 ----------
@@ -7372,7 +7388,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.19";
+      const CONSOLE_VERSION = "0.7.0-test.20";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -7739,8 +7755,8 @@ function connectLan(ctx) {
   try { ctx.ws && ctx.ws.close(); } catch {}
   const w = new WebSocket(url);
   ctx.ws = w;
-  window.__ccDeck005MainWs = w; // #143 盲评A-1 止血：主连接标记——B4 桥命令通道固定走此 socket（ACK 回主连接，不再借道 B2 串台弹错）
-  window.__ccDeck005Frames.emit({ kind: "ws", state: "connecting" }); // #150 R2：建连即广播 connecting（桥恢复 connecting/online/offline 三态，消除 R1 遗留重连窗口显未连接）
+  if (viewSource() !== "cloud") window.__ccDeck005MainWs = w; // #143 盲评A-1 止血：主连接标记——B4 桥命令通道固定走此 socket（ACK 回主连接，不再借道 B2 串台弹错）；W-WINPAIR-R2：云视角时命令面归云 shim，本机建连不抢
+  window.__ccDeck005Frames.emit({ kind: "ws", state: "connecting", source: "lan" }); // #150 R2：建连即广播 connecting（桥恢复 connecting/online/offline 三态，消除 R1 遗留重连窗口显未连接）
   clearTimeout(ctx.lanHsTimer);
   ctx.lanHsTimer = setTimeout(() => {
     ctx.lanHsTimer = 0;
@@ -7754,15 +7770,15 @@ function connectLan(ctx) {
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     setConn(ctx, "online", "已连接");
-    Team.bind(true); // #143 Leader 接线（B3-C3）：注入命令 Promise 通道
-    window.__ccDeck005Frames.emit({ kind: "ws", state: "open" }); // #150 R1：总线广播连接事件（桥 connection→online）
+    syncTeamBind(); // #143 Leader 接线（B3-C3）：注入命令 Promise 通道；W-WINPAIR-R2：并行多源下按视角源在线性统一绑定
+    window.__ccDeck005Frames.emit({ kind: "ws", state: "open", source: "lan" }); // #150 R1：总线广播连接事件（桥 connection→online）
   };
   w.onclose = () => {
     if (ctx.ws !== w) return;
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     setConn(ctx, "offline", "已断开", "transport");
-    Team.bind(false); Team.failFlights(); // #143 Leader 接线：离线禁决议 + 飞行中命令判未达（可重试）
-    window.__ccDeck005Frames.emit({ kind: "ws", state: "close" }); // #150 R1：先广播断开（订阅者先结算飞行命令），再排重连
+    syncTeamBind(); // #143 Leader 接线：离线禁决议 + 飞行中命令判未达（可重试）；W-WINPAIR-R2 统一口径
+    window.__ccDeck005Frames.emit({ kind: "ws", state: "close", source: "lan" }); // #150 R1：先广播断开（订阅者先结算飞行命令），再排重连
     scheduleReconnect(ctx);
   };
   w.onerror = () => {};
@@ -7775,7 +7791,7 @@ function connectLan(ctx) {
       if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
       onEvent(ctx, msg);
     }
-    window.__ccDeck005Frames.emit({ kind: "frame", frame: msg }); // #150 R1 帧总线：地基唯一持连，原始帧（含 COMMAND_ACK）统一 fan-out，域脚本不再各自分接
+    window.__ccDeck005Frames.emit({ kind: "frame", frame: msg, source: "lan" }); // #150 R1 帧总线：地基唯一持连，原始帧（含 COMMAND_ACK）统一 fan-out，域脚本不再各自分接；W-WINPAIR-R2 带 source 标记（订阅方按视角门控）
   };
 }
 
@@ -7842,8 +7858,10 @@ function connectLan(ctx) {
         // W-WINPAIR：未配置态 trigger 显行动引导（点开菜单 → ＋ 添加服务器），不再显含糊的「未配置」
         const name = !bridge || state === "unconfigured" ? "＋ 添加服务器" : sourceDisplayName(String(bridge.relayName || "relay"));
         const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
-        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? count + " 会话 · 在线" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
-        const cloudOn = cloudUIOn();
+        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? count + " 会话 · " + (viewSource() === "aggregate" ? "聚合视图" : "在线") : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
+        const cloudLinked = cloudUIOn(); // 云链已激活（决定云桥行是否注入）
+        const v = viewSource();
+        const cloudActive = v === "cloud"; // 视角（决定哪行 active；aggregate 时两行皆非）
         const pairedCloud = (typeof cloudSharedCloudServers === "function" ? cloudSharedCloudServers() : []).filter((s) => s && s.cloud && s.cloud.paired);
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
@@ -7854,7 +7872,7 @@ function connectLan(ctx) {
           if (menu) {
             const localRow = menu.querySelector('.source-option[data-source-choice="local"]');
             let cloudRow = menu.querySelector('.source-option[data-source-choice="cloud"]');
-            if (cloudOn || pairedCloud.length) {
+            if (cloudLinked || pairedCloud.length) {
               if (!cloudRow && localRow) {
                 cloudRow = document.createElement("button");
                 cloudRow.className = "source-option";
@@ -7871,13 +7889,14 @@ function connectLan(ctx) {
               cloudRow.querySelector("strong").textContent = cloudAddr ? hostOf(cloudAddr) : "云桥";
               cloudRow.querySelector("small").textContent = cs === "online" ? "云桥 · 在线" : cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : "云桥 · " + (cloudCtx.statusText || "离线");
               cloudRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cs === "online" ? "online" : cs === "connecting" ? "connecting" : "offline"));
-              cloudRow.classList.toggle("active", cloudOn);
+              cloudRow.classList.toggle("active", cloudActive);
             }
             if (localRow) {
-              localRow.classList.toggle("active", !cloudOn);
+              // W-WINPAIR-R2：并行保活——本机行连接点显本机链自身状态（不再因视角切走显离线）
+              localRow.classList.toggle("active", v === "local");
               localRow.querySelector("strong").textContent = "本机";
-              localRow.querySelector("small").textContent = cloudOn ? "点击切回本机" : summary;
-              localRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cloudOn ? "offline" : state));
+              localRow.querySelector("small").textContent = cloudActive ? "点击切回本机" : v === "aggregate" ? "聚合展示中 · 点击回单源" : summary;
+              localRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cloudLinked && cloudActive ? (ctx.status === "online" ? "online" : "offline") : state));
             }
           }
           switcher.querySelectorAll(".source-option[data-source-choice]").forEach((option) => {
@@ -8639,13 +8658,16 @@ function connectLan(ctx) {
         // 缝合点 a：https 公网页面（/app2 经 CF Worker 出面）走云桥链——loopback ws:// 被混合
         // 内容策略掐死、桌面探测链不适配公网形态；tauri / http LAN 形态保持原探测链不动。
         if (cloudMode) { bootstrapCloud(); return; }
-        // W-WINPAIR 壳内持久回连：上次会话「＋ 添加服务器」切到云桥且共享库有已配对云源——
-        // 直接接管云链（跳过本机探测；切回本机走 source-menu）。此时尚无 LAN 连接可停，仅置标记。
+        // W-WINPAIR-R2 壳内持久回连（并行保活）：上次会话激活过云桥且共享库有已配对云源——
+        // 云链与本机 LAN **并行**起（本机探测链继续走，不 return 不停链）；视角按持久偏好恢复。
         if (!cloudMode && shellProbe && !shellCloud && lsGet(SHELL_CLOUD_KEY) === "1"
             && cloudSharedCloudServers().some((s) => s.cloud && s.cloud.paired)) {
           shellCloud = true;
-          bootstrapCloud();
-          return;
+          bootstrapCloud(); // 并行起云；命令面由下方视角恢复/setSourceView 决定
+          const saved = lsGet("cc-deck-005-source-view");
+          const wasAggregate = lsGet("cc-deck-005-source-mode") === "aggregate"; // 先存：setSourceView 会写 mode 键
+          setSourceView(saved === "cloud" ? "cloud" : "local");
+          if (wasAggregate) setSourceView("aggregate"); // 上次聚合视图一并恢复
         }
         // 桌面壳：location.host 是 tauri.localhost（非 relay），ws 落探测回的回环端口；浏览器形态
         // 页面即 relay 同源服务，wsUrl 维持 location 推导不变。探测全败不炸——回落未配置引导。
@@ -8758,11 +8780,16 @@ function connectLan(ctx) {
         // #143 盲评A-1 止血：B2 已接管会话列表（打 b2Owned 标）后地基让位——不再用陈旧快照
         // 覆盖 B2 的新鲜渲染（地基只吃 SNAPSHOT、增量全忽略，重连窗口内必陈旧）。dataset 同步归 B2。
         if (sessionList.dataset.b2Owned === "1") return;
-        const c = cloudUIOn() ? cloudCtx : ctx; // 云形态读云源上下文（占位文案/计数与云态一致；LAN 形态维持地基 ctx 不变）；W-WINPAIR：壳内切云同口径
-        sessionList.dataset.relayState = c.hasSnapshot ? "snapshot" : c.status;
+        const v = viewSource();
+        const c = v === "cloud" ? cloudCtx : ctx; // W-WINPAIR-R2：数据源跟视角（cloud=云上下文；local/aggregate 以本机为主视图）
+        // W-WINPAIR-R2 聚合：全部已连接源的会话合并展示（本机 + 已激活云链；test.19 回归②真聚合）
+        const aggOn = v === "aggregate";
+        const aggList = aggOn ? [...ctx.sessions.values(), ...(shellCloud ? [...cloudCtx.sessions.values()] : [])] : null;
+        const aggSnap = aggOn ? (ctx.hasSnapshot || (shellCloud && cloudCtx.hasSnapshot)) : false;
+        sessionList.dataset.relayState = (aggOn ? aggSnap : c.hasSnapshot) ? "snapshot" : c.status;
         sessionList.dataset.connection = c.status;
-        sessionList.dataset.sessionCount = String(c.sessions.size);
-        if (!c.hasSnapshot || !c.sessions.size) {
+        sessionList.dataset.sessionCount = String(aggOn ? aggList.length : c.sessions.size);
+        if ((aggOn ? !aggSnap || !aggList.length : !c.hasSnapshot || !c.sessions.size)) {
           const label = c.cfg && c.cfg.kind === "cloud" ? "云桥" : "relay"; // 云链占位文案走云桥前缀（配对中/未配对等态直达用户）
           // W-NOVAFIX B2：桌面壳（shellProbe 在场）token 未就绪一律「正在连接本机 relay…」——
           // 冷启动/探测落空窗口不给「?token=」浏览器口径文案（桌面无 URL query 可用）
@@ -8776,7 +8803,7 @@ function connectLan(ctx) {
           sessionList.replaceChildren(placeholder);
           return;
         }
-        const sessions = [...c.sessions.values()].sort((first, second) => Number(second.pinned === true) - Number(first.pinned === true) || Number(second.updated_at || 0) - Number(first.updated_at || 0));
+        const sessions = (aggOn ? aggList : [...c.sessions.values()]).sort((first, second) => Number(second.pinned === true) - Number(first.pinned === true) || Number(second.updated_at || 0) - Number(first.updated_at || 0));
         // B18 口径同步（地基首屏占位；接管后由 B2 renderMyList 重渲）：进行中=全部活跃，闲置按项目
         // UIPOLISH2 件五：置顶全局最顶两段式（与 B2 renderMyList 同口径——pinned 抽池平铺最顶
         // 不带分组头，其余走活跃/闲置分组）
@@ -9001,11 +9028,11 @@ function connectLan(ctx) {
         if (status !== "connecting") { cloudCtx.retryAt = 0; cloudCtx.retryNote = ""; }
         if (status === "online") {
           cloudCtx._everOnline = true;
-          Team.bind(true); // 云在线：B3 命令通道放行（经 shim 密封上行）
+          syncTeamBind(); // 云在线：B3 命令通道按视角统一绑定（W-WINPAIR-R2：云视角才真正放行）
         } else if (status === "offline") {
-          Team.bind(false); Team.failFlights(); // 离线三态完备（对齐 connectLan onclose 口径）
+          syncTeamBind(); // 离线三态完备（对齐 connectLan onclose 口径）；W-WINPAIR-R2 统一按视角源
         }
-        window.__ccDeck005Frames.emit({ kind: "ws", state: status === "online" ? "open" : status === "connecting" ? "connecting" : "close" }); // 缝合点 b
+        window.__ccDeck005Frames.emit({ kind: "ws", state: status === "online" ? "open" : status === "connecting" ? "connecting" : "close", source: "cloud" }); // 缝合点 b；W-WINPAIR-R2 带源标记
         setConn(cloudCtx, status, text, cloudCtx.failKind); // 地基三态徽标/chip/会话列表占位
         renderCloudUI();
       }
@@ -9402,7 +9429,7 @@ function connectLan(ctx) {
         if (inner.t === "pong") { ctx.lastPong = Date.now(); return; }
         if (inner.type === "COMMAND_ACK") {
           Team.onAck(inner); // B3 团队域 ACK 结算（不订阅总线，与 connectLan 同口喂给）
-          window.__ccDeck005Frames.emit({ kind: "frame", frame: inner }); // B2/B4 从总线按 command_id 结算
+          window.__ccDeck005Frames.emit({ kind: "frame", frame: inner, source: "cloud" }); // B2/B4 从总线按 command_id 结算；W-WINPAIR-R2 带源标记
           return;
         }
         if (inner.seq !== undefined) {
@@ -9410,7 +9437,7 @@ function connectLan(ctx) {
           lsSet(CLOUD_LASTSEQ_KEY, String(ctx.lastSeq)); // 决策 3：last_seq 写自有键（hello 语义仍按旧壳）
         }
         onEvent(ctx, inner); // 地基会话聚合 + Team.onFrame（SNAPSHOT 团队字段锚定）
-        window.__ccDeck005Frames.emit({ kind: "frame", frame: inner }); // 缝合点 b：内层帧进总线（SNAPSHOT/SESSION_*/增量）
+        window.__ccDeck005Frames.emit({ kind: "frame", frame: inner, source: "cloud" }); // 缝合点 b：内层帧进总线（SNAPSHOT/SESSION_*/增量）；W-WINPAIR-R2 带源标记
       }
 
       // 传输无关的上行：ws 模式直接发；轮询模式 POST（应答/事件走 GET 长轮询回来）
@@ -9609,50 +9636,91 @@ function connectLan(ctx) {
           }
         }
         ctx.probing = false;
-        // 云形态命令面接管：B2/B4/Team 都读 __ccDeck005MainWs / ctx.ws——指向云 shim
-        window.__ccDeck005MainWs = cloudCmdShim;
-        ctx.ws = cloudCmdShim;
+        // 云形态命令面接管：B2/B4/Team 都读 __ccDeck005MainWs——指向云 shim。
+        // W-WINPAIR-R2：壳内并行形态不在此接管（ctx.ws 恒为 LAN socket，帧守卫才成立）——
+        // 命令面归 setSourceView 按视角切换
+        if (cloudMode || viewSource() === "cloud") window.__ccDeck005MainWs = cloudCmdShim;
         connectCloudFor(cloudCtx, false);
       }
-      // ---------- W-WINPAIR：源切换（单源模型内的本机↔云桥） ----------
-      // 005 是单源骨架（同一时刻一条活动链）：切云=停本机 LAN+bootstrapCloud 接管命令面；
-      // 切回=cloudDisconnect+重走 LAN 探测连接。stopped 标记同时挡 scheduleReconnect 与 6s healTimer。
+      // ---------- W-WINPAIR-R2：并行多源 + 视角切换（test.19 回归①②修正） ----------
+      // 语义重定：连接一经建立持续保活（本机 LAN 与云桥并行，谁都不因切换断链）；「切换」只是
+      // 换展示视角（local/cloud/aggregate），命令通道（__ccDeck005MainWs）随视角走。帧总线 emit
+      // 带 source 标记，桥/B2 按视角门控，聚合视角 SNAPSHOT 走 merge（不清另一源的会话）。
+      const SOURCE_VIEW_KEY = "cc-deck-005-source-view";
+      let sourceView = "local"; // local | cloud | aggregate（cloudMode 形态恒 cloud 视角）
+      function viewSource() { return cloudMode ? "cloud" : sourceView; }
+      window.__ccDeck005SourceView = viewSource; // 域脚本（桥/B2 订阅门控）借道
+      function setSourceView(next) {
+        if (cloudMode) return; // 云形态单一云视角，无切换
+        const v = next === "cloud" || next === "aggregate" ? next : "local";
+        sourceView = v;
+        // 持久化：SOURCE_VIEW_KEY 只记单源偏好（local/cloud，aggregate 走 source-mode 键）——
+        // 从聚合切回单源时能回到上次的那个源
+        try {
+          if (v === "aggregate") localStorage.setItem("cc-deck-005-source-mode", "aggregate");
+          else { localStorage.setItem(SOURCE_VIEW_KEY, v); localStorage.setItem("cc-deck-005-source-mode", "single"); }
+        } catch {}
+        document.body.dataset.sourceMode = v === "aggregate" ? "aggregate" : "single";
+        document.querySelectorAll(".source-switcher [data-source-mode]").forEach((el) => el.classList.toggle("active", el.dataset.sourceMode === (v === "aggregate" ? "aggregate" : "single"))); // 五壳模式按钮归位
+        // 命令通道随视角（Team.sendCommand/B2 sendCmd 都读 __ccDeck005MainWs；本机视角=LAN socket）
+        window.__ccDeck005MainWs = v === "cloud" ? cloudCmdShim : ctx.ws;
+        syncTeamBind();
+        replaySnapshots();
+        renderSessionList();
+        renderCloudUI();
+        refreshSourceSwitchers();
+      }
+      window.__ccDeck005SetSourceView = setSourceView; // 走查/域脚本借道
+      // 帧门控：视角源放行；aggregate 放行全部（SNAPSHOT 由桥 merge 承接）；无标记（兼容）视作 lan
+      function frameAllowed(ev) {
+        const src = ev && ev.source ? ev.source : "lan";
+        const v = viewSource();
+        return v === "aggregate" ? true : v === "cloud" ? src === "cloud" : src === "lan";
+      }
+      window.__ccDeck005FrameAllowed = frameAllowed;
+      // 切视角时桥/B2 快照重建：从各链 context 合成 SNAPSHOT 帧重放总线（帧层全链复用，数据零丢失）
+      function replaySnapshots() {
+        const mk = (c, src) => {
+          if (!c || !c.hasSnapshot) return;
+          window.__ccDeck005Frames.emit({ kind: "frame", source: src, frame: {
+            type: "SNAPSHOT",
+            payload: { relay_name: c.relayName, schema_version: 1, sessions: [...c.sessions.values()] },
+          } });
+        };
+        const v = viewSource();
+        if (v === "local") mk(ctx, "lan");
+        else if (v === "cloud") mk(cloudCtx, "cloud");
+        else { mk(ctx, "lan"); mk(cloudCtx, "cloud"); } // aggregate：两源各一帧，桥按 merge upsert
+      }
+      // Team 通道绑定跟视角源在线性（并行后各链状态变化都可能 bind，最终以视角源为准）
+      function syncTeamBind() {
+        const v = viewSource();
+        const on = v === "cloud" ? cloudCtx.status === "online" : ctx.status === "online";
+        Team.bind(on);
+        if (!on) Team.failFlights();
+      }
       function switchToCloudSource(manual) {
-        if (shellCloud) { if (manual) { cloudManualRetry(); showToast("正在重连云桥"); } return; }
         if (cloudMode) return; // 云形态本来就在云链上（设置面板输码即可）
-        ctx.stopped = true;
-        clearTimeout(ctx.reconnectTimer);
-        try { ctx.ws && ctx.ws.close(); } catch {} // onclose 异步到：setConn(offline) 无害（UI 已读 cloudCtx）
-        shellCloud = true;
-        try { localStorage.setItem(SHELL_CLOUD_KEY, "1"); } catch {}
-        bootstrapCloud(); // 共享库选源 + 命令面接管（__ccDeck005MainWs=shim）+ connectCloudFor
-        renderSessionList();
-        renderCloudUI();
-        refreshSourceSwitchers();
+        if (!shellCloud) {
+          // 首次激活：起云链（本机 LAN 不停——并行保活，test.19 回归①修正）
+          shellCloud = true;
+          try { localStorage.setItem(SHELL_CLOUD_KEY, "1"); } catch {}
+          bootstrapCloud();
+        } else if (manual && cloudCtx.status !== "online") {
+          cloudManualRetry();
+        }
+        setSourceView("cloud");
       }
-      // W-WINPAIR 只读诊断锚（排障/走查共用）：源切换态一目了然（shellCloud/云源/云态/LAN 停止位）
-      window.__ccDeck005SourceState = () => ({ shellCloud: !!shellCloud, cloudMode: !!cloudMode,
-        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status,
-        cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired),
-        lanStopped: !!ctx.stopped, lanWsUrl: String(ctx.cfg.wsUrl || "") });
       function switchToLocalSource() {
-        if (!shellCloud) return;
-        cloudDisconnect();
-        Team.bind(false); Team.failFlights(); // 云离线口径对齐（cloudDisconnect 不走 cloudSetConn）
-        window.__ccDeck005Frames.emit({ kind: "ws", state: "close" }); // 先广播断开结算飞行命令（LAN onclose 同口径）
-        shellCloud = false;
-        try { localStorage.removeItem(SHELL_CLOUD_KEY); } catch {}
-        ctx.stopped = false;
-        ctx.sessions.clear(); ctx.hasSnapshot = false; ctx.lastSeq = 0; // 本机链从零快照
-        cloudCtx.sessions.clear(); cloudCtx.hasSnapshot = false;       // 切源快照不串台
-        const b4 = window.__ccDeck005B4;                                // 桥快照残留同清（SNAPSHOT 到达前沿用旧云数据=误读）
-        if (b4) { b4.sessions = new Map(); b4.hasSnapshot = false; }
-        window.__ccDeck005MainWs = null; // connectLan onopen 会重设；清掉防切换窗口期命令误走云 shim
-        connectLan(ctx);
-        renderSessionList();
-        renderCloudUI();
-        refreshSourceSwitchers();
+        if (cloudMode) return;
+        setSourceView("local"); // 云链保持连接保活；仅切视角与命令通道（不再 cloudDisconnect）
       }
+      // W-WINPAIR 只读诊断锚（排障/走查共用）：源切换态一目了然（视角/云源/云态/LAN 连接态）
+      window.__ccDeck005SourceState = () => ({ view: viewSource(), shellCloud: !!shellCloud, cloudMode: !!cloudMode,
+        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status,
+        cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
+        lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
+        lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
       // 先 switchToCloudSource）+ 覆盖 cfg + 走 submitPairCodeWith 配对链（pair_ack 后落共享库）。
@@ -9850,7 +9918,7 @@ function connectLan(ctx) {
         },
         sendCommand(type, payload, timeoutMs = 8000) {
           return new Promise((resolve) => {
-            const ws = ctx.ws;
+            const ws = window.__ccDeck005MainWs || ctx.ws; // W-WINPAIR-R2：命令通道随视角（云视角=shim，本机视角=LAN socket）
             if (!ws || ws.readyState !== WebSocket.OPEN) { resolve(null); return; }
             const commandId = "team-" + Date.now().toString(36) + "-" + String(++this.cmdSeq);
             const timer = setTimeout(() => { this.ackWaiters.delete(commandId); resolve(null); }, timeoutMs);
@@ -9921,7 +9989,9 @@ function connectLan(ctx) {
       };
 
       function onEvent(context, message) {
-        Team.onFrame(context, message); // #143 Leader 接线：团队域帧（SNAPSHOT 团队字段/三事件）
+        // #143 Leader 接线：团队域帧（SNAPSHOT 团队字段/三事件）；W-WINPAIR-R2：并行多源下团队域跟
+        // 视角源走（cloud 视角吃云帧的团队字段，local/aggregate 吃本机——两源 SNAPSHOT 不互相覆盖团队域）
+        if (context === (viewSource() === "cloud" ? cloudCtx : ctx)) Team.onFrame(context, message);
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
         context.sessions = new Map(message.payload.sessions.filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
         context.hasSnapshot = true;
@@ -9949,18 +10019,18 @@ function connectLan(ctx) {
           const option = target.closest(".source-option[data-source-choice]");
           if (option) {
             const choice = String(option.dataset.sourceChoice || "");
-            // W-WINPAIR：真切换——cloud=切云桥（壳/LAN 形态停本机起云链），local=切回本机 relay。
-            // active 态由 refreshSourceSwitchers 状态驱动（cloudSetConn→桥 connection→subscribe 闭环）
-            if (choice === "cloud" && !cloudUIOn()) {
+            // W-WINPAIR-R2：真切换且幂等——cloud=云桥视角（未激活则先并行起云链），local=本机视角。
+            // 连接保活不断链；active 态由 refreshSourceSwitchers 按 viewSource 驱动
+            if (choice === "cloud") {
               closeSourceMenu(switcher);
-              showToast("切换到云桥…");
               switchToCloudSource(false);
+              showToast("视角：云桥 · 连接保持");
               return;
             }
-            if (choice === "local" && shellCloud) {
+            if (choice === "local") {
               closeSourceMenu(switcher);
-              showToast("切换到本机 relay…");
               switchToLocalSource();
+              showToast("视角：本机 relay · 连接保持");
               return;
             }
             const wasActive = option.classList.contains("active");
@@ -9984,10 +10054,18 @@ function connectLan(ctx) {
           const modeBtn = target.closest(".source-mode [data-source-mode]");
           if (modeBtn) {
             const nextMode = modeBtn.dataset.sourceMode === "aggregate" ? "aggregate" : "single";
-            document.body.dataset.sourceMode = nextMode;
-            try { localStorage.setItem("cc-deck-005-source-mode", nextMode); } catch (_) {} // FB1：模式记忆
-            document.querySelectorAll(".source-switcher [data-source-mode]").forEach((el) => el.classList.toggle("active", el.dataset.sourceMode === nextMode)); // FB1：五壳同步（曾只点改本壳）
-            showToast(nextMode === "aggregate" ? "多源聚合视图" : "单源视图");
+            // W-WINPAIR-R2：模式按钮接真视角（test.19 回归②）——aggregate=全部源会话合并展示，
+            // single=回上次单源视角；setSourceView 统一做 dataset/键/按钮五壳归位+数据重放
+            if (typeof setSourceView === "function") {
+              if (nextMode === "aggregate") setSourceView("aggregate");
+              else { const prev = (() => { try { return localStorage.getItem("cc-deck-005-source-view"); } catch { return null; } })(); setSourceView(prev === "cloud" ? "cloud" : "local"); }
+            } else {
+              document.body.dataset.sourceMode = nextMode;
+              try { localStorage.setItem("cc-deck-005-source-mode", nextMode); } catch (_) {} // FB1：模式记忆（setSourceView 不可用时的旧路径兜底）
+              document.querySelectorAll(".source-switcher [data-source-mode]").forEach((el) => el.classList.toggle("active", el.dataset.sourceMode === nextMode));
+            }
+            showToast(nextMode === "aggregate" ? "多源聚合 · 全部源会话合并展示" : "单源视图");
+            closeSourceMenu(switcher); // W-WINPAIR-R2：模式切换后收菜单（与源行点击同口径）
             return;
           }
           const manage = target.closest("[data-source-settings]");
@@ -10318,7 +10396,7 @@ function connectLan(ctx) {
         let healTries = 0;
         const healTimer = setInterval(async () => {
           if (ctx.stopped) { clearInterval(healTimer); return; }
-          const conn = window.__ccDeck005B4 ? window.__ccDeck005B4.connection : ctx.status;
+          const conn = ctx.status; // W-WINPAIR-R2：并行多源下 healTimer 只看本机链自身状态（桥 connection 会随视角在云态，不再当本机健康判据）
           if (conn === "online" || conn === "connecting") { clearInterval(healTimer); return; }
           if (++healTries > 15) { clearInterval(healTimer); return; }
           const again = await probeLocalRelay();
