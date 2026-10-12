@@ -8,7 +8,8 @@
 //   旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造。
 //   M13-6E resolved 分离：已处理行拆入「已处理 N」折叠分区（默认收起），main/resolved
 //   两区各保池序不重排；关闭即回默认折叠（原规格①语义）。
-//   M13-6E 验收回跳：task 落点 = 本弹层宿主 GroupModal 定位台账卡；session 落点 =
+//   M13-6E 验收回跳：task 落点 = 本弹层宿主 TeamDetailPage 定位台账卡（W-EXPODOMAIN
+//   v2 件四：GroupModal 弹窗形态退役，全屏详情页接棒）；session 落点 =
 //   onOpenSession 打开原会话（ListScreen onOpen → App openDetail）。
 //   通知 badge（未处理数）挂顶栏铃铛（ListScreen 统计行「通知 · N」胶囊），计数与
 //   本弹层 rows 同源同函数（notifActionableOf）。
@@ -21,7 +22,7 @@ import { splitResolvedRows, notifActionableOf, notifDoneAt, jumpTargetOf, type N
 import { ackTapGuard, ackVerdict, unknownCommandError } from "../org-commands";
 import { store, useRelay } from "../store";
 import type { NotificationItem } from "../protocol";
-import { GroupModal } from "./OrgZone";
+import { TeamDetailPage } from "./TeamDetailPage";
 
 export default function NotifCenterSheet({ open, onClose, onOpenSession }: {
   open: boolean;
@@ -189,9 +190,10 @@ export default function NotifCenterSheet({ open, onClose, onOpenSession }: {
         )}
       </ScrollView>
       {gmOpen ? (
-        <GroupModal
+        <TeamDetailPage
           srcId={gmOpen.srcId}
-          target={{ gid: gmOpen.gid, name: gmOpen.name }}
+          gid={gmOpen.gid}
+          name={gmOpen.name}
           highlightEntryId={gmOpen.entryId}
           onClose={() => setGmOpen(null)}
           onOpenSession={onOpenSession}

@@ -48,7 +48,7 @@ const ENGINE_STATE_COLOR: Record<EngineCatalogState, keyof ThemeColors> = {
   unknown: "faint",
 };
 
-export default function NewSessionModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export default function NewSessionModal({ visible, presetCwd, onClose }: { visible: boolean; presetCwd?: string | null; onClose: () => void }) {
   const { c } = useTheme();
   const m = useThemeStyles(makeStyles);
   const snap = useRelay();
@@ -131,7 +131,10 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     setModelSel(null);
     setPickerOpen(false);
     setCreateFlight(new Set()); // 残留飞行表清位（能力位 createCaps 不清：relay 版本记忆跨开合有效）
-    void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
+    // W-EXPODOMAIN 件三：项目卡「新建会话于此目录」带入的预设目录优先（覆盖 ccr_cwd
+    // 记忆一次；提交时照常写回记忆）；普通打开（FAB）不带 = 记忆口径不变
+    if (typeof presetCwd === "string" && presetCwd.trim()) setCwd(presetCwd.trim());
+    else void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
     void AsyncStorage.getItem("ccr_auto_mkdir").then((v) => setAutoMkdir(v === "1"));
     void AsyncStorage.getItem("ccr_use_codex").then((v) => {
       // 仅当仍 auto 才带入（防 AsyncStorage 异步回调覆盖用户已做选择）

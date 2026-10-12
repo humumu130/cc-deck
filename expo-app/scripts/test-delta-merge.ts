@@ -41,14 +41,14 @@ function deepEq(a: unknown, b: unknown, msg = "deepEqual mismatch") {
 // ---------- fixtures ----------
 const g = (id: string, name: string): ProjectGroup =>
   ({ id, name, anchor_dir: `/d/${id}`, tier: "轻立项", status: "active", created_at: 1, updated_at: 1 }) as ProjectGroup;
-const e = (id: string, text: string, status: BoardEntry["status"] = "todo"): BoardEntry =>
+const e = (id: string, text: string, status: BoardEntry["status"] = "backlog"): BoardEntry =>
   ({ id, text, status, created_at: 1, updated_at: 1 });
 const l = (id: string, text: string): LessonEntry => ({ id, text, tags: [], ts: 1 });
 
 const groups3 = [g("g1", "甲组"), g("g2", "乙组"), g("g3", "丙组")];
-const boardPrev: ProjectBoard = { gid: "G1", frozen: false, entries: [e("e1", "甲"), e("e2", "乙", "doing"), e("e3", "丙", "done")], updated_at: 100 };
+const boardPrev: ProjectBoard = { gid: "G1", frozen: false, entries: [e("e1", "甲"), e("e2", "乙", "claimed"), e("e3", "丙", "done")], updated_at: 100 };
 const boardDelta = {
-  entries: { upserts: [e("e2", "乙改", "doing"), e("e4", "丁")], removes: ["e1", "nope"] },
+  entries: { upserts: [e("e2", "乙改", "claimed"), e("e4", "丁")], removes: ["e1", "nope"] },
   lessons: { upserts: [l("l1", "经验一")], removes: [] },
   meta: { frozen: true, updated_at: 200 },
 };
@@ -164,7 +164,7 @@ console.log("S4 两链收敛（merge 链==覆盖链==板现值语义）");
 
 ok("S4.1 board：relay 同帧 board 全量与 delta 的收敛结果语义等价", () => {
   // relay 现值（覆盖链目标）：e1 删、e2 改、e4 增、frozen 翻转
-  const boardNow: ProjectBoard = { gid: "G1", frozen: true, entries: [e("e2", "乙改", "doing"), e("e3", "丙", "done"), e("e4", "丁")], updated_at: 200 };
+  const boardNow: ProjectBoard = { gid: "G1", frozen: true, entries: [e("e2", "乙改", "claimed"), e("e3", "丙", "done"), e("e4", "丁")], updated_at: 200 };
   const mergeChain = applyBoardFrame(boardPrev, true, { gid: "G1", board: boardNow, delta: boardDelta }, true).board!;
   const coverChain = applyBoardFrame(boardPrev, true, { gid: "G1", board: boardNow }, true).board!;
   const key = (b: ProjectBoard) =>

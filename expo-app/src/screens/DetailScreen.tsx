@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -23,6 +23,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import { artPoolGate } from "../artpool";
+import { markEchoState, pushPending, reconcilePending, type PendingEcho } from "../pending-echo";
 import { fromB64, toB64 } from "../e2e";
 // E3a：hasActivityCapability 为值导入（E1 落库面，只消费不修改）；其余仍纯类型
 import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
@@ -446,6 +447,28 @@ function BubbleImage({ sid, imgref }: { sid: string; imgref: string }) {
         </Pressable>
       </Modal>
     </>
+  );
+}
+
+// 件五：乐观回显 pending 气泡（用户消息气泡同族视觉——右对齐圆角，降透明度区分
+// 正式态；状态脚注三态：发送中/已排队/失败·点按重试）。挂转录尾部，回声对账后消失
+function PendingEchoBubble({ p, onRetry }: { p: PendingEcho; onRetry: (p: PendingEcho) => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const failed = p.state === "failed";
+  const body = (
+    <View style={[d.peBubble, failed && d.peBubbleFail]}>
+      <Text style={d.peText} numberOfLines={6}>{p.text}</Text>
+      <Text style={[d.peState, { color: failed ? c.error : c.faint }]}>
+        {p.state === "sending" ? "发送中…" : p.state === "queued" ? "已排队 · 确认/回合结束后自动发送" : "发送失败 · 点按重试"}
+      </Text>
+    </View>
+  );
+  if (!failed) return body;
+  return (
+    <Pressable onPress={() => onRetry(p)} accessibilityLabel={`重发失败消息：${p.text.slice(0, 30)}`}>
+      {body}
+    </Pressable>
   );
 }
 
@@ -1676,6 +1699,12 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   const [permPanel, setPermPanel] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
+  // 件五：发送乐观回显（用户实测痛点——手机发出后消息消失 ~5s 才在排队区出现，发送
+  // 端自己看不到）。发送瞬间同步注入 pending 气泡（0.5s 内本地可见），relay 回声/
+  // 排队/失败三路对账收敛（reconcilePending 纯函数，../pending-echo.ts）；跨会话条目
+  // 键控隔离（DetailScreen 常驻复用，切会话不串气泡）
+  const [pendingEcho, setPendingEcho] = useState<PendingEcho[]>([]);
+  const echoSeq = useRef(0);
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
   // 恒 1 行），改 onContentSizeChange 显式定高，夹在 [44,150]（晨间反馈 110→150：
   // 拉高后能看到更多已输入内容）；封顶后高度恒定、内部自然滚动（类微信）
@@ -2060,12 +2089,20 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   );
   const shownMsg = procVisible.filter((e) => matchFilter(e.kind, "msg", e.tool));
   const pageShown = view === "msg" ? shownMsg : [];
+  // 件五对账：回声（user_message）/排队（pending_inputs）到达即收敛 pending 气泡
+  const myEcho = useMemo(() => pendingEcho.filter((p) => p.sid === sid), [pendingEcho, sid]);
+  useEffect(() => {
+    setPendingEcho((prev) => {
+      const next = reconcilePending(prev, { sid, logs, pendingInputs: s?.pending_inputs, now: Date.now() });
+      return next === prev ? prev : next;
+    });
+  }, [logs, s?.pending_inputs, sid, myEcho.length]);
   const lastEntry = pageShown.length ? pageShown[pageShown.length - 1] : null;
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
     const ref = view === "msg" ? scrollRef.current : null;
     if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
-  }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
+  }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING", myEcho.length]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
   // 六视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
   // 远跳（>1 页）飞行途中临时全渲染，防掠过的中间页闪空白
@@ -2244,6 +2281,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     const text = (override ?? input).trim();
     if (!text && images.length === 0 && files.length === 0) return;
     const willQueue = external && s.status === "WAITING";
+    // 件五：发送瞬间同步注入 pending 气泡（乐观回显——0.5s 内本地可见）；ack 失败
+    // （4s 重发+6s 收摊后的 unconfirmed/rejected）→ 转失败态可点重发；发送即拒
+    // （未连接）→ 直接失败态。回声对账在渲染层 effect（reconcilePending）
+    const echoKey = `pe-${Date.now().toString(36)}-${(echoSeq.current += 1)}`;
+    const echoText = text || (images.length ? `[图片 ×${images.length}]` : `[文件 ×${files.length}]`);
     // #54/#62 外部会话同口径带附件：relay 落盘临时目录 + 注入「正文 + 路径指令」，
     // CLI 用 Read 看图/处理文件；托管会话图片走 SDK image blocks、文件走路径指令
     const ok = store.send(
@@ -2253,6 +2295,13 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         ...(images.length > 0 ? { images } : {}),
         ...(files.length > 0 ? { files } : {}),
       },
+      undefined,
+      (r) => {
+        if (!r.ok) setPendingEcho((prev) => markEchoState(prev, echoKey, "failed"));
+      },
+    );
+    setPendingEcho((prev) =>
+      pushPending(prev, { key: echoKey, sid, text: echoText, ts: Date.now(), state: ok ? "sending" : "failed" }),
     );
     if (ok) {
       editInput("");
@@ -2260,6 +2309,12 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
       setFiles([]);
       if (willQueue) flashQueuedHint();
     }
+  };
+
+  // 件五失败重发：移除失败气泡 + 文本重发（附件不缓存重发——占位文案不进重发链）
+  const retryEcho = (p: PendingEcho) => {
+    setPendingEcho((prev) => prev.filter((x) => x.key !== p.key));
+    if (p.text && !/^\[(图片|文件) ×\d+\]$/.test(p.text)) send(p.text);
   };
 
   // 语音输入：按住说话，partial 实时上字幕条，松手 stopListening 等 final 发送（超时兜底用 partial）
@@ -2439,16 +2494,19 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
           <View style={d.headMeta}>
-            {/* #159 方案A：源·ctx 一句话（"源104 · 35%"）替代 ctx 标签+30px 水位条+
-                常亮分级色——一行只留一档字号一种形态；水位信息百分比已足够（列表卡
-                mini 条、统计区仍有全量），ctxTone 只在 60-84 黄 / ≥85 红报警 */}
-            {srcMeta || ctxUsed > 0 ? (
+            {/* A4-4 查漏（桌面件十六信息行序）：目录→水位胶囊→活跃时间。#159 方案A 的
+                「一行一档字号一种形态」保持；水位百分比仍只在报警档亮色（60-84 黄 /
+                ≥85 红），正常档归入 dim；目录=尾两段缩短（全长在「更多」tab 统计区） */}
+            {srcMeta || s.cwd || ctxUsed > 0 ? (
               <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
                 {srcMeta}
-                {srcMeta && ctxUsed > 0 ? " · " : ""}
+                {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
+                {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
+                {s.cwd && ctxUsed > 0 ? " · " : ""}
                 {ctxUsed > 0 ? (
                   <Text style={{ color: ctxTone, fontVariant: ["tabular-nums"] }}>{ctxPct}%</Text>
                 ) : null}
+                {" · "}{fmtLastActive(s.updated_at || s.started_at)}
               </Text>
             ) : null}
             {/* #36 设置簇（右锚）：权限胶囊 + 思考开关成组——同为会话级 14px 小胶囊，
@@ -3117,6 +3175,12 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             return nodes;
           })
         )}
+
+        {/* 件五：乐观回显 pending 气泡（转录尾、工作状态盒前）——发送瞬间即见，
+            回声/排队对账后收敛（reconcilePending）；失败态点按重发 */}
+        {view === "msg"
+          ? myEcho.map((p) => <PendingEchoBubble key={p.key} p={p} onRetry={retryEcho} />)
+          : null}
 
         {/* 工作状态盒（类 CLI 放对话流内，顶栏不再显示工作状态）；#186 用户授权拍板：
             并行子 Agent 并入状态栏——子 Agent 是本回合工作的并行分支、与主状态同信息族，
@@ -3893,6 +3957,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: withA(c.working, 0.10), borderWidth: 1, borderColor: withA(c.working, 0.25),
     borderRadius: 14, borderTopRightRadius: 4, paddingHorizontal: 12, paddingVertical: 8,
   },
+  // 件五 pending 气泡（trUser 同族：右对齐圆角右上台角；降透明度 + 虚线感描边区分
+  // 正式态；失败态 error 描边可点重试）
+  peBubble: {
+    alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10, opacity: 0.72,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: withA(c.working, 0.35),
+    borderRadius: 14, borderTopRightRadius: 4, paddingHorizontal: 12, paddingVertical: 8, gap: 4,
+  },
+  peBubbleFail: { borderColor: withA(c.error, 0.5), opacity: 1 },
+  peText: { color: c.text, fontSize: 14, lineHeight: 20 },
+  peState: { fontSize: 10.5, textAlign: "right" },
   trUserText: { color: c.text, fontSize: 14, lineHeight: 20 },
   trUserTime: { color: c.faint, fontSize: 10, textAlign: "right", marginTop: 3, fontVariant: ["tabular-nums"] },
   // FB14 气泡附图缩略行：气泡内文字下方（64 方图，圆角同发送侧 imgThumb；加载占位

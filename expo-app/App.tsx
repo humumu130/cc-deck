@@ -619,6 +619,12 @@ function Shell() {
   // #72 E 线 产物池视图（列表常驻胶囊入口① + 详情可达行入口②共用；Modal 挂 App 层——
   // 两入口分属两屏，池视图提一级免跨屏导航链）
   const [artPoolOpen, setArtPoolOpen] = useState(false);
+  // 新建会话预设目录（W-EXPODOMAIN 件三）：项目卡「新建会话于此目录」带入
+  // NewSessionModal（覆盖 ccr_cwd 记忆一次）；FAB 普通新建不带
+  const [newPresetCwd, setNewPresetCwd] = useState<string | null>(null);
+  // 会话域目录过滤（件三「查看项目会话」落点，C-7）：跳会话域带目录过滤，列表顶部
+  // 出可清除过滤条；清除即回全量
+  const [dirFilter, setDirFilter] = useState<string | null>(null);
   // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
   // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
   const [navPhase, setNavPhase] = useState<"idle" | "entering" | "closing">("idle");
@@ -695,6 +701,11 @@ function Shell() {
   const pendingCount = useMemo(
     () => splitPending(snap.sessions, { notifications: snap.notifications }).pending.length,
     [snap.sessions, snap.notifications],
+  );
+  // 团队 tab badge = 待决议确认卡数（跨源汇总，A1-11——与团队页队列/桌面 rail badge 同源）
+  const teamBadge = useMemo(
+    () => snap.sources.reduce((n, src) => n + (src.orgConfirms?.length ?? 0), 0),
+    [snap.sources],
   );
 
   // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
@@ -941,8 +952,10 @@ function Shell() {
                     sessions={snap.sessions}
                     connected={snap.connected}
                     connText={snap.connText}
+                    dirFilter={dirFilter}
+                    onClearDirFilter={() => setDirFilter(null)}
                     onOpen={openDetail}
-                    onNew={() => setSheet(true)}
+                    onNew={() => { setNewPresetCwd(null); setSheet(true); }}
                     onOpenSettings={() => setTab("settings")}
                     onOpenArtPool={() => setArtPoolOpen(true)}
                   />
@@ -953,7 +966,12 @@ function Shell() {
                   {tab === "team" ? (
                     <TeamTab onOpenSession={openDetail} />
                   ) : tab === "projects" ? (
-                    <ProjectsTab onOpenSession={openDetail} />
+                    <ProjectsTab
+                      onOpenSession={openDetail}
+                      onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
+                      onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
+                      onGoTeam={() => setTab("team")}
+                    />
                   ) : (
                     <SettingsPage
                       onSetup={() => { setSetupScan(false); setSetup("new"); }}
@@ -963,7 +981,7 @@ function Shell() {
                 </View>
               ) : null}
             </View>
-            <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount }} />
+            <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount, team: teamBadge }} />
           </View>
           {detail ? (
             <Animated.View
@@ -975,7 +993,7 @@ function Shell() {
           ) : null}
           {/* #72 E 线 产物池视图（入口①/②共用；NewSessionModal 同层全 App 弹面） */}
           <ArtPoolModal visible={artPoolOpen} onClose={() => setArtPoolOpen(false)} />
-          <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
+          <NewSessionModal visible={sheet} presetCwd={newPresetCwd} onClose={() => setSheet(false)} />
           {updateInfo ? <UpdateBanner info={updateInfo} onSkip={() => setUpdateInfo(null)} /> : null}
           <Toast />
           <TaskDoneFloat

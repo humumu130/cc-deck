@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Alert, Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { STATUS_ZH, statusColor, withA, mix, type ThemeColors } from "../theme";
+import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
@@ -29,6 +30,10 @@ interface Props {
   onNew: () => void;
   onOpenSettings: () => void; // 左上角 logo = 设置入口（W-EXPOLISH 件三：抽屉退役，落点改设置 tab）
   onOpenArtPool: () => void; // #72 E 线 入口①：产物池常驻胶囊（三重门显隐），App.tsx 开 ArtPoolModal
+  // W-EXPODOMAIN 件三「查看项目会话」落点（C-7）：项目域跳入带目录过滤，顶部出
+  // 可清除过滤条；null = 无过滤（常态）
+  dirFilter?: string | null;
+  onClearDirFilter?: () => void;
   ref?: Ref<ListBackHandle>;
 }
 
@@ -486,22 +491,9 @@ function R2LiveDot() {
   return <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.working, opacity: BLINK_PHASES[ph] }} />;
 }
 
-// r3 状态 tag 胶囊（005 STATUS_TAG 口径：待处理=action 橙 / 错误=danger / 完成=done /
-// 运行中=info；tint 底 + 同色描边 + 同色字）
-const TAG_TINT: Record<string, keyof ThemeColors> = {
-  WAITING: "brandA", ERROR: "error", DONE: "done", WORKING: "info",
-};
-function StatusTag({ s }: { s: SessionState }) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const key = TAG_TINT[s.status] ?? "info";
-  const tint = c[key];
-  return (
-    <View style={[styles.srowTag, { borderColor: withA(tint, 0.42), backgroundColor: withA(tint, 0.12) }]}>
-      <Text style={[styles.srowTagT, { color: tint }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
-    </View>
-  );
-}
+// r3 状态 tag 胶囊已退役（W-EXPODOMAIN v2 A3-5 查漏，桌面 #164 同口径）：AvaBadge
+// 状态灯 + 待处理段置顶 + 摘要行（WAITING 前缀「需要确认 ·」）已表达状态，文字
+// tag 是重复噪声——StatusTag/TAG_TINT/srowTag* 样式随之退役
 
 // 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）；
 // #363 压缩中：⟳ 明示（CLI "Compacting conversation..."），不显示旧摘要防误判卡死
@@ -553,13 +545,14 @@ function Elapsed({ s }: { s: SessionState }) {
 // 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝。
 // minimal（极简单行卡）：面板只留图标不出文字标签（行高太矮叠不下两行字）
 function SwipeRow({
-  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, compact, minimal, dim, children,
+  sid, deletable, onPress, onRename, onDelete, onCopyId, revealSid, onReveal, compact, minimal, dim, children,
 }: {
   sid: string;
   deletable: boolean;
   onPress: () => void;
   onRename: () => void;
   onDelete: () => void;
+  onCopyId: () => void;
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   compact?: boolean;
@@ -637,6 +630,9 @@ function SwipeRow({
             if (open.current) close();
             else onPress();
           }}
+          // A4-6 查漏（桌面右键菜单「复制 ID」的手机等价——长按直达；手机已有左滑
+          // 重命名/删除与撤销，长按位空闲无冲突）
+          onLongPress={onCopyId}
         >
           {children}
         </Pressable>
@@ -751,13 +747,14 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
 // 呈现位，逐项明细在详情页；activityMetricsOf 纯投影保留（test-e2a-list 断言面）。
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge, orgTag,
+  s, onOpen, onResume, onRename, onDelete, onCopyId, revealSid, onReveal, density, dim, srcBadge, orgTag,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
   onResume: (sid: string) => void; // #49/#139 休眠卡点按恢复
   onRename: (sid: string) => void;
   onDelete: (sid: string) => void;
+  onCopyId: (sid: string) => void; // A4-6：长按复制会话 ID（桌面右键菜单项等价）
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   density: ListDensity;
@@ -802,6 +799,7 @@ const SessionCard = memo(function SessionCard({
       onPress={() => (dormant ? onResume(s.session_id) : onOpen(s.session_id))}
       onRename={() => onRename(s.session_id)}
       onDelete={() => onDelete(s.session_id)}
+      onCopyId={() => onCopyId(s.session_id)}
       revealSid={revealSid}
       onReveal={onReveal}
       compact={compact}
@@ -863,7 +861,9 @@ const SessionCard = memo(function SessionCard({
           <View style={styles.srow}>
             <AvaBadge
               letter={(s.title || "未").trim().slice(0, 1) || "未"}
-              srcColor={srcBadge ? srcBadge.color : null}
+              /* A3-7 查漏（桌面 UIPOLISH2 件一同口径）：头像底色=引擎品牌色淡彩（引擎
+                 语义徽章/状态灯/身份头像三分离）；词表外引擎回落源色（不丢信息） */
+              srcColor={ENGINE_ACCENT[s.engine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
               dotColor={dotColor}
               breathe={s.status === "WORKING" || bgLive}
             />
@@ -889,20 +889,23 @@ const SessionCard = memo(function SessionCard({
                   <Text style={styles.srowSum} numberOfLines={1}>{s.action_summary || "…"}</Text>
                 )}
               </View>
-              {/* r3 徽章行：状态 tag + 源胶囊 + 元信息（foldMeta 超 3 个折叠 +N，行高恒定）
-                  ——状态灯/源/水位恒显，文本元信息超量折叠不膨胀（W-EXPOLISH 件一） */}
-              <View style={styles.srowR3}>
-                <StatusTag s={s} />
-                {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-                {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
-                    display 切换不插拔 */}
-                {r3Meta.shown.map((m) => (
-                  <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
-                ))}
-                {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
-                <View style={{ flex: 1 }} />
-                <CtxMini s={s} />
-              </View>
+              {/* r3 徽章行：源胶囊 + 元信息（foldMeta 超 3 个折叠 +N，行高恒定）+ 右端水位
+                  mini。A3-5 查漏（桌面 #164 同口径）：状态文字 tag 退役——AvaBadge 状态灯+
+                  待处理段+摘要行已表达状态，文字 tag 是重复噪声；r3 全空（无源徽/无元信息/
+                  无水位）整行不渲染（桌面 r3 条件渲染同款） */}
+              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || (s.context_usage ?? 0) > 0 ? (
+                <View style={styles.srowR3}>
+                  {srcBadge ? <SrcBadge {...srcBadge} /> : null}
+                  {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
+                      display 切换不插拔 */}
+                  {r3Meta.shown.map((m) => (
+                    <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
+                  ))}
+                  {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
+                  <View style={{ flex: 1 }} />
+                  <CtxMini s={s} />
+                </View>
+              ) : null}
             </View>
           </View>
         </>
@@ -917,7 +920,7 @@ const SessionCard = memo(function SessionCard({
 // ./SettingsPage.tsx（设置 tab 宿主，logo 落点改切 tab）。卡片组织徽标（orgTag）
 // 仍需组名映射，projNameById 保留在本屏。
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onOpenSettings, onOpenArtPool, ref }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onOpenSettings, onOpenArtPool, dirFilter, onClearDirFilter, ref }: Props) {
   const { c } = useTheme();
   const { mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -949,6 +952,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // relay 下发的「已保存，点击恢复」摘要在手机上成了死文案——点卡只打开详情，
   // 恢复从未发生。恢复失败走 SESSION_ERROR（卡片转「恢复失败」可重点重试），
   // 未连接等前置错误由全局 Toast 负责（与删除路径同口径）
+  // A4-6：长按复制会话 ID（桌面右键菜单「复制 ID」的手机等价）——剪贴板直写 + 轻
+  // 震动 + Alert 回显（复制无可见反馈=死动作；回显用系统弹窗不占自绘浮层层级）
+  const copySessionId = useCallback((sid: string) => {
+    try { Vibration.vibrate(10); } catch {}
+    void Clipboard.setStringAsync(sid);
+    Alert.alert("会话 ID 已复制", sid);
+  }, []);
   const handleResumeSaved = useCallback((sid: string) => {
     store.send("COMMAND_RESUME_SESSION", { session_id: sid });
   }, []);
@@ -1139,8 +1149,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
   const visible = useMemo(
     () => (collapseIdle ? sorted.filter((s) => !isIdleSession(s, idleDimMin)) : sorted)
-      .filter((s) => s.session_id !== pendingDel && !deleting.includes(s.session_id)),
-    [sorted, collapseIdle, idleDimMin, pendingDel, deleting],
+      .filter((s) => s.session_id !== pendingDel && !deleting.includes(s.session_id))
+      // 件三目录过滤（桌面 getSessionProject 归一口径：\ 归 / 、尾斜杠剥除、含子目录）
+      .filter((s) => {
+        if (!dirFilter) return true;
+        const d = String(s.cwd || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
+        const f = dirFilter.replace(/[\\/]/g, "/").replace(/\/+$/, "");
+        return !!d && !!f && (d === f || d.startsWith(f + "/"));
+      }),
+    [sorted, collapseIdle, idleDimMin, pendingDel, deleting, dirFilter],
   );
 
   // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶（E2a-up 富版：
@@ -1413,6 +1430,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ) : null}
       </View>
 
+      {/* 件三目录过滤条（项目域「查看项目会话」跳入态）：目录名 + ✕ 清除回全量 */}
+      {dirFilter ? (
+        <View style={styles.dirBar}>
+          <Text style={styles.dirBarT} numberOfLines={1}>
+            项目会话 · {dirFilter.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}
+          </Text>
+          <Pressable hitSlop={8} accessibilityLabel="清除目录过滤，返回全部会话" onPress={onClearDirFilter}>
+            <Text style={styles.dirBarX}>✕</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <FlatList
         // P0 加固②：stickyHeaderIndices 退役——FlatList Android 吸顶的 re-parent
         // 在 Fabric 下触发 Yoga owner 断言崩（YogaLayoutableShadowNode.cpp:709
@@ -1464,6 +1493,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               onResume={handleResumeSaved}
               onRename={handleRename}
               onDelete={requestDelete}
+              onCopyId={copySessionId}
               revealSid={revealSid}
               onReveal={setRevealSid}
               density={density}
@@ -1844,9 +1874,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srowSum: { flex: 1, color: c.dim, fontSize: 12, lineHeight: 16 },
   srowBgTag: { color: c.working, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
   srowR3: { flexDirection: "row", alignItems: "center", gap: 5 },
-  srowTag: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1 },
-  srowTagT: { lineHeight: 14, fontSize: 10, fontWeight: "600" },
   srowMeta: { lineHeight: 14, color: c.faint, fontSize: 10 },
+  // 件三目录过滤条（统计行与列表之间）：品牌描边浅底一行 + ✕ 清除
+  dirBar: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 14, marginTop: 4, marginBottom: 2,
+    borderRadius: 10, borderWidth: 1, borderColor: withA(c.brandA, 0.4),
+    backgroundColor: withA(c.brandA, 0.07), paddingHorizontal: 11, paddingVertical: 7,
+  },
+  dirBarT: { flex: 1, color: c.brandA, fontSize: 11.5, fontWeight: "600" },
+  dirBarX: { color: c.faint, fontSize: 13, paddingHorizontal: 2 },
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 6 }, /* #83 同缩进 */

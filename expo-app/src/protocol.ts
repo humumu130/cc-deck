@@ -390,8 +390,9 @@ export interface ProjectGroup {
   created_at: number;
   updated_at: number;
   // 对齐 relay wire（projects.ts ProjectHeadcountEntry）：joined_at 是幽灵字段
-  // （relay 全库不存在），engine/model/provider 随条目下发
-  headcount?: { session_id: string; role: string; engine?: string; model?: string; provider?: string }[];
+  // （relay 全库不存在），engine/model/provider 随条目下发；nick=席位别名
+  // （relay sanitizeHeadcount 透传，UIPOLISH3 件十⑤ 成员卡显示名优先级 nick>会话名）
+  headcount?: { session_id: string; role: string; engine?: string; model?: string; provider?: string; nick?: string }[];
   // wire 有而 expo 未消费，先补声明防漂移（组挂起/结项/暂缓建议时刻 + 结项一句话）
   parked_at?: number;
   archived_at?: number;
@@ -403,7 +404,7 @@ export interface ProjectGroup {
 // 用户 ✓/✗ 决议（COMMAND_ORG_CONFIRM）；decided 后不再出现在 pending 清单
 export interface OrgConfirm {
   id: string;
-  kind: "project-create" | "tier-change" | "suggest-hold" | "archive" | "revive";
+  kind: "project-create" | "tier-change" | "suggest-hold" | "archive" | "revive" | "rule-append";
   title: string;
   reason?: string;
   created_at: number;
@@ -411,14 +412,46 @@ export interface OrgConfirm {
   payload?: Record<string, unknown>;
 }
 
-// 任务板条目（COMMAND_PROJECT_DETAIL.board 携带；BOARD_UPDATED 增量维护）
+// 任务板条目（COMMAND_PROJECT_DETAIL.board 携带；BOARD_UPDATED 增量维护）。
+// status 五态词表 = relay projects.ts BoardEntryStatus（D18 freeze v2-m10-freeze §1.2
+// 逐字）：backlog/claimed/submitted/ready_to_install/done——此前端侧类型注记的
+// todo/doing/done 三态是 D18 迁移前旧形状（wire 早已五态，GroupModal 渲染面即按五态），
+// W-EXPODOMAIN v2（design-expo-mobile-v2 A1-2）随团队详情页对齐修正。transitions =
+// 泳道迁移时间线（桌面件十九；端上只读消费）
+export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_install" | "done";
 export interface BoardEntry {
   id: string;
   text: string;
-  status: "todo" | "doing" | "done";
+  status: BoardEntryStatus;
   note?: string;
   owner_session?: string;
   dispatch_id?: string;
+  created_at: number;
+  updated_at: number;
+  /** D18 完成候选复核资格位（submitted 生成锁；端上只读） */
+  review_required?: boolean;
+  /** 泳道迁移时间线（桌面件十九：[{status, ts}]；旧条目无此字段） */
+  transitions?: { status: BoardEntryStatus; ts: number }[];
+}
+
+// W-RULES2 团队铁律条目（relay team-rules.ts RuleEntry 端侧镜像；只读消费——手机
+// 写面在电脑端，rule-append 类实时决议走确认卡）。字段与 relay schema 同构，多出的
+// 键端上忽略
+export interface RuleEntry {
+  id: string;
+  /** ≤120 字祈使句 */
+  text: string;
+  /** 三档：all | leader | role:<P81 词表>（词表外写入即拒 fail-closed） */
+  audience: string;
+  /** 双值：team | project:<锚点目录绝对路径（尾斜杠归一）> */
+  scope: string;
+  status: "active" | "retired" | "superseded";
+  /** 替代链：被哪条新规则替代 */
+  superseded_by?: string;
+  /** 升格溯源（由哪条经验复制而来） */
+  promoted_from?: string;
+  created_by: "user" | "agent";
+  confirm_id?: string;
   created_at: number;
   updated_at: number;
 }
@@ -583,6 +616,9 @@ export interface SnapshotPayload {
   // W-EXPP2 经验库（覆盖式锚定；空数组也下发=支持位，缺席=旧 relay）
   experience?: ExperienceEntry[];
   experience_enabled?: boolean;
+  // W-RULES2 团队铁律（覆盖式锚定同上；缺席=旧 relay）
+  rules?: RuleEntry[];
+  rules_enabled?: boolean;
   notifications?: NotificationItem[];
   source_capabilities?: SourceCapabilities;
 }

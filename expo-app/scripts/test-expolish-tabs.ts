@@ -154,13 +154,24 @@ async function main(): Promise<void> {
   eq(notifActionableOf(pool).length, 2, "通知 badge 口径：actionable 且三戳全空");
   eq(notifActionableOf(null).length, 0, "旧 relay null 池 → badge 0（降级不崩）");
 
-  // ---------- ③ 模块面（件二/件三迁出件导出齐全） ----------
-  check(typeof org.OrgZone === "function", "OrgZone 导出（团队 tab 宿主）");
-  check(typeof org.GroupModal === "function", "GroupModal 导出（组详情，三 tab 复用）");
+  // ---------- ③ 模块面（W-EXPODOMAIN v2：OrgZone/GroupModal 旧形态退役，件四） ----------
+  check(typeof org.ConfirmCard === "function", "ConfirmCard 导出（确认卡共享件：决议钮内联+状态徽三态）");
   check(typeof org.useOrgData === "function", "useOrgData 导出（组织数据面）");
   check(typeof org.useOrgDecide === "function", "useOrgDecide 导出（决议 ACK 门）");
   check(typeof org.orgStColor === "function", "orgStColor 导出");
+  check(typeof org.normDir === "function", "normDir 导出（目录归一，项目域/详情页共用）");
   check(org.ORG_ST_ZH && org.ORG_ST_ZH.pending === "待确认", "ORG_ST_ZH 词表随迁");
+  check(org.TIER_ZH && org.TIER_ZH["正经立项"] === "正式项目", "TIER_ZH 口语化词表（件十）");
+  check(Array.isArray(org.BOARD_LANES) && org.BOARD_LANES.length === 5, "BOARD_LANES 五态词表（D18 对齐）");
+  check(org.ORG_CF_KIND_ZH && org.ORG_CF_KIND_ZH["rule-append"] === "铁律", "确认卡 kind 词表含 rule-append（W-RULES1）");
+  check((org as Record<string, unknown>).OrgZone === undefined, "OrgZone 旧形态（chips 平铺）已退役");
+  check((org as Record<string, unknown>).GroupModal === undefined, "GroupModal 旧形态（弹窗组详情）已退役——TeamDetailPage 接棒");
+  // @ts-expect-error 同上
+  const teamDetail = await import("../src/screens/TeamDetailPage.tsx");
+  check(typeof teamDetail.TeamDetailPage === "function", "TeamDetailPage 导出（全屏团队详情七节）");
+  const wizardSrc = srcOf("../src/screens/TeamCreateWizard.tsx");
+  check(wizardSrc.includes('"COMMAND_ORG_ACTION"'), "建团向导走 COMMAND_ORG_ACTION 现役通路");
+  check(wizardSrc.includes('action: "create"'), "建团载荷 action=create（relay 单漏斗）");
   check(typeof orgTabs.TeamTab === "function", "TeamTab 导出");
   check(typeof orgTabs.ProjectsTab === "function", "ProjectsTab 导出");
   check(typeof notifPage.default === "function", "NotifCenterSheet 默认导出（通知 sheet 弹层宿主，件六复用件）");
@@ -179,14 +190,16 @@ async function main(): Promise<void> {
   check(/srowTitle: \{[^}]*lineHeight: 19/.test(listSrc),
     "r1 标题行盒钉 19（font 度量浮动消除）");
   check(/srowMeta: \{[^}]*lineHeight: 14/.test(listSrc), "r3 元信息行盒钉 14");
-  check(/srowTagT: \{[^}]*lineHeight: 14/.test(listSrc), "状态 tag 行盒钉 14");
+  // A3-5 查漏（W-EXPODOMAIN v2）：r3 状态文字 tag 退役（桌面 #164 同口径）——灯+待处理段+
+  // 摘要行已表达状态；StatusTag/TAG_TINT/srowTag* 样式面一并清零
+  check(!/function StatusTag/.test(listSrc) && !/<StatusTag/.test(listSrc), "状态 tag 组件退役（A3-5，函数与 JSX 面清零）");
+  check(!/srowTag[::]/.test(listSrc), "状态 tag 样式面清零（A3-5）");
   check(/titleC: \{[^}]*lineHeight: 19/.test(listSrc), "紧凑档标题行盒钉 19");
   check(/sumC: \{[^}]*lineHeight: 14/.test(listSrc), "紧凑档摘要行盒钉 14");
   check(!listSrc.includes("ActivityBlock s={s}"), "活动指标块不再上卡（0~4 行伸缩=卡高方差主源）");
   // 件一精确化（2026-10-11 用户澄清）：「状态/动作/审批」键值行整体删除——状态由
   // 徽标行胶囊+状态灯承载、动作=摘要行、审批归详情页；样式面 act* 一并清零
   check(!listSrc.includes("actBlock") && !listSrc.includes("actKey"), "键值行渲染与样式面已清零");
-  check(listSrc.includes("<StatusTag s={s} />"), "状态→徽标行状态胶囊承载");
   check(listSrc.includes("<CtxMini s={s} />"), "进度→徽标行水位 mini 承载");
   check(listSrc.includes("foldMeta(["), "r3 元信息走 foldMeta 收敛");
   // 件一红线：摘要行 numberOfLines 钳制保持单行
@@ -226,7 +239,7 @@ async function main(): Promise<void> {
   check(notifSrc.includes("store.ackNotification"), "通知动作真链路（E3b）随迁");
   check(notifSrc.includes("splitResolvedRows"), "已处理折叠分区随迁");
   check(notifSrc.includes("jumpTargetOf"), "验收回跳判定随迁");
-  check(notifSrc.includes("GroupModal"), "task 落点宿主组详情（弹层内可达）");
+  check(notifSrc.includes("TeamDetailPage"), "task 落点宿主团队详情页（W-EXPODOMAIN v2 件四：GroupModal→TeamDetailPage）");
   check(notifSrc.includes("关闭即回默认"), "已处理折叠「关闭回默认」语义保持");
 
   const orgTabsSrc = srcOf("../src/screens/OrgTabs.tsx");
@@ -253,7 +266,7 @@ async function main(): Promise<void> {
     "useOrgData 不再透出经验域（数据面随入口迁设置）");
   check((orgZoneSrc.match(/经验库总开关已关闭/g) ?? []).length === 1, "总开关说明唯一（随列表迁弹层）");
   check(orgZoneSrc.includes("不设 6 条截断"), "弹层全量列表（原内嵌 6 条截断退役）");
-  check(orgTabsSrc.includes("经验域随入口迁设置 tab"), "团队页迁移注记在场");
+  check(orgTabsSrc.includes("TeamDetailPage"), "团队页挂团队详情页（v2 件一）");
   check(!/\bexps\b/.test(orgTabsSrc), "团队 tab 无经验域残留");
   const expPageSrc = srcOf("../src/screens/SettingsPage.tsx");
   check(expPageSrc.includes(">经验库"), "设置页经验库分节在场");
@@ -282,8 +295,8 @@ async function main(): Promise<void> {
   check(!p0List.includes("<PressScale") && !p0List.includes("fabGrad"), "右下悬浮 FAB 退役");
   check(p0List.includes("accessibilityLabel=\"新建会话\""), "会话页顶栏右上角 ＋（原 FAB 行为）");
   check(p0List.includes("plusBtn"), "顶栏 ＋ 钮样式面在场");
-  check(orgTabsSrc.includes("onAdd={addOnDesk}") && orgTabsSrc.includes("请在电脑端操作"),
-    "团队/项目页右上角 ＋（现状能力=电脑端指引）");
+  check(orgTabsSrc.includes("TeamCreateWizard") && orgTabsSrc.includes("setWizardOpen(true)"),
+    "团队/项目页右上角 ＋ → 建团分步向导（v2 件二：电脑端指引退役，org create 现役通路）");
 
   console.log(`ok - ${tests} assertions passed（W-EXPOLISH：卡高钳制 + 通知回铃铛（件六迭代）+ 三域内容化 + dock 迁位 + 经验库迁设置）`);
 }
