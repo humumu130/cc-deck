@@ -394,7 +394,9 @@
     .icon-inline use[href="#icon-users"], .icon-status use[href="#icon-users"] { fill: currentColor; stroke: none; }
     .source-switcher { position: relative; z-index: 5; border-radius: 8px; background: var(--source-switcher-bg); }
     .windowbar .source-switcher { margin-right: 2px; }
-    .source-trigger {display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: var(--fs-E);}
+    /* W-WINPAIR-R5 件六②：连接图标移名称左侧（DOM 顺序不变，flex order 调）+ 间距加大一档 */
+    .source-trigger {display: inline-flex; align-items: center; gap: 9px; min-height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: var(--fs-E);}
+    .source-trigger [data-source-conn] { order: -1; margin-left: 2px; }
     .source-trigger:hover { border-color: var(--brand); background: var(--hover); }
     .source-trigger.source-company { border-color: var(--source-company); background: var(--source-company-bg); }
     .source-trigger.source-home { border-color: var(--source-home); background: var(--source-home-bg); }
@@ -420,7 +422,8 @@
     .source-option.active { background: var(--selected-bg); }
     .source-option[data-source-choice="local"] { border-left: 2px solid var(--source-company); }
     .source-option[data-source-choice="cloud"] { border-left: 2px solid var(--source-home); }
-    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"] { border-left: 3px solid var(--brand); }
+    .source-option[data-source-choice="aggregate"] { border-left: 2px solid var(--brand); }
+    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"], .source-option.active[data-source-choice="aggregate"] { border-left: 3px solid var(--brand); }
     .source-option strong {flex: 1; color: var(--text-strong); font-size: var(--fs-A-item);}
     .source-option small {color: var(--dim); font: var(--fs-B) var(--mono);}
     .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
@@ -2120,7 +2123,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -2616,12 +2619,18 @@
                   if (m.type === "ARTIFACT_CHUNK") { onArtifactChunk(m.payload || {}); return; }
                   const sid = m.session_id || "";
                   switch (m.type) {
-                    // W-WINPAIR-R2：聚合视角 SNAPSHOT merge——S.sessions 保留另一源会话（不清场），其余字段 last-write
+                    // W-WINPAIR-R2：聚合视角 SNAPSHOT merge——S.sessions 保留另一源会话（不清场）；
+                    // W-WINPAIR-R4：projects 同 id 并集（项目列表聚合两源）
                     case "SNAPSHOT": {
                       const agg = (window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource;
                       const keep = agg ? new Map(S.sessions) : null;
+                      const keepProjects = agg ? (Array.isArray(S.projects) ? S.projects.slice() : []) : null;
                       onSnapshot(m.payload);
                       if (keep) for (const [id, v] of keep) if (!S.sessions.has(id)) S.sessions.set(id, v);
+                      if (keepProjects) {
+                        const seen = new Set(S.projects.map((g) => g && g.id));
+                        for (const g of keepProjects) if (g && g.id !== undefined && !seen.has(g.id)) S.projects.push(g);
+                      }
                       break;
                     }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
@@ -2899,7 +2908,7 @@
                     tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
                     bg: bgCount(session), // #164 后台子 Agent 在跑数（⑂N 徽标）
                     engine: esc(engine[0]), engineClass: engine[1],
-                    source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(S.relayName) : S.relayName), // 件十三：localhost→本机 映射统一
+                    source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || S.relayName) : (session.relay_source || S.relayName)), // 件十三 + W-WINPAIR-R6：per-session 源标识优先（聚合两源各显其名）
                     time: activityTime ? fmtListTime(activityTime) : "",
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
@@ -2929,7 +2938,8 @@
                 function myCardMarkup(item) {
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  const b2SourceBadge = (item) => '<span class="source-badge" style="color:' + b2SourceColor(item.source) + ";border-color:" + b2SourceColor(item.source) + ";background:color-mix(in srgb, " + b2SourceColor(item.source) + ' 14%, transparent)">' + item.source + "</span>"; // W-WINPAIR-R6：八色环源色徽章（源色底块增强辨识）
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + b2EngineBadge(item) + b2SourceBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -6657,21 +6667,40 @@
                   let changed = false;
                   if (frame.type === "SNAPSHOT") {
                     // W-WINPAIR-R2：聚合视角 SNAPSHOT 不清场——两源会话并存（另一源的重连快照
-                    // 不得把本源会话从聚合视图里抹掉），其余字段随 applySnapshot last-write
+                    // 不得把本源会话从聚合视图里抹掉）；W-WINPAIR-R4：org 面（projects/确认卡/
+                    // 验收/通知）同口径按 id 并集——通知卡与项目卡聚合可见两源（用户实测空卡修复）
                     if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
-                      const keep = new Map(bridge.sessions);
+                      const keepSessions = new Map(bridge.sessions);
+                      const keepLists = { projects: bridge.projects.slice(), pendingConfirms: bridge.pendingConfirms.slice(), accepts: bridge.accepts.slice(), notifications: bridge.notifications.slice() };
                       applySnapshot(frame.payload);
-                      for (const [id, v] of keep) if (!bridge.sessions.has(id)) bridge.sessions.set(id, v);
+                      for (const [id, v] of keepSessions) if (!bridge.sessions.has(id)) bridge.sessions.set(id, v);
+                      const byId = (keep, cur, idOf) => { const seen = new Set(cur.map((x) => x && idOf(x))); for (const x of keep) { const k = x && idOf(x); if (k !== undefined && k !== null && !seen.has(k)) { cur.push(x); seen.add(k); } } };
+                      byId(keepLists.projects, bridge.projects, (x) => x.id);
+                      byId(keepLists.pendingConfirms, bridge.pendingConfirms, (x) => x.id);
+                      byId(keepLists.accepts, bridge.accepts, (x) => x.id);
+                      byId(keepLists.notifications, bridge.notifications, (x) => x.key); // 通知归一化后判重键=key
                     } else applySnapshot(frame.payload);
                     changed = true;
                   }
                   else if (frame.type === "NOTIFICATIONS_UPDATED") {
                     const items = frame.payload && Array.isArray(frame.payload.items) ? frame.payload.items : [];
-                    bridge.notifications = items.map(normalizeNotification).filter(Boolean);
+                    const next = items.map(normalizeNotification).filter(Boolean);
+                    // W-WINPAIR-R4：聚合视角通知按 key 并集（全量形态不清另一源——通知卡聚合两源；归一化判重键=key）
+                    if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
+                      const seen = new Set(next.map((n) => n && n.key));
+                      for (const n of bridge.notifications) if (n && n.key && !seen.has(n.key)) { next.push(n); seen.add(n.key); }
+                    }
+                    bridge.notifications = next;
                     bridge.notificationsSupported = true;
                     changed = true;
                   } else if (frame.type === "ORG_CONFIRM_UPDATED") {
-                    bridge.pendingConfirms = frame.payload && Array.isArray(frame.payload.pending) ? frame.payload.pending.filter((c) => c && typeof c.id === "string") : [];
+                    const pending = frame.payload && Array.isArray(frame.payload.pending) ? frame.payload.pending.filter((c) => c && typeof c.id === "string") : [];
+                    // W-WINPAIR-R4：聚合视角确认卡同 id 并集
+                    if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
+                      const seen = new Set(pending.map((c) => c.id));
+                      for (const c of bridge.pendingConfirms) if (c && c.id !== undefined && !seen.has(c.id)) pending.push(c);
+                    }
+                    bridge.pendingConfirms = pending;
                     changed = true;
                   } else if (frame.type === "ACCEPTANCES_UPDATED") {
                     bridge.accepts = frame.payload && Array.isArray(frame.payload.acceptances) ? frame.payload.acceptances.filter((a) => a && typeof a.id === "string") : [];
@@ -7473,7 +7502,7 @@
       <div class="mobile-frame">
         <div class="mobile-screen active" id="m-inbox" data-mobile-root="inbox">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>待我处理<small>会话行动与状态</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
           <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待审查</span></div></div><div data-mobile-session-list></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -7486,7 +7515,7 @@
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
             <div class="mobile-content" data-notify-center>
             <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。<button class="notify-light-action" type="button" data-notify-clear-all hidden>全部清除</button></div>
@@ -7503,7 +7532,7 @@
 
         <div class="mobile-screen" id="m-project" data-mobile-root="project">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span></header>
           <div class="mobile-content"><div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div><div data-mobile-project-cards></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div data-mobile-project-lane></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -7511,7 +7540,7 @@
 
         <div class="mobile-screen" id="m-settings" data-mobile-root="settings">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done connection-chip status-connected"><span class="mini-signal" aria-hidden="true"><i></i><i></i><i></i></span>relay 在线</span><button class="icon-btn">⋯</button></header>
           <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>Agent 引擎</strong><p>6 引擎 · 2 已接 · 浏览态</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px" data-settings-pair type="button">扫码添加新设备</button></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button class="active" data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -7553,7 +7582,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.20";
+      const CONSOLE_VERSION = "0.7.0-test.21";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -7909,7 +7938,10 @@
         qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)",
       }[item.engineClass] || sessionSourceColor(item.source));
       const sessionCtaMarkup = (item) => item.tagClass === "action" || item.tagClass === "danger" ? `<button type="button" class="srow-cta">处理</button>` : "";
-      const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong></div><p>${item.summary}</p><div class="identity-cluster">${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}<span class="source-badge">${item.source}</span></div></div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><span class="srow-ava" style="--srow-ava-c:${sessionAvaColor(item)}">${(item.title || "·").trim().charAt(0).toUpperCase()}<i class="status-dot ${item.status}"></i></span><span class="srow-main"><span class="srow-r1"><strong title="${item.title}">${item.title}</strong>${item.time ? `<time class="srow-time">${item.time}</time>` : ""}</span><span class="srow-r2"><span class="srow-r2-t">${item.summary}</span>${item.status === "working" ? `<span class="srow-sec" data-work-sec="${item.workSecs || 0}">${item.workSecs || 0}s</span>` : ""}</span>${item.tag || item.engine || item.source || item.pinned ? `<span class="srow-r3">${item.pinned ? `<span class="tag pin-flag">置顶</span>` : ""}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}<span class="source-badge">${item.source}</span></span>` : ""}</span>${sessionCtaMarkup(item)}</div>`;
+      // W-WINPAIR-R6 件九：源徽章带 FB19 八色环源色（同名恒色——与头像回落色同环）；单源隐藏由
+      // body[data-source-count="1"] CSS 管（B2 渲染拍维护，聚合两源自 >1 显形）
+      const sourceBadgeMarkup = (item) => `<span class="source-badge" style="color:${sessionSourceColor(item.source)};border-color:${sessionSourceColor(item.source)};background:color-mix(in srgb, ${sessionSourceColor(item.source)} 14%, transparent)">${item.source}</span>`;
+      const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong></div><p>${item.summary}</p><div class="identity-cluster">${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}${sourceBadgeMarkup(item)}</div></div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><span class="srow-ava" style="--srow-ava-c:${sessionAvaColor(item)}">${(item.title || "·").trim().charAt(0).toUpperCase()}<i class="status-dot ${item.status}"></i></span><span class="srow-main"><span class="srow-r1"><strong title="${item.title}">${item.title}</strong>${item.time ? `<time class="srow-time">${item.time}</time>` : ""}</span><span class="srow-r2"><span class="srow-r2-t">${item.summary}</span>${item.status === "working" ? `<span class="srow-sec" data-work-sec="${item.workSecs || 0}">${item.workSecs || 0}s</span>` : ""}</span>${item.tag || item.engine || item.source || item.pinned ? `<span class="srow-r3">${item.pinned ? `<span class="tag pin-flag">置顶</span>` : ""}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}${sourceBadgeMarkup(item)}</span>` : ""}</span>${sessionCtaMarkup(item)}</div>`;
 
 function connectLan(ctx) {
   const cfg = ctx.cfg;
@@ -8020,14 +8052,21 @@ function connectLan(ctx) {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
         const online = !!bridge && state === "online" && bridge.hasSnapshot;
-        // W-WINPAIR：未配置态 trigger 显行动引导（点开菜单 → ＋ 添加服务器），不再显含糊的「未配置」
-        const name = !bridge || state === "unconfigured" ? "＋ 添加服务器" : sourceDisplayName(String(bridge.relayName || "relay"));
-        const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
-        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? count + " 会话 · " + (viewSource() === "aggregate" ? "聚合视图" : "在线") : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
-        const cloudLinked = cloudUIOn(); // 云链已激活（决定云桥行是否注入）
         const v = viewSource();
+        const cloudLinked = cloudUIOn(); // 云链已激活（决定云桥行是否注入）
         const cloudActive = v === "cloud"; // 视角（决定哪行 active；aggregate 时两行皆非）
         const pairedCloud = (typeof cloudSharedCloudServers === "function" ? cloudSharedCloudServers() : []).filter((s) => s && s.cloud && s.cloud.paired);
+        // W-WINPAIR-R5 件六①：trigger 文本=视角源名（不等快照——云快照滞后时不再恒显「本机」）：
+        // cloud→云源名（快照 relay_name 优先，未达显桥地址）；aggregate→「聚合 · 全部源」；local→本机
+        let name;
+        if (!bridge || state === "unconfigured") name = "＋ 添加服务器";
+        else if (v === "aggregate") name = "聚合 · 全部源";
+        else if (v === "cloud") name = (cloudCtx.hasSnapshot && cloudCtx.relayName)
+          ? sourceDisplayName(String(cloudCtx.relayName))
+          : ((cloudCtx.cfg && cloudCtx.cfg.wsUrl) ? hostOf(cloudCtx.cfg.wsUrl) : "云桥");
+        else name = sourceDisplayName(String(bridge.relayName || "relay"));
+        const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
+        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? count + " 会话 · " + (v === "aggregate" ? "聚合视图" : "在线") : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
           switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
@@ -8047,11 +8086,32 @@ function connectLan(ctx) {
                 localRow.after(cloudRow);
               }
             } else if (cloudRow) { cloudRow.remove(); cloudRow = null; }
+            // W-WINPAIR-R3：聚合=源列表特殊行（与其他源平级平权；test.20 ②——两钮并排退役）。
+            // 有第二源（云链激活或共享库有已配对云源）才注入——单源聚合无意义
+            let aggRow = menu.querySelector('.source-option[data-source-choice="aggregate"]');
+            if (cloudLinked || pairedCloud.length) {
+              if (!aggRow && localRow) {
+                aggRow = document.createElement("button");
+                aggRow.className = "source-option";
+                aggRow.type = "button";
+                aggRow.dataset.sourceChoice = "aggregate";
+                aggRow.innerHTML = '<span class="source-dot status-disconnected"></span><strong>聚合 · 全部源</strong><small>—</small>';
+                (cloudRow || localRow).after(aggRow);
+              }
+            } else if (aggRow) { aggRow.remove(); aggRow = null; }
+            if (aggRow) {
+              const bothOn = ctx.status === "online" && (cloudCtx.status === "online" || !cloudLinked);
+              const aggCount = ctx.sessions.size + (shellCloud ? cloudCtx.sessions.size : 0);
+              aggRow.querySelector("small").textContent = v === "aggregate" ? aggCount + " 会话 · 聚合中" : bothOn ? "全部源合并展示" : "等待源在线…";
+              aggRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(bothOn ? "online" : "connecting"));
+              aggRow.classList.toggle("active", v === "aggregate");
+            }
             if (cloudRow) {
               const cs = cloudCtx.status;
-              // 未连接时云桥行地址回落共享库已配对源（激活前 cloudCtx.cfg 还没填）
+              // 在线显 relay 名（与顶栏 trigger 同源一致）；未连接显地址（激活前 cloudCtx.cfg 还没填则回落共享库）
               const cloudAddr = (cloudCtx.cfg && cloudCtx.cfg.wsUrl) || (pairedCloud[0] && pairedCloud[0].wsUrl) || "";
-              cloudRow.querySelector("strong").textContent = cloudAddr ? hostOf(cloudAddr) : "云桥";
+              const cloudLabel = (cs === "online" && cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName))) ? cloudCtx.relayName : (cloudAddr ? hostOf(cloudAddr) : "云桥");
+              cloudRow.querySelector("strong").textContent = cloudLabel;
               cloudRow.querySelector("small").textContent = cs === "online" ? "云桥 · 在线" : cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : "云桥 · " + (cloudCtx.statusText || "离线");
               cloudRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cs === "online" ? "online" : cs === "connecting" ? "connecting" : "offline"));
               cloudRow.classList.toggle("active", cloudActive);
@@ -8066,7 +8126,7 @@ function connectLan(ctx) {
           }
           switcher.querySelectorAll(".source-option[data-source-choice]").forEach((option) => {
             const choice = option.dataset.sourceChoice;
-            if (choice === "cloud" || choice === "local") return; // 本机/云桥两行已按源分别渲染
+            if (choice === "cloud" || choice === "local" || choice === "aggregate") return; // 本机/云桥/聚合三行已分别渲染（W-WINPAIR-R3：聚合行不再被兜底循环覆盖文案）
             const strong = option.querySelector("strong");
             const small = option.querySelector("small");
             if (strong) strong.textContent = name;
@@ -8933,7 +8993,7 @@ function connectLan(ctx) {
           tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
           engine: escapeHtml(engine[0]),
           engineClass: engine[1],
-          source: escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(ctx.relayName) : ctx.relayName), // W-UIPOLISH ⑧：件十三漏网——地基列表卡源名同走映射（B2 让位期间仍会渲染）
+          source: escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || ctx.relayName) : (session.relay_source || ctx.relayName)), // W-UIPOLISH ⑧ + W-WINPAIR-R6：源名读 per-session 源标识（聚合两源各显其名），回落本机
           time: activityTime ? fmtListTimeBase(activityTime) : "",
           selected: session.session_id === ctx.selectedSessionId,
           pinned: session.pinned === true,
@@ -9830,6 +9890,12 @@ function connectLan(ctx) {
         // 命令通道随视角（Team.sendCommand/B2 sendCmd 都读 __ccDeck005MainWs；本机视角=LAN socket）
         window.__ccDeck005MainWs = v === "cloud" ? cloudCmdShim : ctx.ws;
         syncTeamBind();
+        // W-WINPAIR-R3：目标源 SNAPSHOT 补喂 Team（视角错位期间到达的团队字段不丢——
+        // 团队域不订阅总线，onEvent 门控跳过的帧在此按缓存 payload 重建）
+        const teamSrc = v === "cloud" ? cloudCtx : ctx;
+        if (teamSrc.hasSnapshot && teamSrc.lastSnapshotPayload) {
+          try { Team.onFrame(teamSrc, { type: "SNAPSHOT", payload: teamSrc.lastSnapshotPayload }); } catch {}
+        }
         replaySnapshots();
         renderSessionList();
         renderCloudUI();
@@ -9843,14 +9909,16 @@ function connectLan(ctx) {
         return v === "aggregate" ? true : v === "cloud" ? src === "cloud" : src === "lan";
       }
       window.__ccDeck005FrameAllowed = frameAllowed;
-      // 切视角时桥/B2 快照重建：从各链 context 合成 SNAPSHOT 帧重放总线（帧层全链复用，数据零丢失）
+      // 切视角时桥/B2 快照重建：从各链 context 缓存的完整 payload 合成 SNAPSHOT 帧重放总线
+      // （W-WINPAIR-R3：全字段重放——projects/org_confirms/acceptances 等不随切换清空；test.20 ①修复）
       function replaySnapshots() {
         const mk = (c, src) => {
           if (!c || !c.hasSnapshot) return;
-          window.__ccDeck005Frames.emit({ kind: "frame", source: src, frame: {
-            type: "SNAPSHOT",
-            payload: { relay_name: c.relayName, schema_version: 1, sessions: [...c.sessions.values()] },
-          } });
+          const p = c.lastSnapshotPayload;
+          const payload = (p && typeof p === "object")
+            ? { ...p, sessions: [...c.sessions.values()] } // 缓存 payload 全字段 + 最新会话态
+            : { relay_name: c.relayName, schema_version: 1, sessions: [...c.sessions.values()] };
+          window.__ccDeck005Frames.emit({ kind: "frame", source: src, frame: { type: "SNAPSHOT", payload } });
         };
         const v = viewSource();
         if (v === "local") mk(ctx, "lan");
@@ -9886,6 +9954,13 @@ function connectLan(ctx) {
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });
+      // W-WINPAIR-R3：快照注入钩子（排障/走查共用）——帧喂进对应链 context（onEvent 全字段缓存）
+      // + 总线 emit，等同真实链路到达。页面内 window 级调用者本具全权，不新增信任面
+      window.__ccDeck005IngestSnapshot = (source, payload) => {
+        const c = source === "cloud" ? cloudCtx : ctx;
+        onEvent(c, { type: "SNAPSHOT", payload: payload && typeof payload === "object" ? payload : { sessions: [] } });
+        window.__ccDeck005Frames.emit({ kind: "frame", source, frame: { type: "SNAPSHOT", payload } });
+      };
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
       // 先 switchToCloudSource）+ 覆盖 cfg + 走 submitPairCodeWith 配对链（pair_ack 后落共享库）。
@@ -10055,15 +10130,18 @@ function connectLan(ctx) {
         if (t && t.closest && t.closest("[data-cloud-pair-input]")) { event.preventDefault(); submitPairCode(); }
       });
       // 域脚本只读挂钩（B4 桥 waitingText / 移动端 B7 lane 与列表副文案借道取云态；帧路由零改动）
+      // W-WINPAIR-R4：云桥技术状态不再外泄到会话/项目/详情列横幅（用户实测「本机云桥已连接」
+      // 无信息量占位）——只保留 unpaired 输码引导（行动引导），其余云态返回 null 落回通用
+      // 等待文案；连接状态详情归设置 → 连接与设备页。listSub 同口径（在线不喊输码）
       window.__ccDeck005CloudUI = {
         active: cloudFormActive,
         stateLabel: cloudStatusLabel,
-        listSub: () => (cloudUIOn() ? "云桥 " + cloudStatusLabel() + " · 详情可输码配对" : ""),
+        listSub: () => (cloudUIOn() && cloudCtx.failKind === "unpaired" ? "云桥未配对 · 详情可输码配对" : ""),
         mobileLane: cloudMobileLane,
         waitingText: () => {
           if (!cloudUIOn()) return null;
           if (cloudCtx.failKind === "unpaired") return "云桥未配对 · 设置 → 连接与设备 输入配对码";
-          return "本机 · 云桥 · " + (cloudCtx.statusText || "未连接");
+          return null; // 云桥技术状态不进列横幅（快照等待走 B4 通用「等待 relay SNAPSHOT」文案）
         },
       };
 
@@ -10107,13 +10185,32 @@ function connectLan(ctx) {
         onFrame(context, message) {
           if (!message || typeof message.type !== "string") return;
           if (message.type === "SNAPSHOT") {
-            const p = message.payload || {};
+            let p = message.payload || {};
+            // W-WINPAIR-R4 聚合 org 合并：双槽缓存各源 payload，aggregate 视角喂给团队域的
+            // 是两源合并帧（projects/org_confirms/boards/sessions 按 id 并集；其余字段 last-write）
+            // ——团队域 snapshot 全量清场，合并必须在这一层做完（域脚本零改动）
+            const agg = viewSource() === "aggregate";
+            if (context === cloudCtx) this._aggCloud = p; else this._aggLan = p;
+            if (agg) {
+              const a = context === cloudCtx ? this._aggLan : this._aggCloud;
+              if (a && a !== p) {
+                const byId = (lists) => { const m = new Map(); for (const l of lists) for (const g of (Array.isArray(l) ? l : [])) if (g && typeof g.id === "string") m.set(g.id, g); return m; };
+                p = {
+                  ...p,
+                  relay_name: "聚合 · 全部源",
+                  projects: [...byId([a.projects, p.projects]).values()],
+                  org_confirms: [...byId([a.org_confirms, p.org_confirms]).values()],
+                  boards: [...(Array.isArray(a.boards) ? a.boards : []), ...(Array.isArray(p.boards) ? p.boards : [])].filter((b) => b && typeof b.gid === "string"),
+                  sessions: [...(Array.isArray(a.sessions) ? a.sessions : []), ...(Array.isArray(p.sessions) ? p.sessions : [])],
+                };
+              } else if (a === p) { p = { ...p, relay_name: "聚合 · 全部源" }; }
+            }
             // #143 盲评C-3：缺 projects = relay 不支持团队域（B3-C1），不锚定——后续 PROJECTS delta 丢弃，绝不空基线起底 merge
             this.anchored = Array.isArray(p.projects); this.boardAnchored = new Set();
             this.projects = this.anchored ? p.projects.slice() : [];
             this.boards = new Map((Array.isArray(p.boards) ? p.boards : []).filter((b) => b && typeof b.gid === "string").map((b) => [b.gid, b]));
             for (const gid of this.boards.keys()) this.boardAnchored.add(gid); // #143 盲评C-2：快照板登记锚定集，后续 BOARD delta 才可投影
-            const api = this.api(); if (api) { try { api.snapshot(p, { relayName: this.ctxName(context) }); } catch {} }
+            const api = this.api(); if (api) { try { api.snapshot(p, { relayName: agg ? "聚合 · 全部源" : this.ctxName(context) }); } catch {} }
             return;
           }
           if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED" && message.type !== "RULES_UPDATED") return; // W-EXPP2/W-RULES2：经验域+规则域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
@@ -10149,16 +10246,31 @@ function connectLan(ctx) {
           }
           // ORG_CONFIRM_UPDATED 只有全量形态（types.ts OrgConfirmUpdatedPayload{pending}，无 delta 字段），透传原文即正确；
           // B3 侧对缺 pending 的帧返回 false 属防线而非缺陷（#143 盲评C-4 记档）
+          // W-WINPAIR-R4：聚合视角下与另一源槽的 org_confirms 并集喂（全量形态会清另一源确认卡）
+          if (message.type === "ORG_CONFIRM_UPDATED" && viewSource() === "aggregate") {
+            const other = context === cloudCtx ? this._aggLan : this._aggCloud;
+            if (other && Array.isArray(p.pending)) {
+              const seen = new Set(p.pending.map((c) => c && c.id));
+              const merged = p.pending.concat((Array.isArray(other.org_confirms) ? other.org_confirms : []).filter((c) => c && c.id !== undefined && !seen.has(c.id)));
+              this.feed(api, teamContext, message.type, { pending: merged });
+              return;
+            }
+          }
           this.feed(api, teamContext, message.type, p); // 覆盖式帧透传（B3 吃全量）
         },
       };
 
       function onEvent(context, message) {
         // #143 Leader 接线：团队域帧（SNAPSHOT 团队字段/三事件）；W-WINPAIR-R2：并行多源下团队域跟
-        // 视角源走（cloud 视角吃云帧的团队字段，local/aggregate 吃本机——两源 SNAPSHOT 不互相覆盖团队域）
+        // 视角源走（cloud 视角吃云帧的团队字段，local/aggregate 吃本机——两源 SNAPSHOT 不互相覆盖团队域）。
+        // W-WINPAIR-R3 补：视角错位的 SNAPSHOT 不丢——每源自存完整 payload，setSourceView 切换时
+        // 对目标源补喂 Team.onFrame 重建团队域（SNAPSHOT 一次性，错过视角窗口≠永久丢数据）
         if (context === (viewSource() === "cloud" ? cloudCtx : ctx)) Team.onFrame(context, message);
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
-        context.sessions = new Map(message.payload.sessions.filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
+        context.lastSnapshotPayload = message.payload; // W-WINPAIR-R3：全字段缓存（projects/org_confirms/acceptances/notifications…）
+        // W-WINPAIR-R6 件九：每条会话挂源标识（relay_name）——聚合合并后徽章/色块按源渲染的锚
+        const srcTag = message.payload.relay_name || context.relayName || "";
+        context.sessions = new Map(message.payload.sessions.filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, Object.assign(session, { relay_source: session.relay_source || srcTag })]));
         context.hasSnapshot = true;
         context.relayName = message.payload.relay_name || location.host;
         if (!context.sessions.has(context.selectedSessionId)) context.selectedSessionId = null;
@@ -10198,6 +10310,12 @@ function connectLan(ctx) {
               showToast("视角：本机 relay · 连接保持");
               return;
             }
+            if (choice === "aggregate") { // W-WINPAIR-R3：聚合特殊源行（平级平权，与其他源行同语言）
+              closeSourceMenu(switcher);
+              setSourceView("aggregate");
+              showToast("多源聚合 · 全部源会话合并展示");
+              return;
+            }
             const wasActive = option.classList.contains("active");
             switcher.querySelectorAll(".source-option").forEach((el) => el.classList.toggle("active", el === option));
             const name = option.querySelector("strong")?.textContent || "当前源";
@@ -10213,9 +10331,8 @@ function connectLan(ctx) {
             openAddServerUI();
             return;
           }
-          // W-NOVAUI ①真因：限定 .source-mode 容器内按钮——FB1 模式记忆把 data-source-mode 写在
-          // body 上（:7679），裸 closest("[data-source-mode]") 对任意点击都命中 body 祖先，本分支
-          // 永远抢跑 return，把「管理与配对新源」等 menu 内后续分支全部吞掉（nova 实测点了没反应）
+          // W-NOVAUI ①真因注释留档：source-mode 两钮区已随 W-WINPAIR-R3 退役（聚合入源列表行）；
+          // 下方 modeBtn 分支保留作 data-source-mode 残留元素的兼容兜底（正常路径不再触达）
           const modeBtn = target.closest(".source-mode [data-source-mode]");
           if (modeBtn) {
             const nextMode = modeBtn.dataset.sourceMode === "aggregate" ? "aggregate" : "single";
