@@ -269,7 +269,9 @@ async function main(): Promise<void> {
   check(orgTabsSrc.includes("TeamDetailPage"), "团队页挂团队详情页（v2 件一）");
   check(!/\bexps\b/.test(orgTabsSrc), "团队 tab 无经验域残留");
   const expPageSrc = srcOf("../src/screens/SettingsPage.tsx");
-  check(expPageSrc.includes(">经验库"), "设置页经验库分节在场");
+  // W-MSETSIG 重设计：经验库从「显示」分节迁 Agent 引擎组、JSX 文本改 Row prop
+  //（title="经验库"）——锚随形态更新，语义不变（经验库分节在场）
+  check(expPageSrc.includes(`title="经验库"`), "设置页经验库分节在场");
   check(expPageSrc.includes("手机只读 · 管理请用电脑端"), "分节电脑端说明锚");
   check(expPageSrc.includes("<ExpLibraryModal"), "弹层接线（入口行 → 只读列表）");
   check(expPageSrc.includes("experiences) continue"), "旧 relay null 源不进（整节隐藏降级范式）");
