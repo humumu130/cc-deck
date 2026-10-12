@@ -503,6 +503,19 @@ export interface SnapshotPayload {
   // #17 第二批：雇员独立家开关状态（设置页数据源；空对象也下发——端上以字段
   // 存在性判断能力）。locked=true（env 显式设置）时端上开关只读
   settings?: EmployeeHomeSettingsPayload;
+  // W-MODE 协作模式（设置-团队域开关数据源；恒字符串下发——旧客户端忽略未知键，
+  // 端上以字段存在性判断能力，deliverables 同口径）。no-leader 时锚卡已被
+  // snapshot() 过滤，端上无需再删
+  collab_mode?: "leader" | "no-leader";
+}
+
+// COLLAB_MODE_UPDATED / SNAPSHOT.collab_mode 载荷
+export interface CollabModePayload {
+  mode: "leader" | "no-leader";
+  /** 当前 Leader 锚卡 relay 会话 id（端上删卡依据；无锚=空串） */
+  leader_session_id: string;
+  /** 切回 leader 时携带完整锚卡状态（端上 upsert 重建；no-leader 时无此键 */
+  leader_session?: SessionState;
 }
 
 // SNAPSHOT.settings / SETTINGS_UPDATED 载荷
@@ -565,6 +578,7 @@ export type EventType =
   | "DISPATCH_DONE"
   | "SETTINGS_UPDATED"
   | "NOTIFICATIONS_UPDATED"
+  | "COLLAB_MODE_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -613,6 +627,9 @@ export type EventPayloadMap = {
   // SNAPSHOT.settings 兜底
   SETTINGS_UPDATED: EmployeeHomeSettingsPayload;
   NOTIFICATIONS_UPDATED: NotificationsUpdatedPayload;
+  // W-MODE 协作模式切换（瞬态）：orgAction collab-mode set 成功边广播；离线端由
+  // SNAPSHOT.collab_mode 兜底（SETTINGS_UPDATED 同款收敛模型）
+  COLLAB_MODE_UPDATED: CollabModePayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;

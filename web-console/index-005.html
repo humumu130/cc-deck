@@ -2218,6 +2218,7 @@
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
+                  collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
@@ -2653,6 +2654,7 @@
                     case "SESSION_DONE": onDoneEvt(sid, m.payload); break;
                     case "SESSION_DELETED": onDeleted(sid); break;
                     case "SESSION_LOG": onLog(sid, m.payload); break;
+                    case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
                   }
                 }
 
@@ -2684,6 +2686,7 @@
                   S.logsTruncated = new Map(Object.entries(p.logs_truncated || {}));
                   S.hasSnapshot = true;
                   S.relayName = p.relay_name || location.host;
+                  S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
@@ -2754,6 +2757,20 @@
                 function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
+                // W-MODE 协作模式切换帧（relay orgAction collab-mode set 成功边广播）：
+                // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）；
+                // leader → 锚卡 upsert 回列表（帧带完整卡）。设置页开关回显走桥缓存（bridge 侧同帧合并）
+                function onCollabMode(p) {
+                  if (!p || (p.mode !== "leader" && p.mode !== "no-leader")) return;
+                  S.collabMode = p.mode;
+                  if (p.mode === "no-leader") {
+                    const lid = typeof p.leader_session_id === "string" ? p.leader_session_id : "";
+                    if (lid && S.sessions.has(lid)) onDeleted(lid);
+                  } else if (p.leader_session && typeof p.leader_session.session_id === "string" && !S.sessions.has(p.leader_session.session_id)) {
+                    S.sessions.set(p.leader_session.session_id, p.leader_session);
+                    renderMyList();
+                  }
+                }
                 function onDeleted(sid) {
                   S.sessions.delete(sid); S.timelines.delete(sid);
                   for (const [key, c] of S.imgUrls) if (key.startsWith(sid + "/")) { if (c && c.url) { try { URL.revokeObjectURL(c.url); } catch (_) {} } S.imgUrls.delete(key); } // FB14 附图缓存随会话回收
@@ -6692,6 +6709,16 @@
                     } else applySnapshot(frame.payload);
                     changed = true;
                   }
+                  else if (frame.type === "COLLAB_MODE_UPDATED") {
+                    // W-MODE：切换帧合并进快照缓存（设置域开关回显数据源；bridge.sessions
+                    // 同步增删防锚卡残留——通知域跳转/selectSessionCard 消费桥缓存）
+                    const cm = frame.payload || {};
+                    const mode = cm.mode === "no-leader" ? "no-leader" : "leader";
+                    if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.collab_mode = mode;
+                    if (mode === "no-leader" && typeof cm.leader_session_id === "string") bridge.sessions.delete(cm.leader_session_id);
+                    else if (mode === "leader" && cm.leader_session && typeof cm.leader_session.session_id === "string") bridge.sessions.set(cm.leader_session.session_id, { ...cm.leader_session });
+                    changed = true;
+                  }
                   else if (frame.type === "NOTIFICATIONS_UPDATED") {
                     const items = frame.payload && Array.isArray(frame.payload.items) ? frame.payload.items : [];
                     const next = items.map(normalizeNotification).filter(Boolean);
@@ -8641,9 +8668,16 @@ function connectLan(ctx) {
           if (idLive) {
             const roleMap = new Map();
             (catalog || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((role) => { if (role && !roleMap.has(role)) roleMap.set(role, e); }));
-            idLive.innerHTML = roleMap.size
+            // W-MODE 协作模式段（团队域面板顶）：能力位=SNAPSHOT.collab_mode（undefined=
+            // 旧 relay 不渲染，deliverables 同口径）。两态分段钮复用 density-control
+            // 语言；点击走 COMMAND_ORG_ACTION（接线在下方独立委托，闭包内有 bridge）
+            const cm = snap.collab_mode;
+            const cmRow = (cm === "leader" || cm === "no-leader")
+              ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>协作模式</strong><p>无 Leader 时隐藏常驻 Leader 卡（挂死恢复用）· 团队与看板照常</p></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
+              : "";
+            idLive.innerHTML = cmRow + (roleMap.size
               ? [...roleMap.entries()].map(([role, e]) => `<div class="member-card"><span class="avatar">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div><strong>${esc(role)}</strong><p>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省引擎</p></div></div>`).join("")
-              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>';
+              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
@@ -8654,6 +8688,26 @@ function connectLan(ctx) {
         };
         bridge.subscribe(() => render());
         render();
+        // W-MODE 协作模式分段钮：COMMAND_ORG_ACTION {action:"collab-mode"} → ACK ok 后
+        // 乐观更新快照缓存并重渲（多端最终一致由 relay COLLAB_MODE_UPDATED 帧兜底；
+        // 旧 relay orgAction default 拒 → toast 报错不切态）
+        document.addEventListener("click", (event) => {
+          const btn = event.target.closest("[data-collab-mode-option]");
+          if (!btn) return;
+          const mode = btn.dataset.collabModeOption === "no-leader" ? "no-leader" : "leader";
+          if (bridge.snapshot && bridge.snapshot.collab_mode === mode) return; // 已在目标态（重渲染竞态防抖）
+          btn.disabled = true;
+          bridge.sendCommand("COMMAND_ORG_ACTION", { action: "collab-mode", mode }).then((ack) => {
+            btn.disabled = false;
+            if (ack && ack.ok) {
+              if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.collab_mode = mode;
+              render();
+              showToast("协作模式已切换为「" + (mode === "no-leader" ? "无 Leader" : "有 Leader") + "」" + (mode === "no-leader" ? " · 常驻 Leader 卡已隐藏" : ""));
+            } else {
+              showToast("切换未生效：" + ((ack && ack.error) || "relay 未确认"));
+            }
+          });
+        });
       }
 
       const params = new URLSearchParams(location.search);

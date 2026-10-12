@@ -917,7 +917,9 @@ export function startServer(
     }
 
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
-    const replay = lastSeq > 0 && !bus.isBeyondBuffer(lastSeq) ? bus.replayAfter(lastSeq) : null;
+    // W-MODE：replay 补发同样滤锚卡 SESSION_CREATED（no-leader 态重连不复活锚卡；
+    // 其余帧端上无卡自然无操作）
+    const replay = lastSeq > 0 && !bus.isBeyondBuffer(lastSeq) ? bus.replayAfter(lastSeq).filter((env) => !mgr.suppressLeaderEvent(env)) : null;
     // 落后太多 = 客户端冷启动（内存空但 localStorage 存着旧 seq）：增量事件只能更新
     // 已知会话、建不出列表，且上千帧补发挤占带宽——超过阈值直接 SNAPSHOT 全量重建
     if (replay && replay.length <= 200) {
@@ -971,6 +973,9 @@ export function startServer(
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr.employeeHomeState(),
+          // W-MODE 协作模式（设置-团队域开关数据源；no-leader 时 sessions 已由
+          // snapshot() 过滤锚卡；cloud-client 云通道快照同步携带，#117 教训）
+          collab_mode: mgr.collabMode(),
           // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
           // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
           // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
@@ -1057,6 +1062,9 @@ export function startServer(
   // #79 定向瞬态帧（env.to）：只发给命令来源连接——大流量分块不殃及同 relay 的
   // 其他在线端（否则一次 20MB 拉取会向所有客户端广播 ~27MB base64）
   const unsubscribe = bus.subscribe((env) => {
+    // W-MODE：no-leader 态锚卡 SESSION_CREATED 不下发（端上唯一建卡帧；UPDATED 等
+    // 对无卡端无操作——suppressLeaderEvent 内部非 CREATED 帧零读盘短路）
+    if (mgr.suppressLeaderEvent(env)) return;
     const text = JSON.stringify(env);
     for (const client of wss.clients) {
       const cw = client as ClientWs;

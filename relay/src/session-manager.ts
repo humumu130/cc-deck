@@ -45,7 +45,7 @@ import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
-import { resolveEmployeeHome, writeSettingsFile } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, type CollabMode } from "./settings.js";
 import type { EmployeeHomeSettingsPayload } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
@@ -844,11 +844,49 @@ export class SessionManager {
     // #224 快照不背已删条目（exists === false）——ws-server SNAPSHOT 与云通道
     // cloud-client 双出口都走这里，一处收口。纯过滤不 re-stat：20s 轮询已把
     // state 维持新鲜（快照最多 20s 陈旧，可接受）
-    return [...this.sessions.values()].map((s) => {
-      const c = this.cloneState(s);
-      if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
-      return c;
+    // W-MODE no-leader：锚卡不下发（快照是低频路径——连接/重连/云恢复，每次
+    // 现读 collab-mode.json 小文件可接受，employeeHomeState 同款「每次现算」口径）。
+    // 只挡下发面：内存卡/锚/ensureLeader 照常（团队/看板/通知不受影响）
+    const hideLeader = this.leaderId && readCollabMode(this.cfg.dataDir) === "no-leader";
+    return [...this.sessions.values()]
+      .filter((s) => !(hideLeader && s.state.session_id === this.leaderId))
+      .map((s) => {
+        const c = this.cloneState(s);
+        if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+        return c;
+      });
+  }
+
+  // W-MODE：no-leader 态下抑制锚卡的 SESSION_CREATED 下发（唯一穿透口——三端消费
+  // 帧里只有 CREATED 会对未知卡建卡，UPDATED/HEARTBEAT/WAITING 等对无卡端全是无操作；
+  // 端上快照已无锚卡，CREATED 一到就「复活」）。用于 ws-server 广播/replay 与
+  // cloud-client onEnv 镜像三处下发出口；bus.emit 持久面（events.ndjson + relay
+  // 自身重启回放重建）绝不挡——挡了 relay 自己的内存卡就丢了。热路径短路：非
+  // CREATED 帧零读盘开销
+  suppressLeaderEvent(env: { type?: string; session_id?: string }): boolean {
+    if (env.type !== "SESSION_CREATED" || !env.session_id || !this.leaderId) return false;
+    return readCollabMode(this.cfg.dataDir) === "no-leader" && env.session_id === this.leaderId;
+  }
+
+  // W-MODE：当前协作模式（SNAPSHOT.collab_mode / orgAction get 数据源）
+  collabMode(): CollabMode {
+    return readCollabMode(this.cfg.dataDir);
+  }
+
+  // W-MODE：切换协作模式（orgAction collab-mode set 的执行体）。写盘成功 → 广播
+  // 瞬态帧（在线端即时增删锚卡；离线端下次快照收敛）→ 返回最新态。no-leader 端
+  // 上删卡依据 = leader_session_id；切回 leader 带 leader_session 完整卡端上 upsert
+  applyCollabMode(mode: CollabMode): { ok: true; data: { mode: CollabMode; leader_session_id: string } } | { ok: false; error: string } {
+    if (mode !== "leader" && mode !== "no-leader") return { ok: false, error: "mode 必须是 leader|no-leader" };
+    if (!writeCollabMode(this.cfg.dataDir, mode)) return { ok: false, error: "collab-mode.json 写盘失败（盘满/权限？）" };
+    const sid = this.leaderId ?? "";
+    const s = sid ? this.sessions.get(sid) : undefined;
+    this.bus.emitTransient("COLLAB_MODE_UPDATED", {
+      mode,
+      leader_session_id: sid,
+      ...(mode === "leader" && s ? { leader_session: this.cloneState(s) } : {}),
     });
+    return { ok: true, data: { mode, leader_session_id: sid } };
   }
 
   // #17 第二批：雇员独立家开关（三端设置项后端）。热生效不重启——写
@@ -5372,6 +5410,15 @@ export class SessionManager {
               open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20),
             },
           };
+        }
+        // W-MODE 协作模式读写（本单最小核心）：mode 缺省=get 当前；mode=leader|no-leader
+        // =切换（写盘+COLLAB_MODE_UPDATED 广播）。设置面动作非决议面——但 HTTP 白名单
+        // 不放行（三端走 WS；org CLI 后续单再议），沿用「新动作默认不进 HTTP」纪律
+        case "collab-mode": {
+          const mode = str("mode");
+          if (!mode) return { ok: true, data: { mode: this.collabMode(), leader_session_id: this.leaderId ?? "" } };
+          if (mode !== "leader" && mode !== "no-leader") return { ok: false, error: "mode 必须是 leader|no-leader" };
+          return this.applyCollabMode(mode);
         }
         case "project-create": {
           const name = str("name");
