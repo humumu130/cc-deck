@@ -314,8 +314,8 @@ export function createGroup(
     confirm = addConfirm(
       {
         kind: "project-create",
-        title: `立项确认：${group.name}`,
-        reason: input.tier === "正经立项" ? "正经立项必须确认（一次点击，防误判档烧钱）" : "轻立项首次确认一次（同类免确认，信任累积）",
+        title: `新建项目确认：${group.name}`, // W-WINPAIR-R9 文案件：「立项」口语词治理（显示层正式化）
+        reason: input.tier === "正经立项" ? "正式项目必须确认（一次点击，防误判档烧钱）" : "轻量项目首次确认一次（同类免确认，信任累积）", // tier 存储值不变，理由文案走正式词
         payload: { gid: group.id, tier: group.tier, anchor_dir: group.anchor_dir },
       },
       dir,
