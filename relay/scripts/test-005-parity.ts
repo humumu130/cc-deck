@@ -178,7 +178,7 @@ ok(cloudZone.includes('window.__ccDeck005Frames.emit({ kind: "ws", state:') && c
 ok(shell.includes("data-cloud-pair-input") && shell.includes("data-cloud-pair-submit") && shell.includes("data-cloud-retry"), "C8 配对表单/重试钮 data 锚（桌面+移动共用委托）");
 ok(shell.includes("data-cloud-settings-slot") && shell.includes("data-cloud-mobile-slot"), "C8 桌面 connections 面板 slot + 移动 lane slot");
 ok(cloudZone.includes("event.isComposing || event.keyCode === 229"), "C8 云表单 Enter IME 守卫（005 军规同款）");
-ok(cloudZone.includes("font-size:14px"), "C8 移动端输入框 14px（防 iOS 聚焦缩放）");
+ok(cloudZone.includes("font-size:var(--fs-A)"), "C8 移动端输入框 14px（防 iOS 聚焦缩放）");
 ok(cloudZone.includes("document.activeElement") && cloudZone.includes("[data-cloud-pair-input]"), "C8 输入中跳过重渲（防打字被 innerHTML 清掉）");
 ok(shell.includes("window.__ccDeck005CloudUI = {"), "C8 域脚本只读挂钩 __ccDeck005CloudUI（B4/B7 借道，帧路由零改动）");
 // C9 深链与 last_seq

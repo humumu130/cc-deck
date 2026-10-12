@@ -418,15 +418,24 @@
     .source-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
     .source-option:hover { background: var(--hover); }
     .source-option.active { background: var(--selected-bg); }
-    .source-option[data-source-choice="office"] { border-left: 2px solid var(--source-company); }
-    .source-option[data-source-choice="home"] { border-left: 2px solid var(--source-home); }
-    .source-option.active[data-source-choice="office"], .source-option.active[data-source-choice="home"] { border-left: 3px solid var(--brand); }
+    .source-option[data-source-choice="local"] { border-left: 2px solid var(--source-company); }
+    .source-option[data-source-choice="cloud"] { border-left: 2px solid var(--source-home); }
+    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"] { border-left: 3px solid var(--brand); }
     .source-option strong {flex: 1; color: var(--text-strong); font-size: var(--fs-A-item);}
     .source-option small {color: var(--dim); font: var(--fs-B) var(--mono);}
     .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
     .source-mode button {flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .source-mode button.active { border-color: var(--selected-line); background: var(--selected-bg); color: var(--text-strong); }
     .source-manage {display: block; padding: 7px 6px 3px; color: var(--info); font-size: var(--fs-E); text-decoration: none;}
+    /* W-WINPAIR：「＋ 添加服务器」恒显入口（client 侧连远程源——壳内连云桥/浏览器连任意源）。
+       与 source-manage（进设置做 server 侧配对）同区不同色：主动作用 brand */
+    .source-add {display: block; width: 100%; margin: 4px 0 0; padding: 7px 6px 5px; border: 0; background: transparent; color: var(--brand); font-size: var(--fs-E); text-align: left; cursor: pointer;}
+    .source-add:hover { color: var(--text-strong); }
+    /* W-WINPAIR 添加服务器弹窗：create-pop 卡体 + pair-pop 背板（高级折叠用原生 details 免 JS） */
+    .add-server-pop details.add-adv { margin: 10px 0 2px; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+    .add-server-pop details.add-adv summary { color: var(--faint); font: var(--fs-B) var(--mono); cursor: pointer; user-select: none; list-style-position: inside; }
+    .add-server-pop details.add-adv[open] summary { margin-bottom: 2px; }
+    .add-server-pop .add-hint { color: var(--faint); font: var(--fs-B) var(--mono); }
     /* W-NOVAFIX B1：配对弹窗（source-menu 同壳浮层，居中位）+ 背板 */
     .pair-pop { position: fixed; top: 50%; left: 50%; display: block; z-index: 96; width: min(392px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow-y: auto; transform: translate(-50%, -50%); }
     .pair-pop-backdrop { position: fixed; inset: 0; z-index: 95; background: color-mix(in srgb, var(--bg0) 55%, transparent); }
@@ -2039,7 +2048,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -7283,7 +7292,7 @@
       <div class="mobile-frame">
         <div class="mobile-screen active" id="m-inbox" data-mobile-root="inbox">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>待我处理<small>会话行动与状态</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
           <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待审查</span></div></div><div data-mobile-session-list></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -7296,7 +7305,7 @@
         </div>
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
             <div class="mobile-content" data-notify-center>
             <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。<button class="notify-light-action" type="button" data-notify-clear-all hidden>全部清除</button></div>
@@ -7313,7 +7322,7 @@
 
         <div class="mobile-screen" id="m-project" data-mobile-root="project">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span></header>
           <div class="mobile-content"><div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div><div data-mobile-project-cards></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div data-mobile-project-lane></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -7321,7 +7330,7 @@
 
         <div class="mobile-screen" id="m-settings" data-mobile-root="settings">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
+          <div class="mobile-sourcebar"><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div></div>
           <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done connection-chip status-connected"><span class="mini-signal" aria-hidden="true"><i></i><i></i><i></i></span>relay 在线</span><button class="icon-btn">⋯</button></header>
           <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>Agent 引擎</strong><p>6 引擎 · 2 已接 · 浏览态</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px" data-settings-pair type="button">扫码添加新设备</button></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button class="active" data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
@@ -7782,6 +7791,7 @@ function connectLan(ctx) {
           overlay.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
         });
         document.querySelectorAll("[data-pair-pop], [data-pair-back]").forEach((el) => el.remove()); // W-NOVAFIX B1 配对弹窗随 Esc/切域收口
+        document.querySelectorAll("[data-add-pop], [data-add-back]").forEach((el) => el.remove()); // W-WINPAIR 添加服务器弹窗同口径收口
         document.querySelectorAll("[data-filter-pop]").forEach((el) => el.remove()); // FB17 筛选浮菜单同口径收口
         document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); // B10 新建弹窗同口径收口（B2 域 IIFE 内函数，地基直删 DOM 免耦合）
         document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
@@ -7829,14 +7839,50 @@ function connectLan(ctx) {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
         const online = !!bridge && state === "online" && bridge.hasSnapshot;
-        const name = !bridge || state === "unconfigured" ? "未配置" : sourceDisplayName(String(bridge.relayName || "relay"));
+        // W-WINPAIR：未配置态 trigger 显行动引导（点开菜单 → ＋ 添加服务器），不再显含糊的「未配置」
+        const name = !bridge || state === "unconfigured" ? "＋ 添加服务器" : sourceDisplayName(String(bridge.relayName || "relay"));
         const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
-        const summary = !bridge || state === "unconfigured" ? "待配对" : online ? count + " 会话 · 在线" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
+        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? count + " 会话 · 在线" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
+        const cloudOn = cloudUIOn();
+        const pairedCloud = (typeof cloudSharedCloudServers === "function" ? cloudSharedCloudServers() : []).filter((s) => s && s.cloud && s.cloud.paired);
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
           switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
           switcher.querySelectorAll("[data-current-source]").forEach((el) => { el.textContent = name; });
+          // W-WINPAIR：云桥源行——云链激活或共享库有已配对云源时注入（与静态本机行并列，点击真切换）
+          const menu = switcher.querySelector("[data-source-menu]");
+          if (menu) {
+            const localRow = menu.querySelector('.source-option[data-source-choice="local"]');
+            let cloudRow = menu.querySelector('.source-option[data-source-choice="cloud"]');
+            if (cloudOn || pairedCloud.length) {
+              if (!cloudRow && localRow) {
+                cloudRow = document.createElement("button");
+                cloudRow.className = "source-option";
+                cloudRow.type = "button";
+                cloudRow.dataset.sourceChoice = "cloud";
+                cloudRow.innerHTML = '<span class="source-dot status-disconnected"></span><strong>云桥</strong><small>—</small>';
+                localRow.after(cloudRow);
+              }
+            } else if (cloudRow) { cloudRow.remove(); cloudRow = null; }
+            if (cloudRow) {
+              const cs = cloudCtx.status;
+              // 未连接时云桥行地址回落共享库已配对源（激活前 cloudCtx.cfg 还没填）
+              const cloudAddr = (cloudCtx.cfg && cloudCtx.cfg.wsUrl) || (pairedCloud[0] && pairedCloud[0].wsUrl) || "";
+              cloudRow.querySelector("strong").textContent = cloudAddr ? hostOf(cloudAddr) : "云桥";
+              cloudRow.querySelector("small").textContent = cs === "online" ? "云桥 · 在线" : cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : "云桥 · " + (cloudCtx.statusText || "离线");
+              cloudRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cs === "online" ? "online" : cs === "connecting" ? "connecting" : "offline"));
+              cloudRow.classList.toggle("active", cloudOn);
+            }
+            if (localRow) {
+              localRow.classList.toggle("active", !cloudOn);
+              localRow.querySelector("strong").textContent = "本机";
+              localRow.querySelector("small").textContent = cloudOn ? "点击切回本机" : summary;
+              localRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cloudOn ? "offline" : state));
+            }
+          }
           switcher.querySelectorAll(".source-option[data-source-choice]").forEach((option) => {
+            const choice = option.dataset.sourceChoice;
+            if (choice === "cloud" || choice === "local") return; // 本机/云桥两行已按源分别渲染
             const strong = option.querySelector("strong");
             const small = option.querySelector("small");
             if (strong) strong.textContent = name;
@@ -8159,7 +8205,7 @@ function connectLan(ctx) {
         queue.classList.add("settings-nav");
         const pairBanner = '<div class="readonly-banner">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>';
         body.innerHTML = `
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active"><div class="settings-list" data-settings-live="connections"></div>${pairBanner}<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary-btn" data-settings-add type="button">＋ 添加服务器 · 连其他电脑</button><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div><div class="settings-connection-tabs workspace-pane"><div class="settings-list" data-settings-live="devices"></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">配对记录未随网页端下发 · 凭证与配对历史存于 relay 本机。</div><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
 <div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-bell"></use></svg></span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>只改文字大小，布局不变 · 立即生效</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="shortcuts"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-search"></use></svg></span><div><strong>全局搜索</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">${escapeHtml(keyDisplay("search"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-plus-doc"></use></svg></span><div><strong>新建会话</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">${escapeHtml(keyDisplay("new"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-panel"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>全局快捷键 · 最小化时唤回窗口</p></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">${escapeHtml(toggleHotkeyDisplay())}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-arrows-v"></use></svg></span><div><strong>切换会话</strong><p>会话列表内上下移动 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("↑↓"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>切换数据源</strong><p>多源间快速切换 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("←→"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-code"></use></svg></span><div><strong>恢复默认键位</strong><p>清除全部自定义，回到出厂键位</p></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div></div>
@@ -8316,7 +8362,7 @@ function connectLan(ctx) {
                 + ' title="' + (shareOn ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "relay 未在线 · 连接后可分享") + '">分享</button>';
               connLive.innerHTML =
                 `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay${esc(window.__ccDeck005SourceDisplayName && window.__ccDeck005SourceDisplayName(bridge.relayName) !== "本机" ? " · " + bridge.relayName : "")}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div>${shareBtn}<span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
-                `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>` +
+                `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>${cloudUIOn() ? esc(cloudCtx.statusText || "未连接") : "未添加远程源 · 可连接其他电脑的 CC Deck"}</p></div>${cloudUIOn() ? "" : '<button class="row-share" data-settings-add type="button" title="填云桥地址 + 8 位配对码，把其他电脑加为数据源">＋ 添加</button>'}<span class="tag ${cloudUIOn() ? (cloudCtx.status === "online" ? "done" : "action") : "info"}">${cloudUIOn() ? (cloudCtx.status === "online" ? "已连接" : cloudStatusLabel()) : "未添加"}</span></div>` +
                 `<div class="settings-row"><span class="avatar">▣</span><div><strong>${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}</strong><p>${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
               if (shellDiag) void refreshRelayDiag();
             }
@@ -8347,7 +8393,7 @@ function connectLan(ctx) {
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
-          setSub(0, cloudMode ? "云桥 " + (window.__ccDeck005CloudUI ? window.__ccDeck005CloudUI.stateLabel() : "未连接") + " · 输码可配对" : "relay " + stateText + " · 本页即已配设备");
+          setSub(0, cloudUIOn() ? "云桥 " + (window.__ccDeck005CloudUI ? window.__ccDeck005CloudUI.stateLabel() : "未连接") + " · 输码可配对" : "relay " + stateText + " · 本页即已配设备");
           const readyN = catalog ? catalog.filter((e) => e && e.state === "ready").length : 0;
           setSub(1, catalog ? readyN + " 引擎已接 · " + (catalog.length - readyN) + " 待装/未接入" : "引擎目录未下发");
           setSub(5, "v" + (window.__shellVer || CONSOLE_VERSION) + " · 通道");
@@ -8466,7 +8512,7 @@ function connectLan(ctx) {
         const dot = (on) => '<span class="source-dot' + (on ? "" : " status-disconnected") + '"></span>';
         return '<div class="pair-dev">' + dot(snapOk) + '<strong>本机 relay · ' + esc(relayName) + '</strong><small>端口 ' + esc(String(relayPort)) + '</small></div>'
           + '<div class="pair-dev">' + dot(true) + '<strong>' + (desktopForm ? "桌面 App（本机）" : "浏览器 · 本页设备") + '</strong><small>token 已就绪</small></div>'
-          + '<div class="pair-dev"><span class="source-dot status-reconnecting"></span><strong>云桥</strong><small>状态未随网页端下发</small></div>';
+          + '<div class="pair-dev"><span class="source-dot status-reconnecting"></span><strong>云桥</strong><small>跨网络中转 · 手机在外的接入通道</small></div>';
       }
       // 私网段 hostname 判定（LAN 分享路可信域；对齐旧壳 index.html PRIV_IP_RE 口径
       // ——回环/公网域名不进 LAN 路：手机够不着，交给云桥）
@@ -8593,6 +8639,14 @@ function connectLan(ctx) {
         // 缝合点 a：https 公网页面（/app2 经 CF Worker 出面）走云桥链——loopback ws:// 被混合
         // 内容策略掐死、桌面探测链不适配公网形态；tauri / http LAN 形态保持原探测链不动。
         if (cloudMode) { bootstrapCloud(); return; }
+        // W-WINPAIR 壳内持久回连：上次会话「＋ 添加服务器」切到云桥且共享库有已配对云源——
+        // 直接接管云链（跳过本机探测；切回本机走 source-menu）。此时尚无 LAN 连接可停，仅置标记。
+        if (!cloudMode && shellProbe && !shellCloud && lsGet(SHELL_CLOUD_KEY) === "1"
+            && cloudSharedCloudServers().some((s) => s.cloud && s.cloud.paired)) {
+          shellCloud = true;
+          bootstrapCloud();
+          return;
+        }
         // 桌面壳：location.host 是 tauri.localhost（非 relay），ws 落探测回的回环端口；浏览器形态
         // 页面即 relay 同源服务，wsUrl 维持 location 推导不变。探测全败不炸——回落未配置引导。
         if (shellProbe || (isHttpPage && !relayToken)) {
@@ -8654,7 +8708,7 @@ function connectLan(ctx) {
       // 推导不出（file://、未配置）回落 location.origin（浏览器形态两者本就一致）
       window.__ccDeck005HttpOrigin = () => {
         try {
-          const raw = String((typeof cloudMode !== "undefined" && cloudMode ? cloudCtx.cfg.wsUrl : ctx.cfg.wsUrl) || "");
+          const raw = String((typeof cloudUIOn !== "undefined" && cloudUIOn() ? cloudCtx.cfg.wsUrl : ctx.cfg.wsUrl) || "");
           const u = new URL(raw.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
           if (u.protocol === "http:" || u.protocol === "https:") return u.origin;
         } catch (_) {}
@@ -8704,7 +8758,7 @@ function connectLan(ctx) {
         // #143 盲评A-1 止血：B2 已接管会话列表（打 b2Owned 标）后地基让位——不再用陈旧快照
         // 覆盖 B2 的新鲜渲染（地基只吃 SNAPSHOT、增量全忽略，重连窗口内必陈旧）。dataset 同步归 B2。
         if (sessionList.dataset.b2Owned === "1") return;
-        const c = cloudMode ? cloudCtx : ctx; // 云形态读云源上下文（占位文案/计数与云态一致；LAN 形态维持地基 ctx 不变）
+        const c = cloudUIOn() ? cloudCtx : ctx; // 云形态读云源上下文（占位文案/计数与云态一致；LAN 形态维持地基 ctx 不变）；W-WINPAIR：壳内切云同口径
         sessionList.dataset.relayState = c.hasSnapshot ? "snapshot" : c.status;
         sessionList.dataset.connection = c.status;
         sessionList.dataset.sessionCount = String(c.sessions.size);
@@ -8713,7 +8767,7 @@ function connectLan(ctx) {
           // W-NOVAFIX B2：桌面壳（shellProbe 在场）token 未就绪一律「正在连接本机 relay…」——
           // 冷启动/探测落空窗口不给「?token=」浏览器口径文案（桌面无 URL query 可用）
           const shellForm = !!(shellProbe || (window.__ccDeck005DesktopForm && window.__ccDeck005DesktopForm()));
-          const message = !c.cfg.wsUrl ? (label === "云桥" ? "云桥未配置" : shellForm ? "正在连接本机 relay…" : "请通过 relay 同源 HTTP 页面连接") : !c.cfg.token ? (c.probing || shellForm ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : !c.hasSnapshot ? (c.status === "online" ? "等待 relay SNAPSHOT…" : label + " " + c.statusText) : "暂无会话 · relay SNAPSHOT 已同步";
+          const message = !c.cfg.wsUrl ? (label === "云桥" ? "云桥未配置" : shellForm ? "正在连接本机 relay…" : "请通过 relay 同源 HTTP 页面连接") : !c.cfg.token ? (c.probing || shellForm ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : !c.hasSnapshot ? (c.status === "online" ? "等待 relay SNAPSHOT…" : label + " " + c.statusText) : (shellForm && !cloudUIOn() ? "暂无会话 · 连其他电脑点顶部菜单「＋ 添加服务器」" : "暂无会话 · relay SNAPSHOT 已同步");
           const placeholder = document.createElement("div");
           placeholder.className = "readonly-banner";
           placeholder.dataset.sessionEmpty = "true";
@@ -8781,6 +8835,12 @@ function connectLan(ctx) {
       const cloudMode = location.protocol === "https:" && !shellProbe; // 缝合点 a：形态判定（https 非桌面壳）
       const CLOUD_RETRY_BASE_MS = 3000, CLOUD_RETRY_MAX_MS = 30000; // 旧壳云链节奏（地基 LAN 1s/30s，两链独立）
       const ACTIVE_CLOUD_KEY = "cc-deck-005-active-cloud"; // 005 自有偏好键：活动云源 id（不与旧壳 ccd_active 纠缠）
+      // W-WINPAIR：壳内云源通路——桌面壳默认连本机内嵌 relay（cloudMode=false 把云链整体门控），
+      // 用户「＋ 添加服务器」显式切到云桥后置 shellCloud 并持久化；重启时 bootstrapConnection
+      // 凭标记+共享库已配对云源自动回云。cloudUIOn() 是云 UI/事件链的统一门（cloudMode 或壳内激活）
+      const SHELL_CLOUD_KEY = "cc-deck-005-shell-cloud";
+      let shellCloud = false;
+      function cloudUIOn() { return cloudMode || shellCloud; }
       const CLOUD_LASTSEQ_KEY = "cc-deck-005-lastseq";     // last_seq 持久化（hello 补发语义仍按旧壳：内存无会话即 0 走全量）
       const SERVERS_KEY = "ccd_servers"; // 与旧壳同源共享（read-shared：读共享库免配对直连；写仅在配对成功后）
       // relay 换 data/cloud-keypair.json 后需同步更新烘焙值并重新部署（与旧壳同源同值）
@@ -9414,7 +9474,7 @@ function connectLan(ctx) {
       // 不受节流影响——切回标签瞬间补一次 ping-resume（带 last_seq，relay 按需补发），顺带探测
       // 半开连接：8s 无回包即强制重连。断线退避中的源立即重连（退避计时早已失真）
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState !== "visible" || !cloudMode) return;
+        if (document.visibilityState !== "visible" || !cloudUIOn()) return;
         if (cloudCtx.status === "offline") cloudManualRetry();
         if (cloudCtx.status !== "online") return;
         if (!cloudPeerOf(cloudCtx.cfg) || cloudCtx.pendingPair) return;
@@ -9467,7 +9527,7 @@ function connectLan(ctx) {
       }
       // 重试等待期倒计时（1Hz）：只改文字（chip 文本节点 + 云 UI），不整块重建面板
       setInterval(() => {
-        if (!cloudMode || cloudCtx.status !== "connecting" || !cloudCtx.retryAt) return;
+        if (!cloudUIOn() || cloudCtx.status !== "connecting" || !cloudCtx.retryAt) return;
         const left = Math.ceil((cloudCtx.retryAt - Date.now()) / 1000);
         if (left <= 0) return; // 归零：重连定时器即将触发，等 connect 翻状态
         const text = (cloudCtx.retryNote || "") + "重试中·下次 " + left + "s";
@@ -9483,7 +9543,14 @@ function connectLan(ctx) {
       // ---------- 配对入口：8 位码手输 + 配对链接深链 ----------
       function submitPairCode() {
         const input = document.querySelector("[data-cloud-pair-input]");
-        const code = ((input && input.value) || "").trim();
+        const code = String((input && input.value) || "").trim();
+        if (input) input.value = "";
+        submitPairCodeWith(code, input);
+      }
+      // W-WINPAIR 拆出带参内核：设置面板输码框与「添加服务器」弹窗同链（弹窗码作实参传入，
+      // 不再依赖全局 querySelector——两输入框并存时读错第一个的坑）
+      function submitPairCodeWith(code, input) {
+        code = String(code || "").trim();
         // 2026-09-09 起签发 8 位码；6 位仍放行（管理员自定义 6 位码过渡兼容）
         if (!/^\d{6,8}$/.test(code)) { showToast("请输入 6-8 位数字配对码"); if (input) input.focus(); return; }
         if (!window.nacl) { showToast("加密组件未加载，请刷新页面重试"); return; }
@@ -9547,6 +9614,110 @@ function connectLan(ctx) {
         ctx.ws = cloudCmdShim;
         connectCloudFor(cloudCtx, false);
       }
+      // ---------- W-WINPAIR：源切换（单源模型内的本机↔云桥） ----------
+      // 005 是单源骨架（同一时刻一条活动链）：切云=停本机 LAN+bootstrapCloud 接管命令面；
+      // 切回=cloudDisconnect+重走 LAN 探测连接。stopped 标记同时挡 scheduleReconnect 与 6s healTimer。
+      function switchToCloudSource(manual) {
+        if (shellCloud) { if (manual) { cloudManualRetry(); showToast("正在重连云桥"); } return; }
+        if (cloudMode) return; // 云形态本来就在云链上（设置面板输码即可）
+        ctx.stopped = true;
+        clearTimeout(ctx.reconnectTimer);
+        try { ctx.ws && ctx.ws.close(); } catch {} // onclose 异步到：setConn(offline) 无害（UI 已读 cloudCtx）
+        shellCloud = true;
+        try { localStorage.setItem(SHELL_CLOUD_KEY, "1"); } catch {}
+        bootstrapCloud(); // 共享库选源 + 命令面接管（__ccDeck005MainWs=shim）+ connectCloudFor
+        renderSessionList();
+        renderCloudUI();
+        refreshSourceSwitchers();
+      }
+      // W-WINPAIR 只读诊断锚（排障/走查共用）：源切换态一目了然（shellCloud/云源/云态/LAN 停止位）
+      window.__ccDeck005SourceState = () => ({ shellCloud: !!shellCloud, cloudMode: !!cloudMode,
+        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status,
+        cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired),
+        lanStopped: !!ctx.stopped, lanWsUrl: String(ctx.cfg.wsUrl || "") });
+      function switchToLocalSource() {
+        if (!shellCloud) return;
+        cloudDisconnect();
+        Team.bind(false); Team.failFlights(); // 云离线口径对齐（cloudDisconnect 不走 cloudSetConn）
+        window.__ccDeck005Frames.emit({ kind: "ws", state: "close" }); // 先广播断开结算飞行命令（LAN onclose 同口径）
+        shellCloud = false;
+        try { localStorage.removeItem(SHELL_CLOUD_KEY); } catch {}
+        ctx.stopped = false;
+        ctx.sessions.clear(); ctx.hasSnapshot = false; ctx.lastSeq = 0; // 本机链从零快照
+        cloudCtx.sessions.clear(); cloudCtx.hasSnapshot = false;       // 切源快照不串台
+        const b4 = window.__ccDeck005B4;                                // 桥快照残留同清（SNAPSHOT 到达前沿用旧云数据=误读）
+        if (b4) { b4.sessions = new Map(); b4.hasSnapshot = false; }
+        window.__ccDeck005MainWs = null; // connectLan onopen 会重设；清掉防切换窗口期命令误走云 shim
+        connectLan(ctx);
+        renderSessionList();
+        renderCloudUI();
+        refreshSourceSwitchers();
+      }
+      // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
+      // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
+      // 先 switchToCloudSource）+ 覆盖 cfg + 走 submitPairCodeWith 配对链（pair_ack 后落共享库）。
+      function openAddServerUI() {
+        closeTransientOverlays();
+        if (document.querySelector("[data-add-pop]")) return;
+        const back = document.createElement("div");
+        back.className = "pair-pop-backdrop";
+        back.dataset.addBack = "";
+        const pop = document.createElement("div");
+        pop.className = "create-pop add-server-pop";
+        pop.dataset.addPop = "";
+        pop.setAttribute("role", "dialog");
+        pop.setAttribute("aria-modal", "true");
+        pop.setAttribute("aria-label", "添加服务器");
+        pop.innerHTML = '<h3>添加服务器</h3>'
+          + '<p class="create-sub">连接其他电脑的 CC Deck · 在对方「设置 → 连接与设备」领 8 位码</p>'
+          + '<div class="create-label">配对码</div>'
+          + '<div class="pair-link-row"><input class="create-field" data-cloud-pair-input type="text" inputmode="numeric" maxlength="8" placeholder="8 位配对码" aria-label="8 位配对码"><button class="primary-btn" type="button" data-add-submit>连接</button></div>'
+          + '<details class="add-adv"><summary>高级 · 服务器地址与令牌</summary>'
+          + '<div class="create-label">服务器地址</div>'
+          + '<input class="create-field" data-add-url type="text" placeholder="cc.humumu.online/cloud（默认云桥）" aria-label="服务器地址">'
+          + '<div class="create-label">桥令牌</div>'
+          + '<input class="create-field" data-add-token type="text" placeholder="留空用公共桥" aria-label="桥令牌">'
+          + '</details>'
+          + '<div class="pair-foot"><span class="add-hint">公司网络自动降级 HTTP 轮询</span><button class="secondary-btn" type="button" data-add-close>取消</button></div>';
+        const closeAddServerUI = () => { pop.remove(); back.remove(); };
+        back.addEventListener("click", closeAddServerUI);
+        pop.addEventListener("click", (event) => {
+          if (event.target.closest("[data-add-close]")) { closeAddServerUI(); return; }
+          if (event.target.closest("[data-add-submit]")) { submitAddServer(); return; }
+        });
+        pop.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return; // IME 守卫
+          if (event.target.closest && event.target.closest("[data-cloud-pair-input], [data-add-url], [data-add-token]")) { event.preventDefault(); submitAddServer(); }
+        });
+        document.body.appendChild(back);
+        document.body.appendChild(pop);
+        setTimeout(() => { const el = pop.querySelector("[data-cloud-pair-input]"); if (el) { try { el.focus(); } catch {} } }, 60);
+      }
+      function submitAddServer() {
+        const pop = document.querySelector("[data-add-pop]");
+        if (!pop) return;
+        const codeEl = pop.querySelector("[data-cloud-pair-input]");
+        const code = String((codeEl && codeEl.value) || "").trim();
+        if (!/^\d{6,8}$/.test(code)) { showToast("请输入 6-8 位数字配对码"); if (codeEl) codeEl.focus(); return; }
+        let wsUrl = String((pop.querySelector("[data-add-url]") || {}).value || "").trim().replace(/\/+$/, "");
+        if (wsUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(wsUrl)) wsUrl = "wss://" + wsUrl; // 云桥语义：裸域名按 wss 补全
+        const token = String((pop.querySelector("[data-add-token]") || {}).value || "").trim();
+        if (!window.nacl) { showToast("加密组件未加载，请检查网络后刷新"); return; }
+        // 激活云链（壳/LAN 形态先切源——bootstrapCloud 从共享库/默认建 cfg 并接管命令面）
+        if (!cloudMode && !shellCloud) switchToCloudSource(false);
+        // 用户显式地址 = 新源身份（id 换新，配对成功以新条目落共享库）；仅令牌则沿用当前源
+        if (wsUrl && wsUrl !== cloudCtx.cfg.wsUrl) {
+          cloudCtx.cfg = { id: cloudUuid(), name: hostOf(wsUrl) || "云桥", kind: "cloud", wsUrl,
+            token: token || BAKED_BRIDGE_TOKEN, cloud: { url: wsUrl, token: token || BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
+          cloudCtx.sessions.clear(); cloudCtx.hasSnapshot = false; cloudCtx.lastSeq = 0;
+        } else if (token) {
+          cloudCtx.cfg.token = token;
+        }
+        pop.remove();
+        document.querySelector("[data-add-back]")?.remove();
+        showToast("正在配对云桥…");
+        submitPairCodeWith(code);
+      }
       function cloudDisconnect() {
         cloudCtx.pollGen++; // 掐掉轮询循环
         clearInterval(cloudCtx.pairTimer); cloudCtx.pairTimer = 0;
@@ -9569,17 +9740,17 @@ function connectLan(ctx) {
         if (cloudCtx.failKind === "unpaired") return ["action", "未配对"];
         return ["danger", "离线"];
       }
-      function cloudFormActive() { return cloudMode; }
+      function cloudFormActive() { return cloudUIOn(); } // W-WINPAIR：壳内切云同口径（域脚本借道判定云 UI 激活）
       function cloudStatusLabel() { return cloudTagOf()[1]; }
       function cloudFormLabel() {
-        return cloudMode ? "本机 · 云桥 · " + (cloudCtx.statusText || "未连接") : "端口 " + (location.port || "8787") + " · 事件流自动补发";
+        return cloudUIOn() ? "本机 · 云桥 · " + (cloudCtx.statusText || "未连接") : "端口 " + (location.port || "8787") + " · 事件流自动补发";
       }
       function cloudRetryBtn() { return isCloudRetryable() ? '<button class="connection-reconnect" data-cloud-retry type="button">重试</button>' : ""; }
       // 桌面 connections 面板 slot 内容：云形态=云桥状态行+本页设备行+（未配对时）输码表单；
       // 非云形态=原静态云桥行（LAN 形态观感不变）
       function cloudSettingsRows() {
-        if (!cloudMode) {
-          return '<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云通道状态未随网页端下发</p></div><span class="tag info">未知</span></div>';
+        if (!cloudUIOn()) {
+          return '<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>未添加远程源 · 点「＋ 添加服务器」连接其他电脑</p></div><button class="row-share" data-settings-add type="button" title="填云桥地址 + 8 位配对码，把其他电脑加为数据源">＋ 添加</button><span class="tag info">未添加</span></div>';
         }
         const [cls, label] = cloudTagOf();
         const peer = cloudPeerOf(cloudCtx.cfg);
@@ -9600,7 +9771,7 @@ function connectLan(ctx) {
       }
       // 移动端「连接与设备」详情的云桥 lane（720px 视口下表单可输入可提交——输入框显式 14px 防 iOS 聚焦缩放）
       function cloudMobileLaneInner() {
-        if (!cloudMode) return '<div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div>';
+        if (!cloudUIOn()) return '<div class="mobile-lane-head"><span>云桥</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div>';
         const [cls, label] = cloudTagOf();
         const peer = cloudPeerOf(cloudCtx.cfg);
         let html = '<div class="mobile-lane-head"><span>云桥</span><span class="tag ' + cls + '">' + label + '</span>' + cloudRetryBtn() + '</div>';
@@ -9636,9 +9807,14 @@ function connectLan(ctx) {
       }
       // 配对表单/重试钮事件（文档级委托：桌面 #d-settings 与移动 #m-settings 同一套 data-* 锚）
       document.addEventListener("click", (event) => {
-        if (!cloudMode) return;
+        if (!cloudUIOn()) return;
         if (event.target.closest("[data-cloud-pair-submit]")) { submitPairCode(); return; }
         if (event.target.closest("[data-cloud-retry]")) { cloudManualRetry(); showToast("正在重连云桥"); return; }
+      });
+      // W-WINPAIR：设置连接页「＋ 添加服务器」入口（client 侧连远程源，与配对新设备 server 侧并列）
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest("[data-settings-add]")) return;
+        openAddServerUI();
       });
       document.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return; // IME 守卫（005 既有军规）
@@ -9649,10 +9825,10 @@ function connectLan(ctx) {
       window.__ccDeck005CloudUI = {
         active: cloudFormActive,
         stateLabel: cloudStatusLabel,
-        listSub: () => (cloudMode ? "云桥 " + cloudStatusLabel() + " · 详情可输码配对" : ""),
+        listSub: () => (cloudUIOn() ? "云桥 " + cloudStatusLabel() + " · 详情可输码配对" : ""),
         mobileLane: cloudMobileLane,
         waitingText: () => {
-          if (!cloudMode) return null;
+          if (!cloudUIOn()) return null;
           if (cloudCtx.failKind === "unpaired") return "云桥未配对 · 设置 → 连接与设备 输入配对码";
           return "本机 · 云桥 · " + (cloudCtx.statusText || "未连接");
         },
@@ -9772,12 +9948,34 @@ function connectLan(ctx) {
           }
           const option = target.closest(".source-option[data-source-choice]");
           if (option) {
+            const choice = String(option.dataset.sourceChoice || "");
+            // W-WINPAIR：真切换——cloud=切云桥（壳/LAN 形态停本机起云链），local=切回本机 relay。
+            // active 态由 refreshSourceSwitchers 状态驱动（cloudSetConn→桥 connection→subscribe 闭环）
+            if (choice === "cloud" && !cloudUIOn()) {
+              closeSourceMenu(switcher);
+              showToast("切换到云桥…");
+              switchToCloudSource(false);
+              return;
+            }
+            if (choice === "local" && shellCloud) {
+              closeSourceMenu(switcher);
+              showToast("切换到本机 relay…");
+              switchToLocalSource();
+              return;
+            }
             const wasActive = option.classList.contains("active");
             switcher.querySelectorAll(".source-option").forEach((el) => el.classList.toggle("active", el === option));
             const name = option.querySelector("strong")?.textContent || "当前源";
             switcher.querySelectorAll("[data-current-source]").forEach((el) => { el.textContent = name; });
             closeSourceMenu(switcher);
-            showToast(wasActive ? "当前源 · " + name + "（配对新源走下方入口）" : "已切换数据源 · " + name);
+            showToast(wasActive ? "当前源 · " + name + "（添加新源走下方 ＋ 入口）" : "已切换数据源 · " + name);
+            return;
+          }
+          // W-WINPAIR：「＋ 添加服务器」恒显入口（client 侧连远程源——壳内云桥/浏览器任意形态）
+          const addBtn = target.closest("[data-source-add]");
+          if (addBtn) {
+            closeSourceMenu(switcher);
+            openAddServerUI();
             return;
           }
           // W-NOVAUI ①真因：限定 .source-mode 容器内按钮——FB1 模式记忆把 data-source-mode 写在
@@ -10124,6 +10322,7 @@ function connectLan(ctx) {
           if (conn === "online" || conn === "connecting") { clearInterval(healTimer); return; }
           if (++healTries > 15) { clearInterval(healTimer); return; }
           const again = await probeLocalRelay();
+          if (ctx.stopped) { clearInterval(healTimer); return; } // W-WINPAIR：probe 等待期间切到云源——本机重连作废
           if (again) {
             applyLocalProbe(again);
             ctx.probing = false;
@@ -10795,7 +10994,7 @@ function connectLan(ctx) {
             : name === "连接与设备"
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
-                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未知</span></div><div class="mobile-task">云通道状态未随网页端下发</div></div>`
+                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div></div>`
             : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
