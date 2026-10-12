@@ -23,6 +23,7 @@ import type {
   LessonEntry,
   ProjectBoard,
   ProjectGroup,
+  RuleEntry,
 } from "./protocol";
 
 // ---------- 条目防御尺（覆盖式消费同款口径，畸形条目不进缓存） ----------
@@ -69,6 +70,12 @@ export function isBoardDelta(v: unknown): v is BoardDelta {
 export function isExperienceEntry(x: unknown): x is ExperienceEntry {
   const e = x as ExperienceEntry | undefined;
   return !!e && typeof e.id === "string" && !!e.id && typeof e.text === "string" && typeof e.kind === "string" && typeof e.status === "string";
+}
+
+// W-RULES2 铁律域条目防御尺（isExperienceEntry 同款宽松鸭子校验）
+export function isRuleEntry(x: unknown): x is RuleEntry {
+  const r = x as RuleEntry | undefined;
+  return !!r && typeof r.id === "string" && !!r.id && typeof r.text === "string" && typeof r.audience === "string" && typeof r.status === "string";
 }
 
 // ---------- merge 核心（幂等：同帧重放二次应用零变化） ----------

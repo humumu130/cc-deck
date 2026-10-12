@@ -4,10 +4,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
 import { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
-import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, ExperienceEntry, LogEntry, NotificationItem, NotificationsUpdatedPayload, PairedDeviceInfo, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, ExperienceEntry, LogEntry, NotificationItem, NotificationsUpdatedPayload, PairedDeviceInfo, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, RuleEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
 export { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
 import { uuid } from "./fmt";
-import { applyBoardFrame, applyProjectsFrame, isExperienceEntry, mergeById } from "./org-delta";
+import { applyBoardFrame, applyProjectsFrame, isExperienceEntry, isRuleEntry, mergeById } from "./org-delta";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 import nacl from "tweetnacl";
@@ -114,6 +114,11 @@ export interface SourceConn {
   // 关（分节置灰说明）。手机只读——操作面在 web/桌面端
   experiences: ExperienceEntry[] | null;
   experienceEnabled: boolean;
+  // W-RULES2 铁律域（SNAPSHOT.rules 覆盖式锚定 + RULES_UPDATED 帧双载）：null = 旧
+  // relay 不支持（团队详情铁律节不渲染）；rulesEnabled=false=总开关关。手机只读——
+  // 写面在电脑端，rule-append 类实时决议走确认卡（design-expo-mobile-v2 A1-15）
+  rules: RuleEntry[] | null;
+  rulesEnabled: boolean;
   // M13-4ADD 板 delta 锚定集：gid 消费过覆盖式全量帧（含重拉 ack）才允许后继 delta
   // merge；未锚定 delta 一律丢弃+重拉（瞬态帧无缺口检测，差分应用在错误基线=静默错乱）
   anchoredBoards: Set<string>;
@@ -241,6 +246,10 @@ export interface SourceStatus {
   // experienceEnabled = SNAPSHOT.experience_enabled（总开关关=分节置灰）
   experiences?: ExperienceEntry[] | null;
   experienceEnabled?: boolean;
+  // W-RULES2 铁律域透出（conn.rules 同名）：null = 旧 relay 不支持；rulesEnabled =
+  // SNAPSHOT.rules_enabled（总开关关=铁律节置灰说明）
+  rules?: RuleEntry[] | null;
+  rulesEnabled?: boolean;
   // M13-6E 任务板缓存透出（conn.boards 对象化）：通知回跳 dispatch 域归因反查
   //（dispatch_id → gid+entryId）数据面，与 web 端 ctx.boards 同构。缓存语义=增量
   // 维护（M13-4 锚定纪律），反查只出「线索」——最终呈现以 GroupModal orgDetail
@@ -603,6 +612,8 @@ class RelayStore {
       orgConfirms: c.orgConfirms, // #26 M2 待决议确认卡
       experiences: c.experiences, // W-EXPP2 经验域（orgZone 分节只读消费）
       experienceEnabled: c.experienceEnabled,
+      rules: c.rules, // W-RULES2 铁律域（团队详情铁律节只读消费）
+      rulesEnabled: c.rulesEnabled,
       boards: Object.fromEntries(c.boards), // M13-6E 板缓存对象化（回跳 dispatch 反查）
       artPool: c.artPool, // #72 E 线 产物池三态透出（artPoolGate 三重门数据面）
       artPoolData: c.artPoolData,
@@ -995,6 +1006,8 @@ class RelayStore {
         boards: new Map(),
         experiences: null, // W-EXPP2 SNAPSHOT 覆盖式锚定（null = 旧 relay 无经验域）
         experienceEnabled: true, // 缺省开（第七键缺省 true；SNAPSHOT.experience_enabled 收敛）
+        rules: null, // W-RULES2 同款覆盖式锚定（null = 旧 relay 无铁律域）
+        rulesEnabled: true,
         anchoredBoards: new Set(), // M13-4ADD 板 delta 锚定集（覆盖式帧/重拉 ack 确立）
         boardResync: new Set(), // M13-4ADD 重拉 in-flight 防抖
         sessions: new Map(),
@@ -2329,6 +2342,10 @@ class RelayStore {
         const exps = (msg.payload as { experience?: unknown }).experience;
         conn.experiences = Array.isArray(exps) ? exps.filter(isExperienceEntry) : null;
         conn.experienceEnabled = (msg.payload as { experience_enabled?: unknown }).experience_enabled !== false;
+        // W-RULES2 铁律域锚定（experience 同款覆盖式口径：空数组也锚定=空库在册）
+        const rls = (msg.payload as { rules?: unknown }).rules;
+        conn.rules = Array.isArray(rls) ? rls.filter(isRuleEntry) : null;
+        conn.rulesEnabled = (msg.payload as { rules_enabled?: unknown }).rules_enabled !== false;
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
@@ -2655,6 +2672,30 @@ class RelayStore {
           );
         } else if (Array.isArray(p.entries)) {
           conn.experiences = (p.entries as unknown[]).filter(isExperienceEntry);
+        }
+        break;
+      }
+      // W-RULES2 铁律域帧（EXPERIENCE_UPDATED 同构：帧双载 entries 恒全量 + delta 已知
+      // 时并出；delta merge 仅在锚定后，缺席 delta → 覆盖式吃 entries 并锚定）
+      case "RULES_UPDATED": {
+        const p = msg.payload as { entries?: unknown; delta?: unknown };
+        const deltaOk =
+          !!p.delta &&
+          typeof p.delta === "object" &&
+          Array.isArray((p.delta as { upserts?: unknown }).upserts) &&
+          Array.isArray((p.delta as { removes?: unknown }).removes);
+        if (deltaOk && conn.rules !== null) {
+          const d = p.delta as { upserts: unknown[]; removes: unknown[] };
+          conn.rules = mergeById(
+            conn.rules,
+            {
+              upserts: d.upserts.filter(isRuleEntry),
+              removes: d.removes.filter((id): id is string => typeof id === "string"),
+            },
+            isRuleEntry,
+          );
+        } else if (Array.isArray(p.entries)) {
+          conn.rules = (p.entries as unknown[]).filter(isRuleEntry);
         }
         break;
       }
