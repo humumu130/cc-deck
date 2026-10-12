@@ -834,6 +834,19 @@
     .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .composer-bottom .composer-spring { flex: 1 1 0; min-width: 0; }
     .composer-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    /* W-SLASH 斜杠命令联想浮层：输入 / 前缀触发，浮在 composer 上方（透传方案——
+       选中只是补全文本，发送走既有纯文本链路，CLI 自行解析）。主题走既有变量双主题
+       自适应；定位 JS 按 composer rect 锚定（body 挂载避免被 workspace 裁切）。 */
+    .slash-box { position: fixed; z-index: 82; display: none; width: min(480px, calc(100vw - 24px)); max-height: 262px; overflow-y: auto; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .slash-box.open { display: block; }
+    .slash-row { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 7px; cursor: pointer; }
+    .slash-row:hover, .slash-row.hot { background: var(--hover); }
+    .slash-row.hot { outline: 1px solid var(--brand); outline-offset: -1px; }
+    .slash-name { flex: none; color: var(--text-strong); font-family: var(--mono); font-size: var(--fs-A-item); font-weight: 600; }
+    .slash-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    .slash-src { flex: none; padding: 1px 6px; border: 1px solid var(--line); border-radius: 7px; color: var(--dim); font-size: 10px; }
+    .slash-empty { padding: 10px 12px; color: var(--faint); font-size: var(--fs-C); }
+    .slash-foot { position: sticky; bottom: -6px; z-index: 1; margin: 4px -6px 0; padding: 5px 12px 4px; color: var(--faint); font-size: 10.5px; border-top: 1px solid var(--line-soft); background: var(--surface2); border-radius: 0 0 10px 10px; }
     /* W-TOPBAR ⑥ 子 Agent 活性面板（旧壳 #142 同构移植）：状态栏下续行，标题行即折叠
        开关（subAgent N + 尾部箭头），条目=呼吸点/✓ + 描述 + 当前动作 + 走秒；无子 Agent 不占位 */
     .agbox { flex: 0 0 auto; padding: 0 20px 6px; background: var(--footer); }
@@ -4693,6 +4706,7 @@
                     const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
                     S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
+                    slashHide(); // W-SLASH：程序清空不发 input 事件，浮层显式收起
                     inputDrafts.delete(s.session_id); // #B3-4 已发出的不再算草稿
                     if (text) histPush(text);
                     S.hist.idx = -1;
@@ -5111,6 +5125,165 @@
                 }
 
                 // ---------- 事件绑定 ----------
+                // ---------- W-SLASH 斜杠命令联想（透传方案，双端对齐 expo e810261 / 旧壳 #279B）----------
+                // 输入 / 前缀（未到参数段=无空白）触发浮层；选中/回车=把命令补全进输入框
+                // （尾随空格留参数位），发送走既有纯文本链路——CLI 自己解析执行，其他引擎
+                // 收到当文本，relay/面板零命令解析逻辑。内置表四处同源维护：relay
+                // ws-server.ts BUILTIN_COMMANDS（/api/commands 数据源）/ 旧壳 SLASH_BUILTIN /
+                // expo slash.ts / 本表。LAN/桌面形态 fetch 用户/项目自定义命令（60s 缓存+
+                // 单飞去重）；云形态 HTTP 到不了 relay、失败一律回落内置表。
+                const SLASH_BUILTIN = [
+                  ["compact", "压缩对话历史，释放上下文"],
+                  ["clear", "清空当前会话历史"],
+                  ["help", "查看帮助"],
+                  ["model", "查看/切换模型"],
+                  ["cost", "当前会话 token 用量"],
+                  ["context", "上下文使用概况"],
+                  ["memory", "编辑项目记忆 CLAUDE.md"],
+                  ["init", "为当前项目初始化 CLAUDE.md"],
+                  ["review", "审查 PR / 代码变更"],
+                  ["resume", "恢复历史会话"],
+                  ["rename", "重命名当前会话"],
+                  ["export", "导出当前会话记录"],
+                  ["todos", "查看当前任务清单"],
+                  ["permissions", "权限规则管理"],
+                  ["config", "打开配置面板"],
+                  ["mcp", "MCP 服务器管理"],
+                  ["statusline", "状态栏配置"],
+                  ["output-style", "切换输出风格"],
+                  ["add-dir", "添加额外工作目录"],
+                  ["vim", "切换 vim 按键模式"],
+                  ["doctor", "Claude Code 健康检查"],
+                  ["login", "切换账号"],
+                  ["bug", "报告问题"],
+                  ["release-notes", "查看更新日志"],
+                ].map(([name, desc]) => ({ name, desc, source: "builtin" }));
+                let slashList = SLASH_BUILTIN;
+                const slashCache = new Map();
+                let slashPanel = null, slashHot = -1, slashInputEl = null, slashInflight = "";
+                const slashQueryOf = (v) => (v.startsWith("/") && !/\s/.test(v) ? v.slice(1) : null);
+                const slashMatches = (q) => {
+                  const s = q.trim().toLowerCase();
+                  if (!s) return slashList.slice(0, 8);
+                  return slashList.filter((c2) => c2.name.toLowerCase().startsWith(s) || (c2.desc || "").toLowerCase().includes(s)).slice(0, 8);
+                };
+                function slashEnsure() {
+                  const s = curSession();
+                  if (!s) return;
+                  const base = String((typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin || "");
+                  const token = String(window.__ccDeck005Token || "");
+                  const cwd = s.cwd ?? "";
+                  const key = base + "|" + cwd;
+                  const hit = slashCache.get(key);
+                  if (hit && Date.now() - hit.ts < 60000) { slashList = hit.list; return; }
+                  if (!base || !token || slashInflight) return;
+                  slashInflight = key;
+                  const wantCwd = cwd;
+                  fetch(base + "/api/commands?token=" + encodeURIComponent(token) + "&cwd=" + encodeURIComponent(cwd), { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined })
+                    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+                    .then((j) => {
+                      if (!j || !j.ok || !Array.isArray(j.commands)) throw new Error("bad shape");
+                      const list = j.commands.filter((c2) => c2 && typeof c2.name === "string");
+                      slashCache.set(key, { ts: Date.now(), list });
+                      slashList = list;
+                    })
+                    .catch(() => { slashList = SLASH_BUILTIN; })
+                    .finally(() => {
+                      slashInflight = "";
+                      // 慢请求期间切了会话（cwd 变）：只入缓存不刷新当前面板，防旧 cwd 命令污染新会话联想
+                      const cur = curSession();
+                      if (cur && (cur.cwd ?? "") === wantCwd) slashRender();
+                    });
+                }
+                function slashHide() {
+                  if (slashPanel) slashPanel.classList.remove("open");
+                  slashHot = -1;
+                }
+                function slashComplete(name) {
+                  const el = slashInputEl;
+                  if (!el) return;
+                  el.value = "/" + name + " ";
+                  el.dispatchEvent(new Event("input", { bubbles: false })); // 走既有 input 链：草稿/发送态/浮层重估
+                  el.focus();
+                  slashHide();
+                }
+                function slashRender() {
+                  if (!slashPanel || !slashInputEl) return;
+                  const q = slashQueryOf(slashInputEl.value);
+                  if (q === null) { slashHide(); return; }
+                  const ms = slashMatches(q);
+                  slashPanel.innerHTML = (ms.length
+                    ? ms.map((m, i) => '<div class="slash-row' + (i === slashHot ? " hot" : "") + '" data-n="' + esc(m.name) + '" data-i="' + i + '" role="option"><span class="slash-name">/' + esc(m.name) + "</span>" +
+                      '<span class="slash-desc">' + esc(m.desc || "") + "</span>" +
+                      (m.source && m.source !== "builtin" ? '<span class="slash-src">' + (m.source === "user" ? "用户" : "项目") + "</span>" : "") + "</div>").join("")
+                    : '<div class="slash-empty">无匹配命令，Enter 原样发送</div>')
+                    + '<div class="slash-foot">↑↓ 选择 · Enter 补全 · Esc 关闭 · 选中后作为文本发送</div>';
+                  if (slashHot >= ms.length) slashHot = ms.length - 1;
+                  const hot = slashPanel.querySelector(".slash-row.hot");
+                  if (hot) hot.scrollIntoView({ block: "nearest" });
+                }
+                function slashUpdate(el) {
+                  slashInputEl = el || null;
+                  if (!slashInputEl) { slashHide(); return; }
+                  const q = slashQueryOf(slashInputEl.value);
+                  if (q === null || !curSession()) { slashHide(); return; }
+                  if (!slashPanel) {
+                    slashPanel = document.createElement("div");
+                    slashPanel.className = "slash-box";
+                    slashPanel.setAttribute("role", "listbox");
+                    slashPanel.setAttribute("aria-label", "斜杠命令联想");
+                    // mousedown 补全（preventDefault 防输入框失焦；touch 合成 click 由 click 兜底）
+                    slashPanel.addEventListener("mousedown", (ev) => {
+                      const row = ev.target.closest(".slash-row");
+                      if (!row) return;
+                      ev.preventDefault();
+                      slashComplete(row.dataset.n);
+                    });
+                    slashPanel.addEventListener("click", (ev) => {
+                      const row = ev.target.closest(".slash-row");
+                      if (!row) return;
+                      ev.preventDefault();
+                      slashComplete(row.dataset.n);
+                    });
+                    document.body.appendChild(slashPanel);
+                  }
+                  // 锚定：浮在 composer 上方（锚 composer 边框盒——textarea 内框差 padding
+                  // 会错位；rect 每次开面板重算，窗口缩放/折叠态换行自适应）
+                  const host = slashInputEl.closest(".composer") || slashInputEl;
+                  const r = host.getBoundingClientRect();
+                  slashPanel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 488)) + "px";
+                  slashPanel.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
+                  slashHot = -1;
+                  slashRender();
+                  slashPanel.classList.add("open");
+                  slashEnsure();
+                }
+                function slashKeydown(ev) {
+                  if (!slashPanel || !slashPanel.classList.contains("open")) return false;
+                  if (ev.key === "Escape") { slashHide(); return true; }
+                  if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown" && ev.key !== "Enter" && ev.key !== "Tab") return false;
+                  if (ev.altKey || ev.ctrlKey || ev.metaKey) return false;
+                  const ms = slashMatches(slashQueryOf(slashInputEl ? slashInputEl.value : "") ?? "");
+                  if (ev.key === "Tab") {
+                    if (!ms.length) return false;
+                    ev.preventDefault();
+                    slashComplete(ms[0].name);
+                    return true;
+                  }
+                  if (ev.key === "Enter") {
+                    // 有 hot 补全选中项；无 hot（未用 ↑↓）不拦截——按原行为原样发送
+                    if (slashHot >= 0 && ms[slashHot]) { ev.preventDefault(); slashComplete(ms[slashHot].name); return true; }
+                    slashHide();
+                    return false;
+                  }
+                  if (!ms.length) return false;
+                  ev.preventDefault();
+                  if (ev.key === "ArrowDown") slashHot = Math.min(slashHot + 1, ms.length - 1);
+                  else slashHot = slashHot <= 0 ? 0 : slashHot - 1;
+                  slashRender();
+                  return true;
+                }
+
                 function bindEvents() {
                   // 选中链由地基驱动；本端只观察 DOM 变化同步 S.selected
                   const readSel = () => UI.sessionList.querySelector(".queue-card.selected");
@@ -5339,9 +5512,10 @@
                     if (!ev.target.closest("#b2-model-menu") && !ev.target.closest("#session-model-capsule")) closeModelMenu();
                     if (!ev.target.closest("#b2-perm-menu") && !ev.target.closest("#session-perm-capsule")) closePermMenu(); // UIPOLISH3 件三
                     if (!ev.target.closest(".artifact-menu-wrap")) document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open"));
+                    if (!ev.target.closest(".slash-box") && !ev.target.closest(".composer")) slashHide(); // W-SLASH：点浮层/输入区外收起
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); closeArtViewer(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
                   });
 
                   // composer：发送/停止/历史/IME
@@ -5365,6 +5539,8 @@
                   UI.input.addEventListener("compositionstart", () => { composing = true; });
                   UI.input.addEventListener("compositionend", () => { composing = false; commitLockUntil = Date.now() + 150; });
                   UI.input.addEventListener("keydown", (ev) => {
+                    // W-SLASH：浮层开时 ↑↓/Enter/Tab/Esc 先归联想面板（IME 组词期不抢键）
+                    if (!ev.isComposing && ev.keyCode !== 229 && slashKeydown(ev)) return;
                     if (ev.key === "Enter" && !ev.shiftKey) {
                       if (ev.isComposing || composing) return;                 // IME 组词期 Enter 不发送
                       if (ev.keyCode === 229 && Date.now() - commitLockUntil < 400) return;
@@ -5373,6 +5549,7 @@
                       return;
                     }
                     histKeydown(ev);
+                    slashUpdate(UI.input); // 历史翻阅换了值：浮层按新值重估（/ 前缀失守即收起）
                   });
                   UI.input.addEventListener("input", () => { if (S.hist.idx >= 0) S.hist.draft = UI.input.value; syncComposerState(); });
                   UI.input.addEventListener("paste", (ev) => {
@@ -5411,6 +5588,9 @@
                     imgInput.addEventListener("change", () => { stageFiles(imgInput.files); imgInput.value = ""; });
                     imgBtn.addEventListener("click", (ev) => { ev.stopPropagation(); imgInput.click(); UI.input.focus(); });
                   }
+
+                  // 桌面会话输入框接线：input 触发重估 + keydown 先过浮层（↑↓/Enter/Tab/Esc），历史翻阅后同步重估
+                  UI.input.addEventListener("input", () => slashUpdate(UI.input));
 
                   // 文档级拖入蒙层（#79：拖文件无反应的真因——depth 计数 + preventDefault）
                   let dragDepth = 0;
@@ -5666,6 +5846,8 @@
                     return commandAck(s.external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: s.session_id });
                   },
                   stageFiles, // #169 手机图片/附件入口复用（压缩/限额逻辑不重写）
+                  slashFor(el) { slashUpdate(el); }, // W-SLASH：手机布局输入框共用联想浮层（透传补全）
+                  slashClose() { slashHide(); },
                 };
               })();
             </script>
@@ -11430,7 +11612,7 @@ function connectLan(ctx) {
         const s = bridge.sessions.get(detailSid) || (api.S && api.S.sessions ? api.S.sessions.get(detailSid) : null);
         if (s && typeof api.canCmd === "function" && !api.canCmd(s)) { mToast("历史会话只读"); return; }
         const r = api.sendPrompt(detailSid, text) || {};
-        if (r.sent) { if (input) input.value = ""; mToast("已发送"); }
+        if (r.sent) { if (input) input.value = ""; if (api && api.slashClose) api.slashClose(); mToast("已发送"); }
         else mToast(String(r.error || "发送失败"));
         syncMobileComposer();
       }
@@ -11459,7 +11641,7 @@ function connectLan(ctx) {
         const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
         if (input) {
           input.addEventListener("keydown", (ev) => { if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return; ev.preventDefault(); mobileSend(); }); // IME 组词期 Enter 不发送
-          input.addEventListener("input", () => syncMobileComposer()); // #169 发送禁用态随输入同步
+          input.addEventListener("input", () => { syncMobileComposer(); const api = b2Api(); if (api && api.slashFor) api.slashFor(input); }); // #169 发送禁用态随输入同步 + W-SLASH 联想浮层共用
         }
         // #169 图片/文件双入口（旧壳 imgBtn/fileBtn 语义；压缩/限额走 B2 stageFiles 不重写）
         const pickHost = '[data-composer="mobile"]';
