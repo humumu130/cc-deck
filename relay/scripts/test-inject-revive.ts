@@ -56,14 +56,23 @@ const INJECT_LOG = join(DATA, "inject.log");
 writeFileSync(
   FAKE,
   [
-    'import { appendFileSync, writeFileSync } from "node:fs";',
+    'import { appendFileSync, writeFileSync, existsSync } from "node:fs";',
     "const args = process.argv.slice(2);",
     'appendFileSync(process.env.CCR_INJECT_LOG, JSON.stringify(args) + "\\n");',
     'if (args.some((a) => String(a).includes("FORCE_FAIL"))) process.exit(1);',
     'if (args[1] === "--peek") {',
     '  // 防抢发守门读屏：框内 = CCR_FAKE_BOX 指定的文本（守门判定 enter 需框内只有已知文本）；',
-    '  // 未设 = 快照不可用（exit 1 → capture null → unknown，⑨a 的判定源）',
+    '  // 未设 = 快照不可用（exit 1 → capture null → unknown，⑨a 的判定源）；',
+    '  // CCR_FAKE_BOX_RACE=渲染竞态：首捕返回外来旧帧（TUI 未渲染），复捕起渲染我们的文本',
     '  if (!process.env.CCR_FAKE_BOX) process.exit(1);',
+    '  if (process.env.CCR_FAKE_BOX_RACE) {',
+    '    const marker = process.env.CCR_FAKE_BOX_RACE;',
+    '    if (!existsSync(marker)) {',
+    '      writeFileSync(marker, "1");',
+    '      writeFileSync(args[2], ["✶ Working…", "─".repeat(40), "❯ 别人的旧帧内容", "─".repeat(40)].join("\\n"));',
+    '      process.exit(0);',
+    '    }',
+    '  }',
     '  try { writeFileSync(args[2], ["✶ Working…", "─".repeat(40), "❯ " + (process.env.CCR_FAKE_BOX ?? ""), "─".repeat(40)].join("\\n")); } catch {}',
     "  process.exit(0);",
     "}",
@@ -270,7 +279,29 @@ const sessionLogText = (id: string) =>
       if (ti >= 0 && ei >= 0) { enterA = Date.now() - t0a; return true; }
       return false;
     }, 6000);
-    assert(enterA >= 0 && enterA <= 3000, `⑨a idle+快照不可用：首条 3 秒内补发提交回车（实测 ${enterA}ms）`);
+    assert(enterA >= 0 && enterA <= 1000, `⑨a idle+快照不可用：1 秒预算内补发提交回车（实测 ${enterA}ms）`);
+
+    // b2) 渲染竞态（用户活体样本签名）：首捕旧帧 skip-absent → 250ms 复捕见文本 → enter
+    //     必须在 1s 预算内发出（此前：静默跳过 → Enter 彻底丢失 → 第二条才顶出）
+    const idB2 = "ext-tir-p0-race";
+    const sb2 = mgr.ensureExternal(idB2, "/tmp/tir", "P0 渲染竞态验证", "tir-p0-b2");
+    mgr.setExternalCliPid(idB2, process.pid);
+    sb2.status = "DONE";
+    const raceMarker = join(DATA, "race-marker-" + Date.now());
+    process.env.CCR_FAKE_BOX = "渲染竞态首条";
+    process.env.CCR_FAKE_BOX_RACE = raceMarker;
+    const t0b2 = Date.now();
+    bridge.extInput(idB2, "渲染竞态首条");
+    let enterB2 = -1;
+    await waitLog(() => {
+      const lg = fakeLog();
+      const ti = lg.findIndex((a) => a.some((x) => String(x).includes("渲染竞态首条")));
+      const ei = lg.slice(ti + 1).findIndex((a) => a.length >= 2 && a[1] === "");
+      if (ti >= 0 && ei >= 0) { enterB2 = Date.now() - t0b2; return true; }
+      return false;
+    }, 6000);
+    assert(enterB2 >= 0 && enterB2 <= 1500, `⑨b2 渲染竞态：复捕后 1.5s 预算内补发（实测 ${enterB2}ms）`);
+    delete process.env.CCR_FAKE_BOX_RACE;
 
     // b) 框内无我们文本（skip-absent）→ 保持静默：已进 CLI 原生队列的正常态，补发回车
     //    =误发无关草稿（111 段红线「natively-queued never compensated」）；未渲染竞态由
