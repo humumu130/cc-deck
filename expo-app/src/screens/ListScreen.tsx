@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Alert, Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Alert, Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Circle, Path } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
@@ -318,6 +319,18 @@ export function activityMetricsOf(s: SessionState): ActivityMetrics | null {
   return out;
 }
 
+// W-PORT-B P0-2（桌面 UIPOLISH2 件九直移）：会话列表搜索——纯前端过滤，字段=
+// 名称(title/initial_prompt)+摘要(action_summary)+目录(cwd)+会话 ID，多词 AND、
+// 大小写不敏感；消息正文搜索需 relay 全量 timeline，成本大不擅扩（桌面同款开放
+// 边界）。空 query 恒过（零行为变化）；过滤挂 visible 链末端，段头/组头计数与
+// 待处理段自然跟随过滤后卡数（投影管线既有口径）
+export function sessionSearchTest(s: SessionState, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = [s.title, s.initial_prompt, s.action_summary, s.cwd, s.session_id].map((v) => String(v || "").toLowerCase());
+  return q.split(/\s+/).filter(Boolean).every((t) => hay.some((h) => h.includes(t)));
+}
+
 // 投影行模型：section（待处理/其他会话段头）· source（源分组头，srcId=null =
 // 「—」降级占位组）· card（会话卡，pending 标记置顶组归属）。组头 count 一律
 // = 该组实际渲染卡数（去重后），不是原始数组长度
@@ -415,6 +428,16 @@ const THEME_MOON = require("../assets/theme/theme-moon.png");
 
 // #80 连接 chip 电脑图标：桌面端 DESK_SVG 同款（16x13 viewBox，rect+底座横线），
 // View 绘制 1.4 描边，颜色随连接态（绿/黄/红）
+// W-PORT-B P0-2：顶栏搜索钮 glyph（放大镜线稿，react-native-svg 同 DetailScreen 范式）
+function SearchGlyph({ color, active }: { color: string; active: boolean }) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? color : "none"} strokeWidth={2.2} strokeLinecap="round">
+      <Circle cx={10.5} cy={10.5} r={6.5} stroke={color} />
+      <Path d="M15.5 15.5 L20.5 20.5" stroke={color} />
+    </Svg>
+  );
+}
+
 function DeskGlyph({ color }: { color: string }) {
   return (
     <View style={{ width: 14, height: 12, marginRight: 4 }}>
@@ -942,6 +965,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }, [snap.aggregate]);
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameSid, setRenameSid] = useState<string | null>(null);
+  // W-PORT-B P0-2：会话列表搜索——顶栏图标展开搜索条，输入即过滤（sessionSearchTest）
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
   const renameTarget = useMemo(
     () => sessions.find((s) => s.session_id === renameSid) ?? null,
     [sessions, renameSid],
@@ -1156,8 +1182,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         const d = String(s.cwd || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
         const f = dirFilter.replace(/[\\/]/g, "/").replace(/\/+$/, "");
         return !!d && !!f && (d === f || d.startsWith(f + "/"));
-      }),
-    [sorted, collapseIdle, idleDimMin, pendingDel, deleting, dirFilter],
+      })
+      // W-PORT-B P0-2：搜索过滤挂链末端（段头/组头计数与待处理段自然联动）
+      .filter((s) => sessionSearchTest(s, searchQ)),
+    [sorted, collapseIdle, idleDimMin, pendingDel, deleting, dirFilter, searchQ],
   );
 
   // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶（E2a-up 富版：
@@ -1326,6 +1354,17 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Pressable>
           </View>
         ) : null}
+        {/* W-PORT-B P0-2：会话搜索入口（桌面件九同能力）——点按展开/收起统计行下
+            搜索条；搜索激活时图标点亮（品牌色）作过滤中的可视锚 */}
+        <Pressable
+          style={styles.searchBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+          hitSlop={4}
+          accessibilityLabel={searchOpen ? (searchQ ? `搜索中：${searchQ}，点按收起搜索条` : "搜索会话已展开，点按收起") : "搜索会话（名称、摘要、目录）"}
+          onPress={() => setSearchOpen((v) => { if (v) setSearchQ(""); return !v; })}
+        >
+          <SearchGlyph color={searchOpen && searchQ ? c.brandA : c.dim} active={false} />
+        </Pressable>
         {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
         <Pressable
           style={styles.themeBtn}
@@ -1430,6 +1469,29 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ) : null}
       </View>
 
+      {/* W-PORT-B P0-2：搜索条（顶栏图标展开；桌面件九同过滤口径）。✕=清空；
+          收起随顶栏图标（收起即清空——过滤残留是隐藏态，用户看不见却改了列表） */}
+      {searchOpen ? (
+        <View style={styles.searchBar}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="搜索名称、摘要、目录"
+            placeholderTextColor={c.faint}
+            value={searchQ}
+            onChangeText={setSearchQ}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel="搜索会话名称、任务摘要或工作目录"
+          />
+          {searchQ ? (
+            <Pressable hitSlop={8} accessibilityLabel="清空搜索词" onPress={() => setSearchQ("")}>
+              <Text style={styles.searchX}>✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
       {/* 件三目录过滤条（项目域「查看项目会话」跳入态）：目录名 + ✕ 清除回全量 */}
       {dirFilter ? (
         <View style={styles.dirBar}>
@@ -1505,10 +1567,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>⚡</Text>
-            <Text style={styles.emptyT}>{collapseIdle && idleCount > 0 ? "空闲会话已折叠" : "还没有会话"}</Text>
+            <Text style={styles.emptyT}>{searchQ ? `搜索「${searchQ.slice(0, 12)}」下暂无会话` : collapseIdle && idleCount > 0 ? "空闲会话已折叠" : "还没有会话"}</Text>
             {/* 空态文案规范：一句状态 + 一句指引，各 ≤15 字 */}
             <Text style={styles.emptyS}>
-              {collapseIdle && idleCount > 0
+              {searchQ
+                ? "换个词或点 ✕ 清空搜索"
+                : collapseIdle && idleCount > 0
                 ? "点上方「展开空闲」查看"
                 : !connected
                   ? snap.connState === "unpaired"
@@ -1882,6 +1946,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 10, borderWidth: 1, borderColor: withA(c.brandA, 0.4),
     backgroundColor: withA(c.brandA, 0.07), paddingHorizontal: 11, paddingVertical: 7,
   },
+  // W-PORT-B P0-2：搜索条与顶栏搜索钮（dirBar 过滤条同族语言）
+  searchBar: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 14, marginTop: 4, marginBottom: 2,
+    borderRadius: 10, borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.panel, paddingHorizontal: 11, paddingVertical: 4,
+  },
+  searchInput: { flex: 1, color: c.text, fontSize: 12.5, paddingVertical: 6, paddingHorizontal: 0 },
+  searchBtn: { width: 30, height: 30, alignItems: "center", justifyContent: "center", marginRight: 2 },
+  searchX: { color: c.faint, fontSize: 13, paddingHorizontal: 2 },
   dirBarT: { flex: 1, color: c.brandA, fontSize: 11.5, fontWeight: "600" },
   dirBarX: { color: c.faint, fontSize: 13, paddingHorizontal: 2 },
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
