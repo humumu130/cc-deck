@@ -431,23 +431,32 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
   // 再单独补 Enter（-l 不自带回车，与 do script 语义对齐）
   const target = await resolveTmuxTarget(pid);
   if (target) {
-    // 写入：失败重试一次（tmux 瞬时竞态）；显式错误即刻上报不假成功
+    // 乐观提交（2026-10-12 用户体感 3~5s 排队实锤后重设计）：同步路径只做
+    // 写入+立即回车（<200ms 返回），验证转后台——写后立即 Enter 不等任何
+    // capture；后台 600ms 首验，未提交则在 1.5s/3s 补发两次，仍失败写本地
+    // 诊断日志（不进会话流）。极端情况由既有 stuckWatch 慢看门兜底。
+    // UX 口径：用户发送即见「已发送/排队」，不再同步等待验证链。
     let w = await tmuxSendKeys(target, "-l", "--", text);
     if (!w.ok) {
-      await sleep(300);
+      await sleep(200);
       w = await tmuxSendKeys(target, "-l", "--", text);
     }
     if (!w.ok) return w;
-    // 提交：回车后验证正文已离开输入区（空白归一跨 wrap 匹配）；未离开重试≤2 次；
-    // 三次仍未生效 → 显式失败（用户手机端可见「发送失败」而非无限排队假象）
+    const e = await tmuxSendKeys(target, "Enter");
+    if (!e.ok) return e;
     const tail = tmuxNorm(text.slice(-24));
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const e = await tmuxSendKeys(target, "Enter");
-      if (!e.ok) return e;
-      await sleep(450);
-      if (await tmuxVerifySubmitted(target, tail)) return { ok: true };
-    }
-    return { ok: false, error: "注入提交未生效（回车 3 次正文仍在输入区）——请在 CLI 手动回车" };
+    void (async () => {
+      for (const delay of [600, 1500, 3000]) {
+        await sleep(delay);
+        try {
+          if (await tmuxVerifySubmitted(target, tail)) return;
+          const r = await tmuxSendKeys(target, "Enter");
+          if (!r.ok) return;
+        } catch {}
+      }
+      console.warn(`[injector] 提交补偿未生效 target=${target} tail=${tail.slice(0, 12)}（已 4 次回车）`);
+    })();
+    return { ok: true };
   }
   // do script 单次整段注入（无 keystroke 的长度可靠性问题，不切分；自带 Return 提交）
   return runAppleScript(buildDoScript(pid, text));
