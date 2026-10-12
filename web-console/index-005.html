@@ -80,8 +80,8 @@
       --action-bg: rgba(226,133,94,.16);
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
-      --me-bg: #0E1927; /* W-UIFB ⑩：我方气泡再加深一点点（i=13，用户原话「一点点一点点」；test.8 值 #101B2B 基础上微降） */
-      --bubble-me-bg: #0E1927; /* W-UIFB 裁决④：test.8 引入的别名，与 --me-bg 同值保留（两套消费规则并存） */
+      --me-bg: #15273B; /* W-UIPOLISH4 件八（2026-10-12 用户深色实测「与背景全同色」）：#0E1927 与对话列底 #0B1624 差 3/千亮度不可辨——抬到表面层 surface2 同值（旧壳 panel-2「表面层」语义同源），仅边框语言保留 */
+      --bubble-me-bg: #15273B; /* W-UIFB 裁决④别名：与 --me-bg 同值保留（两套消费规则并存）；件八同改 */
       --me-line: #4E6D8E;
       --action-ink: #211B0E;
       --done-ink: #082116;
@@ -228,8 +228,8 @@
       --action-bg: rgba(200,100,64,.14);
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
-      --me-bg: #EDF1F7; /* W-UIFB ⑩：浅色同口径微加深（test.8 值 #F1F4F9 基础上微降） */
-      --bubble-me-bg: #EDF1F7; /* W-UIFB 裁决④：别名同值 */
+      --me-bg: #E9EFF6; /* W-UIPOLISH4 件八：浅色同口径再微降深（#EDF1F7→#E9EFF6），与近白列底 #F8FAFC 拉开一档 */
+      --bubble-me-bg: #E9EFF6; /* W-UIFB 裁决④别名：与 --me-bg 同值保留；件八同改 */
       --me-line: #C6D3DF;
       --action-ink: #3C2600;
       --done-ink: #073C27;
@@ -487,6 +487,19 @@
     select.create-field:disabled { opacity: .5; cursor: not-allowed; } /* FB5：无模型清单的引擎，模型下拉置灰 */
     .create-row { display: flex; gap: 6px; align-items: stretch; }
     .create-pop > .create-field { width: 100%; } /* 独立成行的字段（模型/指令）不处 flex 父级，须显式满宽——select/input 缺省会按内容塌缩 */
+    /* W-UIPOLISH4 件九（2026-10-12 用户拍板）：新建弹窗引擎墙退役——收成胶囊选择器
+       （对齐模型下拉形态）。收起态=当前引擎胶囊（状态点·引擎徽章·可用性小字·chevron）；
+       展开浮层 #b2-engine-menu 分组（可用置顶 / 不可用灰置+原因小字）；引擎区从六行
+       ~380px 压到一行。浮层壳复用 .model-menu。 */
+    .engine-picker { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: var(--fs-A); text-align: left; }
+    .engine-picker:hover { background: var(--hover); }
+    .engine-picker .ep-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--done); }
+    .engine-picker .ep-dot.na { background: var(--faint); }
+    .engine-picker .ep-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    .engine-picker .cap-chev { flex: none; width: 10px; height: 10px; color: var(--faint); }
+    #b2-engine-menu .source-option[aria-disabled="true"] { opacity: .55; cursor: default; }
+    #b2-engine-menu .source-option[aria-disabled="true"]:hover { background: transparent; }
+    #b2-engine-menu .source-option small { color: var(--faint); }
     .create-browse { flex: none; min-height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); cursor: pointer; font-size: var(--fs-E); white-space: nowrap; }
     .create-browse:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
     .create-checks { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 12px; padding: 2px 2px 0; }
@@ -677,6 +690,17 @@
     .head-sub .head-ctx-meter { flex: none; min-height: 20px; font-size: var(--fs-D); }
     .head-sub:empty { display: none; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 8px; }
+    /* W-UIPOLISH4 件十四①（2026-10-12 用户截图「挤成一团」）：详情 head 四 tab 间距 17→20px
+       （用户口径 ≥16-20，取上限；只收会话域，团队/项目/设置多 tab 域不扩防溢出）。 */
+    #d-session .segment-bar { gap: 20px; }
+    /* 件十四②：tab 图标 A/B 对比变体——默认纯文字（现状脸不变，选型未拍板不切默认）。
+       body[data-tab-style="icon"] = A 版纯图标（文字藏、title/aria 承载语义，hover 出 tooltip；
+       选中态沿用 ::after 品牌下划线）；"hybrid" = B 版图标+文字混合。图标走 sprite：
+       对话=chat/任务=accept/输出物=package/更多=more-h（lucide 同名形制）。 */
+    .segment-bar .tab-ico { display: none; width: 15px; height: 15px; vertical-align: -2.5px; }
+    body[data-tab-style="icon"] #d-session .segment-bar .tab-txt { display: none; }
+    body[data-tab-style="icon"] #d-session .segment-bar .tab-ico { display: inline-block; }
+    body[data-tab-style="hybrid"] #d-session .segment-bar .tab-ico { display: inline-block; margin-right: 5px; }
     .segment-bar button {position: relative; flex: 0 0 auto; padding: 0 0 6px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .segment-bar button:hover { color: var(--text); }
     .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
@@ -698,6 +722,22 @@
     }
     /* W-UIFB ④：模型胶囊去边框（i=4）——无边框软底 chip；名右小号灰 chevron 提示可展开 */
     .head-capsule { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--tag-bg); color: var(--text); cursor: pointer; font: var(--fs-C) var(--mono); white-space: nowrap; }
+    /* W-UIPOLISH4 件五（2026-10-12 用户截图实锤）：head 胶囊外框高度全面压缩——不超过会话
+       标题字高+2px（钉 calc(var(--fs-page) + 2px)，随密度档与件三 -1px 同步缩放）；引擎徽章/
+       过程/思考/权限/水位同族同规格，padding 收窄 0 7px、line-height 1。源序压过上方 691-694
+       的 24px 钉与 .head-capsule 基线 min-height（同特异度后到必胜；conv/水位选择器多一 id 稳赢）。 */
+    #d-session .workspace-title-row .engine-badge,
+    #d-session #session-head-actions .conv-mini,
+    #d-session #session-head-actions .head-capsule { height: calc(var(--fs-page) + 2px); min-height: 0; padding: 0 7px; line-height: 1; }
+    /* W-UIPOLISH4 件十二（2026-10-12 用户截图精修）：水位胶囊退役容器皮——去框去底色
+       留裸元素（12 段微条+百分比），条高 5→4px 再收；「活跃 ××」时间字号 fs-B→fs-C
+       faint 弱化，head 右侧信息带整体降权（与件五同区联动）。 */
+    #d-session .head-sub .head-ctx-meter { height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; font-size: var(--fs-D); }
+    #d-session .head-sub .head-ctx-meter .ctx-mini-band i { height: 4px; }
+    #d-session .head-sub [data-sub-time] { font-size: var(--fs-C); }
+    #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 3px; }
+    #d-session .workspace-title-row .identity-cluster .engine-badge .engine-icon { width: 10px; height: 10px; }
+    #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
     .head-capsule:hover { background: var(--hover); color: var(--text-strong); }
     .head-capsule:disabled { opacity: .45; cursor: not-allowed; } /* UIPOLISH3 件三：CLI 会话权限胶囊置灰（relay 硬限制 tooltip 说明） */
     .head-capsule:disabled:hover { background: var(--tag-bg); color: var(--text); }
@@ -710,7 +750,7 @@
        无数据（context_usage 空）恒 hidden——与 dock token 内联同口径。色态分档阈值同 ctxMeterHtml（85/60） */
     .head-capsule.head-ctx-meter { gap: 6px; }
     .head-ctx-meter .ctx-mini-band { display: inline-flex; gap: 2px; }
-    .head-ctx-meter .ctx-mini-band i { width: 3px; height: 9px; border-radius: 1px; background: color-mix(in srgb, currentColor 25%, transparent); }
+    .head-ctx-meter .ctx-mini-band i { width: 3px; height: 5px; border-radius: 1px; background: color-mix(in srgb, currentColor 25%, transparent); } /* W-UIPOLISH4 件一：9→5px 细条（用户实锤太高，hairline 语言）；件十二 head 位再收 4px（下行特异度覆盖） */
     .head-ctx-meter .ctx-mini-band i.on { background: currentColor; }
     .head-ctx-meter .ctx-mini-pct { font-variant-numeric: tabular-nums; }
     .head-ctx-meter.safe { color: var(--ctx-safe); }
@@ -737,7 +777,7 @@
        元素的 outline 全部禁用（键盘导航提示由外层圆角边框承载，符合卡片整体聚焦的语义） */
     .composer {display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: var(--fs-A);}
     .composer:focus-within { border-color: var(--brand); }
-    .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
+    .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; resize: none; }
     .composer-input:focus-visible { outline: none; }
     .composer-input::placeholder { color: var(--faint); }
     .composer[data-composer="session"] .composer-input::placeholder { font-size: var(--fs-A-item); } /* W-UIPOLISH ④：排队提示等占位文案 14→13px（--fs-A 降一档），弱化不打扰 */
@@ -774,7 +814,12 @@
     .composer.compact[data-composer="session"] .composer-top { min-height: 34px; flex: 1 1 auto; }
     .composer.compact[data-composer="session"] .composer-hint { display: none; }
     .composer[data-composer="session"] .composer-top { display: flex; align-items: center; flex: 1 1 auto; min-height: 44px; }
-    .composer[data-composer="session"] .composer-input { padding: 4px 0; }
+    /* W-UIPOLISH4 件八（2026-10-12 用户实锤）：输入区超宽文本必须自动换行——input 换
+       textarea（rows=1 起步，JS 随内容长高、上限 132px≈6 行后内滚）；pre-wrap 保换行符，
+       break-word/overflow-wrap:anywhere 兜超长无断点串与 CJK。单行折叠态（用户显式选的
+       紧凑模式）维持单行横滚语义不换行。 */
+    .composer[data-composer="session"] .composer-input { display: block; padding: 4px 0; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; overflow-y: auto; max-height: 132px; }
+    .composer.compact[data-composer="session"] .composer-input { white-space: pre; overflow-x: auto; overflow-y: hidden; max-height: 36px; }
     .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .composer-bottom .composer-spring { flex: 1 1 0; min-width: 0; }
     .composer-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
@@ -803,7 +848,16 @@
     .primary-btn.composer-secondary-action:hover { background: var(--hover); filter: none; box-shadow: none; }
     /* #79 输入栏补全：附件暂存架（composer 内 wrap 换行承载；空架不渲染）+ 拖入高亮 + 生成中点动波 + 已停止标记——全走既有 token，暗亮双主题自动。
        #169 起停止钮改独立 .composer-stopbtn（发送不再 morph），旧 .primary-btn.composer-stop 规则随之退役 */
-    .composer-tray { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 0 100%; margin: 6px 0 8px; padding-top: 6px; border-top: 1px solid var(--line-soft); } /* FB7：虚线清为实线 */
+    .composer-tray { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 0 100%; margin: 6px 0 8px; padding-top: 6px; border-top: 1px solid var(--line-soft); } /* FB7：虚线清为实线（base=手机行式宿主专用） */
+    /* W-UIPOLISH4 件二（2026-10-12 用户实锤）：粘贴图片附件架坠底+撑变形根修——session
+       composer 是 column/nowrap 布局，base 的 flex 1 0 100% 在其中=高度基值撑满整卡（截图
+       image.png 坠底、会话栏撑高的根因）。架子改钉输入框上方（消息流与输入框之间）：
+       flex 0 0 auto 不参与分配、单行缩略条自然高 ~46px 上限 80px、横向滚动承载多张；
+       分隔线从上缘改下缘（架在下、输入在上）。手机宿主不受影响（走 base 规则）。 */
+    .composer[data-composer="session"] .composer-tray { flex: 0 0 auto; flex-wrap: nowrap; min-width: 0; max-width: 100%; max-height: 80px; overflow-x: auto; overflow-y: hidden; margin: 0; padding: 3px 2px; border-top: 0; border-bottom: 1px solid var(--line-soft); }
+    .composer[data-composer="session"] { min-width: 0; } /* 件二补：nowrap 架 min-content 沿 flex 链撑宽 composer（实测撑到 1832px 超视口）——两级钳制后架内横滚 */
+    .composer[data-composer="session"] .composer-tray .composer-tray-item { flex: 0 0 auto; }
+    .composer.compact[data-composer="session"]:has(.composer-tray) { flex-direction: column; align-items: stretch; gap: 2px; } /* 单行折叠态带附件回列布局：架子仍居输入框上方，不与输入行抢横宽 */
     /* FB14：用户气泡附图缩略（点击放大还原） */
     .ub-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
     .ub-img { width: 92px; height: 92px; object-fit: cover; border: 1px solid var(--line-soft); border-radius: 8px; cursor: zoom-in; transition: width .15s ease, height .15s ease; }
@@ -947,7 +1001,11 @@
     .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);}
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
     .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 14px; border-top-right-radius: 5px; }
-    .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 11px; }
+    .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 16px; } /* 件九：与 AI 块统一 16px 基线节奏（原 11/15 不齐） */
+    .conversation-pane .message-ai { margin-bottom: 16px; } /* 件九：同上（原 15；升特异度压 base 源序） */
+    .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
+    .message-ai.cont .message-author { display: none; } /* 件九：连续同作者正文去重署名行，正文 37px 基线不动 */
+    .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
     .msg-user-row .bubble.me { margin-bottom: 0; }
     .msg-user-row .mt { margin-top: 4px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
     .bubble strong { color: var(--text-strong); }
@@ -1640,9 +1698,14 @@
        豁免（不入类）：KPI 数字读数（usage-summary-number/metric b/kv b）、图标 glyph、
        相对 em 排版（md-h1~h4/x-full/code .88em）、头像字（--srow-ava-font/.avatar）。 */
     /* W-UIFIX C：--fs 全系乘 --ui-scale（字号档生效面）；density 三档各自基准同乘 */
-    body { --fs-A: calc(14px * var(--ui-scale)); --fs-A-item: calc(13px * var(--ui-scale)); --fs-B: calc(12px * var(--ui-scale)); --fs-C: calc(11px * var(--ui-scale)); --fs-D: calc(13.5px * var(--ui-scale)); --fs-E: calc(12px * var(--ui-scale)); --fs-F: calc(12px * var(--ui-scale)); --fs-page: calc(16px * var(--ui-scale)); --fs-cta: calc(13px * var(--ui-scale)); --fs-micro: calc(10px * var(--ui-scale)); }
-    body[data-card-density="compact"] { --fs-A: calc(12px * var(--ui-scale)); --fs-A-item: calc(11px * var(--ui-scale)); --fs-B: calc(10px * var(--ui-scale)); --fs-C: calc(9px * var(--ui-scale)); --fs-D: calc(11.5px * var(--ui-scale)); --fs-E: calc(10px * var(--ui-scale)); --fs-F: calc(10px * var(--ui-scale)); --fs-page: calc(14px * var(--ui-scale)); --fs-cta: calc(11px * var(--ui-scale)); --fs-micro: calc(8px * var(--ui-scale)); }
-    body[data-card-density="relaxed"] { --fs-A: calc(16px * var(--ui-scale)); --fs-A-item: calc(15px * var(--ui-scale)); --fs-B: calc(14px * var(--ui-scale)); --fs-C: calc(13px * var(--ui-scale)); --fs-D: calc(15.5px * var(--ui-scale)); --fs-E: calc(14px * var(--ui-scale)); --fs-F: calc(14px * var(--ui-scale)); --fs-page: calc(18px * var(--ui-scale)); --fs-cta: calc(15px * var(--ui-scale)); --fs-micro: calc(12px * var(--ui-scale)); }
+    /* W-UIPOLISH4 件三（2026-10-12 用户拍板「所有档位整体都调小一号」）：三密度档全部 --fs-*
+       逐档 -1px（D 档保 .5 夹值关系：A-item 与 A 之间）；密度档间距不变（compact=正常-2、
+       relaxed=正常+2）。前值见回执对照表（正常档 A14/A-item13/B12/C11/D13.5/E12/F12/page16/cta13/micro10）。
+       W-UIPOLISH4 件十（2026-10-12 再批）：复核确认 standard 与 compact 每档恰差 2px（两号），
+       用户拍板「全档再调小一号」——三密度再 -1px（件三值 A13/…/micro9 → A12/…/micro8）。 */
+    body { --fs-A: calc(12px * var(--ui-scale)); --fs-A-item: calc(11px * var(--ui-scale)); --fs-B: calc(10px * var(--ui-scale)); --fs-C: calc(9px * var(--ui-scale)); --fs-D: calc(11.5px * var(--ui-scale)); --fs-E: calc(10px * var(--ui-scale)); --fs-F: calc(10px * var(--ui-scale)); --fs-page: calc(14px * var(--ui-scale)); --fs-cta: calc(11px * var(--ui-scale)); --fs-micro: calc(8px * var(--ui-scale)); }
+    body[data-card-density="compact"] { --fs-A: calc(10px * var(--ui-scale)); --fs-A-item: calc(9px * var(--ui-scale)); --fs-B: calc(8px * var(--ui-scale)); --fs-C: calc(7px * var(--ui-scale)); --fs-D: calc(9.5px * var(--ui-scale)); --fs-E: calc(8px * var(--ui-scale)); --fs-F: calc(8px * var(--ui-scale)); --fs-page: calc(12px * var(--ui-scale)); --fs-cta: calc(9px * var(--ui-scale)); --fs-micro: calc(6px * var(--ui-scale)); }
+    body[data-card-density="relaxed"] { --fs-A: calc(14px * var(--ui-scale)); --fs-A-item: calc(13px * var(--ui-scale)); --fs-B: calc(12px * var(--ui-scale)); --fs-C: calc(11px * var(--ui-scale)); --fs-D: calc(13.5px * var(--ui-scale)); --fs-E: calc(12px * var(--ui-scale)); --fs-F: calc(12px * var(--ui-scale)); --fs-page: calc(16px * var(--ui-scale)); --fs-cta: calc(13px * var(--ui-scale)); --fs-micro: calc(10px * var(--ui-scale)); }
     /* W-UIFIX C：密度定卡高/纵向 pad 乘 --ui-scale（overflow:hidden 钉高容器，字大不乘必裁）；
        横向 pad 不乘（列宽骨架不动） */
     body { --density-card-block-size: calc(76px * var(--ui-scale)); --density-card-pad-block: calc(7px * var(--ui-scale)); --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: calc(58px * var(--ui-scale)); } /* W-UIPOLISH ⑦：通知行高 +4px（54→58），compact/relaxed 同步 */
@@ -1661,9 +1724,13 @@
        行间 --srow-gap 4px、卡内纵 pad 10px、行盒 16px 钉高，密度档同比例缩放 */
     /* W-UIFIX C：--srow 的字号项（ava-font/name/sub/badge）乘 --ui-scale；几何项
        （pad/ava 框/gap）不乘——头像框与图标保持骨架稳定，头像字随档协调 */
-    body { --srow-pad-block: calc(10px * var(--ui-scale)); --srow-ava: 34px; --srow-ava-font: calc(15px * var(--ui-scale)); --srow-gap: 4px; --srow-name-size: calc(15px * var(--ui-scale)); --srow-sub-size: calc(11.5px * var(--ui-scale)); --srow-badge-size: calc(10.5px * var(--ui-scale)); }
-    body[data-card-density="compact"] { --srow-pad-block: calc(6px * var(--ui-scale)); --srow-ava: 26px; --srow-ava-font: calc(12px * var(--ui-scale)); --srow-gap: 2px; --srow-name-size: calc(14px * var(--ui-scale)); --srow-sub-size: calc(11px * var(--ui-scale)); --srow-badge-size: calc(10px * var(--ui-scale)); }
-    body[data-card-density="relaxed"] { --srow-pad-block: calc(13px * var(--ui-scale)); --srow-ava: 38px; --srow-ava-font: calc(16px * var(--ui-scale)); --srow-gap: 6px; --srow-name-size: calc(16px * var(--ui-scale)); --srow-sub-size: calc(12.5px * var(--ui-scale)); --srow-badge-size: calc(11.5px * var(--ui-scale)); }
+    /* W-UIPOLISH4 件六（2026-10-12 用户实锤「会话卡标题缩小一号」）：srow 卡内四字 token
+       三密度各 -1px（name/sub/badge/ava-font；pad-block·ava·gap 是几何量不动）。这是巡到的
+       唯一逃逸 --fs-* 体系的第二套字号（卡名 15px>fs-A 即用户指认的「标题太大」）。
+       W-UIPOLISH4 件十（再批）：随 fs 全档再 -1px（name 14→13 起）。 */
+    body { --srow-pad-block: calc(10px * var(--ui-scale)); --srow-ava: 34px; --srow-ava-font: calc(13px * var(--ui-scale)); --srow-gap: 4px; --srow-name-size: calc(13px * var(--ui-scale)); --srow-sub-size: calc(9.5px * var(--ui-scale)); --srow-badge-size: calc(8.5px * var(--ui-scale)); }
+    body[data-card-density="compact"] { --srow-pad-block: calc(6px * var(--ui-scale)); --srow-ava: 26px; --srow-ava-font: calc(10px * var(--ui-scale)); --srow-gap: 2px; --srow-name-size: calc(12px * var(--ui-scale)); --srow-sub-size: calc(9px * var(--ui-scale)); --srow-badge-size: calc(8px * var(--ui-scale)); }
+    body[data-card-density="relaxed"] { --srow-pad-block: calc(13px * var(--ui-scale)); --srow-ava: 38px; --srow-ava-font: calc(14px * var(--ui-scale)); --srow-gap: 6px; --srow-name-size: calc(14px * var(--ui-scale)); --srow-sub-size: calc(10.5px * var(--ui-scale)); --srow-badge-size: calc(9.5px * var(--ui-scale)); }
     /* 满宽行（用户直馈 2026-10-05：「左右都浪费横向空间」——蒙版贯穿整列去卡感；
        radius 拍板归零：「既然蒙版贯穿整行了，还需要圆角吗？微信上没有圆角」）：
        会话域列容器水平 padding 归零（.queue 通用类不动，team/project/settings 卡片域零触碰）；
@@ -1974,12 +2041,17 @@
     .message-ai { position: relative; }
     .message-ai .msg-copy { position: absolute; right: 0; top: 0; z-index: 2; pointer-events: none; }
     .message-ai:hover .msg-copy, .message-ai .msg-copy:focus-visible { opacity: 1; pointer-events: auto; }
-    /* #B3-14 排队注入 chip 行（dock 下）：working 色小胶囊，展开态换行显全文 */
-    .pend-row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; padding: 9px 16px 7px; }
+    /* #B3-14 排队注入 chip 行（dock 上）：W-UIPOLISH4 件十一重设计（2026-10-12 用户深色实测
+       四点）——a 宽度与已发气泡一致（max-width 82%，不再贯穿全宽）b 深色太黄太饱和→调暗降
+       饱和不显眼（working 只留 26% 描边+7% 底 tint，文字回中性 dim）c 长内容截断+省略号可展开
+       （ellipsis + .open 全文，沿用 pendOpen 记忆）d 形制与已发气泡一致（14px 圆角右上收
+       5px、同 padding 档），仅颜色/亮度/饱和度区分（= me 气泡的幽灵态）。列尾右对齐同
+       .msg-user-row 语言。 */
+    .pend-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding: 2px 22px 8px; }
     .pend-row[hidden] { display: none; }
     /* W-UIFB ⑦：排队 chip 呼吸闪烁（i=9 前半）——柔和 opacity 呼吸非生硬 blink；
        reduced-motion 用户全局已降级（:root 媒查.all .01ms） */
-    .pend-chip {display: inline-flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--working) 10%, transparent); color: var(--working); cursor: pointer; font: var(--fs-C) var(--mono); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: pend-breathe 2.4s ease-in-out infinite;}
+    .pend-chip {display: inline-flex; align-items: baseline; gap: 6px; max-width: 82%; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--working) 26%, transparent); border-radius: 14px; border-top-right-radius: 5px; background: color-mix(in srgb, var(--working) 7%, var(--bg1)); color: var(--dim); cursor: pointer; font: var(--fs-A) var(--sans); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: pend-breathe 2.4s ease-in-out infinite;}
     @keyframes pend-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
     .pend-chip.open { animation: none; } /* 展开读全文时停止呼吸，减少阅读干扰 */
     .pend-chip:hover { border-color: var(--working); }
@@ -2046,7 +2118,7 @@
   </style>
 </head>
 <body data-card-density="standard" data-source-mode="single">
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol><symbol id="icon-more-h" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></symbol></svg>
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"></path></symbol><symbol id="icon-unfold" viewBox="0 0 24 24"><polyline points="7 9 12 4 17 9"></polyline><polyline points="7 15 12 20 17 15"></polyline></symbol><symbol id="icon-chev-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></symbol><symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"></path><path d="M21 3v5h-5"></path></symbol></svg>
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
@@ -2066,7 +2138,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索名称、摘要、目录" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>更多</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active" title="对话" aria-label="对话"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-chat"></use></svg><span class="tab-txt">对话</span></button><button title="任务" aria-label="任务"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-accept"></use></svg><span class="tab-txt">任务</span></button><button title="输出物" aria-label="输出物"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-package"></use></svg><span class="tab-txt">输出物</span></button><button title="更多" aria-label="更多"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-more-h"></use></svg><span class="tab-txt">更多</span></button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -2075,7 +2147,7 @@
               </div>
               <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-spin" aria-hidden="true"></span><span class="session-state-flow"><span class="session-state-operation" data-session-state-operation></span></span><span class="session-state-elapsed" data-session-state-elapsed></span><span class="session-state-tokens" data-session-state-tokens hidden></span></div>
               <div class="agbox" id="session-agbox" hidden></div>
-              <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><input class="composer-input" type="text" placeholder="发送消息 · ↑↓ 翻阅历史" aria-label="给会话发消息"></div><div class="composer-bottom"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-unfold" type="button" data-composer-unfold title="切换单行/多行输入" aria-label="切换单行/多行输入"><svg class="icon-inline" aria-hidden="true"><use href="#icon-unfold"></use></svg></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><textarea class="composer-input" rows="1" placeholder="发送消息 · ↑↓ 翻阅历史 · Shift+Enter 换行" aria-label="给会话发消息"></textarea></div><div class="composer-bottom"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-unfold" type="button" data-composer-unfold title="切换单行/多行输入" aria-label="切换单行/多行输入"><svg class="icon-inline" aria-hidden="true"><use href="#icon-unfold"></use></svg></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
             <script>
@@ -2884,10 +2956,16 @@
                   return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
                 }
                 // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
+                // W-UIPOLISH4 件十三（2026-10-12 用户截图）：加「最近活跃」档（隐藏超时置灰的
+                // 空闲僵尸卡=idleDimmed 同源判定，只显近期有活动的）+「非进行中」档；档位序=
+                // 全部/最近活跃/进行中/需行动/非进行中/已完成（需行动为既有档保留，序插在
+                // 进行中后不破坏用户给定相对序——严格五档可删一行）。计数徽章照旧（test 通用）。
                 const SESSION_FILTERS = [
                   { id: "all", label: "全部", test: () => true },
+                  { id: "recent", label: "最近活跃", test: (x) => !idleDimmed(x) },
                   { id: "working", label: "进行中", test: (x) => x.status === "WORKING" },
                   { id: "action", label: "需行动", test: (x) => x.status === "WAITING" || x.status === "ERROR" },
+                  { id: "notworking", label: "非进行中", test: (x) => x.status !== "WORKING" },
                   { id: "done", label: "已完成", test: (x) => x.status === "DONE" },
                 ];
                 const sessionFilterOf = () => SESSION_FILTERS.find((f) => f.id === S.filter) || SESSION_FILTERS[0];
@@ -3395,10 +3473,19 @@
                   if (!s || !canCmd(s)) { cap.hidden = true; return; } // 无会话/历史只读卡：隐藏
                   const txt = cap.querySelector("[data-perm-text]");
                   if (s.external) {
-                    // 件十六c（2026-10-11 用户拍板）：右缘「CLI 会话」置灰胶囊删除——engine 徽章
-                    // 「Claude · CLI」已表达身份，去重（原 tooltip 语义并入隐藏，不再占右缘位）
-                    cap.hidden = true;
+                    // W-UIPOLISH4 件四（2026-10-12 用户实测「还是缺失」复核）：考古 2aeb130 ∈
+                    // test.16+——按钮一直在包里，真因是外部/CLI 会话被整体隐藏（relay 硬拒运行时
+                    // 切换 + 件十六c 去重拍板收走了置灰胶囊），而用户实测看的恰是 CLI 会话。入口
+                    // 显性化：外部会话显示只读胶囊——当前模式回显（bridge.ts 会上报 external 的
+                    // permission_mode，有真数据），点击人话说明，不开菜单不硬闯。件十六c 删除的是
+                    // 「CLI 会话」身份置灰胶囊（与 engine 徽章重复），本胶囊是权限信息，不冲突。
+                    cap.hidden = false;
                     cap.disabled = false;
+                    const curX = s.permission_mode || "default";
+                    const modeX = PERM_MODES.find((m) => m.key === curX);
+                    if (txt) txt.textContent = modeX ? modeX.zh : curX;
+                    cap.title = "CLI 会话的权限模式由本机 CLI 启动参数决定，不能从这里切换（点击查看说明）";
+                    cap.dataset.permReadonly = "1";
                     return;
                   }
                   cap.hidden = false;
@@ -3407,12 +3494,14 @@
                   const mode = PERM_MODES.find((m) => m.key === cur);
                   if (txt) txt.textContent = mode ? mode.zh : cur;
                   cap.title = "当前权限模式：" + (mode ? mode.zh : cur) + " · 点击切换";
+                  delete cap.dataset.permReadonly; // 件四：托管会话可切换，清只读态
                 }
                 function closePermMenu() { const m = document.getElementById("b2-perm-menu"); if (m) m.remove(); }
                 function openPermMenu(anchor) {
                   closePermMenu();
                   const s = curSession();
-                  if (!anchor || !s || s.external || !canCmd(s)) return;
+                  if (!anchor || !s || !canCmd(s)) return;
+                  if (s.external) { b2Toast("CLI 会话的权限模式在本机 CLI 里定（启动参数），这里不能切换"); return; } // W-UIPOLISH4 件四：只读胶囊点击给反馈，不静默
                   const menu = document.createElement("div");
                   menu.id = "b2-perm-menu";
                   menu.className = "model-menu"; // 与模型菜单同壳样式（独立 id 防互误伤）
@@ -3610,7 +3699,7 @@
 
                 // ---------- 渲染：对话流 ----------
                 function isStreaming(e, s) { return !!e.streaming && !!s && s.status === "WORKING"; }
-                function daySepNode(ts) { const d = document.createElement("div"); d.className = "timeline-note"; d.textContent = "── " + dayLabel(ts) + " ──"; return d; }
+                function daySepNode(ts) { const d = document.createElement("div"); d.className = "timeline-note day-sep"; d.textContent = "── " + dayLabel(ts) + " ──"; return d; } /* 件九：day-sep 独立类=分节呼吸 */
                 function noteNode(text) { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(text ?? "")) ? " warn" : ""); d.textContent = text; return d; } // #B3-13 ⚠ 行同款黄
                 // ---------- FB14 气泡附图：引用 → 缩略（按需拉取 + 缓存） ----------
                 // 引用拉取复用输出物 CHUNK 管线（COMMAND_ARTIFACT_FETCH 的 img 引用分支）：
@@ -3800,15 +3889,25 @@
                   const frag = document.createDocumentFragment();
                   let prevDay = "";
                   let grp = null;
+                  let lastAiNode = null, lastAiTs = 0; // 件九：连续 AI 正文去重署名链（间隔 >5min 断）
                   for (const e of list) {
                     const dk = e.ts ? dayKey(e.ts) : "";
-                    if (dk && dk !== prevDay) { frag.appendChild(daySepNode(e.ts)); prevDay = dk; grp = null; } // 日期分隔断组
+                    if (dk && dk !== prevDay) { frag.appendChild(daySepNode(e.ts)); prevDay = dk; grp = null; lastAiNode = null; } // 日期分隔断组（件九：新分节重显署名行）
                     const n = entryNode(e, s);
                     if (!n) continue; // 开关关闭的条目（思考）不断组也不占位
                     if (n.dataset.role === "proc") {
                       if (!grp) { grp = procGroupNode(eKey(e)); frag.appendChild(grp); }
                       grp.querySelector(".proc-body").appendChild(n);
-                    } else { frag.appendChild(n); grp = null; } // 正文/气泡断组
+                      lastAiNode = null; // 件九：过程组是强分隔——组后新正文重显署名
+                    } else {
+                      // 件九（层级降噪）：连续 AI 正文消息去重署名行——同作者短间隔连发只留
+                      // 首条头像（正文 37px 左基线不变，续条对齐前条正文）；过程组/气泡/分隔/
+                      // 超 5 分钟间隔都断链（隔时段回来的消息无署名会迷失作者）
+                      const gapBreak = lastAiTs && e.ts && e.ts - lastAiTs > 300_000;
+                      if (n.classList.contains("message-ai") && lastAiNode && !gapBreak) n.classList.add("cont");
+                      if (n.classList.contains("message-ai")) { lastAiNode = n; lastAiTs = e.ts || lastAiTs; } else { lastAiNode = null; lastAiTs = 0; }
+                      frag.appendChild(n); grp = null; // 正文/气泡断组
+                    }
                   }
                   frag.querySelectorAll(".procgrp").forEach(procHeadUpdate);
                   pane.appendChild(frag);
@@ -4468,7 +4567,14 @@
                   UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
                   UI.input.disabled = !editable;
                   // B20 placeholder 承载附件/历史提示（hint 小字行退役）：按会话态给可用性指引
-                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "先从左侧选择会话") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅历史";
+                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "先从左侧选择会话") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅 · Shift+Enter 换行";
+                  autoGrowSessionInput(); // 件八：随内容长高（发送清空/历史翻阅/切会话草稿恢复后都经此收口）
+                }
+                function autoGrowSessionInput() { // 件八：textarea 自动长高（手机 input 宿主跳过）
+                  const el = UI.input;
+                  if (!el || el.tagName !== "TEXTAREA") return;
+                  el.style.height = "auto";
+                  el.style.height = Math.min(el.scrollHeight, 132) + "px";
                 }
                 function sendMessage() {
                   const s = curSession();
@@ -4611,7 +4717,10 @@
                       tray.className = "composer-tray";
                       tray.setAttribute("role", "list");
                       tray.setAttribute("aria-label", "待发送附件");
-                      composer.appendChild(tray);
+                      // W-UIPOLISH4 件二：session 宿主架子钉在输入框上方（.composer-top 之前，
+                      // 消息流与输入框之间）；手机宿主维持尾部追加（行式布局自包裹不受影响）
+                      const top = composer.querySelector(':scope > .composer-top');
+                      if (top) composer.insertBefore(tray, top); else composer.appendChild(tray);
                     }
                     tray.innerHTML = S.staged.map((f, i) => '<span class="composer-tray-item" role="listitem">' + (f.isImg && f.url ? '<img class="composer-tray-thumb" src="' + f.url + '" alt="">' : svgUse("clip")) + '<span class="composer-tray-name">' + esc(f.name) + '</span><button class="composer-tray-x" type="button" data-tray-remove="' + i + '" title="移除附件" aria-label="移除附件 ' + esc(f.name) + '">×</button></span>').join("");
                   }
@@ -4686,11 +4795,14 @@
                 function buildCreateHtml() {
                   const chosen = S.engineChoice || defaultEngineId();
                   let html = '<h3>新建会话</h3><p class="create-sub">选择引擎与工作目录，创建新会话</p>';
-                  html += '<div class="create-label">引擎</div>';
-                  for (const e of catalogEntries()) {
-                    const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                    const dis = e.state !== "ready";
-                    html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '"' + (dis ? " disabled style=\"opacity:.5\"" : "") + '><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(engineStateText(e)) + "</small></button>";
+                  // 件九：引擎墙退役——收起态一枚胶囊（状态点·引擎徽章·可用性小字），
+                  // 分组浮层走 openEngineMenu（可用置顶 / 不可用灰置+原因），引擎区六行 → 一行
+                  {
+                    const entry = catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null;
+                    const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["Claude", "claude"];
+                    const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
+                    html += '<div class="create-label">引擎</div>'
+                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + (entry && entry.state !== "ready" ? " na" : "") + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + '</span><span class="ep-meta">' + esc(entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "") + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
@@ -4730,6 +4842,8 @@
                   pop.innerHTML = buildCreateHtml();
                   back.addEventListener("click", closeCreatePop);
                   pop.addEventListener("click", (ev) => {
+                    const trig = ev.target.closest("[data-engine-trigger]"); // 件九：胶囊开合引擎浮层
+                    if (trig) { const m = document.getElementById("b2-engine-menu"); if (m) closeEngineMenu(); else { openEngineMenu(trig); trig.setAttribute("aria-expanded", "true"); } return; }
                     const engine = ev.target.closest("[data-engine-choice]");
                     if (engine) { pickEngine(engine); return; }
                     if (ev.target.closest("[data-create-browse]")) { void pickCreateCwd(); return; }
@@ -4743,16 +4857,67 @@
                   const prompt = pop.querySelector("[data-create-field='prompt']");
                   if (prompt) prompt.focus();
                 }
-                function closeCreatePop() { document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); }
-                function pickEngine(btn) {
-                  const id = btn.dataset.engineChoice;
+                function closeCreatePop() { closeEngineMenu(); document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); } // 件九：浮层随弹窗同收
+                // 件九：引擎分组浮层（可用置顶 / 不可用灰置+原因小字；壳复用 .model-menu）
+                function closeEngineMenu() { const m = document.getElementById("b2-engine-menu"); if (m) m.remove(); }
+                function openEngineMenu(anchor) {
+                  closeEngineMenu();
+                  const menu = document.createElement("div");
+                  menu.id = "b2-engine-menu";
+                  menu.className = "model-menu";
+                  menu.style.width = "300px";
+                  menu.setAttribute("role", "menu");
+                  menu.setAttribute("aria-label", "选择引擎");
+                  const chosen = S.engineChoice || defaultEngineId();
+                  const ready = catalogEntries().filter((e) => e.state === "ready");
+                  const na = catalogEntries().filter((e) => e.state !== "ready");
+                  let html = "";
+                  if (ready.length) {
+                    html += '<div class="source-menu-head">可用 · ' + ready.length + "</div>";
+                    for (const e of ready) {
+                      const meta = ENGINES[e.id] || [e.label || e.id, ""];
+                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "引擎默认") + "</small></button>";
+                    }
+                  }
+                  if (na.length) {
+                    html += '<div class="source-menu-head">不可用 · ' + na.length + "</div>";
+                    for (const e of na) { // 灰置不可点（div 非 button）：原因小字透出，不硬闯
+                      const meta = ENGINES[e.id] || [e.label || e.id, ""];
+                      html += '<div class="source-option" aria-disabled="true"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></div>";
+                    }
+                  }
+                  menu.innerHTML = html;
+                  menu.addEventListener("click", (ev) => { // 菜单挂 body，对话域大委托够不到——本层直连（b2-perm-menu 同款模式）
+                    const pick = ev.target.closest("[data-engine-choice]");
+                    if (pick) pickEngine(pick);
+                  });
+                  document.body.appendChild(menu);
+                  const r = anchor.getBoundingClientRect();
+                  menu.classList.add("open");
+                  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+                  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + "px";
+                  menu.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8)) + "px";
+                }
+                function pickEngine(btnOrId) {
+                  const id = typeof btnOrId === "string" ? btnOrId : btnOrId.dataset.engineChoice;
                   const entry = catalogEntries().find((e) => e.id === id);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   S.engineChoice = id;
+                  closeEngineMenu(); // 件九：选中即收浮层
                   const pop = document.getElementById("b2-create-pop");
                   if (!pop) return;
-                  pop.querySelectorAll(".source-option").forEach((o) => o.classList.toggle("active", o.dataset.engineChoice === id));
-                  const sel = pop.querySelector("[data-create-field='model']"); // B10 模型二层随引擎重灌
+                  const trig = pop.querySelector("[data-engine-trigger]"); // 件九：收起态胶囊随选同步
+                  if (trig && entry) {
+                    const meta = ENGINES[entry.id] || [entry.label || entry.id, ""];
+                    const badge = trig.querySelector(".engine-badge");
+                    if (badge) { badge.className = "engine-badge " + meta[1]; badge.textContent = meta[0]; }
+                    const dot = trig.querySelector(".ep-dot");
+                    if (dot) dot.classList.toggle("na", entry.state !== "ready");
+                    const metaEl = trig.querySelector(".ep-meta");
+                    const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
+                    if (metaEl) metaEl.textContent = engineStateText(entry) + (readyCount > 1 ? " · 另 " + (readyCount - 1) + " 个可用" : "");
+                  }
+                  const sel = pop.querySelector("[data-create-field='model']"); // B10 模型二层随引擎重灌（件九：联动保留）
                   if (sel) {
                     const models = createModelsFor(id);
                     const cur = sel.value;
@@ -5019,7 +5184,7 @@
 
                   // 点击空白收浮层（document 级，兜在冒泡末端）
                   document.addEventListener("click", (ev) => {
-                    if (!ev.target.closest("#b2-create-pop") && !ev.target.closest("#d-session .queue-head")) closeCreatePop();
+                    if (!ev.target.closest("#b2-create-pop") && !ev.target.closest("#d-session .queue-head") && !ev.target.closest("#b2-engine-menu")) closeCreatePop(); // 件九：点引擎浮层不误关弹窗
                     if (!ev.target.closest("#b2-model-menu") && !ev.target.closest("#session-model-capsule")) closeModelMenu();
                     if (!ev.target.closest("#b2-perm-menu") && !ev.target.closest("#session-perm-capsule")) closePermMenu(); // UIPOLISH3 件三
                     if (!ev.target.closest(".artifact-menu-wrap")) document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open"));

@@ -1351,7 +1351,7 @@ fn main() {
                     }
                 })
                 .build()?;
-            // W-UIFIX B：窗口尺寸/位置记忆恢复（conf 默认 1440×900 建窗后立即套用，
+            // W-UIFIX B：窗口尺寸/位置记忆恢复（conf 默认 1280×800（W-UIPOLISH4 件七：原 1440×900 偏大）建窗后立即套用，
             // 有状态文件且位置可见才覆盖——同帧生效用户无感）
             restore_window_state(&win);            // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
             //（窗口样式仍带 WS_CAPTION），此处显式去框兜底；标题栏职责移交网页自绘。
