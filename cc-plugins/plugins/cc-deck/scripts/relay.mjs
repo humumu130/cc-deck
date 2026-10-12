@@ -56331,7 +56331,20 @@ var Bridge = class _Bridge {
   extFileStats = /* @__PURE__ */ new Map();
   extUsage = /* @__PURE__ */ new Map();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
+  // W-INJECT P0：tries 账本按消息隔离——entry.msgKey = 归属消息（normKey 首条滞留文本）。
+  // 消费方经 ledgerFor(id,key) 取：key 换代（新消息）即得全新账本，旧消息的封顶不再
+  // 连坐后续消息（用户实锤「前几条用掉配额→后续补偿被永久禁用」）
   stuckWatch = /* @__PURE__ */ new Map();
+  /** W-INJECT P0：按消息取账本——msgKey 换代即重置（tries/given_up 不跨消息连坐） */
+  ledgerFor(sessionId, msgKey) {
+    const w2 = this.stuckWatch.get(sessionId);
+    if (!w2 || w2.msgKey !== msgKey) {
+      const fresh = { lastTry: 0, tries: 0, skips: 0, given_up: false, msgKey };
+      this.stuckWatch.set(sessionId, fresh);
+      return fresh;
+    }
+    return w2;
+  }
   // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
   stuckGuarding = /* @__PURE__ */ new Set();
   // #111 注入后主动验证：ext id -> { 定时器, 最后注入的文本 }。注入成功 ≠ 提交成功
@@ -57341,6 +57354,7 @@ var Bridge = class _Bridge {
       }
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
+    if (q2.length === 0 && !(state.pending_inputs ?? []).length) this.stuckWatch.delete(sessionId);
     const item = { text: echoText, ts: Date.now(), ...body !== echoText ? { body } : {}, ...imgRefs.length ? { refs: imgRefs } : {} };
     q2.push(item);
     this.inputQueue.set(sessionId, q2);
@@ -57516,8 +57530,10 @@ var Bridge = class _Bridge {
         this.noPidNote.delete(sessionId);
         this.injectFails.delete(sessionId);
         this.saveQueueDisk();
+        const sentAt = Date.now();
+        console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue\u2192written)`);
         this.armVerify(sessionId, text);
-        this.scheduleSubmitEnter(sessionId, state.cli_pid, text);
+        this.scheduleSubmitEnter(sessionId, state.cli_pid, text, sentAt);
         await sleep3(400);
       }
     } finally {
@@ -57535,7 +57551,23 @@ var Bridge = class _Bridge {
   // 提前到 ~300ms：吞回车场景 ~0.8-1.8s 即补发提交；框净（CLI 原生排队）skip-absent
   // 不补发（111② 契约）；框有外来输入 timeout 交回验证链/看门狗。
   // WAITING（权限弹窗在悬）不补——回车会误触弹窗。
-  scheduleSubmitEnter(sessionId, pid, text) {
+  // W-INJECT P0（2026-10-12 用户实测「idle 会话首条消息永不发出，第二条才顶出去」）：
+  // 守门版此前对三类判定全部静默放弃——①unknown（快照不可用，fail-open 只在慢层看门狗）
+  // ②timeout（WORKING 回合流式输出被 foreignResidual 误判为人工输入，让路至 maxMs，实测
+  // 93s 才发出）③skip-absent（300ms 时正文未渲染完的竞态）。三类都落在「首条注入+CLI 忙/慢」
+  // 的窗口里=首条黑洞。现在分级收口：enter/enter-after-wait 照发；unknown 立即盲发（对齐
+  // 看门狗 W-CROSSQUEUE 直发语义）；timeout/skip-absent 让路一轮（round 0→1 复核）后仍滞留
+  // 直接补发——总时延有界 ≤~2.5s，抢发风险窗等价收敛，吞消息为零（宁扰勿吞既定口径）。
+  // tries 共享封顶账保持（fire 才计账），111 段 got-4 防线不动。
+  // W-INJECT P0（2026-10-12 晨，用户活体样本）：首条消息 Enter 彻底丢失（文本落框 20s+
+  // 不发出，第二条 1~2s 连带顶出）。三重根因：①submit-enter 复用守门缺省 cfg——maxMs=30s，
+  // held 态（WORKING 回合流式输出被误判人工输入）轮询 30s 才出 timeout＝长尾真身；②capture
+  // 与 TUI 渲染竞态——写完立即 capture 读到旧帧 → skip-absent → 补发被跳过（Enter 彻底
+  // 丢失签名）；③tries 账本按会话共享——旧消息封顶连坐后续消息。
+  // 修：短预算守门（≤600ms 内出判定）+ timeout 直发（宁扰勿吞）+ skip-absent 250ms 复捕
+  // 一次（渲染追平；两捕皆净=原生队列，静默守 111 红线）+ 账本按消息隔离 + [submit] ms 打点。
+  // 总预算：注入→补发回车 ≤1s。
+  scheduleSubmitEnter(sessionId, pid, text, sentAt, round = 0) {
     const prev = this.submitEnterTimers.get(sessionId);
     if (prev) clearTimeout(prev);
     const t = setTimeout(() => {
@@ -57544,26 +57576,66 @@ var Bridge = class _Bridge {
       if (!st2 || st2.cli_pid !== pid) return;
       if (st2.status === "WAITING") return;
       if (!(st2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
-      if (this.stuckGuarding.has(sessionId)) return;
+      if (this.stuckGuarding.has(sessionId)) {
+        console.log(`[submit] guarding-conflict, re-arm sid=${sessionId.slice(0, 14)} +250ms`);
+        this.scheduleSubmitEnter(sessionId, pid, text, sentAt, round);
+        return;
+      }
       this.stuckGuarding.add(sessionId);
+      const t02 = Date.now();
       void guardCompensateEnter([text], () => captureConsoleBottom(pid), {
+        // 短预算：submit-enter 是快路径，守门只为「框内是否只有我们的文本」一次快照判定，
+        // 不承担「等人工停手」职责（那是慢层看门狗的分工）——held 态 600ms 内必出判定
+        cfg: { pollMs: 150, stableMs: 300, maxMs: 600, enabled: true },
         abort: () => {
           const s2 = this.mgr.getExternal(sessionId);
           return !s2 || s2.cli_pid !== pid || s2.status === "WAITING" || this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0;
         }
       }).then((v) => {
-        if (v.kind !== "enter" && v.kind !== "enter-after-wait") return;
         const s2 = this.mgr.getExternal(sessionId);
-        if (!s2 || s2.cli_pid !== pid || s2.status === "WAITING") return;
-        if (!(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
-        const wPrev = this.stuckWatch.get(sessionId);
-        const tryNext = (wPrev?.tries ?? 0) + 1;
-        this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: wPrev?.skips ?? 0, given_up: tryNext >= 3 });
-        void injectEnter(pid).then((r) => {
-          if (!r.ok) this.onInjectFail(sessionId, r.error);
-        });
+        const stillPending = !!s2 && s2.cli_pid === pid && s2.status !== "WAITING" && (s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text));
+        const ledger = () => this.ledgerFor(sessionId, normKey(text));
+        const fire = (why) => {
+          if (!stillPending) return;
+          const w2 = ledger();
+          const tryNext = w2.tries + 1;
+          this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: w2.skips, given_up: tryNext >= 3, msgKey: normKey(text) });
+          console.log(`[submit] enter fired sid=${sessionId.slice(0, 14)} why=${why} verdict=${v.kind} round=${round} ms=${Date.now() - sentAt} (guard ${Date.now() - t02}ms)`);
+          void injectEnter(pid).then((r) => {
+            if (!r.ok) this.onInjectFail(sessionId, r.error);
+          });
+        };
+        if (v.kind === "enter" || v.kind === "enter-after-wait") {
+          fire("guard-enter");
+          return;
+        }
+        if (v.kind === "unknown") {
+          fire("unknown-failopen");
+          return;
+        }
+        if (v.kind === "timeout") {
+          fire("timeout-direct");
+          return;
+        }
+        if (v.kind === "skip-absent") {
+          if (round === 0) {
+            console.log(`[submit] skip-absent, recapture +250ms sid=${sessionId.slice(0, 14)} ms=${Date.now() - sentAt}`);
+            const t2 = setTimeout(() => {
+              this.submitEnterTimers.delete(sessionId);
+              const s32 = this.mgr.getExternal(sessionId);
+              if (!s32 || s32.cli_pid !== pid || s32.status === "WAITING") return;
+              if (!(s32.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
+              this.scheduleSubmitEnter(sessionId, pid, text, sentAt, 1);
+            }, 250);
+            t2.unref?.();
+            this.submitEnterTimers.set(sessionId, t2);
+            return;
+          }
+          console.log(`[submit] native-queued (skip-absent x2), silent sid=${sessionId.slice(0, 14)} ms=${Date.now() - sentAt}`);
+          return;
+        }
       }).finally(() => this.stuckGuarding.delete(sessionId));
-    }, 300);
+    }, round === 0 ? 300 : 250);
     t.unref?.();
     this.submitEnterTimers.set(sessionId, t);
   }
@@ -58860,7 +58932,7 @@ var Bridge = class _Bridge {
   runVerify(sessionId, text, round) {
     const st2 = this.mgr.getExternal(sessionId);
     if (!st2?.cli_pid) return;
-    if ((this.stuckWatch.get(sessionId)?.tries ?? 0) >= 3) return;
+    if (this.ledgerFor(sessionId, normKey(text)).tries >= 3) return;
     if (!(st2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
     if (st2.status !== "WORKING" && st2.status !== "DONE" || this.flushing.has(sessionId) || this.stuckGuarding.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
     const pid = st2.cli_pid;
@@ -58901,8 +58973,9 @@ var Bridge = class _Bridge {
     for (const s of this.mgr.snapshot()) {
       if (!s.external) continue;
       const id2 = s.session_id;
-      const w02 = this.stuckWatch.get(id2);
-      const threshold = w02 && w02.tries > 0 ? this.stuckAfterMs : firstMs;
+      const headKey = normKey(pBody((s.pending_inputs ?? [])[0] ?? { text: "" }));
+      const w02 = this.ledgerFor(id2, headKey);
+      const threshold = w02.tries > 0 ? this.stuckAfterMs : firstMs;
       const stuckTexts = (s.pending_inputs ?? []).filter((p) => {
         if (now - p.ts <= threshold) return false;
         if (this.isEnqueued(id2, pBody(p))) return false;
@@ -58920,13 +58993,13 @@ var Bridge = class _Bridge {
         continue;
       }
       if (Date.now() - (this.resumeSpawns.get(id2) ?? 0) < this.resumeWindowMs) continue;
-      const w2 = this.stuckWatch.get(id2);
+      const w2 = this.ledgerFor(id2, headKey);
       if (w2?.given_up && s.status !== "DONE") continue;
       if (w2 && now - w2.lastTry < this.stuckRetryMs) continue;
       const pid = s.cli_pid;
       if (guardConfig().enabled) {
         if (this.stuckGuarding.has(id2)) continue;
-        this.stuckWatch.set(id2, { lastTry: now, tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, given_up: w2?.given_up ?? false });
+        this.stuckWatch.set(id2, { lastTry: now, tries: w2.tries, skips: w2.skips, given_up: w2.given_up, msgKey: w2.msgKey });
         this.stuckGuarding.add(id2);
         void this.guardedStuckEnter(id2, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id2));
         continue;
@@ -58938,15 +59011,16 @@ var Bridge = class _Bridge {
   // #211 tries 闸防叠发）。texts=本次滞留的排队消息全文——第 3 次补发仍不晋升时
   // 转 W-INJECT 显式失败终态（清「排队中」+ 落失败日志），杜绝无限排队
   fireStuckEnter(id2, pid, msg, texts) {
-    const w2 = this.stuckWatch.get(id2);
-    if ((w2?.tries ?? 0) >= 3) return;
-    const tries = (w2?.tries ?? 0) + 1;
-    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, given_up: tries >= 3 });
+    const msgKey = normKey(texts?.[0] ?? "");
+    const w2 = this.ledgerFor(id2, msgKey);
+    if (w2.tries >= 3) return;
+    const tries = w2.tries + 1;
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2.skips, given_up: tries >= 3, msgKey });
     if (tries === 3) {
-      this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1");
+      console.log(`[submit] giveup sid=${id2.slice(0, 14)}\uFF1A\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u8BCA\u65AD\u4E0D\u5165\u4F1A\u8BDD\u6D41\uFF09`);
       this.scheduleStuckFail(id2, texts ?? [], "\u5DF2\u81EA\u52A8\u91CD\u8BD5 3 \u6B21\u4ECD\u6EDE\u7559\u8F93\u5165\u6846");
     } else {
-      this.mgr.pushExternalLog(id2, "system", msg ?? "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66");
+      console.log(`[submit] enter-sent sid=${id2.slice(0, 14)}\uFF1A${msg ?? "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66"}`);
     }
     void injectEnter(pid).then((r) => {
       if (!r.ok) this.onInjectFail(id2, r.error);
@@ -58978,11 +59052,12 @@ var Bridge = class _Bridge {
   // 守门后的跳过（框内已无滞留消息）：不补发、不计数补发次数；连续跳过多次后停手，
   // 防无 hook 会话 pending 永不晋升时每 60s 刷一条日志
   bumpStuckSkips(id2, msg, texts = []) {
-    const w2 = this.stuckWatch.get(id2);
-    const skips = (w2?.skips ?? 0) + 1;
-    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, given_up: (w2?.given_up ?? false) || skips >= 3 });
+    const msgKey = normKey(texts?.[0] ?? "");
+    const w2 = this.ledgerFor(id2, msgKey);
+    const skips = w2.skips + 1;
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2.tries, skips, given_up: w2.given_up || skips >= 3, msgKey });
     if (skips >= 3) {
-      this.mgr.pushExternalLog(id2, "system", "\u8F93\u5165\u6846\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1");
+      console.log(`[submit] skips-giveup sid=${id2.slice(0, 14)}\uFF1A\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1`);
       this.scheduleStuckFail(id2, texts, "\u591A\u6B21\u9A8C\u8BC1\u5747\u672A\u89C1\u6D88\u606F\u8FDB\u5165\u7EC8\u7AEF");
     } else {
       this.mgr.pushExternalLog(id2, "system", msg);
@@ -59006,7 +59081,7 @@ var Bridge = class _Bridge {
       return;
     }
     if (v.kind === "timeout") {
-      this.mgr.pushExternalLog(id2, "system", "\u8F93\u5165\u6846\u68C0\u6D4B\u5230\u6301\u7EED\u4EBA\u5DE5\u8F93\u5165\uFF0C\u672C\u8F6E\u6682\u7F13\u8865\u53D1\u56DE\u8F66\uFF08\u505C\u624B\u540E\u4E0B\u4E00\u8F6E\u81EA\u52A8\u518D\u8BD5\uFF09");
+      console.log(`[submit] defer sid=${id2.slice(0, 14)}\uFF1A\u68C0\u6D4B\u5230\u6301\u7EED\u4EBA\u5DE5\u8F93\u5165\uFF0C\u672C\u8F6E\u6682\u7F13\u8865\u53D1\u56DE\u8F66`);
       return;
     }
     if (v.kind === "aborted") return;
@@ -59017,7 +59092,7 @@ var Bridge = class _Bridge {
     if (v.kind === "unknown") {
       const stNow = this.mgr.getExternal(id2);
       if (stNow?.status === "DONE") {
-        this.stuckWatch.set(id2, { lastTry: Date.now(), tries: 0, skips: 0, given_up: false });
+        this.stuckWatch.set(id2, { lastTry: Date.now(), tries: 0, skips: 0, given_up: false, msgKey: normKey(texts?.[0] ?? "") });
         this.fireStuckEnter(id2, pid, "\u5FEB\u7167\u4E0D\u53EF\u7528\u4F46 CLI \u5DF2\u7A7A\u95F2\uFF08\u65E0\u4EBA\u6253\u5B57\uFF09\uFF0C\u6309\u7A7A\u95F2\u5B89\u5168\u8BED\u4E49\u8865\u53D1\u56DE\u8F66", texts);
         return;
       }
