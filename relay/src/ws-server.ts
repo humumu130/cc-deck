@@ -295,9 +295,8 @@ export function startServer(
     fileURLToPath(new URL("../../", import.meta.url)),
   ];
   const webRoot =
-    webRootCandidates.find((p) => p && existsSync(join(p, "web-console", "index.html"))) ??
+    webRootCandidates.find((p) => p && existsSync(join(p, "web-console", "index-005.html"))) ??
     webRootCandidates[1]!;
-  const consoleHtml = join(webRoot, "web-console", "index.html");
   // 新旧壳共存（用户拍板，2026-10-07）：`/` 主路径 = 旧版稳定壳，`/app2` = 005 新壳对照体验
   const consoleHtml005 = join(webRoot, "web-console", "index-005.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
@@ -370,18 +369,19 @@ export function startServer(
     // 手机浏览器不再跳 /m：web-console 自带 720px 移动端布局（#169 PWA 路线），
     // /m 仅保留给旧主屏图标，页面自身跳回根路径
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync(consoleHtml)) {
-        res.writeHead(503).end("web-console/index.html 不存在（步骤 6 生成）");
+      // W-P0-FIX P0-1 双壳收口（2026-10-13 架构审查 P0，用户点名）：主路径切 005 新壳，
+      // 旧壳 index.html 冻结退役——不再被任何路由服务（文件留仓一个版本周期后删，
+      // 见 web-console/index.html 头部冻结注释）。2026-10-07「新旧共存」口径就此收口
+      if (!existsSync(consoleHtml005)) {
+        res.writeHead(503).end("web-console/index-005.html 不存在（005 新壳未生成/未随包）");
         return;
       }
-      const html = readFileSync(consoleHtml);
       // no-store：控制台是单文件全量替换（无哈希资产名），浏览器启发式缓存会
       // 让 relay 升级后的 LAN 用户一直看旧页（token 换代 → 莫名 401）
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(consoleHtml005));
       return;
     }
-    // 005 新壳对照入口（新旧壳共存，2026-10-07 用户拍板）：主路径 `/` 服务旧版稳定壳，
-    // `/app2` 服务 005 新壳；两壳各自独立文件，互不影响。no-store 理由同上。
+    // 005 新壳入口（/app2 历史书签兼容：与 / 同文件，保留防外链断链）
     if (req.method === "GET" && url.pathname === "/app2") {
       if (!existsSync(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html 不存在（005 新壳未生成/未随包）");

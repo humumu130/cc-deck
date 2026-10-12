@@ -342,3 +342,111 @@ export function deriveTitle(prompt: string): string {
   const t = [...cleaned].length > 24 ? [...cleaned].slice(0, 24).join("") + "…" : cleaned;
   return t || "未命名会话";
 }
+
+// ---------- W-P0-FIX P0-3：boot 单遍流式重放（三放大器架构修） ----------
+// 三放大器 = boot 路径串联的三遍全量扫描：loadEvents（全量 parse+驻留 prior 数组）→
+// compactEvents（第二遍分桶）→ reduceHistory(kept)（第三遍状态机）。41MB 级 events 下
+// 三遍 parse + prior 全量驻留是 boot 内存尖峰与时延主源。本函数一遍流式（readline 逐行
+// 单次 parse）同时产出压缩集与重放态：内存只驻留每会话尾窗桶（kept 等价物），prior 全量
+// 数组不落内存。
+// 等价契约（test-history-stream.ts 锁死）：bootReplayFile(p) 的 kept ===
+// compactEvents(loadEvents(p))、sessions === reduceHistory(kept)、compacted 判定 ===
+// (prior.length !== kept.length)——三步语义逐字节不动，只是消除重复扫描。
+import { createReadStream } from "node:fs";
+import * as readline from "node:readline";
+
+export interface BootReplayResult {
+  /** 压缩后事件集（= compactEvents 产物；EventBus preload 与重写共用） */
+  kept: Envelope[];
+  /** 重放态（= reduceHistory(kept) 产物） */
+  sessions: Map<string, ReplayedSession>;
+  /** 是否需要重写文件（= prior.length !== kept.length） */
+  compacted: boolean;
+}
+
+interface SessionBucket {
+  created: Envelope[];
+  states: Envelope[]; // 非 CREATED 状态事件（保尾 MAX_STATE_EVENTS_PER_SESSION）
+  logs: Envelope[]; // 保尾 MAX_LOGS_PER_SESSION
+  lastTs: number;
+  deleted: boolean; // 尾见 SESSION_DELETED：compact 语义=整组丢弃
+  deletedAtSeq: number;
+}
+
+export async function bootReplayFile(path: string): Promise<BootReplayResult> {
+  const buckets = new Map<string, SessionBucket>();
+  let priorCount = 0;
+  let keptCount = 0;
+  const touch = (b: SessionBucket, e: Envelope): void => {
+    b.lastTs = Math.max(b.lastTs, e.ts);
+  };
+  const rl = readline.createInterface({ input: createReadStream(path, { encoding: "utf-8" }), crlfDelay: Infinity });
+  for await (const line of rl) {
+    const t = line.trim();
+    if (!t) continue;
+    let env: Envelope;
+    try {
+      env = JSON.parse(t) as Envelope;
+    } catch {
+      continue; // 损坏行跳过（loadEvents 同口径）
+    }
+    if (typeof env.seq !== "number" || typeof env.type !== "string") continue;
+    priorCount++;
+    if (env.type === "SESSION_DELETED") {
+      // compact 语义：删除即整组丢弃；重放语义：终结该会话。两路一致按「桶标记删」
+      const b = buckets.get(env.session_id);
+      if (b) {
+        b.deleted = true;
+        b.deletedAtSeq = env.seq;
+        b.created = [];
+        b.states = [];
+        b.logs = [];
+      }
+      // 未建桶的孤儿 DELETE（压缩残件）：两侧同忽略
+      continue;
+    }
+    let b = buckets.get(env.session_id);
+    if (b && b.deleted) {
+      // 复活语义（compactEvents bySession.delete 后新事件重建桶的等价物）：删后
+      // 同 sid 新事件 = 新桶，旧删除标记与残桶一并作废
+      b = { created: [], states: [], logs: [], lastTs: 0, deleted: false, deletedAtSeq: 0 };
+      buckets.set(env.session_id, b);
+    }
+    if (!b) {
+      b = { created: [], states: [], logs: [], lastTs: 0, deleted: false, deletedAtSeq: 0 };
+      buckets.set(env.session_id, b);
+    }
+    if (env.type === "SESSION_CREATED") {
+      b.created.push(env); // CREATED 必保（compact 语义）
+      touch(b, env);
+    } else if (env.type === "SESSION_LOG") {
+      b.logs.push(env);
+      if (b.logs.length > MAX_LOGS_PER_SESSION) b.logs.splice(0, b.logs.length - MAX_LOGS_PER_SESSION);
+      touch(b, env);
+    } else if (STATE_TYPES.has(env.type as EventType)) {
+      b.states.push(env);
+      if (b.states.length > MAX_STATE_EVENTS_PER_SESSION) b.states.splice(0, b.states.length - MAX_STATE_EVENTS_PER_SESSION);
+      touch(b, env);
+    } else {
+      // 其余类型 compact 丢弃（compactEvents 只保 STATE_TYPES/LOG/CREATED），
+      // 但 lastTs 参与会话活跃度排序（compactEvents lastTs 取 states/logs 尾 ts——
+      // 非 STATE/LOG 帧不触碰，此处同口径不 touch）
+    }
+  }
+  // 会话活跃度排序（compactEvents 同款：lastTs 降序取前 MAX_SESSIONS_KEPT）
+  const ranked = [...buckets.entries()]
+    .filter(([, b]) => !b.deleted && (b.created.length > 0 || b.states.length > 0 || b.logs.length > 0))
+    .sort((a, b) => b[1].lastTs - a[1].lastTs)
+    .slice(0, MAX_SESSIONS_KEPT);
+  const kept: Envelope[] = [];
+  for (const [, b] of ranked) {
+    kept.push(...[...b.created, ...b.states, ...b.logs].sort((x, y) => x.seq - y.seq));
+  }
+  kept.sort((x, y) => x.seq - y.seq);
+  keptCount = kept.length;
+  return {
+    kept,
+    sessions: reduceHistory(kept),
+    compacted: priorCount !== keptCount,
+  };
+}

@@ -1,3 +1,8 @@
+<!--
+  ⚠️ 此壳已冻结退役（W-P0-FIX P0-1 双壳收口，2026-10-13）：relay 主路径 `/` 已切
+  index-005.html（新壳），本文件不再被任何路由服务，仅留仓一个版本周期后删除。
+  需要旧壳行为请提单，勿在此文件继续开发。
+-->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -2633,6 +2638,7 @@
 <script>/* 桌面壳标题栏主题同步：Electron 走 preload IPC，Tauri 走全局 API；浏览器无桥接自动跳过 */window.__ccShellTheme=(light)=>{try{window.ccDeck&&window.ccDeck.setNativeTheme(!light)}catch(e){}try{window.__TAURI__&&window.__TAURI__.window.getCurrentWindow().setTheme(light?"light":"dark")}catch(e){}};__ccShellTheme(document.documentElement.classList.contains("light"));</script>
 </head>
 <body>
+<div style="position:fixed;top:0;left:0;right:0;z-index:99999;padding:6px 12px;background:#1c2a3f;color:#cdd8e6;font:12px/1.5 system-ui;text-align:center;border-bottom:1px solid #2e4160">此版本已冻结 · 新版控制台已上线（同地址重新打开即得新版）</div>
 
 <header data-tauri-drag-region>
   <div class="brand" data-tauri-drag-region>

@@ -277,7 +277,7 @@ cd relay && node scripts/build-plugin.mjs
 
 </details>
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（文档与图纸归档）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台，`index-005.html` 为现役壳；旧壳 `index.html` 已冻结退役留仓一个版本周期）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（文档与图纸归档）。
 
 CI：[relay](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml) · [android](https://github.com/humumu130/cc-deck/actions/workflows/android.yml) · [desktop](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)。版本号与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
