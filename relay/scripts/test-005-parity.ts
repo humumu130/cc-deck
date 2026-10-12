@@ -168,11 +168,11 @@ ok(cloudZone.includes("300_000") && cloudZone.includes("静默慢速重试"), "C
 ok(cloudZone.includes("visibilitychange") && cloudZone.includes("cloudManualRetry") && cloudZone.includes("回前台"), "C6 回前台 ping-resume + 8s 半开探测");
 // C7 命令面 shim（缝合点 c）与下行总线（缝合点 b）
 ok(cloudZone.includes("const cloudCmdShim") && cloudZone.includes('get readyState()') && cloudZone.includes("sendCloud(cloudCtx, obj);"), "C7 cloudCmdShim readyState/send 密封上行");
-ok(cloudZone.includes("window.__ccDeck005MainWs = cloudCmdShim") && cloudZone.includes("ctx.ws = cloudCmdShim"), "C7 云形态接管 __ccDeck005MainWs/ctx.ws（B2/B4/Team 零改动借道）");
-ok(cloudZone.includes('window.__ccDeck005Frames.emit({ kind: "ws", state:') && cloudZone.includes('window.__ccDeck005Frames.emit({ kind: "frame", frame: inner })'), "C7 下行经帧总线（状态+内层帧双事件）");
+ok(cloudZone.includes("window.__ccDeck005MainWs = cloudCmdShim") && cloudZone.includes('v === "cloud" ? cloudCmdShim : ctx.ws'), "C7 云形态接管 __ccDeck005MainWs（W-WINPAIR-R2：视角驱动命令通道，ctx.ws 恒 LAN socket 并行保活）");
+ok(cloudZone.includes('window.__ccDeck005Frames.emit({ kind: "ws", state:') && cloudZone.includes('window.__ccDeck005Frames.emit({ kind: "frame", frame: inner, source: "cloud" })'), "C7 下行经帧总线（状态+内层帧双事件）");
 {
   const cmdAckIdx = cloudZone.indexOf('inner.type === "COMMAND_ACK"');
-  ok(cmdAckIdx > 0 && cloudZone.indexOf("Team.onAck(inner)", cmdAckIdx) > 0 && cloudZone.indexOf('__ccDeck005Frames.emit({ kind: "frame", frame: inner })', cmdAckIdx) > 0, "C7 COMMAND_ACK 按 command_id 双口结算（Team + 总线，不锚 socket）");
+  ok(cmdAckIdx > 0 && cloudZone.indexOf("Team.onAck(inner)", cmdAckIdx) > 0 && cloudZone.indexOf('__ccDeck005Frames.emit({ kind: "frame", frame: inner, source: "cloud" })', cmdAckIdx) > 0, "C7 COMMAND_ACK 按 command_id 双口结算（Team + 总线，不锚 socket）");
 }
 // C8 UI 挂载与移动端可用性（坑7）
 ok(shell.includes("data-cloud-pair-input") && shell.includes("data-cloud-pair-submit") && shell.includes("data-cloud-retry"), "C8 配对表单/重试钮 data 锚（桌面+移动共用委托）");
