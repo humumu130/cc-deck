@@ -765,7 +765,9 @@ await wait(150);
   assert((await waitAck(wId)).ok, "29 EXT_INPUT acked (WORKING direct inject)");
   await wait(8000);
   assert(enters() >= 1, "29 stuck pending triggers enter re-send");
-  assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已补发回车")), "29 watchdog log emitted");
+  // W-INJECT P0（1012 用户令）：补偿诊断降级本地日志（[submit] 前缀），不再入会话流——
+  // 用户截图实锤 5 条「快照不可用…补发回车」被当消息渲染。行为断言改「流内零诊断」
+  assert(!events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已补发回车")), "29 watchdog diagnostics stay out of session stream (local log only)");
   const afterTrigger = enters();
   // WAITING（权限弹窗/审批挂起）→ 严禁补发（回车会误触弹窗）
   mgr.setExternalStatus(sid, "WAITING", "权限确认");
@@ -783,7 +785,7 @@ await wait(150);
   await wait(17000);
   const afterRetry = enters();
   assert(afterRetry - afterTrigger === 3, `29 exactly three retries then give up (got ${afterRetry - afterTrigger})`);
-  assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("暂停自动补发")), "29 give-up log emitted");
+  assert(!events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("暂停自动补发")), "29 give-up diagnostic stays out of session stream");
   await wait(6500);
   assert(enters() === afterRetry, "29 no further attempts after give-up");
   await hook({ event: "SessionEnd", session_id: "cli-7", reason: "clear" });
@@ -1609,7 +1611,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     writeFileSync(PEEK, CAP_TEXT.join("\n"));
     await wait(8000);
     assert(enters45() >= 1, "45a clean box still gets compensating enter");
-    assert(logs45().some((t) => t.includes("已补发回车") && !t.includes("等停手")), "45a legacy enter log preserved");
+    assert(!logs45().some((t) => t.includes("已补发回车")), "45a enter diagnostic stays out of session stream (behavior asserted by 45a enter count)");
     assert(peeks45() > 0, "45a watchdog peeks the console before enter");
     await settle();
     // b. 框内有疑似人工输入（静止=已停手）→ 等停手窗口后补发
@@ -1618,7 +1620,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     writeFileSync(PEEK, CAP_WRAP.join("\n"));
     await wait(8000);
     assert(enters45() > before, "45b typing detected then idle → enter after wait");
-    assert(logs45().some((t) => t.includes("等停手")), "45b enter-after-wait log emitted");
+    assert(!logs45().some((t) => t.includes("等停手")), "45b enter-after-wait diagnostic stays out of session stream");
     await settle();
     // c. 持续人工输入（快照内容不断变化）→ 本轮放弃、不补发
     //    假注入器 CHAOS 模式：%T% 每次快照替换为当前时间戳，确定性模拟"一直在打字"
@@ -1630,7 +1632,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     await wait(8000);
     delete process.env.CCR_FAKE_PEEK_CHAOS;
     assert(enters45() === beforeC, "45c continuous typing → no enter this round");
-    assert(logs45().some((t) => t.includes("本轮暂缓补发回车")), "45c defer log emitted");
+    assert(!logs45().some((t) => t.includes("本轮暂缓补发回车")), "45c defer diagnostic stays out of session stream");
     delete process.env.CCR_TYPE_GUARD_MAX_MS;
     await settle();
     // d. 框内已无滞留消息（被人工提交/清空）→ 跳过补发
@@ -1649,7 +1651,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     await wait(8000);
     assert(enters45() > beforeE, "45e capture unavailable → direct enter (no proof of typing, never swallow)");
-    assert(logs45().some((t) => t.includes("按无人输入直接补发回车")), "45e unknown → direct-enter log");
+    assert(!logs45().some((t) => t.includes("按无人输入直接补发回车")), "45e unknown diagnostic stays out of session stream (enter behavior asserted at 45e enter count)");
     assert(!logs45().some((t) => t.includes("暂不补发回车")), "45e no defer warning anymore");
     assert(!logs45().some((t) => t.includes("连续不可用")), "45e no give-up log anymore");
     // e2. given_up（模拟 tries 上限放弃）翻空闲 DONE：unknown 仍自愈直发（3099 行放行
@@ -1942,10 +1944,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   await waitLog(() => enters111() >= 1, 5000);
   assert(enters111() >= 1, "111 stuck text compensated by fast verify");
   assert(Date.now() - t0 < 2500, `111 verify compensation is fast (${Date.now() - t0}ms < 2500ms, watchdog earliest 2s+phase)`);
-  // W-INJECT：submit-enter（静默快路径）可能先于 #111 验证链满足上方 enter 计数——
-  // 日志断言前等验证链日志落地（600ms 级），不再隐含「enter 与日志同拍」假设
-  await waitLog(() => sysLogFrom("#111 主动验证", 0), 5000);
-  assert(sysLogFrom("#111 主动验证", 0), "111 verify compensation logged");
+  // W-INJECT P0：补偿诊断降级本地日志（[submit] 前缀）——流内断言翻为零诊断
+  await wait(700);
+  assert(!events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("#111 主动验证")), "111 verify compensation diagnostic stays out of session stream");
   // 持久滞留（不晋升、框不净空）→ 验证 2 轮是 #111 本体、时钟确定；第 3 发（看门狗，
   // 共享 tries 计数）直接调 sweep 消 5s 节拍相位（49 段先例），3 次后 given_up 停手
   await waitLog(() => enters111() >= 2, 5000);
@@ -1965,22 +1966,17 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   //（skip 计数不动不再以日志断言：看门狗对未晋升旧条目也会发同款 skip 日志，文本无法
   //  区分来源；③段补偿成功本身即 skips 未被毒化的行为证明）
 
-  // ③ 晋升后看门狗重置：新一条滞留消息仍走快路径。判别用日志而非计数——reset 生效则
-  // tries 回 1（打「#111 主动验证」新日志）；无 reset 则 tries=4（>3 不打日志）
+  // ③ 晋升后看门狗重置：新一条滞留消息仍走快路径。W-INJECT P0 双保险下改纯行为断言：
+  // 晋升复位 + 按消息账本（新文本=新 key）任一生效，新消息的补发回车都必达（tries≤3）；
+  // 无任一复位时 tries≥4 静默跳过=enter 不增。诊断日志已降级本地，流内零断言
   await hook({ event: "UserPromptSubmit", prompt: "验证滞留甲", session_id: "cli-12", transcript_path: T });
   await wait(200);
   assert(!(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "验证滞留甲"), "111 stuck msg promoted");
-  const evIdx3 = events.length;
   writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留丙", B, "  ⏵⏵ bypass permissions on"].join("\n"));
   const v3 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留丙" });
   assert((await waitAck(v3)).ok, "111 third msg acked");
-  // W-INJECT：同上——enter 可由静默 submit-enter 先打（无日志），新鲜补偿日志等验证链/看门狗落地
-  await waitLog(() => (enters111() >= entersAfterCap + 1) && (sysLogFrom("#111 主动验证", evIdx3) || sysLogFrom("已补发回车", evIdx3)), 6000);
+  await waitLog(() => enters111() >= entersAfterCap + 1, 6000);
   assert(enters111() >= entersAfterCap + 1, "111 post-promotion stuck still gets fast verify (watchdog reset)");
-  // reset 判别放宽（#84 CI flaky）：本质是「tries 回 1 后的新鲜补发日志」——任何路径
-  // tries=1/2 都打日志，无 reset 时 tries≥4 静默。CI 慢机注入链可超 2s 首窗阈值，
-  // 看门狗先于快验补发时文案是看门狗版「已补发回车」——两只都是 reset 生效的证据
-  assert(sysLogFrom("#111 主动验证", evIdx3) || sysLogFrom("已补发回车", evIdx3), "111 reset makes fresh verify log (tries back to 1)");
 
   // ④ WAITING（权限弹窗/审批挂起）→ 主动验证严禁补发（回车会误触弹窗）。
   //    验证窗拉到 1500ms 给注入→翻态留余量
@@ -2135,7 +2131,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // （「暂停自动补发」），先等它（15s 兜底：首拍相位 3s + 两拍 6s×慢机放大 + 链路
   // 余量）再等 fakeLog 追平；「恰好 3 次」上界由 given_up 门槛（第 3 发同拍同步
   // 置位）+ 后续 flicker 断言的 6000ms 窗（> 一个 3s 拍周期）兜底，等法不弱化断言
-  await waitLog(() => logsOf("cli-50c").some((t) => t.includes("暂停自动补发")), 15_000);
+  await wait(15_000); // W-INJECT：give-up 诊断已降级本地日志，等窗口过后查行为面（不再补发）
   await waitLog(() => enters50c() >= 3, 5000);
   const fired = enters50c();
   assert(fired === 3, `50 sticky tries exactly three (got ${fired})`);
@@ -2145,7 +2141,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr.setExternalPending(extId("cli-50c"), [{ text: "粘滞的滞留消息", ts: Date.now() - 9000 }]);
   await wait(6000);
   assert(enters50c() === fired, "50 status flicker does not reset give-up");
-  assert(logsOf("cli-50c").filter((t) => t.includes("暂停自动补发")).length === 1, "50 give-up logged exactly once");
+  assert(!logsOf("cli-50c").some((t) => t.includes("暂停自动补发")), "50 give-up diagnostic stays out of session stream");
   await hook({ event: "SessionEnd", session_id: "cli-50c", reason: "clear" });
   await hook({ event: "SessionEnd", session_id: "cli-50b", reason: "clear" });
   delete process.env.CCR_TEST_PLATFORM;
