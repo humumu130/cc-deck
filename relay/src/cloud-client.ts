@@ -8,7 +8,7 @@ import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
-import { listGroups, listPendingConfirms } from "./projects.js";
+import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 云通道同源携带
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 云通道同源携带
 import { listModels } from "./models.js";
@@ -479,6 +479,10 @@ export class CloudClient {
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
+        // P0 板持久信道（夜审 B2-F1）：与 ws-server 直连快照同源同步（#117 教训）——
+        // 云桥手机端断连重连同样靠快照全量追平；体积守卫见 listBoards（云帧 1MiB 硬限，
+        // 42KB 实测远安全）
+        ...(() => { const b = listBoards(); return b === null ? {} : { boards: b }; })(), // 守卫弃发=键缺席（旧 relay 形态，单次读盘）；空数组也下发=能力位
         // W-EXPP2 经验库：全量条目锚定帧 + 总开关（与 ws-server 直连快照同源同步，
         // #117 教训——云桥手机经验分节同样靠快照兜底；空数组也下发）
         experience: listExperience(),

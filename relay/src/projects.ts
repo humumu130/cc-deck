@@ -223,6 +223,35 @@ export function listGroups(dir?: string): ProjectGroup[] {
   return readProjectsFile(dir).groups;
 }
 
+// P0 板持久信道（夜审 B2-F1，2026-10-14）：全部板当前盘态快照——随 SNAPSHOT 下发，
+// 断连端重连即全量追平（BOARD_UPDATED 走 emitTransient 不补发，板此前不随快照 →
+// 断连窗口板变更全丢、重连永久陈旧，唯一恢复=重启 App 的用户实证根除）。
+// 口径：①lessons 摘除形态与 emitBoard outBoard 同款（W-EXPP1 域退役，防存量文件
+// 回流）；②loadBoardFile null（读失败半态）跳过不进快照（P3-2 同口径：半态不得
+// 经快照扩散）；③体积守卫：全量总字节超 512KB 时弃发（boards 缺省=旧 relay 形态，
+// 端上自动回退 detail 按需拉；当前实测 3 板 42KB=LAN 快照 4MB 预算的 1%，千卡
+// 级团队仍 <300KB，守卫为极端规模兜底）。
+const SNAPSHOT_BOARDS_MAX_BYTES = 512 * 1024;
+/** null=守卫弃发（端上 boards 键缺席=旧 relay 形态，回退 detail 按需拉）——与「真
+ * 0 板」的空数组严格区分：空数组也下发是能力位语义（端上锚定空库），守卫弃发不
+ * 得清端上已有缓存。 */
+export function listBoards(dir?: string): ProjectBoard[] | null {
+  const out: ProjectBoard[] = [];
+  let total = 0;
+  for (const g of listGroups(dir)) {
+    const b = loadBoardFile(g.id, dir);
+    if (!b) continue;
+    const shaped = b.lessons?.length ? { ...b, lessons: [] } : b;
+    total += JSON.stringify(shaped).length;
+    if (total > SNAPSHOT_BOARDS_MAX_BYTES) {
+      console.warn(`[board-persist] 板全量超 ${SNAPSHOT_BOARDS_MAX_BYTES}B 守卫，SNAPSHOT 不带 boards（端上回退按需拉）`);
+      return null;
+    }
+    out.push(shaped);
+  }
+  return out;
+}
+
 export function listGroupsByStatus(dir?: string): { active: ProjectGroup[]; parked: ProjectGroup[]; archived: ProjectGroup[]; pending: ProjectGroup[] } {
   const g = listGroups(dir);
   const pick = (s: ProjectGroupStatus) => g.filter((x) => x.status === s);

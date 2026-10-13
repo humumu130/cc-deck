@@ -2342,10 +2342,19 @@ class RelayStore {
         conn.projects = Array.isArray(projs)
           ? projs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name)
           : null;
-        // M13-4ADD：快照不带板——断连期间板 delta 可能丢帧，板基线与 relay 脱节。
-        // 清板锚定：后继首帧 delta → drop+重拉重锚定（基线自愈）；projects 由本段
-        // 覆盖式重置天然重锚，无需处理
-        conn.anchoredBoards.clear();
+        // M13-4ADD→P0 板持久信道（夜审 B2-F1，2026-10-14）：快照带 boards（relay 本批
+        // 起）——断连重连直接全量追平（多变更窗口收敛为最新盘态），并整体重锚；键缺席
+        //（旧 relay / 体积守卫弃发）保留原自愈：清板锚定，后继首帧 delta → drop+重拉
+        //（基线自愈）；projects 由本段覆盖式重置天然重锚，无需处理
+        const snapBoards = (msg.payload as { boards?: unknown }).boards;
+        if (Array.isArray(snapBoards)) {
+          const valid = snapBoards.filter((b): b is ProjectBoard => !!b && typeof (b as ProjectBoard).gid === "string" && Array.isArray((b as ProjectBoard).entries));
+          const gids = new Set(valid.map((b) => b.gid));
+          for (const gid of [...conn.boards.keys()]) if (!gids.has(gid)) conn.boards.delete(gid); // 覆盖式=断连窗口内删板/散团也追平
+          for (const b of valid) { conn.boards.set(b.gid, b); conn.anchoredBoards.add(b.gid); }
+        } else {
+          conn.anchoredBoards.clear();
+        }
         const cfs = (msg.payload as { org_confirms?: unknown }).org_confirms;
         conn.orgConfirms = Array.isArray(cfs)
           ? cfs.filter((c): c is OrgConfirm => !!c && typeof (c as OrgConfirm).id === "string" && !!(c as OrgConfirm).kind)

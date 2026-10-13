@@ -21,7 +21,7 @@ import {
 import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
-import { listGroups, listPendingConfirms } from "./projects.js";
+import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
 import { fileURLToPath } from "node:url";
@@ -986,9 +986,15 @@ export function startServer(
           // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
           allow_rules: mgr.allowRules.list(),
           // #26 M2 组织：项目组索引 + 待决确认单（cloud-client 云通道快照同步携带，
-          // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
+          // #117 教训）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          // P0 板持久信道（夜审 B2-F1）：板全量随 SNAPSHOT——断连端重连即追平
+          //（BOARD_UPDATED 瞬态不补发+板此前不随快照=断连窗口变更全丢的根治）；
+          // web 消费面 6896 行早已锚 payload.boards（本批只补 relay 下发）；
+          // 体积守卫与 lessons 摘除口径见 listBoards；detail 按需拉保留为旧 relay
+          //（boards 缺省）与超守卫规模的回退路
+          ...(() => { const b = listBoards(); return b === null ? {} : { boards: b }; })(), // 守卫弃发=键缺席（旧 relay 形态，单次读盘）；空数组也下发=能力位
           // W-EXPP2 经验库：全量条目锚定帧 + 总开关（空数组也下发——端上以字段存在性
           // 判断能力；cloud-client 云通道快照同步携带，#117 教训）
           experience: listExperience(),
