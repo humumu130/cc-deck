@@ -62,6 +62,7 @@ section("\nS2 每次落盘一行（幂等写不合并）");
 {
   const { org, gid } = mkBoardedOrg();
   const u = upsertBoardEntry(gid, { text: "任务乙", status: "backlog" }, org);
+  if (!u.ok) throw new Error("unreachable");
   const before = journalLines(org).length;
   for (let i = 0; i < 3; i++) upsertBoardEntry(gid, { id: u.entry!.id, text: "任务乙", status: "backlog" }, org); // 内容幂等仍写
   const after = journalLines(org).length;
@@ -88,6 +89,7 @@ section("\nS4 各 action 语义行");
 {
   const { org, gid } = mkBoardedOrg();
   const u = upsertBoardEntry(gid, { text: "任务丙", status: "claimed" }, org);
+  if (!u.ok) throw new Error("unreachable");
   const m = moveBoardEntry(gid, u.entry!.id, "done", org);
   assert(m.ok, "S4 前置：move 成功");
   const rmv = journalLines(org).find((l) => (l as { action?: string }).action === "move") as { prev?: { status?: string }; next?: { status?: string } };
