@@ -6771,7 +6771,7 @@ export class SessionManager {
           { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
-    if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
+    if (input.title?.trim()) this.setTitleOverride(sessionId, input.title.trim().slice(0, 40)); // 1013 用户令：会话名不带 [立项档] 前缀（档位在项目数据里，名字保持干净）
     // 徽标帧：create 的 SESSION_CREATED 早于归属字段写入（同 tick 内），补一帧部分
     // 更新带上 project_gid/dispatch_tier（#93 教训：部分帧必随带 status/action_summary）
     if (s) {
