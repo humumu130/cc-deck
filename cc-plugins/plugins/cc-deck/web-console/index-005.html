@@ -747,6 +747,8 @@
     #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 3px; }
     #d-session .workspace-title-row .identity-cluster .engine-badge .engine-icon { width: 10px; height: 10px; }
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
+    #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
+    #d-session #session-extmode-capsule[data-ext-on] .cap-dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); } /* 开态绿点示 approvals 正在推送 */
     .head-capsule:hover { background: var(--hover); color: var(--text-strong); }
     .head-capsule:disabled { opacity: .45; cursor: not-allowed; } /* UIPOLISH3 件三：CLI 会话权限胶囊置灰（relay 硬限制 tooltip 说明） */
     .head-capsule:disabled:hover { background: var(--tag-bg); color: var(--text); }
@@ -832,6 +834,19 @@
     .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .composer-bottom .composer-spring { flex: 1 1 0; min-width: 0; }
     .composer-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    /* W-SLASH 斜杠命令联想浮层：输入 / 前缀触发，浮在 composer 上方（透传方案——
+       选中只是补全文本，发送走既有纯文本链路，CLI 自行解析）。主题走既有变量双主题
+       自适应；定位 JS 按 composer rect 锚定（body 挂载避免被 workspace 裁切）。 */
+    .slash-box { position: fixed; z-index: 82; display: none; width: min(480px, calc(100vw - 24px)); max-height: 262px; overflow-y: auto; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .slash-box.open { display: block; }
+    .slash-row { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 7px; cursor: pointer; }
+    .slash-row:hover, .slash-row.hot { background: var(--hover); }
+    .slash-row.hot { outline: 1px solid var(--brand); outline-offset: -1px; }
+    .slash-name { flex: none; color: var(--text-strong); font-family: var(--mono); font-size: var(--fs-A-item); font-weight: 600; }
+    .slash-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
+    .slash-src { flex: none; padding: 1px 6px; border: 1px solid var(--line); border-radius: 7px; color: var(--dim); font-size: 10px; }
+    .slash-empty { padding: 10px 12px; color: var(--faint); font-size: var(--fs-C); }
+    .slash-foot { position: sticky; bottom: -6px; z-index: 1; margin: 4px -6px 0; padding: 5px 12px 4px; color: var(--faint); font-size: 10.5px; border-top: 1px solid var(--line-soft); background: var(--surface2); border-radius: 0 0 10px 10px; }
     /* W-TOPBAR ⑥ 子 Agent 活性面板（旧壳 #142 同构移植）：状态栏下续行，标题行即折叠
        开关（subAgent N + 尾部箭头），条目=呼吸点/✓ + 描述 + 当前动作 + 走秒；无子 Agent 不占位 */
     .agbox { flex: 0 0 auto; padding: 0 20px 6px; background: var(--footer); }
@@ -1017,6 +1032,11 @@
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
     .msg-user-row .bubble.me { margin-bottom: 0; }
     .msg-user-row .mt { margin-top: 4px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+    /* W-PORT-A R-4 发送乐观回显：气泡内状态行（发送中微降 / 未送达红角），与 .mt 同位不占额外行 */
+    .msg-echo .bubble.me { opacity: .88; }
+    .msg-echo .echo-state { margin-top: 3px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: right; }
+    .msg-echo.echo-fail .bubble.me { opacity: 1; border-color: var(--danger, #e5484d); }
+    .msg-echo.echo-fail .echo-state { color: var(--danger, #e5484d); }
     .bubble strong { color: var(--text-strong); }
     /* ---------- #164 对话流域：旧壳消息生态全量移植（MD 渲染/语法着色/过程组/思考卡/工具行） ---------- */
     .message-ai {margin: 0 0 15px; color: var(--text); font-size: var(--fs-A);}
@@ -2157,7 +2177,7 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索名称、摘要、目录" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
-              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button></span></div><div class="segment-bar"><button class="active" title="对话" aria-label="对话"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-chat"></use></svg><span class="tab-txt">对话</span></button><button title="任务" aria-label="任务"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-accept"></use></svg><span class="tab-txt">任务</span></button><button title="输出物" aria-label="输出物"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-package"></use></svg><span class="tab-txt">输出物</span></button><button title="更多" aria-label="更多"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-more-h"></use></svg><span class="tab-txt">更多</span></button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button><button type="button" class="head-capsule" id="session-extmode-capsule" hidden title="远程审批开关（外部 CLI 会话：开=权限请求推到本端远程决议）"><span class="cap-dot" aria-hidden="true"></span><span data-extmode-text>远程审批</span></button></span></div><div class="segment-bar"><button class="active" title="对话" aria-label="对话"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-chat"></use></svg><span class="tab-txt">对话</span></button><button title="任务" aria-label="任务"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-accept"></use></svg><span class="tab-txt">任务</span></button><button title="输出物" aria-label="输出物"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-package"></use></svg><span class="tab-txt">输出物</span></button><button title="更多" aria-label="更多"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-more-h"></use></svg><span class="tab-txt">更多</span></button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar pm">✦<i class="avatar-engine-dot trae"></i></span><strong>PM</strong><span class="role-label pm-label">PM</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -2227,9 +2247,11 @@
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
+                  collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
+                  echo: new Map(), // W-PORT-A R-4 发送乐观回显：sid → [{key, text, ts, state:"sending"|"fail"}]（回显对账/超时自撤，见 renderConversation）
                   imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
@@ -2611,8 +2633,8 @@
                   S.ackWaiters.clear();
                 }
 
-                function sendCmd(type, payload) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）
-                  const w = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs;
+                function sendCmd(type, payload, wsOverride) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）；W-PORT-A R-2：wsOverride=新建弹窗显式目标源通道（云源创建走云 shim，最高优先）
+                  const w = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs);
                   if (!w || w.readyState !== 1) { b2Toast("relay 未连接，命令未发送"); return null; }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
                   w.send(JSON.stringify(cmd));
@@ -2662,6 +2684,7 @@
                     case "SESSION_DONE": onDoneEvt(sid, m.payload); break;
                     case "SESSION_DELETED": onDeleted(sid); break;
                     case "SESSION_LOG": onLog(sid, m.payload); break;
+                    case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
                   }
                 }
 
@@ -2693,6 +2716,7 @@
                   S.logsTruncated = new Map(Object.entries(p.logs_truncated || {}));
                   S.hasSnapshot = true;
                   S.relayName = p.relay_name || location.host;
+                  S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
@@ -2763,6 +2787,20 @@
                 function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
+                // W-MODE 协作模式切换帧（relay orgAction collab-mode set 成功边广播）：
+                // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）；
+                // leader → 锚卡 upsert 回列表（帧带完整卡）。设置页开关回显走桥缓存（bridge 侧同帧合并）
+                function onCollabMode(p) {
+                  if (!p || (p.mode !== "leader" && p.mode !== "no-leader")) return;
+                  S.collabMode = p.mode;
+                  if (p.mode === "no-leader") {
+                    const lid = typeof p.leader_session_id === "string" ? p.leader_session_id : "";
+                    if (lid && S.sessions.has(lid)) onDeleted(lid);
+                  } else if (p.leader_session && typeof p.leader_session.session_id === "string" && !S.sessions.has(p.leader_session.session_id)) {
+                    S.sessions.set(p.leader_session.session_id, p.leader_session);
+                    renderMyList();
+                  }
+                }
                 function onDeleted(sid) {
                   S.sessions.delete(sid); S.timelines.delete(sid);
                   for (const [key, c] of S.imgUrls) if (key.startsWith(sid + "/")) { if (c && c.url) { try { URL.revokeObjectURL(c.url); } catch (_) {} } S.imgUrls.delete(key); } // FB14 附图缓存随会话回收
@@ -2790,6 +2828,15 @@
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
                   if (s) s.updated_at = entry.ts || Date.now();
+                  // W-PORT-A R-4 回显对账：本会话自己发出的 user 消息回显到达 → 撤最早同文 sending 态 echo
+                  if (msgRoleOf(entry.kind) === "user") {
+                    const eq = S.echo.get(sid);
+                    if (eq && eq.length) {
+                      const txt = String(entry.full ?? entry.text ?? "");
+                      const i = eq.findIndex((x) => x.state === "sending" && x.text === txt);
+                      if (i >= 0) { eq.splice(i, 1); if (!eq.length) S.echo.delete(sid); if (UI && sid === S.selected) renderConversation(); }
+                    }
+                  }
                   const out = pushLog(sid, entry);
                   if (UI && sid === S.selected && out !== "skip") applyDomLog(sid, out, entry.id);
                 }
@@ -3486,9 +3533,36 @@
                   { key: "plan", zh: "规划（只读）" },
                   { key: "bypassPermissions", zh: "跳过权限确认" },
                 ];
+                // W-PORT-A R-6：外部 CLI 会话「远程审批」胶囊——COMMAND_EXT_MODE 开关（手机 #56 同命令面）。
+                // 开=本机 CLI 的权限请求推到本端远程决议（wait-card 审批链）；关=CLI 本机自行处理。
+                // 乐观回显 s.remote_mode，UPDATED 帧权威归位（MERGE_KEYS 已含 remote_mode）。
+                function updateExtModeCapsule(s) {
+                  const cap = UI.extModeCapsule;
+                  if (!cap) return;
+                  if (!s || !s.external || !canCmd(s)) { cap.hidden = true; delete cap.dataset.extOn; return; }
+                  const on = s.remote_mode === true;
+                  cap.hidden = false;
+                  const txt = cap.querySelector("[data-extmode-text]");
+                  if (txt) txt.textContent = "远程审批 " + (on ? "开" : "关");
+                  cap.title = on ? "远程审批已开：CLI 的权限请求会推到这里决议（点击关闭）" : "远程审批已关：CLI 权限请求在本机处理（点击开启推送）";
+                  if (on) cap.dataset.extOn = "1"; else delete cap.dataset.extOn;
+                }
+                async function toggleExtMode() {
+                  const s = curSession();
+                  if (!s || !s.external || !canCmd(s)) return;
+                  const next = !(s.remote_mode === true);
+                  const ack = await commandAck("COMMAND_EXT_MODE", { session_id: s.session_id, enabled: next }); // relay 侧字段名=enabled（session-manager COMMAND_EXT_MODE 读 payload.enabled；types 注释笔误以实现为准）
+                  const v = ackVerdict(ack);
+                  if (v.ok) {
+                    s.remote_mode = next; // 乐观回显；UPDATED 权威归位
+                    updateExtModeCapsule(s);
+                    b2Toast(next ? "远程审批已开：权限请求将推到这里" : "远程审批已关");
+                  } else b2Toast("切换失败：" + v.error);
+                }
                 function updatePermCapsule(s) {
                   const cap = UI.permCapsule;
                   if (!cap) return;
+                  updateExtModeCapsule(s); // W-PORT-A R-6：远程审批胶囊随 head 同步（external 专属）
                   if (!s || !canCmd(s)) { cap.hidden = true; return; } // 无会话/历史只读卡：隐藏
                   const txt = cap.querySelector("[data-perm-text]");
                   if (s.external) {
@@ -3930,6 +4004,16 @@
                   }
                   frag.querySelectorAll(".procgrp").forEach(procHeadUpdate);
                   pane.appendChild(frag);
+                  // W-PORT-A R-4：发送乐观回显气泡（时间线权威流之后、wait-card 之前；惰性超时清理同拍）
+                  echoSweep(s.session_id);
+                  const eqs = S.echo.get(s.session_id) || [];
+                  for (const eq of eqs) {
+                    const row = document.createElement("div");
+                    row.className = "msg-user-row msg-echo" + (eq.state === "fail" ? " echo-fail" : "");
+                    row.dataset.echoKey = eq.key;
+                    row.innerHTML = '<div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : "发送中…") + "</div></div>";
+                    pane.appendChild(row);
+                  }
                   if (s.status === "DONE" && s._terminal === "interrupted") pane.appendChild(noteNode("已停止 · 生成在此中断"));
                   if (s.status === "ERROR" && s.last_error) pane.appendChild(noteNode("⚠ " + oneLine(s.last_error)));
                   syncWaitCard(true);
@@ -4139,13 +4223,27 @@
                 // ---------- 渲染：任务 tab（todosTabHtml 四组制 + VERIFY_RE） ----------
                 // #B3-9 任务行 ✕ 逐条隐藏：sid#tid 键本地记忆（仅本端视图层，不回写 relay）
                 const hiddenTaskKeys = new Set();
+                // W-P0-FIX P0-4 SSOT P2（task-lifecycle.md §7 切数据源）：当前会话存在看板镜像
+                //（source="board"）时任务 tab 默认只显镜像（团队任务唯一事实源），本地自建条目
+                // 降权折叠为「本地草稿」组（点按展开）；无镜像会话（非团队/无板）保持原四组视图
+                const ssotBoardMode = () => {
+                  const sc = curSession();
+                  const ts = Array.isArray(sc && sc.todos) ? sc.todos : [];
+                  return ts.some((t) => t && t.source === "board");
+                };
+                window.__ccDeck005SsotDraftOpen = window.__ccDeck005SsotDraftOpen || false;
                 function renderTasks() {
                   const pane = UI.panes[1];
                   const s = curSession();
                   if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
                   const allTodos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
-                  const todos = allTodos.filter((t) => !hiddenTaskKeys.has(s.session_id + "#" + t.id));
-                  if (!todos.length) { pane.innerHTML = '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'; return; }
+                  const visible0 = allTodos.filter((t) => !hiddenTaskKeys.has(s.session_id + "#" + t.id));
+                  const ssot = ssotBoardMode();
+                  // P2 切源：镜像主显；本地条目折叠组（本地草稿在镜像在场时非团队真相，降权）
+                  const localTodos = ssot ? visible0.filter((t) => t.source !== "board") : [];
+                  const todos = ssot ? visible0.filter((t) => t.source === "board") : visible0;
+                  if (!todos.length && !localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'; return; }
+                  if (!todos.length && localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务进度 · 团队看板</div><div class="readonly-banner">团队看板暂无任务 · 本地草稿 ' + localTodos.length + ' 条（见下方折叠组）</div>' + ssotDraftHtml(localTodos); wireSsotDraft(); return; }
                   const doneAll = todos.filter((t) => t.status === "completed");
                   const doneWindow = doneAll.length && doneAll.every((t) => typeof t.updated_at === "number") ? doneAll.filter((t) => (t.updated_at || 0) >= Date.now() - 86400e3) : doneAll;
                   const doneList = doneWindow.slice(-15);
@@ -4170,7 +4268,24 @@
                   emit("待办 · " + pd.length, pd, () => "<span>○</span>", "", "pending");
                   html += "</div>";
                   if (doneList.length < doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + doneAll.length + " 条）</div>";
+                  if (localTodos.length) html += ssotDraftHtml(localTodos);
                   pane.innerHTML = html;
+                  if (localTodos.length) wireSsotDraft();
+                }
+                // P0-4 本地草稿折叠组（SSOT P2：默认收起、点按展开、行内 ✕ 照旧）
+                function ssotDraftHtml(items) {
+                  const open = !!window.__ccDeck005SsotDraftOpen;
+                  let h = '<div class="queue-group" style="margin-top:10px"><button type="button" class="mini-list-link" data-ssot-draft-toggle style="width:100%;text-align:left">' + (open ? "▾" : "▸") + " 本地草稿 · " + items.length + '（PM 自建，非团队任务真相 · 团队任务以看板为准）</button></div>';
+                  if (!open) return h;
+                  h += '<div class="detail-panel-list">';
+                  for (const t of items) {
+                    h += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + "><span>" + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
+                  }
+                  return h + "</div>";
+                }
+                function wireSsotDraft() {
+                  const tg = UI.panes[1] && UI.panes[1].querySelector("[data-ssot-draft-toggle]");
+                  if (tg) tg.addEventListener("click", () => { window.__ccDeck005SsotDraftOpen = !window.__ccDeck005SsotDraftOpen; renderTasks(); });
                 }
                 function jumpToTask(n) { // #279④ #NNN → 任务 tab 定位（#B3-18 落点 jump-flash 闪高 1.5s）
                   if (UI.tabs[1]) UI.tabs[1].click();
@@ -4597,6 +4712,23 @@
                   el.style.height = "auto";
                   el.style.height = Math.min(el.scrollHeight, 132) + "px";
                 }
+                // W-PORT-A R-4：echo 三路生命周期 helper——选中判定 / 失败标记 / 惰性超时清理（渲染时顺带）
+                function sidIsSelected(sid) { return UI && S.selected === sid; }
+                function markEchoFail(sid, text) {
+                  const eq = S.echo.get(sid);
+                  if (!eq || !eq.length) return;
+                  const i = eq.findIndex((x) => x.state === "sending" && x.text === text);
+                  if (i >= 0) { eq[i].state = "fail"; eq[i].ts = Date.now(); if (sidIsSelected(sid)) renderConversation(); }
+                }
+                function echoSweep(sid) { // 惰性清理：sending 30s 无回显 / fail 15s 展示窗 → 自撤
+                  const eq = S.echo.get(sid);
+                  if (!eq) return false;
+                  const now = Date.now();
+                  const keep = eq.filter((x) => now - x.ts < (x.state === "fail" ? 15_000 : 30_000));
+                  if (keep.length === eq.length) return false;
+                  if (keep.length) S.echo.set(sid, keep); else S.echo.delete(sid);
+                  return true;
+                }
                 function sendMessage() {
                   const s = curSession();
                   if (!s) { b2Toast("先从左侧选择会话"); return; }
@@ -4609,10 +4741,20 @@
                   const payload = Object.assign({ session_id: s.session_id, text }, imgs.length ? { images: imgs } : {}, files.length ? { files } : {});
                   const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", payload);
                   if (id) {
-                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) b2Toast("发送失败: " + v.error); }; // #150 R3：自发命令失败回执（R2 删无主 toast 后补漏——超时 null/ok:false 才 toast，成功静默；输入框清空维持现状不并入 waiter）
+                    // W-PORT-A R-4 发送乐观回显：0.5s 内本地气泡占位（手机件五同款语义，桌面简化为
+                    // 回显对账+ACK 失败标记+超时自撤三路）——relay 回显到达即撤（onLog 对账），
+                    // ACK 失败/超时转「未送达」红角标，15s 后自撤防永久假消息
+                    if (text) {
+                      const eq = S.echo.get(s.session_id) || [];
+                      eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text, ts: Date.now(), state: "sending" });
+                      S.echo.set(s.session_id, eq);
+                      if (sidIsSelected(s.session_id)) renderConversation();
+                    }
+                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) { b2Toast("发送失败: " + v.error); markEchoFail(s.session_id, text); } }; // #150 R3：自发命令失败回执（R2 删无主 toast 后补漏——超时 null/ok:false 才 toast，成功静默；输入框清空维持现状不并入 waiter）+ R-4 失败转未送达
                     const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
                     S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
+                    slashHide(); // W-SLASH：程序清空不发 input 事件，浮层显式收起
                     inputDrafts.delete(s.session_id); // #B3-4 已发出的不再算草稿
                     if (text) histPush(text);
                     S.hist.idx = -1;
@@ -4816,14 +4958,30 @@
                 function buildCreateHtml() {
                   const chosen = S.engineChoice || defaultEngineId();
                   let html = '<h3>新建会话</h3><p class="create-sub">选择引擎与工作目录，创建新会话</p>';
+                  // W-PORT-A R-2：聚合/云链在线时透出「创建到」目标源行（手机 NewSessionModal 批3 同语义——
+                  // 聚合视角下新建不再只能落当前视角源，云源在线即可选云）
+                  {
+                    const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    if (st && st.cloudPaired && st.cloudStatus === "online") {
+                      const lanName = String(S.relayName || location.host || "本机");
+                      const cloudName = String(st.cloudRelayName || st.cloudWsUrl || "远程源");
+                      html += '<div class="create-label">创建到</div><select class="create-field" data-create-field="source" aria-label="目标源">'
+                        + '<option value="local">本机 · ' + esc(lanName) + "</option>"
+                        + '<option value="cloud">远程 · ' + esc(cloudName) + "</option>"
+                        + "</select>";
+                    }
+                  }
                   // 件九：引擎墙退役——收起态一枚胶囊（状态点·引擎徽章·可用性小字），
                   // 分组浮层走 openEngineMenu（可用置顶 / 不可用灰置+原因），引擎区六行 → 一行
                   {
-                    const entry = catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null;
-                    const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["Claude", "claude"];
+                    // W-PORT-A R-7：auto 档（跟随源默认）——选中态收起胶囊显「自动」，与手机 75-E
+                    // 「auto=不发 engine，relay 按 role/源默认」同口径；显式选引擎维持件九形态
+                    const isAuto = chosen === "auto";
+                    const entry = isAuto ? null : (catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null);
+                    const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["自动", "claude"];
                     const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
                     html += '<div class="create-label">引擎</div>'
-                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + (entry && entry.state !== "ready" ? " na" : "") + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + '</span><span class="ep-meta">' + esc(entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "") + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + (!isAuto && entry && entry.state !== "ready" ? " na" : "") + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
@@ -4849,7 +5007,7 @@
                   if (!S.engineChoice) {
                     let lastEng = null;
                     try { lastEng = localStorage.getItem("cc-deck-005-last-engine"); } catch (_) {}
-                    S.engineChoice = lastEng && catalogEntries().some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId();
+                    S.engineChoice = lastEng === "auto" ? "auto" : (lastEng && catalogEntries().some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId()); // R-7：auto 记忆直取（不查 ready）
                   }
                   const back = document.createElement("div");
                   back.className = "pair-pop-backdrop";
@@ -4893,6 +5051,7 @@
                   const ready = catalogEntries().filter((e) => e.state === "ready");
                   const na = catalogEntries().filter((e) => e.state !== "ready");
                   let html = "";
+                  html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge claude">自动</span><strong>自动 · 跟随源默认</strong><small>由源端配置决定引擎（不携带 engine 字段）</small></button>'; // W-PORT-A R-7：auto 档置顶恒可选
                   if (ready.length) {
                     html += '<div class="source-menu-head">可用 · ' + ready.length + "</div>";
                     for (const e of ready) {
@@ -4921,12 +5080,36 @@
                 }
                 function pickEngine(btnOrId) {
                   const id = typeof btnOrId === "string" ? btnOrId : btnOrId.dataset.engineChoice;
+                  if (id === "auto") { // W-PORT-A R-7：auto 档特判——不查 catalog（恒可选），模型二层清空禁用
+                    S.engineChoice = "auto";
+                    closeEngineMenu();
+                    const pop0 = document.getElementById("b2-create-pop");
+                    if (pop0) {
+                      const trig0 = pop0.querySelector("[data-engine-trigger]");
+                      if (trig0) {
+                        const badge0 = trig0.querySelector(".engine-badge");
+                        if (badge0) { badge0.className = "engine-badge claude"; badge0.textContent = "自动"; }
+                        const dot0 = trig0.querySelector(".ep-dot");
+                        if (dot0) dot0.classList.remove("na");
+                        const metaEl0 = trig0.querySelector(".ep-meta");
+                        const rc = catalogEntries().filter((e) => e.state === "ready").length;
+                        if (metaEl0) metaEl0.textContent = "跟随源默认 · " + rc + " 个引擎可用";
+                      }
+                      const selM = pop0.querySelector("[data-create-field='model']");
+                      if (selM) { selM.value = ""; selM.disabled = true; selM.setAttribute("aria-disabled", "true"); }
+                      const prompt0 = pop0.querySelector("[data-create-field='prompt']");
+                      if (prompt0) prompt0.focus();
+                    }
+                    return;
+                  }
                   const entry = catalogEntries().find((e) => e.id === id);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   S.engineChoice = id;
                   closeEngineMenu(); // 件九：选中即收浮层
                   const pop = document.getElementById("b2-create-pop");
                   if (!pop) return;
+                  const selM2 = pop.querySelector("[data-create-field='model']"); // R-7：显式引擎恢复模型二层可选
+                  if (selM2) { selM2.disabled = !createModelsFor(id).length; if (!selM2.disabled) selM2.removeAttribute("aria-disabled"); }
                   const trig = pop.querySelector("[data-engine-trigger]"); // 件九：收起态胶囊随选同步
                   if (trig && entry) {
                     const meta = ENGINES[entry.id] || [entry.label || entry.id, ""];
@@ -4958,16 +5141,25 @@
                   const autoMkdir = !!(pop.querySelector("[data-create-field='autoMkdir']") || {}).checked;
                   if (!prompt.trim()) { b2Toast("请输入初始指令"); return; }
                   const eng = S.engineChoice || defaultEngineId();
-                  const entry = catalogEntries().find((e) => e.id === eng);
+                  const isAutoEng = eng === "auto"; // W-PORT-A R-7：auto=跟随源默认，不携带 engine、跳过 ready 检查
+                  const entry = isAutoEng ? null : catalogEntries().find((e) => e.id === eng);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
+                  // W-PORT-A R-2：目标源路由——「创建到」选了云源时走云 shim（显式通道最高优先）；
+                  // 本机/未显示该行时维持 sendCmd 视角通道（RouteWs/主连接既有语义）
+                  let wsOverride = null;
+                  const srcSel = pop.querySelector("[data-create-field='source']");
+                  if (srcSel && srcSel.value === "cloud") {
+                    wsOverride = window.__ccDeck005WsFor ? window.__ccDeck005WsFor("cloud") : null;
+                    if (!wsOverride) { b2Toast("远程源不在线，无法在远程创建"); return; }
+                  }
                   const payload = { cwd: cwd || S.homedir || ".", prompt: prompt.trim() };
-                  if (eng && eng !== "claude") payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）
+                  if (eng && eng !== "claude" && !isAutoEng) payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）；auto=跟随源默认（R-7）
                   if (model) payload.model = model; // B10 模型二层
                   // FB15 智能默认：本次引擎/模型记忆为下次新建的预填（引擎须仍 ready 才回填）
                   try { localStorage.setItem("cc-deck-005-last-engine", eng || ""); localStorage.setItem("cc-deck-005-last-model", model || ""); } catch (_) {}
                   if (skipPerm) payload.permissionMode = "bypassPermissions"; // B10 跳权限（relay #217：非 skip 启动的会话后续不可切跳过，创建时定）
                   if (autoMkdir) payload.autoMkdir = true; // #208 目录不存在时 relay 侧 mkdir -p
-                  const id = sendCmd("COMMAND_CREATE", payload);
+                  const id = sendCmd("COMMAND_CREATE", payload, wsOverride); // R-2：目标源通道（本机=null 走既有路由）
                   if (!id) return;
                   // #368：创建已受理即记忆本次 cwd，下次新建预填；B10 历史目录列表同步 MRU
                   if (cwd) pushCreateCwd(cwd);
@@ -4981,6 +5173,165 @@
                 }
 
                 // ---------- 事件绑定 ----------
+                // ---------- W-SLASH 斜杠命令联想（透传方案，双端对齐 expo e810261 / 旧壳 #279B）----------
+                // 输入 / 前缀（未到参数段=无空白）触发浮层；选中/回车=把命令补全进输入框
+                // （尾随空格留参数位），发送走既有纯文本链路——CLI 自己解析执行，其他引擎
+                // 收到当文本，relay/面板零命令解析逻辑。内置表四处同源维护：relay
+                // ws-server.ts BUILTIN_COMMANDS（/api/commands 数据源）/ 旧壳 SLASH_BUILTIN /
+                // expo slash.ts / 本表。LAN/桌面形态 fetch 用户/项目自定义命令（60s 缓存+
+                // 单飞去重）；云形态 HTTP 到不了 relay、失败一律回落内置表。
+                const SLASH_BUILTIN = [
+                  ["compact", "压缩对话历史，释放上下文"],
+                  ["clear", "清空当前会话历史"],
+                  ["help", "查看帮助"],
+                  ["model", "查看/切换模型"],
+                  ["cost", "当前会话 token 用量"],
+                  ["context", "上下文使用概况"],
+                  ["memory", "编辑项目记忆 CLAUDE.md"],
+                  ["init", "为当前项目初始化 CLAUDE.md"],
+                  ["review", "审查 PR / 代码变更"],
+                  ["resume", "恢复历史会话"],
+                  ["rename", "重命名当前会话"],
+                  ["export", "导出当前会话记录"],
+                  ["todos", "查看当前任务清单"],
+                  ["permissions", "权限规则管理"],
+                  ["config", "打开配置面板"],
+                  ["mcp", "MCP 服务器管理"],
+                  ["statusline", "状态栏配置"],
+                  ["output-style", "切换输出风格"],
+                  ["add-dir", "添加额外工作目录"],
+                  ["vim", "切换 vim 按键模式"],
+                  ["doctor", "Claude Code 健康检查"],
+                  ["login", "切换账号"],
+                  ["bug", "报告问题"],
+                  ["release-notes", "查看更新日志"],
+                ].map(([name, desc]) => ({ name, desc, source: "builtin" }));
+                let slashList = SLASH_BUILTIN;
+                const slashCache = new Map();
+                let slashPanel = null, slashHot = -1, slashInputEl = null, slashInflight = "";
+                const slashQueryOf = (v) => (v.startsWith("/") && !/\s/.test(v) ? v.slice(1) : null);
+                const slashMatches = (q) => {
+                  const s = q.trim().toLowerCase();
+                  if (!s) return slashList.slice(0, 8);
+                  return slashList.filter((c2) => c2.name.toLowerCase().startsWith(s) || (c2.desc || "").toLowerCase().includes(s)).slice(0, 8);
+                };
+                function slashEnsure() {
+                  const s = curSession();
+                  if (!s) return;
+                  const base = String((typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin || "");
+                  const token = String(window.__ccDeck005Token || "");
+                  const cwd = s.cwd ?? "";
+                  const key = base + "|" + cwd;
+                  const hit = slashCache.get(key);
+                  if (hit && Date.now() - hit.ts < 60000) { slashList = hit.list; return; }
+                  if (!base || !token || slashInflight) return;
+                  slashInflight = key;
+                  const wantCwd = cwd;
+                  fetch(base + "/api/commands?token=" + encodeURIComponent(token) + "&cwd=" + encodeURIComponent(cwd), { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined })
+                    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+                    .then((j) => {
+                      if (!j || !j.ok || !Array.isArray(j.commands)) throw new Error("bad shape");
+                      const list = j.commands.filter((c2) => c2 && typeof c2.name === "string");
+                      slashCache.set(key, { ts: Date.now(), list });
+                      slashList = list;
+                    })
+                    .catch(() => { slashList = SLASH_BUILTIN; })
+                    .finally(() => {
+                      slashInflight = "";
+                      // 慢请求期间切了会话（cwd 变）：只入缓存不刷新当前面板，防旧 cwd 命令污染新会话联想
+                      const cur = curSession();
+                      if (cur && (cur.cwd ?? "") === wantCwd) slashRender();
+                    });
+                }
+                function slashHide() {
+                  if (slashPanel) slashPanel.classList.remove("open");
+                  slashHot = -1;
+                }
+                function slashComplete(name) {
+                  const el = slashInputEl;
+                  if (!el) return;
+                  el.value = "/" + name + " ";
+                  el.dispatchEvent(new Event("input", { bubbles: false })); // 走既有 input 链：草稿/发送态/浮层重估
+                  el.focus();
+                  slashHide();
+                }
+                function slashRender() {
+                  if (!slashPanel || !slashInputEl) return;
+                  const q = slashQueryOf(slashInputEl.value);
+                  if (q === null) { slashHide(); return; }
+                  const ms = slashMatches(q);
+                  slashPanel.innerHTML = (ms.length
+                    ? ms.map((m, i) => '<div class="slash-row' + (i === slashHot ? " hot" : "") + '" data-n="' + esc(m.name) + '" data-i="' + i + '" role="option"><span class="slash-name">/' + esc(m.name) + "</span>" +
+                      '<span class="slash-desc">' + esc(m.desc || "") + "</span>" +
+                      (m.source && m.source !== "builtin" ? '<span class="slash-src">' + (m.source === "user" ? "用户" : "项目") + "</span>" : "") + "</div>").join("")
+                    : '<div class="slash-empty">无匹配命令，Enter 原样发送</div>')
+                    + '<div class="slash-foot">↑↓ 选择 · Enter 补全 · Esc 关闭 · 选中后作为文本发送</div>';
+                  if (slashHot >= ms.length) slashHot = ms.length - 1;
+                  const hot = slashPanel.querySelector(".slash-row.hot");
+                  if (hot) hot.scrollIntoView({ block: "nearest" });
+                }
+                function slashUpdate(el) {
+                  slashInputEl = el || null;
+                  if (!slashInputEl) { slashHide(); return; }
+                  const q = slashQueryOf(slashInputEl.value);
+                  if (q === null || !curSession()) { slashHide(); return; }
+                  if (!slashPanel) {
+                    slashPanel = document.createElement("div");
+                    slashPanel.className = "slash-box";
+                    slashPanel.setAttribute("role", "listbox");
+                    slashPanel.setAttribute("aria-label", "斜杠命令联想");
+                    // mousedown 补全（preventDefault 防输入框失焦；touch 合成 click 由 click 兜底）
+                    slashPanel.addEventListener("mousedown", (ev) => {
+                      const row = ev.target.closest(".slash-row");
+                      if (!row) return;
+                      ev.preventDefault();
+                      slashComplete(row.dataset.n);
+                    });
+                    slashPanel.addEventListener("click", (ev) => {
+                      const row = ev.target.closest(".slash-row");
+                      if (!row) return;
+                      ev.preventDefault();
+                      slashComplete(row.dataset.n);
+                    });
+                    document.body.appendChild(slashPanel);
+                  }
+                  // 锚定：浮在 composer 上方（锚 composer 边框盒——textarea 内框差 padding
+                  // 会错位；rect 每次开面板重算，窗口缩放/折叠态换行自适应）
+                  const host = slashInputEl.closest(".composer") || slashInputEl;
+                  const r = host.getBoundingClientRect();
+                  slashPanel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 488)) + "px";
+                  slashPanel.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
+                  slashHot = -1;
+                  slashRender();
+                  slashPanel.classList.add("open");
+                  slashEnsure();
+                }
+                function slashKeydown(ev) {
+                  if (!slashPanel || !slashPanel.classList.contains("open")) return false;
+                  if (ev.key === "Escape") { slashHide(); return true; }
+                  if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown" && ev.key !== "Enter" && ev.key !== "Tab") return false;
+                  if (ev.altKey || ev.ctrlKey || ev.metaKey) return false;
+                  const ms = slashMatches(slashQueryOf(slashInputEl ? slashInputEl.value : "") ?? "");
+                  if (ev.key === "Tab") {
+                    if (!ms.length) return false;
+                    ev.preventDefault();
+                    slashComplete(ms[0].name);
+                    return true;
+                  }
+                  if (ev.key === "Enter") {
+                    // 有 hot 补全选中项；无 hot（未用 ↑↓）不拦截——按原行为原样发送
+                    if (slashHot >= 0 && ms[slashHot]) { ev.preventDefault(); slashComplete(ms[slashHot].name); return true; }
+                    slashHide();
+                    return false;
+                  }
+                  if (!ms.length) return false;
+                  ev.preventDefault();
+                  if (ev.key === "ArrowDown") slashHot = Math.min(slashHot + 1, ms.length - 1);
+                  else slashHot = slashHot <= 0 ? 0 : slashHot - 1;
+                  slashRender();
+                  return true;
+                }
+
                 function bindEvents() {
                   // 选中链由地基驱动；本端只观察 DOM 变化同步 S.selected
                   const readSel = () => UI.sessionList.querySelector(".queue-card.selected");
@@ -5209,9 +5560,10 @@
                     if (!ev.target.closest("#b2-model-menu") && !ev.target.closest("#session-model-capsule")) closeModelMenu();
                     if (!ev.target.closest("#b2-perm-menu") && !ev.target.closest("#session-perm-capsule")) closePermMenu(); // UIPOLISH3 件三
                     if (!ev.target.closest(".artifact-menu-wrap")) document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open"));
+                    if (!ev.target.closest(".slash-box") && !ev.target.closest(".composer")) slashHide(); // W-SLASH：点浮层/输入区外收起
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); closeArtViewer(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
                   });
 
                   // composer：发送/停止/历史/IME
@@ -5235,6 +5587,8 @@
                   UI.input.addEventListener("compositionstart", () => { composing = true; });
                   UI.input.addEventListener("compositionend", () => { composing = false; commitLockUntil = Date.now() + 150; });
                   UI.input.addEventListener("keydown", (ev) => {
+                    // W-SLASH：浮层开时 ↑↓/Enter/Tab/Esc 先归联想面板（IME 组词期不抢键）
+                    if (!ev.isComposing && ev.keyCode !== 229 && slashKeydown(ev)) return;
                     if (ev.key === "Enter" && !ev.shiftKey) {
                       if (ev.isComposing || composing) return;                 // IME 组词期 Enter 不发送
                       if (ev.keyCode === 229 && Date.now() - commitLockUntil < 400) return;
@@ -5243,6 +5597,7 @@
                       return;
                     }
                     histKeydown(ev);
+                    slashUpdate(UI.input); // 历史翻阅换了值：浮层按新值重估（/ 前缀失守即收起）
                   });
                   UI.input.addEventListener("input", () => { if (S.hist.idx >= 0) S.hist.draft = UI.input.value; syncComposerState(); });
                   UI.input.addEventListener("paste", (ev) => {
@@ -5281,6 +5636,9 @@
                     imgInput.addEventListener("change", () => { stageFiles(imgInput.files); imgInput.value = ""; });
                     imgBtn.addEventListener("click", (ev) => { ev.stopPropagation(); imgInput.click(); UI.input.focus(); });
                   }
+
+                  // 桌面会话输入框接线：input 触发重估 + keydown 先过浮层（↑↓/Enter/Tab/Esc），历史翻阅后同步重估
+                  UI.input.addEventListener("input", () => slashUpdate(UI.input));
 
                   // 文档级拖入蒙层（#79：拖文件无反应的真因——depth 计数 + preventDefault）
                   let dragDepth = 0;
@@ -5411,6 +5769,8 @@
                     });
                   }
                   // UIPOLISH3 件三：权限胶囊同款静态接线（open/close 与模型菜单同构互不干扰）
+                  UI.extModeCapsule = $id("session-extmode-capsule"); // W-PORT-A R-6：远程审批开关（external 专属）
+                  if (UI.extModeCapsule) UI.extModeCapsule.addEventListener("click", () => void toggleExtMode());
                   UI.permCapsule = $id("session-perm-capsule");
                   if (UI.permCapsule) {
                     UI.permCapsule.addEventListener("click", () => {
@@ -5513,7 +5873,19 @@
                     if (imgs.length > IMG_MAX || files.length > FILE_MAX) return { sent: false, error: "附件超限（图 " + IMG_MAX + " / 文件 " + FILE_MAX + "）" };
                     const payload = Object.assign({ session_id: s.session_id, text: body }, imgs.length ? { images: imgs } : {}, files.length ? { files } : {});
                     const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", payload);
-                    if (id) { S.staged = []; renderTray(); return { sent: true }; }
+                    if (id) {
+                      // W-PORT-A R-4：手机渲染路径同享乐观回显（与桌面 sendMessage 同构——echo push + ACK 失败标记）
+                      if (body) {
+                        const eq = S.echo.get(sid) || [];
+                        eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text: body, ts: Date.now(), state: "sending" });
+                        S.echo.set(sid, eq);
+                        if (sidIsSelected(sid)) renderConversation();
+                      }
+                      const sf = (ack) => { const v = ackVerdict(ack); if (!v.ok) markEchoFail(sid, body); };
+                      const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sf(null); } }, 10000);
+                      S.ackWaiters.set(id, { res: sf, t: wd2 });
+                      S.staged = []; renderTray(); return { sent: true };
+                    }
                     return { sent: false, error: "relay 未连接，命令未发送" };
                   },
                   stopPrompt(sid) { // #169 手机停止钮（与桌面 stopSession 同命令面）
@@ -5522,6 +5894,8 @@
                     return commandAck(s.external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: s.session_id });
                   },
                   stageFiles, // #169 手机图片/附件入口复用（压缩/限额逻辑不重写）
+                  slashFor(el) { slashUpdate(el); }, // W-SLASH：手机布局输入框共用联想浮层（透传补全）
+                  slashClose() { slashHide(); },
                 };
               })();
             </script>
@@ -6704,6 +7078,16 @@
                     } else applySnapshot(frame.payload);
                     changed = true;
                   }
+                  else if (frame.type === "COLLAB_MODE_UPDATED") {
+                    // W-MODE：切换帧合并进快照缓存（设置域开关回显数据源；bridge.sessions
+                    // 同步增删防锚卡残留——通知域跳转/selectSessionCard 消费桥缓存）
+                    const cm = frame.payload || {};
+                    const mode = cm.mode === "no-leader" ? "no-leader" : "leader";
+                    if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.collab_mode = mode;
+                    if (mode === "no-leader" && typeof cm.leader_session_id === "string") bridge.sessions.delete(cm.leader_session_id);
+                    else if (mode === "leader" && cm.leader_session && typeof cm.leader_session.session_id === "string") bridge.sessions.set(cm.leader_session.session_id, { ...cm.leader_session });
+                    changed = true;
+                  }
                   else if (frame.type === "NOTIFICATIONS_UPDATED") {
                     const items = frame.payload && Array.isArray(frame.payload.items) ? frame.payload.items : [];
                     const next = items.map(normalizeNotification).filter(Boolean);
@@ -7606,7 +7990,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.21";
+      const CONSOLE_VERSION = "0.7.0-test.22";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -8685,9 +9069,16 @@ function connectLan(ctx) {
           if (idLive) {
             const roleMap = new Map();
             (catalog || []).forEach((e) => (Array.isArray(e && e.default_for_roles) ? e.default_for_roles : []).forEach((role) => { if (role && !roleMap.has(role)) roleMap.set(role, e); }));
-            idLive.innerHTML = roleMap.size
+            // W-MODE 协作模式段（团队域面板顶）：能力位=SNAPSHOT.collab_mode（undefined=
+            // 旧 relay 不渲染，deliverables 同口径）。两态分段钮复用 density-control
+            // 语言；点击走 COMMAND_ORG_ACTION（接线在下方独立委托，闭包内有 bridge）
+            const cm = snap.collab_mode;
+            const cmRow = (cm === "leader" || cm === "no-leader")
+              ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>协作模式</strong><p>无 Leader 时隐藏常驻 Leader 卡（挂死恢复用）· 团队与看板照常</p></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
+              : "";
+            idLive.innerHTML = cmRow + (roleMap.size
               ? [...roleMap.entries()].map(([role, e]) => `<div class="member-card"><span class="avatar">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div><strong>${esc(role)}</strong><p>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省引擎</p></div></div>`).join("")
-              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>';
+              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
@@ -8698,6 +9089,26 @@ function connectLan(ctx) {
         };
         bridge.subscribe(() => render());
         render();
+        // W-MODE 协作模式分段钮：COMMAND_ORG_ACTION {action:"collab-mode"} → ACK ok 后
+        // 乐观更新快照缓存并重渲（多端最终一致由 relay COLLAB_MODE_UPDATED 帧兜底；
+        // 旧 relay orgAction default 拒 → toast 报错不切态）
+        document.addEventListener("click", (event) => {
+          const btn = event.target.closest("[data-collab-mode-option]");
+          if (!btn) return;
+          const mode = btn.dataset.collabModeOption === "no-leader" ? "no-leader" : "leader";
+          if (bridge.snapshot && bridge.snapshot.collab_mode === mode) return; // 已在目标态（重渲染竞态防抖）
+          btn.disabled = true;
+          bridge.sendCommand("COMMAND_ORG_ACTION", { action: "collab-mode", mode }).then((ack) => {
+            btn.disabled = false;
+            if (ack && ack.ok) {
+              if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.collab_mode = mode;
+              render();
+              showToast("协作模式已切换为「" + (mode === "no-leader" ? "无 Leader" : "有 Leader") + "」" + (mode === "no-leader" ? " · 常驻 Leader 卡已隐藏" : ""));
+            } else {
+              showToast("切换未生效：" + ((ack && ack.error) || "relay 未确认"));
+            }
+          });
+        });
       }
 
       const params = new URLSearchParams(location.search);
@@ -10052,7 +10463,7 @@ function connectLan(ctx) {
       });
       // W-WINPAIR 只读诊断锚（排障/走查共用）：源切换态一目了然（视角/云源/云态/LAN 连接态）
       window.__ccDeck005SourceState = () => ({ view: viewSource(), shellCloud: !!shellCloud, cloudMode: !!cloudMode,
-        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status,
+        cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status, cloudRelayName: String(cloudCtx.relayName || ""),
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });
@@ -10075,6 +10486,12 @@ function connectLan(ctx) {
         const bs = window.__ccDeck005B4 && window.__ccDeck005B4.sessions.get(sid);
         if (bs && bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source)) return cloudCtx.status === "online" ? cloudCmdShim : null;
         return window.__ccDeck005MainWs || ctx.ws;
+      };
+      // W-PORT-A R-2：目标源显式通道（新建弹窗「创建到」行消费）——cloud=云 shim（在线才有），
+      // local=LAN socket。与 RouteWs（按会话归属路由）互补：CREATE 类无 session_id 的命令按显式选择走。
+      window.__ccDeck005WsFor = (source) => {
+        if (source === "cloud") return cloudCtx.status === "online" ? cloudCmdShim : null;
+        return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
       };
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
@@ -11280,7 +11697,7 @@ function connectLan(ctx) {
         const s = bridge.sessions.get(detailSid) || (api.S && api.S.sessions ? api.S.sessions.get(detailSid) : null);
         if (s && typeof api.canCmd === "function" && !api.canCmd(s)) { mToast("历史会话只读"); return; }
         const r = api.sendPrompt(detailSid, text) || {};
-        if (r.sent) { if (input) input.value = ""; mToast("已发送"); }
+        if (r.sent) { if (input) input.value = ""; if (api && api.slashClose) api.slashClose(); mToast("已发送"); }
         else mToast(String(r.error || "发送失败"));
         syncMobileComposer();
       }
@@ -11309,7 +11726,7 @@ function connectLan(ctx) {
         const input = document.querySelector('#m-detail [data-composer="mobile"] .composer-input');
         if (input) {
           input.addEventListener("keydown", (ev) => { if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return; ev.preventDefault(); mobileSend(); }); // IME 组词期 Enter 不发送
-          input.addEventListener("input", () => syncMobileComposer()); // #169 发送禁用态随输入同步
+          input.addEventListener("input", () => { syncMobileComposer(); const api = b2Api(); if (api && api.slashFor) api.slashFor(input); }); // #169 发送禁用态随输入同步 + W-SLASH 联想浮层共用
         }
         // #169 图片/文件双入口（旧壳 imgBtn/fileBtn 语义；压缩/限额走 B2 stageFiles 不重写）
         const pickHost = '[data-composer="mobile"]';

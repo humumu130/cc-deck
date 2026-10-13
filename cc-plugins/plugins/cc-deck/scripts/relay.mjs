@@ -10432,6 +10432,26 @@ function ensureEmployeeHomeSeed(dataDir2) {
     return false;
   }
 }
+var COLLAB_MODE_FILE = "collab-mode.json";
+function readCollabMode(dataDir2) {
+  try {
+    const raw = JSON.parse(readFileSync(join(dataDir2, COLLAB_MODE_FILE), "utf-8"));
+    return raw && raw.mode === "no-leader" ? "no-leader" : "leader";
+  } catch {
+    return "leader";
+  }
+}
+function writeCollabMode(dataDir2, mode) {
+  try {
+    const p = join(dataDir2, COLLAB_MODE_FILE);
+    const tmp = p + ".tmp";
+    writeFileSync(tmp, JSON.stringify({ mode, updated_at: Date.now() }, null, 2) + "\n", "utf-8");
+    renameSync(tmp, p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // src/config.ts
 function parseEmployeeConfigDir(v, dataDir2) {
@@ -10599,6 +10619,8 @@ function contextLimitOfEffective(model) {
 var REPLAY_CONTEXT_MAX = 15e5;
 
 // src/history.ts
+import { createReadStream } from "node:fs";
+import * as readline from "node:readline";
 var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 1500;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
@@ -10664,9 +10686,9 @@ function compactEventsFile(path6, minBytes) {
     if (!existsSync4(path6)) return null;
     const size = statSync(path6).size;
     if (size < minBytes) return null;
-    const prior2 = loadEvents(path6);
-    const kept2 = compactEvents(prior2);
-    if (prior2.length === kept2.length) return null;
+    const prior = loadEvents(path6);
+    const kept2 = compactEvents(prior);
+    if (prior.length === kept2.length) return null;
     rewriteFile(path6, kept2);
     return { before: size, after: statSync(path6).size };
   } catch {
@@ -10851,6 +10873,72 @@ function deriveTitle(prompt) {
   const cleaned = firstLine.replace(/^[#>`\s*-]+/, "").replace(/\s+/g, " ").trim();
   const t = [...cleaned].length > 24 ? [...cleaned].slice(0, 24).join("") + "\u2026" : cleaned;
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
+}
+async function bootReplayFile(path6) {
+  const buckets = /* @__PURE__ */ new Map();
+  let priorCount = 0;
+  let keptCount = 0;
+  const touch = (b, e) => {
+    b.lastTs = Math.max(b.lastTs, e.ts);
+  };
+  const rl2 = readline.createInterface({ input: createReadStream(path6, { encoding: "utf-8" }), crlfDelay: Infinity });
+  for await (const line of rl2) {
+    const t = line.trim();
+    if (!t) continue;
+    let env;
+    try {
+      env = JSON.parse(t);
+    } catch {
+      continue;
+    }
+    if (typeof env.seq !== "number" || typeof env.type !== "string") continue;
+    priorCount++;
+    if (env.type === "SESSION_DELETED") {
+      const b2 = buckets.get(env.session_id);
+      if (b2) {
+        b2.deleted = true;
+        b2.deletedAtSeq = env.seq;
+        b2.created = [];
+        b2.states = [];
+        b2.logs = [];
+      }
+      continue;
+    }
+    let b = buckets.get(env.session_id);
+    if (b && b.deleted) {
+      b = { created: [], states: [], logs: [], lastTs: 0, deleted: false, deletedAtSeq: 0 };
+      buckets.set(env.session_id, b);
+    }
+    if (!b) {
+      b = { created: [], states: [], logs: [], lastTs: 0, deleted: false, deletedAtSeq: 0 };
+      buckets.set(env.session_id, b);
+    }
+    if (env.type === "SESSION_CREATED") {
+      b.created.push(env);
+      touch(b, env);
+    } else if (env.type === "SESSION_LOG") {
+      b.logs.push(env);
+      if (b.logs.length > MAX_LOGS_PER_SESSION) b.logs.splice(0, b.logs.length - MAX_LOGS_PER_SESSION);
+      touch(b, env);
+    } else if (STATE_TYPES.has(env.type)) {
+      b.states.push(env);
+      if (b.states.length > MAX_STATE_EVENTS_PER_SESSION) b.states.splice(0, b.states.length - MAX_STATE_EVENTS_PER_SESSION);
+      touch(b, env);
+    } else {
+    }
+  }
+  const ranked = [...buckets.entries()].filter(([, b]) => !b.deleted && (b.created.length > 0 || b.states.length > 0 || b.logs.length > 0)).sort((a, b) => b[1].lastTs - a[1].lastTs).slice(0, MAX_SESSIONS_KEPT);
+  const kept2 = [];
+  for (const [, b] of ranked) {
+    kept2.push(...[...b.created, ...b.states, ...b.logs].sort((x, y) => x.seq - y.seq));
+  }
+  kept2.sort((x, y) => x.seq - y.seq);
+  keptCount = kept2.length;
+  return {
+    kept: kept2,
+    sessions: reduceHistory(kept2),
+    compacted: priorCount !== keptCount
+  };
 }
 
 // src/event-bus.ts
@@ -49728,11 +49816,41 @@ provider=${opts.provider ?? "default"}` : void 0,
     return this.deletedExtIds.has(id2);
   }
   snapshot() {
-    return [...this.sessions.values()].map((s) => {
+    const hideLeader = this.leaderId && readCollabMode(this.cfg.dataDir) === "no-leader";
+    return [...this.sessions.values()].filter((s) => !(hideLeader && s.state.session_id === this.leaderId)).map((s) => {
       const c = this.cloneState(s);
       if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
       return c;
     });
+  }
+  // W-MODE：no-leader 态下抑制锚卡的 SESSION_CREATED 下发（唯一穿透口——三端消费
+  // 帧里只有 CREATED 会对未知卡建卡，UPDATED/HEARTBEAT/WAITING 等对无卡端全是无操作；
+  // 端上快照已无锚卡，CREATED 一到就「复活」）。用于 ws-server 广播/replay 与
+  // cloud-client onEnv 镜像三处下发出口；bus.emit 持久面（events.ndjson + relay
+  // 自身重启回放重建）绝不挡——挡了 relay 自己的内存卡就丢了。热路径短路：非
+  // CREATED 帧零读盘开销
+  suppressLeaderEvent(env) {
+    if (env.type !== "SESSION_CREATED" || !env.session_id || !this.leaderId) return false;
+    return readCollabMode(this.cfg.dataDir) === "no-leader" && env.session_id === this.leaderId;
+  }
+  // W-MODE：当前协作模式（SNAPSHOT.collab_mode / orgAction get 数据源）
+  collabMode() {
+    return readCollabMode(this.cfg.dataDir);
+  }
+  // W-MODE：切换协作模式（orgAction collab-mode set 的执行体）。写盘成功 → 广播
+  // 瞬态帧（在线端即时增删锚卡；离线端下次快照收敛）→ 返回最新态。no-leader 端
+  // 上删卡依据 = leader_session_id；切回 leader 带 leader_session 完整卡端上 upsert
+  applyCollabMode(mode) {
+    if (mode !== "leader" && mode !== "no-leader") return { ok: false, error: "mode \u5FC5\u987B\u662F leader|no-leader" };
+    if (!writeCollabMode(this.cfg.dataDir, mode)) return { ok: false, error: "collab-mode.json \u5199\u76D8\u5931\u8D25\uFF08\u76D8\u6EE1/\u6743\u9650\uFF1F\uFF09" };
+    const sid = this.leaderId ?? "";
+    const s = sid ? this.sessions.get(sid) : void 0;
+    this.bus.emitTransient("COLLAB_MODE_UPDATED", {
+      mode,
+      leader_session_id: sid,
+      ...mode === "leader" && s ? { leader_session: this.cloneState(s) } : {}
+    });
+    return { ok: true, data: { mode, leader_session_id: sid } };
   }
   // #17 第二批：雇员独立家开关（三端设置项后端）。热生效不重启——写
   // settings.json → cfg 重推导 → 广播 SETTINGS_UPDATED；此后新会话立即用新家，
@@ -53612,6 +53730,15 @@ provider=${opts.provider ?? "default"}` : void 0,
             }
           };
         }
+        // W-MODE 协作模式读写（本单最小核心）：mode 缺省=get 当前；mode=leader|no-leader
+        // =切换（写盘+COLLAB_MODE_UPDATED 广播）。设置面动作非决议面——但 HTTP 白名单
+        // 不放行（三端走 WS；org CLI 后续单再议），沿用「新动作默认不进 HTTP」纪律
+        case "collab-mode": {
+          const mode = str2("mode");
+          if (!mode) return { ok: true, data: { mode: this.collabMode(), leader_session_id: this.leaderId ?? "" } };
+          if (mode !== "leader" && mode !== "no-leader") return { ok: false, error: "mode \u5FC5\u987B\u662F leader|no-leader" };
+          return this.applyCollabMode(mode);
+        }
         case "project-create": {
           const name = str2("name");
           const anchor = str2("anchor");
@@ -55753,22 +55880,34 @@ async function injectTextMac(pid, rawText) {
   if (!text) return { ok: false, error: "\u7A7A\u6D88\u606F" };
   const target = await resolveTmuxTarget(pid);
   if (target) {
+    const t02 = Date.now();
     let w2 = await tmuxSendKeys(target, "-l", "--", text);
+    let wRetried = false;
     if (!w2.ok) {
       await sleep(200);
+      wRetried = true;
       w2 = await tmuxSendKeys(target, "-l", "--", text);
     }
     if (!w2.ok) return w2;
+    const tWrite = Date.now();
     const e = await tmuxSendKeys(target, "Enter");
     if (!e.ok) return e;
     const tail2 = tmuxNorm(text.slice(-24));
+    console.log(`[injector] optimistic-write sid-target=${target} write=${tWrite - t02}ms${wRetried ? "(retry)" : ""} enter=${Date.now() - tWrite}ms sync-total=${Date.now() - t02}ms len=${text.length}`);
     void (async () => {
+      let round = 0;
       for (const delay of [600, 1500, 3e3]) {
         await sleep(delay);
+        round++;
         try {
-          if (await tmuxVerifySubmitted(target, tail2)) return;
+          const tV = Date.now();
+          if (await tmuxVerifySubmitted(target, tail2)) {
+            console.log(`[injector] verify-ok round=${round} at=${Date.now() - t02}ms (verify ${Date.now() - tV}ms)`);
+            return;
+          }
           const r = await tmuxSendKeys(target, "Enter");
           if (!r.ok) return;
+          console.log(`[injector] compensate-enter round=${round} at=${Date.now() - t02}ms (verify ${Date.now() - tV}ms)`);
         } catch {
         }
       }
@@ -57540,9 +57679,6 @@ var Bridge = class _Bridge {
     this.saveQueueDisk();
     this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { ...item }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
-      if (state.status !== "DONE") {
-        this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6CE8\u5165\u7EC8\u7AEF\uFF08CLI \u8FD0\u884C\u4E2D\uFF0C\u81EA\u52A8\u6392\u961F\u8DDF\u968F\uFF09\uFF1A${truncate(echoText, 80)}`);
-      }
       void this.flushQueue(sessionId);
     } else {
       this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6392\u961F\uFF08\u7B49\u5F85\u786E\u8BA4/\u56DE\u5408\u7ED3\u675F\u540E\u81EA\u52A8\u53D1\u9001\uFF09\uFF1A${truncate(echoText, 80)}`);
@@ -59470,8 +59606,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync24(join34(p, "web-console", "index.html"))) ?? webRootCandidates[1];
-  const consoleHtml = join34(webRoot, "web-console", "index.html");
+  const webRoot = webRootCandidates.find((p) => p && existsSync24(join34(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
   const consoleHtml005 = join34(webRoot, "web-console", "index-005.html");
   const naclJs = join34(webRoot, "web-console", "nacl.js");
   const qrJs = join34(webRoot, "web-console", "qr.js");
@@ -59533,12 +59668,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync24(consoleHtml)) {
-        res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
+      if (!existsSync24(consoleHtml005)) {
+        res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
-      const html = readFileSync29(consoleHtml);
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/app2") {
@@ -60031,7 +60165,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
-    const replay = lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq) ? bus2.replayAfter(lastSeq) : null;
+    const replay = lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq) ? bus2.replayAfter(lastSeq).filter((env) => !mgr2.suppressLeaderEvent(env)) : null;
     if (replay && replay.length <= 200) {
       for (const env of replay) ws2.send(JSON.stringify(env));
     } else {
@@ -60077,6 +60211,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr2.employeeHomeState(),
+          // W-MODE 协作模式（设置-团队域开关数据源；no-leader 时 sessions 已由
+          // snapshot() 过滤锚卡；cloud-client 云通道快照同步携带，#117 教训）
+          collab_mode: mgr2.collabMode(),
           // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
           // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
           // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
@@ -60148,6 +60285,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     });
   });
   const unsubscribe = bus2.subscribe((env) => {
+    if (mgr2.suppressLeaderEvent(env)) return;
     const text = JSON.stringify(env);
     for (const client of wss.clients) {
       const cw2 = client;
@@ -60790,6 +60928,9 @@ var CloudClient = class {
         // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
         // 云桥手机设置页同样要读 source 判锁定态）
         settings: this.mgr.employeeHomeState(),
+        // W-MODE 协作模式（与 ws-server 直连快照同源同步，#117 教训——云桥手机
+        // 设置页开关回显；no-leader 时 sessions 已由 mgr.snapshot() 过滤锚卡）
+        collab_mode: this.mgr.collabMode(),
         // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
         // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
         // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，
@@ -60991,6 +61132,7 @@ var CloudClient = class {
   }
   onEnv(env) {
     if (!this.ws || this.ws.readyState !== wrapper_default.OPEN) return;
+    if (this.mgr.suppressLeaderEvent(env)) return;
     for (const [dev, st2] of this.phones) {
       if (env.to && env.to !== `cloud-${dev}`) continue;
       if (st2.active && this.sendSealed(dev, env) && env.seq > st2.lastSeq) st2.lastSeq = env.seq;
@@ -61436,16 +61578,16 @@ function sweepTmpImages(dir) {
 var tmpImageDir = join37(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
-var prior = loadEvents(persistPath);
-var kept = compactEvents(prior);
-if (prior.length !== kept.length) rewriteFile(persistPath, kept);
+var boot = await bootReplayFile(persistPath);
+var kept = boot.kept;
+if (boot.compacted) rewriteFile(persistPath, kept);
 var eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
 var compactEventsTick = () => {
   const r = compactEventsFile(persistPath, eventsCompactBytes);
   if (r) console.log(`[events] \u8FD0\u884C\u671F\u538B\u7F29\uFF1A${(r.before / 1048576).toFixed(1)}MB \u2192 ${(r.after / 1048576).toFixed(1)}MB`);
 };
 setInterval(compactEventsTick, 6 * 36e5).unref?.();
-var replayed = reduceHistory(kept);
+var replayed = boot.sessions;
 var bus = new EventBus({ preload: kept, persistPath });
 var mgr = new SessionManager(bus, cfg);
 var adopted = mgr.adopt(replayed);
