@@ -6926,28 +6926,6 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-<<<<<<< HEAD
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
-                    // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
-                    // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
-                    // 状态胶囊保留（UIPOLISH3 件九⑩ 用户拍板件不动）；分组只二分不改数据语义
-                    const card = (item) => {
-                      const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
-                      const mins = Math.max(0, Math.round((Date.now() - (item.updated_at || 0)) / 60000));
-                      const activeAgo = mins <= 0 ? "刚刚活跃" : mins < 60 ? mins + " 分钟前活跃" : mins < 1440 ? Math.round(mins / 60) + " 小时前活跃" : Math.round(mins / 1440) + " 天前活跃";
-                      return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><span class="team-ava" aria-hidden="true">' + escape(String(item.name || item.id).trim().slice(0, 1) || "团") + '</span><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div>'
-                        + '<p class="team-meta" title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + ' 席 · 待确认 ' + pending + (item.status === "archived" ? "" : ' · <span class="team-ago">' + activeAgo + '</span>') + '</p>'
-                        + '<div class="identity-cluster">' + sourceBadge() + "</div></div>";
-                    };
-                    const live = state.projects.filter((p) => p.status !== "archived");
-                    const archived = state.projects.filter((p) => p.status === "archived");
-                    const grp = (label, n) => '<div class="team-grp"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>' + label + ' <span class="team-grp-n">' + n + "</span></div>";
-                    let html = "";
-                    if (live.length) html += grp("进行中", live.length) + live.map(card).join("");
-                    if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
-                    return html;
-                  })() : banner(projectsEmpty());
-=======
                   query("[data-team-projects]").innerHTML = state.projects?.length ? state.projects.map((item) => {
                     const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
                     const roster = members(item);
@@ -6961,7 +6939,6 @@
                     // （点色随态，灯丑根治）。title 恒带全文字（hover/读屏可达）
                     return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '" aria-label="' + escape(teamAria) + '"><span class="team-card-avatar" aria-hidden="true">' + escape(teamAvatar) + '</span><div class="team-card-main"><div class="row"><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div><div class="team-counts" title="' + escape(teamAria + (pending ? " · " + pending + " 项待确认" : "")) + '"><span class="team-count"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg><b>' + roster.length + '</b></span><span class="team-count running"><i class="team-count-icon" aria-hidden="true">▶</i><b>' + running + '</b></span><span class="team-count acceptance"><svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></div></div><div class="identity-cluster">' + sourceBadge() + "</div></div>";
                   }).join("") : banner(projectsEmpty());
->>>>>>> tmp-lane-restore
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
