@@ -382,11 +382,9 @@ const makeStyles = (c: ThemeColors) =>
     headT: { color: c.text, fontSize: 15, fontWeight: "700" },
 
     // W-POLISH-MOBILE A2：副语降为 dim（品牌色克制——原 brandA 与 ＋ 钮双色抢锚点）；
-    headSub: { color: c.dim, fontSize: 11, fontWeight: "600", flex: 1 },
-    plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.1), borderWidth: 1, borderColor: withA(c.brandA, 0.32), overflow: "hidden" },
+    // dda6490/1cf5614 并集残留收口：headSub/plusBtn/list 与下方件七统一规格版重复
+    //（对象字面量后者生效=1cf5614 44×44 统一版），删 A2 三键保留语义；plusT 仅 A2 有，保留。
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
-    list: { flex: 1, paddingHorizontal: 14, paddingTop: 10 },
-    // 确认卡队列（A9：队列加节头，与详情页 ① 节语言一致）
 
     headSub: { color: c.brandA, fontSize: 11, fontWeight: "600", flex: 1 },
     plusBtn: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", marginLeft: 6, overflow: "hidden" }, // 件七：44×44 统一规格

@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 
-import { Alert, Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native";
-
-import { Alert, Animated, FlatList, Image, Linking, Modal, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+// fddde97+dda6490 并集合并残留收口：w63（TextInput/PanResponder）与 w54（Modal）两行 import 并存致 25 处重复标识符——合一行取并集
+import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native";
 
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
