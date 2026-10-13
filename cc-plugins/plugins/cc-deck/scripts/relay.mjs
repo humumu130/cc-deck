@@ -14302,6 +14302,23 @@ function writeProjectsFile(f, dir) {
 function listGroups(dir) {
   return readProjectsFile(dir).groups;
 }
+var SNAPSHOT_BOARDS_MAX_BYTES = 512 * 1024;
+function listBoards(dir) {
+  const out = [];
+  let total = 0;
+  for (const g2 of listGroups(dir)) {
+    const b = loadBoardFile(g2.id, dir);
+    if (!b) continue;
+    const shaped = b.lessons?.length ? { ...b, lessons: [] } : b;
+    total += JSON.stringify(shaped).length;
+    if (total > SNAPSHOT_BOARDS_MAX_BYTES) {
+      console.warn(`[board-persist] \u677F\u5168\u91CF\u8D85 ${SNAPSHOT_BOARDS_MAX_BYTES}B \u5B88\u536B\uFF0CSNAPSHOT \u4E0D\u5E26 boards\uFF08\u7AEF\u4E0A\u56DE\u9000\u6309\u9700\u62C9\uFF09`);
+      return null;
+    }
+    out.push(shaped);
+  }
+  return out;
+}
 function listGroupsByStatus(dir) {
   const g2 = listGroups(dir);
   const pick = (s) => g2.filter((x) => x.status === s);
@@ -60623,9 +60640,19 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
           allow_rules: mgr2.allowRules.list(),
           // #26 M2 组织：项目组索引 + 待决确认单（cloud-client 云通道快照同步携带，
-          // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
+          // #117 教训）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          // P0 板持久信道（夜审 B2-F1）：板全量随 SNAPSHOT——断连端重连即追平
+          //（BOARD_UPDATED 瞬态不补发+板此前不随快照=断连窗口变更全丢的根治）；
+          // web 消费面 6896 行早已锚 payload.boards（本批只补 relay 下发）；
+          // 体积守卫与 lessons 摘除口径见 listBoards；detail 按需拉保留为旧 relay
+          //（boards 缺省）与超守卫规模的回退路
+          ...(() => {
+            const b = listBoards();
+            return b === null ? {} : { boards: b };
+          })(),
+          // 守卫弃发=键缺席（旧 relay 形态，单次读盘）；空数组也下发=能力位
           // W-EXPP2 经验库：全量条目锚定帧 + 总开关（空数组也下发——端上以字段存在性
           // 判断能力；cloud-client 云通道快照同步携带，#117 教训）
           experience: listExperience(),
@@ -61513,6 +61540,14 @@ var CloudClient = class {
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
+        // P0 板持久信道（夜审 B2-F1）：与 ws-server 直连快照同源同步（#117 教训）——
+        // 云桥手机端断连重连同样靠快照全量追平；体积守卫见 listBoards（云帧 1MiB 硬限，
+        // 42KB 实测远安全）
+        ...(() => {
+          const b = listBoards();
+          return b === null ? {} : { boards: b };
+        })(),
+        // 守卫弃发=键缺席（旧 relay 形态，单次读盘）；空数组也下发=能力位
         // W-EXPP2 经验库：全量条目锚定帧 + 总开关（与 ws-server 直连快照同源同步，
         // #117 教训——云桥手机经验分节同样靠快照兜底；空数组也下发）
         experience: listExperience(),
