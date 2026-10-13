@@ -434,6 +434,15 @@
        与 source-manage（进设置做 server 侧配对）同区不同色：主动作用 brand */
     .source-add {display: block; width: 100%; margin: 4px 0 0; padding: 7px 6px 5px; border: 0; background: transparent; color: var(--brand); font-size: var(--fs-E); text-align: left; cursor: pointer;}
     .source-add:hover { color: var(--text-strong); }
+    /* W-WINPAIR-R7②：云桥行 ✎ 改名钮（hover 显现，不与摘要挤位） */
+    .source-rename { flex: none; display: none; width: 20px; height: 20px; border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer; font-size: 11px; line-height: 1; }
+    .source-option:hover .source-rename { display: grid; place-items: center; }
+    .source-rename:hover { color: var(--text-strong); background: var(--hover); }
+    /* W-WINPAIR-R7③：胶囊展开态精修（手机 SetupScreen 服务器卡语言）——行呼吸感/激活描边/摘要防挤 */
+    .source-menu .source-option { gap: 9px; padding: 9px 8px; }
+    .source-menu .source-option + .source-option, .source-menu .source-option + .source-add { margin-top: 2px; }
+    .source-menu .source-option small { flex: none; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .source-menu .source-option.active { box-shadow: inset 0 0 0 1px var(--selected-line); }
     /* W-WINPAIR 添加服务器弹窗：create-pop 卡体 + pair-pop 背板（高级折叠用原生 details 免 JS） */
     .add-server-pop details.add-adv { margin: 10px 0 2px; border-top: 1px solid var(--line-soft); padding-top: 8px; }
     .add-server-pop details.add-adv summary { color: var(--faint); font: var(--fs-B) var(--mono); cursor: pointer; user-select: none; list-style-position: inside; }
@@ -2602,8 +2611,8 @@
                   S.ackWaiters.clear();
                 }
 
-                function sendCmd(type, payload) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算
-                  const w = window.__ccDeck005MainWs;
+                function sendCmd(type, payload) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）
+                  const w = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs;
                   if (!w || w.readyState !== 1) { b2Toast("relay 未连接，命令未发送"); return null; }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
                   w.send(JSON.stringify(cmd));
@@ -4151,7 +4160,9 @@
                   const emit = (label, items, mk, groupClass, groupKey) => {
                     if (!items.length) return;
                     html += '<div class="queue-group' + (groupClass ? " " + groupClass : "") + '" data-task-group="' + groupKey + '">' + label + "</div>";
-                    for (const t of items) html += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + ">" + mk(t) + "<span>" + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
+                    // W-TASKFLOW 看板镜像徽标：source="board" 条目=团队看板单向投影（唯一事实源），双跑期可辨
+                    const srcChip = (t) => (t.source === "board" ? '<i style="font-style:normal;font-size:10px;line-height:1;padding:2px 5px;margin-right:6px;border-radius:4px;color:var(--brand);background:rgba(226,133,94,.12);border:1px solid rgba(226,133,94,.3);font-weight:600" title="团队看板镜像（以看板为准单向同步）">板</i>' : "");
+                    for (const t of items) html += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + ">" + mk(t) + "<span>" + srcChip(t) + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
                   };
                   emit("已完成 · " + doneList.length + "/" + doneAll.length, doneList, () => "<b>✓</b>", "group-done", "done");
                   emit("进行中 · " + ip.length, ip, () => '<b class="run">◐</b>', "group-working", "working");
@@ -6288,7 +6299,7 @@
                   const cands = teamCandidates();
                   // W-UIFB 追加⑭：顶部说明一句话收敛（原句啰嗦且「轻立项」与档位选项重复）；
                   // 档位语义由下拉选项自身表达，说明只答「创建后去哪、要不要确认」
-                  let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的立项会在确认卡上请你决议</p>';
+                  let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的新建项目会在确认卡上请你决议</p>';
                   html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名">';
                   html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
                   html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻量项目（单卡简化态）</option><option value="正经立项">正式项目（每次创建都需确认）</option></select>';
@@ -6364,8 +6375,8 @@
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";
-                    feedback(result.data?.needsConfirm ? "立项已提交，等你在确认卡上 ✓/✗。" + manualNote : "团队已创建。" + manualNote);
-                    toast(result.data?.needsConfirm ? "立项已提交，待确认卡决议" : "团队已创建" + (manualSeats.length ? " · 手动席位 " + manualSeats.length + " 个待入编" : ""));
+                    feedback(result.data?.needsConfirm ? "新建项目已提交，等你在确认卡上 ✓/✗。" + manualNote : "团队已创建。" + manualNote);
+                    toast(result.data?.needsConfirm ? "新建项目已提交，待确认卡决议" : "团队已创建" + (manualSeats.length ? " · 手动席位 " + manualSeats.length + " 个待入编" : ""));
                   } catch (error) {
                     feedback("创建失败：" + String(error?.message || error));
                   } finally {
@@ -6481,7 +6492,7 @@
           </section>
 
           <section class="desktop-screen" id="d-project">
-            <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起立项 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起新建项目 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="source-badge" data-project-source></span></div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
             <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block" data-project-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
             <script>
@@ -6633,8 +6644,9 @@
                     return new Promise((resolve) => {
                       // #150 R1 收紧（承 #143 盲评A-1 口径）：劫持拆除后无 sockets 借道面，命令只走
                       // 地基主连接（window.__ccDeck005MainWs，readyState===1），ACK 经帧总线回本桥结算；
-                      // 无可用连接 resolve(null)——消费域按未送达处理（B4/notify 同口径）
-                      const mainWs = window.__ccDeck005MainWs;
+                      // 无可用连接 resolve(null)——消费域按未送达处理（B4/notify 同口径）；
+                      // W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）
+                      const mainWs = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs;
                       const socket = mainWs && mainWs.readyState === 1 ? mainWs : null;
                       if (!socket) { resolve(null); return; }
                       const command_id = uuid();
@@ -6868,7 +6880,7 @@
                     const nativePath = entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || "");
                     const shellOpen = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
                     const openBtn = '<button class="project-open-btn" type="button" data-project-open="' + escapeHtml(nativePath) + '" aria-label="在文件夹中定位" title="在文件夹中定位 · ' + escapeHtml(displayPath(nativePath)) + '"' + (nativePath && shellOpen ? "" : ' style="display:none"') + '><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg></button>';
-                    return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + '</div><p class="project-card-sub"><span class="project-card-path">' + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未立项") + "</span>" + openBtn + "</p>"
+                    return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + '</div><p class="project-card-sub"><span class="project-card-path">' + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未入项目") + "</span>" + openBtn + "</p>"
                       + (engines.length || working ? '<div class="identity-cluster">' + engines.map((e2) => engineBadge(e2)).join("") + (working ? '<span class="source-badge">进行中 ' + working + "</span>" : "") + "</div>" : "") + "</div>";
                   };
                   const group = (label, list) => list.length ? '<div class="queue-group">' + escapeHtml(label) + " · " + list.length + "</div>" + list.map(card).join("") : "";
@@ -6876,10 +6888,10 @@
                   // 折叠态下组内有 WAITING/ERROR 时亮「抽屉里有要处理的」，不强行展开（卡状态点同词汇）
                   const unfiledHot = unfiledList.some((entry) => entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR"));
                   const unfiledMarkup = unfiledList.length
-                    ? '<button class="queue-group project-unfiled-toggle" type="button" data-project-unfiled-toggle aria-expanded="' + (!unfiledCollapsed) + '"><span class="unfiled-chev">▸</span>未立项 · ' + unfiledList.length + (unfiledCollapsed && unfiledHot ? '<i class="status-dot waiting"></i>' : "") + "</button>"
+                    ? '<button class="queue-group project-unfiled-toggle" type="button" data-project-unfiled-toggle aria-expanded="' + (!unfiledCollapsed) + '"><span class="unfiled-chev">▸</span>未入项目 · ' + unfiledList.length + (unfiledCollapsed && unfiledHot ? '<i class="status-dot waiting"></i>' : "") + "</button>"
                       + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
                     : "";
-                  const markup = group("活跃项目", activeList) + group("待确认立项", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
+                  const markup = group("活跃项目", activeList) + group("待确认新建项目", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
                   els.queue.replaceChildren(nodesFrom(markup));
                 }
 
@@ -6902,10 +6914,10 @@
 
                 function overviewMiniMarkup(entry) {
                   if (overviewMini === "team") {
-                    if (!entry.group) return '<div class="readonly-banner">该目录未立项。立项确认在团队域发起（组织命令），项目页不产生第二写面。</div>' + overviewJumpLink("团队");
+                    if (!entry.group) return '<div class="readonly-banner">该目录未入项目。新建项目确认在团队域发起（组织命令），项目页不产生第二写面。</div>' + overviewJumpLink("团队");
                     const g = entry.group;
                     const headcount = Array.isArray(g.headcount) ? g.headcount : [];
-                    const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认立项" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
+                    const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认新建项目" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
                     const rows = headcount.slice(0, OVERVIEW_MINI_TAKE).map((m) => {
                       const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
                       const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
@@ -6961,11 +6973,11 @@
                 }
 
                 function teamTabMarkup(entry) {
-                  if (!entry.group) return '<div class="readonly-banner">该目录未立项。立项确认在团队域发起（组织命令），项目页不产生第二写面。</div><button class="secondary-btn" type="button" data-domain-jump="team">去团队域</button>';
+                  if (!entry.group) return '<div class="readonly-banner">该目录未入项目。新建项目确认在团队域发起（组织命令），项目页不产生第二写面。</div><button class="secondary-btn" type="button" data-domain-jump="team">去团队域</button>';
                   // FB12 团队 tab 实数据：编制名册只读渲染（席位/角色/引擎/模型），写面仍在团队域
                   const g = entry.group;
                   const headcount = Array.isArray(g.headcount) ? g.headcount : [];
-                  const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认立项" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
+                  const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认新建项目" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
                   const rows = headcount.map((m) => {
                     const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
                     const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
@@ -7085,7 +7097,7 @@
                   const target = event.target;
                   if (target.closest("[data-project-create]")) {
                     bridge.railJump("team");
-                    toast("立项确认在团队域发起 · 项目页只读聚合");
+                    toast("新建项目确认在团队域发起 · 项目页只读聚合");
                     return;
                   }
                   const open = target.closest("[data-open-acceptance]");
@@ -7188,13 +7200,16 @@
 
                 // 行合成：通知账（权威）+ 待决确认单兜底（无在册通知的补行，按 entityId 去重）
                 // + 验收单行（relay 暂无 acceptance 通知产生源 → 端上本地合成，契约请求 B4-C3）。
+                // W-WINPAIR-R8②：时间戳单位归一——acceptance/confirm 的 created_at 是秒级
+                // （bin/acceptance 契约，W-NQA F6 同族），按毫秒解析会显 1970-01-2x；<1e11 视作秒 ×1000
+                const normTs = (v) => { const n = Number(v) || 0; return n > 0 && n < 1e11 ? n * 1000 : n; };
                 function buildRows() {
                   const rows = [];
                   for (const n of bridge.notifications) {
                     if (flight.has(n.key) || dismissedNotifyKeys.has(n.key)) continue;
                     const session = sessionOf(n);
                     rows.push({
-                      synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: n.created_at,
+                      synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: normTs(n.created_at),
                       unresolved: !doneOf(n), active: !doneOf(n) && n.actionable === true, actionable: n.actionable === true,
                       source: n, engine: session ? session.engine : "", sessionTitle: session ? (session.title || session.initial_prompt || "") : "",
                       sessionId: n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "",
@@ -7205,13 +7220,13 @@
                     if (dismissedNotifyKeys.has("confirm:" + confirm.id)) continue;
                     const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOf(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
                     if (covered) continue;
-                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: Number(confirm.created_at) || 0, unresolved: true, active: true, actionable: false, source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
                   }
                   const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
                   if (!hasAcceptanceChannel) {
                     for (const acceptance of bridge.accepts) {
                       if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
-                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: Number(acceptance.created_at) || 0, unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3：「打开表单页回填」冗余提示删除（jump 按钮承载）
+                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
                     }
                   }
                   rows.sort((a, b) => Number(b.active) - Number(a.active) || b.ts - a.ts);
@@ -7249,8 +7264,7 @@
                     return '<div class="notice' + (selected ? " selected" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '" data-notify-group="' + groupKey + '"'
                       + ' title="' + (selected ? "当前选中 · 详情在右侧" : "点击查看来源详情与处理动作") + '">'
                       + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + kindMetaOf(row.kind).icon + '"></use></svg></span>'
-                      + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + '<span class="tag mini">' + escapeHtml(kindMetaOf(row.kind).label) + "</span>" + "</div>"
-                      + '<span class="nrow-time">' + escapeHtml(relTime(doneTs)) + "</span></div></div>";
+                      + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + '<span class="tag mini">' + escapeHtml(kindMetaOf(row.kind).label) + "</span>" + "</div></div>"; // W-WINPAIR-R8②：行内时间移除（第三列详情有时间）
                   };
                   const group = (label, groupKey, items) => items.length
                     ? '<div class="queue-group">' + escapeHtml(label) + ' · <span data-notify-group-count="' + groupKey + '">' + items.length + "</span></div>" + items.map((row) => notice(row, groupKey, row.key === selectedNotifyKey)).join("")
@@ -7293,8 +7307,8 @@
                   const actions = light || lightDone || jumpButton ? '<div class="notify-actions">' + light + lightDone + jumpButton + "</div>" : "";
                   return '<article class="notify-source-card' + (row.unresolved ? "" : " resolved") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="notify-row-main"><div class="nrow-r1"><h3>' + escapeHtml(row.title) + '</h3><span class="nrow-time">' + escapeHtml(relTime(doneTs)) + "</span></div>"
-                    + '<div class="notify-copy">' + copyRowsOf(row) + "</div>"
+                    + '<div class="notify-row-main"><div class="nrow-r1"><h3>' + escapeHtml(row.title) + '</h3></div>' /* W-WINPAIR-R8②：行内时间移除（第三列详情卡承载） */
+                    + '<div class="notify-copy">' + copyRowsOf(row) + "</div>" /* W-WINPAIR-R8①：正文保留在第三列详情卡（sourceCard 即详情主体）——第二列轻行（notice）无正文不重复 */
                     // 件十二扩充 C：元信息行重做——类型枚举徽章（icon+label）在前，源标签小号灰
                     // 在后（本机命名件十三已统一）；「需行动」状态标签删除（C1，通知本就是需行动）
                     + '<div class="nrow-r3"><span class="notify-kind-badge"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg>' + escapeHtml(km.label) + '</span>' + (row.engine ? engineBadge(row.engine) : "") + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></div></div>"
@@ -8050,10 +8064,26 @@ function connectLan(ctx) {
       function sourceConnClass(state) {
         return state === "online" ? "conn-on" : state === "connecting" ? "conn-wait" : state === "unconfigured" ? "conn-idle" : "conn-fail";
       }
-      // W-UIFB ①：源名展示口径——桌面壳 location.host 即本机 relay（tauri.localhost 等），展示「本机」
+      // W-UIFB ①：源名展示口径——桌面壳 location.host 即本机 relay（tauri.localhost 等），展示「本机」；
+      // W-WINPAIR-R7②：源改名表（原始 relay_name→用户命名，localStorage 持久）全链跟随——
+      // 顶栏胶囊/源列表/会话卡源徽章/设置页云桥行都经此映射，新名即显
+      const SOURCE_NAMES_KEY = "cc-deck-005-source-names";
+      function sourceNameOverrides() {
+        try { return JSON.parse(localStorage.getItem(SOURCE_NAMES_KEY) || "{}") || {}; } catch { return {}; }
+      }
+      function setSourceNameOverride(rawName, displayName) {
+        const map = sourceNameOverrides();
+        const k = String(rawName || "");
+        if (!k) return;
+        if (displayName && String(displayName).trim()) map[k] = String(displayName).trim().slice(0, 40);
+        else delete map[k];
+        try { localStorage.setItem(SOURCE_NAMES_KEY, JSON.stringify(map)); } catch {}
+      }
       function sourceDisplayName(name) {
         const n = String(name || "");
-        return /^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(n) ? "本机" : n;
+        if (/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(n)) return "本机";
+        const overrides = sourceNameOverrides();
+        return (Object.prototype.hasOwnProperty.call(overrides, n) && overrides[n]) || n;
       }
       // W-UIFB ①：连接图标（旧版 connChip 线条电脑图标同形移植）注入全部 trigger 壳
       const SOURCE_CONN_SVG = '<svg viewBox="0 0 16 13" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.2" y="1.5" width="13.6" height="9" rx="1.6"/><path d="M5.5 12.5h5" stroke-linecap="round"/></svg>';
@@ -8118,10 +8148,24 @@ function connectLan(ctx) {
             }
             if (cloudRow) {
               const cs = cloudCtx.status;
-              // 在线显 relay 名（与顶栏 trigger 同源一致）；未连接显地址（激活前 cloudCtx.cfg 还没填则回落共享库）
+              // 在线显 relay 名（与顶栏 trigger 同源一致，走改名映射）；未连接显地址（激活前 cloudCtx.cfg 还没填则回落共享库）
               const cloudAddr = (cloudCtx.cfg && cloudCtx.cfg.wsUrl) || (pairedCloud[0] && pairedCloud[0].wsUrl) || "";
-              const cloudLabel = (cs === "online" && cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName))) ? cloudCtx.relayName : (cloudAddr ? hostOf(cloudAddr) : "云桥");
+              const cloudLabel = (cs === "online" && cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName))) ? sourceDisplayName(String(cloudCtx.relayName)) : (cloudAddr ? hostOf(cloudAddr) : "云桥");
               cloudRow.querySelector("strong").textContent = cloudLabel;
+              // W-WINPAIR-R7②：在线云源行尾 ✎ 改名钮（hover 显现）
+              let renameBtn = cloudRow.querySelector("[data-source-rename]");
+              if (cs === "online" && cloudCtx.relayName && !renameBtn) {
+                renameBtn = document.createElement("button");
+                renameBtn.className = "source-rename";
+                renameBtn.type = "button";
+                renameBtn.title = "重命名此源";
+                renameBtn.setAttribute("aria-label", "重命名此源");
+                renameBtn.dataset.sourceRename = "";
+                renameBtn.dataset.relayName = String(cloudCtx.relayName);
+                renameBtn.textContent = "✎";
+                cloudRow.appendChild(renameBtn);
+              } else if (renameBtn && cs !== "online") { renameBtn.remove(); }
+              else if (renameBtn) { renameBtn.dataset.relayName = String(cloudCtx.relayName); }
               cloudRow.querySelector("small").textContent = cs === "online" ? "云桥 · 在线" : cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : "云桥 · " + (cloudCtx.statusText || "离线");
               cloudRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cs === "online" ? "online" : cs === "connecting" ? "connecting" : "offline"));
               cloudRow.classList.toggle("active", cloudActive);
@@ -9958,6 +10002,54 @@ function connectLan(ctx) {
         if (cloudMode) return;
         setSourceView("local"); // 云链保持连接保活；仅切视角与命令通道（不再 cloudDisconnect）
       }
+      // ---------- W-WINPAIR-R7②：源改名（多远程区分——键=原始 relay_name，全链经 sourceDisplayName 跟随） ----------
+      function openRenameSourceUI(rawName) {
+        closeTransientOverlays();
+        if (document.querySelector("[data-rename-pop]")) return;
+        const back = document.createElement("div");
+        back.className = "pair-pop-backdrop";
+        back.dataset.renameBack = "";
+        const pop = document.createElement("div");
+        pop.className = "create-pop";
+        pop.dataset.renamePop = "";
+        pop.setAttribute("role", "dialog");
+        pop.setAttribute("aria-modal", "true");
+        pop.setAttribute("aria-label", "重命名源");
+        pop.innerHTML = '<h3>重命名源</h3>'
+          + '<p class="create-sub">给这台远程起个好认的名字 · 顶栏/源列表/会话徽章同步更新</p>'
+          + '<div class="create-label">显示名</div>'
+          + '<input class="create-field" data-rename-input type="text" maxlength="40" placeholder="' + String(sourceDisplayName(rawName)).replace(/"/g, "&quot;") + '" aria-label="源显示名">'
+          + '<div class="pair-foot"><span class="add-hint">留空恢复默认名</span><span style="display:flex;gap:8px"><button class="secondary-btn" type="button" data-rename-close>取消</button><button class="primary-btn" type="button" data-rename-save>保存</button></span></div>';
+        const close = () => { pop.remove(); back.remove(); };
+        const save = () => {
+          const val = String((pop.querySelector("[data-rename-input]") || {}).value || "").trim();
+          setSourceNameOverride(rawName, val);
+          close();
+          showToast(val ? "已重命名 · " + val : "已恢复默认名");
+          replaySnapshots();          // B2/桥重放快照 → 会话卡徽章按新名重渲
+          renderSessionList();
+          refreshSourceSwitchers();
+        };
+        back.addEventListener("click", close);
+        pop.addEventListener("click", (e) => {
+          if (e.target.closest("[data-rename-close]")) { close(); return; }
+          if (e.target.closest("[data-rename-save]")) { save(); return; }
+        });
+        pop.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+          if (e.target.closest && e.target.closest("[data-rename-input]")) { e.preventDefault(); save(); }
+        });
+        document.body.appendChild(back);
+        document.body.appendChild(pop);
+        setTimeout(() => { const el = pop.querySelector("[data-rename-input]"); if (el) { try { el.focus(); el.select(); } catch {} } }, 60);
+      }
+      // 带改名入口的云桥源行小钮（菜单行/设置行共用标记 data-source-rename，dataset.relayName 带原始名）
+      document.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-source-rename]");
+        if (!btn) return;
+        const raw = String(btn.dataset.relayName || "");
+        if (raw) openRenameSourceUI(raw);
+      });
       // W-WINPAIR 只读诊断锚（排障/走查共用）：源切换态一目了然（视角/云源/云态/LAN 连接态）
       window.__ccDeck005SourceState = () => ({ view: viewSource(), shellCloud: !!shellCloud, cloudMode: !!cloudMode,
         cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status,
@@ -9970,6 +10062,19 @@ function connectLan(ctx) {
         const c = source === "cloud" ? cloudCtx : ctx;
         onEvent(c, { type: "SNAPSHOT", payload: payload && typeof payload === "object" ? payload : { sessions: [] } });
         window.__ccDeck005Frames.emit({ kind: "frame", source, frame: { type: "SNAPSHOT", payload } });
+      };
+      // W-WINPAIR-R7①：聚合发送按会话源路由（test.21 核心闭环）——命令 payload 带会话 id 时查
+      // 所属源定通道：云源会话走云 shim 密封上行（本机 relay 查无此会话=「会话不存在」根修），
+      // 本机会话走 LAN socket；不带会话的命令维持视角通道。ACK 按 command_id 从总线结算不锚 socket
+      window.__ccDeck005RouteWs = (payload) => {
+        const sid = payload && typeof payload === "object" ? String(payload.session_id || payload.sid || "") : "";
+        if (!sid) return window.__ccDeck005MainWs || ctx.ws;
+        if (cloudCtx.sessions.has(sid)) return cloudCtx.status === "online" ? cloudCmdShim : null;
+        if (ctx.sessions.has(sid)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+        // 聚合视图桥持有的会话兜底（relay_source 标识指向云源）
+        const bs = window.__ccDeck005B4 && window.__ccDeck005B4.sessions.get(sid);
+        if (bs && bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source)) return cloudCtx.status === "online" ? cloudCmdShim : null;
+        return window.__ccDeck005MainWs || ctx.ws;
       };
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
@@ -10072,8 +10177,10 @@ function connectLan(ctx) {
         }
         const [cls, label] = cloudTagOf();
         const peer = cloudPeerOf(cloudCtx.cfg);
-        let html = '<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · ' + escapeHtml(hostOf(cloudCtx.cfg.wsUrl)) + '</strong><p>'
-          + escapeHtml(cloudCtx.statusText || "未连接") + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "") + '</p></div><span class="tag ' + cls + '">'
+        let html = '<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · ' + escapeHtml(sourceDisplayName(cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName)) ? cloudCtx.relayName : hostOf(cloudCtx.cfg.wsUrl))) + '</strong><p>'
+          + escapeHtml(cloudCtx.statusText || "未连接") + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "") + '</p></div>'
+          + (cloudCtx.status === "online" && cloudCtx.relayName ? '<button class="row-share" data-source-rename data-relay-name="' + escapeHtml(String(cloudCtx.relayName)) + '" type="button" title="重命名此源">✎ 改名</button>' : "")
+          + '<span class="tag ' + cls + '">'
           + label + '</span>' + cloudRetryBtn() + '</div>';
         html += '<div class="settings-row"><span class="avatar">▣</span><div><strong>本页设备 · ' + (ckp ? escapeHtml(devId(ckp.publicKey, "wb")) : "—")
           + '</strong><p>' + (peer ? "已配对服务器 " + escapeHtml(peer.relay_dev) : cloudCtx.pendingPair ? "配对进行中" : "未配对 · 输码或打开配对链接")
@@ -10171,7 +10278,7 @@ function connectLan(ctx) {
         },
         sendCommand(type, payload, timeoutMs = 8000) {
           return new Promise((resolve) => {
-            const ws = window.__ccDeck005MainWs || ctx.ws; // W-WINPAIR-R2：命令通道随视角（云视角=shim，本机视角=LAN socket）
+            const ws = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : (window.__ccDeck005MainWs || ctx.ws); // W-WINPAIR-R2 视角通道 + R7① 会话源路由（聚合下远程会话走云链）
             if (!ws || ws.readyState !== WebSocket.OPEN) { resolve(null); return; }
             const commandId = "team-" + Date.now().toString(36) + "-" + String(++this.cmdSeq);
             const timer = setTimeout(() => { this.ackWaiters.delete(commandId); resolve(null); }, timeoutMs);
@@ -11318,7 +11425,7 @@ function connectLan(ctx) {
           const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
           const [word, cls] = p.status === "active" ? ["活跃", "done"] : p.status === "parked" ? ["挂起", ""] : ["归档", ""];
           return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(displayPath(p.anchor_dir || ""))}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
-        }).join("") : '<div class="readonly-banner">暂无项目组 · 立项后在组织侧同步。</div>';
+        }).join("") : '<div class="readonly-banner">暂无项目组 · 新建项目后在组织侧同步。</div>';
         const laneHost = screen.querySelector("[data-mobile-project-lane]");
         if (laneHost) laneHost.innerHTML = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`;
       }

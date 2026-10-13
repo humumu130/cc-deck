@@ -14224,8 +14224,10 @@ function createGroup(input, dir) {
     confirm = addConfirm(
       {
         kind: "project-create",
-        title: `\u7ACB\u9879\u786E\u8BA4\uFF1A${group.name}`,
-        reason: input.tier === "\u6B63\u7ECF\u7ACB\u9879" ? "\u6B63\u7ECF\u7ACB\u9879\u5FC5\u987B\u786E\u8BA4\uFF08\u4E00\u6B21\u70B9\u51FB\uFF0C\u9632\u8BEF\u5224\u6863\u70E7\u94B1\uFF09" : "\u8F7B\u7ACB\u9879\u9996\u6B21\u786E\u8BA4\u4E00\u6B21\uFF08\u540C\u7C7B\u514D\u786E\u8BA4\uFF0C\u4FE1\u4EFB\u7D2F\u79EF\uFF09",
+        title: `\u65B0\u5EFA\u9879\u76EE\u786E\u8BA4\uFF1A${group.name}`,
+        // W-WINPAIR-R9 文案件：「立项」口语词治理（显示层正式化）
+        reason: input.tier === "\u6B63\u7ECF\u7ACB\u9879" ? "\u6B63\u5F0F\u9879\u76EE\u5FC5\u987B\u786E\u8BA4\uFF08\u4E00\u6B21\u70B9\u51FB\uFF0C\u9632\u8BEF\u5224\u6863\u70E7\u94B1\uFF09" : "\u8F7B\u91CF\u9879\u76EE\u9996\u6B21\u786E\u8BA4\u4E00\u6B21\uFF08\u540C\u7C7B\u514D\u786E\u8BA4\uFF0C\u4FE1\u4EFB\u7D2F\u79EF\uFF09",
+        // tier 存储值不变，理由文案走正式词
         payload: { gid: group.id, tier: group.tier, anchor_dir: group.anchor_dir }
       },
       dir
@@ -47144,6 +47146,83 @@ function readTaskStoreTodos(cliSessionId, base) {
   return out;
 }
 
+// src/board-mirror.ts
+var BOARD_STATUS_PROJECTION = {
+  backlog: { status: "pending", label: "\u5F85\u8BA4\u9886" },
+  claimed: { status: "in_progress", label: "\u8FDB\u884C\u4E2D" },
+  submitted: { status: "in_progress", label: "\u5F85\u590D\u6838" },
+  ready_to_install: { status: "in_progress", label: "\u5F85\u88C5\u673A" }
+};
+function isBoardMirror(t) {
+  return t.source === "board" && !!t.board_ref && typeof t.board_ref.gid === "string" && typeof t.board_ref.entry_id === "string";
+}
+function isMirrorMarked(t) {
+  return t.source === "board";
+}
+function mirrorKey(ref) {
+  return `${ref.gid}:${ref.entry_id}`;
+}
+function clip(s, n) {
+  return s.length > n ? s.slice(0, n) : s;
+}
+function boardMirrorTodos(dir) {
+  const out = [];
+  const groups = listGroupsByStatus(dir).active;
+  for (const g2 of groups) {
+    const board = loadBoard(g2.id, dir);
+    for (const e of board.entries) {
+      if (e.status === "done") continue;
+      const proj = BOARD_STATUS_PROJECTION[e.status];
+      if (!proj) continue;
+      out.push({
+        content: `[${clip(g2.name, 8)}\xB7${proj.label}] ${clip(e.text, 80)}`,
+        status: proj.status,
+        updated_at: e.updated_at,
+        source: "board",
+        board_ref: { gid: g2.id, entry_id: e.id }
+      });
+    }
+  }
+  return out;
+}
+function mergeBoardMirror(diskTodos, dir) {
+  const disk = diskTodos.filter((t) => !isMirrorMarked(t));
+  return [...disk, ...boardMirrorTodos(dir)];
+}
+function mirrorDiff(actual, dir) {
+  const expected = boardMirrorTodos(dir);
+  const expByKey = new Map(expected.map((m) => [mirrorKey(m.board_ref), m]));
+  const actByKey = new Map(
+    actual.filter(isBoardMirror).map((m) => [mirrorKey(m.board_ref), m])
+  );
+  const missing = [];
+  const stale = [];
+  for (const [k3, exp] of expByKey) {
+    const act = actByKey.get(k3);
+    if (!act) missing.push(exp);
+    else if (act.content !== exp.content || act.status !== exp.status) stale.push(exp);
+  }
+  const extra = [...actByKey.values()].filter((m) => !expByKey.has(mirrorKey(m.board_ref)));
+  return { missing, stale, extra, clean: missing.length === 0 && stale.length === 0 && extra.length === 0 };
+}
+function boardEscalateMs() {
+  const v = Number(process.env.CCR_BOARD_ESCALATE_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 48 * 36e5;
+}
+function escalateClaimed(now, dir) {
+  const window2 = boardEscalateMs();
+  const out = [];
+  for (const g2 of listGroupsByStatus(dir).active) {
+    const board = loadBoard(g2.id, dir);
+    for (const e of board.entries) {
+      if (e.status !== "claimed") continue;
+      const age = now - e.updated_at;
+      if (age >= window2) out.push({ gid: g2.id, group_name: g2.name, entry_id: e.id, text: clip(e.text, 60), age_ms: age });
+    }
+  }
+  return out;
+}
+
 // src/uploads.ts
 import { mkdirSync as mkdirSync12, writeFileSync as writeFileSync10 } from "node:fs";
 import path2 from "node:path";
@@ -48693,7 +48772,8 @@ function allowWaiting(session) {
 function kindLabel(kind) {
   switch (kind) {
     case "project-create":
-      return "\u7ACB\u9879\u786E\u8BA4";
+      return "\u65B0\u5EFA\u9879\u76EE\u786E\u8BA4";
+    // W-WINPAIR-R9 文案件：「立项」口语词治理（用户点名）
     case "tier-change":
       return "\u6863\u4F4D\u53D8\u66F4";
     case "suggest-hold":
@@ -49548,6 +49628,7 @@ var SessionManager = class {
     const c = setInterval(() => {
       this.pollCronTasks();
       this.pollTaskStore();
+      this.reconcileBoardMirror();
     }, CRON_POLL_INTERVAL_MS);
     c.unref();
     const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
@@ -50272,11 +50353,21 @@ provider=${opts.provider ?? "default"}` : void 0,
   // at：事件真实发生时刻——relay 重启后的 transcript 水合（firstRead 重建清单）必须
   // 传转录时间戳，缺省才用当下（#157：水合刷 Date.now() 会把全表最后活跃时间伪造成
   // 重启时刻，闲置置灰判定全失效——公司 relay 晨启批量"当前时间"的根因）
+  //
+  // W-TASKFLOW（2026-10-12 唯一事实源强制）：PM（Leader）会话的任务清单在此咽喉
+  // 自动合成看板镜像——入参 todos 一律是磁盘自建集（CLI 任务存储口径），mergeBoardMirror
+  // 幂等剥离旧镜像+拼当前看板投影（board-mirror.ts 纯读单向）。所有上游（pollTaskStore
+  // 轮询 / onTodos 流 / notifyConfirm 追加 / REFRESH 重发）天然过此点，无一漏挂；
+  // pollTaskStore 的 lastStoreTodos 缓存与 TASK_DONE 完成汇报基于入参磁盘集——镜像
+  // 不污染既有判定。非 Leader 会话零变化。禁止反向写：本点只读看板产内存镜像，
+  // 会话清单侧任何改动（CLI 任务操作/隐藏）不回写看板（同步器单向性，测试件锁死）。
   setTodos(id2, todos, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
+    const disk = todos.filter((t) => !isMirrorMarked(t));
+    const merged = id2 === this.leaderId ? mergeBoardMirror(disk) : disk;
     const hidden = hiddenTodoKeys(id2);
-    const list = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
+    const list = hidden.size ? merged.filter((t) => !hidden.has(normKey(t.content))) : merged;
     s.state.todos = list;
     s.state.updated_at = at ?? Date.now();
     this.emitUpdated(s, true, at);
@@ -52400,6 +52491,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.setTitleOverride(id2, ORG_LEADER_TITLE);
     this.leaderId = id2;
     this.leaderEnsured = true;
+    this.syncBoardMirror();
     this.pinLeaderFile(id2);
     const bootAgent = s?.agent ?? null;
     const bootWaitSec = (resumeInitTimeoutMs() / 1e3).toFixed(1);
@@ -52454,6 +52546,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.setTitleOverride(id2, ORG_LEADER_TITLE);
     this.leaderId = id2;
     this.leaderEnsured = true;
+    this.syncBoardMirror();
   }
   // events 被压缩挤掉（>30 会话）或用户删卡后的重建：从锚合成休眠卡，零 spawn。
   // 不 emit SESSION_CREATED——锚才是重建权威；开机广播走 emitUpdated（与 applyPinned
@@ -52500,6 +52593,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.setTitleOverride(id2, ORG_LEADER_TITLE);
     this.leaderId = id2;
     this.leaderEnsured = true;
+    this.syncBoardMirror();
     this.emitUpdated(managed, true);
     return { ok: true, session_id: id2, created: false, rebuilt: true };
   }
@@ -52636,13 +52730,21 @@ provider=${opts.provider ?? "default"}` : void 0,
     })() : all ? q2.splice(0) : [q2.shift()].filter((x) => !!x);
     if (q2.length === 0) this.openDispatches.delete(key);
     for (const e of es2) {
+      const taskRef = e.gid ? (() => {
+        try {
+          return loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id)?.id ?? "";
+        } catch {
+          return "";
+        }
+      })() : "";
+      const refReceipt = taskRef ? `[task_ref:${taskRef}] ${receipt}` : receipt;
       appendDispatch({
         ts: Date.now(),
         id: e.id,
         tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
         status,
-        receipt: truncate(receipt, 200),
+        receipt: truncate(refReceipt, 200),
         session_id: key,
         ...e.anchor ? { project_anchor: e.anchor } : {},
         ...e.actor ? { actor: e.actor } : {},
@@ -52652,7 +52754,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         ...e.provider ? { provider: e.provider } : {},
         ...e.model ? { model: e.model } : {}
       });
-      this.notifyDispatchClosed(e, status, receipt, key);
+      this.notifyDispatchClosed(e, status, refReceipt, key);
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         if (status === "done") {
@@ -54199,6 +54301,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           delta: { entries: { upserts: [], removes: [] }, lessons: { upserts: [], removes: lessonIds }, meta: { frozen: board.frozen, updated_at: board.updated_at } }
         } : {}
       });
+      this.syncBoardMirror();
       return;
     }
     const entries = this.diffById(prev.entries, outBoard.entries) ?? { upserts: [], removes: [] };
@@ -54214,6 +54317,68 @@ provider=${opts.provider ?? "default"}` : void 0,
       ],
       delta
     });
+    this.syncBoardMirror();
+  }
+  // W-TASKFLOW：Leader 会话的看板镜像重合成（emitBoard 挂点 + 对账看门强制回写共用）。
+  // 从当前 todos 剥旧镜像得磁盘自建集，再经 setTodos 咽喉（对 Leader 自动拼新投影）——
+  // 单一合并路径无第二实现。Leader 不在/历史态 no-op。
+  syncBoardMirror() {
+    if (!this.leaderId) return;
+    const s = this.sessions.get(this.leaderId);
+    if (!s || s.state.historical) return;
+    const disk = (s.state.todos ?? []).filter((t) => !isMirrorMarked(t));
+    this.setTodos(this.leaderId, disk);
+  }
+  // W-TASKFLOW 对账看门 v2（v1=dutySnapshot 只报告不搬；v2=强制以看板为准回写+报警）。
+  // 节拍：随 pollCronTasks/pollTaskStore 同 interval（30s）。健康态零动作（syncBoardMirror
+  // 挂点已把镜像推平，看门是兜底——竞态窗口/外部改 state/同步器故障时纠偏）。
+  // 裁决方向恒定：看板赢。发现镜像缺/陈旧/残留 → syncBoardMirror 强制回写 + 每差异卡
+  // 一行通知（upsertNotification stableKey 幂等：同卡在账静默不轰炸）+ 派单台账一行
+  //（tier=看门狗先例口径，#25-P7）。
+  // 顺带扫 claimed>48h 超窗（生命周期定案超时升级）：escalateClaimed 纯读 → 用户
+  // 通知面（PM 值守 90min 催办两轮仍无进展 → 捅到用户；一卡一账 stableKey 防重）。
+  reconcileBoardMirror() {
+    if (!this.leaderId) return;
+    const s = this.sessions.get(this.leaderId);
+    if (!s || s.state.historical) return;
+    const diff = mirrorDiff(s.state.todos ?? []);
+    if (!diff.clean) {
+      this.syncBoardMirror();
+      const n = diff.missing.length + diff.stale.length + diff.extra.length;
+      for (const m of [...diff.missing, ...diff.stale, ...diff.extra].slice(0, 20)) {
+        this.upsertNotification("system", `board-mirror:${m.board_ref.gid}:${m.board_ref.entry_id}`, void 0, {
+          title: "\u4EFB\u52A1\u955C\u50CF\u5DF2\u5F3A\u5236\u540C\u6B65\uFF08\u4EE5\u770B\u677F\u4E3A\u51C6\uFF09",
+          body: `\u5BF9\u8D26\u53D1\u73B0 PM \u4F1A\u8BDD\u6E05\u5355\u4E0E\u56E2\u961F\u770B\u677F\u4E0D\u540C\u6B65\uFF08\u7F3A ${diff.missing.length} / \u9648\u65E7 ${diff.stale.length} / \u6B8B\u7559 ${diff.extra.length}\uFF09\uFF0C\u5DF2\u6309\u770B\u677F\u5F3A\u5236\u56DE\u5199\uFF1A${truncate(m.content, 80)}`,
+          severity: "info",
+          group: "attention",
+          actionable: false,
+          sessionId: this.leaderId,
+          domain: "task",
+          returnPath: "/"
+        });
+      }
+      appendDispatch({
+        ts: Date.now(),
+        id: randomUUID10(),
+        tier: "\u770B\u95E8\u72D7",
+        target: "board-mirror",
+        status: "done",
+        session_id: this.leaderId,
+        receipt: truncate(`[W-TASKFLOW] \u677F\u955C\u50CF\u5BF9\u8D26\u4FEE\u590D ${n} \u5904\uFF08\u7F3A${diff.missing.length}/\u9648\u65E7${diff.stale.length}/\u6B8B\u7559${diff.extra.length}\uFF09\uFF0C\u5DF2\u5F3A\u5236\u4EE5\u770B\u677F\u4E3A\u51C6\u56DE\u5199 PM \u4F1A\u8BDD\u6E05\u5355`, 200)
+      });
+    }
+    for (const c of escalateClaimed(Date.now())) {
+      this.upsertNotification("system", `board-escalate:${c.gid}:${c.entry_id}`, void 0, {
+        title: `\u4EFB\u52A1\u8D85\u65F6\u5347\u7EA7\uFF1A${c.group_name} \u6709\u5361\u6302\u8D77\u8D85 48 \u5C0F\u65F6`,
+        body: `[${c.group_name}] ${c.text}\uFF08claimed ${Math.round(c.age_ms / 36e5)}h \u65E0\u8FDB\u5C55\uFF09\u2014\u2014PM \u50AC\u529E\u672A\u6536\u53E3\uFF0C\u8BF7\u4EBA\u5DE5\u6838\u67E5`,
+        severity: "waiting",
+        group: "attention",
+        actionable: true,
+        sessionId: this.leaderId,
+        domain: "task",
+        returnPath: "/"
+      });
+    }
   }
   // ── W-EXPP2 experience 域广播：发射侧单点 diff（emitOrgState/emitBoard M13-2 同款，
   // lastXxxBroadcast 只作 diff 基线不参与业务判定）──
@@ -54455,7 +54620,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     const roleInjection = buildRoleInjection({ session_id: veteran ?? void 0, role: expRole });
     const rulesInjection = buildRuleInjection({ role: expRole, anchor });
-    const dispatchPrompt = wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
+    const taskRefId = input.gid ? input.entry_id ?? `t-${randomUUID10().slice(0, 8)}` : "";
+    const taskRefHead = taskRefId ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}
+` : "";
+    const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
     let sessionId;
     if (veteran) {
@@ -54524,7 +54692,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       upsertBoardEntry(input.gid, input.entry_id ? (
         // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
         { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
-      ) : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId });
+      ) : (
+        // W-TASKFLOW task_ref：新卡带预生成 id（与 prompt 头注入的 [task_ref:...] 同键）
+        { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId }
+      ));
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
@@ -55584,18 +55755,26 @@ async function injectTextMac(pid, rawText) {
   if (target) {
     let w2 = await tmuxSendKeys(target, "-l", "--", text);
     if (!w2.ok) {
-      await sleep(300);
+      await sleep(200);
       w2 = await tmuxSendKeys(target, "-l", "--", text);
     }
     if (!w2.ok) return w2;
+    const e = await tmuxSendKeys(target, "Enter");
+    if (!e.ok) return e;
     const tail2 = tmuxNorm(text.slice(-24));
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const e = await tmuxSendKeys(target, "Enter");
-      if (!e.ok) return e;
-      await sleep(450);
-      if (await tmuxVerifySubmitted(target, tail2)) return { ok: true };
-    }
-    return { ok: false, error: "\u6CE8\u5165\u63D0\u4EA4\u672A\u751F\u6548\uFF08\u56DE\u8F66 3 \u6B21\u6B63\u6587\u4ECD\u5728\u8F93\u5165\u533A\uFF09\u2014\u2014\u8BF7\u5728 CLI \u624B\u52A8\u56DE\u8F66" };
+    void (async () => {
+      for (const delay of [600, 1500, 3e3]) {
+        await sleep(delay);
+        try {
+          if (await tmuxVerifySubmitted(target, tail2)) return;
+          const r = await tmuxSendKeys(target, "Enter");
+          if (!r.ok) return;
+        } catch {
+        }
+      }
+      console.warn(`[injector] \u63D0\u4EA4\u8865\u507F\u672A\u751F\u6548 target=${target} tail=${tail2.slice(0, 12)}\uFF08\u5DF2 4 \u6B21\u56DE\u8F66\uFF09`);
+    })();
+    return { ok: true };
   }
   return runAppleScript(buildDoScript(pid, text));
 }
@@ -55839,7 +56018,7 @@ var ENGINE_SCAN_SPECS = [
 function engineRoot(spec, home) {
   return process.env[spec.envRoot] || join33(home, spec.homeDirName, "sessions");
 }
-var clip = (text, cap) => {
+var clip2 = (text, cap) => {
   const compact2 = text.replace(/\s+/g, " ").trim();
   return [...compact2].length > cap ? [...compact2].slice(0, cap).join("") + "\u2026" : compact2;
 };
@@ -55898,7 +56077,7 @@ function activityFor(type, body, label) {
   const item = objectOf(body.item);
   const itemType = typeof item.type === "string" ? item.type : "";
   const errorValue = body.error ?? item.error;
-  const error = clip(typeof errorValue === "string" ? errorValue : textOf2(errorValue), 220);
+  const error = clip2(typeof errorValue === "string" ? errorValue : textOf2(errorValue), 220);
   if (normalizedType === "turn.failed" || type === "task_failed" || type === "error") {
     return { text: error || `${label} \u56DE\u5408\u5931\u8D25`, kind: "system", status: "ERROR", terminal: true, error: error || `${label} \u56DE\u5408\u5931\u8D25` };
   }
@@ -55910,24 +56089,24 @@ function activityFor(type, body, label) {
   }
   if (normalizedType === "item.started") {
     if (itemType === "command_execution") {
-      const command = clip(textOf2(item.command), 180);
+      const command = clip2(textOf2(item.command), 180);
       return { text: command ? `\u6267\u884C\u547D\u4EE4\uFF1A${command}` : "\u6267\u884C\u547D\u4EE4", kind: "tool_use", tool: "command", status: "WORKING", terminal: false };
     }
     return { text: itemType ? `\u5F00\u59CB\uFF1A${itemType}` : `${label} \u5DE5\u4F5C\u4E2D`, kind: "system", status: "WORKING", terminal: false };
   }
   if (normalizedType === "item.completed") {
     if (itemType === "UserMessage") {
-      const prompt = clip(textOf2(item.content), 4e3);
-      return { text: prompt ? `\u7528\u6237\uFF1A${clip(prompt, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
+      const prompt = clip2(textOf2(item.content), 4e3);
+      return { text: prompt ? `\u7528\u6237\uFF1A${clip2(prompt, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
     }
     if (itemType === "AgentMessage") {
-      const text = clip(textOf2(item.content ?? item.text), 220);
+      const text = clip2(textOf2(item.content ?? item.text), 220);
       return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
     }
     if (itemType === "CommandExecution") {
-      const command = clip(textOf2(item.command), 120);
+      const command = clip2(textOf2(item.command), 120);
       const failed = item.status === "failed" || finite(item.exit_code) !== void 0 && item.exit_code !== 0;
-      const output = clip(textOf2(item.aggregated_output), 160);
+      const output = clip2(textOf2(item.aggregated_output), 160);
       return {
         text: failed ? `\u547D\u4EE4\u5931\u8D25\uFF1A${command || output || "\u672A\u77E5\u547D\u4EE4"}` : `\u547D\u4EE4\u5B8C\u6210\uFF1A${command || output || "command"}`,
         kind: failed ? "system" : "tool_result",
@@ -55944,17 +56123,17 @@ function activityFor(type, body, label) {
   }
   if (type === "message" || type === "response_item") {
     const role = typeof body.role === "string" ? body.role : "";
-    const text = clip(textOf2(body.content ?? body.text), 220);
-    const prompt = role === "user" ? clip(textOf2(body.content), 4e3) : "";
-    if (role === "user") return { text: text ? `\u7528\u6237\uFF1A${clip(text, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
+    const text = clip2(textOf2(body.content ?? body.text), 220);
+    const prompt = role === "user" ? clip2(textOf2(body.content), 4e3) : "";
+    if (role === "user") return { text: text ? `\u7528\u6237\uFF1A${clip2(text, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
     if (role === "assistant") return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
     if (body.type === "function_call") {
-      const name = clip(textOf2(body.name), 100);
+      const name = clip2(textOf2(body.name), 100);
       return { text: name ? `\u8C03\u7528\uFF1A${name}` : "\u8C03\u7528\u5DE5\u5177", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
     }
   }
   if (type === "function_call") {
-    const name = clip(textOf2(body.name), 100);
+    const name = clip2(textOf2(body.name), 100);
     return { text: name ? `\u8C03\u7528\uFF1A${name}` : "\u8C03\u7528\u5DE5\u5177", kind: "tool_use", tool: name || "function", status: "WORKING", terminal: false };
   }
   if (type === "function_call_output") {
@@ -59993,6 +60172,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       client.ping();
     }
   }, HEARTBEAT_MS);
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[relay] \u7AEF\u53E3 ${cfg2.port} \u88AB\u5360\u7528\uFF08\u53EF\u80FD\u5DF2\u6709\u5B9E\u4F8B\uFF09\uFF0C\u9000\u51FA\u8BA9 launchd \u91CD\u542F\u3002`);
+      process.exit(1);
+    }
+    console.error(`[relay] server error: ${err.message}`);
+    process.exit(1);
+  });
   server.listen(cfg2.port, opts.onReady);
   return {
     port: cfg2.port,
