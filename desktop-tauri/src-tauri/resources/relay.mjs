@@ -1947,29 +1947,29 @@ var require_nacl_fast = __commonJS({
         return smlen;
       }
       function unpackneg(r, p) {
-        var t = gf2(), chk = gf2(), num2 = gf2(), den = gf2(), den2 = gf2(), den4 = gf2(), den6 = gf2();
+        var t = gf2(), chk = gf2(), num3 = gf2(), den = gf2(), den2 = gf2(), den4 = gf2(), den6 = gf2();
         set25519(r[2], gf1);
         unpack25519(r[1], p);
-        S(num2, r[1]);
-        M(den, num2, D3);
-        Z2(num2, num2, r[2]);
+        S(num3, r[1]);
+        M(den, num3, D3);
+        Z2(num3, num3, r[2]);
         A2(den, r[2], den);
         S(den2, den);
         S(den4, den2);
         M(den6, den4, den2);
-        M(t, den6, num2);
+        M(t, den6, num3);
         M(t, t, den);
         pow2523(t, t);
-        M(t, t, num2);
+        M(t, t, num3);
         M(t, t, den);
         M(t, t, den);
         M(r[0], t, den);
         S(chk, r[0]);
         M(chk, chk, den);
-        if (neq25519(chk, num2)) M(r[0], r[0], I2);
+        if (neq25519(chk, num3)) M(r[0], r[0], I2);
         S(chk, r[0]);
         M(chk, chk, den);
-        if (neq25519(chk, num2)) return -1;
+        if (neq25519(chk, num3)) return -1;
         if (par25519(r[0]) === p[31] >> 7) Z2(r[0], gf0, r[0]);
         M(r[3], r[0], r[1]);
         return 0;
@@ -2600,26 +2600,26 @@ var require_permessage_deflate = __commonJS({
             value = value[0];
             if (key === "client_max_window_bits") {
               if (value !== true) {
-                const num2 = +value;
-                if (!Number.isInteger(num2) || num2 < 8 || num2 > 15) {
+                const num3 = +value;
+                if (!Number.isInteger(num3) || num3 < 8 || num3 > 15) {
                   throw new TypeError(
                     `Invalid value for parameter "${key}": ${value}`
                   );
                 }
-                value = num2;
+                value = num3;
               } else if (!this._isServer) {
                 throw new TypeError(
                   `Invalid value for parameter "${key}": ${value}`
                 );
               }
             } else if (key === "server_max_window_bits") {
-              const num2 = +value;
-              if (!Number.isInteger(num2) || num2 < 8 || num2 > 15) {
+              const num3 = +value;
+              if (!Number.isInteger(num3) || num3 < 8 || num3 > 15) {
                 throw new TypeError(
                   `Invalid value for parameter "${key}": ${value}`
                 );
               }
-              value = num2;
+              value = num3;
             } else if (key === "client_no_context_takeover" || key === "server_no_context_takeover") {
               if (value !== true) {
                 throw new TypeError(
@@ -3333,8 +3333,8 @@ var require_receiver = __commonJS({
           return;
         }
         const buf = this.consume(8);
-        const num2 = buf.readUInt32BE(0);
-        if (num2 > Math.pow(2, 53 - 32) - 1) {
+        const num3 = buf.readUInt32BE(0);
+        if (num3 > Math.pow(2, 53 - 32) - 1) {
           const error = this.createError(
             RangeError,
             "Unsupported WebSocket frame: payload length > 2^53 - 1",
@@ -3345,7 +3345,7 @@ var require_receiver = __commonJS({
           cb2(error);
           return;
         }
-        this._payloadLength = num2 * Math.pow(2, 32) + buf.readUInt32BE(4);
+        this._payloadLength = num3 * Math.pow(2, 32) + buf.readUInt32BE(4);
         this.haveLength(cb2);
       }
       /**
@@ -6005,17 +6005,17 @@ var require_QRMath = __commonJS({
 var require_QRPolynomial = __commonJS({
   "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
-    function QRPolynomial(num2, shift) {
-      if (num2.length === void 0) {
-        throw new Error(num2.length + "/" + shift);
+    function QRPolynomial(num3, shift) {
+      if (num3.length === void 0) {
+        throw new Error(num3.length + "/" + shift);
       }
       var offset = 0;
-      while (offset < num2.length && num2[offset] === 0) {
+      while (offset < num3.length && num3[offset] === 0) {
         offset++;
       }
-      this.num = new Array(num2.length - offset + shift);
-      for (var i = 0; i < num2.length - offset; i++) {
-        this.num[i] = num2[i + offset];
+      this.num = new Array(num3.length - offset + shift);
+      for (var i = 0; i < num3.length - offset; i++) {
+        this.num[i] = num3[i + offset];
       }
     }
     QRPolynomial.prototype = {
@@ -6026,27 +6026,27 @@ var require_QRPolynomial = __commonJS({
         return this.num.length;
       },
       multiply: function(e) {
-        var num2 = new Array(this.getLength() + e.getLength() - 1);
+        var num3 = new Array(this.getLength() + e.getLength() - 1);
         for (var i = 0; i < this.getLength(); i++) {
           for (var j2 = 0; j2 < e.getLength(); j2++) {
-            num2[i + j2] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j2)));
+            num3[i + j2] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j2)));
           }
         }
-        return new QRPolynomial(num2, 0);
+        return new QRPolynomial(num3, 0);
       },
       mod: function(e) {
         if (this.getLength() - e.getLength() < 0) {
           return this;
         }
         var ratio = QRMath.glog(this.get(0)) - QRMath.glog(e.get(0));
-        var num2 = new Array(this.getLength());
+        var num3 = new Array(this.getLength());
         for (var i = 0; i < this.getLength(); i++) {
-          num2[i] = this.get(i);
+          num3[i] = this.get(i);
         }
         for (var x = 0; x < e.getLength(); x++) {
-          num2[x] ^= QRMath.gexp(QRMath.glog(e.get(x)) + ratio);
+          num3[x] ^= QRMath.gexp(QRMath.glog(e.get(x)) + ratio);
         }
-        return new QRPolynomial(num2, 0).mod(e);
+        return new QRPolynomial(num3, 0).mod(e);
       }
     };
     module.exports = QRPolynomial;
@@ -6566,9 +6566,9 @@ var require_QRBitBuffer = __commonJS({
         var bufIndex = Math.floor(index / 8);
         return (this.buffer[bufIndex] >>> 7 - index % 8 & 1) == 1;
       },
-      put: function(num2, length) {
+      put: function(num3, length) {
         for (var i = 0; i < length; i++) {
-          this.putBit((num2 >>> length - i - 1 & 1) == 1);
+          this.putBit((num3 >>> length - i - 1 & 1) == 1);
         }
       },
       getLengthInBits: function() {
@@ -10338,8 +10338,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join37, sep as sep8 } from "node:path";
-import { writeFileSync as writeFileSync24, openSync as openSync5, readFileSync as readFileSync32, rmSync as rmSync5, existsSync as existsSync27, readdirSync as readdirSync15, statSync as statSync12 } from "node:fs";
+import { join as join38, sep as sep8 } from "node:path";
+import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync as readFileSync33, rmSync as rmSync5, existsSync as existsSync27, readdirSync as readdirSync15, statSync as statSync12 } from "node:fs";
 import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -47051,12 +47051,12 @@ function applyCloudSubmits(id2, submits) {
 import { readFileSync as readFileSync17, readdirSync as readdirSync8 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
 import { join as join24 } from "node:path";
-var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience", "rules", "workerPlugins"];
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience", "rules", "workerPlugins", "patrol"];
 function pluginConfigPath() {
   return process.env.CCR_CONFIG_FILE ?? join24(homedir9(), ".cc-deck", "config.json");
 }
 function readPluginConfig() {
-  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true, rules: true, workerPlugins: false };
+  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true, rules: true, workerPlugins: false, patrol: true };
   try {
     const raw = JSON.parse(readFileSync17(pluginConfigPath(), "utf-8"));
     for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
@@ -55897,7 +55897,7 @@ async function injectTextMac(pid, rawText) {
     console.log(`[injector] optimistic-write sid-target=${target} write=${tWrite - t02}ms${wRetried ? "(retry)" : ""} enter=${Date.now() - tWrite}ms sync-total=${Date.now() - t02}ms len=${text.length}`);
     void (async () => {
       let round = 0;
-      for (const delay of [600, 1500, 3e3]) {
+      for (const delay of [600, 1500]) {
         await sleep(delay);
         round++;
         try {
@@ -55912,7 +55912,7 @@ async function injectTextMac(pid, rawText) {
         } catch {
         }
       }
-      console.warn(`[injector] \u63D0\u4EA4\u8865\u507F\u672A\u751F\u6548 target=${target} tail=${tail2.slice(0, 12)}\uFF08\u5DF2 4 \u6B21\u56DE\u8F66\uFF09`);
+      console.warn(`[injector] \u63D0\u4EA4\u8865\u507F\u672A\u751F\u6548 target=${target} tail=${tail2.slice(0, 12)}\uFF08\u5DF2 3 \u6B21\u56DE\u8F66\uFF0C\u4EA4\u6865\u4FA7\u770B\u95E8\u72D7\uFF09`);
     })();
     return { ok: true };
   }
@@ -55953,6 +55953,22 @@ async function injectEsc(pid) {
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), "--esc"]);
+}
+async function injectShiftTab(pid) {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
+  if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
+  if (useAppleInjector()) {
+    if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    const target = await resolveTmuxTarget(pid);
+    if (target) {
+      return runTmux(["send-keys", "-t", target, "-l", "\x1B[Z"]).then(
+        (r) => r.ok ? { ok: true } : { ok: false, error: `tmux send-keys \u5931\u8D25: ${r.error}` }
+      );
+    }
+    return { ok: false, error: "\u8BE5\u4F1A\u8BDD\u4E0D\u5728 tmux \u91CC\uFF08Terminal \u76F4\u5F00\u6682\u4E0D\u652F\u6301\u4F1A\u8BDD\u5185\u6743\u9650\u5FAA\u73AF\uFF0C\u8BF7\u5728\u7EC8\u7AEF\u5185\u6309 Shift+Tab\uFF09" };
+  }
+  if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+  return { ok: false, error: "Windows \u5BBF\u4E3B\u6682\u4E0D\u652F\u6301\u4F1A\u8BDD\u5185\u6743\u9650\u5FAA\u73AF\u6CE8\u5165\uFF0C\u8BF7\u5728\u7EC8\u7AEF\u5185\u6309 Shift+Tab" };
 }
 async function injectEnter(pid) {
   if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
@@ -56050,12 +56066,12 @@ async function captureConsoleBottom(pid, rows = 20) {
 
 // src/type-guard.ts
 function guardConfig() {
-  const num2 = (v, def) => Number(v) > 0 ? Number(v) : def;
+  const num3 = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
     enabled: !/^(off|0|false)$/i.test(process.env.CCR_TYPE_GUARD ?? ""),
-    pollMs: num2(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
-    stableMs: num2(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
-    maxMs: num2(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
+    pollMs: num3(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
+    stableMs: num3(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
+    maxMs: num3(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
   };
 }
 var isBorderRow = (l) => {
@@ -57738,8 +57754,6 @@ var Bridge = class _Bridge {
     this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { ...item }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       void this.flushQueue(sessionId);
-    } else {
-      this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6392\u961F\uFF08\u7B49\u5F85\u786E\u8BA4/\u56DE\u5408\u7ED3\u675F\u540E\u81EA\u52A8\u53D1\u9001\uFF09\uFF1A${truncate(echoText, 80)}`);
     }
     return { ok: true };
   }
@@ -57852,7 +57866,7 @@ var Bridge = class _Bridge {
     if (state.status !== "WORKING") return { ok: false, error: "\u4F1A\u8BDD\u4E0D\u5728\u8FD0\u884C\u4E2D" };
     if (!state.cli_pid) return { ok: false, error: "\u5C1A\u672A\u5B9A\u4F4D CLI \u8FDB\u7A0B\uFF0C\u7B49\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u91CD\u8BD5" };
     const pid = state.cli_pid;
-    this.mgr.pushExternalLog(sessionId, "system", "\u53D1\u9001\u6253\u65AD\uFF08Esc\uFF09");
+    console.log(`[stop] esc sid=${sessionId.slice(0, 14)}\uFF1A\u53D1\u9001\u6253\u65AD`);
     void injectEsc(pid).then((r) => {
       if (!r.ok) {
         this.onInjectFail(sessionId, r.error);
@@ -57865,9 +57879,48 @@ var Bridge = class _Bridge {
       const turn = this.turnStart.get(sessionId) ?? s.started_at;
       this.turnStart.delete(sessionId);
       this.mgr.finishExternal(sessionId, "interrupted", Date.now() - turn);
-      this.mgr.pushExternalLog(sessionId, "system", "\u5DF2\u6253\u65AD");
+      console.log(`[stop] done sid=${sessionId.slice(0, 14)}\uFF1A\u5DF2\u6253\u65AD\uFF08\u72B6\u6001\u53D8\u5316\u9762\u53EF\u89C1\uFF09`);
       if ((this.inputQueue.get(sessionId)?.length ?? 0) > 0) void this.flushQueue(sessionId);
     });
+    return { ok: true };
+  }
+  // W-PERM：claude CLI 会话内权限循环切换（Shift+Tab 注入 ×N → 读屏回显当前档位）。
+  // 仅 claude 引擎（Codex 等无此交互，如实报不支持）；档位镜像回 s.permission_mode
+  //（#191 同源：客户端 permBtn 文案/警示色随 SESSION_UPDATED 即时刷新）。
+  // 异步执行：ACK 立即 ok，切换结果经日志+状态帧回达（与 extStop 的乐观受理同构）
+  cyclePerm(sessionId, times = 1) {
+    const state = this.mgr.getExternal(sessionId);
+    if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
+    if (state.engine && state.engine !== "claude") {
+      return { ok: false, error: `${state.engine} \u5F15\u64CE\u4E0D\u652F\u6301\u4F1A\u8BDD\u5185\u6743\u9650\u5FAA\u73AF\uFF08\u4EC5 claude CLI\uFF0C\u53EF\u5728\u5176\u7EC8\u7AEF\u5185\u5207\u6362\uFF09` };
+    }
+    if (!state.cli_pid) return { ok: false, error: "\u5C1A\u672A\u5B9A\u4F4D CLI \u8FDB\u7A0B\uFF0C\u7B49\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u91CD\u8BD5" };
+    const pid = state.cli_pid;
+    const n = Math.min(4, Math.max(1, Math.floor(times) || 1));
+    void (async () => {
+      for (let i = 0; i < n; i++) {
+        const r = await injectShiftTab(pid);
+        if (!r.ok) {
+          this.mgr.pushExternalLog(sessionId, "system", `\u6743\u9650\u5FAA\u73AF\u5207\u6362\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5"}`);
+          return;
+        }
+        await sleep3(150);
+      }
+      await sleep3(350);
+      const rows = await captureConsoleBottom(pid);
+      const text = (rows ?? []).join("\n");
+      const mode = /bypass permissions on/.test(text) ? "bypassPermissions" : /accept edits on/.test(text) ? "acceptEdits" : /plan mode on/.test(text) ? "plan" : null;
+      const st2 = this.mgr.getExternal(sessionId);
+      if (!st2) return;
+      if (mode) {
+        st2.permission_mode = mode;
+        const zh2 = { default: "\u9ED8\u8BA4\u786E\u8BA4", acceptEdits: "\u63A5\u53D7\u7F16\u8F91", plan: "\u89C4\u5212\uFF08\u53EA\u8BFB\uFF09", bypassPermissions: "\u8DF3\u8FC7\u786E\u8BA4" };
+        this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u5FAA\u73AF\u5207\u6362\u6743\u9650\u6A21\u5F0F \u2192 ${zh2[mode] ?? mode}`);
+        this.mgr.emitExternalSync(sessionId);
+      } else {
+        console.log(`[perm] fallback sid=${sessionId.slice(0, 14)}\uFF1A\u5207\u6362\u952E\u5DF2\u6CE8\u5165\uFF0C\u6863\u4F4D\u672A\u8BC6\u522B\uFF08\u672C\u5730\u8BCA\u65AD\uFF09`);
+      }
+    })();
     return { ok: true };
   }
   async flushQueue(sessionId) {
@@ -60522,33 +60575,174 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 }
 var connectionCounter = 0;
 
-// src/cloud-identity.ts
-import { existsSync as existsSync25, readFileSync as readFileSync30, writeFileSync as writeFileSync22 } from "node:fs";
+// src/patrol.ts
+import { statfsSync, writeFileSync as writeFileSync22, readFileSync as readFileSync30 } from "node:fs";
 import { join as join35 } from "node:path";
+var WORKER_STALE_MIN = 40;
+var BOARD_CLAIMED_STALE_H = 48;
+var DISK_FREE_MIN_GB = 5;
+var num2 = (v, d2) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : d2;
+};
+var PatrolModule = class {
+  constructor(mgr2, opts) {
+    this.mgr = mgr2;
+    this.opts = opts;
+  }
+  mgr;
+  opts;
+  lightTimer = null;
+  fullTimer = null;
+  // 去重账本：key → 上次告警文本（onset-only）
+  lastAlerts = /* @__PURE__ */ new Map();
+  start() {
+    if (this.lightTimer || this.fullTimer) return;
+    const lightMs = num2(process.env.CCR_PATROL_LIGHT_MS, this.opts.lightMs ?? 5 * 6e4);
+    const fullMs = num2(process.env.CCR_PATROL_FULL_MS, this.opts.fullMs ?? 30 * 6e4);
+    this.lightTimer = setInterval(() => {
+      if (!this.opts.enabled()) return;
+      try {
+        this.runLight();
+      } catch (e) {
+        console.log(`[patrol] light error: ${e instanceof Error ? e.message : e}`);
+      }
+    }, lightMs);
+    this.fullTimer = setInterval(() => {
+      if (!this.opts.enabled()) return;
+      try {
+        this.runFull();
+      } catch (e) {
+        console.log(`[patrol] full error: ${e instanceof Error ? e.message : e}`);
+      }
+    }, fullMs);
+    this.lightTimer.unref?.();
+    this.fullTimer.unref?.();
+  }
+  stop() {
+    if (this.lightTimer) clearInterval(this.lightTimer);
+    if (this.fullTimer) clearInterval(this.fullTimer);
+    this.lightTimer = null;
+    this.fullTimer = null;
+  }
+  // ---------- 轻探针（5min）：磁盘 / dataDir 可写 / 事件循环漂移 ----------
+  runLight() {
+    if (!this.opts.enabled()) return;
+    const alerts = [];
+    try {
+      const st2 = statfsSync("/");
+      const freeGb = st2.bavail * st2.bsize / 1e9;
+      if (freeGb < DISK_FREE_MIN_GB) alerts.push({ key: "disk", text: `\u78C1\u76D8\u4F59\u91CF ${freeGb.toFixed(1)}GB\uFF08\u7EA2\u7EBF ${DISK_FREE_MIN_GB}GB\uFF09` });
+      else alerts.push({ key: "disk", text: "" });
+    } catch {
+    }
+    try {
+      const probe = join35(this.opts.dataDir, ".patrol-probe");
+      writeFileSync22(probe, String(Date.now()));
+      alerts.push({ key: "dataDir", text: "" });
+    } catch {
+      alerts.push({ key: "dataDir", text: "\u6570\u636E\u76EE\u5F55\u4E0D\u53EF\u5199\uFF08\u78C1\u76D8\u6EE1\u6216\u6743\u9650\u88AB\u6536\uFF09" });
+    }
+    const t02 = Date.now();
+    setTimeout(() => {
+      const drift = Date.now() - t02 - 500;
+      if (drift > 5e3) this.push("loop", `\u4E8B\u4EF6\u5FAA\u73AF\u6F02\u79FB ${Math.round(drift / 100) / 10}s\uFF08\u5B58\u5728\u540C\u6B65\u963B\u585E/CPU \u70E7\u8680\uFF09`);
+      else this.resolve("loop");
+    }, 500).unref?.();
+    for (const a of alerts) {
+      if (a.text) this.push(a.key, a.text);
+      else this.resolve(a.key);
+    }
+    this.appendReport(`light: ${alerts.map((a) => `${a.key}=${a.text || "OK"}`).join(" ")}`);
+  }
+  // ---------- 全巡（30min）：worker 帧 / 看板漂移 ----------
+  runFull() {
+    if (!this.opts.enabled()) return;
+    const now = Date.now();
+    const stale = this.mgr.snapshot().filter((s) => s.status === "WORKING" && !s.compacting && now - (s.updated_at ?? 0) > WORKER_STALE_MIN * 6e4);
+    if (stale.length) {
+      const text = `${stale.length} \u4E2A\u4F1A\u8BDD WORKING \u505C\u6EDE>${WORKER_STALE_MIN}min\uFF1A` + stale.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 6e4)}m)`).join("\u3001");
+      this.push(`worker-stale`, text);
+    } else this.resolve(`worker-stale`);
+    const boardAlerts = [];
+    try {
+      for (const g2 of listGroups()) {
+        if (g2.status !== "active") continue;
+        const board = loadBoardFile(g2.id);
+        if (!board) continue;
+        const claimedStale = board.entries.filter((e) => e.status === "claimed" && now - (e.updated_at ?? now) > BOARD_CLAIMED_STALE_H * 36e5);
+        const submitted = board.entries.filter((e) => e.status === "submitted");
+        for (const e of claimedStale) {
+          boardAlerts.push(`[${g2.name}] claimed \u505C\u6EDE>${BOARD_CLAIMED_STALE_H}h\uFF1A${(e.text ?? "").slice(0, 24)}`);
+        }
+        if (submitted.length) boardAlerts.push(`[${g2.name}] submitted \u5F85\u9A8C\u6536 ${submitted.length} \u6761`);
+      }
+    } catch (e) {
+      console.log(`[patrol] board scan error: ${e instanceof Error ? e.message : e}`);
+    }
+    if (boardAlerts.length) this.push("board", boardAlerts.slice(0, 6).join("\uFF1B"));
+    else this.resolve("board");
+    this.appendReport(`full: worker-stale=${stale.length} board=${boardAlerts.length ? boardAlerts.length + "\u9879" : "OK"}`);
+  }
+  // ---------- 去重推送（onset-only）+ 报告落盘 ----------
+  push(key, text) {
+    const prev = this.lastAlerts.get(key);
+    if (prev === text) return;
+    this.lastAlerts.set(key, text);
+    const sessions = this.mgr.snapshot();
+    const target = sessions.find((s) => s.status === "WORKING" && s.external) || sessions.find((s) => s.external) || sessions[0];
+    if (!target) return;
+    this.mgr.notifyDone(target.session_id, [`\u26A0\uFE0F \u5DE1\u68C0\uFF1A${text}`], 0);
+    this.appendReport(`ALERT [${key}] ${text}`);
+  }
+  resolve(key) {
+    if (this.lastAlerts.delete(key)) {
+      this.appendReport(`RECOVERED [${key}]`);
+    }
+  }
+  appendReport(line) {
+    try {
+      const ts2 = (/* @__PURE__ */ new Date()).toLocaleString("zh-CN", { hour12: false });
+      const path6 = this.opts.reportPath;
+      let prev = "";
+      try {
+        prev = readFileSync30(path6, "utf-8");
+      } catch {
+      }
+      const lines = [...prev.split("\n").filter(Boolean), `[${ts2}] ${line}`];
+      writeFileSync22(path6, lines.slice(-200).join("\n") + "\n");
+    } catch {
+    }
+  }
+};
+
+// src/cloud-identity.ts
+import { existsSync as existsSync25, readFileSync as readFileSync31, writeFileSync as writeFileSync23 } from "node:fs";
+import { join as join36 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join35(dataDir2, "cloud-keypair.json");
+  const kpPath = join36(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync25(kpPath)) {
-    keypair = JSON.parse(readFileSync30(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync31(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync22(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync23(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join35(dataDir2, "wan-secret");
+  const wanSecretPath = join36(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync25(wanSecretPath)) wanSecret = readFileSync30(wanSecretPath, "utf-8").trim();
+  if (existsSync25(wanSecretPath)) wanSecret = readFileSync31(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
-    writeFileSync22(wanSecretPath, wanSecret, "utf-8");
+    writeFileSync23(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join35(dataDir2, "cloud-peers.json");
+  const peersPath = join36(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync25(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync30(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync31(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -60556,7 +60750,7 @@ function loadOrCreateIdentity(dataDir2) {
   const persistPeers = () => {
     const obj = {};
     for (const [k3, v] of peers) obj[k3] = v;
-    writeFileSync22(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+    writeFileSync23(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
   let lastPeerFlush = 0;
   return {
@@ -61396,23 +61590,23 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync26, readFileSync as readFileSync31, writeFileSync as writeFileSync23 } from "node:fs";
-import { join as join36 } from "node:path";
+import { existsSync as existsSync26, readFileSync as readFileSync32, writeFileSync as writeFileSync24 } from "node:fs";
+import { join as join37 } from "node:path";
 import { homedir as homedir17 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join36(homedir17(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join37(homedir17(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync26(dir)) return "skip-no-dir";
-  const file = join36(dir, "settings.json");
+  const file = join37(dir, "settings.json");
   let obj;
   if (!existsSync26(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync31(file, "utf-8"));
+      obj = JSON.parse(readFileSync32(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -61425,7 +61619,7 @@ function ensureTodoToolsEnv() {
   }
   obj.env = { ...env, [TODO_TOOLS_ENV_KEY]: "1" };
   try {
-    writeFileSync23(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
+    writeFileSync24(file, JSON.stringify(obj, null, 2) + "\n", "utf-8");
     return "written";
   } catch {
     return "error";
@@ -61448,9 +61642,9 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join37(cfg.dataDir, "relay.lock");
+  const lockPath = join38(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync32(lockPath, "utf8").trim());
+    const prev = Number(readFileSync33(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -61464,12 +61658,12 @@ process.on("unhandledRejection", (reason) => {
     }
   }
   try {
-    writeFileSync24(lockPath, String(process.pid));
+    writeFileSync25(lockPath, String(process.pid));
   } catch {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync32(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
+      if (Number(readFileSync33(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
     } catch {
     }
   };
@@ -61510,7 +61704,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync32(join37(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync33(join38(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -61561,14 +61755,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync5(join37(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync5(join38(cfg.dataDir, "relay.log"), "a");
   const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join37(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join38(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -61581,7 +61775,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync27("/proc")) return readFileSync32(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync27("/proc")) return readFileSync33(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync3("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -61591,9 +61785,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join37(cfg.dataDir, "relay.pid");
+  const pidFile = join38(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync32(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync33(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -61619,12 +61813,12 @@ if (cliArgs.has("--stop")) {
   ensureEmployeeHomeSeed(cfg.dataDir);
 }
 probeSqliteDriverAtBoot();
-var persistPath = join37(cfg.dataDir, "events.ndjson");
+var persistPath = join38(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
     for (const f of readdirSync15(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join37(dir, f);
+      const p = join38(dir, f);
       try {
         if (Date.now() - statSync12(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
@@ -61633,7 +61827,7 @@ function sweepTmpImages(dir) {
   } catch {
   }
 }
-var tmpImageDir = join37(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join38(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var boot = await bootReplayFile(persistPath);
@@ -61716,7 +61910,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync32(join37(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync33(join38(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -61728,6 +61922,13 @@ if (cfg.cloudUrls.length) {
   }
 }
 startAcceptanceCloudPoll(cfg, mgr, bus);
+if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+  new PatrolModule(mgr, {
+    dataDir: cfg.dataDir,
+    reportPath: join38(cfg.dataDir, "patrol-report.md"),
+    enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
+  }).start();
+}
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...cloudClients.length ? { pairCodes } : {},
@@ -61739,7 +61940,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync32(join37(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync33(join38(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -61773,15 +61974,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync24(join37(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync25(join38(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync24(join37(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join37(homedir18(), ".cc-deck", "data");
+    writeFileSync25(join38(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join38(homedir18(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
     if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync27(hookHome)) {
       try {
-        writeFileSync24(join37(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync25(join38(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -61806,7 +62007,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join37(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join38(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

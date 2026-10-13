@@ -38,8 +38,8 @@ import { join } from "node:path";
 // newAgent 按 state.employee 守卫），非 Claude 引擎零波及；用户自己建的会话不受此键
 // 影响（其插件面走各自 config 家的常规加载）。relay 侧专属键，hooks 侧 guard-lib
 // CONFIG_DEFAULTS 不含。
-export const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience", "rules", "workerPlugins"] as const;
-export type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean; duty: boolean; preCompactSummary: boolean; experience: boolean; rules: boolean; workerPlugins: boolean };
+export const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables", "duty", "preCompactSummary", "experience", "rules", "workerPlugins", "patrol"] as const;
+export type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean; duty: boolean; preCompactSummary: boolean; experience: boolean; rules: boolean; workerPlugins: boolean; patrol: boolean };
 // 测试缝（P71）：缺省 ~/.cc-deck/config.json；CCR_CONFIG_FILE 注入后读写全落指定
 // 文件——值守产品门测试绝不触生产配置（同 CCR_DATA_DIR/CCR_ORG_DIR 隔离范式）
 export function pluginConfigPath(): string {
@@ -48,7 +48,7 @@ export function pluginConfigPath(): string {
 // 导出供 cloud-client 云通道 SNAPSHOT 同源携带（手机走云桥也要拿到开关）+
 // session-manager feedPM 产品门（P71）读取
 export function readPluginConfig(): PluginConfig {
-  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true, rules: true, workerPlugins: false };
+  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true, duty: true, preCompactSummary: true, experience: true, rules: true, workerPlugins: false, patrol: true };
   try {
     const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
     for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;

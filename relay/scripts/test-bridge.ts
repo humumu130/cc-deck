@@ -306,7 +306,7 @@ const qId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "排�
 assert((await waitAck(qId)).ok, "EXT_INPUT queued acked");
 await wait(300);
 assert(!fakeLog().some((a) => a[1] === "排队消息A"), "no injection while WAITING");
-assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue logged");
+assert(!events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue NOT logged（W-INJECT 令：过程提示全删，排队态由 pending 气泡表达）");
 assert(pendOf(extId("cli-1")).some((p) => p.text === "排队消息A"), "queued msg echoed in pending_inputs");
 const cont17 = send("COMMAND_CONTINUE", { session_id: extId("cli-1"), request_id: w17.payload.request_id });
 assert((await waitAck(cont17)).ok, "17.5 CONTINUE acked");
@@ -1799,7 +1799,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   );
   assert(events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === sidA && (e.payload as { pinned?: boolean }).pinned === false), "46b SESSION_UPDATED 带 pinned:false");
   // 外部会话 pin → 拒绝
-  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: extId("cli-1"), pinned: true }))).ok === false, "46b 外部会话 pin 被拒");
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: extId("cli-1"), pinned: true }))).ok === true, "46b 外部会话 pin 放行（UIPOLISH3 件一拍板：置顶纯列表整理，CLI sid 一视同仁）");
 
   // c) 重启休眠登记：新 mgr（同 dataDir）收养历史 → applyPinned 只标 saved 不拉起
   assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidA, pinned: true }))).ok, "46c 重新 pin A（供重启模拟）");
@@ -2216,7 +2216,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     const pend54 = mgr.getExternal(sid54)!.pending_inputs!.at(-1)!;
     assert(pend54.text === "[图片×1]" && typeof pend54.body === "string" && pend54.body.startsWith("请用 Read 工具查看图片"), "54b pending carries body alongside echo");
     const sys54 = events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid54 && (e.payload as { kind?: string }).kind === "system").map((e) => String((e.payload as { text: string }).text));
-    assert(sys54.some((t) => t.includes("已注入终端") && t.includes("[图片×1]")), "54b inject receipt log uses echo");
+    assert(!sys54.some((t) => t.includes("已注入终端")), "54b inject receipt log removed（W-INJECT 令：过程提示全删，回显走 pending_inputs）");
     assert(!sys54.some((t) => t.includes("img-")), "54b no tmp path in client-visible system logs");
     // ① 晋升：CLI 提交的 UPS prompt 是注入全文（含路径）→ pending 清空 + 时间线记短回显
     await hook({ event: "UserPromptSubmit", prompt: pend54.body, session_id: "cli-54", cli_pid: 5477 });

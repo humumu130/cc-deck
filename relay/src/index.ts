@@ -11,7 +11,9 @@ import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
-import { compactEventsFile, loadEvents, rewriteFile, bootReplayFile } from "./history.js";
+import { PatrolModule } from "./patrol.js";
+import { readPluginConfig } from "./plugin-config.js";
+import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
@@ -425,6 +427,17 @@ if (cfg.cloudUrls.length) {
 // pairCodes 仅云桥启用时下发（无云桥时配对码无处消费，领了也白领）
 // #175 验收单云通道回流（公司网提交走 CF Worker→KV，relay 每 60s 拉回+通知）
 startAcceptanceCloudPoll(cfg, mgr, bus);
+// W-PATROL 巡检哨兵（内置定时模块）：30min 全巡（worker 帧新鲜度/看板漂移）+ 5min 轻探针
+// （磁盘/dataDir 可写/事件循环漂移）。开关=plugin-config 第十键 patrol（默认开）+
+// CCR_PATROL=0 应急停；异常经 notifyDone 推用户（/api/notify 绿框同通道）。
+// 自愈（kickstart 自拉）由壳负责，本模块只报告不动进程。
+if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+  new PatrolModule(mgr, {
+    dataDir: cfg.dataDir,
+    reportPath: join(cfg.dataDir, "patrol-report.md"),
+    enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
+  }).start();
+}
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...(cloudClients.length ? { pairCodes } : {}),

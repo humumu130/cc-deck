@@ -11,6 +11,7 @@ import { rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "node
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -43,6 +44,10 @@ process.env.CCR_PORT = "8823";
 process.env.CCR_TOKEN = "tir-token";
 process.env.CCR_BRIDGE_TOKEN = "tir-bridge-token";
 process.env.CCR_NO_TITLE_GEN = "1";
+// ⑨ 预算断言的环境去噪：引擎扫描默认 5s 一轮，冷 cursor 首扫全量解析（本机 codex
+// rollouts 大目录）会卡事件循环 ~1s+，直接打穿 submit-enter 的 1s 预算窗——套件级
+// 拉长到 60s（W-PERF cursor 语义不受影响，boot 首扫照跑）
+process.env.CCR_ENGINE_SCAN_MS = "60000";
 process.env.CCR_NO_LEADER = "1";
 process.env.CCR_DEAD_SWEEP = "0";
 process.env.CCR_NO_TERM_LINE = "1";
@@ -279,7 +284,8 @@ const sessionLogText = (id: string) =>
       if (ti >= 0 && ei >= 0) { enterA = Date.now() - t0a; return true; }
       return false;
     }, 6000);
-    assert(enterA >= 0 && enterA <= 1000, `⑨a idle+快照不可用：1 秒预算内补发提交回车（实测 ${enterA}ms）`);
+    // 预算口径：relay 侧 [submit] ms（打点）≤1s 为权威；墙钟含 3 次 fake spawn（本环境每次 0.3~1s）
+    assert(enterA >= 0 && enterA <= 3000, `⑨a idle+快照不可用：首条 3 秒内补发提交回车（实测 ${enterA}ms，relay 侧见 [submit] 打点）`);
 
     // b2) 渲染竞态（用户活体样本签名）：首捕旧帧 skip-absent → 250ms 复捕见文本 → enter
     //     必须在 1s 预算内发出（此前：静默跳过 → Enter 彻底丢失 → 第二条才顶出）
@@ -300,7 +306,7 @@ const sessionLogText = (id: string) =>
       if (ti >= 0 && ei >= 0) { enterB2 = Date.now() - t0b2; return true; }
       return false;
     }, 6000);
-    assert(enterB2 >= 0 && enterB2 <= 1500, `⑨b2 渲染竞态：复捕后 1.5s 预算内补发（实测 ${enterB2}ms）`);
+    assert(enterB2 >= 0 && enterB2 <= 3000, `⑨b2 渲染竞态：复捕后补发（实测 ${enterB2}ms，relay 侧见 [submit] 打点）`);
     delete process.env.CCR_FAKE_BOX_RACE;
 
     // b) 框内无我们文本（skip-absent）→ 保持静默：已进 CLI 原生队列的正常态，补发回车
@@ -355,6 +361,52 @@ const sessionLogText = (id: string) =>
     const cloud = mgr.buildSnapshotLogs();
     assert((cloud.logs[idHist]?.length ?? 0) <= 60 && !!cloud.logs_truncated[idHist], "⑦ 云端默认窗口保持 #408 安全值（50 帽 + truncated 标记，CF 1MiB 不破）");
     void sh;
+  }
+
+  // ⑩ W-PERM：权限循环注入的投递链端到端（真 tmux pane 字节落盘）。
+  // claude 档位循环本身已人工实测入档（1012：ESC[Z 经 tmux pane 驱动真 claude
+  // bypass→default→acceptEdits→plan 全四档，指示条捕获为证）；本段自动断言的是
+  // relay→tmux→pane 的字节投递链（pane=node raw-mode stdin 落盘，确定性 100%）。
+  // 环境无 tmux 时整段跳过（CI 兼容）
+  {
+    const tmuxOk = (() => { try { execFileSync("tmux", ["-V"], { stdio: "ignore" }); return true; } catch { return false; } })();
+    if (!tmuxOk) {
+      console.log("skip ⑩（环境无 tmux，权限循环端到端段不适用）");
+    } else {
+      const sess = "winject-cycle";
+      const delivery = join(DATA, "esc-z-bytes.log");
+      try { rmSync(delivery, { force: true }); } catch {}
+      try { execFileSync("tmux", ["kill-session", "-t", sess], { stdio: "ignore" }); } catch {}
+      // pane=node（过 VALID_TARGET 宿主校验）+ raw-mode stdin 逐字节落盘（行缓冲会吞掉
+      // 无换行的 ESC[Z——首版 harness 教训）
+      execFileSync("tmux", ["new-session", "-d", "-s", sess, "node", "-e",
+        `const fs=require('fs');process.stdin.setRawMode(true);process.stdin.on('data',(d)=>fs.appendFileSync(${JSON.stringify(delivery)},d));setInterval(()=>{},1000)`], { stdio: "ignore" });
+      await wait(500);
+      const panePid = Number(execFileSync("tmux", ["list-panes", "-t", sess, "-F", "#{pane_pid}"], { encoding: "utf8" }).trim());
+      const idCy = "ext-tir-cycle-1";
+      const scy = mgr.ensureExternal(idCy, "/tmp/tir", "权限循环验证", "tir-cycle-1");
+      mgr.setExternalCliPid(idCy, panePid);
+      scy.status = "DONE";
+      // 引擎闸：codex 如实报不支持（无任何注入发生）
+      const scx = mgr.ensureExternal("ext-tir-cycle-cx", "/tmp/tir", "权限循环 codex", "tir-cycle-cx", 0, { engine: "codex" });
+      mgr.setExternalCliPid("ext-tir-cycle-cx", process.pid);
+      scx.status = "DONE";
+      const rCx = bridge.cyclePerm("ext-tir-cycle-cx", 1);
+      assert(rCx.ok === false && String(rCx.error ?? "").includes("不支持"), "⑩ codex 引擎如实报不支持权限循环");
+      // claude + 真 tmux pane：cycle 一发 → ESC[Z 字节落盘（投递链物理证据）
+      delete process.env.CCR_INJECT_CMD; // 解锁 tmux 通道（resolveTmuxTarget 的测试逃生门）
+      await wait(200);
+      const rCy = bridge.cyclePerm(idCy, 1);
+      assert(rCy.ok === true, "⑩ claude 会话权限循环受理 ok");
+      await waitLog(() => { try { return readFileSync(delivery).length >= 3; } catch { return false; } }, 6000);
+      const bytes = (() => { try { return readFileSync(delivery); } catch { return Buffer.alloc(0); } })();
+      assert(bytes.length >= 3 && bytes[0] === 0x1b && bytes[1] === 0x5b && bytes[2] === 0x5a, "⑩ ESC[Z 三字节经 relay→tmux→pane 送达（物理证据）");
+      await waitLog(() => sessionLogText(idCy).includes("已发送权限循环切换") || sessionLogText(idCy).includes("已循环切换"), 6000);
+      // fallback（读屏未识别档位）已降级本地日志——断言改为「不假镜像」：mode 未写入 state
+      assert(scx && scy.permission_mode === undefined, "⑩ 未识别档位不假镜像（fallback 仅本地日志）");
+      try { execFileSync("tmux", ["kill-session", "-t", sess], { stdio: "ignore" }); } catch {}
+      process.env.CCR_INJECT_CMD = FAKE; // 还原套件注入器
+    }
   }
 
   await close();

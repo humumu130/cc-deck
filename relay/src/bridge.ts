@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
-import { injectText, injectEsc, injectEnter, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
+import { injectText, injectEsc, injectEnter, injectShiftTab, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
 import { guardConfig, guardCompensateEnter } from "./type-guard.js";
 import {
   addHiddenTodoKey,
@@ -1498,12 +1498,12 @@ export class Bridge {
     // 带图消息双文本：text=短回显（客户端可见面一律不暴露临时路径），body=注入 CLI 的
     // 全文——晋升/看门狗/防抢发守门对账用 body（pBody），CLI 侧回流的只有 body 形态
     this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { ...item }]);
+    // W-INJECT（用户令）：「已注入终端/已排队」类过程提示全删——排队态由 pending 气泡
+    // 表达，过程文本不再进会话流
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       // W-INJECT P0 尾声：删除「已注入终端（CLI 运行中，自动排队跟随）」提示行——发送方
       // 回显已由 pending_inputs 承载（排队 chip），再来一条 system 日志是重复噪音（用户体感啰嗦）
       void this.flushQueue(sessionId);
-    } else {
-      this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(echoText, 80)}`);
     }
     return { ok: true };
   }
@@ -1639,7 +1639,7 @@ export class Bridge {
     if (state.status !== "WORKING") return { ok: false, error: "会话不在运行中" };
     if (!state.cli_pid) return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
     const pid = state.cli_pid;
-    this.mgr.pushExternalLog(sessionId, "system", "发送打断（Esc）");
+    console.log(`[stop] esc sid=${sessionId.slice(0, 14)}：发送打断`);
     void injectEsc(pid).then((r) => {
       if (!r.ok) {
         this.onInjectFail(sessionId, r.error);
@@ -1654,10 +1654,54 @@ export class Bridge {
       const turn = this.turnStart.get(sessionId) ?? s.started_at;
       this.turnStart.delete(sessionId);
       this.mgr.finishExternal(sessionId, "interrupted", Date.now() - turn);
-      this.mgr.pushExternalLog(sessionId, "system", "已打断");
+      console.log(`[stop] done sid=${sessionId.slice(0, 14)}：已打断（状态变化面可见）`);
       // 状态已是 DONE：排队的消息照常注入（flushQueue 认 DONE/WORKING）
       if ((this.inputQueue.get(sessionId)?.length ?? 0) > 0) void this.flushQueue(sessionId);
     });
+    return { ok: true };
+  }
+
+  // W-PERM：claude CLI 会话内权限循环切换（Shift+Tab 注入 ×N → 读屏回显当前档位）。
+  // 仅 claude 引擎（Codex 等无此交互，如实报不支持）；档位镜像回 s.permission_mode
+  //（#191 同源：客户端 permBtn 文案/警示色随 SESSION_UPDATED 即时刷新）。
+  // 异步执行：ACK 立即 ok，切换结果经日志+状态帧回达（与 extStop 的乐观受理同构）
+  cyclePerm(sessionId: string, times = 1): { ok: boolean; error?: string } {
+    const state = this.mgr.getExternal(sessionId);
+    if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
+    if (state.engine && state.engine !== "claude") {
+      return { ok: false, error: `${state.engine} 引擎不支持会话内权限循环（仅 claude CLI，可在其终端内切换）` };
+    }
+    if (!state.cli_pid) return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
+    const pid = state.cli_pid;
+    const n = Math.min(4, Math.max(1, Math.floor(times) || 1));
+    void (async () => {
+      for (let i = 0; i < n; i++) {
+        const r = await injectShiftTab(pid);
+        if (!r.ok) {
+          this.mgr.pushExternalLog(sessionId, "system", `权限循环切换失败：${r.error ?? "未知"}`);
+          return;
+        }
+        await sleep(150);
+      }
+      await sleep(350); // TUI 重绘档位指示
+      const rows = await captureConsoleBottom(pid);
+      const text = (rows ?? []).join("\n");
+      const mode = /bypass permissions on/.test(text) ? "bypassPermissions"
+        : /accept edits on/.test(text) ? "acceptEdits"
+        : /plan mode on/.test(text) ? "plan"
+        : null;
+      const st = this.mgr.getExternal(sessionId);
+      if (!st) return;
+      if (mode) {
+        st.permission_mode = mode; // 镜像 CLI 实际档位（#191 同源）
+        const zh: Record<string, string> = { default: "默认确认", acceptEdits: "接受编辑", plan: "规划（只读）", bypassPermissions: "跳过确认" };
+        this.mgr.pushExternalLog(sessionId, "system", `已循环切换权限模式 → ${zh[mode] ?? mode}`);
+        this.mgr.emitExternalSync(sessionId);
+      } else {
+        // 读屏未识别档位（弹窗遮挡/非 claude TUI 文案）：切换键已注入，档位待转录镜像收敛
+        console.log(`[perm] fallback sid=${sessionId.slice(0, 14)}：切换键已注入，档位未识别（本地诊断）`);
+      }
+    })();
     return { ok: true };
   }
 

@@ -433,8 +433,9 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
   if (target) {
     // 乐观提交（2026-10-12 用户体感 3~5s 排队实锤后重设计）：同步路径只做
     // 写入+立即回车（<200ms 返回），验证转后台——写后立即 Enter 不等任何
-    // capture；后台 600ms 首验，未提交则在 1.5s/3s 补发两次，仍失败写本地
-    // 诊断日志（不进会话流）。极端情况由既有 stuckWatch 慢看门兜底。
+    // capture；后台 600ms 首验，未提交则 1.5s 补发一次（3s 盲 Enter 段已裁剪：
+    // 无状态感知的迟到回车会误发第二条消息或用户草稿，1.5s 后桥侧守门链/
+    // 看门狗已接管，补偿权归它们）。极端情况由既有 stuckWatch 慢看门兜底。
     // UX 口径：用户发送即见「已发送/排队」，不再同步等待验证链。
     // [injector] ms 打点（W-INJECT P0 尾声·延迟量化）：与 bridge.ts [submit] 前缀同风格，
     // write/enter/补偿各段耗时进 stdout——延迟实测量化（<200ms 口径的验证数据源），不进会话流
@@ -454,7 +455,7 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
     console.log(`[injector] optimistic-write sid-target=${target} write=${tWrite - t0}ms${wRetried ? "(retry)" : ""} enter=${Date.now() - tWrite}ms sync-total=${Date.now() - t0}ms len=${text.length}`);
     void (async () => {
       let round = 0;
-      for (const delay of [600, 1500, 3000]) {
+      for (const delay of [600, 1500]) {
         await sleep(delay);
         round++;
         try {
@@ -468,7 +469,7 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
           console.log(`[injector] compensate-enter round=${round} at=${Date.now() - t0}ms (verify ${Date.now() - tV}ms)`);
         } catch {}
       }
-      console.warn(`[injector] 提交补偿未生效 target=${target} tail=${tail.slice(0, 12)}（已 4 次回车）`);
+      console.warn(`[injector] 提交补偿未生效 target=${target} tail=${tail.slice(0, 12)}（已 3 次回车，交桥侧看门狗）`);
     })();
     return { ok: true };
   }
@@ -519,6 +520,32 @@ export async function injectEsc(pid: number): Promise<InjectResult> {
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), "--esc"]);
+}
+
+// W-PERM：向 claude CLI 注入 Shift+Tab（会话内权限循环 default→acceptEdits→plan→
+// bypassPermissions）。tmux 宿主：S-Tab 键名直达 pane（同 injectEsc 通道）。
+// Terminal 直开（do script 通道）：do script 只能表达「文本+Return」，Shift+Tab 是
+// 修饰键事件非字符，无法经此通道表达——System Events keystroke 又要抢焦点+辅助功能
+// 授权，两害相权取如实报不支持（Codex 等引擎同口径在 relay 层拦截）
+export async function injectShiftTab(pid: number): Promise<InjectResult> {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
+  if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
+  if (useAppleInjector()) {
+    if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+    const target = await resolveTmuxTarget(pid);
+    if (target) {
+      // ESC[Z 字面量（-l）：真 claude 实测全四档循环可达（bypass→default→acceptEdits→
+      // plan，1012 沙盒 tmux pane 实证）；send-keys S-Tab 键名只会发裸 0x09（Shift 丢失，
+      // claude 不识别），弃用
+      return runTmux(["send-keys", "-t", target, "-l", "\u001b[Z"]).then((r) =>
+        r.ok ? { ok: true } : { ok: false, error: `tmux send-keys 失败: ${r.error}` },
+      );
+    }
+    return { ok: false, error: "该会话不在 tmux 里（Terminal 直开暂不支持会话内权限循环，请在终端内按 Shift+Tab）" };
+  }
+  if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+  // Windows inject.cs 无 --stab 键位（SendInput 修饰键序列未实现）——如实报不支持
+  return { ok: false, error: "Windows 宿主暂不支持会话内权限循环注入，请在终端内按 Shift+Tab" };
 }
 
 // 只发一个回车（空文本 + 默认带回车；inject.cs 对空文本不拒绝——
