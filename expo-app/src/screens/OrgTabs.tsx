@@ -15,6 +15,7 @@ import { withA, type ThemeColors } from "../theme";
 import { displaySrcName } from "../fmt";
 import type { ProjectGroup, SessionState } from "../protocol";
 import { useRelay, type SourceStatus } from "../store";
+import { PlusMark } from "../brand";
 import { ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgData, useOrgDecide } from "./OrgZone";
 import { TeamDetailPage } from "./TeamDetailPage";
 import TeamCreateWizard from "./TeamCreateWizard";
@@ -32,14 +33,15 @@ function OrgPageShell({ title, sub, onAdd, addLabel, children }: { title: string
       <View style={styles.head}>
         <Text style={styles.headT}>{title}</Text>
         <Text style={styles.headSub}>{sub}</Text>
+        {/* 件七：＋ 统一规格（brand.tsx PlusMark 20px + 44×44 触区，与会话页同参同视觉） */}
         <Pressable
           style={styles.plusBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
           onPress={onAdd}
           hitSlop={4}
           accessibilityLabel={addLabel}
         >
-          <Text style={styles.plusT}>＋</Text>
+          <PlusMark size={20} color={c.brandA} />
         </Pressable>
       </View>
       <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 28 }}>
@@ -370,8 +372,7 @@ const makeStyles = (c: ThemeColors) =>
     },
     headT: { color: c.text, fontSize: 15, fontWeight: "700" },
     headSub: { color: c.brandA, fontSize: 11, fontWeight: "600", flex: 1 },
-    plusBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", marginLeft: 6, overflow: "hidden" },
-    plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
+    plusBtn: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", marginLeft: 6, overflow: "hidden" }, // 件七：44×44 统一规格
     list: { flex: 1, paddingHorizontal: 14, paddingTop: 8 },
     // 确认卡队列
     cfQueue: { gap: 8, marginBottom: 12 },

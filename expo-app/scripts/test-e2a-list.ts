@@ -195,14 +195,19 @@ const SRC_FIX = [
 {
   // 遍历行序：每个段头/组头之后紧跟的卡数必须等于头上的 count
   const headerCountsMatch = (rows: ProjectionRow[]): boolean => {
-    let cur: { count: number; n: number } | null = null;
+    // 🔧回归②：无 grp 的卡=尾部平铺（单源直列态）或源分组归属卡（聚合态）——
+    // 带 grp 的卡只计入键匹配的组；组头计数=组内实际卡数
+    let cur: { count: number; n: number; key: string | null } | null = null;
     for (const r of rows) {
       if (r.kind === "card") {
-        if (!cur) return false;
-        cur.n += 1;
+        if (!cur) continue;
+        const g = (r as { grp?: string }).grp;
+        // 源分组头（key=null）下的卡无 grp → 计入；可折叠组头（key 在）只收键匹配卡，
+        // undefined=尾部平铺跳过
+        if (cur.key === null ? g === undefined : g === cur.key) cur.n += 1;
       } else {
         if (cur && cur.n !== cur.count) return false;
-        cur = { count: r.count, n: 0 };
+        cur = { count: r.count, n: 0, key: r.kind === "section" ? r.key : null };
       }
     }
     return !cur || cur.n === cur.count;
@@ -217,10 +222,11 @@ const SRC_FIX = [
   check(headerCountsMatch(flat), "② 平铺态组头计数=实际卡数");
   const isSec = (r: ProjectionRow, label: string): r is Extract<ProjectionRow, { kind: "section" }> =>
     r.kind === "section" && r.label === label;
-  const pendSec = flat.find((r) => isSec(r, "待处理"));
-  const othSec = flat.find((r) => isSec(r, "其他会话"));
-  check(pendSec?.count === 1, "② 待处理段计数 1");
-  check(othSec?.count === 3, "② 其他会话段计数 3（不是原始数组长度 4）");
+  // 🔧回归②（test.21）：「待处理」段退役——WAITING 无 waiting_request 归「进行中」
+  // 组（桌面 isActive 同口径）、DONE/ERROR 闲置平铺；组头计数=实际卡数不变
+  // 件九：「进行中」组取消（用户拍板）——状态过滤交筛选档，列表=置顶+团队+平铺
+  check(flat.every((r) => r.kind !== "section" || r.label !== "进行中"), "② 「进行中」组已取消（件九）");
+  check(flat.filter((r) => r.kind === "card").length === 4, "② 全量卡无丢失（平铺可见）");
 
   const grouped = buildListProjection({
     sessions: [sess("a1", "WAITING", "srcA"), sess("a2", "DONE", "srcA"), sess("b1", "DONE", "srcB"), sess("b2", "ERROR", "srcB")],
@@ -271,8 +277,8 @@ const SRC_FIX = [
     sourceActivityCap: true,
   });
   check(single.every((r) => r.kind !== "source"), "④ 单源模式无源分组头");
-  check(single.some((r) => r.kind === "section" && r.label === "待处理" && r.count === 1), "④ 单源待处理段");
-  check(single.some((r) => r.kind === "section" && r.label === "其他会话" && r.count === 1), "④ 单源其他会话段");
+  check(single.every((r) => r.kind !== "section"), "④ 单源纯平铺（件九：无状态组头）");
+  check(single.every((r) => r.kind !== "section" || r.label !== "待处理"), "④ 「待处理」段已退役");
 
   // 聚合单源（sources.length===1）：分组无意义 → 直列
   const soloAgg = buildListProjection({
@@ -292,9 +298,10 @@ const SRC_FIX = [
   });
   const heads = grouped.filter((r) => r.kind === "source") as Extract<ProjectionRow, { kind: "source" }>[];
   check(heads.length === 2, "④ 聚合分组两源两组头");
-  check(heads[0].name === "公司 iMac" && heads[0].online === true && heads[0].count === 1, "④ srcA 组头：名/在线/计数");
+  // 🔧回归②：WAITING 可决策卡不再单列待处理段——随源归组（桌面 isActive 口径）
+  check(heads[0].name === "公司 iMac" && heads[0].online === true && heads[0].count === 2, "④ srcA 组头：名/在线/计数（WAITING 归组）");
   check(heads[1].name === "家里 Mac mini" && heads[1].online === false && heads[1].count === 1, "④ srcB 组头：名/离线/计数");
-  check(grouped[0].kind === "section" && grouped[0].label === "待处理", "④ 待处理段仍置顶");
+  check(grouped.every((r) => r.kind !== "section" || r.label !== "待处理"), "④ 聚合态无「待处理」段（回归②）");
   const groupOf = (sid: string): string => {
     let cur = "";
     for (const r of grouped) {
@@ -303,7 +310,7 @@ const SRC_FIX = [
     }
     return "";
   };
-  check(groupOf("a1") === "sec-pending", "④ WAITING 卡在待处理段（不入源组）");
+  check(groupOf("a1") === "src-srcA", "④ WAITING 卡归 srcA 组（回归②：不再单列待处理段）");
   check(groupOf("a2") === "src-srcA", "④ DONE 卡归 srcA 组");
   check(groupOf("b1") === "src-srcB", "④ DONE 卡归 srcB 组");
 
@@ -314,11 +321,12 @@ const SRC_FIX = [
     sources: SRC_FIX,
     sourceActivityCap: false,
   });
+  // 🔧回归②：legacy（sourceActivityCap 缺失）不再降级「—」占位组——新四段结构
+  //（置顶/团队/进行中/闲置）不依赖源活动能力，卡不丢、结构保留
   const legacyHeads = legacy.filter((r) => r.kind === "source") as Extract<ProjectionRow, { kind: "source" }>[];
-  check(legacyHeads.length === 1 && legacyHeads[0].name === "—", "④ legacy 聚合 → 「—」占位组");
-  check(legacyHeads[0].count === 2 && legacy.filter((r) => r.kind === "card").length === 3, "④ 降级不丢卡、计数照实（待处理不计入降级组）");
-  check(!legacy.some((r) => r.kind === "section" && r.label === "其他会话"), "④ 降级组替代平铺段（结构保留）");
-  check(legacy.some((r) => r.kind === "section" && r.label === "待处理"), "④ 降级态待处理段仍在");
+  check(legacyHeads.length === 0, "④ legacy 聚合 → 新结构（「—」降级组退役）");
+  check(legacy.filter((r) => r.kind === "card").length === 3, "④ legacy 不丢卡");
+  check(!legacy.some((r) => r.kind === "section" && r.label === "待处理"), "④ legacy 无「待处理」段（回归②）");
   // sourceActivityCap 缺省语义同 legacy（undefined → false 传入），此处断言 false 显式等价
   const legacyToo = buildListProjection({
     sessions: [sess("x1", "DONE", "srcA")],
@@ -326,7 +334,7 @@ const SRC_FIX = [
     sources: SRC_FIX,
     sourceActivityCap: undefined as unknown as boolean,
   });
-  check(legacyToo.some((r) => r.kind === "source" && r.name === "—"), "④ legacy 缺省（undefined）同降级");
+  check(legacyToo.every((r) => r.kind !== "source"), "④ legacy 缺省（undefined）同新结构（无源组头）");
 
   // 聚合分组下无 src / 源已不在列表 → 「—」占位组殿后
   const orphan = buildListProjection({
