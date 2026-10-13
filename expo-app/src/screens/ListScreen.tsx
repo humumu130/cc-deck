@@ -122,7 +122,7 @@ const SectionHeader = memo(function SectionHeader({ label, count, collapsible, e
   const body = (
     <View style={styles.secHead}>
       {divided ? <View style={styles.secDivider} pointerEvents="none" /> : null}
-      {teamColor ? <View style={[styles.secTeamBar, { backgroundColor: teamColor }]} /> : null}
+      {teamColor ? <View style={[styles.secTeamBar, { backgroundColor: withA(teamColor, 0.55) }]} /> : null}
       <View style={styles.secHeadRow} accessibilityLabel={`${label}，${count} 个会话${collapsible ? `，点按${expanded ? "收起" : "展开"}` : ""}`}>
         {collapsible ? <Text style={styles.secChev}>{expanded ? "▾" : "▸"}</Text> : null}
         <Text style={styles.secHeadT}>{label}</Text>
@@ -1924,8 +1924,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // E2a 段头（待处理/其他会话）：分组只靠间距+小节标题（005 军规③——去下衬线）；
   // 吸顶行定高 + 自带底色；左缘与行内容对齐（14）
   // 件十：组间分界——20px 间距 + hairline（首组不出线；分隔线在组头容器顶部）
+  // 1013 用户反馈（真机截图红框）：组头降级为轻盈小节头——非粗黑（700→600）、
+  // 计数弱化、团队色条 3px→2px 细线且降透明、底距放大给呼吸
   secHead: {
-    marginTop: 20, marginBottom: 5, paddingHorizontal: 14,
+    marginTop: 20, marginBottom: 8, paddingHorizontal: 14,
     backgroundColor: c.bg,
   },
   secHeadRow: { flexDirection: "row", alignItems: "baseline", gap: 6 },
@@ -1933,10 +1935,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     position: "absolute", top: -10, left: 14, right: 14, height: StyleSheet.hairlineWidth,
     backgroundColor: withA(c.faint, 0.35),
   },
-  // 团队色竖条（桌面 grpBar 3px 同语言）
-  secTeamBar: { width: 3, height: 13, borderRadius: 1.5, position: "absolute", left: 4, top: 3 },
-  secHeadT: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2 },
-  secCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
+  // 团队色细线（原 3px 竖条过重——2px×10px 细线 + 半透明，双端区分度语言保留）
+  secTeamBar: { width: 2, height: 10, borderRadius: 1, position: "absolute", left: 4, top: 2 },
+  secHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600", letterSpacing: 0.2 },
+  secCount: { color: withA(c.faint, 0.85), fontSize: 10.5, fontVariant: ["tabular-nums"] },
   // 件六回归②：可折叠组头（团队收纳/进行中）caret——与 OrgTabs 未立项折叠头同语言
   secChev: { color: c.faint, fontSize: 11, lineHeight: 14 },
   // E2a 活动指标块：四行定高小字（行距 gap 3、lineHeight 定值、单行 ellipsis），
@@ -1993,11 +1995,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
     backgroundColor: "transparent", borderWidth: 0,
-    borderRadius: 0, paddingVertical: 8, paddingHorizontal: 14,
+    borderRadius: 0, paddingVertical: 6, paddingHorizontal: 14,
   },
-  cardC: { borderRadius: 0, paddingVertical: 6, paddingHorizontal: 14 },
+  cardC: { borderRadius: 0, paddingVertical: 5, paddingHorizontal: 14 },
   // 极简平铺行：同通栏语言，行高最矮
-  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 7, paddingHorizontal: 14 },
+  // 1013 高度压缩批：单行内容 ~31px 低于 44px 触控底线（改前 ~33 同欠账）——
+  // minHeight 44 兜底 + 内容垂直居中（设置行 minHeight 48 同语言），视觉仍为三档最矮
+  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 6, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
@@ -2007,10 +2011,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ctxCellBar: { width: 44, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   ctxCellT: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"], color: c.faint },
   // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
-  liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5, paddingLeft: 6 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7） */
-  titleC: { lineHeight: 19, color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
-  sumC: { lineHeight: 14, color: c.faint, fontSize: 11, marginTop: 2 },
-  footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, paddingLeft: 6 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7）；1013 行距压缩 -1 */
+  titleC: { lineHeight: 18, color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
+  sumC: { lineHeight: 14, color: c.faint, fontSize: 11, marginTop: 1 },
+  footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
   folderC: { lineHeight: 13, fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
@@ -2024,11 +2028,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srow: { flexDirection: "row", alignItems: "center", gap: 11 },
   ava: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" }, // 双端对齐：9 方块→17 圆（=34/2，桌面 .srow-ava 50% 同口径）
   avaT: { fontSize: 15, fontWeight: "700" },
-  srowMain: { flex: 1, minWidth: 0, gap: 3 },
+  // 1013 高度压缩批（默认密度行距各收一档）：行间 gap 3→2、r1 19→18、r2 16→15——
+  // 卡片 pitch ~73→~65px（-11%）；内容高 51 仍 > 头像地板 34，不触发塌陷
+  srowMain: { flex: 1, minWidth: 0, gap: 2 },
   srowR1: { flexDirection: "row", alignItems: "center", gap: 6 },
-  srowTitle: { lineHeight: 19, flex: 1, color: c.textStrong, fontSize: 13.5, fontWeight: "600" },
-  srowR2: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 16 },
-  srowSum: { flex: 1, color: c.dim, fontSize: 12, lineHeight: 16 },
+  srowTitle: { lineHeight: 18, flex: 1, color: c.textStrong, fontSize: 13.5, fontWeight: "600" },
+  srowR2: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 15 },
+  srowSum: { flex: 1, color: c.dim, fontSize: 12, lineHeight: 15 },
   srowBgTag: { color: c.working, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
   srowR3: { flexDirection: "row", alignItems: "center", gap: 5 },
   srowMeta: { lineHeight: 14, color: c.faint, fontSize: 10 },

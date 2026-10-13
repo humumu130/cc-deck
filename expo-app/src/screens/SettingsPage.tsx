@@ -1485,11 +1485,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 设置行（005 settings-row 直译）：图标方格 + 双行文字 + 右槽；
   // padding 12 + minHeight 48 = 44px+ 触达。带 children（内嵌块）时行盒转
   // rowWrap（column）：paddingHorizontal 12 + row（内层行）自适应
-  row: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 12, paddingVertical: 12, minHeight: 48 },
-  rowWrap: { paddingHorizontal: 12, paddingVertical: 6 },
+  row: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 12, paddingVertical: 13, minHeight: 48 }, // 1013 用户反馈「行高太低」：上下 padding 回调一档（12→13，minHeight 48 热区底线不动）
+  rowWrap: { paddingHorizontal: 12, paddingVertical: 7 },
   rowDiv: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line },
   rowTitleT: { color: c.text, fontSize: 13.5, fontWeight: "600" },
-  rowNoteT: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
+  rowNoteT: { color: c.faint, fontSize: 10.5, marginTop: 2 },
   rowChevT: { color: c.faint, fontSize: 12, marginLeft: 2 },
   // 行右值（版本号 / 经验库条数）：弱一档小字
   rowValT: { color: c.dim, fontSize: 11, flexShrink: 1 },
