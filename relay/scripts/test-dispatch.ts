@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager, wrapDispatchPrompt } from "../src/session-manager.js";
 import { readDispatchLog } from "../src/org.js";
-import { addMember, listGroups, listPendingConfirms, loadBoard, upsertBoardEntry } from "../src/projects.js";
+import { addMember, listGroups, listPendingConfirms, loadBoard, removeMember, upsertBoardEntry } from "../src/projects.js";
 import { routingFor } from "../src/routing.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -351,6 +351,27 @@ async function main() {
     const e4 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第四单", gid: gidE }) as { ok: boolean; session_id?: string };
     assert(e4.ok === true && e4.session_id === wE2, "首选忙 → 次优熟手 W2 resume");
     assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE2)?.count ?? 0) === 2), "W2 再收口 → count=2");
+
+    // ---------- 停摆杜绝 R3：liveness 门·僵尸熟手 resume 承接（2026-10-13） ----------
+    // 设计修正版：派单侧不加 veteran 门（saved/DONE 退休态是 resume 亲和正当形态，僵尸流
+    // 有补刀）——liveness 把关统一在投递咽喉。此处锁「僵尸熟手仍 resume 原班 + 换流承接
+    // （补刀后新流），prompt 不落死队列」的口径。
+    {
+      const zomb = mgr as unknown as { sessions: Map<string, { agent?: { ended?: boolean; childPid?: number }; wd: { gaveUp: boolean } }> };
+      const alive = mgr as unknown as { agentStreamAlive(s: never): boolean };
+      const m2 = zomb.sessions.get(wE2)!;
+      const w2agent = m2.agent!;
+      const savedPid = w2agent.childPid;
+      Object.assign(w2agent, { ended: false, childPid: 999_999_999 });
+      assert(alive.agentStreamAlive(zomb.sessions.get(wE2) as never) === false, "R3 liveness：僵尸流（agent 在场+kill(0) 死）判死（单元口径）");
+      const e5z = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps R3 僵尸熟手单", gid: gidE }) as { ok: boolean; session_id?: string; dispatch_id?: string };
+      assert(e5z.ok === true && e5z.session_id === wE2, "R3 liveness：僵尸熟手 resume 原班（session_id 复用，门在投递咽喉不在派单）");
+      assert(zomb.sessions.get(wE2)!.agent !== w2agent, "R3 liveness：resume 换流承接（旧尸停用，prompt 不落死队列）");
+      // 还原（对后续 bad 评级/唯一熟手用例零扰动）：pid 复原 + 熟手池不增位（resume 原班
+      // 未建新会话——本段天然零扰动，仅等收口即可）
+      Object.assign(w2agent, { childPid: savedPid });
+      await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE2)?.count ?? 0) === 3);
+    }
 
     // 搞砸 → 避开：W2 评 bad → 第五单（W1 忙）跳过 W2 → 新会话 W3
     const rt = mgr.orgAction("rate", { gid: gidE, sid: wE2, rating: "bad" });

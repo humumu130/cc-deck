@@ -1,5 +1,6 @@
 // hooks 桥接全链路测试：模拟 bridge-hook.mjs 的 POST 序列 + WS 客户端命令
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1798,8 +1799,36 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     "46b unpin 后文件移除 A",
   );
   assert(events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === sidA && (e.payload as { pinned?: boolean }).pinned === false), "46b SESSION_UPDATED 带 pinned:false");
-  // 外部会话 pin → 拒绝
-  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: extId("cli-1"), pinned: true }))).ok === true, "46b 外部会话 pin 放行（UIPOLISH3 件一拍板：置顶纯列表整理，CLI sid 一视同仁）");
+  // 外部会话 pin → 放行（UIPOLISH3 件一拍板：置顶纯列表整理，CLI sid 一视同仁）——
+  // 本批顺手修复预存红：旧断言「被拒」是拍板前语义，产品已翻转断言未跟（46b 曾长期基线红）
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: extId("cli-1"), pinned: true }))).ok === true, "46b 外部会话 pin 放行（UIPOLISH3 件一拍板口径，预存红断言对齐）");
+
+  // ---------- 47. 停摆杜绝 R3：liveness 门（2026-10-13，test.23 第一刀） ----------
+  // 僵尸流=agent 在场、ended 未翻、宿主进程已死（kill(0) ESRCH）——旧直发分支写进无人
+  // 消费的死队列（1012~1013 停摆根因）。门语义：判死→自动拉活（零感）/拉不活→阻断+通知。
+  {
+    const zomb = mgr as unknown as { sessions: Map<string, { agent?: { ended?: boolean; childPid?: number; sendMessage?: unknown }; wd: { gaveUp: boolean }; state: { relay_session_id?: string } }> };
+    const alive = mgr as unknown as { agentStreamAlive(s: never): boolean };
+    // 47a 僵尸流 → 自动拉活零感（ack ok + 换流 + 复活日志/通知）
+    const mA = zomb.sessions.get(sidA)!;
+    const oldAgentA = mA.agent;
+    assert(!!oldAgentA && !!mA.state.relay_session_id, "47a 前置：会话 A 有 agent 与 SDK 记录");
+    Object.assign(oldAgentA!, { ended: false, childPid: 999_999_999 });
+    assert(alive.agentStreamAlive(mA as never) === false, "47a 僵尸流判死（kill(0) ESRCH）");
+    const ackZ = await waitAck(send("COMMAND_MESSAGE", { session_id: sidA, text: "R3-zombie-revive" }));
+    assert(ackZ.ok === true, "47a 僵尸流投递 → 自动拉活零感（ack ok，消息随 resume 恢复投递）");
+    assert(zomb.sessions.get(sidA)!.agent !== oldAgentA, "47a 走 resume 换流（未写死队列）");
+    assert(events.some((e) => e.type === "SESSION_LOG" && e.session_id === sidA && String((e.payload as { text?: string }).text ?? "").includes("已自动拉起恢复投递")), "47a 复活日志落会话流（liveness-revive 可见）");
+
+    // 47b 拉不活（无 SDK 会话记录）→ 阻断回执 + 通知（不静默排队）
+    const mB = zomb.sessions.get(sidB)!;
+    assert(!!mB.agent && !mB.state.relay_session_id, "47b 前置：会话 B 无 SDK 记录（noinit 形态）");
+    Object.assign(mB.agent!, { ended: false, childPid: 999_999_998 });
+    const ackB2 = await waitAck(send("COMMAND_MESSAGE", { session_id: sidB, text: "R3-unrevivable" }));
+    assert(ackB2.ok === false && String((ackB2 as { error?: string }).error ?? "").includes("无法自动恢复"), "47b 拉不活 → 阻断回执（明确错误，不再静默排队）");
+    const notifRaw = (() => { try { return readFileSync(join(cfg.dataDir, "notifications.json"), "utf-8"); } catch { return ""; } })();
+    assert(notifRaw.includes("liveness-block"), "47b 阻断通知落账（stableKey=liveness-block 幂等）");
+  }
 
   // c) 重启休眠登记：新 mgr（同 dataDir）收养历史 → applyPinned 只标 saved 不拉起
   assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidA, pinned: true }))).ok, "46c 重新 pin A（供重启模拟）");
@@ -1831,7 +1860,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // d) 按需恢复：RESUME A → resume 原 sdk id、不注入消息、saved/historical 清除
   const ackResume = mgr2.handleCommand({ command_id: "resume-a1", type: "COMMAND_RESUME_SESSION", payload: { session_id: sidA }, ts: Date.now() }, "test") as CommandAckPayload;
   assert(ackResume.ok === true, "46d COMMAND_RESUME_SESSION 受理");
-  assert(created[created.length - 1].resume === sdkA, "46d resume 引用原 SDK 会话 id");
+  assert(created[created.length - 1].resume === mgr.snapshot().find((s) => s.session_id === sidA)!.relay_session_id, "46d resume 引用原 SDK 会话 id（动态取当前所属——47 段 liveness 换流后 sdk id 随流更新，断言锁初值会误红）");
   assert(created[created.length - 1].prompt === undefined, "46d 恢复不注入用户消息（parked）");
   assert(await waitFor2(() => {
     const st = mgr2.snapshot().find((s) => s.session_id === sidA);
@@ -2491,6 +2520,11 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // init 由测试手动触发，精确钉住 spawn→onInit 并发窗口。childPid 用超 pid_max 的
   // 不存在值（killTree 真实现会 ESRCH；这里换 spy 直接断言补刀调用）
   let fac189 = 0;
+  // R3 liveness 仿真（2026-10-13）：childPid 用真活进程（sleep 宿主）——超 pid_max 死值
+  // 会被 liveness 门（kill(0)）判死，直达/互斥用例全变接管换流。killTree 补刀面已 spy，
+  // 活宿主 pid 不会误杀真进程；段尾统一清理。
+  const host189 = spawn("sleep", ["600"], { detached: true, stdio: "ignore" });
+  host189.unref();
   const kills189: number[] = [];
   const recs189: { a: AgentLike; cb: AgentCallbacks; sent: string[]; prompt?: string }[] = [];
   mgr.setAgentFactory((cwd, model, cb, prompt, opts) => {
@@ -2502,7 +2536,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
       id: randomUUID(),
       startedAt: Date.now(),
       ended: false,
-      childPid: 19900000 + fac189,
+      childPid: host189.pid ?? undefined,
       sendMessage: (t) => { sent.push(t); },
       allow: () => false,
       deny: () => false,
@@ -2569,7 +2603,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   recs189[2]!.a.ended = true; // 旧流已关但进程挂着——补刀必须杀（#189 放宽点）
   assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m5" }))).ok, "189e 超窗 m5 acked");
   assert(fac189 === 4, "189e 超窗放行接管（第 4 个 agent）");
-  assert(kills189.includes(19900003), "189e 补刀旧树不看 ended（流断活尸也杀）");
+  assert(kills189.includes(recs189[2]!.a.childPid!), "189e 补刀旧树不看 ended（流断活尸也杀；pid=活宿主仿真值）");
 
   // f) 盲区：新流（agent4）无 init、ended=true、status 钉 WORKING——窗口内看门狗
   // 持袖旁观；静默超阈 + 超窗后 lane="ended" 接管：杀活尸 + 重放全部未回显消息
@@ -2582,7 +2616,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mgr.tickWatchdog();
   await waitLog(() => wd189().some((e) => (e.payload as { action?: string }).action === "recover_ok"), 4000);
   assert(wd189().some((e) => { const p = e.payload as { action?: string; lane?: string }; return p.action === "stall_detected" && p.lane === "ended"; }), "189f 盲区按 lane=ended 判死（不走 CPU 采样）");
-  assert(kills189.includes(19900004), "189f 盲区恢复杀掉流断活尸");
+  assert(kills189.includes(recs189[3]!.a.childPid!), "189f 盲区恢复杀掉流断活尸");
   assert(fac189 === 5, "189f 盲区恢复重拉（第 5 个 agent）");
   assert(!!recs189[4]!.prompt && recs189[4]!.prompt.includes("m5"), "189f 重放包含全部未回显消息");
   assert(sys189().some((t) => t.includes("看门狗接管：会话流已断开")), "189f ended 通道接管文案进时间线");
@@ -2606,6 +2640,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   delete process.env.CCR_WATCHDOG_STALL_MS;
   delete process.env.CCR_WATCHDOG_SAMPLE_MS;
   rmSync(TASK_DIR189, { recursive: true, force: true });
+  try { if (host189.pid) process.kill(host189.pid, "SIGKILL"); } catch {} // R3 liveness 宿主进程清理
   mgr.setWatchdogProcs(null);
   mgr.setAgentFactory(null);
 }

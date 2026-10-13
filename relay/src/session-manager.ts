@@ -2455,12 +2455,18 @@ export class SessionManager {
             });
           }
           // agent 已死（Relay 重启遗留 / stop 收尾）或已放弃自愈（#109：放弃路径不再
-          // 预杀树，僵流可能还挂着）：有 SDK 会话 id 就地 resume 复活（接管时补刀旧树）
-          if (!s.agent || s.agent.ended || s.wd.gaveUp) {
+          // 预杀树，僵流可能还挂着）：有 SDK 会话 id 就地 resume 复活（接管时补刀旧树）。
+          // 停摆杜绝 R3（liveness 门，2026-10-13）：补第四态「僵尸流」——agent 对象在场、
+          // ended 未翻 true（流 close 事件未到），但宿主进程已死（kill(0) 失败）：
+          // 直发 sendMessage 会写进无人消费的死队列（1012~1013 停摆根因），并入判死走拉活。
+          if (!this.agentStreamAlive(s)) {
             // #189 resume 互斥：上次 resume 的 agent 还在路上（spawn→onInit 窗口），
             // ended 只是流先关了——此刻再接管必然双拉（新 agent childPid 未就位，
             // 补刀落空 → 双进程）。消息走 sendMessage 排队：AsyncQueue 即 SDK prompt
-            // 流，新流 init 后按序消费，语义与正常排队一致
+            // 流，新流 init 后按序消费，语义与正常排队一致。
+            // R3 口径备案：互斥窗内**不**加 liveness 守卫——窗内 childPid 常未就位
+            //（spawn 异步填充），kill(0) 误杀会破互斥（189c 实锤）；窗内即夭由
+            // init 看门狗兜底（超时 fresh 重放），liveness 门只管「窗外的稳态僵尸流」。
             // #27 补 !ended：codex 干净收口后 ended 恒 false（DONE 常驻），但 stop/
             // 早夭路径 ended=true 且窗口内——对 ended 的 agent sendMessage 只会被
             // 静默丢（codex 侧 console.warn），消息蒸发；一律走 resumeAgent 真拉活
@@ -2482,12 +2488,38 @@ export class SessionManager {
             if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
               this.pushExternalLog(s.state.session_id, "system", "收到手动消息，越过恢复冷却尝试拉起");
             }
-            this.resumeAgent(s, text, imgPayload.length ? imgPayload : undefined, echo, imgRefs.length ? imgRefs : undefined);
-            return { command_id: cmd.command_id, ok: true };
+            // 停摆杜绝 R3：拉活失败的同步信号（无 SDK 会话记录=真拉不活）显式阻断——
+            // 回执明确错误+通知面（stableKey 幂等），不再静默排队进死队列。手动豁免
+            // 语义（W-LEADFIX：用户显式消息越冷却拉起）不变——冷却是退避不是死，
+            // 只有同步不可恢复才拦。
+            const agBefore = s.agent;
+            const wasZombie = !!(agBefore && !agBefore.ended && !s.wd.gaveUp && agBefore.childPid);
+            try {
+              this.resumeAgent(s, text, imgPayload.length ? imgPayload : undefined, echo, imgRefs.length ? imgRefs : undefined);
+              if (wasZombie) {
+                this.pushExternalLog(s.state.session_id, "system", "检测到会话进程已断（消息未丢），已自动拉起恢复投递");
+                this.upsertNotification("system", "liveness-revive", s.state.session_id, {
+                  title: "会话进程已断，已自动复活",
+                  body: `${s.state.title || s.state.session_id.slice(0, 8)}：检测到宿主进程已退出（liveness 门），消息已随自动拉起恢复投递，无需重发`,
+                  severity: "info", group: "attention", actionable: false, sessionId: s.state.session_id, domain: "session", returnPath: "/",
+                });
+              }
+              return { command_id: cmd.command_id, ok: true };
+            } catch (err) {
+              const why = err instanceof Error ? err.message : String(err);
+              this.upsertNotification("system", "liveness-block", s.state.session_id, {
+                title: "消息未投递：会话进程已断且无法自动恢复",
+                body: `${s.state.title || s.state.session_id.slice(0, 8)}：${why}——消息已退回未投递（点会话卡片可手动恢复后重发）`,
+                severity: "waiting", group: "attention", actionable: true, sessionId: s.state.session_id, domain: "session", returnPath: "/",
+              });
+              return { command_id: cmd.command_id, ok: false, error: `会话进程已断且无法自动恢复，消息未投递：${why}` };
+            }
           }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
+          const liveAgent = s.agent;
+          if (!liveAgent) return { command_id: cmd.command_id, ok: false, error: "会话流不在场（liveness 窗口竞态）" }; // 类型窄化兜底（agentStreamAlive 已保证非空，逻辑不可达）
           s.pendingImgRefs = imgRefs.length ? imgRefs : undefined; // FB14：回显槽先置（echo 同步消费）
           // #7 看门狗重放账（P1FIX 2026-10-10 调序 + id 精确出账）：push 先于
           // sendMessage——adapter 的回显在 sendMessage 内同步发出并透传 ackId，账不在场
@@ -2503,7 +2535,7 @@ export class SessionManager {
             ts: Date.now(),
             hold: s.state.relay_session_id ? undefined : "init",
           });
-          s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo, msgId);
+          liveAgent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo, msgId);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -3677,6 +3709,20 @@ export class SessionManager {
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
   // echo（#62 文件消息）：客户端可见回显文本——正文已合成路径指令时传原文本短回显，
   // 不暴露临时路径（同 #54b 口径）；不传则回显截断正文 + 图片计数
+  // ---------- 停摆杜绝 R3：liveness 门（2026-10-13，test.23 第一刀） ----------
+  // 廉价探活：kill(pid,0) 零 IO（权限/存在性探测，不发送信号）。无 childPid（SDK 内联
+  // 形态/异步填充窗口）保守放行=既有行为，不引入新拒真。
+  private streamPidAlive(s: ManagedSession): boolean {
+    const pid = s.agent?.childPid;
+    if (typeof pid !== "number" || !pid) return true;
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  }
+  /** 投递前活性判定：agent 不在场/流已 ended/看门狗已放弃/宿主进程已死（僵尸流——
+   * ended 未翻但进程没了，直发=写进无人消费的死队列，1012~1013 停摆根因 R3）= 死。 */
+  private agentStreamAlive(s: ManagedSession): boolean {
+    return !!s.agent && !s.agent.ended && !s.wd.gaveUp && this.streamPidAlive(s);
+  }
+
   private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[]): void {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
@@ -6499,6 +6545,11 @@ export class SessionManager {
     // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
     // 熟手全忙即顺延下一位或新会话，活不过夜
     let veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
+    // 停摆杜绝 R3（liveness 门，设计修正）：派单侧**不加** veteran 活性门——saved/DONE/
+    // parked 退休态熟手（无 agent/ended）正是 resume 亲和的正当形态，僵尸流 resume 也有
+    // 补刀（resumeAgent stop+killTree）；投递唯一咽喉在 COMMAND_MESSAGE/EXT_INPUT 的
+    // agentStreamAlive 门统一把关（单一职责，防双门误杀 resume 路径——test-dispatch
+    // 「复活后派单拉原班」用例实锤过误杀）。
     if (veteran && (planned.engine || planned.model || planned.provider)) {
       const veteranState = this.require(veteran).state;
       if ((planned.engine && veteranState.engine !== planned.engine) ||
