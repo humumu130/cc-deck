@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IA 重构对照图 · 会话列表瘦身——worker 收进团队域</title>
+<!--
+  [正经立项] IA 重构对照图（feat/session-list-slim 派单第 1 步：先出对照图再实现）
+  任务 t-7e0c6189 · 2026-10-13 · 供 Leader 先审后拍
+  四态 × 改前/改后：① 列表态 ② 团队域态 ③ 详情面板态 ④ 第四列展开态
+  视觉 token 与组件类名对齐 web-console/index-005.html（:root 变量直搬，srow/member-card/inspector 同构简化版）
+-->
+<style>
+  :root {
+    --bg0: #07111D; --bg1: #0B1624; --surface1: #101E2F; --surface2: #15273B;
+    --hover: #1D344D; --line: #2A4058; --line-soft: #203247;
+    --text-strong: #E8EFF8; --text: #C4D0DE; --dim: #A8B9CA; --faint: #90A6BD;
+    --brand: #E2855E; --brand-hover: #F0A06A;
+    --done: #4BCB91; --working: #E9B84C; --error: #EC7472; --info: #7EAFE8;
+    --queue-deep: #0E1B2B; --workspace-top: #0B1726; --inspector-top: #0F2031;
+    --panel-shadow: rgba(1,8,16,.1); --card-border: rgba(71,101,132,.48);
+    --border-strong: #4E6D8E; --selected-bg: rgba(232,239,248,.08);
+    --q-row-hov: rgba(148,163,190,.07); --q-row-sel: rgba(148,163,190,.14);
+    --tag-border: rgba(111,139,166,.18); --tag-bg: rgba(83,103,126,.19); --tag-ink: #D7E3EF;
+    --tag-bg-action: rgba(226,133,94,.16); --tag-ink-action: #F0A06A;
+    --tag-bg-info: rgba(126,175,232,.16); --tag-ink-info: #A7C8F2;
+    --tag-bg-done: rgba(75,203,145,.15); --tag-ink-done: #7FE0B2;
+    --rail: #06101B; --chrome: #070D15; --brand-soft: #3A251F;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg0); color: var(--text); font: 13px/1.55 var(--sans); padding: 34px 30px 70px; }
+  h1 { color: var(--text-strong); font-size: 19px; margin-bottom: 4px; }
+  .sub { color: var(--faint); font: 12px var(--mono); margin-bottom: 26px; }
+  .sub b { color: var(--brand); font-weight: 600; }
+  section.sec { margin-bottom: 42px; }
+  .sec-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .sec-head .no { color: var(--brand); font: 700 12px var(--mono); }
+  .sec-head h2 { color: var(--text-strong); font-size: 15px; }
+  .sec-desc { color: var(--dim); font-size: 12px; margin-bottom: 12px; max-width: 860px; }
+  .sec-desc code { color: var(--info); font: 11px var(--mono); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .trio { display: grid; grid-template-columns: 1fr 1fr 0.92fr; gap: 14px; }
+  .pane-tag .state.v7 { color: var(--info); border-color: rgba(126,175,232,.4); background: var(--tag-bg-info); }
+  /* —— v8 原型形态（美学基准参照，结构取自 docs/v8-ui-interactive-v2.html，配色以本页 token 统一）—— */
+  .v7rail { flex: none; width: 34px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0; background: var(--rail); border: 1px solid var(--line-soft); border-radius: 8px; color: var(--faint); font-size: 14px; }
+  .v7rail .on { color: var(--text-strong); background: var(--hover); border-radius: 7px; padding: 3px 6px; }
+  .v7head { border-bottom: 1px solid var(--line-soft); padding: 11px 13px 0; }
+  .v7head .r1 { display: flex; align-items: center; gap: 8px; }
+  .v7head .r1 .back { color: var(--dim); font-size: 14px; }
+  .v7head .r1 .dt { color: var(--text-strong); font-size: 13.5px; font-weight: 600; }
+  .v7head .r1 .live { color: var(--done); font-size: 10.5px; }
+  .v7head .r1 .mini { margin-left: auto; color: var(--dim); font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
+  .v7head .r2 { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 10.5px; margin: 5px 0 8px; }
+  .v7head .ctxbar { width: 54px; height: 5px; border-radius: 3px; background: var(--q-row-sel); overflow: hidden; }
+  .v7head .ctxbar i { display: block; height: 100%; width: 32%; background: var(--brand); }
+  .v7head .dtabs { display: flex; gap: 14px; border-top: 1px solid var(--line-soft); padding: 7px 0; }
+  .v7head .dtabs button { border: 0; background: transparent; color: var(--dim); font-size: 11.5px; padding: 0; cursor: pointer; }
+  .v7head .dtabs button.on { color: var(--text-strong); font-weight: 650; box-shadow: inset 0 -2px 0 var(--brand); padding-bottom: 6px; }
+  .v7note { margin: 9px 11px 0; padding: 7px 9px; border: 1px dashed var(--line); border-radius: 7px; color: var(--faint); font-size: 10.5px; line-height: 1.5; }
+  .v7msg { padding: 11px 13px; display: flex; flex-direction: column; gap: 7px; }
+  .v7msg .teamnotice { color: var(--faint); font-size: 10.5px; text-align: center; }
+  .v7msg .mbub { max-width: 92%; border-radius: 9px; padding: 6px 9px; font-size: 11px; color: var(--text); background: var(--surface2); }
+  .v7msg .mrow.me { display: flex; justify-content: flex-end; }
+  .v7msg .mrow.me .mbub { background: var(--brand-soft, #3A251F); color: var(--text-strong); }
+  .v7msg .mwho { color: var(--faint); font-size: 9.5px; margin-bottom: 2px; }
+  .v7msg .staffcard { border: 1px solid var(--line-soft); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .v7msg .staffcard .m { display: flex; gap: 6px; align-items: center; color: var(--dim); font-size: 10.5px; }
+  .v7msg .staffcard .role { color: var(--faint); }
+  .v7msg .staffcard .mdl { margin-left: auto; color: var(--faint); font: 9px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  .pane { border: 1px solid var(--line-soft); border-radius: 12px; background: var(--bg1); overflow: hidden; }
+  .pane-tag { display: flex; align-items: center; gap: 7px; padding: 8px 14px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font-size: 11.5px; background: var(--chrome); }
+  .pane-tag .state { font: 600 10.5px var(--mono); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--tag-border); }
+  .pane-tag .state.before { color: var(--faint); }
+  .pane-tag .state.after { color: var(--brand); border-color: rgba(226,133,94,.4); background: var(--tag-bg-action); }
+  .pane-tag .delta { margin-left: auto; color: var(--faint); font: 10.5px var(--mono); }
+  .stage { padding: 12px; display: flex; gap: 10px; min-height: 300px; }
+
+  /* —— 会话列（mock 同构 .queue）—— */
+  .queue { width: 272px; flex: none; display: flex; flex-direction: column; background: var(--queue-deep); border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+  .queue-head { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px 8px; }
+  .queue-head h3 { color: var(--text-strong); font-size: 13.5px; font-weight: 650; }
+  .icon-btn { width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); font-size: 13px; cursor: pointer; }
+  .list-tools { display: flex; gap: 6px; padding: 0 13px 9px; align-items: center; }
+  .list-tools .search { flex: 1; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--faint); font-size: 11px; display: flex; align-items: center; padding: 0 8px; }
+  .list-tools .chip { height: 24px; padding: 0 9px; border-radius: 999px; background: var(--surface2); color: var(--dim); font-size: 11px; display: flex; align-items: center; }
+  .slist { overflow: hidden; flex: 1; padding: 0 3px 8px 6px; }
+  .grp-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 5px; color: var(--dim); font-size: 11px; }
+  .grp-head .caret { color: var(--faint); font-size: 9px; }
+  .grp-head .cnt { color: var(--faint); font: 10px var(--mono); }
+
+  /* —— 会话卡（mock 同构 .queue-card .srow）—— */
+  .queue-card { display: flex; gap: 9px; padding: 8px 8px; border-radius: 9px; cursor: pointer; align-items: flex-start; border: 1px solid transparent; }
+  .queue-card:hover { background: var(--q-row-hov); }
+  .queue-card.selected { background: var(--q-row-sel); border-color: var(--card-border); }
+  .srow-ava { position: relative; flex: none; width: 30px; height: 30px; border-radius: 8px; background: #3E8E7E; color: #fff; font: 700 13px/30px var(--sans); text-align: center; }
+  .srow-ava.b { background: #5B8FA8; } .srow-ava.c { background: #8A7AB5; } .srow-ava.d { background: #A8763E; }
+  .dot { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--queue-deep); background: var(--done); }
+  .dot.working { background: var(--working); } .dot.waiting { background: var(--brand); } .dot.error { background: var(--error); }
+  .srow-main { flex: 1; min-width: 0; }
+  .srow-r1 { display: flex; align-items: baseline; gap: 6px; }
+  .srow-r1 strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 600; }
+  .srow-r1 time { flex: none; color: var(--faint); font: 10px var(--mono); }
+  .srow-r2 { display: flex; gap: 5px; align-items: center; margin-top: 2px; }
+  .srow-r2 .sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: 11px; }
+  .srow-r3 { display: flex; gap: 4px; margin-top: 4px; align-items: center; }
+  .tag { flex: none; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--tag-border); background: var(--tag-bg); color: var(--tag-ink); font: 10px var(--mono); }
+  .tag.action { background: var(--tag-bg-action); color: var(--tag-ink-action); border-color: rgba(226,133,94,.3); }
+  .tag.info { background: var(--tag-bg-info); color: var(--tag-ink-info); }
+  .tag.done { background: var(--tag-bg-done); color: var(--tag-ink-done); }
+  .tag.pin { color: var(--brand); border-color: rgba(226,133,94,.3); }
+
+  /* —— 团队入口卡（新组件）—— */
+  .team-entry { display: flex; gap: 9px; padding: 8px 9px; margin: 2px 2px; border-radius: 9px; border: 1px dashed var(--line); background: rgba(21,39,59,.45); cursor: pointer; align-items: center; }
+  .team-entry:hover { background: var(--q-row-hov); border-color: var(--border-strong); }
+  .team-entry .t-ava { flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--info); display: flex; align-items: center; justify-content: center; font-size: 13px; position: relative; }
+  .team-entry .t-main { flex: 1; min-width: 0; }
+  .team-entry .t-name { color: var(--text-strong); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .team-entry .t-sub { color: var(--faint); font-size: 10.5px; margin-top: 1px; }
+  .unread-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 0 rgba(226,133,94,.5); animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(226,133,94,.45); } 70% { box-shadow: 0 0 0 7px rgba(226,133,94,0); } 100% { box-shadow: 0 0 0 0 rgba(226,133,94,0); } }
+  .t-expand { flex: none; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .t-expand:hover { border-color: var(--border-strong); color: var(--text); }
+  .worker-mini-row { display: flex; gap: 3px; margin-top: 4px; }
+  .worker-mini { width: 16px; height: 16px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); color: var(--faint); font: 600 8px/14px var(--mono); text-align: center; position: relative; }
+  .worker-mini i { position: absolute; right: -1.5px; bottom: -1.5px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--queue-deep); background: var(--working); }
+
+  /* —— 团队域成员卡（mock 同构 .member-card）—— */
+  .member-card { display: flex; gap: 10px; padding: 10px 11px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface1); cursor: default; position: relative; }
+  .member-card.clickable { cursor: pointer; }
+  .member-card.clickable:hover { border-color: var(--border-strong); background: var(--hover); }
+  .member-card.clickable::after { content: "↗ 直开"; position: absolute; right: 9px; top: 8px; color: var(--faint); font: 9.5px var(--mono); opacity: 0; transition: opacity .12s; }
+  .member-card.clickable:hover::after { opacity: 1; color: var(--brand); }
+  .avatar { position: relative; flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--text-strong); font: 700 12px/29px var(--sans); text-align: center; }
+  .avatar.pm { color: var(--brand); } .avatar.qa { color: var(--info); }
+  .avatar i, .srow-ava i.eng { position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--surface1); background: var(--info); }
+  .member-card .m-main { flex: 1; min-width: 0; }
+  .member-card .m-name { color: var(--text-strong); font-size: 12.5px; font-weight: 600; }
+  .member-card .m-sub { color: var(--faint); font-size: 10.5px; margin-top: 1px; }
+
+  /* —— 检查器块（mock 同构 .inspector-block）—— */
+  .inspector { flex: 1; min-width: 0; background: var(--inspector-top); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 13px; overflow: hidden; }
+  .inspector h4 { color: var(--text-strong); font-size: 12.5px; font-weight: 650; margin-bottom: 10px; }
+  .insp-block { border-top: 1px solid var(--line-soft); padding: 9px 0; }
+  .insp-block:first-of-type { border-top: 0; padding-top: 0; }
+  .insp-title { display: flex; align-items: center; justify-content: space-between; color: var(--dim); font-size: 11.5px; margin-bottom: 6px; }
+  .insp-title .n { font: 10.5px var(--mono); color: var(--faint); }
+  .member-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .member-chip { display: flex; align-items: center; gap: 5px; padding: 3px 8px 3px 3px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); cursor: pointer; }
+  .member-chip:hover { border-color: var(--border-strong); background: var(--hover); }
+  .member-chip .mc-ava { position: relative; width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); color: var(--text-strong); font: 700 9px/19px var(--mono); text-align: center; }
+  .member-chip .mc-ava i { position: absolute; right: -2px; bottom: -2px; width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--inspector-top); background: var(--working); }
+  .member-chip .mc-name { color: var(--text); font-size: 11px; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .member-chip.unread .mc-name { color: var(--text-strong); }
+  .drawer-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 3px 9px; border: 1px solid var(--tag-border); border-radius: 6px; background: var(--tag-bg); color: var(--tag-ink); font-size: 10.5px; cursor: pointer; }
+  .drawer-link:hover { border-color: var(--border-strong); color: var(--text); }
+
+  /* —— 第四列 team-drawer（新组件）—— */
+  .team-drawer { flex: none; width: 248px; background: var(--queue-deep); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+  .drawer-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+  .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
+  .drawer-head .d-cnt { color: var(--faint); font: 10px var(--mono); }
+  .drawer-body { flex: 1; overflow: hidden; padding: 6px 3px 8px 6px; }
+  .drawer-note { margin: 8px 8px 2px; color: var(--faint); font-size: 10px; }
+
+  .cols-labels { display: flex; gap: 10px; margin-top: 9px; }
+  .cols-labels span { color: var(--faint); font: 9.5px var(--mono); }
+  .arrow-note { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 11px; border: 1px dashed var(--line); border-radius: 8px; color: var(--dim); font-size: 11px; background: rgba(21,39,59,.35); }
+  .arrow-note b { color: var(--brand); font-weight: 600; }
+  .footer-note { margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 11px; max-width: 900px; }
+</style>
+</head>
+<body>
+
+<h1>IA 重构对照图 · 会话列表瘦身——worker 收进团队域</h1>
+<div class="sub">任务 t-7e0c6189 · feat/session-list-slim · <b>先审后拍</b>：本页为设计定案图，通过后按图实现 · 示例数据：2 团队（矩阵团队 1 PM + 4 worker + 1 QA · 夜巡团队 1 Leader + 2 worker）+ 2 个无团队直连会话 · 第三列 <b>v8 原型形态</b>（用户 1013 定版：v8 = 桌面 UI 美学基准，docs/v8-ui-interactive-v2.html；唯一例外=会话详情页保持现版。v7 双轨口径作废）</div>
+
+<!-- ══════════ ① 列表态 ══════════ -->
+<section class="sec">
+  <div class="sec-head"><span class="no">①</span><h2>会话列表态（会话域左列）</h2></div>
+  <div class="sec-desc">核心变化：编制内 worker/QA 会话不再逐张铺列表，聚合为每团队一张「团队入口卡」；<b style="color:var(--text)">PM / Leader / 无团队直连 / 置顶会话照旧直列</b>（置顶的 worker 会话视为用户显式关注，保留出列）。团队入口卡点击跳团队域，卡上 <code>⤢</code> 钮就地展开第四列；worker 有新输出 → 团队卡未读呼吸点亮，进团队域 / 展开第四列 / 直开后消。</div>
+  <div class="trio">
+    <div class="pane">
+      <div class="pane-tag"><span class="state before">改前</span>会话列表 · 11 张全铺<span class="delta">进行中 4 + 闲置 7</span></div>
+      <div class="stage">
+        <div class="queue">
+          <div class="queue-head"><h3>会话</h3><button class="icon-btn">＋</button></div>
+          <div class="list-tools"><div class="search">搜索</div><div class="chip">全部</div></div>
+          <div class="slist">
+            <div class="grp-head"><span class="caret">▾</span>进行中 · 4</div>
+            <div class="queue-card"><span class="srow-ava">矩<i class="dot working"></i></span><span class="srow-main"><span class="srow-r1"><strong>矩阵团队 · PM</strong><time>12:04</time></span><span class="srow-r2"><span class="sum">正在派单 W-PORT-B…</span></span><span class="srow-r3"><span class="tag info">进行中</span><span class="tag">Claude</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava b">W<i class="dot working"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-PORT-B 特性搬运</strong><time>12:03</time></span><span class="srow-r2"><span class="sum">跑断言 26/26…</span></span><span class="srow-r3"><span class="tag info">进行中</span><span class="tag">Codex</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava c">W<i class="dot working"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-BOARD2 看板 v2</strong><time>12:01</time></span><span class="srow-r2"><span class="sum">CDP 29/29…</span></span><span class="srow-r3"><span class="tag info">进行中</span><span class="tag">Trae</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava d">Q<i class="dot waiting"></i></span><span class="srow-main"><span class="srow-r1"><strong>QA 夜巡</strong><time>11:58</time></span><span class="srow-r2"><span class="sum">等待确认 · 43 图回执</span></span><span class="srow-r3"><span class="tag action">需行动</span><span class="tag">Qwen</span></span></span></div>
+            <div class="grp-head" style="margin-top:6px"><span class="caret">▾</span>闲置 · 7</div>
+            <div class="queue-card"><span class="srow-ava">矩<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>矩阵团队 · Leader</strong><time>10:42</time></span><span class="srow-r2"><span class="sum">验收单 8f06e7f6 已发</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava b">W<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-SRCMENU2 源菜单批</strong><time>09:15</time></span><span class="srow-r2"><span class="sum">已改未 commit 等 squash</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava c">W<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-RULES2 铁律 P2</strong><time>09:02</time></span><span class="srow-r2"><span class="sum">34/34 新套件</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava d">W<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-EXPO2 件六</strong><time>08:47</time></span><span class="srow-r2"><span class="sum">1cf5614 全量收编</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava b">W<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-CTXFIX 三修</strong><time>08:30</time></span><span class="srow-r2"><span class="sum">回合终态真入口已定位</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava">夜<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>夜巡 · Leader</strong><time>02:10</time></span><span class="srow-r2"><span class="sum">夜审完结 · 无 P0</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava c">W<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>W-NQA 夜巡 QA</strong><time>01:44</time></span><span class="srow-r2"><span class="sum">43 图零代码改动</span></span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-tag"><span class="state after">改后</span>会话列表 · 5 张直列 + 2 张团队入口卡<span class="delta">进行中 1 + 团队 2 + 闲置 2</span></div>
+      <div class="stage">
+        <div class="queue">
+          <div class="queue-head"><h3>会话</h3><button class="icon-btn">＋</button></div>
+          <div class="list-tools"><div class="search">搜索</div><div class="chip">全部</div></div>
+          <div class="slist">
+            <div class="grp-head"><span class="caret">▾</span>进行中 · 1</div>
+            <div class="queue-card selected"><span class="srow-ava">矩<i class="dot working"></i></span><span class="srow-main"><span class="srow-r1"><strong>矩阵团队 · PM</strong><time>12:04</time></span><span class="srow-r2"><span class="sum">正在派单 W-PORT-B…</span></span><span class="srow-r3"><span class="tag info">进行中</span><span class="tag">Claude</span></span></span></div>
+            <div class="grp-head" style="margin-top:6px"><span class="caret">▾</span>团队 · 2</div>
+            <div class="team-entry">
+              <span class="t-ava">▣<i style="position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:50%;border:2px solid var(--queue-deep);background:var(--working)"></i></span>
+              <span class="t-main">
+                <span class="t-name">矩阵团队 <span class="unread-dot" title="worker 有新输出"></span></span>
+                <span class="t-sub">5 个 worker 会话 · 2 在跑</span>
+                <span class="worker-mini-row"><span class="worker-mini">W<i></i></span><span class="worker-mini">W</span><span class="worker-mini">W</span><span class="worker-mini">W</span><span class="worker-mini">QA</span></span>
+              </span>
+              <button class="t-expand" title="展开该团队 worker 会话（第四列）">⤢</button>
+            </div>
+            <div class="team-entry">
+              <span class="t-ava">▣</span>
+              <span class="t-main">
+                <span class="t-name">夜巡团队</span>
+                <span class="t-sub">2 个 worker 会话 · 全部闲置</span>
+                <span class="worker-mini-row"><span class="worker-mini">W</span><span class="worker-mini">QA</span></span>
+              </span>
+              <button class="t-expand" title="展开该团队 worker 会话（第四列）">⤢</button>
+            </div>
+            <div class="grp-head" style="margin-top:6px"><span class="caret">▾</span>闲置 · 2</div>
+            <div class="queue-card"><span class="srow-ava">矩<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>矩阵团队 · Leader</strong><time>10:42</time></span><span class="srow-r2"><span class="sum">验收单 8f06e7f6 已发</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava">夜<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong>夜巡 · Leader</strong><time>02:10</time></span><span class="srow-r2"><span class="sum">夜审完结 · 无 P0</span></span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-tag"><span class="state v7">v8 基准</span>会话列表美学形态<span class="delta">scard 两行卡 · 项目分组 · 密度档</span></div>
+      <div class="stage">
+        <div class="v7rail"><span class="on">💬</span><span>👥</span><span>📁</span><span style="margin-top:auto">🔔</span></div>
+        <div class="queue" style="flex:1">
+          <div class="queue-head"><h3>会话</h3><button class="icon-btn" style="font-size:10px">密度·标准</button></div>
+          <div class="slist" style="padding-top:6px">
+            <div class="grp-head"><span class="caret">▾</span>cc-deck · 进行中 · 4</div>
+            <div class="queue-card"><span class="srow-ava" style="background:var(--surface2);color:var(--text)">🎨</span><span class="srow-main"><span class="srow-r1"><strong>ui-review 走查</strong><span class="dot working" style="margin-left:auto"></span></span><span class="srow-r2"><span class="sum">清理 v4 截图引用 · 刚刚活跃</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava" style="background:var(--surface2);color:var(--text)">🤖</span><span class="srow-main"><span class="srow-r1"><strong>团队模式设计稿 v6</strong><span class="tag action" style="margin-left:auto">等你确认</span></span><span class="srow-r2"><span class="sum">导航地基 · 在等你确认方案 · 12 分钟前</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava" style="background:var(--surface2);color:var(--text)">📦</span><span class="srow-main"><span class="srow-r1"><strong>0.5.2-test.15 出包</strong><span class="dot waiting" style="margin-left:auto"></span></span><span class="srow-r2"><span class="sum">Actions 跑完 2/3 · 等安卓产物</span></span></span></div>
+            <div class="queue-card"><span class="srow-ava" style="background:var(--surface2);color:var(--text)">📱</span><span class="srow-main"><span class="srow-r1"><strong>手机走查</strong><span class="dot" style="margin-left:auto"></span></span><span class="srow-r2"><span class="sum">无线 adb 待连 · 1 小时前</span></span></span></div>
+            <div class="grp-head" style="margin-top:6px"><span class="caret">▾</span>blog · 已完成 · 2</div>
+            <div class="queue-card"><span class="srow-ava" style="background:var(--surface2);color:var(--text)">🔧</span><span class="srow-main"><span class="srow-r1"><strong>主题模板调试</strong></span><span class="srow-r2"><span class="sum">暗色代码块适配 · 昨天</span></span></span></div>
+            <div class="newcard" style="margin:8px 8px 0;padding:8px;border:1px dashed var(--line);border-radius:8px;color:var(--dim);text-align:center;font-size:11px">＋ 新建会话</div>
+          </div>
+        </div>
+      </div>
+      <div class="v7note" style="margin:0 12px 12px">v8 美学基准取材点：<b style="color:var(--dim)">emoji 头像 + 两行 scard、组头带项目名与状态（cc-deck·进行中 / blog·已完成）、行内「等你确认」chip、密度档钮、底部 ＋ 新建卡</b>。v8 列表仍是全铺——本批先落 IA 瘦身（结构），卡片美学向 v8 靠拢是后续独立 UI 批。</div>
+    </div>
+  </div>
+  <div class="arrow-note">↑ <b>列表过滤口径</b>：编制内 role ∈ worker/qa/reviewer → 收进团队；PM/Leader/无编制（直连）→ 直列；<b>置顶例外</b>：置顶的 worker 会话仍出列（用户显式关注优先于 IA 规则）；被收起的会话正与某团队 PM 直聊中（选中态）时临时出列，切走自动收回。</div>
+</section>
+
+<!-- ══════════ ② 团队域态 ══════════ -->
+<section class="sec">
+  <div class="sec-head"><span class="no">②</span><h2>团队域态（成员 tab · 成员卡可直开）</h2></div>
+  <div class="sec-desc">成员网格每张成员卡新增 <b style="color:var(--text)">点击直开</b>语义：点卡片 → 跳回会话域并选中该成员会话（直聊路径保留——日常只跟 PM 说话，但要跟某个 worker 对话时两跳即达）。PM 卡照旧可点（其会话本就在列表）。collab 模式 no-leader 下 PM 直达语义不变（relay 侧语义，本批零触碰）。</div>
+  <div class="trio">
+    <div class="pane">
+      <div class="pane-tag"><span class="state before">改前</span>成员卡纯展示 · 无点击语义<span class="delta">hover 无反馈</span></div>
+      <div class="stage">
+        <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start;background:var(--workspace-top);border:1px solid var(--line-soft);border-radius:10px;padding:12px">
+          <div class="member-card"><span class="avatar pm">✦</span><span class="m-main"><div class="m-name">矩阵团队 · PM</div><div class="m-sub">pm · Claude · 59% · 83k/140k</div></span></div>
+          <div class="member-card"><span class="avatar">W</span><span class="m-main"><div class="m-name">W-PORT-B 特性搬运</div><div class="m-sub">worker · Codex · 41%</div></span></div>
+          <div class="member-card"><span class="avatar">W</span><span class="m-main"><div class="m-name">W-BOARD2 看板 v2</div><div class="m-sub">worker · Trae · 67%</div></span></div>
+          <div class="member-card"><span class="avatar qa">QA</span><span class="m-main"><div class="m-name">QA 夜巡</div><div class="m-sub">qa · Qwen Code · 22%</div></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-tag"><span class="state after">改后</span>成员卡 hover 亮边 + 「↗ 直开」角标<span class="delta">点击 = 跳会话域选中该会话</span></div>
+      <div class="stage">
+        <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start;background:var(--workspace-top);border:1px solid var(--line-soft);border-radius:10px;padding:12px">
+          <div class="member-card clickable" style="border-color:var(--border-strong);background:var(--hover)"><span class="avatar pm">✦</span><span class="m-main"><div class="m-name">矩阵团队 · PM</div><div class="m-sub">pm · Claude · 59% · 83k/140k</div></span></div>
+          <div class="member-card clickable"><span class="avatar">W</span><span class="m-main"><div class="m-name">W-PORT-B 特性搬运</div><div class="m-sub">worker · Codex · 41%</div></span></div>
+          <div class="member-card clickable"><span class="avatar">W</span><span class="m-main"><div class="m-name">W-BOARD2 看板 v2</div><div class="m-sub">worker · Trae · 67%</div></span></div>
+          <div class="member-card clickable"><span class="avatar qa">QA</span><span class="m-main"><div class="m-name">QA 夜巡</div><div class="m-sub">qa · Qwen Code · 22%</div></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-tag"><span class="state v7">v8 基准</span>团队域 · 成员 Tab 形态<span class="delta">成员卡含动作行「旁听 / 消息 / 接替」</span></div>
+      <div class="stage" style="flex-direction:column;min-height:0">
+        <div class="v7head" style="width:100%">
+          <div class="r1"><span class="back">‹</span><span class="dt">cc-deck M1 攻坚团</span><span class="live">● 运行中 · 2 小时</span><span class="mini">↗ 归档</span></div>
+          <div class="r2"><span>编制 6 · 任务 11 · 开团 09:30</span><span class="ctxbar"><i></i></span><span>32%</span><span style="color:var(--faint)">·</span><span>Leader glm-5.3</span></div>
+          <div class="dtabs"><button>消息</button><button>看板 1</button><button class="on">成员</button><button>活动</button></div>
+        </div>
+        <div style="flex:1;overflow:hidden;display:grid;grid-template-columns:1fr;gap:8px;padding:10px 12px;align-content:start">
+          <div class="member-card" style="cursor:default"><span class="avatar" style="font-size:14px">👑</span><span class="m-main"><div class="m-name">Leader <span class="tag done" style="margin-left:4px">在线</span></div><div class="m-sub">指挥 · 兼验收 · glm-5.3</div><div class="m-sub" style="color:var(--dim)"><b>指挥全团</b> · 拆卡 9 张 · T-13 已验收</div></span><span class="worker-mini-row" style="flex-direction:column;gap:5px;align-items:flex-end"><span class="worker-mini" style="width:54px;height:16px;border-style:solid">旁听</span><span class="worker-mini" style="width:54px;height:16px;border-color:var(--border-strong);color:var(--text)">消息</span><span class="worker-mini" style="width:54px;height:16px">接替</span></span></div>
+          <div class="member-card" style="cursor:default"><span class="avatar" style="font-size:14px">🛠</span><span class="m-main"><div class="m-name">worker-relay <span class="tag done" style="margin-left:4px">在线</span></div><div class="m-sub">开发 · glm-5.3-air</div><div class="m-sub" style="color:var(--dim)"><b>T-12 任务板数据模型</b> · wt/t7/relay</div><div class="m-sub" style="display:flex;align-items:center;gap:6px"><span class="ctxbar" style="width:54px;height:5px;border-radius:3px;background:var(--q-row-sel);overflow:hidden;display:inline-block"><i style="display:block;height:100%;width:61%;background:var(--working)"></i></span>上下文 61%</div></span><span class="worker-mini-row" style="flex-direction:column;gap:5px;align-items:flex-end"><span class="worker-mini" style="width:54px;height:16px">旁听</span><span class="worker-mini" style="width:54px;height:16px;border-color:var(--border-strong);color:var(--text)">消息</span><span class="worker-mini" style="width:54px;height:16px">接替</span></span></div>
+          <div class="member-card" style="cursor:default"><span class="avatar" style="font-size:14px">📱</span><span class="m-main"><div class="m-name">worker-mobile <span class="tag" style="margin-left:4px">离线</span></div><div class="m-sub">开发 · glm-5.3-air</div><div class="m-sub" style="color:var(--dim)"><b>T-15 手机只读看板</b> · M2 范围已标</div></span><span class="worker-mini-row" style="flex-direction:column;gap:5px;align-items:flex-end"><span class="worker-mini" style="width:54px;height:16px">旁听</span><span class="worker-mini" style="width:54px;height:16px;border-color:var(--border-strong);color:var(--text)">消息</span><span class="worker-mini" style="width:54px;height:16px">接替</span></span></div>
+        </div>
+      </div>
+      <div class="v7note" style="margin:10px 12px 12px">v8 成员卡取材点：<b style="color:var(--dim)">mh 头行（emoji 头像 + 名 + 角色 + 模型 chip + 在线 pill）· 当前任务行 + worktree · ctxrow 上下文水位条 · mact 动作行</b>——其中「消息」动作 = 本批「直开」的 v8 形态（点开该成员会话直聊）；「旁听/接替」为既有规划面，不在本批。</div>
+    </div>
+  </div>
+  <div class="arrow-note">↑ 第一张卡示意 hover 态（亮边 + 直开角标显形）。直开 = railJump 会话域 + 选中该会话（选中中的 worker 会话临时出列，见 ① 注）；同时清该团队未读聚合。v8 列为美学与结构基准：现产品团队域四 Tab「对话/看板/成员/活动」与 v8「消息/看板/成员/活动」同位（命名「对话↔消息」统一提请 Leader 拍板）；成员卡 mact 动作行（旁听/消息/接替）是直开的后续完整形态，本批先落「整卡可点直开」。</div>
+</section>
+
+<!-- ══════════ ③ 详情面板态 ══════════ -->
+<section class="sec">
+  <div class="sec-head"><span class="no">③</span><h2>详情面板态（检查器 · 选中 PM/Leader 会话时）</h2></div>
+  <div class="sec-desc">检查器（第三列）在既有块之上插入 <b style="color:var(--text)">「团队成员」块</b>：该团队全部编制成员的胶囊头像行（状态点 + 名字，有新输出的名字高亮），点胶囊 = 直开该成员会话；块尾「展开成员会话 ⤢」= 就地拉出第四列。仅当选中会话属于某团队编制（PM/Leader/worker 均可——worker 直开后也方便横向跳同僚）时渲染，无团队会话不出现此块。<b style="color:var(--text)">本页无 v8 对照列——会话详情页保持现版不动（用户 1013 定版的唯一例外）。</b></div>
+  <div class="pair">
+    <div class="pane">
+      <div class="pane-tag"><span class="state before">改前</span>检查器 4 块 · 无团队信息<span class="delta">选中 PM 会话时</span></div>
+      <div class="stage">
+        <div class="inspector">
+          <h4>证据检查器</h4>
+          <div class="insp-block"><div class="insp-title"><span>会话</span><span class="tag info">进行中</span></div></div>
+          <div class="insp-block"><div class="insp-title"><span>任务清单</span><span class="n">6/9</span></div></div>
+          <div class="insp-block"><div class="insp-title"><span>用量</span><span class="n">59%</span></div></div>
+          <div class="insp-block"><div class="insp-title"><span>输出物</span><span class="n">4</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-tag"><span class="state after">改后</span>插入「团队成员」块（第二位）<span class="delta">胶囊点头像 = 直开</span></div>
+      <div class="stage">
+        <div class="inspector">
+          <h4>证据检查器</h4>
+          <div class="insp-block"><div class="insp-title"><span>会话</span><span class="tag info">进行中</span></div></div>
+          <div class="insp-block" style="border-left:2px solid var(--brand);padding-left:9px">
+            <div class="insp-title"><span>团队成员 · 矩阵团队</span><span class="n">6 席</span></div>
+            <div class="member-chips">
+              <span class="member-chip" title="点击直开 PM 会话"><span class="mc-ava">✦</span><span class="mc-name">矩阵团队 · PM</span></span>
+              <span class="member-chip unread" title="点击直开 · 有新输出"><span class="mc-ava">W<i></i></span><span class="mc-name">W-PORT-B</span></span>
+              <span class="member-chip unread" title="点击直开 · 有新输出"><span class="mc-ava">W<i></i></span><span class="mc-name">W-BOARD2</span></span>
+              <span class="member-chip"><span class="mc-ava">W</span><span class="mc-name">W-SRCMENU2</span></span>
+              <span class="member-chip"><span class="mc-ava">W</span><span class="mc-name">W-RULES2</span></span>
+              <span class="member-chip"><span class="mc-ava">QA</span><span class="mc-name">QA 夜巡</span></span>
+            </div>
+            <span class="drawer-link">展开成员会话 ⤢</span>
+          </div>
+          <div class="insp-block"><div class="insp-title"><span>任务清单</span><span class="n">6/9</span></div></div>
+          <div class="insp-block"><div class="insp-title"><span>用量</span><span class="n">59%</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="arrow-note">↑ PM 胶囊也在列（从 worker 会话横向跳 PM 方便）；胶囊状态点取成员会话实时状态；带头像呼吸点 + 名字高亮 = 该成员有新输出（与 ① 团队卡未读同源同消）。会话详情页（检查器所属）保持现版不动——v8 美学基准的唯一例外（用户 1013 定版）。</div>
+</section>
+
+<!-- ══════════ ④ 第四列展开态 ══════════ -->
+<section class="sec">
+  <div class="sec-head"><span class="no">④</span><h2>第四列展开态（team-drawer · 新增侧栏）</h2></div>
+  <div class="sec-desc">会话域新增可展开第四列 <code>team-drawer</code>：默认收起（零占位），从团队入口卡 <code>⤢</code> / 检查器「展开成员会话」拉出，展示该团队全部 worker/QA 会话卡（复用会话卡视觉，点击直开）；展开即清该团队未读聚合。位置在检查器左侧；检查器收起时贴右缘。通知域零影响（复活/完成/升级通知照常，只是列表不铺 worker）。</div>
+  <div class="pair">
+    <div class="pane">
+      <div class="pane-tag"><span class="state before">改前</span>三列布局 · 无第四列<span class="delta">列表(296) + 对话(flex) + 检查器(320 覆盖)</span></div>
+      <div class="stage">
+        <div class="queue" style="width:180px">
+          <div class="queue-head"><h3>会话</h3></div>
+          <div class="slist" style="padding-top:8px">
+            <div class="queue-card"><span class="srow-ava" style="width:24px;height:24px;font:600 11px/24px var(--sans)">矩</span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11.5px">矩阵团队 · PM</strong></span></span></div>
+            <div class="queue-card"><span class="srow-ava b" style="width:24px;height:24px;font:600 11px/24px var(--sans)">夜</span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11.5px">夜巡 · Leader</strong></span></span></div>
+          </div>
+        </div>
+        <div style="flex:1;border:1px dashed var(--line-soft);border-radius:10px;background:var(--workspace-top);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:11px">对话工作区</div>
+        <div class="inspector" style="flex:none;width:170px"><h4 style="font-size:11.5px">证据检查器</h4><div class="insp-block"><div class="insp-title"><span>会话</span></div></div><div class="insp-block"><div class="insp-title"><span>用量</span></div></div></div>
+      </div>
+      <div class="cols-labels"><span style="width:180px">① 列表 296px</span><span style="flex:1">② 对话 flex</span><span style="width:170px">③ 检查器 320px（覆盖式）</span></div>
+    </div>
+    <div class="pane">
+      <div class="pane-tag"><span class="state after">改后</span>第四列 team-drawer 展开<span class="delta">248px · 默认收起零占位</span></div>
+      <div class="stage">
+        <div class="queue" style="width:150px">
+          <div class="queue-head"><h3>会话</h3></div>
+          <div class="slist" style="padding-top:8px">
+            <div class="queue-card selected" style="padding:6px"><span class="srow-ava" style="width:22px;height:22px;font:600 10px/22px var(--sans)">矩</span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11px">矩阵团队 · PM</strong></span></span></div>
+            <div class="team-entry" style="padding:6px"><span class="t-ava" style="width:22px;height:22px;font-size:10px">▣</span><span class="t-main"><span class="t-name" style="font-size:11px">矩阵团队</span></span><span class="t-expand" style="width:18px;height:18px;font-size:9px">⤢</span></div>
+          </div>
+        </div>
+        <div style="flex:1;border:1px dashed var(--line-soft);border-radius:10px;background:var(--workspace-top);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:11px">对话工作区</div>
+        <div class="inspector" style="flex:none;width:140px"><h4 style="font-size:11px">证据检查器</h4><div class="insp-block" style="border-left:2px solid var(--brand);padding-left:7px"><div class="insp-title" style="font-size:10.5px"><span>团队成员</span></div></div></div>
+        <div class="team-drawer" style="width:200px">
+          <div class="drawer-head"><span class="d-name" style="font-size:11.5px">矩阵团队 · 成员会话</span><span class="d-cnt">5</span><button class="t-expand" style="width:18px;height:18px;font-size:9px" title="收起">✕</button></div>
+          <div class="drawer-body">
+            <div class="queue-card" style="padding:6px 7px"><span class="srow-ava b" style="width:24px;height:24px;font:600 10px/24px var(--sans)">W<i class="dot working"></i></span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11px">W-PORT-B 特性搬运</strong><time>12:03</time></span><span class="srow-r2"><span class="sum" style="font-size:10px">跑断言 26/26…</span></span></span></div>
+            <div class="queue-card" style="padding:6px 7px"><span class="srow-ava c" style="width:24px;height:24px;font:600 10px/24px var(--sans)">W<i class="dot working"></i></span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11px">W-BOARD2 看板 v2</strong><time>12:01</time></span><span class="srow-r2"><span class="sum" style="font-size:10px">CDP 29/29…</span></span></span></div>
+            <div class="queue-card" style="padding:6px 7px"><span class="srow-ava d" style="width:24px;height:24px;font:600 10px/24px var(--sans)">Q<i class="dot waiting"></i></span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11px">QA 夜巡</strong><time>11:58</time></span><span class="srow-r2"><span class="sum" style="font-size:10px">等待确认 · 43 图回执</span></span></span></div>
+            <div class="queue-card" style="padding:6px 7px"><span class="srow-ava b" style="width:24px;height:24px;font:600 10px/24px var(--sans)">W<i class="dot"></i></span><span class="srow-main"><span class="srow-r1"><strong style="font-size:11px">W-SRCMENU2 源菜单批</strong><time>09:15</time></span><span class="srow-r2"><span class="sum" style="font-size:10px">等 Leader squash</span></span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cols-labels"><span style="width:150px">① 列表</span><span style="flex:1">② 对话</span><span style="width:140px">③ 检查器</span><span style="width:200px;color:var(--brand)">④ 成员会话 248px（新）</span></div>
+    </div>
+  </div>
+  <div class="arrow-note">↑ 第四列卡片点击 = 直开（选中中的卡临时出列到 ①，见 ① 注）；PM/Leader 不进第四列（他们已在 ① 直列）；展开动作即清该团队未读聚合。</div>
+</section>
+
+<div class="footer-note">
+  实现口径备注（对齐派单设计要点）：未读聚合 = 团队内 worker/QA 会话有新输出（SESSION_LOG 增量）→ 团队入口卡呼吸点 + 检查器成员胶囊高亮；清除时机 = 进团队域选中该团队 / 展开第四列 / 直开任一成员会话。通知域、collab no-leader PM 直达语义、store/protocol 零触碰。被收起会话的右键/置顶/搜索直达等既有能力经列表入口的路径自然保留（置顶者仍出列；搜索命中被收起会话时经团队入口抵达）。v8 对齐总述（用户 1013 定版：v8 = 桌面 UI 美学基准，v7 双轨口径作废，例外=会话详情页保持现版）：本批先落 IA 结构（列表瘦身 + worker 收进团队域 + 第四列），团队域结构（消息/看板/成员/活动 四 Tab）与 v8 一致承接；卡片美学向 v8 取材（① 两行 scard + 项目分组 + 行内确认 chip，② 成员卡 mh/当前任务/水位条/mact 动作行——「消息」动作 = 直开的 v8 完整形态）为后续独立 UI 批；团队域 tab 命名统一（对话↔消息）提请 Leader 拍板。</div>
+
+</body>
+</html>

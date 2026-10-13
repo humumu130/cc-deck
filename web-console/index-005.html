@@ -2152,6 +2152,49 @@
     .session-group > .queue-group .grp-count { margin-left: 2px; padding: 1px 7px 2px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-weight: 600; font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
     #d-session .queue-card.idle strong { color: var(--dim); } /* 件C④：置灰卡标题降灰（升特异度压 #d-session .srow-r1 strong；opacity .55 基线原有） */
     .session-list-tools button.active { color: var(--text-strong); border-color: var(--border-strong); background: var(--hover); }
+    /* [t-7e0c6189] 会话列表瘦身：团队入口卡——每团队一张聚合卡（worker 会话收进团队域，
+       卡身点击跳团队域、⤢ 钮就地展开第四列；未读呼吸点 = 团队内 worker 有新输出） */
+    .team-entry { display: flex; gap: 9px; align-items: center; margin: 2px 2px; padding: 8px 9px; border: 1px dashed var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface2) 45%, transparent); cursor: pointer; }
+    .team-entry:hover { background: var(--q-row-hov); border-color: var(--border-strong); }
+    .team-entry .t-ava { flex: none; position: relative; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--info); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .team-entry .t-main { flex: 1; min-width: 0; }
+    .team-entry .t-name { display: flex; align-items: center; gap: 6px; color: var(--text-strong); font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .team-entry .t-sub { color: var(--faint); font-size: var(--fs-C); margin-top: 1px; }
+    .team-entry .t-expand { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; }
+    .team-entry .t-expand:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
+    .worker-mini-row { display: flex; gap: 3px; margin-top: 4px; }
+    .worker-mini { flex: none; position: relative; width: 16px; height: 16px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); color: var(--faint); font: 600 8px/14px var(--mono); text-align: center; }
+    .worker-mini .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
+    .worker-mini.more { border-style: dashed; }
+    /* 未读呼吸点：brand 色源 + glow 光圈动画（环色全走 var，零裸色值） */
+    .slim-unread-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; }
+    @keyframes slimPulseKf { 0% { box-shadow: 0 0 0 0 var(--glow-brand); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+    /* [t-7e0c6189] 第四列 team-drawer：该团队 worker/QA 会话列表（默认收起零占位，展开 248px；
+       覆盖式 absolute 贴检查器左缘——检查器收起时贴 42px 柄右缘） */
+    .team-drawer { position: absolute; top: 0; bottom: 0; right: var(--inspector-w, 320px); z-index: 3; display: flex; flex-direction: column; width: 248px; background: var(--queue-deep); border-left: 1px solid var(--line); box-shadow: -5px 0 18px var(--panel-shadow); }
+    .desktop-screen.inspector-collapsed .team-drawer { right: 42px; }
+    .team-drawer[hidden] { display: none; }
+    .team-drawer .drawer-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+    .team-drawer .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
+    .team-drawer .drawer-head .d-cnt { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
+    .team-drawer .drawer-body { flex: 1; overflow: hidden auto; padding: 6px 4px 8px 6px; }
+    .team-drawer .queue-card { border: 1px solid transparent; }
+    /* [t-7e0c6189] 团队域成员卡可直开：hover 亮边 + 右上角「↗ 直开」角标显形 */
+    .member-card[data-team-member-session] { cursor: pointer; position: relative; }
+    .member-card[data-team-member-session]::after { content: "↗ 直开"; position: absolute; right: 9px; top: 8px; color: var(--faint); font: 9.5px var(--mono); opacity: 0; transition: opacity .12s ease; }
+    .member-card[data-team-member-session]:hover { border-color: var(--border-strong); background: var(--hover); }
+    .member-card[data-team-member-session]:hover::after { opacity: 1; color: var(--brand); }
+    /* [t-7e0c6189] 检查器「团队成员」块：成员胶囊行（点头像=直开）+ 展开链 */
+    .member-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .member-chip { display: flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px 3px 3px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); cursor: pointer; }
+    .member-chip:hover { border-color: var(--border-strong); background: var(--hover); }
+    .member-chip .mc-ava { position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); color: var(--text-strong); font: 700 9px/19px var(--mono); text-align: center; }
+    .member-chip .mc-ava .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
+    .member-chip .mc-name { color: var(--dim); font-size: var(--fs-C); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .member-chip.unread { border-color: color-mix(in srgb, var(--brand) 42%, transparent); }
+    .member-chip.unread .mc-name { color: var(--text-strong); }
+    .slim-drawer-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 3px 9px; border: 1px solid var(--tag-border); border-radius: 6px; background: var(--tag-bg); color: var(--tag-ink); cursor: pointer; font-size: var(--fs-C); }
+    .slim-drawer-link:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
     /* #B3-17 入场工具类：新挂载节点 translateY(4px)+fade */
     @keyframes b3EnterKf { from { opacity: 0; transform: translateY(4px); } }
     .enter { animation: b3EnterKf .18s ease-out; }
@@ -2214,6 +2257,7 @@
               <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><textarea class="composer-input" rows="1" placeholder="发送消息 · ↑↓ 翻阅历史 · Shift+Enter 换行" aria-label="给会话发消息"></textarea></div><div class="composer-bottom"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-unfold" type="button" data-composer-unfold title="切换单行/多行输入" aria-label="切换单行/多行输入"><svg class="icon-inline" aria-hidden="true"><use href="#icon-unfold"></use></svg></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
+            <aside class="team-drawer" data-slim-drawer hidden aria-label="团队成员会话（第四列）"></aside>
             <script>
               // #143-B2 会话域迁移：本块只存在于 #d-session 区间内，不触碰 <style> 与底部地基脚本。
               // 数据通道订阅地基帧总线（#150 R2 并轨：全页唯一 WS，SNAPSHOT+增量+COMMAND_ACK 同源）。
@@ -2281,6 +2325,8 @@
                   imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
+                  slimUnread: new Map(), // [t-7e0c6189] 团队未读聚合：gid → Set<sid>（编制内 worker/QA 有新输出且未在看）；进团队域/展第四列/直开即清（内存态，重启随增量重建）
+                  drawerGid: "", // [t-7e0c6189] 第四列展开的团队（""=收起；localStorage 记忆）
                 };
                 let UI = null;
                 // #B3-4 每会话输入草稿（旧壳 inputDrafts 同语义）：切走存 / 切回恢复 / 发送清，
@@ -2711,7 +2757,21 @@
                     case "SESSION_DELETED": onDeleted(sid); break;
                     case "SESSION_LOG": onLog(sid, m.payload); break;
                     case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
+                    case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break; // [t-7e0c6189] 编制增量（S.projects 原只吃 SNAPSHOT 全量，编制一变列表过滤就陈旧）
                   }
+                }
+                function onProjectsUpdated(p) {
+                  if (!S.hasSnapshot) return; // 锚定纪律同地基 Team 桥：未 SNAPSHOT 锚定前丢弃 delta，防空基线起底 merge（#143 盲评C-3 同源风险）
+                  if (Array.isArray(p.groups)) { S.projects = p.groups.filter((g) => g && typeof g.id === "string"); }
+                  else if (p && p.delta !== undefined) {
+                    const byId = new Map(S.projects.map((g) => [g.id, g]));
+                    for (const g of (Array.isArray(p.delta.upserts) ? p.delta.upserts : [])) if (g && typeof g.id === "string") byId.set(g.id, g);
+                    for (const id of (Array.isArray(p.delta.removes) ? p.delta.removes : [])) byId.delete(String(id));
+                    S.projects = [...byId.values()];
+                  } else return;
+                  renderMyList();
+                  renderSlimDrawer();
+                  if (UI && curSession()) renderInspector();
                 }
 
                 // #150 R2 并轨：B2 退役自持 ws，订阅地基帧总线（帧语义原样；断线 fail-fast 保持）。
@@ -2750,8 +2810,11 @@
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
                   if (!S.sessions.has(S.selected)) S.selected = "";
+                  S.slimUnread = new Map(); // [t-7e0c6189] 换源/重连全量回放：未读随增量重建（快照历史 log 不回灌未读）
+                  try { S.drawerGid = localStorage.getItem("cc-deck-005-slim-drawer") || ""; } catch (_) {} // [t-7e0c6189] 第四列展开态记忆（gid 已不存在时 renderSlimDrawer 自动收起）
                   renderMyList();
                   renderAll();
+                  renderSlimDrawer();
                 }
                 // UIPOLISH3 件二：项目组增量并入 S.projects（列表分组数据面与团队域同新鲜度）。
                 // v2 投影 delta 形态（upserts/removes）与 legacy 全量 groups 双兼容，与地基
@@ -2784,6 +2847,7 @@
                   if (Object.prototype.hasOwnProperty.call(p, "waiting_request")) s.waiting_request = p.waiting_request ?? null; // 权威自愈：null 即清
                   s.updated_at = p.updated_at || Date.now();
                   renderMyList();
+                  renderSlimDrawer(); // [t-7e0c6189] 第四列成员卡状态/摘要随更新刷新（隐藏态零开销早退）
                   if (sid === S.selected) renderAll();
                 }
                 function onHeartbeat(sid, p) {
@@ -2865,6 +2929,16 @@
                   }
                   const out = pushLog(sid, entry);
                   if (UI && sid === S.selected && out !== "skip") applyDomLog(sid, out, entry.id);
+                  // [t-7e0c6189] 未读聚合：编制内 worker/QA 有新输出且未在看 → 记 gid/sid 并亮团队入口徽标
+                  //（每 sid 只触发一次重渲；进团队域/展第四列/直开即清——slimMarkSeen）
+                  if (S.hasSnapshot && UI && sid !== S.selected) {
+                    const m = slimRosterOf(S.projects).bySid.get(sid);
+                    if (m && !SLIM_KEEP_ROLE.test(m.role)) {
+                      let set = S.slimUnread.get(m.gid);
+                      if (!set) { set = new Set(); S.slimUnread.set(m.gid, set); }
+                      if (!set.has(sid)) { set.add(sid); renderMyList(); if (curSession()) renderInspector(); }
+                    }
+                  }
                 }
 
                 // ---------- COMMAND_ACK / ARTIFACT_CHUNK ----------
@@ -3047,6 +3121,94 @@
                   }
                   return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
                 }
+                // ---------- [t-7e0c6189] 会话列表瘦身：worker 会话收进团队域 ----------
+                // 口径（对照图 docs/session-list-slim-mockup.html）：编制内 role 非 PM/Leader 的成员会话
+                // 不逐张铺列表，聚合为每团队一张入口卡；PM/Leader/无编制直连/置顶照旧直列；正被选中
+                // （直聊中）的 worker 会话临时出列，切走自动收回。slimRosterOf/slimIsHidden 为纯函数
+                // （test-session-slim.ts 直跑锚）。
+                const SLIM_KEEP_ROLE = /^(pm|leader)$/i;
+                function slimRosterOf(projects) {
+                  const bySid = new Map(), teams = new Map();
+                  for (const p of (Array.isArray(projects) ? projects : [])) {
+                    if (!p || typeof p.id !== "string") continue;
+                    const list = (Array.isArray(p.headcount) ? p.headcount : []).filter((m) => m && typeof m.session_id === "string");
+                    if (!list.length) continue;
+                    teams.set(p.id, { id: p.id, name: String(p.name || p.id), members: list });
+                    for (const m of list) bySid.set(m.session_id, { gid: p.id, role: String(m.role || ""), gname: String(p.name || p.id) }); // 同 sid 跨团编制罕见，后者覆盖（团队域 memberInfo 同 find 口径）
+                  }
+                  return { bySid, teams };
+                }
+                function slimIsHidden(session, roster, selectedSid) {
+                  if (!session || typeof session.session_id !== "string") return false;
+                  if (session.pinned === true) return false; // 置顶例外：用户显式关注优先于 IA 规则
+                  const m = roster.bySid.get(session.session_id);
+                  if (!m || SLIM_KEEP_ROLE.test(m.role)) return false; // PM/Leader 与无编制（直连）照旧直列
+                  return session.session_id !== selectedSid; // 直聊中（选中）临时出列
+                }
+                function slimTeamEntryMarkup(team, roster, sessionsMap, filterDef) {
+                  const kept = [], hidden = [];
+                  for (const m of team.members) {
+                    const s = sessionsMap.get(m.session_id);
+                    if (!s) continue; // 编制在、会话未同步（异源）不计
+                    (SLIM_KEEP_ROLE.test(String(m.role || "")) ? kept : hidden).push({ m, s });
+                  }
+                  if (!hidden.length) return ""; // 全是 PM/Leader（或会话缺失）：无收起内容不出卡
+                  const hit = hidden.filter((x) => !filterDef || filterDef.test(x.s));
+                  if (!hit.length) return ""; // 非「全部」筛选下该团队无命中状态——不出卡（筛选语义纯粹）
+                  const running = hidden.filter((x) => x.s.status === "WORKING" || x.s.status === "WAITING" || x.s.status === "ERROR").length;
+                  const minis = hit.slice(0, 5).map((x) => {
+                    const st = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[x.s.status] || "done";
+                    const badge = SLIM_KEEP_ROLE.test(String(x.m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(x.m.role || "")) ? "QA" : "W";
+                    return '<span class="worker-mini" title="' + esc(x.s.title || x.m.session_id) + '">' + badge + '<i class="status-dot ' + st + '"></i></span>';
+                  }).join("") + (hit.length > 5 ? '<span class="worker-mini more" title="还有 ' + (hit.length - 5) + ' 个成员会话">+' + (hit.length - 5) + "</span>" : "");
+                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(team.name) + " · " + hit.length + ' 个成员会话，点击去团队域"><span class="t-ava">▣</span><span class="t-main"><span class="t-name">' + esc(team.name) + (S.slimUnread.has(team.id) ? '<span class="slim-unread-dot" title="成员有新输出"></span>' : "") + '</span><span class="t-sub">' + hit.length + " 个成员会话 · " + running + ' 在跑</span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
+                }
+                function slimDrawerCardMarkup(item) {
+                  return '<div class="queue-card" data-slim-open="' + item.id + '" role="button" tabindex="0" aria-label="打开 ' + item.title + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source ? '<span class="srow-r3">' + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span></div>";
+                }
+                function renderSlimDrawer() {
+                  const el = document.querySelector("#d-session [data-slim-drawer]");
+                  if (!el) return;
+                  if (!S.drawerGid && el.hidden) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
+                  const team = S.drawerGid ? slimRosterOf(S.projects).teams.get(S.drawerGid) : null;
+                  if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.hidden = true; el.replaceChildren(); return; }
+                  el.hidden = false;
+                  const cards = team.members.filter((m) => !SLIM_KEEP_ROLE.test(String(m.role || "")) && S.sessions.has(m.session_id)).map((m) => ({ s: S.sessions.get(m.session_id), m })).sort((a, b) => Number(b.s.updated_at || 0) - Number(a.s.updated_at || 0));
+                  const head = '<div class="drawer-head"><span class="d-name">' + esc(team.name) + " · 成员会话</span><span class=\"d-cnt\">" + cards.length + '</span><button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="收起成员会话" aria-label="收起成员会话">✕</button></div>';
+                  const body = cards.length ? '<div class="drawer-body">' + cards.map((x) => slimDrawerCardMarkup(myCardItem(x.s))).join("") + "</div>" : '<div class="drawer-body"><div class="readonly-banner">该团队暂无成员会话 · 编制在团队域维护</div></div>';
+                  el.innerHTML = head + body;
+                }
+                function slimMarkSeen(gid) {
+                  if (!gid || !S.slimUnread.has(gid)) return;
+                  S.slimUnread.delete(gid);
+                  renderMyList();
+                  if (UI && curSession()) renderInspector();
+                }
+                function slimToggleDrawer(gid) {
+                  const want = String(gid || "");
+                  S.drawerGid = S.drawerGid === want ? "" : want;
+                  try { localStorage.setItem("cc-deck-005-slim-drawer", S.drawerGid); } catch (_) {}
+                  if (S.drawerGid) slimMarkSeen(S.drawerGid); // 展开即清该团队未读（设计要点 1）
+                  renderSlimDrawer();
+                }
+                function slimOpenSession(sid) {
+                  if (!UI) return;
+                  const s = S.sessions.get(String(sid || ""));
+                  if (!s) { b2Toast("成员会话不在当前来源"); return; }
+                  const gid = slimRosterOf(S.projects).bySid.get(s.session_id)?.gid || "";
+                  if (gid) slimMarkSeen(gid); // 直开即清该团队未读
+                  if (S.selected === s.session_id) return;
+                  if (S.selected) inputDrafts.set(S.selected, UI.input.value); // #B3-4 同款：切走存草稿
+                  S.selected = s.session_id;
+                  S.forceScroll = true;
+                  UI.input.value = inputDrafts.get(s.session_id) ?? "";
+                  S.staged = [];
+                  histLoad(s.session_id);
+                  renderTray();
+                  renderMyList(); // 直聊中的 worker 会话临时出列并打标 selected（mo 读到幂等，不重复结算）
+                  renderAll();
+                }
+                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）
                 // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
                 // W-UIPOLISH4 件十三（2026-10-12 用户截图）：加「最近活跃」档（隐藏超时置灰的
                 // 空闲僵尸卡=idleDimmed 同源判定，只显近期有活动的）+「非进行中」档；档位序=
@@ -3136,10 +3298,16 @@
                     return;
                   }
                   const filterDef = sessionFilterOf();
-                  const sessions = [...S.sessions.values()].filter((x) => filterDef.test(x) && sessionSearchTest(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // [t-7e0c6189] 瘦身过滤：编制内 worker/QA 会话收起（置顶/选中中/PM/Leader/无编制直列照旧）
+                  const slimRoster = slimRosterOf(S.projects);
+                  const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);
+                  const sessions = [...S.sessions.values()].filter((x) => filterDef.test(x) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
                   // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径
                   const filterHidden = [...S.sessions.values()].filter((x) => !(filterDef.test(x) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
+                  // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
+                  const slimHiddenIds = [...S.sessions.values()].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
+                  S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;
                   if (!sessions.length) {
                     const ph = document.createElement("div");
                     ph.className = "readonly-banner";
@@ -3214,6 +3382,12 @@
                   // 平铺，状态过滤交给筛选档（件十三「进行中」档）。活跃池与闲置池合流平铺
                   // （topUnpinned 本就按置顶+recency 序，活跃卡自然浮前）。
                   const activeMarkup = activePool.map((x) => myCardMarkup(myCardItem(x))).join("");
+                  // [t-7e0c6189] 团队小节：每团队一张入口卡（点击跳团队域 / ⤢ 展第四列）；无收起内容的团队不出卡
+                  const slimTeamsOpen = !collapsedGroups.has("slim-teams");
+                  const slimEntries = [...slimRoster.teams.values()].map((t) => slimTeamEntryMarkup(t, slimRoster, S.sessions, filterDef)).filter(Boolean);
+                  const teamsMarkup = slimEntries.length
+                    ? '<div class="session-group' + (slimTeamsOpen ? "" : " collapsed") + '" data-session-group="slim-teams">' + grpHead("slim-teams", "团队", slimEntries.length, slimTeamsOpen) + '<div class="grp-body">' + slimEntries.join("") + "</div></div>"
+                    : "";
                   const idleMarkup = idleAll.map((x) => myCardMarkup(myCardItem(x))).join("");
                   // 折叠未展开时这些卡有意不进 DOM——observer 完整性检查据此放行，防「缺卡→重渲→
                   // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）；团队折叠组并入同记账
@@ -3221,7 +3395,7 @@
                   const collapsedHidden = [...teamHidden];
                   S._collapsedIdleIds = collapsedHidden.length ? new Set(collapsedHidden) : null;
                   const template = document.createElement("template");
-                  template.innerHTML = pinnedMarkup + teamMarkup + activeMarkup + idleMarkup; // 团队组顶层优先呈现（默认折叠不抢纵向空间）
+                  template.innerHTML = pinnedMarkup + teamMarkup + teamsMarkup + activeMarkup + idleMarkup; // 团队组顶层优先呈现（默认折叠不抢纵向空间）；slim 团队入口卡插在团队组之后（t-7e0c6189）
                   list.replaceChildren(template.content);
                 }
 
@@ -3774,6 +3948,23 @@
                     const eng = ENGINES[s.engine || "claude"] || ["Claude"];
                     const st = STATUS_TAG[s.status] || ["完成", "done"];
                     html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
+                    // [t-7e0c6189] 团队成员块：选中会话属于某编制时，成员胶囊行（点头像=直开）+ 展开第四列
+                    const slimMem = slimRosterOf(S.projects).bySid.get(s.session_id);
+                    if (slimMem) {
+                      const slimTeamObj = slimRosterOf(S.projects).teams.get(slimMem.gid);
+                      const unreadSet = S.slimUnread.get(slimMem.gid);
+                      if (slimTeamObj) {
+                        const chips = slimTeamObj.members.map((m) => {
+                          const ms = S.sessions.get(m.session_id);
+                          if (!ms) return ""; // 编制在、会话未同步：不出胶囊
+                          const mst = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[ms.status] || "done";
+                          const badge = SLIM_KEEP_ROLE.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
+                          const unread = unreadSet && unreadSet.has(m.session_id);
+                          return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
+                        }).join("");
+                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">展开成员会话 ⤢</button></div>';
+                      }
+                    }
                     if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
                     if (s.context_usage) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>";
                     // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
@@ -5363,18 +5554,28 @@
                       UI.input.value = inputDrafts.get(sid) ?? ""; // #B3-4 切回恢复（未输入过清空，防串会话）
                       S.staged = [];
                       renderTray();
+                      renderMyList(); // [t-7e0c6189] 选中进出 worker 会话时出列/收回要跟着换（mo 再触发时 sid 已同，幂等）
                       renderAll();
                     }
                     if (S.hasSnapshot && S.sessions.size) {
                       const domIds = new Set([...UI.sessionList.querySelectorAll("[data-session-card]")].map((c) => c.dataset.sessionCard));
-                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0); // FB17：筛空态是合法形态
-                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失
+                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0) && !(S._slimHiddenIds && S._slimHiddenIds.size > 0); // FB17：筛空态是合法形态（含瘦身收空）
+                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k)) && !(S._slimHiddenIds && S._slimHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失（t-7e0c6189：被收起的同口径）
                       if (miss) renderMyList();
                     }
                   });
                   // #143 盲评A-1 止血配套：补 attributes 监听——地基让位重渲后，选中改为地基点改 class，
                   // 无此监听则 S.selected 不再跟随（原只观察 childList）。走秒改 textContent 不触发。
                   mo.observe(UI.sessionList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+
+                  // [t-7e0c6189] 键盘可达：团队入口卡/成员胶囊/第四列卡（role=button）Enter/Space 走点击链
+                  UI.section.addEventListener("keydown", (ev) => {
+                    if (ev.key !== "Enter" && ev.key !== " ") return;
+                    const t = ev.target.closest("[data-slim-team], [data-slim-open], [data-slim-drawer-toggle]");
+                    if (!t) return;
+                    ev.preventDefault();
+                    t.click();
+                  });
 
                   // 域内委托（在冒泡到地基 document 监听之前截住需要接管的面）
                   UI.section.addEventListener("click", (ev) => {
@@ -5426,6 +5627,21 @@
                     }
                     const filterBtn = ev.target.closest("#d-session [data-session-filter]"); // FB17：筛选芯片开浮菜单
                     if (filterBtn) { ev.stopPropagation(); openSessionFilterMenu(filterBtn); return; }
+                    // [t-7e0c6189] 瘦身交互三口：第四列开关 / 直开成员会话 / 团队入口跳团队域
+                    //（顺序敏感：按钮先于团队卡身，防 team 卡吞掉 ⤢/胶囊点击）
+                    const slimTgl = ev.target.closest("[data-slim-drawer-toggle]");
+                    if (slimTgl) { ev.stopPropagation(); slimToggleDrawer(slimTgl.dataset.slimDrawerToggle); return; }
+                    const slimOpen = ev.target.closest("[data-slim-open]");
+                    if (slimOpen) { ev.stopPropagation(); slimOpenSession(slimOpen.dataset.slimOpen); return; }
+                    const slimTeam = ev.target.closest("[data-slim-team]");
+                    if (slimTeam) {
+                      ev.stopPropagation();
+                      const gid = slimTeam.dataset.slimTeam;
+                      slimMarkSeen(gid); // 进团队域即清未读（设计要点 1）
+                      window.__ccDeck005B4?.railJump?.("team"); // 跳团队域（rail-btn 点击链）
+                      window.ccDeckTeam?.select?.(gid);
+                      return;
+                    }
                     const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中组；W-NOVAUI ⑤ 项目组已退役）
                     if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
                     const taskHide = ev.target.closest("[data-task-hide]");
@@ -5704,6 +5920,12 @@
                     if (!S.hasSnapshot) return;
                     UI.sessionList.querySelectorAll(".queue-card").forEach((card) => {
                       const s = S.sessions.get(card.dataset.sessionCard);
+                      const el = card.querySelector(".srow-sec");
+                      if (el && s && s.status === "WORKING") el.textContent = myCardItem(s).workSecs + "s";
+                    });
+                    const slimDrawerEl = document.querySelector("#d-session [data-slim-drawer]"); // [t-7e0c6189] 第四列走秒同链（data-slim-open 卡）
+                    if (slimDrawerEl && !slimDrawerEl.hidden) slimDrawerEl.querySelectorAll(".queue-card[data-slim-open]").forEach((card) => {
+                      const s = S.sessions.get(card.dataset.slimOpen);
                       const el = card.querySelector(".srow-sec");
                       if (el && s && s.status === "WORKING") el.textContent = myCardItem(s).workSecs + "s";
                     });
@@ -6683,6 +6905,7 @@
                   if (!state.projects?.some((item) => item.id === gid)) return false;
                   state.selected = gid;
                   state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === gid)?.id || null;
+                  window.__ccDeck005SlimUi?.markSeen?.(gid); // [t-7e0c6189] 进团队域选中该团队即清未读聚合（设计要点 1）
                   render();
                   void requestDetail(gid);
                   return true;
