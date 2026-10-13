@@ -468,6 +468,9 @@ export class CloudClient {
         // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
         // 云桥手机设置页同样要读 source 判锁定态）
         settings: this.mgr.employeeHomeState(),
+        // W-MODE 协作模式（与 ws-server 直连快照同源同步，#117 教训——云桥手机
+        // 设置页开关回显；no-leader 时 sessions 已由 mgr.snapshot() 过滤锚卡）
+        collab_mode: this.mgr.collabMode(),
         // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
         // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
         // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，
@@ -737,6 +740,9 @@ export class CloudClient {
 
   private onEnv(env: Envelope): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    // W-MODE：no-leader 态锚卡 SESSION_CREATED 不镜像云端（手机端 upsert 建卡口径
+    // 与 LAN 端一致；快照侧已由 mgr.snapshot() 过滤收口）
+    if (this.mgr.suppressLeaderEvent(env)) return;
     for (const [dev, st] of this.phones) {
       // #79 定向瞬态帧（env.to）：只发给命令来源端——大流量分块不广播给全部云手机
       if (env.to && env.to !== `cloud-${dev}`) continue;

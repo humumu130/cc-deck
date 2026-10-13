@@ -275,3 +275,37 @@ export function ensureEmployeeHomeSeed(dataDir: string): boolean {
     return false;
   }
 }
+
+// ---------- W-MODE 协作模式开关（2026-10-12 最小核心） ----------
+// collabMode: "leader"（默认，现状全兼容）| "no-leader"（会话列表/SNAPSHOT 隐藏 Leader
+// 常驻锚卡）。独立小文件 data/collab-mode.json（任务书口径，不挤 settings.json——
+// 语义域不同：settings 是产品行为开关，这是组织形态开关）。读写纪律抄 settings.json
+// 两条硬约束：tmp+rename 原子写；坏 JSON 按「未配置」处理（leader 兜底，失败方向=
+// 现状，永不因坏文件把用户锁进 no-leader）。隐藏是纯下发面过滤：锚、内存卡、
+// ensureLeader、团队/看板/通知机制全量照常（用户痛点=挂死 ERROR 锚卡删不掉恢复
+// 不了，隐藏即解——relay 拒删是 M1 审查轮的故意设计，不能为开关放开）。
+
+export type CollabMode = "leader" | "no-leader";
+
+const COLLAB_MODE_FILE = "collab-mode.json";
+
+export function readCollabMode(dataDir: string): CollabMode {
+  try {
+    const raw = JSON.parse(readFileSync(join(dataDir, COLLAB_MODE_FILE), "utf-8")) as { mode?: unknown };
+    return raw && raw.mode === "no-leader" ? "no-leader" : "leader"; // 未知值/坏 JSON → leader（现状兜底）
+  } catch {
+    return "leader"; // 无文件=默认态（不落盘：leader 是现状，零迁移）
+  }
+}
+
+export function writeCollabMode(dataDir: string, mode: CollabMode): boolean {
+  try {
+    const p = join(dataDir, COLLAB_MODE_FILE);
+    const tmp = p + ".tmp";
+    writeFileSync(tmp, JSON.stringify({ mode, updated_at: Date.now() }, null, 2) + "\n", "utf-8");
+    renameSync(tmp, p);
+    return true;
+  } catch {
+    return false;
+  }
+}
