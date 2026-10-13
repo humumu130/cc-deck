@@ -15,6 +15,22 @@
 // 管理/扫码/配对码/设备管理/规则/权限/过程消息三档/空闲变灰/回车发送/雇员独立家
 // /经验库/版本/反馈/保活豁免/图例弹窗——分组归位：保活+回车发送入通用，雇员独立
 // 家+经验库入 Agent 引擎（条件组，旧 relay 无字段整组不显）。
+//
+// W-MSET3 正经立项深度重设计（2026-10-13，[正经立项] 批）：三路思考（A 极简/B 信
+// 息丰富/C 任务流）定案 = C 骨架 × A 收敛——「连接为王，偏好归边」。六件：
+// ① 头部副题实时化：静态目录文案 → 实时连接摘要（N 台电脑 · M 在线 / 未连接）；
+// ② 新增活动连接状态卡（页面首卡）：当前活动源 + 四态灯 + 通道词，在线静态展示
+//    /离线点按即连/未配置点按进 setup（吸收原「未配置」引导行与 connCard 样式）；
+// ③ 偏好组合并：原「显示与字号」+「通用」两组 → 「偏好」一组四行（过程消息/空
+//    闲置灰/回车发送/后台保活），dispCollapsed 折叠机制退役（偏好恒展开，组头折
+//    叠钮删除）；「显示与字号」名不符实组名随之消解；
+// ④ 配对码按需化：常驻自动领码 + 1Hz 常驻时钟 → 行点击展开才领码/展示/续领/跑钟，
+//    收起态零流量零定时器（原 pairGenMini「生成配对码」钮退役，行点击即领）；
+// ⑤ 图标语言统一 SVG：?（图例）/▾▸（折叠）/ⓘ（帮助）/＋（添加）/↻（刷新）字符
+//    图标全数退役，换 stroke 1.8 线图标（与 IconTile/PencilIcon 同语言）；
+// ⑥ 组头计数明确化：连接管理折叠态「· N」→「· N 台」。
+// 不动面（R7 口径继承）：服务器行视觉几何、六弹层（关于/图例/设备/经验库/扫码/
+// 导入）、规则/权限子节、Agent 引擎条件组、删码逻辑（store/protocol 零触碰）。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -137,6 +153,22 @@ const ICON_QR = "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2.5v2.5H14zM17.5 14H
 const ICON_SHIELD = "M12 3l7 3v5c0 4.6-3 7.7-7 9.2C8 18.7 5 15.6 5 11V6z"; // 盾（记住的规则）
 const ICON_LOCK = "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z"; // 锁（权限）
 const ICON_PENCIL = "M17 3l4 4L8 20l-5 1 1-5z"; // 铅笔（反馈，PencilIcon 同语义线稿）
+// W-MSET3 ⑤ 字符图标退役：?/▾▸/ⓘ/＋/↻ 换 stroke 线图标（与 IconTile 同语言）
+const ICON_HELP = "M9.4 9.1a2.7 2.7 0 1 1 4 2.4c-.85.44-1.4 1-1.4 2M12 16.9h.01"; // 问号（图例入口）
+const ICON_CHEVRON = "M6 9.5l6 5.5 6-5.5"; // 下折角（组折叠，收起态旋转 -90°）
+const ICON_INFO = "M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zM12 11.2v4.6M12 7.9v.2"; // ⓘ（行内帮助）
+const ICON_PLUS = "M12 5.5v13M5.5 12h13"; // ＋（手动添加）
+const ICON_REFRESH = "M19.5 12a7.5 7.5 0 1 1-2.1-5.2M19.5 3.8v3.4h-3.4"; // ↻（配对码刷新）
+
+// W-MSET3 ⑤ 裸线图标（无方格底）：小尺寸 stroke 图标统一出口（问号/折角/ⓘ/＋/↻），
+// 参数与 IconTile 内 Svg 同参（strokeWidth 1.8 / round），rotate 用于折叠两态
+function LineGlyph({ path, size = 14, color, rotate }: { path: string; size?: number; color: string; rotate?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" style={rotate ? { transform: [{ rotate }] } : undefined}>
+      <Path d={path} stroke={color} strokeWidth={1.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 // W-MSETSIG 重设计：行图标升级为「图标方格」——005 settings-row 的标志语言
 // （setting-icon：28×28 圆角 9 软底方格 + 15px 线图标 stroke 1.8），对齐桌面新壳
@@ -510,22 +542,39 @@ export default function SettingsPage({
   };
 
   // 新设备配对码：信任设备向 relay 领一次性码，供网页端新浏览器输入。
-  // 页面挂载即自动领码（relay 侧多码并存互不作废），常驻展示 + 倒计时 + 刷新
+  // W-MSET3 ④ 按需化：行点击展开才领码/展示/续领/跑钟——收起态零流量零定时器
+  //（原「挂载即领 + 常驻 1Hz 时钟」退役；relay 侧多码并存互不作废，按领按用）
+  const [pairOpen, setPairOpen] = useState(false);
+  const [pairBusy, setPairBusy] = useState(false);
   const [pairErr, setPairErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const pc = snap.pairCode;
   const pairLeft = pc ? Math.max(0, Math.floor((pc.expiresAt - now) / 1000)) : 0;
-  // 倒计时 1Hz 时钟：仅页面在挂载（tab 激活）且码未到期时运行，到期即停表（避免常驻耗电）
+  // 倒计时 1Hz 时钟：仅在展开态且码未到期时运行，到期即停表（避免常驻耗电）
   useEffect(() => {
-    if (!pc || pc.expiresAt <= Date.now()) return;
+    if (!pairOpen || !pc || pc.expiresAt <= Date.now()) return;
     const t = setInterval(() => {
       setNow(Date.now());
       if (pc.expiresAt - Date.now() <= 0) clearInterval(t);
     }, 1000);
     return () => clearInterval(t);
-  }, [pc, pc?.code]);
+  }, [pairOpen, pc, pc?.code]);
   const genPairCode = async () => {
-    setPairErr(await store.requestPairCode());
+    if (pairing.current || pairBusy) return;
+    pairing.current = true;
+    setPairBusy(true);
+    try {
+      setPairErr(await store.requestPairCode());
+    } finally {
+      pairing.current = false;
+      setPairBusy(false);
+    }
+  };
+  // W-MSET3 ④ 展开开关：展开即领（无码/将过期）；收起即静默
+  const togglePair = () => {
+    const nv = !pairOpen;
+    setPairOpen(nv);
+    if (nv && snap.connected && (!pc || pc.expiresAt - Date.now() <= 2000)) void genPairCode();
   };
   // 点码即复制：粘到网页端配对框省一程手输
   const [copied, setCopied] = useState(false);
@@ -538,11 +587,11 @@ export default function SettingsPage({
     } catch {}
   };
   const pairing = useRef(false);
-  // 页面挂载即领码；开着期间码到期（pairLeft 归零）自动续领。importOpen 时暂停：
-  // ImportPicker 正按用户选定的源领码（认快照里新出现的 pairCode），页面若同时为
-  // 活动源续领会抢出另一个码、有串到别的 relay 的风险
+  // 码到期（pairLeft 归零）自动续领——W-MSET3 ④ 仅展开态续领（收起不领不耗流）。
+  // importOpen 时暂停：ImportPicker 正按用户选定的源领码（认快照里新出现的
+  // pairCode），页面若同时为活动源续领会抢出另一个码、有串到别的 relay 的风险
   useEffect(() => {
-    if (!snap.connected || importOpen) return;
+    if (!snap.connected || importOpen || !pairOpen) return;
     if (pc && pc.expiresAt - Date.now() > 2000) return;
     if (pairing.current) return;
     pairing.current = true;
@@ -552,24 +601,14 @@ export default function SettingsPage({
       .finally(() => {
         pairing.current = false;
       });
-  }, [snap.connected, pc, pairLeft === 0, importOpen]);
+  }, [snap.connected, pc, pairLeft === 0, importOpen, pairOpen]);
 
   // #313 关于弹窗：「关于」行呼出；检查更新从抽屉行迁入弹窗。tab 页卸载即整体收弹窗
   const [aboutOpen, setAboutOpen] = useState(false);
 
-  // #313 显示设置区折叠（记忆上次选择）。W-MSETSIG 默认改展开：重设计后「显示与
-  // 字号」定位常用组置顶（任务书），没存过偏好的新会话直接可见；存过 "0"/"1" 的
-  // 老用户原样尊重（null → 展开，"1" → 展开，"0" → 折叠）
-  const [dispCollapsed, setDispCollapsed] = useState(false);
-  useEffect(() => {
-    void AsyncStorage.getItem("cc_display_collapsed").then((v) => setDispCollapsed(v === "0"));
-  }, []);
-  const toggleDisp = () => {
-    setDispCollapsed((v) => {
-      void AsyncStorage.setItem("cc_display_collapsed", v ? "0" : "1");
-      return !v;
-    });
-  };
+  // W-MSET3 ③ 偏好组恒展开：原「显示与字号」折叠记忆（cc_display_collapsed）退役
+  // ——偏好合并后仅四行一卡，折叠收益低于组头噪音；存过偏好的老用户键值留在
+  // storage 无副作用（不再读取），连接组折叠记忆（cc.drawer.srvCollapsed）保留
 
   // 连接状态卡（对齐设置原型）：活动源 = activeSourceId 命中项 → 缺失退第一个在线源 →
   // 再退任一源；无源显示"未配置"。状态点按源 state 取色，副行 = 通道（cloud=云桥/LAN）
@@ -579,6 +618,28 @@ export default function SettingsPage({
     snap.sources.find((s) => s.state === "online") ??
     snap.sources[0] ??
     null;
+  // W-MSET3 ① 头部副题实时化：静态目录文案 → 实时连接摘要
+  const onlineCount = snap.sources.filter((s) => s.state === "online").length;
+  const headSub =
+    servers.length === 0 ? "未连接 · 点下方添加电脑" : `${servers.length} 台电脑 · ${onlineCount} 台在线`;
+  // W-MSET3 ② 活动连接卡派生：登记项（triggerConnect 需 wsUrl/cloud）+ 通道词
+  //（在线时上报 channel 优先，退配置推断）+ 展示名（relayName 覆盖默认 host 名）
+  const activeEntry = activeSrc ? (servers.find((x) => x.id === activeSrc.id) ?? null) : null;
+  const activeChanWord = (() => {
+    if (!activeSrc || !activeEntry) return "";
+    const inferred = activeEntry.cloud ? "cloud" : isLanUrl(activeEntry.wsUrl) ? "lan" : "";
+    const chan = activeSrc.state === "online" ? (activeSrc.channel ?? inferred) : inferred;
+    return chan === "cloud" ? "云桥中转" : chan === "lan" ? "局域网直连" : chan ? "直连" : "";
+  })();
+  const activeTone = activeSrc ? connStateTone(activeSrc.state) : "off";
+  const activeToneColor =
+    activeTone === "online" ? c.done : activeTone === "busy" ? c.working : activeTone === "bad" ? c.error : c.faint;
+  const activeName =
+    activeSrc && activeEntry
+      ? activeSrc.relayName && activeEntry.name === defaultHostName(activeEntry)
+        ? activeSrc.relayName
+        : activeEntry.name
+      : "";
 
   // #212 记住规则（设置抽屉「记住的规则」区数据）：各在线源合并展示；
   // legacy 计数支持分态——全部在线源都是旧 relay（allowRules 为 null）时显示
@@ -639,8 +700,10 @@ export default function SettingsPage({
         <View style={d.head}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>设置</Text>
+            {/* W-MSETSIG 副题原为静态目录文案（「连接、引擎与偏好」），W-MSET3 ① 改
+                实时连接摘要——头部从目录标题升维为信息面（打开即知连着几台、几台在线） */}
             <Text style={d.verT} numberOfLines={1}>
-              {CHANNEL_TAG ? `${CHANNEL_TAG} · ` : ""}连接、引擎与偏好
+              {CHANNEL_TAG ? `${CHANNEL_TAG} · ` : ""}{headSub}
             </Text>
           </View>
           {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
@@ -657,36 +720,91 @@ export default function SettingsPage({
 
         {/* #130 底部补安全距离：contentContainerStyle 撑出手势条空间（原 Build 行贴底） */}
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}>
+        {/* W-MSET3 ② 活动连接状态卡（页面首卡，「连接为王」）：当前活动源升维——四态
+            灯（busy 黄闪）+ 名称 + 状态词·通道词，打开设置即知「连着谁、走哪条通道」
+            （原 #36 删状态卡后此信息只藏在服务器列表选中行里，多源时需逐行扫视）。
+            在线=静态展示；配对失效（云桥）=点按进编辑重配；其余非在线=点按触发连接
+            （triggerConnect 含 8s 云桥不通弹窗）；无任何源=点按进 setup（吸收原引导行） */}
+        {activeSrc ? (
+          <Pressable
+            style={d.activeCard}
+            android_ripple={
+              activeSrc.state !== "online" && activeEntry
+                ? { color: c.tintSoft, borderless: false, radius: 12 }
+                : undefined
+            }
+            onPress={
+              activeSrc.state === "online" || !activeEntry
+                ? undefined
+                : activeSrc.state === "unpaired" && activeEntry.cloud
+                  ? () => edit(activeEntry)
+                  : () => triggerConnect(activeEntry)
+            }
+            accessibilityLabel={`当前连接 ${activeName || activeSrc.name}，${connStateNote(activeSrc.state)}${activeChanWord ? `，${activeChanWord}` : ""}`}
+          >
+            <View style={[d.activeBar, { backgroundColor: activeToneColor }]} />
+            {activeTone === "busy" ? (
+              (() => {
+                ensurePlugBlink();
+                return (
+                  <Animated.View style={{ opacity: plugBlink }}>
+                    <PlugGlyph size={15} color={activeToneColor} />
+                  </Animated.View>
+                );
+              })()
+            ) : (
+              <PlugGlyph size={15} color={activeToneColor} />
+            )}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={d.activeNameT} numberOfLines={1}>{activeName || activeSrc.name}</Text>
+              <Text style={[d.activeSubT, activeSrc.state === "unpaired" && d.activeSubBadT]} numberOfLines={1}>
+                {connStateNote(activeSrc.state)}{activeChanWord ? ` · ${activeChanWord}` : ""}
+              </Text>
+            </View>
+            {activeSrc.state !== "online" && activeEntry ? <Text style={d.activeGoT}>›</Text> : null}
+          </Pressable>
+        ) : (
+          <Pressable
+            style={d.activeCard}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+            onPress={onSetup}
+            accessibilityLabel="未配置电脑，点此添加第一台"
+          >
+            <View style={[d.activeBar, { backgroundColor: c.faint }]} />
+            <PlugGlyph size={15} color={c.faint} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={d.activeNameT}>未配置电脑</Text>
+              <Text style={d.activeSubT}>点此扫码或手动添加第一台</Text>
+            </View>
+            <Text style={d.activeGoT}>›</Text>
+          </Pressable>
+        )}
+
         {/* 连接管理组（W-MSETSIG 任务书分组①，置顶）：区头（可折叠收起服务器列表，
             记忆上次选择）+ 服务器卡流 + 添加入口 + 设备/配对行组卡 + 规则/权限子节 */}
         <View style={d.secHead}>
-          {/* #51 问号左靠：紧跟组标题成左组（原 space-between 三元素被推中） */}
+          {/* #51 问号左靠：紧跟组标题成左组（原 space-between 三元素被推中）。
+              W-MSET3 ⑤ ? 字符图标退役 → SVG 线图标（secHelpT 文字样式随样式键退役）；
+              ⑥ 折叠态计数带单位「台」（原裸数字 N 与组内行数/源数歧义） */}
           <View style={d.secTitleRow}>
-            <Text style={d.secTitleT}>连接管理{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+            <Text style={d.secTitleT}>连接管理{srvCollapsed && servers.length ? ` · ${servers.length} 台` : ""}</Text>
             {/* #48/#53 通道含义问号：自绘图例弹窗（AboutModal 同款 sheet + 图标行） */}
             <Pressable
               hitSlop={8}
               onPress={() => setLegendOpen(true)}
               accessibilityLabel="连接图标含义说明"
             >
-              <Text style={d.secHelpT}>?</Text>
+              <View style={d.secHelpBtn}>
+                <LineGlyph path={ICON_HELP} size={11} color={c.dim} />
+              </View>
             </Pressable>
           </View>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
-            <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
+            <LineGlyph path={ICON_CHEVRON} size={13} color={c.dim} rotate={srvCollapsed ? "-90deg" : "0deg"} />
           </Pressable>
         </View>
-        {/* 状态卡已删（#36 用户点单）：常驻首行撤销——状态与重连并入下方各连接行。
-            未配置任何源时仍需一个入口（否则空态无路可走），保留仅此场景的引导行 */}
-        {!srvCollapsed && servers.length === 0 ? (
-          <Pressable style={d.connCard} android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }} onPress={onSetup}>
-            <View style={[d.connDot, { backgroundColor: c.faint }]} />
-            <View style={d.connMain}>
-              <Text style={d.connNameT}>未配置</Text>
-              <Text style={d.connSubT}>点此添加第一台电脑</Text>
-            </View>
-          </Pressable>
-        ) : null}
+        {/* 原「未配置」引导行已删（W-MSET3 ② 活动连接卡未配置态吸收：页面首卡即
+            入口，不再在组内重复一块）；srvEmpty 空文案双行同理退役 */}
         {!srvCollapsed ? (
         <ScrollView style={d.srvScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {servers.map((e) => {
@@ -798,14 +916,17 @@ export default function SettingsPage({
               <Svg style={d.ghostBorder} pointerEvents="none">
                 <Rect x="1" y="1" width="98%" height="38" rx="11" stroke={withA(c.dim, 0.35)} strokeWidth={1} strokeDasharray="4 4" fill="none" />
               </Svg>
-              <Text style={d.ghostT}>＋ 手动添加</Text>
+              {/* W-MSET3 ⑤ ＋ 字符图标退役 → SVG 线图标（与行图标同语言） */}
+              <View style={d.ghostInner}>
+                <LineGlyph path={ICON_PLUS} size={13} color={c.dim} />
+                <Text style={d.ghostT}>手动添加</Text>
+              </View>
             </Pressable>
           </View>
           {/* #308 云桥引导已删（#36 用户点单）：提示框啰嗦+太阳云图标无意义——
               配对入口在连接详情（点行进去）已有，此引导框整块移除 */}
         </ScrollView>
         ) : null}
-        {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         {/* 折叠区内：连接管理全量内容（设备/配对组卡 + 规则/权限子节）——
             折叠=整组收起只留组头（多源场景腾空间，记忆上次选择） */}
@@ -823,51 +944,48 @@ export default function SettingsPage({
             onPress={() => setDevicesOpen(true)}
             a11y="已配对设备"
           />
-          {/* 网页端配对（原「配对」独立分节收进连接管理组）：信任设备向 relay 领
-              一次性码供网页端输入；码常驻展示 + 倒计时 + 刷新 + 点击复制 */}
+          {/* 网页端配对（W-MSET3 ④ 按需化）：行点击展开——展开才领码/展示/续领/跑
+              钟，收起态零流量零定时器（原「挂载即领 + 常驻倒计时 + 生成钮」退役）；
+              展开态码点按复制、到期自动续领（ImportPicker 互斥语义保留）。
+              到期 0:00 到续领回包之间不闪「已过期」（每 TTL 一次的窗口） */}
           <Row
             icon={ICON_QR}
             title="网页端配对"
-            note={pc ? "点码复制 · 供新浏览器输入" : "新浏览器输入配对码接入"}
+            note={pairOpen && pc ? "点码复制 · 供新浏览器输入" : "一次性配对码 · 供新浏览器接入"}
             last
-            right={
-              !pc ? (
-                <Pressable
-                  style={d.pairGenMini}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                  hitSlop={4}
-                  onPress={() => void genPairCode()}
-                >
-                  <Text style={d.pairGenMiniT}>生成配对码</Text>
-                </Pressable>
-              ) : null
-            }
+            onPress={togglePair}
+            a11y={pairOpen ? "收起配对码" : "展开配对码"}
           >
-            {pc ? (
-              // pc 存在即展示码：到期 0:00 到续领回包之间不闪「已过期」（每 TTL 一次的窗口）
-              <View style={d.pairEmbed}>
-                <Pressable onPress={() => void copyCode()} hitSlop={4} accessibilityLabel="配对码，点击复制">
-                  <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
-                </Pressable>
-                <View style={d.pairSide}>
-                  <Text style={d.pairExpT}>
-                    {Math.floor(pairLeft / 60)}:{String(pairLeft % 60).padStart(2, "0")}
-                  </Text>
-                  <Pressable
-                    style={d.pairRefresh}
-                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-                    hitSlop={6}
-                    onPress={() => void genPairCode()}
-                  >
-                    <Text style={d.pairRefreshT}>↻</Text>
+            {pairOpen ? (
+              pc ? (
+                <View style={d.pairEmbed}>
+                  <Pressable onPress={() => void copyCode()} hitSlop={4} accessibilityLabel="配对码，点击复制">
+                    <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
                   </Pressable>
+                  <View style={d.pairSide}>
+                    <Text style={d.pairExpT}>
+                      {Math.floor(pairLeft / 60)}:{String(pairLeft % 60).padStart(2, "0")}
+                    </Text>
+                    <Pressable
+                      style={d.pairRefresh}
+                      android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+                      hitSlop={6}
+                      onPress={() => void genPairCode()}
+                      accessibilityLabel="刷新配对码"
+                    >
+                      <LineGlyph path={ICON_REFRESH} size={13} color={c.dim} />
+                    </Pressable>
+                  </View>
+                  {copied ? <Text style={d.pairHintT}>已复制 ✓</Text> : null}
                 </View>
-                {copied ? <Text style={d.pairHintT}>已复制 ✓</Text> : null}
-              </View>
+              ) : pairBusy ? (
+                <Text style={d.pairPendingT}>领取中…</Text>
+              ) : (
+                <Text style={d.pairPendingT}>{pairErr ?? "未连接电脑 · 连上后自动领码"}</Text>
+              )
             ) : null}
           </Row>
         </GroupCard>
-        {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
 
         {/* #212 记住的规则（连接管理子节）：审批卡「允许并记住」落的规则（各在线源
             合并展示），删除按条目所属源路由发命令。分态：无在线源 / 全旧 relay
@@ -962,17 +1080,15 @@ export default function SettingsPage({
         </>
         ) : null}
 
-        {/* 显示与字号组（任务书分组②，置顶常用）：过程消息三档（标准/紧凑/隐藏=
-            过程消息字号档）+ 空闲变灰。#313 折叠记忆保留；W-MSETSIG 默认改展开
-            （重设计后定位常用组置顶，null 未存偏好的新会话直接可见；存过 "0"/"1"
-            的老用户原样尊重） */}
+        {/* 偏好组（W-MSET3 ③ 合并：原「显示与字号」+「通用」两组 → 一组四行）。
+            「显示与字号」组名与内容不符（过程消息档/空闲置灰皆非全局字号）早已
+            该正名；通用组仅两行撑不起独立组——合并后少一层组头一处分折叠（原
+            显示组折叠记忆 cc_display_collapsed 退役，偏好恒展开）。行序：显示类
+            （过程消息/空闲置灰）→ 输入类（回车发送）→ 系统类（后台保活收尾） */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}>显示与字号</Text>
-          <Pressable style={d.secToggle} hitSlop={10} onPress={toggleDisp} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
-            <Text style={d.secToggleT}>{dispCollapsed ? "▸" : "▾"}</Text>
-          </Pressable>
+          <Text style={d.secTitleT}>偏好</Text>
+          <View style={d.secToggle} />
         </View>
-        {!dispCollapsed ? (
         <GroupCard>
           {/* #37 同行化：缩小版拨杆（118×24）与标题同行；三档 = 标准三档字距 */}
           <Row
@@ -982,16 +1098,16 @@ export default function SettingsPage({
             right={<Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />}
           />
           {/* #121 空闲变灰阈值（分钟）：数字输入（不锁数字键盘——要能输负号），失回
-              提交；「负数 = 永不变灰」语义收进标签旁 ⓘ 弹窗 */}
+              提交；「负数 = 永不变灰」语义收进标签旁 ⓘ 弹窗（W-MSET3 ⑤ ⓘ 字符图
+              标退役 → SVG 线图标，helpMark 文字样式键随之退役） */}
           <Row
             icon={ICON_MOON}
             title="空闲变灰"
             note="会话静止后列表置灰"
-            last
             right={
               <View style={d.numRow}>
                 <Pressable hitSlop={8} onPress={idleDimHelp} accessibilityLabel="空闲变灰说明">
-                  <Text style={d.helpMark}>ⓘ</Text>
+                  <LineGlyph path={ICON_INFO} size={13} color={c.faint} />
                 </Pressable>
                 <TextInput
                   style={d.numInput}
@@ -1008,8 +1124,25 @@ export default function SettingsPage({
               </View>
             }
           />
+          {/* #129 回车发送（输入习惯类，W-MSET3 ③ 从通用组并入偏好） */}
+          <Row
+            icon={ICON_ENTER}
+            title="回车发送"
+            note="开 = 回车即发送 · 关 = 换行"
+            last={!fgSupported()}
+            right={
+              <Switch
+                value={enterSend}
+                onValueChange={setEnterSend}
+                trackColor={{ false: withA(c.dim, 0.3), true: c.brandA }}
+                thumbColor="#EDEDF2"
+              />
+            }
+          />
+          {/* #85 后台保活（W-MSET3 ③ 从通用组并入偏好收尾；kaRow 行形态与组卡行
+              同构，KeepAliveCard 共享组件零改动——SetupScreen 消费面不受影响） */}
+          {fgSupported() ? <KeepAliveCard /> : null}
         </GroupCard>
-        ) : null}
 
         {/* Agent 引擎组（任务书分组③，条件渲染：两项都是 relay 能力探测驱动——
             旧 relay 无字段整组不显）。#17 雇员独立家（relay 级设置）：活动源
@@ -1061,31 +1194,8 @@ export default function SettingsPage({
         </>
         ) : null}
 
-        {/* 通用组（任务书分组④）：后台保活（#85 常驻可见——原入口只在添加连接页，
-            配好的人看不到；W-MSETSIG 从连接区卡流移通用组，kaRow 行形态与组卡行
-            同构）+ 回车发送（#129 输入习惯类）。多源聚合开关已移除（2026-09-14）：
-            与会话列表「单源/聚合」胶囊重复，收敛单一入口 */}
-        <View style={d.secHead}>
-          <Text style={d.secTitleT}>通用</Text>
-          <View style={d.secToggle} />
-        </View>
-        <GroupCard>
-          {fgSupported() ? <KeepAliveCard /> : null}
-          <Row
-            icon={ICON_ENTER}
-            title="回车发送"
-            note="开 = 回车即发送 · 关 = 换行"
-            last
-            right={
-              <Switch
-                value={enterSend}
-                onValueChange={setEnterSend}
-                trackColor={{ false: withA(c.dim, 0.3), true: c.brandA }}
-                thumbColor="#EDEDF2"
-              />
-            }
-          />
-        </GroupCard>
+        {/* 通用组已删（W-MSET3 ③ 并入偏好组）：后台保活+回车发送两行上移，多源聚
+            合开关早在 2026-09-14 移除（与会话列表「单源/聚合」胶囊重复，单一入口） */}
         {/* 关于组（任务书分组⑤，低频沉底）：#313 版本行（呼出弹窗——本版特性/检查
             更新/反馈都在里面）+ 反馈行；Build 尾行收组卡下（面板元信息收尾） */}
         <View style={d.secHead}>
@@ -1391,12 +1501,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingLeft: 37, paddingTop: 3, paddingBottom: 2,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
   },
-  // 无码态行内生成钮（原整宽 pairGen 收进行右槽）：小胶囊，pairGen 同语言
-  pairGenMini: {
-    paddingVertical: 6, paddingHorizontal: 10, borderRadius: 11,
-    backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45), overflow: "hidden",
-  },
-  pairGenMiniT: { color: c.brandA, fontSize: 11.5, fontWeight: "700" },
+  // W-MSET3 ④ 配对码展开态非码文案（领取中/失败/未连接提示）：左缘对齐行标题
+  //文字（pairEmbed 同缩进）；pairGenMini/pairGenMiniT 生成钮样式键随按需化退役
+  pairPendingT: { color: c.faint, fontSize: 11.5, paddingLeft: 37, paddingVertical: 3 },
   // 服务器删除两步确认态（第二点「确认删除?」红）：与首点「删除」waiting 黄区分
   srvDelArmSureT: { color: c.error },
   // #130 区头：去字符图标（◫⇄≡ⓘ 胖瘦不一）纯文字 + 字距放宽 + 节奏 20/8
@@ -1405,9 +1512,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   secTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1.5 },
   secToggle: { width: 24, height: 24, alignItems: "center", justifyContent: "center", marginVertical: -6 },
-  secToggleT: { color: c.dim, fontSize: 11 },
-  // #48 通道含义问号（连接区标题旁，点击弹解释）——#130 去 16px 描边圈，改 tintSoft 软底
-  secHelpT: { color: c.dim, fontSize: 11, backgroundColor: c.tintSoft, borderRadius: 8, width: 16, height: 16, textAlign: "center", lineHeight: 14, overflow: "hidden" },
+  // W-MSET3 ⑤ 问号钮：tintSoft 软底小方格（#130 语言沿用），内嵌 SVG 线图标
+  //（原 ? 字符图标退役，secToggleT/secHelpT 文字样式键随之退役）
+  secHelpBtn: { width: 18, height: 18, borderRadius: 6, alignItems: "center", justifyContent: "center", backgroundColor: c.tintSoft, overflow: "hidden" },
   // 服务器列表滚动容器：P0 加固③恢复有界帽（320）——嵌套 ScrollView 无界展开在
   // Fabric 触发 Yoga owner 断言崩（YogaLayoutableShadowNode.cpp:709，崩栈
   // ScrollViewShadowNode::layout；连接 SNAPSHOT 大渲染期必崩实测实锤），有界滚动
@@ -1455,6 +1562,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ghostWrap: { marginBottom: 8 },
   ghostBtn: { height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   ghostBorder: { ...FILL },
+  // W-MSET3 ⑤ ＋ 字符退役：SVG 线图标 + 文字横排
+  ghostInner: { flexDirection: "row", alignItems: "center", gap: 6 },
   ghostT: { color: c.dim, fontSize: 12.5 },
   // #130 保活卡与上方列表的呼吸距（0.7 批 2 起卡形态自带 marginBottom，占位样式退役）
   // 择路浮动胶囊 + 设备弹层（原 devEntry 行已并入连接管理组卡 Row）
@@ -1495,18 +1604,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   devFootNote: { color: c.faint, fontSize: 10, textAlign: "center", paddingVertical: 6 },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   body: { flex: 1 },
-  // 连接状态卡（连接区顶，对齐设置原型）：状态点 + 源名称粗体 + 通道/状态副行小字；
-  // 与服务器行同语言（圆角 12 / 细边框 / panel 底）；整卡点击重连
-  connCard: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingVertical: 10, paddingHorizontal: 11, borderRadius: 12,
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  // W-MSET3 ② 活动连接状态卡（页面首卡）：服务器卡同族语言（左缘 3dp 状态色条 =
+  // srvBar 同构 + panel 底 + line 边 + radius 12），但更大更重（首卡地位）：行高
+  // 更足、名称 textStrong 14.5/700、副行状态词+通道词；在线静态、非在线可点
+  activeCard: {
+    flexDirection: "row", alignItems: "center", gap: 11,
+    paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    marginBottom: 12, overflow: "hidden",
   },
-  connDot: { width: 7, height: 7, borderRadius: 4 },
-  connMain: { flex: 1, minWidth: 0 },
-  connNameT: { color: c.text, fontSize: 13.5, fontWeight: "700" },
-  connSubT: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
-  connReT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
+  activeBar: { position: "absolute", left: 0, top: 12, bottom: 12, width: 3, borderRadius: 2 },
+  activeNameT: { color: c.textStrong, fontSize: 14.5, fontWeight: "700" },
+  activeSubT: { color: c.faint, fontSize: 10.5, marginTop: 2 },
+  // unpaired 染红（与服务器行 srvNoteBadT 同语义：唯一须人工重配的态）
+  activeSubBadT: { color: c.error },
+  activeGoT: { color: c.faint, fontSize: 13, marginLeft: 2 },
   // #378 配对码平铺去框（W-MSETSIG 内嵌进「网页端配对」行 children）：大字码 +
   // 右侧倒计时/刷新（pairBox/pairTop 容器键随分节退役）
   pairSide: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1518,7 +1630,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, overflow: "hidden",
   },
-  pairRefreshT: { color: c.dim, fontSize: 12.5 },
+  // pairRefreshT 已删（W-MSET3 ⑤ ↻ 字符图标退役 → ICON_REFRESH 线图标）
   pairHintT: { color: c.faint, fontSize: 10, marginTop: 6, textAlign: "center" },
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
   // #212 记住规则行：首行 tool（等宽粗体）+ scope 徽章 + [源名] + 删除，次行
@@ -1548,8 +1660,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     color: c.text, fontSize: 13, textAlign: "center", includeFontPadding: false,
   },
   numUnit: { color: c.dim, fontSize: 11 },
-  // #130 标签旁小问号（faint 不抢焦点）：点弹该设置项的语义说明
-  helpMark: { color: c.faint, fontSize: 12.5, fontWeight: "700" },
+  // helpMark 已删（W-MSET3 ⑤ ⓘ 字符图标退役 → ICON_INFO 线图标）
   // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层。
   // #37 同行缩小版：24 高（原 34）。#130 轨道去描边（原 tintSoft 底 + 细边双边缘）
   leverTrack: {
