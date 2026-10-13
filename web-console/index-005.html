@@ -6056,6 +6056,40 @@
                     : "";
                   return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(r.text || fullText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(info.name) + " · " + escape(info.role || "") : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
+                // W-DESIGNHUB 看板挂载两区（用户澄清并入）：图纸（当前组关联，匹配口径与
+                // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
+                // 分词靠子串包含兜底）+ 输出物（当前组编制成员会话聚合，会话域输出物 tab
+                // 同源数据）。清单缺（旧 relay）两区整体不渲染
+                function teamDesignSection(project) {
+                  const docs = state.designDocs;
+                  if (!Array.isArray(docs) || !docs.length) return "";
+                  if (!project) return '<div class="inspector-block"><div class="inspector-title"><span>系统设计图纸 · ' + docs.length + '</span></div>'
+                    + docs.slice(0, 6).map((d) => '<div class="task-card compact"><strong>' + escape(d.title) + '</strong><p>' + escape(d.group) + " · " + escape(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escape(d.path) + '">新窗打开 ↗</button></div>').join("")
+                    + (docs.length > 6 ? '<div class="inspector-copy">共 ' + docs.length + " 张 · 全部清单见 设置 → 关于。</div>" : "") + "</div>";
+                  const segs = [String(project.name || ""), String(project.anchor_dir || "").replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || ""];
+                  const toks = new Set();
+                  for (const seg of segs) for (const tok of seg.toLowerCase().split(/[-_/.\s]+/)) if (tok && !/^\d+$/.test(tok)) toks.add(tok);
+                  const tokArr = [...toks];
+                  const hit = (tag) => tokArr.some((t) => t.includes(tag) || tag.includes(t));
+                  const hits = docs.filter((d) => Array.isArray(d.tags) && d.tags.some(hit));
+                  if (!hits.length) return '<div class="inspector-block"><div class="inspector-title"><span>系统设计图纸</span></div><div class="inspector-copy">本团队暂无关联图纸 · 全部清单见 设置 → 关于 → 系统设计图纸。</div></div>';
+                  return '<div class="inspector-block"><div class="inspector-title"><span>系统设计图纸 · ' + hits.length + '</span></div>'
+                    + hits.map((d) => '<div class="task-card compact"><strong>' + escape(d.title) + '</strong><p>' + escape(d.group) + " · " + escape(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escape(d.path) + '">新窗打开 ↗</button></div>').join("") + "</div>";
+                }
+                function teamArtifactsSection(project) {
+                  if (!project) return "";
+                  const sidSet = new Set(members(project).map((m) => m.session_id));
+                  const rows = [];
+                  for (const [sid, s] of state.sessions) {
+                    if (!sidSet.has(sid) || !Array.isArray(s?.artifacts)) continue;
+                    for (const a of s.artifacts) if (a && typeof a.path === "string") rows.push({ sid, s, a });
+                  }
+                  rows.sort((x, y) => (Number(y.a.last_at) || 0) - (Number(x.a.last_at) || 0));
+                  if (!rows.length) return '<div class="inspector-block"><div class="inspector-title"><span>团队输出物</span></div><div class="inspector-copy">当前编制尚无输出物 · 会话产出实时登记。</div></div>';
+                  return '<div class="inspector-block"><div class="inspector-title"><span>团队输出物 · ' + rows.length + '</span></div>'
+                    + rows.slice(0, 8).map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("")
+                    + (rows.length > 8 ? '<div class="inspector-copy">共 ' + rows.length + " 件 · 全量在会话域输出物 tab。</div>" : "") + "</div>";
+                }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
                   const tasks = entities(board?.entries);
@@ -6533,6 +6567,10 @@
                   }).join("") : "";
                   query("[data-team-confirms]").innerHTML = count ? confirmCards : banner("暂无待确认事项");
                   panes[1].innerHTML += count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "";
+                  // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸 + 团队输出物两区。
+                  // 图纸匹配同项目域口径（name/锚点分词 ∩ tags 子串双向）；输出物按当前组
+                  // 编制成员会话聚合（会话域输出物 tab 同源数据，团队维度可见）
+                  panes[1].innerHTML += teamDesignSection(project) + teamArtifactsSection(project);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
                   if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
@@ -6608,6 +6646,8 @@
                   state.boards.clear(); state.receipts.clear(); state.loads.clear(); state.flights.clear(); state.accepted.clear();
                   state.source = context?.relayName || payload.relay_name || "当前来源";
                   state.sessions = new Map((Array.isArray(payload.sessions) ? payload.sessions : []).filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
+                  // W-DESIGNHUB：图纸清单锚定（能力位=数组存在；缺=旧 relay 不挂区）
+                  state.designDocs = Array.isArray(payload.design_docs) ? payload.design_docs.filter((d) => d && typeof d.path === "string" && typeof d.title === "string") : undefined;
                   updateProjects(payload.projects);
                   updateConfirms(payload.org_confirms);
                   // W-EXPP2 经验域锚定（字段存在=锚定，空数组也成立；缺席=旧 relay 不渲染）
@@ -6809,6 +6849,20 @@
                     if (newSession) {
                       event.stopPropagation();
                       openTeamCreate();
+                      return;
+                    }
+                    // W-DESIGNHUB 看板图纸打开（HttpOrigin 拼绝对地址新窗直开，同设置/项目域口径）
+                    const designOpen = event.target.closest("[data-design-doc]");
+                    if (designOpen) {
+                      const origin = (typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin;
+                      void window.__ccDeck005OpenUrl(origin.replace(/\/+$/, "") + designOpen.dataset.designDoc);
+                      return;
+                    }
+                    // W-DESIGNHUB 输出物行 → 跳会话域对应会话（输出物全量在会话域输出物 tab）
+                    const artifactRow = event.target.closest("[data-team-artifact]");
+                    if (artifactRow) {
+                      const sid = artifactRow.dataset.teamArtifact;
+                      if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.selectSessionCard === "function") window.__ccDeck005B4.selectSessionCard(sid);
                       return;
                     }
                     const decision = event.target.closest("[data-team-decision]");
@@ -7371,6 +7425,34 @@
                   return '<div class="queue-group">会话 · ' + sessions.length + "</div>" + rows + overviewJumpLink("会话");
                 }
 
+                // W-DESIGNHUB 项目相关图纸：tags = 图纸目录+文件名分词（relay 侧同规则），
+                // 项目侧分词 = 项目组 name ∪ 锚点目录末段（[-_/.空格] 切、小写、纯数字滤）。
+                // 匹配空但清单在 → 灰提示指全局入口；清单缺（旧 relay/无 docs）→ 整区不渲染
+                function designDocsOf(entry) {
+                  return Array.isArray(bridge.snapshot && bridge.snapshot.design_docs) ? bridge.snapshot.design_docs : null;
+                }
+                function projectDesignToks(entry) {
+                  const segs = [];
+                  if (entry.group && typeof entry.group.name === "string") segs.push(entry.group.name);
+                  const anchor = String(entry.anchor || "");
+                  const tail = anchor.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || "";
+                  if (tail) segs.push(tail);
+                  const out = new Set();
+                  for (const seg of segs) for (const tok of seg.toLowerCase().split(/[-_/.\s]+/)) if (tok && !/^\d+$/.test(tok)) out.add(tok);
+                  return out;
+                }
+                function designSectionMarkup(entry) {
+                  const docs = designDocsOf(entry);
+                  if (!docs || !docs.length) return "";
+                  // 匹配=子串包含（双向）：中文项目名无空格分词（「005 换壳项目」切开是
+                  // 「换壳项目」整词），精确相等会漏「换壳」tag——放宽为 a⊂b ∪ b⊂a
+                  const toks = [...projectDesignToks(entry)];
+                  const hit = (tag) => toks.some((t) => t.includes(tag) || tag.includes(t));
+                  const hits = docs.filter((d) => Array.isArray(d.tags) && d.tags.some(hit));
+                  if (!hits.length) return '<div class="queue-group">设计图纸</div><div class="readonly-banner">本项目暂无专属图纸 · 全局系统设计见 设置 → 关于 → 系统设计图纸。</div>';
+                  return '<div class="queue-group">设计图纸 · ' + hits.length + "</div>"
+                    + hits.map((d) => '<div class="queue-card"><div class="row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg><strong>' + escapeHtml(d.title) + '</strong><span class="tag">' + escapeHtml(d.group) + '</span></div><p>' + escapeHtml(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escapeHtml(d.path) + '" style="margin:2px 0 0">新窗打开 ↗</button></div>').join("");
+                }
                 function overviewMarkup(entry) {
                   const artifacts = artifactsOf(entry);
                   const card = (key, icon, label, num) =>
@@ -7384,6 +7466,7 @@
                     + card("artifacts", "package", "输出物", artifacts.length)
                     + card("accepts", "check", "验收单", bridge.accepts.length)
                     + "</div>"
+                    + designSectionMarkup(entry)
                     + overviewMiniMarkup(entry);
                 }
 
@@ -7520,6 +7603,13 @@
                   if (target.closest("[data-project-create]")) {
                     bridge.railJump("team");
                     toast("新建项目确认在团队域发起 · 项目页只读聚合");
+                    return;
+                  }
+                  // W-DESIGNHUB 项目图纸打开：HttpOrigin 拼绝对地址新窗直开（关于页同款口径）
+                  const designOpen = target.closest("[data-design-doc]");
+                  if (designOpen) {
+                    const origin = (typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin;
+                    void window.__ccDeck005OpenUrl(origin.replace(/\/+$/, "") + designOpen.dataset.designDoc);
                     return;
                   }
                   const open = target.closest("[data-open-acceptance]");
@@ -9000,7 +9090,7 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane" data-settings-panel="shortcuts"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-search"></use></svg></span><div><strong>全局搜索</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">${escapeHtml(keyDisplay("search"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-plus-doc"></use></svg></span><div><strong>新建会话</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">${escapeHtml(keyDisplay("new"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-panel"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>全局快捷键 · 最小化时唤回窗口</p></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">${escapeHtml(toggleHotkeyDisplay())}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-arrows-v"></use></svg></span><div><strong>切换会话</strong><p>会话列表内上下移动 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("↑↓"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>切换数据源</strong><p>多源间快速切换 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("←→"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-code"></use></svg></span><div><strong>恢复默认键位</strong><p>清除全部自定义，回到出厂键位</p></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p><a class="about-link" data-about-link="https://cc.humumu.online">项目主页</a><span class="about-sep">·</span><a class="about-link" data-about-link="https://github.com/humumu130/cc-deck">仓库地址</a></p></div><span class="tag info" data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p><a class="about-link" data-about-link="https://cc.humumu.online">项目主页</a><span class="about-sep">·</span><a class="about-link" data-about-link="https://github.com/humumu130/cc-deck">仓库地址</a></p></div><span class="tag info" data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="settings-list" data-settings-live="design" hidden></div></div>`;
         wireCardDensityControls(body);
         wireFsDebugPanel(body); // 件十六：字号调试面板回填已存值/默认值
         // FB9 设置 queue 头 ×：返回进入设置前的域（设置无独立关闭语义，等价「关门走人」）
@@ -9081,6 +9171,14 @@ function connectLan(ctx) {
           // 浏览器直开，既有跨形态打开链）
           const aboutLink = event.target.closest("[data-about-link]");
           if (aboutLink) { void window.__ccDeck005OpenUrl(aboutLink.dataset.aboutLink); return; }
+          // W-DESIGNHUB 图纸打开：relay 相对路径经 HttpOrigin 拼绝对地址（桌面形态
+          // location 是 tauri.localhost，相对路径必断链——#158-批4a 验收单同款口径）
+          const designBtn = event.target.closest("[data-design-doc]");
+          if (designBtn) {
+            const origin = (typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin;
+            void window.__ccDeck005OpenUrl(origin.replace(/\/+$/, "") + designBtn.dataset.designDoc);
+            return;
+          }
           // FB9 footer 两钮接线：帮助走仓库 README 外链；验证按桥的实连态给结论（不伪造通过）
           if (event.target.closest("[data-settings-help]")) { void window.__ccDeck005OpenUrl("https://github.com/humumu130/cc-deck#readme"); return; }
           if (event.target.closest("[data-settings-verify]")) {
@@ -9172,6 +9270,25 @@ function connectLan(ctx) {
               const tag = ok ? '<span class="tag done">已接</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}</strong><p>${copy}</p></div>${tag}</div>`;
             }).join("");
+          }
+          // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
+          // 数组存在且非空——旧 relay/缺 docs 部署自动隐藏）。按 group 分组小标题 + 行；
+          // 点击经 __ccDeck005HttpOrigin 拼绝对地址新窗直开（图纸 archify 自包含、自带
+          // 深浅主题与交互，原样渲染不加工——无容器页）
+          const designLive = section.querySelector('[data-settings-live="design"]');
+          if (designLive) {
+            const docs = Array.isArray(snap.design_docs) ? snap.design_docs.filter((d) => d && typeof d.path === "string" && typeof d.title === "string") : [];
+            designLive.hidden = docs.length === 0;
+            if (docs.length) {
+              const groups = [];
+              for (const d of docs) if (!groups.includes(d.group)) groups.push(d.group);
+              designLive.innerHTML = groups.map((g) =>
+                '<div class="queue-group">' + esc(g) + " · " + docs.filter((d) => d.group === g).length + "</div>"
+                + docs.filter((d) => d.group === g).map((d) =>
+                  '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>' + esc(d.title) + "</strong><p>" + esc(d.path) + "</p></div>"
+                  + '<button class="secondary-btn" data-design-doc="' + esc(d.path) + '" type="button" title="新窗打开图纸">打开 ↗</button></div>').join("")
+              ).join("");
+            }
           }
           const idLive = section.querySelector('[data-settings-live="identity"]');
           if (idLive) {

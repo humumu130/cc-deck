@@ -18,6 +18,7 @@ import {
   type Acceptance,
   type CloudSubmit,
 } from "./acceptance.js";
+import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listGroups, listPendingConfirms } from "./projects.js";
@@ -315,6 +316,7 @@ export function startServer(
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
     ".webmanifest": "application/manifest+json; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
     ".png": "image/png",
     ".svg": "image/svg+xml",
     ".apk": "application/vnd.android.package-archive",
@@ -338,6 +340,33 @@ export function startServer(
     }
     const ext = rel.slice(rel.lastIndexOf("."));
     res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync(file));
+    return true;
+  };
+
+  // W-DESIGNHUB：/design/<相对路径> 系统设计图纸静态服务（docs/system-design/ 两层）。
+  // 原样渲染红线：readFileSync 直出，无容器页无加工（archify 图纸自带深浅主题与交互，
+  // 新窗直开）。遍历防护 = resolveDesignFile（resolve 后必须仍在 designDir 内 + 扩展
+  // 白名单 + decodeURIComponent 后校验）；目录缺失（旧部署形态）自然 404——清单侧
+  // 同步为空、端上入口隐藏。cache-control：图纸随包分发低频换代，给短缓存即可（与
+  // no-store 的控制台不同——图纸大，避免每次重开全量拉 6MB）
+  const serveDesign = (url: URL, res: ServerResponse): boolean => {
+    if (!url.pathname.startsWith("/design/")) return false;
+    const rel = url.pathname.slice("/design/".length).replace(/^\/+/, "");
+    const file = resolveDesignFile(webRoot, rel);
+    if (!file) {
+      res.writeHead(rel ? 400 : 404).end(rel ? "bad design path" : "not found");
+      return true;
+    }
+    let isFile = false;
+    try {
+      isFile = statSync(file).isFile();
+    } catch {}
+    if (!isFile) {
+      res.writeHead(404).end("not found");
+      return true;
+    }
+    const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
+    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream", "cache-control": "max-age=300" }).end(readFileSync(file));
     return true;
   };
 
@@ -366,6 +395,7 @@ export function startServer(
       return;
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
+    if (req.method === "GET" && serveDesign(url, res)) return;
     // 手机浏览器不再跳 /m：web-console 自带 720px 移动端布局（#169 PWA 路线），
     // /m 仅保留给旧主屏图标，页面自身跳回根路径
     if (req.method === "GET" && url.pathname === "/") {
@@ -976,6 +1006,10 @@ export function startServer(
           // W-MODE 协作模式（设置-团队域开关数据源；no-leader 时 sessions 已由
           // snapshot() 过滤锚卡；cloud-client 云通道快照同步携带，#117 教训）
           collab_mode: mgr.collabMode(),
+          // W-DESIGNHUB 系统设计图纸清单（设置-关于「系统设计图纸」区 + 项目域总览
+          // 「设计图纸」区数据源；空数组/缺键 = 入口隐藏——旧 relay 与缺 docs 部署
+          // 自动降级。移动端暂缓，云通道不带）
+          design_docs: listDesignDocs(webRoot),
           // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
           // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
           // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）

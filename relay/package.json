@@ -13,6 +13,7 @@
     "test:allow-rules": "tsx scripts/test-allow-rules.ts",
     "test:history-stream": "tsx scripts/test-history-stream.ts",
     "test:singleton-lock": "tsx scripts/test-singleton-lock.ts",
+    "test:design-docs": "tsx scripts/test-design-docs.ts",
     "backup:pre-cutover": "node scripts/backup-pre-cutover.mjs",
     "check:db-cutover": "node scripts/check-db-cutover.mjs",
     "test:bridge": "tsx scripts/test-bridge.ts",

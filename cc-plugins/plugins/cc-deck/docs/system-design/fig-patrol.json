@@ -1,0 +1,163 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "巡检哨兵：双层定时监控",
+    "locale": "zh-CN",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "launchd",
+      "label": "launchd 系统调度"
+    },
+    {
+      "id": "light",
+      "label": "轻探针 · 5min"
+    },
+    {
+      "id": "full",
+      "label": "全巡 · 30min"
+    },
+    {
+      "id": "notify",
+      "label": "通知通道"
+    },
+    {
+      "id": "user",
+      "label": "用户"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "timer",
+      "lane": "launchd",
+      "col": 0,
+      "type": "cloud",
+      "label": "launchd 定时",
+      "sublabel": "会话外常驻",
+      "width": 110
+    },
+    {
+      "id": "probe",
+      "lane": "light",
+      "col": 1,
+      "type": "backend",
+      "label": "轻探针",
+      "sublabel": "relay+磁盘",
+      "width": 100
+    },
+    {
+      "id": "probe-gate",
+      "lane": "light",
+      "col": 2,
+      "type": "backend",
+      "label": "异常?",
+      "sublabel": "relay≠200 / 磁盘<5G"
+    },
+    {
+      "id": "selfheal",
+      "lane": "light",
+      "col": 3,
+      "type": "security",
+      "label": "自拉起",
+      "sublabel": "kickstart relay"
+    },
+    {
+      "id": "full",
+      "lane": "full",
+      "col": 1,
+      "type": "backend",
+      "label": "全巡",
+      "sublabel": "帧/任务表/漂移",
+      "width": 100
+    },
+    {
+      "id": "full-gate",
+      "lane": "full",
+      "col": 2,
+      "type": "backend",
+      "label": "异常?",
+      "sublabel": "停滞/漂移",
+      "width": 110
+    },
+    {
+      "id": "report",
+      "lane": "full",
+      "col": 4,
+      "type": "database",
+      "label": "巡检报告落盘",
+      "sublabel": "patrol-report.md 滚动"
+    },
+    {
+      "id": "notify",
+      "lane": "notify",
+      "col": 4,
+      "type": "cloud",
+      "label": "/api/notify",
+      "sublabel": "推用户手机"
+    },
+    {
+      "id": "user-phone",
+      "lane": "user",
+      "col": 5,
+      "type": "external",
+      "label": "用户手机"
+    }
+  ],
+  "edges": [
+    {
+      "from": "timer",
+      "to": "probe",
+      "label": "5min",
+      "role": "main"
+    },
+    {
+      "from": "timer",
+      "to": "full",
+      "label": "30min",
+      "role": "main"
+    },
+    {
+      "from": "probe",
+      "to": "probe-gate",
+      "role": "main"
+    },
+    {
+      "from": "probe-gate",
+      "to": "selfheal",
+      "label": "relay 挂",
+      "role": "error"
+    },
+    {
+      "from": "probe-gate",
+      "to": "notify",
+      "label": "异常通知",
+      "role": "error",
+      "variant": "dashed"
+    },
+    {
+      "from": "full",
+      "to": "full-gate",
+      "role": "main"
+    },
+    {
+      "from": "full-gate",
+      "to": "notify",
+      "label": "异常推送",
+      "role": "error"
+    },
+    {
+      "from": "full-gate",
+      "to": "report",
+      "label": "正常落盘",
+      "role": "main"
+    },
+    {
+      "from": "notify",
+      "to": "user-phone",
+      "label": "真通知推送",
+      "role": "async"
+    }
+  ]
+}

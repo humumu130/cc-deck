@@ -513,6 +513,9 @@ export interface SnapshotPayload {
   // 端上以字段存在性判断能力，deliverables 同口径）。no-leader 时锚卡已被
   // snapshot() 过滤，端上无需再删
   collab_mode?: "leader" | "no-leader";
+  // W-DESIGNHUB 系统设计图纸清单（docs/system-design/ 扫描产物）：空数组/缺键 =
+  // 入口隐藏（旧 relay 与缺 docs 部署自动降级）。移动端暂缓，云通道快照不带
+  design_docs?: DesignDocItem[];
 }
 
 // COLLAB_MODE_UPDATED / SNAPSHOT.collab_mode 载荷
@@ -525,6 +528,18 @@ export interface CollabModePayload {
 }
 
 // SNAPSHOT.settings / SETTINGS_UPDATED 载荷
+// W-DESIGNHUB 系统设计图纸清单项（design-docs.ts 产出 / SNAPSHOT.design_docs 元素）
+export interface DesignDocItem {
+  /** 浏览地址（relay 相对根）：/design/<相对路径>（段已 encodeURIComponent） */
+  path: string;
+  /** 一级子目录名（分组标题）；根目录文件 = "全局" */
+  group: string;
+  /** 图纸 <title>（archify 中文标题）；解析失败回落文件名 */
+  title: string;
+  /** 目录+文件名分词（小写）：项目域按项目组 name/锚点分词取交集 */
+  tags: string[];
+}
+
 export interface EmployeeHomeSettingsPayload {
   employee_home: boolean;   // 开关生效态
   value: string | null;     // 实际家路径（关闭时 null；auto 已展开为绝对路径）
