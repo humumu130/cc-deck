@@ -1600,6 +1600,12 @@
     .settings-row .row-share { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
     .settings-row .row-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
     .settings-row .row-share:disabled { opacity: .38; cursor: default; }
+    /* W-SDEL 服务器条目删除/编辑钮（用户 1013 反馈：删掉失效服务器条目——旧壳 srv-del 语义回归）：
+       与 row-share 同语言小描边钮；删除 hover 转 danger（ destructive 动作给视觉预警） */
+    .settings-row .row-del, .settings-row .row-edit { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
+    .settings-row .row-del:hover { color: var(--error); border-color: var(--error); }
+    .settings-row .row-edit:hover { color: var(--brand); border-color: var(--brand); }
+    .settings-row.cloud-cur strong::after { content: " · 当前"; color: var(--faint); font-size: var(--fs-E); font-weight: 400; }
     .settings-row p.relay-diag[data-diag="ok"] { color: var(--done); }
     .settings-row .chev { margin-left: auto; color: var(--faint); }
     .mobile-frame { position: relative; width: 100%; overflow: hidden; background: var(--bg1); }
@@ -9247,7 +9253,10 @@ function connectLan(ctx) {
                 + ' title="' + (shareOn ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "relay 未在线 · 连接后可分享") + '">分享</button>';
               connLive.innerHTML =
                 `<div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay${esc(window.__ccDeck005SourceDisplayName && window.__ccDeck005SourceDisplayName(bridge.relayName) !== "本机" ? " · " + bridge.relayName : "")}</strong><p>端口 ${relayPort} · 事件流自动补发</p>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div>${shareBtn}<span class="tag ${connState === "online" ? "done" : "action"}">${stateText}</span></div>` +
-                `<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>${cloudUIOn() ? esc(cloudCtx.statusText || "未连接") : "未添加远程源 · 可连接其他电脑的 CC Deck"}</p></div>${cloudUIOn() ? "" : '<button class="row-share" data-settings-add type="button" title="填云桥地址 + 8 位配对码，把其他电脑加为数据源">＋ 添加</button>'}<span class="tag ${cloudUIOn() ? (cloudCtx.status === "online" ? "done" : "action") : "info"}">${cloudUIOn() ? (cloudCtx.status === "online" ? "已连接" : cloudStatusLabel()) : "未添加"}</span></div>` +
+                // W-SDEL：远程源区=共享库条目列表（多条+连接/编辑/删除；云桥降级为条目之一）——
+                // 桌面壳/浏览器 LAN 形态同样列出，死条目清理不依赖云链激活态（cloudSettingsRows
+                // 空列表自给引导行；cloudUIOn 时附本页设备行与输码表单）
+                cloudSettingsRows() +
                 `<div class="settings-row"><span class="avatar">▣</span><div><strong>${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}</strong><p>${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")}</p></div><span class="tag ${connState === "unconfigured" ? "action" : "done"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
               if (shellDiag) void refreshRelayDiag();
             }
@@ -9311,6 +9320,9 @@ function connectLan(ctx) {
         };
         bridge.subscribe(() => render());
         render();
+        // W-SDEL 借道：服务器条目增删改后主动刷设置页实时区（bridge.subscribe 只随桥事件走，
+        // 删本地条目无桥事件——不借道则 else 分支 DOM 停留旧列表）
+        window.__ccDeck005RefreshSettingsLive = render;
         // W-MODE 协作模式分段钮：COMMAND_ORG_ACTION {action:"collab-mode"} → ACK ok 后
         // 乐观更新快照缓存并重渲（多端最终一致由 relay COLLAB_MODE_UPDATED 帧兜底；
         // 旧 relay orgAction default 拒 → toast 报错不切态）
@@ -9882,6 +9894,98 @@ function connectLan(ctx) {
         writeSharedServers(list);
       }
       function cloudSharedCloudServers() { return (readSharedServersRaw() || []).filter((s) => s && s.id && s.kind === "cloud"); }
+
+      // ---------- W-SDEL 服务器条目管理（用户 1013 反馈：删掉失效服务器条目重连——旧壳 deleteServer 移植） ----------
+      // cloudPersistPaired 只管配对落写（绝不删条目）；删除/编辑/激活切换在此补全——读写同库同键，
+      // 损坏保护同口径（readSharedServersRaw 返回 null 绝不写）。纯逻辑内核拆 sdel* 无 DOM 函数（test-005-servers 直跑锚）。
+      function sdelRemoveFromList(list, id) { return (list || []).filter((s) => !(s && s.id === id && s.kind === "cloud")); }
+      function sdelPatchEntry(cur, patch) {
+        const wsUrl = String(patch.wsUrl || cur.wsUrl || "").trim().replace(/\/+$/, "");
+        const name = String(patch.name || "").trim() || cur.name || "云桥";
+        const token = String(patch.token || "").trim();
+        const addrChanged = !!wsUrl && !!cur.wsUrl && wsUrl !== cur.wsUrl;
+        const cloud = cur.cloud && typeof cur.cloud === "object" ? Object.assign({}, cur.cloud) : null;
+        if (cloud) {
+          if (wsUrl) cloud.url = wsUrl;
+          if (token) cloud.token = token;
+          // 地址变更=换桥：配对身份重置（旧壳 saveSrvBtn 编辑分支同语义——保 rd/rk 仅限同地址）
+          if (addrChanged) { cloud.rd = BAKED_RELAY.rd; cloud.rk = BAKED_RELAY.rk; cloud.paired = false; }
+        }
+        return { entry: { id: cur.id, name, kind: "cloud", wsUrl: wsUrl || cur.wsUrl || "", token: token || cur.token || "", cloud }, addrChanged };
+      }
+      function sharedCloudEntryOf(id) { return cloudSharedCloudServers().find((s) => s.id === id) || null; }
+      // 删除语义=忘掉该源：共享库条目移除（凭据一并清）+ 配对挂起清 + 当前连接源断链防拉回。
+      // 返回 true=已删；false=库损坏保护跳过。二次确认门在 UI 层（deleteCloudServerUI）。
+      function removeSharedCloudServer(id) {
+        const list = readSharedServersRaw();
+        if (list === null) return null; // 共享源列表损坏：宁可不写（cloudPersistPaired 同口径）
+        const next = sdelRemoveFromList(list, id);
+        if (next.length === list.length) return next; // 无此条目：幂等
+        writeSharedServers(next);
+        return next;
+      }
+      function updateSharedCloudServer(id, patch) {
+        const list = readSharedServersRaw();
+        if (list === null) return null;
+        const i = list.findIndex((s) => s && s.id === id && s.kind === "cloud");
+        if (i < 0) return { list, entry: null, addrChanged: false };
+        const r = sdelPatchEntry(list[i], patch || {});
+        list[i] = r.entry;
+        writeSharedServers(list);
+        return { list, entry: r.entry, addrChanged: r.addrChanged };
+      }
+      // 删除的运行时收口：删的是当前连接源时——断链（cloudDisconnect 掐 pollGen/pairTimer/ping/
+      // reconnect/hs/disc 全套定时器）+ 内存 cfg 重置/回退（防 cloudManualRetry 与 visibilitychange
+      // 把已删地址拉回重连——拉活链第②④条的内存锚就在 cloudCtx.cfg）。
+      function deleteCloudServer(id) {
+        const relayName = String(cloudCtx.relayName || "");
+        const wasOnline = cloudCtx.cfg && cloudCtx.cfg.id === id && cloudCtx.status === "online";
+        const next = removeSharedCloudServer(id);
+        if (next === null) { showToast("源列表数据损坏，已跳过写入（保护既有数据）"); return false; }
+        setPendingPair(id, null); // 配对挂起一并清（旧壳 deleteServer 同口径）
+        // 改名 override 清理：override 键=原始 relay_name，仅在线源可映射；离线死条目无映射，留档无害（显示层 map miss 不生效）
+        if (wasOnline && relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(relayName)) setSourceNameOverride(relayName, "");
+        if (cloudCtx.cfg && cloudCtx.cfg.id === id) {
+          cloudDisconnect();
+          cloudCtx.sessions.clear(); cloudCtx.hasSnapshot = false; cloudCtx.lastSeq = 0;
+          const rest = (next || []).filter((s) => s && s.cloud && s.cloud.paired && s.cloud.rd && s.cloud.rk);
+          if (rest.length) {
+            // 回退下一条已配对源并自动重连（旧壳 deleteServer 回退 servers[0] 同语义）
+            const hit = rest.find((s) => s.id === lsGet(ACTIVE_CLOUD_KEY)) || rest[0];
+            lsSet(ACTIVE_CLOUD_KEY, hit.id);
+            cloudCtx.cfg = { id: hit.id, name: hit.name || "云桥", kind: "cloud", wsUrl: hit.wsUrl || "", token: hit.token || BAKED_BRIDGE_TOKEN, cloud: Object.assign({}, hit.cloud) };
+            if (cloudMode || shellCloud) bootstrapCloud(); // boot 内部按 ACTIVE 重选（=刚设的 hit，双保险同结果）并重连
+          } else {
+            // 删空：视角回本机；cfg 落空模板（源菜单回「＋ 添加服务器」兜底态；boot 回连条件
+            //「共享库尚有 paired 云源」随删空自然失效，SHELL_CLOUD_KEY 不必强清）
+            try { localStorage.removeItem(ACTIVE_CLOUD_KEY); } catch {}
+            cloudCtx.cfg = { id: cloudUuid(), name: "云桥", kind: "cloud", wsUrl: "", token: "", cloud: null };
+            if (!cloudMode && typeof setSourceView === "function") setSourceView("local");
+          }
+        }
+        replaySnapshots(); renderSessionList(); renderCloudUI(); refreshSourceSwitchers();
+        try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+        return true;
+      }
+      // 切换连接：选中哪条源就连哪台（旧壳点行设活动源语义）。ACTIVE_CLOUD_KEY 先行，再断当前
+      // 云链换 cfg 重连——switchToCloudSource 仅首启 bootstrap，已激活态需显式换 cfg（见上删除链同款）。
+      function activateCloudServer(id) {
+        const hit = sharedCloudEntryOf(id);
+        if (!hit) return;
+        lsSet(ACTIVE_CLOUD_KEY, id);
+        if (!(cloudCtx.cfg && cloudCtx.cfg.id === id && cloudCtx.status === "online")) {
+          cloudDisconnect();
+          cloudCtx.sessions.clear(); cloudCtx.hasSnapshot = false; cloudCtx.lastSeq = 0;
+          cloudCtx.cfg = { id: hit.id, name: hit.name || "云桥", kind: "cloud", wsUrl: hit.wsUrl || "", token: hit.token || BAKED_BRIDGE_TOKEN, cloud: Object.assign({}, hit.cloud || {}) };
+          if (cloudMode) connectCloudFor(cloudCtx, false);
+          else if (shellCloud) bootstrapCloud();
+          else { switchToCloudSource(false); } // 壳/LAN 形态首启云链（内部 bootstrap 按 ACTIVE 选中并切视角）
+        }
+        if (!cloudMode && typeof setSourceView === "function" && viewSource() !== "cloud") setSourceView("cloud");
+        renderCloudUI(); refreshSourceSwitchers();
+        try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+        showToast("已切换到 " + (hit.name || hostOf(hit.wsUrl) || "云桥"));
+      }
 
       // ---------- 单活动云源运行时上下文（005 单源模型；字段口径=旧壳 ensureCtx 云链子集） ----------
       const cloudCtx = {
@@ -10778,6 +10882,82 @@ function connectLan(ctx) {
         showToast("正在配对云桥…");
         submitPairCodeWith(code);
       }
+      // W-SDEL 删除确认门：正在连接的源（在线/连接中）删除需二次确认（明示断连影响）；
+      // 离线/未连接的死条目直接删——正是「删掉失效条目重新添加」的用户主路径，不设卡
+      function deleteCloudServerUI(entry) {
+        if (!entry || !entry.id) return;
+        const isCur = cloudCtx.cfg && cloudCtx.cfg.id === entry.id;
+        const live = isCur && (cloudCtx.status === "online" || cloudCtx.status === "connecting");
+        const label = sdelDisplayName(entry, isCur);
+        if (live && !confirm("正在连接「" + label + "」，删除将断开连接。确定删除？")) return;
+        if (deleteCloudServer(entry.id)) showToast("已删除服务器「" + label + "」");
+      }
+      // W-SDEL 编辑弹窗（名称 / 服务器地址 / 桥令牌——旧壳 saveSrvBtn 编辑分支语义移植）：
+      // 地址未变=保配对身份；地址变更=换桥，配对身份重置需重新输码（保存后明示）。
+      // 编辑当前连接源且字段变更 → 断开重连（旧壳「改动连接相关字段即重连该源」）。
+      function openEditServerUI(entry) {
+        if (!entry || !entry.id) return;
+        closeTransientOverlays();
+        if (document.querySelector("[data-edit-pop]")) return;
+        const back = document.createElement("div");
+        back.className = "pair-pop-backdrop";
+        back.dataset.editBack = "";
+        const pop = document.createElement("div");
+        pop.className = "create-pop add-server-pop";
+        pop.dataset.editPop = "";
+        pop.setAttribute("role", "dialog");
+        pop.setAttribute("aria-modal", "true");
+        pop.setAttribute("aria-label", "编辑服务器");
+        pop.innerHTML = '<h3>编辑服务器</h3>'
+          + '<p class="create-sub">改动地址将重置配对（换桥需重新输码）· 改动连接字段即重连此源</p>'
+          + '<div class="create-label">名称</div>'
+          + '<input class="create-field" data-edit-name type="text" maxlength="40" placeholder="如：家里 Mac" aria-label="服务器名称" value="' + escapeHtml(String(entry.name || "")) + '">'
+          + '<div class="create-label">服务器地址</div>'
+          + '<input class="create-field" data-edit-url type="text" placeholder="cc.humumu.online/cloud" aria-label="服务器地址" value="' + escapeHtml(String(entry.wsUrl || "")) + '">'
+          + '<div class="create-label">桥令牌</div>'
+          + '<input class="create-field" data-edit-token type="text" placeholder="留空沿用当前令牌" aria-label="桥令牌" value="">'
+          + '<div class="pair-foot"><span class="add-hint">删除源走列表行 ✕ 钮</span><span style="display:flex;gap:8px"><button class="secondary-btn" type="button" data-edit-close>取消</button><button class="primary-btn" type="button" data-edit-save>保存</button></span></div>';
+        const close = () => { pop.remove(); back.remove(); };
+        const save = () => {
+          const rawUrl = String((pop.querySelector("[data-edit-url]") || {}).value || "").trim().replace(/\/+$/, "");
+          let wsUrl = rawUrl;
+          if (wsUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(wsUrl)) wsUrl = "wss://" + wsUrl; // 云桥语义：裸域名按 wss 补全（submitAddServer 同口径）
+          const name = String((pop.querySelector("[data-edit-name]") || {}).value || "").trim();
+          const token = String((pop.querySelector("[data-edit-token]") || {}).value || "").trim();
+          const wasCur = cloudCtx.cfg && cloudCtx.cfg.id === entry.id;
+          const relayName = String(cloudCtx.relayName || "");
+          const r = updateSharedCloudServer(entry.id, { name, wsUrl, token });
+          if (r === null) { showToast("源列表数据损坏，已跳过写入（保护既有数据）"); close(); return; }
+          if (!r.entry) { showToast("该服务器已不存在"); close(); renderCloudUI(); return; }
+          // 在线源改名同步 override（顶栏/会话徽章经 sourceDisplayName 跟随，与源菜单 ✎ 同效）
+          if (wasCur && cloudCtx.status === "online" && relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(relayName)) setSourceNameOverride(relayName, name);
+          if (wasCur) {
+            // 当前连接源字段变更 → 断开重连（地址变了会重置配对，重连后走输码）
+            const changed = r.addrChanged || !!token;
+            cloudDisconnect();
+            cloudCtx.cfg = { id: r.entry.id, name: r.entry.name, kind: "cloud", wsUrl: r.entry.wsUrl || "", token: r.entry.token || BAKED_BRIDGE_TOKEN, cloud: Object.assign({}, r.entry.cloud || null) };
+            if (cloudMode || shellCloud) bootstrapCloud();
+            showToast(r.addrChanged ? "地址已变更 · 需重新输码配对" : changed ? "已保存 · 正在重连" : "已保存");
+          } else {
+            showToast(r.addrChanged ? "已保存 · 地址变更，连接时需重新配对" : "已保存");
+          }
+          close();
+          renderCloudUI(); refreshSourceSwitchers();
+          try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+        };
+        back.addEventListener("click", close);
+        pop.addEventListener("click", (e) => {
+          if (e.target.closest("[data-edit-close]")) { close(); return; }
+          if (e.target.closest("[data-edit-save]")) { save(); return; }
+        });
+        pop.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return; // IME 守卫（005 既有军规）
+          if (e.target.closest && e.target.closest("[data-edit-name], [data-edit-url], [data-edit-token]")) { e.preventDefault(); save(); }
+        });
+        document.body.appendChild(back);
+        document.body.appendChild(pop);
+        setTimeout(() => { const el = pop.querySelector("[data-edit-name]"); if (el) { try { el.focus(); el.select(); } catch {} } }, 60);
+      }
       function cloudDisconnect() {
         cloudCtx.pollGen++; // 掐掉轮询循环
         clearInterval(cloudCtx.pairTimer); cloudCtx.pairTimer = 0;
@@ -10806,43 +10986,83 @@ function connectLan(ctx) {
         return cloudUIOn() ? "本机 · 云桥 · " + (cloudCtx.statusText || "未连接") : "端口 " + (location.port || "8787") + " · 事件流自动补发";
       }
       function cloudRetryBtn() { return isCloudRetryable() ? '<button class="connection-reconnect" data-cloud-retry type="button">重试</button>' : ""; }
-      // 桌面 connections 面板 slot 内容：云形态=云桥状态行+本页设备行+（未配对时）输码表单；
-      // 非云形态=原静态云桥行（LAN 形态观感不变）
+      // 桌面 connections 面板 slot 内容（W-SDEL 重做：服务器条目列表管理——多条+连接+编辑+删除；
+      // 「云桥」从唯一固定项降级为其中一条默认条目）。空列表=引导行；云形态追加本页设备行与
+      // （未配对时）输码表单。非云形态同样列条目——死条目清理入口不依赖云链激活态。
+      function sdelDisplayName(entry, isCurrent) {
+        if (isCurrent && cloudCtx.hasSnapshot && cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName))) return sourceDisplayName(String(cloudCtx.relayName));
+        const n = String((entry && entry.name) || "");
+        return n && n !== "云桥" ? n : (hostOf(entry && entry.wsUrl) || "云桥");
+      }
+      function sdelSubLine(s, isCur, paired) {
+        if (isCur) return (cloudCtx.statusText || "未连接") + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "");
+        return s.wsUrl ? hostOf(s.wsUrl) : "未配置"; // 视觉审查①：副行只留地址，配对状态统一交给右侧 tag（不做双份）
+      }
+      function sdelServerRows(mobile) {
+        const entries = cloudSharedCloudServers();
+        const curId = cloudCtx.cfg && cloudCtx.cfg.id;
+        return entries.map((s) => {
+          const isCur = s.id === curId;
+          const paired = !!(s.cloud && s.cloud.paired);
+          const disp = sdelDisplayName(s, isCur);
+          const sub = sdelSubLine(s, isCur, paired);
+          if (mobile) {
+            return '<div class="mobile-task"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong style="font-size:var(--fs-B)">' + escapeHtml(disp) + '</strong>'
+              + (isCur ? "" : '<button class="primary-btn" data-srv-connect="' + s.id + '" type="button" style="font-size:var(--fs-A)">连接</button>')
+              + (isCur ? cloudRetryBtn() : "")
+              + '<button class="row-edit" data-srv-edit="' + s.id + '" type="button" title="编辑此服务器">✎</button>'
+              + '<button class="row-del" data-srv-delete="' + s.id + '" type="button" title="删除此服务器">✕</button></div>'
+              + '<p style="margin:4px 0 0;color:var(--dim)">' + escapeHtml(sub) + '</p></div>';
+          }
+          const [cls, label] = isCur ? cloudTagOf() : (paired ? ["info", "已保存"] : ["action", "待配对"]); // 视觉审查②：与既有行措辞统一（待配对）
+          return '<div class="settings-row' + (isCur ? " cloud-cur" : "") + '"><span class="avatar">☁</span><div><strong>' + escapeHtml(disp) + '</strong><p>' + escapeHtml(sub) + '</p></div>'
+            + (isCur ? "" : '<button class="row-share" data-srv-connect="' + s.id + '" type="button" title="连接此服务器">连接</button>')
+            + (isCur ? cloudRetryBtn() : "")
+            + '<button class="row-edit" data-srv-edit="' + s.id + '" type="button" title="编辑此服务器（名称 / 地址 / 令牌）">✎</button>'
+            + '<button class="row-del" data-srv-delete="' + s.id + '" type="button" title="删除此服务器">✕</button>'
+            + '<span class="tag ' + cls + '">' + label + '</span></div>';
+        }).join("");
+      }
       function cloudSettingsRows() {
-        if (!cloudUIOn()) {
-          return '<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>未添加远程源 · 点「＋ 添加服务器」连接其他电脑</p></div><button class="row-share" data-settings-add type="button" title="填云桥地址 + 8 位配对码，把其他电脑加为数据源">＋ 添加</button><span class="tag info">未添加</span></div>';
+        const entries = cloudSharedCloudServers();
+        let html = "";
+        if (!entries.length) {
+          html += '<div class="settings-row"><span class="avatar">☁</span><div><strong>远程源</strong><p>未添加远程源 · 点「＋ 添加」连接其他电脑</p></div><button class="row-share" data-settings-add type="button" title="填服务器地址 + 8 位配对码，把其他电脑加为数据源">＋ 添加</button><span class="tag info">未添加</span></div>';
+        } else {
+          html += sdelServerRows(false);
+          html += '<div class="settings-row"><span class="avatar">＋</span><div><strong>添加服务器</strong><p>8 位配对码连接其他电脑的 CC Deck</p></div><button class="row-share" data-settings-add type="button">＋ 添加</button></div>';
         }
-        const [cls, label] = cloudTagOf();
-        const peer = cloudPeerOf(cloudCtx.cfg);
-        let html = '<div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · ' + escapeHtml(sourceDisplayName(cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName)) ? cloudCtx.relayName : hostOf(cloudCtx.cfg.wsUrl))) + '</strong><p>'
-          + escapeHtml(cloudCtx.statusText || "未连接") + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "") + '</p></div>'
-          + (cloudCtx.status === "online" && cloudCtx.relayName ? '<button class="row-share" data-source-rename data-relay-name="' + escapeHtml(String(cloudCtx.relayName)) + '" type="button" title="重命名此源">✎ 改名</button>' : "")
-          + '<span class="tag ' + cls + '">'
-          + label + '</span>' + cloudRetryBtn() + '</div>';
-        html += '<div class="settings-row"><span class="avatar">▣</span><div><strong>本页设备 · ' + (ckp ? escapeHtml(devId(ckp.publicKey, "wb")) : "—")
-          + '</strong><p>' + (peer ? "已配对服务器 " + escapeHtml(peer.relay_dev) : cloudCtx.pendingPair ? "配对进行中" : "未配对 · 输码或打开配对链接")
-          + '</p></div><span class="tag ' + (peer ? "done" : "action") + '">' + (peer ? "已配对" : "待配对") + '</span></div>';
-        if (!peer) {
-          html += '<div class="settings-row"><span class="avatar">◈</span><div style="flex:1;min-width:0"><strong>输入配对码</strong>'
-            + '<p>电脑端 CC Deck 设置 → relay 页领取 8 位码</p>'
-            + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
-            + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="8 位配对码" aria-label="8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em">'
-            + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div></div></div>';
+        if (cloudUIOn()) {
+          const peer = cloudPeerOf(cloudCtx.cfg);
+          html += '<div class="settings-row"><span class="avatar">▣</span><div><strong>本页设备 · ' + (ckp ? escapeHtml(devId(ckp.publicKey, "wb")) : "—")
+            + '</strong><p>' + (peer ? "已配对服务器 " + escapeHtml(peer.relay_dev) : cloudCtx.pendingPair ? "配对进行中" : "未配对 · 输码或打开配对链接")
+            + '</p></div><span class="tag ' + (peer ? "done" : "action") + '">' + (peer ? "已配对" : "待配对") + '</span></div>';
+          if (!peer) {
+            html += '<div class="settings-row"><span class="avatar">◈</span><div style="flex:1;min-width:0"><strong>输入配对码</strong>'
+              + '<p>电脑端 CC Deck 设置 → relay 页领取 8 位码</p>'
+              + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
+              + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="8 位配对码" aria-label="8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em">'
+              + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div></div></div>';
+          }
         }
         return html;
       }
-      // 移动端「连接与设备」详情的云桥 lane（720px 视口下表单可输入可提交——输入框显式 14px 防 iOS 聚焦缩放）
+      // 移动端「连接与设备」详情的远程源 lane（W-SDEL 同步列表化；720px 视口下表单可输入可提交——
+      // 输入框显式 14px 防 iOS 聚焦缩放）。与桌面 sdelServerRows 共用 data-* 锚（文档级委托同一套）
       function cloudMobileLaneInner() {
-        if (!cloudUIOn()) return '<div class="mobile-lane-head"><span>云桥</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div>';
-        const [cls, label] = cloudTagOf();
-        const peer = cloudPeerOf(cloudCtx.cfg);
-        let html = '<div class="mobile-lane-head"><span>云桥</span><span class="tag ' + cls + '">' + label + '</span>' + cloudRetryBtn() + '</div>';
-        html += '<div class="mobile-task">' + escapeHtml(cloudCtx.statusText || "未连接") + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "") + '</div>';
-        if (!peer) {
-          html += '<div class="mobile-task"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
-            + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="8 位配对码" aria-label="8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:8em;font-size:var(--fs-A)">'
-            + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div>'
-            + '<p style="margin:6px 0 0;color:var(--dim)">电脑端 CC Deck 设置 → relay 页领取</p></div>';
+        const entries = cloudSharedCloudServers();
+        if (!entries.length) return '<div class="mobile-lane-head"><span>远程源</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div>';
+        let html = '<div class="mobile-lane-head"><span>远程源 · ' + entries.length + '</span></div>';
+        html += sdelServerRows(true);
+        html += '<div class="mobile-task"><button class="primary-btn" data-settings-add type="button" style="font-size:var(--fs-A)">＋ 添加服务器</button></div>';
+        if (cloudUIOn()) {
+          const peer = cloudPeerOf(cloudCtx.cfg);
+          if (!peer) {
+            html += '<div class="mobile-task"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+              + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="8 位配对码" aria-label="8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:8em;font-size:var(--fs-A)">'
+              + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div>'
+              + '<p style="margin:6px 0 0;color:var(--dim)">电脑端 CC Deck 设置 → relay 页领取</p></div>';
+          }
         }
         return html;
       }
@@ -10877,6 +11097,16 @@ function connectLan(ctx) {
       document.addEventListener("click", (event) => {
         if (!event.target.closest("[data-settings-add]")) return;
         openAddServerUI();
+      });
+      // W-SDEL 服务器条目三锚委托（桌面设置页与移动 lane 共用；不带 cloudUIOn 门——
+      // 非云形态也要能清理死条目/连接已保存源，云链激活由 activateCloudServer 内部接管）
+      document.addEventListener("click", (event) => {
+        const conn = event.target.closest("[data-srv-connect]");
+        if (conn) { activateCloudServer(String(conn.dataset.srvConnect || "")); return; }
+        const del = event.target.closest("[data-srv-delete]");
+        if (del) { deleteCloudServerUI(sharedCloudEntryOf(String(del.dataset.srvDelete || ""))); return; }
+        const edit = event.target.closest("[data-srv-edit]");
+        if (edit) { openEditServerUI(sharedCloudEntryOf(String(edit.dataset.srvEdit || ""))); return; }
       });
       document.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return; // IME 守卫（005 既有军规）
