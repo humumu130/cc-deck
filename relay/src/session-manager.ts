@@ -1343,7 +1343,7 @@ export class SessionManager {
     for (const c of candidates) {
       if (revived >= limit) break;
       try {
-        this.resumeAgent(c.s, "[relay 自动恢复] relay 重启完成，检测到本会话仍有未完成任务。请直接读取任务清单继续推进工作，无需复述上下文。");
+        this.resumeAgent(c.s, "[relay 自动恢复] relay 重启完成，检测到本会话仍有未完成任务。" + this.reviveInstruction(c.s));
         revived++;
       } catch (e) {
         console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} 恢复失败: ${e instanceof Error ? e.message : String(e)}`);
@@ -1357,6 +1357,13 @@ export class SessionManager {
   // 返回 null=可拉；字符串=skip 原因（审计/测试可断言）。boot 扫描与事件驱动激活器
   // 共用同一链——两条入口纪律零分叉（外部/在场/parked/退休/互斥/pin 休眠/熔断/锚点/
   // 待办/48h 新鲜度，语义逐条搬自 autoReviveManaged 原实现，行为零变）。
+  // W-CDXREV 复活注入指令 engine 感知：claude 读任务清单续跑（既有口径）；codex 无
+  // Claude 系任务存储可读——改为「从中断处接续」口径（resume 上下文在 thread 里）
+  private reviveInstruction(s: ManagedSession): string {
+    return s.state.engine === "codex"
+      ? "请从中断处接续推进当前任务：先简述已完成部分与下一步，再继续执行。"
+      : "请直接读取任务清单继续推进工作，无需复述上下文。";
+  }
   private reviveEligible(s: ManagedSession): string | null {
     if (s.state.external) return "external";
     if (s.agent) return "agent-alive";
@@ -1375,9 +1382,20 @@ export class SessionManager {
     // W-LEADFIX 熔断豁免：连续 resume 失败冷却期内不自动拉起（防死循环换入口重演）
     if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) return "resume-cooldown";
     if (!s.state.relay_session_id) return "no-resume-anchor";
-    // #17 雇员按家读取任务存储
-    const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
-    if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    // W-CDXREV（用户 1013 指令根治）：codex 引擎无 Claude 系任务存储（readTaskStoreTodos
+    // 恒 null=拉活死路，重启后 codex 会话全变历史只读）——以状态信号判活工作：
+    // ERROR=回合失败死流（与激活器死信号同源）；WORKING=重启时在跑被腰斩（回放僵尸，
+    // 语义等价 claude「有未完成待办」）；DONE=正常收工不拉（与 claude 语义一致）。
+    // resume 链 codex 已通（resumeAgent→newAgent(engine:"codex")→CodexAgentSession
+    // exec resume <thread_id>，relay_session_id=thread_id 即 resume 锚）。
+    // 48h 新鲜度/互斥/冷却等闸门在后段共用不变
+    if (s.state.engine === "codex") {
+      if (s.state.status !== "ERROR" && s.state.status !== "WORKING") return "codex-idle";
+    } else {
+      // #17 雇员按家读取任务存储
+      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
+      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    }
     // 48h 新鲜度：残留的"pending 愿望"不是活工作
     if (Date.now() - s.state.updated_at > 48 * 3600_000) return "stale-48h";
     return null;
@@ -1396,10 +1414,10 @@ export class SessionManager {
     if (why) return { ok: false, skipped: why };
     const title = s.state.title || id.slice(0, 8);
     try {
-      this.resumeAgent(s, `[Agent 激活器 · ${source}] ${reason}。检测到本会话仍有未完成任务，已自动恢复。请直接读取任务清单继续推进工作，无需复述上下文。`);
+      this.resumeAgent(s, `[Agent 激活器 · ${source}] ${reason}。检测到本会话仍有未完成任务，已自动恢复。` + this.reviveInstruction(s));
       this.upsertNotification("system", "activator-revive", id, {
         title: "会话已自动复活（激活器）",
-        body: `${title}：${reason}——已从任务清单自动恢复（来源：${source}）`,
+        body: `${title}：${reason}——已自动恢复（来源：${source}）`,
         severity: "info", group: "attention", actionable: false, sessionId: id, domain: "session", returnPath: "/",
       });
       return { ok: true };

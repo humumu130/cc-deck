@@ -230,6 +230,65 @@ delete process.env.CCR_ORG_DIR;
   rmSync(join(TASKS, SID_EMP3), { recursive: true, force: true });
 }
 
+// ---------- W-CDXREV codex 引擎拉活覆盖（用户 1013 指令根治） ----------
+// codex 无 Claude 系任务存储：资格=状态信号（WORKING=被腰斩 / ERROR=死流；DONE=收工不拉）；
+// resume 锚=relay_session_id（=codex thread_id，newAgent engine:"codex" → exec resume）
+{
+  // 独立 mgr + 记录器：上方用例的残留会话会挤占 limit 配额（updated_at 更新），必须隔离
+  const resumes2: { resume?: string; text: string }[] = [];
+  const mgr2 = new SessionManager(new EventBus(), loadConfig());
+  mgr2.setAgentFactory((_cwd, _model, _cb, initialPrompt, opts) => {
+    resumes2.push({ resume: opts?.resume, text: initialPrompt ?? "" });
+    const agent: AgentLike = {
+      id: `fake-cdx-${resumes2.length}`, startedAt: Date.now(), ended: false,
+      sendMessage() {}, allow: () => false, deny: () => false, answer: () => false,
+      stop: async () => {}, setPermissionMode: async () => {},
+    };
+    return agent;
+  });
+  const mkCdx = (sid: string, cliSid: string, updated: number, extra: Record<string, unknown>): [string, ReplayedSession] => [
+    sid,
+    { state: { ...mk(sid, cliSid, false, updated)[1].state, ...extra }, logs: [] } as unknown as ReplayedSession,
+  ];
+  const SID_CDX_THR = "cdx-thread-aaa"; // codex thread_id 兼作 relay_session_id
+  mgr2.adopt(new Map([
+    mkCdx("cdx-working", SID_CDX_THR, Date.now(), { engine: "codex", status: "WORKING" }),
+    mkCdx("cdx-error", "cdx-thread-bbb", Date.now() - 2000, { engine: "codex", status: "ERROR" }),
+    mkCdx("cdx-done", "cdx-thread-ccc", Date.now() - 3000, { engine: "codex", status: "DONE" }),
+    mkCdx("cdx-noanchor", "", Date.now(), { engine: "codex", status: "WORKING" }), // 无锚点：首回合未完成
+    mkCdx("cdx-stale", "cdx-thread-ddd", Date.now() - 72 * 3600_000, { engine: "codex", status: "WORKING" }), // 超 48h
+    // 引擎缺省（claude）行为零变：DONE+无待办不拉（守既有语义防 codex 分叉误伤）
+    mkCdx("cla-done", SID_IDLE, Date.now() - 4000, { status: "DONE" }),
+  ]));
+  const nCdx = mgr2.autoReviveManaged();
+  assert(nCdx === 2, `codex WORKING/ERROR 腰斩死流被拉起、DONE 不拉（WORKING+ERROR 两席）got=${nCdx}`);
+  assert(resumes2.some((r) => r.resume === SID_CDX_THR), "codex resume 锚=relay_session_id（thread_id）");
+  assert(resumes2.filter((r) => r.resume === "cdx-thread-bbb").length === 1, "codex ERROR 死流同被拉起");
+  assert(!resumes2.some((r) => r.resume === "cdx-thread-ccc"), "codex DONE 正常收工不拉（与 claude 语义一致）");
+  assert(!resumes2.some((r) => r.resume === ""), "codex 无锚点仍被拦（no-resume-anchor 闸门共用）");
+  assert(!resumes2.some((r) => r.resume === "cdx-thread-ddd"), "codex 超 48h 陈旧不拉（新鲜度闸门共用）");
+  assert(!resumes2.some((r) => r.resume === SID_IDLE), "claude 缺省路径行为零变（DONE+无待办不拉）");
+  const wTxt = resumes2.find((r) => r.resume === SID_CDX_THR)?.text ?? "";
+  assert(wTxt.includes("中断处接续"), `codex 复活文案=中断接续口径（非任务清单）got=${wTxt.slice(0, 60)}`);
+  {
+    const st = mgr2.snapshot().find((s) => s.session_id === "cdx-working")!;
+    assert(st.status === "WORKING" && !st.historical, "codex 被拉起翻 WORKING、摘 historical");
+  }
+  // 激活器入口同链（reviveManagedSession）：cdx-error 刚被 autoRevive 拉起（agent 在场/
+  // resumePending 互斥），预期被闸门拦下——防双拉纪律先于 engine 分叉
+  const rAct = mgr2.reviveManagedSession("cdx-error", "test", "回合失败");
+  assert(rAct.ok === false && (rAct.skipped === "resume-in-flight" || rAct.skipped === "agent-alive"),
+    `互斥/在场闸门先于 engine 分叉生效（防双拉）got=${JSON.stringify(rAct)}`);
+  // DONE 态 codex 走激活器入口：idle skip（engine 分叉对两入口同效）
+  const rDone = mgr2.reviveManagedSession("cdx-done", "test", "误触发");
+  assert(rDone.ok === false && rDone.skipped === "codex-idle", `DONE 态 codex 激活器入口同拦 got=${JSON.stringify(rDone)}`);
+  // ERROR 态未被拉过的 codex（模拟激活器独立发现死流）：engine 分叉放行真复活
+  mgr2.adopt(new Map([mkCdx("cdx-error2", "cdx-thread-eee", Date.now(), { engine: "codex", status: "ERROR" })]));
+  const rAct2 = mgr2.reviveManagedSession("cdx-error2", "test", "回合失败");
+  assert(rAct2.ok === true, `激活器事件驱动复活 codex 死流可达 got=${JSON.stringify(rAct2)}`);
+  assert(resumes2.some((r) => r.resume === "cdx-thread-eee" && r.text.includes("激活器")), "激活器路径 codex 同拉起（含 engine 感知文案）");
+}
+
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
 rmSync(join(TASKS, SID_IDLE), { recursive: true, force: true });
 rmSync(join(TASKS, SID_PARKED), { recursive: true, force: true });
