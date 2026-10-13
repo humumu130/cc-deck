@@ -335,6 +335,13 @@
        会话域（工作目录/最近活动）已迁第三列 head（.head-meta），顶栏不再随会话抖动 */
     .windowbar-hint {flex: 0 1 auto; min-width: 0; max-width: 340px; overflow: hidden; color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap;}
     .windowbar-hint:empty { display: none; }
+    /* 1013 件9：顶栏页内刷新钮——重拉全量 SNAPSHOT（保 tab/滚动），主连接零扰动 */
+    .windowbar-refresh { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+    .windowbar-refresh:hover { color: var(--text); background: var(--hover); }
+    .windowbar-refresh .icon-inline { width: 14px; height: 14px; }
+    .windowbar-refresh.busy { pointer-events: none; color: var(--faint); }
+    .windowbar-refresh.busy .icon-inline { animation: wrefSpinKf .8s linear infinite; }
+    @keyframes wrefSpinKf { to { transform: rotate(360deg); } }
     /* #158-②③ windowbar 桌面化：Tauri 壳内真拖拽区+Windows 三钮（浏览器保持原型装饰零变化） */
     .windowbar { user-select: none; -webkit-user-select: none; }
     .windowbar-winbtns { display: none; align-items: stretch; flex: none; margin: 0 -13px 0 6px; }
@@ -453,21 +460,28 @@
     .pair-pop-backdrop { position: fixed; inset: 0; z-index: 95; background: color-mix(in srgb, var(--bg0) 55%, transparent); }
     /* FB3 配对弹窗四件套：QR 图 / 8 位码 / 链接+复制 / 已连设备列表（参照旧版 relay 页两栏制） */
     .pair-grid { display: flex; gap: 14px; padding: 6px; }
-    .pair-qr-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    /* 1013 件1-3：qr-col 定宽——原 flex:none 无宽约束，智能码就绪后 small 换长文案把左栏
+       撑到 ~290px 不可收缩，右栏被压塌（码折行贴边/说明竖排/复制钮挤竖/左栏下方死空白四症同根）；
+       定宽 148px=QR 118px+余量，small 限宽内正常换行，两栏回到设计比例 */
+    .pair-qr-col { flex: none; width: 148px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
     .pair-qr-col canvas { width: 118px; height: 118px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .pair-qr-col small, .pair-code-note, .pair-dev small { color: var(--dim); font: var(--fs-B) var(--mono); }
+    .pair-qr-col small { max-width: 100%; text-align: center; line-height: 1.5; }
     .pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
     .pair-code-box { padding: 9px 10px; border: 1px solid var(--selected-line); border-radius: 9px; background: var(--surface1); text-align: center; }
-    .pair-code-digits { color: var(--text-strong); font: 700 22px/1.2 var(--mono); letter-spacing: .12em; font-variant-numeric: tabular-nums; }
-    .pair-code-note { display: block; margin-top: 4px; text-align: center; }
+    /* 件1：8 位码两组四位分两行（JS 落 <br>），nowrap 防组内折行贴边 */
+    .pair-code-digits { color: var(--text-strong); font: 700 24px/1.3 var(--mono); letter-spacing: .14em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pair-code-note { display: block; margin-top: 5px; text-align: center; line-height: 1.5; }
     .pair-link-row { display: flex; gap: 6px; }
-    .pair-link-row input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono); }
+    .pair-link-row input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; } /* 1013 件1 追补：截断明示（默认 input 硬切无省略号）*/
+    .pair-link-row .secondary-btn { flex: none; } /* 件2：复制钮不被挤竖（原无收缩保护，右栏塌陷时被压成竖条）*/
     .pair-devs { margin: 8px 6px 4px; padding: 7px 6px 3px; border-top: 1px solid var(--line-soft); }
     .pair-dev { display: flex; align-items: center; gap: 8px; padding: 6px 4px; }
     .pair-dev strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
     .pair-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 6px 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
     .pair-cloud-link { color: var(--info); font-size: var(--fs-E); text-decoration: none; cursor: pointer; }
     .pair-cloud-link:hover { text-decoration: underline; }
+    @media (max-width: 400px) { .pair-grid { flex-direction: column; } .pair-qr-col { width: auto; } } /* 1013 窄宽档：360px 类视口两栏纵向堆叠（右栏不再被压到 ~130px）*/
     /* B10 新建会话弹窗：居中对话框（引擎选择/模型二层/初始指令/目录+浏览+历史/两开关）。
        浮层描边合法（军规④）；行内不再画线（军规②③），分组靠间距+小节标题 */
     .create-pop { position: fixed; top: 50%; left: 50%; z-index: 96; display: block; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; padding: 16px 16px 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: var(--shadow); transform: translate(-50%, -50%); }
@@ -1378,14 +1392,18 @@
     #d-team .task-card.compact { padding: 7px 9px; }
     #d-team .task-card.compact > strong { font-size: var(--fs-B); }
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
-    /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；向上弹防
-       workspace-body 底缘裁剪，pointer-events:none 防闪烁，z-index 盖过后续泳道卡 */
+    /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；
+       1013 件8 重设计：原「卡上方通栏」纵向受限、长内容桌面显示不完整——改鼠标侧方弹出
+       （.flip 由 JS 委托择侧：右侧空间不足翻左侧），宽度放开 400px（上限 50vw），纵向
+       max-height 卡内滚动；字号整体降档+紧凑行距（宽卡换少行数）；pointer-events:none
+       防闪烁，z-index 盖过后续泳道卡 */
     #d-team .task-card.compact { position: relative; }
-    #d-team .task-card .task-pop { display: none; position: absolute; z-index: 30; left: 3px; right: 3px; bottom: calc(100% + 4px); padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); pointer-events: none; text-align: left; }
+    #d-team .task-card .task-pop { display: none; position: absolute; z-index: 30; top: 0; left: calc(100% + 8px); width: min(400px, 50vw); max-height: min(460px, calc(100vh - 40px)); overflow-y: auto; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); pointer-events: none; text-align: left; }
     #d-team .task-card:hover .task-pop { display: block; }
-    #d-team .task-pop b { display: block; color: var(--text-strong); font-size: var(--fs-B); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
-    #d-team .task-pop p { display: block; margin: 4px 0 0; color: var(--dim); font-size: var(--fs-D); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
-    #d-team .task-pop span { display: block; margin-top: 5px; color: var(--faint); font-size: var(--fs-D); white-space: normal; }
+    #d-team .task-card .task-pop.flip { left: auto; right: calc(100% + 8px); }
+    #d-team .task-pop b { display: block; color: var(--text-strong); font-size: var(--fs-B); line-height: 1.4; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop p { display: block; margin: 4px 0 0; color: var(--dim); font-size: var(--fs-B); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop span { display: block; margin-top: 5px; color: var(--faint); font-size: var(--fs-C); line-height: 1.4; white-space: normal; }
     /* 追加⑨：甬道拉高吃满可用纵向——看板 pane flex 列布局，board flex:1 吃满 pane 剩余高
        （min-height:100% 百分比参照链断裂：pane 高度 auto 时百分比失效，故走 flex），
        grid stretch 等高，底缘贴容器底 */
@@ -1406,6 +1424,8 @@
     #d-team .task-owner .q-num { flex: none; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 999px; background: var(--tag-bg); color: var(--dim); font: 600 10px/15px var(--mono); text-align: center; font-style: normal; }
     #d-team .task-owner .q-run { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--working); box-shadow: 0 0 0 2px color-mix(in srgb, var(--working) 22%, transparent); }
     #d-team .lane-subhead { display: flex; align-items: center; gap: 5px; margin: 9px 2px 5px; color: var(--dim); font-size: var(--fs-D); font-weight: 700; }
+    /* 1013 件6：分区头成员小标识（角色字母圆点）+计数小灰字（.subhead-count 原有） */
+    #d-team .lane-subhead .lane-subhead-ava { flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--dim); font: 700 9px/1 var(--mono); font-style: normal; }
     #d-team .lane-subhead:first-child { margin-top: 1px; }
     #d-team .lane-subhead .subhead-count { color: var(--faint); font-weight: 400; }
     /* UIPOLISH3 件四⑩：团队卡状态徽章与指示灯整合——单元素状态胶囊（点色随态，替代裸灯+文字 tag 两件套） */
@@ -1461,11 +1481,39 @@
     .metric:first-child { border-left: 0; }
     .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
     .metric span {color: var(--dim); font-size: var(--fs-B);}
-    /* W-PROJAGG：总览 4 卡 = 可点速览卡（点卡切下方 mini 列表），选中态/悬停沿全局 selected/hover 语言 */
+    /* W-PROJIA 案A：总览 4 卡 = 纯摘要 + 跳转入口（点卡切主区对应 tab，不嵌内容列表）。
+    label 行 = 图标 + 名称 + → 指示（hover 提亮传达可点跳转）；数字大号（.metric b 原排版启用） */
     .project-overview .metric { cursor: pointer; font: inherit; text-align: left; transition: background .18s ease; }
     .project-overview .metric:hover { background: var(--hover); }
-    .project-overview .metric.selected { background: var(--selected-bg); box-shadow: inset 0 -2px 0 var(--brand); }
-    .project-overview .metric.selected span { color: var(--text-strong); }
+    .project-overview .metric .metric-label { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: var(--fs-B); }
+    .project-overview .metric .metric-label .go { margin-left: auto; color: var(--dim); opacity: .45; font-size: var(--fs-C); transition: opacity .15s ease, color .15s ease; }
+    .project-overview .metric:hover .metric-label .go, .project-overview .metric:focus-visible .metric-label .go { opacity: 1; color: var(--brand); }
+    /* W-PROJIA 案B：长页分区（tab 栏移除，四卡=分区锚点）——scroll-margin 防分区头顶格 */
+    .proj-section { padding-top: 4px; margin-bottom: 16px; scroll-margin-top: 10px; }
+    .proj-section + .proj-section { border-top: 1px solid var(--line-soft); padding-top: 14px; }
+    /* W-PROJIA 案C（v8 美学基准 2026-10-13 定版）：项目域主区 = v8 dhead/psec/vrow 语言
+    （docs/mockups/v8-ui-interactive-v2.html「V8 项目域局部」），变量映射现网主题体系
+    （p-dim→dim / p-faint→faint / p-line→line-soft / p-panel→surface2 / p-text→text-strong），
+    暗亮双主题自动适配，不引入第二套色板。头部 meta 行替代四大卡与蓝条；分区=头+代表条目+
+    就地展开（默认收 3 条，点「全部 N 条」就地展开不跳页）；vrow 点击跳来源域（v8 语义）。 */
+    #d-project .workspace-head .live { font-size: var(--fs-C); color: var(--done); white-space: nowrap; }
+    #d-project .proj-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 10px; color: var(--dim); font-size: var(--fs-C); }
+    #d-project .proj-meta .sep { color: var(--faint); }
+    #d-project .proj-meta .jump-hint { color: var(--faint); }
+    .psec { padding: 10px 0 2px; }
+    .psec h5 { margin: 0 0 2px; font-size: var(--fs-C); color: var(--dim); font-weight: 600; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; }
+    .psec h5 .cnt { color: var(--faint); font-weight: 500; }
+    .psec h5 .jump { margin-left: auto; font-size: var(--fs-D); color: var(--brand); font-weight: 500; cursor: pointer; border: 0; background: transparent; padding: 0; font-family: inherit; }
+    .psec h5 .jump:hover { text-decoration: underline; }
+    .vrow { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); margin: 6px 0; font-size: var(--fs-B); color: var(--dim); cursor: pointer; transition: border-color .16s ease; }
+    .vrow:hover { border-color: var(--faint); }
+    .vrow .t { color: var(--text-strong); min-width: 0; }
+    .vrow .t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vrow .t .s { color: var(--faint); font-size: var(--fs-D); margin-left: 6px; }
+    .vrow .k { margin-left: auto; font-size: var(--fs-D); color: var(--faint); font-family: var(--mono); flex: none; }
+    .vrow .k.run { color: var(--done); }
+    .vrow .k.wait { color: var(--brand); }
+    .vrow .k.err { color: var(--danger, #e06a5a); }
     .mini-list-link { display: inline-block; margin: 10px 0 2px; padding: 0; border: 0; background: transparent; color: var(--brand); cursor: pointer; font-size: var(--fs-C); }
     .mini-list-link:hover { text-decoration: underline; }
     .readonly-banner {padding: 8px 10px; margin-bottom: 14px; border: 1px solid color-mix(in srgb, var(--readonly-line) 55%, transparent); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: var(--fs-B);} /* FB7：虚线清为低对比实线 */
@@ -2122,7 +2170,9 @@
        ④空闲卡降权见 .queue-card.idle strong（opacity .55 原有+标题降灰新增）
        ⑤组头吸顶（.session-list 滚动口 sticky，底带实色防透、滚动不迷路） */
     .session-group + .session-group { margin-top: 20px; }
-    .session-group > .queue-group { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 5px 8px 4px 9px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); border-left: 3px solid var(--grp-accent, var(--brand)); background: color-mix(in srgb, var(--brand) 4%, var(--surface2)); font-weight: 650; color: var(--text); }
+    /* 1013 件5（用户截图反馈）：组头下缘横线去掉（带底 tint 已够分层，双 hairline 显重）；
+       左内边距 9→6 收窄=整组视觉左移回调（配套 grpHead 去文件夹图标，标题起点贴近卡片内容缘） */
+    .session-group > .queue-group { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 5px 8px 4px 6px; border-top: 1px solid var(--line-soft); border-left: 3px solid var(--grp-accent, var(--brand)); background: color-mix(in srgb, var(--brand) 4%, var(--surface2)); font-weight: 650; color: var(--text); }
     .session-group > .queue-group:hover { color: var(--text-strong); }
     .session-group > .queue-group .grp-caret { width: 10px; font-size: 10px; color: var(--dim); }
     .session-group > .queue-group:hover .grp-caret { color: var(--text); }
@@ -2130,6 +2180,49 @@
     .session-group > .queue-group .grp-count { margin-left: 2px; padding: 1px 7px 2px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-weight: 600; font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
     #d-session .queue-card.idle strong { color: var(--dim); } /* 件C④：置灰卡标题降灰（升特异度压 #d-session .srow-r1 strong；opacity .55 基线原有） */
     .session-list-tools button.active { color: var(--text-strong); border-color: var(--border-strong); background: var(--hover); }
+    /* [t-7e0c6189] 会话列表瘦身：团队入口卡——每团队一张聚合卡（worker 会话收进团队域，
+       卡身点击跳团队域、⤢ 钮就地展开第四列；未读呼吸点 = 团队内 worker 有新输出） */
+    .team-entry { display: flex; gap: 9px; align-items: center; margin: 2px 2px; padding: 8px 9px; border: 1px dashed var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface2) 45%, transparent); cursor: pointer; }
+    .team-entry:hover { background: var(--q-row-hov); border-color: var(--border-strong); }
+    .team-entry .t-ava { flex: none; position: relative; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--info); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .team-entry .t-main { flex: 1; min-width: 0; }
+    .team-entry .t-name { display: flex; align-items: center; gap: 6px; color: var(--text-strong); font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .team-entry .t-sub { color: var(--faint); font-size: var(--fs-C); margin-top: 1px; }
+    .team-entry .t-expand { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; }
+    .team-entry .t-expand:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
+    .worker-mini-row { display: flex; gap: 3px; margin-top: 4px; }
+    .worker-mini { flex: none; position: relative; width: 16px; height: 16px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); color: var(--faint); font: 600 8px/14px var(--mono); text-align: center; }
+    .worker-mini .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
+    .worker-mini.more { border-style: dashed; }
+    /* 未读呼吸点：brand 色源 + glow 光圈动画（环色全走 var，零裸色值） */
+    .slim-unread-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; }
+    @keyframes slimPulseKf { 0% { box-shadow: 0 0 0 0 var(--glow-brand); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+    /* [t-7e0c6189] 第四列 team-drawer：该团队 worker/QA 会话列表（默认收起零占位，展开 248px；
+       覆盖式 absolute 贴检查器左缘——检查器收起时贴 42px 柄右缘） */
+    .team-drawer { position: absolute; top: 0; bottom: 0; right: var(--inspector-w, 320px); z-index: 3; display: flex; flex-direction: column; width: 248px; background: var(--queue-deep); border-left: 1px solid var(--line); box-shadow: -5px 0 18px var(--panel-shadow); }
+    .desktop-screen.inspector-collapsed .team-drawer { right: 42px; }
+    .team-drawer[hidden] { display: none; }
+    .team-drawer .drawer-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+    .team-drawer .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
+    .team-drawer .drawer-head .d-cnt { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
+    .team-drawer .drawer-body { flex: 1; overflow: hidden auto; padding: 6px 4px 8px 6px; }
+    .team-drawer .queue-card { border: 1px solid transparent; }
+    /* [t-7e0c6189] 团队域成员卡可直开：hover 亮边 + 右上角「↗ 直开」角标显形 */
+    .member-card[data-team-member-session] { cursor: pointer; position: relative; }
+    .member-card[data-team-member-session]::after { content: "↗ 直开"; position: absolute; right: 9px; top: 8px; color: var(--faint); font: 9.5px var(--mono); opacity: 0; transition: opacity .12s ease; }
+    .member-card[data-team-member-session]:hover { border-color: var(--border-strong); background: var(--hover); }
+    .member-card[data-team-member-session]:hover::after { opacity: 1; color: var(--brand); }
+    /* [t-7e0c6189] 检查器「团队成员」块：成员胶囊行（点头像=直开）+ 展开链 */
+    .member-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .member-chip { display: flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px 3px 3px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); cursor: pointer; }
+    .member-chip:hover { border-color: var(--border-strong); background: var(--hover); }
+    .member-chip .mc-ava { position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); color: var(--text-strong); font: 700 9px/19px var(--mono); text-align: center; }
+    .member-chip .mc-ava .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
+    .member-chip .mc-name { color: var(--dim); font-size: var(--fs-C); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .member-chip.unread { border-color: color-mix(in srgb, var(--brand) 42%, transparent); }
+    .member-chip.unread .mc-name { color: var(--text-strong); }
+    .slim-drawer-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 3px 9px; border: 1px solid var(--tag-border); border-radius: 6px; background: var(--tag-bg); color: var(--tag-ink); cursor: pointer; font-size: var(--fs-C); }
+    .slim-drawer-link:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
     /* #B3-17 入场工具类：新挂载节点 translateY(4px)+fade */
     @keyframes b3EnterKf { from { opacity: 0; transform: translateY(4px); } }
     .enter { animation: b3EnterKf .18s ease-out; }
@@ -2165,7 +2258,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><button type="button" class="windowbar-refresh" data-refresh-all title="刷新数据 · 重拉全量快照，保留当前页面与滚动位置" aria-label="刷新数据"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -2192,6 +2285,7 @@
               <footer class="workspace-footer"><div class="composer" data-composer="session"><div class="composer-top"><textarea class="composer-input" rows="1" placeholder="发送消息 · ↑↓ 翻阅历史 · Shift+Enter 换行" aria-label="给会话发消息"></textarea></div><div class="composer-bottom"><button class="composer-clip" type="button" title="附加文件（最多 5 个，单个 20MB，任意类型）" aria-label="附加文件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><button class="composer-img" type="button" data-composer-img title="添加图片（最多 8 张，也可直接 ⌘V 粘贴）" aria-label="添加图片"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cam"></use></svg></button><span class="composer-hint">支持粘贴 / 拖入图片、文件</span><span class="composer-spring"></span><button type="button" class="head-capsule" id="session-model-capsule" hidden title="切换模型"><span class="cap-dot"></span><span data-capsule-text>模型</span></button><button class="composer-unfold" type="button" data-composer-unfold title="切换单行/多行输入" aria-label="切换单行/多行输入"><svg class="icon-inline" aria-hidden="true"><use href="#icon-unfold"></use></svg></button><button class="composer-stopbtn" type="button" data-composer-stop title="停止生成" aria-label="停止生成" hidden><svg class="icon-inline" aria-hidden="true"><use href="#icon-stop"></use></svg></button><button class="composer-sendbtn" type="button" data-composer-send title="发送（Enter）" aria-label="发送"><svg class="icon-inline" aria-hidden="true"><use href="#icon-send"></use></svg></button></div></div></footer>
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
+            <aside class="team-drawer" data-slim-drawer hidden aria-label="团队成员会话（第四列）"></aside>
             <script>
               // #143-B2 会话域迁移：本块只存在于 #d-session 区间内，不触碰 <style> 与底部地基脚本。
               // 数据通道订阅地基帧总线（#150 R2 并轨：全页唯一 WS，SNAPSHOT+增量+COMMAND_ACK 同源）。
@@ -2259,6 +2353,8 @@
                   imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
+                  slimUnread: new Map(), // [t-7e0c6189] 团队未读聚合：gid → Set<sid>（编制内 worker/QA 有新输出且未在看）；进团队域/展第四列/直开即清（内存态，重启随增量重建）
+                  drawerGid: "", // [t-7e0c6189] 第四列展开的团队（""=收起；localStorage 记忆）
                 };
                 let UI = null;
                 // #B3-4 每会话输入草稿（旧壳 inputDrafts 同语义）：切走存 / 切回恢复 / 发送清，
@@ -2689,7 +2785,21 @@
                     case "SESSION_DELETED": onDeleted(sid); break;
                     case "SESSION_LOG": onLog(sid, m.payload); break;
                     case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
+                    case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break; // [t-7e0c6189] 编制增量（S.projects 原只吃 SNAPSHOT 全量，编制一变列表过滤就陈旧）
                   }
+                }
+                function onProjectsUpdated(p) {
+                  if (!S.hasSnapshot) return; // 锚定纪律同地基 Team 桥：未 SNAPSHOT 锚定前丢弃 delta，防空基线起底 merge（#143 盲评C-3 同源风险）
+                  if (Array.isArray(p.groups)) { S.projects = p.groups.filter((g) => g && typeof g.id === "string"); }
+                  else if (p && p.delta !== undefined) {
+                    const byId = new Map(S.projects.map((g) => [g.id, g]));
+                    for (const g of (Array.isArray(p.delta.upserts) ? p.delta.upserts : [])) if (g && typeof g.id === "string") byId.set(g.id, g);
+                    for (const id of (Array.isArray(p.delta.removes) ? p.delta.removes : [])) byId.delete(String(id));
+                    S.projects = [...byId.values()];
+                  } else return;
+                  renderMyList();
+                  renderSlimDrawer();
+                  if (UI && curSession()) renderInspector();
                 }
 
                 // #150 R2 并轨：B2 退役自持 ws，订阅地基帧总线（帧语义原样；断线 fail-fast 保持）。
@@ -2728,8 +2838,11 @@
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
                   if (!S.sessions.has(S.selected)) S.selected = "";
+                  S.slimUnread = new Map(); // [t-7e0c6189] 换源/重连全量回放：未读随增量重建（快照历史 log 不回灌未读）
+                  try { S.drawerGid = localStorage.getItem("cc-deck-005-slim-drawer") || ""; } catch (_) {} // [t-7e0c6189] 第四列展开态记忆（gid 已不存在时 renderSlimDrawer 自动收起）
                   renderMyList();
                   renderAll();
+                  renderSlimDrawer();
                 }
                 // UIPOLISH3 件二：项目组增量并入 S.projects（列表分组数据面与团队域同新鲜度）。
                 // v2 投影 delta 形态（upserts/removes）与 legacy 全量 groups 双兼容，与地基
@@ -2762,6 +2875,7 @@
                   if (Object.prototype.hasOwnProperty.call(p, "waiting_request")) s.waiting_request = p.waiting_request ?? null; // 权威自愈：null 即清
                   s.updated_at = p.updated_at || Date.now();
                   renderMyList();
+                  renderSlimDrawer(); // [t-7e0c6189] 第四列成员卡状态/摘要随更新刷新（隐藏态零开销早退）
                   if (sid === S.selected) renderAll();
                 }
                 function onHeartbeat(sid, p) {
@@ -2843,6 +2957,16 @@
                   }
                   const out = pushLog(sid, entry);
                   if (UI && sid === S.selected && out !== "skip") applyDomLog(sid, out, entry.id);
+                  // [t-7e0c6189] 未读聚合：编制内 worker/QA 有新输出且未在看 → 记 gid/sid 并亮团队入口徽标
+                  //（每 sid 只触发一次重渲；进团队域/展第四列/直开即清——slimMarkSeen）
+                  if (S.hasSnapshot && UI && sid !== S.selected) {
+                    const m = slimRosterOf(S.projects).bySid.get(sid);
+                    if (m && !SLIM_KEEP_ROLE.test(m.role)) {
+                      let set = S.slimUnread.get(m.gid);
+                      if (!set) { set = new Set(); S.slimUnread.set(m.gid, set); }
+                      if (!set.has(sid)) { set.add(sid); renderMyList(); if (curSession()) renderInspector(); }
+                    }
+                  }
                 }
 
                 // ---------- COMMAND_ACK / ARTIFACT_CHUNK ----------
@@ -3025,6 +3149,94 @@
                   }
                   return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
                 }
+                // ---------- [t-7e0c6189] 会话列表瘦身：worker 会话收进团队域 ----------
+                // 口径（对照图 docs/session-list-slim-mockup.html）：编制内 role 非 PM/Leader 的成员会话
+                // 不逐张铺列表，聚合为每团队一张入口卡；PM/Leader/无编制直连/置顶照旧直列；正被选中
+                // （直聊中）的 worker 会话临时出列，切走自动收回。slimRosterOf/slimIsHidden 为纯函数
+                // （test-session-slim.ts 直跑锚）。
+                const SLIM_KEEP_ROLE = /^(pm|leader)$/i;
+                function slimRosterOf(projects) {
+                  const bySid = new Map(), teams = new Map();
+                  for (const p of (Array.isArray(projects) ? projects : [])) {
+                    if (!p || typeof p.id !== "string") continue;
+                    const list = (Array.isArray(p.headcount) ? p.headcount : []).filter((m) => m && typeof m.session_id === "string");
+                    if (!list.length) continue;
+                    teams.set(p.id, { id: p.id, name: String(p.name || p.id), members: list });
+                    for (const m of list) bySid.set(m.session_id, { gid: p.id, role: String(m.role || ""), gname: String(p.name || p.id) }); // 同 sid 跨团编制罕见，后者覆盖（团队域 memberInfo 同 find 口径）
+                  }
+                  return { bySid, teams };
+                }
+                function slimIsHidden(session, roster, selectedSid) {
+                  if (!session || typeof session.session_id !== "string") return false;
+                  if (session.pinned === true) return false; // 置顶例外：用户显式关注优先于 IA 规则
+                  const m = roster.bySid.get(session.session_id);
+                  if (!m || SLIM_KEEP_ROLE.test(m.role)) return false; // PM/Leader 与无编制（直连）照旧直列
+                  return session.session_id !== selectedSid; // 直聊中（选中）临时出列
+                }
+                function slimTeamEntryMarkup(team, roster, sessionsMap, filterDef) {
+                  const kept = [], hidden = [];
+                  for (const m of team.members) {
+                    const s = sessionsMap.get(m.session_id);
+                    if (!s) continue; // 编制在、会话未同步（异源）不计
+                    (SLIM_KEEP_ROLE.test(String(m.role || "")) ? kept : hidden).push({ m, s });
+                  }
+                  if (!hidden.length) return ""; // 全是 PM/Leader（或会话缺失）：无收起内容不出卡
+                  const hit = hidden.filter((x) => !filterDef || filterDef.test(x.s));
+                  if (!hit.length) return ""; // 非「全部」筛选下该团队无命中状态——不出卡（筛选语义纯粹）
+                  const running = hidden.filter((x) => x.s.status === "WORKING" || x.s.status === "WAITING" || x.s.status === "ERROR").length;
+                  const minis = hit.slice(0, 5).map((x) => {
+                    const st = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[x.s.status] || "done";
+                    const badge = SLIM_KEEP_ROLE.test(String(x.m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(x.m.role || "")) ? "QA" : "W";
+                    return '<span class="worker-mini" title="' + esc(x.s.title || x.m.session_id) + '">' + badge + '<i class="status-dot ' + st + '"></i></span>';
+                  }).join("") + (hit.length > 5 ? '<span class="worker-mini more" title="还有 ' + (hit.length - 5) + ' 个成员会话">+' + (hit.length - 5) + "</span>" : "");
+                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(team.name) + " · " + hit.length + ' 个成员会话，点击去团队域"><span class="t-ava">▣</span><span class="t-main"><span class="t-name">' + esc(team.name) + (S.slimUnread.has(team.id) ? '<span class="slim-unread-dot" title="成员有新输出"></span>' : "") + '</span><span class="t-sub">' + hit.length + " 个成员会话 · " + running + ' 在跑</span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
+                }
+                function slimDrawerCardMarkup(item) {
+                  return '<div class="queue-card" data-slim-open="' + item.id + '" role="button" tabindex="0" aria-label="打开 ' + item.title + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source ? '<span class="srow-r3">' + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span></div>";
+                }
+                function renderSlimDrawer() {
+                  const el = document.querySelector("#d-session [data-slim-drawer]");
+                  if (!el) return;
+                  if (!S.drawerGid && el.hidden) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
+                  const team = S.drawerGid ? slimRosterOf(S.projects).teams.get(S.drawerGid) : null;
+                  if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.hidden = true; el.replaceChildren(); return; }
+                  el.hidden = false;
+                  const cards = team.members.filter((m) => !SLIM_KEEP_ROLE.test(String(m.role || "")) && S.sessions.has(m.session_id)).map((m) => ({ s: S.sessions.get(m.session_id), m })).sort((a, b) => Number(b.s.updated_at || 0) - Number(a.s.updated_at || 0));
+                  const head = '<div class="drawer-head"><span class="d-name">' + esc(team.name) + " · 成员会话</span><span class=\"d-cnt\">" + cards.length + '</span><button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="收起成员会话" aria-label="收起成员会话">✕</button></div>';
+                  const body = cards.length ? '<div class="drawer-body">' + cards.map((x) => slimDrawerCardMarkup(myCardItem(x.s))).join("") + "</div>" : '<div class="drawer-body"><div class="readonly-banner">该团队暂无成员会话 · 编制在团队域维护</div></div>';
+                  el.innerHTML = head + body;
+                }
+                function slimMarkSeen(gid) {
+                  if (!gid || !S.slimUnread.has(gid)) return;
+                  S.slimUnread.delete(gid);
+                  renderMyList();
+                  if (UI && curSession()) renderInspector();
+                }
+                function slimToggleDrawer(gid) {
+                  const want = String(gid || "");
+                  S.drawerGid = S.drawerGid === want ? "" : want;
+                  try { localStorage.setItem("cc-deck-005-slim-drawer", S.drawerGid); } catch (_) {}
+                  if (S.drawerGid) slimMarkSeen(S.drawerGid); // 展开即清该团队未读（设计要点 1）
+                  renderSlimDrawer();
+                }
+                function slimOpenSession(sid) {
+                  if (!UI) return;
+                  const s = S.sessions.get(String(sid || ""));
+                  if (!s) { b2Toast("成员会话不在当前来源"); return; }
+                  const gid = slimRosterOf(S.projects).bySid.get(s.session_id)?.gid || "";
+                  if (gid) slimMarkSeen(gid); // 直开即清该团队未读
+                  if (S.selected === s.session_id) return;
+                  if (S.selected) inputDrafts.set(S.selected, UI.input.value); // #B3-4 同款：切走存草稿
+                  S.selected = s.session_id;
+                  S.forceScroll = true;
+                  UI.input.value = inputDrafts.get(s.session_id) ?? "";
+                  S.staged = [];
+                  histLoad(s.session_id);
+                  renderTray();
+                  renderMyList(); // 直聊中的 worker 会话临时出列并打标 selected（mo 读到幂等，不重复结算）
+                  renderAll();
+                }
+                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）
                 // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
                 // W-UIPOLISH4 件十三（2026-10-12 用户截图）：加「最近活跃」档（隐藏超时置灰的
                 // 空闲僵尸卡=idleDimmed 同源判定，只显近期有活动的）+「非进行中」档；档位序=
@@ -3114,10 +3326,16 @@
                     return;
                   }
                   const filterDef = sessionFilterOf();
-                  const sessions = [...S.sessions.values()].filter((x) => filterDef.test(x) && sessionSearchTest(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // [t-7e0c6189] 瘦身过滤：编制内 worker/QA 会话收起（置顶/选中中/PM/Leader/无编制直列照旧）
+                  const slimRoster = slimRosterOf(S.projects);
+                  const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);
+                  const sessions = [...S.sessions.values()].filter((x) => filterDef.test(x) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
                   // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径
                   const filterHidden = [...S.sessions.values()].filter((x) => !(filterDef.test(x) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
+                  // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
+                  const slimHiddenIds = [...S.sessions.values()].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
+                  S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;
                   if (!sessions.length) {
                     const ph = document.createElement("div");
                     ph.className = "readonly-banner";
@@ -3173,7 +3391,7 @@
                   const activePool = topUnpinned.filter(isActive); // 不再按 reason 重排
                   const idleAll = topUnpinned.filter((x) => !isActive(x));
                   // B11 组头（可折叠）：caret + 文件夹图标 + 名 · 计数；卡体包 .grp-body，折叠态 CSS 隐藏
-                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span><span class="grp-count" data-session-group-count>' + count + "</span></div>"; /* 件十五：计数徽章化（· 分隔符退役） */
+                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span>' + title + '</span><span class="grp-count" data-session-group-count>' + count + "</span></div>"; /* 件十五：计数徽章化（· 分隔符退役）；1013 件5：文件夹图标退役——标题起点左移贴卡片内容缘（caret 单独承担折叠示意）*/
                   // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
                   // 加头=降格成可折叠组；组头间距由「进行中」组头自然承担）。恒在 DOM（不参与折叠记账）
                   const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
@@ -3192,6 +3410,12 @@
                   // 平铺，状态过滤交给筛选档（件十三「进行中」档）。活跃池与闲置池合流平铺
                   // （topUnpinned 本就按置顶+recency 序，活跃卡自然浮前）。
                   const activeMarkup = activePool.map((x) => myCardMarkup(myCardItem(x))).join("");
+                  // [t-7e0c6189] 团队小节：每团队一张入口卡（点击跳团队域 / ⤢ 展第四列）；无收起内容的团队不出卡
+                  const slimTeamsOpen = !collapsedGroups.has("slim-teams");
+                  const slimEntries = [...slimRoster.teams.values()].map((t) => slimTeamEntryMarkup(t, slimRoster, S.sessions, filterDef)).filter(Boolean);
+                  const teamsMarkup = slimEntries.length
+                    ? '<div class="session-group' + (slimTeamsOpen ? "" : " collapsed") + '" data-session-group="slim-teams">' + grpHead("slim-teams", "团队", slimEntries.length, slimTeamsOpen) + '<div class="grp-body">' + slimEntries.join("") + "</div></div>"
+                    : "";
                   const idleMarkup = idleAll.map((x) => myCardMarkup(myCardItem(x))).join("");
                   // 折叠未展开时这些卡有意不进 DOM——observer 完整性检查据此放行，防「缺卡→重渲→
                   // 又缺卡」死循环（批3 实测：开折叠点击组头即挂死事件循环）；团队折叠组并入同记账
@@ -3199,7 +3423,7 @@
                   const collapsedHidden = [...teamHidden];
                   S._collapsedIdleIds = collapsedHidden.length ? new Set(collapsedHidden) : null;
                   const template = document.createElement("template");
-                  template.innerHTML = pinnedMarkup + teamMarkup + activeMarkup + idleMarkup; // 团队组顶层优先呈现（默认折叠不抢纵向空间）
+                  template.innerHTML = pinnedMarkup + teamMarkup + teamsMarkup + activeMarkup + idleMarkup; // 团队组顶层优先呈现（默认折叠不抢纵向空间）；slim 团队入口卡插在团队组之后（t-7e0c6189）
                   list.replaceChildren(template.content);
                 }
 
@@ -3752,6 +3976,23 @@
                     const eng = ENGINES[s.engine || "claude"] || ["Claude"];
                     const st = STATUS_TAG[s.status] || ["完成", "done"];
                     html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
+                    // [t-7e0c6189] 团队成员块：选中会话属于某编制时，成员胶囊行（点头像=直开）+ 展开第四列
+                    const slimMem = slimRosterOf(S.projects).bySid.get(s.session_id);
+                    if (slimMem) {
+                      const slimTeamObj = slimRosterOf(S.projects).teams.get(slimMem.gid);
+                      const unreadSet = S.slimUnread.get(slimMem.gid);
+                      if (slimTeamObj) {
+                        const chips = slimTeamObj.members.map((m) => {
+                          const ms = S.sessions.get(m.session_id);
+                          if (!ms) return ""; // 编制在、会话未同步：不出胶囊
+                          const mst = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[ms.status] || "done";
+                          const badge = SLIM_KEEP_ROLE.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
+                          const unread = unreadSet && unreadSet.has(m.session_id);
+                          return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
+                        }).join("");
+                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">展开成员会话 ⤢</button></div>';
+                      }
+                    }
                     if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
                     if (s.context_usage) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>";
                     // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
@@ -5341,18 +5582,28 @@
                       UI.input.value = inputDrafts.get(sid) ?? ""; // #B3-4 切回恢复（未输入过清空，防串会话）
                       S.staged = [];
                       renderTray();
+                      renderMyList(); // [t-7e0c6189] 选中进出 worker 会话时出列/收回要跟着换（mo 再触发时 sid 已同，幂等）
                       renderAll();
                     }
                     if (S.hasSnapshot && S.sessions.size) {
                       const domIds = new Set([...UI.sessionList.querySelectorAll("[data-session-card]")].map((c) => c.dataset.sessionCard));
-                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0); // FB17：筛空态是合法形态
-                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失
+                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0) && !(S._slimHiddenIds && S._slimHiddenIds.size > 0); // FB17：筛空态是合法形态（含瘦身收空）
+                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k)) && !(S._slimHiddenIds && S._slimHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失（t-7e0c6189：被收起的同口径）
                       if (miss) renderMyList();
                     }
                   });
                   // #143 盲评A-1 止血配套：补 attributes 监听——地基让位重渲后，选中改为地基点改 class，
                   // 无此监听则 S.selected 不再跟随（原只观察 childList）。走秒改 textContent 不触发。
                   mo.observe(UI.sessionList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+
+                  // [t-7e0c6189] 键盘可达：团队入口卡/成员胶囊/第四列卡（role=button）Enter/Space 走点击链
+                  UI.section.addEventListener("keydown", (ev) => {
+                    if (ev.key !== "Enter" && ev.key !== " ") return;
+                    const t = ev.target.closest("[data-slim-team], [data-slim-open], [data-slim-drawer-toggle]");
+                    if (!t) return;
+                    ev.preventDefault();
+                    t.click();
+                  });
 
                   // 域内委托（在冒泡到地基 document 监听之前截住需要接管的面）
                   UI.section.addEventListener("click", (ev) => {
@@ -5404,6 +5655,21 @@
                     }
                     const filterBtn = ev.target.closest("#d-session [data-session-filter]"); // FB17：筛选芯片开浮菜单
                     if (filterBtn) { ev.stopPropagation(); openSessionFilterMenu(filterBtn); return; }
+                    // [t-7e0c6189] 瘦身交互三口：第四列开关 / 直开成员会话 / 团队入口跳团队域
+                    //（顺序敏感：按钮先于团队卡身，防 team 卡吞掉 ⤢/胶囊点击）
+                    const slimTgl = ev.target.closest("[data-slim-drawer-toggle]");
+                    if (slimTgl) { ev.stopPropagation(); slimToggleDrawer(slimTgl.dataset.slimDrawerToggle); return; }
+                    const slimOpen = ev.target.closest("[data-slim-open]");
+                    if (slimOpen) { ev.stopPropagation(); slimOpenSession(slimOpen.dataset.slimOpen); return; }
+                    const slimTeam = ev.target.closest("[data-slim-team]");
+                    if (slimTeam) {
+                      ev.stopPropagation();
+                      const gid = slimTeam.dataset.slimTeam;
+                      slimMarkSeen(gid); // 进团队域即清未读（设计要点 1）
+                      window.__ccDeck005B4?.railJump?.("team"); // 跳团队域（rail-btn 点击链）
+                      window.ccDeckTeam?.select?.(gid);
+                      return;
+                    }
                     const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中组；W-NOVAUI ⑤ 项目组已退役）
                     if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
                     const taskHide = ev.target.closest("[data-task-hide]");
@@ -5682,6 +5948,12 @@
                     if (!S.hasSnapshot) return;
                     UI.sessionList.querySelectorAll(".queue-card").forEach((card) => {
                       const s = S.sessions.get(card.dataset.sessionCard);
+                      const el = card.querySelector(".srow-sec");
+                      if (el && s && s.status === "WORKING") el.textContent = myCardItem(s).workSecs + "s";
+                    });
+                    const slimDrawerEl = document.querySelector("#d-session [data-slim-drawer]"); // [t-7e0c6189] 第四列走秒同链（data-slim-open 卡）
+                    if (slimDrawerEl && !slimDrawerEl.hidden) slimDrawerEl.querySelectorAll(".queue-card[data-slim-open]").forEach((card) => {
+                      const s = S.sessions.get(card.dataset.slimOpen);
                       const el = card.querySelector(".srow-sec");
                       if (el && s && s.status === "WORKING") el.textContent = myCardItem(s).workSecs + "s";
                     });
@@ -5995,13 +6267,22 @@
                   const r = taskOwnerResolve(task, project);
                   const hasOwner = r.resolved; // ⑦a：前缀映射命中视同有主
                   const info = memberInfo(r.member || (task.owner_session ? { session_id: task.owner_session, role: "执行者" } : { session_id: "", role: "" }));
+                  // 1013 件6：卡面显示名走看板语境单口——nick 优先，缺席回短 sid（原 memberInfo
+                  // 的 session.title 兜底会把派单 prompt 首行/全 UUID 顶上卡，蓝底大字元凶）
+                  const shortSid = (sid) => String(sid || "").slice(0, 8);
+                  const dispName = r.member ? (String(r.member.nick || "") || shortSid(r.member.session_id)) : shortSid(task.owner_session);
                   const engKnown = Boolean(info.engine && engines.has(info.engine)); // 件六：词表外/缺失不渲染引擎
                   const ownerBits = [];
                   if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
                   if (queueCtx && queueCtx.ordinal) ownerBits.push('<i class="q-num">' + queueCtx.ordinal + "</i>");
                   if (engKnown) ownerBits.push(engineBadge(info.engine));
-                  ownerBits.push(hasOwner ? "<b>" + escape(info.name) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : "<b>未指派</b>");
+                  // 1013 件6：claimed 失联卡（owner 在场但不在编制）不再裸标「未指派」——短 sid+失联
+                  // 保身份（分区头已按用户口径不渲染，身份落卡上）
+                  ownerBits.push(hasOwner ? "<b>" + escape(dispName) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : (task.owner_session ? "<b>" + escape(dispName) + '</b><span class="assignee-meta">失联</span>' : "<b>未指派</b>"));
                   const fullText = String(task.text || task.id);
+                  // 1013 件6：卡面标题渲染层 cap60 归一（relay 建卡已 cap，存量卡/owner 前缀回填
+                  // 路径漏网在此兜底；title 属性与悬浮详情仍全文）
+                  const faceText = (() => { const t = String(r.text || fullText).trim(); return t.length > 60 ? t.slice(0, 59) + "…" : t; })();
                   const created = expFmtTime(task.ts);
                   const updated = expFmtTime(task.updated_at);
                   // 件十九：泳道迁移时间线（历史条目无 transitions=从当下起记，如实显示已有部分）
@@ -6009,7 +6290,7 @@
                   const timeline = Array.isArray(task.transitions) && task.transitions.length
                     ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
                     : "";
-                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(r.text || fullText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(info.name) + " · " + escape(info.role || "") : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
+                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(faceText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
                 // W-DESIGNHUB 看板挂载两区（用户澄清并入）：图纸（当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -6066,15 +6347,19 @@
                     // 进行中泳道按 worker 分区（件八，用户推荐形态的落地修正：已指派未开始
                     // 的卡实际在 claimed——dispatch 建卡直接 claimed，不在 backlog；分区随之
                     // 放进行中泳道而非待认领）。组内 ts 升序=排队序；运行中（回执 join）置顶
-                    const groups = new Map(); // sid -> {name, cards[]}
+                    // 1013 件6（用户 1013 截图反馈）：分区名走 nick||短 sid 单口（原 memberInfo
+                    // 的 title/sid 兜底把 UUID 与派单原文顶成分区行，蓝底大字占三行）；分区头
+                    // 带成员小标识；失联卡不再渲染「失联执行者」分区行——卡直接排队（身份在
+                    // 卡上：短 sid+失联），泳道里只有卡片
+                    const avaLetter = (m) => /^(pm|leader)$/i.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
+                    const groups = new Map(); // sid -> {name, ava, cards[]}
                     const orphans = []; // owner 失联（sid 不在编制——离编/数据残留）
                     const unassigned = []; // 无主卡（件七显示面）
                     for (const t of items) {
                       if (!t.owner_session) { unassigned.push(t); continue; }
                       const m = members(project).find((x) => x.session_id === t.owner_session);
                       if (!m) { orphans.push(t); continue; }
-                      const info = memberInfo(m);
-                      if (!groups.has(t.owner_session)) groups.set(t.owner_session, { name: info.name, cards: [] });
+                      if (!groups.has(t.owner_session)) groups.set(t.owner_session, { name: String(m.nick || "") || String(t.owner_session).slice(0, 8), ava: avaLetter(m), cards: [] });
                       groups.get(t.owner_session).cards.push(t);
                     }
                     let html2 = "";
@@ -6082,13 +6367,10 @@
                       const ordered = g.cards.slice().sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
                       const runningIdx = ordered.findIndex((t) => dispatchStatus.get(t.dispatch_id) === "running");
                       if (runningIdx > 0) ordered.unshift(...ordered.splice(runningIdx, 1)); // 运行中置顶=当前活
-                      html2 += '<div class="lane-subhead">' + escape(g.name) + '<span class="subhead-count">' + ordered.length + "</span></div>";
+                      html2 += '<div class="lane-subhead"><i class="lane-subhead-ava">' + g.ava + '</i>' + escape(g.name) + '<span class="subhead-count">' + ordered.length + "</span></div>";
                       html2 += ordered.map((t, i) => taskMarkup(t, project, { ordinal: ordered.length > 1 ? i + 1 : 0, running: dispatchStatus.get(t.dispatch_id) === "running" })).join("");
                     }
-                    if (orphans.length) {
-                      html2 += '<div class="lane-subhead">失联执行者<span class="subhead-count">' + orphans.length + "</span></div>";
-                      html2 += orphans.map((t) => taskMarkup(t, project)).join("");
-                    }
+                    if (orphans.length) html2 += orphans.map((t) => taskMarkup(t, project)).join("");
                     if (unassigned.length) {
                       if (showUnassignedHead) html2 += '<div class="lane-subhead">未指派<span class="subhead-count">' + unassigned.length + "</span></div>"; // ⑦b：组头仅待认领泳道
                       html2 += unassigned.map((t) => taskMarkup(t, project)).join("");
@@ -6651,6 +6933,7 @@
                   if (!state.projects?.some((item) => item.id === gid)) return false;
                   state.selected = gid;
                   state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === gid)?.id || null;
+                  window.__ccDeck005SlimUi?.markSeen?.(gid); // [t-7e0c6189] 进团队域选中该团队即清未读聚合（设计要点 1）
                   render();
                   void requestDetail(gid);
                   return true;
@@ -6798,6 +7081,30 @@
                   panes.forEach((pane) => pane.removeAttribute("data-stub"));
                   root.removeAttribute("data-stub");
                   state.mounted = true;
+                  // 1013 件8：悬浮详情卡侧方定位——CSS 默认右侧（.flip 翻左），JS 委托按视口
+                  // 余量择侧 + 纵向钳制（贴底上移/贴顶下移，均留 12px 呼吸）；rAF 等 :hover
+                  // 布局生效后量尺寸；重复触发幂等
+                  root.addEventListener("mouseover", (event) => {
+                    const card = event.target.closest(".task-card");
+                    if (!card || !root.contains(card)) return;
+                    const pop = card.querySelector(":scope > .task-pop");
+                    if (!pop) return;
+                    requestAnimationFrame(() => {
+                      if (!pop.isConnected || !card.matches(":hover")) return;
+                      const cr = card.getBoundingClientRect();
+                      pop.classList.toggle("flip", cr.right + 416 > window.innerWidth - 8);
+                      pop.style.top = "0px";
+                      const pr = pop.getBoundingClientRect();
+                      const wantTop = Math.min(cr.top, window.innerHeight - 12 - pr.height);
+                      pop.style.top = Math.max(12, wantTop) - cr.top + "px";
+                    });
+                  });
+                  // 1013 件9：顶栏刷新钮——板不随 SNAPSHOT 走（按需拉），且 Team.snapshot
+                  // 落地时会清 boards/loads；事件在 SNAPSHOT 之后到：当前选中组立即 force
+                  // 重拉（用户正在看的板即刻新鲜），其余组 loads 已清、切组时自然重拉
+                  document.addEventListener("ccdeck-005-refresh", () => {
+                    if (state.selected) void requestDetail(state.selected, true);
+                  });
                   root.addEventListener("click", (event) => {
                     // FB4 团域新建：真表单（团队名/锚点/档位/成员多选），不再代理会话域新建会话弹窗
                     const newSession = event.target.closest("[data-team-new-session]");
@@ -6914,7 +7221,7 @@
 
           <section class="desktop-screen" id="d-project">
             <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起新建项目 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="source-badge" data-project-source></span></div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button><button data-project-design-tab hidden>图纸</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2 data-project-name>项目</h2><span class="live" data-project-live hidden></span><span class="source-badge" data-project-source></span></div><div class="proj-meta" data-project-meta hidden></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
             <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block" data-project-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
             <script>
               (() => {
@@ -7337,177 +7644,94 @@
                 function renderHead(entry) {
                   els.name.textContent = entry ? entry.name : "项目";
                   els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
+                  // W-PROJIA 案C（v8 dhead 语言）：live 徽标 + meta 行——替代四大卡与两条蓝条
+                  const liveNode = section.querySelector("[data-project-live]");
+                  const metaNode = section.querySelector("[data-project-meta]");
                   if (entry) {
-                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进总览指标
-                  } else window.__ccDeck005SetWindowbarHint?.("project", "—");
-                }
-
-                // W-PROJAGG：总览 = 4 张并排速览卡（会话/团队/输出物/验收单，可点切换、默认会话）
-                // + 选中卡对应的 mini 精简列表（最近 5~8 条 + 总计数，条目只读）。第三列定位 =
-                // 只读速览，与主区 tab 全量管理视图互补：mini 底部「在 X 中查看全部 →」经
-                // bridge.clickTab 复用同一切换路径（先例 5412 行通知跳 tab）。
-                const OVERVIEW_MINI_TAKE = 6;
-                let overviewMini = "sessions";
-                const overviewJumpLink = (tabLabel) =>
-                  '<button class="mini-list-link" type="button" data-overview-jump="' + escapeHtml(tabLabel) + '">在' + escapeHtml(tabLabel) + "中查看全部 →</button>";
-
-                function overviewMiniMarkup(entry) {
-                  if (overviewMini === "team") {
-                    if (!entry.group) return '<div class="readonly-banner">该目录未入项目。新建项目确认在团队域发起（组织命令），项目页不产生第二写面。</div>' + overviewJumpLink("团队");
-                    const g = entry.group;
-                    const headcount = Array.isArray(g.headcount) ? g.headcount : [];
-                    const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认新建项目" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
-                    const rows = headcount.slice(0, OVERVIEW_MINI_TAKE).map((m) => {
-                      const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
-                      const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
-                      return '<div class="queue-card"><div class="row"><i class="status-dot ' + (s ? (STATUS_DOT[s.status] || "done") : "waiting") + '"></i><strong>' + escapeHtml(title) + '</strong><span class="tag">' + escapeHtml(m && m.role ? m.role : "角色未标注") + "</span></div></div>";
-                    }).join("");
-                    return '<div class="queue-group">' + escapeHtml(g.name || "编制") + " · " + headcount.length + " 人 · " + escapeHtml(statusText) + "</div>"
-                      + (rows || '<div class="readonly-banner">编制为空 · 成员在团队域维护。</div>') + overviewJumpLink("团队");
-                  }
-                  if (overviewMini === "artifacts") {
+                    const hot = projectActionItems(entry).length;
                     const artifacts = artifactsOf(entry);
-                    if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>' + overviewJumpLink("输出物");
-                    const anchor = normDir(entry.anchor);
-                    const rows = artifacts.slice(0, OVERVIEW_MINI_TAKE).map((a) => {
-                      const pN = normDir(a.path);
-                      const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
-                      return '<div class="artifact-row">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>";
-                    }).join("");
-                    return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows + overviewJumpLink("输出物");
+                    if (liveNode) {
+                      liveNode.hidden = false;
+                      liveNode.textContent = "● " + entry.sessions.length + " 会话 · " + (entry.group ? 1 : 0) + " 团队" + (hot ? " · " + hot + " 需行动" : "");
+                    }
+                    if (metaNode) {
+                      const open = bridge.accepts.filter((a) => !a.submitted).length;
+                      metaNode.hidden = false;
+                      metaNode.innerHTML = '<span>只读聚合 · 目录 ' + escapeHtml(shortenDir(entry.anchor)) + '</span><span class="sep">·</span>'
+                        + "<span>输出物 " + artifacts.length + "</span>" + '<span class="sep">·</span>'
+                        + "<span>验收单 " + bridge.accepts.length + (open ? " · " + open + " 张未闭环" : "") + "（全局登记）</span>";
+                    }
+                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进头部 meta 行
+                  } else {
+                    if (liveNode) liveNode.hidden = true;
+                    if (metaNode) metaNode.hidden = true;
+                    window.__ccDeck005SetWindowbarHint?.("project", "—");
                   }
-                  if (overviewMini === "accepts") {
-                    if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>' + overviewJumpLink("验收单");
-                    const rows = bridge.accepts.slice(0, OVERVIEW_MINI_TAKE).map((a) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + (Number(a.total) || 0) + " 项 · 已回填 " + (Number(a.judged) || 0) + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
-                    return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows + overviewJumpLink("验收单");
-                  }
-                  // sessions（默认卡）
+                }
+
+                // W-PROJIA 案C（2026-10-13 用户定版：v8 原型为桌面 UI 美学基准，
+                // docs/mockups/v8-ui-interactive-v2.html「V8 项目域局部」）：主区 = v8 的
+                // psec 分区 + vrow 代表条目语言——每分区默认 3 条代表，超量出「全部 N 条 ▾」
+                // 就地展开（不跳页、不丢上下文）；条目点击跳来源域（v8 语义：项目域=只读
+                // 观测面板，编辑回源域）。头部 live 徽标 + meta 行替代四大卡与两条蓝条（见
+                // renderHead）；任务分区退役（原 tab 内容本就是「去团队域」跳转占位——正是
+                // 用户判定重叠的复制品）；图纸分区能力位判 designDocsSeen。案A/案B 的
+                // overviewMarkup 与六个 *TabMarkup 机制整体退役。
+                const PSEC_TAKE = 3;
+                const expandedSections = new Set(); // 分区展开态（域内会话态，切项目/刷新回落默认收起）
+                const VROW_K = { WORKING: ["运行中", " run"], WAITING: ["待处理", " wait"], ERROR: ["错误", " err"], DONE: ["完成", ""] };
+                const vrow = (attrs, title, sub, kText, kCls) =>
+                  '<div class="vrow"' + (attrs ? " " + attrs : "") + '><div class="t"><b>' + escapeHtml(title) + "</b>" + (sub ? '<span class="s">' + escapeHtml(sub) + "</span>" : "") + '</div>' + (kText ? '<span class="k' + (kCls || "") + '">' + escapeHtml(kText) + "</span>" : "") + "</div>";
+                function psecMarkup(id, icon, name, rows, emptyText, emptyAttrs) {
+                  const expanded = expandedSections.has(id);
+                  const shown = expanded ? rows : rows.slice(0, PSEC_TAKE);
+                  const toggle = rows.length > PSEC_TAKE
+                    ? '<button class="jump" type="button" data-psec-toggle="' + id + '">' + (expanded ? "收起 ▴" : "全部 " + rows.length + " 条 ▾") + "</button>"
+                    : "";
+                  const body = rows.length
+                    ? shown.join("")
+                    : '<div class="vrow" style="cursor:default"' + (emptyAttrs ? " " + emptyAttrs : "") + '><div class="t"><b style="color:var(--faint)">' + escapeHtml(emptyText) + "</b></div></div>";
+                  return '<section class="proj-section psec" id="proj-sec-' + id + '" data-proj-section="' + id + '">'
+                    + '<h5><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg>' + escapeHtml(name) + ' <span class="cnt">' + rows.length + "</span>" + toggle + "</h5>"
+                    + body + "</section>";
+                }
+                function sessionsRows(entry) {
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  if (!sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>' + overviewJumpLink("会话");
-                  const rows = sessions.slice(0, OVERVIEW_MINI_TAKE).map((s) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(relTime(Number(s.updated_at))) + " · " + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</p></div>").join("");
-                  return '<div class="queue-group">会话 · ' + sessions.length + "</div>" + rows + overviewJumpLink("会话");
+                  return sessions.map((s) => {
+                    const ctx = Number(s.context_limit) > 0 ? " · 上下文 " + Math.max(1, Math.min(999, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100))) + "%" : "";
+                    const k = VROW_K[s.status] || ["完成", ""];
+                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"', s.title || s.initial_prompt || s.session_id, relTime(s.updated_at) + ctx, k[0], k[1]);
+                  });
                 }
-
-                // W-DESIGNHUB 项目相关图纸：tags = 图纸目录+文件名分词（relay 侧同规则），
-                // 项目侧分词 = 项目组 name ∪ 锚点目录末段（[-_/.空格] 切、小写、纯数字滤）。
-                // 匹配空但清单在 → 灰提示指全局入口；清单缺（旧 relay/无 docs）→ 整区不渲染
-                function designDocsOf(entry) {
-                  return Array.isArray(bridge.snapshot && bridge.snapshot.design_docs) ? bridge.snapshot.design_docs : null;
-                }
-                function projectDesignToks(entry) {
-                  const segs = [];
-                  if (entry.group && typeof entry.group.name === "string") segs.push(entry.group.name);
-                  const anchor = String(entry.anchor || "");
-                  const tail = anchor.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || "";
-                  if (tail) segs.push(tail);
-                  const out = new Set();
-                  for (const seg of segs) for (const tok of seg.toLowerCase().split(/[-_/.\s]+/)) if (tok && !/^\d+$/.test(tok)) out.add(tok);
-                  return out;
-                }
-                function designSectionMarkup(entry) {
-                  const docs = designDocsOf(entry);
-                  if (!docs || !docs.length) return "";
-                  // 匹配=子串包含（双向）：中文项目名无空格分词（「005 换壳项目」切开是
-                  // 「换壳项目」整词），精确相等会漏「换壳」tag——放宽为 a⊂b ∪ b⊂a
-                  const toks = [...projectDesignToks(entry)];
-                  const hit = (tag) => toks.some((t) => t.includes(tag) || tag.includes(t));
-                  const hits = docs.filter((d) => Array.isArray(d.tags) && d.tags.some(hit));
-                  if (!hits.length) return '<div class="queue-group">设计图纸</div><div class="readonly-banner">本项目暂无专属图纸 · 全局系统设计见 设置 → 关于 → 系统设计图纸。</div>';
-                  return '<div class="queue-group">设计图纸 · ' + hits.length + "</div>"
-                    + hits.map((d) => '<div class="queue-card"><div class="row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg><strong>' + escapeHtml(d.title) + '</strong><span class="tag">' + escapeHtml(d.group) + '</span></div><p>' + escapeHtml(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escapeHtml(d.path) + '" style="margin:2px 0 0">新窗打开 ↗</button></div>').join("");
-                }
-                function overviewMarkup(entry) {
-                  const artifacts = artifactsOf(entry);
-                  const card = (key, icon, label, num) =>
-                    '<button class="metric' + (overviewMini === key ? " selected" : "") + '" type="button" data-overview-card="' + key + '" aria-pressed="' + (overviewMini === key) + '">'
-                    + (icon ? '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg>' : "")
-                    + "<span>" + escapeHtml(label) + " " + num + "</span></button>";
-                  return '<div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div>'
-                    + '<div class="project-overview">'
-                    + card("sessions", "chat", "会话", entry.sessions.length)
-                    + card("team", "users", "团队", entry.group ? 1 : 0)
-                    + card("artifacts", "package", "输出物", artifacts.length)
-                    + card("accepts", "check", "验收单", bridge.accepts.length)
-                    + "</div>"
-                    + designSectionMarkup(entry)
-                    + overviewMiniMarkup(entry);
-                }
-
-                function sessionsTabMarkup(entry) {
-                  if (!entry.sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>';
-                  const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || displayPath(s.cwd) || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></div></div>").join("");
-                  return '<div class="queue-group">会话 · ' + entry.sessions.length + "</div>" + rows;
-                }
-
-                function teamTabMarkup(entry) {
-                  if (!entry.group) return '<div class="readonly-banner">该目录未入项目。新建项目确认在团队域发起（组织命令），项目页不产生第二写面。</div><button class="secondary-btn" type="button" data-domain-jump="team">去团队域</button>';
-                  // FB12 团队 tab 实数据：编制名册只读渲染（席位/角色/引擎/模型），写面仍在团队域
+                function teamRows(entry) {
+                  if (!entry.group) return [];
                   const g = entry.group;
                   const headcount = Array.isArray(g.headcount) ? g.headcount : [];
-                  const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认新建项目" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
-                  const rows = headcount.map((m) => {
-                    const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
-                    const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
-                    const eng = (m && m.engine) || (s && s.engine) || "";
-                    return '<div class="queue-card" data-domain-jump="session"' + (m && m.session_id ? ' data-jump-session="' + escapeHtml(m.session_id) + '"' : "") + ' title="在会话域打开该成员"><div class="row"><i class="status-dot ' + (s ? (STATUS_DOT[s.status] || "done") : "waiting") + '"></i><strong>' + escapeHtml(title) + '</strong><span class="tag">' + escapeHtml(m && m.role ? m.role : "角色未标注") + "</span></div>"
-                      + '<div class="identity-cluster">' + (eng ? engineBadge(eng) : "") + (m && m.model ? '<span class="source-badge">' + escapeHtml(m.model) + "</span>" : "") + "</div></div>";
-                  }).join("");
-                  return '<div class="queue-group">' + escapeHtml(g.name || "编制") + " · " + headcount.length + " 人 · " + escapeHtml(statusText) + "</div>"
-                    + (rows || '<div class="readonly-banner">编制为空 · 成员在团队域维护。</div>')
-                    + '<button class="secondary-btn" type="button" data-domain-jump="team" style="margin-top:10px">在团队域维护编制</button>';
+                  return headcount.map((m) => {
+                    const sid = m && typeof m.session_id === "string" ? m.session_id : "";
+                    const s = sid ? bridge.sessions.get(sid) : null;
+                    const title = s ? (s.title || s.initial_prompt || sid) : sid || "空席位";
+                    const sub = (m && m.role ? m.role : "角色未标注") + (m && m.model ? " · " + m.model : "");
+                    const k = s ? (VROW_K[s.status] || ["完成", ""]) : ["离线", " wait"];
+                    return vrow((sid ? 'data-domain-jump="session" data-jump-session="' + escapeHtml(sid) + '" title="在会话域打开该成员"' : 'style="cursor:default"'), title, sub, k[0], k[1]);
+                  });
                 }
-
-                function taskTabMarkup() {
-                  return '<div class="readonly-banner">任务板随团队域维护（按需经 COMMAND_PROJECT_DETAIL 拉取），项目页不复制任务状态。</div><button class="secondary-btn" type="button" data-domain-jump="team">在团队看板处理</button>';
-                }
-
-                function artifactsTabMarkup(entry) {
-                  const artifacts = artifactsOf(entry);
-                  if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>';
+                function artifactsRows(entry) {
                   const anchor = normDir(entry.anchor);
-                  const rows = artifacts.map((a) => {
-                    // #158-批4a：前缀比较归一化（a.path 原生 \ 与 anchor 归一 / 不匹配会整串显示）
+                  return artifactsOf(entry).map((a) => {
                     const pN = normDir(a.path);
                     const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
-                    return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></span></div>";
-                  }).join("");
-                  return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows;
+                    const eng = ENGINES[a.session && a.session.engine] ? ENGINES[a.session.engine][0] : "";
+                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话"', rel, relTime(a.last_at), eng, "");
+                  });
                 }
-
-                function acceptancesTabMarkup() {
-                  if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>';
-                  const rows = bridge.accepts.map((a) => '<div class="queue-card" data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + (Number(a.total) || 0) + " 项 · 已回填 " + (Number(a.judged) || 0) + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
-                  return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows;
+                function acceptsRows() {
+                  return bridge.accepts.map((a) =>
+                    vrow('data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"', a.title, "已回填 " + (Number(a.judged) || 0) + "/" + (Number(a.total) || 0) + " · " + relTime(a.created_at), a.submitted ? "已提交" : "待填", a.submitted ? "" : " wait"));
                 }
-
-                // W-SRCMENU2 ⑥：图纸 tab（W-DESIGNHUB 消费面）——分组平铺（group 头+行），行点击
-                // 新窗直开 relay /design/<rel>（红线：HTML 原样服务不加工、无容器页）。打开地址=
-                // 主连接源 origin + path（聚合两源图纸按 path 去重并集可见；云源图纸跨源直开需
-                // 云桥静态面，超出本批——回执口径点）。项目匹配：与当前项目组 name/锚点分词有
-                // 交集的 tags 行前置「相关」小标（信息增强不筛除——图纸目录通常量小，全量可扫）
-                function designDocsTabMarkup(entry) {
-                  if (!bridge.designDocs.length) return '<div class="readonly-banner">图纸目录为空（docs/system-design/ 未部署 archify 产物）。</div>';
-                  const keyTokens = new Set(
-                    String(entry && entry.group ? entry.group.name || "" : "").toLowerCase().split(/[\s/_·-]+/).filter(Boolean)
-                      .concat(String(entry && entry.group ? entry.group.anchor_dir || "" : "").toLowerCase().split(/[/\s_-]+/).filter(Boolean)),
-                  );
-                  const groups = new Map();
-                  for (const d of bridge.designDocs) {
-                    if (!groups.has(d.group)) groups.set(d.group, []);
-                    groups.get(d.group).push(d);
-                  }
-                  let html = '<div class="readonly-banner">系统设计图纸 · ' + bridge.designDocs.length + ' 张 · 点击新窗打开</div>';
-                  for (const [g, items] of groups) {
-                    html += '<div class="queue-group">' + escapeHtml(g || "全局") + " · " + items.length + "</div>";
-                    for (const d of items) {
-                      const related = d.tags && d.tags.some((t) => keyTokens.has(t)) && entry && entry.group;
-                      html += '<div class="queue-card" role="button" tabindex="0" data-design-open="' + escapeHtml(d.path) + '" title="' + escapeHtml(d.title) + ' · 新窗打开"><div class="row"><strong>' + escapeHtml(d.title) + "</strong>"
-                        + (related ? '<span class="tag mini">相关</span>' : "") + "</div>"
-                        + (Array.isArray(d.tags) && d.tags.length ? '<p>' + escapeHtml(d.tags.slice(0, 6).map((t) => "#" + t).join(" ")) + "</p>" : "") + "</div>";
-                    }
-                  }
-                  return html;
+                function designRows() {
+                  return bridge.designDocs.map((d) =>
+                    vrow('data-design-open="' + escapeHtml(d.path) + '" title="新窗打开"', d.title, (Array.isArray(d.tags) && d.tags.length ? d.tags.slice(0, 4).map((t) => "#" + t).join(" ") : ""), d.group, ""));
                 }
 
                 function renderInspector(entry) {
@@ -7540,21 +7764,20 @@
                   }
                 }
 
-                function bodyPanes() {
-                  const panes = els.body ? [...els.body.querySelectorAll(":scope > .workspace-pane")] : [];
-                  return panes.length >= 6 ? panes : null;
-                }
-                function setPaneContents(markups) {
+                // W-PROJIA 案B：tab 栏移除后地基 setupStubTabs 不再为项目域建 pane——
+                // workspace-body 退化为单一长页容器：总览摘要区 + 六分区（分区头带锚点，
+                // 四卡点击 scrollIntoView 平滑滚动定位）。bodyPanes/setPaneContents 的
+                // 多 pane 分发机制退役，统一走 renderLongPage。
+                function renderLongPage(entry) {
                   if (!els.body) return;
-                  const panes = bodyPanes();
-                  if (panes) {
-                    markups.forEach((markup, index) => {
-                      const pane = panes[index];
-                      if (!pane) return;
-                      pane.replaceChildren(nodesFrom(markup));
-                      delete pane.dataset.stub;
-                    });
-                  } else els.body.replaceChildren(nodesFrom(markups[0] || ""));
+                  // W-PROJIA 案C：v8 psec 分区长页（四区 + 图纸能力区）；任务分区退役（原 tab
+                  // 内容即「去团队域」跳转占位，属用户判定的复制品）；头部摘要见 renderHead
+                  let html = psecMarkup("sessions", "chat", "会话", sessionsRows(entry), "该项目目录暂无会话，新会话由会话域发起。");
+                  html += psecMarkup("team", "users", "团队", teamRows(entry), entry.group ? "编制为空，成员在团队域维护。" : "该目录未入项目，新建项目确认在团队域发起。");
+                  html += psecMarkup("artifacts", "package", "输出物", artifactsRows(entry), "暂无输出物登记，输出物由会话域实时产生。");
+                  html += psecMarkup("accepts", "check", "验收单", acceptsRows(), "暂无验收单登记。");
+                  if (bridge.designDocsSeen && bridge.designDocs.length > 0) html += psecMarkup("design", "layers", "图纸", designRows(), "图纸目录为空。");
+                  els.body.replaceChildren(nodesFrom(html));
                 }
 
                 function render() {
@@ -7565,7 +7788,7 @@
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                     window.__ccDeck005SetWindowbarHint?.("project", waiting);
-                    setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
+                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner" role="status">' + escapeHtml(waiting) + "</div>"));
                     els.riskCount.style.display = "none";
                     els.riskCopy.textContent = waiting;
                     els.artifactCount.textContent = "0";
@@ -7582,13 +7805,11 @@
                   const entry = entries.find((e) => e.key === selectedKey) || null;
                   renderHead(entry);
                   if (!entry) {
-                    setPaneContents(['<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>']);
+                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>'));
                     renderInspector(null);
                     return;
                   }
-                  setPaneContents([overviewMarkup(entry), sessionsTabMarkup(entry), teamTabMarkup(entry), taskTabMarkup(), artifactsTabMarkup(entry), acceptancesTabMarkup(), designDocsTabMarkup(entry)]); // W-SRCMENU2 ⑥：第七 pane=图纸
-                  const designTab = document.querySelector('#d-project [data-project-design-tab]'); // 能力位：SNAPSHOT 曾带 design_docs 且非空才显形（旧 relay/无 docs 部署自动隐藏）；项目域 IIFE 无 root 别名——document 直查防 ReferenceError 被订阅链静默吞
-                  if (designTab) designTab.hidden = !(bridge.designDocsSeen && bridge.designDocs.length > 0);
+                  renderLongPage(entry); // W-PROJIA 案B：单长页（图纸分区能力位在函数内判）
                   renderInspector(entry);
                 }
 
@@ -7644,11 +7865,16 @@
                   }
                   const queueCard = target.closest("[data-project-key]");
                   if (queueCard) { selectedKey = queueCard.dataset.projectKey || ""; render(); return; }
-                  // W-PROJAGG：总览速览卡切换 mini 列表；「查看全部」跳主区对应 tab（segment-bar 同路）
-                  const miniCard = target.closest("[data-overview-card]");
-                  if (miniCard) { overviewMini = miniCard.dataset.overviewCard || "sessions"; render(); return; }
-                  const miniJump = target.closest("[data-overview-jump]");
-                  if (miniJump) { bridge.clickTab("#d-project .segment-bar", miniJump.dataset.overviewJump); return; }
+                  // W-PROJIA 案C：分区「全部 N 条 ▾」就地展开/收起（超量分区才有；
+                  // 展开态域内会话态记忆，render 后滚动位置随内容自然保持）
+                  const psecToggle = target.closest("[data-psec-toggle]");
+                  if (psecToggle) {
+                    const id = psecToggle.dataset.psecToggle || "";
+                    if (expandedSections.has(id)) expandedSections.delete(id);
+                    else expandedSections.add(id);
+                    render();
+                    return;
+                  }
                   const jump = target.closest("[data-domain-jump]");
                   if (jump) {
                     bridge.railJump(jump.dataset.domainJump);
@@ -9501,7 +9727,7 @@ function connectLan(ctx) {
         if (!drawPairQr(cv, payload)) return false;
         const col = cv.closest(".pair-qr-col");
         const small = col && col.querySelector("small");
-        if (small) small.textContent = "手机扫码即连 · 同网直连 / 跨网云桥自动择路";
+        if (small) small.innerHTML = "手机扫码即连 · 同网直连<br>跨网走云桥自动择路"; // 1013 件4：一行太长是左栏被撑宽元凶之一，拆两行紧凑排
         return true;
       }
       function openLanPairDialog() {
@@ -9521,7 +9747,7 @@ function connectLan(ctx) {
           + '<div class="pair-grid">'
           + '<div class="pair-qr-col"><canvas data-pair-qr width="10" height="10"></canvas><small>手机扫码直接加入</small></div>'
           + '<div class="pair-info">'
-          + '<div class="pair-code-box"><div class="pair-code-digits" data-pair-code>···· ····</div><span class="pair-code-note" data-pair-code-note>正在领取 8 位配对码…</span></div>'
+          + '<div class="pair-code-box"><div class="pair-code-digits" data-pair-code>····<br>····</div><span class="pair-code-note" data-pair-code-note>正在领取 8 位配对码…</span></div>'
           + '<div class="pair-link-row"><input readonly value="' + link.replace(/"/g, "&quot;") + '" aria-label="配对链接"><button class="secondary-btn" type="button" data-pair-copy>复制</button></div>'
           + '</div></div>'
           + '<div class="source-menu-head">已连接设备</div>'
@@ -9559,9 +9785,9 @@ function connectLan(ctx) {
           return buildSmartPairParts().then((parts) => {
             if (!pop.isConnected) return;
             if (smartTimer) { clearTimeout(smartTimer); smartTimer = null; } // 重领前必清旧续期器（防 QR 画失败等分支双倍重领）
-            if (digits) digits.textContent = (parts.code.slice(0, 4) + " " + parts.code.slice(4)).trim();
+            if (digits) digits.replaceChildren(parts.code.slice(0, 4), document.createElement("br"), parts.code.slice(4)); // 1013 件1：两组四位分两行（原单行在右栏受压时折行贴边）
             const mins = Math.max(1, Math.round((parts.ttlMs || 300000) / 60000));
-            if (note) note.textContent = "手机 App「添加电脑」输入 · " + mins + " 分钟内有效";
+            if (note) note.innerHTML = "手机 App「添加电脑」输入 ·<br>" + mins + " 分钟内有效"; // 1013 件1 追补：右栏 200px 档自然断行会把「5」孤在行尾（mins 数字安全免转义），定死「·」后断行
             if (cv && (parts.lan || parts.cloud)) {
               drawSmartPairQr(cv, parts);
               const ttl = parts.ttlMs || 300000;
@@ -11260,6 +11486,70 @@ function connectLan(ctx) {
         if (!context.sessions.has(context.selectedSessionId)) context.selectedSessionId = null;
         renderSessionList();
       }
+
+      // 1013 件9（用户反馈：看板清了但页面没变化、找不到刷新入口）：顶栏页内刷新钮。
+      // 临时 ws 不带 last_seq 重连一次 → relay 判新客户端推全量 SNAPSHOT → onEvent 幂等
+      // 覆盖 + 帧总线 fan-out，各域自动重渲；DOM 不换页，tab/滚动天然保留。主连接
+      // 零扰动（2026-09-16 手机下拉刷新教训：断开重连会干断在线源、清在途 ACK 追踪）。
+      // 板不随快照走（COMMAND_PROJECT_DETAIL 按需拉）——ccdeck-005-refresh 事件让团队域
+      // 对已锚定板 force 重拉；云视角全量重建必须断链重连，不值当——降级 ping-resume
+      // 增量补发 + 板重拉。
+      let refreshAllInFlight = false;
+      // 滚动保持：SNAPSHOT 重走会 replaceChildren 重渲各域列表（session-list 的
+      // scrollTop 会归零跳顶）——刷新前记各滚动口，落帧重渲后两拍恢复
+      const REFRESH_SCROLL_SEL = [".session-list", "#d-team .workspace-body", "#d-team .team-chat", "#d-project .workspace-body", "#d-notify .workspace-body", "#d-settings .settings-body"];
+      function scrollMark() {
+        return REFRESH_SCROLL_SEL.map((sel) => { const el = document.querySelector(sel); return el ? { el, top: el.scrollTop } : null; }).filter(Boolean);
+      }
+      function scrollRestore(marks) {
+        for (const m of marks) { try { if (m.el.isConnected) m.el.scrollTop = m.top; } catch {} }
+      }
+      function refreshAllData() {
+        if (refreshAllInFlight) return;
+        const btn = document.querySelector("[data-refresh-all]");
+        refreshAllInFlight = true;
+        if (btn) btn.classList.add("busy");
+        const marks = scrollMark();
+        const done = (ok) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => scrollRestore(marks))); // 重渲落帧后恢复（rAF 两拍等 replaceChildren 后布局）
+          refreshAllInFlight = false;
+          if (btn) btn.classList.remove("busy");
+          showToast(ok ? "数据已刷新" : "刷新未成功 · 请检查连接后重试");
+        };
+        const refreshBoards = () => document.dispatchEvent(new CustomEvent("ccdeck-005-refresh")); // 团队域当前组板 force 重拉
+        if (viewSource() === "cloud") {
+          try { sendCloud(cloudCtx, { t: "ping", last_seq: cloudCtx.sessions.size > 0 ? cloudCtx.lastSeq : 0 }); refreshBoards(); done(true); } catch { done(false); }
+          return;
+        }
+        if (!ctx.cfg || !ctx.cfg.wsUrl || !ctx.cfg.token) { done(false); return; }
+        let settled = false;
+        const timer = setTimeout(() => { if (!settled) { settled = true; try { w.close(); } catch {} done(false); } }, 5000);
+        let w;
+        try {
+          w = new WebSocket(ctx.cfg.wsUrl + "?token=" + encodeURIComponent(ctx.cfg.token));
+          w.onmessage = (ev) => {
+            if (settled) return;
+            let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+            if (msg.type !== "SNAPSHOT") return;
+            settled = true; clearTimeout(timer);
+            if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+            // 滚动快照：SNAPSHOT 重渲会瞬间清空列表内容，容器 scrollTop 被 clamp 归零——
+            // 重建完成后同步还原（单据要求：保留当前 tab/滚动位置）
+            const scrollKeep = [...document.querySelectorAll(".session-list, .desktop-screen.active .workspace-body, .desktop-screen.active .queue")]
+              .map((el) => [el, el.scrollTop]).filter(([, top]) => top > 0);
+            onEvent(ctx, msg);
+            window.__ccDeck005Frames.emit({ kind: "frame", frame: msg, source: "lan" });
+            for (const [el, top] of scrollKeep) el.scrollTop = top;
+            try { w.close(); } catch {}
+            refreshBoards(); // SNAPSHOT 落地后（Team.snapshot 已清板/loads）再触发板重拉
+            done(true);
+          };
+          w.onerror = () => { if (!settled) { settled = true; clearTimeout(timer); done(false); } };
+        } catch { clearTimeout(timer); done(false); }
+      }
+      document.addEventListener("click", (event) => {
+        if (event.target.closest("[data-refresh-all]")) refreshAllData();
+      });
 
       document.addEventListener("click", (event) => {
         const target = event.target;

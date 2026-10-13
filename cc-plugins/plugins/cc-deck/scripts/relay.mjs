@@ -50332,7 +50332,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     for (const c of candidates) {
       if (revived >= limit) break;
       try {
-        this.resumeAgent(c.s, "[relay \u81EA\u52A8\u6062\u590D] relay \u91CD\u542F\u5B8C\u6210\uFF0C\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002");
+        this.resumeAgent(c.s, "[relay \u81EA\u52A8\u6062\u590D] relay \u91CD\u542F\u5B8C\u6210\uFF0C\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002" + this.reviveInstruction(c.s));
         revived++;
       } catch (e) {
         console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} \u6062\u590D\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
@@ -50345,6 +50345,11 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 返回 null=可拉；字符串=skip 原因（审计/测试可断言）。boot 扫描与事件驱动激活器
   // 共用同一链——两条入口纪律零分叉（外部/在场/parked/退休/互斥/pin 休眠/熔断/锚点/
   // 待办/48h 新鲜度，语义逐条搬自 autoReviveManaged 原实现，行为零变）。
+  // W-CDXREV 复活注入指令 engine 感知：claude 读任务清单续跑（既有口径）；codex 无
+  // Claude 系任务存储可读——改为「从中断处接续」口径（resume 上下文在 thread 里）
+  reviveInstruction(s) {
+    return s.state.engine === "codex" ? "\u8BF7\u4ECE\u4E2D\u65AD\u5904\u63A5\u7EED\u63A8\u8FDB\u5F53\u524D\u4EFB\u52A1\uFF1A\u5148\u7B80\u8FF0\u5DF2\u5B8C\u6210\u90E8\u5206\u4E0E\u4E0B\u4E00\u6B65\uFF0C\u518D\u7EE7\u7EED\u6267\u884C\u3002" : "\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002";
+  }
   reviveEligible(s) {
     if (s.state.external) return "external";
     if (s.agent) return "agent-alive";
@@ -50358,8 +50363,12 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (s.state.pinned && s.state.saved) return "pinned-dormant";
     if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) return "resume-cooldown";
     if (!s.state.relay_session_id) return "no-resume-anchor";
-    const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
-    if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    if (s.state.engine === "codex") {
+      if (s.state.status !== "ERROR" && s.state.status !== "WORKING") return "codex-idle";
+    } else {
+      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
+      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    }
     if (Date.now() - s.state.updated_at > 48 * 36e5) return "stale-48h";
     return null;
   }
@@ -50376,10 +50385,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (why) return { ok: false, skipped: why };
     const title = s.state.title || id2.slice(0, 8);
     try {
-      this.resumeAgent(s, `[Agent \u6FC0\u6D3B\u5668 \xB7 ${source}] ${reason}\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u3002\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002`);
+      this.resumeAgent(s, `[Agent \u6FC0\u6D3B\u5668 \xB7 ${source}] ${reason}\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u3002` + this.reviveInstruction(s));
       this.upsertNotification("system", "activator-revive", id2, {
         title: "\u4F1A\u8BDD\u5DF2\u81EA\u52A8\u590D\u6D3B\uFF08\u6FC0\u6D3B\u5668\uFF09",
-        body: `${title}\uFF1A${reason}\u2014\u2014\u5DF2\u4ECE\u4EFB\u52A1\u6E05\u5355\u81EA\u52A8\u6062\u590D\uFF08\u6765\u6E90\uFF1A${source}\uFF09`,
+        body: `${title}\uFF1A${reason}\u2014\u2014\u5DF2\u81EA\u52A8\u6062\u590D\uFF08\u6765\u6E90\uFF1A${source}\uFF09`,
         severity: "info",
         group: "attention",
         actionable: false,
@@ -55006,7 +55015,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       ));
       this.emitBoard(input.gid);
     }
-    if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
+    if (input.title?.trim()) this.setTitleOverride(sessionId, input.title.trim().slice(0, 40));
     if (s) {
       this.bus.emit(sessionId, "SESSION_UPDATED", {
         status: s.state.status,
