@@ -39,7 +39,7 @@ echo "[1/3] put $KEY ← $(basename "$FILE") (${LOCAL_SIZE}B)"
 if ! (cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key put "$KEY" \
     --path "$FILE" --namespace-id "$KV_NS" --remote \
     --metadata "{\"filename\":\"$FN\"}" >/dev/null 2>&1); then
-  echo "    wrangler 直连失败，回落 curl+代理（$CF_PROXY）"
+  echo "    wrangler 直连失败，回落 curl+代理（${CF_PROXY}）"
   curl -sS --max-time 600 -x "$CF_PROXY" \
     -H "Authorization: Bearer $CF_TOKEN" -X PUT --data-binary "@$FILE" \
     "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY" \
@@ -70,7 +70,7 @@ for i in 1 2 3 4; do
     REMOTE_MD5=$(md5_of "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
     if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
   fi
-  [ "$i" = "4" ] || { echo "    第 $i 次回读未一致（remote=$REMOTE_MD5），6s 后重读"; sleep 6; }
+  [ "$i" = "4" ] || { echo "    第 $i 次回读未一致（remote=${REMOTE_MD5}），6s 后重读"; sleep 6; }
 done
 rm -f "$TMP"
 

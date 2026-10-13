@@ -42,7 +42,7 @@ echo "[1/5] 等 desktop.yml 的 $TAG run 完成…"
 if [ -n "${RUN_ID:-}" ]; then
   # 注入旁路：矩阵腿无关抖动（如 dmg 腿挂、Windows NSIS 腿 success 且 artifact 完好）
   # 时 run 整体 conclusion=failure 会卡死 success 门——手动 RUN_ID=<id> 跳过轮询直进拉取
-  echo "    RUN_ID=$RUN_ID（环境变量注入，跳过轮询/结论门——自行确认 artifact 完好）"
+  echo "    RUN_ID=${RUN_ID}（环境变量注入，跳过轮询/结论门——自行确认 artifact 完好）"
 else
 RUN_ID=""
 for i in $(seq 1 120); do
@@ -62,13 +62,13 @@ for r in runs:
 " 2>/dev/null) || RUN_ID=""
   ST=$(echo "$RUN_ID" | awk '{print $2}')
   [ "$ST" = "completed" ] && break
-  [ -n "$ST" ] && echo "    run $(echo "$RUN_ID" | awk '{print $1}') $ST…（30s 再查）"
+  [ -n "$ST" ] && echo "    run $(echo "$RUN_ID" | awk '{print $1}') ${ST}…（30s 再查）"
   sleep 30
 done
 [ -n "$RUN_ID" ] || { echo "ERR: 没找到 $TAG 的 desktop.yml run——tag 推了吗？"; exit 1; }
 CONCL=$(echo "$RUN_ID" | awk '{print $3}')
 RUN_ID=$(echo "$RUN_ID" | awk '{print $1}')
-[ "$CONCL" = "success" ] || { echo "ERR: run $RUN_ID 结论 $CONCL（非 success）——先去 Actions 排查"; exit 1; }
+[ "$CONCL" = "success" ] || { echo "ERR: run $RUN_ID 结论 ${CONCL}（非 success）——先去 Actions 排查"; exit 1; }
 echo "    run $RUN_ID success"
 fi
 
@@ -76,13 +76,13 @@ echo "[2/5] 拉 Windows 产物（setup.exe + .sig）…"
 # 产物下载走同一条抖动链路，失败重试 3 次（30s 间隔）再放弃
 DL_OK=0
 for i in 1 2 3; do
-  if gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-$TAG" -D "$TMP"; then DL_OK=1; break; fi
+  if gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-Nova-$TAG" -D "$TMP"; then DL_OK=1; break; fi
   [ "$i" = "3" ] || { echo "    下载失败（第 $i 次），30s 后重试…"; sleep 30; }
 done
-[ "$DL_OK" = "1" ] || { echo "ERR: artifact 拉取失败（名字 CC-Deck-Desktop-Tauri-$TAG）"; exit 1; }
+[ "$DL_OK" = "1" ] || { echo "ERR: artifact 拉取失败（名字 CC-Deck-Desktop-Tauri-Nova-${TAG}）"; exit 1; }
 EXE=$(find "$TMP" -name '*-setup.exe' | head -1)
 SIG=$(find "$TMP" -name '*-setup.exe.sig' | head -1)
-[ -n "$EXE" ] && [ -n "$SIG" ] || { echo "ERR: artifact 缺 setup.exe 或 .sig（EXE=$EXE SIG=$SIG）"; exit 1; }
+[ -n "$EXE" ] && [ -n "$SIG" ] || { echo "ERR: artifact 缺 setup.exe 或 .sig（EXE=$EXE SIG=${SIG}）"; exit 1; }
 EXE=$(cd "$(dirname "$EXE")" && pwd)/$(basename "$EXE")
 SIG=$(cd "$(dirname "$SIG")" && pwd)/$(basename "$SIG")
 echo "    $(basename "$EXE") ($(stat -f%z "$EXE")B)"
@@ -95,7 +95,7 @@ ECS_MD5=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/$EXE_KEY" | awk '{print $1}')
 echo "    ECS md5 校验一致"
 scripts/kv-put-verified.sh "$EXE" "$EXE_KEY"
 
-echo "[4/5] 生成并上传 $MANIFEST_KEY（双源，url 各指本源）…"
+echo "[4/5] 生成并上传 ${MANIFEST_KEY}（双源，url 各指本源）…"
 SIGB64=$(base64 < "$SIG" | tr -d '\n')
 PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # 清单 url 双源统一指 CF https（#122：updater 对 http 敏感——endpoint 层启动即校验
