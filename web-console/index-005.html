@@ -335,6 +335,13 @@
        会话域（工作目录/最近活动）已迁第三列 head（.head-meta），顶栏不再随会话抖动 */
     .windowbar-hint {flex: 0 1 auto; min-width: 0; max-width: 340px; overflow: hidden; color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap;}
     .windowbar-hint:empty { display: none; }
+    /* 1013 件9：顶栏页内刷新钮——重拉全量 SNAPSHOT（保 tab/滚动），主连接零扰动 */
+    .windowbar-refresh { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+    .windowbar-refresh:hover { color: var(--text); background: var(--hover); }
+    .windowbar-refresh .icon-inline { width: 14px; height: 14px; }
+    .windowbar-refresh.busy { pointer-events: none; color: var(--faint); }
+    .windowbar-refresh.busy .icon-inline { animation: wrefSpinKf .8s linear infinite; }
+    @keyframes wrefSpinKf { to { transform: rotate(360deg); } }
     /* #158-②③ windowbar 桌面化：Tauri 壳内真拖拽区+Windows 三钮（浏览器保持原型装饰零变化） */
     .windowbar { user-select: none; -webkit-user-select: none; }
     .windowbar-winbtns { display: none; align-items: stretch; flex: none; margin: 0 -13px 0 6px; }
@@ -453,21 +460,28 @@
     .pair-pop-backdrop { position: fixed; inset: 0; z-index: 95; background: color-mix(in srgb, var(--bg0) 55%, transparent); }
     /* FB3 配对弹窗四件套：QR 图 / 8 位码 / 链接+复制 / 已连设备列表（参照旧版 relay 页两栏制） */
     .pair-grid { display: flex; gap: 14px; padding: 6px; }
-    .pair-qr-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    /* 1013 件1-3：qr-col 定宽——原 flex:none 无宽约束，智能码就绪后 small 换长文案把左栏
+       撑到 ~290px 不可收缩，右栏被压塌（码折行贴边/说明竖排/复制钮挤竖/左栏下方死空白四症同根）；
+       定宽 148px=QR 118px+余量，small 限宽内正常换行，两栏回到设计比例 */
+    .pair-qr-col { flex: none; width: 148px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
     .pair-qr-col canvas { width: 118px; height: 118px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .pair-qr-col small, .pair-code-note, .pair-dev small { color: var(--dim); font: var(--fs-B) var(--mono); }
+    .pair-qr-col small { max-width: 100%; text-align: center; line-height: 1.5; }
     .pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
     .pair-code-box { padding: 9px 10px; border: 1px solid var(--selected-line); border-radius: 9px; background: var(--surface1); text-align: center; }
-    .pair-code-digits { color: var(--text-strong); font: 700 22px/1.2 var(--mono); letter-spacing: .12em; font-variant-numeric: tabular-nums; }
-    .pair-code-note { display: block; margin-top: 4px; text-align: center; }
+    /* 件1：8 位码两组四位分两行（JS 落 <br>），nowrap 防组内折行贴边 */
+    .pair-code-digits { color: var(--text-strong); font: 700 24px/1.3 var(--mono); letter-spacing: .14em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pair-code-note { display: block; margin-top: 5px; text-align: center; line-height: 1.5; }
     .pair-link-row { display: flex; gap: 6px; }
-    .pair-link-row input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono); }
+    .pair-link-row input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; } /* 1013 件1 追补：截断明示（默认 input 硬切无省略号）*/
+    .pair-link-row .secondary-btn { flex: none; } /* 件2：复制钮不被挤竖（原无收缩保护，右栏塌陷时被压成竖条）*/
     .pair-devs { margin: 8px 6px 4px; padding: 7px 6px 3px; border-top: 1px solid var(--line-soft); }
     .pair-dev { display: flex; align-items: center; gap: 8px; padding: 6px 4px; }
     .pair-dev strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
     .pair-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 6px 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
     .pair-cloud-link { color: var(--info); font-size: var(--fs-E); text-decoration: none; cursor: pointer; }
     .pair-cloud-link:hover { text-decoration: underline; }
+    @media (max-width: 400px) { .pair-grid { flex-direction: column; } .pair-qr-col { width: auto; } } /* 1013 窄宽档：360px 类视口两栏纵向堆叠（右栏不再被压到 ~130px）*/
     /* B10 新建会话弹窗：居中对话框（引擎选择/模型二层/初始指令/目录+浏览+历史/两开关）。
        浮层描边合法（军规④）；行内不再画线（军规②③），分组靠间距+小节标题 */
     .create-pop { position: fixed; top: 50%; left: 50%; z-index: 96; display: block; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; padding: 16px 16px 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: var(--shadow); transform: translate(-50%, -50%); }
@@ -1378,14 +1392,18 @@
     #d-team .task-card.compact { padding: 7px 9px; }
     #d-team .task-card.compact > strong { font-size: var(--fs-B); }
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
-    /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；向上弹防
-       workspace-body 底缘裁剪，pointer-events:none 防闪烁，z-index 盖过后续泳道卡 */
+    /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；
+       1013 件8 重设计：原「卡上方通栏」纵向受限、长内容桌面显示不完整——改鼠标侧方弹出
+       （.flip 由 JS 委托择侧：右侧空间不足翻左侧），宽度放开 400px（上限 50vw），纵向
+       max-height 卡内滚动；字号整体降档+紧凑行距（宽卡换少行数）；pointer-events:none
+       防闪烁，z-index 盖过后续泳道卡 */
     #d-team .task-card.compact { position: relative; }
-    #d-team .task-card .task-pop { display: none; position: absolute; z-index: 30; left: 3px; right: 3px; bottom: calc(100% + 4px); padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); pointer-events: none; text-align: left; }
+    #d-team .task-card .task-pop { display: none; position: absolute; z-index: 30; top: 0; left: calc(100% + 8px); width: min(400px, 50vw); max-height: min(460px, calc(100vh - 40px)); overflow-y: auto; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); pointer-events: none; text-align: left; }
     #d-team .task-card:hover .task-pop { display: block; }
-    #d-team .task-pop b { display: block; color: var(--text-strong); font-size: var(--fs-B); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
-    #d-team .task-pop p { display: block; margin: 4px 0 0; color: var(--dim); font-size: var(--fs-D); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
-    #d-team .task-pop span { display: block; margin-top: 5px; color: var(--faint); font-size: var(--fs-D); white-space: normal; }
+    #d-team .task-card .task-pop.flip { left: auto; right: calc(100% + 8px); }
+    #d-team .task-pop b { display: block; color: var(--text-strong); font-size: var(--fs-B); line-height: 1.4; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop p { display: block; margin: 4px 0 0; color: var(--dim); font-size: var(--fs-B); line-height: 1.45; white-space: normal; overflow: visible; text-overflow: unset; }
+    #d-team .task-pop span { display: block; margin-top: 5px; color: var(--faint); font-size: var(--fs-C); line-height: 1.4; white-space: normal; }
     /* 追加⑨：甬道拉高吃满可用纵向——看板 pane flex 列布局，board flex:1 吃满 pane 剩余高
        （min-height:100% 百分比参照链断裂：pane 高度 auto 时百分比失效，故走 flex），
        grid stretch 等高，底缘贴容器底 */
@@ -1406,6 +1424,8 @@
     #d-team .task-owner .q-num { flex: none; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 999px; background: var(--tag-bg); color: var(--dim); font: 600 10px/15px var(--mono); text-align: center; font-style: normal; }
     #d-team .task-owner .q-run { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--working); box-shadow: 0 0 0 2px color-mix(in srgb, var(--working) 22%, transparent); }
     #d-team .lane-subhead { display: flex; align-items: center; gap: 5px; margin: 9px 2px 5px; color: var(--dim); font-size: var(--fs-D); font-weight: 700; }
+    /* 1013 件6：分区头成员小标识（角色字母圆点）+计数小灰字（.subhead-count 原有） */
+    #d-team .lane-subhead .lane-subhead-ava { flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--dim); font: 700 9px/1 var(--mono); font-style: normal; }
     #d-team .lane-subhead:first-child { margin-top: 1px; }
     #d-team .lane-subhead .subhead-count { color: var(--faint); font-weight: 400; }
     /* UIPOLISH3 件四⑩：团队卡状态徽章与指示灯整合——单元素状态胶囊（点色随态，替代裸灯+文字 tag 两件套） */
@@ -2122,7 +2142,9 @@
        ④空闲卡降权见 .queue-card.idle strong（opacity .55 原有+标题降灰新增）
        ⑤组头吸顶（.session-list 滚动口 sticky，底带实色防透、滚动不迷路） */
     .session-group + .session-group { margin-top: 20px; }
-    .session-group > .queue-group { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 5px 8px 4px 9px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); border-left: 3px solid var(--grp-accent, var(--brand)); background: color-mix(in srgb, var(--brand) 4%, var(--surface2)); font-weight: 650; color: var(--text); }
+    /* 1013 件5（用户截图反馈）：组头下缘横线去掉（带底 tint 已够分层，双 hairline 显重）；
+       左内边距 9→6 收窄=整组视觉左移回调（配套 grpHead 去文件夹图标，标题起点贴近卡片内容缘） */
+    .session-group > .queue-group { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 5px 8px 4px 6px; border-top: 1px solid var(--line-soft); border-left: 3px solid var(--grp-accent, var(--brand)); background: color-mix(in srgb, var(--brand) 4%, var(--surface2)); font-weight: 650; color: var(--text); }
     .session-group > .queue-group:hover { color: var(--text-strong); }
     .session-group > .queue-group .grp-caret { width: 10px; font-size: 10px; color: var(--dim); }
     .session-group > .queue-group:hover .grp-caret { color: var(--text); }
@@ -2165,7 +2187,7 @@
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
-        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
+        <div class="windowbar" data-tauri-drag-region><span class="window-dots"><i data-w="close" title="关闭" aria-label="关闭"></i><i data-w="min" title="最小化" aria-label="最小化"></i><i data-w="max" title="最大化" aria-label="最大化"></i></span><span class="window-title" data-tauri-drag-region>CC Deck</span><div class="source-switcher" data-stub="B7"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><strong data-current-source>当前源</strong><span class="source-conn conn-idle" data-source-conn aria-hidden="true"></span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="local"><span class="source-dot status-connected"></span><strong>当前源</strong><small>—</small></button><button class="source-add" type="button" data-source-add>＋ 添加服务器 · 连接其他电脑</button><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="windowbar-spring" data-tauri-drag-region></span><span class="windowbar-hint" data-windowbar-hint id="windowbar-hint"></span><button type="button" class="windowbar-refresh" data-refresh-all title="刷新数据 · 重拉全量快照，保留当前页面与滚动位置" aria-label="刷新数据"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button><div class="windowbar-winbtns" data-win-btns><button type="button" data-w="min" title="最小化" aria-label="最小化">─</button><button type="button" data-w="max" title="最大化" aria-label="最大化">▢</button><button type="button" data-w="close" title="关闭" aria-label="关闭">✕</button></div></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
             <button class="rail-btn active" data-domain="session" title="会话"><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></button>
@@ -3173,7 +3195,7 @@
                   const activePool = topUnpinned.filter(isActive); // 不再按 reason 重排
                   const idleAll = topUnpinned.filter((x) => !isActive(x));
                   // B11 组头（可折叠）：caret + 文件夹图标 + 名 · 计数；卡体包 .grp-body，折叠态 CSS 隐藏
-                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-folder">' + svgUse("folder") + "</span><span>" + title + '</span><span class="grp-count" data-session-group-count>' + count + "</span></div>"; /* 件十五：计数徽章化（· 分隔符退役） */
+                  const grpHead = (key, title, count, expanded) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span>' + title + '</span><span class="grp-count" data-session-group-count>' + count + "</span></div>"; /* 件十五：计数徽章化（· 分隔符退役）；1013 件5：文件夹图标退役——标题起点左移贴卡片内容缘（caret 单独承担折叠示意）*/
                   // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
                   // 加头=降格成可折叠组；组头间距由「进行中」组头自然承担）。恒在 DOM（不参与折叠记账）
                   const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
@@ -5995,13 +6017,22 @@
                   const r = taskOwnerResolve(task, project);
                   const hasOwner = r.resolved; // ⑦a：前缀映射命中视同有主
                   const info = memberInfo(r.member || (task.owner_session ? { session_id: task.owner_session, role: "执行者" } : { session_id: "", role: "" }));
+                  // 1013 件6：卡面显示名走看板语境单口——nick 优先，缺席回短 sid（原 memberInfo
+                  // 的 session.title 兜底会把派单 prompt 首行/全 UUID 顶上卡，蓝底大字元凶）
+                  const shortSid = (sid) => String(sid || "").slice(0, 8);
+                  const dispName = r.member ? (String(r.member.nick || "") || shortSid(r.member.session_id)) : shortSid(task.owner_session);
                   const engKnown = Boolean(info.engine && engines.has(info.engine)); // 件六：词表外/缺失不渲染引擎
                   const ownerBits = [];
                   if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
                   if (queueCtx && queueCtx.ordinal) ownerBits.push('<i class="q-num">' + queueCtx.ordinal + "</i>");
                   if (engKnown) ownerBits.push(engineBadge(info.engine));
-                  ownerBits.push(hasOwner ? "<b>" + escape(info.name) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : "<b>未指派</b>");
+                  // 1013 件6：claimed 失联卡（owner 在场但不在编制）不再裸标「未指派」——短 sid+失联
+                  // 保身份（分区头已按用户口径不渲染，身份落卡上）
+                  ownerBits.push(hasOwner ? "<b>" + escape(dispName) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : (task.owner_session ? "<b>" + escape(dispName) + '</b><span class="assignee-meta">失联</span>' : "<b>未指派</b>"));
                   const fullText = String(task.text || task.id);
+                  // 1013 件6：卡面标题渲染层 cap60 归一（relay 建卡已 cap，存量卡/owner 前缀回填
+                  // 路径漏网在此兜底；title 属性与悬浮详情仍全文）
+                  const faceText = (() => { const t = String(r.text || fullText).trim(); return t.length > 60 ? t.slice(0, 59) + "…" : t; })();
                   const created = expFmtTime(task.ts);
                   const updated = expFmtTime(task.updated_at);
                   // 件十九：泳道迁移时间线（历史条目无 transitions=从当下起记，如实显示已有部分）
@@ -6009,7 +6040,7 @@
                   const timeline = Array.isArray(task.transitions) && task.transitions.length
                     ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
                     : "";
-                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(r.text || fullText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(info.name) + " · " + escape(info.role || "") : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
+                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><strong>' + escape(faceText) + '</strong>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
                 // W-DESIGNHUB 看板挂载两区（用户澄清并入）：图纸（当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -6066,15 +6097,19 @@
                     // 进行中泳道按 worker 分区（件八，用户推荐形态的落地修正：已指派未开始
                     // 的卡实际在 claimed——dispatch 建卡直接 claimed，不在 backlog；分区随之
                     // 放进行中泳道而非待认领）。组内 ts 升序=排队序；运行中（回执 join）置顶
-                    const groups = new Map(); // sid -> {name, cards[]}
+                    // 1013 件6（用户 1013 截图反馈）：分区名走 nick||短 sid 单口（原 memberInfo
+                    // 的 title/sid 兜底把 UUID 与派单原文顶成分区行，蓝底大字占三行）；分区头
+                    // 带成员小标识；失联卡不再渲染「失联执行者」分区行——卡直接排队（身份在
+                    // 卡上：短 sid+失联），泳道里只有卡片
+                    const avaLetter = (m) => /^(pm|leader)$/i.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
+                    const groups = new Map(); // sid -> {name, ava, cards[]}
                     const orphans = []; // owner 失联（sid 不在编制——离编/数据残留）
                     const unassigned = []; // 无主卡（件七显示面）
                     for (const t of items) {
                       if (!t.owner_session) { unassigned.push(t); continue; }
                       const m = members(project).find((x) => x.session_id === t.owner_session);
                       if (!m) { orphans.push(t); continue; }
-                      const info = memberInfo(m);
-                      if (!groups.has(t.owner_session)) groups.set(t.owner_session, { name: info.name, cards: [] });
+                      if (!groups.has(t.owner_session)) groups.set(t.owner_session, { name: String(m.nick || "") || String(t.owner_session).slice(0, 8), ava: avaLetter(m), cards: [] });
                       groups.get(t.owner_session).cards.push(t);
                     }
                     let html2 = "";
@@ -6082,13 +6117,10 @@
                       const ordered = g.cards.slice().sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
                       const runningIdx = ordered.findIndex((t) => dispatchStatus.get(t.dispatch_id) === "running");
                       if (runningIdx > 0) ordered.unshift(...ordered.splice(runningIdx, 1)); // 运行中置顶=当前活
-                      html2 += '<div class="lane-subhead">' + escape(g.name) + '<span class="subhead-count">' + ordered.length + "</span></div>";
+                      html2 += '<div class="lane-subhead"><i class="lane-subhead-ava">' + g.ava + '</i>' + escape(g.name) + '<span class="subhead-count">' + ordered.length + "</span></div>";
                       html2 += ordered.map((t, i) => taskMarkup(t, project, { ordinal: ordered.length > 1 ? i + 1 : 0, running: dispatchStatus.get(t.dispatch_id) === "running" })).join("");
                     }
-                    if (orphans.length) {
-                      html2 += '<div class="lane-subhead">失联执行者<span class="subhead-count">' + orphans.length + "</span></div>";
-                      html2 += orphans.map((t) => taskMarkup(t, project)).join("");
-                    }
+                    if (orphans.length) html2 += orphans.map((t) => taskMarkup(t, project)).join("");
                     if (unassigned.length) {
                       if (showUnassignedHead) html2 += '<div class="lane-subhead">未指派<span class="subhead-count">' + unassigned.length + "</span></div>"; // ⑦b：组头仅待认领泳道
                       html2 += unassigned.map((t) => taskMarkup(t, project)).join("");
@@ -6798,6 +6830,30 @@
                   panes.forEach((pane) => pane.removeAttribute("data-stub"));
                   root.removeAttribute("data-stub");
                   state.mounted = true;
+                  // 1013 件8：悬浮详情卡侧方定位——CSS 默认右侧（.flip 翻左），JS 委托按视口
+                  // 余量择侧 + 纵向钳制（贴底上移/贴顶下移，均留 12px 呼吸）；rAF 等 :hover
+                  // 布局生效后量尺寸；重复触发幂等
+                  root.addEventListener("mouseover", (event) => {
+                    const card = event.target.closest(".task-card");
+                    if (!card || !root.contains(card)) return;
+                    const pop = card.querySelector(":scope > .task-pop");
+                    if (!pop) return;
+                    requestAnimationFrame(() => {
+                      if (!pop.isConnected || !card.matches(":hover")) return;
+                      const cr = card.getBoundingClientRect();
+                      pop.classList.toggle("flip", cr.right + 416 > window.innerWidth - 8);
+                      pop.style.top = "0px";
+                      const pr = pop.getBoundingClientRect();
+                      const wantTop = Math.min(cr.top, window.innerHeight - 12 - pr.height);
+                      pop.style.top = Math.max(12, wantTop) - cr.top + "px";
+                    });
+                  });
+                  // 1013 件9：顶栏刷新钮——板不随 SNAPSHOT 走（按需拉），且 Team.snapshot
+                  // 落地时会清 boards/loads；事件在 SNAPSHOT 之后到：当前选中组立即 force
+                  // 重拉（用户正在看的板即刻新鲜），其余组 loads 已清、切组时自然重拉
+                  document.addEventListener("ccdeck-005-refresh", () => {
+                    if (state.selected) void requestDetail(state.selected, true);
+                  });
                   root.addEventListener("click", (event) => {
                     // FB4 团域新建：真表单（团队名/锚点/档位/成员多选），不再代理会话域新建会话弹窗
                     const newSession = event.target.closest("[data-team-new-session]");
@@ -9501,7 +9557,7 @@ function connectLan(ctx) {
         if (!drawPairQr(cv, payload)) return false;
         const col = cv.closest(".pair-qr-col");
         const small = col && col.querySelector("small");
-        if (small) small.textContent = "手机扫码即连 · 同网直连 / 跨网云桥自动择路";
+        if (small) small.innerHTML = "手机扫码即连 · 同网直连<br>跨网走云桥自动择路"; // 1013 件4：一行太长是左栏被撑宽元凶之一，拆两行紧凑排
         return true;
       }
       function openLanPairDialog() {
@@ -9521,7 +9577,7 @@ function connectLan(ctx) {
           + '<div class="pair-grid">'
           + '<div class="pair-qr-col"><canvas data-pair-qr width="10" height="10"></canvas><small>手机扫码直接加入</small></div>'
           + '<div class="pair-info">'
-          + '<div class="pair-code-box"><div class="pair-code-digits" data-pair-code>···· ····</div><span class="pair-code-note" data-pair-code-note>正在领取 8 位配对码…</span></div>'
+          + '<div class="pair-code-box"><div class="pair-code-digits" data-pair-code>····<br>····</div><span class="pair-code-note" data-pair-code-note>正在领取 8 位配对码…</span></div>'
           + '<div class="pair-link-row"><input readonly value="' + link.replace(/"/g, "&quot;") + '" aria-label="配对链接"><button class="secondary-btn" type="button" data-pair-copy>复制</button></div>'
           + '</div></div>'
           + '<div class="source-menu-head">已连接设备</div>'
@@ -9559,9 +9615,9 @@ function connectLan(ctx) {
           return buildSmartPairParts().then((parts) => {
             if (!pop.isConnected) return;
             if (smartTimer) { clearTimeout(smartTimer); smartTimer = null; } // 重领前必清旧续期器（防 QR 画失败等分支双倍重领）
-            if (digits) digits.textContent = (parts.code.slice(0, 4) + " " + parts.code.slice(4)).trim();
+            if (digits) digits.replaceChildren(parts.code.slice(0, 4), document.createElement("br"), parts.code.slice(4)); // 1013 件1：两组四位分两行（原单行在右栏受压时折行贴边）
             const mins = Math.max(1, Math.round((parts.ttlMs || 300000) / 60000));
-            if (note) note.textContent = "手机 App「添加电脑」输入 · " + mins + " 分钟内有效";
+            if (note) note.innerHTML = "手机 App「添加电脑」输入 ·<br>" + mins + " 分钟内有效"; // 1013 件1 追补：右栏 200px 档自然断行会把「5」孤在行尾（mins 数字安全免转义），定死「·」后断行
             if (cv && (parts.lan || parts.cloud)) {
               drawSmartPairQr(cv, parts);
               const ttl = parts.ttlMs || 300000;
@@ -11260,6 +11316,70 @@ function connectLan(ctx) {
         if (!context.sessions.has(context.selectedSessionId)) context.selectedSessionId = null;
         renderSessionList();
       }
+
+      // 1013 件9（用户反馈：看板清了但页面没变化、找不到刷新入口）：顶栏页内刷新钮。
+      // 临时 ws 不带 last_seq 重连一次 → relay 判新客户端推全量 SNAPSHOT → onEvent 幂等
+      // 覆盖 + 帧总线 fan-out，各域自动重渲；DOM 不换页，tab/滚动天然保留。主连接
+      // 零扰动（2026-09-16 手机下拉刷新教训：断开重连会干断在线源、清在途 ACK 追踪）。
+      // 板不随快照走（COMMAND_PROJECT_DETAIL 按需拉）——ccdeck-005-refresh 事件让团队域
+      // 对已锚定板 force 重拉；云视角全量重建必须断链重连，不值当——降级 ping-resume
+      // 增量补发 + 板重拉。
+      let refreshAllInFlight = false;
+      // 滚动保持：SNAPSHOT 重走会 replaceChildren 重渲各域列表（session-list 的
+      // scrollTop 会归零跳顶）——刷新前记各滚动口，落帧重渲后两拍恢复
+      const REFRESH_SCROLL_SEL = [".session-list", "#d-team .workspace-body", "#d-team .team-chat", "#d-project .workspace-body", "#d-notify .workspace-body", "#d-settings .settings-body"];
+      function scrollMark() {
+        return REFRESH_SCROLL_SEL.map((sel) => { const el = document.querySelector(sel); return el ? { el, top: el.scrollTop } : null; }).filter(Boolean);
+      }
+      function scrollRestore(marks) {
+        for (const m of marks) { try { if (m.el.isConnected) m.el.scrollTop = m.top; } catch {} }
+      }
+      function refreshAllData() {
+        if (refreshAllInFlight) return;
+        const btn = document.querySelector("[data-refresh-all]");
+        refreshAllInFlight = true;
+        if (btn) btn.classList.add("busy");
+        const marks = scrollMark();
+        const done = (ok) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => scrollRestore(marks))); // 重渲落帧后恢复（rAF 两拍等 replaceChildren 后布局）
+          refreshAllInFlight = false;
+          if (btn) btn.classList.remove("busy");
+          showToast(ok ? "数据已刷新" : "刷新未成功 · 请检查连接后重试");
+        };
+        const refreshBoards = () => document.dispatchEvent(new CustomEvent("ccdeck-005-refresh")); // 团队域当前组板 force 重拉
+        if (viewSource() === "cloud") {
+          try { sendCloud(cloudCtx, { t: "ping", last_seq: cloudCtx.sessions.size > 0 ? cloudCtx.lastSeq : 0 }); refreshBoards(); done(true); } catch { done(false); }
+          return;
+        }
+        if (!ctx.cfg || !ctx.cfg.wsUrl || !ctx.cfg.token) { done(false); return; }
+        let settled = false;
+        const timer = setTimeout(() => { if (!settled) { settled = true; try { w.close(); } catch {} done(false); } }, 5000);
+        let w;
+        try {
+          w = new WebSocket(ctx.cfg.wsUrl + "?token=" + encodeURIComponent(ctx.cfg.token));
+          w.onmessage = (ev) => {
+            if (settled) return;
+            let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+            if (msg.type !== "SNAPSHOT") return;
+            settled = true; clearTimeout(timer);
+            if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+            // 滚动快照：SNAPSHOT 重渲会瞬间清空列表内容，容器 scrollTop 被 clamp 归零——
+            // 重建完成后同步还原（单据要求：保留当前 tab/滚动位置）
+            const scrollKeep = [...document.querySelectorAll(".session-list, .desktop-screen.active .workspace-body, .desktop-screen.active .queue")]
+              .map((el) => [el, el.scrollTop]).filter(([, top]) => top > 0);
+            onEvent(ctx, msg);
+            window.__ccDeck005Frames.emit({ kind: "frame", frame: msg, source: "lan" });
+            for (const [el, top] of scrollKeep) el.scrollTop = top;
+            try { w.close(); } catch {}
+            refreshBoards(); // SNAPSHOT 落地后（Team.snapshot 已清板/loads）再触发板重拉
+            done(true);
+          };
+          w.onerror = () => { if (!settled) { settled = true; clearTimeout(timer); done(false); } };
+        } catch { clearTimeout(timer); done(false); }
+      }
+      document.addEventListener("click", (event) => {
+        if (event.target.closest("[data-refresh-all]")) refreshAllData();
+      });
 
       document.addEventListener("click", (event) => {
         const target = event.target;
