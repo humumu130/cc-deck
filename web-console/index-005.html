@@ -6959,7 +6959,7 @@
 
           <section class="desktop-screen" id="d-project">
             <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起新建项目 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="source-badge" data-project-source></span></div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="source-badge" data-project-source></span></div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button><button data-project-design-tab hidden>图纸</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
             <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block" data-project-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
             <script>
               (() => {
@@ -7059,6 +7059,10 @@
                   pendingConfirms: [],
                   accepts: [],
                   projects: [],
+                  // W-SRCMENU2 ⑥：设计图纸目录（SNAPSHOT.design_docs——W-DESIGNHUB 契约；
+                  // 缺键/空数组=旧 relay 或无 docs 部署，图纸 tab 自动隐藏）
+                  designDocs: [],
+                  designDocsSeen: false,
                   relayName: location.host || "relay",
                   homedir: "",
                   // P0 连接接线：http 页面统一 connecting 起步（无 token 时地基异步探测本机 relay，
@@ -7136,6 +7140,9 @@
                   bridge.pendingConfirms = Array.isArray(p.org_confirms) ? p.org_confirms.filter((c) => c && typeof c.id === "string") : [];
                   bridge.accepts = Array.isArray(p.acceptances) ? p.acceptances.filter((a) => a && typeof a.id === "string") : [];
                   bridge.projects = Array.isArray(p.projects) ? p.projects.filter((g) => g && typeof g.id === "string") : [];
+                  // W-SRCMENU2 ⑥：图纸清单（鸭子校验——path 字符串在场才算；缺键维持 []，能力位由 seen 判）
+                  const dd = Array.isArray(p.design_docs) ? p.design_docs.filter((d) => d && typeof d.path === "string" && typeof d.title === "string") : null;
+                  if (dd) { bridge.designDocs = dd; bridge.designDocsSeen = true; }
                   bridge.relayName = typeof p.relay_name === "string" && p.relay_name ? p.relay_name : (location.host || "relay");
                   bridge.homedir = typeof p.homedir === "string" ? p.homedir : "";
                   bridge.snapshot = p;
@@ -7159,7 +7166,7 @@
                     // 验收/通知）同口径按 id 并集——通知卡与项目卡聚合可见两源（用户实测空卡修复）
                     if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
                       const keepSessions = new Map(bridge.sessions);
-                      const keepLists = { projects: bridge.projects.slice(), pendingConfirms: bridge.pendingConfirms.slice(), accepts: bridge.accepts.slice(), notifications: bridge.notifications.slice() };
+                      const keepLists = { projects: bridge.projects.slice(), pendingConfirms: bridge.pendingConfirms.slice(), accepts: bridge.accepts.slice(), notifications: bridge.notifications.slice(), designDocs: bridge.designDocs.slice() };
                       applySnapshot(frame.payload);
                       for (const [id, v] of keepSessions) if (!bridge.sessions.has(id)) bridge.sessions.set(id, v);
                       const byId = (keep, cur, idOf) => { const seen = new Set(cur.map((x) => x && idOf(x))); for (const x of keep) { const k = x && idOf(x); if (k !== undefined && k !== null && !seen.has(k)) { cur.push(x); seen.add(k); } } };
@@ -7167,6 +7174,7 @@
                       byId(keepLists.pendingConfirms, bridge.pendingConfirms, (x) => x.id);
                       byId(keepLists.accepts, bridge.accepts, (x) => x.id);
                       byId(keepLists.notifications, bridge.notifications, (x) => x.key); // 通知归一化后判重键=key
+                      byId(keepLists.designDocs, bridge.designDocs, (x) => x.path); // W-SRCMENU2 ⑥：图纸按 path 去重并集（聚合两源）
                     } else applySnapshot(frame.payload);
                     changed = true;
                   }
@@ -7518,6 +7526,35 @@
                   return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows;
                 }
 
+                // W-SRCMENU2 ⑥：图纸 tab（W-DESIGNHUB 消费面）——分组平铺（group 头+行），行点击
+                // 新窗直开 relay /design/<rel>（红线：HTML 原样服务不加工、无容器页）。打开地址=
+                // 主连接源 origin + path（聚合两源图纸按 path 去重并集可见；云源图纸跨源直开需
+                // 云桥静态面，超出本批——回执口径点）。项目匹配：与当前项目组 name/锚点分词有
+                // 交集的 tags 行前置「相关」小标（信息增强不筛除——图纸目录通常量小，全量可扫）
+                function designDocsTabMarkup(entry) {
+                  if (!bridge.designDocs.length) return '<div class="readonly-banner">图纸目录为空（docs/system-design/ 未部署 archify 产物）。</div>';
+                  const keyTokens = new Set(
+                    String(entry && entry.group ? entry.group.name || "" : "").toLowerCase().split(/[\s/_·-]+/).filter(Boolean)
+                      .concat(String(entry && entry.group ? entry.group.anchor_dir || "" : "").toLowerCase().split(/[/\s_-]+/).filter(Boolean)),
+                  );
+                  const groups = new Map();
+                  for (const d of bridge.designDocs) {
+                    if (!groups.has(d.group)) groups.set(d.group, []);
+                    groups.get(d.group).push(d);
+                  }
+                  let html = '<div class="readonly-banner">系统设计图纸 · ' + bridge.designDocs.length + ' 张 · 点击新窗打开</div>';
+                  for (const [g, items] of groups) {
+                    html += '<div class="queue-group">' + escapeHtml(g || "全局") + " · " + items.length + "</div>";
+                    for (const d of items) {
+                      const related = d.tags && d.tags.some((t) => keyTokens.has(t)) && entry && entry.group;
+                      html += '<div class="queue-card" role="button" tabindex="0" data-design-open="' + escapeHtml(d.path) + '" title="' + escapeHtml(d.title) + ' · 新窗打开"><div class="row"><strong>' + escapeHtml(d.title) + "</strong>"
+                        + (related ? '<span class="tag mini">相关</span>' : "") + "</div>"
+                        + (Array.isArray(d.tags) && d.tags.length ? '<p>' + escapeHtml(d.tags.slice(0, 6).map((t) => "#" + t).join(" ")) + "</p>" : "") + "</div>";
+                    }
+                  }
+                  return html;
+                }
+
                 function renderInspector(entry) {
                   const actions = projectActionItems(entry);
                   if (actions.length) {
@@ -7573,7 +7610,7 @@
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                     window.__ccDeck005SetWindowbarHint?.("project", waiting);
-                    setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
+                    setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
                     els.riskCount.style.display = "none";
                     els.riskCopy.textContent = waiting;
                     els.artifactCount.textContent = "0";
@@ -7594,7 +7631,9 @@
                     renderInspector(null);
                     return;
                   }
-                  setPaneContents([overviewMarkup(entry), sessionsTabMarkup(entry), teamTabMarkup(entry), taskTabMarkup(), artifactsTabMarkup(entry), acceptancesTabMarkup()]);
+                  setPaneContents([overviewMarkup(entry), sessionsTabMarkup(entry), teamTabMarkup(entry), taskTabMarkup(), artifactsTabMarkup(entry), acceptancesTabMarkup(), designDocsTabMarkup(entry)]); // W-SRCMENU2 ⑥：第七 pane=图纸
+                  const designTab = document.querySelector('#d-project [data-project-design-tab]'); // 能力位：SNAPSHOT 曾带 design_docs 且非空才显形（旧 relay/无 docs 部署自动隐藏）；项目域 IIFE 无 root 别名——document 直查防 ReferenceError 被订阅链静默吞
+                  if (designTab) designTab.hidden = !(bridge.designDocsSeen && bridge.designDocs.length > 0);
                   renderInspector(entry);
                 }
 
@@ -7625,6 +7664,15 @@
                   }
                   // W-PROJP1 P1-1：快捷链接——先于卡片选中分支，点击不触发选卡（选卡会切第三列总览，误触代价高）
                   const openBtn = target.closest("[data-project-open]");
+                  // W-SRCMENU2 ⑥：图纸行点击 → 新窗直开 relay /design/<rel>（W-DESIGNHUB 红线：
+                  // 图纸自带主题与交互，无容器页）。地址=主连接源 origin+path
+                  const designBtn = target.closest("[data-design-open]");
+                  if (designBtn) {
+                    event.stopPropagation();
+                    const p = designBtn.dataset.designOpen || "";
+                    if (p) window.open(p, "_blank", "noopener");
+                    return;
+                  }
                   if (openBtn) {
                     event.stopPropagation();
                     const native = openBtn.dataset.projectOpen || "";
