@@ -1335,39 +1335,7 @@ export class SessionManager {
     if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
     const candidates: { s: ManagedSession; updated: number }[] = [];
     for (const s of this.sessions.values()) {
-      if (s.state.external || s.agent) continue;
-      // #26 M3 审查修正：挂起退休成员不自动拉起——组挂起=编制退休释放（板冻结），
-      // 重启后 auto-revive 不得把它拉回去干活。org_parked 是内存态（重启即丢，boot
-      // 由 rehydrateParkedMembers 重建），再按 project_gid 组状态兜一层双保险
-      if (s.state.org_parked) continue;
-      if (s.state.project_gid) {
-        const pg = findGroup(s.state.project_gid);
-        if (pg && pg.status !== "active") continue;
-      }
-      // #26 补章审查修正（A/B 双报）：退休成员（member-retire 编制除名）不得被
-      // auto-revive 起死回生——retired 档清了 org_parked/project_gid，上面两道
-      // 豁免全绕过，重启后残留待办会把已退休 worker 拉回去继续干活（编制门只挡
-      // 派单路由，不挡恢复）。退休痕迹=路由记录在册但不在该组编制（生产路径唯一
-      // 除名通道是 member-retire；结项组 headcount 快照保留，不构成痕迹）
-      if (this.isRetiredMember(s.state.session_id)) continue;
-      // #189 resume 互斥：上一轮 resume 的 agent 还在路上（spawn→onInit 窗口），
-      // 不重复拉起（双拉 → childPid 未就位补刀落空 → 双进程）
-      if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
-      // W-LEADFIX pin 休眠豁免：置顶会话的设计语义是「可见 + 点卡片按需恢复」
-      //（2026-09-09 用户拍板「开机不自动 resume」，见 applyPinned）——applyPinned 刚把
-      // 清单内会话标成 saved 休眠，此处原实现漏挡会把它们全部自动 resume（绕过用户
-      // 决策）。pinned+saved（停放休眠形态）一律跳过，用户消息/点卡才拉起
-      if (s.state.pinned && s.state.saved) continue;
-      // W-LEADFIX 熔断豁免：连续 resume 失败冷却期内的会话不自动拉起（否则 boot 后
-      // 照旧每条消息一拉，死循环换个入口重演）
-      if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) continue;
-      if (!s.state.relay_session_id) continue; // 首回合未完成即断，无 resume 锚点
-      // #17 雇员按家读取任务存储（审查修正：此口漏传则开关开启后雇员任务恒
-      // 读不到 → 有未完待办的雇员会话重启后不再被自动拉起，恰是本函数要保的）
-      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
-      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
-      // 48h 新鲜度：一周前残留的"pending 愿望"不是活工作，拉起来只会空转误导
-      if (Date.now() - s.state.updated_at > 48 * 3600_000) continue;
+      if (this.reviveEligible(s)) continue;
       candidates.push({ s, updated: s.state.updated_at });
     }
     candidates.sort((a, b) => b.updated - a.updated);
@@ -1383,6 +1351,67 @@ export class SessionManager {
     }
     if (revived > 0) console.log(`[auto-revive] 已自动拉起 ${revived} 个有未完成待办的托管会话`);
     return revived;
+  }
+
+  // ---------- W-ACTIVATOR 单会话复活资格链（autoReviveManaged 过滤链抽出共用） ----------
+  // 返回 null=可拉；字符串=skip 原因（审计/测试可断言）。boot 扫描与事件驱动激活器
+  // 共用同一链——两条入口纪律零分叉（外部/在场/parked/退休/互斥/pin 休眠/熔断/锚点/
+  // 待办/48h 新鲜度，语义逐条搬自 autoReviveManaged 原实现，行为零变）。
+  private reviveEligible(s: ManagedSession): string | null {
+    if (s.state.external) return "external";
+    if (s.agent) return "agent-alive";
+    // #26 M3 审查修正：挂起退休成员不自动拉起——组挂起=编制退休释放（板冻结）
+    if (s.state.org_parked) return "org-parked";
+    if (s.state.project_gid) {
+      const pg = findGroup(s.state.project_gid);
+      if (pg && pg.status !== "active") return "group-not-active";
+    }
+    // #26 补章审查修正（A/B 双报）：退休成员（member-retire 编制除名）不得起死回生
+    if (this.isRetiredMember(s.state.session_id)) return "retired";
+    // #189 resume 互斥（liveness 门同款去重锁——在途标记在则跳过，双拉防双进程）
+    if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) return "resume-in-flight";
+    // W-LEADFIX pin 休眠豁免（用户拍板「开机不自动 resume」，见 applyPinned）
+    if (s.state.pinned && s.state.saved) return "pinned-dormant";
+    // W-LEADFIX 熔断豁免：连续 resume 失败冷却期内不自动拉起（防死循环换入口重演）
+    if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) return "resume-cooldown";
+    if (!s.state.relay_session_id) return "no-resume-anchor";
+    // #17 雇员按家读取任务存储
+    const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
+    if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    // 48h 新鲜度：残留的"pending 愿望"不是活工作
+    if (Date.now() - s.state.updated_at > 48 * 3600_000) return "stale-48h";
+    return null;
+  }
+
+  // ---------- W-ACTIVATOR 事件驱动复活统一入口（agent-activator.ts 调用面） ----------
+  // 与 liveness 门的关系：投递点（sendMessage/dispatch）的判死拉活已在收编语义里
+  //（resumePending 互斥=天然去重锁，本入口的 Eligible 链同款检查——两路不会双拉）；
+  // 本入口补「没人投递时死了也能拉回」：agent-activator 订阅 SESSION_ERROR /
+  // DISPATCH_DONE(failed) 触发。通知面两态（stableKey 幂等）：成功=info/失败=waiting
+  // attention 级（可操作跳会话卡）。
+  reviveManagedSession(id: string, source: string, reason: string): { ok: boolean; skipped?: string; error?: string } {
+    const s = this.sessions.get(id);
+    if (!s) return { ok: false, skipped: "not-found" };
+    const why = this.reviveEligible(s);
+    if (why) return { ok: false, skipped: why };
+    const title = s.state.title || id.slice(0, 8);
+    try {
+      this.resumeAgent(s, `[Agent 激活器 · ${source}] ${reason}。检测到本会话仍有未完成任务，已自动恢复。请直接读取任务清单继续推进工作，无需复述上下文。`);
+      this.upsertNotification("system", "activator-revive", id, {
+        title: "会话已自动复活（激活器）",
+        body: `${title}：${reason}——已从任务清单自动恢复（来源：${source}）`,
+        severity: "info", group: "attention", actionable: false, sessionId: id, domain: "session", returnPath: "/",
+      });
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.upsertNotification("system", "activator-fail", id, {
+        title: "自动复活失败（需要手动处理）",
+        body: `${title}：${reason}——自动恢复失败：${msg}（点会话卡片可手动恢复）`,
+        severity: "waiting", group: "attention", actionable: true, sessionId: id, domain: "session", returnPath: "/",
+      });
+      return { ok: false, error: msg };
+    }
   }
 
   // ---------- 外部会话（hooks 桥接）----------

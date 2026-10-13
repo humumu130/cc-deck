@@ -5,6 +5,7 @@ import { join, sep } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { attachAgentActivator } from "./agent-activator.js";
 import { loadConfig } from "./config.js";
 import { resolveEmployeeHome, writeSettingsFile, ensureEmployeeHomeSeed } from "./settings.js";
 import { detectLanIp } from "./lan-ip.js";
@@ -304,6 +305,9 @@ const replayed = boot.sessions; // 单遍流式产物（= reduceHistory(kept) �
 
 const bus = new EventBus({ preload: kept, persistPath });
 const mgr = new SessionManager(bus, cfg);
+// W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
+// 守「死了没人投递」的死角（SESSION_ERROR/派单失败触发）。CCR_NO_ACTIVATOR=1 逃生阀。
+attachAgentActivator(bus, mgr);
 const adopted = mgr.adopt(replayed);
 
 // 重放会重写历史状态（非终态→ERROR、清 waiting_request），但重连客户端走
