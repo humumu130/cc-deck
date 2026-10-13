@@ -50953,6 +50953,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (s.state.external) {
       this.deletedExtIds.add(id2);
       appendDeletedExt(this.cfg.dataDir, id2);
+      this.bridge?.forget(id2);
     }
     if (s.state.pinned) {
       writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id2));
@@ -56625,6 +56626,63 @@ var Bridge = class _Bridge {
   opts;
   pending = /* @__PURE__ */ new Map();
   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
+  /** W-INJECT P0（泄漏修复）：外部会话消亡统一回收。此前 29 个以 ext id 为键的 Map/Set 无会话级
+   * 清理路径——nameMisses/extFileStats/extUsage/lastHookAt/engineActivityKeys/recentUserMsgs(外层)/
+   * cliStatusAt/termLine/termCapAt/titleScanned 等零 delete 纯增长，常驻 relay + 高频 ext 会话
+   * churn（每条 claude 命令注册一个 ext id）下慢性泄漏；更危险的是 4 个定时器 Map
+   * （resumeClosures/verifyTimers/stuckFailTimers/submitEnterTimers）残留 Timeout 持闭包可重复触发。
+   * 幂等（不存在的键 delete 零害）；enqueuedKeys 有 60 上限自愈但一并清更干净。
+   * 挂点：SessionManager.deleteSession 的 external 分支。 */
+  forget(id2) {
+    this.pending.delete(id2);
+    this.turnStart.delete(id2);
+    this.inputQueue.delete(id2);
+    this.flushing.delete(id2);
+    this.named.delete(id2);
+    this.nameMisses.delete(id2);
+    this.transcriptPaths.delete(id2);
+    this.recentUserMsgs.delete(id2);
+    this.escMarkedAt.delete(id2);
+    this.engineActivityKeys.delete(id2);
+    this.extFileStats.delete(id2);
+    this.extUsage.delete(id2);
+    this.stuckWatch.delete(id2);
+    this.stuckGuarding.delete(id2);
+    this.askFallback.delete(id2);
+    this.noHookIds.delete(id2);
+    this.lastGrow.delete(id2);
+    this.lastHookAt.delete(id2);
+    this.cliStatusAt.delete(id2);
+    this.termLine.delete(id2);
+    this.termCapAt.delete(id2);
+    this.titleScanned.delete(id2);
+    this.enqueuedKeys.delete(id2);
+    this.turnShape.delete(id2);
+    this.injectFails.delete(id2);
+    this.noPidNote.delete(id2);
+    this.resumeSpawns.delete(id2);
+    this.orphanProbe.delete(id2);
+    const rc2 = this.resumeClosures.get(id2);
+    if (rc2) {
+      clearTimeout(rc2);
+      this.resumeClosures.delete(id2);
+    }
+    const vt2 = this.verifyTimers.get(id2);
+    if (vt2) {
+      clearTimeout(vt2.timer);
+      this.verifyTimers.delete(id2);
+    }
+    const sft = this.stuckFailTimers.get(id2);
+    if (sft) {
+      clearTimeout(sft);
+      this.stuckFailTimers.delete(id2);
+    }
+    const set_ = this.submitEnterTimers.get(id2);
+    if (set_) {
+      clearTimeout(set_);
+      this.submitEnterTimers.delete(id2);
+    }
+  }
   turnStart = /* @__PURE__ */ new Map();
   // ext session_id -> 本回合开始时间
   inputQueue = /* @__PURE__ */ new Map();
