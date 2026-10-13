@@ -538,6 +538,8 @@ class RelayStore {
         }
         continue;
       }
+      // 🔥P0：offline/idle 且非待唤醒——直接发起（末分支本已有；connConnect 开头
+      // 清残留退避 timer，后台期排定的长退避到点即被掐）
       // offline/idle 且非待唤醒：直接发起
       if ((conn.state === "offline" || conn.state === "idle") && conn.cfg && !conn.awaitWake) this.connConnect(conn);
     }
@@ -1669,6 +1671,10 @@ class RelayStore {
     // 永远没人收尸（心跳 send 异常也被 catch 吞）。按 onclose 同语义判死走重连
     if (ws.readyState !== WebSocket.OPEN) {
       this.connDead(conn, ws);
+      // 🔥P0 前台即时重连：探测语境=用户刚回前台（onForeground/看门狗），判死即
+      // 零延迟重连——不走 scheduleReconnect 的 3s 基线（connDead 已排的 timer 由
+      // connConnect 开头清掉；connConnect 自带 cfg/unpaired 守卫）
+      this.connConnect(conn);
       return;
     }
     if (conn.probeTimer) {
@@ -1688,19 +1694,26 @@ class RelayStore {
         : JSON.stringify({ type: "PING" }));
     } catch {
       // #85 send 异常 = socket 已坏：此时状态可能已被回前台体检置「校验连接…」
-      //（无 timer 的 reconnecting），同步收尸才能保证有人接管重连
+      //（无 timer 的 reconnecting），同步收尸才能保证有人接管重连；🔥P0 判死即
+      // 零延迟重连（前台语境不等 3s 基线）
       this.connDead(conn, ws);
+      this.connConnect(conn);
       return;
     }
     conn.probeTimer = setTimeout(() => {
       conn.probeTimer = null;
       if (conn.ws === ws && conn.lastDownAt === t0) {
-        // #85 2.5s 无任何下行 = 确认死链：同步收尸立即重连（有回则 lastDownAt 已被
-        // onMessage 刷新，此处自然跳过）。原裸 ws.close() 在静默死 TCP 上等 onclose
-        // 可悬 ~15 分钟——回前台卡死的最后一条无界路径
+        // #85 无任何下行 = 确认死链：同步收尸（有回则 lastDownAt 已被 onMessage
+        // 刷新，此处自然跳过）。原裸 ws.close() 在静默死 TCP 上等 onclose 可悬
+        // ~15 分钟——回前台卡死的最后一条无界路径。🔥P0（2026-10-12 用户提级：
+        // 重连速度=最高频痛点）：超时 2.5s→800ms + 判死零延迟重连——探测语境=
+        // 前台回访（心跳 15s 一拍，前台活跃连接 lastDownAt 恒新鲜；>20s 陈旧 +
+        // 800ms 无 PONG = 冻结实锤），云 PONG <1s、LAN PONG 即时，800ms 容差足够；
+        // 活连接误杀成本=一次 ~2s 重连，冻结漏杀成本=用户盯着旧状态 5.5s+，取前者
         this.connDead(conn, ws);
+        this.connConnect(conn);
       }
-    }, 2500); // #90 4s→2.5s：云链路 PONG <1s，2.5s 无回即判死
+    }, 800);
   }
 
   // 失败后自动重试调度（③）：3s 起指数退避至 30s 封顶，重试等待期每秒刷新倒计时

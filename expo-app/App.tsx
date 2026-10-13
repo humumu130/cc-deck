@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, AppState, BackHandler, Dimensions, Easing, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
+import { Animated, AppState, BackHandler, Dimensions, Easing, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
@@ -600,6 +600,9 @@ function PermBar({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
+// 件六③滑切序=底栏序（模块级常量：会话→团队→项目→设置，左滑进右滑退）
+const TAB_ORDER: TabKey[] = ["sessions", "team", "projects", "settings"];
+
 function Shell() {
   const { c, mode } = useTheme();
   const st = useThemeStyles(makeStyles);
@@ -613,6 +616,26 @@ function Shell() {
   // P0 二分实验 1：tab 锁死 sessions（其余域不挂载）——隔离「团队/项目/设置域
   // 挂载与切换」因子；60s 稳定则崩面在域挂载面，仍崩则崩面在会话域本体
   const [tab, setTab] = useState<TabKey>("sessions");
+  // 件六③：列表页左右滑切底部导航域（用户拍板，对齐主流 App 域切换手势）。横占优
+  // 判定（|dx| > |dy|*2 且 ≥48px）让垂直滚动（FlatList/ScrollView 纵滑）零冲突；
+  // 详情层（navLayer 盖顶）与各 Modal（向导/详情页/菜单 sheet）是独立渲染层，触点
+  // 到不了这里，天然不打架；TAB_ORDER 序=底栏序（左滑进右滑退，边界 no-op）。
+  // tabRef 镜像：PanResponder 创建一次，release 读实时 tab（闭包陈旧值防陈旧切回）
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const swipeTabs = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      // 捕获阶段抢判（FlatList/ScrollView 滚动响应器会先占普通阶段——横占优时
+      // 父层在 capture 阶段接管，垂直滚动 dy 占优时放行给列表，零冲突）
+      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) >= 48 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderRelease: (_e, g) => {
+        const i = TAB_ORDER.indexOf(tabRef.current);
+        if (g.dx <= -48 && i >= 0 && i < TAB_ORDER.length - 1) setTab(TAB_ORDER[i + 1]);
+        else if (g.dx >= 48 && i > 0) setTab(TAB_ORDER[i - 1]);
+      },
+    }),
+  ).current;
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
@@ -944,7 +967,7 @@ function Shell() {
               底栏域（件六），挂 ListScreen 顶栏铃铛 + sheet 弹层。详情层仍为全屏
               覆盖（盖过底栏），从任一域推入、返回回原 tab */}
           <View style={st.tabRoot}>
-            <View style={st.tabPane}>
+            <View style={st.tabPane} {...swipeTabs.panHandlers}>
               <View style={[st.domain, tab !== "sessions" && st.domainHidden]}>
                 {(!detail || navPhase !== "idle") && (
                   <ListScreen

@@ -1,18 +1,22 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+
 import { Alert, Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native";
+
+import { Alert, Animated, FlatList, Image, Linking, Modal, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { LogoMark, PencilIcon } from "../brand";
+import { PlusMark } from "../brand";
 import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
 import { FadeIn } from "../motion";
-import { hasActivityCapability, type SessionState, type SessionStatus } from "../protocol";
+import { hasActivityCapability, type ProjectGroup, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf } from "../notify-jump";
 import NotifCenterSheet from "./NotifCenterPage";
 import RenameModal from "./RenameModal";
@@ -71,6 +75,9 @@ function srcColor(id: string): string {
 // 列表密度三档循环胶囊（统计行，原抽屉「列表布局」拨杆迁入）：标准→紧凑→极简→标准；
 // 存储仍走 display-settings（cc.display.listCompact 三档不动），仅入口换位置
 const DENSITY_ORDER: ListDensity[] = ["std", "compact", "minimal"];
+// 件六回归②：折叠态持久键（桌面 expandedTeams「集合=用户展开过的组」同语义——默认
+// 折叠，展开过的记键；「进行中」组默认展开记折叠态）
+const TEAM_EXPANDED_KEY = "ccdeck_team_expanded";
 const DENSITY_LABEL: Record<ListDensity, string> = { std: "标准", compact: "紧凑", minimal: "极简" };
 
 // 源分组头（信息层级重设计）：聚合多源时列表按源分区——源色竖条 + 源名 + 在线
@@ -99,37 +106,44 @@ const GroupHeader = memo(function GroupHeader({ name, color, online, count }: {
   );
 });
 
-// 段头（E2a 只读投影）：「待处理」/「其他会话」小节标题 + 实际渲染卡数；与源
-// 分组头同族形制（色条换粗体小标，无源属性）。吸顶行自带底色，滚动叠加不透字
-const SectionHeader = memo(function SectionHeader({ label, count }: { label: string; count: number }) {
+// 段头（E2a 只读投影）：小节标题 + 实际渲染卡数；与源分组头同族形制。吸顶行自带
+// 底色，滚动叠加不透字。件十：组间 20px 间距 + hairline 分隔线（组与组边界可见）；
+// 团队收纳组头加团队色竖条（3px，桌面 grpBar 同语言——双端区分度规格一致）
+const SectionHeader = memo(function SectionHeader({ label, count, collapsible, expanded, onToggle, teamColor, divided }: {
+  label: string;
+  count: number;
+  collapsible?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  teamColor?: string; // 件十：团队色竖条（有=团队收纳组）
+  divided?: boolean; // 件十：组间分隔线（非首组渲染）
+}) {
+  const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
-  return (
-    <View style={styles.secHead} accessibilityLabel={`${label}，${count} 个会话`}>
-      <Text style={styles.secHeadT}>{label}</Text>
-      <Text style={styles.secCount}>{count}</Text>
+  const body = (
+    <View style={styles.secHead}>
+      {divided ? <View style={styles.secDivider} pointerEvents="none" /> : null}
+      {teamColor ? <View style={[styles.secTeamBar, { backgroundColor: teamColor }]} /> : null}
+      <View style={styles.secHeadRow} accessibilityLabel={`${label}，${count} 个会话${collapsible ? `，点按${expanded ? "收起" : "展开"}` : ""}`}>
+        {collapsible ? <Text style={styles.secChev}>{expanded ? "▾" : "▸"}</Text> : null}
+        <Text style={styles.secHeadT}>{label}</Text>
+        <Text style={styles.secCount}>{count}</Text>
+      </View>
     </View>
+  );
+  if (!collapsible || !onToggle) return body;
+  return (
+    <Pressable onPress={onToggle} hitSlop={{ top: 6, bottom: 6 }}>
+      {body}
+    </Pressable>
   );
 });
-
-// 新增会话 ＋：圆头细条十字，与品牌星芒同线条语言
-function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
-  const w = 2.8;
-  return (
-    <View style={{ width: size, height: size }}>
-      <View style={{ position: "absolute", width: w, height: size, left: (size - w) / 2, borderRadius: w / 2, backgroundColor: color }} />
-      <View style={{ position: "absolute", height: w, width: size, top: (size - w) / 2, borderRadius: w / 2, backgroundColor: color }} />
-    </View>
-  );
-}
-
-const ACT_W = 78;    // 单个操作按钮宽
-const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
 
 // 列表行模型（E2a 只读投影）：三行型——段头（待处理/其他会话）、源分组头、
 // 会话卡；卡行原样引用 SessionState 对象（分组/包装不改写会话，行级 memo 依赖
 // 引用不变）。行序与 key 由 buildListProjection 纯函数产出
 type ListRow =
-  | { h: "sec"; key: string; label: string; count: number }
+  | { h: "sec"; key: string; label: string; count: number; grp?: "team" | "active"; collapsed?: boolean; teamColor?: string }
   | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
 
@@ -187,7 +201,12 @@ export interface QueueFlags {
 }
 
 // 待处理组内排序优先级：可决策 > 待验收 > 通知要求 > 工作中
-export const QUEUE_REASON_ORDER: Record<string, number> = { waiting: 0, acceptance: 1, notification: 2, working: 3 };
+export const QUEUE_REASON_ORDER: Record<string, number> = { waiting: 0, acceptance: 1, notification: 2 };
+// 🔧回归修②（test.21 用户实机）：「待处理」语义收窄——只有真需用户行动的才进
+// pending（可决策 WAITING / 待填验收单 / 未决 actionable 通知）；原「WORKING 且有
+// 活动证据也占待处理位」是把「在忙」当「待办」（用户实锤：待处理里的会话并不
+// 需要用户处理）。WORKING 卡归「进行中」组（桌面 isActive 同口径），badge 计数
+// 随之修正为纯行动数（与桌面 rail badge 只计需行动同源）
 
 // 五标志判定（旧 relay 缺字段全形态降级：不崩、不伪造）
 export function queueFlagsOf(s: SessionState, notifActionable?: boolean): QueueFlags {
@@ -204,13 +223,11 @@ export function queueFlagsOf(s: SessionState, notifActionable?: boolean): QueueF
   // 可观察工作状态：活动正文或工具名在场（仅 kind/时间戳不算——在线不占行动位）
   const observableWork = !!(act && ((typeof act.text === "string" && act.text !== "") || (typeof act.tool === "string" && act.tool !== "")));
   const needsAction = waitingDecidable || acceptance || notif;
-  const inPending = needsAction || (working && observableWork);
   const reason: QueueReason = waitingDecidable ? "waiting"
     : acceptance ? "acceptance"
     : notif ? "notification"
-    : working && observableWork ? "working"
     : "other";
-  return { needs_action: needsAction, is_working: working, needs_acceptance: acceptance, is_other: !inPending, reason };
+  return { needs_action: needsAction, is_working: working, needs_acceptance: acceptance, is_other: !needsAction, reason };
 }
 
 // 单流分区主入口：pending（待处理，置顶）/ others（其他会话）两组互斥。同一会话
@@ -335,9 +352,11 @@ export function sessionSearchTest(s: SessionState, query: string): boolean {
 // 「—」降级占位组）· card（会话卡，pending 标记置顶组归属）。组头 count 一律
 // = 该组实际渲染卡数（去重后），不是原始数组长度
 export type ProjectionRow =
-  | { kind: "section"; key: string; label: string; count: number }
+  // grp：可折叠组标记（件六回归②对齐桌面）——"team"=团队收纳组（默认折叠）、
+  // "active"=「进行中」组（默认展开）；无 grp 的段头（其他会话等）不可折叠
+  | { kind: "section"; key: string; label: string; count: number; grp?: "team"; teamColor?: string }
   | { kind: "source"; key: string; srcId: string | null; name: string; color: string; online: boolean; count: number }
-  | { kind: "card"; key: string; s: SessionState; pending: boolean };
+  | { kind: "card"; key: string; s: SessionState; pending: boolean; grp?: string };
 
 export interface ProjectionSource {
   id: string;
@@ -355,6 +374,8 @@ export interface ProjectionParams {
   // #018-E2a-up 全源归一通知池（snap.sources 各源 notifications 平铺）；缺省 =
   // 无通知域，旧 relay（notifications 为 null/缺字段）自然降级空池
   notifications?: unknown;
+  // 🔧回归②：在办项目组（团队收纳分组的归属数据，snap.sources projects 平铺跨源）
+  projects?: ProjectGroup[];
 }
 
 // 列表投影主入口：
@@ -364,23 +385,79 @@ export interface ProjectionParams {
 // - 聚合多源 + 能力缺失（legacy）→ 降级为单一「—」占位组平铺，不隐藏结构；
 // - 聚合分组下无 src / 源已不在列表的会话落「—」占位组殿后（降级不丢卡）
 export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
-  // E2a-up 富版分区：needs_action 四型/不占位四则/互斥/组内序全在 splitPending
-  //（018 §2.1.1）；段头/组头 count 全部取自本函数输出的过滤后卡数，绝不用源总数
+  // 🔧回归修②（test.21 用户实机）：分组策略对齐桌面（index-005 B18/UIPOLISH2 件五/
+  // UIPOLISH3 件二）——「待处理」段退役（WORKING 在忙≠待办，用户实锤），四段结构：
+  //   ① 置顶池平铺最顶（跨组、无组头——钉选不该被组折叠藏掉，桌面件五口径）
+  //   ② 团队收纳组「组名 · N」（在办团队编制成员；组内活跃前置+recency；组序=团队
+  //      创建序）grp="team" 默认折叠（渲染层滤行，展开态 AsyncStorage 持久）
+  //   ③ 「进行中」组（非编制 WORKING/WAITING/ERROR——桌面 isActive 同口径）grp="active"
+  //      默认展开可折叠
+  //   ④ 闲置平铺（DONE 等，无组头 recency 序）
+  // splitPending 仍产出 pending（真行动项）供会话 badge 计数（App 层），列表不再
+  // 单列待处理段——行动卡就地进行中组（摘要行「需要确认 ·」前缀+badge 已表达）
   const { pending, others } = splitPending(p.sessions, { notifications: p.notifications });
+  // 并集回全量（splitPending 兼做去重+recency 排序）：行动卡（真需处理的 WAITING/
+  // 验收单/通知绑定）不再单列「待处理」段，就地进行中组——桌面 isActive 同口径
+  const all = [...pending, ...others];
+  void others;
   const rows: ProjectionRow[] = [];
-  if (pending.length) {
-    rows.push({ kind: "section", key: "sec-pending", label: "待处理", count: pending.length });
-    for (const s of pending) rows.push({ kind: "card", key: s.session_id, s, pending: true });
+  const pinnedNow = all.filter((s) => s.pinned === true);
+  const unpinned = all.filter((s) => s.pinned !== true);
+  if (pinnedNow.length) {
+    for (const s of pinnedNow) rows.push({ kind: "card", key: s.session_id, s, pending: false });
   }
-  if (!others.length) return rows;
+  const isActive = (x: SessionState) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
+  const recency = (x: SessionState) => x.updated_at || x.started_at || 0;
+  // 团队归属（桌面 teamOf 同口径）：在办组（status=active）编制成员 sid 映射，先建组赢
+  const teamOf = new Map<string, { gid: string; gname: string; created_at: number }>();
+  for (const g of p.projects ?? []) {
+    if (g.status !== "active" || !Array.isArray(g.headcount)) continue;
+    for (const h of g.headcount) {
+      if (h && typeof h.session_id === "string" && !teamOf.has(h.session_id)) {
+        teamOf.set(h.session_id, { gid: g.id, gname: g.name || g.id, created_at: g.created_at ?? 0 });
+      }
+    }
+  }
+  const teamSections = new Map<string, { gid: string; name: string; created_at: number; members: SessionState[] }>();
+  const topUnpinned: SessionState[] = [];
+  for (const s of unpinned) {
+    const t = teamOf.get(s.session_id);
+    if (!t) {
+      topUnpinned.push(s);
+      continue;
+    }
+    let sec = teamSections.get(t.gid);
+    if (!sec) {
+      sec = { gid: t.gid, name: t.gname, created_at: t.created_at ?? 0, members: [] };
+      teamSections.set(t.gid, sec);
+    }
+    sec.members.push(s);
+  }
+  const teamList = [...teamSections.values()].sort((a, b) => a.created_at - b.created_at || a.name.localeCompare(b.name));
+  for (const t of teamList) {
+    t.members.sort((a, b) => Number(isActive(b)) - Number(isActive(a)) || recency(b) - recency(a));
+    rows.push({ kind: "section", key: `team-${t.gid}`, label: t.name, count: t.members.length, grp: "team", teamColor: srcColor(t.gid) });
+    for (const s of t.members) rows.push({ kind: "card", key: s.session_id, s, pending: false, grp: `team-${t.gid}` });
+  }
+  // 件九（用户拍板 2026-10-12）：「进行中」状态分组取消——列表=置顶+团队分组+平铺，
+  // 状态过滤交给筛选档（「最近活跃/进行中/已完成」，与桌面同款另行派发联动）；
+  // 平铺序沿用 all（真行动卡前置 + recency），组头心智只剩「谁在团里」一类
+  void isActive;
+  for (const s of topUnpinned) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  if (!rows.length && !p.sessions.length) return rows;
+  // 聚合多源：保留源分组结构（多 relay 场景桌面无对应，维持既有源分组+组内 recency）
   const useGroups = p.aggregate && p.sources.length > 1;
-  if (!useGroups) {
-    rows.push({ kind: "section", key: "sec-others", label: "其他会话", count: others.length });
-    for (const s of others) rows.push({ kind: "card", key: s.session_id, s, pending: false });
-    return rows;
+  if (useGroups && p.sourceActivityCap) {
+    return buildSourceGroupedRows(p, all);
   }
+  return rows;
+}
+
+// 聚合多源投影（原路径保持）：源分组头 + 组内 recency 平铺；置顶在组内原位
+//（多源态罕见，不做团队收纳三段——真机单源场景才走桌面对齐结构）
+function buildSourceGroupedRows(p: ProjectionParams, others: SessionState[]): ProjectionRow[] {
+  const rows: ProjectionRow[] = [];
   if (!p.sourceActivityCap) {
-    // legacy relay：源能力缺失，分组依据不可信 → 「—」占位组平铺（结构保留）
     rows.push({ kind: "source", key: "src-degraded", srcId: null, name: "—", color: "", online: false, count: others.length });
     for (const s of others) rows.push({ kind: "card", key: s.session_id, s, pending: false });
     return rows;
@@ -410,10 +487,10 @@ export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
     for (const s of cards) rows.push({ kind: "card", key: s.session_id, s, pending: false });
   }
   // 无归属（快照无 src / 源已删）→ 「—」占位组殿后
-  const rest = [...bySrc.values()].flat();
-  if (rest.length) {
-    rows.push({ kind: "source", key: "src-unknown", srcId: null, name: "—", color: "", online: false, count: rest.length });
-    for (const s of rest) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  const unowned = [...bySrc.values()].flat();
+  if (unowned.length) {
+    rows.push({ kind: "source", key: "src-unknown", srcId: null, name: "—", color: "", online: false, count: unowned.length });
+    for (const s of unowned) rows.push({ kind: "card", key: s.session_id, s, pending: false });
   }
   return rows;
 }
@@ -565,19 +642,14 @@ function Elapsed({ s }: { s: SessionState }) {
 }
 
 // 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。
-// 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝。
-// minimal（极简单行卡）：面板只留图标不出文字标签（行高太矮叠不下两行字）
-function SwipeRow({
-  sid, deletable, onPress, onRename, onDelete, onCopyId, revealSid, onReveal, compact, minimal, dim, children,
+// 件六①②：左滑重命名/删除面板退役（SwipeRow 拆除）——功能并入长按菜单（桌面右键
+// 菜单语义对齐）；长按 400ms 弹贴底 sheet（CardMenuSheet）。卡壳只保留点按+长按+
+// 离线置灰蒙层；同时把整个横向手势位让给「左右滑切 tab」（App 层，件六③）
+function CardShell({
+  onPress, onLongPress, compact, minimal, dim, children,
 }: {
-  sid: string;
-  deletable: boolean;
   onPress: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-  onCopyId: () => void;
-  revealSid: string | null;
-  onReveal: (v: string | null) => void;
+  onLongPress: () => void;
   compact?: boolean;
   minimal?: boolean;
   dim?: boolean; // #32 离线源降权（缓存会话与在线视觉区分）
@@ -585,86 +657,67 @@ function SwipeRow({
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
-  const x = useRef(new Animated.Value(0)).current;
-  const open = useRef(false);
-  const close = () => {
-    open.current = false;
-    onReveal(null);
-    Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-  };
-  // 同时只保留一行展开
-  useEffect(() => {
-    if (open.current && revealSid !== null && revealSid !== sid) {
-      open.current = false;
-      Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-    }
-  }, [revealSid]);
-  const pan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 12,
-      onPanResponderMove: (_, g) => {
-        const base = open.current ? -FULL_W : 0;
-        x.setValue(Math.min(0, Math.max(-FULL_W - 36, base + g.dx)));
-      },
-      onPanResponderRelease: (_, g) => {
-        // 已展开：明显右移或右甩即收起；未展开：左移过半或左甩即展开
-        const shouldOpen = open.current ? !(g.dx > 24 || g.vx > 0.3) : g.dx < -ACT_W / 2 || g.vx < -0.5;
-        open.current = shouldOpen;
-        onReveal(shouldOpen ? sid : null);
-        Animated.spring(x, { toValue: shouldOpen ? -FULL_W : 0, useNativeDriver: true, bounciness: 5, speed: 18 }).start();
-      },
-      onPanResponderTerminate: () => {
-        open.current = false;
-        Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-      },
-    }),
-  ).current;
   return (
     <View style={[styles.swipeWrap, compact && styles.swipeWrapC, minimal && styles.swipeWrapM]}>
-      <View style={[styles.actPanel, minimal && styles.actPanelM]}>
-        <Pressable
-          style={[styles.actBtn, styles.actRen]}
-          android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }}
-          onPress={() => {
-            onRename();
-            close();
-          }}
-        >
-          <View style={{ marginBottom: 2 }}><PencilIcon size={14} color="#fff" /></View>
-          {!minimal ? <Text style={styles.actT2}>重命名</Text> : null}
-        </Pressable>
-        <Pressable
-          style={[styles.actBtn, !deletable && styles.actOff]}
-          android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }}
-          onPress={() => {
-            if (deletable) onDelete();
-            close();
-          }}
-        >
-          <Text style={styles.actT}>✕</Text>
-          {!minimal ? <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text> : null}
-        </Pressable>
-      </View>
-      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
-        <Pressable
-          style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
-          android_ripple={{ color: c.tintSoft, borderless: false }}
-          onPress={() => {
-            if (open.current) close();
-            else onPress();
-          }}
-          // A4-6 查漏（桌面右键菜单「复制 ID」的手机等价——长按直达；手机已有左滑
-          // 重命名/删除与撤销，长按位空闲无冲突）
-          onLongPress={onCopyId}
-        >
-          {children}
-        </Pressable>
-        {/* 置灰蒙层替代整卡降透明度（2026-09-17）：dimRow opacity 曾让常驻底层的
-            重命名/删除动作排透出（所有 DONE 卡同时"开盖"的假象）；蒙层盖在
-            swipeCard 内（overflow:hidden 自带圆角裁切），正面保持不透明 */}
-        {dim ? <View pointerEvents="none" style={styles.dimCover} /> : null}
-      </Animated.View>
+      <Pressable
+        style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
+        android_ripple={{ color: c.tintSoft, borderless: false }}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={400}
+      >
+        {children}
+      </Pressable>
+      {/* 置灰蒙层替代整卡降透明度（2026-09-17）：蒙层盖在卡壳内（overflow:hidden
+          自带圆角裁切），正面保持不透明 */}
+      {dim ? <View pointerEvents="none" style={styles.dimCover} /> : null}
     </View>
+  );
+}
+
+// 件六①：会话卡长按操作菜单（贴底 sheet，NotifCenterSheet/ExpLibraryModal 同语言）——
+// 置顶/重命名/复制 ID/删除，桌面右键菜单语义对齐；删除带运行中/后台在跑拦截
+function CardMenuSheet({ target, onClose, onPin, onRename, onCopyId, onDelete }: {
+  target: SessionState | null;
+  onClose: () => void;
+  onPin: (s: SessionState) => void;
+  onRename: (s: SessionState) => void;
+  onCopyId: (s: SessionState) => void;
+  onDelete: (s: SessionState) => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  if (!target) return null;
+  const bgLive = (target.subagents ?? []).some((a) => !a.ended_at) && target.status !== "WORKING";
+  const deletable = (target.status === "DONE" || target.status === "ERROR") && !bgLive; // #100 后台在跑禁删
+  const pinned = target.pinned === true;
+  const row = (label: string, hint: string, press: () => void, opts?: { danger?: boolean; disabled?: boolean }) => (
+    <Pressable
+      key={label}
+      style={[styles.menuRow, opts?.disabled && styles.menuRowOff]}
+      disabled={opts?.disabled}
+      android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+      accessibilityLabel={`${label}（${target.title || target.session_id.slice(0, 8)}）`}
+      onPress={press}
+    >
+      <Text style={[styles.menuLabel, opts?.danger && { color: c.error }]}>{label}</Text>
+      <Text style={styles.menuHint} numberOfLines={1}>{hint}</Text>
+    </Pressable>
+  );
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.menuMask} onPress={onClose}>
+        <View style={{ width: "100%" }}>
+          <Pressable style={styles.menuSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.menuTitle} numberOfLines={1}>{target.title || "未命名会话"}</Text>
+            {row(pinned ? "取消置顶" : "置顶", pinned ? "从置顶区移回常规区" : "置顶区恒在列表前部（待处理段之下）", () => onPin(target))}
+            {row("重命名", "回写服务器，跨端生效", () => onRename(target))}
+            {row("复制 ID", "会话标识复制到剪贴板", () => onCopyId(target))}
+            {row("删除", deletable ? "4 秒内可撤销" : "运行中/后台在跑不可删", () => onDelete(target), { danger: true, disabled: !deletable })}
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -751,7 +804,7 @@ function CtxCell({ s }: { s: SessionState }) {
   );
 }
 
-// memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
+// memo：流式刷新只重渲变化的那一行（onCardMenu 引用稳定（setMenuFor）；
 // 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
 // #59 聚合源归属角标：源身份色点+源名（各密度档通用，行内右端）
 function SrcBadge({ name, color }: { name: string; color: string }) {
@@ -770,16 +823,12 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
 // 呈现位，逐项明细在详情页；activityMetricsOf 纯投影保留（test-e2a-list 断言面）。
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onRename, onDelete, onCopyId, revealSid, onReveal, density, dim, srcBadge, orgTag,
+  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
   onResume: (sid: string) => void; // #49/#139 休眠卡点按恢复
-  onRename: (sid: string) => void;
-  onDelete: (sid: string) => void;
-  onCopyId: (sid: string) => void; // A4-6：长按复制会话 ID（桌面右键菜单项等价）
-  revealSid: string | null;
-  onReveal: (v: string | null) => void;
+  onCardMenu: (s: SessionState) => void; // 件六①：长按 400ms 弹操作菜单（置顶/重命名/复制 ID/删除）
   density: ListDensity;
   dim?: boolean; // #32 离线源降权
   srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
@@ -804,9 +853,11 @@ const SessionCard = memo(function SessionCard({
   const idle = s.status === "DONE" && !bgLive && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   // #49/#139 休眠卡（对齐桌面端 isDormant 口径）：已保存（saved）且会话不在跑——
   // 「点击恢复」入口只属于服务端已关掉的会话；运行中/等待输入的即使带 saved 残留
-  // 也按正常卡处理（本来就没停，无从恢复）。休眠卡降透明度 + 点按发恢复命令
+  // 也按正常卡处理（本来就没停，无从恢复）。休眠卡降透明度 + 点按发恢复命令。
+  // 件六 C-3 语义拆分（v2 拍板跟进）：pinned=纯置顶（桌面 UIPOLISH3 件一同口径），
+  // 休眠判定收窄到 saved 单字段——置顶的在跑会话不再被误判休眠
   const dormant =
-    s.pinned === true && s.saved === true && s.status !== "WORKING" && s.status !== "WAITING";
+    s.saved === true && s.status !== "WORKING" && s.status !== "WAITING";
   // W-EXPOLISH 件一 r3 文本元信息收敛：目录/组织/已保存/历史超 3 个折叠「+N」
   //（源胶囊/状态 tag/水位恒显不占折叠额）
   const r3Meta = foldMeta([
@@ -816,15 +867,9 @@ const SessionCard = memo(function SessionCard({
     ...(s.historical && !s.external ? ["历史"] : []),
   ], 3);
   return (
-    <SwipeRow
-      sid={s.session_id}
-      deletable={deletable}
+    <CardShell
       onPress={() => (dormant ? onResume(s.session_id) : onOpen(s.session_id))}
-      onRename={() => onRename(s.session_id)}
-      onDelete={() => onDelete(s.session_id)}
-      onCopyId={() => onCopyId(s.session_id)}
-      revealSid={revealSid}
-      onReveal={onReveal}
+      onLongPress={() => onCardMenu(s)}
       compact={compact}
       minimal={minimal}
       dim={dim || isIdleCard || dormant}
@@ -933,7 +978,7 @@ const SessionCard = memo(function SessionCard({
           </View>
         </>
       )}
-    </SwipeRow>
+    </CardShell>
   );
 });
 
@@ -963,7 +1008,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     persistAggregate(next);
     store.setAggregate(next);
   }, [snap.aggregate]);
-  const [revealSid, setRevealSid] = useState<string | null>(null);
+  // 件六①：长按菜单目标（null=关）；置顶/重命名/复制 ID/删除四操作贴底 sheet
+  const [menuFor, setMenuFor] = useState<SessionState | null>(null);
+  // 件六回归②：团队收纳组展开集（默认空=全折叠）+「进行中」组开态（默认展开）
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void AsyncStorage.getItem(TEAM_EXPANDED_KEY).then((v) => {
+      try {
+        const arr = JSON.parse(v ?? "[]");
+        if (Array.isArray(arr)) setExpandedTeams(new Set(arr.filter((x): x is string => typeof x === "string")));
+      } catch {}
+    });
+  }, []);
   const [renameSid, setRenameSid] = useState<string | null>(null);
   // W-PORT-B P0-2：会话列表搜索——顶栏图标展开搜索条，输入即过滤（sessionSearchTest）
   const [searchOpen, setSearchOpen] = useState(false);
@@ -973,6 +1029,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sessions, renameSid],
   );
   const handleRename = useCallback((sid: string) => setRenameSid(sid), []);
+  // 件六①：置顶切换（桌面右键菜单同链）——COMMAND_PIN_SESSION 写穿 + SESSION_UPDATED
+  // 权威回显收敛（LAN 往返快，不做本地乐观覆盖；unpin 休眠卡由 relay 联动摘 saved）
+  const togglePin = useCallback((s: SessionState) => {
+    store.send("COMMAND_PIN_SESSION", { session_id: s.session_id, pinned: s.pinned !== true });
+  }, []);
 
   // #49/#139 休眠卡点按 = 按需恢复（对齐桌面端）：此前手机端没有实现保存恢复，
   // relay 下发的「已保存，点击恢复」摘要在手机上成了死文案——点卡只打开详情，
@@ -1201,16 +1262,47 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       sourceActivityCap: snap.sourceCapabilities?.activity === true,
       // E2a-up：全源归一通知池（各源 notifications 平铺；旧 relay null → 空池降级）
       notifications: snap.sources.flatMap((x) => x.notifications ?? []),
+      // 件六回归②：跨源项目组平铺（团队收纳归属数据）
+      projects: snap.sources.flatMap((x) => x.projects ?? []),
     }),
     [visible, snap.aggregate, snap.sources, snap.sourceCapabilities],
   );
-  const rows = useMemo<ListRow[]>(() => projection.map((r) =>
-    r.kind === "section"
-      ? { h: "sec" as const, key: r.key, label: r.label, count: r.count }
-      : r.kind === "source"
-        ? { h: "src" as const, key: r.key, name: r.name, color: r.color, online: r.online, count: r.count }
-        : { h: false as const, key: r.key, s: r.s },
-  ), [projection]);
+  // 件六回归②：折叠态滤行（桌面「折叠不进 DOM」同语义）——团队组默认折叠（展开态
+  // AsyncStorage 持久 = 用户展开过的组），「进行中」默认展开；段头恒渲染（计数自投影）
+  const rows = useMemo<ListRow[]>(() => {
+    const out: ListRow[] = [];
+    for (const r of projection) {
+      if (r.kind === "section") {
+        const collapsed = r.grp === "team" ? !expandedTeams.has(r.key) : false;
+        out.push({ h: "sec", key: r.key, label: r.label, count: r.count, grp: r.grp, collapsed, ...(r.teamColor ? { teamColor: r.teamColor } : {}) });
+        continue;
+      }
+      if (r.kind === "source") {
+        out.push({ h: "src", key: r.key, name: r.name, color: r.color, online: r.online, count: r.count });
+        continue;
+      }
+      if (!r.grp) {
+        out.push({ h: false, key: r.key, s: r.s });
+        continue;
+      }
+      const hidden = r.grp.startsWith("team-") ? !expandedTeams.has(r.grp) : false;
+      if (!hidden) out.push({ h: false, key: r.key, s: r.s });
+    }
+    return out;
+  }, [projection, expandedTeams]);
+  // 折叠组头点按：团队组切换展开（AsyncStorage 持久展开集）；「进行中」组切换折叠
+  const toggleSection = useCallback((key: string) => {
+    if (key.startsWith("team-")) {
+      setExpandedTeams((prev) => {
+        const n = new Set(prev);
+        if (n.has(key)) n.delete(key);
+        else n.add(key);
+        void AsyncStorage.setItem(TEAM_EXPANDED_KEY, JSON.stringify([...n]));
+        return n;
+      });
+      return;
+    }
+  }, []);
   // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启且未
   // 走分组头（降级/单在线源混排）时恒显；配色与分组头共用 sourcePalette，同屏稳定
   const srcBadgeMap = useMemo(() => {
@@ -1277,29 +1369,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topbar}>
-        <Pressable
-          style={styles.logoBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
-          onPress={onOpenSettings}
-          hitSlop={6}
-          accessibilityLabel="打开设置"
-        >
-          <View style={styles.logo}>
-            <LogoMark size={19} />
-          </View>
-        </Pressable>
-        <View style={styles.titleWrap}>
-          <Text style={styles.titleT}>CC Deck</Text>
-          {snap.aggregate && snap.sources.length > 1 ? (
-            // #53 副标题与聚合胶囊去重：数量/聚合态信息归统计行胶囊独占，副标题
-            // 统一点名当前活动源（命令默认去向）；无活动源时回退唯一在线源点名
-            (activeName || soloName) ? (
-              <Text style={styles.titleSub} numberOfLines={1}>{activeName || soloName}</Text>
-            ) : null
-          ) : activeName ? (
-            <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text>
-          ) : null}
-        </View>
+        {/* 件八（用户拍板 2026-10-12）：品牌行移除——「CC Deck」名+图标是单卡时代
+            遗物（团队/项目页均无此行，风格不统一）；顶栏只留功能元素，品牌身份交
+            系统状态栏/启动器图标。设置入口=底部导航设置域（logo 旧快捷位随之退役） */}
         <Pressable
           style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
@@ -1445,17 +1517,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Text>
           </Pressable>
         ) : null}
-        {notifPending.length > 0 ? (
+        {/* 🔧回归修①（test.21 实机）：铃铛恒显——原「notifPending>0 才渲染整个钮」
+            在无未决时把入口藏没（已处理区看不到、通知中心进不去）；0=无计数态 */
+        (
           <Pressable
             style={styles.chipBtn}
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
             onPress={() => setNotifOpen(true)}
             hitSlop={4}
-            accessibilityLabel={`通知中心，${notifPending.length} 项需行动`}
+            accessibilityLabel={notifPending.length > 0 ? `通知中心，${notifPending.length} 项需行动` : "通知中心"}
           >
-            <Text style={styles.chipT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
+            <Text style={styles.chipT} numberOfLines={1}>
+              通知{notifPending.length > 0 ? ` · ${notifPending.length > 99 ? "99+" : notifPending.length}` : ""}
+            </Text>
           </Pressable>
-        ) : null}
+        )}
         {artPoolOn ? (
           <Pressable
             style={styles.chipBtn}
@@ -1543,9 +1619,17 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Pressable>
           ) : null
         }
-        renderItem={({ item }) =>
+        renderItem={({ item, index: idx }) =>
           item.h === "sec" ? (
-            <SectionHeader label={item.label} count={item.count} />
+            <SectionHeader
+              label={item.label}
+              count={item.count}
+              collapsible={!!item.grp}
+              expanded={!item.collapsed}
+              onToggle={item.grp ? () => toggleSection(item.key) : undefined}
+              teamColor={item.teamColor}
+              divided={idx > 0}
+            />
           ) : item.h === "src" ? (
             <GroupHeader name={item.name} color={item.color || c.faint} online={item.online} count={item.count} />
           ) : (
@@ -1553,11 +1637,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               s={item.s}
               onOpen={onOpen}
               onResume={handleResumeSaved}
-              onRename={handleRename}
-              onDelete={requestDelete}
-              onCopyId={copySessionId}
-              revealSid={revealSid}
-              onReveal={setRevealSid}
+              onCardMenu={setMenuFor}
               density={density}
               srcBadge={srcBadgeOf(item.s.src)}
               orgTag={orgTagOf(item.s)}
@@ -1612,6 +1692,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           if (renameTarget) store.send("COMMAND_RENAME", { session_id: renameTarget.session_id, title });
           setRenameSid(null);
         }}
+      />
+
+      {/* 件六①：长按操作菜单（贴底 sheet）——置顶/重命名/复制 ID/删除，语义对齐
+          桌面右键菜单（UIPOLISH3 件一置顶全量解锁：外部/CLI/历史会话同权）；删除保
+          运行中拦截（deletable）与 #207 离线源拦截（requestDelete 内） */}
+      <CardMenuSheet
+        target={menuFor}
+        onClose={() => setMenuFor(null)}
+        onPin={(s) => { togglePin(s); setMenuFor(null); }}
+        onRename={(s) => { handleRename(s.session_id); setMenuFor(null); }}
+        onCopyId={(s) => { copySessionId(s.session_id); setMenuFor(null); }}
+        onDelete={(s) => { requestDelete(s.session_id); setMenuFor(null); }}
       />
 
       {/* 状态图例浮窗：统计行 ？ 呼出，点任意处收起 */}
@@ -1769,16 +1861,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcMenuManageT: { color: c.dim, fontSize: 12 },
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    // #198 横线与详情页 head 对齐：padding 10/8→9/6 + 标题列 lineHeight 显式化
-    //（titleT 20 / titleSub 13，与详情页 d.title/d.sub 同档）——两页 head 构造等高
-    //（详情=6+20+3+14+6，列表=9+max(logo34,20+0.5+13)+6），分隔线 Y 一致
+    // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担
     paddingHorizontal: 16, paddingTop: 9, paddingBottom: 6,
     borderBottomWidth: 1, borderBottomColor: c.line,
-  },
-  logoBtn: { borderRadius: 12 },
-  logo: {
-    width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
-    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
   },
   // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
   connChip: {
@@ -1800,9 +1885,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 线条月牙：描边圆 + 偏移实心圆（按钮底色 tintSoft 遮出弯月）
   tgMoon: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.4 },
   tgMoonMask: { position: "absolute", width: 10, height: 10, borderRadius: 5, left: 4.5, top: -2.5 },
-  titleWrap: { flexShrink: 1, marginRight: "auto" },
-  titleT: { color: c.text, fontSize: 16, fontWeight: "700", letterSpacing: 0.2, lineHeight: 20 }, // #198 lineHeight 显式（原字体度量浮动）
-  titleSub: { color: c.faint, fontSize: 11, lineHeight: 13, marginTop: 0.5 },
   statRow: {
     flexDirection: "row", alignItems: "center", gap: 9,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
@@ -1841,13 +1923,22 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   // E2a 段头（待处理/其他会话）：分组只靠间距+小节标题（005 军规③——去下衬线）；
   // 吸顶行定高 + 自带底色；左缘与行内容对齐（14）
+  // 件十：组间分界——20px 间距 + hairline（首组不出线；分隔线在组头容器顶部）
   secHead: {
-    flexDirection: "row", alignItems: "baseline", gap: 6,
-    marginTop: 14, marginBottom: 5, paddingHorizontal: 14,
+    marginTop: 20, marginBottom: 5, paddingHorizontal: 14,
     backgroundColor: c.bg,
   },
+  secHeadRow: { flexDirection: "row", alignItems: "baseline", gap: 6 },
+  secDivider: {
+    position: "absolute", top: -10, left: 14, right: 14, height: StyleSheet.hairlineWidth,
+    backgroundColor: withA(c.faint, 0.35),
+  },
+  // 团队色竖条（桌面 grpBar 3px 同语言）
+  secTeamBar: { width: 3, height: 13, borderRadius: 1.5, position: "absolute", left: 4, top: 3 },
   secHeadT: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2 },
   secCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
+  // 件六回归②：可折叠组头（团队收纳/进行中）caret——与 OrgTabs 未立项折叠头同语言
+  secChev: { color: c.faint, fontSize: 11, lineHeight: 14 },
   // E2a 活动指标块：四行定高小字（行距 gap 3、lineHeight 定值、单行 ellipsis），
   // 键淡值常——activity 缺失/能力全关时整块不渲染
   grpBar: { width: 3, height: 13, borderRadius: 1.5 },
@@ -1888,16 +1979,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #32 离线源降权 + 空闲置灰：向页面背景渐隐的蒙层（不用 opacity——会让底层
   // 动作排透出，2026-09-17 测试机截图实锤）
   dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.45) },
-  actPanel: {
-    position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
-    flexDirection: "row", borderRadius: 10, overflow: "hidden",
+  // 件六①：长按操作菜单（贴底 sheet）
+  menuMask: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
+  menuSheet: {
+    backgroundColor: c.panel, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    borderWidth: 1, borderColor: c.line, paddingHorizontal: 16,
+    paddingTop: 14, paddingBottom: 30,
   },
-  actPanelM: { top: 2, bottom: 2, borderRadius: 10 },
-  actBtn: { width: ACT_W, alignItems: "center", justifyContent: "center", gap: 3, backgroundColor: withA(c.waiting, 0.9) },
-  actRen: { backgroundColor: c.brandB },
-  actOff: { backgroundColor: withA(c.dim, 0.3) },
-  actT: { color: "#fff", fontSize: 17, fontWeight: "600" },
-  actT2: { color: "#fff", fontSize: 11.5, fontWeight: "600" },
+  menuTitle: { color: c.text, fontSize: 14, fontWeight: "700", marginBottom: 8 },
+  menuRow: { paddingVertical: 11, borderRadius: 12, paddingHorizontal: 6, gap: 2 },
+  menuRowOff: { opacity: 0.42 },
+  menuLabel: { color: c.text, fontSize: 14, fontWeight: "600" },
+  menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
     backgroundColor: "transparent", borderWidth: 0,
     borderRadius: 0, paddingVertical: 8, paddingHorizontal: 14,
@@ -1978,8 +2071,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   footHint: { alignItems: "center", paddingVertical: 10 },
   footHintT: { color: c.faint, fontSize: 12 },
   // W-EXPOLISH 件七：右下悬浮新增钮退役——新建统一顶栏右上角 ＋
+  // 件七：三域 ＋ 统一规格——44×44 触区 + PlusMark 20px（brand.tsx 单源导出，三处同参）
   plusBtn: {
-    width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
     marginRight: -4, overflow: "hidden",
   },
   // 删除撤销条（#247）：底部浮条；右侧留出让任务汇报悬浮钮（44dp@right12）的空档。

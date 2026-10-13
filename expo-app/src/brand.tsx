@@ -65,3 +65,15 @@ export function PencilIcon({ size = 13, color = "#8B93A7" }: { size?: number; co
     </View>
   );
 }
+
+// 新增 ＋ 十字标（件七：三域统一规格——会话/团队/项目页右上角同一组件同参数；
+// 圆头细条十字，与品牌星芒同线条语言）
+export function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
+  const w = 2.8;
+  return (
+    <View style={{ width: size, height: size }}>
+      <View style={{ position: "absolute", width: w, height: size, left: (size - w) / 2, borderRadius: w / 2, backgroundColor: color }} />
+      <View style={{ position: "absolute", height: w, width: size, top: (size - w) / 2, borderRadius: w / 2, backgroundColor: color }} />
+    </View>
+  );
+}

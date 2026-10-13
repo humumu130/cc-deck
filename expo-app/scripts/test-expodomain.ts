@@ -276,8 +276,8 @@ async function main(): Promise<void> {
   const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
   check(detailSrc.includes("A4-4 查漏"), "A4-4 信息行序注记");
   check(/s\.cwd.*ctxPct.*fmtLastActive/s.test(detailSrc), "A4-4 序=目录→水位→活跃时间");
-  // A4-6：长按复制 ID
-  check(listSrc.includes("onLongPress={onCopyId}"), "A4-6 长按复制 ID 入口");
+  // A4-6→件六①演进：长按位改为操作菜单（复制 ID 并入菜单行；Clipboard 直写保持）
+  check(listSrc.includes("onLongPress"), "长按入口在场（件六①）");
   check(listSrc.includes("Clipboard.setStringAsync"), "A4-6 剪贴板直写");
 
   console.log("I. 件五：发消息乐观回显（0.5s 内本地可见 + 三路对账）");
@@ -343,7 +343,95 @@ async function main(): Promise<void> {
   check(detailSrc.includes("reconcilePending(prev, { sid, logs, pendingInputs"), "渲染层对账 effect 接线");
   check(/myEcho\.length\]\);/.test(detailSrc), "滚动跟随含气泡数（发完即滚到底）");
 
-  console.log(`OK ${tests} assertions（W-EXPODOMAIN v2：件一~件五 + 查漏组）`);
+  console.log("J. 件六：长按菜单/左滑退役/滑切 tab");
+  // @ts-expect-error 桩层同上
+  const list = await import("../src/screens/ListScreen.tsx");
+  // ① 长按菜单：400ms + 贴底 sheet 四操作（置顶/重命名/复制 ID/删除）+ 删除拦截
+  check(listSrc.includes("delayLongPress={400}"), "长按 400ms 触发（用户指定）");
+  check(listSrc.includes("function CardMenuSheet"), "CardMenuSheet 贴底菜单组件");
+  check(listSrc.includes("置顶区恒在列表前部"), "菜单行：置顶（含落位说明）");
+  check(listSrc.includes('"重命名"') || listSrc.includes('row("重命名"'), "菜单行：重命名");
+  check(listSrc.includes('"复制 ID"') || listSrc.includes('row("复制 ID"'), "菜单行：复制 ID");
+  check(listSrc.includes('"删除"') || listSrc.includes('row("删除"'), "菜单行：删除");
+  check(listSrc.includes("运行中/后台在跑不可删"), "删除行运行中拦截（禁用态）");
+  check(listSrc.includes("COMMAND_PIN_SESSION"), "置顶走 COMMAND_PIN_SESSION（桌面同链）");
+  check(listSrc.includes("4 秒内可撤销"), "删除行撤销提示（#247 舞步保持）");
+  // ② 左滑退役：SwipeRow 组件/操作面板/reveal 机制零残留（结构性断言——注释提及不算）
+  check(!/function SwipeRow/.test(listSrc) && !/<SwipeRow/.test(listSrc), "SwipeRow 组件退役（件六②）");
+  check(!/actPanel/.test(listSrc) && !/actBtn/.test(listSrc), "左滑操作面板样式零残留（件六②）");
+  check(!/onReveal/.test(listSrc), "滑出 reveal 机制零残留");
+  // ③ 投影（纯函数，回归②新结构）：置顶无头平铺 → 团队收纳组（grp=team）→
+  // 「进行中」组（grp=active）→ 闲置平铺；「待处理」段退役（badge 仍计数真行动项）
+  const proj = list.buildListProjection as (p: unknown) => { kind: string; key: string; label?: string; grp?: string; count?: number; s?: { session_id: string; pinned?: boolean } }[];
+  const mkS = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
+    session_id: id, relay_session_id: id, cwd: "/d/x", initial_prompt: "", title: id, model: "m",
+    status: "DONE", action_summary: "", started_at: 1, updated_at: 1, stats: {}, ...over,
+  });
+  const rowsP = proj({
+    sessions: [
+      mkS("pin1", { pinned: true, updated_at: 60 }),
+      mkS("t1", { status: "WORKING", updated_at: 55, project_gid: "gA" }),
+      mkS("t2", { status: "DONE", updated_at: 50, project_gid: "gA" }),
+      mkS("act1", { status: "WORKING", updated_at: 45 }),
+      mkS("wait1", { status: "WAITING", waiting_request: { request_id: "r1", tool_name: "Bash" }, updated_at: 42 }),
+      mkS("idle1", { updated_at: 30 }),
+    ],
+    aggregate: false, sources: [], notifications: [],
+    projects: [{ id: "gA", name: "甲团", anchor_dir: "/d/a", tier: "轻立项", status: "active", created_at: 1, updated_at: 1, headcount: [{ session_id: "t1", role: "worker" }, { session_id: "t2", role: "worker" }] }],
+  });
+  const keysP = rowsP.map((r) => r.key);
+  check(keysP[0] === "pin1", "投影：置顶无头平铺恒首（跨组钉选）");
+  check(!keysP.includes("sec-pending") && !keysP.includes("sec-pinned"), "投影：「待处理/置顶」段头退役（回归②新结构）");
+  const teamIdx = keysP.indexOf("team-gA");
+  check(teamIdx > 0 && rowsP[keysP.indexOf("team-gA")].label === "甲团" && rowsP[teamIdx].grp === "team", "投影：团队收纳组（在办编制成员）");
+  check(keysP.indexOf("t1") > teamIdx && keysP.indexOf("t2") > teamIdx, "投影：团队卡收纳组内");
+  // 件九：「进行中」组取消——非编制卡（WORKING/WAITING/闲置）全部平铺
+  check(!keysP.includes("sec-active"), "投影：「进行中」组已取消（件九，状态过滤交筛选档）");
+  check(keysP.indexOf("act1") > teamIdx && keysP.indexOf("wait1") > teamIdx && keysP.indexOf("idle1") > teamIdx, "投影：非编制卡平铺（行动前置+recency）");
+  // badge 语义：WORKING 有活动证据不再计 pending（真行动=可决策 WAITING/验收单/通知）
+  const spNew = list.splitPending([mkS("w1", { status: "WAITING", waiting_request: { request_id: "r2", tool_name: "Bash" } }), mkS("wk1", { status: "WORKING", activity: { state: "WORKING", capabilities: {}, activity: { kind: "tool", text: "npm test", observed_at: 1 }, updated_at: 1 } })] as never[]) as { pending: { session_id: string }[]; others: { session_id: string }[] };
+  check(spNew.pending.length === 1 && spNew.pending[0].session_id === "w1", "badge 语义：WORKING 有活动≠待处理（真行动才计）");
+  // 休眠语义拆分（C-3 跟进）：saved 单字段判定
+  check(listSrc.includes("s.saved === true && s.status !== \"WORKING\" && s.status !== \"WAITING\""), "休眠判定 saved 单字段（pinned=纯置顶，C-3 拆分落地）");
+  // ③ App 滑切 tab：panHandlers 挂 tabPane + 横占优判定 + tabRef 防陈旧
+  check(appSrc.includes("{...swipeTabs.panHandlers}"), "滑切手势挂 tabPane（件六③）");
+  check(appSrc.includes("TAB_ORDER") && appSrc.includes('["sessions", "team", "projects", "settings"]'), "滑切序=底栏序");
+  check(appSrc.includes("Math.abs(g.dx) > Math.abs(g.dy) * 2"), "横占优判定（垂直滚动零冲突）");
+  check(appSrc.includes("tabRef.current"), "tabRef 镜像防闭包陈旧");
+
+  console.log("K. 回归双修（铃铛恒显/分组对齐）+ 件七/件八");
+  // 🔧回归①：铃铛恒显（0=无计数态，不再整钮消失）
+  check(/notifPending\.length > 0 \? null/.test(listSrc) === false, "铃铛不再条件消失（0 也显示）");
+  check(listSrc.includes("通知{notifPending.length > 0"), "铃铛计数条件拼接（0=无计数态文案）");
+  // 🔧回归②：分组结构断言（投影纯函数面已覆盖；此处锚渲染层折叠/持久）
+  check(listSrc.includes("TEAM_EXPANDED_KEY"), "团队组折叠态持久键（件九：进行中组键随组退役）");
+  check(!listSrc.includes("sec-active"), "「进行中」组渲染层退役（件九：状态过滤交筛选档）");
+  check(listSrc.includes("toggleSection"), "组头折叠交互");
+  // 件七：三域 ＋ 统一
+  const brandSrc = srcOf("../src/brand.tsx");
+  check(brandSrc.includes("export function PlusMark"), "PlusMark 单源导出（brand.tsx）");
+  check(listSrc.includes('from "../brand"') && !/function PlusMark/.test(listSrc), "会话页复用 brand.PlusMark（本地定义移除）");
+  check(orgTabsSrc.includes("<PlusMark size={20} color={c.brandA} />"), "团队/项目页 PlusMark 接线");
+  check(/plusBtn: \{\s*width: 44, height: 44/.test(listSrc) && /plusBtn: \{ width: 44, height: 44/.test(orgTabsSrc), "三域 plusBtn 44×44 统一触区");
+  // 件八：品牌行移除
+  check(!listSrc.includes("CC Deck</Text>") && !/titleT/.test(listSrc), "「CC Deck」标题行移除（件八）");
+  check(!/logoBtn/.test(listSrc), "logo 钮退役（件八；设置入口=底栏设置域）");
+
+  console.log("L. 件十：组间分隔线 + 团队色竖条");
+  check(listSrc.includes("secDivider"), "组间 hairline 分隔线样式");
+  check(/marginTop: 20/.test(listSrc), "组间 20px 间距");
+  check(listSrc.includes("secTeamBar"), "团队色竖条样式（3px，桌面 grpBar 同语言）");
+  check(listSrc.includes("teamColor: srcColor(t.gid)"), "团队组头带 gid 哈希色（SRC_COLORS 环）");
+  check(listSrc.includes("divided={idx > 0}"), "首组不出线（idx>0 才分隔）");
+
+  console.log("M. 🔥P0：前台即时重连+重连提速");
+  check(srcOf("../src/store.ts").includes("}, 800);"), "探测超时 2.5s→800ms（前台语境，PONG 即时/<1s）");
+  check((srcOf("../src/store.ts").match(/this\.connDead\(conn, ws\);\n\s+(?:\/\/[^\n]*\n\s*)*this\.connConnect\(conn\);/g) ?? []).length >= 2, "探测判死三路（超时/send 异常/readyState）→ connDead 后零延迟 connConnect");
+  check(srcOf("../src/store.ts").includes("重连速度=最高频痛点"), "P0 注记在场（用户提级口径）");
+  check(srcOf("../src/store.ts").includes("startForegroundService()"), "后台保活：connConnect 收口 FGS（既有 #85 面）");
+  check(srcOf("../src/store.ts").includes("resetBackoff();"), "回前台清退避（#114 既有面保持）");
+
+  console.log(`OK ${tests} assertions（W-EXPODOMAIN v2：件一~件十 + P0 重连 + 回归双修 + 查漏组）`);
 }
 
 main().then(
