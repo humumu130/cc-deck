@@ -17,27 +17,30 @@
   <script src="/qr.js"></script>
   <style>
     :root {
-      --bg0: #07111D;
-      --bg1: #0B1624;
-      --surface1: #101E2F;
-      --surface2: #15273B;
-      --hover: #1D344D;
-      --line: #2A4058;
-      --line-soft: #203247;
-      --text-strong: #E8EFF8;
-      --text: #C4D0DE;
-      --dim: #A8B9CA;
-      --card-sub: #A9B5C7;
-      --faint: #90A6BD;
-      --progress-fill: #7793AE;
-      --brand: #E2855E;
-      --brand-hover: #F0A06A;
-      --brand-strong: #B85B38;
+      /* W-V8 批1 token 换血（A 轨对照图附录）：底色藏蓝系→v8 暖黑中性系、
+         状态色/品牌橙对齐 v8 权威值（v8-ui-interactive-v2.html :root）。
+         派生 rgba（glow/veil/border 系）低透明度色相残留弱，批 1 保守留原值观察反馈 */
+      --bg0: #060B13;
+      --bg1: #0A111C;
+      --surface1: #0E1726;
+      --surface2: #131F31;
+      --hover: #1B2A3D;
+      --line: #1C2A3E;
+      --line-soft: #16233A;
+      --text-strong: #EBF2FB;
+      --text: #C6D2E3;
+      --dim: #8494AC;
+      --card-sub: #A9B6C9;
+      --faint: #7A889F;
+      --progress-fill: #6E8299;
+      --brand: #E08A63;
+      --brand-hover: #EC9A73;
+      --brand-strong: #C96442;
       --brand-soft: #3A251F;
-      --done: #4BCB91;
-      --working: #E9B84C;
-      --error: #EC7472;
-      --info: #7EAFE8;
+      --done: #35DC97;
+      --working: #FFC53D;
+      --error: #E5484D;
+      --info: #7CB8FF;
       --ctx-safe: #4BCB91;
       --ctx-attention: #E9B84C;
       --ctx-critical: #EC7472;
@@ -45,15 +48,15 @@
       --ctx-attention-fill: #F4C95F;
       --ctx-critical-fill: #FF8A87;
       --ctx-track: #3A5570;
-      --source: #8F9DB1;
-      --chrome: #070D15;
-      --rail: #06101B;
-      --queue-deep: #0E1B2B;
-      --workspace-top: #0B1726;
-      --footer: #0E1B2B;
-      --inspector-top: #0F2031;
+      --source: #7E8FA6;
+      --chrome: #050A11;
+      --rail: #050A11;
+      --queue-deep: #0B1522;
+      --workspace-top: #0A111C;
+      --footer: #0B1522;
+      --inspector-top: #0D1A2B;
       --phone-frame: #02060A;
-      --glow-brand: rgba(226,133,94,.14);
+      --glow-brand: rgba(224,138,99,.14);
       --glow-blue: rgba(41,94,137,.08);
       --surface-veil: rgba(16,30,47,.9);
       --source-switcher-bg: #101E2F;
@@ -71,7 +74,8 @@
       --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
       --status-done-glow: rgba(75,203,145,.35);
       --status-error-glow: rgba(236,116,114,.25);
-      --status-working-glow: rgba(233,184,76,.35);
+      --status-working-glow: rgba(53,220,151,.5);
+      --status-waiting-glow: rgba(255,197,61,.35);
       --q-row-hov: rgba(148,163,190,.07);
       --q-row-sel: rgba(148,163,190,.14);
       --tag-border: rgba(111,139,166,.18);
@@ -219,7 +223,8 @@
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
       --status-error-glow: rgba(200,76,81,.2);
-      --status-working-glow: rgba(165,109,0,.22);
+      --status-working-glow: rgba(22,141,96,.3);
+      --status-waiting-glow: rgba(165,109,0,.22);
       --q-row-hov: rgba(16,24,40,.05);
       --q-row-sel: rgba(16,24,40,.09);
       --tag-border: rgba(96,117,138,.24);
@@ -632,6 +637,17 @@
     .queue-card { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    /* W-V8 批2 团队域壳层（A 轨对照图①④ P1②）：选中态琥珀描边贯通（品牌色在
+       「当前位置」反馈——旧选中态灰白脱离体系，只覆盖团队域不动通用类） */
+    #d-team .queue-card.selected { border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: color-mix(in srgb, var(--brand) 7%, var(--surface1)); box-shadow: inset 2px 0 0 var(--brand); }
+    /* v8 scard 件：头像 tile / 点分 meta 行 / 活跃时间弱化 / 分组头 */
+    #d-team .team-ava { flex: 0 0 auto; width: 26px; height: 26px; margin-right: 9px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--brand-hover); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+    #d-team .team-meta { color: var(--dim); }
+    #d-team .team-meta .icon-inline { width: 12px; height: 12px; }
+    #d-team .team-ago { color: var(--faint); }
+    #d-team .team-grp { display: flex; align-items: center; gap: 5px; margin: 10px 2px 5px; font-size: var(--fs-micro, 10.5px); font-weight: 600; color: var(--faint); letter-spacing: .3px; }
+    #d-team .team-grp .icon-inline { width: 10px; height: 10px; }
+    #d-team .team-grp-n { padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-variant-numeric: tabular-nums; }
     /* #160 空闲置灰（旧壳 #96 同口径）：DONE/ERROR 静默超阈值分钟降透明度退后，
        hover 回一档便于辨认操作；后台子 Agent 在跑豁免（不加 idle 类） */
     .queue-card.idle { opacity: .55; }
@@ -657,10 +673,13 @@
     .project-unfiled-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
     .project-unfiled-toggle .status-dot { margin-left: auto; }
     .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
-    .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
+    /* W-V8 批2 状态语义对调（A 轨对照图 P1④，v8 权威语义）：绿=进行中（呼吸圈绿）、
+       灰=完成（退隐无光圈）、红=失败、琥珀=等待用户（中间注意力态，非 v8 原词表——
+       拍板保留琥珀防「等输入」误读为异常）。旧语义黄=运行/绿=完成会直接误读 */
+    .status-dot.done { background: var(--faint); }
     .status-dot.waiting { background: var(--working); }
     .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
-    .status-dot.working { background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+    .status-dot.working { background: var(--done); animation: dot-breathe 2.4s ease-in-out infinite; }
     @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
     .tag {display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: var(--fs-C); white-space: nowrap;}
     .tag.mini { padding: 1px 6px; font-size: var(--fs-D); color: var(--dim); } /* 件十二扩充 A：列表行类型徽章小号 */
@@ -2229,21 +2248,20 @@
     /* #B3-18 jump-flash：跳转落点闪高 1.5s（任务行/组头/等待卡同语汇） */
     @keyframes b3JumpFlashKf { 0% { background: color-mix(in srgb, var(--brand) 26%, transparent); } 100% { background: transparent; } }
     .jump-flash { animation: b3JumpFlashKf 1.5s ease-out; border-radius: 6px; }
-    /* #B3-19 状态灯静态光圈：done/error/waiting 补 1px 淡光圈（working 走既有呼吸动画） */
-    .status-dot.done { box-shadow: 0 0 7px var(--status-done-glow), 0 0 0 1px color-mix(in srgb, var(--done) 35%, transparent); }
+    /* #B3-19 状态灯静态光圈：error/waiting 补 1px 淡光圈（working 走既有呼吸动画；
+       W-V8 批2：done=灰退隐态摘光圈——完成不该比进行中还亮） */
     .status-dot.error { box-shadow: 0 0 7px var(--status-error-glow), 0 0 0 1px color-mix(in srgb, var(--error) 35%, transparent); }
-    .status-dot.waiting { box-shadow: 0 0 6px var(--status-working-glow), 0 0 0 1px color-mix(in srgb, var(--working) 35%, transparent); }
+    .status-dot.waiting { box-shadow: 0 0 6px var(--status-waiting-glow), 0 0 0 1px color-mix(in srgb, var(--working) 35%, transparent); }
     /* 浅色 LED 化：亮底上淡色圆点发灰——补 1px 深化描边定型 */
     html[data-theme="light"] .status-dot { box-shadow: 0 0 0 1px color-mix(in srgb, #22364A 32%, transparent); }
-    html[data-theme="light"] .status-dot.done { box-shadow: 0 0 6px var(--status-done-glow), 0 0 0 1px color-mix(in srgb, var(--done) 50%, transparent); }
     html[data-theme="light"] .status-dot.error { box-shadow: 0 0 6px var(--status-error-glow), 0 0 0 1px color-mix(in srgb, var(--error) 50%, transparent); }
-    html[data-theme="light"] .status-dot.waiting { box-shadow: 0 0 6px var(--status-working-glow), 0 0 0 1px color-mix(in srgb, var(--working) 50%, transparent); }
+    html[data-theme="light"] .status-dot.waiting { box-shadow: 0 0 6px var(--status-waiting-glow), 0 0 0 1px color-mix(in srgb, var(--working) 50%, transparent); }
     /* 会话列表头像角标灯（font2 拍板）：10px 灯体 + 2px 底色切角环 + 3px 状态色 20% 光环，
        环结构统一明暗两主题（bg1 随主题取值），状态只注入 --dot-halo 色源 */
-    #d-session .srow-ava .status-dot.done { --dot-halo: var(--done); }
+    #d-session .srow-ava .status-dot.done { --dot-halo: var(--faint); }
     #d-session .srow-ava .status-dot.error { --dot-halo: var(--error); }
     #d-session .srow-ava .status-dot.waiting { --dot-halo: var(--working); }
-    #d-session .srow-ava .status-dot.working { --dot-halo: var(--working); }
+    #d-session .srow-ava .status-dot.working { --dot-halo: var(--done); }
     /* dock 状态灯同族光圈（--session-state-color 随态位） */
     .session-state-dot { box-shadow: 0 0 6px color-mix(in srgb, var(--session-state-color) 38%, transparent), 0 0 0 1px color-mix(in srgb, var(--session-state-color) 32%, transparent); }
     @media (max-width: 959px) {
@@ -2336,7 +2354,7 @@
                 const HIST_PREFIX = "cc.input.hist.";               // #95 按会话分桶的输入历史
                 const HIST_MAX = 200;
                 const IMG_MAX = 8, FILE_MAX = 5, FILE_SIZE_MAX = 20 * 1024 * 1024; // B20 附件上限提升（图 8 / 文件 5）
-                const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
+                const STATUS_TAG = { WORKING: ["运行中", "done"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] }; // W-V8 批2a：运行中绿系（v8 语义对调，info 蓝退役）
                 const DOCK_STATE = { WORKING: "running", WAITING: "waiting", ERROR: "suspended", DONE: "closing" }; // B21 态图标承态，状态词退役
 
                 const S = {
@@ -3099,7 +3117,8 @@
                     summary: esc(session.action_summary || session.last_error || displayPath(session.cwd) || "暂无活动摘要"),
                     status,
                     // #164 状态文字标签退役（头像角标状态点已表达状态）；tagClass 仅供 CTA 判定保留
-                    tagClass: ({ working: "info", waiting: "action", error: "danger", done: "done" })[status],
+                    // W-V8 批2a 状态语义对调：working 绿（v8 进行中=绿系；CTA 判定只认 action/danger 不受影响）
+                    tagClass: ({ working: "done", waiting: "action", error: "danger", done: "done" })[status],
                     bg: bgCount(session), // #164 后台子 Agent 在跑数（⑂N 徽标）
                     engine: esc(engine[0]), engineClass: engine[1],
                     source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || S.relayName) : (session.relay_source || S.relayName)), // 件十三 + W-WINPAIR-R6：per-session 源标识优先（聚合两源各显其名）
@@ -6179,7 +6198,7 @@
                 const root = document.querySelector("#d-team");
                 const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
-                const groupStatuses = new Map([["pending", "待确认"], ["active", "在办"], ["parked", "已挂起"], ["archived", "已结项"]]);
+                const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
                 const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
                 // 件十（2026-10-11 用户实锤）：tier 措辞口语化——显示层映射「正经立项→正式项目 /
                 // 轻立项→轻量项目」；存储值保持旧词（创建载荷 option value/relay 校验/org CLI 参数
@@ -6759,13 +6778,26 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? state.projects.map((item) => {
-                    const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
-                    // UIPOLISH3 件四⑨⑩（2026-10-11 用户反馈）：统计行图标化（席位/待确认→图标+数字，
-                    // 长「8个编制席位」截断根治）；状态灯+「在办」tag 两件套整合为单枚状态胶囊
-                    // （点色随态，灯丑根治）。title 恒带全文字（hover/读屏可达）
-                    return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div><p title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + (pending ? '&nbsp;&nbsp;<svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg> ' + pending : "") + '</p><div class="identity-cluster">' + sourceBadge() + "</div></div>";
-                  }).join("") : banner(projectsEmpty());
+                  query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
+                    // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
+                    // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
+                    // 状态胶囊保留（UIPOLISH3 件九⑩ 用户拍板件不动）；分组只二分不改数据语义
+                    const card = (item) => {
+                      const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
+                      const mins = Math.max(0, Math.round((Date.now() - (item.updated_at || 0)) / 60000));
+                      const activeAgo = mins <= 0 ? "刚刚活跃" : mins < 60 ? mins + " 分钟前活跃" : mins < 1440 ? Math.round(mins / 60) + " 小时前活跃" : Math.round(mins / 1440) + " 天前活跃";
+                      return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><span class="team-ava" aria-hidden="true">' + escape(String(item.name || item.id).trim().slice(0, 1) || "团") + '</span><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div>'
+                        + '<p class="team-meta" title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + ' 席 · 待确认 ' + pending + (item.status === "archived" ? "" : ' · <span class="team-ago">' + activeAgo + '</span>') + '</p>'
+                        + '<div class="identity-cluster">' + sourceBadge() + "</div></div>";
+                    };
+                    const live = state.projects.filter((p) => p.status !== "archived");
+                    const archived = state.projects.filter((p) => p.status === "archived");
+                    const grp = (label, n) => '<div class="team-grp"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>' + label + ' <span class="team-grp-n">' + n + "</span></div>";
+                    let html = "";
+                    if (live.length) html += grp("进行中", live.length) + live.map(card).join("");
+                    if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
+                    return html;
+                  })() : banner(projectsEmpty());
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役

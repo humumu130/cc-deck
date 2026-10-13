@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>v8 UI 还原批【手机端】· 逐屏对照图（t-079b13c5 · 待 Leader 拍板）</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07111d;
+    --panel: #0f1d2d;
+    --panel-2: #14263b;
+    --line: #2a4058;
+    --line-soft: rgba(142,170,198,.16);
+    --text: #e8eff8;
+    --muted: #a5b6c9;
+    --faint: #7e95ad;
+    --brand: #e2855e;
+    --brand-soft: rgba(226,133,94,.13);
+    --ok: #4bcb91;
+    --warn: #e9b84c;
+    --info: #7eafe8;
+    --danger: #ec7472;
+    --shadow: 0 18px 42px rgba(1,8,16,.28);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-width: 1100px; background: radial-gradient(1100px 560px at 12% -12%, rgba(226,133,94,.10), transparent 60%), radial-gradient(900px 500px at 88% 0%, rgba(126,175,232,.08), transparent 60%), var(--bg); color: var(--text); font: 13px/1.55 var(--font); }
+  .page { width: min(1640px, calc(100% - 52px)); margin: 0 auto; padding: 34px 0 64px; }
+  .eyebrow { color: var(--brand); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  h1 { margin: 5px 0 8px; font-size: 27px; line-height: 1.18; letter-spacing: -.02em; }
+  h2 { margin: 0; font-size: 18px; }
+  h3 { margin: 0; font-size: 13.5px; }
+  p { margin: 0; }
+  .lede { max-width: 980px; color: var(--muted); font-size: 13.5px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; background: rgba(20,38,59,.72); color: var(--muted); font-size: 11px; }
+  .chip strong { color: var(--text); }
+  .chip.warn { border-color: rgba(233,184,76,.48); color: var(--warn); background: rgba(233,184,76,.08); }
+  .chip.ok { border-color: rgba(75,203,145,.42); color: var(--ok); background: rgba(75,203,145,.07); }
+  .notice { display: grid; grid-template-columns: 10px 1fr; gap: 14px; margin: 20px 0; padding: 14px 17px; border: 1px solid rgba(233,184,76,.40); border-radius: 14px; background: rgba(233,184,76,.08); }
+  .notice::before { content: ""; display: block; border-radius: 8px; background: var(--warn); }
+  .notice strong { color: var(--warn); }
+  .notice p { color: var(--muted); font-size: 12.5px; }
+  .rules { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 18px 0; }
+  .rule { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(15,29,45,.76); }
+  .rule b { display: block; margin-bottom: 3px; color: var(--text); }
+  .rule p { color: var(--muted); font-size: 11.5px; }
+  .rule.top { grid-column: 1 / -1; border-color: rgba(236,116,114,.5); background: rgba(236,116,114,.07); }
+  .rule.top b { color: var(--danger); }
+  .section { margin-top: 34px; }
+  .section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line-soft); }
+  .section-head p { color: var(--faint); font-size: 12px; }
+  .shotrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .viewport { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: #02070d; box-shadow: var(--shadow); }
+  .viewport-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, rgba(20,38,59,.96), rgba(15,29,45,.96)); }
+  .viewport-head .side { color: var(--faint); font: 10px var(--mono); }
+  .viewport-head strong { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+  .viewport-head strong::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px var(--brand-soft); }
+  .viewport.now .viewport-head strong::before { background: var(--info); box-shadow: 0 0 0 4px rgba(126,175,232,.12); }
+  .viewport img { display: block; width: 100%; max-height: 760px; object-fit: contain; object-position: top; background: #04090f; }
+  .missing { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 420px; color: var(--faint); }
+  .missing .tag { padding: 5px 12px; border: 1px dashed rgba(236,116,114,.55); border-radius: 999px; color: var(--danger); font-size: 12px; font-weight: 700; }
+  .missing p { font-size: 11.5px; max-width: 320px; text-align: center; }
+  .points { margin-top: 14px; border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 9px 14px; text-align: left; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); background: rgba(15,29,45,.9); border-bottom: 1px solid var(--line); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; font-size: 12.5px; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  td.id { color: var(--text); font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+  td.pri { white-space: nowrap; font-weight: 700; }
+  .p1 { color: var(--danger); } .p2 { color: var(--warn); } .p3 { color: var(--info); }
+  .pb { color: var(--brand); }
+  td b { color: var(--text); }
+  td .conflict { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px solid rgba(236,116,114,.5); border-radius: 6px; color: var(--danger); font-size: 10px; font-weight: 700; }
+  .summary td { font-size: 12px; }
+  .foot-note { margin-top: 26px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 14px; background: rgba(15,29,45,.6); color: var(--faint); font-size: 11.5px; line-height: 1.8; }
+  .foot-note b { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">cc-deck · v8 restore · mobile</div>
+  <h1>v8 UI 还原批【手机端】· 逐屏对照图</h1>
+  <p class="lede">任务 t-079b13c5（用户 1013 指令：手机端也要对齐 v8，不要漏）。左列 = v8 交互权威原型（v8-ui-interactive-v2.html 手机壳，Playwright 逐屏直截）；右列 = 现网手机端 <b>0.7.0-test.23</b>（feat/v8-restore 线，模拟器实拍 · 生产快照回放沙盒 8798）。还原点逐屏编号，<span class="p1">P1</span>=结构级缺失 / <span class="p2">P2</span>=形制与信息选取差异 / <span class="p3">P3</span>=观感细节 / <span class="pb">拍</span>=需 Leader 拍板。<b>本图为实施前拍板稿——过目定夺后再动代码。</b></p>
+  <div class="meta">
+    <span class="chip">基准原型 <strong>v8-ui-interactive-v2.html（交互权威）</strong></span>
+    <span class="chip">现网 <strong>test.23 = feat/v8-restore@7ef7dd6</strong></span>
+    <span class="chip">截图 <strong>原型 17 帧 · 实拍 8 屏</strong></span>
+    <span class="chip warn">兄弟单避让 <strong>ListScreen 顶部/head 区（fix/mobile-list-r2）</strong></span>
+  </div>
+
+  <div class="rules">
+    <div class="rule top"><b>拍 · 品牌色系归属（头号拍板点）</b>
+      <p>v8 原型手机帧用的是「手机壳独立体系（蓝紫）」——底 #070D18 / 品牌 #4D9FFF→#7C6CF2。但原型注释自陈：手机帧 token <b>取自当时 App 的 theme.ts</b>（快照，非设计增量）；现网手机已在 005 批统一为暖橙系（#E2855E，与桌面一致）。我的建议：<b>维持现网暖橙、只对齐结构/交互/信息架构</b>——若要整体换蓝紫需连桌面一起拍板，单独换手机会造成双端品牌分裂。本图其余还原点均按「暖橙底 + v8 形态」表述。</p>
+    </div>
+    <div class="rule"><b>还原口径 · 结构对齐</b><p>信息架构（tab 结构/页面归属/收纳关系/卡片信息选取）以 v8 为准——这是本批主体，也是「不要漏」的主所指。</p></div>
+    <div class="rule"><b>还原口径 · 退役不回加</b><p>历史拍板退役项不回加：会话详情「全部」tab（已退役备案）不在还原范围；「更多」tab 的水位/统计内容保留、只改收纳形态。</p></div>
+    <div class="rule"><b>还原口径 · 冲突面避让</b><p>ListScreen 顶部与 head 区 = 兄弟单 fix/mobile-list-r2 地盘（引擎标签/head 对齐/灯色统计挪位/全域滑切）。涉顶栏的还原点（A1/F3/X3）合并为「顶栏统一改造簇」，待兄弟单收编后实施，本批不做。</p></div>
+    <div class="rule"><b>现网侧截图说明</b><p>沙盒 relay（CCR_DATA_DIR 隔离 + 生产 events 快照回放）实拍；03/04/05/06 屏为同一快照数据，屏结构以 UI 为准。原型侧为 DOM 操纵切屏直截（含 ⋯ 浮层、泳道折叠态）。</p></div>
+  </div>
+
+  <!-- ================ ① 会话 tab ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>① 会话 tab（root）</h2>
+      <p>proto/pchat ↔ now/01-chattab</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型</strong><span class="side">ph-pchat</span></div><img src="assets/v8-mobile/proto/pchat.png" alt="v8 会话 tab"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23</strong><span class="side">会话 tab</span></div><img src="assets/v8-mobile/now/01-chattab.png" alt="现网会话 tab"></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">A1</td><td class="pri p2">P2<span class="conflict">冲突面</span></td><td><b>appbar 标题行</b>：v8 = 「会话」大标题 + 铃铛（badge=需行动数）+ ＋；现网无标题行（连接 chip + 工具行 + 统计行）。→ 并入「顶栏统一改造簇」，等兄弟单收编后实施。</td></tr>
+      <tr><td class="id">A2</td><td class="pri p2">P2</td><td><b>团队置顶卡</b>：v8 会话列表首卡 = 团队卡（品牌描边 hcard + 「N 成员 · N 进行中 · N 待装机 · 刚刚活跃」live 副行，点进团队详情）；现网会话 tab 无团队入口（只在团队 tab）。→ 会话 tab 增条件团队置顶卡。</td></tr>
+      <tr><td class="id">A3</td><td class="pri p2">P2</td><td><b>会话卡形制</b>：v8 = 卡片制（42px emoji 头像 tile + 名称 + 右缘状态点 + 副行 live）；现网 = 通栏行 + 34px 首字母圆头像 + 右端水位 mini。→ 卡片化 + 头像 tile 放大（emoji 优先、首字母兜底）；水位 mini 去留可拍板。</td></tr>
+      <tr><td class="id">A4</td><td class="pri p3">P3</td><td><b>「等你确认」胶囊</b>：v8 会话名旁挂 pause 胶囊（等你确认，琥珀描边）；现网在摘要行用文字前缀表达。→ 名称行旁胶囊化（信息已有，形态升级）。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ② 会话详情 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>② 会话详情（二级）</h2>
+      <p>proto/pchatd-四视图 ↔ now/07-chatdetail</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 消息 + ⋯ 收纳浮层</strong><span class="side">ph-pchatd p7m / ovsheet</span></div><img src="assets/v8-mobile/proto/pchatd-ov.png" alt="v8 会话详情"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23</strong><span class="side">会话详情</span></div><img src="assets/v8-mobile/now/07-chatdetail.png" alt="现网会话详情"></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">B1</td><td class="pri p1">P1</td><td><b>顶 tab ⋯ 收纳</b>：v8 = 消息/任务/输出物 + ⋯（低频视图：定时任务/统计 → 底部浮层点开原地切换，badge 提示数）；现网 = 对话/任务/输出物/<b>更多</b> 平铺四 tab（「更多」为显性 tab）。→ 「更多」tab 退场改 ⋯ 浮层，水位计/统计/定时任务内容原样搬进浮层视图。参考帧：<a href="assets/v8-mobile/proto/pchatd-all.png">p7a 全部</a>·<a href="assets/v8-mobile/proto/pchatd-tasks.png">p7k 任务</a>。</td></tr>
+      <tr><td class="id">B2</td><td class="pri p2">P2</td><td><b>气泡角色标签</b>：v8 assistant 气泡上方带 pwho 名字行（「Claude」/「Leader · glm-5.3」）；现网 assistant 气泡直接正文。→ 加角色行（数据已有 session/agent 名）。</td></tr>
+      <tr><td class="id">B3</td><td class="pri p3">P3</td><td><b>断连补齐提示卡</b>：v8 有 gapcard（⇄ 正在对齐更早的消息 / ⇅ 已补齐断连期间的 N 条）；现网重连补齐走 org-delta 无行内提示。→ 视图级提示卡，观感件。</td></tr>
+      <tr><td class="id">B4</td><td class="pri pb">不还原</td><td><b>「全部」时间线 tab</b>：v8 有 p7a 全部视图；现网已退役备案（历史拍板）。→ 不回加，仅记录。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ③ 团队 tab ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>③ 团队 tab（root）</h2>
+      <p>proto/pteam ↔ now/02-teamtab</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型</strong><span class="side">ph-pteam</span></div><img src="assets/v8-mobile/proto/pteam.png" alt="v8 团队 tab"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23</strong><span class="side">团队 tab</span></div><img src="assets/v8-mobile/now/02-teamtab.png" alt="现网团队 tab"></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">C1</td><td class="pri p2">P2</td><td><b>团队卡动态副行</b>：v8 = emoji 头像 + 「N 成员 · N 进行中 · N 待装机 · 刚刚活跃」（动态优先）；现网 = 名称 + 状态胶囊 + 「N 人 · 待确认 N · 档位 · 源名」（静态编制优先）。→ 副行换动态信息（数据面 board/group 已有，进行中/待装机计数可从板卡状态聚合）；状态胶囊保留。</td></tr>
+      <tr><td class="id">C2</td><td class="pri p3">P3</td><td><b>归档团队 dim 卡</b>：v8 列表含「已收团 · 只读归档」降透明卡；现网仅显示在办团队。→ 已收团条件显示（数据 status 已有）。</td></tr>
+      <tr><td class="id">C3</td><td class="pri p3">P3</td><td><b>确认卡队列</b>：现网已具备（置顶 + ✓/✗ 决议 + 状态徽），形制比 v8 更完整——保留现网，不回退。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ④ 团队详情（用户点名） ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>④ 团队详情（二级）· 用户点名重点</h2>
+      <p>proto/pteamd 看板/成员 ↔ now/05/06</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 看板 tab</strong><span class="side">ph-pteamd p3b</span></div><img src="assets/v8-mobile/proto/pteamd-board.png" alt="v8 看板"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23 · 任务板节</strong><span class="side">TeamDetailPage</span></div><img src="assets/v8-mobile/now/05-teamdetail-board.png" alt="现网看板"></div>
+    </div>
+    <div class="shotrow" style="margin-top:16px">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 成员 tab</strong><span class="side">ph-pteamd p3c</span></div><img src="assets/v8-mobile/proto/pteamd-crew.png" alt="v8 成员"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23 · 编制节（展开）</strong><span class="side">TeamDetailPage</span></div><img src="assets/v8-mobile/now/06-crew.png" alt="现网成员卡"></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">D1</td><td class="pri p1">P1</td><td><b>二级 tab 架构</b>：v8 = 对话 / 看板（默认，badge）/ 成员 + ⋯（活动 · 低频浮层）；现网 = 七节纵排单页（确认/任务板/编制/活动/经验/铁律/熟手池）。→ 改造为三 tab + ⋯：<b>D1a</b> 对话 tab 全新（开团通知 + 我/Leader 气泡 + pready「就绪待装机」卡〔装机看效果/反馈问题〕+ 输入条，参考 <a href="assets/v8-mobile/proto/pteamd-talk.png">pteamd-talk</a>）；<b>D1b</b> 经验/铁律/熟手池归 ⋯ 浮层（低频视图收纳，「只收视图不收动作」）；<b>D1c</b> 活动归 ⋯（时间线内容保留）；<b>D1d</b> 确认卡保留在对话 tab 顶部（或看板 tab 顶，与现网确认队列同语义）。</td></tr>
+      <tr><td class="id">D2</td><td class="pri p1">P1</td><td><b>看板吸顶总览条</b>：v8 = 五段彩色进度条（按泳道卡数分段）+ 可点图例（点分段跳组）+ 当前视口框（滚动联动）；现网无总览。→ 吸顶条 + 图例点击 scrollTo 泳道（视口框联动为进阶，可降 P3）。</td></tr>
+      <tr><td class="id">D3</td><td class="pri p1">P1</td><td><b>泳道折叠组头 + 置顶泳道</b>：v8 = planeh（组名+计数+折叠箭头，可整组收起）+ 「⚡ 就绪待装机」置顶泳道（warn 底高亮 + pin-top 虚线标）；现网 = 泳道头不折叠、无置顶强调，五态固定序。→ 组头可折叠 + 待装机泳道置顶高亮。</td></tr>
+      <tr><td class="id">D4</td><td class="pri p1">P1</td><td><b>看板卡元素</b>：v8 卡 = 标题 + 自验点行（●过 ●败 ○未测，vpg）+ 验收单入口（验收单↗）+ 版本 chip + 元行（认领时间 · worktree · 状态/警示）；现网卡 = 标题 + 描述 + 执行者行。→ 补自验点行与验收单 chip。<b>数据依赖待核</b>：板卡 meta 是否携带 AI 自验计数（若无，relay 侧补一档 meta，单独申报）。</td></tr>
+      <tr><td class="id">D5</td><td class="pri p1">P1</td><td><b>成员卡操作行 + 在线三态</b>：v8 = 旁听 / 消息 / 接替 三操作 + 在线 pill（在线/失联/滞留）+ ⚠ 停留警告 + 上下文水位条；现网 = 头像 + 名 + 角色·模型行 + 引擎徽 + 水位条（无操作行、无在线态）。→ 旁听/消息 = 跳该成员会话（现网整卡点击已具语义，拆成两钮）；<b>「接替」= 写操作，手机只读边界拍板点</b>（v8 原型手机有此钮；现网口径「写操作走电脑端」——建议手机端藏接替或只读展示接替状态）。失联/滞留态数据依赖 watchdog 面板字段，待核。</td></tr>
+      <tr><td class="id">D6</td><td class="pri p2">P2</td><td><b>成员卡头像</b>：v8 = 34px emoji tile（👑🛠📱 等角色 emoji）；现网 = 32px 首字母圆标。→ emoji 优先（与 A3 同语言统一改）。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ⑤ 项目 tab + 详情 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>⑤ 项目 tab + 项目详情（二级）</h2>
+      <p>proto/pproj + pprojd ↔ now/03</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 项目 tab</strong><span class="side">ph-pproj</span></div><img src="assets/v8-mobile/proto/pproj.png" alt="v8 项目 tab"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23 · 项目 tab</strong><span class="side">ProjectsTab</span></div><img src="assets/v8-mobile/now/03-projtab.png" alt="现网项目 tab"></div>
+    </div>
+    <div class="shotrow" style="margin-top:16px">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 项目详情（四分节聚合）</strong><span class="side">ph-pprojd</span></div><img src="assets/v8-mobile/proto/pprojd.png" alt="v8 项目详情"></div>
+      <div class="viewport"><div class="viewport-head"><strong>现网 · 无此屏</strong><span class="side">缺失</span></div><div class="missing"><span class="tag">结构级缺失</span><p>现网点项目卡 → 直接进团队详情七节页（语义错位）；「查看项目会话」跳会话域带过滤。无项目维度聚合视图。</p></div></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">E1</td><td class="pri p1">P1</td><td><b>项目详情四分节聚合页缺失</b>：v8 = 💬 会话 N（「在 💬 查看 ↗」跳转行）+ 👥 团队 + 📦 输出物 + ✅ 验收单（N 未闭环）四分节 vrow 行卡 + 「只读聚合 · 联动不合并（写操作回原域）」脚注。→ 新建 ProjectDetailPage，项目卡点击改指此页；团队/会话行带跳转。</td></tr>
+      <tr><td class="id">E2</td><td class="pri p2">P2</td><td><b>项目卡形制</b>：v8 = folder 图标 + 名称 + 状态点 + 「路径 · N 会话 · N 团队 · <b>N 需行动</b>」；现网 = 三行制（名称+胶囊 / 会话数·路径·源 / 动作行两钮）。→ 收敛为两行（动作行移入详情页，「需行动」计数聚合行新增——数据面可从 todos/验收单聚合）。</td></tr>
+      <tr><td class="id">E3</td><td class="pri p3">P3</td><td><b>隐藏项目 / 长按恢复</b>：v8 有已隐藏 dim 卡（长按恢复）+ ⋯ 菜单（隐藏/恢复/改名）；现网无隐藏机制。→ 可后置（M2）。</td></tr>
+      <tr><td class="id">E4</td><td class="pri pb">记录</td><td><b>＋号语义分歧</b>：v8 = 打开本机目录纳入项目（需系统目录选择器）；现网 = 新建会话于此目录。→ 建议保留现网语义（更实用），v8 语义待 M2 文件选择器再议。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ⑥ 通知中心 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>⑥ 通知中心（二级）</h2>
+      <p>proto/pnotif ↔ now/08</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型</strong><span class="side">ph-pnotif</span></div><img src="assets/v8-mobile/proto/pnotif.png" alt="v8 通知中心"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23 · 通知弹层</strong><span class="side">NotifCenterSheet</span></div><img src="assets/v8-mobile/now/08-notifcenter.png" alt="现网通知中心"></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">F1</td><td class="pri p1">P1</td><td><b>三分组语言</b>：v8 = 🔴 需你行动（常驻 · 手动关）/ 🟡 注意 / ⚪ 动态 三组分级；现网 = 未处理 / 已处理 两区（黄点单色）。→ 行按级别三分组。<b>数据依赖待核</b>：notifications 行有无 level/actionable 字段（无则 relay 侧补）。</td></tr>
+      <tr><td class="id">F2</td><td class="pri p2">P2</td><td><b>行动行右侧动作钮</b>：v8 行内直接给「验收单 ↗」「换厂商接替 ↗」动作钮 + × 手动关；现网行内「定位来源 ›」+ 知道了/忽略。→ 需行动类行补右侧直达钮（联动 G1 验收单屏）。</td></tr>
+      <tr><td class="id">F3</td><td class="pri p3">P3<span class="conflict">冲突面</span></td><td><b>入口形态</b>：v8 = appbar 铃铛 badge；现网 = 统计行「通知 · N」胶囊（件六拍板：通知不占底栏不挂铃铛位——历史拍板与 v8 冲突）。→ 归顶栏统一改造簇一并拍板（拍板点：是否推翻件六拍板回挂铃铛）。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ⑦ 验收单 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>⑦ 验收单（二级 · 出门回填主战场）</h2>
+      <p>proto/psheet ↔ 现网无站内屏</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型</strong><span class="side">ph-psheet</span></div><img src="assets/v8-mobile/proto/psheet.png" alt="v8 验收单"></div>
+      <div class="viewport"><div class="viewport-head"><strong>现网 · 无站内屏</strong><span class="side">缺失</span></div><div class="missing"><span class="tag">结构级缺失</span><p>现网唯一形态 = 会话列表顶部条件卡（AccHeader），点击 Linking 外链跳出填写（LAN / cc.humumu.online）。站内无步骤条、无行回填组件。</p></div></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">G1</td><td class="pri p1">P1</td><td><b>站内验收单屏</b>：v8 = 步骤条（出单 → 回填 → 确认收单）+ 手机端行组（未测/✓ toggle + 备注 input + 证据 ↗）+ 他端折叠行（🖥 桌面已回填只读 / 🌐 AI 已代验）+ 主按钮两段（提交回填 → 确认收单，同屏切换）。→ 新建站内验收单屏，AccHeader 点击改站内打开（外链保留兜底）。<b>数据依赖待核</b>：acceptance 回填 API 手机端可用性（acceptance.ts 面已有，回填写口待查）。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ⑧ 设置 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>⑧ 设置（root + 子页）</h2>
+      <p>proto/pset + pset-conn + pset-prov ↔ now/04</p>
+    </div>
+    <div class="shotrow">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 设置主页</strong><span class="side">ph-pset</span></div><img src="assets/v8-mobile/proto/pset.png" alt="v8 设置"></div>
+      <div class="viewport now"><div class="viewport-head"><strong>现网 test.23 · 设置页</strong><span class="side">SettingsPage</span></div><img src="assets/v8-mobile/now/04-settab.png" alt="现网设置"></div>
+    </div>
+    <div class="shotrow" style="margin-top:16px">
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 模型服务子页</strong><span class="side">ph-pset-prov</span></div><img src="assets/v8-mobile/proto/pset-prov.png" alt="v8 模型服务"></div>
+      <div class="viewport"><div class="viewport-head"><strong>v8 原型 · 连接与设备子页</strong><span class="side">ph-pset-conn</span></div><img src="assets/v8-mobile/proto/pset-conn.png" alt="v8 连接与设备"></div>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">H1</td><td class="pri p1">P1</td><td><b>模型服务子页缺失</b>：v8 = 默认继承环境卡（dashed 描边 + 环境变量 + 验证连通）+ 厂商卡（baseUrl / 模型 chips / 凭证脱敏 •••• / 额度条）+ 角色路由默认表（Leader/开发/验收 + why 列）+ 「凭证仅存你的电脑」安全提示。→ 新建子页（浏览态只读，验证连通由 relay 代发）；数据面 engine_catalog 已铺（W-PORT-B），凭证脱敏读侧待核。</td></tr>
+      <tr><td class="id">H2</td><td class="pri p2">P2</td><td><b>连接与设备子页化</b>：v8 = 独立子页（本机 relay 卡 + 已配设备清单〔码 + 在线态〕+ 云桥卡 + 「手机是指挥台，不是安装器」ptrust）；现网 = 连接管理组内嵌（内容相当）。→ 组升子页 + ptrust 提示条（内容搬家，语义不变）。</td></tr>
+      <tr><td class="id">H3</td><td class="pri p3">P3</td><td><b>设置主页形制</b>：v8 = hcard 四行列表（通用/模型服务/连接与设备/关于）+ ⋯ 快捷菜单；现网 = 五区分组卡（信息更全）。→ 保守：保留现网分区结构，仅补「模型服务」入口行 + ⋯ 快捷跳转；完整 hcard 化可后置。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ ⑨ 横切 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>⑨ 横切件（底部 Tab · 全局）</h2>
+      <p>底部导航对照（各屏截图内均可观察）</p>
+    </div>
+    <div class="points"><table>
+      <tr><th style="width:64px">编号</th><th style="width:70px">优先级</th><th>差异与还原建议</th></tr>
+      <tr><td class="id">X1</td><td class="pri pb">拍</td><td><b>品牌色系归属</b>（见顶部头号拍板点）：v8 手机帧蓝紫 vs 现网暖橙。建议维持暖橙。</td></tr>
+      <tr><td class="id">X2</td><td class="pri p2">P2</td><td><b>底部 Tab 选中语言</b>：v8 = 图标染品牌色 + 文字提亮 + 图标<b>下方 4px 圆点</b>；badge = 琥珀底深字、tab 区上缘居中偏右。现网 = 图标+文字全染 brandA（微信式无底无点）；badge = 红底白字、图标右上角。→ 补选中圆点 + badge 换琥珀底深字（一处 token 改动，全局生效）。</td></tr>
+      <tr><td class="id">X3</td><td class="pri p2">P2<span class="conflict">冲突面</span></td><td><b>appbar 三件套</b>（标题 + 铃铛 badge + ＋/⋯）：v8 所有 root 屏统一；现网各 tab 头部语言不一（会话无标题行、团队/项目有标题行、设置有标题）。→ 顶栏统一改造簇（与 A1/F3 合并），等兄弟单收编后统一实施。</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================ 汇总 ================ -->
+  <div class="section">
+    <div class="section-head">
+      <h2>还原点汇总 · 实施分批建议</h2>
+      <p>P1×8 · P2×9 · P3×7 · 拍板×3 · 不还原×1（点击表内编号可回溯上方对应屏）</p>
+    </div>
+    <div class="points summary"><table>
+      <tr><th style="width:56px">编号</th><th style="width:64px">优先级</th><th style="width:120px">归属屏</th><th>一句话</th><th style="width:150px">建议批次</th></tr>
+      <tr><td class="id">D1</td><td class="pri p1">P1</td><td>④ 团队详情</td><td>七节纵排 → 对话/看板/成员三 tab + ⋯ 收纳（对话 tab 全新）</td><td>批1 · 团队详情簇</td></tr>
+      <tr><td class="id">D2</td><td class="pri p1">P1</td><td>④ 看板</td><td>吸顶五段总览条 + 图例点跳组</td><td>批1 · 团队详情簇</td></tr>
+      <tr><td class="id">D3</td><td class="pri p1">P1</td><td>④ 看板</td><td>泳道折叠组头 + ⚡待装机置顶泳道</td><td>批1 · 团队详情簇</td></tr>
+      <tr><td class="id">D4</td><td class="pri p1">P1</td><td>④ 看板</td><td>看板卡自验点行 + 验收单入口 chip（数据依赖待核）</td><td>批1 · 团队详情簇</td></tr>
+      <tr><td class="id">D5</td><td class="pri p1">P1</td><td>④ 成员</td><td>成员卡操作行（旁听/消息）+ 在线三态（接替=边界拍板）</td><td>批1 · 团队详情簇</td></tr>
+      <tr><td class="id">E1</td><td class="pri p1">P1</td><td>⑤ 项目详情</td><td>四分节聚合页新建（现网缺失+语义错位）</td><td>批2 · 项目详情簇</td></tr>
+      <tr><td class="id">F1</td><td class="pri p1">P1</td><td>⑥ 通知中心</td><td>行分级三分组（数据依赖待核）</td><td>批2 · 通知+验收簇</td></tr>
+      <tr><td class="id">G1</td><td class="pri p1">P1</td><td>⑦ 验收单</td><td>站内回填屏新建（步骤条+行回填+两段主钮）</td><td>批2 · 通知+验收簇</td></tr>
+      <tr><td class="id">B1</td><td class="pri p1">P1</td><td>② 会话详情</td><td>「更多」tab → ⋯ 底部浮层收纳</td><td>批3 · 详情+团队tab簇</td></tr>
+      <tr><td class="id">H1</td><td class="pri p1">P1</td><td>⑧ 设置</td><td>模型服务子页（Provider 浏览态+路由表）</td><td>批4 · 设置簇</td></tr>
+      <tr><td class="id">C1</td><td class="pri p2">P2</td><td>③ 团队 tab</td><td>团队卡副行换动态信息</td><td>批3 · 详情+团队tab簇</td></tr>
+      <tr><td class="id">B2</td><td class="pri p2">P2</td><td>② 会话详情</td><td>气泡角色标签行</td><td>批3 · 详情+团队tab簇</td></tr>
+      <tr><td class="id">E2</td><td class="pri p2">P2</td><td>⑤ 项目 tab</td><td>项目卡两行化 + 需行动聚合</td><td>批2 · 项目详情簇</td></tr>
+      <tr><td class="id">F2</td><td class="pri p2">P2</td><td>⑥ 通知中心</td><td>行动行右侧直达钮</td><td>批2 · 通知+验收簇</td></tr>
+      <tr><td class="id">H2</td><td class="pri p2">P2</td><td>⑧ 设置</td><td>连接管理组 → 连接与设备子页 + ptrust</td><td>批4 · 设置簇</td></tr>
+      <tr><td class="id">X2</td><td class="pri p2">P2</td><td>⑨ 横切</td><td>Tab 选中圆点 + badge 琥珀底深字</td><td>批5 · 形制统一簇</td></tr>
+      <tr><td class="id">A2</td><td class="pri p2">P2</td><td>① 会话 tab</td><td>团队置顶卡（列表内团队入口）</td><td>批5 · 形制统一簇</td></tr>
+      <tr><td class="id">A3</td><td class="pri p2">P2</td><td>① 会话 tab</td><td>会话卡卡片化 + emoji 头像 tile</td><td>批5 · 形制统一簇</td></tr>
+      <tr><td class="id">D6</td><td class="pri p2">P2</td><td>④ 成员</td><td>成员卡 emoji 头像（与 A3 同语言）</td><td>批1 · 团队详情簇</td></tr>
+      <tr><td class="id">A4</td><td class="pri p3">P3</td><td>① 会话 tab</td><td>「等你确认」名称行胶囊</td><td>批5 · 形制统一簇</td></tr>
+      <tr><td class="id">B3</td><td class="pri p3">P3</td><td>② 会话详情</td><td>断连补齐提示卡</td><td>批3 · 详情+团队tab簇</td></tr>
+      <tr><td class="id">C2</td><td class="pri p3">P3</td><td>③ 团队 tab</td><td>归档团队 dim 卡</td><td>批3 · 详情+团队tab簇</td></tr>
+      <tr><td class="id">E3</td><td class="pri p3">P3</td><td>⑤ 项目</td><td>隐藏项目/长按恢复（M2）</td><td>后置</td></tr>
+      <tr><td class="id">F3</td><td class="pri p3">P3</td><td>⑥ 通知中心</td><td>入口铃铛化（历史拍板冲突，待拍）</td><td>顶栏统一簇（避让）</td></tr>
+      <tr><td class="id">H3</td><td class="pri p3">P3</td><td>⑧ 设置</td><td>设置主页 hcard 化（保守：只补入口行）</td><td>批4 · 设置簇</td></tr>
+      <tr><td class="id">A1</td><td class="pri p2">P2<span class="conflict">冲突</span></td><td>① 会话 tab</td><td>appbar 标题行+铃铛</td><td>顶栏统一簇（避让）</td></tr>
+      <tr><td class="id">X3</td><td class="pri p2">P2<span class="conflict">冲突</span></td><td>⑨ 横切</td><td>root 屏 appbar 三件套统一</td><td>顶栏统一簇（避让）</td></tr>
+      <tr><td class="id">X1</td><td class="pri pb">拍</td><td>全局</td><td>品牌色系：维持暖橙（建议） vs 回蓝紫</td><td>拍板后定</td></tr>
+      <tr><td class="id">D5e</td><td class="pri pb">拍</td><td>④ 成员</td><td>「接替」按钮是否在手机端开放（只读边界）</td><td>拍板后定</td></tr>
+      <tr><td class="id">F3e</td><td class="pri pb">拍</td><td>⑥ 通知</td><td>是否推翻件六拍板（通知不挂铃铛位）</td><td>拍板后定</td></tr>
+      <tr><td class="id">B4</td><td class="pri pb">不还原</td><td>② 会话详情</td><td>「全部」tab（历史退役拍板）</td><td>—</td></tr>
+    </table></div>
+  </div>
+
+  <div class="foot-note">
+    <b>协同与避让声明</b>：本批分支 feat/v8-restore-mobile（自 feat/v8-restore@7ef7dd6 开出——手机端最新形态在该线而非 origin/dev，从 dev 开会对照失真且实施必冲突，已改基点并在回执声明）。兄弟单 fix/mobile-list-r2 在修列表小件，本批所有涉 ListScreen 顶部/head 的还原点（A1/F3/X3）均已标「冲突面」并归入顶栏统一改造簇避让——本批实施不碰该区。禁碰 store/protocol 的纪律适用于 UI 之外；D4/F1/G1/H1 的数据依赖（板卡自验 meta、通知 level、验收回填写口、engine 凭证读侧）若需 relay 侧补档，将单独申报不擅自扩权。<br>
+    <b>自测口径预告</b>：每屏一簇实施，簇收口 = tsc 0 + 模拟器截图（本沙盒配方：CCR_DATA_DIR/CCR_PORT/CCR_NO_ACTIVATOR 隔离 + 生产快照回放）+ 验收点 ≥4 条入回执。<br>
+    <b>产物</b>：对照图（本文件）+ 截图资产 assets/v8-mobile/（proto 17 帧 / now 8 屏）。原型侧另备未入图的帧：pchatd-arts（输出物 tab）、pchatd-all（全部时间线）、pteamd-act（活动）、pteamd-talk（对话）——实施对应簇时取用。
+  </div>
+
+</div>
+</body>
+</html>
