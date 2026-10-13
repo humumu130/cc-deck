@@ -10339,7 +10339,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
 import { join as join39, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync as readFileSync34, rmSync as rmSync5, existsSync as existsSync27, readdirSync as readdirSync16, statSync as statSync13 } from "node:fs";
+import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync as readFileSync34, rmSync as rmSync6, existsSync as existsSync27, readdirSync as readdirSync16, statSync as statSync14 } from "node:fs";
 import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -11018,7 +11018,7 @@ var EventBus = class {
 
 // src/session-manager.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { appendFileSync as appendFileSync3, existsSync as existsSync22, mkdirSync as mkdirSync17, readFileSync as readFileSync25, realpathSync as realpathSync3, statSync as statSync8, writeFileSync as writeFileSync17 } from "node:fs";
+import { appendFileSync as appendFileSync4, existsSync as existsSync22, mkdirSync as mkdirSync17, readFileSync as readFileSync25, realpathSync as realpathSync3, statSync as statSync9, writeFileSync as writeFileSync17 } from "node:fs";
 import { homedir as homedir12 } from "node:os";
 import { isAbsolute as isAbsolute7, join as join31, resolve as resolve8, sep as sep6 } from "node:path";
 
@@ -14133,7 +14133,7 @@ function ensureOrgCli() {
 }
 
 // src/projects.ts
-import { copyFileSync, existsSync as existsSync14, mkdirSync as mkdirSync8, readFileSync as readFileSync12, writeFileSync as writeFileSync7 } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync as existsSync14, mkdirSync as mkdirSync8, readFileSync as readFileSync12, renameSync as renameSync3, rmSync as rmSync2, statSync as statSync5, writeFileSync as writeFileSync7 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { isAbsolute as isAbsolute2, join as join14 } from "node:path";
 
@@ -14448,7 +14448,7 @@ function migrateBoardStatuses(gid, board, dir) {
   try {
     const p = boardFilePath(gid, dir);
     if (existsSync14(p)) copyFileSync(p, `${p}.pre-d18.json`);
-    saveBoardFile(board, dir);
+    saveBoardFile(board, dir, { action: "migrate", entry_id: "*", next: { status: `${moved} \u6761\u4E09\u6001\u2192\u4E94\u6001` } });
   } catch {
   }
   return board;
@@ -14473,9 +14473,32 @@ function loadBoardFile(gid, dir) {
 function loadBoardOrEmpty(gid, dir) {
   return loadBoardFile(gid, dir) ?? { gid, entries: [], frozen: false, updated_at: 0 };
 }
-function saveBoardFile(b, dir) {
+var BOARD_JOURNAL_MAX_BYTES = 5 * 1024 * 1024;
+function appendBoardJournal(gid, rec, d2) {
   try {
-    const d2 = dir ?? orgDir();
+    const p = join14(d2, "boards-journal.ndjson");
+    try {
+      if (statSync5(p).size > BOARD_JOURNAL_MAX_BYTES) {
+        try {
+          rmSync2(`${p}.1`, { force: true });
+        } catch {
+        }
+        renameSync3(p, `${p}.1`);
+      }
+    } catch {
+    }
+    appendFileSync(p, JSON.stringify({ ts: Date.now(), gid, ...rec }) + "\n", "utf-8");
+  } catch (e) {
+    console.error(`[board-journal] \u8FFD\u52A0\u5931\u8D25\uFF08\u4E0D\u963B\u65AD\u677F\u5199\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function sideOf(e) {
+  return { status: e.status, ...e.text ? { text: e.text.slice(0, 60) } : {} };
+}
+function saveBoardFile(b, dir, jr) {
+  const d2 = dir ?? orgDir();
+  appendBoardJournal(b.gid, jr ?? { action: "save" }, d2);
+  try {
     mkdirSync8(boardsDirPath(d2), { recursive: true });
     writeFileSync7(boardFilePath(b.gid, d2), JSON.stringify(b, null, 2) + "\n", "utf-8");
     return true;
@@ -14500,7 +14523,7 @@ function freezeBoard(gid, frozen, dir) {
   if (b.frozen === frozen) return;
   b.frozen = frozen;
   b.updated_at = Date.now();
-  saveBoardFile(b, dir);
+  saveBoardFile(b, dir, { action: frozen ? "freeze" : "unfreeze" });
 }
 function resolveStatusTransition(e, to2, rrInput) {
   if (to2 === "submitted") {
@@ -14519,6 +14542,7 @@ function upsertBoardEntry(gid, entry, dir) {
   const now = Date.now();
   const deps = entry.depends_on === void 0 ? void 0 : [...new Set(entry.depends_on.filter((d2) => typeof d2 === "string" && d2.trim() !== ""))];
   let e = entry.id ? w2.board.entries.find((x) => x.id === entry.id) : void 0;
+  const jPrev = e ? sideOf(e) : void 0;
   if (e) {
     e.text = entry.text;
     if (entry.status) {
@@ -14566,7 +14590,7 @@ function upsertBoardEntry(gid, entry, dir) {
     w2.board.entries.push(e);
   }
   w2.board.updated_at = now;
-  if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
+  if (!saveBoardFile(w2.board, dir, { action: jPrev ? "update" : "create", entry_id: e.id, ...jPrev ? { prev: jPrev } : {}, next: sideOf(e) })) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
   return { ok: true, entry: e };
 }
 function moveBoardEntry(gid, entryId, to2, dir) {
@@ -14574,6 +14598,7 @@ function moveBoardEntry(gid, entryId, to2, dir) {
   if (!w2.ok) return w2;
   const e = w2.board.entries.find((x) => x.id === entryId);
   if (!e) return { ok: false, error: `\u677F\u6761\u76EE\u4E0D\u5B58\u5728: ${entryId}` };
+  const jPrev = sideOf(e);
   const t = resolveStatusTransition(e, to2);
   if (!t.ok) return { ok: false, error: t.error };
   e.status = t.status;
@@ -14583,17 +14608,18 @@ function moveBoardEntry(gid, entryId, to2, dir) {
   else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
   w2.board.updated_at = e.updated_at;
-  if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
+  if (!saveBoardFile(w2.board, dir, { action: "move", entry_id: e.id, prev: jPrev, next: sideOf(e) })) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
   return { ok: true, entry: e };
 }
 function removeBoardEntry(gid, entryId, dir) {
   const w2 = writableBoard(gid, dir);
   if (!w2.ok) return w2;
   const before = w2.board.entries.length;
+  const jPrevEntry = w2.board.entries.find((x) => x.id === entryId);
   w2.board.entries = w2.board.entries.filter((x) => x.id !== entryId);
   if (w2.board.entries.length === before) return { ok: false, error: `\u677F\u6761\u76EE\u4E0D\u5B58\u5728: ${entryId}` };
   w2.board.updated_at = Date.now();
-  if (!saveBoardFile(w2.board, dir)) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
+  if (!saveBoardFile(w2.board, dir, { action: "remove", entry_id: entryId, ...jPrevEntry ? { prev: sideOf(jPrevEntry) } : {} })) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
   return { ok: true };
 }
 function moveEntryByDispatch(gid, dispatchId, to2, dir) {
@@ -14601,10 +14627,11 @@ function moveEntryByDispatch(gid, dispatchId, to2, dir) {
   if (!w2.ok) return;
   const e = w2.board.entries.find((x) => x.dispatch_id === dispatchId);
   if (!e || e.status === to2) return;
+  const jPrev = sideOf(e);
   e.status = to2;
   e.updated_at = Date.now();
   w2.board.updated_at = e.updated_at;
-  saveBoardFile(w2.board, dir);
+  saveBoardFile(w2.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
 }
 function computeReady(card, board) {
   const gate_reason = card.gate ? card.gate.reason || "gate \u672A\u8FC7\uFF08\u539F\u56E0\u672A\u6CE8\u660E\uFF09" : null;
@@ -47204,7 +47231,7 @@ function cronTasksKey(tasks) {
 }
 
 // src/task-store.ts
-import { readdirSync as readdirSync9, readFileSync as readFileSync19, statSync as statSync6 } from "node:fs";
+import { readdirSync as readdirSync9, readFileSync as readFileSync19, statSync as statSync7 } from "node:fs";
 import { homedir as homedir10 } from "node:os";
 import path from "node:path";
 function readTaskStoreTodos(cliSessionId, base) {
@@ -47227,7 +47254,7 @@ function readTaskStoreTodos(cliSessionId, base) {
       const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
       const parsed = Number(t.id);
       const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync6(fp2).mtimeMs, ...activeForm });
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync7(fp2).mtimeMs, ...activeForm });
     } catch {
     }
   }
@@ -47433,7 +47460,7 @@ ${summary}
 }
 
 // src/experience.ts
-import { existsSync as existsSync18, mkdirSync as mkdirSync13, readFileSync as readFileSync20, readdirSync as readdirSync10, renameSync as renameSync4, writeFileSync as writeFileSync11, appendFileSync as appendFileSync2, statSync as statSync7 } from "node:fs";
+import { existsSync as existsSync18, mkdirSync as mkdirSync13, readFileSync as readFileSync20, readdirSync as readdirSync10, renameSync as renameSync5, writeFileSync as writeFileSync11, appendFileSync as appendFileSync3, statSync as statSync8 } from "node:fs";
 import { randomUUID as randomUUID7 } from "node:crypto";
 import { dirname as dirname8, join as join26 } from "node:path";
 var EXPERIENCE_KINDS = ["pitfall", "practice", "preference", "fact", "term"];
@@ -47495,7 +47522,7 @@ function expGcBackupPath(dir) {
 function atomicWrite(path6, content) {
   const tmp = `${path6}.tmp-${Date.now()}`;
   writeFileSync11(tmp, content, "utf-8");
-  renameSync4(tmp, path6);
+  renameSync5(tmp, path6);
 }
 function findCorruptMarker(dir) {
   try {
@@ -47525,7 +47552,7 @@ function loadExperience(dir) {
 function corruptAndRefuse(p, dir, why) {
   const renamed = `${p}.corrupt-${Date.now()}`;
   try {
-    renameSync4(p, renamed);
+    renameSync5(p, renamed);
   } catch (e) {
     console.warn(`[experience] \u574F\u6587\u4EF6\u7559\u8BC1\u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u62D2\u7EDD\u5199\u64CD\u4F5C\u4ECD\u751F\u6548`);
   }
@@ -47595,7 +47622,7 @@ function appendGcLog(row, dir) {
   try {
     const d2 = dir ?? orgDir();
     mkdirSync13(d2, { recursive: true });
-    appendFileSync2(expGcLogPath(d2), JSON.stringify(row) + "\n", "utf-8");
+    appendFileSync3(expGcLogPath(d2), JSON.stringify(row) + "\n", "utf-8");
   } catch (e) {
     console.warn(`[experience] GC \u65E5\u5FD7\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -47995,7 +48022,7 @@ function startExperienceGc(dir) {
         const p = experiencePath(dir);
         let sizeBytes = 0;
         try {
-          sizeBytes = statSync7(p).size;
+          sizeBytes = statSync8(p).size;
         } catch {
         }
         const activeCount = listExperience({ status: "active" }, dir).length;
@@ -48196,7 +48223,7 @@ function importExperience(path6, dir) {
 }
 
 // src/role-templates.ts
-import { existsSync as existsSync19, mkdirSync as mkdirSync14, readFileSync as readFileSync21, renameSync as renameSync5, writeFileSync as writeFileSync12 } from "node:fs";
+import { existsSync as existsSync19, mkdirSync as mkdirSync14, readFileSync as readFileSync21, renameSync as renameSync6, writeFileSync as writeFileSync12 } from "node:fs";
 import { dirname as dirname9, join as join27 } from "node:path";
 
 // presets/role-templates.json
@@ -48331,7 +48358,7 @@ function instantiateBuiltin(t, dir) {
     mkdirSync14(dirname9(p), { recursive: true });
     const tmp = `${p}.tmp-${Date.now()}`;
     writeFileSync12(tmp, JSON.stringify(lib, null, 2) + "\n", "utf-8");
-    renameSync5(tmp, p);
+    renameSync6(tmp, p);
   } catch (e) {
     console.warn(`[role-templates] \u5185\u7F6E\u6A21\u677F\u5B9E\u4F8B\u5316\u843D\u76D8\u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u6CE8\u5165\u7167\u5E38\uFF09: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -48383,7 +48410,7 @@ function buildRoleInjection(input) {
 }
 
 // src/team-rules.ts
-import { existsSync as existsSync20, mkdirSync as mkdirSync15, readFileSync as readFileSync22, readdirSync as readdirSync11, renameSync as renameSync6, writeFileSync as writeFileSync13 } from "node:fs";
+import { existsSync as existsSync20, mkdirSync as mkdirSync15, readFileSync as readFileSync22, readdirSync as readdirSync11, renameSync as renameSync7, writeFileSync as writeFileSync13 } from "node:fs";
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { join as join28 } from "node:path";
 function envNum4(name, fallback, min = 1) {
@@ -48414,7 +48441,7 @@ function rulesPath(dir) {
 function atomicWrite2(path6, content) {
   const tmp = `${path6}.tmp-${Date.now()}`;
   writeFileSync13(tmp, content, "utf-8");
-  renameSync6(tmp, path6);
+  renameSync7(tmp, path6);
 }
 function findCorruptMarker2(dir) {
   try {
@@ -48444,7 +48471,7 @@ function loadRules(dir) {
 function corruptAndRefuse2(p, dir, why) {
   const renamed = `${p}.corrupt-${Date.now()}`;
   try {
-    renameSync6(p, renamed);
+    renameSync7(p, renamed);
   } catch (e) {
     console.warn(`[team-rules] \u574F\u6587\u4EF6\u7559\u8BC1\u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u62D2\u7EDD\u5199\u64CD\u4F5C\u4ECD\u751F\u6548`);
   }
@@ -49021,7 +49048,7 @@ var DecisionNotificationWatcher = class {
 // src/agent-codex.ts
 import { spawn as spawn4 } from "node:child_process";
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { existsSync as existsSync21, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync16 } from "node:fs";
+import { existsSync as existsSync21, mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync16 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter as delimiter3, dirname as dirname10, join as join30 } from "node:path";
 var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
@@ -49340,7 +49367,7 @@ var CodexAgentSession = class {
     for (const d2 of extraDirs ?? []) dirs.add(d2);
     for (const d2 of dirs) {
       try {
-        rmSync3(d2, { recursive: true, force: true });
+        rmSync4(d2, { recursive: true, force: true });
       } catch {
       }
     }
@@ -49424,7 +49451,7 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const isUsableDir = (p) => {
     if (!p) return false;
     try {
-      return statSync8(p).isDirectory();
+      return statSync9(p).isDirectory();
     } catch {
       return false;
     }
@@ -49672,7 +49699,7 @@ function transcriptHasAssistant(cwd, sdkId, configHome) {
 }
 function transcriptBytesFor(cwd, sdkId, configHome) {
   try {
-    return statSync8(transcriptPathFor(cwd, sdkId, configHome)).size;
+    return statSync9(transcriptPathFor(cwd, sdkId, configHome)).size;
   } catch {
     return void 0;
   }
@@ -50573,7 +50600,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     let size;
     let exists = true;
     try {
-      size = statSync8(p).size;
+      size = statSync9(p).size;
     } catch {
       exists = false;
     }
@@ -50646,7 +50673,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       unverified = snapshot.unverified === true;
     } else {
       try {
-        size = statSync8(p).size;
+        size = statSync9(p).size;
       } catch {
         exists = false;
       }
@@ -50768,7 +50795,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       let size;
       let exists = true;
       try {
-        size = statSync8(a.path).size;
+        size = statSync9(a.path).size;
       } catch {
         exists = false;
       }
@@ -50816,7 +50843,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       let size;
       let exists = true;
       try {
-        size = statSync8(e.path).size;
+        size = statSync9(e.path).size;
       } catch {
         exists = false;
       }
@@ -51208,7 +51235,7 @@ provider=${opts.provider ?? "default"}` : void 0,
               actor: "user"
             });
           }
-          if (!s.agent || s.agent.ended || s.wd.gaveUp) {
+          if (!this.agentStreamAlive(s)) {
             if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
               s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
@@ -51221,12 +51248,44 @@ provider=${opts.provider ?? "default"}` : void 0,
             if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
               this.pushExternalLog(s.state.session_id, "system", "\u6536\u5230\u624B\u52A8\u6D88\u606F\uFF0C\u8D8A\u8FC7\u6062\u590D\u51B7\u5374\u5C1D\u8BD5\u62C9\u8D77");
             }
-            this.resumeAgent(s, text, imgPayload.length ? imgPayload : void 0, echo, imgRefs.length ? imgRefs : void 0);
-            return { command_id: cmd.command_id, ok: true };
+            const agBefore = s.agent;
+            const wasZombie = !!(agBefore && !agBefore.ended && !s.wd.gaveUp && agBefore.childPid);
+            try {
+              this.resumeAgent(s, text, imgPayload.length ? imgPayload : void 0, echo, imgRefs.length ? imgRefs : void 0);
+              if (wasZombie) {
+                this.pushExternalLog(s.state.session_id, "system", "\u68C0\u6D4B\u5230\u4F1A\u8BDD\u8FDB\u7A0B\u5DF2\u65AD\uFF08\u6D88\u606F\u672A\u4E22\uFF09\uFF0C\u5DF2\u81EA\u52A8\u62C9\u8D77\u6062\u590D\u6295\u9012");
+                this.upsertNotification("system", "liveness-revive", s.state.session_id, {
+                  title: "\u4F1A\u8BDD\u8FDB\u7A0B\u5DF2\u65AD\uFF0C\u5DF2\u81EA\u52A8\u590D\u6D3B",
+                  body: `${s.state.title || s.state.session_id.slice(0, 8)}\uFF1A\u68C0\u6D4B\u5230\u5BBF\u4E3B\u8FDB\u7A0B\u5DF2\u9000\u51FA\uFF08liveness \u95E8\uFF09\uFF0C\u6D88\u606F\u5DF2\u968F\u81EA\u52A8\u62C9\u8D77\u6062\u590D\u6295\u9012\uFF0C\u65E0\u9700\u91CD\u53D1`,
+                  severity: "info",
+                  group: "attention",
+                  actionable: false,
+                  sessionId: s.state.session_id,
+                  domain: "session",
+                  returnPath: "/"
+                });
+              }
+              return { command_id: cmd.command_id, ok: true };
+            } catch (err) {
+              const why = err instanceof Error ? err.message : String(err);
+              this.upsertNotification("system", "liveness-block", s.state.session_id, {
+                title: "\u6D88\u606F\u672A\u6295\u9012\uFF1A\u4F1A\u8BDD\u8FDB\u7A0B\u5DF2\u65AD\u4E14\u65E0\u6CD5\u81EA\u52A8\u6062\u590D",
+                body: `${s.state.title || s.state.session_id.slice(0, 8)}\uFF1A${why}\u2014\u2014\u6D88\u606F\u5DF2\u9000\u56DE\u672A\u6295\u9012\uFF08\u70B9\u4F1A\u8BDD\u5361\u7247\u53EF\u624B\u52A8\u6062\u590D\u540E\u91CD\u53D1\uFF09`,
+                severity: "waiting",
+                group: "attention",
+                actionable: true,
+                sessionId: s.state.session_id,
+                domain: "session",
+                returnPath: "/"
+              });
+              return { command_id: cmd.command_id, ok: false, error: `\u4F1A\u8BDD\u8FDB\u7A0B\u5DF2\u65AD\u4E14\u65E0\u6CD5\u81EA\u52A8\u6062\u590D\uFF0C\u6D88\u606F\u672A\u6295\u9012\uFF1A${why}` };
+            }
           }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
+          const liveAgent = s.agent;
+          if (!liveAgent) return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u6D41\u4E0D\u5728\u573A\uFF08liveness \u7A97\u53E3\u7ADE\u6001\uFF09" };
           s.pendingImgRefs = imgRefs.length ? imgRefs : void 0;
           const msgId = randomUUID10();
           s.unacked.push({
@@ -51237,7 +51296,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             ts: Date.now(),
             hold: s.state.relay_session_id ? void 0 : "init"
           });
-          s.agent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo, msgId);
+          liveAgent.sendMessage(text, imgPayload.length ? imgPayload : void 0, echo, msgId);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -51642,7 +51701,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
           let st2;
           try {
-            st2 = statSync8(hit.path);
+            st2 = statSync9(hit.path);
           } catch {
             return { command_id: cmd.command_id, ok: false, error: imgHit ? "\u56FE\u7247\u5DF2\u8FC7\u671F\uFF08\u4E34\u65F6\u9644\u4EF6\u5B9A\u671F\u6E05\u626B\uFF09" : "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
           }
@@ -52185,6 +52244,24 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
   // echo（#62 文件消息）：客户端可见回显文本——正文已合成路径指令时传原文本短回显，
   // 不暴露临时路径（同 #54b 口径）；不传则回显截断正文 + 图片计数
+  // ---------- 停摆杜绝 R3：liveness 门（2026-10-13，test.23 第一刀） ----------
+  // 廉价探活：kill(pid,0) 零 IO（权限/存在性探测，不发送信号）。无 childPid（SDK 内联
+  // 形态/异步填充窗口）保守放行=既有行为，不引入新拒真。
+  streamPidAlive(s) {
+    const pid = s.agent?.childPid;
+    if (typeof pid !== "number" || !pid) return true;
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /** 投递前活性判定：agent 不在场/流已 ended/看门狗已放弃/宿主进程已死（僵尸流——
+   * ended 未翻但进程没了，直发=写进无人消费的死队列，1012~1013 停摆根因 R3）= 死。 */
+  agentStreamAlive(s) {
+    return !!s.agent && !s.agent.ended && !s.wd.gaveUp && this.streamPidAlive(s);
+  }
   resumeAgent(s, firstMessage, images, echo, refs) {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
@@ -53080,7 +53157,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 直接写 notification ledger」），非 EventBus。
   appendDutyRound(r) {
     try {
-      appendFileSync3(join31(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
+      appendFileSync4(join31(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
         kind: "PM_DUTY_ROUND",
         v: 1,
         feed_id: r.feed_id,
@@ -53303,7 +53380,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         const p = join31(dir, `${s.id}.json`);
         let mtime = 0;
         try {
-          mtime = statSync8(p).mtimeMs;
+          mtime = statSync9(p).mtimeMs;
         } catch {
         }
         return { sid: s.id, receipt_path: p, mtime, reviewed: false };
@@ -54639,7 +54716,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     };
     let anchorSt;
     try {
-      anchorSt = statSync8(anchor, { throwIfNoEntry: false });
+      anchorSt = statSync9(anchor, { throwIfNoEntry: false });
     } catch (e) {
       return { ok: false, error: `\u951A\u76EE\u5F55\u65E0\u6CD5\u8BBF\u95EE: ${anchor}\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u8BF7\u6838\u5BF9\u8DEF\u5F84\u6743\u9650` };
     }
@@ -55561,12 +55638,12 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID12 } from "node:crypto";
-import { readFileSync as readFileSync30, writeFileSync as writeFileSync21, mkdirSync as mkdirSync20, existsSync as existsSync24, readdirSync as readdirSync15, statSync as statSync12 } from "node:fs";
+import { readFileSync as readFileSync30, writeFileSync as writeFileSync21, mkdirSync as mkdirSync20, existsSync as existsSync24, readdirSync as readdirSync15, statSync as statSync13 } from "node:fs";
 import { join as join35, dirname as dirname11, sep as sep8 } from "node:path";
 import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/design-docs.ts
-import { readFileSync as readFileSync26, readdirSync as readdirSync12, statSync as statSync9 } from "node:fs";
+import { readFileSync as readFileSync26, readdirSync as readdirSync12, statSync as statSync10 } from "node:fs";
 import { join as join32, resolve as resolve9, sep as sep7 } from "node:path";
 var DESIGN_DIR_SEGMENTS = ["docs", "system-design"];
 function designDir(webRoot) {
@@ -55586,7 +55663,7 @@ function dirFingerprint(dir) {
     for (const name of entries.sort()) {
       const p = join32(d2, name);
       try {
-        const st2 = statSync9(p);
+        const st2 = statSync10(p);
         parts.push(`${name}:${st2.mtimeMs}:${st2.size}:${st2.isDirectory()}`);
         if (st2.isDirectory() && depth < 1) walk(p, depth + 1);
       } catch {
@@ -55626,7 +55703,7 @@ function listDesignDocs(webRoot) {
     for (const name of readdirSync12(root).sort()) {
       const p = join32(root, name);
       try {
-        if (statSync9(p).isDirectory()) groups.push({ dir: p, group: name });
+        if (statSync10(p).isDirectory()) groups.push({ dir: p, group: name });
       } catch {
       }
     }
@@ -55685,13 +55762,13 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
-import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync29, readdirSync as readdirSync14, statSync as statSync11, writeFileSync as writeFileSync20 } from "node:fs";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync29, readdirSync as readdirSync14, statSync as statSync12, writeFileSync as writeFileSync20 } from "node:fs";
 import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn5, execFileSync } from "node:child_process";
-import { existsSync as existsSync23, mkdirSync as mkdirSync18, appendFileSync as appendFileSync4, readFileSync as readFileSync27, writeFileSync as writeFileSync18, rmSync as rmSync4 } from "node:fs";
+import { existsSync as existsSync23, mkdirSync as mkdirSync18, appendFileSync as appendFileSync5, readFileSync as readFileSync27, writeFileSync as writeFileSync18, rmSync as rmSync5 } from "node:fs";
 import path4, { join as join33 } from "node:path";
 import { homedir as homedir13, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
@@ -55725,7 +55802,7 @@ function ensureInjector() {
     mkdirSync18(binDir, { recursive: true });
     if (existsSync23(exe2) && !existsSync23(exe2 + ".v2") && srcPeek) {
       try {
-        rmSync4(exe2, { force: true });
+        rmSync5(exe2, { force: true });
       } catch {
       }
     }
@@ -55916,7 +55993,7 @@ function runAppleScript(script) {
       clearTimeout(timer);
       if (code === 0) return resolve10({ ok: true });
       try {
-        appendFileSync4(join33(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync5(join33(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
       resolve10({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
@@ -55971,7 +56048,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       });
       child.on("error", (e) => {
         try {
-          rmSync4(tmp, { force: true });
+          rmSync5(tmp, { force: true });
         } catch {
         }
         resolve10({ ok: false, error: e.message });
@@ -56165,7 +56242,7 @@ async function captureConsoleBottom(pid, rows = 20) {
     return null;
   } finally {
     try {
-      rmSync4(tmp, { force: true });
+      rmSync5(tmp, { force: true });
     } catch {
     }
   }
@@ -56268,7 +56345,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
 
 // src/engine-rollouts.ts
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync28, readdirSync as readdirSync13, readSync as readSync2, renameSync as renameSync7, statSync as statSync10, writeFileSync as writeFileSync19 } from "node:fs";
+import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync28, readdirSync as readdirSync13, readSync as readSync2, renameSync as renameSync8, statSync as statSync11, writeFileSync as writeFileSync19 } from "node:fs";
 import { basename as basename6, join as join34, relative as relative3 } from "node:path";
 var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
 var ENGINE_SCAN_SPECS = [
@@ -56510,7 +56587,7 @@ var RolloutScanner = class {
       }
       const tmp = `${this.persistFile}.tmp`;
       writeFileSync19(tmp, JSON.stringify({ version: 1, files }));
-      renameSync7(tmp, this.persistFile);
+      renameSync8(tmp, this.persistFile);
     } catch {
     }
   }
@@ -56523,7 +56600,7 @@ var RolloutScanner = class {
       let size = 0;
       let mtime = now;
       try {
-        const stat2 = statSync10(filePath);
+        const stat2 = statSync11(filePath);
         size = stat2.size;
         mtime = stat2.mtimeMs;
       } catch {
@@ -57054,7 +57131,7 @@ var Bridge = class _Bridge {
           let mtime;
           let fileSize = 0;
           try {
-            const st2 = statSync11(p);
+            const st2 = statSync12(p);
             mtime = st2.mtimeMs;
             fileSize = st2.size;
           } catch {
@@ -57103,7 +57180,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync4(p, "r");
-      const size = statSync11(p).size;
+      const size = statSync12(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
       readSync3(fd2, buf, 0, len, size - len);
@@ -57171,7 +57248,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync4(p, "r");
-      const size = statSync11(p).size;
+      const size = statSync12(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -57407,7 +57484,7 @@ var Bridge = class _Bridge {
   // 新标题在尾部），取文件序最新一条
   scanTranscriptTitles(p) {
     try {
-      const size = statSync11(p).size;
+      const size = statSync12(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
       const fd2 = openSync4(p, "r");
       try {
@@ -58363,7 +58440,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync11(transcriptPath).size;
+      const size = statSync12(transcriptPath).size;
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -58725,7 +58802,7 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync11(path6).size;
+      const size = statSync12(path6).size;
       const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -58785,7 +58862,7 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync11(path6).size;
+      const size = statSync12(path6).size;
       const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -59329,7 +59406,7 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync11(file);
+      st2 = statSync12(file);
     } catch {
       return null;
     }
@@ -59422,7 +59499,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync11(agentFile).size;
+          const sz2 = statSync12(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -59855,7 +59932,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync12(file).isFile();
+      isFile = statSync13(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -59876,7 +59953,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     let isFile = false;
     try {
-      isFile = statSync12(file).isFile();
+      isFile = statSync13(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -61797,7 +61874,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync34(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
+      if (Number(readFileSync34(lockPath, "utf8").trim()) === process.pid) rmSync6(lockPath);
     } catch {
     }
   };
@@ -61932,7 +62009,7 @@ if (cliArgs.has("--stop")) {
     console.log("\u672A\u53D1\u73B0\u8FD0\u884C\u4E2D\u7684 CC Deck Relay");
   }
   try {
-    rmSync5(pidFile);
+    rmSync6(pidFile);
   } catch {
   }
   process.exit(0);
@@ -61954,7 +62031,7 @@ function sweepTmpImages(dir) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join39(dir, f);
       try {
-        if (Date.now() - statSync13(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
+        if (Date.now() - statSync14(p).mtimeMs > 7 * 864e5) rmSync6(p, { force: true });
       } catch {
       }
     }
