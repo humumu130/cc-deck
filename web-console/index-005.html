@@ -2079,22 +2079,6 @@
     .message-ai { position: relative; }
     .message-ai .msg-copy { position: absolute; right: 0; top: 0; z-index: 2; pointer-events: none; }
     .message-ai:hover .msg-copy, .message-ai .msg-copy:focus-visible { opacity: 1; pointer-events: auto; }
-    /* #B3-14 排队注入 chip 行（dock 上）：W-UIPOLISH4 件十一重设计（2026-10-12 用户深色实测
-       四点）——a 宽度与已发气泡一致（max-width 82%，不再贯穿全宽）b 深色太黄太饱和→调暗降
-       饱和不显眼（working 只留 26% 描边+7% 底 tint，文字回中性 dim）c 长内容截断+省略号可展开
-       （ellipsis + .open 全文，沿用 pendOpen 记忆）d 形制与已发气泡一致（14px 圆角右上收
-       5px、同 padding 档），仅颜色/亮度/饱和度区分（= me 气泡的幽灵态）。列尾右对齐同
-       .msg-user-row 语言。 */
-    .pend-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding: 2px 22px 8px; }
-    .pend-row[hidden] { display: none; }
-    /* W-UIFB ⑦：排队 chip 呼吸闪烁（i=9 前半）——柔和 opacity 呼吸非生硬 blink；
-       reduced-motion 用户全局已降级（:root 媒查.all .01ms） */
-    .pend-chip {display: inline-flex; align-items: baseline; gap: 6px; max-width: 82%; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--working) 26%, transparent); border-radius: 14px; border-top-right-radius: 5px; background: color-mix(in srgb, var(--working) 7%, var(--bg1)); color: var(--dim); cursor: pointer; font: var(--fs-A) var(--sans); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: pend-breathe 2.4s ease-in-out infinite;}
-    @keyframes pend-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
-    .pend-chip.open { animation: none; } /* 展开读全文时停止呼吸，减少阅读干扰 */
-    .pend-chip:hover { border-color: var(--working); }
-    .pend-chip.open { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-    .pend-caret { flex: none; font-size: 9px; }
     /* #B3-15 输出物六类分色：图标着色单点（inspector 迷你行/输出物面板瓦片 .k-* --tk 体系共用一处 token） */
     .art-ico.k-doc { color: var(--art-doc); }
     .art-ico.k-sheet { color: var(--art-sheet); }
@@ -3666,7 +3650,6 @@
                     dock.querySelector("[data-session-state-elapsed]").textContent = "";
                     if (tok) tok.hidden = true;
                     dockTerminalWatch(dock, null);
-                    renderPendChips(null); // #B3-14
                     renderSubagents(null); // W-UIFB ⑧（自 TOPBAR 批移植+修正版）无会话撤面板
                     return;
                   }
@@ -3681,12 +3664,11 @@
                   if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
-                  renderPendChips(s); // #B3-14 排队注入 chip 行（状态栏上方，W-TOPBAR ⑥ 形态 U10 pass 保持）
                   renderSubagents(s); // W-UIFB ⑧ 子 Agent 活性面板（状态栏下续行）
                 }
                 // W-UIFB ⑧：子 Agent 活性面板（W-TOPBAR ⑥ test.8 同构移植 + i=10 修正入形）——
                 // 防御同旧壳：ended_at>0 才算结束（ended_at:0 falsy 坑）；>4 条溢出提示；
-                // 折叠态模块级记忆（renderDock 高频重建不丢态，pendOpen 先例）
+                // 折叠态模块级记忆（renderDock 高频重建不丢态）
                 let agCollapsed = false;
                 function renderSubagents(s) {
                   const box = document.getElementById("session-agbox");
@@ -3707,29 +3689,6 @@
                     }).join("") + (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : ""));
                 }
                 function toggleSubagents() { agCollapsed = !agCollapsed; renderSubagents(curSession()); }
-                // #B3-14 排队注入气泡（旧壳 pendbox 语义 005 化）：pending_inputs 渲染为 chip 行，
-                // W-TOPBAR ⑥：位置修正到状态栏上方（排队是用户侧待发内容，不属于状态栏；
-                // U10 验收 pass 形态保持）。W-UIFB ⑦ 加呼吸闪烁（.pend-chip pend-breathe）。
-                // 点击展开全文；展开态按文本记忆（Set）——排队区随 SESSION_UPDATED 重建 DOM，
-                // 无记忆则展开即被收回（旧壳 2026-09-16 用户反馈③同坑）。清空时连记忆一并回收。
-                const pendOpen = new Set();
-                function renderPendChips(s) {
-                  const dock = UI.dock;
-                  if (!dock) return;
-                  let row = dock.previousElementSibling;
-                  if (!row || !row.classList.contains("pend-row")) {
-                    row = document.createElement("div");
-                    row.className = "pend-row";
-                    dock.before(row);
-                  }
-                  const pi = s && Array.isArray(s.pending_inputs) ? s.pending_inputs : [];
-                  if (!pi.length) { row.hidden = true; row.textContent = ""; pendOpen.clear(); return; }
-                  row.hidden = false;
-                  row.innerHTML = pi.map((p, i) => {
-                    const open = pendOpen.has(p.text);
-                    return '<button type="button" class="pend-chip' + (open ? " open" : "") + '" data-pend-i="' + i + '" title="点击展开/收起全文"><span class="pend-caret">' + (open ? "▾" : "▸") + "</span>" + esc(open ? String(p.text ?? "") : oneLine(p.text)) + "</button>";
-                  }).join("");
-                }
                 function dockLiveLine(s) { return !!s && s.status === "WORKING" && String(s.action_summary || "").startsWith("\u200B"); }
                 // B#133 终态收口：DONE ✓ 停留 8s 后整条淡出收起（高度+透明动画）；ERROR ⚠ 常驻不收。
                 // 键 = sid+status：同一终态的后续心跳/重渲不重启计时、不闪复原。
@@ -5410,16 +5369,6 @@
                       const tl = cs ? (S.timelines.get(cs.session_id) || []) : [];
                       const en = tl.find((x) => eKey(x) === mc.dataset.x);
                       copyWithFallback(String((en && (en.full ?? en.text)) ?? ""), "已复制消息");
-                      return;
-                    }
-                    const pendChip = ev.target.closest(".pend-chip"); // #B3-14 排队气泡展开/收起
-                    if (pendChip) {
-                      ev.stopPropagation();
-                      const cs = curSession();
-                      const pi = cs && Array.isArray(cs.pending_inputs) ? cs.pending_inputs : [];
-                      const p = pi[Number(pendChip.dataset.pendI)];
-                      if (p) { if (pendOpen.has(p.text)) pendOpen.delete(p.text); else pendOpen.add(p.text); }
-                      renderPendChips(cs);
                       return;
                     }
                     const cpy = ev.target.closest(".copy-btn");
