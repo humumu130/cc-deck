@@ -10343,6 +10343,59 @@ import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync a
 import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
+// src/agent-activator.ts
+var numEnv = (k3, d2) => {
+  const v = Number(process.env[k3]);
+  return Number.isFinite(v) && v > 0 ? v : d2;
+};
+function attachAgentActivator(bus2, mgr2) {
+  const cooldownMs = numEnv("CCR_ACTIVATOR_COOLDOWN_MS", 10 * 6e4);
+  const maxPerHour = Math.floor(numEnv("CCR_ACTIVATOR_MAX_PER_HOUR", 6));
+  const lastAttempt = /* @__PURE__ */ new Map();
+  const recent = [];
+  const st2 = { triggers: 0, revives: 0, skipped: 0, failures: 0, cooldownHits: 0, windowHits: 0 };
+  const pruneWindow = (now) => {
+    while (recent.length && now - recent[0] > 36e5) recent.shift();
+  };
+  const tryRevive = (sid, source, reason) => {
+    const now = Date.now();
+    const last = lastAttempt.get(sid) ?? 0;
+    if (now - last < cooldownMs) {
+      st2.cooldownHits++;
+      return;
+    }
+    pruneWindow(now);
+    if (recent.length >= maxPerHour) {
+      st2.windowHits++;
+      return;
+    }
+    lastAttempt.set(sid, now);
+    recent.push(now);
+    st2.triggers++;
+    const r = mgr2.reviveManagedSession(sid, source, reason);
+    if (r.ok) st2.revives++;
+    else if (r.skipped) st2.skipped++;
+    else st2.failures++;
+  };
+  const unsub = bus2.subscribe((env) => {
+    if (process.env.CCR_NO_ACTIVATOR === "1") return;
+    if (env.type === "SESSION_ERROR" && env.session_id) {
+      tryRevive(env.session_id, "SESSION_ERROR", "\u4F1A\u8BDD\u8FDB\u5165\u9519\u8BEF\u6001");
+      return;
+    }
+    if (env.type === "DISPATCH_DONE" && env.payload) {
+      const p = env.payload;
+      if (p.status === "failed" && typeof p.worker_session_id === "string" && p.worker_session_id) {
+        tryRevive(p.worker_session_id, "DISPATCH_FAILED", "\u6D3E\u5355\u5931\u8D25\u6536\u53E3");
+      }
+    }
+  });
+  return {
+    stats: () => ({ ...st2 }),
+    detach: unsub
+  };
+}
+
 // src/config.ts
 import { randomUUID } from "node:crypto";
 import { existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
@@ -50271,20 +50324,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
     const candidates = [];
     for (const s of this.sessions.values()) {
-      if (s.state.external || s.agent) continue;
-      if (s.state.org_parked) continue;
-      if (s.state.project_gid) {
-        const pg2 = findGroup(s.state.project_gid);
-        if (pg2 && pg2.status !== "active") continue;
-      }
-      if (this.isRetiredMember(s.state.session_id)) continue;
-      if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
-      if (s.state.pinned && s.state.saved) continue;
-      if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) continue;
-      if (!s.state.relay_session_id) continue;
-      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
-      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
-      if (Date.now() - s.state.updated_at > 48 * 36e5) continue;
+      if (this.reviveEligible(s)) continue;
       candidates.push({ s, updated: s.state.updated_at });
     }
     candidates.sort((a, b) => b.updated - a.updated);
@@ -50300,6 +50340,68 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     if (revived > 0) console.log(`[auto-revive] \u5DF2\u81EA\u52A8\u62C9\u8D77 ${revived} \u4E2A\u6709\u672A\u5B8C\u6210\u5F85\u529E\u7684\u6258\u7BA1\u4F1A\u8BDD`);
     return revived;
+  }
+  // ---------- W-ACTIVATOR 单会话复活资格链（autoReviveManaged 过滤链抽出共用） ----------
+  // 返回 null=可拉；字符串=skip 原因（审计/测试可断言）。boot 扫描与事件驱动激活器
+  // 共用同一链——两条入口纪律零分叉（外部/在场/parked/退休/互斥/pin 休眠/熔断/锚点/
+  // 待办/48h 新鲜度，语义逐条搬自 autoReviveManaged 原实现，行为零变）。
+  reviveEligible(s) {
+    if (s.state.external) return "external";
+    if (s.agent) return "agent-alive";
+    if (s.state.org_parked) return "org-parked";
+    if (s.state.project_gid) {
+      const pg2 = findGroup(s.state.project_gid);
+      if (pg2 && pg2.status !== "active") return "group-not-active";
+    }
+    if (this.isRetiredMember(s.state.session_id)) return "retired";
+    if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) return "resume-in-flight";
+    if (s.state.pinned && s.state.saved) return "pinned-dormant";
+    if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) return "resume-cooldown";
+    if (!s.state.relay_session_id) return "no-resume-anchor";
+    const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
+    if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    if (Date.now() - s.state.updated_at > 48 * 36e5) return "stale-48h";
+    return null;
+  }
+  // ---------- W-ACTIVATOR 事件驱动复活统一入口（agent-activator.ts 调用面） ----------
+  // 与 liveness 门的关系：投递点（sendMessage/dispatch）的判死拉活已在收编语义里
+  //（resumePending 互斥=天然去重锁，本入口的 Eligible 链同款检查——两路不会双拉）；
+  // 本入口补「没人投递时死了也能拉回」：agent-activator 订阅 SESSION_ERROR /
+  // DISPATCH_DONE(failed) 触发。通知面两态（stableKey 幂等）：成功=info/失败=waiting
+  // attention 级（可操作跳会话卡）。
+  reviveManagedSession(id2, source, reason) {
+    const s = this.sessions.get(id2);
+    if (!s) return { ok: false, skipped: "not-found" };
+    const why = this.reviveEligible(s);
+    if (why) return { ok: false, skipped: why };
+    const title = s.state.title || id2.slice(0, 8);
+    try {
+      this.resumeAgent(s, `[Agent \u6FC0\u6D3B\u5668 \xB7 ${source}] ${reason}\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u3002\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002`);
+      this.upsertNotification("system", "activator-revive", id2, {
+        title: "\u4F1A\u8BDD\u5DF2\u81EA\u52A8\u590D\u6D3B\uFF08\u6FC0\u6D3B\u5668\uFF09",
+        body: `${title}\uFF1A${reason}\u2014\u2014\u5DF2\u4ECE\u4EFB\u52A1\u6E05\u5355\u81EA\u52A8\u6062\u590D\uFF08\u6765\u6E90\uFF1A${source}\uFF09`,
+        severity: "info",
+        group: "attention",
+        actionable: false,
+        sessionId: id2,
+        domain: "session",
+        returnPath: "/"
+      });
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.upsertNotification("system", "activator-fail", id2, {
+        title: "\u81EA\u52A8\u590D\u6D3B\u5931\u8D25\uFF08\u9700\u8981\u624B\u52A8\u5904\u7406\uFF09",
+        body: `${title}\uFF1A${reason}\u2014\u2014\u81EA\u52A8\u6062\u590D\u5931\u8D25\uFF1A${msg}\uFF08\u70B9\u4F1A\u8BDD\u5361\u7247\u53EF\u624B\u52A8\u6062\u590D\uFF09`,
+        severity: "waiting",
+        group: "attention",
+        actionable: true,
+        sessionId: id2,
+        domain: "session",
+        returnPath: "/"
+      });
+      return { ok: false, error: msg };
+    }
   }
   // ---------- 外部会话（hooks 桥接）----------
   bridge = null;
@@ -62053,6 +62155,7 @@ setInterval(compactEventsTick, 6 * 36e5).unref?.();
 var replayed = boot.sessions;
 var bus = new EventBus({ preload: kept, persistPath });
 var mgr = new SessionManager(bus, cfg);
+attachAgentActivator(bus, mgr);
 var adopted = mgr.adopt(replayed);
 for (const s of mgr.snapshot()) {
   bus.emit(s.session_id, "SESSION_UPDATED", {
