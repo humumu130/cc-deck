@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 
-// fddde97+dda6490 并集合并残留收口：w63（TextInput/PanResponder）与 w54（Modal）两行 import 并存致 25 处重复标识符——合一行取并集
+// dda6490+6fb7180 并集合并残留收口：w63（TextInput/PanResponder）与 w54（Modal）两行 import 并存致重复标识符——合一行取并集
 import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native";
 
 import * as Clipboard from "expo-clipboard";
@@ -553,7 +553,8 @@ function BgBadge({ n, color }: { n: number; color: string }) {
   return <Text style={{ color, fontSize: 9.5, fontWeight: "700" }}> ⑂{n}</Text>;
 }
 
-// W-EXPO 005 srow 头像（.srow-ava 等价）：34px 圆角 9 方块，源色 16% 淡染底 +
+// W-EXPO 005 srow 头像（.srow-ava 等价）：34px **圆形**（双端对齐 2026-10-12 用户实锤：
+// 桌面已 50% 圆、手机仍圆角方块），源色 16% 淡染底 +
 // 首字母；右下角状态灯叠角（2px 页底光圈遮接缝，.status-dot 同口径四色）
 function AvaBadge({ letter, srcColor, dotColor, breathe }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean }) {
   const { c } = useTheme();
@@ -2021,7 +2022,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 3, flexShrink: 1 },
   // ---------- W-EXPO 005 srow 通栏行 ----------
   srow: { flexDirection: "row", alignItems: "center", gap: 11 },
-  ava: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  ava: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" }, // 双端对齐：9 方块→17 圆（=34/2，桌面 .srow-ava 50% 同口径）
   avaT: { fontSize: 15, fontWeight: "700" },
   srowMain: { flex: 1, minWidth: 0, gap: 3 },
   srowR1: { flexDirection: "row", alignItems: "center", gap: 6 },
