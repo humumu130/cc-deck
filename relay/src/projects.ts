@@ -10,7 +10,7 @@
 //   <orgDir>/projects.json           项目组索引（写穿全量，含分诊信任态）
 //   <orgDir>/boards/<gid>.json       项目组任务板（一板一文件）
 //   <orgDir>/confirms.json           组织确认单队列（正经立项/升降级/建议暂缓/结项/复活）
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
@@ -491,7 +491,7 @@ function migrateBoardStatuses(gid: string, board: ProjectBoard, dir?: string): P
   try {
     const p = boardFilePath(gid, dir);
     if (existsSync(p)) copyFileSync(p, `${p}.pre-d18.json`);
-    saveBoardFile(board, dir);
+    saveBoardFile(board, dir, { action: "migrate", entry_id: "*", next: { status: `${moved} 条三态→五态` } });
   } catch { /* 冷备份/落盘失败不阻断读侧 */ }
   return board;
 }
@@ -524,9 +524,50 @@ function loadBoardOrEmpty(gid: string, dir?: string): ProjectBoard {
   return loadBoardFile(gid, dir) ?? { gid, entries: [], frozen: false, updated_at: 0 };
 }
 
-function saveBoardFile(b: ProjectBoard, dir?: string): boolean {
+// ---------- W-BJOURNAL 板文件 delta journal（SSOT 拍板点1，2026-10-13 用户批「立即落」） ----------
+// boards/<gid>.json 是全量覆盖写、无版本化——一次误写=全灭。本 journal 在每次板落盘前
+// 追加一行 append-only 审计（org/boards-journal.ndjson）：{ts, gid, entry_id, action,
+// prev/next 摘要}。字段全部取自调用链内存态（改前快照+改后内存对象），零额外 IO 重查。
+// 三条纪律：①写失败不阻断主写（journal 是保险不是闸，stderr 记录）②有界：超 5MB 滚动
+// 改名保留一份旧档 .1（rm 旧 .1→rename，防无限增长）③不改变板 JSON 本体（零 schema 迁移）。
+export interface BoardJournalSide {
+  status?: string;
+  text?: string; // 截 60（摘要非全文——journal 是审计线索不是备份）
+}
+export interface BoardJournalRecord {
+  action: string; // create|update|move|remove|dispatch-move|freeze|unfreeze|migrate|save（save=无语义兜底行）
+  entry_id?: string;
+  prev?: BoardJournalSide;
+  next?: BoardJournalSide;
+}
+
+const BOARD_JOURNAL_MAX_BYTES = 5 * 1024 * 1024;
+
+function appendBoardJournal(gid: string, rec: BoardJournalRecord, d: string): void {
   try {
-    const d = dir ?? orgDir();
+    const p = join(d, "boards-journal.ndjson");
+    try {
+      if (statSync(p).size > BOARD_JOURNAL_MAX_BYTES) {
+        try { rmSync(`${p}.1`, { force: true }); } catch { /* 旧档删除失败不阻断滚动 */ }
+        renameSync(p, `${p}.1`);
+      }
+    } catch { /* 无文件=首写（ENOENT），直接追加 */ }
+    appendFileSync(p, JSON.stringify({ ts: Date.now(), gid, ...rec }) + "\n", "utf-8");
+  } catch (e) {
+    // 纪律①：journal 失败绝不阻断板写（保险不是闸）——stderr 而非 warn（审计面静默降级不可接受）
+    console.error(`[board-journal] 追加失败（不阻断板写）: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+function sideOf(e: { status?: string; text?: string }): BoardJournalSide {
+  return { status: e.status, ...(e.text ? { text: e.text.slice(0, 60) } : {}) };
+}
+
+function saveBoardFile(b: ProjectBoard, dir?: string, jr?: BoardJournalRecord): boolean {
+  const d = dir ?? orgDir();
+  // 写入前追加 journal（任何落盘都有行——无语义调用记 action:"save" 兜底行）
+  appendBoardJournal(b.gid, jr ?? { action: "save" }, d);
+  try {
     mkdirSync(boardsDirPath(d), { recursive: true });
     writeFileSync(boardFilePath(b.gid, d), JSON.stringify(b, null, 2) + "\n", "utf-8");
     return true;
@@ -555,7 +596,7 @@ function freezeBoard(gid: string, frozen: boolean, dir?: string): void {
   if (b.frozen === frozen) return;
   b.frozen = frozen;
   b.updated_at = Date.now();
-  saveBoardFile(b, dir);
+  saveBoardFile(b, dir, { action: frozen ? "freeze" : "unfreeze" });
 }
 
 /** D18 五态搬移规则内核（upsert/move 单点共用）：
@@ -604,6 +645,7 @@ export function upsertBoardEntry(
     ? undefined
     : [...new Set(entry.depends_on.filter((d): d is string => typeof d === "string" && d.trim() !== ""))];
   let e: BoardEntry | undefined = entry.id ? w.board.entries.find((x) => x.id === entry.id) : undefined;
+  const jPrev = e ? sideOf(e) : undefined; // journal 前态快照（改前内存，零重查）
   if (e) {
     e.text = entry.text;
     if (entry.status) {
@@ -653,7 +695,7 @@ export function upsertBoardEntry(
     w.board.entries.push(e);
   }
   w.board.updated_at = now;
-  if (!saveBoardFile(w.board, dir)) return { ok: false, error: "板写入失败" };
+  if (!saveBoardFile(w.board, dir, { action: jPrev ? "update" : "create", entry_id: e.id, ...(jPrev ? { prev: jPrev } : {}), next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
 
@@ -667,6 +709,7 @@ export function moveBoardEntry(
   if (!w.ok) return w;
   const e = w.board.entries.find((x) => x.id === entryId);
   if (!e) return { ok: false, error: `板条目不存在: ${entryId}` };
+  const jPrev = sideOf(e); // journal 前态快照
   // D18：与 upsert 同规则内核（R1/R2/R3）——move 直 submitted 无资格拒、submitted→done
   // 清位、普通 done 收口清位
   const t = resolveStatusTransition(e, to);
@@ -679,7 +722,7 @@ export function moveBoardEntry(
   else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
-  if (!saveBoardFile(w.board, dir)) return { ok: false, error: "板写入失败" };
+  if (!saveBoardFile(w.board, dir, { action: "move", entry_id: e.id, prev: jPrev, next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
 
@@ -687,10 +730,11 @@ export function removeBoardEntry(gid: string, entryId: string, dir?: string): { 
   const w = writableBoard(gid, dir);
   if (!w.ok) return w;
   const before = w.board.entries.length;
+  const jPrevEntry = w.board.entries.find((x) => x.id === entryId);
   w.board.entries = w.board.entries.filter((x) => x.id !== entryId);
   if (w.board.entries.length === before) return { ok: false, error: `板条目不存在: ${entryId}` };
   w.board.updated_at = Date.now();
-  if (!saveBoardFile(w.board, dir)) return { ok: false, error: "板写入失败" };
+  if (!saveBoardFile(w.board, dir, { action: "remove", entry_id: entryId, ...(jPrevEntry ? { prev: sideOf(jPrevEntry) } : {}) })) return { ok: false, error: "板写入失败" };
   return { ok: true };
 }
 
@@ -700,10 +744,11 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
   if (!w.ok) return;
   const e = w.board.entries.find((x) => x.dispatch_id === dispatchId);
   if (!e || e.status === to) return;
+  const jPrev = sideOf(e);
   e.status = to;
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
-  saveBoardFile(w.board, dir);
+  saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
 }
 
 // ---------- #087 beads 思想采纳（009 §4 M1/M2 + §5 裁决；零外部依赖，不引 bd/Dolt） ----------
