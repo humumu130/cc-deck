@@ -374,6 +374,9 @@ interface SessionBucket {
 }
 
 export async function bootReplayFile(path: string): Promise<BootReplayResult> {
+  // fresh 安装（data 目录尚无 events.ndjson）：空重放直达——createReadStream 对缺失
+  // 文件异步 reject 会以 uncaught 崩掉整个 relay（冒烟闸 1013 逮住：新装机必崩级）
+  if (!existsSync(path)) return { kept: [], sessions: new Map(), compacted: false };
   const buckets = new Map<string, SessionBucket>();
   let priorCount = 0;
   let keptCount = 0;

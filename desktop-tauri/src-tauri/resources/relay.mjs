@@ -10875,6 +10875,7 @@ function deriveTitle(prompt) {
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
 }
 async function bootReplayFile(path6) {
+  if (!existsSync4(path6)) return { kept: [], sessions: /* @__PURE__ */ new Map(), compacted: false };
   const buckets = /* @__PURE__ */ new Map();
   let priorCount = 0;
   let keptCount = 0;
