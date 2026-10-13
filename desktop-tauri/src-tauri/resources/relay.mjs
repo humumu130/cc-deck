@@ -10338,8 +10338,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir18, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join38, sep as sep8 } from "node:path";
-import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync as readFileSync33, rmSync as rmSync5, existsSync as existsSync27, readdirSync as readdirSync15, statSync as statSync12 } from "node:fs";
+import { join as join39, sep as sep9 } from "node:path";
+import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync as readFileSync34, rmSync as rmSync5, existsSync as existsSync27, readdirSync as readdirSync16, statSync as statSync13 } from "node:fs";
 import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -45223,14 +45223,14 @@ var AsyncQueue = class {
   closed = false;
   push(value) {
     if (this.closed) throw new Error("queue closed");
-    const resolve9 = this.resolvers.shift();
-    if (resolve9) resolve9({ value, done: false });
+    const resolve10 = this.resolvers.shift();
+    if (resolve10) resolve10({ value, done: false });
     else this.values.push(value);
   }
   end() {
     this.closed = true;
-    for (const resolve9 of this.resolvers.splice(0)) {
-      resolve9({ value: void 0, done: true });
+    for (const resolve10 of this.resolvers.splice(0)) {
+      resolve10({ value: void 0, done: true });
     }
   }
   get iterable() {
@@ -45244,7 +45244,7 @@ var AsyncQueue = class {
             if (self2.closed) {
               return Promise.resolve({ value: void 0, done: true });
             }
-            return new Promise((resolve9) => self2.resolvers.push(resolve9));
+            return new Promise((resolve10) => self2.resolvers.push(resolve10));
           }
         };
       }
@@ -45730,14 +45730,14 @@ var AgentSession = class {
       ...remember ? { remember } : {}
     });
     this.cb.onLog("system", questions.length ? summary : `\u7B49\u5F85\u786E\u8BA4: ${summary}`);
-    return new Promise((resolve9) => {
+    return new Promise((resolve10) => {
       this.pending.set(requestId, {
         tool: toolName,
         input,
         created_at: Date.now(),
         resolve: (r) => {
           this.pending.delete(requestId);
-          resolve9(r);
+          resolve10(r);
         }
       });
     });
@@ -45882,13 +45882,13 @@ async function snapshotTree() {
   return out;
 }
 function psExec(cmd, args) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     try {
       execFile(cmd, args, { timeout: 1e4, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-        resolve9(err ? "" : String(stdout));
+        resolve10(err ? "" : String(stdout));
       });
     } catch {
-      resolve9("");
+      resolve10("");
     }
   });
 }
@@ -47082,8 +47082,8 @@ async function generateTitle(task, model, onSid, cwd, configHome) {
   if (!trimmed) return { title: null };
   let timer;
   let sidSeen = false;
-  const timeout = new Promise((resolve9) => {
-    timer = setTimeout(() => resolve9({ title: null }), 2e4);
+  const timeout = new Promise((resolve10) => {
+    timer = setTimeout(() => resolve10({ title: null }), 2e4);
     timer.unref();
   });
   try {
@@ -55560,9 +55560,115 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID12 } from "node:crypto";
-import { readFileSync as readFileSync29, writeFileSync as writeFileSync21, mkdirSync as mkdirSync20, existsSync as existsSync24, readdirSync as readdirSync14, statSync as statSync11 } from "node:fs";
-import { join as join34, dirname as dirname11, sep as sep7 } from "node:path";
+import { readFileSync as readFileSync30, writeFileSync as writeFileSync21, mkdirSync as mkdirSync20, existsSync as existsSync24, readdirSync as readdirSync15, statSync as statSync12 } from "node:fs";
+import { join as join35, dirname as dirname11, sep as sep8 } from "node:path";
 import { homedir as homedir15, networkInterfaces as networkInterfaces2 } from "node:os";
+
+// src/design-docs.ts
+import { readFileSync as readFileSync26, readdirSync as readdirSync12, statSync as statSync9 } from "node:fs";
+import { join as join32, resolve as resolve9, sep as sep7 } from "node:path";
+var DESIGN_DIR_SEGMENTS = ["docs", "system-design"];
+function designDir(webRoot) {
+  return join32(webRoot, ...DESIGN_DIR_SEGMENTS);
+}
+var DESIGN_EXT_RE = /\.(html|json|png|svg)$/i;
+var listCache = /* @__PURE__ */ new Map();
+function dirFingerprint(dir) {
+  const parts = [];
+  const walk = (d2, depth) => {
+    let entries = [];
+    try {
+      entries = readdirSync12(d2);
+    } catch {
+      return;
+    }
+    for (const name of entries.sort()) {
+      const p = join32(d2, name);
+      try {
+        const st2 = statSync9(p);
+        parts.push(`${name}:${st2.mtimeMs}:${st2.size}:${st2.isDirectory()}`);
+        if (st2.isDirectory() && depth < 1) walk(p, depth + 1);
+      } catch {
+      }
+    }
+  };
+  walk(dir, 0);
+  return parts.join("|");
+}
+function readTitle(file, fallback) {
+  try {
+    const head = readFileSync26(file, { encoding: "utf8", flag: "r" }).slice(0, 24576);
+    const m = head.match(/<title>([^<]{1,120})<\/title>/i);
+    const t = m?.[1]?.trim();
+    return t || fallback;
+  } catch {
+    return fallback;
+  }
+}
+function tokenize(segments) {
+  const out = /* @__PURE__ */ new Set();
+  for (const seg of segments) {
+    for (const tok of seg.toLowerCase().split(/[-_/.]+/)) {
+      if (tok && !/^\d+$/.test(tok)) out.add(tok);
+    }
+  }
+  return [...out];
+}
+function listDesignDocs(webRoot) {
+  const root = designDir(webRoot);
+  const key = dirFingerprint(root);
+  const cached2 = listCache.get(webRoot);
+  if (cached2 && cached2.key === key) return cached2.list;
+  const list = [];
+  const groups = [{ dir: root, group: "\u5168\u5C40" }];
+  try {
+    for (const name of readdirSync12(root).sort()) {
+      const p = join32(root, name);
+      try {
+        if (statSync9(p).isDirectory()) groups.push({ dir: p, group: name });
+      } catch {
+      }
+    }
+  } catch {
+    listCache.set(webRoot, { key, list });
+    return list;
+  }
+  for (const { dir, group } of groups) {
+    let files = [];
+    try {
+      files = readdirSync12(dir).filter((f) => /\.html$/i.test(f)).sort();
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      const relSegs = dir === root ? [f] : [group, f];
+      list.push({
+        path: "/design/" + relSegs.map(encodeURIComponent).join("/"),
+        group,
+        title: readTitle(join32(dir, f), f.replace(/\.html$/i, "")),
+        tags: tokenize([...relSegs])
+      });
+    }
+  }
+  listCache.set(webRoot, { key, list });
+  return list;
+}
+function resolveDesignFile(webRoot, relPath) {
+  if (!relPath || relPath.includes("\0")) return null;
+  let rel;
+  try {
+    rel = decodeURIComponent(relPath);
+  } catch {
+    return null;
+  }
+  if (!DESIGN_EXT_RE.test(rel)) return null;
+  const root = resolve9(designDir(webRoot));
+  const full = resolve9(root, rel);
+  if (full !== root && !full.startsWith(root + sep7)) return null;
+  return full;
+}
+
+// src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/ws/wrapper.mjs
@@ -55578,14 +55684,14 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
-import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync28, readdirSync as readdirSync13, statSync as statSync10, writeFileSync as writeFileSync20 } from "node:fs";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync29, readdirSync as readdirSync14, statSync as statSync11, writeFileSync as writeFileSync20 } from "node:fs";
 import { homedir as homedir14 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn5, execFileSync } from "node:child_process";
-import { existsSync as existsSync23, mkdirSync as mkdirSync18, appendFileSync as appendFileSync4, readFileSync as readFileSync26, writeFileSync as writeFileSync18, rmSync as rmSync4 } from "node:fs";
-import path4, { join as join32 } from "node:path";
+import { existsSync as existsSync23, mkdirSync as mkdirSync18, appendFileSync as appendFileSync4, readFileSync as readFileSync27, writeFileSync as writeFileSync18, rmSync as rmSync4 } from "node:fs";
+import path4, { join as join33 } from "node:path";
 import { homedir as homedir13, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path4.dirname(fileURLToPath2(import.meta.url));
@@ -55603,7 +55709,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync26(injectCs, "utf8").includes("--peek");
+    return readFileSync27(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -55667,23 +55773,23 @@ var ERR_BY_CODE = {
   6: "peek-fail"
 };
 function run(args) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     const fake = process.env.CCR_INJECT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, ...args], { windowsHide: true }) : spawn5(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve9({ ok: false, error: "timeout" });
+      resolve10({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve9({ ok: false, error: e.message });
+      resolve10({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve9({ ok: true });
-      else resolve9({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
+      if (code === 0) resolve10({ ok: true });
+      else resolve10({ ok: false, error: ERR_BY_CODE[code ?? -1] ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -55719,7 +55825,7 @@ function mapAppleError(stderr) {
   return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : /TTY-NOT-FOUND/.test(stderr) ? "\u672A\u5728 Terminal.app \u627E\u5230\u8BE5\u4F1A\u8BDD\u7684\u7EC8\u7AEF\u6807\u7B7E\uFF08CLI \u53EF\u80FD\u8FD0\u884C\u5728 tmux/iTerm2 \u7B49\u5176\u4ED6\u7EC8\u7AEF\u91CC\uFF0C\u6216\u8FDB\u7A0B\u5DF2\u91CD\u542F\uFF09" : void 0;
 }
 function runTmux(args, timeoutMs = 5e3) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     const child = spawn5("tmux", args);
     let out = "";
     let err = "";
@@ -55727,15 +55833,15 @@ function runTmux(args, timeoutMs = 5e3) {
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve9({ ok: false, text: "", error: "timeout" });
+      resolve10({ ok: false, text: "", error: "timeout" });
     }, timeoutMs);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve9({ ok: false, text: "", error: e.message });
+      resolve10({ ok: false, text: "", error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve9({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+      resolve10({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
     });
   });
 }
@@ -55792,27 +55898,27 @@ async function tmuxVerifySubmitted(target, tail2) {
   return !!bottom && !bottom.includes(tail2);
 }
 function runAppleScript(script) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve9({ ok: false, error: "timeout" });
+      resolve10({ ok: false, error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve9({ ok: false, error: e.message });
+      resolve10({ ok: false, error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) return resolve9({ ok: true });
+      if (code === 0) return resolve10({ ok: true });
       try {
-        appendFileSync4(join32(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync4(join33(homedir13(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
-      resolve9({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
+      resolve10({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
     });
   });
 }
@@ -55854,9 +55960,9 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join32(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    const tmp = join33(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync18(tmp, body, "utf8");
-    return new Promise((resolve9) => {
+    return new Promise((resolve10) => {
       const child = spawn5("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
@@ -55867,9 +55973,9 @@ async function resumeSession(cwd, sessionId, text, permMode) {
           rmSync4(tmp, { force: true });
         } catch {
         }
-        resolve9({ ok: false, error: e.message });
+        resolve10({ ok: false, error: e.message });
       });
-      child.on("spawn", () => resolve9({ ok: true }));
+      child.on("spawn", () => resolve10({ ok: true }));
       child.unref?.();
     });
   }
@@ -56010,7 +56116,7 @@ function buildCaptureScript(pid) {
   ].join("\n");
 }
 function runAppleScriptOut(script) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
     const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
     let out = "";
@@ -56019,15 +56125,15 @@ function runAppleScriptOut(script) {
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
       child.kill();
-      resolve9({ ok: false, text: "", error: "timeout" });
+      resolve10({ ok: false, text: "", error: "timeout" });
     }, 1e4);
     child.on("error", (e) => {
       clearTimeout(timer);
-      resolve9({ ok: false, text: "", error: e.message });
+      resolve10({ ok: false, text: "", error: e.message });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve9({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+      resolve10({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
     });
   });
 }
@@ -56047,11 +56153,11 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join32(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join33(tmpdir2(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync26(tmp, "utf8");
+    const text = readFileSync27(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
@@ -56128,7 +56234,7 @@ function removeKnownTexts(s, known) {
 }
 function foreignResidual(box, knownTexts) {
   const stripped = box.map((l, i) => i === 0 ? l.replace(/^\s*❯\s*/, "") : l.replace(/^\s+/, ""));
-  const residuals = ["", " "].map((sep9) => maskNoise(removeKnownTexts(stripped.join(sep9), knownTexts)));
+  const residuals = ["", " "].map((sep10) => maskNoise(removeKnownTexts(stripped.join(sep10), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -56161,8 +56267,8 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
 
 // src/engine-rollouts.ts
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync27, readdirSync as readdirSync12, readSync as readSync2, renameSync as renameSync7, statSync as statSync9, writeFileSync as writeFileSync19 } from "node:fs";
-import { basename as basename6, join as join33, relative as relative3 } from "node:path";
+import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync28, readdirSync as readdirSync13, readSync as readSync2, renameSync as renameSync7, statSync as statSync10, writeFileSync as writeFileSync19 } from "node:fs";
+import { basename as basename6, join as join34, relative as relative3 } from "node:path";
 var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
 var ENGINE_SCAN_SPECS = [
   { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
@@ -56172,7 +56278,7 @@ var ENGINE_SCAN_SPECS = [
   { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") }
 ];
 function engineRoot(spec, home) {
-  return process.env[spec.envRoot] || join33(home, spec.homeDirName, "sessions");
+  return process.env[spec.envRoot] || join34(home, spec.homeDirName, "sessions");
 }
 var clip2 = (text, cap) => {
   const compact2 = text.replace(/\s+/g, " ").trim();
@@ -56338,12 +56444,12 @@ function rolloutFiles(root, pattern) {
     if (depth > 6) return;
     let entries;
     try {
-      entries = readdirSync12(dir, { withFileTypes: true });
+      entries = readdirSync13(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const p = join33(dir, entry.name);
+      const p = join34(dir, entry.name);
       if (entry.isDirectory()) walk(p, depth + 1);
       else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
     }
@@ -56374,12 +56480,12 @@ var RolloutScanner = class {
     this.loaded = true;
     if (!this.persistFile) return;
     try {
-      const dump = JSON.parse(readFileSync27(this.persistFile, "utf8"));
+      const dump = JSON.parse(readFileSync28(this.persistFile, "utf8"));
       if (dump.version !== 1 || !dump.files || typeof dump.files !== "object") return;
       for (const [rel, entry] of Object.entries(dump.files)) {
         if (!entry || typeof entry.offset !== "number" || !entry.profile) continue;
         if (!(entry.offset >= 0) || typeof entry.carry !== "string") continue;
-        const filePath = join33(this.root, rel);
+        const filePath = join34(this.root, rel);
         this.cursors.set(filePath, { offset: entry.offset, carry: entry.carry, profile: { ...entry.profile, filePath } });
       }
     } catch {
@@ -56416,7 +56522,7 @@ var RolloutScanner = class {
       let size = 0;
       let mtime = now;
       try {
-        const stat2 = statSync9(filePath);
+        const stat2 = statSync10(filePath);
         size = stat2.size;
         mtime = stat2.mtimeMs;
       } catch {
@@ -56576,7 +56682,7 @@ var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync28(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync29(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -56585,7 +56691,7 @@ function cliSessionIdle(pid) {
 function cliSessionStatus(pid) {
   try {
     const f = path5.join(homedir14(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync28(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync29(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -56921,11 +57027,11 @@ var Bridge = class _Bridge {
     try {
       const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir14(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync13(root, { withFileTypes: true })) {
+      for (const dir of readdirSync14(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync13(path5.join(root, dir.name));
+          files = readdirSync14(path5.join(root, dir.name));
         } catch {
           continue;
         }
@@ -56947,7 +57053,7 @@ var Bridge = class _Bridge {
           let mtime;
           let fileSize = 0;
           try {
-            const st2 = statSync10(p);
+            const st2 = statSync11(p);
             mtime = st2.mtimeMs;
             fileSize = st2.size;
           } catch {
@@ -56996,7 +57102,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync4(p, "r");
-      const size = statSync10(p).size;
+      const size = statSync11(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
       readSync3(fd2, buf, 0, len, size - len);
@@ -57064,7 +57170,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync4(p, "r");
-      const size = statSync10(p).size;
+      const size = statSync11(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -57100,7 +57206,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync28(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync29(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -57120,7 +57226,7 @@ var Bridge = class _Bridge {
       const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir14(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync13(dir);
+        files = readdirSync14(dir);
       } catch {
         return;
       }
@@ -57130,7 +57236,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync28(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync29(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -57300,7 +57406,7 @@ var Bridge = class _Bridge {
   // 新标题在尾部），取文件序最新一条
   scanTranscriptTitles(p) {
     try {
-      const size = statSync10(p).size;
+      const size = statSync11(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
       const fd2 = openSync4(p, "r");
       try {
@@ -57608,7 +57714,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync28(path5.join(homedir14(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync29(path5.join(homedir14(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -58115,7 +58221,7 @@ var Bridge = class _Bridge {
   //（重放后为空），从同一账本重建「排队中」回显，重连端可见
   loadQueueDisk() {
     try {
-      const raw = JSON.parse(readFileSync28(this.queueFile, "utf-8"));
+      const raw = JSON.parse(readFileSync29(this.queueFile, "utf-8"));
       for (const [id2, list] of Object.entries(raw)) {
         if (!Array.isArray(list) || list.length === 0) continue;
         if (!this.mgr.getExternal(id2)) continue;
@@ -58148,7 +58254,7 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync28(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync29(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
       writeFileSync20(this.pidCacheFile, JSON.stringify(raw));
     } catch {
@@ -58209,10 +58315,10 @@ var Bridge = class _Bridge {
   readCcSessionName(cliSessionId) {
     try {
       const dir = path5.join(homedir14(), ".claude", "sessions");
-      for (const f of readdirSync13(dir)) {
+      for (const f of readdirSync14(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync28(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync29(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -58256,7 +58362,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync10(transcriptPath).size;
+      const size = statSync11(transcriptPath).size;
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -58618,7 +58724,7 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync10(path6).size;
+      const size = statSync11(path6).size;
       const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -58678,7 +58784,7 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync10(path6).size;
+      const size = statSync11(path6).size;
       const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -58870,7 +58976,7 @@ var Bridge = class _Bridge {
       ...taskCallId ? { id: taskCallId } : {}
     });
     const holdMs = questions.length ? this.opts.questionHoldMs ?? QUESTION_HOLD_MS : this.opts.holdMs ?? DEFAULT_HOLD_MS;
-    return new Promise((resolve9) => {
+    return new Promise((resolve10) => {
       const timer = setTimeout(() => {
         this.pending.delete(id2);
         if (questions.length) {
@@ -58879,13 +58985,13 @@ var Bridge = class _Bridge {
           this.mgr.setExternalStatus(id2, "WORKING", summary);
           this.bus.emit(id2, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision: "timeout", by: "relay" });
         }
-        resolve9({ decision: "pass" });
+        resolve10({ decision: "pass" });
       }, holdMs);
       timer.unref();
       this.pending.set(id2, {
         sessionId: id2,
         requestId,
-        resolve: resolve9,
+        resolve: resolve10,
         timer,
         toolName: ev2.tool_name ?? "tool",
         toolInput: input,
@@ -59203,14 +59309,14 @@ var Bridge = class _Bridge {
     if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
     let names;
     try {
-      names = readdirSync13(dir);
+      names = readdirSync14(dir);
     } catch {
       return null;
     }
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync28(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync29(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -59222,7 +59328,7 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync10(file);
+      st2 = statSync11(file);
     } catch {
       return null;
     }
@@ -59315,7 +59421,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync10(agentFile).size;
+          const sz2 = statSync11(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -59681,13 +59787,13 @@ var BUILTIN_COMMANDS = [
 function listCustomCommands(dir, source) {
   let entries;
   try {
-    entries = readdirSync14(dir, { withFileTypes: true });
+    entries = readdirSync15(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync29(p, "utf-8").slice(0, 400);
+      const head = readFileSync30(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -59699,11 +59805,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join34(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join35(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync14(join34(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join34(dir, e.name, g2)), source });
+        for (const g2 of readdirSync15(join35(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join35(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -59717,11 +59823,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync24(join34(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
-  const consoleHtml005 = join34(webRoot, "web-console", "index-005.html");
-  const naclJs = join34(webRoot, "web-console", "nacl.js");
-  const qrJs = join34(webRoot, "web-console", "qr.js");
-  const mobileDir = join34(webRoot, "mobile") + sep7;
+  const webRoot = webRootCandidates.find((p) => p && existsSync24(join35(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
+  const consoleHtml005 = join35(webRoot, "web-console", "index-005.html");
+  const naclJs = join35(webRoot, "web-console", "nacl.js");
+  const qrJs = join35(webRoot, "web-console", "qr.js");
+  const mobileDir = join35(webRoot, "mobile") + sep8;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -59733,6 +59839,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
     ".webmanifest": "application/manifest+json; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
     ".png": "image/png",
     ".svg": "image/svg+xml",
     ".apk": "application/vnd.android.package-archive"
@@ -59747,7 +59854,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync11(file).isFile();
+      isFile = statSync12(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -59755,7 +59862,28 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync29(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync30(file));
+    return true;
+  };
+  const serveDesign = (url, res) => {
+    if (!url.pathname.startsWith("/design/")) return false;
+    const rel = url.pathname.slice("/design/".length).replace(/^\/+/, "");
+    const file = resolveDesignFile(webRoot, rel);
+    if (!file) {
+      res.writeHead(rel ? 400 : 404).end(rel ? "bad design path" : "not found");
+      return true;
+    }
+    let isFile = false;
+    try {
+      isFile = statSync12(file).isFile();
+    } catch {
+    }
+    if (!isFile) {
+      res.writeHead(404).end("not found");
+      return true;
+    }
+    const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream", "cache-control": "max-age=300" }).end(readFileSync30(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
@@ -59778,12 +59906,13 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
+    if (req.method === "GET" && serveDesign(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
       if (!existsSync24(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(consoleHtml005));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync30(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/app2") {
@@ -59791,7 +59920,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(consoleHtml005));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync30(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -59799,7 +59928,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync30(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
@@ -59807,16 +59936,16 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync29(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync30(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join34(webRoot, "web-console", url.pathname.slice(1));
+      const file = join35(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync24(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync29(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync30(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -59860,11 +59989,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join34(cfg2.dataDir, "relay-name");
+      const file = join35(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync29(file, "utf8").trim().slice(0, 40);
+          name = readFileSync30(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -60160,8 +60289,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join34(homedir15(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join34(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join35(homedir15(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join35(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -60325,6 +60454,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // W-MODE 协作模式（设置-团队域开关数据源；no-leader 时 sessions 已由
           // snapshot() 过滤锚卡；cloud-client 云通道快照同步携带，#117 教训）
           collab_mode: mgr2.collabMode(),
+          // W-DESIGNHUB 系统设计图纸清单（设置-关于「系统设计图纸」区 + 项目域总览
+          // 「设计图纸」区数据源；空数组/缺键 = 入口隐藏——旧 relay 与缺 docs 部署
+          // 自动降级。移动端暂缓，云通道不带）
+          design_docs: listDesignDocs(webRoot),
           // M13-2 v2 投影协议能力位：端上（expo/Tauri/Web）据此启用五态渲染与
           // PROJECTS/BOARD_UPDATED delta merge 分支；phone 出口同发（#117，M13-1 闸），
           // WAN 手表极简集不带（M13-1 断言 WAN ⊆ 核心+截断）
@@ -60433,12 +60566,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   return {
     port: cfg2.port,
     bridge,
-    close: () => new Promise((resolve9) => {
+    close: () => new Promise((resolve10) => {
       clearInterval(heartbeat);
       bridge.close();
       unsubscribe();
       for (const client of wss.clients) client.terminate();
-      wss.close(() => server.close(() => resolve9()));
+      wss.close(() => server.close(() => resolve10()));
     })
   };
 }
@@ -60495,7 +60628,7 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync29(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync30(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
@@ -60576,8 +60709,8 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/patrol.ts
-import { statfsSync, writeFileSync as writeFileSync22, readFileSync as readFileSync30 } from "node:fs";
-import { join as join35 } from "node:path";
+import { statfsSync, writeFileSync as writeFileSync22, readFileSync as readFileSync31 } from "node:fs";
+import { join as join36 } from "node:path";
 var WORKER_STALE_MIN = 40;
 var BOARD_CLAIMED_STALE_H = 48;
 var DISK_FREE_MIN_GB = 5;
@@ -60637,7 +60770,7 @@ var PatrolModule = class {
     } catch {
     }
     try {
-      const probe = join35(this.opts.dataDir, ".patrol-probe");
+      const probe = join36(this.opts.dataDir, ".patrol-probe");
       writeFileSync22(probe, String(Date.now()));
       alerts.push({ key: "dataDir", text: "" });
     } catch {
@@ -60706,7 +60839,7 @@ var PatrolModule = class {
       const path6 = this.opts.reportPath;
       let prev = "";
       try {
-        prev = readFileSync30(path6, "utf-8");
+        prev = readFileSync31(path6, "utf-8");
       } catch {
       }
       const lines = [...prev.split("\n").filter(Boolean), `[${ts2}] ${line}`];
@@ -60717,32 +60850,32 @@ var PatrolModule = class {
 };
 
 // src/cloud-identity.ts
-import { existsSync as existsSync25, readFileSync as readFileSync31, writeFileSync as writeFileSync23 } from "node:fs";
-import { join as join36 } from "node:path";
+import { existsSync as existsSync25, readFileSync as readFileSync32, writeFileSync as writeFileSync23 } from "node:fs";
+import { join as join37 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join36(dataDir2, "cloud-keypair.json");
+  const kpPath = join37(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync25(kpPath)) {
-    keypair = JSON.parse(readFileSync31(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync32(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
     writeFileSync23(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join36(dataDir2, "wan-secret");
+  const wanSecretPath = join37(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync25(wanSecretPath)) wanSecret = readFileSync31(wanSecretPath, "utf-8").trim();
+  if (existsSync25(wanSecretPath)) wanSecret = readFileSync32(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
     writeFileSync23(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join36(dataDir2, "cloud-peers.json");
+  const peersPath = join37(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync25(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync31(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync32(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -60923,8 +61056,8 @@ var CloudClient = class {
   }
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
-    const sep9 = base.includes("?") ? "&" : "?";
-    return `${base}${sep9}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    const sep10 = base.includes("?") ? "&" : "?";
+    return `${base}${sep10}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
   connect() {
     if (this.stopped) return;
@@ -61590,23 +61723,23 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync26, readFileSync as readFileSync32, writeFileSync as writeFileSync24 } from "node:fs";
-import { join as join37 } from "node:path";
+import { existsSync as existsSync26, readFileSync as readFileSync33, writeFileSync as writeFileSync24 } from "node:fs";
+import { join as join38 } from "node:path";
 import { homedir as homedir17 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join37(homedir17(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join38(homedir17(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync26(dir)) return "skip-no-dir";
-  const file = join37(dir, "settings.json");
+  const file = join38(dir, "settings.json");
   let obj;
   if (!existsSync26(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync32(file, "utf-8"));
+      obj = JSON.parse(readFileSync33(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -61642,9 +61775,9 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join38(cfg.dataDir, "relay.lock");
+  const lockPath = join39(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync33(lockPath, "utf8").trim());
+    const prev = Number(readFileSync34(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -61663,7 +61796,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync33(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
+      if (Number(readFileSync34(lockPath, "utf8").trim()) === process.pid) rmSync5(lockPath);
     } catch {
     }
   };
@@ -61704,7 +61837,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync33(join38(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync34(join39(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -61755,14 +61888,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync5(join38(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync5(join39(cfg.dataDir, "relay.log"), "a");
   const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join38(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join39(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -61775,7 +61908,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync27("/proc")) return readFileSync33(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync27("/proc")) return readFileSync34(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync3("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -61785,9 +61918,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join38(cfg.dataDir, "relay.pid");
+  const pidFile = join39(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync33(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync34(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -61813,21 +61946,21 @@ if (cliArgs.has("--stop")) {
   ensureEmployeeHomeSeed(cfg.dataDir);
 }
 probeSqliteDriverAtBoot();
-var persistPath = join38(cfg.dataDir, "events.ndjson");
+var persistPath = join39(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
-    for (const f of readdirSync15(dir)) {
+    for (const f of readdirSync16(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join38(dir, f);
+      const p = join39(dir, f);
       try {
-        if (Date.now() - statSync12(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
+        if (Date.now() - statSync13(p).mtimeMs > 7 * 864e5) rmSync5(p, { force: true });
       } catch {
       }
     }
   } catch {
   }
 }
-var tmpImageDir = join38(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join39(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var boot = await bootReplayFile(persistPath);
@@ -61910,7 +62043,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync33(join38(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync34(join39(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -61925,7 +62058,7 @@ startAcceptanceCloudPoll(cfg, mgr, bus);
 if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
   new PatrolModule(mgr, {
     dataDir: cfg.dataDir,
-    reportPath: join38(cfg.dataDir, "patrol-report.md"),
+    reportPath: join39(cfg.dataDir, "patrol-report.md"),
     enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
   }).start();
 }
@@ -61940,7 +62073,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync33(join38(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync34(join39(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -61974,15 +62107,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync25(join38(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync25(join39(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync25(join38(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join38(homedir18(), ".cc-deck", "data");
-    const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep8).startsWith(t + sep8));
+    writeFileSync25(join39(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join39(homedir18(), ".cc-deck", "data");
+    const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep9).startsWith(t + sep9));
     if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync27(hookHome)) {
       try {
-        writeFileSync25(join38(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync25(join39(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -62007,7 +62140,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join38(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join39(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );
