@@ -1394,6 +1394,7 @@ export class SessionManager {
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
     hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
+    forget: (sessionId: string) => void; // W-INJECT P0 泄漏修复：外部会话消亡统一回收（Bridge.forget）
   } | null = null;
 
   setBridge(b: {
@@ -1403,6 +1404,7 @@ export class SessionManager {
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
     hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
+    forget: (sessionId: string) => void;
   }): void {
     this.bridge = b;
   }
@@ -2150,6 +2152,7 @@ export class SessionManager {
     if (s.state.external) {
       this.deletedExtIds.add(id);
       appendDeletedExt(this.cfg.dataDir, id);
+      this.bridge?.forget(id); // W-INJECT P0（泄漏修复）：外部会话消亡统一回收 bridge 29 键位+4 定时器（见 Bridge.forget 注释）
     }
     if (s.state.pinned) {
       writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id));

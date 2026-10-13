@@ -188,6 +188,52 @@ type QueuedInput = { text: string; ts: number; body?: string; refs?: string[] };
 
 export class Bridge {
   private pending = new Map<string, Pending>();   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
+
+  /** W-INJECT P0（泄漏修复）：外部会话消亡统一回收。此前 29 个以 ext id 为键的 Map/Set 无会话级
+   * 清理路径——nameMisses/extFileStats/extUsage/lastHookAt/engineActivityKeys/recentUserMsgs(外层)/
+   * cliStatusAt/termLine/termCapAt/titleScanned 等零 delete 纯增长，常驻 relay + 高频 ext 会话
+   * churn（每条 claude 命令注册一个 ext id）下慢性泄漏；更危险的是 4 个定时器 Map
+   * （resumeClosures/verifyTimers/stuckFailTimers/submitEnterTimers）残留 Timeout 持闭包可重复触发。
+   * 幂等（不存在的键 delete 零害）；enqueuedKeys 有 60 上限自愈但一并清更干净。
+   * 挂点：SessionManager.deleteSession 的 external 分支。 */
+  forget(id: string): void {
+    this.pending.delete(id);
+    this.turnStart.delete(id);
+    this.inputQueue.delete(id);
+    this.flushing.delete(id);
+    this.named.delete(id);
+    this.nameMisses.delete(id);
+    this.transcriptPaths.delete(id);
+    this.recentUserMsgs.delete(id);
+    this.escMarkedAt.delete(id);
+    this.engineActivityKeys.delete(id);
+    this.extFileStats.delete(id);
+    this.extUsage.delete(id);
+    this.stuckWatch.delete(id);
+    this.stuckGuarding.delete(id);
+    this.askFallback.delete(id);
+    this.noHookIds.delete(id);
+    this.lastGrow.delete(id);
+    this.lastHookAt.delete(id);
+    this.cliStatusAt.delete(id);
+    this.termLine.delete(id);
+    this.termCapAt.delete(id);
+    this.titleScanned.delete(id);
+    this.enqueuedKeys.delete(id);
+    this.turnShape.delete(id);
+    this.injectFails.delete(id);
+    this.noPidNote.delete(id);
+    this.resumeSpawns.delete(id);
+    this.orphanProbe.delete(id);
+    const rc = this.resumeClosures.get(id);
+    if (rc) { clearTimeout(rc); this.resumeClosures.delete(id); }
+    const vt = this.verifyTimers.get(id);
+    if (vt) { clearTimeout(vt.timer); this.verifyTimers.delete(id); }
+    const sft = this.stuckFailTimers.get(id);
+    if (sft) { clearTimeout(sft); this.stuckFailTimers.delete(id); }
+    const set_ = this.submitEnterTimers.get(id);
+    if (set_) { clearTimeout(set_); this.submitEnterTimers.delete(id); }
+  }
   private turnStart = new Map<string, number>();  // ext session_id -> 本回合开始时间
   private inputQueue = new Map<string, QueuedInput[]>(); // ext session_id -> 排队中的输入（忙时攒，回合结束注入；W-INJECT 起落盘防丢）
   private flushing = new Set<string>();           // 正在逐条注入的会话（防并发交错）

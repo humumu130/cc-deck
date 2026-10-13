@@ -268,6 +268,29 @@ assert(!events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { te
 const pendOf = (sid: string) => mgr.snapshot().find((s) => s.session_id === sid)?.pending_inputs ?? [];
 assert(pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "busy inject echoed in pending_inputs");
 
+// 16b. W-INJECT P0 泄漏回归：Bridge.forget 统一回收——造脏状态（含零 delete 的纯增长键位）→ forget → 全清。
+// 背景：29 个以 ext id 为键的 Map/Set 原无会话级清理路径，常驻 relay 高频 ext churn 下慢性泄漏。
+// 访问用 any 桥：部分键位是 private（封装正确），泄漏回归属白盒断言，运行时直访。
+{
+  const b = bridge as unknown as Record<string, any>; // 白盒泄漏断言：键位 Map/Set 混合，any 桥最省（运行时形态自证）
+  b.nameMisses.set(extId("cli-1"), 3);
+  b.lastHookAt.set(extId("cli-1"), Date.now());
+  b.extUsage.set(extId("cli-1"), { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, model: "m", ctx: 1 });
+  b.recentUserMsgs.set(extId("cli-1"), new Map([["k", { ts: Date.now(), via: "promote" }]]));
+  b.cliStatusAt.set(extId("cli-1"), Date.now());
+  b.termLine.set(extId("cli-1"), "x");
+  b.titleScanned.add(extId("cli-1"));
+  bridge.forget(extId("cli-1"));
+  assert(
+    !b.nameMisses.has(extId("cli-1")) && !b.lastHookAt.has(extId("cli-1"))
+    && !b.extUsage.has(extId("cli-1")) && !b.recentUserMsgs.has(extId("cli-1"))
+    && !b.cliStatusAt.has(extId("cli-1")) && !b.termLine.has(extId("cli-1"))
+    && !b.titleScanned.has(extId("cli-1")) && !b.pending.has(extId("cli-1"))
+    && !b.inputQueue.has(extId("cli-1")) && !b.stuckWatch.has(extId("cli-1")),
+    "forget 统一回收（零 delete 键位+常规键位全清）",
+  );
+}
+
 // 17. EXT_STOP（WORKING）→ 注入 Esc
 const escId = send("COMMAND_EXT_STOP", { session_id: extId("cli-1") });
 assert((await waitAck(escId)).ok, "EXT_STOP acked");
