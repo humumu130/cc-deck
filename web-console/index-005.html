@@ -1481,11 +1481,39 @@
     .metric:first-child { border-left: 0; }
     .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
     .metric span {color: var(--dim); font-size: var(--fs-B);}
-    /* W-PROJAGG：总览 4 卡 = 可点速览卡（点卡切下方 mini 列表），选中态/悬停沿全局 selected/hover 语言 */
+    /* W-PROJIA 案A：总览 4 卡 = 纯摘要 + 跳转入口（点卡切主区对应 tab，不嵌内容列表）。
+    label 行 = 图标 + 名称 + → 指示（hover 提亮传达可点跳转）；数字大号（.metric b 原排版启用） */
     .project-overview .metric { cursor: pointer; font: inherit; text-align: left; transition: background .18s ease; }
     .project-overview .metric:hover { background: var(--hover); }
-    .project-overview .metric.selected { background: var(--selected-bg); box-shadow: inset 0 -2px 0 var(--brand); }
-    .project-overview .metric.selected span { color: var(--text-strong); }
+    .project-overview .metric .metric-label { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: var(--fs-B); }
+    .project-overview .metric .metric-label .go { margin-left: auto; color: var(--dim); opacity: .45; font-size: var(--fs-C); transition: opacity .15s ease, color .15s ease; }
+    .project-overview .metric:hover .metric-label .go, .project-overview .metric:focus-visible .metric-label .go { opacity: 1; color: var(--brand); }
+    /* W-PROJIA 案B：长页分区（tab 栏移除，四卡=分区锚点）——scroll-margin 防分区头顶格 */
+    .proj-section { padding-top: 4px; margin-bottom: 16px; scroll-margin-top: 10px; }
+    .proj-section + .proj-section { border-top: 1px solid var(--line-soft); padding-top: 14px; }
+    /* W-PROJIA 案C（v8 美学基准 2026-10-13 定版）：项目域主区 = v8 dhead/psec/vrow 语言
+    （docs/mockups/v8-ui-interactive-v2.html「V8 项目域局部」），变量映射现网主题体系
+    （p-dim→dim / p-faint→faint / p-line→line-soft / p-panel→surface2 / p-text→text-strong），
+    暗亮双主题自动适配，不引入第二套色板。头部 meta 行替代四大卡与蓝条；分区=头+代表条目+
+    就地展开（默认收 3 条，点「全部 N 条」就地展开不跳页）；vrow 点击跳来源域（v8 语义）。 */
+    #d-project .workspace-head .live { font-size: var(--fs-C); color: var(--done); white-space: nowrap; }
+    #d-project .proj-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 10px; color: var(--dim); font-size: var(--fs-C); }
+    #d-project .proj-meta .sep { color: var(--faint); }
+    #d-project .proj-meta .jump-hint { color: var(--faint); }
+    .psec { padding: 10px 0 2px; }
+    .psec h5 { margin: 0 0 2px; font-size: var(--fs-C); color: var(--dim); font-weight: 600; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; }
+    .psec h5 .cnt { color: var(--faint); font-weight: 500; }
+    .psec h5 .jump { margin-left: auto; font-size: var(--fs-D); color: var(--brand); font-weight: 500; cursor: pointer; border: 0; background: transparent; padding: 0; font-family: inherit; }
+    .psec h5 .jump:hover { text-decoration: underline; }
+    .vrow { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); margin: 6px 0; font-size: var(--fs-B); color: var(--dim); cursor: pointer; transition: border-color .16s ease; }
+    .vrow:hover { border-color: var(--faint); }
+    .vrow .t { color: var(--text-strong); min-width: 0; }
+    .vrow .t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vrow .t .s { color: var(--faint); font-size: var(--fs-D); margin-left: 6px; }
+    .vrow .k { margin-left: auto; font-size: var(--fs-D); color: var(--faint); font-family: var(--mono); flex: none; }
+    .vrow .k.run { color: var(--done); }
+    .vrow .k.wait { color: var(--brand); }
+    .vrow .k.err { color: var(--danger, #e06a5a); }
     .mini-list-link { display: inline-block; margin: 10px 0 2px; padding: 0; border: 0; background: transparent; color: var(--brand); cursor: pointer; font-size: var(--fs-C); }
     .mini-list-link:hover { text-decoration: underline; }
     .readonly-banner {padding: 8px 10px; margin-bottom: 14px; border: 1px solid color-mix(in srgb, var(--readonly-line) 55%, transparent); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: var(--fs-B);} /* FB7：虚线清为低对比实线 */
@@ -7193,7 +7221,7 @@
 
           <section class="desktop-screen" id="d-project">
             <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn" type="button" data-project-create aria-label="发起新建项目 · 去团队域">＋</button></div><div data-project-queue data-relay-state="loading"></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2 data-project-name>项目</h2><span class="source-badge" data-project-source></span></div><div class="segment-bar"><button class="active">总览</button><button>会话</button><button>团队</button><button>任务</button><button>输出物</button><button>验收单</button><button data-project-design-tab hidden>图纸</button></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2 data-project-name>项目</h2><span class="live" data-project-live hidden></span><span class="source-badge" data-project-source></span></div><div class="proj-meta" data-project-meta hidden></div></header><div class="workspace-body" data-project-body><div class="readonly-banner" data-project-state role="status">等待 relay SNAPSHOT…</div></div><footer class="workspace-footer"><span class="desktop-only-note">编辑请回来源域</span></footer></section>
             <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action" data-project-risk-count style="display:none">需行动 0</span></div><div class="inspector-copy" data-project-risk-copy>等待 relay SNAPSHOT…</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span data-project-artifact-count>0</span></div><div data-project-artifact-rows></div></div><div class="inspector-block" data-project-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
             <script>
               (() => {
@@ -7616,177 +7644,94 @@
                 function renderHead(entry) {
                   els.name.textContent = entry ? entry.name : "项目";
                   els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
+                  // W-PROJIA 案C（v8 dhead 语言）：live 徽标 + meta 行——替代四大卡与两条蓝条
+                  const liveNode = section.querySelector("[data-project-live]");
+                  const metaNode = section.querySelector("[data-project-meta]");
                   if (entry) {
-                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进总览指标
-                  } else window.__ccDeck005SetWindowbarHint?.("project", "—");
-                }
-
-                // W-PROJAGG：总览 = 4 张并排速览卡（会话/团队/输出物/验收单，可点切换、默认会话）
-                // + 选中卡对应的 mini 精简列表（最近 5~8 条 + 总计数，条目只读）。第三列定位 =
-                // 只读速览，与主区 tab 全量管理视图互补：mini 底部「在 X 中查看全部 →」经
-                // bridge.clickTab 复用同一切换路径（先例 5412 行通知跳 tab）。
-                const OVERVIEW_MINI_TAKE = 6;
-                let overviewMini = "sessions";
-                const overviewJumpLink = (tabLabel) =>
-                  '<button class="mini-list-link" type="button" data-overview-jump="' + escapeHtml(tabLabel) + '">在' + escapeHtml(tabLabel) + "中查看全部 →</button>";
-
-                function overviewMiniMarkup(entry) {
-                  if (overviewMini === "team") {
-                    if (!entry.group) return '<div class="readonly-banner">该目录未入项目。新建项目确认在团队域发起（组织命令），项目页不产生第二写面。</div>' + overviewJumpLink("团队");
-                    const g = entry.group;
-                    const headcount = Array.isArray(g.headcount) ? g.headcount : [];
-                    const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认新建项目" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
-                    const rows = headcount.slice(0, OVERVIEW_MINI_TAKE).map((m) => {
-                      const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
-                      const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
-                      return '<div class="queue-card"><div class="row"><i class="status-dot ' + (s ? (STATUS_DOT[s.status] || "done") : "waiting") + '"></i><strong>' + escapeHtml(title) + '</strong><span class="tag">' + escapeHtml(m && m.role ? m.role : "角色未标注") + "</span></div></div>";
-                    }).join("");
-                    return '<div class="queue-group">' + escapeHtml(g.name || "编制") + " · " + headcount.length + " 人 · " + escapeHtml(statusText) + "</div>"
-                      + (rows || '<div class="readonly-banner">编制为空 · 成员在团队域维护。</div>') + overviewJumpLink("团队");
-                  }
-                  if (overviewMini === "artifacts") {
+                    const hot = projectActionItems(entry).length;
                     const artifacts = artifactsOf(entry);
-                    if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>' + overviewJumpLink("输出物");
-                    const anchor = normDir(entry.anchor);
-                    const rows = artifacts.slice(0, OVERVIEW_MINI_TAKE).map((a) => {
-                      const pN = normDir(a.path);
-                      const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
-                      return '<div class="artifact-row">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>";
-                    }).join("");
-                    return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows + overviewJumpLink("输出物");
+                    if (liveNode) {
+                      liveNode.hidden = false;
+                      liveNode.textContent = "● " + entry.sessions.length + " 会话 · " + (entry.group ? 1 : 0) + " 团队" + (hot ? " · " + hot + " 需行动" : "");
+                    }
+                    if (metaNode) {
+                      const open = bridge.accepts.filter((a) => !a.submitted).length;
+                      metaNode.hidden = false;
+                      metaNode.innerHTML = '<span>只读聚合 · 目录 ' + escapeHtml(shortenDir(entry.anchor)) + '</span><span class="sep">·</span>'
+                        + "<span>输出物 " + artifacts.length + "</span>" + '<span class="sep">·</span>'
+                        + "<span>验收单 " + bridge.accepts.length + (open ? " · " + open + " 张未闭环" : "") + "（全局登记）</span>";
+                    }
+                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进头部 meta 行
+                  } else {
+                    if (liveNode) liveNode.hidden = true;
+                    if (metaNode) metaNode.hidden = true;
+                    window.__ccDeck005SetWindowbarHint?.("project", "—");
                   }
-                  if (overviewMini === "accepts") {
-                    if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>' + overviewJumpLink("验收单");
-                    const rows = bridge.accepts.slice(0, OVERVIEW_MINI_TAKE).map((a) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + (Number(a.total) || 0) + " 项 · 已回填 " + (Number(a.judged) || 0) + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
-                    return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows + overviewJumpLink("验收单");
-                  }
-                  // sessions（默认卡）
+                }
+
+                // W-PROJIA 案C（2026-10-13 用户定版：v8 原型为桌面 UI 美学基准，
+                // docs/mockups/v8-ui-interactive-v2.html「V8 项目域局部」）：主区 = v8 的
+                // psec 分区 + vrow 代表条目语言——每分区默认 3 条代表，超量出「全部 N 条 ▾」
+                // 就地展开（不跳页、不丢上下文）；条目点击跳来源域（v8 语义：项目域=只读
+                // 观测面板，编辑回源域）。头部 live 徽标 + meta 行替代四大卡与两条蓝条（见
+                // renderHead）；任务分区退役（原 tab 内容本就是「去团队域」跳转占位——正是
+                // 用户判定重叠的复制品）；图纸分区能力位判 designDocsSeen。案A/案B 的
+                // overviewMarkup 与六个 *TabMarkup 机制整体退役。
+                const PSEC_TAKE = 3;
+                const expandedSections = new Set(); // 分区展开态（域内会话态，切项目/刷新回落默认收起）
+                const VROW_K = { WORKING: ["运行中", " run"], WAITING: ["待处理", " wait"], ERROR: ["错误", " err"], DONE: ["完成", ""] };
+                const vrow = (attrs, title, sub, kText, kCls) =>
+                  '<div class="vrow"' + (attrs ? " " + attrs : "") + '><div class="t"><b>' + escapeHtml(title) + "</b>" + (sub ? '<span class="s">' + escapeHtml(sub) + "</span>" : "") + '</div>' + (kText ? '<span class="k' + (kCls || "") + '">' + escapeHtml(kText) + "</span>" : "") + "</div>";
+                function psecMarkup(id, icon, name, rows, emptyText, emptyAttrs) {
+                  const expanded = expandedSections.has(id);
+                  const shown = expanded ? rows : rows.slice(0, PSEC_TAKE);
+                  const toggle = rows.length > PSEC_TAKE
+                    ? '<button class="jump" type="button" data-psec-toggle="' + id + '">' + (expanded ? "收起 ▴" : "全部 " + rows.length + " 条 ▾") + "</button>"
+                    : "";
+                  const body = rows.length
+                    ? shown.join("")
+                    : '<div class="vrow" style="cursor:default"' + (emptyAttrs ? " " + emptyAttrs : "") + '><div class="t"><b style="color:var(--faint)">' + escapeHtml(emptyText) + "</b></div></div>";
+                  return '<section class="proj-section psec" id="proj-sec-' + id + '" data-proj-section="' + id + '">'
+                    + '<h5><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg>' + escapeHtml(name) + ' <span class="cnt">' + rows.length + "</span>" + toggle + "</h5>"
+                    + body + "</section>";
+                }
+                function sessionsRows(entry) {
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  if (!sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>' + overviewJumpLink("会话");
-                  const rows = sessions.slice(0, OVERVIEW_MINI_TAKE).map((s) => '<div class="queue-card"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(relTime(Number(s.updated_at))) + " · " + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</p></div>").join("");
-                  return '<div class="queue-group">会话 · ' + sessions.length + "</div>" + rows + overviewJumpLink("会话");
+                  return sessions.map((s) => {
+                    const ctx = Number(s.context_limit) > 0 ? " · 上下文 " + Math.max(1, Math.min(999, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100))) + "%" : "";
+                    const k = VROW_K[s.status] || ["完成", ""];
+                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"', s.title || s.initial_prompt || s.session_id, relTime(s.updated_at) + ctx, k[0], k[1]);
+                  });
                 }
-
-                // W-DESIGNHUB 项目相关图纸：tags = 图纸目录+文件名分词（relay 侧同规则），
-                // 项目侧分词 = 项目组 name ∪ 锚点目录末段（[-_/.空格] 切、小写、纯数字滤）。
-                // 匹配空但清单在 → 灰提示指全局入口；清单缺（旧 relay/无 docs）→ 整区不渲染
-                function designDocsOf(entry) {
-                  return Array.isArray(bridge.snapshot && bridge.snapshot.design_docs) ? bridge.snapshot.design_docs : null;
-                }
-                function projectDesignToks(entry) {
-                  const segs = [];
-                  if (entry.group && typeof entry.group.name === "string") segs.push(entry.group.name);
-                  const anchor = String(entry.anchor || "");
-                  const tail = anchor.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || "";
-                  if (tail) segs.push(tail);
-                  const out = new Set();
-                  for (const seg of segs) for (const tok of seg.toLowerCase().split(/[-_/.\s]+/)) if (tok && !/^\d+$/.test(tok)) out.add(tok);
-                  return out;
-                }
-                function designSectionMarkup(entry) {
-                  const docs = designDocsOf(entry);
-                  if (!docs || !docs.length) return "";
-                  // 匹配=子串包含（双向）：中文项目名无空格分词（「005 换壳项目」切开是
-                  // 「换壳项目」整词），精确相等会漏「换壳」tag——放宽为 a⊂b ∪ b⊂a
-                  const toks = [...projectDesignToks(entry)];
-                  const hit = (tag) => toks.some((t) => t.includes(tag) || tag.includes(t));
-                  const hits = docs.filter((d) => Array.isArray(d.tags) && d.tags.some(hit));
-                  if (!hits.length) return '<div class="queue-group">设计图纸</div><div class="readonly-banner">本项目暂无专属图纸 · 全局系统设计见 设置 → 关于 → 系统设计图纸。</div>';
-                  return '<div class="queue-group">设计图纸 · ' + hits.length + "</div>"
-                    + hits.map((d) => '<div class="queue-card"><div class="row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg><strong>' + escapeHtml(d.title) + '</strong><span class="tag">' + escapeHtml(d.group) + '</span></div><p>' + escapeHtml(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escapeHtml(d.path) + '" style="margin:2px 0 0">新窗打开 ↗</button></div>').join("");
-                }
-                function overviewMarkup(entry) {
-                  const artifacts = artifactsOf(entry);
-                  const card = (key, icon, label, num) =>
-                    '<button class="metric' + (overviewMini === key ? " selected" : "") + '" type="button" data-overview-card="' + key + '" aria-pressed="' + (overviewMini === key) + '">'
-                    + (icon ? '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg>' : "")
-                    + "<span>" + escapeHtml(label) + " " + num + "</span></button>";
-                  return '<div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div>'
-                    + '<div class="project-overview">'
-                    + card("sessions", "chat", "会话", entry.sessions.length)
-                    + card("team", "users", "团队", entry.group ? 1 : 0)
-                    + card("artifacts", "package", "输出物", artifacts.length)
-                    + card("accepts", "check", "验收单", bridge.accepts.length)
-                    + "</div>"
-                    + designSectionMarkup(entry)
-                    + overviewMiniMarkup(entry);
-                }
-
-                function sessionsTabMarkup(entry) {
-                  if (!entry.sessions.length) return '<div class="readonly-banner">该项目目录暂无会话。新会话由会话域发起。</div>';
-                  const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
-                  const rows = sessions.map((s) => '<div class="queue-card" data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"><div class="row"><i class="status-dot ' + (STATUS_DOT[s.status] || "done") + '"></i><strong>' + escapeHtml(s.title || s.initial_prompt || s.session_id) + '</strong><span class="tag ' + (STATUS_TAG[s.status] || "done") + '">' + (STATUS_WORD[s.status] || "完成") + "</span></div><p>" + escapeHtml(s.action_summary || displayPath(s.cwd) || "暂无活动摘要") + '</p><div class="identity-cluster">' + engineBadge(s.engine) + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></div></div>").join("");
-                  return '<div class="queue-group">会话 · ' + entry.sessions.length + "</div>" + rows;
-                }
-
-                function teamTabMarkup(entry) {
-                  if (!entry.group) return '<div class="readonly-banner">该目录未入项目。新建项目确认在团队域发起（组织命令），项目页不产生第二写面。</div><button class="secondary-btn" type="button" data-domain-jump="team">去团队域</button>';
-                  // FB12 团队 tab 实数据：编制名册只读渲染（席位/角色/引擎/模型），写面仍在团队域
+                function teamRows(entry) {
+                  if (!entry.group) return [];
                   const g = entry.group;
                   const headcount = Array.isArray(g.headcount) ? g.headcount : [];
-                  const statusText = g.status === "active" ? "在办" : g.status === "pending" ? "待确认新建项目" : g.status === "parked" ? "已挂起" : g.status === "archived" ? "已结项" : (g.status || "—");
-                  const rows = headcount.map((m) => {
-                    const s = m && typeof m.session_id === "string" ? bridge.sessions.get(m.session_id) : null;
-                    const title = s ? (s.title || s.initial_prompt || m.session_id) : m && m.session_id ? m.session_id : "空席位";
-                    const eng = (m && m.engine) || (s && s.engine) || "";
-                    return '<div class="queue-card" data-domain-jump="session"' + (m && m.session_id ? ' data-jump-session="' + escapeHtml(m.session_id) + '"' : "") + ' title="在会话域打开该成员"><div class="row"><i class="status-dot ' + (s ? (STATUS_DOT[s.status] || "done") : "waiting") + '"></i><strong>' + escapeHtml(title) + '</strong><span class="tag">' + escapeHtml(m && m.role ? m.role : "角色未标注") + "</span></div>"
-                      + '<div class="identity-cluster">' + (eng ? engineBadge(eng) : "") + (m && m.model ? '<span class="source-badge">' + escapeHtml(m.model) + "</span>" : "") + "</div></div>";
-                  }).join("");
-                  return '<div class="queue-group">' + escapeHtml(g.name || "编制") + " · " + headcount.length + " 人 · " + escapeHtml(statusText) + "</div>"
-                    + (rows || '<div class="readonly-banner">编制为空 · 成员在团队域维护。</div>')
-                    + '<button class="secondary-btn" type="button" data-domain-jump="team" style="margin-top:10px">在团队域维护编制</button>';
+                  return headcount.map((m) => {
+                    const sid = m && typeof m.session_id === "string" ? m.session_id : "";
+                    const s = sid ? bridge.sessions.get(sid) : null;
+                    const title = s ? (s.title || s.initial_prompt || sid) : sid || "空席位";
+                    const sub = (m && m.role ? m.role : "角色未标注") + (m && m.model ? " · " + m.model : "");
+                    const k = s ? (VROW_K[s.status] || ["完成", ""]) : ["离线", " wait"];
+                    return vrow((sid ? 'data-domain-jump="session" data-jump-session="' + escapeHtml(sid) + '" title="在会话域打开该成员"' : 'style="cursor:default"'), title, sub, k[0], k[1]);
+                  });
                 }
-
-                function taskTabMarkup() {
-                  return '<div class="readonly-banner">任务板随团队域维护（按需经 COMMAND_PROJECT_DETAIL 拉取），项目页不复制任务状态。</div><button class="secondary-btn" type="button" data-domain-jump="team">在团队看板处理</button>';
-                }
-
-                function artifactsTabMarkup(entry) {
-                  const artifacts = artifactsOf(entry);
-                  if (!artifacts.length) return '<div class="readonly-banner">暂无输出物登记。输出物由会话域实时产生。</div>';
+                function artifactsRows(entry) {
                   const anchor = normDir(entry.anchor);
-                  const rows = artifacts.map((a) => {
-                    // #158-批4a：前缀比较归一化（a.path 原生 \ 与 anchor 归一 / 不匹配会整串显示）
+                  return artifactsOf(entry).map((a) => {
                     const pN = normDir(a.path);
                     const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
-                    return '<div class="artifact-row" data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话">' + escapeHtml(rel) + "<span>" + escapeHtml(relTime(a.last_at)) + '</span><span class="identity-cluster">' + engineBadge(a.session.engine) + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></span></div>";
-                  }).join("");
-                  return '<div class="queue-group">输出物 · ' + artifacts.length + "</div>" + rows;
+                    const eng = ENGINES[a.session && a.session.engine] ? ENGINES[a.session.engine][0] : "";
+                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话"', rel, relTime(a.last_at), eng, "");
+                  });
                 }
-
-                function acceptancesTabMarkup() {
-                  if (!bridge.accepts.length) return '<div class="readonly-banner">暂无验收单登记。</div>';
-                  const rows = bridge.accepts.map((a) => '<div class="queue-card" data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"><div class="row"><i class="status-dot ' + (a.submitted ? "done" : "waiting") + '"></i><strong>' + escapeHtml(a.title) + "</strong>" + (a.submitted ? '<span class="tag done">已提交</span>' : '<span class="tag action">待填</span>') + "</div><p>共 " + (Number(a.total) || 0) + " 项 · 已回填 " + (Number(a.judged) || 0) + " · " + escapeHtml(relTime(a.created_at)) + "</p></div>").join("");
-                  return '<div class="readonly-banner">验收单为全局登记（SNAPSHOT 无项目归属字段，契约请求已备案），此处按登记时间列出。</div><div class="queue-group">验收单 · ' + bridge.accepts.length + "</div>" + rows;
+                function acceptsRows() {
+                  return bridge.accepts.map((a) =>
+                    vrow('data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"', a.title, "已回填 " + (Number(a.judged) || 0) + "/" + (Number(a.total) || 0) + " · " + relTime(a.created_at), a.submitted ? "已提交" : "待填", a.submitted ? "" : " wait"));
                 }
-
-                // W-SRCMENU2 ⑥：图纸 tab（W-DESIGNHUB 消费面）——分组平铺（group 头+行），行点击
-                // 新窗直开 relay /design/<rel>（红线：HTML 原样服务不加工、无容器页）。打开地址=
-                // 主连接源 origin + path（聚合两源图纸按 path 去重并集可见；云源图纸跨源直开需
-                // 云桥静态面，超出本批——回执口径点）。项目匹配：与当前项目组 name/锚点分词有
-                // 交集的 tags 行前置「相关」小标（信息增强不筛除——图纸目录通常量小，全量可扫）
-                function designDocsTabMarkup(entry) {
-                  if (!bridge.designDocs.length) return '<div class="readonly-banner">图纸目录为空（docs/system-design/ 未部署 archify 产物）。</div>';
-                  const keyTokens = new Set(
-                    String(entry && entry.group ? entry.group.name || "" : "").toLowerCase().split(/[\s/_·-]+/).filter(Boolean)
-                      .concat(String(entry && entry.group ? entry.group.anchor_dir || "" : "").toLowerCase().split(/[/\s_-]+/).filter(Boolean)),
-                  );
-                  const groups = new Map();
-                  for (const d of bridge.designDocs) {
-                    if (!groups.has(d.group)) groups.set(d.group, []);
-                    groups.get(d.group).push(d);
-                  }
-                  let html = '<div class="readonly-banner">系统设计图纸 · ' + bridge.designDocs.length + ' 张 · 点击新窗打开</div>';
-                  for (const [g, items] of groups) {
-                    html += '<div class="queue-group">' + escapeHtml(g || "全局") + " · " + items.length + "</div>";
-                    for (const d of items) {
-                      const related = d.tags && d.tags.some((t) => keyTokens.has(t)) && entry && entry.group;
-                      html += '<div class="queue-card" role="button" tabindex="0" data-design-open="' + escapeHtml(d.path) + '" title="' + escapeHtml(d.title) + ' · 新窗打开"><div class="row"><strong>' + escapeHtml(d.title) + "</strong>"
-                        + (related ? '<span class="tag mini">相关</span>' : "") + "</div>"
-                        + (Array.isArray(d.tags) && d.tags.length ? '<p>' + escapeHtml(d.tags.slice(0, 6).map((t) => "#" + t).join(" ")) + "</p>" : "") + "</div>";
-                    }
-                  }
-                  return html;
+                function designRows() {
+                  return bridge.designDocs.map((d) =>
+                    vrow('data-design-open="' + escapeHtml(d.path) + '" title="新窗打开"', d.title, (Array.isArray(d.tags) && d.tags.length ? d.tags.slice(0, 4).map((t) => "#" + t).join(" ") : ""), d.group, ""));
                 }
 
                 function renderInspector(entry) {
@@ -7819,21 +7764,20 @@
                   }
                 }
 
-                function bodyPanes() {
-                  const panes = els.body ? [...els.body.querySelectorAll(":scope > .workspace-pane")] : [];
-                  return panes.length >= 6 ? panes : null;
-                }
-                function setPaneContents(markups) {
+                // W-PROJIA 案B：tab 栏移除后地基 setupStubTabs 不再为项目域建 pane——
+                // workspace-body 退化为单一长页容器：总览摘要区 + 六分区（分区头带锚点，
+                // 四卡点击 scrollIntoView 平滑滚动定位）。bodyPanes/setPaneContents 的
+                // 多 pane 分发机制退役，统一走 renderLongPage。
+                function renderLongPage(entry) {
                   if (!els.body) return;
-                  const panes = bodyPanes();
-                  if (panes) {
-                    markups.forEach((markup, index) => {
-                      const pane = panes[index];
-                      if (!pane) return;
-                      pane.replaceChildren(nodesFrom(markup));
-                      delete pane.dataset.stub;
-                    });
-                  } else els.body.replaceChildren(nodesFrom(markups[0] || ""));
+                  // W-PROJIA 案C：v8 psec 分区长页（四区 + 图纸能力区）；任务分区退役（原 tab
+                  // 内容即「去团队域」跳转占位，属用户判定的复制品）；头部摘要见 renderHead
+                  let html = psecMarkup("sessions", "chat", "会话", sessionsRows(entry), "该项目目录暂无会话，新会话由会话域发起。");
+                  html += psecMarkup("team", "users", "团队", teamRows(entry), entry.group ? "编制为空，成员在团队域维护。" : "该目录未入项目，新建项目确认在团队域发起。");
+                  html += psecMarkup("artifacts", "package", "输出物", artifactsRows(entry), "暂无输出物登记，输出物由会话域实时产生。");
+                  html += psecMarkup("accepts", "check", "验收单", acceptsRows(), "暂无验收单登记。");
+                  if (bridge.designDocsSeen && bridge.designDocs.length > 0) html += psecMarkup("design", "layers", "图纸", designRows(), "图纸目录为空。");
+                  els.body.replaceChildren(nodesFrom(html));
                 }
 
                 function render() {
@@ -7844,7 +7788,7 @@
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                     window.__ccDeck005SetWindowbarHint?.("project", waiting);
-                    setPaneContents([waiting, waiting, waiting, waiting, waiting, waiting, waiting].map((text) => '<div class="readonly-banner" role="status">' + escapeHtml(text) + "</div>"));
+                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner" role="status">' + escapeHtml(waiting) + "</div>"));
                     els.riskCount.style.display = "none";
                     els.riskCopy.textContent = waiting;
                     els.artifactCount.textContent = "0";
@@ -7861,13 +7805,11 @@
                   const entry = entries.find((e) => e.key === selectedKey) || null;
                   renderHead(entry);
                   if (!entry) {
-                    setPaneContents(['<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>']);
+                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>'));
                     renderInspector(null);
                     return;
                   }
-                  setPaneContents([overviewMarkup(entry), sessionsTabMarkup(entry), teamTabMarkup(entry), taskTabMarkup(), artifactsTabMarkup(entry), acceptancesTabMarkup(), designDocsTabMarkup(entry)]); // W-SRCMENU2 ⑥：第七 pane=图纸
-                  const designTab = document.querySelector('#d-project [data-project-design-tab]'); // 能力位：SNAPSHOT 曾带 design_docs 且非空才显形（旧 relay/无 docs 部署自动隐藏）；项目域 IIFE 无 root 别名——document 直查防 ReferenceError 被订阅链静默吞
-                  if (designTab) designTab.hidden = !(bridge.designDocsSeen && bridge.designDocs.length > 0);
+                  renderLongPage(entry); // W-PROJIA 案B：单长页（图纸分区能力位在函数内判）
                   renderInspector(entry);
                 }
 
@@ -7923,11 +7865,16 @@
                   }
                   const queueCard = target.closest("[data-project-key]");
                   if (queueCard) { selectedKey = queueCard.dataset.projectKey || ""; render(); return; }
-                  // W-PROJAGG：总览速览卡切换 mini 列表；「查看全部」跳主区对应 tab（segment-bar 同路）
-                  const miniCard = target.closest("[data-overview-card]");
-                  if (miniCard) { overviewMini = miniCard.dataset.overviewCard || "sessions"; render(); return; }
-                  const miniJump = target.closest("[data-overview-jump]");
-                  if (miniJump) { bridge.clickTab("#d-project .segment-bar", miniJump.dataset.overviewJump); return; }
+                  // W-PROJIA 案C：分区「全部 N 条 ▾」就地展开/收起（超量分区才有；
+                  // 展开态域内会话态记忆，render 后滚动位置随内容自然保持）
+                  const psecToggle = target.closest("[data-psec-toggle]");
+                  if (psecToggle) {
+                    const id = psecToggle.dataset.psecToggle || "";
+                    if (expandedSections.has(id)) expandedSections.delete(id);
+                    else expandedSections.add(id);
+                    render();
+                    return;
+                  }
                   const jump = target.closest("[data-domain-jump]");
                   if (jump) {
                     bridge.railJump(jump.dataset.domainJump);
