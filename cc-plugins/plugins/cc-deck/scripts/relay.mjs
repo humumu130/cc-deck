@@ -53882,7 +53882,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
-    if (action.startsWith("rule-")) {
+    if (action.startsWith("rule-") || action === "collab-mode") {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
