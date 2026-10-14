@@ -200,7 +200,11 @@ console.log("-- C. UI 列表化与三锚委托 --");
   const i = html.indexOf('cloudSettingsRows() +');
   ok(i > 0, "C7 非 cloudMode 连接面板嵌入 cloudSettingsRows（桌面壳/LAN 形态同列条目）");
   const iElse = html.lastIndexOf("else {", i);
+<<<<<<< HEAD
   ok(iElse > 0 && html.slice(iElse, i).includes("settings-row"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后）");
+=======
+  ok(iElse > 0 && html.slice(iElse, i).includes("v8-relaystat"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后·W-V8R 批6 行形态改 v8-relaystat）");
+>>>>>>> feat/v8-visual-restore
   ok(html.includes("window.__ccDeck005RefreshSettingsLive = render;"), "C7 设置实时区刷新借道挂 window（bridge.subscribe 只随桥事件走）");
   const del = blockFrom("function deleteCloudServer(id) {");
   ok(del.includes("__ccDeck005RefreshSettingsLive"), "C7 删除后主动刷设置实时区（无桥事件路径）");
