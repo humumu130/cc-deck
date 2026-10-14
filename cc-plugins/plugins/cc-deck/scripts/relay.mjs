@@ -47250,6 +47250,63 @@ function pruneFinishedFlows() {
   }
 }
 
+// src/engine-auth-watch.ts
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var WATCH_BASE_MS = Number(process.env.CCR_AUTH_WATCH_BASE_MS) > 0 ? Number(process.env.CCR_AUTH_WATCH_BASE_MS) : 6e4;
+var WATCH_MAX_MS = Number(process.env.CCR_AUTH_WATCH_MAX_MS) > 0 ? Number(process.env.CCR_AUTH_WATCH_MAX_MS) : 3e5;
+var INTENT_CAP = 5;
+var readyHook = null;
+var watches = /* @__PURE__ */ new Map();
+var blockedCreates = /* @__PURE__ */ new Map();
+var blockedDispatches = /* @__PURE__ */ new Map();
+function setAuthWatchReadyHook(hook) {
+  readyHook = hook;
+}
+function ensureAuthWatch(engine) {
+  if (watches.has(engine)) return;
+  watches.set(engine, true);
+  void watchLoop(engine);
+}
+async function watchLoop(engine) {
+  let delay = WATCH_BASE_MS;
+  for (; ; ) {
+    await sleep2(delay);
+    if (!watches.get(engine)) return;
+    const probe = await probeEngineAuthAsync(engine, { timeoutMs: 8e3 });
+    if (probe.state === "ready") break;
+    delay = Math.min(Math.round(delay * 2), WATCH_MAX_MS);
+  }
+  watches.delete(engine);
+  resetEngineAuthCache();
+  try {
+    await readyHook?.(engine);
+  } catch (e) {
+    console.warn(`[auth-watch] ${engine} \u6062\u590D\u94A9\u5B50\u5F02\u5E38: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function pushCapped(list, item) {
+  const next = [...list ?? [], item];
+  return next.length > INTENT_CAP ? next.slice(next.length - INTENT_CAP) : next;
+}
+function recordBlockedCreate(intent) {
+  blockedCreates.set(intent.engine, pushCapped(blockedCreates.get(intent.engine), intent));
+  ensureAuthWatch(intent.engine);
+}
+function recordBlockedDispatch(intent) {
+  blockedDispatches.set(intent.engine, pushCapped(blockedDispatches.get(intent.engine), intent));
+  ensureAuthWatch(intent.engine);
+}
+function takeBlockedCreates(engine) {
+  const list = blockedCreates.get(engine) ?? [];
+  blockedCreates.delete(engine);
+  return list;
+}
+function takeBlockedDispatches(engine) {
+  const list = blockedDispatches.get(engine) ?? [];
+  blockedDispatches.delete(engine);
+  return list;
+}
+
 // src/permission-audit.ts
 import { isAbsolute as isAbsolute6, join as join23, resolve as resolve7 } from "node:path";
 import { homedir as homedir9 } from "node:os";
@@ -50363,6 +50420,13 @@ var SessionManager = class {
     this.reconcileOrphanConfirms();
     setConfirmCreatedHook((c2) => this.recordOrgConfirmNotification(c2));
     setExperienceGcSummaryHook((s) => this.onExperienceGcRound(s));
+    setAuthWatchReadyHook((engine) => this.recoverEngineAfterAuth(engine));
+    this.bus.subscribe((env) => {
+      if (env.type !== "AUTH_REQUIRED") return;
+      const p = env.payload;
+      if (p?.state !== "ready" || typeof p.engine !== "string") return;
+      this.recoverEngineAfterAuth(p.engine);
+    });
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -50392,6 +50456,9 @@ var SessionManager = class {
   notifications = /* @__PURE__ */ new Map();
   notificationsJson = "";
   // 上次投影的序列化基线（值变才发帧的 dedup 锚）
+  // #102 批 C：引擎登录恢复最近执行时刻（engine → ts）——pane 轮验/verify/watch
+  // 兜底三源同 ready 的幂等窗锚（10s 内同引擎只跑一轮恢复扫描）
+  authRecoverAt = /* @__PURE__ */ new Map();
   // #26 矩阵式 M1：组织 Leader 常驻态。leaderId = 当前 Leader 的 relay 会话 id
   //（isLeaderSession 的内存匹配源——COMMAND_MESSAGE/onTurnEnd 高频路径零盘 IO）；
   // ensureLeader 维护，onInit 不重置（resume 换流只会话对象换、relay id 不变）。
@@ -50915,6 +50982,95 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     if (revived > 0) console.log(`[auto-revive] \u5DF2\u81EA\u52A8\u62C9\u8D77 ${revived} \u4E2A\u6709\u672A\u5B8C\u6210\u5F85\u529E\u7684\u6258\u7BA1\u4F1A\u8BDD`);
     return revived;
+  }
+  // ---------- #102 批 C：引擎登录就绪恢复三面（探/登/通之「通」） ----------
+  // ready 三源（watch 兜底循环 / 批 B pane 轮验 / verify 手动验证）都收敛到本入口；
+  // 10s 幂等窗去重——同一就绪事件多源重复触发只跑一轮。
+  //   面一（会话恢复）：运行时失效进 needs_auth 的 ERROR 会话自动 resume——复用
+  //     resumeAgent + renewable 值守 prompt（流断即丢不记重放账，duty 重推导再注入），
+  //     恢复尝试即清 auth_hint（摘 needs_auth 牌防重复触发）；
+  //   面二（创建拦截）：无会话实体可恢复——消费 intent 快照发通知「已登录，可以创建了」
+  //     +anchor/task 摘要回显；
+  //   面三（派单拦截）：通知「已登录，可以重新派单」——不自动重放（失败重放有
+  //     副作用风险，重发是用户动作）。
+  recoverEngineAfterAuth(engine) {
+    const now = Date.now();
+    if (now - (this.authRecoverAt.get(engine) ?? 0) < 1e4) return;
+    this.authRecoverAt.set(engine, now);
+    const label = getEngineDefinition(engine)?.label ?? engine;
+    let resumed = 0;
+    for (const s of this.sessions.values()) {
+      if (s.state.engine !== engine || !s.state.auth_hint || s.state.status !== "ERROR") continue;
+      s.state.auth_hint = void 0;
+      try {
+        this.resumeAgent(
+          s,
+          `[\u5F15\u64CE\u767B\u5F55\u6062\u590D] ${label} \u5DF2\u767B\u5F55\uFF0C\u81EA\u52A8\u6062\u590D\u672C\u4F1A\u8BDD\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002` + this.reviveInstruction(s),
+          void 0,
+          void 0,
+          void 0,
+          { renewable: true }
+        );
+        this.pushExternalLog(s.state.session_id, "system", `${label} \u5DF2\u767B\u5F55\uFF0C\u4F1A\u8BDD\u5DF2\u6062\u590D`);
+        resumed++;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.pushExternalLog(s.state.session_id, "system", `${label} \u5DF2\u767B\u5F55\uFF0C\u4F46\u4F1A\u8BDD\u81EA\u52A8\u6062\u590D\u5931\u8D25\uFF1A${msg}\uFF08\u53EF\u624B\u52A8\u53D1\u6D88\u606F\u62C9\u8D77\uFF09`);
+      }
+    }
+    if (resumed > 0) {
+      try {
+        this.upsertNotification("system", `auth-recover-${engine}`, String(now), {
+          title: `${label} \u5DF2\u767B\u5F55`,
+          body: truncate(`\u4EFB\u52A1\u5DF2\u6062\u590D\uFF08${resumed} \u4E2A\u4F1A\u8BDD\u81EA\u52A8\u62C9\u8D77\uFF09`, 160),
+          severity: "info",
+          group: "activity",
+          actionable: false,
+          domain: "session",
+          returnPath: "sessions"
+        });
+      } catch {
+      }
+    }
+    for (const c of takeBlockedCreates(engine)) {
+      try {
+        this.upsertNotification("system", `auth-create-${engine}-${c.ts}`, String(c.ts), {
+          title: `${label} \u5DF2\u767B\u5F55\uFF0C\u53EF\u4EE5\u521B\u5EFA\u4E86`,
+          body: truncate(`\u6B64\u524D\u88AB\u62E6\u7684\u521B\u5EFA\u5DF2\u89E3\u9501\uFF1A${c.prompt_summary || "(\u65E0\u4EFB\u52A1\u6458\u8981)"}${c.cwd ? `\uFF08\u76EE\u5F55 ${c.cwd}\uFF09` : ""}`, 160),
+          severity: "info",
+          group: "activity",
+          actionable: false,
+          domain: "session",
+          returnPath: "sessions"
+        });
+      } catch {
+      }
+    }
+    for (const d2 of takeBlockedDispatches(engine)) {
+      try {
+        this.upsertNotification("system", `auth-dispatch-${engine}-${d2.ts}`, String(d2.ts), {
+          title: `${label} \u5DF2\u767B\u5F55\uFF0C\u53EF\u4EE5\u91CD\u65B0\u6D3E\u5355`,
+          body: truncate(`\u6B64\u524D\u88AB\u62E6\u7684\u6D3E\u5355\u5DF2\u89E3\u9501\uFF1A${d2.title || d2.anchor}`, 160),
+          severity: "info",
+          group: "activity",
+          actionable: false,
+          domain: "session",
+          returnPath: "sessions"
+        });
+      } catch {
+      }
+    }
+  }
+  // #102 批 C：重启扫描——relay 起动收养后为 needs_auth 态（auth_hint 在场）的会话
+  // 挂兜底重探（不拉活：拉活面归 autoReviveManaged 的待办判定；此处只挂探针监听，
+  // ready 即走恢复三面）。不受 CCR_NO_AUTOREVIVE 阀控（探测≠拉活）。
+  scanNeedsAuthSessions() {
+    const engines = /* @__PURE__ */ new Set();
+    for (const s of this.sessions.values()) {
+      if (s.state.auth_hint && s.state.engine && s.state.engine !== "claude") engines.add(s.state.engine);
+    }
+    for (const e of engines) ensureAuthWatch(e);
+    return engines.size;
   }
   // ---------- W-ACTIVATOR 单会话复活资格链（autoReviveManaged 过滤链抽出共用） ----------
   // 返回 null=可拉；字符串=skip 原因（审计/测试可断言）。boot 扫描与事件驱动激活器
@@ -51829,6 +51985,12 @@ provider=${opts.provider ?? "default"}` : void 0,
             const auth = probeEngineAuth(engineResolved);
             if (auth.state === "needs_auth") {
               startEngineLogin(this.bus, engineResolved);
+              recordBlockedCreate({
+                engine: engineResolved,
+                ...typeof cmd.payload.cwd === "string" && cmd.payload.cwd ? { cwd: cmd.payload.cwd } : {},
+                prompt_summary: truncate(typeof cmd.payload.prompt === "string" ? cmd.payload.prompt : "", 80),
+                ts: Date.now()
+              });
               return {
                 command_id: cmd.command_id,
                 ok: false,
@@ -52954,6 +53116,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           const authHint = authFailureHint(reason, managed.state.engine);
           if (authHint) {
             managed.state.auth_hint = authHint;
+            if (managed.state.engine) ensureAuthWatch(managed.state.engine);
             const entry = { kind: "system", text: `\u5F15\u64CE\u767B\u5F55\u6001\u5931\u6548\u2014\u2014${authHint}`, ts: Date.now() };
             managed.logs.push(entry);
             if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
@@ -55431,7 +55594,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const check2 = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
       if (!check2.ok) return { ok: false, error: `Codex preflight \u5931\u8D25: ${check2.errors.join("\uFF1B")}` };
       const auth2 = probeEngineAuth(engine);
-      if (auth2.state === "needs_auth") return { ok: false, error: `Codex \u672A\u767B\u5F55: ${auth2.auth_hint ?? "\u8BF7\u5148\u5B8C\u6210\u767B\u5F55"}` };
+      if (auth2.state === "needs_auth") return { ok: false, error: `Codex \u672A\u767B\u5F55: ${auth2.auth_hint ?? "\u8BF7\u5148\u5B8C\u6210\u767B\u5F55"}`, needs_auth: true };
       return { ok: true };
     }
     const def = getEngineDefinition(engine);
@@ -55439,7 +55602,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const check = def.preflight(providerProfileFor(engine, provider));
     if (!check.ok) return { ok: false, error: `${def.label} preflight \u5931\u8D25: ${check.errors.join("\uFF1B")}` };
     const auth = probeEngineAuth(engine);
-    if (auth.state === "needs_auth") return { ok: false, error: `${def.label} \u672A\u767B\u5F55: ${auth.auth_hint ?? "\u8BF7\u5148\u5B8C\u6210\u767B\u5F55"}` };
+    if (auth.state === "needs_auth") return { ok: false, error: `${def.label} \u672A\u767B\u5F55: ${auth.auth_hint ?? "\u8BF7\u5148\u5B8C\u6210\u767B\u5F55"}`, needs_auth: true };
     return { ok: true };
   }
   // #26 M2 派单（§4 随手办/项目组任务）：worker 会话承接——M3 起项目组活双来源
@@ -55516,6 +55679,14 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
       if (!pf.ok) {
+        if (pf.needs_auth) {
+          recordBlockedDispatch({
+            engine: planned.engine,
+            ...input.title ? { title: input.title } : {},
+            anchor,
+            ts: Date.now()
+          });
+        }
         appendPermissionAudit(auditStore(this.cfg.dataDir), {
           requested_mode: "bypassPermissions",
           normalized_mode: null,
@@ -56739,7 +56910,7 @@ async function tmuxBottomText(target, lines = 8) {
   if (!r.ok) return "";
   return tmuxNorm(r.text.split(/\r?\n/).filter((l) => l.trim()).slice(-lines).join(""));
 }
-var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function tmuxVerifySubmitted(target, tail2) {
   const bottom = await tmuxBottomText(target);
   return !!bottom && !bottom.includes(tail2);
@@ -56838,7 +57009,7 @@ async function injectTextMac(pid, rawText) {
     let w2 = await tmuxSendKeys(target, "-l", "--", text);
     let wRetried = false;
     if (!w2.ok) {
-      await sleep2(200);
+      await sleep3(200);
       wRetried = true;
       w2 = await tmuxSendKeys(target, "-l", "--", text);
     }
@@ -56851,7 +57022,7 @@ async function injectTextMac(pid, rawText) {
     void (async () => {
       let round = 0;
       for (const delay of [600, 1500]) {
-        await sleep2(delay);
+        await sleep3(delay);
         round++;
         try {
           const tV = Date.now();
@@ -57084,7 +57255,7 @@ function foreignResidual(box, knownTexts) {
   const residuals = ["", " "].map((sep10) => maskNoise(removeKnownTexts(stripped.join(sep10), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
-var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep4 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   const cfg2 = opts.cfg ?? guardConfig();
   const abort = opts.abort ?? (() => false);
@@ -57108,7 +57279,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
     }
     if (Date.now() - t02 >= cfg2.maxMs) return { kind: "timeout", waitedMs: Date.now() - t02 };
     if (abort()) return { kind: "aborted" };
-    await sleep3(cfg2.pollMs);
+    await sleep4(cfg2.pollMs);
   }
 }
 
@@ -57525,7 +57696,7 @@ function transcriptFirstTs(p) {
 }
 var DEFAULT_HOLD_MS = 59e4;
 var QUESTION_HOLD_MS = 9e4;
-var sleep4 = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep5 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir15(), ".claude", "sessions", `${pid}.json`);
@@ -58700,7 +58871,7 @@ var Bridge = class _Bridge {
         this.onInjectFail(sessionId, r.error);
         return;
       }
-      await sleep4(400);
+      await sleep5(400);
       const pid2 = this.mgr.getExternal(sessionId)?.cli_pid;
       if (!pid2) return;
       const r2 = await injectText(pid2, msg);
@@ -58914,9 +59085,9 @@ var Bridge = class _Bridge {
           this.mgr.pushExternalLog(sessionId, "system", `\u6743\u9650\u5FAA\u73AF\u5207\u6362\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5"}`);
           return;
         }
-        await sleep4(150);
+        await sleep5(150);
       }
-      await sleep4(350);
+      await sleep5(350);
       const rows = await captureConsoleBottom(pid);
       const text = (rows ?? []).join("\n");
       const mode = /bypass permissions on/.test(text) ? "bypassPermissions" : /accept edits on/.test(text) ? "acceptEdits" : /plan mode on/.test(text) ? "plan" : null;
@@ -58970,7 +59141,7 @@ var Bridge = class _Bridge {
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue\u2192written)`);
         this.armVerify(sessionId, text);
         this.scheduleSubmitEnter(sessionId, state.cli_pid, text, sentAt);
-        await sleep4(400);
+        await sleep5(400);
       }
     } finally {
       this.flushing.delete(sessionId);
@@ -62954,6 +63125,10 @@ if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
 setTimeout(() => {
   try {
     mgr.autoReviveManaged();
+  } catch {
+  }
+  try {
+    mgr.scanNeedsAuthSessions();
   } catch {
   }
 }, 5e3).unref?.();
