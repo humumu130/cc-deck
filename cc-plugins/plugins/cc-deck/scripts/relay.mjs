@@ -46789,6 +46789,10 @@ function todoCandidates(snapshot) {
     time_estimate_ms: todo.time_estimate_ms
   }));
 }
+function workerDoneCandidates(snapshot) {
+  const n = snapshot.worker_done_pending ?? 0;
+  return n > 0 ? [{ kind: "worker_done", id: `worker-done-pending-${n}`, source_session_id: "worker-done" }] : [];
+}
 function staleDoingCandidates(snapshot) {
   return (snapshot.stale_doing ?? []).map((doing) => ({
     kind: "stale_doing",
@@ -46812,7 +46816,8 @@ function evaluateLeaderActionableWork(snapshot) {
     ...receiptCandidates(snapshot, now),
     ...dispatchCandidates(snapshot),
     ...todoCandidates(snapshot),
-    ...staleDoingCandidates(snapshot)
+    ...staleDoingCandidates(snapshot),
+    ...workerDoneCandidates(snapshot)
   ];
   const blocked = [...snapshot.blocked ?? []];
   if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
@@ -49850,6 +49855,10 @@ var SessionManager = class {
   // chain 起算无对账风险；跨重启持久化属 #71 产品面
   dutyFeed = { consecutive_feeds: 0 };
   dutyEpoch = 0;
+  // W-PMWAKE：worker 回合 DONE 且未被 Leader 处理的计数（Leader turn_end 归零）——
+  // dutySnapshot.worker_done_pending → 值守候选「worker_done」→ PM 注入唤醒（1013 夜
+  // 四报告落地 5h43m 无人收割实证；内存态即可，重启归零无害=重启后本就需重新盘点）
+  workerDonePending = 0;
   leaderId = null;
   leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -52346,8 +52355,13 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.ctxWatchdogOnTurnBoundary(managed, managed.state.status);
         this.syncWaitingNotification(managed);
         if (dutyEnabled()) {
-          if (this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
-          else if (ok2) this.feedPM("worker_done");
+          if (this.isLeaderSession(managed.state.session_id)) {
+            this.workerDonePending = 0;
+            this.feedPM("turn_end");
+          } else if (ok2) {
+            this.workerDonePending += 1;
+            this.feedPM("worker_done");
+          }
         }
       },
       onSessionEnd: (reason) => {
@@ -53351,6 +53365,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     return {
       now,
+      worker_done_pending: this.workerDonePending,
       pending_receipts: this.pendingAcceptanceReceipts(),
       failed_or_hanging_dispatches: failed,
       unlocked_todos: todos,
