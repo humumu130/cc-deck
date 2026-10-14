@@ -1774,11 +1774,7 @@
     .v8-sethead { margin: 2px 2px 14px; }
     .v8-sethead .t { color: var(--text-strong); font-size: 15px; font-weight: 700; }
     .v8-sethead .s { margin-top: 2px; color: var(--faint); font-size: var(--fs-C); }
-<<<<<<< HEAD
-    .v8-setcard { margin: 0 0 12px; padding: 12px 14px 10px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface2); }
-=======
     .v8-setcard { margin: 0 0 12px; padding: 12px 14px 10px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
->>>>>>> feat/v8-visual-restore
     .v8-setcard > h5 { margin: 0 0 8px; color: var(--dim); font-size: var(--fs-C); font-weight: 600; letter-spacing: .3px; }
     .v8-setcard .settings-list { gap: 4px; }
     .v8-relaystat { display: flex; align-items: flex-start; gap: 10px; }
@@ -1795,11 +1791,7 @@
     .v8-prbtn.go { border-color: color-mix(in srgb, var(--brand) 40%, transparent); background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand-strong, var(--brand)); }
     .v8-prbtn.ok { border-color: color-mix(in srgb, var(--done) 35%, transparent); color: var(--done); }
     .v8-escape { margin-top: 8px; color: var(--faint); font-size: var(--fs-C); line-height: 1.5; }
-<<<<<<< HEAD
-    .settings-row { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
-=======
     .settings-row { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); } /* W-V8 批8：行距紧凑+圆角归一 */
->>>>>>> feat/v8-visual-restore
     button.settings-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
     .theme-setting:hover { border-color: var(--brand); }
     .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); }
@@ -6490,7 +6482,7 @@
             <script data-team-script>
               (() => {
                 const root = document.querySelector("#d-team");
-                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待验收"], ["ready_to_install", "就绪待装机"], ["done", "已完成"]]; // W-V8 批4b：列名词表对齐 v8（待审查/待收单/完成→待验收/就绪待装机/已完成）
+                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]]; // 1014 用户定版词表：待认领/进行中/待审查/待收单/完成（批4b 改向作废）
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
                 const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
@@ -6559,39 +6551,9 @@
                   // 件十一：头像角点=状态灯（status-dot 同源绘画卡，working 橘呼吸/waiting 黄/done 绿/
                   // 查无=缺省灰）——原 avatar-engine-dot 引擎色点（claude 橘）被误读为运行灯，空闲成员
                   // 也亮橘=「成员灯与绘画卡矛盾」根因；引擎语义已有 engine-badge 表达不丢失
-<<<<<<< HEAD
                   const stateLabel = ({ working: "运行中", waiting: "待处理", error: "异常", done: "已完成" })[info.status] || "离线";
                   const signalLabel = (tone) => ({ good: "正常", warn: "滞后", bad: "失联", off: "无数据" })[tone] || "无数据";
                   return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="member-card-main"><div class="member-head"><div><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div><span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + "</div></div>";
-=======
-                  // W-V8 批3 第②层任务行（v8 名册卡四层之「任务/描述行」）：成员在板上的
-                  // 首条 claimed 卡文本（taskOwnerResolve 同源解析——session 直绑与 [角色] 前缀
-                  // 映射都认）；无卡=「空闲 · 可派单」弱化行
-                  let taskLine = "";
-                  {
-                    const board = project && state.boards ? state.boards.get(project.id) : null;
-                    const entries = board && Array.isArray(board.entries) ? board.entries : [];
-                    const hit = entries.find((e) => {
-                      if (!e || e.state === "todo" || !e.owner) return false;
-                      // 命中口径=W-BOARD2 owner 前缀回填（owner=sid 前 8/nick）+派单卡 session 直绑
-                      const ow = String(e.owner);
-                      const r = taskOwnerResolve(e, project);
-                      if (r.member && r.member.session_id === member.session_id) return true;
-                      return member.session_id ? member.session_id.startsWith(ow) : false;
-                    });
-                    taskLine = hit
-                      ? '<p class="member-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-board"></use></svg> ' + escape(String(hit.text || hit.id).slice(0, 42)) + "</p>"
-                      : '<p class="member-task idle">空闲 · 可派单</p>';
-                  }
-                  // W-V8 批3 第①层头行 v8 化：role 职责独立 chip（pm 描边品牌色）/模型 mono chip
-                  //（v8 直角 mono+精确 id 语言）+ 三态状态 badge（在线绿/等输入琥珀/失败红/空闲灰/
-                  // 未接入灰——v8「三色 watchdog 双信号」之第一信号，第二信号=水位条）；p 行拼串退役
-                  const stateWord = info.status === "working" ? ["online", "在线"] : info.status === "waiting" ? ["hold", "等输入"] : info.status === "error" ? ["fail", "失败"] : info.status === "done" ? ["idle", "空闲"] : ["idle", "未接入"];
-                  return '<div class="member-card"><div class="m-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="m-name"><strong title="' + escape(info.name) + '">' + escape(info.name) + '</strong></div><span class="m-role ' + roleClass + '">' + escape(info.role) + '</span><span class="m-model" title="' + escape(info.model) + '">' + escape(info.model) + '</span><span class="m-state ' + stateWord[0] + '">' + stateWord[1] + "</span></div>"
-                    + taskLine
-                    + memberCtxMeter(info)
-                    + '<div class="m-foot"><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><button type="button" class="m-open" data-open-detail="' + escape(member.session_id) + '">详情 ↗</button></div></div>';
->>>>>>> feat/v8-visual-restore
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -6795,12 +6757,7 @@
                     const validDate = date && Number.isFinite(date.getTime());
                     const time = validDate ? String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") : "时间未知";
                     const session = state.sessions.get(entry.session_id);
-<<<<<<< HEAD
-                    const activityClass = statuses.has(entry.status) ? entry.status : "dispatched";
-                    return '<div class="activity-row activity-' + activityClass + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i aria-hidden="true"></i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
-=======
                     return '<div class="activity-row"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph ' + (glyphTone.get(entry.status) || "") + '" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
->>>>>>> feat/v8-visual-restore
                   }).join("") + "</div>";
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
@@ -7161,21 +7118,6 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-<<<<<<< HEAD
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? state.projects.map((item) => {
-                    const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
-                    const roster = members(item);
-                    const boardEntries = entities(state.boards.get(item.id)?.entries);
-                    const running = boardEntries.length ? boardEntries.filter((task) => (legacyStatuses.get(task.status) || task.status) === "claimed").length : roster.filter((member) => state.sessions.get(member.session_id)?.status === "WORKING").length;
-                    const acceptance = boardEntries.filter((task) => ["submitted", "ready_to_install"].includes(legacyStatuses.get(task.status) || task.status)).length;
-                    const teamAria = (item.name || item.id) + " · " + roster.length + " 个成员 · " + running + " 个进行中 · " + acceptance + " 个待验收";
-                    const teamAvatar = String(item.name || item.id || "团").trim().charAt(0).toUpperCase() || "团";
-                    // UIPOLISH3 件四⑨⑩（2026-10-11 用户反馈）：统计行图标化（席位/待确认→图标+数字，
-                    // 长「8个编制席位」截断根治）；状态灯+「在办」tag 两件套整合为单枚状态胶囊
-                    // （点色随态，灯丑根治）。title 恒带全文字（hover/读屏可达）
-                    return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '" aria-label="' + escape(teamAria) + '"><span class="team-card-avatar" aria-hidden="true">' + escape(teamAvatar) + '</span><div class="team-card-main"><div class="row"><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div><div class="team-counts" title="' + escape(teamAria + (pending ? " · " + pending + " 项待确认" : "")) + '"><span class="team-count"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg><b>' + roster.length + '</b></span><span class="team-count running"><i class="team-count-icon" aria-hidden="true">▶</i><b>' + running + '</b></span><span class="team-count acceptance"><svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></div></div><div class="identity-cluster">' + sourceBadge() + "</div></div>";
-                  }).join("") : banner(projectsEmpty());
-=======
                   query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
                     // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
                     // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
@@ -7196,7 +7138,6 @@
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
                     return html;
                   })() : banner(projectsEmpty());
->>>>>>> feat/v8-visual-restore
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
