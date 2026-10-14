@@ -98,15 +98,15 @@ ok(entryCss.includes("cursor: pointer") && cssBlock(".team-entry .t-expand").len
 const drawerCss = cssBlock(".team-drawer");
 ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 248px") && html.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column, re-anchors when inspector collapses");
 ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && html.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
-ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".slim-unread-dot").includes("animation: slimPulseKf"), "inspector member chips + unread pulse dot styles exist");
+ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".t-expand.has-unread::after").includes("animation: slimPulseKf"), "inspector member chips + unread pulse styles exist (V8R+ ③未读点迁 t-expand 角标)");
 
 // ---- §C 列表渲染链 ----
 console.log("-- §C render chain");
 ok(html.includes("const slimRoster = slimRosterOf(S.projects);") && html.includes(".filter(filterDef.test).filter(slimVisible)") && html.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
 ok(html.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
-ok(html.includes('grpHead("slim-teams", "团队", slimEntries.length, slimTeamsOpen)') && html.includes("data-session-group=\"slim-teams\"".replace(/"/g, '"')), "team section renders as collapsible group (B11 reuse)");
+ok(html.includes('grpHead("slim-teams", "team", slimEntries.length, slimTeamsOpen, 0, "teams")') && html.includes("data-session-group=\"slim-teams\"".replace(/"/g, '"')), "team section renders as collapsible group (B11 reuse; V8R+ ④标题 team/teams 双人图标)");
 ok(html.includes("template.innerHTML = activeMarkup + teamsMarkup + idleMarkup;"), "list assembly order: active → teams → idle");
-ok(fnBody("slimTeamEntryMarkup").includes('if (!hidden.length) return "";') && fnBody("slimTeamEntryMarkup").includes("if (!hit.length) return \"\";"), "team card only when foldable members exist and match active filter");
+ok(fnBody("slimTeamEntryMarkup").includes('if (hidden.length && !hit.length) return "";') && !fnBody("slimTeamEntryMarkup").includes('if (!hidden.length) return "";'), "team card gating = filter-miss only (V8R+ ⑤用户拍板：有编制即出卡，无收起内容团队也可见；旧「无收起内容不出卡」早退退役)");
 
 // ---- §D MutationObserver 放行 + 选中联动 ----
 console.log("-- §D observer integration");

@@ -47,6 +47,13 @@
       --st-blocked: #E5895B;
       --st-error: #E5484D;
       --st-closed: #7A889F;
+      /* V8R 看板泳道进度色（v8-ui-interactive-v2 --p-* 原值直引）：待认领灰蓝/进行中绿/
+         待审查品牌橙/待收单琥珀/完成暗色——总览分段条与图例共用同一映射 */
+      --p-backlog: #55677F;
+      --p-claimed: #2FBF71;
+      --p-submitted: #E08A63;
+      --p-ready: #FFC53D;
+      --p-done: #2C3B52;
       --info: #7CB8FF;
       --ctx-safe: #4BCB91;
       --ctx-attention: #E9B84C;
@@ -196,6 +203,12 @@
       --done: #168D60;
       --working: #A56D00;
       --error: #C84C51;
+      /* V8R 看板泳道进度色·浅色（v8-ui-interactive-v2 浅色 --p-* 原值直引） */
+      --p-backlog: #C3CEDD;
+      --p-claimed: #22A06B;
+      --p-submitted: #C05B33;
+      --p-ready: #E0A43C;
+      --p-done: #D7DEE9;
       --info: #3978B8;
       --ctx-safe: #168D60;
       --ctx-attention: #A56D00;
@@ -1544,32 +1557,39 @@
        board 的 flex:1 1 0 无定高可依塌成内容高，输出物区在 flex 流里反客为主。
        pane 撑满 body 视口高 → board 分到剩余 → 甬道全高（lane 默认 stretch） */
     #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; height: 100%; }
-    #d-team .board-overview { flex: 0 0 auto; padding: 15px 22px 12px; border-bottom: 1px solid var(--line-soft); }
-    #d-team .board-overview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700; }
-    #d-team .board-overview-head span { color: var(--faint); font-size: var(--fs-C); font-weight: 400; }
-    #d-team .board-progress { display: flex; height: 7px; gap: 2px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: var(--tag-bg); }
+    /* V8R 看板总览区（原型 .ov）：无头行、prog 矩形分段（8px/radius 4/段间 2px 画布分隔线）、
+       图例方 chip（panel 底+line 边+radius 6）——原型 ovleg 语言 */
+    #d-team .board-overview { flex: 0 0 auto; padding: 14px 18px 12px; border-bottom: 0; }
+    #d-team .board-overview-head { display: none; } /* V8R：重头行退役（markup 已停产出，样式兜底） */
+    #d-team .board-progress { display: flex; height: 8px; gap: 0; margin-top: 0; overflow: hidden; border-radius: 4px; background: var(--surface1); }
     #d-team .board-progress i { display: block; min-width: 0; height: 100%; transition: width .2s ease; }
-    #d-team .board-progress .backlog { background: var(--info); }
-    #d-team .board-progress .claimed { background: var(--working); }
-    #d-team .board-progress .submitted { background: var(--brand); }
-    #d-team .board-progress .ready_to_install { background: color-mix(in srgb, var(--brand) 62%, var(--done)); }
-    #d-team .board-progress .done { background: var(--done); }
-    #d-team .board-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-    #d-team .board-legend span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface2); color: var(--dim); font-size: var(--fs-C); }
+    #d-team .board-progress i + i { border-left: 2px solid var(--bg1); } /* 原型段间 2px bg-main 分隔线 */
+    #d-team .board-progress .backlog { background: var(--p-backlog); }
+    #d-team .board-progress .claimed { background: var(--p-claimed); }
+    #d-team .board-progress .submitted { background: var(--p-submitted); }
+    #d-team .board-progress .ready_to_install { background: var(--p-ready); }
+    #d-team .board-progress .done { background: var(--p-done); }
+    #d-team .board-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    #d-team .board-legend span { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface1); color: var(--dim); font-size: var(--fs-C); }
     #d-team .board-legend i { width: 7px; height: 7px; border-radius: 50%; background: var(--legend-color, var(--faint)); }
-    #d-team .board-legend b { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; }
-    #d-team .workspace-body > .workspace-pane.board-pane .board { display: flex; flex: 1 1 0; grid-template-rows: none; grid-template-columns: none; min-width: 0; min-height: 320px; gap: 12px; overflow: auto hidden; padding: 14px 22px 18px; } /* 件9：min-height 0→320 保底（极矮窗防压缩没）；等高甬道=lane 默认 stretch */
+    #d-team .board-legend b { color: var(--text-strong); font-weight: 600; font-variant-numeric: tabular-nums; }
+    #d-team .workspace-body > .workspace-pane.board-pane .board { display: flex; flex: 1 1 0; grid-template-rows: none; grid-template-columns: none; min-width: 0; min-height: 320px; gap: 10px; overflow: auto hidden; padding: 12px 18px 10px; } /* V8R：原型 bcols gap 10/padding 14-18-12；均分甬道（1 1 0）+窄窗保底滚动 */
     /* 件9：卡在甬道内纵向滚动；高度=stretch 拉满 board。W-LV8 甬道对齐 v8 bcol：
        三层明度阶梯（画布 bg0 < 甬道 surface1+描边 < 卡 surface2）——原 lane-bg 与画布
-       近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来 */
-    #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 0 214px; flex-direction: column; min-width: 214px; min-height: 0; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); }
-    /* W-LV8：进行中列 v8 bcol.go——warn 微渐变+描边+1px 光环（活跃态一眼锚定） */
-    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-claimed { border-color: color-mix(in srgb, var(--working) 38%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--working) 7%, var(--surface1)), var(--surface1) 44%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--working) 10%, transparent); }
+       近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来。
+       V8R：均分 flex 1 1 0 + min-width 186（原型 bcol flex:1 1 0 无滚动；窄窗可滚不压缩） */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 1 0; min-width: 186px; flex-direction: column; min-height: 0; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); }
+    /* V8R：待收单列 = 原型 bcol.go（行动列）——琥珀描边 + 1px 光环 + 顶部琥珀渐变 + 列头琥珀字
+      （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中） */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install { border-color: color-mix(in srgb, var(--working) 42%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, var(--surface1)), var(--surface1) 40%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--working) 15%, transparent); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--working); }
     /* W-LV8：空列空态（v8 .arch 语义）——死黑矩形→轻提示，扫读不失衡 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-empty { padding: 14px 0 10px; text-align: center; color: var(--faint); font-size: var(--fs-C); line-height: 1.6; }
     /* 件9：看板 pane 内的图纸/输出物侧区——限高内滚不与甬道争纵向空间（恒 ≤190px） */
     #d-team .workspace-body > .workspace-pane.board-pane .board-side-list { flex: 0 0 auto; max-height: 190px; overflow: auto; padding: 10px 22px 8px; border-top: 1px solid var(--line-soft); }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane-head { position: sticky; top: -1px; z-index: 1; flex: 0 0 auto; margin: -2px -2px 8px; padding: 2px 2px 9px; background: inherit; font-size: var(--fs-C); font-weight: 600; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-head { position: sticky; top: -1px; z-index: 1; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: -2px -2px 8px; padding: 2px 2px 9px; background: inherit; font-size: var(--fs-C); font-weight: 600; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* V8R：列头防换行（窄列/浅色长词） */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { flex: none; }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; } /* W-LV8：v8 h4 b——计数亮色锚住列头 */
     #d-team .workspace-body > .workspace-pane.board-pane .task-card { flex: 0 0 auto; }
     #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -1629,9 +1649,6 @@
     #d-team .queue-card[data-team-project] .row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .queue-card[data-team-project] .team-meta { margin: 6px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .queue-card[data-team-project] .team-counts { gap: 8px; }
-    #d-team .lane-ready_to_install { border-color: color-mix(in srgb, var(--brand) 42%, var(--line-soft)); background: color-mix(in srgb, var(--lane-bg) 86%, var(--brand) 14%); }
-    #d-team .lane-ready_to_install .lane-head { color: var(--brand-strong); }
-    #d-team .lane-ready_to_install .task-card { border-color: color-mix(in srgb, var(--brand) 42%, var(--line)); background: color-mix(in srgb, var(--surface2) 90%, var(--brand) 10%); }
     #d-team .task-title { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
     #d-team .task-title > strong { flex: 1 1 auto; min-width: 0; }
     #d-team .task-verify { display: inline-flex; align-items: center; flex: none; gap: 2px; padding-top: 2px; color: var(--info); }
@@ -1639,6 +1656,74 @@
     #d-team .task-verify-dot.pass { background: var(--done); box-shadow: 0 0 0 1px color-mix(in srgb, var(--done) 22%, transparent); }
     #d-team .task-verify-dot.fail { background: var(--error); box-shadow: 0 0 0 1px color-mix(in srgb, var(--error) 22%, transparent); }
     #d-team .task-verify-dot.pending { background: var(--faint); }
+    /* ============================================================
+       V8R 团队域像素级还原（GLM 轨 · feat/v8r-team-glm）
+       基准 docs/mockups/v8-ui-interactive-v2.html 团队域（看板/成员/活动）。
+       原型语言：panel/panel-2 平色卡 + 细边 + 10.5px meta 层 + 软色环 +
+       状态胶囊软底；字阶 13.5/12/11.5/10.5/10。仅 #d-team 作用域，不外溢。
+       ============================================================ */
+    /* head 第二行 meta（原型 dhead.row2）：普通字体（非 mono）+ 弱分隔点 */
+    #d-team .head-sub[data-team-meta] { font-family: var(--font); gap: 8px; }
+    #d-team .head-sub[data-team-meta] .meta-sep { color: var(--faint); }
+    /* ---- 看板卡三段式（原型 tcard：.ct/.cm/.cline）---- */
+    #d-team .task-card.compact { padding: 9px 10px; background: var(--surface2); }
+    #d-team .task-card.compact .task-title strong { font-size: var(--fs-B); font-weight: 600; color: var(--text-strong); }
+    #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
+    #d-team .task-owner { flex-wrap: wrap; gap: 5px; }
+    #d-team .task-owner .tchip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding: 2px 7px; border-radius: 6px; background: var(--bg1); color: var(--card-sub); font-size: var(--fs-C); line-height: 15px; }
+    #d-team .task-owner .tchip b { min-width: 0; overflow: hidden; font-weight: 500; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .task-owner .tchip i { overflow: hidden; font-style: normal; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .task-owner.unassigned .tchip { color: var(--working); }
+    #d-team .task-owner.unassigned .tchip b { color: var(--working); }
+    #d-team .task-cline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; color: var(--dim); font-size: var(--fs-C); line-height: 1.45; }
+    #d-team .task-cline .cline-sep { flex: none; color: var(--faint); font-style: normal; }
+    #d-team .task-cline .cline-run { color: var(--working); }
+    #d-team .task-card.task-done { opacity: .45; }
+    #d-team .task-card.task-done .task-title strong { color: var(--text); font-weight: 500; }
+    #d-team .task-flag { margin-top: 5px; color: var(--error); font-size: var(--fs-C); }
+    #d-team .boardfoot { flex: 0 0 auto; margin: 0 18px; padding: 8px 0 10px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: var(--fs-C); line-height: 1.7; }
+    /* lane-subhead 退役兜底（markup 已停产出；防历史快照/旧缓存渲染残留） */
+    #d-team .lane-subhead { display: none; }
+    /* ---- 成员名册卡（原型 member/crewgrid）---- */
+    #d-team .workspace-pane .member-list { grid-template-columns: repeat(2, 1fr); gap: 10px; align-content: start; }
+    @media (max-width: 1180px) { #d-team .workspace-pane .member-list { grid-template-columns: 1fr; } }
+    #d-team .workspace-pane .member-card { display: flex; flex-direction: column; gap: 7px; min-height: 0; padding: 12px 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface1); }
+    #d-team .workspace-pane .member-card:hover { border-color: var(--border-strong); background: var(--surface1); }
+    #d-team .member-card .avatar { position: relative; flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); color: var(--dim); font: 700 12px/1 var(--mono); }
+    #d-team .member-card .avatar .status-dot { position: absolute; right: -3px; bottom: -3px; width: 9px; height: 9px; border: 2px solid var(--surface1); border-radius: 50%; }
+    #d-team .member-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    #d-team .member-head .mh-id { flex: 1; min-width: 0; }
+    #d-team .member-head strong { display: block; overflow: hidden; color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .member-head .member-role { overflow: hidden; margin: 1px 0 0; color: var(--dim); font-size: var(--fs-C); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .member-mdl { flex: none; max-width: 10em; overflow: hidden; padding: 1.5px 7px; border: 1px dashed var(--border-strong); border-radius: 5px; background: var(--bg1); color: var(--faint); font: var(--fs-C) var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .member-state { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 2.5px 9px; border-radius: 20px; font-size: var(--fs-C); font-weight: 500; white-space: nowrap; }
+    #d-team .member-state .status-dot { width: 7px; height: 7px; }
+    #d-team .member-card .identity-cluster { margin-top: 0; }
+    #d-team .member-summary { display: block; min-height: 0; margin-top: 0; overflow: hidden; color: var(--card-sub); font-size: var(--fs-C); line-height: 1.7; text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .member-summary b { color: var(--text); font-weight: 500; }
+    /* 上下文水位（原型 ctxrow/.ctx/.ctxlabel）：5px 渐变填充 + tabular 标签 */
+    #d-team .member-card .ctxrow { display: flex; align-items: center; gap: 8px; margin-top: 0; }
+    #d-team .member-card .ctxrow .ctx { flex: 1; display: block; height: 5px; overflow: hidden; border-radius: 3px; background: var(--track, var(--tag-bg)); }
+    #d-team .member-card .ctxrow .ctx i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(135deg, var(--brand-hover), var(--brand-strong)); }
+    #d-team .member-card .ctxrow .ctxlabel { flex: none; color: var(--dim); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    #d-team .watchdog-row { margin-top: 0; }
+    #d-team .crewfoot { margin-top: 2px; padding: 6px 0 2px; border-top: 1px dashed var(--line-soft); color: var(--dim); font-size: var(--fs-C); line-height: 1.8; text-align: center; }
+    #d-team .crewfoot .lamp-key { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; }
+    #d-team .crewfoot .lamp-key i { width: 7px; height: 7px; border-radius: 50%; }
+    /* ---- 活动时间线（原型 feedwrap/.fi 轻列表）---- */
+    #d-team .activity-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 9px; min-height: 0; padding: 6px 0; border-bottom: 1px dashed var(--line-soft); color: var(--card-sub); font-size: var(--fs-C); line-height: 1.5; }
+    #d-team .activity-row::before { content: none; } /* 竖线时间轴退役（原型无） */
+    #d-team .activity-row time { flex: 0 0 40px; min-width: 0; padding: 1px 0 0; color: var(--faint); font: var(--fs-C) var(--mono); font-variant-numeric: tabular-nums; }
+    #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--dim); font: var(--fs-C)/1.5 var(--mono); }
+    #d-team .activity-row .act-glyph.ok { color: var(--done); }
+    #d-team .activity-row .act-glyph.bad { color: var(--error); }
+    #d-team .activity-row > span { flex: 1; min-width: 0; }
+    #d-team .activity-row b { color: var(--text); font-weight: 600; }
+    /* 活动筛选 chips（原型 fchips） */
+    #d-team .feed-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 4px 0 10px; }
+    #d-team .feed-chips .fchip { padding: 4px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); font-size: var(--fs-C); cursor: pointer; transition: color .15s ease, border-color .15s ease, background-color .15s ease; }
+    #d-team .feed-chips .fchip:hover { color: var(--text); border-color: var(--border-strong); }
+    #d-team .feed-chips .fchip.on { color: var(--brand-hover); border-color: var(--brand-line, color-mix(in srgb, var(--brand) 42%, transparent)); background: var(--brand-soft); font-weight: 600; }
     #d-session .team-entry { gap: 10px; margin: 4px 2px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface2) 90%, var(--brand) 10%), color-mix(in srgb, var(--surface1) 72%, transparent)); }
     #d-session .team-entry:hover { border-color: var(--border-strong); background: var(--hover); }
     #d-session .team-entry .t-ava { width: 32px; height: 32px; border-radius: 10px; background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 30%, var(--line)); color: var(--brand-strong); }
@@ -1647,7 +1732,9 @@
     #d-session .team-entry .t-counts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; color: var(--dim); font: var(--fs-C) var(--mono); }
     #d-session .team-entry .t-count { display: inline-flex; align-items: center; gap: 3px; }
     #d-session .team-entry .t-count svg { width: 12px; height: 12px; }
-    #d-session .team-entry .t-count .t-running-icon { color: var(--working); font-size: 10px; }
+    #d-session .team-entry .t-count .t-running-icon { width: 11px; height: 11px; color: var(--st-working); } /* V8R+ ②：▶ 字符→黄色单人 svg（#icon-user） */
+    #d-session .team-entry .t-expand.has-unread { position: relative; } /* V8R+ ③：未读点从 t-name 后迁此角标（与头像健康灯去重，功能保留） */
+    #d-session .team-entry .t-expand.has-unread::after { content: ""; position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; } /* 描边省略：slimPulseKf 的 box-shadow 帧会覆盖静态描边，走纯呼吸环 */
     #d-session .team-entry .t-count .t-accept-icon { color: var(--brand); }
     #d-session .team-entry .t-count b { color: var(--text); font-weight: 700; }
     #d-session .workspace-head { background: linear-gradient(180deg, color-mix(in srgb, var(--workspace-top) 96%, var(--brand) 4%), var(--workspace-top)); }
@@ -2069,6 +2156,12 @@
     /* r3 徽章行：footnote 级（用户直馈二次微调：高度再降一档——字号/行高/徽章 padding
        整体压缩，比摘要行明显更小更淡）；三徽全空整行不渲染（高度自适应不虚胖） */
     #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: calc(12px * var(--ui-scale)); }
+    /* V8R+（1014 Leader 追加）：PM/Leader 直列卡的「所属团队」归属 chip——左侧 3px 团队色条
+       （GRP_ACCENTS 色轮同源，同团队恒同色）+ 团队名（超长截断）；徽章级、随 r3 徽章行，
+       不破坏卡片信息架构；无归属不渲染 */
+    #d-session .team-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 11em; min-width: 0; padding: 1px 7px 1px 5px; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--fs-micro); line-height: 16px; white-space: nowrap; }
+    #d-session .team-chip i { flex: none; width: 3px; height: 9px; border-radius: 2px; background: var(--team-accent, var(--brand)); }
+    #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     #d-session .srow-r3 > * { flex: none; margin-top: 0; }
     #d-session .srow-r3 .tag { padding: 1px 5px; font-size: var(--srow-badge-size); }
     #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .source-badge { padding: 1px 4px; font-size: var(--srow-badge-size); }
@@ -2383,7 +2476,7 @@
     /* W-V8 批4 组头 v8 化（用户点名2）：头像 tile + 计数图标（12px+11px 数字，状态色只落图标） */
     .session-group > .queue-group .grp-ava { flex: 0 0 auto; width: 20px; height: 20px; margin: 0 2px 0 -2px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--line); color: var(--brand-hover); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
     .session-group > .queue-group .grp-ic { width: 12px; height: 12px; margin: 0 3px 0 2px; vertical-align: -2px; color: var(--faint); }
-    .session-group > .queue-group .grp-ic.on { color: var(--done); }
+    .session-group > .queue-group .grp-ic.run { color: var(--st-working); } /* V8R+ ②：working 计数=黄色单人（五色灯「黄=工作中」，原 activity 波形绿退役 */
     #d-session .queue-card.idle strong { color: var(--dim); } /* 件C④：置灰卡标题降灰（升特异度压 #d-session .srow-r1 strong；opacity .55 基线原有） */
     .session-list-tools button.active { color: var(--text-strong); border-color: var(--border-strong); background: var(--hover); }
     /* [t-7e0c6189] 会话列表瘦身：团队入口卡——每团队一张聚合卡（worker 会话收进团队域，
@@ -2413,7 +2506,8 @@
     .worker-mini .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
     .worker-mini.more { border-style: dashed; }
     /* 未读呼吸点：brand 色源 + glow 光圈动画（环色全走 var，零裸色值） */
-    .slim-unread-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; }
+    /* .slim-unread-dot 本体随 V8R+ ③退役（未读点迁 t-expand.has-unread::after 角标，
+       slimPulseKf 动画复用）；keyframes 留档（角标动画同引） */
     @keyframes slimPulseKf { 0% { box-shadow: 0 0 0 0 var(--glow-brand); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
     /* [t-7e0c6189] 第四列 team-drawer：该团队 worker/QA 会话列表（默认收起零占位，展开 248px；
        覆盖式 absolute 贴检查器左缘——检查器收起时贴 42px 柄右缘） */
@@ -2611,7 +2705,7 @@
 </head>
 <body data-card-density="standard" data-source-mode="single">
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol><symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"></rect></symbol><symbol id="icon-cam" viewBox="0 0 24 24"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"></circle></symbol><symbol id="icon-send" viewBox="0 0 24 24"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4Z"></path></symbol><symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="3.5" width="20" height="13.5" rx="2"></rect><path d="M8 21h8" stroke-linecap="round"></path></symbol><symbol id="icon-more-h" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></symbol></svg>
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"></path></symbol><symbol id="icon-unfold" viewBox="0 0 24 24"><polyline points="7 9 12 4 17 9"></polyline><polyline points="7 15 12 20 17 15"></polyline></symbol><symbol id="icon-chev-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></symbol><symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"></path><path d="M21 3v5h-5"></path></symbol><symbol id="icon-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol><symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line><line x1="14" y1="10" x2="14.01" y2="10"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><line x1="6" y1="14" x2="6.01" y2="14"></line><line x1="10" y1="14" x2="10.01" y2="14"></line><line x1="14" y1="14" x2="14.01" y2="14"></line><line x1="18" y1="14" x2="18.01" y2="14"></line></symbol><symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"></path><circle cx="12" cy="12" r="2.6"></circle></symbol><symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5"></path><path d="M4 20h16"></path></symbol><symbol id="icon-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></symbol><symbol id="icon-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="10" y1="4" x2="10" y2="20"></line></symbol><symbol id="icon-accept" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"></rect><path d="m8.5 12 2.5 2.5L16 9.5"></path><line x1="9" y1="6.5" x2="15" y2="6.5"></line></symbol><symbol id="icon-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"></path></symbol><symbol id="icon-unfold" viewBox="0 0 24 24"><polyline points="7 9 12 4 17 9"></polyline><polyline points="7 15 12 20 17 15"></polyline></symbol><symbol id="icon-chev-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol><symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.8 4.8"></path></symbol><symbol id="icon-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></symbol><symbol id="icon-plus-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path><path d="M12 12v6m-3-3h6"></path></symbol><symbol id="icon-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9.5" y1="4" x2="9.5" y2="20"></line></symbol><symbol id="icon-arrows-v" viewBox="0 0 24 24"><path d="M8 3.5 4.5 7M8 3.5 11.5 7M8 3.5v17"></path><path d="m16 20.5 3.5-3.5M16 20.5l-3.5-3.5M16 20.5v-17"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></symbol><symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"></path><path d="M21 3v5h-5"></path></symbol><symbol id="icon-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></symbol><symbol id="icon-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></symbol></svg>
   <main class="page">
     <section class="mode-stage active" id="stage-desktop">
         <div class="desktop-frame">
@@ -3459,6 +3553,24 @@
                   }
                   renderMyList();
                 }
+                const GRP_ACCENTS = ["var(--brand)", "var(--info)", "var(--done)", "var(--working)"]; // 件C③：团队色轮（组序注入，>4 组循环）；V8R+ 提升共享——PM 归属 chip 同轮取色
+                // V8R+（Leader 1014 追加）：PM/Leader 直列卡的「所属团队」归属 chip 数据——
+                // 编制内 role 命中 pm/leader 的会话返回 {name, accent}（团队名+色轮色，按 S.projects
+                // 序取色=同团队恒同色）；无归属返回 null（不显示空标识）。worker/QA 会话已被
+                // 团队收纳/入口卡聚合，不在直列面，天然不触发。
+                function pmTeamChipOf(sid) {
+                  if (!Array.isArray(S.projects)) return null;
+                  for (let pi = 0; pi < S.projects.length; pi++) {
+                    const p = S.projects[pi];
+                    const hc = Array.isArray(p && p.headcount) ? p.headcount : [];
+                    for (const m of hc) {
+                      if (m && m.session_id === sid && /^(pm|leader)$/i.test(String(m.role || ""))) {
+                        return { name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length] };
+                      }
+                    }
+                  }
+                  return null;
+                }
                 function myCardItem(session) {
                   const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "done";
                   const engineKey = session.engine || "claude";
@@ -3474,6 +3586,7 @@
                     // W-V8 批2a 状态语义对调：working 绿（v8 进行中=绿系；CTA 判定只认 action/danger 不受影响）
                     tagClass: ({ working: "done", waiting: "action", error: "danger", done: "done" })[status],
                     bg: bgCount(session), // #164 后台子 Agent 在跑数（⑂N 徽标）
+                    team: pmTeamChipOf(session.session_id), // V8R+：PM/Leader 所属团队归属（null=无归属不显）
                     engine: esc(engine[0]), engineClass: engine[1],
                     source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || S.relayName) : (session.relay_source || S.relayName)), // 件十三 + W-WINPAIR-R6：per-session 源标识优先（聚合两源各显其名）
                     time: activityTime ? fmtListTime(activityTime) : "",
@@ -3506,7 +3619,7 @@
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
                   const b2SourceBadge = (item) => '<span class="source-badge" style="color:' + b2SourceColor(item.source) + ";border-color:" + b2SourceColor(item.source) + ";background:color-mix(in srgb, " + b2SourceColor(item.source) + ' 14%, transparent)">' + item.source + "</span>"; // W-WINPAIR-R6：八色环源色徽章（源色底块增强辨识）
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + b2EngineBadge(item) + b2SourceBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.team || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.team ? '<span class="team-chip" title="所属团队：' + esc(item.team.name) + '" style="--team-accent:' + item.team.accent + '"><i aria-hidden="true"></i><span class="tc-name">' + esc(item.team.name) + "</span></span>" : "") + b2EngineBadge(item) + b2SourceBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -3553,9 +3666,11 @@
                     if (!s) continue; // 编制在、会话未同步（异源）不计
                     (SLIM_KEEP_ROLE.test(String(m.role || "")) ? kept : hidden).push({ m, s });
                   }
-                  if (!hidden.length) return ""; // 全是 PM/Leader（或会话缺失）：无收起内容不出卡
+                  // V8R+ ⑤（1014 用户拍板）：「全是 PM/Leader（或会话缺失）无收起内容不出卡」
+                  // 早退退役——有编制即出卡（成员会话全缺失的团队也可见，点击进团队域看编制；
+                  // 第四列展开已有「暂无成员会话」兜底）；仅保留筛选语义早退
                   const hit = hidden.filter((x) => !filterDef || filterDef.test(x.s));
-                  if (!hit.length) return ""; // 非「全部」筛选下该团队无命中状态——不出卡（筛选语义纯粹）
+                  if (hidden.length && !hit.length) return ""; // 非「全部」筛选下该团队无命中状态——不出卡（筛选语义纯粹）
                   const running = hit.filter((x) => x.s.status === "WORKING" || x.s.status === "WAITING" || x.s.status === "ERROR").length;
                   const acceptance = Number.isFinite(Number(team.acceptance_count)) ? Math.max(0, Number(team.acceptance_count)) : 0;
                   // 1014 追加（用户：3 人在岗只见 1 颗队级绿点）：mini 行=每在岗成员一颗显性
@@ -3574,8 +3689,10 @@
                   // 1014 追加：队级聚合灯语义明确化——头像角点=整队健康度（任一成员在跑=绿呼吸/
                   // 全闲=灰），与成员 mini 灯形成「队健康 × 人人灯」两级；title 明示语义
                   const teamAlive = hit.some((x) => x.s.status === "WORKING");
-                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '<i class="lamp-dot team-health ' + (teamAlive ? "working" : "idle") + '" title="整队健康度：' + running + ' 人在跑"></i></span><span class="t-main"><span class="t-name">' + esc(team.name) + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="成员"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg><b>' + hit.length + '</b></span><span class="t-count" title="进行中"><i class="t-running-icon" aria-hidden="true">▶</i><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
-                }
+                  // V8R+ 团队卡批：①成员计数=单人 icon-user（重叠双人 #icon-users 留给「团队」
+                  // 概念组头）②进行中=黄色单人（五色灯「黄=工作中」，原 ▶ 字符被用户读成三角）
+                  // ③未读点从 t-name 后迁 t-expand 角标（与头像右下健康灯重复判定，功能不丢）
+                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '<i class="lamp-dot team-health ' + (teamAlive ? "working" : "idle") + '" title="整队健康度：' + running + ' 人在跑"></i></span><span class="t-main"><span class="t-name">' + esc(team.name) + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="成员"><svg class="icon-inline" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + hit.length + '</b></span><span class="t-count" title="进行中"><svg class="icon-inline t-running-icon" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand' + (S.slimUnread.has(team.id) ? " has-unread" : "") + '" data-slim-drawer-toggle="' + esc(team.id) + '" title="' + (S.slimUnread.has(team.id) ? "成员有新输出 · " : "") + '展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';                }
                 function slimDrawerCardMarkup(item) {
                   return '<div class="queue-card" data-slim-open="' + item.id + '" role="button" tabindex="0" aria-label="打开 ' + item.title + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source ? '<span class="srow-r3">' + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span></div>";
                 }
@@ -3780,7 +3897,13 @@
                   // 成员=users / 进行中=activity 着 v8 绿；12px 图标+11px 数字（灰），
                   // 状态色只落图标不落数字；+头像 tile（组名首字）。验收=clipboard 琥珀
                   // 项数据在 B4 域（bridge.accepts），跨域桥留验收单拍板批
-                  const grpHead = (key, title, count, expanded, workingN) => '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-ava" aria-hidden="true">' + esc(String(title).replace(/<[^>]*>/g, "").trim().slice(0, 1) || "团") + "</span><span>" + title + '</span><span class="grp-count" data-session-group-count><svg class="icon-inline grp-ic" aria-hidden="true"><use href="#icon-users"></use></svg>' + count + (workingN ? ' <svg class="icon-inline grp-ic on" aria-hidden="true"><use href="#icon-activity"></use></svg>' + workingN : "") + "</span></div>";
+                  // V8R+ 团队卡批 ①②⑥：grpHead 加图标形态参数——"roster"（编制人口径：单人
+                  // icon-user + working 黄单人，对齐五色灯「黄=工作中」）|"teams"（团队概念组：
+                  // 保留重叠双人 #icon-users）；默认 roster（唯二调用点显式传参）。
+                  const grpHead = (key, title, count, expanded, workingN, iconMode = "roster") => {
+                    const memberIcon = iconMode === "teams" ? "#icon-users" : "#icon-user";
+                    return '<div class="queue-group" data-group-toggle="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + (expanded ? "true" : "false") + '" title="展开/收起该组"><span class="grp-caret">▸</span><span class="grp-ava" aria-hidden="true">' + esc(String(title).replace(/<[^>]*>/g, "").trim().slice(0, 1) || "团") + "</span><span>" + title + '</span><span class="grp-count" data-session-group-count><svg class="icon-inline grp-ic" aria-hidden="true"><use href="' + memberIcon + '"></use></svg>' + count + (workingN ? ' <svg class="icon-inline grp-ic run" aria-hidden="true"><use href="#icon-user"></use></svg>' + workingN : "") + "</span></div>";
+                  };
                   // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
                   // 加头=降格成可折叠组；组头间距由「进行中」组头自然承担）。恒在 DOM（不参与折叠记账）
                   const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
@@ -3793,8 +3916,17 @@
                     // 与 B11 active 组同机制：折叠不进 DOM（省心跳重渲），observer 完整性
                     // 检查经 _collapsedIdleIds 放行缺卡
                     if (!open) teamHidden.push(...t.members.map((x) => x.session_id));
-                    const workingN = t.members.filter((x) => x.status === "WORKING").length;
-                    teamMarkup += '<div class="session-group' + (open ? "" : " collapsed") + '" data-session-group="' + esc(t.key) + '" style="--grp-accent:' + GRP_ACCENTS[teamIdx++ % GRP_ACCENTS.length] + '">' + grpHead(t.key, esc(t.name), t.members.length, open, workingN) + '<div class="grp-body">' + (open ? t.members.map((x) => myCardMarkup(myCardItem(x))).join("") : "") + "</div></div>"; // 件C③：竖色条 accent 注入
+                    // V8R+ ⑥口径归一（Leader 1014）：组头计数从「组内会话卡数/其中 WORKING」
+                    // 改为「编制 roster 口径」——编制成员数（团队 headcount 有效席）+ 其中在跑数
+                    // （编制成员映射会话 status=WORKING）。与团队域侧栏「N 席」/成员页同源同数。
+                    // 旧口径来源：t.members.length=件二团队组收纳的组内会话卡数（生产实况 17/0）、
+                    // workingN=其中 WORKING 数；团队域 40/3=侧栏 headcount 席位/成员卡 working 数
+                    // ——同一概念两处两口径，现归一 headcount 单一口径。
+                    const rosterGrp = (Array.isArray(S.projects) ? S.projects : []).find((p) => p && p.id === t.gid);
+                    const rosterList = (Array.isArray(rosterGrp && rosterGrp.headcount) ? rosterGrp.headcount : []).filter((m) => m && typeof m.session_id === "string");
+                    const rosterN = rosterList.length || t.members.length; // 团队数据缺席兜底组内卡数
+                    const rosterWorking = rosterList.filter((m) => (S.sessions.get(m.session_id) || {}).status === "WORKING").length;
+                    teamMarkup += '<div class="session-group' + (open ? "" : " collapsed") + '" data-session-group="' + esc(t.key) + '" style="--grp-accent:' + GRP_ACCENTS[teamIdx++ % GRP_ACCENTS.length] + '">' + grpHead(t.key, esc(t.name), rosterN, open, rosterWorking) + '<div class="grp-body">' + (open ? t.members.map((x) => myCardMarkup(myCardItem(x))).join("") : "") + "</div></div>"; // 件C③：竖色条 accent 注入
                   }
                   // 追加（2026-10-12 用户拍板）：取消「进行中」状态分组——列表=置顶+团队分组+
                   // 平铺，状态过滤交给筛选档（件十三「进行中」档）。活跃池与闲置池合流平铺
@@ -3804,7 +3936,7 @@
                   const slimTeamsOpen = !collapsedGroups.has("slim-teams");
                   const slimEntries = [...slimRoster.teams.values()].map((t) => slimTeamEntryMarkup(t, slimRoster, S.sessions, filterDef)).filter(Boolean);
                   const teamsMarkup = slimEntries.length
-                    ? '<div class="session-group' + (slimTeamsOpen ? "" : " collapsed") + '" data-session-group="slim-teams">' + grpHead("slim-teams", "团队", slimEntries.length, slimTeamsOpen) + '<div class="grp-body">' + slimEntries.join("") + "</div></div>"
+                    ? '<div class="session-group' + (slimTeamsOpen ? "" : " collapsed") + '" data-session-group="slim-teams">' + grpHead("slim-teams", "team", slimEntries.length, slimTeamsOpen, 0, "teams") + '<div class="grp-body">' + slimEntries.join("") + "</div></div>"
                     : "";
                   const idleMarkup = idleAll.map((x) => myCardMarkup(myCardItem(x))).join("");
                   // 折叠未展开时这些卡有意不进 DOM——observer 完整性检查据此放行，防「缺卡→重渲→
@@ -6575,7 +6707,7 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="head-sub" data-team-meta hidden></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
               <!-- UIPOLISH3 件四②：底部常驻栏废除（决议内联到确认卡、刷新上 head、反馈走 toast） -->
             </section>
@@ -6598,7 +6730,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false };
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all" }; // feedFilter：V8R 活动页状态筛选（纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -6635,14 +6767,31 @@
                   };
                   return { name: member.nick || session.title || member.session_id, role: member.role || "角色未标注", nick: member.nick || "", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit, status, heartbeat: signalTone(heartbeatAt), log: signalTone(logAt), summary: session.activity?.task_summary?.text || session.activity?.activity?.text || session.action_summary || "暂无最近活动" };
                 }
+                // V8R+（Leader 1014 追加，用户拍板）：成员卡动态排列——工作中（working）优先靠前、
+                // 闲置靠后；同档内按最近活跃时间降序（越活跃越靠前）；tiebreak 保持编制序防抖动。
+                // 行为逻辑非纯视觉：状态切换后顺序随每次渲染跟随变化（sortRoster 单口，
+                // 成员页 pane 与侧栏 data-team-members 共用同一排序）。
+                function sortRoster(list) {
+                  const rank = (m) => {
+                    const session = state.sessions.get(m.session_id) || {};
+                    const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
+                    const lastAt = Number(session.activity?.updated_at || session.updated_at || session.started_at || 0);
+                    return { work: status === "working" ? 0 : 1, lastAt };
+                  };
+                  return list
+                    .map((m, i) => ({ m, r: rank(m), i }))
+                    .sort((x, y) => x.r.work - y.r.work || y.r.lastAt - x.r.lastAt || x.i - y.i)
+                    .map((x) => x.m);
+                }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
                   if (!used || !limit || limit <= 0) return "";
                   const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
                   if (!Number.isFinite(pct)) return ""; // 件十六防护：脏数据（NaN 比例）宁缺毋滥——NaN% 内联失效会退化成全宽条（全员等长观感的候选根因）
-                  const tone = pct >= 85 ? "critical" : pct >= 60 ? "attention" : "safe";
-                  return '<div class="mini-context-meter ' + tone + '" data-context-waterline><i><b style="width:' + pct + '%"></b></i><span>' + pct + "%</span></div>";
+                  // V8R：原型 ctxrow/.ctx/.ctxlabel——5px 渐变填充条 + tabular-nums 标签
+                  //（原三色 tone 分段退役；title 带原值与档位信息补偿）
+                  return '<div class="ctxrow" data-context-waterline title="上下文 ' + used + ' / ' + limit + ' tokens（' + (pct >= 85 ? "危险" : pct >= 60 ? "偏高" : "安全") + '）"><span class="ctx"><i style="width:' + pct + '%"></i></span><span class="ctxlabel">上下文 ' + pct + "%</span></div>";
                 }
                 function memberMarkup(member, project) {
                   const info = memberInfo(member);
@@ -6654,7 +6803,10 @@
                   // 也亮橘=「成员灯与绘画卡矛盾」根因；引擎语义已有 engine-badge 表达不丢失
                   const stateLabel = ({ working: "运行中", waiting: "待处理", error: "异常", done: "已完成" })[info.status] || "离线";
                   const signalLabel = (tone) => ({ good: "正常", warn: "滞后", bad: "失联", off: "无数据" })[tone] || "无数据";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="member-card-main"><div class="member-head"><div><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + " · " + escape(info.model) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div><span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + "</div></div>";
+                  // V8R 名册卡（原型 member/.mh/.mb/.ctxrow）：头行=头像+名/角色两行+模型 mono 虚线
+                  // 胶囊+状态软底胶囊；引擎/源徽章收摘要下轻量行（owner 徽章保留）；五色叠角灯不变
+                  const mdl = info.model && info.model !== "模型未标注" ? '<span class="member-mdl" title="模型">' + escape(info.model) + "</span>" : "";
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -6721,19 +6873,36 @@
                   const shortSid = (sid) => String(sid || "").slice(0, 8);
                   const dispName = r.member ? (String(r.member.nick || "") || shortSid(r.member.session_id)) : shortSid(task.owner_session);
                   const engKnown = Boolean(info.engine && engines.has(info.engine)); // 件六：词表外/缺失不渲染引擎
+                  const laneKey = legacyStatuses.get(task.status) || task.status;
+                  const isDone = laneKey === "done";
+                  // V8R 三段式卡（原型 tcard：.ct 标题 / .cm chip 行 / .cline meta 行）——
+                  // 执行者行 chip 胶囊化（tchip：bg1 底+card-sub 字+radius 6），排队/运行
+                  // 信号保留（q-run 点 + cline 排队号）；未指派/失联警示色语义不变
                   const ownerBits = [];
                   if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
-                  if (queueCtx && queueCtx.ordinal) ownerBits.push('<i class="q-num">' + queueCtx.ordinal + "</i>");
                   if (engKnown) ownerBits.push(engineBadge(info.engine));
-                  // 1013 件6：claimed 失联卡（owner 在场但不在编制）不再裸标「未指派」——短 sid+失联
-                  // 保身份（分区头已按用户口径不渲染，身份落卡上）
-                  ownerBits.push(hasOwner ? "<b>" + escape(dispName) + '</b><span class="assignee-meta">' + escape(info.role || "") + "</span>" : (task.owner_session ? "<b>" + escape(dispName) + '</b><span class="assignee-meta">失联</span>' : "<b>未指派</b>"));
+                  ownerBits.push('<span class="tchip owner">' + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>");
                   const fullText = String(task.text || task.id);
                   // 1013 件6：卡面标题渲染层 cap60 归一（relay 建卡已 cap，存量卡/owner 前缀回填
                   // 路径漏网在此兜底；title 属性与悬浮详情仍全文）
                   const faceText = (() => { const t = String(r.text || fullText).trim(); return t.length > 60 ? t.slice(0, 59) + "…" : t; })();
                   const created = expFmtTime(task.ts);
                   const updated = expFmtTime(task.updated_at);
+                  // V8R cline meta 行：时间基线 + 排队号（原 claimed 分区头退役，排队信息落卡面）。
+                  // 短时间格式（原型 cline「认领 10:02」口径）：今天=HH:MM，跨日=MM-DD HH:MM
+                  const shortTime = (ts) => {
+                    const d = new Date(Number(ts) || 0);
+                    if (!Number.isFinite(d.getTime()) || d.getTime() <= 0) return "—";
+                    const pad = (n) => String(n).padStart(2, "0");
+                    const hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+                    const now = new Date();
+                    const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+                    return sameDay ? hm : pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + hm;
+                  };
+                  const clineBits = ["创建 " + shortTime(task.ts)];
+                  if (updated && updated !== "—" && updated !== created) clineBits.push("更新 " + shortTime(task.updated_at));
+                  if (queueCtx && queueCtx.ordinal) clineBits.push("排队 #" + queueCtx.ordinal);
+                  if (queueCtx && queueCtx.running) clineBits.push('<span class="cline-run">▶ 运行中</span>');
                   const selfCheck = taskSelfCheck(task);
                   const selfCheckLabel = selfCheck ? "AI 自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
                   const selfCheckHtml = selfCheck ? '<span class="task-verify" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span>" : "";
@@ -6742,7 +6911,7 @@
                   const timeline = Array.isArray(task.transitions) && task.transitions.length
                     ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
                     : "";
-                  return '<div class="task-card compact" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><div class="task-title"><strong>' + escape(faceText) + '</strong>' + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
+                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><div class="task-title"><strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
                 // W-DESIGNHUB 看板挂载两区（用户澄清并入）：图纸（当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -6788,59 +6957,32 @@
                   const dispatchStatus = new Map((state.receipts.get(project?.id) || []).map((r) => [r && r.id, r && r.status]).filter(([id, st]) => id && typeof st === "string"));
                   const boardCounts = new Map(lanes.map(([status]) => [status, tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status).length]));
                   const total = tasks.length;
-                  const boardOverview = '<div class="board-overview"><div class="board-overview-head"><span>任务板总览</span><span>' + total + ' 张卡 · 实时同步</span></div><div class="board-progress" aria-label="任务状态分布">' + lanes.map(([status]) => '<i class="' + status + '" style="width:' + (total ? (boardCounts.get(status) / total * 100).toFixed(2) : 0) + '%"></i>').join("") + '</div><div class="board-legend">' + lanes.map(([status, label]) => '<span style="--legend-color:' + ({ backlog: "var(--info)", claimed: "var(--working)", submitted: "var(--brand)", ready_to_install: "var(--brand)", done: "var(--done)" })[status] + '"><i></i>' + label + ' <b>' + boardCounts.get(status) + '</b></span>').join("") + '</div></div>';
-                  const laneBody = (status, items, showUnassignedHead) => {
-                    if (status !== "claimed") {
-                      // ⑦b：backlog 泳道无主卡归「未指派」组头（组头唯一允许泳道），有主卡平铺在前
-                      const split = [[], []];
-                      for (const t of items) (taskOwnerResolve(t, project).resolved ? split[0] : split[1]).push(t);
-                      let html3 = split[0].map((t) => taskMarkup(t, project)).join("");
-                      if (split[1].length && showUnassignedHead) html3 += '<div class="lane-subhead">未指派<span class="subhead-count">' + split[1].length + "</span></div>";
-                      html3 += split[1].map((t) => taskMarkup(t, project)).join("");
-                      return html3;
-                    }
-                    // 进行中泳道按 worker 分区（件八，用户推荐形态的落地修正：已指派未开始
-                    // 的卡实际在 claimed——dispatch 建卡直接 claimed，不在 backlog；分区随之
-                    // 放进行中泳道而非待认领）。组内 ts 升序=排队序；运行中（回执 join）置顶
-                    // 1013 件6（用户 1013 截图反馈）：分区名走 nick||短 sid 单口（原 memberInfo
-                    // 的 title/sid 兜底把 UUID 与派单原文顶成分区行，蓝底大字占三行）；分区头
-                    // 带成员小标识；失联卡不再渲染「失联执行者」分区行——卡直接排队（身份在
-                    // 卡上：短 sid+失联），泳道里只有卡片
-                    const avaLetter = (m) => /^(pm|leader)$/i.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
-                    const groups = new Map(); // sid -> {name, ava, cards[]}
-                    const orphans = []; // owner 失联（sid 不在编制——离编/数据残留）
-                    const unassigned = []; // 无主卡（件七显示面）
-                    for (const t of items) {
-                      if (!t.owner_session) { unassigned.push(t); continue; }
-                      const m = members(project).find((x) => x.session_id === t.owner_session);
-                      if (!m) { orphans.push(t); continue; }
-                      if (!groups.has(t.owner_session)) groups.set(t.owner_session, { name: String(m.nick || "") || String(t.owner_session).slice(0, 8), ava: avaLetter(m), cards: [] });
-                      groups.get(t.owner_session).cards.push(t);
-                    }
-                    let html2 = "";
-                    for (const g of groups.values()) {
-                      const ordered = g.cards.slice().sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
+                  // V8R 总览区（原型 .ov）：prog 8px 矩形分段（段色 --p-* 同名类映射）+ 方 chip
+                  // 图例——去「任务板总览」重头行（计数并入图例，实时口径入 boardfoot）
+                  const boardOverview = '<div class="board-overview"><div class="board-progress" aria-label="任务状态分布">' + lanes.map(([status]) => '<i class="' + status + '" style="width:' + (total ? (boardCounts.get(status) / total * 100).toFixed(2) : 0) + '%"></i>').join("") + '</div><div class="board-legend">' + lanes.map(([status, label]) => '<span style="--legend-color:var(--p-' + (status === "ready_to_install" ? "ready" : status) + ')"><i></i>' + label + ' <b>' + boardCounts.get(status) + '</b></span>').join("") + '</div></div>';
+                  const laneBody = (status, items) => {
+                    // V8R：泳道内平铺（原型 bcol 无分区头概念）——claimed 全列统一「运行中置顶
+                    // + ts 升序」=排队序，排队号 #n 与运行态落卡面 cline；backlog 同平铺。
+                    // （原 per-worker 分区头与「未指派」组头退役；身份/失联/未指派警示全在卡 chip）
+                    if (status === "claimed") {
+                      const ordered = items.slice().sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
                       const runningIdx = ordered.findIndex((t) => dispatchStatus.get(t.dispatch_id) === "running");
                       if (runningIdx > 0) ordered.unshift(...ordered.splice(runningIdx, 1)); // 运行中置顶=当前活
-                      html2 += '<div class="lane-subhead"><i class="lane-subhead-ava">' + g.ava + '</i>' + escape(g.name) + '<span class="subhead-count">' + ordered.length + "</span></div>";
-                      html2 += ordered.map((t, i) => taskMarkup(t, project, { ordinal: ordered.length > 1 ? i + 1 : 0, running: dispatchStatus.get(t.dispatch_id) === "running" })).join("");
+                      return ordered.map((t, i) => taskMarkup(t, project, { ordinal: ordered.length > 1 ? i + 1 : 0, running: dispatchStatus.get(t.dispatch_id) === "running" })).join("");
                     }
-                    if (orphans.length) html2 += orphans.map((t) => taskMarkup(t, project)).join("");
-                    if (unassigned.length) {
-                      if (showUnassignedHead) html2 += '<div class="lane-subhead">未指派<span class="subhead-count">' + unassigned.length + "</span></div>"; // ⑦b：组头仅待认领泳道
-                      html2 += unassigned.map((t) => taskMarkup(t, project)).join("");
-                    }
-                    return html2;
+                    return items.map((t) => taskMarkup(t, project)).join("");
                   };
                   const columns = lanes.map(([status, label]) => {
                     const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
-                    // 追加⑦b：「未指派」分组头只在待认领泳道渲染（进行中的必有 owner 口径）；
-                    // 其他泳道的真无主卡平铺泳道尾部（卡面保留未指派警示，不设组头）
-                    const body = laneBody(status, items, status === "backlog");
-                    return '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
+                    const body = laneBody(status, items);
+                    // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
+                    const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
+                    return '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
-                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + boardOverview + '<div class="board">' + columns + "</div>" + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
+                  // V8R boardfoot（原型 .boardfoot）：口径脚注——自验点语义 + 操作指引
+                  const boardFoot = '<div class="boardfoot">板面实时同步 · 断线自动补齐 · 卡面 ✓✗○ = AI 自验进度，最终验收以确认卡为准 · 新建任务走来源会话派单</div>';
+                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + boardOverview + '<div class="board">' + columns + "</div>" + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
                 }
                 function activityMarkup(project) {
                   const receipts = state.receipts.get(project?.id);
@@ -6851,15 +6993,26 @@
                   // glyph 家族（▶ 派单 / ● 运行 / ✓ 完成 / ⚠ 失败——v8 事件 glyph 语言）
                   const glyphs = new Map([["dispatched", "▶"], ["running", "●"], ["done", "✓"], ["failed", "⚠"]]);
                   const glyphTone = new Map([["dispatched", "info"], ["running", "info"], ["done", "ok"], ["failed", "bad"]]);
-                  const ordered = receipts.slice().sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
-                  return '<div class="team-activity">' + ordered.map((entry) => {
+                  // V8R：筛选 chips（原型 fchips）——状态轴纯前端过滤（全部/四态，零链路改动）
+                  const counts = new Map([["all", receipts.length]]);
+                  for (const r of receipts) counts.set(r.status, (counts.get(r.status) || 0) + 1);
+                  const chips = ['<div class="feed-chips" role="group" aria-label="活动状态筛选">']
+                    .concat([["all", "全部"], ["dispatched", "已派单"], ["running", "运行中"], ["done", "完成"], ["failed", "失败"]]
+                      .filter(([key]) => key === "all" || counts.get(key))
+                      .map(([key, label]) => '<button type="button" class="fchip' + (state.feedFilter === key ? " on" : "") + '" data-feed-chip="' + key + '">' + label + ' <b>' + (counts.get(key) || 0) + "</b></button>"))
+                    .concat(["</div>"]).join("");
+                  const ordered = receipts.slice()
+                    .filter((entry) => state.feedFilter === "all" || entry.status === state.feedFilter)
+                    .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
+                  const rows = ordered.map((entry) => {
                     const timestamp = Number(entry.ts);
                     const date = Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp) : null;
                     const validDate = date && Number.isFinite(date.getTime());
                     const time = validDate ? String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") : "时间未知";
                     const session = state.sessions.get(entry.session_id);
-                    return '<div class="activity-row"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph ' + (glyphTone.get(entry.status) || "") + '" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
-                  }).join("") + "</div>";
+                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph ' + (glyphTone.get(entry.status) || "") + '" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
+                  }).join("");
+                  return '<div class="team-activity">' + chips + (rows || banner("当前筛选无条目")) + "</div>";
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
                 // 数据源：SNAPSHOT.experience（覆盖式锚定）+ EXPERIENCE_UPDATED 帧（帧双载
@@ -7240,12 +7393,28 @@
                     return html;
                   })() : banner(projectsEmpty());
                   query("[data-team-title]").textContent = project?.name || "团队";
+                  // V8R head 第二行 meta（原型 dhead.row2 语言）：编制/任务卡/待确认/开团时间——
+                  // 无团队选中（空态）整行隐藏；数据缺项跳过不占位
+                  {
+                    const meta = query("[data-team-meta]");
+                    if (project) {
+                      const boardTotal = state.boards.get(project.id)?.entries?.length;
+                      const createdDay = Number(project.created_at) > 0 ? (() => { const d = new Date(Number(project.created_at)); const pad = (n) => String(n).padStart(2, "0"); return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); })() : "";
+                      meta.innerHTML = [
+                        "编制 " + members(project).length + " 席",
+                        Number.isFinite(boardTotal) ? "任务卡 " + boardTotal : "",
+                        count ? "待确认 " + count + " 项" : "",
+                        createdDay ? "开团 " + createdDay : "",
+                      ].filter(Boolean).map((piece) => "<span>" + escape(piece) + "</span>").join('<span class="meta-sep">·</span>');
+                      meta.hidden = false;
+                    } else meta.hidden = true;
+                  }
                   // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = srcName(state.source); // W-UIPOLISH ⑧：团队名称旁源徽标同走映射（用户实锤漏网点）
                   window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
-                  const memberHtml = members(project).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
+                  const memberHtml = sortRoster(members(project)).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
                   query("[data-team-members]").innerHTML = memberHtml;
@@ -7254,7 +7423,9 @@
                   panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
                   if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
                   panes[1].innerHTML = boardMarkup(project);
-                  panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>";
+                  // V8R：成员页尾 crewfoot（原型 .crewfoot）——顺带承载五色灯词表图例（用户定版）
+                  const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · watchdog 双信号（心跳+日志） · 点卡片直开成员会话</div>';
+                  panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>" + crewFoot;
                   panes[3].innerHTML = activityHtml;
                   panes[4].innerHTML = experienceMarkup(); // W-EXPP2 经验库第五 tab
                   panes[5].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第六 tab
@@ -7609,6 +7780,9 @@
                     }
                     const decision = event.target.closest("[data-team-decision]");
                     if (decision) { event.preventDefault(); if (decision.dataset.approve === "true" || decision.dataset.approve === "false") void decide(decision.dataset.teamDecision, decision.dataset.approve === "true"); return; }
+                    // V8R 活动页筛选 chips（纯前端过滤，零链路）
+                    const feedChip = event.target.closest("[data-feed-chip]");
+                    if (feedChip) { state.feedFilter = feedChip.dataset.feedChip || "all"; render(); return; }
                     const project = event.target.closest("[data-team-project]");
                     if (project) { select(project.dataset.teamProject); return; }
                     const confirm = event.target.closest("[data-team-pick-confirm]");
