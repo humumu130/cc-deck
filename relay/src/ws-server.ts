@@ -420,6 +420,23 @@ export function startServer(
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(consoleHtml005));
       return;
     }
+    // 预览页白名单：web-console/preview/<name>.html（A/B 双轨对比页等临时产物，
+    // 不进 bundle 打包清单）——同源 http 天然连 relay，替代 file://+硬编码 ws hack。
+    // name 白名单字符防目录穿越；文件缺席 404（预览属临时物，不报 503）
+    if (req.method === "GET" && url.pathname.startsWith("/preview/")) {
+      const name = url.pathname.slice("/preview/".length);
+      if (!/^[a-z0-9-]+\.html$/.test(name)) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const previewPath = join(webRoot, "web-console", "preview", name);
+      if (!existsSync(previewPath)) {
+        res.writeHead(404).end("preview 不存在: " + name);
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(previewPath));
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
       // web-console 云桥模式依赖的 tweetnacl（页面 <script src="/nacl.js">）
       if (!existsSync(naclJs)) {

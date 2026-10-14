@@ -51174,6 +51174,17 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     this.bus.emit(id2, "SESSION_LOG", entry);
   }
+  // W-STREAMDELTA（#94 外部会话终端流）：撤除流式占位块——外部 CLI 的终端捕获流块
+  // 是「视觉过渡」（正文权威=转录终条），回合终态必须撤块防双条；复用 #73 同 id 替换
+  // 语义做不到删除（空文本残留壳），故设 PATCH 帧：端上 timelines 删条+DOM 移除。
+  removeExternalLog(id2, entryId) {
+    const s = this.sessions.get(id2);
+    if (!s) return;
+    const i = s.logs.findIndex((e) => e.id === entryId);
+    if (i < 0) return;
+    s.logs.splice(i, 1);
+    this.bus.emit(id2, "SESSION_LOG_PATCH", { remove_id: entryId });
+  }
   setRemoteMode(id2, enabled) {
     const s = this.sessions.get(id2);
     if (!s || !s.state.external) return;
@@ -56926,6 +56937,14 @@ function pidAlive(pid) {
     return e.code === "EPERM";
   }
 }
+function deriveStreamFrame(prev, next) {
+  if (!prev || prev.length === 0) return { lines: next.slice(), stable: true };
+  if (next.length < prev.length) return { lines: prev, stable: false };
+  const n = prev.length;
+  for (let i = 0; i < n; i++) if (prev[i] !== next[i]) return { lines: prev, stable: false };
+  return { lines: next.slice(), stable: true };
+}
+var STREAM_DELTA_ENV = () => process.env.CCR_STREAM_DELTA !== "0";
 var Bridge = class _Bridge {
   constructor(bus2, mgr2, opts) {
     this.bus = bus2;
@@ -56968,6 +56987,8 @@ var Bridge = class _Bridge {
   mgr;
   opts;
   pending = /* @__PURE__ */ new Map();
+  // W-STREAMDELTA 终端流状态：sid → { id（流块 id）, lines（上次捕获）, buf, timer }
+  streamCap = /* @__PURE__ */ new Map();
   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
   /** W-INJECT P0（泄漏修复）：外部会话消亡统一回收。此前 29 个以 ext id 为键的 Map/Set 无会话级
    * 清理路径——nameMisses/extFileStats/extUsage/lastHookAt/engineActivityKeys/recentUserMsgs(外层)/
@@ -56976,7 +56997,50 @@ var Bridge = class _Bridge {
    * （resumeClosures/verifyTimers/stuckFailTimers/submitEnterTimers）残留 Timeout 持闭包可重复触发。
    * 幂等（不存在的键 delete 零害）；enqueuedKeys 有 60 上限自愈但一并清更干净。
    * 挂点：SessionManager.deleteSession 的 external 分支。 */
+  /** 终端流启动：回合进行中周期捕获尾部行，稳定追加才上帧（900ms 拍 + pushExternalLog
+   * 同 id 替换链，端上原位更新）。幂等（timer 在场即返）。 */
+  streamDeltaStart(id2) {
+    if (!STREAM_DELTA_ENV()) return;
+    const st2 = this.mgr.getExternal(id2);
+    if (!st2 || !st2.cli_pid || st2.status !== "WORKING") return;
+    if (this.streamCap.has(id2)) return;
+    const sid8 = id2.slice(0, 8);
+    const entry = { id: "sd-" + sid8, lines: null, buf: "", timer: null };
+    entry.timer = setInterval(() => {
+      const s2 = this.mgr.getExternal(id2);
+      if (!s2 || !s2.cli_pid || s2.status !== "WORKING") {
+        this.streamDeltaStop(id2);
+        return;
+      }
+      void captureConsoleBottom(s2.cli_pid, 24).then((rows) => {
+        const cur = this.streamCap.get(id2);
+        if (!cur || !rows) return;
+        const { lines, stable } = deriveStreamFrame(cur.lines, rows);
+        if (!stable) {
+          cur.lines = rows;
+          return;
+        }
+        cur.lines = lines;
+        const buf = lines.join("\n").slice(-4e3);
+        if (buf === cur.buf || !buf.trim()) return;
+        cur.buf = buf;
+        this.mgr.pushExternalLog(id2, "assistant_text", buf.slice(-400), void 0, { full: buf, id: cur.id, streaming: true });
+      }).catch(() => {
+      });
+    }, 900);
+    entry.timer.unref?.();
+    this.streamCap.set(id2, entry);
+  }
+  /** 终态收敛：撤流块（正文以转录终条为准，防双条）+ 停捕获。 */
+  streamDeltaStop(id2) {
+    const e = this.streamCap.get(id2);
+    if (!e) return;
+    clearInterval(e.timer);
+    this.streamCap.delete(id2);
+    this.mgr.removeExternalLog(id2, e.id);
+  }
   forget(id2) {
+    this.streamDeltaStop(id2);
     this.pending.delete(id2);
     this.turnStart.delete(id2);
     this.inputQueue.delete(id2);
@@ -57167,6 +57231,7 @@ var Bridge = class _Bridge {
       const summary = profile.activity ?? (desiredStatus === "WORKING" ? `${spec.label} \u8FD0\u884C\u4E2D` : desiredStatus === "ERROR" ? `${spec.label} \u51FA\u9519` : `${spec.label} \u5DF2\u5B8C\u6210`);
       if (desiredStatus === "ERROR" && profile.error) state.last_error = profile.error;
       if (desiredStatus === "DONE" && state.status !== "DONE") {
+        this.streamDeltaStop(id2);
         this.mgr.finishExternal(id2, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
       } else if (state.status !== desiredStatus || state.action_summary !== summary) {
         this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0);
@@ -57496,6 +57561,7 @@ var Bridge = class _Bridge {
       const id2 = this.extId(ev2);
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.session_id === id2 || s.cli_pid !== ev2.cli_pid) continue;
+        this.streamDeltaStop(s.session_id);
         this.mgr.finishExternal(s.session_id, "completed", 0);
         const old = this.mgr.getExternal(s.session_id);
         if (old) old.historical = true;
@@ -57610,6 +57676,7 @@ var Bridge = class _Bridge {
           );
           if (s.status === "WORKING" && quiet > 2e4) {
             const turn = this.turnStart.get(s.session_id) ?? s.started_at;
+            this.streamDeltaStop(s.session_id);
             this.mgr.finishExternal(s.session_id, "completed", now - turn, now - quiet);
           }
         }
@@ -58012,6 +58079,7 @@ var Bridge = class _Bridge {
     const pid = st2.cli_pid;
     const msg = buildAnswerMessage(questions, answers);
     this.mgr.setExternalStatus(sessionId, "WORKING", "\u624B\u673A\u4F5C\u7B54");
+    this.streamDeltaStart(sessionId);
     void injectEsc(pid).then(async (r) => {
       if (!r.ok) {
         this.onInjectFail(sessionId, r.error);
@@ -58817,6 +58885,7 @@ var Bridge = class _Bridge {
         const st1 = this.mgr.getExternal(id2);
         if (derived && st1 && st1.status === "WORKING" && derived !== st1.action_summary && (this.noHookIds.has(id2) || /^转录活跃|^自愈：/.test(st1.action_summary ?? ""))) {
           this.mgr.setExternalStatus(id2, "WORKING", derived);
+          this.streamDeltaStart(id2);
         }
       }
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
@@ -59146,6 +59215,7 @@ var Bridge = class _Bridge {
           ...taskCallId ? { id: taskCallId } : {}
         });
         this.mgr.setExternalStatus(id2, "WORKING", summary);
+        this.streamDeltaStart(id2);
         this.mgr.pushExternalLog(
           id2,
           "system",
@@ -60142,6 +60212,20 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync30(consoleHtml005));
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/preview/")) {
+      const name = url.pathname.slice("/preview/".length);
+      if (!/^[a-z0-9-]+\.html$/.test(name)) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const previewPath = join35(webRoot, "web-console", "preview", name);
+      if (!existsSync24(previewPath)) {
+        res.writeHead(404).end("preview \u4E0D\u5B58\u5728: " + name);
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync30(previewPath));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {

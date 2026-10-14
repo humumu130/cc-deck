@@ -67,6 +67,10 @@ copy(join(root, "web-console", "qr.js"), join(out, "web-console", "qr.js"));
 for (const f of ["manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "maskable-512.png"]) {
   copy(join(root, "web-console", f), join(out, "web-console", f));
 }
+// preview/ A/B 双轨对比页（ws-server /preview/ 白名单路由伺服；目录整拷，缺目录跳过）
+if (existsSync(join(root, "web-console", "preview"))) {
+  copy(join(root, "web-console", "preview"), join(out, "web-console", "preview"));
+}
 // W-DESIGNHUB 系统设计图纸（docs/system-design/ 整目录递归）：漏拷 = 插件部署的
 // /design/* 404 + SNAPSHOT.design_docs 空（端上入口隐藏——能力位自动降级，但桌面
 // 插件形态就永远看不到图纸了，必须拷）
