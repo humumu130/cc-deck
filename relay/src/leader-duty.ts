@@ -1,4 +1,4 @@
-export type DutyCandidateKind = "receipt" | "dispatch" | "todo" | "stale_doing";
+export type DutyCandidateKind = "receipt" | "dispatch" | "todo" | "stale_doing" | "worker_done";
 export type DutyRisk = "known" | "unknown";
 
 export interface DutyPendingReceipt {
@@ -67,6 +67,8 @@ export interface DutyPolicy {
 }
 
 export interface DutyQueueSnapshot {
+  /** W-PMWAKE：worker 回合 DONE 且未被 Leader 处理过的计数（Leader turn_end 归零） */
+  worker_done_pending?: number;
   pending_receipts?: DutyPendingReceipt[];
   failed_or_hanging_dispatches?: DutyDispatchCandidate[];
   unlocked_todos?: DutyUnlockedTodo[];
@@ -137,6 +139,14 @@ function todoCandidates(snapshot: DutyQueueSnapshot): DutyCandidate[] {
   }));
 }
 
+// W-PMWAKE：worker DONE→PM 唤醒候选（1013 夜四份报告落地 5h43m 无人收割实证）
+function workerDoneCandidates(snapshot: DutyQueueSnapshot): DutyCandidate[] {
+  const n = snapshot.worker_done_pending ?? 0;
+  return n > 0
+    ? [{ kind: "worker_done" as const, id: `worker-done-pending-${n}`, source_session_id: "worker-done" }]
+    : [];
+}
+
 function staleDoingCandidates(snapshot: DutyQueueSnapshot): DutyCandidate[] {
   return (snapshot.stale_doing ?? []).map((doing) => ({
     kind: "stale_doing" as const,
@@ -163,6 +173,7 @@ export function evaluateLeaderActionableWork(snapshot: DutyQueueSnapshot): DutyA
     ...dispatchCandidates(snapshot),
     ...todoCandidates(snapshot),
     ...staleDoingCandidates(snapshot),
+    ...workerDoneCandidates(snapshot),
   ];
   const blocked = [...(snapshot.blocked ?? [])];
   if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };

@@ -714,6 +714,10 @@ export class SessionManager {
   // chain 起算无对账风险；跨重启持久化属 #71 产品面
   private dutyFeed: DutyFeedCountState = { consecutive_feeds: 0 };
   private dutyEpoch = 0;
+  // W-PMWAKE：worker 回合 DONE 且未被 Leader 处理的计数（Leader turn_end 归零）——
+  // dutySnapshot.worker_done_pending → 值守候选「worker_done」→ PM 注入唤醒（1013 夜
+  // 四报告落地 5h43m 无人收割实证；内存态即可，重启归零无害=重启后本就需重新盘点）
+  private workerDonePending = 0;
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -3719,8 +3723,8 @@ export class SessionManager {
           // （备案维持：failed 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，
           // 双挂会重复轰炸）；WORKING Leader 由 feedPM 内合并门兜住（不追加回合）。
           if (dutyEnabled()) {
-            if (this.isLeaderSession(managed.state.session_id)) this.feedPM("turn_end");
-            else if (ok) this.feedPM("worker_done");
+            if (this.isLeaderSession(managed.state.session_id)) { this.workerDonePending = 0; this.feedPM("turn_end"); }
+            else if (ok) { this.workerDonePending += 1; this.feedPM("worker_done"); }
           }
         },
         onSessionEnd: (reason) => {
@@ -4926,6 +4930,7 @@ export class SessionManager {
     }
     return {
       now,
+      worker_done_pending: this.workerDonePending,
       pending_receipts: this.pendingAcceptanceReceipts(),
       failed_or_hanging_dispatches: failed,
       unlocked_todos: todos,
