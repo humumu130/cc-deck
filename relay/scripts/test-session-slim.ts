@@ -104,15 +104,9 @@ ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc
 console.log("-- §C render chain");
 ok(html.includes("const slimRoster = slimRosterOf(S.projects);") && html.includes(".filter((x) => filterDef.test(x) && sessionSearchTest(x) && slimVisible(x))") && html.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
 ok(html.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
-<<<<<<< HEAD
-ok(html.includes('grpHead("slim-teams", "team", slimEntries.length, slimTeamsOpen, 0, "teams")') && html.includes("data-session-group=\"slim-teams\"".replace(/"/g, '"')), "team section renders as collapsible group (B11 reuse; V8R+ ④标题 team/teams 双人图标)");
-ok(html.includes("template.innerHTML = activeMarkup + teamsMarkup + idleMarkup;"), "list assembly order: active → teams → idle");
-ok(fnBody("slimTeamEntryMarkup").includes('if (hidden.length && !hit.length) return "";') && !fnBody("slimTeamEntryMarkup").includes('if (!hidden.length) return "";'), "team card gating = filter-miss only (V8R+ ⑤用户拍板：有编制即出卡，无收起内容团队也可见；旧「无收起内容不出卡」早退退役)");
-=======
 ok(html.includes('data-group-toggle="slim-teams"') && html.includes("<span>team</span>") && html.includes("session-group teams-dock") && html.includes(".session-group.teams-dock {") && html.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
 ok(html.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && html.includes("mountTwoPane(tpl.content);") && html.includes('upper.className = "list-upper";'), "list assembly: two-pane (#103) — upper sessions pane, dock below");
 ok(fnBody("slimTeamEntryMarkup").includes('const isAllFilter = !filterDef || filterDef.id === "all";') && fnBody("slimTeamEntryMarkup").includes("if (!hit.length && (!isAllFilter || !team.members.length)) return \"\";") && fnBody("slimTeamEntryMarkup").includes("const rosterN = team.members.length;"), "team card for roster-present teams (#99-5: unsynced/PM-only included on all-filter via id check, filter purity kept) + roster headcount counting (#99-6)");
->>>>>>> feat/session-list-ia
 
 // ---- §D MutationObserver 放行 + 选中联动 ----
 console.log("-- §D observer integration");
