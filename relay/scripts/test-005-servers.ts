@@ -201,7 +201,11 @@ console.log("-- C. UI 列表化与三锚委托 --");
   ok(i > 0, "C7 非 cloudMode 连接面板嵌入 cloudSettingsRows（桌面壳/LAN 形态同列条目）");
   const iElse = html.lastIndexOf("else {", i);
 <<<<<<< HEAD
+<<<<<<< HEAD
   ok(iElse > 0 && html.slice(iElse, i).includes("settings-row"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后）");
+=======
+  ok(iElse > 0 && html.slice(iElse, i).includes("v8-relaystat"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后·W-V8R 批6 行形态改 v8-relaystat）");
+>>>>>>> feat/v8-visual-restore
 =======
   ok(iElse > 0 && html.slice(iElse, i).includes("v8-relaystat"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后·W-V8R 批6 行形态改 v8-relaystat）");
 >>>>>>> feat/v8-visual-restore

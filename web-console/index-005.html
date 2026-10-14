@@ -178,13 +178,13 @@
       --line-soft: #DCE5EC;
       --text-strong: #15283D;
       --text: #30465B;
-      --dim: #334B61;
-      --card-sub: #4A5670;
-      --faint: #3F566C;
+      --dim: #3D5271; /* W-V8 批9：浅色文字灰阶向 v8 卡文字 #4C5C75 收 */
+      --card-sub: #4C5C75;
+      --faint: #42587A;
       --progress-fill: #607D99;
-      --brand: #C86440;
-      --brand-hover: #D9754D;
-      --brand-strong: #A94725;
+      --brand: #B85228; /* W-V8 批9：浅色品牌系对齐 v8（渐变主值） */
+      --brand-hover: #C96442;
+      --brand-strong: #96391A;
       --brand-soft: #FBE7DE;
       --done: #168D60;
       --working: #A56D00;
@@ -810,7 +810,7 @@
        禁止静默 downloadAndInstall（自动覆盖安装位事故同族风险）。notes 走 latest.json body，
        白底黑字规则沿用设置面板；z-index 120 压过一切业务浮层（更新是全局级事务） */
     .update-dialog-backdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; background: color-mix(in srgb, var(--bg0) 55%, transparent); }
-    .update-dialog { width: min(430px, calc(100vw - 48px)); padding: 18px 20px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface1); box-shadow: var(--card-shadow); }
+    .update-dialog { width: min(430px, calc(100vw - 48px)); padding: 18px 20px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface1); box-shadow: var(--card-shadow); }
     .update-dialog h3 { margin: 0; color: var(--text-strong); font-size: var(--fs-page); }
     .update-dialog .upd-ver { color: var(--brand-strong); font: 700 var(--fs-D) var(--mono); }
     .update-dialog .upd-cur { margin-top: 3px; color: var(--faint); font-size: var(--fs-E); }
@@ -1055,9 +1055,9 @@
     /* W-TOPBAR ⑨：我方气泡对齐旧版 0.6——去阴影（用户「有阴影很割裂」）、底色单列
        --bubble-me-bg 取旧 --panel-2 双主题值（「纯白太突兀，旧版舒服」）、形制 14px 圆角
        右上收 5px、边框 --me-line 改旧 --border 同值；时间戳气泡下方右对齐（.msg-user-row） */
-    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);}
+    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);}
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
-    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 14px; border-top-right-radius: 5px; }
+    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 10px; border-top-right-radius: 5px; }
     .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 16px; } /* 件九：与 AI 块统一 16px 基线节奏（原 11/15 不齐） */
     .conversation-pane .message-ai { margin-bottom: 16px; } /* 件九：同上（原 15；升特异度压 base 源序） */
     .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
@@ -1403,6 +1403,7 @@
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
     .lane-head {display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: var(--fs-D); font-weight: 700;}
+    .lane-head span:last-child { color: var(--text); opacity: .85; } /* W-V8 批10：列计数提亮（0 值 3:1 贴下限项） */
     .task-card { min-width: 0; padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
     /* UIPOLISH3 件四⑤+件五/六/七/八：看板卡精简——紧凑双行（标题/备注截断 + 执行者行），
     状态标签删除（泳道已表达），引擎未知不显示（词表内才渲染），执行者行=引擎点+名，
@@ -1773,7 +1774,7 @@
     .v8-sethead { margin: 2px 2px 14px; }
     .v8-sethead .t { color: var(--text-strong); font-size: 15px; font-weight: 700; }
     .v8-sethead .s { margin-top: 2px; color: var(--faint); font-size: var(--fs-C); }
-    .v8-setcard { margin: 0 0 12px; padding: 12px 14px 10px; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface2); }
+    .v8-setcard { margin: 0 0 12px; padding: 12px 14px 10px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
     .v8-setcard > h5 { margin: 0 0 8px; color: var(--dim); font-size: var(--fs-C); font-weight: 600; letter-spacing: .3px; }
     .v8-setcard .settings-list { gap: 4px; }
     .v8-relaystat { display: flex; align-items: flex-start; gap: 10px; }
@@ -1790,7 +1791,7 @@
     .v8-prbtn.go { border-color: color-mix(in srgb, var(--brand) 40%, transparent); background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand-strong, var(--brand)); }
     .v8-prbtn.ok { border-color: color-mix(in srgb, var(--done) 35%, transparent); color: var(--done); }
     .v8-escape { margin-top: 8px; color: var(--faint); font-size: var(--fs-C); line-height: 1.5; }
-    .settings-row { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .settings-row { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); } /* W-V8 批8：行距紧凑+圆角归一 */
     button.settings-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
     .theme-setting:hover { border-color: var(--brand); }
     .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); }
@@ -1943,7 +1944,7 @@
        原始档位——终值改由「设置→通用·字号调试」面板调参后固化（避免 token 源码降档与
        调参结果两套改动打架）。原始档：A14/A-item13/B12/C11/D13.5/E12/F12/page16/cta13/micro10；
        compact=正常-2、relaxed=正常+2。调试面板 override 走 body inline（见设置域），不进本源。 */
-    body { --fs-A: calc(14px * var(--ui-scale)); --fs-A-item: calc(13px * var(--ui-scale)); --fs-B: calc(12px * var(--ui-scale)); --fs-C: calc(11px * var(--ui-scale)); --fs-D: calc(13.5px * var(--ui-scale)); --fs-E: calc(12px * var(--ui-scale)); --fs-F: calc(12px * var(--ui-scale)); --fs-page: calc(16px * var(--ui-scale)); --fs-cta: calc(13px * var(--ui-scale)); --fs-micro: calc(10px * var(--ui-scale)); }
+    body { --fs-A: calc(14px * var(--ui-scale)); --fs-A-item: calc(13px * var(--ui-scale)); --fs-B: calc(12px * var(--ui-scale)); --fs-C: calc(11px * var(--ui-scale)); --fs-D: calc(12.5px * var(--ui-scale)); --fs-E: calc(12px * var(--ui-scale)); --fs-F: calc(12px * var(--ui-scale)); --fs-page: calc(15px * var(--ui-scale)); --fs-cta: calc(12px * var(--ui-scale)); --fs-micro: calc(10px * var(--ui-scale)); }
     body[data-card-density="compact"] { --fs-A: calc(12px * var(--ui-scale)); --fs-A-item: calc(11px * var(--ui-scale)); --fs-B: calc(10px * var(--ui-scale)); --fs-C: calc(9px * var(--ui-scale)); --fs-D: calc(11.5px * var(--ui-scale)); --fs-E: calc(10px * var(--ui-scale)); --fs-F: calc(10px * var(--ui-scale)); --fs-page: calc(14px * var(--ui-scale)); --fs-cta: calc(11px * var(--ui-scale)); --fs-micro: calc(8px * var(--ui-scale)); }
     body[data-card-density="relaxed"] { --fs-A: calc(16px * var(--ui-scale)); --fs-A-item: calc(15px * var(--ui-scale)); --fs-B: calc(14px * var(--ui-scale)); --fs-C: calc(13px * var(--ui-scale)); --fs-D: calc(15.5px * var(--ui-scale)); --fs-E: calc(14px * var(--ui-scale)); --fs-F: calc(14px * var(--ui-scale)); --fs-page: calc(18px * var(--ui-scale)); --fs-cta: calc(15px * var(--ui-scale)); --fs-micro: calc(12px * var(--ui-scale)); }
     /* W-UIFIX C：密度定卡高/纵向 pad 乘 --ui-scale（overflow:hidden 钉高容器，字大不乘必裁）；
@@ -2020,7 +2021,7 @@
     #d-session .srow-close:hover { color: var(--error); background: var(--danger-bg); }
     #d-session .queue-card:hover .srow-more, #d-session .queue-card:hover .srow-pin, #d-session .queue-card:hover .srow-close,
     #d-session .queue-card:focus-within .srow-more, #d-session .queue-card:focus-within .srow-pin, #d-session .queue-card:focus-within .srow-close { opacity: 1; }
-    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--card-sub, var(--dim)); font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }
+    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); /* W-V8 批10：摘要行提亮一档（路径/摘要全图最暗项） */ font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
     /* B2 批2 A#bg-live：r2 走秒行 warn 呼吸点 + ⑂N tag（task-ref chip 形制；bgCount>0 恒显，含 WORKING 态） */
@@ -2058,7 +2059,7 @@
     /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */
     #d-session .srow-r3 .tag.pin-flag { background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--brand); }
     /* 文档级拖入蒙层（旧版 :8706-8740 语义：拖文件进窗口任意处即亮，防浏览器默认打开文件白屏） */
-    body.file-drag-over::after {content: "松开把文件加进输入栏"; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; z-index: 80; border: 2px dashed var(--brand); border-radius: 14px; background: color-mix(in srgb, var(--brand) 7%, transparent); color: var(--brand); font: 600 var(--fs-A) var(--sans); letter-spacing: .02em; pointer-events: none;}
+    body.file-drag-over::after {content: "松开把文件加进输入栏"; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; z-index: 80; border: 2px dashed var(--brand); border-radius: 10px; background: color-mix(in srgb, var(--brand) 7%, transparent); color: var(--brand); font: 600 var(--fs-A) var(--sans); letter-spacing: .02em; pointer-events: none;}
     /* 回到底按钮（旧版 :9404-9420 语义：离底 >80px 停 300ms 复核浮现+滚动中先收+平滑回底） */
     #d-session .workspace { position: relative; }
     /* 件十一（2026-10-10 用户反馈）：回到底部升级为圆形 FAB（原 26px 文本胶囊钮形态
@@ -2566,7 +2567,7 @@
           </nav>
 
           <section class="desktop-screen active" id="d-session">
-            <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索名称、摘要、目录" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
+            <aside class="queue"><div class="queue-head" data-stub="B2"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools" data-stub="B2"><span class="search-wrap"><input type="search" placeholder="搜索会话" aria-label="搜索会话名称、任务摘要或工作目录"><svg class="search-glass" aria-hidden="true"><use href="#icon-search"></use></svg></span><button type="button" data-session-filter aria-label="筛选会话 · 当前全部"><svg class="icon-inline" aria-hidden="true"><use href="#icon-filter"></use></svg><span data-filter-label>全部</span></button><span data-session-source-label title="当前源"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span></div><div class="session-list" data-session-list data-relay-state="loading"></div></aside>
             <section class="workspace" data-stub="B2">
               <header class="workspace-head"><div class="workspace-title-row"><div class="ws-title-main"><div class="ws-title-line"><h2 id="session-title">会话</h2><span class="identity-cluster" id="session-identity"></span></div><div class="head-sub" id="session-head-sub"><span data-sub-dir></span><button type="button" class="head-capsule head-ctx-meter" id="session-ctx-meter" hidden title="上下文水位"><span class="ctx-mini-band" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ctx-mini-pct" data-ctx-mini-pct>0%</span></button><span data-sub-time></span></div></div><span class="head-actions" id="session-head-actions"><button type="button" class="conv-mini" data-conv-toggle="proc" title="显示/隐藏工具过程行"></button><button type="button" class="conv-mini" data-conv-toggle="think" title="显示/隐藏思考过程"></button><button type="button" class="head-capsule" id="session-perm-capsule" hidden title="权限模式"><span class="cap-dot" aria-hidden="true"></span><span data-perm-text>权限模式</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button><button type="button" class="head-capsule" id="session-extmode-capsule" hidden title="远程审批开关（外部 CLI 会话：开=权限请求推到本端远程决议）"><span class="cap-dot" aria-hidden="true"></span><span data-extmode-text>远程审批</span></button></span></div><div class="segment-bar"><button class="active" title="对话" aria-label="对话"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-chat"></use></svg><span class="tab-txt">对话</span></button><button title="任务" aria-label="任务"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-accept"></use></svg><span class="tab-txt">任务</span></button><button title="输出物" aria-label="输出物"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-package"></use></svg><span class="tab-txt">输出物</span></button><button title="更多" aria-label="更多"><svg class="icon-inline tab-ico" aria-hidden="true"><use href="#icon-more-h"></use></svg><span class="tab-txt">更多</span></button></div></header>
               <div class="workspace-body" id="session-body">
@@ -6756,8 +6757,7 @@
                     const validDate = date && Number.isFinite(date.getTime());
                     const time = validDate ? String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") : "时间未知";
                     const session = state.sessions.get(entry.session_id);
-                    const activityClass = statuses.has(entry.status) ? entry.status : "dispatched";
-                    return '<div class="activity-row activity-' + activityClass + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i aria-hidden="true"></i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
+                    return '<div class="activity-row"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph ' + (glyphTone.get(entry.status) || "") + '" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
                   }).join("") + "</div>";
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
@@ -7118,19 +7118,26 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? state.projects.map((item) => {
-                    const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
-                    const roster = members(item);
-                    const boardEntries = entities(state.boards.get(item.id)?.entries);
-                    const running = boardEntries.length ? boardEntries.filter((task) => (legacyStatuses.get(task.status) || task.status) === "claimed").length : roster.filter((member) => state.sessions.get(member.session_id)?.status === "WORKING").length;
-                    const acceptance = boardEntries.filter((task) => ["submitted", "ready_to_install"].includes(legacyStatuses.get(task.status) || task.status)).length;
-                    const teamAria = (item.name || item.id) + " · " + roster.length + " 个成员 · " + running + " 个进行中 · " + acceptance + " 个待验收";
-                    const teamAvatar = String(item.name || item.id || "团").trim().charAt(0).toUpperCase() || "团";
-                    // UIPOLISH3 件四⑨⑩（2026-10-11 用户反馈）：统计行图标化（席位/待确认→图标+数字，
-                    // 长「8个编制席位」截断根治）；状态灯+「在办」tag 两件套整合为单枚状态胶囊
-                    // （点色随态，灯丑根治）。title 恒带全文字（hover/读屏可达）
-                    return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '" aria-label="' + escape(teamAria) + '"><span class="team-card-avatar" aria-hidden="true">' + escape(teamAvatar) + '</span><div class="team-card-main"><div class="row"><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div><div class="team-counts" title="' + escape(teamAria + (pending ? " · " + pending + " 项待确认" : "")) + '"><span class="team-count"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg><b>' + roster.length + '</b></span><span class="team-count running"><i class="team-count-icon" aria-hidden="true">▶</i><b>' + running + '</b></span><span class="team-count acceptance"><svg class="icon-inline" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></div></div><div class="identity-cluster">' + sourceBadge() + "</div></div>";
-                  }).join("") : banner(projectsEmpty());
+                  query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
+                    // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
+                    // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
+                    // 状态胶囊保留（UIPOLISH3 件九⑩ 用户拍板件不动）；分组只二分不改数据语义
+                    const card = (item) => {
+                      const pending = state.confirms.filter((confirm) => confirm.payload?.gid === item.id).length;
+                      const mins = Math.max(0, Math.round((Date.now() - (item.updated_at || 0)) / 60000));
+                      const activeAgo = mins <= 0 ? "刚刚活跃" : mins < 60 ? mins + " 分钟前活跃" : mins < 1440 ? Math.round(mins / 60) + " 小时前活跃" : Math.round(mins / 1440) + " 天前活跃";
+                      return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><span class="team-ava" aria-hidden="true">' + escape(String(item.name || item.id).trim().slice(0, 1) || "团") + '</span><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div>'
+                        + '<p class="team-meta" title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + ' 席 · 待确认 ' + pending + (item.status === "archived" ? "" : ' · <span class="team-ago">' + activeAgo + '</span>') + '</p>'
+                        + '<div class="identity-cluster">' + sourceBadge() + "</div></div>";
+                    };
+                    const live = state.projects.filter((p) => p.status !== "archived");
+                    const archived = state.projects.filter((p) => p.status === "archived");
+                    const grp = (label, n) => '<div class="team-grp"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>' + label + ' <span class="team-grp-n">' + n + "</span></div>";
+                    let html = "";
+                    if (live.length) html += grp("进行中", live.length) + live.map(card).join("");
+                    if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
+                    return html;
+                  })() : banner(projectsEmpty());
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
