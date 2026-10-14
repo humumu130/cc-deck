@@ -104,6 +104,7 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
               onPress={() => setDetailOpen({ srcId: src.id, gid: g.id, name: g.name })}
             >
               <View style={styles.teamR1}>
+                <View style={styles.teamIcon}><Text style={styles.teamIconT}>T</Text></View>
                 <Text style={styles.teamName} numberOfLines={1}>{g.name}</Text>
                 <View style={[styles.stPill, { borderColor: withA(stColor, 0.5), backgroundColor: withA(stColor, 0.1) }]}>
                   <View style={[styles.stPillDot, { backgroundColor: stColor }]} />
@@ -224,6 +225,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
           onPress={() => setDetailOpen({ srcId: src.id, gid: g.id, name: g.name })}
         >
           <View style={styles.teamR1}>
+            <View style={styles.projectIcon}><Text style={styles.projectIconT}>P</Text></View>
             <Text style={styles.teamName} numberOfLines={1}>{g.name}</Text>
             <View style={[styles.stPill, { borderColor: withA(stColor, 0.5), backgroundColor: withA(stColor, 0.1) }]}>
               <View style={[styles.stPillDot, { backgroundColor: stColor }]} />
@@ -297,6 +299,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
                     onPress={() => setUnfiledExpand(open ? null : b.dir)}
                   >
                     <View style={styles.teamR1}>
+                      <View style={styles.projectIcon}><Text style={styles.projectIconT}>P</Text></View>
                       <Text style={styles.teamName} numberOfLines={1}>{shortDirOf(b.native || b.dir)}</Text>
                       <Text style={styles.unfiledTag}>未立项</Text>
                     </View>
@@ -376,19 +379,19 @@ const makeStyles = (c: ThemeColors) =>
     page: { flex: 1, backgroundColor: c.bg },
     head: {
       flexDirection: "row", alignItems: "baseline", gap: 8,
-      paddingHorizontal: 16, paddingTop: 9, paddingBottom: 6,
+      paddingHorizontal: 16, paddingTop: 12, paddingBottom: 9,
       borderBottomWidth: 1, borderBottomColor: c.line,
     },
-    headT: { color: c.text, fontSize: 15, fontWeight: "700" },
+    headT: { color: c.textStrong, fontSize: 16, fontWeight: "700" },
 
     // W-POLISH-MOBILE A2：副语降为 dim（品牌色克制——原 brandA 与 ＋ 钮双色抢锚点）；
     headSub: { color: c.dim, fontSize: 11, fontWeight: "600", flex: 1 },
-    plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.1), borderWidth: 1, borderColor: withA(c.brandA, 0.32), overflow: "hidden" },
+    plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.38), overflow: "hidden" },
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
-    list: { flex: 1, paddingHorizontal: 14, paddingTop: 10 },
+    list: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
     // 确认卡队列（A9：队列加节头，与详情页 ① 节语言一致）
     // dda6490 并集合并残留收口：上方 A2 块（dim 副语/36＋钮）为终态，旧块（brandA/44×44 件七）重复键删除——JS 对象字面量后者静默覆盖前者，残留即回退
-    cfQueue: { gap: 8, marginBottom: 12 },
+    cfQueue: { gap: 9, marginBottom: 14 },
     cfH: { color: c.faint, fontSize: 11, fontWeight: "700", marginBottom: 1 },
     cfSrc: { color: c.dim, fontSize: 10.5, fontWeight: "700", marginBottom: -3 },
     errRow: {
@@ -401,25 +404,29 @@ const makeStyles = (c: ThemeColors) =>
     // 团队/项目卡（同形制）：r1 名称+状态胶囊 / r2 元信息行（A1：去 emoji，席位数字
     // 提亮 text 色、待确认品牌色——信息进对视觉位，胶囊退为状态锚不抢色）
     teamCard: {
-      borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
-      paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8, gap: 5, overflow: "hidden",
+      borderRadius: 14, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
+      paddingHorizontal: 12, paddingVertical: 12, marginBottom: 9, gap: 7, overflow: "hidden",
     },
     projCard: {
-      borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
-      paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8, gap: 8, overflow: "hidden",
+      borderRadius: 14, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
+      paddingHorizontal: 12, paddingVertical: 12, marginBottom: 9, gap: 8, overflow: "hidden",
     },
     teamR1: { flexDirection: "row", alignItems: "center", gap: 8 },
-    teamName: { color: c.text, fontSize: 13.5, fontWeight: "700", flex: 1, minWidth: 0 },
+    teamIcon: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.32) },
+    teamIconT: { color: c.brandA, fontSize: 13, fontWeight: "800" },
+    projectIcon: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: withA(c.brandB, 0.14), borderWidth: 1, borderColor: withA(c.brandB, 0.32) },
+    projectIconT: { color: c.brandB, fontSize: 13, fontWeight: "800" },
+    teamName: { color: c.textStrong, fontSize: 13.5, fontWeight: "700", flex: 1, minWidth: 0 },
     stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
     stPillDot: { width: 6, height: 6, borderRadius: 3 },
     stPillT: { fontSize: 10, fontWeight: "700" },
-    teamMeta: { color: c.faint, fontSize: 10.5, marginTop: 0 },
+    teamMeta: { color: c.dim, fontSize: 10.5, marginTop: 0, paddingLeft: 38 },
     teamMetaStrong: { color: c.dim, fontWeight: "700", fontVariant: ["tabular-nums"] },
     teamMetaPend: { color: c.brandA, fontWeight: "700", fontVariant: ["tabular-nums"] },
     // 项目卡动作行（A4：触达 36+主钮字重 700）
     actRow: { flexDirection: "row", gap: 8, marginTop: 6 },
     actBtn: {
-      flex: 1, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center",
+      flex: 1, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center",
       backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.35), overflow: "hidden",
     },
     actBtnSub: { backgroundColor: c.tintSoft, borderColor: c.line },
@@ -434,8 +441,8 @@ const makeStyles = (c: ThemeColors) =>
     unfiledNoteT: { color: c.faint, fontSize: 10.5, lineHeight: 15 },
     // 空态卡（A3：图标锚+标题提亮——「不是白板」）
     emptyCard: {
-      alignItems: "center", paddingVertical: 38, paddingHorizontal: 22,
-      borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel, gap: 7,
+      alignItems: "center", paddingVertical: 42, paddingHorizontal: 22,
+      borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel, gap: 8,
     },
     emptyIcon: { color: withA(c.faint, 0.5), fontSize: 30, fontWeight: "600", lineHeight: 34 },
     emptyT: { color: c.dim, fontSize: 14, fontWeight: "700" },

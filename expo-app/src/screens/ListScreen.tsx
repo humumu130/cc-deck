@@ -1833,8 +1833,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   accCard: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 10, paddingHorizontal: 12,
-    borderRadius: 12, borderWidth: 1, marginBottom: 8, overflow: "hidden",
-    backgroundColor: c.panel, borderColor: c.line,
+    borderRadius: 14, borderWidth: 1, marginBottom: 9, overflow: "hidden",
+    backgroundColor: c.panel2, borderColor: withA(c.working, 0.35),
   },
   accTag: { backgroundColor: c.tintSoft, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
   accTagT: { color: c.brandA, fontSize: 10, fontWeight: "700" },
@@ -1847,7 +1847,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 顶栏设备图标源切换菜单（方案 A）：右上锚定小面板，行=色点+名称+通道+当前标
   srcMenu: {
     position: "absolute", top: 52, right: 12, zIndex: 30, minWidth: 208,
-    backgroundColor: c.panel, borderRadius: 12, borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.panel2, borderRadius: 13, borderWidth: 1, borderColor: c.lineStrong,
     overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
@@ -1862,8 +1862,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担
-    paddingHorizontal: 16, paddingTop: 9, paddingBottom: 6,
-    borderBottomWidth: 1, borderBottomColor: c.line,
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8,
+    backgroundColor: c.panel, borderBottomWidth: 1, borderBottomColor: c.line,
   },
   // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
   connChip: {
@@ -1887,8 +1887,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tgMoonMask: { position: "absolute", width: 10, height: 10, borderRadius: 5, left: 4.5, top: -2.5 },
   statRow: {
     flexDirection: "row", alignItems: "center", gap: 9,
-    paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
-    height: 34,
+    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 5,
+    height: 38,
   },
   statSrc: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
   statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
@@ -1906,8 +1906,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   helpT: { fontSize: 10, color: c.faint, lineHeight: 12 },
   legendScrim: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.25)", zIndex: 60 },
   legendCard: {
-    position: "absolute", top: 90, left: 18, minWidth: 128,
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 12,
+    position: "absolute", top: 96, left: 18, minWidth: 128,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 14,
     paddingVertical: 12, paddingHorizontal: 14, gap: 8, elevation: 6,
   },
   legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1974,18 +1974,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   aggTOn: { color: c.brandA, fontWeight: "700" },
   // W-EXPO 005 通栏行（军规①②）：无框无圆角、行间零分隔线（纯留白分行）；卡面用
   // 页面底色保持不透明（左滑动作排藏在卡后，透明底会提前露出）
-  swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
-  swipeWrapC: { marginBottom: 2 },
-  swipeWrapM: { marginBottom: 1 },
-  swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
+  swipeWrap: { marginBottom: 8, borderRadius: 13, overflow: "hidden" },
+  swipeWrapC: { marginBottom: 8 },
+  swipeWrapM: { marginBottom: 6 },
+  swipeCard: { borderRadius: 13, overflow: "hidden", backgroundColor: c.panel, borderWidth: 1, borderColor: c.line },
   // #32 离线源降权 + 空闲置灰：向页面背景渐隐的蒙层（不用 opacity——会让底层
   // 动作排透出，2026-09-17 测试机截图实锤）
   dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.45) },
   // 件六①：长按操作菜单（贴底 sheet）
-  menuMask: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
+  menuMask: { flex: 1, backgroundColor: withA(c.bg, 0.72), justifyContent: "flex-end" },
   menuSheet: {
-    backgroundColor: c.panel, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 16,
+    backgroundColor: c.panel2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderWidth: 1, borderColor: c.lineStrong, paddingHorizontal: 16,
     paddingTop: 14, paddingBottom: 30,
   },
   menuTitle: { color: c.text, fontSize: 14, fontWeight: "700", marginBottom: 8 },
@@ -1994,14 +1994,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuLabel: { color: c.text, fontSize: 14, fontWeight: "600" },
   menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
-    backgroundColor: "transparent", borderWidth: 0,
-    borderRadius: 0, paddingVertical: 6, paddingHorizontal: 14,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12,
   },
-  cardC: { borderRadius: 0, paddingVertical: 5, paddingHorizontal: 14 },
+  cardC: { borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12 },
   // 极简平铺行：同通栏语言，行高最矮
   // 1013 高度压缩批：单行内容 ~31px 低于 44px 触控底线（改前 ~33 同欠账）——
   // minHeight 44 兜底 + 内容垂直居中（设置行 minHeight 48 同语言），视觉仍为三档最矮
-  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 6, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
+  cardM: { borderRadius: 11, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel, paddingVertical: 8, paddingHorizontal: 12, minHeight: 44, justifyContent: "center" },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },

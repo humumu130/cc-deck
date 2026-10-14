@@ -10,11 +10,11 @@ interface ThemeCtx {
   toggle: () => void;
 }
 
-// #173 默认浅色：无已存偏好时 light；AsyncStorage 存过 light/dark 的照旧（用户偏好不动）
-const Ctx = createContext<ThemeCtx>({ c: LIGHT, mode: "light", toggle: () => {} });
+// V8 默认深色：无已存偏好时直接进入原型的蓝紫深色壳；AsyncStorage 中已有偏好照旧。
+const Ctx = createContext<ThemeCtx>({ c: DARK, mode: "dark", toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<Mode>("light");
+  const [mode, setMode] = useState<Mode>("dark");
   useEffect(() => {
     void AsyncStorage.getItem("ccr_theme").then((v) => {
       if (v === "light" || v === "dark") setMode(v);

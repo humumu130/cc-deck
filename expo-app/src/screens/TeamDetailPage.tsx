@@ -570,13 +570,13 @@ const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     page: { flex: 1, backgroundColor: c.bg },
     head: {
-      flexDirection: "row", alignItems: "center", gap: 6,
-      paddingHorizontal: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
+      flexDirection: "row", alignItems: "center", gap: 8,
+      paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: c.line, backgroundColor: c.panel,
     },
     // B6：返回/刷新加容器底与 ripple（裸符号 affordance 弱）
-    back: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 10, overflow: "hidden" },
+    back: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden" },
     backT: { color: c.brandA, fontSize: 24, fontWeight: "600", marginTop: -2 },
-    headT: { color: c.text, fontSize: 15.5, fontWeight: "700" },
+    headT: { color: c.textStrong, fontSize: 16, fontWeight: "700" },
     headTags: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" },
     stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
     stPillDot: { width: 6, height: 6, borderRadius: 3 },
@@ -585,9 +585,9 @@ const makeStyles = (c: ThemeColors) =>
     refresh: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 10, overflow: "hidden" },
     refreshT: { color: c.dim, fontSize: 19 },
     // B1：节间距节奏（gap 7→8 + 节头 marginTop 10→14，七节分堆更清）
-    body: { padding: 14, paddingBottom: 44, gap: 8 },
+    body: { padding: 14, paddingBottom: 44, gap: 10 },
     sec: { marginBottom: 6 },
-    secH: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 14, marginBottom: 5 },
+    secH: { color: c.dim, fontSize: 11, fontWeight: "700", marginTop: 16, marginBottom: 6, letterSpacing: 0.2 },
     secHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 5, paddingVertical: 2, borderRadius: 8 },
     secChev: { color: c.faint, fontSize: 12 },
     secGap: { gap: 6 },
@@ -610,8 +610,8 @@ const makeStyles = (c: ThemeColors) =>
     claimGrp: { marginBottom: 6 },
     claimGrpH: { color: c.dim, fontSize: 11, fontWeight: "700", marginBottom: 4 },
     tCard: {
-      borderRadius: 10, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
-      paddingHorizontal: 10, paddingVertical: 9, gap: 4, overflow: "hidden",
+      borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
+      paddingHorizontal: 11, paddingVertical: 10, gap: 5, overflow: "hidden",
     },
     tCardHi: { borderWidth: 1.5, borderColor: c.brandA, backgroundColor: c.tintSoft },
     tCardT: { color: c.text, fontSize: 12.5, lineHeight: 17, fontWeight: "600" },
@@ -628,8 +628,8 @@ const makeStyles = (c: ThemeColors) =>
     engBadgeT: { color: c.dim, fontSize: 10, fontWeight: "600" },
     // 成员卡
     memCard: {
-      borderRadius: 10, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
-      paddingHorizontal: 10, paddingVertical: 9, gap: 7, overflow: "hidden",
+      borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
+      paddingHorizontal: 11, paddingVertical: 10, gap: 8, overflow: "hidden",
     },
     memRow: { flexDirection: "row", alignItems: "center", gap: 9 },
     memAva: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },

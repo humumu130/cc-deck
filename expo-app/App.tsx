@@ -242,7 +242,7 @@ function WatchPairModal({
     <Modal visible transparent animationType="fade" onRequestClose={() => onDecide(false)}>
       <View style={st.wpMask}>
         <View style={st.wpCard}>
-          <Text style={st.wpTitle}>⌚ 手表请求接入</Text>
+          <Text style={st.wpTitle}>手表请求接入</Text>
           <Text style={st.wpName}>{req.name}</Text>
           <Text style={st.wpCode}>{req.code}</Text>
           <Text style={st.wpHint}>与手表屏幕上的 6 位码核对一致再允许</Text>
@@ -1073,8 +1073,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   domainHidden: { display: "none" },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10, maxWidth: "86%",
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,
+    borderRadius: 14, paddingHorizontal: 18, paddingVertical: 10, maxWidth: "86%",
   },
   toastT: { color: c.text, fontSize: 13.5, textAlign: "center" },
   // 悬浮层根：全屏 box-none，按钮/卡片/收起 scrim 各自绝对定位
@@ -1216,22 +1216,22 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   udGoT: { color: "#fff", fontSize: 13.5, fontWeight: "700" },
   // #316 手表配对授权弹窗：居中卡片，6 位码大字便于与手表屏核对
-  wpMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: 30 },
+  wpMask: { flex: 1, backgroundColor: withA(c.bg, 0.72), alignItems: "center", justifyContent: "center", padding: 24 },
   wpCard: {
-    width: "100%", maxWidth: 300, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 18, paddingVertical: 22, paddingHorizontal: 20, alignItems: "center",
+    width: "100%", maxWidth: 320, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,
+    borderRadius: 20, paddingVertical: 24, paddingHorizontal: 22, alignItems: "center",
   },
-  wpTitle: { color: c.text, fontSize: 15.5, fontWeight: "800" },
+  wpTitle: { color: c.textStrong, fontSize: 16, fontWeight: "800" },
   wpName: { color: c.dim, fontSize: 12.5, marginTop: 5 },
   wpCode: {
     color: c.brandA, fontSize: 40, fontWeight: "800", letterSpacing: 8, paddingLeft: 8,
-    marginTop: 14, fontVariant: ["tabular-nums"],
+    marginTop: 16, fontVariant: ["tabular-nums"],
   },
   wpHint: { color: c.faint, fontSize: 11.5, marginTop: 10, textAlign: "center", lineHeight: 16 },
-  wpBtns: { flexDirection: "row", gap: 10, marginTop: 18, alignSelf: "stretch" },
+  wpBtns: { flexDirection: "row", gap: 10, marginTop: 20, alignSelf: "stretch" },
   wpDeny: {
     flex: 1, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.lineStrong, overflow: "hidden",
   },
   wpDenyT: { color: c.dim, fontSize: 14, fontWeight: "600" },
   wpAllow: {

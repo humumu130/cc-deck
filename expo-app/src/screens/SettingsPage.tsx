@@ -1464,10 +1464,10 @@ function ensurePlugBlink() {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // tab 页容器（原抽屉 root/scrim/panel 退役）：全宽 + 顶安全区（JSX 注入 insets）
   page: { flex: 1, backgroundColor: c.bg },
-  content: { flex: 1, paddingHorizontal: 16, paddingTop: 14 },
+  content: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   // W-MSETSIG 头部重设计：005 mobile-head 域标题（h2 设置 15-17px + small 副题
   // 10.5px）——原「logo + CC Deck」品牌头部退役（品牌识别收敛到关于弹窗 abLogo）
-  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.line },
+  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 13, borderBottomWidth: 1, borderBottomColor: c.line },
   nameT: { color: c.textStrong, fontSize: 16.5, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 10.5, marginTop: 2 },
   // 头部右上全局扫码钮：tintSoft 圆角方（#130 去描边），角标式扫描图标
@@ -1480,12 +1480,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   //（行间 hairline 由 Row 的 rowDiv 收在卡内）；组卡 marginBottom 与内容流呼吸
   groupCard: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, overflow: "hidden", marginBottom: 8,
+    borderRadius: 14, overflow: "hidden", marginBottom: 10,
   },
   // 设置行（005 settings-row 直译）：图标方格 + 双行文字 + 右槽；
   // padding 12 + minHeight 48 = 44px+ 触达。带 children（内嵌块）时行盒转
   // rowWrap（column）：paddingHorizontal 12 + row（内层行）自适应
-  row: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 12, paddingVertical: 13, minHeight: 48 }, // 1013 用户反馈「行高太低」：上下 padding 回调一档（12→13，minHeight 48 热区底线不动）
+  row: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 13, paddingVertical: 14, minHeight: 50 }, // 1013 用户反馈「行高太低」：上下 padding 回调一档（12→13，minHeight 48 热区底线不动）
   rowWrap: { paddingHorizontal: 12, paddingVertical: 7 },
   rowDiv: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line },
   rowTitleT: { color: c.text, fontSize: 13.5, fontWeight: "600" },
@@ -1522,7 +1522,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvScroll: { maxHeight: 320 },
   srvRow: {
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",
+    borderRadius: 14, backgroundColor: c.panel2, marginBottom: 9, overflow: "hidden",
   },
   // #130 选中改品牌蓝（原绿框绿底——绿色从此只表示「在线插头」），与全 App 选中语言统一
   srvRowOn: { borderColor: withA(c.brandA, 0.45), backgroundColor: c.tintStrong },
@@ -1532,7 +1532,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #51 行头：名称占满剩余空间（flex:1）——通道标记+插头图标恒右对齐（原 flexShrink
   // 随名称长短漂移：短名靠左长名靠右不齐）；图标间距收小 6→4
   srvHead: { flexDirection: "row", alignItems: "center", gap: 4 },
-  srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
+  srvName: { color: c.textStrong, fontSize: 13.5, fontWeight: "600", flex: 1 },
   // 0.7 批 2 服务器卡副行状态词（状态灯的文本回声；unpaired 染红点明须人工重配）
   srvNoteT: { color: c.faint, fontSize: 10, marginTop: 2 },
   srvNoteBadT: { color: c.error },
@@ -1570,12 +1570,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   routeToast: {
     position: "absolute", left: 16, right: 16, alignItems: "center",
     paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12,
-    backgroundColor: withA("#02050A", 0.78),
+    backgroundColor: withA(c.panel2, 0.96), borderWidth: 1, borderColor: c.lineStrong,
   },
   routeToastT: { color: "#EDEDF2", fontSize: 12, fontWeight: "600" },
   devSrcRow: { marginBottom: 10 },
   devSrcChip: {
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 9,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
     backgroundColor: c.tintSoft, marginRight: 6, maxWidth: 150,
   },
   devSrcChipOn: { backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45) },
@@ -1583,8 +1583,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   devSrcChipTOn: { color: c.brandA },
   devList: { flex: 1 },
   devCard: {
-    borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: c.panel2,
-    paddingHorizontal: 11, paddingVertical: 9, marginBottom: 8,
+    borderWidth: 1, borderColor: c.line, borderRadius: 14, backgroundColor: c.panel2,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 9,
   },
   devCardLocal: { borderColor: withA(c.brandA, 0.45), backgroundColor: c.tintStrong },
   devHead: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -1609,8 +1609,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 更足、名称 textStrong 14.5/700、副行状态词+通道词；在线静态、非在线可点
   activeCard: {
     flexDirection: "row", alignItems: "center", gap: 11,
-    paddingVertical: 13, paddingHorizontal: 14, borderRadius: 12,
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    paddingVertical: 14, paddingHorizontal: 14, borderRadius: 14,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,
     marginBottom: 12, overflow: "hidden",
   },
   activeBar: { position: "absolute", left: 0, top: 12, bottom: 12, width: 3, borderRadius: 2 },
@@ -1623,7 +1623,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 右侧倒计时/刷新（pairBox/pairTop 容器键随分节退役）
   pairSide: { flexDirection: "row", alignItems: "center", gap: 8 },
   // #130 配对码降权：19→15（层级靠字重+等宽+字距，不靠尺寸）
-  pairCodeT: { color: c.text, fontSize: 15, fontWeight: "700", letterSpacing: 2, fontVariant: ["tabular-nums"] },
+  pairCodeT: { color: c.brandA, fontSize: 16, fontWeight: "800", letterSpacing: 2.2, fontVariant: ["tabular-nums"] },
   pairExpT: { color: c.dim, fontSize: 11, fontVariant: ["tabular-nums"] },
   // #130 刷新钮与扫码钮同形制：tintSoft 圆底去描边，26×26
   pairRefresh: {
@@ -1679,16 +1679,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 关于区底部弱化 Build 行（面板元信息收尾，最暗一档）
   aboutBuildT: { color: c.faint, fontSize: 10, marginTop: 16 },
   // #313 关于弹窗（ab = about）：NewSessionModal 同款贴底卡片视觉语言
-  abMask: { flex: 1, backgroundColor: withA("#02050A", 0.65), justifyContent: "flex-end" },
+  abMask: { flex: 1, backgroundColor: withA(c.bg, 0.72), justifyContent: "flex-end" },
   abSheet: {
-    backgroundColor: c.panel, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    backgroundColor: c.panel2, borderTopLeftRadius: 22, borderTopRightRadius: 22,
     borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 16,
     paddingTop: 18, paddingBottom: 30,
   },
   abHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   abLogo: {
     width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center",
-    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.lineStrong,
   },
   abNameT: { color: c.text, fontSize: 16.5, fontWeight: "700" },
   abVerT: { color: c.faint, fontSize: 11.5, marginTop: 1 },

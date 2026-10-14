@@ -6,8 +6,8 @@
 // 四域（W-EXPOLISH 件六用户拍板回四域：通知放底部太挤，主流做法右上角通知——
 // 通知改挂 ListScreen 顶栏铃铛 + sheet 弹层，NotifCenterPage 组件保留复用）：
 // 会话 = ListScreen 宿主；团队/项目/设置 = 内容化页（OrgTabs/SettingsPage 宿主，
-// 件三保留）。规格对齐桌面 mobile-nav：高 62px 内容区 + 底缘安全区、图标 20px、
-// 44px 触区、选中语义 = 图标本体染品牌色无底（微信式）、badge 15px 红底白字右上角。
+// 件三保留）。规格对齐桌面 mobile-nav：高 64px 内容区 + 底缘安全区、图标 20px、
+// 44px 触区、选中语义 = 图标本体染蓝色并带微型定位点、badge 15px 琥珀底深字右上角。
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -101,6 +101,7 @@ export default function BottomTabs({
               </View>
             </View>
             <Text style={[st.label, active && st.labelOn, { color }]}>{t.label}</Text>
+            <View style={[st.activeDot, !active && st.activeDotOff]} />
           </Pressable>
         );
       })}
@@ -110,18 +111,18 @@ export default function BottomTabs({
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
-    // 62px 内容区（对齐桌面 mobile-nav）+ 底缘安全区由组件按 insets 注入
+    // V8 底栏：蓝紫手机壳面板 + hairline 分隔，底缘安全区由组件注入
     bar: {
       flexDirection: "row",
-      height: 62,
-      backgroundColor: c.navBg,
+      height: 64,
+      backgroundColor: c.panel,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: c.line,
     },
-    // 44px 触区：slot 全高 62px ≥ 44
-    slot: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3 },
+    // 44px 触区：slot 全高 64px ≥ 44
+    slot: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, minHeight: 44 },
     iconWrap: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
-    // badge 15px 红底白字右上角（桌面 mobile-nav badge 同规格）
+    // badge 15px 琥珀底深字：待处理语义与 v8 原型一致
     badge: {
       position: "absolute",
       top: -4,
@@ -130,13 +131,15 @@ const makeStyles = (c: ThemeColors) =>
       height: 15,
       borderRadius: 7.5,
       paddingHorizontal: 4,
-      backgroundColor: c.error,
+      backgroundColor: c.working,
       alignItems: "center",
       justifyContent: "center",
     },
     // P0 加固：badge 隐藏态 = display 切换（不插拔节点）
     badgeOff: { display: "none" },
-    badgeT: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
-    label: { fontSize: 10, fontWeight: "600" },
+    badgeT: { color: "#2B2100", fontSize: 9, fontWeight: "800" },
+    label: { fontSize: 10.5, fontWeight: "600" },
     labelOn: { fontWeight: "700" },
+    activeDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.brandA, marginTop: -1 },
+    activeDotOff: { display: "none" },
   });
