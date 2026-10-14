@@ -211,6 +211,19 @@ ok(shell.includes("if (cloudMode) cloudDisconnect();"), "C11 pagehide 云链卸�
   rmSync(dir, { recursive: true, force: true });
   ok(synFails === 0, "C12 六内联块全部 node --check 通过");
 }
+// C13 设置域模板串 div 平衡（#104：fe9c571 插字号调试行丢 general 面板闭合，后四面板
+// 被解析器吞进 general 内 → 快捷键/团队身份模板/扩展/关于点开空白。node --check 只验 JS
+// 语法不验模板串内 HTML 平衡——此处补结构闸）
+{
+  const ssStart = shell.indexOf("function setupSettingsDomain");
+  const ssEnd = ssStart >= 0 ? shell.indexOf("wireCardDensityControls(body)", ssStart) : -1;
+  const zone = ssStart >= 0 && ssEnd > ssStart ? shell.slice(ssStart, ssEnd) : "";
+  ok(zone.length > 2000, "C13 setupSettingsDomain 模板段可提取");
+  const divOpens = (zone.match(/<div\b/g) || []).length;
+  const divCloses = (zone.match(/<\/div>/g) || []).length;
+  ok(divOpens > 20 && divOpens === divCloses, `C13 设置域模板串 div 平衡（开 ${divOpens} = 闭 ${divCloses}；失衡即面板吞嵌空白）`);
+  ok(count(zone, 'data-settings-panel=') === 7, "C13 七面板标记齐（connections/provider/general/shortcuts/identity/extensions/about）");
+}
 
 console.log(`\n005-parity: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
