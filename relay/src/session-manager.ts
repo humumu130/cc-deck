@@ -24,6 +24,11 @@ import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
 import { authFailureHint, probeEngineAuth } from "./engine-auth.js";
 import { cancelEngineLogin, engineLoginStatus, startEngineLogin, verifyEngineLogin } from "./engine-login.js";
+// #102 批 C：登录就绪兜底重探（pane 关闭后低频重探 + 被拦意图登记——恢复三面入口）
+import {
+  ensureAuthWatch, recordBlockedCreate, recordBlockedDispatch,
+  setAuthWatchReadyHook, takeBlockedCreates, takeBlockedDispatches,
+} from "./engine-auth-watch.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
@@ -706,6 +711,9 @@ export class SessionManager {
   // 不冲突——那边管「注入会话的提醒文本」，这边管「端上通知列表的结构化数据源」
   private notifications = new Map<string, NotificationLifecycleItem>();
   private notificationsJson = ""; // 上次投影的序列化基线（值变才发帧的 dedup 锚）
+  // #102 批 C：引擎登录恢复最近执行时刻（engine → ts）——pane 轮验/verify/watch
+  // 兜底三源同 ready 的幂等窗锚（10s 内同引擎只跑一轮恢复扫描）
+  private authRecoverAt = new Map<SessionEngine, number>();
 
   // #26 矩阵式 M1：组织 Leader 常驻态。leaderId = 当前 Leader 的 relay 会话 id
   //（isLeaderSession 的内存匹配源——COMMAND_MESSAGE/onTurnEnd 高频路径零盘 IO）；
@@ -829,6 +837,16 @@ export class SessionManager {
     // 广播增量 + 淘汰/合并非零时发 GC 轮摘要通知（D1-4「经验整理：淘汰 N、合并 M，
     // 均可恢复」走既有通知流）。注册在构造器：startExperienceGc 定时器晚于 mgr 建立
     setExperienceGcSummaryHook((s) => this.onExperienceGcRound(s));
+    // #102 批 C：登录就绪恢复三面入口（会话 resume / 创建拦截通知回显 / 派单拦截
+    // 通知）——watch 兜底循环探到 ready 时回调。另订阅 AUTH_REQUIRED ready 帧：
+    // 批 B pane 轮验/verify 的实时 ready 也收敛到同一入口（幂等窗去重，无需互斥锁）
+    setAuthWatchReadyHook((engine) => this.recoverEngineAfterAuth(engine));
+    this.bus.subscribe((env) => {
+      if (env.type !== "AUTH_REQUIRED") return;
+      const p = env.payload as { engine?: unknown; state?: unknown };
+      if (p?.state !== "ready" || typeof p.engine !== "string") return;
+      this.recoverEngineAfterAuth(p.engine as SessionEngine);
+    });
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -1360,6 +1378,80 @@ export class SessionManager {
     }
     if (revived > 0) console.log(`[auto-revive] 已自动拉起 ${revived} 个有未完成待办的托管会话`);
     return revived;
+  }
+
+  // ---------- #102 批 C：引擎登录就绪恢复三面（探/登/通之「通」） ----------
+  // ready 三源（watch 兜底循环 / 批 B pane 轮验 / verify 手动验证）都收敛到本入口；
+  // 10s 幂等窗去重——同一就绪事件多源重复触发只跑一轮。
+  //   面一（会话恢复）：运行时失效进 needs_auth 的 ERROR 会话自动 resume——复用
+  //     resumeAgent + renewable 值守 prompt（流断即丢不记重放账，duty 重推导再注入），
+  //     恢复尝试即清 auth_hint（摘 needs_auth 牌防重复触发）；
+  //   面二（创建拦截）：无会话实体可恢复——消费 intent 快照发通知「已登录，可以创建了」
+  //     +anchor/task 摘要回显；
+  //   面三（派单拦截）：通知「已登录，可以重新派单」——不自动重放（失败重放有
+  //     副作用风险，重发是用户动作）。
+  private recoverEngineAfterAuth(engine: SessionEngine): void {
+    const now = Date.now();
+    if (now - (this.authRecoverAt.get(engine) ?? 0) < 10_000) return;
+    this.authRecoverAt.set(engine, now);
+    const label = getEngineDefinition(engine)?.label ?? engine;
+    let resumed = 0;
+    for (const s of this.sessions.values()) {
+      // 只恢复运行时失效面（ERROR+auth_hint）；手动救活/已收口的会话不命中条件
+      if (s.state.engine !== engine || !s.state.auth_hint || s.state.status !== "ERROR") continue;
+      s.state.auth_hint = undefined; // 恢复尝试即摘牌（防本轮回环重复恢复；快照随帧自愈）
+      try {
+        this.resumeAgent(
+          s,
+          `[引擎登录恢复] ${label} 已登录，自动恢复本会话。检测到本会话仍有未完成任务。` + this.reviveInstruction(s),
+          undefined, undefined, undefined, { renewable: true },
+        );
+        this.pushExternalLog(s.state.session_id, "system", `${label} 已登录，会话已恢复`);
+        resumed++;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.pushExternalLog(s.state.session_id, "system", `${label} 已登录，但会话自动恢复失败：${msg}（可手动发消息拉起）`);
+      }
+    }
+    if (resumed > 0) {
+      try {
+        this.upsertNotification("system", `auth-recover-${engine}`, String(now), {
+          title: `${label} 已登录`,
+          body: truncate(`任务已恢复（${resumed} 个会话自动拉起）`, 160),
+          severity: "info", group: "activity", actionable: false, domain: "session", returnPath: "sessions",
+        });
+      } catch { /* 通知面尽力而为 */ }
+    }
+    for (const c of takeBlockedCreates(engine)) {
+      try {
+        this.upsertNotification("system", `auth-create-${engine}-${c.ts}`, String(c.ts), {
+          title: `${label} 已登录，可以创建了`,
+          body: truncate(`此前被拦的创建已解锁：${c.prompt_summary || "(无任务摘要)"}${c.cwd ? `（目录 ${c.cwd}）` : ""}`, 160),
+          severity: "info", group: "activity", actionable: false, domain: "session", returnPath: "sessions",
+        });
+      } catch { /* 尽力而为 */ }
+    }
+    for (const d of takeBlockedDispatches(engine)) {
+      try {
+        this.upsertNotification("system", `auth-dispatch-${engine}-${d.ts}`, String(d.ts), {
+          title: `${label} 已登录，可以重新派单`,
+          body: truncate(`此前被拦的派单已解锁：${d.title || d.anchor}`, 160),
+          severity: "info", group: "activity", actionable: false, domain: "session", returnPath: "sessions",
+        });
+      } catch { /* 尽力而为 */ }
+    }
+  }
+
+  // #102 批 C：重启扫描——relay 起动收养后为 needs_auth 态（auth_hint 在场）的会话
+  // 挂兜底重探（不拉活：拉活面归 autoReviveManaged 的待办判定；此处只挂探针监听，
+  // ready 即走恢复三面）。不受 CCR_NO_AUTOREVIVE 阀控（探测≠拉活）。
+  scanNeedsAuthSessions(): number {
+    const engines = new Set<SessionEngine>();
+    for (const s of this.sessions.values()) {
+      if (s.state.auth_hint && s.state.engine && s.state.engine !== "claude") engines.add(s.state.engine);
+    }
+    for (const e of engines) ensureAuthWatch(e);
+    return engines.size;
   }
 
   // ---------- W-ACTIVATOR 单会话复活资格链（autoReviveManaged 过滤链抽出共用） ----------
@@ -2407,6 +2499,15 @@ export class SessionManager {
               // AUTH_REQUIRED 事件（含面板提取的授权 URL），端上引导卡渲染二维码，
               // 扫码即登录零终端操作（同步受理 pane 异步起流，事件后至）
               startEngineLogin(this.bus, engineResolved);
+              // #102 批 C：创建被拦无会话实体可恢复——登记 intent 快照（anchor/task
+              // 摘要），pane 关闭后 watch 兜底探到 ready 时通知「已登录，可以创建了」
+              // +快照回显（内部挂 watch；cap 5 防通知风暴）
+              recordBlockedCreate({
+                engine: engineResolved,
+                ...(typeof cmd.payload.cwd === "string" && cmd.payload.cwd ? { cwd: cmd.payload.cwd } : {}),
+                prompt_summary: truncate(typeof cmd.payload.prompt === "string" ? cmd.payload.prompt : "", 80),
+                ts: Date.now(),
+              });
               return {
                 command_id: cmd.command_id, ok: false,
                 error: `引擎 ${engineResolved} 未登录: ${auth.auth_hint ?? "请先完成引擎登录"}`,
@@ -3786,6 +3887,10 @@ export class SessionManager {
             const authHint = authFailureHint(reason, managed.state.engine);
             if (authHint) {
               managed.state.auth_hint = authHint;
+              // #102 批 C：运行时失效的会话挂兜底重探（pane 关闭/超时后 watch 低频
+              // 轮探，ready → recoverEngineAfterAuth 自动 resume 本会话）；engine
+              // 缺席（外部/未落定）不挂——无探针目标
+              if (managed.state.engine) ensureAuthWatch(managed.state.engine);
               const entry = { kind: "system" as const, text: `引擎登录态失效——${authHint}`, ts: Date.now() };
               managed.logs.push(entry);
               if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
@@ -6614,7 +6719,7 @@ export class SessionManager {
   //   - zcode：unsupported 主档 fail-closed（settings.preflightEngineProfile 同款裁
   //     决）——明确 error 不静默回退（与 read-mode 无效值 fail-fast 同哲学）；词表内
   //     但 registry 无适配器，旧路径跑到 spawn 才炸「未注册引擎」，本口前移到派单前
-  private preflightDispatchEngine(engine: SessionEngine, provider?: string): { ok: true } | { ok: false; error: string } {
+  private preflightDispatchEngine(engine: SessionEngine, provider?: string): { ok: true } | { ok: false; error: string; needs_auth?: boolean } {
     if (engine === "zcode") {
       return { ok: false, error: "unsupported engine: zcode（注册引擎词表：claude/codex/trae/qwen-code/codebuddy——zcode 未接适配器，不静默回退）" };
     }
@@ -6625,7 +6730,7 @@ export class SessionManager {
       // #102 批 A：派单 spawn 前置校验同接登录态（与 COMMAND_CREATE 拦截同源单点
       // engine-auth.ts）——1014 根因场景即派单后炸笼统「引擎返回错误」
       const auth = probeEngineAuth(engine);
-      if (auth.state === "needs_auth") return { ok: false, error: `Codex 未登录: ${auth.auth_hint ?? "请先完成登录"}` };
+      if (auth.state === "needs_auth") return { ok: false, error: `Codex 未登录: ${auth.auth_hint ?? "请先完成登录"}`, needs_auth: true };
       return { ok: true };
     }
     const def = getEngineDefinition(engine);
@@ -6634,7 +6739,7 @@ export class SessionManager {
     if (!check.ok) return { ok: false, error: `${def.label} preflight 失败: ${check.errors.join("；")}` };
     // #102 批 A：registry 引擎（trae/qwen-code/codebuddy）派单同拦
     const auth = probeEngineAuth(engine);
-    if (auth.state === "needs_auth") return { ok: false, error: `${def.label} 未登录: ${auth.auth_hint ?? "请先完成登录"}` };
+    if (auth.state === "needs_auth") return { ok: false, error: `${def.label} 未登录: ${auth.auth_hint ?? "请先完成登录"}`, needs_auth: true };
     return { ok: true };
   }
 
@@ -6744,6 +6849,16 @@ export class SessionManager {
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
       if (!pf.ok) {
+        // #102 批 C：登录态被拦的派单登记意图（ready 后通知「已登录，可以重新派单」
+        // ——不自动重放：失败重放有副作用风险，重发是用户动作；内部挂兜底 watch）
+        if (pf.needs_auth) {
+          recordBlockedDispatch({
+            engine: planned.engine,
+            ...(input.title ? { title: input.title } : {}),
+            anchor,
+            ts: Date.now(),
+          });
+        }
         // P81-5：preflight 拒也落审计（§6.3「拒绝也写审计」；B8 修正「与 preflight 拒同记」）
         appendPermissionAudit(auditStore(this.cfg.dataDir), {
           requested_mode: "bypassPermissions", normalized_mode: null, effective_mode: "forbidden", native_mode: null,

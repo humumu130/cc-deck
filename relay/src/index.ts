@@ -378,6 +378,11 @@ setTimeout(() => {
   try {
     mgr.autoReviveManaged();
   } catch {}
+  // #102 批 C：重启后为 needs_auth 态会话挂登录兜底重探（pane 早没了——登录就绪
+  // 后自动恢复三面；探测≠拉活不受 CCR_NO_AUTOREVIVE 阀控）
+  try {
+    mgr.scanNeedsAuthSessions();
+  } catch {}
 }, 5_000).unref?.();
 
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
