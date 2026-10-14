@@ -6481,7 +6481,7 @@
             <script data-team-script>
               (() => {
                 const root = document.querySelector("#d-team");
-                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待验收"], ["ready_to_install", "就绪待装机"], ["done", "已完成"]]; // W-V8 批4b：列名词表对齐 v8（待审查/待收单/完成→待验收/就绪待装机/已完成）
+                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]]; // 1014 用户定版词表：待认领/进行中/待审查/待收单/完成（批4b 改向作废）
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
                 const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
