@@ -3,8 +3,8 @@ import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
-import { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
-import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, ExperienceEntry, LogEntry, NotificationItem, NotificationsUpdatedPayload, PairedDeviceInfo, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, RuleEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
+import { hasActivityCapability, normalizeActivityCapabilities, normalizeAuthFlow, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
+import type { AllowRule, AuthRequiredPayload, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, ExperienceEntry, LogEntry, NotificationItem, NotificationsUpdatedPayload, PairedDeviceInfo, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, RuleEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
 export { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
 import { uuid } from "./fmt";
 import { applyBoardFrame, applyProjectsFrame, isExperienceEntry, isRuleEntry, mergeById } from "./org-delta";
@@ -124,6 +124,10 @@ export interface SourceConn {
   anchoredBoards: Set<string>;
   // M13-4ADD 重拉防抖：in-flight gid（orgDetail ack 回调必达，Set 必清理）
   boardResync: Set<string>;
+  // #102 批 B 引擎登录流程（AUTH_REQUIRED 瞬态帧，覆盖式）：null = 无活流程（卡收）；
+  // state=ready 时 UI 先本地 patch engine_catalog（黄点转绿）再收卡。断线重连后
+  // 可发 COMMAND_ENGINE_LOGIN status 重查（瞬态帧不补发）
+  authFlow: AuthRequiredPayload | null;
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -316,6 +320,9 @@ export interface Snapshot {
   confirmDismissedKey: string | null;
   // #316 手表配对请求（LAN 源瞬态事件）：非空 = 全局弹窗显示名称+6 位比对码
   watchPair: { requestId: string; name: string; code: string; sourceId: string } | null;
+  // #102 批 B 引擎登录流程（活动源 AUTH_REQUIRED 覆盖式）：非空 = EngineLoginModal
+  // 显示（QR/浏览器引导/转绿）；state 终态后 UI 自行收卡（store 不清——重连快照清）
+  authFlow: AuthRequiredPayload | null;
   // 议题①设备清单版本号（PAIRED_DEVICE 瞬态帧驱动，add/kick 均自增）：设备列表页
   // 打开期间据此自动重拉（配对/踢出由任一端发起都即时收敛，不靠手动刷新）
   peersRev: number;
@@ -350,6 +357,7 @@ const emptySnapshot: Snapshot = {
   artPool: "pending", // #72 E 线：未配置态无池入口（三重门 online 不过）
   artPoolData: [],
   empHome: null,
+  authFlow: null, // #102 批 B 引擎登录流程（无流程 = 卡收）
   sessions: [],
   lastErrorCmd: null,
   cloudBusy: false,
@@ -597,7 +605,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome" | "schemaVersion" | "sourceCapabilities" | "notifications" | "notificationsLegacy" | "artPool" | "artPoolData"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome" | "authFlow" | "schemaVersion" | "sourceCapabilities" | "notifications" | "notificationsLegacy" | "artPool" | "artPoolData"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -635,7 +643,7 @@ class RelayStore {
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null, schemaVersion: undefined, sourceCapabilities: undefined, notifications: null, notificationsLegacy: true, artPool: "pending", artPoolData: [] };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null, authFlow: null, schemaVersion: undefined, sourceCapabilities: undefined, notifications: null, notificationsLegacy: true, artPool: "pending", artPoolData: [] };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -660,6 +668,7 @@ class RelayStore {
         models: activeModels,
         deliverables: activeDeliverables,
         empHome: activeEmpHome,
+        authFlow: inPlay.find((x) => x.authFlow)?.authFlow ?? null, // #102 批 B 聚合取任一活流程
         artPool: this.activeConn()?.artPool ?? "pending", // #72 E 线 活动源口径（deliverables 同款）
         artPoolData: this.activeConn()?.artPoolData ?? [],
         schemaVersion: this.activeConn()?.schemaVersion,
@@ -682,6 +691,7 @@ class RelayStore {
       models: c.models,
       deliverables: c.deliverables,
       empHome: c.empHome,
+      authFlow: c.authFlow, // #102 批 B 登录流程直出
       artPool: c.artPool, // #72 E 线 单源直出（聚合 return 同款活动源口径）
       artPoolData: c.artPoolData,
       schemaVersion: c.schemaVersion,
@@ -1012,6 +1022,7 @@ class RelayStore {
         rulesEnabled: true,
         anchoredBoards: new Set(), // M13-4ADD 板 delta 锚定集（覆盖式帧/重拉 ack 确立）
         boardResync: new Set(), // M13-4ADD 重拉 in-flight 防抖
+        authFlow: null, // #102 批 B 引擎登录流程（AUTH_REQUIRED 覆盖式；null = 卡收）
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -2368,6 +2379,9 @@ class RelayStore {
         const rls = (msg.payload as { rules?: unknown }).rules;
         conn.rules = Array.isArray(rls) ? rls.filter(isRuleEntry) : null;
         conn.rulesEnabled = (msg.payload as { rules_enabled?: unknown }).rules_enabled !== false;
+        // #102 批 B：重连快照清登录流程卡（瞬态帧不补发——活流程由 relay 侧轮询继续
+        // 推新帧重建；需要即时态可发 COMMAND_ENGINE_LOGIN status 查询）
+        conn.authFlow = null;
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
@@ -2764,6 +2778,26 @@ class RelayStore {
         }
         break;
       }
+      // #102 批 B 引擎登录流程帧（瞬态 seq:0，覆盖式）：relay 登录 pane 提取到授权
+      // URL/登录态转 ready/超时取消时推——UI 弹登录卡渲染二维码（把饭喂到嘴里）。
+      // state=ready 先本地 patch engine_catalog（黄点转绿不等重连）；终态后 UI 收卡。
+      // 畸形帧忽略不覆盖（normalizeAuthFlow null 防御）
+      case "AUTH_REQUIRED": {
+        const flow = normalizeAuthFlow(msg.payload);
+        if (flow) {
+          conn.authFlow = flow;
+          if (flow.state === "ready") {
+            const caps = conn.sourceCapabilities;
+            const cat = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
+            const hit = cat ? cat.find((e) => e.id === flow.engine) : undefined;
+            if (hit && hit.state !== "ready") {
+              hit.state = "ready";
+              delete hit.auth_hint;
+            }
+          }
+        }
+        break;
+      }
       // #79 输出物拉取数据帧（瞬态 seq:0）：ref = 本端预生成的 command_id。其他设备
       // 同拉时全播帧也会到本端——查无此 ref 直接忽略（单用户多端语义可接受）。
       // relay 先发数据帧+done 尾帧、ACK 最后到（execCommand 同步 emit 后才回执），
@@ -3018,8 +3052,14 @@ class RelayStore {
   // 断连兜底（审查 P3）：断开清场静默清 pendingCmds 不回调 onAck（契约「调用方自带
   // 兜底超时」），12s 到点仍无回执时按当下快照分流——SETTINGS_UPDATED 已先到收敛
   // 到目标态则按成功收口（防「连接中断」误报掩盖已生效），否则提示重连自动同步
-  empHomeSet(enabled: boolean, onDone?: (r: { ok: boolean; err: string | null }) => void): boolean {
-    if (!onDone) return this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled });
+  // #102 批 B 引擎登录引导命令面：start=幂等起登录 pane（ACK data=流程投影，非空
+  // 直接喂 authFlow 开卡——AUTH_REQUIRED 事件后至增量更新 url）；verify=「我已完成
+  // 登录」（结果走事件）；cancel=收卡。命令按活动源路由（engine 无 sid）。
+  engineLogin(engine: string, action: "start" | "status" | "verify" | "cancel", onAck?: (r: { ok: boolean; err: string | null; data?: unknown }) => void): boolean {
+    return this.send("COMMAND_ENGINE_LOGIN", { engine, action }, undefined, onAck ? (r) => onAck({ ok: r.ok, err: r.err, data: r.data }) : undefined);
+  }
+
+  empHomeSet(enabled: boolean, onDone?: (r: { ok: boolean; err: string | null }) => void): boolean {    if (!onDone) return this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled });
     let settled = false;
     const sent = this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled }, undefined, (r) => {
       settled = true;

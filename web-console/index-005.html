@@ -2033,6 +2033,22 @@
     .toast {position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: var(--fs-B);}
     .mobile-frame .toast { right: 12px; bottom: 74px; max-width: calc(100% - 24px); }
     .toast.show { opacity: 1; transform: none; }
+    /* #102 批 B 引擎登录引导卡（把饭喂到嘴里）：二维码直接渲染在卡里，扫码即登录 */
+    .englogin-card { position: fixed; right: 22px; bottom: 22px; z-index: 118; width: 302px; padding: 14px 14px 12px; border: 1px solid var(--toast-line); border-radius: 12px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); }
+    .englogin-card .elc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .englogin-card .elc-title { font-weight: 600; font-size: var(--fs-B); flex: 1 1 auto; min-width: 0; }
+    .englogin-card .elc-state { font-size: var(--fs-micro); color: var(--faint); }
+    .englogin-card .elc-qrwrap { display: flex; justify-content: center; padding: 8px; background: #fff; border-radius: 8px; margin-bottom: 8px; }
+    .englogin-card canvas.elc-qr { display: block; }
+    .englogin-card .elc-art { margin: 0 0 8px; padding: 8px; background: #fff; color: #10151C; border-radius: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 6px; line-height: 6px; white-space: pre; overflow: hidden; text-align: center; }
+    .englogin-card .elc-note { margin: 0 0 8px; font-size: var(--fs-C); color: var(--faint); line-height: 1.5; }
+    .englogin-card .elc-link { display: block; margin: 0 0 8px; font-size: var(--fs-C); color: var(--brand-strong); text-decoration: underline; word-break: break-all; }
+    .englogin-card .elc-actions { display: flex; gap: 8px; }
+    .englogin-card .elc-actions button { flex: 1 1 auto; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--hover); color: var(--text); font-size: var(--fs-C); cursor: pointer; }
+    .englogin-card .elc-actions button.primary { background: var(--brand); border-color: transparent; color: #fff; }
+    .englogin-card .elc-actions button:disabled { opacity: .6; cursor: default; }
+    .englogin-card.ready { border-color: var(--done); }
+    .englogin-card.ready .elc-state { color: var(--done); }
     .desktop-only-note {color: var(--faint); font-size: var(--fs-C);}
     .engine-badge, .source-badge {display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: var(--fs-C); line-height: 1;}
     .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
@@ -5777,6 +5793,8 @@
                     if (trig) { const m = document.getElementById("b2-engine-menu"); if (m) closeEngineMenu(); else { openEngineMenu(trig); trig.setAttribute("aria-expanded", "true"); } return; }
                     const engine = ev.target.closest("[data-engine-choice]");
                     if (engine) { pickEngine(engine); return; }
+                    const loginRow = ev.target.closest("[data-engine-login]"); // #102 批 B：未登录引擎行 → 弹登录卡
+                    if (loginRow) { closeEngineMenu(); if (window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(loginRow.dataset.engineLogin || ""); return; }
                     if (ev.target.closest("[data-create-browse]")) { void pickCreateCwd(); return; }
                     if (ev.target.closest("[data-create-cancel]")) { closeCreatePop(); return; }
                     if (ev.target.closest("[data-create-submit]")) { submitCreate(); return; }
@@ -5816,9 +5834,9 @@
                   }
                   if (needsAuth.length) {
                     html += '<div class="source-menu-head">未登录 · ' + needsAuth.length + "</div>";
-                    for (const e of needsAuth) { // 灰置不可点：登录指引小字透出（auth_hint）
+                    for (const e of needsAuth) { // #102 批 B：从灰置升级为可点——点行直接弹登录卡（二维码扫码即登录）
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<div class="source-option" aria-disabled="true" title="' + esc(oneLine(e.auth_hint || "请先完成引擎登录")) + '"><span class="ep-dot"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></div>";
+                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(oneLine(e.auth_hint || "点此扫码登录")) + '"><span class="ep-dot"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>点此扫码登录</small></button>";
                     }
                   }
                   if (na.length) {
@@ -5831,7 +5849,9 @@
                   menu.innerHTML = html;
                   menu.addEventListener("click", (ev) => { // 菜单挂 body，对话域大委托够不到——本层直连（b2-perm-menu 同款模式）
                     const pick = ev.target.closest("[data-engine-choice]");
-                    if (pick) pickEngine(pick);
+                    if (pick) { pickEngine(pick); return; }
+                    const loginRow = ev.target.closest("[data-engine-login]"); // #102 批 B：未登录行 → 登录卡
+                    if (loginRow) { closeEngineMenu(); if (window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(loginRow.dataset.engineLogin || ""); }
                   });
                   document.body.appendChild(menu);
                   const r = anchor.getBoundingClientRect();
@@ -5905,7 +5925,7 @@
                   const eng = S.engineChoice || defaultEngineId();
                   const isAutoEng = eng === "auto"; // W-PORT-A R-7：auto=跟随源默认，不携带 engine、跳过 ready 检查
                   const entry = isAutoEng ? null : catalogEntries().find((e) => e.id === eng);
-                  if (entry && entry.state === "needs_auth") { b2Toast("引擎未登录：" + oneLine(entry.auth_hint || "请先完成引擎登录")); return; } // #102 批 A：可操作指引
+                  if (entry && entry.state === "needs_auth") { b2Toast("引擎未登录，已为你拉起登录引导"); if (window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(eng); return; } // #102 批 B：toast 升级——直接弹登录卡（把饭喂到嘴里）
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   // W-PORT-A R-2：目标源路由——「创建到」选了云源时走云 shim（显式通道最高优先）；
                   // 本机/未显示该行时维持 sendCmd 视角通道（RouteWs/主连接既有语义）
@@ -5930,7 +5950,7 @@
                   const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
                     clearTimeout(wd);
-                    if (ack && ack.ok === false && ack.needs_auth) b2Toast("引擎未登录，未创建会话：" + oneLine(ack.auth_hint || ack.error || "请先完成引擎登录"), 6000); // #102 批 A：fail-fast 拒绝显示可操作指引
+                    if (ack && ack.ok === false && ack.needs_auth) { b2Toast("引擎未登录，未创建会话——登录引导已弹出", 5000); if (window.__ccDeck005LoginCard && eng && eng !== "auto") window.__ccDeck005LoginCard.open(eng); } // #102 批 B：fail-fast 拒绝自动弹登录卡（relay 拦截时已同步 kick，此处幂等兜底）
                     else if (ack && ack.ok === false) b2Toast("新建会话失败: " + (ack.error || "未知错误"));
                     else if (ack && ack.ok === true && ack.degraded) b2Toast("已创建 · 引擎降级为 " + ((ENGINES[ack.engine] || [ack.engine || "claude"])[0]) + "：" + (ack.degraded_reason || ""));
                   }, t: wd });
@@ -8116,6 +8136,10 @@
                   } else if (frame.type === "ACCEPTANCES_UPDATED") {
                     bridge.accepts = frame.payload && Array.isArray(frame.payload.acceptances) ? frame.payload.acceptances.filter((a) => a && typeof a.id === "string") : [];
                     changed = true;
+                  } else if (frame.type === "AUTH_REQUIRED") {
+                    // #102 批 B：登录流程帧 → 引导卡（二维码/浏览器引导/转绿收卡）
+                    if (window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.onFlow(frame.payload);
+                    changed = true;
                   } else if (frame.type === "PROJECTS_UPDATED") {
                     bridge.projects = frame.payload && Array.isArray(frame.payload.groups) ? frame.payload.groups.filter((g) => g && typeof g.id === "string") : [];
                     changed = true;
@@ -8148,6 +8172,117 @@
                   }
                   if (ev.kind === "frame" && window.__ccDeck005FrameAllowed(ev)) handleFrame(ev.frame, ev.source); // W-WINPAIR-R2：按视角门控（aggregate 放行全部+merge）
                 });
+
+                // ---------- #102 批 B 引擎登录引导卡（把饭喂到嘴里——用户 1014 定调） ----------
+                // AUTH_REQUIRED 瞬态事件驱动：relay 登录 pane 提取到授权 URL 即渲染二维码，
+                // 扫码/点链接完成登录，「我已完成登录」触发 relay 直探（结果走事件回推）。
+                // 覆盖三入口：创建拦截 ACK（needs_auth）/引擎菜单与设置区「立即登录」/
+                // 事件直推（同 relay 其他端发起也能看到）。QR 渲染复用 FB3 配对同款
+                // qr.js（QRCode 类 + canvas），不引外链。
+                window.__ccDeck005LoginCard = (() => {
+                  const ENGINE_NAME = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
+                  const oneLineLc = (t) => { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 120 ? v.slice(0, 120) + "…" : v; };
+                  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+                  let flow = null;      // 当前流程（AUTH_REQUIRED payload 形状）
+                  let verifying = false;
+                  let card = null;
+                  const ensureCard = () => {
+                    if (card) return card;
+                    card = document.createElement("div");
+                    card.className = "englogin-card";
+                    card.addEventListener("click", (ev) => {
+                      const b = ev.target.closest("button[data-elc-act]");
+                      if (!b) return;
+                      const act = b.dataset.elcAct;
+                      if (act === "verify" && flow) { verifying = true; render(); void bridge.sendCommand("COMMAND_ENGINE_LOGIN", { engine: flow.engine, action: "verify" }); }
+                      else if (act === "cancel" && flow) { void bridge.sendCommand("COMMAND_ENGINE_LOGIN", { engine: flow.engine, action: "cancel" }).then(() => hide()); }
+                      else if (act === "retry" && flow) { verifying = false; onFlow({ ...flow, state: "starting", url: undefined }); void bridge.sendCommand("COMMAND_ENGINE_LOGIN", { engine: flow.engine, action: "start" }); }
+                      else if (act === "close") hide();
+                    });
+                    document.body.appendChild(card);
+                    return card;
+                  };
+                  const hide = () => { flow = null; verifying = false; if (card) card.remove(); card = null; };
+                  // state=ready → 本地 catalog patch（引擎目录黄点转绿无需重连；下次 SNAPSHOT 归真）
+                  const patchCatalog = (engine) => {
+                    const snap = bridge.snapshot;
+                    const cat = snap && snap.source_capabilities && Array.isArray(snap.source_capabilities.engine_catalog) ? snap.source_capabilities.engine_catalog : null;
+                    if (!cat) return;
+                    const hit = cat.find((e) => e && e.id === engine);
+                    if (hit && hit.state !== "ready") { hit.state = "ready"; if ("auth_hint" in hit) delete hit.auth_hint; for (const fn of subscribers) { try { fn("AUTH_REQUIRED"); } catch (_) {} } }
+                  };
+                  function drawQr(canvas, text) {
+                    try {
+                      const q = new QRCode(0, QRErrorCorrectLevel.M);
+                      q.addData(text);
+                      q.make();
+                      const n = q.getModuleCount(), pad = 2, scale = 4;
+                      canvas.width = canvas.height = (n + pad * 2) * scale;
+                      const g = canvas.getContext("2d");
+                      if (!g) return false;
+                      g.fillStyle = "#fff"; g.fillRect(0, 0, canvas.width, canvas.height);
+                      g.fillStyle = "#10151C";
+                      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect((c + pad) * scale, (r + pad) * scale, scale, scale);
+                      return true;
+                    } catch (_) { return false; }
+                  }
+                  function render() {
+                    if (!flow) return hide();
+                    const el = ensureCard();
+                    const name = ENGINE_NAME[flow.engine] || flow.engine;
+                    const stateText = flow.state === "ready" ? "已登录" : flow.state === "starting" ? "拉起登录面板…" : flow.state === "timeout" ? "等待超时" : flow.state === "error" ? "拉起失败" : flow.state === "cancelled" ? "已取消" : verifying ? "验证中…" : "等待登录";
+                    el.classList.toggle("ready", flow.state === "ready");
+                    let html = '<div class="elc-head"><span class="elc-title">🔑 ' + esc(name) + ' 登录</span><span class="elc-state">' + esc(stateText) + "</span></div>";
+                    if (flow.state === "ready") {
+                      html += '<p class="elc-note">' + esc(name) + " 已登录，引擎目录已点亮，现在可以用它创建会话了。</p>";
+                      html += '<div class="elc-actions"><button class="primary" data-elc-act="close">好</button></div>";
+                    } else if (flow.state === "timeout" || flow.state === "error" || flow.state === "cancelled") {
+                      html += '<p class="elc-note">' + esc(oneLineLc(flow.hint || "登录未完成")) + "</p>";
+                      html += '<div class="elc-actions"><button class="primary" data-elc-act="retry">重新发起</button><button data-elc-act="close">关闭</button></div>';
+                    } else {
+                      // starting/pending：QR 卡（mode=qr 有 url）→ 二维码字符画 → 浏览器卡 → hint 卡
+                      if (flow.mode === "qr" && flow.url) {
+                        html += '<div class="elc-qrwrap"><canvas class="elc-qr" role="img" aria-label="登录二维码"></canvas></div>';
+                        html += '<a class="elc-link" href="' + esc(flow.url) + '" target="_blank" rel="noopener">或点此在浏览器打开授权页</a>';
+                      } else if (flow.mode === "qr" && flow.qr_text) {
+                        html += '<pre class="elc-art">' + esc(flow.qr_text) + "</pre>";
+                        if (flow.url) html += '<a class="elc-link" href="' + esc(flow.url) + '" target="_blank" rel="noopener">或点此在浏览器打开授权页</a>';
+                      } else if (flow.mode === "browser") {
+                        html += '<p class="elc-note">已在这台电脑上为你打开浏览器完成授权；手机端看到本卡时，请回到这台电脑前完成。</p>';
+                        if (flow.url) html += '<a class="elc-link" href="' + esc(flow.url) + '" target="_blank" rel="noopener">浏览器没打开？点此手动打开授权页</a>';
+                      } else {
+                        html += '<p class="elc-note">' + esc(oneLineLc(flow.hint || "请完成引擎登录")) + "</p>";
+                      }
+                      const busy = flow.state === "starting" || verifying;
+                      html += '<div class="elc-actions"><button class="primary" data-elc-act="verify"' + (busy ? " disabled" : "") + '>我已完成登录</button><button data-elc-act="cancel"' + (busy ? " disabled" : "") + ">取消</button></div>";
+                    }
+                    el.innerHTML = html;
+                    const cv = el.querySelector("canvas.elc-qr");
+                    if (cv && flow.url) drawQr(cv, flow.url);
+                  }
+                  function onFlow(payload) {
+                    if (!payload || typeof payload !== "object" || typeof payload.engine !== "string") return;
+                    flow = payload;
+                    if (payload.state !== "pending" && payload.state !== "starting") verifying = false;
+                    render();
+                    if (payload.state === "ready") {
+                      patchCatalog(payload.engine);
+                      setTimeout(() => { if (flow && flow.state === "ready") hide(); }, 2200);
+                    }
+                  }
+                  return {
+                    onFlow,
+                    // 手动入口（设置区/创建弹窗/ACK 拦截）：幂等 start——relay 侧活流程复用，
+                    // ACK data 即流程投影直接渲染（事件后至增量更新 url）
+                    open(engine) {
+                      if (typeof engine !== "string" || engine === "claude") return;
+                      verifying = false;
+                      void bridge.sendCommand("COMMAND_ENGINE_LOGIN", { engine, action: "start" }).then((ack) => {
+                        if (ack && ack.ok && ack.data && typeof ack.data === "object" && ack.data.engine) onFlow(ack.data);
+                      });
+                    },
+                  };
+                })();
 
                 // ---------- 项目域聚合与渲染 ----------
                 const els = {
@@ -10049,6 +10184,13 @@ function connectLan(ctx) {
             openLanPairDialog();
             return;
           }
+          // #102 批 B：引擎目录未登录行/「立即登录」钮 → 弹登录卡（二维码扫码即登录）
+          const engLoginRow = event.target.closest("[data-engine-login]");
+          if (engLoginRow) {
+            const eng = engLoginRow.dataset.engineLogin || "";
+            if (eng && window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(eng);
+            return;
+          }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; }
           // 件十五：关于页项目主页/仓库链接——统一走 __ccDeck005OpenUrl（桌面 openExternal /
           // 浏览器直开，既有跨形态打开链）
@@ -10160,7 +10302,9 @@ function connectLan(ctx) {
                   ? esc(oneLine(e.auth_hint || "请先完成引擎登录"))
                   : esc(e.preflight && e.preflight.reason) || (e.state === "unsupported" ? "枚举占位 · 未接入编排" : "适配器待安装");
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
-              return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"${na ? ` title="${esc(oneLine(e.auth_hint || "请先完成引擎登录"))}"` : ""}><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}</strong><p>${copy}</p></div>${tag}</div>`;
+              // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
+              const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
+              return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}</strong><p>${copy}</p></div>${loginBtn || tag}</div>`;
             }).join("");
           }
           // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
@@ -13293,7 +13437,7 @@ function connectLan(ctx) {
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
                 : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div></div>`
-            : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "needs_auth" ? "未登录" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
+            : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task"${e.state === "needs_auth" ? ` data-engine-login="${esc(e.id)}" role="button" style="cursor:pointer"` : ""}>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "needs_auth" ? "未登录 · 点此扫码登录" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
             : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>'
@@ -13327,6 +13471,8 @@ function connectLan(ctx) {
         }
         const navBtn = target.closest(".mobile-nav [data-mobile-root]");
         if (navBtn) { openMobileRoot(navBtn.dataset.mobileRoot); return; }
+        const mEngLogin = target.closest("[data-engine-login]"); // #102 批 B：手机设置·引擎目录未登录行 → 登录卡
+        if (mEngLogin) { const eng = mEngLogin.dataset.engineLogin || ""; if (eng && window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(eng); return; }
         const mGrp = target.closest("[data-mobile-group-toggle]"); // FB16：手机闲置项目组折叠/展开
         if (mGrp) {
           const gname = mGrp.dataset.mobileGroupToggle;

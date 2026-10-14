@@ -73,7 +73,7 @@ export interface SourceCapabilities {
 // ─── 75-E 引擎目录（SNAPSHOT source_capabilities.engine_catalog 载荷，三端同构
 // 契约，与 PM-75 提案 §4.3 / relay 75-R / web 75-W 同形状同词表） ───
 
-export type EngineCatalogState = "ready" | "unavailable" | "unsupported" | "unknown";
+export type EngineCatalogState = "ready" | "unavailable" | "needs_auth" | "unsupported" | "unknown";
 
 export interface EngineCatalogEntry {
   id: string;
@@ -83,12 +83,15 @@ export interface EngineCatalogEntry {
   preflight?: { state: "pass" | "fail" | "unknown"; reason?: string };
   models?: string[];
   default_for_roles?: string[];
+  /** #102 批 A/B：state=needs_auth 时的登录指引（relay auth_hint；批 B 起可点行拉起登录卡） */
+  auth_hint?: string;
 }
 
-// 三端状态词表（钉死，与 75-W/75-R 逐字一致——勿改字面）
+// 三端状态词表（钉死，与 75-W/75-R 逐字一致——勿改字面；needs_auth #102 批 A 增补）
 export const ENGINE_STATE_LABEL: Record<EngineCatalogState, string> = {
   ready: "可用",
   unavailable: "未安装或校验未过",
+  needs_auth: "未登录 · 点此扫码登录",
   unsupported: "不支持 · 不可选",
   unknown: "状态未知",
 };
@@ -105,7 +108,7 @@ export const ENGINE_PHRASES = {
   downgrade: "已降级",
 } as const;
 
-const ENGINE_STATES: readonly EngineCatalogState[] = ["ready", "unavailable", "unsupported", "unknown"];
+const ENGINE_STATES: readonly EngineCatalogState[] = ["ready", "unavailable", "needs_auth", "unsupported", "unknown"];
 
 function normalizeEngineCatalogEntry(value: unknown): EngineCatalogEntry | null {
   if (!isRecord(value)) return null;
@@ -132,6 +135,7 @@ function normalizeEngineCatalogEntry(value: unknown): EngineCatalogEntry | null 
       : {}),
     ...(models ? { models } : {}),
     ...(roles ? { default_for_roles: roles } : {}),
+    ...(typeof value.auth_hint === "string" && value.auth_hint ? { auth_hint: value.auth_hint } : {}),
   };
 }
 
@@ -162,8 +166,47 @@ export function engineLabelOf(entry: Pick<EngineCatalogEntry, "id" | "label">): 
 export function engineSelectable(entry: EngineCatalogEntry): string | null {
   if (entry.state === "unsupported") return entry.preflight?.reason || ENGINE_STATE_LABEL.unsupported;
   if (entry.state === "unavailable") return entry.preflight?.reason || ENGINE_STATE_LABEL.unavailable;
+  // #102 批 B：未登录禁选但可点登录（NewSessionModal 行内拉起登录卡，扫码即登录）
+  if (entry.state === "needs_auth") return entry.auth_hint || ENGINE_STATE_LABEL.needs_auth;
   if (entry.preflight?.state === "fail") return entry.preflight.reason || ENGINE_PHRASES.preflightFail;
   return null;
+}
+
+// ─── #102 批 B 引擎登录引导（AUTH_REQUIRED 瞬态载荷；与 relay types.ts
+// AuthRequiredPayload / web LoginCard 同构三端契约） ───
+
+export type EngineLoginFlowState = "starting" | "pending" | "ready" | "timeout" | "error" | "cancelled";
+
+export interface AuthRequiredPayload {
+  flow_id: string;
+  engine: string;
+  state: EngineLoginFlowState;
+  mode: "qr" | "browser" | "hint";
+  url?: string;
+  qr_text?: string;
+  hint: string;
+  ts?: number;
+}
+
+const LOGIN_FLOW_STATES: readonly EngineLoginFlowState[] = ["starting", "pending", "ready", "timeout", "error", "cancelled"];
+
+/** AUTH_REQUIRED 载荷鸭子校验（畸形帧 null——不覆盖既有卡，relay 侧必发合法形状） */
+export function normalizeAuthFlow(value: unknown): AuthRequiredPayload | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.engine !== "string" || !value.engine) return null;
+  if (typeof value.flow_id !== "string" || !value.flow_id) return null;
+  if (typeof value.state !== "string" || !LOGIN_FLOW_STATES.includes(value.state as EngineLoginFlowState)) return null;
+  const mode = value.mode === "qr" || value.mode === "browser" || value.mode === "hint" ? value.mode : "hint";
+  return {
+    flow_id: value.flow_id,
+    engine: value.engine,
+    state: value.state as EngineLoginFlowState,
+    mode,
+    ...(typeof value.url === "string" && value.url ? { url: value.url } : {}),
+    ...(typeof value.qr_text === "string" && value.qr_text ? { qr_text: value.qr_text } : {}),
+    hint: typeof value.hint === "string" ? value.hint : "",
+    ...(typeof value.ts === "number" ? { ts: value.ts } : {}),
+  };
 }
 
 /** 预置引擎推导（目录读侧，零求值）：default_for_roles 非空的第一个条目 = 预置；

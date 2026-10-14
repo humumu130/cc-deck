@@ -10340,7 +10340,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 import { networkInterfaces as networkInterfaces3, homedir as homedir19, hostname, tmpdir as tmpdir3 } from "node:os";
 import { join as join40, sep as sep9 } from "node:path";
 import { writeFileSync as writeFileSync25, openSync as openSync5, readFileSync as readFileSync35, rmSync as rmSync6, existsSync as existsSync27, readdirSync as readdirSync16, statSync as statSync14 } from "node:fs";
-import { spawn as spawn6, execFileSync as execFileSync3 } from "node:child_process";
+import { spawn as spawn7, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/agent-activator.ts
@@ -46625,14 +46625,14 @@ function providerProfileFor(engine, provider) {
 
 // src/engine-auth.ts
 import { accessSync as accessSync3, constants as constants5, readFileSync as readFileSync16 } from "node:fs";
-import { spawnSync as spawnSync2 } from "node:child_process";
+import { spawnSync as spawnSync2, execFile as execFile2 } from "node:child_process";
 import { homedir as homedir8 } from "node:os";
 import { join as join22 } from "node:path";
 var HINTS = {
   codex: "\u7EC8\u7AEF\u8FD0\u884C codex login \u5B8C\u6210\u767B\u5F55\uFF1B\u7528 API \u4E2D\u8F6C\u5219\u5728 ~/.codex/config.toml \u914D bearer_token\uFF0C\u6216\u8BBE\u7F6E OPENAI_API_KEY \u73AF\u5883\u53D8\u91CF",
   codebuddy: "\u7EC8\u7AEF\u8FD0\u884C codebuddy-code\uFF0C\u8F93\u5165 /login \u5B8C\u6210\u767B\u5F55\uFF08\u684C\u9762\u7248\u767B\u5F55\u6001\u4E0E CLI \u76F8\u4E92\u72EC\u7ACB\uFF09",
   "qwen-code": "\u7EC8\u7AEF\u542F\u52A8 qwen-code \u540E\u6309\u63D0\u793A\u767B\u5F55\uFF08\u8F93\u5165 /auth\uFF09\uFF0C\u6216\u8BBE\u7F6E QWEN_API_KEY / GEMINI_API_KEY \u73AF\u5883\u53D8\u91CF",
-  trae: "\u7EC8\u7AEF\u542F\u52A8 trae-cli \u540E\u6309\u63D0\u793A\u5B8C\u6210\u8D26\u53F7\u767B\u5F55"
+  trae: "\u7EC8\u7AEF\u8FD0\u884C trae-cli\uFF0C\u6309 ? \u9009 Login with Email \u5B8C\u6210\u767B\u5F55\uFF08\u6216\u70B9\u5F15\u64CE\u76EE\u5F55\u7684\u7ACB\u5373\u767B\u5F55\uFF09"
 };
 function fileExists(path6) {
   try {
@@ -46663,9 +46663,15 @@ function credentialCandidatePresent(files, envKeys) {
 function needsAuth(engine) {
   return { state: "needs_auth", auth_hint: HINTS[engine] ?? `\u8BF7\u5728\u7EC8\u7AEF\u5B8C\u6210 ${engine} \u767B\u5F55` };
 }
+function staticAuthHint(engine) {
+  return HINTS[engine] ?? `\u8BF7\u5728\u7EC8\u7AEF\u5B8C\u6210 ${engine} \u767B\u5F55`;
+}
 var readyProbe = { state: "ready" };
 var CACHE_TTL_MS = 45e3;
 var probeCache = /* @__PURE__ */ new Map();
+function resetEngineAuthCache() {
+  probeCache.clear();
+}
 function probeEngineAuth(engine, opts) {
   if (!opts) {
     const hit = probeCache.get(engine);
@@ -46723,11 +46729,21 @@ ${r.stderr ?? ""}`;
         [join22(home, ".qwen", "oauth_creds.json"), join22(home, ".qwen", "google-accounts.json"), join22(home, ".qwen", "aws_credentials.json")],
         ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
       ) ? readyProbe : needsAuth(engine);
-    case "trae":
-      return credentialCandidatePresent(
-        [join22(home, ".trae", ".credentials.json"), join22(home, ".trae", "credentials.json"), join22(home, ".trae-cli", ".credentials.json")],
-        ["TRAE_API_KEY"]
-      ) ? readyProbe : needsAuth(engine);
+    case "trae": {
+      try {
+        const r = spawnSync2(process.env.CCR_TRAE_PATH ?? "trae-cli", ["login", "status"], {
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: timeoutMs,
+          encoding: "utf-8"
+        });
+        if (r.error || r.signal) return readyProbe;
+        const out = `${r.stdout ?? ""}
+${r.stderr ?? ""}`;
+        return /not logged in|未登录|请先登录/i.test(out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    }
     default:
       return readyProbe;
   }
@@ -46735,6 +46751,58 @@ ${r.stderr ?? ""}`;
 function authFailureHint(text, engine) {
   if (!/not logged in|authentication required|please use \/login|请先登录|账号未登录/i.test(text)) return null;
   return (engine && HINTS[engine]) ?? "\u8BF7\u5728\u7EC8\u7AEF\u5B8C\u6210\u5BF9\u5E94\u5F15\u64CE\u7684\u767B\u5F55\u540E\u91CD\u8BD5";
+}
+function execFileText(cmd, args, timeoutMs) {
+  return new Promise((resolve10) => {
+    execFile2(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
+      resolve10({ ok: !err, out: `${stdout ?? ""}
+${stderr ?? ""}` });
+    });
+  });
+}
+async function probeEngineAuthAsync(engine, opts) {
+  const home = opts?.homeDir ?? homedir8();
+  const timeoutMs = opts?.timeoutMs ?? 5e3;
+  switch (engine) {
+    case "claude":
+    case "zcode":
+      return readyProbe;
+    // 免检恒 ready（同同步版）
+    case "codex": {
+      if (codexConfigAuthPresent(home)) return readyProbe;
+      try {
+        const r = await execFileText(process.env.CCR_CODEX_PATH ?? "codex", ["login", "status"], timeoutMs);
+        if (!r.ok) return readyProbe;
+        return /not logged in/i.test(r.out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    }
+    case "codebuddy": {
+      try {
+        const r = await execFileText(process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", ["auth", "status"], timeoutMs);
+        if (!r.ok) return readyProbe;
+        return /authentication required|not logged in|请先登录/i.test(r.out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    }
+    case "qwen-code":
+      return credentialCandidatePresent(
+        [join22(home, ".qwen", "oauth_creds.json"), join22(home, ".qwen", "google-accounts.json"), join22(home, ".qwen", "aws_credentials.json")],
+        ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+      ) ? readyProbe : needsAuth(engine);
+    case "trae":
+      try {
+        const r = await execFileText(process.env.CCR_TRAE_PATH ?? "trae-cli", ["login", "status"], timeoutMs);
+        if (!r.ok) return readyProbe;
+        return /not logged in|未登录|请先登录/i.test(r.out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    default:
+      return readyProbe;
+  }
 }
 
 // src/engine-catalog.ts
@@ -46817,6 +46885,369 @@ function engineCatalogSummary(claudeModelFallback = "") {
 }
 function catalogReadyEngines() {
   return new Set(engineCatalogSummary().filter((e) => e.state === "ready").map((e) => e.id));
+}
+
+// src/engine-login.ts
+import { spawn as spawn4 } from "node:child_process";
+function tmuxCmd() {
+  return process.env.CCR_TMUX_CMD || "tmux";
+}
+function runTmux(args, timeoutMs = 5e3) {
+  return new Promise((resolve10) => {
+    const child = spawn4(tmuxCmd(), args);
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (c) => out += c);
+    child.stderr?.on("data", (c) => err += c);
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve10({ ok: false, text: "", error: "timeout" });
+    }, timeoutMs);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve10({ ok: false, text: "", error: e.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve10({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+    });
+  });
+}
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var PROFILES = {
+  codebuddy: {
+    command: () => [process.env.CCR_CODEBUDDY_PATH || "codebuddy-code"],
+    mode: "qr",
+    bootMs: 4e3,
+    steps: [
+      // 实测首屏 trust folder 四选一：选 1（仅信任当前目录）+ 回车
+      { match: /do you trust the files in this folder/i, keys: ["1", "Enter"], settleMs: 3e3 }
+    ],
+    urlPattern: /^https:\/\/copilot\.tencent\.com\/login\?\S+/i
+  },
+  codex: {
+    command: () => [process.env.CCR_CODEX_PATH || "codex", "login"],
+    mode: "browser",
+    bootMs: 3e3,
+    steps: [],
+    // codex login 非交互首屏直接打印 URL，无需驱动
+    urlPattern: /^https:\/\/auth\.openai\.com\/oauth\/authorize\?\S+/i
+  },
+  trae: {
+    command: () => [process.env.CCR_TRAE_PATH || "trae-cli"],
+    mode: "qr",
+    bootMs: 5e3,
+    steps: [
+      // 实测：TUI 就绪后 `?` 弹 Sign in 三选一 → 选 1（Email，自动确认出 URL）
+      { match: /ask trae cli to do anything|TRAE CLI \(v/i, keys: ["?"], settleMs: 2500 },
+      { match: /sign in to use trae cli/i, keys: ["1"], settleMs: 3e3 },
+      { match: /login with email/i, keys: ["Enter"], settleMs: 2500 }
+    ],
+    urlPattern: /^https:\/\/console\.enterprise\.trae\.cn\/authorization\?\S+/i
+  },
+  "qwen-code": {
+    command: () => [process.env.CCR_QWEN_PATH || "qwen-code"],
+    mode: "qr",
+    bootMs: 5e3,
+    steps: [
+      // 未实测备案：gemini-cli fork 惯例 TUI 内 /auth 触发设备授权流
+      { match: /ask anything|qwen|gemini/i, keys: ["/auth", "Enter"], settleMs: 3e3 }
+    ]
+  }
+};
+var URL_EXCLUDE = /localhost|127\.0\.0\.1|docs\.trae\.cn|www\.trae\.cn|trae\.cn\/trae-cli|codebuddy\.ai\/docs|www\.codebuddy\.ai|openai\.com\/?$|npmjs\.org|github\.com\/?$/i;
+function extractLoginUrl(text, profileUrlPattern) {
+  const lines = text.split(/\r?\n/);
+  if (profileUrlPattern) {
+    for (const line of lines) {
+      const m = profileUrlPattern.exec(line.trim());
+      if (m) return m[0];
+    }
+  }
+  let fallback = null;
+  for (const line of lines) {
+    const m = /https:\/\/[^\s"'<>()]+/.exec(line);
+    if (!m) continue;
+    const url = m[0].replace(/[.,;:]+$/, "");
+    if (URL_EXCLUDE.test(url)) continue;
+    if (!url.includes("?")) continue;
+    fallback = url;
+  }
+  return fallback;
+}
+function extractQrBlockArt(text) {
+  const lines = text.split(/\r?\n/);
+  let run2 = [];
+  const flush = () => {
+    if (run2.length < 5) return null;
+    const widths = run2.map((l) => l.trimEnd().length);
+    const max = Math.max(...widths);
+    return widths.every((w2) => Math.abs(w2 - max) <= 2) ? run2.join("\n") : null;
+  };
+  for (const line of lines) {
+    const dense = (line.match(/[█▄▀▌▐◆]/g) || []).length;
+    if (dense >= 8) run2.push(line);
+    else {
+      const art = flush();
+      if (art) return art;
+      run2 = [];
+    }
+  }
+  return flush();
+}
+function flowProjection(f) {
+  return {
+    flow_id: f.flow_id,
+    engine: f.engine,
+    state: f.state,
+    mode: f.mode,
+    ...f.url ? { url: f.url } : {},
+    ...f.qr_text ? { qr_text: f.qr_text } : {},
+    hint: f.hint,
+    ts: Date.now()
+  };
+}
+var flows = /* @__PURE__ */ new Map();
+var finishedAt = /* @__PURE__ */ new Map();
+var FLOW_RETAIN_MS = 5 * 6e4;
+var TIMESCALE = Number(process.env.CCR_LOGIN_TIMESCALE) > 0 ? Number(process.env.CCR_LOGIN_TIMESCALE) : 1;
+var FLOW_TIMEOUT_MS = (Number(process.env.CCR_LOGIN_FLOW_TIMEOUT_MS) > 0 ? Number(process.env.CCR_LOGIN_FLOW_TIMEOUT_MS) : 5 * 6e4) / TIMESCALE;
+var POLL_MS = (Number(process.env.CCR_LOGIN_POLL_MS) > 40 ? Number(process.env.CCR_LOGIN_POLL_MS) : 1200) / TIMESCALE;
+var scaleMs = (ms) => ms / TIMESCALE;
+var PROBE_EVERY_POLLS = 2;
+function engineHint(engine) {
+  return staticAuthHint(engine);
+}
+function flowTmuxSession(engine) {
+  return `ccr-login-${engine.replace(/[^a-z0-9-]/gi, "")}`;
+}
+function pushEvent(bus2, f) {
+  if (!bus2) return;
+  try {
+    bus2.emitTransient("AUTH_REQUIRED", flowProjection(f));
+  } catch {
+  }
+}
+async function killPane(engine) {
+  await runTmux(["kill-session", "-t", flowTmuxSession(engine)]);
+}
+function startEngineLogin(bus2, engine) {
+  const profile = PROFILES[engine];
+  const existing = flows.get(engine);
+  if (existing && (existing.state === "starting" || existing.state === "pending")) {
+    pushEvent(bus2, existing);
+    return flowProjection(existing);
+  }
+  const f = {
+    flow_id: `englogin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    engine,
+    state: "starting",
+    mode: profile ? profile.mode : "hint",
+    hint: engineHint(engine),
+    started_at: Date.now(),
+    stepFired: /* @__PURE__ */ new Set()
+  };
+  flows.set(engine, f);
+  finishedAt.delete(engine);
+  pushEvent(bus2, f);
+  if (!profile) {
+    f.state = "pending";
+    void watchHintOnly(bus2, engine);
+  } else {
+    void spawnLoginPane(bus2, engine, profile);
+  }
+  return flowProjection(f);
+}
+async function spawnLoginPane(bus2, engine, profile) {
+  const f = flows.get(engine);
+  if (!f || f.state !== "starting" && f.state !== "pending") return;
+  await killPane(engine);
+  const cmd = profile.command();
+  const started = await runTmux(["new-session", "-d", "-x", "120", "-y", "36", "-s", flowTmuxSession(engine), ...cmd]);
+  const cur = flows.get(engine);
+  if (!cur || cur !== f) return;
+  if (!started.ok) {
+    f.state = "error";
+    f.hint = `${f.hint}\uFF08\u81EA\u52A8\u62C9\u8D77\u767B\u5F55\u9762\u677F\u5931\u8D25\uFF1A${started.error || "tmux \u4E0D\u53EF\u7528"}\uFF09`;
+    finishedAt.set(engine, Date.now());
+    pushEvent(bus2, f);
+    return;
+  }
+  f.state = "pending";
+  void pollLoop(bus2, engine);
+}
+async function watchHintOnly(bus2, engine) {
+  const f = flows.get(engine);
+  if (!f) return;
+  const deadline = Date.now() + FLOW_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(PROBE_EVERY_POLLS * POLL_MS);
+    const cur = flows.get(engine);
+    if (!cur || cur !== f || cur.state !== "pending" && cur.state !== "starting") return;
+    resetEngineAuthCache();
+    const probe = await probeEngineAuthAsync(engine, { timeoutMs: 5e3 });
+    if (probe.state === "ready") return settleReady(bus2, engine);
+  }
+  return settleTimeout(bus2, engine);
+}
+async function settleReady(bus2, engine) {
+  const f = flows.get(engine);
+  if (f) {
+    f.state = "ready";
+    finishedAt.set(engine, Date.now());
+    pushEvent(bus2, f);
+  }
+  await killPane(engine);
+  resetEngineAuthCache();
+}
+async function settleTimeout(bus2, engine) {
+  const f = flows.get(engine);
+  if (f) {
+    f.state = "timeout";
+    f.hint = `${f.hint}\uFF08\u7B49\u5F85\u767B\u5F55\u8D85\u65F6\uFF0C\u53EF\u91CD\u65B0\u53D1\u8D77\uFF09`;
+    finishedAt.set(engine, Date.now());
+    pushEvent(bus2, f);
+  }
+  await killPane(engine);
+}
+async function pollLoop(bus2, engine) {
+  const profile = PROFILES[engine];
+  const f = flows.get(engine);
+  if (!profile || !f) return;
+  const session = flowTmuxSession(engine);
+  const deadline = Date.now() + FLOW_TIMEOUT_MS;
+  let polls = 0;
+  let bootWait = scaleMs(profile.bootMs);
+  let fallbackLoginAt = null;
+  let fallbackFired = false;
+  while (Date.now() < deadline) {
+    const cur = flows.get(engine);
+    if (!cur || cur !== f || cur.state !== "pending" && cur.state !== "starting") return;
+    if (bootWait > 0) {
+      const w2 = Math.min(bootWait, POLL_MS);
+      await sleep(w2);
+      bootWait -= w2;
+      continue;
+    }
+    const cap = await runTmux(["capture-pane", "-p", "-t", session]);
+    if (!cap.ok) {
+      await sleep(POLL_MS);
+      const probe = await probeEngineAuthAsync(engine, { timeoutMs: 5e3 });
+      if (probe.state === "ready") return settleReady(bus2, engine);
+      const cap2 = await runTmux(["capture-pane", "-p", "-t", session]);
+      if (!cap2.ok) {
+        const st2 = flows.get(engine);
+        if (st2 && (st2.state === "pending" || st2.state === "starting")) {
+          st2.state = "cancelled";
+          finishedAt.set(engine, Date.now());
+          pushEvent(bus2, st2);
+        }
+        return;
+      }
+      continue;
+    }
+    const text = cap.text;
+    for (let i = 0; i < profile.steps.length; i++) {
+      if (f.stepFired.has(i)) continue;
+      const step = profile.steps[i];
+      if (step.match.test(text)) {
+        f.stepFired.add(i);
+        if (step.keys?.length) {
+          let literal = "";
+          for (const k3 of step.keys) {
+            if (k3 === "Enter") {
+              if (literal) {
+                await runTmux(["send-keys", "-t", session, "-l", literal]);
+                literal = "";
+              }
+              await runTmux(["send-keys", "-t", session, "Enter"]);
+            } else literal += k3;
+          }
+          if (literal) await runTmux(["send-keys", "-t", session, "-l", literal]);
+        }
+        if (step.settleMs) await sleep(scaleMs(step.settleMs));
+        break;
+      }
+    }
+    const url = extractLoginUrl(text, profile.urlPattern);
+    if (url && url !== f.url) {
+      f.url = url;
+      pushEvent(bus2, f);
+    }
+    if (engine === "codebuddy" && !f.url && !/waiting for auth/i.test(text)) {
+      if (fallbackLoginAt === null) fallbackLoginAt = Date.now() + scaleMs(2e4);
+      else if (!fallbackFired && Date.now() > fallbackLoginAt && /ask anything|tips for getting started/i.test(text)) {
+        fallbackFired = true;
+        await runTmux(["send-keys", "-t", session, "-l", "/login"]);
+        await runTmux(["send-keys", "-t", session, "Enter"]);
+      }
+    }
+    if (!f.qr_text) {
+      const art = extractQrBlockArt(text);
+      if (art) {
+        f.qr_text = art;
+        pushEvent(bus2, f);
+      }
+    }
+    polls++;
+    if (polls % PROBE_EVERY_POLLS === 0) {
+      resetEngineAuthCache();
+      const probe = await probeEngineAuthAsync(engine, { timeoutMs: 5e3 });
+      if (probe.state === "ready") return settleReady(bus2, engine);
+    }
+    await sleep(POLL_MS);
+  }
+  return settleTimeout(bus2, engine);
+}
+function engineLoginStatus(engine) {
+  pruneFinishedFlows();
+  const f = flows.get(engine);
+  return f ? flowProjection(f) : null;
+}
+function cancelEngineLogin(bus2, engine) {
+  const f = flows.get(engine);
+  if (!f) return null;
+  if (f.state === "starting" || f.state === "pending") {
+    f.state = "cancelled";
+    finishedAt.set(engine, Date.now());
+    pushEvent(bus2, f);
+  }
+  void killPane(engine);
+  return flowProjection(f);
+}
+function verifyEngineLogin(bus2, engine) {
+  resetEngineAuthCache();
+  void (async () => {
+    const probe = await probeEngineAuthAsync(engine, { timeoutMs: 8e3 });
+    if (probe.state === "ready") {
+      const f2 = flows.get(engine);
+      if (f2 && (f2.state === "starting" || f2.state === "pending")) {
+        await settleReady(bus2, engine);
+        return;
+      }
+      pushEvent(bus2, {
+        flow_id: `englogin-verify-${Date.now().toString(36)}`,
+        engine,
+        state: "ready",
+        mode: "hint",
+        hint: probe.auth_hint ?? "",
+        started_at: Date.now(),
+        stepFired: /* @__PURE__ */ new Set()
+      });
+      return;
+    }
+    const f = flows.get(engine);
+    if (f && (f.state === "pending" || f.state === "starting")) pushEvent(bus2, f);
+  })();
+}
+function pruneFinishedFlows() {
+  const now = Date.now();
+  for (const [engine, at] of finishedAt) {
+    if (now - at > FLOW_RETAIN_MS) {
+      flows.delete(engine);
+      finishedAt.delete(engine);
+    }
+  }
 }
 
 // src/permission-audit.ts
@@ -49239,7 +49670,7 @@ var DecisionNotificationWatcher = class {
 };
 
 // src/agent-codex.ts
-import { spawn as spawn4 } from "node:child_process";
+import { spawn as spawn5 } from "node:child_process";
 import { randomUUID as randomUUID9 } from "node:crypto";
 import { existsSync as existsSync21, mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync16 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49482,7 +49913,7 @@ var CodexAgentSession = class {
     this.mapper.turnStartMs = Date.now();
     let child;
     try {
-      child = spawn4(this.bin, args, {
+      child = spawn5(this.bin, args, {
         stdio: ["pipe", "pipe", "pipe"],
         cwd: this.cwd,
         env: childEnv()
@@ -51397,6 +51828,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (engineResolved && engineResolved !== "claude") {
             const auth = probeEngineAuth(engineResolved);
             if (auth.state === "needs_auth") {
+              startEngineLogin(this.bus, engineResolved);
               return {
                 command_id: cmd.command_id,
                 ok: false,
@@ -52037,6 +52469,33 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
           const r = this.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
+        }
+        case "COMMAND_ENGINE_LOGIN": {
+          {
+            const p = cmd.payload;
+            const engine = p.engine;
+            if (!isSessionEngine(engine)) {
+              return { command_id: cmd.command_id, ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(engine)}` };
+            }
+            if (engine === "claude") {
+              return { command_id: cmd.command_id, ok: false, error: "claude \u514D\u767B\u5F55\uFF08relay \u5185\u5D4C SDK\uFF09" };
+            }
+            const action = p.action === "status" || p.action === "verify" || p.action === "cancel" ? p.action : "start";
+            if (action === "status") {
+              const flow2 = engineLoginStatus(engine);
+              return { command_id: cmd.command_id, ok: true, data: flow2 };
+            }
+            if (action === "cancel") {
+              const flow2 = cancelEngineLogin(this.bus, engine);
+              return { command_id: cmd.command_id, ok: true, ...flow2 ? { data: flow2 } : { data: null } };
+            }
+            if (action === "verify") {
+              verifyEngineLogin(this.bus, engine);
+              return { command_id: cmd.command_id, ok: true, data: { engine, accepted: true } };
+            }
+            const flow = startEngineLogin(this.bus, engine);
+            return { command_id: cmd.command_id, ok: true, data: flow };
+          }
         }
         case "COMMAND_TASK_CREATE":
         case "COMMAND_TASK_UPDATE":
@@ -56077,7 +56536,7 @@ import { homedir as homedir15 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
-import { spawn as spawn5, execFileSync } from "node:child_process";
+import { spawn as spawn6, execFileSync } from "node:child_process";
 import { existsSync as existsSync23, mkdirSync as mkdirSync18, appendFileSync as appendFileSync5, readFileSync as readFileSync28, writeFileSync as writeFileSync18, rmSync as rmSync5 } from "node:fs";
 import path4, { join as join34 } from "node:path";
 import { homedir as homedir14, tmpdir as tmpdir2 } from "node:os";
@@ -56163,7 +56622,7 @@ var ERR_BY_CODE = {
 function run(args) {
   return new Promise((resolve10) => {
     const fake = process.env.CCR_INJECT_CMD;
-    const child = fake ? spawn5(process.execPath, [fake, ...args], { windowsHide: true }) : spawn5(exe2, args, { windowsHide: true });
+    const child = fake ? spawn6(process.execPath, [fake, ...args], { windowsHide: true }) : spawn6(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -56212,9 +56671,9 @@ function buildDoScriptExpr(pid, expr) {
 function mapAppleError(stderr) {
   return /-25211\b|-1743\b/.test(stderr) ? "Mac relay \u9700\u5728 Terminal \u7A97\u53E3\u5185\u8FD0\u884C\uFF08sshd/nohup \u4E0A\u4E0B\u6587\u65E0\u6743\u81EA\u52A8\u5316 Terminal\uFF1B\u6216\u7ED9\u5BF9\u5E94\u8FDB\u7A0B\u6388 Terminal \u81EA\u52A8\u5316\u6743\u9650\uFF09" : /-1719\b/.test(stderr) ? "\u9700\u8981\u5728 Mac \u7CFB\u7EDF\u8BBE\u7F6E\u2192\u9690\u79C1\u4E0E\u5B89\u5168\u6027\u2192\u8F85\u52A9\u529F\u80FD\u4E2D\u6388\u6743\uFF08\u65E7 keystroke \u8DEF\u5F84\u9057\u7559\uFF0Cdo script \u7406\u8BBA\u4E0A\u4E0D\u518D\u9700\u8981\uFF09" : /TTY-NOT-FOUND/.test(stderr) ? "\u672A\u5728 Terminal.app \u627E\u5230\u8BE5\u4F1A\u8BDD\u7684\u7EC8\u7AEF\u6807\u7B7E\uFF08CLI \u53EF\u80FD\u8FD0\u884C\u5728 tmux/iTerm2 \u7B49\u5176\u4ED6\u7EC8\u7AEF\u91CC\uFF0C\u6216\u8FDB\u7A0B\u5DF2\u91CD\u542F\uFF09" : void 0;
 }
-function runTmux(args, timeoutMs = 5e3) {
+function runTmux2(args, timeoutMs = 5e3) {
   return new Promise((resolve10) => {
-    const child = spawn5("tmux", args);
+    const child = spawn6("tmux", args);
     let out = "";
     let err = "";
     child.stdout?.on("data", (c) => out += c);
@@ -56256,7 +56715,7 @@ async function resolveTmuxTarget(pid) {
   }
   if (!tty || tty === "?") return null;
   try {
-    const r = await runTmux(["list-panes", "-a", "-F", "#{pane_tty}|#{window_index}|#{pane_index}|#{session_name}"]);
+    const r = await runTmux2(["list-panes", "-a", "-F", "#{pane_tty}|#{window_index}|#{pane_index}|#{session_name}"]);
     if (!r.ok) return null;
     for (const line of r.text.split(/\r?\n/)) {
       const m = /^(\/dev\/[^\s|]+)\|(\d+)\|(\d+)\|(.*)$/.exec(line);
@@ -56269,18 +56728,18 @@ async function resolveTmuxTarget(pid) {
   return null;
 }
 async function tmuxSendKeys(target, ...keys) {
-  const r = await runTmux(["send-keys", "-t", target, ...keys]);
+  const r = await runTmux2(["send-keys", "-t", target, ...keys]);
   return r.ok ? { ok: true } : { ok: false, error: `tmux send-keys \u5931\u8D25: ${r.error}` };
 }
 function tmuxNorm(s) {
   return s.replace(/\s+/g, "");
 }
 async function tmuxBottomText(target, lines = 8) {
-  const r = await runTmux(["capture-pane", "-p", "-t", target]);
+  const r = await runTmux2(["capture-pane", "-p", "-t", target]);
   if (!r.ok) return "";
   return tmuxNorm(r.text.split(/\r?\n/).filter((l) => l.trim()).slice(-lines).join(""));
 }
-var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function tmuxVerifySubmitted(target, tail2) {
   const bottom = await tmuxBottomText(target);
   return !!bottom && !bottom.includes(tail2);
@@ -56288,7 +56747,7 @@ async function tmuxVerifySubmitted(target, tail2) {
 function runAppleScript(script) {
   return new Promise((resolve10) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
+    const child = fake ? spawn6(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn6("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -56351,7 +56810,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
     const tmp = join34(tmpdir2(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync18(tmp, body, "utf8");
     return new Promise((resolve10) => {
-      const child = spawn5("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
+      const child = spawn6("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
         stdio: "ignore"
@@ -56379,7 +56838,7 @@ async function injectTextMac(pid, rawText) {
     let w2 = await tmuxSendKeys(target, "-l", "--", text);
     let wRetried = false;
     if (!w2.ok) {
-      await sleep(200);
+      await sleep2(200);
       wRetried = true;
       w2 = await tmuxSendKeys(target, "-l", "--", text);
     }
@@ -56392,7 +56851,7 @@ async function injectTextMac(pid, rawText) {
     void (async () => {
       let round = 0;
       for (const delay of [600, 1500]) {
-        await sleep(delay);
+        await sleep2(delay);
         round++;
         try {
           const tV = Date.now();
@@ -56455,7 +56914,7 @@ async function injectShiftTab(pid) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
     const target = await resolveTmuxTarget(pid);
     if (target) {
-      return runTmux(["send-keys", "-t", target, "-l", "\x1B[Z"]).then(
+      return runTmux2(["send-keys", "-t", target, "-l", "\x1B[Z"]).then(
         (r) => r.ok ? { ok: true } : { ok: false, error: `tmux send-keys \u5931\u8D25: ${r.error}` }
       );
     }
@@ -56506,7 +56965,7 @@ function buildCaptureScript(pid) {
 function runAppleScriptOut(script) {
   return new Promise((resolve10) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn5(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn5("osascript", ["-e", script]);
+    const child = fake ? spawn6(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn6("osascript", ["-e", script]);
     let out = "";
     let err = "";
     child.stdout?.on("data", (c) => out += c);
@@ -56531,7 +56990,7 @@ async function captureConsoleBottom(pid, rows = 20) {
     if (!macTargetIsCliHost(pid)) return null;
     const target = await resolveTmuxTarget(pid);
     if (target) {
-      const tm2 = await runTmux(["capture-pane", "-t", target, "-p"]);
+      const tm2 = await runTmux2(["capture-pane", "-t", target, "-p"]);
       if (!tm2.ok || !tm2.text.trim()) return null;
       return tm2.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
     }
@@ -56625,7 +57084,7 @@ function foreignResidual(box, knownTexts) {
   const residuals = ["", " "].map((sep10) => maskNoise(removeKnownTexts(stripped.join(sep10), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
-var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   const cfg2 = opts.cfg ?? guardConfig();
   const abort = opts.abort ?? (() => false);
@@ -56649,7 +57108,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
     }
     if (Date.now() - t02 >= cfg2.maxMs) return { kind: "timeout", waitedMs: Date.now() - t02 };
     if (abort()) return { kind: "aborted" };
-    await sleep2(cfg2.pollMs);
+    await sleep3(cfg2.pollMs);
   }
 }
 
@@ -57066,7 +57525,7 @@ function transcriptFirstTs(p) {
 }
 var DEFAULT_HOLD_MS = 59e4;
 var QUESTION_HOLD_MS = 9e4;
-var sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep4 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir15(), ".claude", "sessions", `${pid}.json`);
@@ -58241,7 +58700,7 @@ var Bridge = class _Bridge {
         this.onInjectFail(sessionId, r.error);
         return;
       }
-      await sleep3(400);
+      await sleep4(400);
       const pid2 = this.mgr.getExternal(sessionId)?.cli_pid;
       if (!pid2) return;
       const r2 = await injectText(pid2, msg);
@@ -58455,9 +58914,9 @@ var Bridge = class _Bridge {
           this.mgr.pushExternalLog(sessionId, "system", `\u6743\u9650\u5FAA\u73AF\u5207\u6362\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5"}`);
           return;
         }
-        await sleep3(150);
+        await sleep4(150);
       }
-      await sleep3(350);
+      await sleep4(350);
       const rows = await captureConsoleBottom(pid);
       const text = (rows ?? []).join("\n");
       const mode = /bypass permissions on/.test(text) ? "bypassPermissions" : /accept edits on/.test(text) ? "acceptEdits" : /plan mode on/.test(text) ? "plan" : null;
@@ -58511,7 +58970,7 @@ var Bridge = class _Bridge {
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue\u2192written)`);
         this.armVerify(sessionId, text);
         this.scheduleSubmitEnter(sessionId, state.cli_pid, text, sentAt);
-        await sleep3(400);
+        await sleep4(400);
       }
     } finally {
       this.flushing.delete(sessionId);
@@ -60201,7 +60660,10 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_TASK_CREATE",
   "COMMAND_TASK_UPDATE",
   "COMMAND_DISPATCH",
-  "COMMAND_LESSON_APPEND"
+  "COMMAND_LESSON_APPEND",
+  // #102 批 B 引擎登录引导（把饭喂到嘴里）：起登录 pane/查状态/我已完成登录/取消
+  //（漏加白名单=LAN 实机死路，#212 同款坑——mgr case 与单测全过唯独入口层挡死）
+  "COMMAND_ENGINE_LOGIN"
 ]);
 var HEARTBEAT_MS = 3e4;
 var HEARTBEAT_MISS_LIMIT = 20;
@@ -61442,7 +61904,9 @@ var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_TASK_CREATE",
   "COMMAND_TASK_UPDATE",
   "COMMAND_DISPATCH",
-  "COMMAND_LESSON_APPEND"
+  "COMMAND_LESSON_APPEND",
+  // #102 批 B 引擎登录引导（与 ws-server COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_ENGINE_LOGIN"
 ]);
 var PEER_META_MAX = 120;
 var SIGHTING_TTL_MS = 18e4;
@@ -62368,7 +62832,7 @@ if (cliArgs.has("--daemon")) {
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
   const logFd = openSync5(join40(cfg.dataDir, "relay.log"), "a");
-  const child = spawn6(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
+  const child = spawn7(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }

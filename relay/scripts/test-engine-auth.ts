@@ -53,9 +53,13 @@ const CODEX_NOT_LOGGED = mkScript("codex-not-logged", "Not logged in: run `codex
 const CODEX_LOGGED_IN = mkScript("codex-logged-in", "Logged in using ChatGPT");
 const CB_AUTH_REQUIRED = mkScript("cb-auth-required", "Authentication required. Please use /login command to sign in to your account");
 const CB_HEALTHY = mkScript("cb-healthy", "Signed in as tester@example.com (Plus)");
+// #102 批 B：trae 探针命令改版 fixture（v2 实测三形态：Not logged in / 已登录 / 1.0 空输出）
+const TRAE_NOT_LOGGED = mkScript("trae-not-logged", "Not logged in");
+const TRAE_HEALTHY = mkScript("trae-healthy", "Logged in as tester (Free)");
+const TRAE_EMPTY = mkScript("trae-empty", "");
 
 // ---------- env 九键保存/清场/恢复（零生产触达） ----------
-const ENV_KEYS = ["CCR_CODEX_PATH", "CCR_CODEBUDDY_PATH", "CODEX_HOME", "OPENAI_API_KEY",
+const ENV_KEYS = ["CCR_CODEX_PATH", "CCR_CODEBUDDY_PATH", "CCR_TRAE_PATH", "CODEX_HOME", "OPENAI_API_KEY",
   "QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "TRAE_API_KEY"] as const;
 const SAVED: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) { SAVED[k] = process.env[k]; delete process.env[k]; }
@@ -149,13 +153,26 @@ try {
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
   assert(r.state === "ready", "P3c qwen env key 在场 → ready（候选 env 路径）");
   delete process.env.QWEN_API_KEY;
+  // #102 批 B 实测修正（Leader 追加要求）：trae 凭据不在 ~/.trae/.credentials.json
+  // 等候选路径（v2 实测存 ~/.trae/cli/*.sqlite），文件候选恒 miss 长期误报——
+  // 改与 codex 同款探针命令文本匹配（trae-cli login status 实测「Not logged in」
+  // rc=0；1.0 输出空 fail-open ready）
   mkdirSync(join(HOME, ".trae"), { recursive: true });
   writeFileSync(join(HOME, ".trae", ".credentials.json"), "{}");
+  process.env.CCR_TRAE_PATH = TRAE_HEALTHY;
   r = probeEngineAuth("trae", { homeDir: HOME });
-  assert(r.state === "ready", "P3d trae .credentials.json 存在 → ready");
+  assert(r.state === "ready", "P3d trae login status 已登录输出 → ready（#102 批 B 实测改探针命令）");
+  process.env.CCR_TRAE_PATH = TRAE_NOT_LOGGED;
+  r = probeEngineAuth("trae", { homeDir: HOME });
+  assert(r.state === "needs_auth" && (r.auth_hint ?? "").length > 0, "P3e trae Not logged in 输出 → needs_auth+hint（v2 traex 实测输出）");
+  process.env.CCR_TRAE_PATH = TRAE_EMPTY;
+  r = probeEngineAuth("trae", { homeDir: HOME });
+  assert(r.state === "ready", "P3e' trae 1.0 空输出 fail-open → ready（1.0 已 limited maintenance，取舍备案）");
+  process.env.CCR_TRAE_PATH = join(BIN, "no-such-trae");
+  r = probeEngineAuth("trae", { homeDir: HOME });
+  assert(r.state === "ready", "P3e'' trae 探针故障 fail-open → ready");
   rmSync(join(HOME, ".trae", ".credentials.json"));
-  r = probeEngineAuth("trae", { homeDir: HOME });
-  assert(r.state === "needs_auth", "P3e trae 无凭据 → needs_auth");
+  delete process.env.CCR_TRAE_PATH;
   r = probeEngineAuth("claude", { homeDir: HOME });
   assert(r.state === "ready", "P3f claude 恒 ready（relay 进程即 SDK 免检）");
   r = probeEngineAuth("zcode", { homeDir: HOME });

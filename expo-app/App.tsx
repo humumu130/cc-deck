@@ -9,6 +9,7 @@ import type { DetailBackHandle } from "./src/screens/DetailScreen";
 import { projectNotifications, type SessionState } from "./src/protocol";
 import { ensureNotifPermission, fgStatsKey, fgStatsTitle, fgSupported, markPermHintShown, notifPermissionState, notifyAlert, openNotifSettings, permHintActive, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
+import EngineLoginModal from "./src/screens/EngineLoginModal";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
@@ -1040,6 +1041,8 @@ function Shell() {
             }}
           />
           {snap.watchPair ? <WatchPairModal req={snap.watchPair} onDecide={(a) => store.decideWatchPair(a)} /> : null}
+          {/* #102 批 B 引擎登录引导卡（AUTH_REQUIRED 瞬态帧驱动）：扫码即登录零终端操作 */}
+          <EngineLoginModal />
         </>
       ) : (
         <SetupScreen

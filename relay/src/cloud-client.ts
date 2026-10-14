@@ -73,6 +73,8 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_TASK_UPDATE",
   "COMMAND_DISPATCH",
   "COMMAND_LESSON_APPEND",
+  // #102 批 B 引擎登录引导（与 ws-server COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_ENGINE_LOGIN",
 ]);
 
 const PEER_META_MAX = 120;

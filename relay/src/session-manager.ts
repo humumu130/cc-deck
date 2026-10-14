@@ -23,6 +23,7 @@ import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normal
 import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
 import { authFailureHint, probeEngineAuth } from "./engine-auth.js";
+import { cancelEngineLogin, engineLoginStatus, startEngineLogin, verifyEngineLogin } from "./engine-login.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
@@ -2402,6 +2403,10 @@ export class SessionManager {
           if (engineResolved && engineResolved !== "claude") {
             const auth = probeEngineAuth(engineResolved);
             if (auth.state === "needs_auth") {
+              // #102 批 B：把饭喂到嘴里——拦截同时自动拉起登录 pane（tmux 托管）+
+              // AUTH_REQUIRED 事件（含面板提取的授权 URL），端上引导卡渲染二维码，
+              // 扫码即登录零终端操作（同步受理 pane 异步起流，事件后至）
+              startEngineLogin(this.bus, engineResolved);
               return {
                 command_id: cmd.command_id, ok: false,
                 error: `引擎 ${engineResolved} 未登录: ${auth.auth_hint ?? "请先完成引擎登录"}`,
@@ -3158,6 +3163,41 @@ export class SessionManager {
           }
           const r = this.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+        }
+        case "COMMAND_ENGINE_LOGIN": {
+          // #102 批 B 引擎登录引导（把饭喂到嘴里）：action 四态——
+          //   start  幂等起登录 pane（tmux 托管）+ AUTH_REQUIRED 事件流（url 增量推）
+          //   status 查当前流程（瞬态事件断线不补发，重连后靠这里兜底）
+          //   verify 「我已完成登录」：异步直探（不阻塞——结果走 AUTH_REQUIRED 事件：
+          //         ready 卡片转绿/仍 pending 回弹），ACK 只做受理
+          //   cancel 收 pane 推 cancelled（用户关卡）
+          // ACK data = 流程投影（与 AUTH_REQUIRED payload 同构，端上同一渲染面）；
+          // handleCommand 同步约束：全部接口同步受理、异步推进（spawn/探针不进 ACK 路径）
+          {
+            const p = cmd.payload as { engine?: unknown; action?: unknown };
+            const engine = p.engine;
+            if (!isSessionEngine(engine)) {
+              return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(engine)}` };
+            }
+            if (engine === "claude") {
+              return { command_id: cmd.command_id, ok: false, error: "claude 免登录（relay 内嵌 SDK）" };
+            }
+            const action = p.action === "status" || p.action === "verify" || p.action === "cancel" ? p.action : "start";
+            if (action === "status") {
+              const flow = engineLoginStatus(engine);
+              return { command_id: cmd.command_id, ok: true, data: flow };
+            }
+            if (action === "cancel") {
+              const flow = cancelEngineLogin(this.bus, engine);
+              return { command_id: cmd.command_id, ok: true, ...(flow ? { data: flow } : { data: null }) };
+            }
+            if (action === "verify") {
+              verifyEngineLogin(this.bus, engine); // 受理；探针结果走 AUTH_REQUIRED 事件
+              return { command_id: cmd.command_id, ok: true, data: { engine, accepted: true } };
+            }
+            const flow = startEngineLogin(this.bus, engine);
+            return { command_id: cmd.command_id, ok: true, data: flow };
+          }
         }
         case "COMMAND_TASK_CREATE":
         case "COMMAND_TASK_UPDATE":

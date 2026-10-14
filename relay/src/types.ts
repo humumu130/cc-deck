@@ -533,6 +533,29 @@ export interface CollabModePayload {
   leader_session?: SessionState;
 }
 
+// #102 批 B 引擎登录引导（AUTH_REQUIRED 瞬态载荷；与 engine-login.ts flowProjection
+// 同构）。flow_id = 登录流程 id（登录 pane 非会话——任务书原字段名 session_id 在此
+// 语义化为 flow_id，端上「我已完成登录」按钮按 engine 定位流程即可，回执备注偏离）。
+// state 推进：starting（pane 起流）→ pending（面板就绪，url/qr_text 增量推）→
+// ready（探针转绿，端上卡片转绿+本地 engine_catalog patch ready）/ timeout / error /
+// cancelled（终态，流程对象 relay 侧保留 5min 供 status 查询）。
+// mode 引导卡形态：qr=URL 渲染二维码（codebuddy device-flow/trae，扫码或点链接
+// 授权）；browser=本机浏览器回调型（codex：CLI 自开浏览器，URL 兜底显示，手机端
+// 显示「请在 Mac 前完成浏览器授权」）；hint=纯指引（无 profile 引擎兜底）。
+export interface AuthRequiredPayload {
+  flow_id: string;
+  engine: SessionEngine;
+  state: "starting" | "pending" | "ready" | "timeout" | "error" | "cancelled";
+  mode: "qr" | "browser" | "hint";
+  /** 授权 URL（relay 登录 pane 面板提取；qr 模式端上渲染二维码+链接 fallback） */
+  url?: string;
+  /** 终端二维码字符画（部分 CLI 直接印；原样透传，端上等宽渲染兜底） */
+  qr_text?: string;
+  /** 登录指引（批 A auth_hint 同源文案——hint-only 降级显示） */
+  hint: string;
+  ts: number;
+}
+
 // SNAPSHOT.settings / SETTINGS_UPDATED 载荷
 // W-DESIGNHUB 系统设计图纸清单项（design-docs.ts 产出 / SNAPSHOT.design_docs 元素）
 export interface DesignDocItem {
@@ -607,6 +630,7 @@ export type EventType =
   | "SETTINGS_UPDATED"
   | "NOTIFICATIONS_UPDATED"
   | "COLLAB_MODE_UPDATED"
+  | "AUTH_REQUIRED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -658,6 +682,10 @@ export type EventPayloadMap = {
   // W-MODE 协作模式切换（瞬态）：orgAction collab-mode set 成功边广播；离线端由
   // SNAPSHOT.collab_mode 兜底（SETTINGS_UPDATED 同款收敛模型）
   COLLAB_MODE_UPDATED: CollabModePayload;
+  // #102 批 B 引擎登录引导（瞬态：seq:0 不落 ndjson 不补发）：登录 pane 起流/提取
+  // 到授权 URL/登录态转 ready/超时取消时广播；端上引导卡渲染二维码（把饭喂到嘴里
+  // ——用户 1014 定调）。离线端重连后 COMMAND_ENGINE_LOGIN status 查当前态兜底
+  AUTH_REQUIRED: AuthRequiredPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -902,7 +930,9 @@ export type CommandType =
   | "COMMAND_TASK_CREATE"
   | "COMMAND_TASK_UPDATE"
   | "COMMAND_DISPATCH"
-  | "COMMAND_LESSON_APPEND";
+  | "COMMAND_LESSON_APPEND"
+  // #102 批 B 引擎登录引导（把饭喂到嘴里）：start/status/verify/cancel 四动作
+  | "COMMAND_ENGINE_LOGIN";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -1175,6 +1205,15 @@ export interface ArtifactGroupFetchCommand extends CommandBase {
   payload: { session_id: string; group_key: string };
 }
 
+// #102 批 B 引擎登录引导（把饭喂到嘴里）：start=幂等起登录 pane（ACK data=流程
+// 投影，与 AUTH_REQUIRED payload 同构）；status=查当前流程（瞬态事件断线不补发的
+// 重连兜底）；verify=「我已完成登录」异步直探（结果走 AUTH_REQUIRED 事件，ACK 只
+// 受理）；cancel=收 pane。engine=claude 拒（免检）。
+export interface EngineLoginCommand extends CommandBase {
+  type: "COMMAND_ENGINE_LOGIN";
+  payload: { engine: SessionEngine; action?: "start" | "status" | "verify" | "cancel" };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -1211,6 +1250,7 @@ export type Command =
   | NotificationAckCommand
   | EngineProfileUpdateCommand
   | ArtifactGroupFetchCommand
+  | EngineLoginCommand
   | TaskCreateCommand
   | TaskUpdateCommand
   | DispatchCommand

@@ -63,9 +63,10 @@ function main(): void {
   eq(ENGINE_STATE_LABEL, {
     ready: "可用",
     unavailable: "未安装或校验未过",
+    needs_auth: "未登录 · 点此扫码登录",
     unsupported: "不支持 · 不可选",
     unknown: "状态未知",
-  }, "engine_catalog 四态词（与 75-W/75-R 逐字一致）");
+  }, "engine_catalog 五态词（与 75-W/75-R 逐字一致；needs_auth #102 批 A/B 增补——批 B 起可点行拉起登录卡）");
   eq(ENGINE_PHRASES, {
     legacyRelayHint: "升级 relay 可选择更多引擎",
     onlyAvailable: "仅可用",

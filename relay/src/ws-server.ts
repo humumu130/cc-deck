@@ -179,6 +179,9 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_TASK_UPDATE",
   "COMMAND_DISPATCH",
   "COMMAND_LESSON_APPEND",
+  // #102 批 B 引擎登录引导（把饭喂到嘴里）：起登录 pane/查状态/我已完成登录/取消
+  //（漏加白名单=LAN 实机死路，#212 同款坑——mgr case 与单测全过唯独入口层挡死）
+  "COMMAND_ENGINE_LOGIN",
 ]);
 
 const HEARTBEAT_MS = 30_000;

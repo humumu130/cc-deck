@@ -44,6 +44,7 @@ const PRESETS: { label: string; text: string }[] = [
 const ENGINE_STATE_COLOR: Record<EngineCatalogState, keyof ThemeColors> = {
   ready: "done",
   unavailable: "working",
+  needs_auth: "working", // #102 批 B：未登录黄点（与 web 黄点同语义档）
   unsupported: "error",
   unknown: "faint",
 };
@@ -167,11 +168,17 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
     }
     // 75-E 创建前阻止（派单作业③）：显式选了不可选引擎（未安装/不支持/预检失败）
     // → 行内原因，不发送（engineSelectable 与选择器灰显同一把尺；auto 不拦——
-    // 默认引擎不可用由 relay 端兜底，端上不探测）
+    // 默认引擎不可用由 relay 端兜底，端上不探测）。
+    // #102 批 B：needs_auth 不再只报错——自动拉起登录卡（把饭喂到嘴里，扫码即登录）
     if (catalog && engineExplicit) {
       const selEntry = catalog.find((e) => e.id === engineExplicit);
       const block = selEntry ? engineSelectable(selEntry) : null;
       if (selEntry && block) {
+        if (selEntry.state === "needs_auth") {
+          setErr(`引擎 ${engineLabelOf(selEntry)} 未登录——已拉起登录引导`);
+          store.engineLogin(selEntry.id, "start");
+          return;
+        }
         setErr(`引擎 ${engineLabelOf(selEntry)} 不可用：${block}`);
         return;
       }
@@ -214,8 +221,16 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
         return;
       }
       // P81-8E forbidden 拒绝面：reason 码 → 三端统一词表人话（词表外码兜底
-      // 「已拒绝（<码>）」）；非 forbidden 错误原样透传
+      // 「已拒绝（<码>）」）；非 forbidden 错误原样透传。
+      // #102 批 B：relay fail-fast needs_auth 拒绝（error 含「未登录」+已 kick 登录
+      // pane）→ 行内指引+端侧幂等再 kick 一发（ACK 比首帧事件先到时保证卡开出）
       const fr = forbiddenReasonOf(v.error);
+      const authMiss = !!v.error && v.error.includes("未登录");
+      if (authMiss && engineExplicit) {
+        setErr(`${v.error}——登录引导已弹出`);
+        store.engineLogin(engineExplicit, "start");
+        return;
+      }
       setErr(fr ?? v.error ?? "命令未确认（超时或源未连接），可重试");
     };
     const sent = store.send(
@@ -359,6 +374,8 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                 ) : null}
                 {(catalog ?? []).map((e) => {
                   const block = engineSelectable(e);
+                  // #102 批 B：needs_auth 行不灰死——可点拉起登录卡（扫码即登录，把饭喂到嘴里）
+                  const loginRow = e.state === "needs_auth";
                   const on = engineSel === e.id;
                   const accent = ENGINE_ACCENT[e.id] ?? c.faint;
                   const stateColor = c[ENGINE_STATE_COLOR[e.state]];
@@ -369,10 +386,15 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                   return (
                     <View key={e.id}>
                       <Pressable
-                        style={[m.engRow, on && m.engRowOn, block ? { opacity: 0.45 } : null]}
-                        disabled={!!block}
-                        accessibilityLabel={`引擎 ${engineLabelOf(e)}，${ENGINE_STATE_LABEL[e.state]}${block ? `，不可选：${block}` : ""}`}
+                        style={[m.engRow, on && m.engRowOn, block && !loginRow ? { opacity: 0.45 } : null]}
+                        disabled={!!block && !loginRow}
+                        accessibilityLabel={`引擎 ${engineLabelOf(e)}，${ENGINE_STATE_LABEL[e.state]}${block && !loginRow ? `，不可选：${block}` : ""}`}
                         onPress={() => {
+                          if (loginRow) { // 未登录 → 登录卡（ENGINE_LOGIN start 幂等；卡就绪后回来选它）
+                            store.engineLogin(e.id, "start", (r) => { if (!r.ok && r.err) setErr(r.err); });
+                            setPickerOpen(false);
+                            return;
+                          }
                           setEngineSel(e.id);
                           setModelSel(null); // 模型绑定引擎：换引擎模型重置
                           void AsyncStorage.setItem("ccr_use_codex", e.id === "codex" ? "1" : "0");
@@ -386,7 +408,8 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                             <Text style={[m.engState, { color: stateColor }]}>{ENGINE_STATE_LABEL[e.state]}</Text>
                           </View>
                           {capsText ? <Text style={m.engSub}>{capsText}</Text> : null}
-                          {block ? <Text style={[m.engBlockT, { color: c.waiting }]}>不可选：{block}</Text> : null}
+                          {loginRow ? <Text style={[m.engBlockT, { color: stateColor }]}>点此拉起登录二维码，扫码即登录</Text> : null}
+                          {block && !loginRow ? <Text style={[m.engBlockT, { color: c.waiting }]}>不可选：{block}</Text> : null}
                         </View>
                         {on ? <Text style={m.engCheck}>✓</Text> : null}
                       </Pressable>

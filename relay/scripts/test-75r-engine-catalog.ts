@@ -58,6 +58,13 @@ const byId = (cat: EngineCatalogEntry[], id: SessionEngine): EngineCatalogEntry 
 
 try {
   // ---------- fixture（org 两组带 role_defaults；env 注入零生产触达） ----------
+  // #102 批 B：COMMAND_CREATE 拦截会 kick 登录 pane（startEngineLogin）——CCR_TMUX_CMD
+  // 钉假脚本（输出失败 → error 分支立即收场），防测试环境真 spawn tmux 跑假引擎脚本
+  const TMUX_FAKE = mkdtempSync(join(tmpdir(), "ccr-75r-tmux-"));
+  const tmuxFake = join(TMUX_FAKE, "tmux-fake");
+  writeFileSync(tmuxFake, "#!/bin/sh\nexit 1\n");
+  chmodSync(tmuxFake, 0o755);
+  process.env.CCR_TMUX_CMD = tmuxFake;
   const ORG = mkdtempSync(join(tmpdir(), "ccr-org-75r-"));
   const CWD = mkdtempSync(join(tmpdir(), "ccr-cwd-75r-"));
   const now = Date.now();
@@ -242,8 +249,13 @@ try {
       && typeof (ackG as { auth_hint?: string }).auth_hint === "string" && ((ackG as { auth_hint?: string }).auth_hint ?? "").length > 0
       && (ackG.error ?? "").includes("未登录"),
       "S7g codex 装了未登录：拒创建 ok=false+needs_auth=true+auth_hint 非空（fail-fast 结构化拒绝——spawn 前拦下）");
-    assert(events.length === eventsBeforeG && created.length === createdCountBeforeG,
-      "S7g' 拦截即终局：无 SESSION_CREATED 事件、无 agent 工厂调用（不 spawn——1014 根因链在创建口截断）");
+    // #102 批 B 起拦截不再「零事件」：同时 kick 登录流程（AUTH_REQUIRED 瞬态帧 ×1，
+    // 把饭喂到嘴里链路受理）——会话面仍零副作用（无 SESSION_CREATED、无工厂调用）
+    const authFramesG = events.slice(eventsBeforeG).filter((ev) => ev.type === "AUTH_REQUIRED");
+    assert(events.slice(eventsBeforeG).every((ev) => ev.type === "AUTH_REQUIRED")
+      && authFramesG.length >= 1 && authFramesG.every((ev) => (ev.payload as { engine?: string }).engine === "codex")
+      && created.length === createdCountBeforeG,
+      "S7g' 拦截即终局：无 SESSION_CREATED、无 agent 工厂调用（不 spawn）；批 B 起恰多 AUTH_REQUIRED 登录流程帧（kick 登录 pane）");
     // h. codebuddy 同拦（1014 实锤引擎）：Authentication required → 拒+hint
     process.env.CCR_CODEBUDDY_PATH = mkFake("cb-na", "Authentication required. Please use /login command to sign in");
     const ackH = send({ cwd: CWD, prompt: "75R cb 未登录拦截", engine: "codebuddy" });
@@ -285,6 +297,7 @@ try {
     else process.env.CCR_STORAGE_READ_MODE = prevReadMode;
     if (prevCodexPath === undefined) delete process.env.CCR_CODEX_PATH;
     else process.env.CCR_CODEX_PATH = prevCodexPath;
+    delete process.env.CCR_TMUX_CMD; // #102 批 B：测试级注入（无既有值可污染——恒删）
     rmSync(ORG, { recursive: true, force: true });
   }
 } catch (e) {

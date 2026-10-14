@@ -30,7 +30,7 @@
 // 运行时兜底（token 中途过期）：authFailureHint 对引擎输出/退出尾行做 pattern 匹配
 //（Not logged in / Authentication required / 请先登录），命中返回该引擎登录指引。
 import { accessSync, constants, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SessionEngine } from "./types.js";
@@ -52,7 +52,7 @@ const HINTS: Record<string, string> = {
   codex: "终端运行 codex login 完成登录；用 API 中转则在 ~/.codex/config.toml 配 bearer_token，或设置 OPENAI_API_KEY 环境变量",
   codebuddy: "终端运行 codebuddy-code，输入 /login 完成登录（桌面版登录态与 CLI 相互独立）",
   "qwen-code": "终端启动 qwen-code 后按提示登录（输入 /auth），或设置 QWEN_API_KEY / GEMINI_API_KEY 环境变量",
-  trae: "终端启动 trae-cli 后按提示完成账号登录",
+  trae: "终端运行 trae-cli，按 ? 选 Login with Email 完成登录（或点引擎目录的立即登录）",
 };
 
 function fileExists(path: string): boolean {
@@ -92,6 +92,12 @@ function credentialCandidatePresent(files: string[], envKeys: string[]): boolean
 
 function needsAuth(engine: SessionEngine): EngineAuthProbe {
   return { state: "needs_auth", auth_hint: HINTS[engine] ?? `请在终端完成 ${engine} 登录` };
+}
+
+/** 静态登录指引文案（零 spawn——#102 批 B engine-login 流程 hint 用；探针级
+ * 精确 hint 由 probeEngineAuth* 的 auth_hint 承载，本函数只做降级文案） */
+export function staticAuthHint(engine: SessionEngine): string {
+  return HINTS[engine] ?? `请在终端完成 ${engine} 登录`;
 }
 
 const readyProbe: EngineAuthProbe = { state: "ready" };
@@ -165,12 +171,21 @@ function probeEngineAuthDirect(engine: SessionEngine, opts?: AuthProbeOptions): 
         [join(home, ".qwen", "oauth_creds.json"), join(home, ".qwen", "google-accounts.json"), join(home, ".qwen", "aws_credentials.json")],
         ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
       ) ? readyProbe : needsAuth(engine);
-    case "trae":
-      // 候选同上备案；trae-cli 首次使用必须登录，home 无凭据痕迹 = needs_auth 合理
-      return credentialCandidatePresent(
-        [join(home, ".trae", ".credentials.json"), join(home, ".trae", "credentials.json"), join(home, ".trae-cli", ".credentials.json")],
-        ["TRAE_API_KEY"],
-      ) ? readyProbe : needsAuth(engine);
+    case "trae": {
+      // #102 批 B 实测修正（与 probeEngineAuthAsync 同源）：文件候选恒 miss 误报，
+      // 改探针命令文本匹配——`trae-cli login status` v2 输出「Not logged in」rc=0；
+      // 1.0 输出空 → fail-open ready
+      try {
+        const r = spawnSync(process.env.CCR_TRAE_PATH ?? "trae-cli", ["login", "status"], {
+          stdio: ["ignore", "pipe", "pipe"], timeout: timeoutMs, encoding: "utf-8",
+        });
+        if (r.error || r.signal) return readyProbe;
+        const out = `${r.stdout ?? ""}\n${r.stderr ?? ""}`;
+        return /not logged in|未登录|请先登录/i.test(out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    }
     default:
       return readyProbe;
   }
@@ -183,4 +198,69 @@ function probeEngineAuthDirect(engine: SessionEngine, opts?: AuthProbeOptions): 
 export function authFailureHint(text: string, engine?: SessionEngine): string | null {
   if (!/not logged in|authentication required|please use \/login|请先登录|账号未登录/i.test(text)) return null;
   return (engine && HINTS[engine]) ?? "请在终端完成对应引擎的登录后重试";
+}
+
+// ---------- #102 批 B：异步探针（登录 pane 轮验用——spawnSync 阻塞主线程 0.8~5s，
+// 登录流程存活期每 ~2.4s 轮验一次会把 relay 事件流打停摆；批 A 同款防线注释见
+// CACHE_TTL_MS 处）。判定逻辑与 probeEngineAuthDirect 逐引擎同源（输出文本匹配
+// 同 pattern），仅 spawn 面 sync→async。文件/env 判定（codex 认配置、qwen/trae
+// 凭据候选）微秒级保持同步。不进缓存：调用方（engine-login 轮验）本就每轮
+// resetEngineAuthCache，缓存语义由调用方掌控。
+function execFileText(cmd: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; out: string }> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
+      // 探针故障 fail-open 与同步版同口径：error/signal → ready 由调用方兜
+      resolve({ ok: !err, out: `${stdout ?? ""}\n${stderr ?? ""}` });
+    });
+  });
+}
+
+export async function probeEngineAuthAsync(engine: SessionEngine, opts?: AuthProbeOptions): Promise<EngineAuthProbe> {
+  const home = opts?.homeDir ?? homedir();
+  const timeoutMs = opts?.timeoutMs ?? 5000;
+  switch (engine) {
+    case "claude":
+    case "zcode":
+      return readyProbe; // 免检恒 ready（同同步版）
+    case "codex": {
+      if (codexConfigAuthPresent(home)) return readyProbe; // 认配置优先（同步版同源函数）
+      try {
+        const r = await execFileText(process.env.CCR_CODEX_PATH ?? "codex", ["login", "status"], timeoutMs);
+        if (!r.ok) return readyProbe; // 探针故障 fail-open
+        return /not logged in/i.test(r.out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    }
+    case "codebuddy": {
+      try {
+        const r = await execFileText(process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", ["auth", "status"], timeoutMs);
+        if (!r.ok) return readyProbe;
+        return /authentication required|not logged in|请先登录/i.test(r.out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    }
+    case "qwen-code":
+      return credentialCandidatePresent(
+        [join(home, ".qwen", "oauth_creds.json"), join(home, ".qwen", "google-accounts.json"), join(home, ".qwen", "aws_credentials.json")],
+        ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
+      ) ? readyProbe : needsAuth(engine);
+    case "trae":
+      // #102 批 B 实测修正（Leader 追加要求）：trae 凭据不在批 A 候选的
+      // ~/.trae/.credentials.json 等路径（实测 v2 状态存 ~/.trae/cli/*.sqlite），文件
+      // 候选恒 miss → 长期误报 needs_auth。改与 codex 同款探针命令文本匹配：
+      // `trae-cli login status` 实测输出「Not logged in」rc=0（v2 traex 同款）；
+      // 1.0 老版该子命令输出为空 → fail-open 判 ready（1.0 已 limited maintenance，
+      // 主线适配 v2，取舍回执备案）
+      try {
+        const r = await execFileText(process.env.CCR_TRAE_PATH ?? "trae-cli", ["login", "status"], timeoutMs);
+        if (!r.ok) return readyProbe;
+        return /not logged in|未登录|请先登录/i.test(r.out) ? needsAuth(engine) : readyProbe;
+      } catch {
+        return readyProbe;
+      }
+    default:
+      return readyProbe;
+  }
 }

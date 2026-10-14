@@ -46,3 +46,7 @@ docs-internal/
 # 插件市场 add 本地目录 / 桌面 tauri 打包都从这里取——必须随仓库走
 !cc-plugins/plugins/cc-deck/scripts/node_modules/
 !desktop-tauri/src-tauri/resources/node_modules/
+
+# worker worktree 副本（嵌套仓库，勿入库）
+.artifacts-persist-cdx/
+.pmwake-cdx/
