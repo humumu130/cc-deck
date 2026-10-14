@@ -25,11 +25,12 @@
 //
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-75r-engine-catalog.ts
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalogReadyEngines, engineCatalogSummary } from "../src/engine-catalog.js";
+import { resetEngineAuthCache } from "../src/engine-auth.js";
 import { listModels } from "../src/models.js";
 import { setLightConfirmTrusted } from "../src/projects.js";
 import { EventBus } from "../src/event-bus.js";
@@ -50,8 +51,9 @@ function section(name: string) {
 
 const RELAY_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SIX: readonly SessionEngine[] = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
-const STATES = ["ready", "unavailable", "unsupported", "unknown"];
+const STATES = ["ready", "unavailable", "needs_auth", "unsupported", "unknown"]; // #102 批 A：+needs_auth（装了未登录）
 const PF_STATES = ["pass", "fail", "unknown"];
+const BASE_KEYS = ["capabilities", "default_for_roles", "id", "label", "models", "preflight", "state"];
 const byId = (cat: EngineCatalogEntry[], id: SessionEngine): EngineCatalogEntry => cat.find((e) => e.id === id)!;
 
 try {
@@ -96,8 +98,14 @@ try {
       && Array.isArray(e.models) && Array.isArray(e.default_for_roles),
     );
     assert(shapeOk, "S1④ 逐条目七字段形状全对（state/preflight 词表值域+capabilities 三布尔+两数组）");
-    const keysOk = cat.every((e) => JSON.stringify(Object.keys(e).sort()) === JSON.stringify(["capabilities", "default_for_roles", "id", "label", "models", "preflight", "state"]));
-    assert(keysOk, "S1⑤ 条目键集恰七（无多余键——75-W 消费端按形状锚定，漂移即两端炸）");
+    // #102 批 A：键集七为基、needs_auth 态附 auth_hint 恰八（条件展开——旧客户端忽略未知键零感知）
+    const keysOk = cat.every((e) => {
+      const keys = Object.keys(e).sort();
+      return JSON.stringify(keys) === JSON.stringify(BASE_KEYS)
+        || (e.state === "needs_auth" && JSON.stringify(keys) === JSON.stringify([...BASE_KEYS, "auth_hint"].sort()));
+    });
+    assert(keysOk, "S1⑤ 条目键集恰七（needs_auth 态恰八带 auth_hint——75-W 消费端按形状锚定，漂移即两端炸）");
+    assert(cat.every((e) => e.state !== "needs_auth" || (typeof e.auth_hint === "string" && e.auth_hint.length > 0)), "S1⑥ needs_auth 态必有非空 auth_hint（目录黄点 hover/菜单灰置小字数据源）");
 
     // ---------- S2 claude confirmed ----------
     section("S2 claude confirmed（自证可用+models 同源）");
@@ -109,7 +117,7 @@ try {
     // ---------- S3 codex 可控缝 ----------
     section("S3 codex 可控缝（CCR_CODEX_PATH 钉两态）");
     const cxNative = byId(cat, "codex");
-    assert(cxNative.state === "ready" || cxNative.state === "unavailable", "S3① codex 本机形态两态之一（不锁死装没装）");
+    assert(cxNative.state === "ready" || cxNative.state === "unavailable" || cxNative.state === "needs_auth", "S3① codex 本机形态三态之一（#102 批 A +needs_auth；不锁死装没装/登录态）");
     if (cxNative.state === "unavailable") {
       assert(cxNative.preflight.state === "fail" && cxNative.preflight.reason.length > 0, "S3② unavailable 时 preflight=fail+reason 非空（端上灰显有据）");
     }
@@ -128,11 +136,13 @@ try {
     section("S4 registry 三注册（trae/qwen-code/codebuddy 形态断言）");
     for (const id of ["trae", "qwen-code", "codebuddy"] as const) {
       const e = byId(cat, id);
-      const twoState = e.state === "ready" || e.state === "unavailable";
+      // #102 批 A：+needs_auth（CLI 在场账号未登录）；needs_auth 时 preflight 仍 pass（两维正交）
+      const threeState = e.state === "ready" || e.state === "unavailable" || e.state === "needs_auth";
       const failHasReason = e.state !== "unavailable" || (e.preflight.state === "fail" && e.preflight.reason.length > 0);
-      assert(twoState && failHasReason && e.models.length === 0
+      const authOrthogonal = e.state !== "needs_auth" || (e.preflight.state === "pass" && typeof e.auth_hint === "string" && e.auth_hint.length > 0);
+      assert(threeState && failHasReason && authOrthogonal && e.models.length === 0
         && typeof e.capabilities.resume === "boolean" && typeof e.capabilities.approval === "boolean" && typeof e.capabilities.artifacts === "boolean",
-        `S4 ${id}：ready|unavailable 形态+fail 带 reason+models 空+capabilities 三布尔（registry 实况投影）`);
+        `S4 ${id}：ready|unavailable|needs_auth 形态+fail 带 reason+needs_auth 时 preflight pass+hint 非空+models 空+capabilities 三布尔（registry 实况投影）`);
     }
 
     // ---------- S5 zcode unsupported ----------
@@ -214,6 +224,41 @@ try {
     const ackF = send({ cwd: CWD, prompt: "75R manual 透传", engine: "claude", selection_source: "manual" });
     assert(ackF.ok === true && ackF.engine === "claude" && ackF.degraded === undefined, "S7f 合法 selection_source 透传：manual 零效应照常建卡");
     delete process.env.CCR_CODEX_PATH;
+
+    // g. #102 批 A needs_auth fail-fast 拦截：假脚本过 preflight（X_OK 存在性维）+
+    //    探针吐 Not logged in → 拒创建返结构化错误（needs_auth+auth_hint），无会话落卡
+    //   （1014 根因案例：CodeBuddy 装了未登录，spawn 后才炸笼统「引擎返回错误」）
+    //   探针 45s TTL 缓存（SNAPSHOT 防 spawn 风暴）——fixture 前后必须 reset：防 S1
+    //   真机态缓存污染 S7g 断言 / S7g 假 needs_auth 态缓存泄进 S8 round-trip 对照
+    resetEngineAuthCache();
+    const naBin = mkdtempSync(join(tmpdir(), "ccr-75r-nabin-"));
+    const mkFake = (name: string, out: string) => { const p = join(naBin, name); writeFileSync(p, `#!/bin/sh\ncat <<'EOF'\n${out}\nEOF\n`); chmodSync(p, 0o755); return p; };
+    const eventsBeforeG = events.length;
+    const createdCountBeforeG = created.length;
+    process.env.CCR_CODEX_PATH = mkFake("codex-na", "Not logged in: run codex login");
+    process.env.CODEX_HOME = join(naBin, "empty-codex-home"); // 三源全无（config/auth.json/env）——探针确定被走到
+    const ackG = send({ cwd: CWD, prompt: "75R 未登录拦截", engine: "codex" });
+    assert(ackG.ok === false && (ackG as { needs_auth?: boolean }).needs_auth === true
+      && typeof (ackG as { auth_hint?: string }).auth_hint === "string" && ((ackG as { auth_hint?: string }).auth_hint ?? "").length > 0
+      && (ackG.error ?? "").includes("未登录"),
+      "S7g codex 装了未登录：拒创建 ok=false+needs_auth=true+auth_hint 非空（fail-fast 结构化拒绝——spawn 前拦下）");
+    assert(events.length === eventsBeforeG && created.length === createdCountBeforeG,
+      "S7g' 拦截即终局：无 SESSION_CREATED 事件、无 agent 工厂调用（不 spawn——1014 根因链在创建口截断）");
+    // h. codebuddy 同拦（1014 实锤引擎）：Authentication required → 拒+hint
+    process.env.CCR_CODEBUDDY_PATH = mkFake("cb-na", "Authentication required. Please use /login command to sign in");
+    const ackH = send({ cwd: CWD, prompt: "75R cb 未登录拦截", engine: "codebuddy" });
+    assert(ackH.ok === false && (ackH as { needs_auth?: boolean }).needs_auth === true && ((ackH as { auth_hint?: string }).auth_hint ?? "").includes("codebuddy"),
+      "S7h codebuddy 装了未登录：同拒+auth_hint 含 codebuddy 字样（1014 用户实测案例锚定）");
+    // i. 目录同源联动：同配置下 engineCatalogSummary 的 codex 投影 needs_auth+preflight 仍 pass（两维正交）
+    const catG = engineCatalogSummary("test-model");
+    const codexG = byId(catG, "codebuddy");
+    assert(codexG.state === "needs_auth" && codexG.preflight.state === "pass" && typeof codexG.auth_hint === "string" && codexG.auth_hint.length > 0,
+      "S7i 目录-拦截同源：codebuddy 投影 needs_auth+preflight pass+auth_hint（CLI 在场账号未登录——两维正交，web 黄点数据源）");
+    delete process.env.CCR_CODEX_PATH;
+    delete process.env.CCR_CODEBUDDY_PATH;
+    delete process.env.CODEX_HOME;
+    resetEngineAuthCache(); // 缓存还原真机态——S8 round-trip 与 S1 cat 同源对照不受假态残留
+    rmSync(naBin, { recursive: true, force: true });
 
     // ---------- S8 JSON round-trip（旧客户端零感知） ----------
     section("S8 JSON round-trip 与旧客户端零感知");

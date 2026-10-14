@@ -127,21 +127,26 @@ export interface SourceCapabilities {
  * 三端同步）。六枚举全覆盖：
  *   ready        可选（preflight 过/自证可用）
  *   unavailable  不可选（CLI 未装/校验未过——preflight.fail+reason）
+ *   needs_auth   不可选但已装（CLI 在场、账号未登录——#102 批 A 新态：黄点+auth_hint
+ *                登录指引；preflight 仍 pass——CLI 存在性维度独立，两维正交）
  *   unsupported  不可选（枚举占位未接入编排，如 zcode——灰显给原因）
  *   unknown      状态未知（投影兜底，理论上不出现——六枚举全有确定分支）
  * capabilities 三键是 catalog 静态投影（源级能力，非会话级运行时配置——codex 的
  * remoteDecisionChannel 会话位不在此反映，备案）。models=该引擎源级可用清单，没有
  * 清单的引擎恒空数组（端上显示「使用引擎默认」——严禁拿 Claude 的 SNAPSHOT.models
- * 冒充他引擎清单，提案 §5.2 红线）。
+ * 冒充他引擎清单，提案 §5.2 红线）。auth_hint 仅 needs_auth 态携带（旧客户端忽略
+ * 未知键零感知——#102 批 A）。
  */
 export interface EngineCatalogEntry {
   id: SessionEngine;
   label: string;
-  state: "ready" | "unavailable" | "unsupported" | "unknown";
+  state: "ready" | "unavailable" | "needs_auth" | "unsupported" | "unknown";
   capabilities: { resume: boolean; approval: boolean; artifacts: boolean };
   preflight: { state: "pass" | "fail" | "unknown"; reason: string };
   models: string[];
   default_for_roles: string[];
+  /** #102 批 A：state=needs_auth 时的登录指引（动词开头、含具体命令——目录黄点 hover/菜单灰置小字共用） */
+  auth_hint?: string;
 }
 
 export interface NotificationSourceContext {
@@ -258,6 +263,7 @@ export interface SessionState {
   artifacts?: ArtifactItem[]; // #35 会话输出物清单（内存态；外部会话重启走 transcript 回放重建）
   artifacts_truncated?: boolean; // #35 输出物超 200 条被截断保最新（汇总行提示用）
   compacting?: boolean;      // #363 true = CLI 正在压缩上下文（PreCompact hook 置位，Compacting conversation…）；下一事件/转录增长/8min 兜底清位
+  auth_hint?: string;        // #102 批 A：引擎登录态中途失效（运行时兜底 pattern 命中）——存在即 needs_auth 态，值为登录指引；随 SNAPSHOT/UPDATE 下发，回合成功自动清
   // W-CTXFIX B3（2026-10-10）：压缩前任务状态摘要（context-watchdog.ts 看门狗在水位
   // ≥85% 时向会话发摘要指令、捕获该回合 assistant 输出固化于此）。CLI auto-compact
   // 发生后由此注回下一回合首帧（只注一次，运行态标志不落 state）。随 SESSION_UPDATED
@@ -1322,6 +1328,10 @@ export interface CommandAckPayload {
   /** P81-2 开卡权限求值回执（COMMAND_CREATE/组织派单成功时携带）：effective≠normalized
    * 即发生降级（端上可显示 effective badge）；forbidden 拒绝面走 ok:false+error 不带本字段。 */
   permission?: { normalized: string; effective: string; native_mode: string | null; reason: string };
+  /** #102 批 A：COMMAND_CREATE 因引擎未登录被拒（fail-fast 拦截）——needs_auth=true +
+   * auth_hint 登录指引，端上显示可操作提示而非笼统错误；其余路径不携带（旧客户端零感知） */
+  needs_auth?: boolean;
+  auth_hint?: string;
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
   pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
   peers?: PairedDeviceInfo[]; // 仅 COMMAND_PEERS 成功时携带（议题①）

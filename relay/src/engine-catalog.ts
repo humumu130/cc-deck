@@ -26,6 +26,7 @@ import { listModels } from "./models.js";
 import { preflightEngine } from "./agent-jsonl.js";
 import { getEngineDefinition } from "./engine-registry.js";
 import { listGroups } from "./projects.js";
+import { probeEngineAuth } from "./engine-auth.js";
 import type { EngineCatalogEntry, SessionEngine } from "./types.js";
 
 const SIX_ENGINES: readonly SessionEngine[] = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
@@ -65,13 +66,17 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
     }
     if (id === "codex") {
       const pf = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
+      // #102 批 A：preflight 过（CLI 在场）后二探登录态——needs_auth 黄点+auth_hint；
+      // preflight 仍 pass（存在性维度独立，两维正交）
+      const auth = pf.ok ? probeEngineAuth(id) : { state: "ready" as const };
       return {
         id, label: "Codex",
-        state: pf.ok ? "ready" : "unavailable",
+        state: !pf.ok ? "unavailable" : auth.state === "needs_auth" ? "needs_auth" : "ready",
         capabilities: { resume: true, approval: false, artifacts: false },
         preflight: pf.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf.errors.join("；") },
         models: [], // codex 无源级模型清单——端上显示「使用引擎默认」，不冒充
         default_for_roles: roles,
+        ...(auth.state === "needs_auth" ? { auth_hint: auth.auth_hint } : {}),
       };
     }
     if (id === "zcode") {
@@ -90,10 +95,13 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
       return { id, label: id, state: "unknown", capabilities: { resume: false, approval: false, artifacts: false }, preflight: { state: "unknown", reason: "注册表缺定义" }, models: [], default_for_roles: roles };
     }
     const pf = def.preflight();
+    // #102 批 A：registry 三引擎（trae/qwen-code/codebuddy）同接登录态二探——
+    // CodeBuddy「装了未登录」正是本批根因案例（1014 用户实测）
+    const auth = pf.ok ? probeEngineAuth(id) : { state: "ready" as const };
     return {
       id,
       label: def.label,
-      state: pf.ok ? "ready" : "unavailable",
+      state: !pf.ok ? "unavailable" : auth.state === "needs_auth" ? "needs_auth" : "ready",
       capabilities: {
         resume: def.capabilities?.resume ?? false,
         approval: def.capabilities?.approval ?? false,
@@ -102,6 +110,7 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
       preflight: pf.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf.errors.join("；") },
       models: [],
       default_for_roles: roles,
+      ...(auth.state === "needs_auth" ? { auth_hint: auth.auth_hint } : {}),
     };
   });
 }

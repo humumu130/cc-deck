@@ -22,6 +22,7 @@ import {
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionPolicyEnabled } from "./permission-policy.js";
 import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
+import { authFailureHint, probeEngineAuth } from "./engine-auth.js";
 import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
@@ -2392,6 +2393,23 @@ export class SessionManager {
               }
             }
           }
+          // #102 批 A：引擎登录态 fail-fast 拦截（spawn 前置校验）——显式/预置解析落定
+          // 的非 claude 引擎先探登录态，needs_auth 拒创建返结构化错误（needs_auth+
+          // auth_hint），端上显示可操作指引而非 spawn 后炸「引擎返回错误」（1014 实锤
+          // 根因：CodeBuddy 装了未登录）。claude 免检（relay 进程即 SDK）；探针 fail-open
+          // （故障判 ready 不锁引擎）。kill-switch 分叉之前=两个分支统一覆盖；probe 现算
+          // 无缓存=登录后下一次创建即恢复（目录投影同源 engine-auth.ts 单点）
+          if (engineResolved && engineResolved !== "claude") {
+            const auth = probeEngineAuth(engineResolved);
+            if (auth.state === "needs_auth") {
+              return {
+                command_id: cmd.command_id, ok: false,
+                error: `引擎 ${engineResolved} 未登录: ${auth.auth_hint ?? "请先完成引擎登录"}`,
+                needs_auth: true,
+                ...(auth.auth_hint ? { auth_hint: auth.auth_hint } : {}),
+              };
+            }
+          }
           // P81-9 kill-switch off（§8.2.4 回退契约）：完整回 P81 前行为——pm 走旧直通
           //（:2041 本就是旧形态），引擎/角色/ceiling/环境四闸跳过、forbidden 面缺席、
           // 不落新 P81 审计（「回退不删除任何事实源」=既有审计照旧，新面不写）；ACK 回
@@ -3712,6 +3730,8 @@ export class SessionManager {
           if (ok) {
             managed.state.status = "DONE";
             managed.state.done_reason = reason;
+            // #102 批 A：回合成功=登录态恢复（或兜底误报自愈），清 needs_auth 标记
+            if (managed.state.auth_hint) managed.state.auth_hint = undefined;
             this.bus.emit(managed.state.session_id, "SESSION_DONE", {
               terminal_reason: reason,
               duration_ms: durationMs,
@@ -3720,7 +3740,18 @@ export class SessionManager {
           } else {
             managed.state.status = "ERROR";
             managed.state.last_error = reason;
-            this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason });
+            // #102 批 A 运行时兜底：token 中途过期（创建闸过后才失效）——引擎输出/
+            // 退出尾行命中登录失效 pattern → 会话进 needs_auth 态（auth_hint 随
+            // SNAPSHOT/UPDATE 下发，端上显示登录指引而非笼统错误）
+            const authHint = authFailureHint(reason, managed.state.engine);
+            if (authHint) {
+              managed.state.auth_hint = authHint;
+              const entry = { kind: "system" as const, text: `引擎登录态失效——${authHint}`, ts: Date.now() };
+              managed.logs.push(entry);
+              if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
+              this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+            }
+            this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason, ...(authHint ? { auth_hint: authHint } : {}) });
           }
           // W-CTXFIX B3：回合终态真入口在 onTurnEnd（onStatusChange 的 DONE 帧只是
           // 旁路回显）——看门狗两段态推进必须挂这里，否则 armed 永远等不到升级
@@ -6550,12 +6581,21 @@ export class SessionManager {
     if (engine === "claude") return { ok: true }; // SDK 内嵌，无静态探针
     if (engine === "codex") {
       const check = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
-      return check.ok ? { ok: true } : { ok: false, error: `Codex preflight 失败: ${check.errors.join("；")}` };
+      if (!check.ok) return { ok: false, error: `Codex preflight 失败: ${check.errors.join("；")}` };
+      // #102 批 A：派单 spawn 前置校验同接登录态（与 COMMAND_CREATE 拦截同源单点
+      // engine-auth.ts）——1014 根因场景即派单后炸笼统「引擎返回错误」
+      const auth = probeEngineAuth(engine);
+      if (auth.state === "needs_auth") return { ok: false, error: `Codex 未登录: ${auth.auth_hint ?? "请先完成登录"}` };
+      return { ok: true };
     }
     const def = getEngineDefinition(engine);
     if (!def) return { ok: false, error: `unsupported engine: ${engine}（注册引擎词表：claude/codex/trae/qwen-code/codebuddy——不静默回退）` };
     const check = def.preflight(providerProfileFor(engine, provider));
-    return check.ok ? { ok: true } : { ok: false, error: `${def.label} preflight 失败: ${check.errors.join("；")}` };
+    if (!check.ok) return { ok: false, error: `${def.label} preflight 失败: ${check.errors.join("；")}` };
+    // #102 批 A：registry 引擎（trae/qwen-code/codebuddy）派单同拦
+    const auth = probeEngineAuth(engine);
+    if (auth.state === "needs_auth") return { ok: false, error: `${def.label} 未登录: ${auth.auth_hint ?? "请先完成登录"}` };
+    return { ok: true };
   }
 
   // #26 M2 派单（§4 随手办/项目组任务）：worker 会话承接——M3 起项目组活双来源
@@ -7295,6 +7335,9 @@ export class SessionManager {
       // #157 载荷显式带 updated_at：客户端最后活跃时间以它为准（水合帧 ≠ 活动帧，
       // 信 envelope ts 会把重启时刻误当活动时刻）；旧客户端忽略此字段不受影响
       updated_at: s.state.updated_at,
+      // #102 批 A：needs_auth 标记清除点（回合成功）不在回执路径上——同 saved 口径
+      // 恒随增量帧显式携带（null=已清），防其他在线端挂着过期登录失效标记
+      auth_hint: s.state.auth_hint ?? null,
     });
   }
 

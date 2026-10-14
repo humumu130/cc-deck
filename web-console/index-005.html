@@ -530,6 +530,8 @@
     .engine-picker:hover { background: var(--hover); }
     .engine-picker .ep-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--done); }
     .engine-picker .ep-dot.na { background: var(--faint); }
+    .engine-picker .ep-dot.warn { background: var(--working); } /* #102 批 A：needs_auth 未登录黄点 */
+    .source-option .ep-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--working); margin-right: 2px; } /* #102 批 A：引擎菜单「未登录」组行内黄点 */
     .engine-picker .ep-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
     .engine-picker .cap-chev { flex: none; width: 10px; height: 10px; color: var(--faint); }
     #b2-engine-menu { z-index: 98; } /* 1013 件10：引擎下拉挂 body 但承 .model-menu 的 82 < 弹窗 96 被遮罩盖住——id 特异度单点提到弹窗之上（不动 .model-menu 共享层生态） */
@@ -707,6 +709,8 @@
     .tag.action { background: var(--action-bg); color: var(--brand-strong); }
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
+    .tag.authn { background: color-mix(in srgb, var(--working) 14%, transparent); color: var(--working); } /* #102 批 A：引擎已装未登录 */
+    .eng-auth-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--working); margin-left: 5px; vertical-align: middle; }
     .tag.info { background: var(--info-bg); color: var(--info); }
     /* #172-F1 高度链：workspace 是 column flex 容器（grid 子项），缺 min-height:0 时内容撑开会把
        footer(composer) 推出视口——补 min-height:0 放行收缩（与 #162 同族，162 修 desktop-screen 级） */
@@ -2719,7 +2723,7 @@
                 const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
                 function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
                 function uuid() { return (crypto.randomUUID && crypto.randomUUID()) || ("c" + Date.now() + "-" + Math.random().toString(16).slice(2)); }
-                function b2Toast(msg) { const t = $id("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), 2400); }
+                function b2Toast(msg, ms) { const t = $id("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400); }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
                 function dayKey(ts) { const d = new Date(ts); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
@@ -3221,7 +3225,7 @@
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
                 }
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary"];
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -3256,7 +3260,7 @@
                   renderMyList();
                   if (sid === S.selected) renderAll();
                 }
-                function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
+                function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.auth_hint = (p && p.auth_hint) || null; /* #102 批 A：登录态中途失效指引（非登录态故障为 null 清） */ s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
                 // W-MODE 协作模式切换帧（relay orgAction collab-mode set 成功边广播）：
@@ -4627,6 +4631,7 @@
                   }
                   if (s.status === "DONE" && s._terminal === "interrupted") pane.appendChild(noteNode("已停止 · 生成在此中断"));
                   if (s.status === "ERROR" && s.last_error) pane.appendChild(noteNode("⚠ " + oneLine(s.last_error)));
+                  if (s.status === "ERROR" && s.auth_hint) pane.appendChild(noteNode("🔑 " + oneLine(s.auth_hint))); /* #102 批 A：引擎登录态失效指引行 */
                   syncWaitCard(true);
                   autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
                   S.forceScroll = false;
@@ -5520,6 +5525,7 @@
                 function defaultEngineId() { const ready = catalogEntries().find((e) => e.state === "ready"); return ready ? ready.id : "claude"; }
                 function engineStateText(e) {
                   if (e.state === "ready") return e.models && e.models.length ? e.models.length + " 个模型" : "已就绪 · 使用引擎默认";
+                  if (e.state === "needs_auth") return "未登录 · " + oneLine(e.auth_hint || "请先完成引擎登录"); // #102 批 A：装了没登录——黄点+指引
                   if (e.state === "unsupported") return "不支持 · " + ((e.preflight && e.preflight.reason) || "占位");
                   return "不可用 · " + oneLine((e.preflight && e.preflight.reason) || "未探测到");
                 }
@@ -5603,8 +5609,10 @@
                     const entry = isAuto ? null : (catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null);
                     const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["自动", "claude"];
                     const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
+                    // #102 批 A：胶囊状态点三色——绿 ready / 黄 needs_auth（未登录）/ 灰 其余不可用
+                    const dotCls = !isAuto && entry ? (entry.state === "needs_auth" ? " warn" : entry.state !== "ready" ? " na" : "") : "";
                     html += '<div class="create-label">引擎</div>'
-                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + (!isAuto && entry && entry.state !== "ready" ? " na" : "") + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + dotCls + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
@@ -5672,7 +5680,10 @@
                   menu.setAttribute("aria-label", "选择引擎");
                   const chosen = S.engineChoice || defaultEngineId();
                   const ready = catalogEntries().filter((e) => e.state === "ready");
-                  const na = catalogEntries().filter((e) => e.state !== "ready");
+                  // #102 批 A：needs_auth 单列「未登录」组（黄点+登录指引小字）——与装都没装的
+                  // 「不可用」分开（用户动作不同：登录 vs 安装），均灰置不可点（div 非 button）
+                  const na = catalogEntries().filter((e) => e.state !== "ready" && e.state !== "needs_auth");
+                  const needsAuth = catalogEntries().filter((e) => e.state === "needs_auth");
                   let html = "";
                   html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge claude">自动</span><strong>自动 · 跟随源默认</strong><small>由源端配置决定引擎（不携带 engine 字段）</small></button>'; // W-PORT-A R-7：auto 档置顶恒可选
                   if (ready.length) {
@@ -5680,6 +5691,13 @@
                     for (const e of ready) {
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
                       html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "引擎默认") + "</small></button>";
+                    }
+                  }
+                  if (needsAuth.length) {
+                    html += '<div class="source-menu-head">未登录 · ' + needsAuth.length + "</div>";
+                    for (const e of needsAuth) { // 灰置不可点：登录指引小字透出（auth_hint）
+                      const meta = ENGINES[e.id] || [e.label || e.id, ""];
+                      html += '<div class="source-option" aria-disabled="true" title="' + esc(oneLine(e.auth_hint || "请先完成引擎登录")) + '"><span class="ep-dot"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></div>";
                     }
                   }
                   if (na.length) {
@@ -5739,7 +5757,7 @@
                     const badge = trig.querySelector(".engine-badge");
                     if (badge) { badge.className = "engine-badge " + meta[1]; badge.textContent = meta[0]; }
                     const dot = trig.querySelector(".ep-dot");
-                    if (dot) dot.classList.toggle("na", entry.state !== "ready");
+                    if (dot) { dot.classList.toggle("na", entry.state !== "ready" && entry.state !== "needs_auth"); dot.classList.toggle("warn", entry.state === "needs_auth"); }
                     const metaEl = trig.querySelector(".ep-meta");
                     const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
                     if (metaEl) metaEl.textContent = engineStateText(entry) + (readyCount > 1 ? " · 另 " + (readyCount - 1) + " 个可用" : "");
@@ -5766,6 +5784,7 @@
                   const eng = S.engineChoice || defaultEngineId();
                   const isAutoEng = eng === "auto"; // W-PORT-A R-7：auto=跟随源默认，不携带 engine、跳过 ready 检查
                   const entry = isAutoEng ? null : catalogEntries().find((e) => e.id === eng);
+                  if (entry && entry.state === "needs_auth") { b2Toast("引擎未登录：" + oneLine(entry.auth_hint || "请先完成引擎登录")); return; } // #102 批 A：可操作指引
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   // W-PORT-A R-2：目标源路由——「创建到」选了云源时走云 shim（显式通道最高优先）；
                   // 本机/未显示该行时维持 sendCmd 视角通道（RouteWs/主连接既有语义）
@@ -5790,7 +5809,8 @@
                   const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
                     clearTimeout(wd);
-                    if (ack && ack.ok === false) b2Toast("新建会话失败: " + (ack.error || "未知错误"));
+                    if (ack && ack.ok === false && ack.needs_auth) b2Toast("引擎未登录，未创建会话：" + oneLine(ack.auth_hint || ack.error || "请先完成引擎登录"), 6000); // #102 批 A：fail-fast 拒绝显示可操作指引
+                    else if (ack && ack.ok === false) b2Toast("新建会话失败: " + (ack.error || "未知错误"));
                     else if (ack && ack.ok === true && ack.degraded) b2Toast("已创建 · 引擎降级为 " + ((ENGINES[ack.engine] || [ack.engine || "claude"])[0]) + "：" + (ack.degraded_reason || ""));
                   }, t: wd });
                 }
@@ -9917,6 +9937,7 @@ function connectLan(ctx) {
         const bridge = window.__ccDeck005B4;
         if (!bridge) return;
         const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+        const oneLine = (t) => { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 160 ? v.slice(0, 160) + "…" : v; }; // #102 批 A：auth_hint 单行化（本块独立定义，不跨 script 块借对话域同名函数）
         const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
         const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
         const render = () => {
@@ -9968,12 +9989,15 @@ function connectLan(ctx) {
             else provLive.innerHTML = catalog.map((e) => {
               if (!e || typeof e.id !== "string") return "";
               const ok = e.state === "ready";
+              const na = e.state === "needs_auth"; // #102 批 A：装了未登录——黄点+登录指引（不混「待装」）
               const label = esc(e.label) || esc(ENGINE_SHORT[e.id]) || esc(e.id);
               const copy = ok
                 ? (Array.isArray(e.models) && e.models.length ? `已接 · ${e.models.length} 个模型` : "已接 · 使用引擎默认模型")
-                : esc(e.preflight && e.preflight.reason) || (e.state === "unsupported" ? "枚举占位 · 未接入编排" : "适配器待安装");
-              const tag = ok ? '<span class="tag done">已接</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
-              return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}</strong><p>${copy}</p></div>${tag}</div>`;
+                : na
+                  ? esc(oneLine(e.auth_hint || "请先完成引擎登录"))
+                  : esc(e.preflight && e.preflight.reason) || (e.state === "unsupported" ? "枚举占位 · 未接入编排" : "适配器待安装");
+              const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
+              return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"${na ? ` title="${esc(oneLine(e.auth_hint || "请先完成引擎登录"))}"` : ""}><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}</strong><p>${copy}</p></div>${tag}</div>`;
             }).join("");
           }
           // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
@@ -13106,7 +13130,7 @@ function connectLan(ctx) {
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
                 : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div></div>`
-            : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
+            : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task">${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "needs_auth" ? "未登录" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
             : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>'
