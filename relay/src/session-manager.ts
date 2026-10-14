@@ -2333,6 +2333,15 @@ export class SessionManager {
     s.state.waiting_request = undefined;
     s.state.waiting_started_at = undefined;
     s.state.updated_at = at;
+    // #105：external 值守目标回合终态=统一值守检查点（对齐托管侧 onTurnEnd 的
+    // Leader turn_end 语义——在岗证据重算行动位+worker_done 计数归零）。归零条件
+    // 限定「本会话是当前值守目标」：其他 external 会话回合结束不碰值守账。compact
+    // 归档旧身也走此口（同 pid 新身接管后照常重算，与托管 Leader 回合终态归零同
+    // 口径——worker_done 若仍待处理，下一轮事件照常进候选）。
+    if (dutyEnabled() && s.state.external && id === this.dutyTargetId()) {
+      this.workerDonePending = 0;
+      this.feedPM("turn_end");
+    }
     this.bus.emit(id, "SESSION_DONE", {
       terminal_reason: reason,
       duration_ms: durationMs,
@@ -3914,7 +3923,10 @@ export class SessionManager {
           // （备案维持：failed 单的即时唤醒由 notifyDispatchClosed 既有注入面承接，
           // 双挂会重复轰炸）；WORKING Leader 由 feedPM 内合并门兜住（不追加回合）。
           if (dutyEnabled()) {
-            if (this.isLeaderSession(managed.state.session_id)) { this.workerDonePending = 0; this.feedPM("turn_end"); }
+            // #105：托管回合终态按「当前值守目标」归零/触发（leader 模式=Leader 锚，
+            // 现行为不变；no-leader 模式目标解析为 external PM 会话——托管锚卡回合
+            // 终态不再驱动值守，external 目标的终态挂钩在 finishExternal）
+            if (managed.state.session_id === this.dutyTargetId()) { this.workerDonePending = 0; this.feedPM("turn_end"); }
             else if (ok) { this.workerDonePending += 1; this.feedPM("worker_done"); }
           }
         },
@@ -5147,6 +5159,32 @@ export class SessionManager {
     };
   }
 
+  // #105 值守目标解析（协作模式感知）：leader 模式=Leader 锚卡（现行为不变）；
+  // no-leader 模式=用户实际交互的 PM 会话——锚卡在 no-leader 下已被 snapshot 过滤
+  // （用户判定弃用的托管卡），resumeAgent 喂它是喂幽灵（1015 实锤：duty-rounds 128
+  // 行全 sleep、result=continue 零次，仅有的注入全落在弃用锚卡）。判定口径：external
+  // 会话（用户自开 CLI 桥接——no-leader 语义=用户自任 PM，其终端会话即 PM 会话）
+  // 且非 historical、cli_pid 在册且活（进程探测信号 0 只验存在；无 pid=重启补水
+  // 失败/未定位，注入是黑洞，1014 ab91190d 死壳实录），最近活跃（updated_at 最大）
+  // 一张。无显式 role 面可用（external 无 role 字段），「最近活跃的 external」即
+  // 任务书口径「role=PM 且非锚、最近活跃」的可落地最大似然。全不满足 → null
+  // （调用侧写 no_pm_target 审计行哑值守——可观测优于静默喂幽灵）。
+  private dutyTargetId(): string | null {
+    if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
+    let best: string | null = null;
+    let bestAt = -1;
+    for (const s of this.sessions.values()) {
+      if (!s.state.external || s.state.historical) continue;
+      if (this.leaderId && s.state.session_id === this.leaderId) continue; // 锚卡防御性排除（external 不该是锚，双保险）
+      const pid = s.state.cli_pid;
+      if (!pid) continue; // 无进程定位：extInput 大概率黑洞（等待 bridge 重定位/hook 上报）
+      try { process.kill(pid, 0); } catch { continue; } // 进程已死：哑值守等用户开新会话，不自动开新窗
+      const at = s.state.updated_at || 0;
+      if (at > bestAt) { bestAt = at; best = s.state.session_id; }
+    }
+    return best;
+  }
+
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
   // （四值 reason：actionable→喂；all_running/blocked/empty→sleep 放行——「全 running
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
@@ -5162,10 +5200,25 @@ export class SessionManager {
       });
       return;
     }
+    // #105 值守目标解析（协作模式感知）：no-leader → 用户实际 PM 会话；leader →
+    // Leader 锚卡（现行为不变）。无目标（no-leader 且无活 external）→ 可观测哑值守
+    //（审计行 no_pm_target），优于喂弃用锚卡的假象 continue。
+    const targetId = this.dutyTargetId();
+    if (!targetId) {
+      this.appendDutyRound({
+        feed_id: randomUUID(), feed_generation: randomUUID(), trigger: [trigger],
+        result: "sleep", reason: "no_pm_target",
+        detail: "no-leader 模式下无在册 PM 会话（external 且进程活）",
+        from: Date.now(),
+      });
+      return;
+    }
+    const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
     // PM WORKING 合并语义（019 §3.3「PM WORKING 时合并 feed 上下文而不追加回合」
-    // 最小落地）：Leader 在岗干活中不追加值守回合（resumeAgent 会换流打断在途回合）
-    // ——不丢事件：Leader 回合终态必触发 turn_end 重算，届时候选照收。
-    const leader = this.sessions.get(this.leaderId);
+    // 最小落地）：值守目标在岗干活中不追加值守回合（托管目标 resumeAgent 会换流打断
+    // 在途回合；external 目标注入会排队跟随，同样不催）——不丢事件：托管目标回合
+    // 终态必触发 turn_end 重算，external 目标回合终态 finishExternal 同挂钩，届时候选照收。
+    const leader = this.sessions.get(targetId);
     if (leader?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID();
@@ -5235,8 +5288,12 @@ export class SessionManager {
     // 列表整理语义（UIPOLISH3 拍板），PM 被置顶极常见，一 pin 值守即哑=静默故障
     // （1014 实锤：PM 自身被 pin，worker_done 候选连续 sleep）。死循环防护由
     // resume_breaker 熔断+K=3 退避兜底，不靠 pin。
-    const leaderSession = this.sessions.get(this.leaderId);
-    if (leaderSession) {
+    // #105：停放/熔断判定只对托管目标有意义（saved/agent/resumeCooldownUntil 是
+    // 托管概念；external 目标进程死活已在 dutyTargetId 的 pid 闸过滤，extInput
+    // 链路自处理排队跟随——PM 卡 saved 停放哑值守问题在 no-leader 下随目标切换
+    // 天然消解，leader 模式维持用户主动停放的明确意图语义）。
+    const leaderSession = this.sessions.get(targetId);
+    if (leaderSession && !targetIsExternal) {
       const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
       const parked = !!leaderSession.state.saved && !leaderSession.agent;
       if (tripped || parked) {
@@ -5249,12 +5306,22 @@ export class SessionManager {
       }
     }
     try {
-      this.pushExternalLog(this.leaderId, "system", `[值守喂活] 发现 ${verdict.candidates.length} 项可处理（最老：${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}）`);
-      // W-INJFIX：值守 prompt 标可再生——注入失败（init 超时/流断/熔断）直接丢弃，
-      // 不进 unacked 重放账；下一轮 duty（turn_end/event/K=3 退避续办）重推导队列
-      // 注入新 prompt。与手动恢复豁免（用户消息越冷却拉起）分流：值守是自动路径，
-      // 失败即让位，不与用户消息争补偿链（1014 注入刷屏根因）
-      this.resumeAgent(this.require(this.leaderId), prompt, undefined, undefined, undefined, { renewable: true });
+      this.pushExternalLog(targetId, "system", `[值守喂活] 发现 ${verdict.candidates.length} 项可处理（最老：${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}）`);
+      if (targetIsExternal) {
+        // #105 no-leader：external PM 会话走 bridge.extInput（终端按键注入；WORKING
+        // 中自动排队跟随）。同步 {ok,error} 语义对齐 resumeAgent 的 throw——失败落
+        // pm_unwakeable 分支。prompt 标可再生（external 队列同样由下一轮 duty 重
+        // 推导重注入，无需重放账）
+        if (!this.bridge) throw new Error("外部会话通道未就绪（bridge 未挂）");
+        const r = this.bridge.extInput(targetId, prompt);
+        if (!r.ok) throw new Error(r.error ?? "外部会话注入失败");
+      } else {
+        // W-INJFIX：值守 prompt 标可再生——注入失败（init 超时/流断/熔断）直接丢弃，
+        // 不进 unacked 重放账；下一轮 duty（turn_end/event/K=3 退避续办）重推导队列
+        // 注入新 prompt。与手动恢复豁免（用户消息越冷却拉起）分流：值守是自动路径，
+        // 失败即让位，不与用户消息争补偿链（1014 注入刷屏根因）
+        this.resumeAgent(this.require(targetId), prompt, undefined, undefined, undefined, { renewable: true });
+      }
       this.appendDutyRound({
         feed_id: feedId, feed_generation: generation, trigger: [trigger],
         result: "continue", observed, from,
@@ -5262,7 +5329,7 @@ export class SessionManager {
     } catch (err) {
       // 注入失败（019 §3.2 第 4 步）：保留原回合终态不伪造继续成功，记录 pm_unwakeable
       // 并升级用户（019 §5.2 语义一「需要处理」——通知账 action 桶可操作）。stableKey
-      // 一 Leader 一行：upsertNotification 非 dispatch kind 静默防重，重复失败不刷屏
+      // 一目标一行：upsertNotification 非 dispatch kind 静默防重，重复失败不刷屏
       //（升级通知在场即可，防轰炸与 K=3 chain 双保险）
       const detail = err instanceof Error ? err.message : String(err);
       this.appendDutyRound({
@@ -5270,13 +5337,13 @@ export class SessionManager {
         result: "pm_unwakeable", detail, observed, from,
       });
       try {
-        this.upsertNotification("system", `duty:${this.leaderId}`, undefined, {
+        this.upsertNotification("system", `duty:${targetId}`, undefined, {
           title: "需要处理：团队值守无法继续",
-          body: truncate(`值守喂活失败：${detail}；仍有 ${verdict.candidates.length} 项候选待处理，请检查 Leader 会话。`, 160),
+          body: truncate(`值守喂活失败：${detail}；仍有 ${verdict.candidates.length} 项候选待处理，请检查值守目标会话（${targetIsExternal ? "PM 外部会话" : "Leader 会话"}）。`, 160),
           severity: "error",
           group: "action",
           actionable: true,
-          sessionId: this.leaderId ?? undefined,
+          sessionId: targetId,
           domain: "duty",
           returnPath: "sessions",
         });
