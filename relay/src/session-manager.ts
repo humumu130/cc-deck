@@ -5019,20 +5019,24 @@ export class SessionManager {
       `请验收回执、派发下一批或同步任务板；完成后末行单独输出一行 JSON（不加代码块）：`,
       `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`,
     ].join("\n");
-    // W-LEADFIX：喂活注入先过熔断/pin 休眠闸——Leader 死卡时值守周期曾是死循环
+    // W-LEADFIX：喂活注入先过熔断/停放闸——Leader 死卡时值守周期曾是死循环
     // 主驱动（每轮喂活拉一次 resume → init 超时 → 退避续办再拉）。压制时本轮按
     // sleep 收口不续办（值守判定每轮重推导队列，prompt 无需入队）；熔断冷却结束
     // 后由下一轮触发（turn_end/event）自然恢复喂活。pm_unwakeable 审计口径保留给
-    // 真注入异常，此处单独记 resume_breaker / pm_parked_pinned 不混淆
+    // 真注入异常，此处单独记 resume_breaker / pm_parked 不混淆。
+    // PM 停放判据只认 saved+无 agent（用户主动休眠）；pinned 不参与——置顶是
+    // 列表整理语义（UIPOLISH3 拍板），PM 被置顶极常见，一 pin 值守即哑=静默故障
+    // （1014 实锤：PM 自身被 pin，worker_done 候选连续 sleep）。死循环防护由
+    // resume_breaker 熔断+K=3 退避兜底，不靠 pin。
     const leaderSession = this.sessions.get(this.leaderId);
     if (leaderSession) {
       const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
-      const parkedPinned = !!leaderSession.state.pinned && !!leaderSession.state.saved && !leaderSession.agent;
-      if (tripped || parkedPinned) {
+      const parked = !!leaderSession.state.saved && !leaderSession.agent;
+      if (tripped || parked) {
         this.suppressAutoResume(leaderSession, "值守喂活");
         this.appendDutyRound({
           feed_id: feedId, feed_generation: generation, trigger: [trigger],
-          result: "sleep", reason: tripped ? "resume_breaker" : "pm_parked_pinned", observed, from,
+          result: "sleep", reason: tripped ? "resume_breaker" : "pm_parked", observed, from,
         });
         return;
       }

@@ -54,7 +54,7 @@ writeFileSync(wc005Path, readFileSync(wc005Path, "utf-8").replace(/(CONSOLE_VERS
 //   （#150：桌面打包漏 web-console/mobile → relay 网页端 503；qr.js 此处未拷，桌面打包有）
 const copy = (from, to) => {
   mkdirSync(dirname(to), { recursive: true });
-  rmSync(to, { force: true });
+  rmSync(to, { recursive: true, force: true });
   cpSync(from, to, { recursive: true });
 };
 copy(join(root, "web-console", "index.html"), join(out, "web-console", "index.html"));

@@ -53460,15 +53460,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     const leaderSession = this.sessions.get(this.leaderId);
     if (leaderSession) {
       const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
-      const parkedPinned = !!leaderSession.state.pinned && !!leaderSession.state.saved && !leaderSession.agent;
-      if (tripped || parkedPinned) {
+      const parked = !!leaderSession.state.saved && !leaderSession.agent;
+      if (tripped || parked) {
         this.suppressAutoResume(leaderSession, "\u503C\u5B88\u5582\u6D3B");
         this.appendDutyRound({
           feed_id: feedId,
           feed_generation: generation,
           trigger: [trigger],
           result: "sleep",
-          reason: tripped ? "resume_breaker" : "pm_parked_pinned",
+          reason: tripped ? "resume_breaker" : "pm_parked",
           observed,
           from
         });
