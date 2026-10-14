@@ -40,6 +40,13 @@
       --done: #35DC97;
       --working: #FFC53D;
       --error: #E5484D;
+      /* 1014 用户定版·状态灯词表五色（全产品唯一事实源，一切点形状态灯引用此处；
+         黄闪=工作中/绿=空闲/橙=阻塞/红=出错/灰=关闭退役——常亮无动画，唯 working 闪） */
+      --st-working: #FFC53D;
+      --st-idle: #35DC97;
+      --st-blocked: #E5895B;
+      --st-error: #E5484D;
+      --st-closed: #7A889F;
       --info: #7CB8FF;
       --ctx-safe: #4BCB91;
       --ctx-attention: #E9B84C;
@@ -525,6 +532,7 @@
     .engine-picker .ep-dot.na { background: var(--faint); }
     .engine-picker .ep-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
     .engine-picker .cap-chev { flex: none; width: 10px; height: 10px; color: var(--faint); }
+    #b2-engine-menu { z-index: 98; } /* 1013 件10：引擎下拉挂 body 但承 .model-menu 的 82 < 弹窗 96 被遮罩盖住——id 特异度单点提到弹窗之上（不动 .model-menu 共享层生态） */
     #b2-engine-menu .source-option[aria-disabled="true"] { opacity: .55; cursor: default; }
     #b2-engine-menu .source-option[aria-disabled="true"]:hover { background: transparent; }
     #b2-engine-menu .source-option small { color: var(--faint); }
@@ -672,14 +680,19 @@
     .project-unfiled-toggle .unfiled-chev { flex: none; font-size: 9px; line-height: 1; transition: transform .15s ease; }
     .project-unfiled-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
     .project-unfiled-toggle .status-dot { margin-left: auto; }
-    .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
-    /* W-V8 批2 状态语义对调（A 轨对照图 P1④，v8 权威语义）：绿=进行中（呼吸圈绿）、
-       灰=完成（退隐无光圈）、红=失败、琥珀=等待用户（中间注意力态，非 v8 原词表——
-       拍板保留琥珀防「等输入」误读为异常）。旧语义黄=运行/绿=完成会直接误读 */
-    .status-dot.done { background: var(--faint); }
-    .status-dot.waiting { background: var(--working); }
-    .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
-    .status-dot.working { background: var(--done); animation: dot-breathe 2.4s ease-in-out infinite; }
+    .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--st-closed); }
+    /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
+       黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
+       灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */
+    /* 形态定版（1014 追加，双编码=色+形态）：工作中=黄呼吸光晕（glow pulse 缓入缓出）/
+       空闲=绿实心/阻塞=橙空心环/出错=红实心+入场一次微抖/关闭退役=灰空心。
+       形态类 .st-form-*（.pulse/.hollow/.shake-once）一处定义全产品引用 */
+    .status-dot.done { background: var(--st-idle); }
+    .status-dot.waiting { background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-blocked); }
+    .status-dot.error { background: var(--st-error); animation: st-shake-once .32s ease-in-out 1; }
+    .status-dot.working { background: var(--st-working); animation: st-glow-pulse 2s ease-in-out infinite; }
+    @keyframes st-glow-pulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 6px 2px color-mix(in srgb, var(--st-working) 50%, transparent); } }
+    @keyframes st-shake-once { 20% { transform: translateX(1px); } 45% { transform: translateX(-1px); } 70% { transform: translateX(.5px); } }
     @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
     .tag {display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: var(--fs-C); white-space: nowrap;}
     .tag.mini { padding: 1px 6px; font-size: var(--fs-D); color: var(--dim); } /* 件十二扩充 A：列表行类型徽章小号 */
@@ -1409,8 +1422,9 @@
     状态标签删除（泳道已表达），引擎未知不显示（词表内才渲染），执行者行=引擎点+名，
     无主卡「未指派」警示色（backlog 无主是常态不标）。进行中泳道按 worker 分区排队：
     lane-subhead 分区头 + q-num 序号徽章 + running 点（dispatch 回执 join） */
-    #d-team .task-card.compact { padding: 7px 9px; }
-    #d-team .task-card.compact > strong { font-size: var(--fs-B); }
+    #d-team .task-card.compact { padding: 9px 10px; margin-bottom: 8px; border-radius: 11px; } /* W-LV8：v8 tcard 形态（radius 11/呼吸留白/间距 4 基数） */
+    #d-team .task-card.compact:hover { border-color: var(--dim); } /* v8 tcard:hover 同款浮起暗示 */
+    #d-team .task-card.compact > strong { font-size: var(--fs-B); font-weight: 600; color: var(--text-strong); } /* v8 .ct：标题 600 撑读焦点 */
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
     /* 追加⑧：hover 展开浮层——紧凑卡信息补偿（标题全文/描述全文/执行者/时间）；
        1013 件8 重设计：原「卡上方通栏」纵向受限、长内容桌面显示不完整——改鼠标侧方弹出
@@ -1522,7 +1536,10 @@
     #d-team .workspace-body { padding: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--workspace-top) 92%, var(--brand) 8%), var(--bg1)); }
     #d-team .workspace-body > .workspace-pane:not(.board-pane) { overflow: auto; padding: 16px 22px 20px; }
     #d-team .workspace-body > .workspace-pane.board-pane { overflow: hidden; padding: 0; }
-    #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; }
+    /* 1013 件9（P0 甬道塌陷）：height:100% 补 flex 链断点——pane 此前 auto 高，
+       board 的 flex:1 1 0 无定高可依塌成内容高，输出物区在 flex 流里反客为主。
+       pane 撑满 body 视口高 → board 分到剩余 → 甬道全高（lane 默认 stretch） */
+    #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; height: 100%; }
     #d-team .board-overview { flex: 0 0 auto; padding: 15px 22px 12px; border-bottom: 1px solid var(--line-soft); }
     #d-team .board-overview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700; }
     #d-team .board-overview-head span { color: var(--faint); font-size: var(--fs-C); font-weight: 400; }
@@ -1537,9 +1554,19 @@
     #d-team .board-legend span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface2); color: var(--dim); font-size: var(--fs-C); }
     #d-team .board-legend i { width: 7px; height: 7px; border-radius: 50%; background: var(--legend-color, var(--faint)); }
     #d-team .board-legend b { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; }
-    #d-team .workspace-body > .workspace-pane.board-pane .board { display: flex; flex: 1 1 0; grid-template-rows: none; grid-template-columns: none; min-width: 0; min-height: 0; gap: 12px; overflow: auto hidden; padding: 14px 22px 18px; }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 0 214px; flex-direction: column; min-width: 214px; min-height: 0; max-height: 100%; overflow: auto; padding: 10px; border-radius: 12px; background: color-mix(in srgb, var(--lane-bg) 92%, var(--surface2)); }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane-head { position: sticky; top: -1px; z-index: 1; flex: 0 0 auto; margin: -2px -2px 8px; padding: 2px 2px 9px; background: inherit; }
+    #d-team .workspace-body > .workspace-pane.board-pane .board { display: flex; flex: 1 1 0; grid-template-rows: none; grid-template-columns: none; min-width: 0; min-height: 320px; gap: 12px; overflow: auto hidden; padding: 14px 22px 18px; } /* 件9：min-height 0→320 保底（极矮窗防压缩没）；等高甬道=lane 默认 stretch */
+    /* 件9：卡在甬道内纵向滚动；高度=stretch 拉满 board。W-LV8 甬道对齐 v8 bcol：
+       三层明度阶梯（画布 bg0 < 甬道 surface1+描边 < 卡 surface2）——原 lane-bg 与画布
+       近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来 */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 0 214px; flex-direction: column; min-width: 214px; min-height: 0; overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); }
+    /* W-LV8：进行中列 v8 bcol.go——warn 微渐变+描边+1px 光环（活跃态一眼锚定） */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-claimed { border-color: color-mix(in srgb, var(--working) 38%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--working) 7%, var(--surface1)), var(--surface1) 44%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--working) 10%, transparent); }
+    /* W-LV8：空列空态（v8 .arch 语义）——死黑矩形→轻提示，扫读不失衡 */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-empty { padding: 14px 0 10px; text-align: center; color: var(--faint); font-size: var(--fs-C); line-height: 1.6; }
+    /* 件9：看板 pane 内的图纸/输出物侧区——限高内滚不与甬道争纵向空间（恒 ≤190px） */
+    #d-team .workspace-body > .workspace-pane.board-pane .board-side-list { flex: 0 0 auto; max-height: 190px; overflow: auto; padding: 10px 22px 8px; border-top: 1px solid var(--line-soft); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-head { position: sticky; top: -1px; z-index: 1; flex: 0 0 auto; margin: -2px -2px 8px; padding: 2px 2px 9px; background: inherit; font-size: var(--fs-C); font-weight: 600; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; } /* W-LV8：v8 h4 b——计数亮色锚住列头 */
     #d-team .workspace-body > .workspace-pane.board-pane .task-card { flex: 0 0 auto; }
     #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
     #d-team .workspace-pane .member-card { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 11px; min-height: 142px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 14px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface2) 94%, var(--brand) 6%), var(--surface2)); }
@@ -1552,18 +1579,20 @@
     #d-team .member-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .member-state { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 7px; border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-size: var(--fs-C); white-space: nowrap; }
     #d-team .member-state .status-dot { width: 7px; height: 7px; }
-    #d-team .member-state.state-working { color: var(--working); background: var(--wait-bg); }
-    #d-team .member-state.state-done { color: var(--done); background: var(--done-bg); }
-    #d-team .member-state.state-error { color: var(--error); background: var(--danger-bg); }
+    /* 1014 词表统一：名册 state 三色引用 --st-*（working 黄/done 绿/error 红；底色垫同相软底） */
+    #d-team .member-state.state-working { color: var(--st-working); background: color-mix(in srgb, var(--st-working) 12%, transparent); }
+    #d-team .member-state.state-done { color: var(--st-idle); background: color-mix(in srgb, var(--st-idle) 12%, transparent); }
+    #d-team .member-state.state-error { color: var(--st-error); background: color-mix(in srgb, var(--st-error) 12%, transparent); }
     #d-team .member-card .identity-cluster { margin-top: 8px; }
     #d-team .member-summary { display: block; min-height: 18px; margin-top: 9px; overflow: hidden; color: var(--dim); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .watchdog-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
     #d-team .watchdog-signal { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font: var(--fs-C) var(--mono); }
-    #d-team .watchdog-signal i { width: 7px; height: 7px; border-radius: 50%; background: var(--signal-color, var(--faint)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal-color, var(--faint)) 16%, transparent); }
-    #d-team .watchdog-signal.good { --signal-color: var(--done); }
-    #d-team .watchdog-signal.warn { --signal-color: var(--working); }
-    #d-team .watchdog-signal.bad { --signal-color: var(--error); }
-    #d-team .watchdog-signal.off { --signal-color: var(--faint); }
+    #d-team .watchdog-signal i { width: 7px; height: 7px; border-radius: 50%; background: var(--signal-color, var(--st-closed)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal-color, var(--st-closed)) 16%, transparent); }
+    /* 1014 词表统一：watchdog 双信号 good=绿/warn=橙/bad=红/off=灰（--st-*） */
+    #d-team .watchdog-signal.good { --signal-color: var(--st-idle); }
+    #d-team .watchdog-signal.warn { --signal-color: var(--st-blocked); }
+    #d-team .watchdog-signal.bad { --signal-color: var(--st-error); }
+    #d-team .watchdog-signal.off { --signal-color: var(--st-closed); }
     #d-team .workspace-pane .team-activity { width: 100%; max-width: none; padding: 0 4px 12px; }
     #d-team .activity-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700; }
     #d-team .activity-head span { color: var(--faint); font-size: var(--fs-C); font-weight: 400; }
@@ -2352,12 +2381,24 @@
     .team-entry { display: flex; gap: 9px; align-items: center; margin: 2px 2px; padding: 8px 9px; border: 1px dashed var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface2) 45%, transparent); cursor: pointer; }
     .team-entry:hover { background: var(--q-row-hov); border-color: var(--border-strong); }
     .team-entry .t-ava { flex: none; position: relative; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--info); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .team-entry .t-ava .team-health { position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border: 1.5px solid var(--surface1); } /* 1014：队级健康度角点（成员 mini 灯的上级聚合） */
     .team-entry .t-main { flex: 1; min-width: 0; }
     .team-entry .t-name { display: flex; align-items: center; gap: 6px; color: var(--text-strong); font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .team-entry .t-sub { color: var(--faint); font-size: var(--fs-C); margin-top: 1px; }
     .team-entry .t-expand { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; }
     .team-entry .t-expand:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
     .worker-mini-row { display: flex; gap: 3px; margin-top: 4px; }
+    /* 1014 追加：每成员一颗心态灯（灯为主体，角色收 title）——running=绿呼吸/idle=灰 */
+    /* 1014 五色词表（--st-* 唯一事实源）：working 黄闪/其余常亮 */
+    .worker-mini.lamp { display: inline-grid; place-items: center; }
+    .worker-mini.lamp .lamp-dot { width: 7px; height: 7px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-closed); }
+    .worker-mini.lamp .lamp-dot.idle { background: var(--st-idle); box-shadow: none; }
+    .worker-mini.lamp .lamp-dot.blocked { box-shadow: inset 0 0 0 1.5px var(--st-blocked); }
+    .worker-mini.lamp .lamp-dot.error { background: var(--st-error); box-shadow: none; animation: st-shake-once .32s ease-in-out 1; }
+    .worker-mini.lamp .lamp-dot.working { background: var(--st-working); box-shadow: none; animation: st-glow-pulse 2s ease-in-out infinite; }
+    .team-entry .t-ava .lamp-dot.team-health { background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-closed); }
+    .team-entry .t-ava .lamp-dot.team-health.idle { background: var(--st-idle); box-shadow: none; }
+    .team-entry .t-ava .lamp-dot.team-health.working { background: var(--st-working); box-shadow: none; animation: st-glow-pulse 2s ease-in-out infinite; }
     .worker-mini { flex: none; position: relative; width: 16px; height: 16px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); color: var(--faint); font: 600 8px/14px var(--mono); text-align: center; }
     .worker-mini .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
     .worker-mini.more { border-style: dashed; }
@@ -3482,14 +3523,23 @@
                   if (!hit.length) return ""; // 非「全部」筛选下该团队无命中状态——不出卡（筛选语义纯粹）
                   const running = hit.filter((x) => x.s.status === "WORKING" || x.s.status === "WAITING" || x.s.status === "ERROR").length;
                   const acceptance = Number.isFinite(Number(team.acceptance_count)) ? Math.max(0, Number(team.acceptance_count)) : 0;
-                  const minis = hit.slice(0, 5).map((x) => {
-                    const st = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[x.s.status] || "done";
-                    const badge = SLIM_KEEP_ROLE.test(String(x.m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(x.m.role || "")) ? "QA" : "W";
-                    return '<span class="worker-mini" title="' + esc(x.s.title || x.m.session_id) + '">' + badge + '<i class="status-dot ' + st + '"></i></span>';
+                  // 1014 追加（用户：3 人在岗只见 1 颗队级绿点）：mini 行=每在岗成员一颗显性
+                  // 心态灯（WORKING=绿呼吸/其余=灰；角色与状态词收进 title 悬停）——原 badge
+                  // 字+6px 角点形态灯存在感为零；**在岗优先排序**（用户截图：绿点被折进
+                  // +N 看不见）——running 稳定前置再截 5+N，绿点恒前排可见
+                  const lampOrder = hit.slice().sort((a, b) => Number(b.s.status === "WORKING") - Number(a.s.status === "WORKING"));
+                  const minis = lampOrder.slice(0, 5).map((x) => {
+                    const stCls = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[x.s.status] || "closed"; // 1014 五色词表
+                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[x.s.status] || "离线";
+                    const who = (SLIM_KEEP_ROLE.test(String(x.m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(x.m.role || "")) ? "QA" : "W") + " " + (x.s.title || x.m.session_id).slice(0, 24);
+                    return '<span class="worker-mini lamp" title="' + esc(who + " · " + stWord) + '"><i class="lamp-dot ' + stCls + '"></i></span>';
                   }).join("") + (hit.length > 5 ? '<span class="worker-mini more" title="还有 ' + (hit.length - 5) + ' 个成员会话">+' + (hit.length - 5) + "</span>" : "");
                   const teamAria = team.name + " · " + hit.length + " 个成员 · " + running + " 个进行中 · " + acceptance + " 个待验收";
                   const avatar = String(team.name || team.id || "团").trim().charAt(0).toUpperCase() || "团";
-                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '</span><span class="t-main"><span class="t-name">' + esc(team.name) + (S.slimUnread.has(team.id) ? '<span class="slim-unread-dot" title="成员有新输出"></span>' : "") + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="成员"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg><b>' + hit.length + '</b></span><span class="t-count" title="进行中"><i class="t-running-icon" aria-hidden="true">▶</i><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
+                  // 1014 追加：队级聚合灯语义明确化——头像角点=整队健康度（任一成员在跑=绿呼吸/
+                  // 全闲=灰），与成员 mini 灯形成「队健康 × 人人灯」两级；title 明示语义
+                  const teamAlive = hit.some((x) => x.s.status === "WORKING");
+                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '<i class="lamp-dot team-health ' + (teamAlive ? "working" : "idle") + '" title="整队健康度：' + running + ' 人在跑"></i></span><span class="t-main"><span class="t-name">' + esc(team.name) + (S.slimUnread.has(team.id) ? '<span class="slim-unread-dot" title="成员有新输出"></span>' : "") + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="成员"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg><b>' + hit.length + '</b></span><span class="t-count" title="进行中"><i class="t-running-icon" aria-hidden="true">▶</i><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
                 }
                 function slimDrawerCardMarkup(item) {
                   return '<div class="queue-card" data-slim-open="' + item.id + '" role="button" tabindex="0" aria-label="打开 ' + item.title + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source ? '<span class="srow-r3">' + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span></div>";
@@ -6650,7 +6700,7 @@
                 function teamDesignSection(project) {
                   const docs = state.designDocs;
                   if (!Array.isArray(docs) || !docs.length) return "";
-                  if (!project) return '<div class="inspector-block"><div class="inspector-title"><span>系统设计图纸 · ' + docs.length + '</span></div>'
+                  if (!project) return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>系统设计图纸 · ' + docs.length + '</span></div>'
                     + docs.slice(0, 6).map((d) => '<div class="task-card compact"><strong>' + escape(d.title) + '</strong><p>' + escape(d.group) + " · " + escape(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escape(d.path) + '">新窗打开 ↗</button></div>').join("")
                     + (docs.length > 6 ? '<div class="inspector-copy">共 ' + docs.length + " 张 · 全部清单见 设置 → 关于。</div>" : "") + "</div>";
                   const segs = [String(project.name || ""), String(project.anchor_dir || "").replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || ""];
@@ -6659,8 +6709,8 @@
                   const tokArr = [...toks];
                   const hit = (tag) => tokArr.some((t) => t.includes(tag) || tag.includes(t));
                   const hits = docs.filter((d) => Array.isArray(d.tags) && d.tags.some(hit));
-                  if (!hits.length) return '<div class="inspector-block"><div class="inspector-title"><span>系统设计图纸</span></div><div class="inspector-copy">本团队暂无关联图纸 · 全部清单见 设置 → 关于 → 系统设计图纸。</div></div>';
-                  return '<div class="inspector-block"><div class="inspector-title"><span>系统设计图纸 · ' + hits.length + '</span></div>'
+                  if (!hits.length) return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>系统设计图纸</span></div><div class="inspector-copy">本团队暂无关联图纸 · 全部清单见 设置 → 关于 → 系统设计图纸。</div></div>';
+                  return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>系统设计图纸 · ' + hits.length + '</span></div>'
                     + hits.map((d) => '<div class="task-card compact"><strong>' + escape(d.title) + '</strong><p>' + escape(d.group) + " · " + escape(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escape(d.path) + '">新窗打开 ↗</button></div>').join("") + "</div>";
                 }
                 function teamArtifactsSection(project) {
@@ -6672,8 +6722,8 @@
                     for (const a of s.artifacts) if (a && typeof a.path === "string") rows.push({ sid, s, a });
                   }
                   rows.sort((x, y) => (Number(y.a.last_at) || 0) - (Number(x.a.last_at) || 0));
-                  if (!rows.length) return '<div class="inspector-block"><div class="inspector-title"><span>团队输出物</span></div><div class="inspector-copy">当前编制尚无输出物 · 会话产出实时登记。</div></div>';
-                  return '<div class="inspector-block"><div class="inspector-title"><span>团队输出物 · ' + rows.length + '</span></div>'
+                  if (!rows.length) return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>团队输出物</span></div><div class="inspector-copy">当前编制尚无输出物 · 会话产出实时登记。</div></div>';
+                  return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>团队输出物 · ' + rows.length + '</span></div>'
                     + rows.slice(0, 8).map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("")
                     + (rows.length > 8 ? '<div class="inspector-copy">共 ' + rows.length + " 件 · 全量在会话域输出物 tab。</div>" : "") + "</div>";
                 }
@@ -6736,7 +6786,7 @@
                     // 追加⑦b：「未指派」分组头只在待认领泳道渲染（进行中的必有 owner 口径）；
                     // 其他泳道的真无主卡平铺泳道尾部（卡面保留未指派警示，不设组头）
                     const body = laneBody(status, items, status === "backlog");
-                    return '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + body + "</div>";
+                    return '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + label + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + boardOverview + '<div class="board">' + columns + "</div>" + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
