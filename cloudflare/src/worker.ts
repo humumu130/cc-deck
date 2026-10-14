@@ -74,8 +74,13 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
     }
     if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
       if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
-      const inner = url.pathname.slice(4) || "/";
-      return env.ASSETS.fetch(new Request("https://assets.local" + inner + url.search, req));
+      // 2026-10-14 用户定版：/app 主路径升级=新壳 index-005（v8 视觉还原已部署）；
+      // 旧稳定壳退 /app-old（=assets 根 index.html，直链仍可用）
+      if (url.pathname === "/app") {
+        return env.ASSETS.fetch(new Request("https://assets.local/index-005.html", req));
+      }
+      const inner = url.pathname.slice(5).replace(/^\/+/, "") || "index-005";
+      return env.ASSETS.fetch(new Request("https://assets.local/" + inner + url.search, req));
     }
     // 005 新壳对照入口（新旧壳共存，2026-10-07 用户拍板）：/app 主路径 = 旧版稳定壳
     //（assets 根 index.html），/app2 = web-console/index-005.html；子路径透传同 /app 口径。
