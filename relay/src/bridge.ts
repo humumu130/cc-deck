@@ -3624,7 +3624,12 @@ export class Bridge {
       // 幻影挂起），同走 15s 宽限防误杀慢晋升
       this.scheduleStuckFail(id, texts, "多次验证均未见消息进入终端");
     } else {
-      this.mgr.pushExternalLog(id, "system", msg);
+      // W-INJFIX：skip 是过程性判定（框净=已提交或原生排队），对用户无行动意义——
+      // 降级 console 运维日志，不进时间线。1014 实锤：该行走 pushExternalLog 时 PM
+      // 会话被每 3s 一条连刷（pending 滞留 + CLI 忙期间 skip 循环，relay 重启 skips
+      // 清零后循环重启）；时间线只保留要求用户行动的终态（scheduleStuckFail 的
+      // 「请到终端确认后重发」类）
+      console.log(`[submit] skip sid=${id.slice(0, 14)}：${msg}`);
     }
   }
 

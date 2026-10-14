@@ -371,6 +371,39 @@ try {
     } finally { f.cleanup(); }
   }
 
+  // ---------- P9 W-INJFIX：值守 prompt 可再生——注入失败（init 超时 fresh 回退）不重放 ----------
+  // 1014 注入刷屏根修：值守喂活 prompt 每轮 duty 重推导队列重新生成，是可再生消息——
+  // 注入失败应直接放弃，不进 unacked 重放账（fresh 回退/看门狗接管/冷却补投全部跳过），
+  // 不与用户消息争补偿链。对照组：同窗内用户消息必须照常重放（renewable 不殃及）。
+  console.log("P9 值守 prompt 可再生（W-INJFIX）");
+  {
+    process.env.CCR_RESUME_INIT_MS = "150"; // init 看门狗 150ms（合法下限 100，test-resume-breaker 同缝）
+    const f = mkFixture(dirs);
+    try {
+      const bootIdx = f.ensureLeaderIdx();
+      f.card("P9 可再生验证候选卡");
+      const base = f.created.length;
+      f.created[bootIdx]?.cb.onTurnEnd(true, "boot", 1); // feedPM → resumeAgent（值守 prompt）
+      const dutyPrompt = String(f.created[base]?.prompt ?? "");
+      assert(dutyPrompt.includes("[值守喂活]"), "P9① 值守注入发生（prompt 含 [值守喂活]， renewable 标记路径）");
+      const leaderId = f.mgr.getLeaderSessionId() ?? "";
+      assert(leaderId !== "", "P9⓪ Leader 在档");
+      // 值守流 spawn 后（互斥窗/活流均可）立即发一条用户消息：活流 sendMessage 同步
+      // no-op（fake 无回显无 ackId）→ 留在 unacked（ts ≥ resumeStart）
+      send(f.mgr, "p9msg", "COMMAND_MESSAGE", { session_id: leaderId, text: "P9 用户插话（不可再生）" }, "web-1");
+      // 不调 onInit：150ms 后 init 看门狗触发 fresh 分支（Leader 无记忆 → fresh 重放）
+      await sleep(600);
+      const freshPrompt = String(f.created[f.created.length - 1]?.prompt ?? "");
+      assert(freshPrompt.includes("P9 用户插话（不可再生）"), "P9② fresh 重放保留用户消息（renewable 语义不殃及普通消息）");
+      assert(!freshPrompt.includes("[值守喂活]"), "P9③ 值守 prompt 不重放（可再生：失败即丢，下一轮 duty 重推导注入新 prompt）");
+      const managed = (f.mgr as unknown as { sessions: Map<string, { unacked: unknown[] }> }).sessions.get(leaderId);
+      assert(!!managed && managed.unacked.length === 0, "P9④ unacked 零滞留（renewable 条目丢弃、用户消息已并入 fresh 重放出账）");
+    } finally {
+      f.cleanup();
+      delete process.env.CCR_RESUME_INIT_MS;
+    }
+  }
+
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
   console.log(`P71 duty product: ${pass}/${pass + fail}`);
   if (fail > 0) process.exit(1);

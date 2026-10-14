@@ -450,7 +450,10 @@ interface ManagedSession {
   // - hold "turn"（resume 首条消息走 initialPrompt 路径、永无回显；resume 互斥窗
   //   排队的消息）：首个 ok 回合结束清账——回合完成 = transcript 已收，重放即重复；
   //   init 超时走 fresh 回退时账还在，合并重放语义（:3597 注释）不破
-  unacked: { id: string; text: string; images?: string[]; ts: number; refs?: string[]; hold?: "init" | "turn" }[];
+  // - renewable（W-INJFIX 1014）：值守喂活 prompt 是可再生消息——每轮 duty 重推导
+  //   队列重新生成，投递失败应直接放弃。标记条目不进任何重放/补投链（fresh 回退、
+  //   看门狗接管 recoverFromStall、冷却补投 flushResumeBacklog），失败即丢弃
+  unacked: { id: string; text: string; images?: string[]; ts: number; refs?: string[]; hold?: "init" | "turn"; renewable?: boolean }[];
   wd: WatchdogState;
   // #109 流代际：resumeAgent/reviveSaved 换流前递增。回调闭包按创建时代际比对，
   // 不匹配即忽略——旧流的任何后续事件（接管补刀的收尾回调 / 网络回魂）不再写
@@ -3786,7 +3789,10 @@ export class SessionManager {
     return !!s.agent && !s.agent.ended && !s.wd.gaveUp && this.streamPidAlive(s);
   }
 
-  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[]): void {
+  // W-INJFIX：opts.renewable——调用方声明 firstMessage 是可再生消息（值守喂活
+  // prompt：每轮 duty 重推导队列重新生成）。可再生消息失败即丢弃：不进 unacked
+  // 重放账（fresh 回退/看门狗接管/冷却补投全部跳过），下一轮 duty 注入全新 prompt
+  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[], opts?: { renewable?: boolean }): void {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
@@ -3815,7 +3821,8 @@ export class SessionManager {
       s.wd.gaveUp = false;
       // P1FIX：首条消息走 initialPrompt 路径（构造时入 SDK 队列）永无回显，出账点 =
       // 首个 ok 回合结束（onTurnEnd 清 hold:"turn"）；流断在回合内则由看门狗带账重放
-      s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn" });
+      // W-INJFIX：renewable 消息不记重放账——流断了这条就丢弃（duty 重推导再注入）
+      s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn", ...(opts?.renewable ? { renewable: true } : {}) });
       this.emitUpdated(s, true);
       return;
     }
@@ -3928,7 +3935,8 @@ export class SessionManager {
     // 下一轮自愈要带上它）。P1FIX：initialPrompt 路径永无回显，出账点 = 首个 ok
     // 回合结束（onTurnEnd 清 hold:"turn"）——此前无出账点，账永久滞留被后续每次
     // 恢复全量重放（审计 P1 实锤）
-    s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn" });
+    // W-INJFIX：renewable 消息（值守喂活 prompt）不入重放账——失败即丢，duty 再注入
+    s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn", ...(opts?.renewable ? { renewable: true } : {}) });
     initTimer = setTimeout(() => {
       initTimer = null;
       // 已 init / 流已换（stale timer）/ 流已被 STOP 或自然关闭 / 会话卡已被删
@@ -3953,8 +3961,11 @@ export class SessionManager {
       if (!s.state.external && !hasMemory) {
         // 首回合挂死 → fresh spawn 重放：resume 窗口内到达的全部未回显消息一并
         // 合并重放（挂死流的队列没人消费，只重放首条会让窗口内第二条静默丢失、
-        // 无限期悬在 unacked）；多单 FIFO 同 recoverFromStall 的合并口径收口
-        const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart);
+        // 无限期悬在 unacked）；多单 FIFO 同 recoverFromStall 的合并口径收口。
+        // W-INJFIX：renewable（值守 prompt）排除——init 已超时说明这轮注入失败，
+        // 可再生消息直接丢弃（下一轮 duty 重新注入新 prompt），不值得为它 fresh
+        // 重放烧一个回合；首条本身 renewable 且无其他积压 → fresh 拉活不带 prompt
+        const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart && !m.renewable);
         s.unacked = s.unacked.filter((m) => m.ts < resumeStart);
         if (pendingNow.length > 1) {
           for (let i = 1; i < pendingNow.length; i++) {
@@ -3964,8 +3975,8 @@ export class SessionManager {
             this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
           }
         }
-        const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
-        const replayImages = (pendingNow.length ? pendingNow.flatMap((m) => m.images ?? []) : images ?? []).slice(0, 4);
+        const replayText = (pendingNow.length ? pendingNow : opts?.renewable ? [] : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
+        const replayImages = (pendingNow.length ? pendingNow.flatMap((m) => m.images ?? []) : opts?.renewable ? [] : images ?? []).slice(0, 4);
         s.streamGen++;
         s.resumePending = Date.now();
         s.lastProgressAt = Date.now();
@@ -3975,7 +3986,7 @@ export class SessionManager {
           s.state.cwd,
           s.state.model,
           this.agentCallbacks(s),
-          replayText,
+          replayText || undefined, // W-INJFIX：全部为 renewable 时 fresh 只拉活不带 prompt（reviveSaved 语义），下一轮 duty 重新注入
           {
             permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口（fresh 回退同收敛）
             images: replayImages.length ? replayImages : undefined,
@@ -3987,7 +3998,9 @@ export class SessionManager {
           },
         );
         this.pushExternalLog(s.state.session_id, "system",
-          `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话重发本条消息`);
+          replayText
+            ? `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话重发本条消息`
+            : `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话恢复（无可重发消息，值守类消息待下一轮值守再注入）`);
         this.emitUpdated(s, true);
       } else {
         s.state.status = "ERROR";
@@ -4096,8 +4109,10 @@ export class SessionManager {
         s.state.org_parked = undefined; // M3 审查修正：恢复即脱离挂起休眠（同 resumeAgent）
         base.onInit(sdkIdNew, model, permissionMode);
         // W-LEADFIX：熔断冷却/pin 休眠期间入队的积压注入（值守/回执）随恢复补投，
-        // 有活即开回合，不再宣称「等待输入」（无积压才落 DONE 待命态）
-        const backlog = s.unacked.filter((m) => m.ts < reviveStart);
+        // 有活即开回合，不再宣称「等待输入」（无积压才落 DONE 待命态）。
+        // W-INJFIX：renewable 不算积压——flushResumeBacklog 已丢弃，纯 renewable
+        // 账不该把状态误标成「处理排队消息」
+        const backlog = s.unacked.filter((m) => m.ts < reviveStart && !m.renewable);
         if (backlog.length > 0 && s.agent && !s.agent.ended) {
           this.flushResumeBacklog(s, reviveStart);
           s.state.status = "WORKING";
@@ -4729,9 +4744,13 @@ export class SessionManager {
   //（之后的属 spawn 窗口消息，走 sendMessage 排队既定路径），合并单回合送达
   //（同看门狗多消息重放口径）。resumeAgent 与 reviveSaved 的 onInit 包裹各调一次
   private flushResumeBacklog(s: ManagedSession, beforeTs: number): void {
-    const backlog = s.unacked.filter((m) => m.ts < beforeTs);
+    // W-INJFIX：renewable（值守 prompt）不补投——恢复成功后由下一轮 duty 重新判定
+    // 注入（旧 prompt 的队列快照是投递时刻的，已过期），一并出账丢弃
+    const dropped = s.unacked.filter((m) => m.renewable).length;
+    if (dropped > 0) console.log(`[duty] resume-backlog drops ${dropped} renewable prompt(s) sid=${s.state.session_id.slice(0, 14)}（duty 下轮重推导）`);
+    const backlog = s.unacked.filter((m) => m.ts < beforeTs && !m.renewable);
+    s.unacked = s.unacked.filter((m) => m.ts >= beforeTs && !m.renewable);
     if (backlog.length === 0) return;
-    s.unacked = s.unacked.filter((m) => m.ts >= beforeTs);
     const text = backlog.map((m) => m.text).join("\n\n");
     const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
     this.pushExternalLog(s.state.session_id, "system", `恢复成功，补投排队消息 ${backlog.length} 条`);
@@ -5055,7 +5074,11 @@ export class SessionManager {
     }
     try {
       this.pushExternalLog(this.leaderId, "system", `[值守喂活] 发现 ${verdict.candidates.length} 项可处理（最老：${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}）`);
-      this.resumeAgent(this.require(this.leaderId), prompt);
+      // W-INJFIX：值守 prompt 标可再生——注入失败（init 超时/流断/熔断）直接丢弃，
+      // 不进 unacked 重放账；下一轮 duty（turn_end/event/K=3 退避续办）重推导队列
+      // 注入新 prompt。与手动恢复豁免（用户消息越冷却拉起）分流：值守是自动路径，
+      // 失败即让位，不与用户消息争补偿链（1014 注入刷屏根因）
+      this.resumeAgent(this.require(this.leaderId), prompt, undefined, undefined, undefined, { renewable: true });
       this.appendDutyRound({
         feed_id: feedId, feed_generation: generation, trigger: [trigger],
         result: "continue", observed, from,
@@ -7523,7 +7546,13 @@ export class SessionManager {
       // 收尾加固审查修正（B）：防风暴额度只记真实干预——放弃=零干预零额度（push
       // 原在放弃守卫之前，两次 park-放弃会烧掉第三次真僵死的自愈机会）
       s.wd.recoveries.push(Date.now());
-      const pending = s.unacked;
+      // W-INJFIX：值守喂活 prompt 是可再生消息（每轮 duty 重推导队列重新生成）——
+      // 看门狗接管重放只救用户消息，renewable 条目直接丢弃：下一轮 duty 触发时
+      // 重新判定注入新 prompt。1014 实锤：值守 prompt 混进补偿链后随每次接管/
+      // 补投反复重生，PM 时间线被注入循环刷屏
+      const renewableDropped = s.unacked.filter((m) => m.renewable).length;
+      if (renewableDropped > 0) console.log(`[duty] stall-recovery drops ${renewableDropped} renewable prompt(s) sid=${sid.slice(0, 14)}（duty 下轮重推导）`);
+      const pending = s.unacked.filter((m) => !m.renewable);
       s.unacked = [];
       const sdkId = s.state.relay_session_id;
       if (!sdkId) throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法自动恢复");

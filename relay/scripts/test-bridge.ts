@@ -1666,7 +1666,12 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     writeFileSync(PEEK, CAP_EMPTY.join("\n"));
     await wait(8000);
     assert(enters45() === beforeD, "45d message gone from box → skip enter");
-    assert(logs45().some((t) => t.includes("跳过本次补发回车")), "45d skip log emitted");
+    // W-INJFIX（1014 注入刷屏根修）：skip 是过程性判定，从 pushExternalLog（用户时间
+    // 线）降级 console 运维日志——时间线不再出现该行；skips 计数链保持（3 次 giveup
+    // + 显式失败终态不受降噪影响，用 stuckWatch 账本验证仍在推进）
+    assert(!logs45().some((t) => t.includes("跳过本次补发回车")), "45d skip log stays out of session stream (W-INJFIX quiet)");
+    const w45d = (bridge as unknown as { stuckWatch: Map<string, { skips: number }> }).stuckWatch.get(sid);
+    assert(!!w45d && w45d.skips >= 1, "45d skips ledger still advances (giveup chain intact)");
     await settle();
     // e. 快照不可用（旧注入器/编译失败/识别失败）→ 无法证明有人在打字 = 按无人输入
     //    直接补发（W-CROSSQUEUE 反转 #180 fail-closed：跨机快照恒不可用曾 3 连放弃
