@@ -1614,10 +1614,16 @@
     #d-team .team-count-icon { display: inline-grid; place-items: center; width: 13px; height: 13px; color: var(--working); font: 700 11px/1 var(--mono); }
     #d-team .team-count.acceptance .icon-inline { color: var(--brand); }
     #d-team .team-count b { color: var(--text); font: 700 var(--fs-C) var(--mono); font-variant-numeric: tabular-nums; }
-    #d-team .queue-card[data-team-project] { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 10px; }
+    /* 1014 实锤修复：此 grid 两列是给「avatar 独立列」旧 markup 设计的，W-V8 批2 新
+       markup 的 avatar 在 .row 内——整行 row 被塞进 38px 首列（名称宽 0）、team-meta
+       掉第二列再被 2111 固定高裁切=卡片视觉只剩头像+状态胶囊。改自然块流：row 一行、
+       meta 一行、identity 一行 */
+    #d-team .queue-card[data-team-project] { display: block; }
     #d-team .team-card-avatar { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--brand) 34%, var(--line)); border-radius: 12px; background: var(--brand-soft); color: var(--brand-strong); font: 700 15px/1 var(--mono); }
     #d-team .team-card-main { min-width: 0; }
-    #d-team .queue-card[data-team-project] .row { min-width: 0; }
+    #d-team .queue-card[data-team-project] .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    #d-team .queue-card[data-team-project] .row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #d-team .queue-card[data-team-project] .team-meta { margin: 6px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .queue-card[data-team-project] .team-counts { gap: 8px; }
     #d-team .lane-ready_to_install { border-color: color-mix(in srgb, var(--brand) 42%, var(--line-soft)); background: color-mix(in srgb, var(--lane-bg) 86%, var(--brand) 14%); }
     #d-team .lane-ready_to_install .lane-head { color: var(--brand-strong); }
@@ -2522,6 +2528,16 @@
       border-color: var(--card-border);
       box-shadow: var(--card-shadow);
     }
+    /* 1014 用户实锤「团队卡只剩头像+运行中」：2111 固定卡高+overflow hidden 裁掉
+       grid 第二行（team-meta/identity），1617 grid 与 W-V8 markup 错配的复合伤——
+       团队项目卡放开固定高，内容按行自然流 */
+    #d-team .queue-card[data-team-project] {
+      block-size: auto;
+      min-block-size: var(--density-card-block-size);
+      overflow: visible;
+    }
+    #d-team .queue-card[data-team-project] .row { display: flex; align-items: center; gap: 8px; }
+    #d-team .queue-card[data-team-project] .row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .queue-card[data-team-project]:hover, #d-project .queue-card:hover {
       background: var(--hover);
       border-color: var(--border-strong);
