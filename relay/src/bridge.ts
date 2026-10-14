@@ -186,8 +186,25 @@ function pidAlive(pid: number): boolean {
 // body=注入 CLI 全文（带图消息双文本口径，对账一律 body 形态）
 type QueuedInput = { text: string; ts: number; body?: string; refs?: string[] };
 
+
+// ---------- W-STREAMDELTA（#94）：外部会话终端流帧 ----------
+// 外部 CLI 无 SDK stream_event（旧版「流式感」=工具日志行逐条上屏，新壳过程折叠后
+// 体感「等半天出整段」）。此件把 tmux 终端捕获做成视觉流：周期 capture 底部行 →
+// 尾部增量 append 到流块 buf（同 id 原地替换复用 #73 链）→ 终态撤块（PATCH），
+// 正文权威恒为转录终条。行数收缩/前缀漂移（CLI 重绘清屏）= 不稳窗口跳帧（保守防错乱）。
+export function deriveStreamFrame(prev: string[] | null, next: string[]): { lines: string[]; stable: boolean } {
+  if (!prev || prev.length === 0) return { lines: next.slice(), stable: true };
+  if (next.length < prev.length) return { lines: prev, stable: false }; // 清屏/重绘
+  const n = prev.length;
+  for (let i = 0; i < n; i++) if (prev[i] !== next[i]) return { lines: prev, stable: false }; // 前缀漂移
+  return { lines: next.slice(), stable: true }; // 纯尾部追加
+}
+export const STREAM_DELTA_ENV = () => process.env.CCR_STREAM_DELTA !== "0"; // 缺省开
+
 export class Bridge {
-  private pending = new Map<string, Pending>();   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
+  private pending = new Map<string, Pending>();
+  // W-STREAMDELTA 终端流状态：sid → { id（流块 id）, lines（上次捕获）, buf, timer }
+  private streamCap = new Map<string, { id: string; lines: string[] | null; buf: string; timer: NodeJS.Timeout }>();   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
 
   /** W-INJECT P0（泄漏修复）：外部会话消亡统一回收。此前 29 个以 ext id 为键的 Map/Set 无会话级
    * 清理路径——nameMisses/extFileStats/extUsage/lastHookAt/engineActivityKeys/recentUserMsgs(外层)/
@@ -196,7 +213,45 @@ export class Bridge {
    * （resumeClosures/verifyTimers/stuckFailTimers/submitEnterTimers）残留 Timeout 持闭包可重复触发。
    * 幂等（不存在的键 delete 零害）；enqueuedKeys 有 60 上限自愈但一并清更干净。
    * 挂点：SessionManager.deleteSession 的 external 分支。 */
+
+  /** 终端流启动：回合进行中周期捕获尾部行，稳定追加才上帧（900ms 拍 + pushExternalLog
+   * 同 id 替换链，端上原位更新）。幂等（timer 在场即返）。 */
+  private streamDeltaStart(id: string): void {
+    if (!STREAM_DELTA_ENV()) return;
+    const st = this.mgr.getExternal(id);
+    if (!st || !st.cli_pid || st.status !== "WORKING") return;
+    if (this.streamCap.has(id)) return;
+    const sid8 = id.slice(0, 8);
+    const entry: { id: string; lines: string[] | null; buf: string; timer: NodeJS.Timeout } = { id: "sd-" + sid8, lines: null, buf: "", timer: null as unknown as NodeJS.Timeout };
+    entry.timer = setInterval(() => {
+      const s2 = this.mgr.getExternal(id);
+      if (!s2 || !s2.cli_pid || s2.status !== "WORKING") { this.streamDeltaStop(id); return; }
+      void captureConsoleBottom(s2.cli_pid, 24).then((rows) => {
+        const cur = this.streamCap.get(id);
+        if (!cur || !rows) return;
+        const { lines, stable } = deriveStreamFrame(cur.lines, rows);
+        if (!stable) { cur.lines = rows; return; } // 不稳窗口：只记不帧
+        cur.lines = lines;
+        const buf = lines.join("\n").slice(-4000);
+        if (buf === cur.buf || !buf.trim()) return;
+        cur.buf = buf;
+        this.mgr.pushExternalLog(id, "assistant_text", buf.slice(-400), undefined, { full: buf, id: cur.id, streaming: true });
+      }).catch(() => {});
+    }, 900);
+    entry.timer.unref?.();
+    this.streamCap.set(id, entry);
+  }
+  /** 终态收敛：撤流块（正文以转录终条为准，防双条）+ 停捕获。 */
+  private streamDeltaStop(id: string): void {
+    const e = this.streamCap.get(id);
+    if (!e) return;
+    clearInterval(e.timer);
+    this.streamCap.delete(id);
+    this.mgr.removeExternalLog(id, e.id);
+  }
+
   forget(id: string): void {
+    this.streamDeltaStop(id);
     this.pending.delete(id);
     this.turnStart.delete(id);
     this.inputQueue.delete(id);
@@ -423,7 +478,7 @@ export class Bridge {
       const summary = profile.activity ?? (desiredStatus === "WORKING" ? `${spec.label} 运行中` : desiredStatus === "ERROR" ? `${spec.label} 出错` : `${spec.label} 已完成`);
       if (desiredStatus === "ERROR" && profile.error) state.last_error = profile.error;
       if (desiredStatus === "DONE" && state.status !== "DONE") {
-        this.mgr.finishExternal(id, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
+        this.streamDeltaStop(id); this.mgr.finishExternal(id, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
       } else if (state.status !== desiredStatus || state.action_summary !== summary) {
         this.mgr.setExternalStatus(id, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : undefined);
         if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id);
@@ -794,7 +849,7 @@ export class Bridge {
       // 接力」实录）。同 cli_pid 的其他 ext 会话 = 换代前旧身，立即归档收尾
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.session_id === id || s.cli_pid !== ev.cli_pid) continue;
-        this.mgr.finishExternal(s.session_id, "completed", 0);
+        this.streamDeltaStop(s.session_id); this.mgr.finishExternal(s.session_id, "completed", 0);
         const old = this.mgr.getExternal(s.session_id);
         if (old) old.historical = true; // 旧端仅可查看语义 + #32 离线降权视觉
         this.mgr.pushExternalLog(s.session_id, "system", "上下文已压缩，续接为新会话（本条目归档）");
@@ -922,7 +977,7 @@ export class Bridge {
           );
           if (s.status === "WORKING" && quiet > 20_000) {
             const turn = this.turnStart.get(s.session_id) ?? s.started_at;
-            this.mgr.finishExternal(s.session_id, "completed", now - turn, now - quiet); // #144 完成时刻=最后转录/hook 活动，非判定时刻
+            this.streamDeltaStop(s.session_id); this.mgr.finishExternal(s.session_id, "completed", now - turn, now - quiet); // #144 完成时刻=最后转录/hook 活动，非判定时刻
           }
         }
       } catch {}
@@ -1391,7 +1446,7 @@ export class Bridge {
     if (fb) this.askFallback.delete(sessionId);
     const pid = st.cli_pid;
     const msg = buildAnswerMessage(questions, answers);
-    this.mgr.setExternalStatus(sessionId, "WORKING", "手机作答");
+    this.mgr.setExternalStatus(sessionId, "WORKING", "手机作答"); this.streamDeltaStart(sessionId);
     void injectEsc(pid).then(async (r) => {
       if (!r.ok) {
         this.onInjectFail(sessionId, r.error);
@@ -2381,7 +2436,7 @@ export class Bridge {
           derived !== st1.action_summary &&
           (this.noHookIds.has(id) || /^转录活跃|^自愈：/.test(st1.action_summary ?? ""))
         ) {
-          this.mgr.setExternalStatus(id, "WORKING", derived);
+          this.mgr.setExternalStatus(id, "WORKING", derived); this.streamDeltaStart(id);
         }
       }
       // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏；排队台账不回放（陈旧）
@@ -2772,7 +2827,7 @@ export class Bridge {
           detail: detailToolUse(ev.tool_name ?? "tool", input),
           ...(taskCallId ? { id: taskCallId } : {}),
         });
-        this.mgr.setExternalStatus(id, "WORKING", summary);
+        this.mgr.setExternalStatus(id, "WORKING", summary); this.streamDeltaStart(id);
         this.mgr.pushExternalLog(
           id,
           "system",

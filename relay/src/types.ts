@@ -581,6 +581,7 @@ export type EventType =
   | "SESSION_ERROR"
   | "SESSION_DONE"
   | "SESSION_LOG"
+  | "SESSION_LOG_PATCH" // W-STREAMDELTA：流块删除补丁（终态收敛——外部终端流块随回合结束撤除，正文以转录终条为准）
   | "SESSION_ACTIVITY"
   | "TASK_DONE"
   | "SESSION_DELETED"

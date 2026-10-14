@@ -3121,6 +3121,7 @@
                     case "SESSION_DONE": onDoneEvt(sid, m.payload); break;
                     case "SESSION_DELETED": onDeleted(sid); break;
                     case "SESSION_LOG": onLog(sid, m.payload); break;
+                    case "SESSION_LOG_PATCH": onLogRemove(sid, m.payload); break; // W-STREAMDELTA：终态撤流块
                     case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break; // [t-7e0c6189] 编制增量（S.projects 原只吃 SNAPSHOT 全量，编制一变列表过滤就陈旧）
                   }
@@ -3278,6 +3279,20 @@
                   list.push(e);
                   if (list.length > 400) list.splice(0, list.length - 400);
                   return "append";
+                }
+                // W-STREAMDELTA：流块撤除（relay removeExternalLog 的 PATCH）——timelines 删条+DOM 原位移除（终态正文以转录终条为准，防双条）
+                function onLogRemove(sid, payload) {
+                  const rid = payload && payload.remove_id;
+                  if (typeof rid !== "string" || !rid) return;
+                  const list = S.timelines.get(sid);
+                  if (Array.isArray(list)) {
+                    const i = list.findIndex((e) => e && e.id === rid);
+                    if (i >= 0) list.splice(i, 1);
+                  }
+                  if (UI && sid === S.selected) {
+                    const node = UI.convPane && UI.convPane.querySelector('[data-x="' + cssEsc(rid) + '"]');
+                    if (node) node.remove();
+                  }
                 }
                 function onLog(sid, entry) {
                   if (!sid || !entry || typeof entry !== "object") return;

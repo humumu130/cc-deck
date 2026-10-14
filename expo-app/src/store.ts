@@ -2545,6 +2545,12 @@ class RelayStore {
         this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: `完成: ${msg.payload.terminal_reason} · ${(msg.payload.duration_ms / 1000).toFixed(1)}s` });
         break;
       }
+      // W-STREAMDELTA：流块撤除（终态收敛——timelines 删条，正文以转录终条为准）
+      case "SESSION_LOG_PATCH": {
+        const rid = (msg.payload as { remove_id?: unknown }).remove_id;
+        if (typeof rid === "string" && rid) this.removeTimelineEntry(sid, rid);
+        break;
+      }
       case "SESSION_LOG": {
         if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, msg.payload.text ?? "");
         this.pushLog(conn, sid, msg.payload);
@@ -2869,6 +2875,17 @@ class RelayStore {
   }
 
   // 时间线不可变更新：数组引用一变，渲染层的 useMemo/依赖比较才能感知新条目
+  /** W-STREAMDELTA：流块撤除（pushLog 的删除对位——同 id 条目移除，正文以转录终条为准） */
+  private removeTimelineEntry(sid: string, entryId: string): void {
+    const conn = this.sidIndex.get(sid) ?? this.activeConn();
+    if (!conn) return;
+    const arr = conn.timelines.get(sid);
+    if (Array.isArray(arr)) {
+      const i = arr.findIndex((e) => e && e.id === entryId);
+      if (i >= 0) arr.splice(i, 1);
+    }
+  }
+
   private pushLog(conn: SourceConn, sid: string, entry: LogEntry) {
     const list = conn.timelines.get(sid) ?? [];
     const e: LogEntry = {

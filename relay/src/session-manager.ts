@@ -2254,7 +2254,7 @@ export class SessionManager {
     kind: LogEntry["kind"],
     text: string,
     tool?: string,
-    meta?: { full?: string; detail?: string; diff?: string[]; id?: string; occurred_at?: number; images?: string[] },
+    meta?: { full?: string; detail?: string; diff?: string[]; id?: string; occurred_at?: number; images?: string[]; streaming?: boolean }, // streaming=W-STREAMDELTA 终端流块在帧标记（端上流点动画）
   ): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -2270,6 +2270,18 @@ export class SessionManager {
       if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500); // W-INJECT④：500→1500 对齐重放/文件窗
     }
     this.bus.emit(id, "SESSION_LOG", entry);
+  }
+
+  // W-STREAMDELTA（#94 外部会话终端流）：撤除流式占位块——外部 CLI 的终端捕获流块
+  // 是「视觉过渡」（正文权威=转录终条），回合终态必须撤块防双条；复用 #73 同 id 替换
+  // 语义做不到删除（空文本残留壳），故设 PATCH 帧：端上 timelines 删条+DOM 移除。
+  removeExternalLog(id: string, entryId: string): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    const i = s.logs.findIndex((e) => e.id === entryId);
+    if (i < 0) return;
+    s.logs.splice(i, 1);
+    this.bus.emit(id, "SESSION_LOG_PATCH", { remove_id: entryId });
   }
 
   setRemoteMode(id: string, enabled: boolean): void {
