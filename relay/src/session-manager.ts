@@ -5475,7 +5475,9 @@ export class SessionManager {
     // ——web 双壳/expo 面板走 COMMAND_ORG_ACTION，无此直通则面板全瘫）。rule-append
     // 的 direct 语义=面板用户主权面（配对即用户授权，org CLI direct 同信任级）；
     // 审计行/广播在漏斗 case 内单点（auditRuleAction + emitRules），此处不重复记账。
-    if (action.startsWith("rule-")) {
+    // collab-mode 同款直通（1014 实锤：w58 把 case 写进 orgAction 却没在咽喉放行，
+    // 设置面板按钮永远收到 unsupported——mgr case/单测全过、唯独咽喉挡死，#212 同款坑）
+    if (action.startsWith("rule-") || action === "collab-mode") {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
