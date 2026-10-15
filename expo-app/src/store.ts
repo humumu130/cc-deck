@@ -782,7 +782,8 @@ class RelayStore {
       if (raw) {
         const cfg = JSON.parse(raw) as ConnConfig;
         if (cfg.wsUrl && cfg.token) {
-          const entry: ServerEntry = { id: uuid(), name: hostOf(cfg.wsUrl), wsUrl: cfg.wsUrl, token: cfg.token };
+          // W-LANFIX：老单条迁移落多条列表时路径补全（直连形态，裸 host 一并升级）
+          const entry: ServerEntry = { id: uuid(), name: hostOf(cfg.wsUrl), wsUrl: withWsPath(cfg.wsUrl), token: cfg.token };
           await AsyncStorage.setItem("ccr_conns", JSON.stringify([entry]));
           await AsyncStorage.setItem("ccr_active", entry.id);
           await AsyncStorage.removeItem("ccr_conn");
@@ -826,7 +827,10 @@ class RelayStore {
         target = {
           ...old,
           name: entry.name || old.name,
-          ...(crossKind ? {} : { token: entry.token || old.token }),
+          // W-LANFIX：同 host:port（直连写法差异/重复添加）时吸收新提交的路径形态——
+          // 存量裸条目（无 /ws）在下次添加/扫码等价命中时自动升级为带路径写法，
+          // 迁移保留路径（已有路径原样透传，见 withWsPath）
+          ...(crossKind ? {} : { token: entry.token || old.token, wsUrl: withWsPath(entry.wsUrl) }),
           cloud: entry.cloud ?? old.cloud ?? null,
         };
         list[dup] = target;
@@ -1337,8 +1341,10 @@ class RelayStore {
   // LAN 探测：open 即成功（返回活连接，由调用方接管）；超时/出错返回 null
   private probeLan(conn: SourceConn, cfg: ConnConfig): Promise<WebSocket | null> {
     return new Promise((resolve) => {
+      // W-LANFIX：存量裸 host 条目（无 /ws 路径）在此补全——path=/ 会被 relay 拒成
+      // 5s 重连死循环，防御层让坏条目立即复活（写入端根修见 SetupScreen/归并吸收）
       const url =
-        cfg.wsUrl +
+        withWsPath(cfg.wsUrl) +
         "?token=" + encodeURIComponent(cfg.token) +
         (conn.lastSeq > 0 ? "&last_seq=" + conn.lastSeq : "");
       let ws: WebSocket;
@@ -1960,7 +1966,8 @@ class RelayStore {
     const relayDev = await new Promise<string | null>((resolve) => {
       let ws: WebSocket;
       try {
-        ws = new WebSocket(wsUrl + "?token=" + encodeURIComponent(token));
+        // W-LANFIX：与 probeLan 同口径——裸 host 条目补 /ws，防身份探测恒败
+        ws = new WebSocket(withWsPath(wsUrl) + "?token=" + encodeURIComponent(token));
       } catch {
         resolve(null);
         return;
@@ -3471,6 +3478,20 @@ export function identityOf(e: ServerEntry): string | null {
 // 内网直连地址（身份探测/归并取 LAN 写法用）：RFC1918 + 回环 + localhost
 export function isLanUrl(wsUrl: string): boolean {
   return /^wss?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost)/i.test(wsUrl);
+}
+
+// 直连路径补全（W-LANFIX 1016）：relay upgrade 只认 pathname=/ws（ws-server 拒
+// path=/），裸 host 条目（手输 192.168.x.x:8787 → ws://host:port 无路径）拼上
+// ?token 后 path=/ 必被拒——手机每 5s 重连死循环（生产实锤：换 IP 后新条目）。
+// 路径空或 / → 补 /ws（query/hash 保留）；已有实质路径（/ws、桥路径）原样；
+// 非 ws(s) 形态原样返回（不添乱）。写入端（SetupScreen/归并吸收）与消费端
+// （probeLan/probeLanIdentity）共用此单口
+export function withWsPath(wsUrl: string): string {
+  const m = /^(wss?:\/\/[^/?#]+)(\/[^?#]*)?(\?.*)?(#.*)?$/.exec(wsUrl);
+  if (!m) return wsUrl;
+  const path = m[2];
+  if (path && path !== "/") return wsUrl;
+  return m[1] + "/ws" + (m[3] || "") + (m[4] || "");
 }
 
 // 两个条目是否指向同一台服务器（名称不参与——同机改名/换写法仍算重复）：

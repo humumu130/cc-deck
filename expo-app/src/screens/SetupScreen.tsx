@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { withA, type ThemeColors } from "../theme";
 import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { store, useRelay, identityOf, type ServerEntry } from "../store";
+import { store, useRelay, identityOf, isLanUrl, withWsPath, type ServerEntry } from "../store";
 import { ackTapGuard, capabilityCardModel, capsuleSubline, pairErrNote, todoSurface } from "../protocol"; // E4a 只读投影 + E4b ACK 可见面（纯函数，protocol.ts 段）
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
@@ -287,7 +287,11 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       setErr("请填写地址");
       return;
     }
-    const base = normAddr(wsUrl);
+    // W-LANFIX：LAN 直连形态裸 host（手输 192.168.x.x:8787）落库即补 /ws——relay
+    // upgrade 只认 /ws，裸条目重连死循环（生产 1016 实锤）；云桥/公网形态写入不动
+    //（桥地址路径语义自持，写入面保守只改 LAN）
+    const base0 = normAddr(wsUrl);
+    const base = isLanUrl(base0) ? withWsPath(base0) : base0;
     const tk = token.trim();
     if (!/^wss?:\/\//.test(base)) {
       setErr("地址需以 ws:// 或 wss:// 开头");
@@ -328,7 +332,9 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       setErr("请填写地址");
       return;
     }
-    const base = normAddr(wsUrl);
+    // W-LANFIX：编辑同款——LAN 直连形态补 /ws（云桥地址编辑不动）
+    const base0 = normAddr(wsUrl);
+    const base = isLanUrl(base0) ? withWsPath(base0) : base0;
     if (!/^wss?:\/\//.test(base)) {
       setErr("地址需以 ws:// 或 wss:// 开头");
       return;
