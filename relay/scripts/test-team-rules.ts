@@ -14,6 +14,7 @@ import {
   appendRule, retireRule, supersedeRule, promoteExperienceToRule, listRules, buildRuleInjection,
   matchRule, formatRuleLine, normRuleKey, rulesPath, teamAllBucketChars, parseAudience,
   ruleMaxTeam, ruleMaxProject, ruleMaxRole, ruleMaxText, rulesInjectBudget,
+  ensureBuiltinRulesSeed, BUILTIN_RULE_PM_NO_CODE,
   type RuleEntry,
 } from "../src/team-rules.js";
 import { wrapDispatchPrompt } from "../src/session-manager.js";
@@ -424,6 +425,27 @@ section("\nS8 雇员家轻种子（断链说明/存在即认/关闭态零写）"
   process.env.CCR_EMPLOYEE_CONFIG_DIR = "";
   writeFileSync(join(DATA2, "settings.json"), JSON.stringify({ employeeHome: false }));
   assert(ensureEmployeeHomeSeed(DATA2) === false && !existsSync(join(DATA2, "claude-home")), "关闭态：零写入");
+}
+
+// ---------- S9 #108 内置铁律种子（PM 不编码）：幂等/字段/退役不复活 ----------
+section("\nS9 内置铁律种子（#108 PM 不编码）");
+{
+  const dir = mkDir("s9");
+  dirs.push(dir);
+  // 首种：created + 走既有框架字段（audience=role:pm / scope=team / status=active）
+  assert(ensureBuiltinRulesSeed(dir) === "created", "空库首种 → created");
+  const seeded = listRules(undefined, dir).find((e) => normRuleKey(e.text) === normRuleKey(BUILTIN_RULE_PM_NO_CODE));
+  assert(
+    !!seeded && seeded.audience === "role:pm" && seeded.scope === "team" && seeded.status === "active" && seeded.created_by === "user",
+    "种子字段走 team-rules 既有框架（role:pm/team/active/created_by=user 主权面）",
+  );
+  // 幂等：二次调用不重复
+  assert(ensureBuiltinRulesSeed(dir) === "exists", "二次种子 → exists（幂等不重复）");
+  assert(listRules(undefined, dir).filter((e) => normRuleKey(e.text) === normRuleKey(BUILTIN_RULE_PM_NO_CODE)).length === 1, "库里仍只一条（无双活）");
+  // 用户主权：retire 后不复活（重启重播=对抗用户）
+  assert(retireRule(seeded!.id, dir).ok, "用户 retire 种子条目");
+  assert(ensureBuiltinRulesSeed(dir) === "exists", "退役后重播 → exists（永不复活，用户决定优先）");
+  assert(listRules(undefined, dir).filter((e) => e.status === "active" && normRuleKey(e.text) === normRuleKey(BUILTIN_RULE_PM_NO_CODE)).length === 0, "退役条目保持 retired（不被种回 active）");
 }
 
 // ---------- 环境还原 ----------

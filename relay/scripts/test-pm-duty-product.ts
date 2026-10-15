@@ -159,6 +159,8 @@ try {
       const prompt = String(f.created[base]?.prompt ?? "");
       assert(prompt.includes("[值守喂活]") && prompt.includes(cardId.slice(0, 12)),
         "P1① config 无 duty 键=缺省开：回合终态照常注入值守活（候选锚卡 id，prompt 内 12 位截断口径）");
+      assert(prompt.includes("实现类需求请派发 worker 处理，勿自行编码。"),
+        "P1①' #108 值守 prompt 恒定尾注在场（PM 不编码——无论候选如何每轮必带）");
       const last = f.rounds()[f.rounds().length - 1] ?? {};
       assert(last.result === "continue" && JSON.stringify(last.trigger) === JSON.stringify(["turn_end"]),
         "P1② 审计 continue 行（trigger=turn_end）");

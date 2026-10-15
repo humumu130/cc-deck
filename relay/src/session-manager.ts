@@ -83,6 +83,7 @@ import { buildRoleInjection, getRoleTemplate, listRoleTemplates } from "./role-t
 // 替代链/升格复制 + 注入块构建（store 零依赖本文件，无环）
 import {
   appendRule, retireRule, supersedeRule, promoteExperienceToRule, listRules, buildRuleInjection,
+  ensureBuiltinRulesSeed, // #108：org 初始化内置铁律种子（PM 不编码）
   type RuleEntry, // W-RULES2：emitRules diff 基线类型
 } from "./team-rules.js";
 
@@ -4440,6 +4441,9 @@ export class SessionManager {
       ensureOrgDir();
       ensureOrgClaudeMd();
       ensureOrgCli(); // #26 M2：物化 ~/.cc-deck/bin/org（Leader 分诊指令通道；测试态跳过）
+      // #108：内置铁律种子（PM 不直接编码）——新用户开团即得；幂等（存在即认、
+      // 用户退役不复活）、自吞错（种子失败不阻断 Leader 创建）
+      ensureBuiltinRulesSeed();
     } catch (e) {
       return { ok: false, error: `org 目录不可用: ${e instanceof Error ? e.message : String(e)}` };
     }
@@ -5286,6 +5290,10 @@ export class SessionManager {
       ...(verdict.blocked.length ? [`另有 ${verdict.blocked.length} 项阻塞（等依赖/放行），本轮不处置。`] : []),
       `请验收回执、派发下一批或同步任务板；完成后末行单独输出一行 JSON（不加代码块）：`,
       `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`,
+      // #108 恒定尾注：值守行动里最易角色错位的就是「亲自下场写代码」——每轮值守
+      // prompt 无论候选如何都带这行（DUTY_RECEIPT 是「你回复的末行」协议，尾注在其
+      // 后不冲突）。与 PM 岗位模板纪律行、rules 内置铁律三面同源一句。
+      `实现类需求请派发 worker 处理，勿自行编码。`,
     ].join("\n");
     // W-LEADFIX：喂活注入先过熔断/停放闸——Leader 死卡时值守周期曾是死循环
     // 主驱动（每轮喂活拉一次 resume → init 超时 → 退避续办再拉）。压制时本轮按

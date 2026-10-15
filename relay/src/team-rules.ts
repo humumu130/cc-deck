@@ -551,3 +551,35 @@ export function buildRuleInjection(input: RuleInjectionInput): RuleInjection | n
     return null;
   }
 }
+
+// ---------- #108 内置铁律种子（2026-10-15，PM 不编码角色边界产品化） ----------
+
+/** 内置铁律正文（#108）：PM 会话收到实现类需求「忍不住自己写代码」是角色错位
+ * （1015 用户实测实锤：交付慢/上下文浪费/职责混乱），固化为产品默认规则——新用户
+ * 开团即得，主权仍归用户（retire/supersede 随意；退役后本种子永不复活）。 */
+export const BUILTIN_RULE_PM_NO_CODE = "PM 不直接编码——实现类工作派发 worker";
+
+/**
+ * 幂等种子（ensureOrgClaudeMd 同纪律：存在即认、永不覆盖、永不复活）。归一键在
+ * 全库任何状态（active/retired/superseded）命中即视为已种过——用户 retire 它是
+ * 明确决定，重启重播=对抗用户主权。挂点在 ensureLeader org 初始化段（新用户开团
+ * 即得）；内部自吞错（种子尽力而为，不阻断 Leader 创建——settings.ts 雇员家种子
+ * 同口径）。created_by="user"：产品预置默认走用户主权面（词表只有 user|agent，
+ * agent=确认卡提案链路语义不符；用户可改可退，主权面归属正确）。
+ */
+export function ensureBuiltinRulesSeed(dir?: string): "created" | "exists" | "failed" {
+  try {
+    const { store } = loadRules(dir);
+    const key = normRuleKey(BUILTIN_RULE_PM_NO_CODE);
+    if (store.rules.some((e) => normRuleKey(e.text) === key)) return "exists";
+    const r = appendRule(
+      { text: BUILTIN_RULE_PM_NO_CODE, audience: "role:pm", scope: "team", created_by: "user" },
+      dir,
+    );
+    // 满库（数值闸拒收）/坏 JSON 保护态等 → failed 不抛：种子不挤用户的规则
+    return r.ok ? "created" : "failed";
+  } catch (e) {
+    console.warn(`[team-rules] 内置铁律种子失败（忽略，不影响启动）: ${e instanceof Error ? e.message : String(e)}`);
+    return "failed";
+  }
+}

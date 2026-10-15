@@ -67,7 +67,10 @@ section("\nS0 store（内置 3 岗/用户覆盖/fail-open）");
   const all = listRoleTemplates(dir);
   const slugs = all.map((t) => t.slug).sort();
   assert(slugs.join() === "content-marketing,engineering-dev,pm", `内置 3 岗在库（${slugs.join("/")}）`);
-  assert(all.reduce((n, t) => n + t.rows.length, 0) === 15, "首批 15 行（3 岗×5 行）");
+  assert(all.reduce((n, t) => n + t.rows.length, 0) === 16, "在库 16 行（pm 6 行【#108 纪律行】+其余 2 岗×5 行）");
+  // #108 角色边界产品化：PM 模板纪律行（身份行置首——预算裁剪保序截尾，首位最后被裁）
+  const pm = getRoleTemplate("pm", dir);
+  assert(!!pm && pm.rows[0]!.includes("不直接编码") && pm.rows[0]!.includes("派发 worker"), "#108 PM 模板纪律行在场（首行：不直接编码/派发 worker）");
   assert(all.every((t) => t.rows.every((r) => r.length <= 120)), "行纪律：每行 ≤120 字");
   assert(all.every((t) => t.source === "builtin"), "内置条目 source=builtin");
   const hit = getRoleTemplate("Engineering-Dev", dir);
