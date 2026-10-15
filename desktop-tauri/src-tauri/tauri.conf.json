@@ -48,8 +48,6 @@
       "resources/bin/inject.cs": "resources/bin/inject.cs",
       "../../web-console/index.html": "web-console/index.html",
       "../../web-console/index-005.html": "web-console/index-005.html",
-      "../../web-console/preview/v8-glm.html": "web-console/preview/v8-glm.html",
-      "../../web-console/preview/v8-cdx.html": "web-console/preview/v8-cdx.html",
       "../../web-console/nacl.js": "web-console/nacl.js",
       "../../web-console/qr.js": "web-console/qr.js",
       "../../web-console/manifest.json": "web-console/manifest.json",
