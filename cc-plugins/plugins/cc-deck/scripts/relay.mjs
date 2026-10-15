@@ -48704,7 +48704,7 @@ function notifyGcRound(ts2, s) {
     console.warn(`[experience] GC \u6536\u53E3\u56DE\u8C03\u5F02\u5E38\uFF08\u5FFD\u7565\uFF09: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
-function runExperienceGc(trigger, now, dir) {
+function runExperienceGc(trigger, now, dir, mode = "auto") {
   if (!readPluginConfig().experience) return { ran: false, actions: [], reason: "\u603B\u5F00\u5173\u5173\u95ED" };
   const { store, corrupted } = loadExperience(dir);
   if (corrupted) return { ran: false, actions: [], reason: "\u574F JSON \u4FDD\u62A4\u6001" };
@@ -48748,7 +48748,7 @@ function runExperienceGc(trigger, now, dir) {
     const archiveOnly = maybeArchiveRetired(store.entries, dir);
     if (archiveOnly) {
       saveExperience(store, dir);
-      appendGcLog({ ts: now, trigger, mode: "auto", actions: [archiveOnly], snapshot_ref: now }, dir);
+      appendGcLog({ ts: now, trigger, mode, actions: [archiveOnly], snapshot_ref: now }, dir);
       gcLastRunAt = now;
       gcLastRoundHadActions = true;
       notifyGcRound(now, { ts: now, retired: 0, merged: 0, demoted: 0 });
@@ -48800,7 +48800,7 @@ function runExperienceGc(trigger, now, dir) {
     saveExperience(store, dir);
     actions.push(archiveAction);
   }
-  appendGcLog({ ts: now, trigger, mode: "auto", actions, snapshot_ref: affected.length > 0 ? now : void 0 }, dir);
+  appendGcLog({ ts: now, trigger, mode, actions, snapshot_ref: affected.length > 0 ? now : void 0 }, dir);
   gcLastRunAt = now;
   gcLastRoundHadActions = true;
   notifyGcRound(now, { ts: now, retired: neverUsedRetireIds.length, merged: retireIds.size, demoted: demoteIds.length });
@@ -55223,6 +55223,23 @@ provider=${opts.provider ?? "default"}` : void 0,
           this.auditExpAction("exp-restore", r, "global");
           if (r.ok) this.emitExperience();
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "exp-gc": {
+          const r = runExperienceGc("manual", Date.now(), void 0, "manual");
+          this.auditExpAction("exp-gc", r.ran ? { ok: true } : { ok: false, error: r.reason }, "global");
+          if (r.ran && r.actions.length > 0) this.emitExperience();
+          const n = (t) => r.actions.filter((a) => a.type === t).reduce((s, a) => s + a.target_ids.length, 0);
+          return {
+            ok: true,
+            data: {
+              ran: r.ran,
+              reason: r.reason,
+              retired: n("retire"),
+              merged: n("dedupe"),
+              demoted: n("demote"),
+              archived: n("archive")
+            }
+          };
         }
         case "exp-regroup": {
           const oldId = str2("old_id");

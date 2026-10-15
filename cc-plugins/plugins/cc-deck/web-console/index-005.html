@@ -2323,6 +2323,10 @@
     .task-flag {display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--brand-hover); font-size: var(--fs-C);}
     /* W-EXPP2 经验库 pane（团队域第五 tab）：行卡片沿用 .task-card 地基，徽章/筛选/改归组表单为域内新增 */
     .exp-filters { display: flex; gap: 8px; margin: 0 0 10px; }
+    /* W-POLISH #96 手动整理钮/反馈行：filter 行右缘对齐（margin-left auto 推到尾）；
+       反馈行 readonly-banner 同底（绿字区分普通提示） */
+    .exp-gc-btn { margin-left: auto; min-height: 28px; padding: 0 10px; }
+    .exp-gc-note { margin: 0 0 10px; color: var(--done); }
     .exp-filter { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font-size: var(--fs-E); }
     .exp-row .inspector-title strong { font-weight: 400; font-size: var(--fs-B); line-height: 1.45; }
     .exp-row p { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 6px 0 0; color: var(--dim); font-size: var(--fs-C); }
@@ -6896,7 +6900,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all" }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all" }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -6933,8 +6937,10 @@
                   };
                   return { name: member.nick || session.title || member.session_id, role: member.role || "角色未标注", nick: member.nick || "", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit, status, heartbeat: signalTone(heartbeatAt), log: signalTone(logAt), summary: session.activity?.task_summary?.text || session.activity?.activity?.text || session.action_summary || "暂无最近活动" };
                 }
-                // V8R+（Leader 1014 追加，用户拍板）：成员卡动态排列——工作中（working）优先靠前、
-                // 闲置靠后；同档内按最近活跃时间降序（越活跃越靠前）；tiebreak 保持编制序防抖动。
+                // V8R+（Leader 1014 追加，用户拍板）：成员卡动态排列——工作中（working/waiting）
+                // 优先靠前、闲置靠后；同档内按最近活跃时间降序（越活跃越靠前）；tiebreak 保持
+                // 编制序防抖动。W-POLISH #95（1016 派单口径）：WAITING 归入第 0 档（在动状态=
+                // WORKING/WAITING 双态，原实现仅 working——两端待认领单/等输入也算活跃位）。
                 // 行为逻辑非纯视觉：状态切换后顺序随每次渲染跟随变化（sortRoster 单口，
                 // 成员页 pane 与侧栏 data-team-members 共用同一排序）。
                 function sortRoster(list) {
@@ -6942,7 +6948,7 @@
                     const session = state.sessions.get(m.session_id) || {};
                     const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
                     const lastAt = Number(session.activity?.updated_at || session.updated_at || session.started_at || 0);
-                    return { work: status === "working" ? 0 : 1, lastAt };
+                    return { work: status === "working" || status === "waiting" ? 0 : 1, lastAt };
                   };
                   return list
                     .map((m, i) => ({ m, r: rank(m), i }))
@@ -7278,7 +7284,11 @@
                     // 追加⑫：状态轴 chips 化（原生 select 观感退役；范围轴动态项目多保留胶囊 select）
                     '<div class="exp-chips" role="group" aria-label="状态筛选">' +
                     ["active", "retired", "all"].map((k) => '<button type="button" class="exp-chip' + (state.expFilter.status === k ? " on" : "") + '" data-exp-chip-status="' + k + '">' + ({ active: "在役", retired: "已退役", all: "全部" })[k] + "</button>").join("") + "</div>" +
-                    '<datalist id="exp-role-list"><option value="any"></option><option value="worker"></option><option value="pm"></option><option value="reviewer"></option><option value="qa"></option></datalist></div>';
+                    // W-POLISH #96 手动整理：立即跑一轮机械档 GC（relay 定时档周跑/阈值触发之外
+                    // 的人工入口）；结果一行反馈（清了几条，均可恢复）。飞行中禁用防连点
+                    (expCanOp() ? '<button type="button" class="secondary-btn exp-gc-btn" data-exp-gc' + (state.expGcFlight ? " disabled" : "") + ">整理</button>" : "") +
+                    '<datalist id="exp-role-list"><option value="any"></option><option value="worker"></option><option value="pm"></option><option value="reviewer"></option><option value="qa"></option></datalist></div>' +
+                    (state.expGcNote ? '<div class="readonly-banner exp-gc-note">' + state.expGcNote + "</div>" : "");
                   if (!state.experiences.length) return head + banner("经验库为空——worker 回执「经验：<一句话>（#kind）」申报入库，或 CLI org exp append。");
                   const list = expFiltered();
                   if (!list.length) return head + banner("当前筛选无条目");
@@ -7995,6 +8005,27 @@
                     // 追加⑫：状态轴 chips 切换（经验/铁律；原 select change 链保留范围轴）
                     const expChip = event.target.closest("[data-exp-chip-status]");
                     if (expChip) { state.expFilter.status = expChip.dataset.expChipStatus; render(); return; }
+                    // W-POLISH #96 手动整理（立即一轮 GC）：飞行禁用 + 结果一行反馈（清了几条）
+                    const expGc = event.target.closest("[data-exp-gc]");
+                    if (expGc) {
+                      if (!expCanOp() || state.expGcFlight) return;
+                      state.expGcFlight = true;
+                      state.expGcNote = null;
+                      render();
+                      state.command("COMMAND_ORG_ACTION", { action: "exp-gc" }).then((ack) => {
+                        state.expGcFlight = false;
+                        if (ack && ack.ok) {
+                          const d = ack.data || {};
+                          if (!d.ran) state.expGcNote = "整理未执行：" + (d.reason || "未知原因");
+                          else if (!d.retired && !d.merged && !d.demoted && !d.archived) state.expGcNote = "整理完成：无低值条目可清（库已干净；自动整理每周一轮+触顶即跑）";
+                          else state.expGcNote = "整理完成：淘汰 " + (d.retired || 0) + " · 合并 " + (d.merged || 0) + " · 降权 " + (d.demoted || 0) + " · 归档 " + (d.archived || 0) + "（均可恢复/可回溯）";
+                        } else {
+                          state.expGcNote = "整理失败：" + ((ack && ack.error) || "relay 未确认");
+                        }
+                        render();
+                      });
+                      return;
+                    }
                     const ruleChip = event.target.closest("[data-rules-chip-status]");
                     if (ruleChip) { state.rulesFilter.status = ruleChip.dataset.rulesChipStatus; render(); return; }
                     const expGo = event.target.closest("[data-exp-form-go]");
@@ -9258,7 +9289,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.28";
+      const CONSOLE_VERSION = "0.7.0-test.29";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
