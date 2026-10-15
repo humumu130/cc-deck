@@ -1451,6 +1451,29 @@
     无主卡「未指派」警示色（backlog 无主是常态不标）。进行中泳道按 worker 分区排队：
     lane-subhead 分区头 + q-num 序号徽章 + running 点（dispatch 回执 join） */
     #d-team .task-card.compact { padding: 9px 10px; margin-bottom: 8px; border-radius: 11px; } /* W-LV8：v8 tcard 形态（radius 11/呼吸留白/间距 4 基数） */
+    /* W-HYBRID #114① 看板五色状态条（Codex 轨样式，1015 拍板）：卡左缘 3px 圆头条，
+       --st-* 五键词表（working 琥珀/idle 灰/blocked 蓝/error 红/closed 绿）——
+       状态映射 statusStripeOf：gate 阻塞恒 error（最高优信号覆盖 lane 色）；
+       submitted/ready_to_install=等外部动作（复核/收单）同归 blocked；closed=done */
+    :root { --st-working: var(--working); --st-idle: var(--faint); --st-blocked: var(--info); --st-error: var(--error); --st-closed: var(--done); }
+    .task-card[data-stripe] { position: relative; }
+    .task-card[data-stripe]::before {
+      content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+      border-radius: 2px; background: var(--st-idle);
+    }
+    .task-card[data-stripe="working"]::before { background: var(--st-working); }
+    .task-card[data-stripe="idle"]::before { background: var(--st-idle); }
+    .task-card[data-stripe="blocked"]::before { background: var(--st-blocked); }
+    .task-card[data-stripe="error"]::before { background: var(--st-error); }
+    .task-card[data-stripe="closed"]::before { background: var(--st-closed); }
+    /* W-HYBRID #115④ 成员卡消息钮（直达会话）：卡右下显式 💬 小钮——整卡可点之外
+       的可达性增强（触屏/键盘焦点友好），同 data-team-member-session 跳转链零新路由 */
+    .member-msg-btn {
+      position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface1);
+      color: var(--dim); font-size: 10px; line-height: 16px; cursor: pointer;
+    }
+    .member-msg-btn:hover { border-color: var(--border-strong); color: var(--brand); }
     #d-team .task-card.compact:hover { border-color: var(--dim); } /* v8 tcard:hover 同款浮起暗示 */
     #d-team .task-card.compact > strong { font-size: var(--fs-B); font-weight: 600; color: var(--text-strong); } /* v8 .ct：标题 600 撑读焦点 */
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
@@ -6941,6 +6964,9 @@
                 // 优先靠前、闲置靠后；同档内按最近活跃时间降序（越活跃越靠前）；tiebreak 保持
                 // 编制序防抖动。W-POLISH #95（1016 派单口径）：WAITING 归入第 0 档（在动状态=
                 // WORKING/WAITING 双态，原实现仅 working——两端待认领单/等输入也算活跃位）。
+                // W-HYBRID #115④（1015 拍板）：PM/Leader 恒置首（pm 档 0——指挥位用户心智；
+                // 工作档顺延 1，其余 2；同档内活跃倒序与编制序 tiebreak 不变，sortRoster WAITING
+                // 档语义完全兼容——PM 也在动时仍在首，非 PM 在动时仍前于闲置）。
                 // 行为逻辑非纯视觉：状态切换后顺序随每次渲染跟随变化（sortRoster 单口，
                 // 成员页 pane 与侧栏 data-team-members 共用同一排序）。
                 function sortRoster(list) {
@@ -6948,11 +6974,12 @@
                     const session = state.sessions.get(m.session_id) || {};
                     const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
                     const lastAt = Number(session.activity?.updated_at || session.updated_at || session.started_at || 0);
-                    return { work: status === "working" || status === "waiting" ? 0 : 1, lastAt };
+                    const isPm = /^(pm|leader)$/i.test(String(m.role || ""));
+                    return { pm: isPm ? 0 : 1, work: status === "working" || status === "waiting" ? 0 : 1, lastAt };
                   };
                   return list
                     .map((m, i) => ({ m, r: rank(m), i }))
-                    .sort((x, y) => x.r.work - y.r.work || y.r.lastAt - x.r.lastAt || x.i - y.i)
+                    .sort((x, y) => x.r.pm - y.r.pm || x.r.work - y.r.work || y.r.lastAt - x.r.lastAt || x.i - y.i)
                     .map((x) => x.m);
                 }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
@@ -6978,7 +7005,11 @@
                   // V8R 名册卡（原型 member/.mh/.mb/.ctxrow）：头行=头像+名/角色两行+模型 mono 虚线
                   // 胶囊+状态软底胶囊；引擎/源徽章收摘要下轻量行（owner 徽章保留）；五色叠角灯不变
                   const mdl = info.model && info.model !== "模型未标注" ? '<span class="member-mdl" title="模型">' + escape(info.model) + "</span>" : "";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + "</div>";
+                  // W-HYBRID #115④ 消息钮（1015 拍板·Codex 轨）：卡右下显式 💬 直达会话——复用
+                  // data-team-member-session 跳转链（委托→selectSessionCard），触屏/键盘
+                  // 可达性增强零新路由；状态标签=member-state 胶囊已落（文案贴会话语义）
+                  const msgBtn = member.session_id ? '<span class="member-msg-btn" role="button" tabindex="0" title="直达成员会话" aria-label="直达 ' + escape(info.name) + ' 的会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg>消息</span>' : "";
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -7083,7 +7114,10 @@
                   const timeline = Array.isArray(task.transitions) && task.transitions.length
                     ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
                     : "";
-                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><div class="task-title"><strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
+                  // W-HYBRID #114① 五色条映射（Codex 轨）：gate 阻塞恒 error 覆盖 lane 色；
+                  // claimed=working/backlog=idle/submitted·ready_to_install=blocked（等外部）/done=closed
+                  const stripe = task.gate ? "error" : ({ backlog: "idle", claimed: "working", submitted: "blocked", ready_to_install: "blocked", done: "closed" })[laneKey] || "idle";
+                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '" title="' + escape(fullText) + '"><div class="task-title"><strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
                 // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
