@@ -222,7 +222,12 @@ ok(shell.includes("if (cloudMode) cloudDisconnect();"), "C11 pagehide 云链卸�
   const divOpens = (zone.match(/<div\b/g) || []).length;
   const divCloses = (zone.match(/<\/div>/g) || []).length;
   ok(divOpens > 20 && divOpens === divCloses, `C13 设置域模板串 div 平衡（开 ${divOpens} = 闭 ${divCloses}；失衡即面板吞嵌空白）`);
-  ok(count(zone, 'data-settings-panel=') === 7, "C13 七面板标记齐（connections/provider/general/shortcuts/identity/extensions/about）");
+  // C13 面板标记（#117/#120 设置域 V3 同构改版后：六页导航，shortcuts 并入 general——
+  // 旧七面板独立 shortcuts 标记退役；快捷键内容以「快捷键」文案在 general 域内验）
+  for (const p of ["connections", "provider", "general", "identity", "extensions", "about"]) {
+    ok(zone.includes(`data-settings-panel="${p}"`), `C13 设置面板 ${p} 标记在（V3 同构六页）`);
+  }
+  ok(!zone.includes('data-settings-panel="shortcuts"') && zone.includes("快捷键"), "C13 shortcuts 无独立面板标记+快捷键组在（并入 general）");
 }
 
 console.log(`\n005-parity: ${pass} passed, ${fail} failed`);
