@@ -10517,6 +10517,11 @@ function parseEmployeeConfigDir(v, dataDir2) {
 function resolveDataDir() {
   return process.env.CCR_DATA_DIR ?? ("1" ? join2(homedir(), ".cc-deck", "data") : join2(process.cwd(), "data"));
 }
+function isDataDirIsolated() {
+  const v = process.env.CCR_DATA_DIR;
+  if (!v) return false;
+  return resolve(v) !== resolve(join2(homedir(), ".cc-deck", "data"));
+}
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
   const dataDir2 = resolveDataDir();
@@ -13694,8 +13699,18 @@ function evaluateCommandPermission(actorRole, capability, options = {}) {
 }
 var ORG_LEADER_TITLE = "Leader";
 var ORG_LEADER_BOOTSTRAP_PROMPT = "\uFF08Leader \u4E0A\u5C97\u5F15\u5BFC\uFF0C\u7CFB\u7EDF\u6D88\u606F\uFF09\u4F60\u5DF2\u88AB\u521B\u5EFA\u4E3A\u5E38\u9A7B\u56E2\u961F\u7684 Leader\u3002\u8BF7\u53EA\u505A\u4E00\u4EF6\u4E8B\uFF1A\u9605\u8BFB\u672C\u76EE\u5F55\u7684 CLAUDE.md\uFF08\u56E2\u961F\u8BB0\u5FC6\u4E0E\u5206\u8BCA\u901A\u9053\uFF09\uFF0C\u7136\u540E\u7528\u4E00\u4E24\u53E5\u8BDD\u786E\u8BA4\u4E0A\u5C97\u2014\u2014\u590D\u8FF0\u4F60\u7684\u4E94\u54CD\u5E94\u5206\u8BCA\uFF08\u54A8\u8BE2/\u968F\u624B\u529E/\u8F7B\u7ACB\u9879/\u6B63\u7ECF\u7ACB\u9879/\u5EFA\u8BAE\u6682\u7F13\uFF09\u5373\u53EF\u3002\u4E0D\u8981\u6267\u884C\u5176\u4ED6\u64CD\u4F5C\u3001\u4E0D\u8981\u6539\u52A8\u4EFB\u4F55\u6587\u4EF6\u3002";
+var orgDirBannerShown = false;
 function orgDir() {
-  return process.env.CCR_ORG_DIR || join12(homedir5(), ".cc-deck", "org");
+  if (process.env.CCR_ORG_DIR) return process.env.CCR_ORG_DIR;
+  if (isDataDirIsolated()) {
+    const dir = join12(process.env.CCR_DATA_DIR, "org");
+    if (!orgDirBannerShown) {
+      orgDirBannerShown = true;
+      console.log(`[org] CCR_DATA_DIR \u9694\u79BB\uFF1Aorg \u76EE\u5F55\u968F data \u76EE\u5F55\u8D70 \u2192 ${dir}\uFF08\u663E\u5F0F CCR_ORG_DIR \u53EF\u8986\u76D6\uFF09`);
+    }
+    return dir;
+  }
+  return join12(homedir5(), ".cc-deck", "org");
 }
 function ensureOrgDir(dir) {
   const d2 = dir ?? orgDir();
@@ -52312,7 +52327,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             return { command_id: cmd.command_id, ok: false, error: "\u65E0\u6548\u6A21\u578B\u540D" };
           }
           const s = this.sessions.get(sid) ?? this.sessions.get(`ext-${sid}`);
-          if (!s) return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u4E0D\u5B58\u5728" };
+          if (!s) return { command_id: cmd.command_id, ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sid}` };
           if (s.state.engine) {
             return { command_id: cmd.command_id, ok: false, error: `${s.state.engine} \u4F1A\u8BDD\u4E0D\u652F\u6301\u8FD0\u884C\u65F6\u5207\u6362\u6A21\u578B\uFF0C\u8BF7\u65B0\u5EFA\u4F1A\u8BDD\u65F6\u6307\u5B9A` };
           }
@@ -53979,14 +53994,16 @@ provider=${opts.provider ?? "default"}` : void 0,
     })() : all ? q2.splice(0) : [q2.shift()].filter((x) => !!x);
     if (q2.length === 0) this.openDispatches.delete(key);
     for (const e of es2) {
-      const taskRef = e.gid ? (() => {
+      const taskHit = e.gid ? (() => {
         try {
-          return loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id)?.id ?? "";
+          return loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
         } catch {
-          return "";
+          return void 0;
         }
-      })() : "";
-      const refReceipt = taskRef ? `[task_ref:${taskRef}] ${receipt}` : receipt;
+      })() : void 0;
+      const taskRef = taskHit?.id ?? "";
+      const titleSeg = taskHit?.text ? ` ${truncate(taskHit.text, 40)}` : "";
+      const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}` : receipt;
       appendDispatch({
         ts: Date.now(),
         id: e.id,
@@ -56041,11 +56058,13 @@ provider=${opts.provider ?? "default"}` : void 0,
         sessionId = veteran;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        if (capReuse) {
-          const receipt = truncate(`\u7F16\u5236\u5DF2\u6EE1\uFF0C\u590D\u7528 worker resume \u5931\u8D25\u4E14\u4E0D\u6269\u7F16\u964D\u7EA7: ${msg}`, 200);
+        const gCap = input.gid ? findGroup(input.gid) : null;
+        const veteranGroupAtCap = !capReuse && !!gCap && gCap.status === "active" && genericWorkerCount(gCap.headcount) >= headcountCapOf(gCap);
+        if (capReuse || veteranGroupAtCap) {
+          const receipt = truncate(`\u7F16\u5236\u5DF2\u6EE1${capReuse ? "\uFF0C\u590D\u7528 worker resume \u5931\u8D25\u4E14\u4E0D\u6269\u7F16\u964D\u7EA7" : "\uFF0C\u5728\u7F16\u719F\u624B resume \u7194\u65AD\u4E14\u4E0D\u6269\u7F16\u964D\u7EA7"}: ${msg}`, 200);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
-          return { ok: false, error: `\u7F16\u5236\u5DF2\u6EE1\uFF08\u89E6\u9876\u590D\u7528 resume \u5931\u8D25\uFF0C\u4E0D\u6269\u7F16\uFF09: ${msg}` };
+          return { ok: false, error: `\u7F16\u5236\u5DF2\u6EE1\uFF08${capReuse ? "\u89E6\u9876\u590D\u7528" : "\u5728\u7F16\u719F\u624B"} resume \u5931\u8D25\uFF0C\u4E0D\u6269\u7F16\uFF09: ${msg}` };
         }
         this.pushExternalLog(veteran, "system", `\u719F\u624B\u590D\u6D3B\u5931\u8D25\uFF0C\u672C\u5355\u964D\u7EA7\u65B0\u4F1A\u8BDD: ${msg}`);
         try {
@@ -56208,7 +56227,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     const enqueuedAt = Date.now();
     const item = { dispatch_id: dispatchId, enqueued_at: enqueuedAt, input: { ...input } };
     if (this.dispatchQueueItems.length >= 200) {
-      const receipt = truncate(`\u6D3E\u5355\u961F\u5217\u5DF2\u6EE1\uFF08200\uFF09\u2014\u2014\u7F16\u5236\u89E6\u9876\u4E14\u957F\u671F\u5168\u5FD9\uFF0C\u8BF7\u5148\u6E05\u7406\u7F16\u5236\u6216\u8C03 headcount_cap`, 200);
+      const titleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
+      const receipt = truncate(`${titleSeg}\u6D3E\u5355\u961F\u5217\u5DF2\u6EE1\uFF08200\uFF09\u2014\u2014\u7F16\u5236\u89E6\u9876\u4E14\u957F\u671F\u5168\u5FD9\uFF0C\u8BF7\u5148\u6E05\u7406\u7F16\u5236\u6216\u8C03 headcount_cap`, 200);
       appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
       this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
       return { ok: false, error: "\u6D3E\u5355\u961F\u5217\u5DF2\u6EE1\uFF08200\uFF09" };
@@ -56217,7 +56237,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!saveDispatchQueue(this.dispatchQueueItems)) {
       console.warn("[dispatch-queue] \u6392\u961F\u843D\u76D8\u5931\u8D25\uFF08\u5185\u5B58\u961F\u5217\u6709\u6548\uFF0C\u91CD\u542F\u8BE5\u5355\u4E22\u5931\uFF09");
     }
-    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
+    const queuedTitleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
     this.pushExternalLog(this.leaderId ?? "", "system", `\u6D3E\u5355\u6392\u961F\uFF1A${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}\uFF08\u7F16\u5236 ${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)} \u89E6\u9876\u4E14\u5168\u5FD9\uFF0C\u961F\u5217\u4F4D\u7F6E ${this.dispatchQueueItems.length}\uFF09`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
   }
@@ -58583,6 +58604,13 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
+      if (isDataDirIsolated() && !process.env.CCR_PROJECTS_ROOT) {
+        if (!this.orphanSkipBannerShown) {
+          this.orphanSkipBannerShown = true;
+          console.log("[orphan-scan] CCR_DATA_DIR \u9694\u79BB\uFF1A\u8DF3\u8FC7\u5168\u673A\u5B64\u513F\u626B\u63CF\uFF08\u6C99\u76D2\u4E0D\u6536\u517B\u751F\u4EA7\u4F1A\u8BDD\uFF1BCCR_PROJECTS_ROOT \u53EF\u663E\u5F0F\u6062\u590D\uFF09");
+        }
+        return;
+      }
       const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir15(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
       for (const dir of readdirSync14(root, { withFileTypes: true })) {
@@ -58724,6 +58752,8 @@ var Bridge = class _Bridge {
   // 其余（纯文本首回合 / claude -p 单发）：不收养，返回 size 供调用方观察增长——
   //   活跃会话下一轮必然变长，-p 单发不会。
   orphanProbe = /* @__PURE__ */ new Map();
+  orphanSkipBannerShown = false;
+  // W-SANDBOXFIX：隔离态跳过横幅 once（60s 轮询防刷屏）
   scanOrphanActivity(p) {
     let fd2;
     try {
