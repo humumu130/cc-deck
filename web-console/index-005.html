@@ -6759,7 +6759,7 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="head-sub" data-team-meta hidden></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="head-sub" data-team-meta hidden></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>输出</button><button>经验</button><button>铁律</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
               <!-- UIPOLISH3 件四②：底部常驻栏废除（决议内联到确认卡、刷新上 head、反馈走 toast） -->
             </section>
@@ -6965,10 +6965,10 @@
                     : "";
                   return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><div class="task-title"><strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
-                // W-DESIGNHUB 看板挂载两区（用户澄清并入）：图纸（当前组关联，匹配口径与
+                // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
-                // 分词靠子串包含兜底）+ 输出物（当前组编制成员会话聚合，会话域输出物 tab
-                // 同源数据）。清单缺（旧 relay）两区整体不渲染
+                // 分词靠子串包含兜底。清单缺（旧 relay）整区不渲染；输出物第二区已迁
+                // 独立「输出」tab（W-OUTTAB）
                 function teamDesignSection(project) {
                   const docs = state.designDocs;
                   if (!Array.isArray(docs) || !docs.length) return "";
@@ -6985,8 +6985,11 @@
                   return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>系统设计图纸 · ' + hits.length + '</span></div>'
                     + hits.map((d) => '<div class="task-card compact"><strong>' + escape(d.title) + '</strong><p>' + escape(d.group) + " · " + escape(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escape(d.path) + '">新窗打开 ↗</button></div>').join("") + "</div>";
                 }
-                function teamArtifactsSection(project) {
-                  if (!project) return "";
+                function teamOutputsMarkup(project) {
+                  // W-OUTTAB（用户 1015 拍板：输出物不放看板里）：原看板尾「团队输出物」侧块整体
+                  // 迁独立「输出」tab。数据口径零改动（当前编制成员会话 artifacts 聚合、last_at 倒序），
+                  // 侧块 8 条上限随迁移退役（专设 tab=全量面）；跳转链同源 data-team-artifact。
+                  if (!project) return banner("尚未选定团队——左侧选择团队后展示编制输出物。");
                   const sidSet = new Set(members(project).map((m) => m.session_id));
                   const rows = [];
                   for (const [sid, s] of state.sessions) {
@@ -6994,10 +6997,9 @@
                     for (const a of s.artifacts) if (a && typeof a.path === "string") rows.push({ sid, s, a });
                   }
                   rows.sort((x, y) => (Number(y.a.last_at) || 0) - (Number(x.a.last_at) || 0));
-                  if (!rows.length) return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>团队输出物</span></div><div class="inspector-copy">当前编制尚无输出物 · 会话产出实时登记。</div></div>';
-                  return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>团队输出物 · ' + rows.length + '</span></div>'
-                    + rows.slice(0, 8).map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("")
-                    + (rows.length > 8 ? '<div class="inspector-copy">共 ' + rows.length + " 件 · 全量在会话域输出物 tab。</div>" : "") + "</div>";
+                  const head = '<div class="pane-summary">团队输出物 <span class="faint">共 ' + rows.length + " 件 · 按登记时间倒序</span></div>";
+                  if (!rows.length) return head + banner("当前编制尚无输出物 · 会话产出实时登记。");
+                  return head + rows.map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("");
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
@@ -7479,8 +7481,9 @@
                   const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · watchdog 双信号（心跳+日志） · 点卡片直开成员会话</div>';
                   panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>" + crewFoot;
                   panes[3].innerHTML = activityHtml;
-                  panes[4].innerHTML = experienceMarkup(); // W-EXPP2 经验库第五 tab
-                  panes[5].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第六 tab
+                  panes[4].innerHTML = teamOutputsMarkup(project); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）
+                  panes[5].innerHTML = experienceMarkup(); // W-EXPP2 经验库第六 tab
+                  panes[6].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第七 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
                   // UIPOLISH3 件四②（2026-10-11 用户拍板）：底部常驻栏废除——决议钮下沉到每张
@@ -7500,10 +7503,10 @@
                   }).join("") : "";
                   query("[data-team-confirms]").innerHTML = count ? confirmCards : banner("暂无待确认事项");
                   panes[1].innerHTML += count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "";
-                  // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸 + 团队输出物两区。
-                  // 图纸匹配同项目域口径（name/锚点分词 ∩ tags 子串双向）；输出物按当前组
-                  // 编制成员会话聚合（会话域输出物 tab 同源数据，团队维度可见）
-                  panes[1].innerHTML += teamDesignSection(project) + teamArtifactsSection(project);
+                  // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
+                  // 口径（name/锚点分词 ∩ tags 子串双向）。输出物原第二区已迁独立「输出」tab
+                  // （W-OUTTAB，用户 1015 拍板：输出物不放看板里）
+                  panes[1].innerHTML += teamDesignSection(project);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
                   if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
@@ -7773,7 +7776,7 @@
                 function mount() {
                   if (state.mounted) return;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
-                  if (panes.length !== 6) return; // W-EXPP2+W-RULES2：四 tab → 五 tab（经验）→ 六 tab（铁律）
+                  if (panes.length !== 7) return; // W-EXPP2+W-RULES2+W-OUTTAB：四 tab → 五（经验）→ 六（铁律）→ 七（输出，活动后）
                   panes.forEach((pane) => pane.removeAttribute("data-stub"));
                   root.removeAttribute("data-stub");
                   state.mounted = true;
