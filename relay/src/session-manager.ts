@@ -2766,7 +2766,9 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "无效模型名" };
           }
           const s = this.sessions.get(sid) ?? this.sessions.get(`ext-${sid}`);
-          if (!s) return { command_id: cmd.command_id, ok: false, error: "会话不存在" };
+          // T10 残余收口：裸「会话不存在」不带 id=排查线索断绝（同文件 1969/7768 均带
+          // id——本处漏网；用户侧报错对不上任何会话卡，等同「id 残缺」的另一形态）
+          if (!s) return { command_id: cmd.command_id, ok: false, error: `会话不存在: ${sid}` };
           // #27 codex 拒收：模型接线在 ~/.codex/config.toml（relay 侧模型名是 Claude
           // 概念，注入 /model 只会被 codex 当普通文本跑一遍）
           if (s.state.engine) {
