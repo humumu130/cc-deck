@@ -58,3 +58,9 @@ docs-internal/
 *.dmg
 *.exe.sig
 docs-internal/archive/
+
+# 截图/校验产物不入库（走 artifacts 看板；产品图标白名单豁免）
+expo-app/safari*.png
+docs/architecture/*.png
+specs/*.png
+docs/mockups/*.png
