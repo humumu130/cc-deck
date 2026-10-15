@@ -1024,9 +1024,14 @@
     body[data-ui-scale="90"] { --ui-scale: 0.9; }
     body[data-ui-scale="110"] { --ui-scale: 1.1; }
     body[data-ui-scale="125"] { --ui-scale: 1.25; }
-    /* FB5 引擎置灰：未就绪引擎行整体降不透明度（状态 tag 仍可读，不再与已接引擎同权重） */
+    /* FB5 引擎置灰：未就绪引擎行整体降不透明度（状态 tag 仍可读，不再与已接引擎同权重）
+       W-SETTINGS3 批2：行式化后 v8-swrow.engine-off 同口径 */
     .settings-row.engine-off { opacity: .55; }
     .settings-row.engine-off .engine-badge { filter: saturate(.35); }
+    #d-settings .v8-swrow.engine-off { opacity: .55; }
+    #d-settings .v8-swrow.engine-off .engine-badge { filter: saturate(.35); }
+    /* W-SETTINGS3 批2：引擎徽章叠 v8-swico 格子——保胶囊形态（30×30 方格会让胶囊扭曲） */
+    #d-settings .v8-swico.engine-badge { width: auto; height: auto; border-radius: 999px; }
     .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
     .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
     /* W-CTXFIX B3 压缩前状态摘要折叠：灰调低调（存档查阅属性），details 原生折叠默认收起 */
@@ -1717,17 +1722,27 @@
     #d-team .crewfoot { margin-top: 2px; padding: 6px 0 2px; border-top: 1px dashed var(--line-soft); color: var(--dim); font-size: var(--fs-C); line-height: 1.8; text-align: center; }
     #d-team .crewfoot .lamp-key { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; }
     #d-team .crewfoot .lamp-key i { width: 7px; height: 7px; border-radius: 50%; }
-    /* ---- 活动时间线（原型 feedwrap/.fi 轻列表）---- */
+    /* ---- 活动时间线（v3 原型 feedwrap/.fi 轻列表——W-ACTIVITY3 #116）---- */
     #d-team .activity-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 9px; min-height: 0; padding: 6px 0; border-bottom: 1px dashed var(--line-soft); color: var(--card-sub); font-size: var(--fs-C); line-height: 1.5; }
     #d-team .activity-row::before { content: none; } /* 竖线时间轴退役（原型无） */
     #d-team .activity-row time { flex: 0 0 40px; min-width: 0; padding: 1px 0 0; color: var(--faint); font: var(--fs-C) var(--mono); font-variant-numeric: tabular-nums; }
-    #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--dim); font: var(--fs-C)/1.5 var(--mono); }
-    #d-team .activity-row .act-glyph.ok { color: var(--done); }
-    #d-team .activity-row .act-glyph.bad { color: var(--error); }
+    /* 五色词表 glyph/状态词（1014 定版灯 token 全产品唯一事实源；派单=品牌橙 #E08A63 系——
+       dispatched 橙/running 工作琥珀/done 空闲绿/failed 出错红/未知兜底=关闭灰） */
+    #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--st-closed); font: var(--fs-C)/1.5 var(--mono); }
+    #d-team .activity-row .act-st { font-weight: 600; color: var(--st-closed); }
+    #d-team .activity-row.activity-dispatched .act-glyph, #d-team .activity-row.activity-dispatched .act-st { color: var(--brand); }
+    #d-team .activity-row.activity-running .act-glyph, #d-team .activity-row.activity-running .act-st { color: var(--st-working); }
+    #d-team .activity-row.activity-done .act-glyph, #d-team .activity-row.activity-done .act-st { color: var(--st-idle); }
+    #d-team .activity-row.activity-failed .act-glyph, #d-team .activity-row.activity-failed .act-st { color: var(--st-error); }
     #d-team .activity-row > span { flex: 1; min-width: 0; }
     #d-team .activity-row b { color: var(--text); font-weight: 600; }
-    /* 活动筛选 chips（原型 fchips） */
-    #d-team .feed-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 4px 0 10px; }
+    #d-team .activity-row .act-note { color: var(--dim); }
+    /* TODO(W-ACTIVITY3 拍板项)：密度双档（标准/紧凑）——v3 原型活动区无明示开关
+       （1373/1618「密度·标准」为左列列表、1917 为全局会话列表设置，均非活动面），
+       留待用户拍板后实装，不抢跑 */
+    /* 活动筛选 chips（v3 原型 fchips；筛选语义=Codex 轨拍板：类型/源双轴） */
+    #d-team .feed-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 4px 0 10px; }
+    #d-team .feed-chips .feed-axis { color: var(--faint); font-size: var(--fs-E); }
     #d-team .feed-chips .fchip { padding: 4px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); font-size: var(--fs-C); cursor: pointer; transition: color .15s ease, border-color .15s ease, background-color .15s ease; }
     #d-team .feed-chips .fchip:hover { color: var(--text); border-color: var(--border-strong); }
     #d-team .feed-chips .fchip.on { color: var(--brand-hover); border-color: var(--brand-line, color-mix(in srgb, var(--brand) 42%, transparent)); background: var(--brand-soft); font-weight: 600; }
@@ -1911,18 +1926,19 @@
     /* W-V8R 批6（连接与设备 v8 化，v8 setpage-conn 形态·现网 token 映射）：sethead 页头+
        setcard 三卡（relay/已配设备/云桥）+relaystat 主行+swrow 设备行+prbtn 小钮+escape 尾注 */
     .v8-sethead { margin: 2px 2px 14px; }
-    .v8-sethead .t { color: var(--text-strong); font-size: 15px; font-weight: 700; }
-    .v8-sethead .s { margin-top: 2px; color: var(--faint); font-size: var(--fs-C); }
-    .v8-setcard { margin: 0 0 12px; padding: 12px 14px 10px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
-    .v8-setcard > h5 { margin: 0 0 8px; color: var(--dim); font-size: var(--fs-C); font-weight: 600; letter-spacing: .3px; }
+    .v8-sethead .t { color: var(--text-strong); font-size: 15.5px; font-weight: 600; }
+    .v8-sethead .s { margin-top: 4px; color: var(--faint); font-size: var(--fs-C); }
+    .v8-setcard { margin: 0 0 12px; padding: 3px 14px 7px; border: 1px solid var(--line-soft); border-radius: 13px; background: var(--surface2); }
+    .v8-setcard > h5 { margin: 6px 0 2px; color: var(--dim); font-size: var(--fs-C); font-weight: 600; letter-spacing: .3px; }
     .v8-setcard .settings-list { gap: 4px; }
     .v8-relaystat { display: flex; align-items: flex-start; gap: 10px; }
     .v8-relaystat .st { color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 600; }
     .v8-relaystat .meta, .v8-swd { margin-top: 1px; color: var(--faint); font-size: var(--fs-C); }
+    .v8-relaystat .meta { font-family: var(--mono, ui-monospace, monospace); } /* W-SETTINGS3 批2（视觉清单）：端口/路径等值类文本回 V3 mono 码值语言 */
     .v8-rdot2 { flex: none; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--done); box-shadow: 0 0 8px color-mix(in srgb, var(--done) 45%, transparent); }
     .v8-rdot2.off { background: var(--working); box-shadow: 0 0 8px color-mix(in srgb, var(--working) 45%, transparent); }
     .v8-relaystat .row-share { margin-left: auto; flex: none; }
-    .v8-swrow { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--line-soft); }
+    .v8-swrow { display: flex; align-items: center; gap: 10px; padding: var(--setrow-py, 8px) 2px; border-bottom: 1px dashed var(--line-soft); }
     .v8-setcard .v8-swrow:last-of-type { border-bottom: 0; }
     .v8-swico { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface1); color: var(--info); font-size: 13px; }
     .v8-swtxt { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-A-item); font-weight: 550; }
@@ -2032,7 +2048,7 @@
     #m-detail .session-state-dock { padding: 8px 12px; }
     #m-detail .session-state-activity { grid-column: 1 / -1; justify-content: flex-start; margin-left: 0; }
     #m-detail .session-state-operation { max-width: 46%; }
-    .toast {position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: var(--fs-B); word-break: break-all;} /* T10：长 id（会话不存在类报错带 36 位 UUID）强制折行完整显示——窄屏 12 字符 hex 段不 break 时溢出/被目视截断成「残缺 id」误导排查 */
+    .toast {position: absolute; right: 22px; bottom: 22px; z-index: 70; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: var(--fs-B); word-break: break-all;} /* T10：长 id（会话不存在类报错带 36 位 UUID）强制折行完整显示——窄屏 12 字符 hex 段不 break 时溢出/被目视截断成「残缺 id」误导排查；#119 z 20→70：瞬时反馈压通知弹窗遮罩(60)等业务浮层，仍低于更新弹窗 120 */
     .mobile-frame .toast { right: 12px; bottom: 74px; max-width: calc(100% - 24px); }
     .toast.show { opacity: 1; transform: none; }
     /* #102 批 B 引擎登录引导卡（把饭喂到嘴里）：二维码直接渲染在卡里，扫码即登录 */
@@ -2271,7 +2287,7 @@
     .density-control { display: inline-flex; gap: 2px; padding: 2px; margin-left: auto; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); }
     .density-control button {padding: 4px 11px; border: 0; border-radius: 999px; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: background .16s ease, color .16s ease;}
     .density-control button:hover { color: var(--text-strong); }
-    .density-control button.active { background: var(--brand); color: #fff; box-shadow: 0 1px 4px rgba(1,8,16,.3); }
+    .density-control button.active { background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; box-shadow: none; } /* W-SETTINGS3 批2：分段选中换 V3 seg token（brand-soft 淡底+橙字 600，原 brand 实底白字退役） */
     /* #160 空闲置灰时长输入（设置·通用与快捷键）：数字输入 + 单位小字，同 density-control 量级 */
     .idle-dim-field { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
     .idle-dim-field input {width: 62px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface1); color: var(--text-strong); font-size: var(--fs-E); text-align: right;}
@@ -2351,13 +2367,36 @@
     .demo-error-actions button {padding: 4px 7px; border: 1px solid var(--danger-line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: var(--fs-E);}
     .demo-error-actions button:hover { border-color: var(--error); }
     @keyframes demo-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
-    /* 件七：设置导航卡贴合+分割线（参照会话面板卡语言）——高度调小一档（内容高+9px×2，
-       原 min-height:57 时代 76px）；block-size:auto 挣脱 :1516 的 density 固定高（ID 特化
-       优先级高于本处类选择器，不显式覆盖会钉住卡高） */
-    .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; border-radius: 0; margin-bottom: 0; padding: 9px 12px; block-size: auto; transition: background .06s linear; }
-    .settings-nav .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+    /* 件七：设置导航卡——W-SETTINGS3 批1 换 V3 snav 语言（v8-ui-interactive-v3 setnav）：
+       圆角 9 悬浮淡底；选中=brand-soft 底+橙字 600+左缘 2.5px 品牌条（取代旧分隔线+3px 内阴影）；
+       block-size:auto 挣脱 :1516 的 density 固定高（ID 特化优先级高于本处类选择器） */
+    .settings-nav .queue-card { position: relative; border-color: transparent; background: transparent; box-shadow: none; border-radius: 9px; margin-bottom: 2px; padding: 8px 11px; block-size: auto; transition: color .15s ease, background-color .15s ease; }
+    .settings-nav .queue-card + .queue-card { border-top: 0; }
     .settings-nav .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
-    .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--brand); }
+    .settings-nav .queue-card.selected { border-color: transparent; background: color-mix(in srgb, var(--brand) 16%, transparent); box-shadow: none; } /* 视觉清单：选中态整块暖琥珀填充（原 brand-soft 极淡近中性，高亮重量不足） */
+    .settings-nav .queue-card.selected::before { content: ""; position: absolute; left: 2px; top: 8px; bottom: 8px; width: 2.5px; border-radius: 2px; background: var(--brand); }
+    .settings-nav .queue-card.selected .row strong { color: var(--brand-strong); font-weight: 600; }
+    .settings-nav .queue-card .row .avatar { background: transparent; border-color: transparent; color: var(--dim); }
+    .settings-nav .queue-card.selected .row .avatar { color: var(--brand-strong); }
+    /* W-SETTINGS3 批2：去重复页头——面板 sethead 是唯一标题（V3 无域头重复标题；activateSettings
+       仍写 h2 供无障碍/标题链，视觉上隐藏） */
+    #d-settings .workspace-title-row h2 { display: none; }
+    /* W-SETTINGS3 批2（视觉对照清单）：设置域按钮语言回 V3 描边幽灵系——橙实心收敛到
+       「检查更新」单一最高权重主操作（about hero 主钮），卡内操作一律描边 */
+    #d-settings .primary-btn { background: transparent; border: 1px solid color-mix(in srgb, var(--brand) 45%, transparent); color: var(--brand-strong); font-weight: 600; }
+    #d-settings .primary-btn:hover { background: var(--brand-soft); }
+    #d-settings .about-hero .primary-btn { background: var(--brand); border-color: var(--brand); color: #fff; }
+    /* W-SETTINGS3 批2（视觉清单）：扩展页图标容器上色+关于 hero 卡 */
+    .v8-swico.ext-ico { background: color-mix(in srgb, var(--brand) 14%, transparent); border-color: color-mix(in srgb, var(--brand) 35%, transparent); color: var(--brand-strong); }
+    .about-hero { text-align: center; padding: 22px 14px 16px; }
+    .about-hero .logo { font-size: 28px; font-weight: 800; letter-spacing: 1px; color: var(--text-strong); }
+    .about-hero .logo b { color: var(--brand); }
+    .about-hero .ver { margin-top: 8px; font-size: var(--fs-B); color: var(--dim); }
+    /* W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（父列 flex 撑满才吸底） */
+    .queue.settings-nav { display: flex; flex-direction: column; }
+    .settings-nav-foot { margin-top: auto; padding: 10px 8px 2px; font-size: var(--fs-micro); color: var(--faint); line-height: 1.7; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+    /* W-SETTINGS3 批1：快捷键行内键位码（V3 prcode 语言，键位当前值随行展示） */
+    .kbd-inline-chip { display: inline-block; margin-left: 7px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface1); color: var(--dim); font-family: var(--mono, ui-monospace, monospace); font-size: var(--fs-micro); white-space: nowrap; }
     /* #df2-E 面板底部动作右下角：panel 尾按钮右靠 + workspace-footer 全线右对齐（composer 场景 flex:1 不受影响） */
     .settings-panel > button.primary-btn, .settings-panel > button.secondary-btn, .settings-panel .settings-connection-tabs > button.primary-btn { display: block; margin-left: auto; }
     .workspace-footer { justify-content: flex-end; }
@@ -2698,22 +2737,49 @@
       background: var(--surface2); /* t25fix #8：浅色主题同名册卡渐变同步退役 */
       border-color: var(--line);
     }
-    #d-notify .notifpanel {
-      background: var(--surface1);
-      border-color: var(--line);
-      border-radius: 16px;
-      padding: 14px;
+    /* ===== #119 通知 V3 弹窗形态（基准 docs/mockups/v8-ui-interactive-v3.html 通知区）=====
+       rail 🔔 锚定浮层+遮罩（不再切域）；三级分组 ndot r/y/n = 需你行动/注意/动态；
+       五色词表对齐 V3：红 --error·琥珀 --working·中性 --faint·品牌橙 --brand（act 钮）；
+       已读（动态组）.read 降噪；标题不硬裁自然换行（W-NQA F5 防复发）。 */
+    #d-notify { position: absolute; inset: 0; z-index: 60; display: none; } /* 挂 desktop-frame 定位上下文（.desktop-shell 无定位，最近 positioned 祖先=desktop-frame） */
+    #d-notify.on { display: block; }
+    .notifmask { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg0) 68%, transparent); } /* V3 口径：锚定浮层 scrim 取中浓度（surface-veil .9 过重——背景全不可辨），bg0 深浅自适应 */
+    .notifpanel {
+      position: absolute; left: 64px; bottom: 56px; width: min(400px, calc(100% - 84px)); max-height: 70%;
+      overflow-y: auto; background: var(--surface1); border: 1px solid var(--line);
+      border-radius: 14px; box-shadow: var(--shadow); padding: 12px 13px; outline: none;
     }
-    #d-notify .nrow {
-      border-radius: 12px;
-      background: var(--surface2);
-      border-color: var(--line);
-      padding: 10px;
-    }
-    #d-notify .nrow.alert {
-      background: var(--danger-bg);
-      border-color: var(--danger-line);
-    }
+    .notifpanel::-webkit-scrollbar { width: 4px; }
+    .notifpanel::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+    .notifpanel h5 { font-size: var(--fs-B); font-weight: 650; color: var(--text-strong); display: flex; align-items: center; gap: 8px; }
+    .notifpanel h5 .nsub { font-size: var(--fs-C); color: var(--faint); font-weight: 500; white-space: nowrap; }
+    .notifpanel h5 .clr { margin-left: auto; font-size: var(--fs-C); color: var(--faint); font-weight: 500; cursor: pointer; border: 0; background: none; padding: 2px 0; font-family: inherit; white-space: nowrap; }
+    .notifpanel h5 .clr:hover { color: var(--dim); }
+    .notifpanel h5 .n-x { flex: none; margin-left: 2px; }
+    .ngrp { font-size: var(--fs-C); color: var(--dim); font-weight: 600; margin: 10px 0 3px; letter-spacing: .3px; display: flex; align-items: center; gap: 6px; }
+    .ngrp .cnt { margin-left: auto; color: var(--faint); font: var(--fs-C) var(--mono); }
+    .ndot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .ndot.r { background: var(--error); box-shadow: 0 0 0 3px var(--danger-bg); }
+    .ndot.y { background: var(--working); box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 15%, transparent); }
+    .ndot.n { background: var(--faint); box-shadow: 0 0 0 3px var(--hover); }
+    .nrow { display: flex; gap: 9px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 10px; margin: 5px 0; font-size: var(--fs-B); background: var(--surface2); align-items: flex-start; }
+    .nrow.alert { border-color: var(--danger-line); background: var(--danger-bg); }
+    .nrow.warn { border-color: color-mix(in srgb, var(--working) 42%, transparent); background: color-mix(in srgb, var(--working) 7%, var(--surface2)); } /* 视觉审查 #2：注意组黄卡补淡黄底——红卡/灰卡之间层级感不断档（对齐 V3 warn 行卡底色语言） */
+    .nrow .ic { flex: none; margin-top: 1px; display: inline-flex; color: var(--dim); }
+    .nrow .ic .icon-inline { width: 15px; height: 15px; }
+    .nrow.alert .ic { color: var(--error); }
+    .nrow.warn .ic { color: var(--working); }
+    .nrow .t { min-width: 0; flex: 1; }
+    .nrow .t b { font-weight: 600; color: var(--text-strong); overflow-wrap: anywhere; } /* F5：标题自然换行不硬裁 */
+    .nrow .t .s { color: var(--faint); font-size: var(--fs-C); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nrow .act { flex: none; font-size: var(--fs-C); color: var(--brand); border: 1px solid color-mix(in srgb, var(--brand) 45%, transparent); border-radius: 7px; padding: 2px 9px; margin-top: 2px; cursor: pointer; background: transparent; font-family: inherit; transition: background .15s ease; white-space: nowrap; }
+    .nrow .act:hover, .nrow .act:focus-visible { background: var(--brand-soft); }
+    .nrow .x { flex: none; border: 0; background: none; font-size: 12px; line-height: 1.4; color: var(--faint); padding: 0 2px; margin-top: 2px; cursor: pointer; }
+    .nrow .x:hover, .nrow .x:focus-visible { color: var(--dim); }
+    .nrow .x.ghost { opacity: 0; }
+    .nrow:hover .x.ghost, .nrow .x.ghost:focus-visible { opacity: 1; }
+    .nrow.read { opacity: .58; } /* 已读（动态/历史）视觉降噪 */
+    .nrow.read:hover { opacity: .85; }
     #d-settings .settings-panel {
       background: transparent; /* t25fix #13（验收 T11）：外层大边框退役——面板内子卡（relay 状态卡/设备卡）自带描边层次，外再套一圈即用户吐槽的「蒙加了个大边框」；对齐深色主题无边框基线 */
       border: 0;
@@ -2721,9 +2787,17 @@
       padding: 4px 0 10px;
     }
     #d-settings .settings-panel .settings-row {
-      min-height: 50px;
-      padding: 10px 0;
+      min-height: var(--setrow-minh, 50px);
+      padding: var(--setrow-py, 10px) 0;
     }
+    /* W-SETTINGS3 批3：设置域密度双档（V3 通用页「列表密度」seg 语言，作用于设置页自身
+       行距与留白）——comfortable=呼吸感默认；compact=一屏多看几行。变量挂 #d-settings，
+       导航/页头/分组卡留白随档联动 */
+    #d-settings[data-settings-density="compact"] { --setrow-py: 4px; --setrow-minh: 36px; --setcard-gap: 8px; --setcard-py: 8px; }
+    #d-settings[data-settings-density="compact"] .v8-setcard { padding: var(--setcard-py, 12px) 14px calc(var(--setcard-py, 12px) - 2px); margin-bottom: var(--setcard-gap, 12px); }
+    #d-settings[data-settings-density="compact"] .v8-swd { margin-top: 0; line-height: 1.4; }
+    #d-settings[data-settings-density="compact"] .v8-setcard > h5 { padding-top: 4px; }
+    #d-settings[data-settings-density="compact"] .toggle-switch { transform: scale(.92); }
     .pair-pop {
       width: min(420px, calc(100vw - 40px));
       border: 1px solid var(--line);
@@ -2838,6 +2912,7 @@
                   engineCatalog: null, models: [], projects: [],
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
+                  tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
@@ -3285,7 +3360,7 @@
                       break;
                     }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
-                    case "SESSION_CREATED": onSessionCreated(sid, m.payload); break;
+                    case "SESSION_CREATED": onSessionCreated(sid, m.payload, evSource); break; // #110：帧通道随行（建卡打源标的锚）
                     case "SESSION_UPDATED": onSessionUpdated(sid, m.payload); break;
                     case "SESSION_HEARTBEAT": onHeartbeat(sid, m.payload); break;
                     case "SESSION_WAITING": onWaiting(sid, m.payload); break;
@@ -3372,9 +3447,18 @@
                   S.projects = [...byId.values()];
                   renderMyList();
                 }
-                function onSessionCreated(sid, p) {
+                function onSessionCreated(sid, p, evSource) {
                   if (!sid || S.sessions.has(sid)) return;
-                  S.sessions.set(sid, Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, p || {}));
+                  // #110 实时建卡打源标：SNAPSHOT merge（t25fix #5）与 B4 桥（T10 relay_channel）
+                  // 都打标，唯 B2 实时 SESSION_CREATED 漏打——聚合视角下选「远程」创建的会话卡
+                  // 回落显示名（会被后到的云快照覆写成云名）→「创建到选了远程/本机、卡/详情却挂
+                  // 另一源」=用户实锤的选源不生效目视假象（会话实际落点正确，是标签说谎）。
+                  // 源名一律走 __ccDeck005SourceState 走查钩子取链上真值（本 IIFE 跨 script 块
+                  // 不可直引 ctx/cloudCtx——直引即 ReferenceError 且被总线 try/catch 静默吞），
+                  // 与 SNAPSHOT merge 同锚 relay_name；p 将来若携带 relay_source 以 p 为准。
+                  const srcState = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                  const srcName = evSource === "cloud" ? String((srcState && srcState.cloudRelayName) || "") : String((srcState && srcState.lanRelayName) || S.relayName || "");
+                  S.sessions.set(sid, Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, srcName ? { relay_source: srcName } : {}, p || {}));
                   renderMyList();
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
@@ -3925,9 +4009,15 @@
                     mountTwoPane(ph);
                     return;
                   }
-                  const sessions = [...S.sessions.values()].filter((x) => filterDef.test(x) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // 1015 置顶常驻（用户需求）：筛选档不隐藏置顶卡——pinned 豁免 filterDef.test 恒进
+                  // 渲染集钉最顶（不因「进行中/已完成」等状态档不匹配而被筛掉）；搜索不豁免——
+                  // sessionSearchTest 是用户显式找词，置顶卡不匹配搜索词照隐藏；slim 收起不豁免——
+                  // slimIsHidden 本就置顶例外（:3709）。主过滤与 filterHidden 记账共用 pinnedKeep
+                  // 谓词，记账恒等于真实隐藏集（mo 完整性检查口径不漂）。
+                  const pinnedKeep = (x) => x.pinned === true;
+                  const sessions = [...S.sessions.values()].filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
                   // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径
-                  const filterHidden = [...S.sessions.values()].filter((x) => !(filterDef.test(x) && sessionSearchTest(x))).map((x) => x.session_id);
+                  const filterHidden = [...S.sessions.values()].filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
                   // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
                   const slimHiddenIds = [...S.sessions.values()].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
@@ -6632,6 +6722,31 @@
                   if (UI.ctxMeter) {
                     UI.ctxMeter.addEventListener("click", () => { if (UI.tabs[3]) UI.tabs[3].click(); });
                   }
+                  // #124 tab 往返滚动保持：四 pane 共享 #session-body 滚动容器，切到任务/输出物/更多
+                  // 时对话 pane display:none → scrollHeight 骤缩 → scrollTop 被 clamp（用户实锤「切回
+                  // 跳到很上面」），clamp 派发的 scroll 事件还会把残值记回 S.scrollKeep。修复=离开对话
+                  // tab 瞬间（捕获阶段，先于地基 wireSegmentTabs 冒泡 activate，display 未切、值未被
+                  // clamp）记 memo 真值；切回后 activate 已完成（setTimeout 0），恢复位置——贴底态恢复
+                  // 贴底。不碰 onScroll 记账/autoScroll/renderTasks：新消息贴底链与任务列表零回归。
+                  section.querySelector(".segment-bar")?.addEventListener("click", (ev) => {
+                    const btn = ev.target.closest("button");
+                    const idx = btn ? UI.tabs.indexOf(btn) : -1;
+                    if (idx < 0) return;
+                    if (idx !== 0 && UI.tabs[0]?.classList.contains("active")) { // 离开对话 tab：此刻 DOM 未变，scrollTop 是真值
+                      if (S.selected) {
+                        const el = UI.body;
+                        S.tabChatMemo = { sid: S.selected, top: el.scrollTop, bottom: el.scrollHeight - el.scrollTop - el.clientHeight < 120 };
+                      }
+                    } else if (idx === 0) { // 回到对话 tab（含重复点击，幂等）：activate 完成后恢复
+                      setTimeout(() => {
+                        const memo = S.tabChatMemo;
+                        S.tabChatMemo = null;
+                        if (!memo || memo.sid !== S.selected) return; // 期间换过会话：不恢复（选中链自会定位）
+                        const el = UI.body;
+                        el.scrollTop = memo.bottom ? el.scrollHeight : Math.max(0, Math.min(memo.top, el.scrollHeight - el.clientHeight));
+                      }, 0);
+                    }
+                  }, true); // 捕获阶段：先于 target/冒泡上的 activate
                   // UIPOLISH2 件九：会话列表搜索接线（原死控件激活）——150ms 防抖后重渲列表；
                   // 空态/隐藏记账（_filterHiddenIds）走 renderMyList 内的合并谓词
                   if (UI.listTools) {
@@ -6753,7 +6868,7 @@
           <section class="desktop-screen" id="d-team" data-stub="B3">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action" data-team-count>0</span></h2><button class="icon-btn" type="button" data-team-new-session title="新建团队" aria-label="新建团队">＋</button></div><div data-team-projects><div class="readonly-banner">团队数据通道尚未接入</div></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="head-sub" data-team-meta hidden></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>经验</button><button>铁律</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot" data-team-status-dot></i><h2 data-team-title>团队</h2><span class="source-badge" data-team-source>当前来源</span><button type="button" class="head-refresh" data-team-refresh title="刷新详情" aria-label="刷新团队详情"><svg class="icon-inline" aria-hidden="true"><use href="#icon-refresh"></use></svg></button></div><div class="head-sub" data-team-meta hidden></div><div class="segment-bar"><button>对话</button><button class="active">看板</button><button>成员</button><button>活动</button><button>输出</button><button>经验</button><button>铁律</button></div></header>
               <div class="workspace-body"><div class="readonly-banner">团队数据通道尚未接入</div><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待审查</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>待收单</span><span>0</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>0</span></div></div></div></div>
               <!-- UIPOLISH3 件四②：底部常驻栏废除（决议内联到确认卡、刷新上 head、反馈走 toast） -->
             </section>
@@ -6776,7 +6891,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all" }; // feedFilter：V8R 活动页状态筛选（纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all" }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -6959,10 +7074,10 @@
                     : "";
                   return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" title="' + escape(fullText) + '"><div class="task-title"><strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div></div>";
                 }
-                // W-DESIGNHUB 看板挂载两区（用户澄清并入）：图纸（当前组关联，匹配口径与
+                // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
-                // 分词靠子串包含兜底）+ 输出物（当前组编制成员会话聚合，会话域输出物 tab
-                // 同源数据）。清单缺（旧 relay）两区整体不渲染
+                // 分词靠子串包含兜底。清单缺（旧 relay）整区不渲染；输出物第二区已迁
+                // 独立「输出」tab（W-OUTTAB）
                 function teamDesignSection(project) {
                   const docs = state.designDocs;
                   if (!Array.isArray(docs) || !docs.length) return "";
@@ -6979,8 +7094,11 @@
                   return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>系统设计图纸 · ' + hits.length + '</span></div>'
                     + hits.map((d) => '<div class="task-card compact"><strong>' + escape(d.title) + '</strong><p>' + escape(d.group) + " · " + escape(d.path) + '</p><button class="mini-list-link" type="button" data-design-doc="' + escape(d.path) + '">新窗打开 ↗</button></div>').join("") + "</div>";
                 }
-                function teamArtifactsSection(project) {
-                  if (!project) return "";
+                function teamOutputsMarkup(project) {
+                  // W-OUTTAB（用户 1015 拍板：输出物不放看板里）：原看板尾「团队输出物」侧块整体
+                  // 迁独立「输出」tab。数据口径零改动（当前编制成员会话 artifacts 聚合、last_at 倒序），
+                  // 侧块 8 条上限随迁移退役（专设 tab=全量面）；跳转链同源 data-team-artifact。
+                  if (!project) return banner("尚未选定团队——左侧选择团队后展示编制输出物。");
                   const sidSet = new Set(members(project).map((m) => m.session_id));
                   const rows = [];
                   for (const [sid, s] of state.sessions) {
@@ -6988,10 +7106,9 @@
                     for (const a of s.artifacts) if (a && typeof a.path === "string") rows.push({ sid, s, a });
                   }
                   rows.sort((x, y) => (Number(y.a.last_at) || 0) - (Number(x.a.last_at) || 0));
-                  if (!rows.length) return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>团队输出物</span></div><div class="inspector-copy">当前编制尚无输出物 · 会话产出实时登记。</div></div>';
-                  return '<div class="inspector-block board-side-list"><div class="inspector-title"><span>团队输出物 · ' + rows.length + '</span></div>'
-                    + rows.slice(0, 8).map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("")
-                    + (rows.length > 8 ? '<div class="inspector-copy">共 ' + rows.length + " 件 · 全量在会话域输出物 tab。</div>" : "") + "</div>";
+                  const head = '<div class="pane-summary">团队输出物 <span class="faint">共 ' + rows.length + " 件 · 按登记时间倒序</span></div>";
+                  if (!rows.length) return head + banner("当前编制尚无输出物 · 会话产出实时登记。");
+                  return head + rows.map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("");
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
@@ -7030,25 +7147,48 @@
                   const boardFoot = '<div class="boardfoot">板面实时同步 · 断线自动补齐 · 卡面 ✓✗○ = AI 自验进度，最终验收以确认卡为准 · 新建任务走来源会话派单</div>';
                   return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + boardOverview + '<div class="board">' + columns + "</div>" + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
                 }
-                function activityMarkup(project) {
+                function activityMarkup(project, opts = {}) {
+                  // W-ACTIVITY3（#116，1015 拍板）：视觉基准=v3 原型活动页（feedwrap/.fi 轻列表
+                  // ——行=时间+glyph+状态词+标题，dashed 分隔，去卡片墙重徽章）；筛选语义=Codex
+                  // 轨拍板（类型/源双轴——团队/项目轴在 per-team pane 内退化恒单值不单列）。
+                  // 数据源沿用派单回执（dispatch-log 收敛末行）零 relay 改动：engine 为 M12-5
+                  // 可选键（缺省=Claude 不写键），receipt 仅终态行携带。
+                  // opts.compact=右侧栏「最近派单回执」复用行渲染（v3 dispfeed 同形态：
+                  // 无头无 chips 纯行流）。
                   const receipts = state.receipts.get(project?.id);
+                  const compact = Boolean(opts.compact);
                   if (!receipts) return banner("尚未取得派单回执，请加载项目详情。");
-                  if (!receipts.length) return banner("暂无派单回执");
+                  const head = '<div class="pane-summary">活动 <span class="faint">团队时间线 · 共 ' + receipts.length + " 条</span></div>";
+                  if (!receipts.length) return (compact ? "" : head) + banner("暂无派单回执");
                   const statuses = new Map([["dispatched", "已派单"], ["running", "运行中"], ["done", "完成"], ["failed", "失败"]]);
-                  // W-V8 批4b 活动时间线 v8 化：①倒序（最新在上——v8 时间线倒序口径）②类型
-                  // glyph 家族（▶ 派单 / ● 运行 / ✓ 完成 / ⚠ 失败——v8 事件 glyph 语言）
+                  // glyph 家族（v3 事件 glyph 语言）：▶ 派单 / ● 运行 / ✓ 完成 / ⚠ 失败；
+                  // 色随 .activity-* 父类走五色词表（见 CSS 块注释）
                   const glyphs = new Map([["dispatched", "▶"], ["running", "●"], ["done", "✓"], ["failed", "⚠"]]);
-                  const glyphTone = new Map([["dispatched", "info"], ["running", "info"], ["done", "ok"], ["failed", "bad"]]);
-                  // V8R：筛选 chips（原型 fchips）——状态轴纯前端过滤（全部/四态，零链路改动）
-                  const counts = new Map([["all", receipts.length]]);
-                  for (const r of receipts) counts.set(r.status, (counts.get(r.status) || 0) + 1);
-                  const chips = ['<div class="feed-chips" role="group" aria-label="活动状态筛选">']
-                    .concat([["all", "全部"], ["dispatched", "已派单"], ["running", "运行中"], ["done", "完成"], ["failed", "失败"]]
-                      .filter(([key]) => key === "all" || counts.get(key))
-                      .map(([key, label]) => '<button type="button" class="fchip' + (state.feedFilter === key ? " on" : "") + '" data-feed-chip="' + key + '">' + label + ' <b>' + (counts.get(key) || 0) + "</b></button>"))
-                    .concat(["</div>"]).join("");
+                  // 源轴=引擎（entry.engine 缺省回会话引擎，再缺省 claude——与派单解析链缺省一致）
+                  const engineOf = (entry) => entry.engine || state.sessions.get(entry.session_id)?.engine || "claude";
+                  const srcCounts = new Map();
+                  for (const r of receipts) { const e = engineOf(r); srcCounts.set(e, (srcCounts.get(e) || 0) + 1); }
+                  const stCounts = new Map();
+                  for (const r of receipts) stCounts.set(r.status, (stCounts.get(r.status) || 0) + 1);
+                  const chip = (axis, key, label, n, on) => '<button type="button" class="fchip' + (on ? " on" : "") + '" data-feed-' + axis + '="' + escape(key) + '">' + escape(label) + " <b>" + n + "</b></button>";
+                  // 防御：已选源在本组回执中不存在（换组后引擎集变化）→ 视同 all，不空转
+                  const srcLive = state.feedSrc === "all" || srcCounts.has(state.feedSrc);
+                  const chips = compact ? "" :
+                    '<div class="feed-chips" role="group" aria-label="活动类型筛选"><span class="feed-axis">类型</span>'
+                    + [["all", "全部", receipts.length], ["dispatched", "已派单", 0], ["running", "运行中", 0], ["done", "完成", 0], ["failed", "失败", 0]]
+                      .map(([key, label]) => [key, label, key === "all" ? receipts.length : (stCounts.get(key) || 0)])
+                      .filter(([key, , n]) => key === "all" || n)
+                      .map(([key, label, n]) => chip("chip", key, label, n, state.feedFilter === key))
+                      .join("")
+                    + "</div>"
+                    + '<div class="feed-chips" role="group" aria-label="活动来源筛选"><span class="feed-axis">源</span>'
+                    + [["all", "全部源", receipts.length], ...[...srcCounts.entries()].sort((a, b) => b[1] - a[1]).map(([e, n]) => [e, (engines.get(e)?.[0] || e), n])]
+                      .filter(([key, , n]) => key === "all" || n)
+                      .map(([key, label, n]) => chip("src", key, label, n, state.feedSrc === key || (key === "all" && !srcLive)))
+                      .join("")
+                    + "</div>";
                   const ordered = receipts.slice()
-                    .filter((entry) => state.feedFilter === "all" || entry.status === state.feedFilter)
+                    .filter((entry) => (state.feedFilter === "all" || entry.status === state.feedFilter) && (!srcLive || state.feedSrc === "all" || engineOf(entry) === state.feedSrc))
                     .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
                   const rows = ordered.map((entry) => {
                     const timestamp = Number(entry.ts);
@@ -7056,9 +7196,12 @@
                     const validDate = date && Number.isFinite(date.getTime());
                     const time = validDate ? String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") : "时间未知";
                     const session = state.sessions.get(entry.session_id);
-                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph ' + (glyphTone.get(entry.status) || "") + '" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
+                    const note = String(entry.receipt || "").trim();
+                    // v3 轻行正文：状态词（五色）+ 目标（承接人/会话）+ 收口回执（终态才有，
+                    // 附注灰字）；tier/引擎徽章/来源徽章随卡片墙语汇退役（v3 .fi 无徽章位）
+                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + "</span></div>";
                   }).join("");
-                  return '<div class="team-activity">' + chips + (rows || banner("当前筛选无条目")) + "</div>";
+                  return '<div class="team-activity">' + (compact ? "" : head) + chips + (rows || banner("当前筛选无条目")) + "</div>";
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
                 // 数据源：SNAPSHOT.experience（覆盖式锚定）+ EXPERIENCE_UPDATED 帧（帧双载
@@ -7464,7 +7607,7 @@
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
                   query("[data-team-members]").innerHTML = memberHtml;
-                  query("[data-team-activity]").innerHTML = activityHtml;
+                  query("[data-team-activity]").innerHTML = activityMarkup(project, { compact: true }); // W-ACTIVITY3：右栏回执流=compact 态（v3 dispfeed 纯行形态，无头无 chips）
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
                   panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
                   if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
@@ -7473,8 +7616,9 @@
                   const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · watchdog 双信号（心跳+日志） · 点卡片直开成员会话</div>';
                   panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>" + crewFoot;
                   panes[3].innerHTML = activityHtml;
-                  panes[4].innerHTML = experienceMarkup(); // W-EXPP2 经验库第五 tab
-                  panes[5].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第六 tab
+                  panes[4].innerHTML = teamOutputsMarkup(project); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）
+                  panes[5].innerHTML = experienceMarkup(); // W-EXPP2 经验库第六 tab
+                  panes[6].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第七 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
                   // UIPOLISH3 件四②（2026-10-11 用户拍板）：底部常驻栏废除——决议钮下沉到每张
@@ -7494,10 +7638,10 @@
                   }).join("") : "";
                   query("[data-team-confirms]").innerHTML = count ? confirmCards : banner("暂无待确认事项");
                   panes[1].innerHTML += count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "";
-                  // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸 + 团队输出物两区。
-                  // 图纸匹配同项目域口径（name/锚点分词 ∩ tags 子串双向）；输出物按当前组
-                  // 编制成员会话聚合（会话域输出物 tab 同源数据，团队维度可见）
-                  panes[1].innerHTML += teamDesignSection(project) + teamArtifactsSection(project);
+                  // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
+                  // 口径（name/锚点分词 ∩ tags 子串双向）。输出物原第二区已迁独立「输出」tab
+                  // （W-OUTTAB，用户 1015 拍板：输出物不放看板里）
+                  panes[1].innerHTML += teamDesignSection(project);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
                   if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
@@ -7767,7 +7911,7 @@
                 function mount() {
                   if (state.mounted) return;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
-                  if (panes.length !== 6) return; // W-EXPP2+W-RULES2：四 tab → 五 tab（经验）→ 六 tab（铁律）
+                  if (panes.length !== 7) return; // W-EXPP2+W-RULES2+W-OUTTAB：四 tab → 五（经验）→ 六（铁律）→ 七（输出，活动后）
                   panes.forEach((pane) => pane.removeAttribute("data-stub"));
                   root.removeAttribute("data-stub");
                   state.mounted = true;
@@ -7826,9 +7970,11 @@
                     }
                     const decision = event.target.closest("[data-team-decision]");
                     if (decision) { event.preventDefault(); if (decision.dataset.approve === "true" || decision.dataset.approve === "false") void decide(decision.dataset.teamDecision, decision.dataset.approve === "true"); return; }
-                    // V8R 活动页筛选 chips（纯前端过滤，零链路）
+                    // V8R 活动页筛选 chips（纯前端过滤，零链路）；W-ACTIVITY3 加源轴（Codex 轨双轴口径）
                     const feedChip = event.target.closest("[data-feed-chip]");
                     if (feedChip) { state.feedFilter = feedChip.dataset.feedChip || "all"; render(); return; }
+                    const feedSrcChip = event.target.closest("[data-feed-src]");
+                    if (feedSrcChip) { state.feedSrc = feedSrcChip.dataset.feedSrc || "all"; render(); return; }
                     const project = event.target.closest("[data-team-project]");
                     if (project) { select(project.dataset.teamProject); return; }
                     const confirm = event.target.closest("[data-team-pick-confirm]");
@@ -8709,28 +8855,33 @@
             </script>
           </section>
 
-          <section class="desktop-screen" id="d-notify">
-            <aside class="queue" data-notification-queue data-relay-state="loading"></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>0 项需行动</span></div></header><div class="workspace-body"><div class="notify-source-summary">轻动作可就地完成；复杂操作回到来源处理。</div><div class="notify-source-list" data-notification-list><div class="readonly-banner" data-notify-state role="status">等待 relay SNAPSHOT…</div></div></div></section>
-            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>0</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block" data-notify-waterline hidden></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
+          <!-- #119 通知 V3 弹窗形态：rail 🔔 锚定浮层+遮罩（Esc/点遮罩/×/铃铛再点关闭），
+               原三列域（队列/详情/检查器）退役；数据链与分组口径零改动 -->
+          <section id="d-notify" aria-hidden="true">
+            <div class="notifmask" data-notify-mask></div>
+            <div class="notifpanel" data-notify-panel role="dialog" aria-modal="true" aria-labelledby="notifpanel-title" tabindex="-1">
+              <h5 id="notifpanel-title">通知<span class="nsub" data-notify-panel-sub>0 项需行动</span><button class="clr" type="button" data-notify-clear-soft title="清空注意与动态（保留需你行动项）">清空注意/动态</button><button class="icon-btn n-x" type="button" data-notify-close title="关闭通知" aria-label="关闭通知">×</button></h5>
+              <div data-notify-panel-body><div class="readonly-banner" role="status">等待 relay SNAPSHOT…</div></div>
+            </div>
+          </section>
             <script>
               (() => {
                 "use strict";
-                // #143-B4 通知域脚本：消费 #d-project 域声明的共享桥（window.__ccDeck005B4）
-                // 渲染通知中心。口径：badge=全部需行动（含验收/确认）；resolved/unresolved
-                // 分离；轻动作=COMMAND_NOTIFICATION_ACK(handled)，重流程 rail 跳原域。
+                // #119 通知 V3 弹窗形态（基准 v8-ui-interactive-v3.html 通知区）：原三列域退役，
+                // rail 🔔 锚定浮层。数据链零改动（消费 #d-project 共享桥 window.__ccDeck005B4：
+                // 通知账+确认单兜底+验收单端上合成）；三级分组=需你行动(r)/注意(y)/动态(n)；
+                // 行内 act 钮直达来源域（jump 链复用）；badge 口径不变=全部需行动（含验收/确认）。
                 const bridge = window.__ccDeck005B4;
                 const section = document.getElementById("d-notify");
                 if (!bridge || !section) return;
                 const escapeHtml = bridge.escapeHtml;
                 const relTime = bridge.relTime;
                 const toast = bridge.toast;
-                const engineBadge = bridge.engineBadge;
                 const doneOf = bridge.doneOfNotification;
-                const queue = section.querySelector("[data-notification-queue]");
-                const list = section.querySelector("[data-notification-list]");
+                const panel = section.querySelector("[data-notify-panel]");
+                const panelBody = section.querySelector("[data-notify-panel-body]");
+                const headSub = section.querySelector("[data-notify-panel-sub]");
                 const railBadge = document.querySelector('.rail-btn[data-domain="notify"] [data-notify-badge]');
-                const countNodes = [...section.querySelectorAll("[data-notify-action-count]")];
                 const flight = new Set();
                 // FB18 通知清除：本页会话内已清除键（不落盘——通知账权威在 relay，落盘键集会随
                 // relay 重启漂移成脏过滤；actionable 行清除时另发 ACK 同步权威账面）。
@@ -8813,88 +8964,25 @@
                       + (jump.teamAction ? ' data-notify-team-action="' + escapeHtml(jump.teamAction) + '"' : ""))
                   : "";
 
-                // 件十二-B：第二列选中态（key）——点轻行联动第三列详情卡；null=未选中（空态）
-                let selectedNotifyKey = null;
-                function queueMarkup(rows) {
-                  const actionRows = rows.filter((r) => r.active);
-                  const attentionRows = rows.filter((r) => !r.active && r.unresolved);
-                  const dynamicRows = rows.filter((r) => !r.unresolved);
-                  // 件十二-B：第二列=通知流轻行（一眼可扫：icon+标题+类别+时间）——body 摘要与
-                  // 清除 ×/动作全部下沉第三列详情卡，两列不再重复渲染同一批通知
-                  const notice = (row, groupKey, selected) => {
-                    const doneTs = !row.unresolved && row.source ? (row.source.resolved_at || row.source.handled_at || row.source.dismissed_at || row.ts) : row.ts;
-                    return '<div class="notice' + (selected ? " selected" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '" data-notify-group="' + groupKey + '"'
-                      + ' title="' + (selected ? "当前选中 · 详情在右侧" : "点击查看来源详情与处理动作") + '">'
-                      + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + kindMetaOf(row.kind).icon + '"></use></svg></span>'
-                      + "<div><div class=\"notice-title-row\"><strong>" + escapeHtml(row.title) + "</strong>" + '<span class="tag mini">' + escapeHtml(kindMetaOf(row.kind).label) + "</span>" + "</div></div>"; // W-WINPAIR-R8②：行内时间移除（第三列详情有时间）
-                  };
-                  const group = (label, groupKey, items) => items.length
-                    ? '<div class="queue-group">' + escapeHtml(label) + ' · <span data-notify-group-count="' + groupKey + '">' + items.length + "</span></div>" + items.map((row) => notice(row, groupKey, row.key === selectedNotifyKey)).join("")
-                    : "";
-                  return '<div class="queue-head"><h2>通知</h2><button class="notify-light-action" type="button" data-notify-clear-soft title="清空注意与动态（保留需你行动项）">清空注意/动态</button><button class="icon-btn" type="button" data-notify-clear title="全部清除（含需行动项）" aria-label="全部清除通知">×</button></div>'
-                    + group("需你行动", "action", actionRows)
-                    + group("注意", "attention", attentionRows)
-                    + group("动态", "dynamic", dynamicRows);
-                }
-
-                function copyRowsOf(row) {
-                  // 件十二扩充 B1/B3：验收单统计「共 N 项 · 已回填 M」合并同一行（chip 带），
-                  // 「打开表单页回填」冗余提示删除（打开验收单 jump 按钮已承载该动作）
-                  if (row.kind === "acceptance") {
-                    const m = /共 (\d+) 项 · 已回填 (\d+)/.exec(String(row.body || ""));
-                    if (m) return '<div class="notify-stat-line"><span class="notify-stat"><b>' + escapeHtml(m[1]) + "</b> 项</span><span class=\"notify-stat-sep\">·</span><span class=\"notify-stat\"><b>" + escapeHtml(m[2]) + "</b> 已回填</span></div>";
-                  }
-                  const confirmBody = row.kind === "org-confirm" ? (String(row.body || "").startsWith("理由：") ? String(row.body) : "理由：" + (row.body || "—"))
-                    : "";
-                  const text = row.kind === "org-confirm" ? confirmBody
-                    : row.body ? "详情：" + row.body : "";
-                  return String(text).split(" · ").filter(Boolean).map((seg) => {
-                    const at = seg.indexOf("：");
-                    return '<div class="notify-copy-row">' + (at > 0 ? "<b>" + escapeHtml(seg.slice(0, at + 1)) + "</b>" + escapeHtml(seg.slice(at + 1)) : escapeHtml(seg)) + "</div>";
-                  }).join("");
-                }
-
-                function sourceCard(row) {
+                // #119 V3 行标记：icon + 标题（不硬裁）+ 一行摘要（body 首行 · 相对时间）+
+                // act 行动钮（直达来源域；无跳转的 actionable 行给「知道了」轻动作）+ × 清除。
+                // 组别类：alert=需你行动（红）/warn=注意（琥珀）/read=动态（已读降噪）。
+                function rowMarkup(row) {
                   const jump = jumpOf(row);
                   const km = kindMetaOf(row.kind);
-                  const doneTs = !row.unresolved && row.source ? (row.source.resolved_at || row.source.handled_at || row.source.dismissed_at || row.ts) : row.ts;
+                  const cls = row.active ? "alert" : row.unresolved ? "warn" : "read";
                   const canAck = !row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported;
-                  const light = canAck ? '<button class="notify-light-action" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
-                  const lightDone = !row.synth && !row.unresolved ? '<button class="notify-light-action" type="button" disabled>已处理</button>' : "";
-                  // 件十二扩充 B4：跳转钮从 primary-btn 重设计为轻量链接钮（brand 文字+› 尾缀，
-                  // 无边框 hover 浮底——贴面板 ghost 语言，不再块状突兀）
-                  const jumpButton = jump ? (jump.acceptance
-                    ? '<button class="notify-jump-btn" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + '<span class="jump-chev">›</span></button>'
-                    : '<button class="notify-jump-btn" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + '<span class="jump-chev">›</span></button>') : "";
-                  const actions = light || lightDone || jumpButton ? '<div class="notify-actions">' + light + lightDone + jumpButton + "</div>" : "";
-                  const sev = row.active ? "act" : row.unresolved ? "att" : "dyn"; // W-V8 批5：组别 severity（行动红/注意琥珀/动态中性——v8 边框按严重度着色语言）
-                  return '<article class="notify-source-card sev-' + sev + (row.unresolved ? "" : " resolved") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-active="' + (row.active ? "true" : "false") + '">'
-                    + '<span class="notice-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="notify-row-main"><div class="nrow-r1"><h3>' + escapeHtml(row.title) + '</h3></div>' /* W-WINPAIR-R8②：行内时间移除（第三列详情卡承载） */
-                    + '<div class="notify-copy">' + copyRowsOf(row) + "</div>" /* W-WINPAIR-R8①：正文保留在第三列详情卡（sourceCard 即详情主体）——第二列轻行（notice）无正文不重复 */
-                    // 件十二扩充 C：元信息行重做——类型枚举徽章（icon+label）在前，源标签小号灰
-                    // 在后（本机命名件十三已统一）；「需行动」状态标签删除（C1，通知本就是需行动）
-                    + '<div class="nrow-r3"><span class="notify-kind-badge"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg>' + escapeHtml(km.label) + '</span>' + (row.engine ? engineBadge(row.engine) : "") + '<span class="source-badge">' + escapeHtml(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName) + "</span></div></div>"
-                    + '<button class="notify-x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">✕</button>'
-                    + actions + "</article>";
-                }
-
-                // 件十二-B：第三列=选中通知的来源详情卡（原全量卡列表与第二列重复渲染，
-                // 分工不清——详情含 kicker/copy/动作钮/回来源域跳转，全部下沉此处）
-                function detailMarkup(rows) {
-                  const selected = rows.find((r) => r.key === selectedNotifyKey) || null;
-                  if (!selected) {
-                    return rows.length
-                      ? '<div class="readonly-banner">选择左侧通知查看来源详情与处理动作。</div>'
-                      : '<div class="readonly-banner">暂无需要你行动的通知 · 行动项到达时在左侧列表提示。</div>';
-                  }
-                  const jump = jumpOf(selected);
-                  // 件十二扩充 C3：详情头类型枚举徽章（icon+label，与卡内元信息行同语言）
-                  const km = kindMetaOf(selected.kind);
-                  return '<div class="notify-detail-head"><span class="notify-kind-badge"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg>' + escapeHtml(km.label) + "</span>"
-                    + (selected.sessionTitle ? '<span class="notify-detail-jump-hint">来源会话 · ' + escapeHtml(selected.sessionTitle) + "</span>" : "")
-                    + (jump ? '<span class="notify-detail-jump-hint">或「' + escapeHtml(jump.label) + "」回来源处理</span>" : "") + "</div>"
-                    + sourceCard(selected);
+                  const sub = [String(row.body || "").split("\n")[0], relTime(row.ts)].filter(Boolean).join(" · ");
+                  const act = jump
+                    ? (jump.acceptance
+                      ? '<button class="act" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + ' ↗</button>'
+                      : '<button class="act" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + ' ↗</button>')
+                    : canAck ? '<button class="act" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
+                  const x = '<button class="x' + (row.active ? "" : " ghost") + '" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">×</button>';
+                  return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
+                    + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
+                    + '<div class="t"><b>' + escapeHtml(row.title) + '</b><div class="s">' + escapeHtml(sub) + "</div></div>"
+                    + act + x + "</div>";
                 }
 
                 function nodesFrom(markup) {
@@ -8902,17 +8990,9 @@
                   template.innerHTML = markup;
                   return template.content;
                 }
-                function emptyState(message) {
-                  const state = document.createElement("div");
-                  state.className = "demo-empty-state";
-                  const copy = document.createElement("p");
-                  copy.textContent = message;
-                  state.append(copy);
-                  return state;
-                }
 
                 function syncCounts(count) {
-                  countNodes.forEach((node) => { node.textContent = node.closest(".workspace-title-row") ? count + " 项需行动" : String(count); });
+                  if (headSub) headSub.textContent = count + " 项需行动"; // 专属属性（data-notify-panel-sub）——与手机端 [data-notify-action-count] 断耦（W-NQA F11 防复发）
                   if (railBadge) {
                     railBadge.textContent = String(count);
                     railBadge.hidden = count === 0;
@@ -8921,45 +9001,20 @@
                   }
                 }
 
-                // ⑥a-4 来源会话水位块：首个需行动行的来源会话 context 用量（原型 data-context-waterline 终态）
-                function syncWaterline(rows) {
-                  const block = section.querySelector("[data-notify-waterline]");
-                  if (!block) return;
-                  const withSession = rows.find((r) => r.active && r.sessionId);
-                  const session = withSession ? bridge.sessions.get(withSession.sessionId) : null;
-                  const used = Number(session && session.context_usage) || 0;
-                  const limit = Number(session && session.context_limit) || 0;
-                  if (!session || !used || !limit || limit <= 0) {
-                    block.hidden = true;
-                    block.textContent = "";
-                    return;
-                  }
-                  const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
-                  block.hidden = false;
-                  block.innerHTML = '<div class="inspector-title"><span>来源会话水位</span><span>' + pct + "%</span></div>"
-                    + '<div class="mini-context-meter"><i><b style="width:' + pct + '%"></b></i></div>'
-                    + '<div class="inspector-copy">来源会话：' + escapeHtml(session.title || session.initial_prompt || session.session_id) + "</div>";
-                }
+                // ⑥a-4 来源会话水位块随三列检查器退役（V3 弹窗无检查器位；水位仍在会话域详情可见）
 
                 function render() {
                   const waiting = bridge.waitingText();
-                  const state = bridge.hasSnapshot ? "snapshot" : bridge.connection;
-                  queue.dataset.relayState = state;
-                  list.dataset.relayState = state;
                   if (waiting) {
-                    queue.replaceChildren(bridge.bannerOf(waiting));
-                    list.replaceChildren(bridge.bannerOf(waiting));
+                    panelBody.replaceChildren(bridge.bannerOf(waiting));
                     syncCounts(0);
-                    syncWaterline([]);
                     return;
                   }
                   if (!bridge.notificationsSupported) {
                     // W-NOVAFIX B8a：降级分档——未连接给连接文案（等待重连），已连接才下「relay 不支持通知」结论
                     const online = bridge.connection === "online";
-                    queue.replaceChildren(nodesFrom('<div class="queue-head"><h2>通知</h2></div>'), bridge.bannerOf(online ? "已连接 · 此 relay 不支持通知数据（旧版本）· 通知中心不可用" : "正在连接 relay · 连接后同步通知"));
-                    list.replaceChildren(bridge.bannerOf(online ? "已连接的 relay 版本较旧，未下发通知数据 · 无法显示通知账" : "正在连接 relay · 连接后同步通知"));
+                    panelBody.replaceChildren(bridge.bannerOf(online ? "已连接 · 此 relay 不支持通知数据（旧版本）· 通知中心不可用" : "正在连接 relay · 连接后同步通知"));
                     syncCounts(0);
-                    syncWaterline([]);
                     return;
                   }
                   const rows = buildRows();
@@ -8973,18 +9028,24 @@
                       window.__ccDeck005NotifyFx.desktop(fresh[0].title, fresh[0].body);
                     }
                   }
-                  // 件十二-B：选中失效（清除/消失）回落到第一条需行动行——回落须在两列渲染前
-                  if (selectedNotifyKey && !rows.some((r) => r.key === selectedNotifyKey)) {
-                    const firstActive = rows.find((r) => r.active);
-                    selectedNotifyKey = firstActive ? firstActive.key : null;
+                  const actionRows = rows.filter((r) => r.active);
+                  const attentionRows = rows.filter((r) => !r.active && r.unresolved);
+                  const dynamicRows = rows.filter((r) => !r.unresolved);
+                  // V3 三级分组：ndot r/y/n = 需你行动/注意/动态（组头带计数）
+                  const group = (label, dot, items) => items.length
+                    ? '<div class="ngrp"><i class="ndot ' + dot + '"></i>' + escapeHtml(label) + '<span class="cnt">' + items.length + "</span></div>" + items.map(rowMarkup).join("")
+                    : "";
+                  if (rows.length) {
+                    panelBody.replaceChildren(nodesFrom(
+                      group("需你行动", "r", actionRows)
+                      + group("注意", "y", attentionRows)
+                      + group("动态", "n", dynamicRows)));
+                  } else {
+                    panelBody.replaceChildren(nodesFrom('<div class="readonly-banner">暂无需要你行动的通知 · 行动项到达时在此提示。</div>'));
                   }
-                  queue.replaceChildren(nodesFrom(queueMarkup(rows)));
-                  if (!rows.length) list.replaceChildren(emptyState("暂无需要你行动的通知"));
-                  else list.replaceChildren(nodesFrom(detailMarkup(rows)));
                   for (const r of rows) seenNotifyKeys.add(r.key);
                   notifySeenInit = true;
-                  syncCounts(rows.filter((r) => r.active).length);
-                  syncWaterline(rows);
+                  syncCounts(actionRows.length);
                 }
 
                 // #018-W1b 轻动作：COMMAND_NOTIFICATION_ACK{notification_key, action:"handled"}。
@@ -9037,7 +9098,8 @@
                 }
 
                 function focusSource(el) {
-                  if (el.hasAttribute("data-notify-open-acceptance")) { bridge.openAcceptance(el.dataset.notifyOpenAcceptance); return; }
+                  // #119：行内 act 直达来源域后收弹窗（V3「行动钮直达」语义——弹窗即走）
+                  if (el.hasAttribute("data-notify-open-acceptance")) { bridge.openAcceptance(el.dataset.notifyOpenAcceptance); setOpen(false); return; }
                   const domain = el.dataset.notifyDomain;
                   if (domain === "session") {
                     bridge.railJump("session");
@@ -9049,10 +9111,34 @@
                     bridge.clickTab("#d-team .segment-bar", el.dataset.notifyTeamAction === "confirm" ? "看板" : "成员");
                     toast("已定位来源团队 · 确认/接替在原域完成");
                   }
+                  setOpen(false);
                 }
+
+                // #119 开合面：section.on 显隐 + aria 同步 + 焦点进出（开=进面板，关=还原触发钮）。
+                // 铃铛 toggle 走地基点击链的 window.__ccDeck005NotifyPanel；Esc/切域/切形态由
+                // closeTransientOverlays 统一收口；遮罩/× 在下方 section 点击代理处理。
+                let lastFocus = null;
+                function setOpen(open) {
+                  const on = !!open;
+                  section.classList.toggle("on", on);
+                  section.setAttribute("aria-hidden", on ? "false" : "true");
+                  const bell = document.querySelector('.rail-btn[data-domain="notify"]');
+                  if (bell) bell.classList.toggle("active", on); // 弹窗开着=铃铛高亮（V3 bell.on 同语言）
+                  if (on) {
+                    lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                    panel.focus({ preventScroll: true });
+                  } else if (lastFocus && lastFocus.isConnected) {
+                    try { lastFocus.focus({ preventScroll: true }); } catch (_) {}
+                    lastFocus = null;
+                  }
+                }
+                const isOpen = () => section.classList.contains("on");
+                window.__ccDeck005NotifyPanel = { open: () => setOpen(true), close: () => setOpen(false), toggle: () => setOpen(!isOpen()), isOpen };
 
                 section.addEventListener("click", (event) => {
                   const target = event.target;
+                  if (target.closest("[data-notify-mask]")) { setOpen(false); return; } // 点外关闭（遮罩即外）
+                  if (target.closest("[data-notify-close]")) { setOpen(false); return; } // 头部 ×
                   const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
                   if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");
@@ -9060,23 +9146,11 @@
                   if (target.closest("[data-notify-clear-soft]")) { clearSoftNotifications(); return; }
                   if (target.closest("[data-notify-clear]")) { clearAllNotifications(); return; }
                   const open = target.closest("[data-notify-open-acceptance]");
-                  if (open) { bridge.openAcceptance(open.dataset.openAcceptance); return; }
+                  if (open) { bridge.openAcceptance(open.dataset.notifyOpenAcceptance); setOpen(false); return; }
                   const jump = target.closest("[data-notify-jump]");
                   if (jump) { focusSource(jump); return; }
                   const card = target.closest("[data-notify-card]");
-                  if (card && !target.closest("button")) {
-                    // 件十二-B：第二列轻行点击=选中联动第三列详情（原整卡跳转语义下沉到详情卡
-                    // 的「回来源域处理」按钮，跳转判定保留兼容旧 jump 属性卡）
-                    if (card.dataset.notifyKey && card.closest("[data-notification-queue]")) {
-                      if (selectedNotifyKey !== card.dataset.notifyKey) {
-                        selectedNotifyKey = card.dataset.notifyKey;
-                        render();
-                      }
-                      return;
-                    }
-                    if (card.dataset.notifyActive === "true" && (card.hasAttribute("data-notify-jump") || card.hasAttribute("data-notify-open-acceptance"))) focusSource(card);
-                    else if (card.dataset.notifyActive !== "true") toast("历史动态 · 已归档，无需处理");
-                  }
+                  if (card && !target.closest("button") && card.dataset.notifyActive !== "true") toast("历史动态 · 已归档，无需处理");
                 });
 
                 bridge.subscribe(() => render());
@@ -9086,7 +9160,7 @@
           </section>
 
           <section class="desktop-screen" id="d-settings">
-            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接管理</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-sliders"></use></svg></span><strong>通用</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><strong>快捷键</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-table"></use></svg></span><strong>扩展</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-card" data-settings-nav="general"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><strong>通用</strong></div></div><div class="queue-card" data-settings-nav="provider"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div></div><div class="queue-card selected" data-settings-nav="connections"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong></div></div><div class="queue-card" data-settings-nav="identity"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div></div><div class="queue-card" data-settings-nav="extensions"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-table"></use></svg></span><strong>扩展</strong></div></div><div class="queue-card" data-settings-nav="about"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div></div><div class="settings-nav-foot" data-settings-nav-foot>v0.0.0<br>本机 relay</div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2>连接与设备</h2></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>端口 8787 · 事件流自动补发</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云桥连接详情</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token 已就绪</p></div><span class="tag done">在线</span></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn" data-settings-help type="button">查看连接帮助</button><button class="primary-btn" data-settings-verify type="button">验证全部连接</button></footer></section>
             <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>—</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
           </section>
@@ -9179,7 +9253,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.25";
+      const CONSOLE_VERSION = "0.7.0-test.26";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -9553,7 +9627,7 @@
       // ---------- FB2：workspace-sub 出舱入顶栏——各域提示文字集中路由到 windowbar 右侧 ----------
       // 每域存自己的最新文案，展示活动域的那条；windowbar 全局唯一，避免后写覆盖前域。
       // 域各在独立 <script> 块（函数声明不跨块），写点经 window.__ccDeck005SetWindowbarHint 进来
-      const windowbarHintStore = { session: "加载中…", team: "尚未收到团队快照", project: "等待 relay SNAPSHOT…", notify: "通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。", settings: "" };
+      const windowbarHintStore = { session: "加载中…", team: "尚未收到团队快照", project: "等待 relay SNAPSHOT…", settings: "" }; /* #119：notify 域改弹窗，不再占域提示位 */
       function setWindowbarHint(domain, text) {
         if (!(domain in windowbarHintStore)) return;
         windowbarHintStore[domain] = String(text || "");
@@ -9674,6 +9748,7 @@ function connectLan(ctx) {
         document.querySelectorAll("[data-filter-pop]").forEach((el) => el.remove()); // FB17 筛选浮菜单同口径收口
         document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); // B10 新建弹窗同口径收口（B2 域 IIFE 内函数，地基直删 DOM 免耦合）
         document.querySelectorAll("[data-source-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+        window.__ccDeck005NotifyPanel?.close(); // #119 通知弹窗随 Esc/切域/切形态统一收口
       }
 
       // ---------- W-NOVAFIX B3b/c：source-menu 接线（此前只有静态壳无开合） ----------
@@ -9898,8 +9973,8 @@ function connectLan(ctx) {
       }
 
       // ---------- ⑥c-1 设置域 B6：六面板装配（原型 setupSettingsContent 同构）+ 真数据经 B4 桥 ----------
-      const SETTINGS_PANELS = ["connections", "provider", "general", "shortcuts", "identity", "extensions", "about"];
-      const SETTINGS_TITLES = ["连接与设备", "Agent 引擎", "通用", "快捷键", "团队身份模板", "扩展", "关于"];
+      const SETTINGS_PANELS = ["general", "provider", "connections", "identity", "extensions", "about"];
+      const SETTINGS_TITLES = ["通用", "Agent 引擎", "连接与设备", "团队身份模板", "扩展", "关于"];
       const SETTINGS_SUBS = {
         connections: "relay · 云桥 · 已配设备 · 异常项单独处理",
         provider: "六引擎接入 · 状态取自 relay 引擎目录",
@@ -10143,17 +10218,35 @@ function connectLan(ctx) {
         const body = section?.querySelector(".workspace-body");
         if (!section || !queue || !body || body.dataset.settingsReady) return;
         queue.classList.add("settings-nav");
-        const pairBanner = '<div class="readonly-banner">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>';
+        const pairBanner = '<div class="v8-escape">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>'; /* W-SETTINGS3 批2：组尾注释降回灰字内联（视觉清单：全宽橙描边提示框非 V3 语言） */
         body.innerHTML = `
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">relay · 远程源 · 本页设备——连接管理面</div></div><div class="v8-setcard"><h5>relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard"><h5>已配设备</h5><div class="settings-list" data-settings-live="devices"></div><div class="v8-escape">设备身份 = 配对密钥（E2E）· 踢出后需重新配对；凭证与配对历史存于 relay 本机</div></div>${pairBanner}<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary-btn" data-settings-add type="button">＋ 添加服务器 · 连其他电脑</button><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-bell"></use></svg></span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>只改文字大小，布局不变 · 立即生效</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div><div class="settings-row fs-debug-row-wrap"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-sliders"></use></svg></span><div class="fs-debug-body"><strong>字号调试</strong><p class="fs-debug-note">临时调试 · 调完截图给 PM 固化（不进正式配置）</p><div class="fs-debug-grid"><label class="fs-debug-item"><span>消息内容</span><input type="range" min="10" max="22" step="1" data-fs-slider="msg" aria-label="消息内容字号（px）" /><b data-fs-val="msg"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="msg" title="重置本项" aria-label="重置消息内容字号">↺</button></label><label class="fs-debug-item"><span>卡片标题</span><input type="range" min="10" max="22" step="1" data-fs-slider="title" aria-label="卡片标题字号（px）" /><b data-fs-val="title"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="title" title="重置本项" aria-label="重置卡片标题字号">↺</button></label><label class="fs-debug-item"><span>卡片描述</span><input type="range" min="10" max="22" step="1" data-fs-slider="desc" aria-label="卡片描述字号（px）" /><b data-fs-val="desc"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="desc" title="重置本项" aria-label="重置卡片描述字号">↺</button></label><label class="fs-debug-item"><span>界面 UI</span><input type="range" min="10" max="22" step="1" data-fs-slider="ui" aria-label="界面 UI 字号（px）" /><b data-fs-val="ui"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="ui" title="重置本项" aria-label="重置界面 UI 字号">↺</button></label><label class="fs-debug-item"><span>等宽代码</span><input type="range" min="10" max="22" step="1" data-fs-slider="mono" aria-label="等宽代码字号（px）" /><b data-fs-val="mono"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="mono" title="重置本项" aria-label="重置等宽代码字号">↺</button></label></div><button type="button" class="secondary-btn fs-dbg-reset-all" data-fs-reset-all>全部重置</button></div></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="shortcuts"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-search"></use></svg></span><div><strong>全局搜索</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">${escapeHtml(keyDisplay("search"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-plus-doc"></use></svg></span><div><strong>新建会话</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">${escapeHtml(keyDisplay("new"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-panel"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>全局快捷键 · 最小化时唤回窗口</p></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">${escapeHtml(toggleHotkeyDisplay())}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-arrows-v"></use></svg></span><div><strong>切换会话</strong><p>会话列表内上下移动 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("↑↓"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>切换数据源</strong><p>多源间快速切换 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("←→"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-code"></use></svg></span><div><strong>恢复默认键位</strong><p>清除全部自定义，回到出厂键位</p></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p><a class="about-link" data-about-link="https://cc.humumu.online">项目主页</a><span class="about-sep">·</span><a class="about-link" data-about-link="https://github.com/humumu130/cc-deck">仓库地址</a></p></div><span class="tag info" data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="settings-list" data-settings-live="design" hidden></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div><div class="s">外观 · 快捷键 · 通知——基座偏好（连接状态见连接与设备页）</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号<div class="v8-swd">只改文字大小，布局不变 · 立即生效</div></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度<div class="v8-swd">会话卡片信息密度 · 紧凑=一屏多看两条</div></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">设置密度<div class="v8-swd">本设置页行距与留白 · 舒适=呼吸感，紧凑=一屏多看几行</div></div><div class="density-control" role="group" aria-label="设置密度"><button type="button" data-settings-density-option="compact">紧凑</button><button type="button" data-settings-density-option="comfortable">舒适</button></div></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span><div class="v8-swd">跨会话 / 团队 / 任务的模糊搜索 · 点右侧自定义</div></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span><div class="v8-swd">普通会话 · 点右侧自定义</div></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span><div class="v8-swd">全局快捷键 · 最小化时唤回窗口</div></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span><div class="v8-swd">会话列表内上下移动</div></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span><div class="v8-swd">多源间快速切换</div></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义，回到出厂键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音<div class="v8-swd">行动项到达时提示</div></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知<div class="v8-swd">后台 relay 有新行动时提示</div></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div></div><div class="v8-setcard"><h5>高级</h5><div class="v8-swrow"><div class="v8-swtxt">空闲置灰<div class="v8-swd">完成/出错会话静默超时后退后显示</div></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div><div class="v8-swrow fs-debug-row-wrap"><div class="fs-debug-body"><strong>字号调试</strong><p class="fs-debug-note">临时调试 · 调完截图给 PM 固化（不进正式配置）</p><div class="fs-debug-grid"><label class="fs-debug-item"><span>消息内容</span><input type="range" min="10" max="22" step="1" data-fs-slider="msg" aria-label="消息内容字号（px）" /><b data-fs-val="msg"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="msg" title="重置本项" aria-label="重置消息内容字号">↺</button></label><label class="fs-debug-item"><span>卡片标题</span><input type="range" min="10" max="22" step="1" data-fs-slider="title" aria-label="卡片标题字号（px）" /><b data-fs-val="title"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="title" title="重置本项" aria-label="重置卡片标题字号">↺</button></label><label class="fs-debug-item"><span>卡片描述</span><input type="range" min="10" max="22" step="1" data-fs-slider="desc" aria-label="卡片描述字号（px）" /><b data-fs-val="desc"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="desc" title="重置本项" aria-label="重置卡片描述字号">↺</button></label><label class="fs-debug-item"><span>界面 UI</span><input type="range" min="10" max="22" step="1" data-fs-slider="ui" aria-label="界面 UI 字号（px）" /><b data-fs-val="ui"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="ui" title="重置本项" aria-label="重置界面 UI 字号">↺</button></label><label class="fs-debug-item"><span>等宽代码</span><input type="range" min="10" max="22" step="1" data-fs-slider="mono" aria-label="等宽代码字号（px）" /><b data-fs-val="mono"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="mono" title="重置本项" aria-label="重置等宽代码字号">↺</button></label></div><button type="button" class="secondary-btn fs-dbg-reset-all" data-fs-reset-all>全部重置</button></div></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">引擎目录 · 登录态与模型——凭证只存引擎本机</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">relay · 远程源 · 本页设备——连接管理面</div></div><div class="v8-setcard"><h5>relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard"><h5>已配设备</h5><div class="settings-list" data-settings-live="devices"></div><div class="v8-escape">设备身份 = 配对密钥（E2E）· 踢出后需重新配对；凭证与配对历史存于 relay 本机</div></div>${pairBanner}<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">模型路由 · 系统提示 · 工具白名单都长在模板上——开团的初始编制</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">开团时可逐成员覆盖 · 模板只给初始值，不当牢笼。</div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">控制面能力扩展——内建三件随软件发行、免安装确认 · 统一鉴权无特权通道</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span><div class="v8-swd">出单 · 回填 · 收单闭环 · 验收单分发与提醒</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span><div class="v8-swd">意图声明制登记 · 输出物看板数据源</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span><div class="v8-swd">登记查询 · 产物打开与分享</div></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载、可停用——停用即对应能力面下线；M1 骨架期三件恒启用，停用开关随注册表就绪后生效。</div></div><div class="v8-setcard"><h5>权限声明（只读）· 授权以命令面权限表为准</h5><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div><div class="v8-setcard"><h5>第三方扩展</h5><div class="v8-escape">🧩 尚无第三方扩展——规范与市场 M2 开放，不预建目录。技能（skill）/ MCP 兼容投送是 Agent 侧资产（舰队配装），不在本页——本页只管控制面扩展。</div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 诊断</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录<div class="v8-swd">GitHub Releases · tag 即档案（git tag + 提交信息 + Release 页）</div></div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页<div class="v8-swd">在线演示与文档入口</div></div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App<div class="v8-swd">扫码安装 · 手机端仅浏览、验证和换路由</div></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
         wireCardDensityControls(body);
         wireFsDebugPanel(body); // 件十六：字号调试面板回填已存值/默认值
+        // W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（活读壳版本/桥连接态）
+        const navFoot = queue.querySelector("[data-settings-nav-foot]");
+        if (navFoot) navFoot.innerHTML = escapeHtml(String(window.__shellVer || CONSOLE_VERSION)) + "<br>本机 relay · 已连接";
+        // W-SETTINGS3 批3：设置域密度双档——comfortable 默认；点击切档挂 #d-settings
+        // data-settings-density（CSS 变量联动行距/卡留白）+ localStorage ccd_settings_density 持久
+        const DENSITY_KEY = "ccd_settings_density";
+        const applySettingsDensity = (mode) => {
+          const m = mode === "compact" ? "compact" : "comfortable";
+          section.dataset.settingsDensity = m;
+          body.querySelectorAll("[data-settings-density-option]").forEach((b) => b.classList.toggle("active", b.dataset.settingsDensityOption === m));
+        };
+        applySettingsDensity((() => { try { return localStorage.getItem(DENSITY_KEY) || "comfortable"; } catch (_) { return "comfortable"; } })());
+        body.addEventListener("click", (event) => {
+          const btn = event.target.closest("[data-settings-density-option]");
+          if (!btn) return;
+          const m = btn.dataset.settingsDensityOption === "compact" ? "compact" : "comfortable";
+          try { localStorage.setItem(DENSITY_KEY, m); } catch (_) {}
+          applySettingsDensity(m);
+        });
         // FB9 设置 queue 头 ×：返回进入设置前的域（设置无独立关闭语义，等价「关门走人」）
         queue.querySelector(".queue-head .icon-btn")?.addEventListener("click", () => setDesktopDomain(lastNonSettingsDomain));
         // FB9/FB3 移动设置「扫码添加新设备」与桌面同链（云形态输码 / LAN 弹配对四件套）
@@ -10279,7 +10372,7 @@ function connectLan(ctx) {
           }
           if (event.target.closest("[data-keymap-reset]")) { resetKeymap(); return; }
         });
-        activateSettings(0);
+        activateSettings(SETTINGS_PANELS.indexOf("connections")); // W-SETTINGS3 批1：面板序 V3 化后默认页仍=连接与设备（source-manage「管理与配对新源」跳入语义不变；旧序 0=connections）
       }
       function initSettingsLiveData() {
         const bridge = window.__ccDeck005B4;
@@ -10333,7 +10426,7 @@ function connectLan(ctx) {
           if (devLive) devLive.innerHTML = '<div class="v8-escape">当前 relay 未下发已配设备清单 · 设备管理在桌面端完成。</div>';
           const provLive = section.querySelector('[data-settings-live="provider"]');
           if (provLive) {
-            if (!catalog) provLive.innerHTML = '<div class="readonly-banner">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>';
+            if (!catalog) provLive.innerHTML = '<div class="v8-escape">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>'; /* W-SETTINGS3 批2：空态蓝描边 banner 退役，回 V3 灰字内联说明 */
             else provLive.innerHTML = catalog.map((e) => {
               if (!e || typeof e.id !== "string") return "";
               const ok = e.state === "ready";
@@ -10347,7 +10440,8 @@ function connectLan(ctx) {
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
-              return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}</strong><p>${copy}</p></div>${loginBtn || tag}</div>`;
+              // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
+              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd">${copy}</div></div>${loginBtn || tag}</div>`;
             }).join("");
           }
           // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
@@ -10364,8 +10458,8 @@ function connectLan(ctx) {
               designLive.innerHTML = groups.map((g) =>
                 '<div class="queue-group">' + esc(g) + " · " + docs.filter((d) => d.group === g).length + "</div>"
                 + docs.filter((d) => d.group === g).map((d) =>
-                  '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>' + esc(d.title) + "</strong><p>" + esc(d.path) + "</p></div>"
-                  + '<button class="secondary-btn" data-design-doc="' + esc(d.path) + '" type="button" title="新窗打开图纸">打开 ↗</button></div>').join("")
+                  '<div class="v8-swrow"><span class="v8-swico"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div class="v8-swtxt">' + esc(d.title) + '<div class="v8-swd">' + esc(d.path) + "</div></div>"
+                  + '<button class="v8-prbtn" data-design-doc="' + esc(d.path) + '" type="button" title="新窗打开图纸">打开 ↗</button></div>').join("")
               ).join("");
             }
           }
@@ -10377,12 +10471,13 @@ function connectLan(ctx) {
             // 旧 relay 不渲染，deliverables 同口径）。两态分段钮复用 density-control
             // 语言；点击走 COMMAND_ORG_ACTION（接线在下方独立委托，闭包内有 bridge）
             const cm = snap.collab_mode;
+            // W-SETTINGS3 批2：协作模式行+角色行 v8 化（V3 tplrow：ico 左+名/描述+引擎 chip 右）
             const cmRow = (cm === "leader" || cm === "no-leader")
-              ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>协作模式</strong><p>无 Leader 时隐藏常驻 Leader 卡（挂死恢复用）· 团队与看板照常</p></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
+              ? '<div class="v8-swrow"><span class="v8-swico"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div class="v8-swtxt">协作模式<div class="v8-swd">无 Leader 时隐藏常驻 Leader 卡（挂死恢复用）· 团队与看板照常</div></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
               : "";
             idLive.innerHTML = cmRow + (roleMap.size
-              ? [...roleMap.entries()].map(([role, e]) => `<div class="member-card"><span class="avatar">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div><strong>${esc(role)}</strong><p>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省引擎</p></div></div>`).join("")
-              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
+              ? [...roleMap.entries()].map(([role, e]) => `<div class="v8-swrow"><span class="v8-swico">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div class="v8-swtxt">${esc(role)}<div class="v8-swd">开团初始编制 · 模板只给初始值不当牢笼</div></div><span class="kbd-inline-chip">${esc(e.label || ENGINE_SHORT[e.id] || e.id)}</span></div>`).join("")
+              : '<div class="v8-escape">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
@@ -11863,6 +11958,7 @@ function connectLan(ctx) {
         cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status, cloudRelayName: String(cloudCtx.relayName || ""),
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
+        lanRelayName: String(ctx.relayName || ""), // #110：B2 域建卡打源标读点（跨 script 块不可直引 ctx；S.relayName 会被后到云快照覆写，LAN 名必须取链上真值）
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });
       // W-WINPAIR-R3：快照注入钩子（排障/走查共用）——帧喂进对应链 context（onEvent 全字段缓存）
       // + 总线 emit，等同真实链路到达。页面内 window 级调用者本具全权，不新增信任面
@@ -12353,7 +12449,7 @@ function connectLan(ctx) {
       let refreshAllInFlight = false;
       // 滚动保持：SNAPSHOT 重走会 replaceChildren 重渲各域列表（session-list 的
       // scrollTop 会归零跳顶）——刷新前记各滚动口，落帧重渲后两拍恢复
-      const REFRESH_SCROLL_SEL = [".session-list", "#d-team .workspace-body", "#d-team .team-chat", "#d-project .workspace-body", "#d-notify .workspace-body", "#d-settings .settings-body"];
+      const REFRESH_SCROLL_SEL = [".session-list", "#d-team .workspace-body", "#d-team .team-chat", "#d-project .workspace-body", "#d-notify .notifpanel", "#d-settings .settings-body"]; /* #119：通知改弹窗，滚动位=面板本体 */
       function scrollMark() {
         return REFRESH_SCROLL_SEL.map((sel) => { const el = document.querySelector(sel); return el ? { el, top: el.scrollTop } : null; }).filter(Boolean);
       }
@@ -12502,7 +12598,11 @@ function connectLan(ctx) {
         const badge = target.closest(".source-badge");
         if (badge) { openSourceMenu(); return; }
         const railButton = target.closest(".rail-btn[data-domain]");
-        if (railButton) { setDesktopDomain(railButton.dataset.domain); return; }
+        if (railButton) {
+          // #119 通知改 V3 弹窗形态：铃铛不再切域，开/关锚定浮层（Esc/遮罩/×/再点同关）
+          if (railButton.dataset.domain === "notify") { window.__ccDeck005NotifyPanel?.toggle(); return; }
+          setDesktopDomain(railButton.dataset.domain); return;
+        }
         const themeToggle = target.closest("[data-theme-toggle]");
         if (themeToggle) { applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true); return; }
         const densityBtn = target.closest("[data-card-density-option]"); // FB9 补：密度档桌面侧曾无点击链（移动端借道点桌面钮也断在此）
@@ -12966,7 +13066,37 @@ function connectLan(ctx) {
       // ---------- ⑥c-3 m-detail 五 tab 真数据（对话/任务/输出物/用量/⋯；B2 数据面 + 桌面口径复刻） ----------
       let detailSid = "";
       let detailBase = null; // { content, convHost, conv, tasks, arts, usage, more }
-      const b2Api = () => window.__ccDeck005B2 || null;
+      // #124 tab 往返滚动保持（手机同桌面 S.tabChatMemo 口径）：手机形态 .mode-stage 无高度
+      // 约束，真滚动容器是 document（window 滚动；.mobile-content 自身被内容撑高、scrollTop
+      // 恒 0——CDP 实测）。切走对话 pane display:none → document scrollHeight 骤缩 → window
+      // scrollY 被 clamp。离开瞬间（捕获阶段）记 memo，切回（activate 完成后）恢复，贴底态
+      // 恢复贴底；换会话（sid 不匹配）不恢复。
+      let mTabChatMemo = null;
+      (() => {
+        const bar = document.querySelector("#m-detail .mobile-detail-tabs");
+        if (!bar) return;
+        const se = () => document.scrollingElement || document.documentElement;
+        const btns = [...bar.querySelectorAll("button")];
+        bar.addEventListener("click", (ev) => {
+          const btn = ev.target.closest("button");
+          const idx = btn ? btns.indexOf(btn) : -1;
+          if (idx < 0) return;
+          if (idx !== 0 && btns[0]?.classList.contains("active")) { // 离开对话 tab：DOM 未变，真值
+            if (detailSid) {
+              const el = se();
+              mTabChatMemo = { sid: detailSid, top: el.scrollTop, bottom: el.scrollHeight - el.scrollTop - window.innerHeight < 120 };
+            }
+          } else if (idx === 0) { // 回到对话 tab：activate 完成后恢复
+            setTimeout(() => {
+              const memo = mTabChatMemo;
+              mTabChatMemo = null;
+              if (!memo || memo.sid !== detailSid) return;
+              const el = se();
+              el.scrollTop = memo.bottom ? el.scrollHeight : Math.max(0, Math.min(memo.top, el.scrollHeight - window.innerHeight));
+            }, 0);
+          }
+        }, true);
+      })();
       // #169 手机详情当前会话暴露（桌面文档级拖放收件时借道定位 sid，替代桌面 S.selected）
       if (window.__ccDeck005B4) window.__ccDeck005B4.currentDetail = () => detailSid;
       const DETAIL_TL_MAX = 30;
@@ -13379,7 +13509,7 @@ function connectLan(ctx) {
         const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !(dismissed && dismissed.has(n.key)));
         const isDone = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
         const activeN = items.filter((n) => !isDone(n)).length;
-        const countEl = document.querySelector("[data-notify-action-count]");
+        const countEl = document.querySelector("#m-notify [data-notify-action-count]"); // F11 根修：作用域锁定手机壳——裸 [data-notify-action-count] 会命中桌面节点把 chip 覆盖成裸数字
         if (countEl) countEl.textContent = String(activeN);
         document.querySelectorAll("[data-notify-clear-all]").forEach((b) => { b.hidden = !items.length; }); // FB18：移动端批量清除钮
         const list = document.querySelector("#m-notify [data-mobile-notification-list]");
