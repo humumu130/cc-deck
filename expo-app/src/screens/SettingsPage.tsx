@@ -44,6 +44,7 @@ import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUr
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import type { AllowRule, ExperienceEntry, PairedDeviceInfo } from "../protocol";
 import { ExpLibraryModal } from "./OrgZone";
+import { PageHead } from "./page-head";
 import { connStateNote, connStateTone, pairErrNote, peerKindLabel, peerRelTime } from "../protocol";
 import { PERM_CAP_STATE_LABEL, permissionModesText, permissionSummariesOf, type PermCapState } from "../permission";
 import { fgSupported } from "../notify";
@@ -159,6 +160,14 @@ const ICON_CHEVRON = "M6 9.5l6 5.5 6-5.5"; // 下折角（组折叠，收起态�
 const ICON_INFO = "M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zM12 11.2v4.6M12 7.9v.2"; // ⓘ（行内帮助）
 const ICON_PLUS = "M12 5.5v13M5.5 12h13"; // ＋（手动添加）
 const ICON_REFRESH = "M19.5 12a7.5 7.5 0 1 1-2.1-5.2M19.5 3.8v3.4h-3.4"; // ↻（配对码刷新）
+// W-MOBILE3 #122 一级目录页导航卡（v3 pset hcard 分区 → expo Row 行语言）：
+// icon 复用各组既有线稿；sub 即二级页 PageHead 副题
+const SET_NAV: { key: "conn" | "prefs" | "engines" | "about"; title: string; sub: string; note: string; icon: string }[] = [
+  { key: "conn", title: "连接与设备", sub: "连接", note: "服务器 · 已配设备 · 规则与权限", icon: ICON_PHONE },
+  { key: "prefs", title: "通用与偏好", sub: "偏好", note: "主题 · 空闲置灰 · 输入习惯 · 保活", icon: ICON_MOON },
+  { key: "engines", title: "Agent 引擎", sub: "引擎", note: "引擎目录 · 经验库", icon: ICON_BOOK },
+  { key: "about", title: "关于", sub: "关于", note: "版本 · 检查更新 · 反馈", icon: ICON_BOX },
+];
 
 // W-MSET3 ⑤ 裸线图标（无方格底）：小尺寸 stroke 图标统一出口（问号/折角/ⓘ/＋/↻），
 // 参数与 IconTile 内 Svg 同参（strokeWidth 1.8 / round），rotate 用于折叠两态
@@ -439,6 +448,8 @@ export default function SettingsPage({
   // 全局扫码（直连/登录/导入三码统一入口）：头部右上扫码钮呼出，与设置页共用
   // ScanScreen.routeScanResult 同一条链路；错误走 Alert（抽屉无表单 err 行），
   // import 码在抽屉内弹 ImportPicker 选条目回发
+  // W-MOBILE3 #122 设置二级页：null=一级目录页；conn/prefs/engines/about=二级详情
+  const [subPage, setSubPage] = useState<"conn" | "prefs" | "engines" | "about" | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
@@ -694,32 +705,37 @@ export default function SettingsPage({
   return (
     <View style={[d.page, { paddingTop: insets.top }]}>
       <View style={d.content}>
-        {/* W-MSETSIG 头部重设计：005 mobile-head 域标题语言（h2 设置 + small 副题 +
-            右侧动作钮）——替换原「logo + CC Deck」品牌头部（侧边栏直搬残留；品牌
-            识别已收敛到关于弹窗 abLogo，扫码功能钮保留） */}
-        <View style={d.head}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={d.nameT}>设置</Text>
-            {/* W-MSETSIG 副题原为静态目录文案（「连接、引擎与偏好」），W-MSET3 ① 改
-                实时连接摘要——头部从目录标题升维为信息面（打开即知连着几台、几台在线） */}
-            <Text style={d.verT} numberOfLines={1}>
-              {CHANNEL_TAG ? `${CHANNEL_TAG} · ` : ""}{headSub}
-            </Text>
-          </View>
-          {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
-          <Pressable
-            style={d.scanBtn}
-            hitSlop={8}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
-            onPress={() => setScanOpen(true)}
-            accessibilityLabel="扫码（直连 / 登录 / 导入）"
-          >
-            <ScanGlyph color={c.brandA} />
-          </Pressable>
-        </View>
-
+        {/* W-MOBILE3 #121/#122：头部换 PageHead 统一组件（v3 .appbar 规格）；#122 二级页化
+            ——一级=「设置」域标题+扫码钮；二级=返回+分区标题+「设置 · X」副题（v3 appbar 二级形态）。
+            原 W-MSETSIG 品牌头（nameT/verT/scanBtn 三键）退役，扫码钮视觉保留进 right 槽 */}
+        {subPage === null ? (
+          <PageHead
+            title="设置"
+            sub={`${CHANNEL_TAG ? CHANNEL_TAG + " · " : ""}${headSub}`}
+            right={
+              <Pressable
+                style={d.scanBtn}
+                hitSlop={8}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+                onPress={() => setScanOpen(true)}
+                accessibilityLabel="扫码（直连 / 登录 / 导入）"
+              >
+                <ScanGlyph color={c.brandA} />
+              </Pressable>
+            }
+          />
+        ) : (
+          <PageHead
+            title={SET_NAV.find((n) => n.key === subPage)!.title}
+            sub={`设置 · ${SET_NAV.find((n) => n.key === subPage)!.sub}`}
+            onBack={() => setSubPage(null)}
+            backLabel="返回设置目录"
+          />
+        )}
         {/* #130 底部补安全距离：contentContainerStyle 撑出手势条空间（原 Build 行贴底） */}
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}>
+        {/* W-MOBILE3 #122 一级目录：活动连接卡（保留信息面）+ 四分区导航卡 → 点卡进二级页 */}
+        {subPage === null ? (<>
         {/* W-MSET3 ② 活动连接状态卡（页面首卡，「连接为王」）：当前活动源升维——四态
             灯（busy 黄闪）+ 名称 + 状态词·通道词，打开设置即知「连着谁、走哪条通道」
             （原 #36 删状态卡后此信息只藏在服务器列表选中行里，多源时需逐行扫视）。
@@ -780,6 +796,19 @@ export default function SettingsPage({
           </Pressable>
         )}
 
+        {SET_NAV.map((n, i) => (
+          <Row
+            key={n.key}
+            icon={n.icon}
+            title={n.title}
+            note={n.note}
+            onPress={() => setSubPage(n.key)}
+            last={i === SET_NAV.length - 1}
+            a11y={`${n.title}，点按进入`}
+          />
+        ))}
+        </>) : null}
+        {subPage === "conn" ? (<>
         {/* 连接管理组（W-MSETSIG 任务书分组①，置顶）：区头（可折叠收起服务器列表，
             记忆上次选择）+ 服务器卡流 + 添加入口 + 设备/配对行组卡 + 规则/权限子节 */}
         <View style={d.secHead}>
@@ -1080,6 +1109,8 @@ export default function SettingsPage({
         </>
         ) : null}
 
+        </>) : null}
+        {subPage === "prefs" ? (<>
         {/* 偏好组（W-MSET3 ③ 合并：原「显示与字号」+「通用」两组 → 一组四行）。
             「显示与字号」组名与内容不符（过程消息档/空闲置灰皆非全局字号）早已
             该正名；通用组仅两行撑不起独立组——合并后少一层组头一处分折叠（原
@@ -1144,6 +1175,8 @@ export default function SettingsPage({
           {fgSupported() ? <KeepAliveCard /> : null}
         </GroupCard>
 
+        </>) : null}
+        {subPage === "engines" ? (<>
         {/* Agent 引擎组（任务书分组③，条件渲染：两项都是 relay 能力探测驱动——
             旧 relay 无字段整组不显）。#17 雇员独立家（relay 级设置）：活动源
             SNAPSHOT.settings 携带才渲染；source=env = 部署环境锁定只读；切换走
@@ -1194,6 +1227,8 @@ export default function SettingsPage({
         </>
         ) : null}
 
+        </>) : null}
+        {subPage === "about" ? (<>
         {/* 通用组已删（W-MSET3 ③ 并入偏好组）：后台保活+回车发送两行上移，多源聚
             合开关早在 2026-09-14 移除（与会话列表「单源/聚合」胶囊重复，单一入口） */}
         {/* 关于组（任务书分组⑤，低频沉底）：#313 版本行（呼出弹窗——本版特性/检查
@@ -1220,7 +1255,8 @@ export default function SettingsPage({
             a11y="反馈"
           />
         </GroupCard>
-        <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>
+        <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>        </>) : null}
+
         </ScrollView>
       </View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />

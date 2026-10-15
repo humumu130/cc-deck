@@ -1880,9 +1880,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcMenuManageT: { color: c.dim, fontSize: 12 },
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8,
-    backgroundColor: c.panel, borderBottomWidth: 1, borderBottomColor: c.line,
+    // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担。
+    // W-MOBILE3 #121 三域 Header 统一：容器规格对齐 PageHead/v3 .appbar（14 水平/
+    // 10 底 + headBg 底 + 底边框）——会话页无大标题（件八拍板品牌行移除的延续，
+    // 源胶囊即页面身份），统一的是容器与动作钮语言
+    paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
+    backgroundColor: c.headBg, borderBottomWidth: 1, borderBottomColor: c.line,
   },
   // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
   connChip: {

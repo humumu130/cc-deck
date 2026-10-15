@@ -412,7 +412,9 @@ async function main(): Promise<void> {
   check(brandSrc.includes("export function PlusMark"), "PlusMark 单源导出（brand.tsx）");
   check(listSrc.includes('from "../brand"') && !/function PlusMark/.test(listSrc), "会话页复用 brand.PlusMark（本地定义移除）");
   check(orgTabsSrc.includes("<PlusMark size={20} color={c.brandA} />"), "团队/项目页 PlusMark 接线");
-  check(/plusBtn: \{\s*width: 44, height: 44/.test(listSrc) && /plusBtn: \{ width: 44, height: 44/.test(orgTabsSrc), "三域 plusBtn 44×44 统一触区");
+  // W-MOBILE3 #121 口径对齐：触区统一 44（ListScreen 视觉 44 / OrgTabs A2 终态视觉 36
+  // + hitSlop 4 ≈ 44 触区）——dda6490 收编删旧 44 块后本断言基线红，按现拍板终态改写
+  check(/plusBtn: \{\s*width: 44, height: 44/.test(listSrc) && /plusBtn: \{ width: 36, height: 36/.test(orgTabsSrc), "三域 plusBtn 统一触区（ListScreen 44 视觉 / OrgTabs 36 视觉+hitSlop≈44）");
   // 件八：品牌行移除
   check(!listSrc.includes("CC Deck</Text>") && !/titleT/.test(listSrc), "「CC Deck」标题行移除（件八）");
   check(!/logoBtn/.test(listSrc), "logo 钮退役（件八；设置入口=底栏设置域）");

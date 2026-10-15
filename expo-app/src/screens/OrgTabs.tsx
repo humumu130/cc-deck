@@ -19,6 +19,7 @@ import { PlusMark } from "../brand";
 import { ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgData, useOrgDecide } from "./OrgZone";
 import { EngineBadge, TeamDetailPage } from "./TeamDetailPage";
 import TeamCreateWizard from "./TeamCreateWizard";
+import { PageHead } from "./page-head";
 
 // 未立项折叠组展开态持久键（折叠态独立记账：默认折叠，用户展开过的桶记展开——与桌面
 // expandedTeams「集合=展开过的」同语义，防 collapsed 语义互染）
@@ -30,20 +31,25 @@ function OrgPageShell({ title, sub, onAdd, addLabel, children }: { title: string
   const styles = useThemeStyles(makeStyles);
   return (
     <SafeAreaView style={styles.page} edges={["top"]}>
-      <View style={styles.head}>
-        <Text style={styles.headT}>{title}</Text>
-        <Text style={styles.headSub}>{sub}</Text>
-        {/* 件七：＋ 统一规格（brand.tsx PlusMark 20px + 44×44 触区，与会话页同参同视觉） */}
-        <Pressable
-          style={styles.plusBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-          onPress={onAdd}
-          hitSlop={4}
-          accessibilityLabel={addLabel}
-        >
-          <PlusMark size={20} color={c.brandA} />
-        </Pressable>
-      </View>
+      {/* W-MOBILE3 #121 三域 Header 统一：团队/项目页头换 PageHead（v3 .appbar 两行式
+          规格——标题 16/600 上、副题 11/dim 下；容器 padding 14/10/10+底边框）。原
+          baseline 单行式（headT+headSub 同行）退役；＋ 钮视觉保留 W-POLISH-MOBILE A2
+          拍板的品牌色底 36 圆角（v3 裸图标 dim 钮不采用——expo 侧两轮拍板终态） */}
+      <PageHead
+        title={title}
+        sub={sub}
+        right={
+          <Pressable
+            style={styles.plusBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+            onPress={onAdd}
+            hitSlop={4}
+            accessibilityLabel={addLabel}
+          >
+            <PlusMark size={20} color={c.brandA} />
+          </Pressable>
+        }
+      />
       <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 28 }}>
         {children}
       </ScrollView>
@@ -454,15 +460,8 @@ function displayLastAt(items: SessionState[]): string {
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     page: { flex: 1, backgroundColor: c.bg },
-    head: {
-      flexDirection: "row", alignItems: "baseline", gap: 8,
-      paddingHorizontal: 16, paddingTop: 12, paddingBottom: 9,
-      borderBottomWidth: 1, borderBottomColor: c.line,
-    },
-    headT: { color: c.textStrong, fontSize: 16, fontWeight: "700" },
-
-    // W-POLISH-MOBILE A2：副语降为 dim（品牌色克制——原 brandA 与 ＋ 钮双色抢锚点）；
-    headSub: { color: c.dim, fontSize: 11, fontWeight: "600", flex: 1 },
+    // W-MOBILE3 #121：head/headT/headSub 退役（页头上收 PageHead 统一组件——
+    // v3 .appbar 两行式规格；样式键删除防残留回退）
     plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.38), overflow: "hidden" },
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
     list: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
