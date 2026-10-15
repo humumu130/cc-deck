@@ -64,3 +64,7 @@ expo-app/safari*.png
 docs/architecture/*.png
 specs/*.png
 docs/mockups/*.png
+
+# A/B preview 快照（临时对比物，走本地 serve/artifacts 不入 git）
+web-console/preview/
+cc-plugins/plugins/cc-deck/web-console/preview/
