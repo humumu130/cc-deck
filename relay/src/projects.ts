@@ -75,6 +75,11 @@ export interface ProjectGroup {
    * mixed_team_default（§5.3.1 混编新卡缺省请求服务端物化 bypassPermissions）；
    * 缺省/false=普通组走 tier_default。立项入参可标；改标走组编辑面（后续单）。 */
   mixed_engine?: boolean;
+  /** P0 编制上限（2026-10-15 用户实锤「编制膨胀」）：本组泛 worker 席位上限（组级
+   * 覆盖；缺省走全局 maxHeadcountWorkers）。命名角色不计入。触顶后派单复用空闲
+   * worker（idle 最久优先），全忙排队不自动扩编——见 session-manager dispatchWorker。
+   * 缺席/undefined=用全局缺省；显式数字（>0）覆盖。 */
+  headcount_cap?: number;
 }
 
 // 板状态五态词表（D18，freeze v2-m10-freeze §1.2 逐字）：backlog 待认领 / claimed
@@ -278,6 +283,91 @@ export function maxActiveGroups(): number {
   return Number.isFinite(n) && n > 0 ? n : 5;
 }
 
+// ---------- P0 编制上限与裁剪（2026-10-15 用户实锤「编制膨胀」） ----------
+//
+// 膨胀根源（1015 实况：CC Deck 组 69 席 = 4 命名 + 65 泛 worker）：gid 派单在
+// pickVeteran 不中时恒新会话 + addMember 无闸追加，从不清退；且路由记录只在派单
+// 收口（done/failed）时写——被中断/未收口的 worker 无路由记录，永久不在熟手复用池，
+// 每单必新开。三件根修：①上限闸（本节）②触顶复用+排队（session-manager）③裁剪
+// （planHeadcountTrim 纯函数 + session-manager 编排）。
+
+/** 泛 worker 全局缺省席位上限：env CCR_ORG_HEADCOUNT_CAP 可覆盖（测试便利，与
+ * maxActiveGroups 同范式）；缺省 15（2026-10-15 派单任务书建议值）。 */
+export function maxHeadcountWorkers(): number {
+  const n = Number(process.env.CCR_ORG_HEADCOUNT_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 15;
+}
+
+/** 组生效席位上限：组级 headcount_cap 显式覆盖 > 全局缺省。单点（派单闸/addMember
+ * 闸/审计面对账共用，勿散写）。 */
+export function headcountCapOf(g: Pick<ProjectGroup, "headcount_cap">): number {
+  if (typeof g.headcount_cap === "number" && g.headcount_cap > 0) return g.headcount_cap;
+  return maxHeadcountWorkers();
+}
+
+/** 泛 worker 计数（cap 口径）：role === "worker"（泛称缺省）才计入——命名角色是显式
+ * 任命（岗位语义），不占泛用席位、不受上限惩罚。 */
+export function genericWorkerCount(headcount: ProjectHeadcountEntry[]): number {
+  return headcount.filter((h) => (h.role || "worker") === "worker").length;
+}
+
+/** 裁剪计划纯函数（规则顺序即优先级，逐条可判）：
+ * ①命名角色恒保（显式任命不自动裁）②会话存活中保（isLiveSession——编排侧口径=
+ * 在册且忙碌/近期有动静，纯历史卡不算存活）③24h 内有活动保（lastActiveOf 由编排
+ * 侧聚合 routing/台账/会话三路取最大）④其余裁（出编制不删会话：路由档案/历史卡
+ * 原样保留，复拉走 member-add 再入编）。now/keepIdleMs 注入=单测同判定。 */
+export interface HeadcountTrimPlan {
+  keep: ProjectHeadcountEntry[];
+  trimmed: { entry: ProjectHeadcountEntry; reason: string }[];
+}
+
+export function planHeadcountTrim(input: {
+  headcount: ProjectHeadcountEntry[];
+  isLiveSession: (sid: string) => boolean;
+  lastActiveOf: (sid: string) => number;
+  now: number;
+  keepIdleMs?: number;
+}): HeadcountTrimPlan {
+  const keepMs = input.keepIdleMs ?? 24 * 3_600_000;
+  const keep: ProjectHeadcountEntry[] = [];
+  const trimmed: { entry: ProjectHeadcountEntry; reason: string }[] = [];
+  for (const entry of input.headcount) {
+    const role = entry.role || "worker";
+    if (role !== "worker") { keep.push(entry); continue; } // ①命名角色
+    if (input.isLiveSession(entry.session_id)) { keep.push(entry); continue; } // ②会话存活
+    const last = input.lastActiveOf(entry.session_id);
+    if (last > 0 && input.now - last < keepMs) { keep.push(entry); continue; } // ③近期有活动
+    const days = last > 0 ? Math.max(1, Math.floor((input.now - last) / 86_400_000)) : 0;
+    trimmed.push({ entry, reason: last > 0 ? `无活动 ${days} 天` : "无派单收口记录" });
+  }
+  return { keep, trimmed };
+}
+
+/** 组编制整体写面（裁剪收口用——removeMember 循环 N 次写穿不如一次；成员级单退仍走
+ * removeMember）。headcount 原样替换 + updated_at 推进；组不存在/写失败照常报。 */
+export function setGroupHeadcount(gid: string, headcount: ProjectHeadcountEntry[], dir?: string): TransitionResult {
+  const f = readProjectsFile(dir);
+  const g = f.groups.find((x) => x.id === gid);
+  if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+  g.headcount = headcount;
+  g.updated_at = Date.now();
+  if (!saveGroup(g, dir)) return { ok: false, error: "索引写入失败" };
+  return { ok: true, group: g };
+}
+
+/** 组级编制上限写面（P0 2026-10-15）：cap=数字（>0 取整）设覆盖；undefined 清除回
+ * 全局缺省（maxHeadcountWorkers）。设后生效面=派单闸/addMember 闸/裁剪保留判定。 */
+export function setGroupHeadcountCap(gid: string, cap: number | undefined, dir?: string): TransitionResult {
+  const f = readProjectsFile(dir);
+  const g = f.groups.find((x) => x.id === gid);
+  if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+  if (cap === undefined) delete g.headcount_cap;
+  else g.headcount_cap = Math.floor(cap);
+  g.updated_at = Date.now();
+  if (!saveGroup(g, dir)) return { ok: false, error: "索引写入失败" };
+  return { ok: true, group: g };
+}
+
 function saveGroup(g: ProjectGroup, dir?: string): boolean {
   const f = readProjectsFile(dir);
   const i = f.groups.findIndex((x) => x.id === g.id);
@@ -455,6 +545,9 @@ export function addMember(
   role: string,
   selectionOrDir?: { engine?: SessionEngine; model?: string; provider?: string; nick?: string } | string,
   dir?: string,
+  // P0 编制上限：缺省启闸（新席位受 headcountCapOf 管）；已在编席位走更新分支不触闸。
+  // 复用/改档路径（dispatchWorker 复用、member-add 复拉已在编熟手）天然不受影响
+  opts?: { enforceCap?: boolean },
 ): TransitionResult {
   const selection = typeof selectionOrDir === "string" ? undefined : selectionOrDir;
   const dataDir = typeof selectionOrDir === "string" ? selectionOrDir : dir;
@@ -463,6 +556,12 @@ export function addMember(
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   const current = g.headcount.find((h) => h.session_id === sessionId);
   if (!current) {
+    // 编制上限闸（2026-10-15）：新增泛 worker 席位前核 cap——命名角色不占泛用席位。
+    // 触顶即拒（不静默）：派单面有触顶复用/排队前置闸（dispatchWorker），此处是
+    // 并发兜底 + 手动 member-add 的显式拒绝位
+    if ((opts?.enforceCap ?? true) && (role || "worker") === "worker" && genericWorkerCount(g.headcount) >= headcountCapOf(g)) {
+      return { ok: false, error: `编制已达上限（泛 worker ${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）——上限内派单自动复用空闲 worker；确需扩编先调 headcount_cap 或清理编制` };
+    }
     g.headcount.push({ session_id: sessionId, role, ...(selection?.nick ? { nick: selection.nick } : {}), ...selection });
     g.updated_at = Date.now();
     if (!saveGroup(g, dataDir)) return { ok: false, error: "索引写入失败" };

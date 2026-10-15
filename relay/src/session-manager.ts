@@ -13,10 +13,10 @@ import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
   adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
-  findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
+  findGroup, findGroupByAnchor, findStaleGroups, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
-  moveBoardEntry, moveEntryByDispatch,
-  removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
+  moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
+  removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionPolicyEnabled } from "./permission-policy.js";
@@ -35,7 +35,10 @@ import {
   type ProjectGroup, type ProjectBoard,
 } from "./projects.js";
 // #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
-import { rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
+import { listRouting, rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
+// P0 编制上限配套（2026-10-15）：派单排队底座（触顶全忙排队不扩编；重启不丢）——
+// 内存队列权威（this.dispatchQueueItems），本侧只用 load（boot 回灌）/save（写穿持久化）
+import { loadDispatchQueue, saveDispatchQueue, type QueuedDispatch } from "./dispatch-queue.js";
 // M12-6 值守喂活闭环（019 D1/D2 relay 接线半边）：leader-duty 纯函数（D18 三零边界
 // ——该文件零 import 纯函数，落盘与注入面在本侧，不回写它）
 import {
@@ -739,6 +742,13 @@ export class SessionManager {
   private leaderBootRetries = 0;
   // #26 M3 挂起自动化扫描节拍（boot + 每小时；startStaleScan 起，CCR_ORG_STALE_DAYS=0 不起）
   private staleTimer: ReturnType<typeof setInterval> | null = null;
+  // P0 编制上限（2026-10-15）：编制触顶全忙排队 FIFO（dispatch-queue.json 持久，
+  // 重启 reloadDispatchQueue 回内存）；drainReentrant 防排水重入（drain → dispatchWorker
+  // → closeOpenDispatches → drain 理论环，旗标断环）
+  private dispatchQueueItems: QueuedDispatch[] = [];
+  private drainReentrant = false;
+  // P0 headcount 裁剪节拍（boot 首轮 + 每 6h；startHeadcountTrim 起，CCR_ORG_TRIM_HOURS=0 关定时）
+  private trimTimer: ReturnType<typeof setInterval> | null = null;
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
@@ -4808,6 +4818,8 @@ export class SessionManager {
   private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog"): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
+    // P0 排队排水挂点前置说明：方法尾部对本批受影响 gid 逐个 drainDispatchQueue——
+    // 收口即释放 worker 空闲/腾出编制，排队单在此接续（触顶复用或名额新建）
     // onlyGid（组挂起/结项联动收口用）：只收**该组**的派单——同一熟手可跨多组在跑，
     // A 组挂起不得把成员为 B 组干的活一起收掉（矩阵式「项目×熟手」正交）
     const es = onlyGid
@@ -4889,6 +4901,19 @@ export class SessionManager {
       if (status === "done" && boardTo !== "backlog") {
         this.captureExperienceDeclaration(key, e);
       }
+    }
+    // P0 编制排队排水（2026-10-15）：收口即释放空闲（worker 回合终态/中断/退休）——
+    // 本批受影响组逐个试排（drain 内部重入 dispatchWorker 走完整前置闸：有 idle 复用、
+    // 名额已腾出则新建，仍触顶全忙则原样留队）。drainReentrant 旗标断重入环。
+    // **microtask 延迟**：onTurnEnd 主流程是同步链（closeOpenDispatches → status=DONE
+    // 尾随），同步排水时 worker 状态仍是 WORKING（判不出 idle）——延迟到本同步链
+    // 落定后排（microtask 先于 timer，状态已 DONE 可复用）
+    for (const gid of [...new Set(es.map((e) => e.gid).filter((x): x is string => !!x))]) {
+      try {
+        queueMicrotask(() => {
+          try { this.drainDispatchQueue(gid); } catch { /* 排水失败不阻断主路径（单留队列等下一轮空闲） */ }
+        });
+      } catch { /* 微任务调度失败不阻断收口主路径 */ }
     }
   }
 
@@ -5676,16 +5701,17 @@ export class SessionManager {
           ...(typeof payload.redispatch_of === "string" && payload.redispatch_of.trim() ? { redispatch_of: payload.redispatch_of.trim() } : {}),
         });
         // orgAction("dispatch") 转调 dispatchWorker，返回裸形 {ok,dispatch_id,session_id}
-        const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string }) : undefined;
+        const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string; queued?: boolean }) : undefined;
         this.auditOrgCommand(actor, device, action, g?.anchor_dir ?? anchorDir, tier, r.ok,
           r.ok
-            ? `编排派单已受理（entry=${cardId} dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}${payload.redispatch_of ? " 重投" : ""}）`
+            ? `编排派单已受理（entry=${cardId} dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}${dr?.queued ? " · 编制触顶排队" : ""}${payload.redispatch_of ? " 重投" : ""}）`
             : `${r.error}（task_ref=${cardId} 已入账，可带 entry_id 重派）`,
         );
         if (!r.ok) return { ok: false, error: `${r.error}（task_ref=${cardId} 已入账，可带 entry_id 重派）` };
         // ACK 编排口径：task_ref=卡 id（≡entity_id，计划表原文键）；blocked 恒带显式
-        // 布尔（消费方免猜），dispatch_id/session_id 仅就绪链携带
-        return { ok: true, data: { entity_id: cardId, gid, task_ref: cardId, blocked: false, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "" } };
+        // 布尔（消费方免猜），dispatch_id/session_id 仅就绪链携带；queued=P0 编制触顶
+        // 排队（session_id 空串+queued:true——消费方判 queued 免猜空承接人）
+        return { ok: true, data: { entity_id: cardId, gid, task_ref: cardId, blocked: false, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "", ...(dr?.queued ? { queued: true } : {}) } };
       }
       // ---------- M12-1 直派路径（无 task 键，行为零变化） ----------
       const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
@@ -5708,15 +5734,16 @@ export class SessionManager {
       });
       // orgAction("dispatch") 转调 dispatchWorker，返回的是裸形 {ok,dispatch_id,
       // session_id}（无 data 包裹——既有咽喉形状，别处照旧消费不因本单改形）
-      const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string }) : undefined;
+      const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string; queued?: boolean }) : undefined;
       this.auditOrgCommand(
         actor, device, action, g?.anchor_dir ?? anchorDir, tier, r.ok,
-        r.ok ? `派单已受理（dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}）` : r.error,
+        r.ok ? `派单已受理（dispatch=${dr?.dispatch_id?.slice(0, 8) ?? ""}${dr?.queued ? " · 编制触顶排队" : ""}）` : r.error,
       );
       if (!r.ok) return { ok: false, error: r.error };
       // ACK data 按设计稿口径 entity_id=新 worker 会话+并列 dispatch_id（直派无卡，
-      // entity_id 语义=会话；编排链语义=卡——两路径各自自洽，回单备案）
-      return { ok: true, data: { entity_id: dr?.session_id ?? "", gid: gid || null, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "" } };
+      // entity_id 语义=会话；编排链语义=卡——两路径各自自洽，回单备案）；
+      // queued=P0 编制触顶排队（session_id 空串 + queued:true，端上判 queued 免猜）
+      return { ok: true, data: { entity_id: dr?.session_id ?? "", gid: gid || null, dispatch_id: dr?.dispatch_id ?? "", session_id: dr?.session_id ?? "", ...(dr?.queued ? { queued: true } : {}) } };
     }
     if (action === "lesson-append") {
       const gid = typeof payload.gid === "string" ? payload.gid.trim() : "";
@@ -6366,8 +6393,9 @@ export class SessionManager {
             };
           });
           // W-EXPP1：lessons 摘除下发（与 emitBoard 同口径——detail 拉取是端上板缓存的
-          // 另一条喂养链，磁盘文件不动）
-          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool } };
+          // 另一条喂养链，磁盘文件不动）。P0 编制上限（2026-10-15）：cap/workers/queued
+          // 随详情下发——面板可见席位水位（headcount_cap 缺席=全局缺省值生效）
+          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool, cap: headcountCapOf(g), workers: genericWorkerCount(g.headcount), queued: this.queueDepth(g.id) } };
         }
         // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
         case "rate": {
@@ -6417,6 +6445,9 @@ export class SessionManager {
           removeMember(gid, sid);
           this.emitOrgState();
           this.emitBoard(gid);
+          // P0 编制排队排水：除名即腾出泛 worker 名额（closeOpenDispatches 内的排水
+          // 挂点跑在除名前，名额未腾出时排队单留队——此处补一轮试排）
+          try { this.drainDispatchQueue(gid); } catch { /* 排水失败留队等下一轮 */ }
           // 无卡（已驱逐）→ 纯除名；他组派单还在跑 → 只除名不停流（矩阵式正交：
           // 他组回合自然收口后空闲入池）
           if (!s || (this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
@@ -6448,7 +6479,41 @@ export class SessionManager {
           const r = addMember(gid, sid, role, selection);
           if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
           this.emitOrgState();
+          // P0 编制排队排水：手动复拉若腾出/占回名额面变化，试排一轮（幂等，无队列 no-op）
+          try { this.drainDispatchQueue(gid); } catch { /* 排水失败留队等下一轮 */ }
           return { ok: true, data: { group: r.group } };
+        }
+        // ---------- P0 编制上限（2026-10-15 用户实锤「编制膨胀」） ----------
+        // 组级席位上限设置（headcount_cap 覆盖全局缺省；数字≤0/缺省=清除回全局）。
+        // 上调后立即试排一轮（队列里等名额的单接续）。
+        case "cap-set": {
+          const gid = str("gid");
+          if (!gid) return { ok: false, error: "gid 必填" };
+          const g = findGroup(gid);
+          if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+          if (g.status === "archived") return { ok: false, error: "结项组只读（编制为快照档案），不可设上限" };
+          const capValue = p.cap;
+          // 数字（>0 有限）= 设组级覆盖；数字≤0 / null / 缺省 = 清除回全局缺省；
+          // 其余类型（字符串等）拒收
+          if (capValue !== undefined && capValue !== null && (typeof capValue !== "number" || !Number.isFinite(capValue))) {
+            return { ok: false, error: "cap 必须是数字（>0 设上限；≤0 清除回全局缺省）" };
+          }
+          const capNum = typeof capValue === "number" && capValue > 0 ? capValue : undefined;
+          const r = setGroupHeadcountCap(g.id, capNum);
+          if (!r.ok) return { ok: false, error: r.error };
+          this.emitOrgState();
+          // 设定后立即试排（上调/清除可能有排队单等着新名额）
+          try { this.drainDispatchQueue(g.id); } catch { /* 排水失败留队等下一轮 */ }
+          const g2 = findGroup(gid);
+          return { ok: true, data: { group: g2, cap: g2 ? headcountCapOf(g2) : 0, workers: g2 ? genericWorkerCount(g2.headcount) : 0, queued: this.queueDepth(g.id) } };
+        }
+        // 编制裁剪预览/执行（dry_run=true 只出清单不动盘）。执行面由 boot/定时自动跑，
+        // 本口给 Leader 手动触发与清单核对（谁/最后活跃/为何裁）。
+        case "headcount-trim": {
+          return this.trimHeadcounts({
+            dryRun: bool("dry_run"),
+            ...(typeof p.keep_idle_hours === "number" && p.keep_idle_hours > 0 ? { keepIdleMs: p.keep_idle_hours * 3_600_000 } : {}),
+          });
         }
         case "confirm-decide": {
           const cid = str("confirm_id");
@@ -6831,8 +6896,8 @@ export class SessionManager {
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string }):
-    { ok: true; dispatch_id: string; session_id: string; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string } {
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string }):
+    { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
     // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
@@ -6891,8 +6956,8 @@ export class SessionManager {
     // 导入侧 import-dispatch-lesson 按行序终态切分自动出 <id>#r<N> 段、attempt+1、
     // parent 指前段——运行时零段号零新字段，两面对齐）。原单须存在且已终态（在途
     // 单重投=双跑同活，拒收）；段 id 尾（#rN）剥掉归位 root（导入器同款正则口径）
-    let dispatchId: string = randomUUID();
-    if (input.redispatch_of) {
+    let dispatchId: string = input.queue_replay ?? randomUUID();
+    if (input.redispatch_of && !input.queue_replay) {
       const root = input.redispatch_of.trim().replace(/#r\d+$/, "");
       if (!root) return { ok: false, error: "redispatch_of 必填原单 dispatch_id" };
       const prev = readDispatchLog().find((e) => e.id === root);
@@ -6901,16 +6966,36 @@ export class SessionManager {
         return { ok: false, error: `原单 ${root.slice(0, 8)} 仍在途（${prev.status}），不可重投（等终态或先停单）` };
       dispatchId = root;
     }
+    // #40 M4 actor 标注：唯一调用方 /api/org dispatch = Leader CLI → 缺省 "leader"；
+    // 台账三行（dispatched/running/终态）同 id 共享 actor，收口通知据此定向
+    const actor = input.actor?.trim() || "leader";
+    // M12-5 引擎 preflight 的台账透传字段（P0 编制闸的 queued/failed 行同值携带——
+    // 声明前移供编制闸复用）
+    const engineFields = {
+      ...(planned.engine ? { engine: planned.engine } : {}),
+      ...(planned.provider ? { provider: planned.provider } : {}),
+      ...(planned.model ? { model: planned.model } : {}),
+    };
     // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
     // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
-    // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
-    // 熟手全忙即顺延下一位或新会话，活不过夜
+    // 档案注入（记忆亲和：干净冷启动）。
+    // P0 编制上限（2026-10-15 用户实锤「编制膨胀」，推翻「排队不做」旧注）：熟手不中
+    // 且泛 worker 已达 headcountCapOf 时**禁止新建**（扩编闸）——先复用编制内 idle
+    // 最久 worker（resume，非 spawn），全忙则排队（不自动扩编，drainDispatchQueue 在
+    // 回合收口/成员除名释放空闲时接续）。膨胀根源正是「路由记录只在收口时写」：被
+    // 中断的 worker 无路由记录、永久不在熟手池，每单必新开——编制闸把这条漏 Casualty
+    // 路径堵死（复用判定不看路由记录，只看编制名册+运行态）。
+    // 质量优先取舍（PM 补充① 1015 用户令）：复用是上限约束下的最优解而非默认偏好——
+    // 未触顶一律走既有熟手机制（上下文亲和）或新开（干净冷启动），不为省席位强迫
+    // 复用；触顶复用带 role 精确匹配 + 引擎三元组一致两道质量闸，idle 最久优先=
+    // 上下文最冷（旧任务残留最少）。
     let veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
     // 停摆杜绝 R3（liveness 门，设计修正）：派单侧**不加** veteran 活性门——saved/DONE/
     // parked 退休态熟手（无 agent/ended）正是 resume 亲和的正当形态，僵尸流 resume 也有
     // 补刀（resumeAgent stop+killTree）；投递唯一咽喉在 COMMAND_MESSAGE/EXT_INPUT 的
     // agentStreamAlive 门统一把关（单一职责，防双门误杀 resume 路径——test-dispatch
-    // 「复活后派单拉原班」用例实锤过误杀）。
+    // 「复活后派单拉原班」用例实锤过误杀）。引擎失配清 null **必须先于**编制闸——
+    // 否则失配熟手被清 null 后跳过闸直接新建，绕过上限
     if (veteran && (planned.engine || planned.model || planned.provider)) {
       const veteranState = this.require(veteran).state;
       if ((planned.engine && veteranState.engine !== planned.engine) ||
@@ -6919,16 +7004,30 @@ export class SessionManager {
         veteran = null;
       }
     }
-    // #40 M4 actor 标注：唯一调用方 /api/org dispatch = Leader CLI → 缺省 "leader"；
-    // 台账三行（dispatched/running/终态）同 id 共享 actor，收口通知据此定向
-    const actor = input.actor?.trim() || "leader";
+    // P0 编制闸：veteran 是否经「触顶复用」路径产生——是则 resume 失败**不得**走
+    // 新会话降级（那等于变相扩编，绕过上限闸），只能 failed 收口（单可重投）
+    let capReuse = false;
+    if (input.gid && !veteran) {
+      const g0 = findGroup(input.gid);
+      if (g0 && g0.status === "active" && genericWorkerCount(g0.headcount) >= headcountCapOf(g0)) {
+        // 触顶先清（PM 补充③ 1015 用户令：开新 worker 前也要及时清理过期旧席）——
+        // 只清本组过期席，腾出名额走正常判定；无过期席/清完仍满才复用/排队
+        try { this.trimHeadcounts({ onlyGid: input.gid }); } catch { /* 清理失败不阻断派单主路径 */ }
+        const g1 = findGroup(input.gid);
+        if (g1 && g1.status === "active" && genericWorkerCount(g1.headcount) >= headcountCapOf(g1)) {
+          const reuse = this.pickIdleRosterWorker(g1, role, planned);
+          if (reuse) {
+            veteran = reuse;
+            capReuse = true;
+            this.pushExternalLog(reuse, "system", `编制已满（${genericWorkerCount(g1.headcount)}/${headcountCapOf(g1)}），本单复用空闲 worker（非新建）`);
+          } else {
+            return this.enqueueCapDispatch(input, g1, tier, anchor, actor, engineFields);
+          }
+        }
+      }
+    }
     // M12-5 引擎 preflight：拉起前纯静态检查，失败即 error 拒派——零 spawn 零台账
     //（dispatched 行都未落，裁定备案见 preflightDispatchEngine 注释）
-    const engineFields = {
-      ...(planned.engine ? { engine: planned.engine } : {}),
-      ...(planned.provider ? { provider: planned.provider } : {}),
-      ...(planned.model ? { model: planned.model } : {}),
-    };
     if (planned.engine) {
       const pf = this.preflightDispatchEngine(planned.engine, planned.provider);
       if (!pf.ok) {
@@ -7048,7 +7147,15 @@ export class SessionManager {
         // 熟手复活失败（理论窗口：并发竞态后 require 抛/新 agent 拉起即抛）：同 id
         // 降级记忆亲和新会话，台账收敛到 running 行（熟手不因此记 failed——
         // closeOpenDispatches 才收口，路由表无感）
+        // P0 编制闸例外：触顶复用路径（capReuse）resume 失败**不降级新会话**——
+        // 那是变相扩编绕过上限闸；照 failed 收口（单可重投/等队列），熟手不记账
         const msg = e instanceof Error ? e.message : String(e);
+        if (capReuse) {
+          const receipt = truncate(`编制已满，复用 worker resume 失败且不扩编降级: ${msg}`, 200);
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
+          this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          return { ok: false, error: `编制已满（触顶复用 resume 失败，不扩编）: ${msg}` };
+        }
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
           sessionId = this.create(anchor, dispatchPrompt, spawnMode, true, {
@@ -7098,11 +7205,21 @@ export class SessionManager {
     }
     if (input.gid) {
       const actual = this.sessions.get(sessionId)?.state;
-      addMember(input.gid, sessionId, role, {
+      const am = addMember(input.gid, sessionId, role, {
         ...(actual?.engine ? { engine: actual.engine } : {}),
         ...(actual?.model ? { model: actual.model } : {}),
         ...(actual?.engine_provider ? { provider: actual.engine_provider } : {}),
       });
+      // P0 编制闸兜底：前置闸已在 spawn 前放行（有名额才走新建），走到这里被拒=
+      // 极窄竞态（单线程 tick 内不可达，防御性保留）——会话已拉起但入编被闸，停流+
+      // failed 收口（不入编的 worker 是编制外孤儿，留着只会重复膨胀）
+      if (!am.ok) {
+        if (s) this.retireSession(s, input.gid, "retired");
+        const receipt = truncate(`入编被编制上限闸拒绝: ${am.error ?? ""}`, 200);
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "failed", receipt, session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
+        this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, sessionId);
+        return { ok: false, error: am.error ?? "入编失败" };
+      }
     }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
@@ -7170,6 +7287,240 @@ export class SessionManager {
       return e.session_id;
     }
     return null;
+  }
+
+  // ---------- P0 编制上限：触顶复用与排队（2026-10-15 用户实锤「编制膨胀」） ----------
+
+  // 编制内 idle worker 复用选取（触顶时的非扩编承接位）：只看编制名册+运行态，**不看
+  // 路由记录**——膨胀根源正是路由记录只在派单收口时写（被中断的 worker 无记录、永久
+  // 不在熟手池，每单必新开）。选取规则：
+  //   资格 = 在册可 resume（relay_session_id 在）｜非外部会话｜非 Leader｜不忙
+  //   （WORKING/WAITING）｜无在途派单｜不在 resume 互斥窗/熔断冷却（同 pickVeteran
+  //   判据）｜role 精确匹配（只复用泛 worker——命名角色岗位语义不顶替）｜引擎三元组
+  //   与 planned 显式要求逐项一致（engine/model/provider，同熟手引擎一致性判据）
+  //   排序 = 会话 updated_at 升序（idle 最久优先）
+  // 返回 null = 全忙/无人可复用（调用方排队）。
+  private pickIdleRosterWorker(
+    g: ProjectGroup,
+    role: string,
+    planned: { engine?: SessionEngine; model?: string; provider?: string },
+  ): string | null {
+    const now = Date.now();
+    const cands: { sid: string; last: number }[] = [];
+    for (const h of g.headcount) {
+      if ((h.role || "worker") !== (role || "worker")) continue; // 角色精确匹配（泛 worker↔泛派单）
+      if (planned.engine && h.engine && h.engine !== planned.engine) continue;
+      const s = this.sessions.get(h.session_id);
+      if (!s || !s.state.relay_session_id) continue;
+      if (s.state.external) continue;
+      if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
+      if (this.isLeaderSession(h.session_id)) continue;
+      if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) continue;
+      if (s.resumePending && now - s.resumePending < resumePendingWindowMs()) continue;
+      if (s.resumeCooldownUntil && now < s.resumeCooldownUntil) continue;
+      // 引擎三元组运行态一致性（同派单侧熟手引擎判据：显式要求 vs 会话现值）
+      if ((planned.engine && s.state.engine !== planned.engine) ||
+          (planned.model && s.state.model !== planned.model) ||
+          (planned.provider && s.state.engine_provider !== planned.provider)) continue;
+      cands.push({ sid: h.session_id, last: s.state.updated_at ?? 0 });
+    }
+    cands.sort((a, b) => a.last - b.last); // idle 最久优先
+    return cands[0]?.sid ?? null;
+  }
+
+  // 触顶全忙排队收口：台账落 "queued" 行（审计视图；closeHungDispatchRows 白名单
+  // running|dispatched 天然不碰）+ 队列持久化（dispatch-queue.json，重启不丢）+ ACK
+  // 带 queued:true。排队不是终态——drainDispatchQueue 在空闲释放时接续。
+  // dispatch_id：重放路径（queue_replay）沿用原单 id——防「重放再排队」时旧 queued
+  // 行永悬+新 id 双账（同单一生 id，台账收敛视图才有唯一终态）。
+  // **内存队列权威**：this.dispatchQueueItems 是唯一事实源，盘文件只做持久化
+  //（boot reload 回灌）——enqueue 一律内存 push+写穿；若从盘 load-append（首版实现），
+  // 排水期间盘落后内存，重放再排队会把整条旧队列复制回来（测试 H3 实锤四重账）。
+  private enqueueCapDispatch(
+    input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; entry_id?: string; redispatch_of?: string; queue_replay?: string },
+    g: ProjectGroup,
+    tier: DispatchTier,
+    anchor: string,
+    actor: string,
+    engineFields: Record<string, unknown>,
+  ): { ok: true; dispatch_id: string; session_id: string; queued: boolean } | { ok: false; error: string } {
+    const dispatchId = input.queue_replay ?? randomUUID();
+    const enqueuedAt = Date.now();
+    const item: QueuedDispatch = { dispatch_id: dispatchId, enqueued_at: enqueuedAt, input: { ...input } as Record<string, unknown> };
+    if (this.dispatchQueueItems.length >= 200) {
+      // 队列满（护栏 200）：编制触顶且长期全忙的真实堵塞——failed 收口给人看，不静默丢
+      const receipt = truncate(`派单队列已满（200）——编制触顶且长期全忙，请先清理编制或调 headcount_cap`, 200);
+      appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
+      this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+      return { ok: false, error: "派单队列已满（200）" };
+    }
+    // 重放再排队：同 id 条目挪回队首（保 FIFO——它原本排在同组未处理单之前）；
+    // 新单尾插（先到先服务）
+    this.dispatchQueueItems = input.queue_replay
+      ? [item, ...this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId)]
+      : [...this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId), item];
+    if (!saveDispatchQueue(this.dispatchQueueItems)) {
+      console.warn("[dispatch-queue] 排队落盘失败（内存队列有效，重启该单丢失）");
+    }
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
+    this.pushExternalLog(this.leaderId ?? "", "system", `派单排队：${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}（编制 ${genericWorkerCount(g.headcount)}/${headcountCapOf(g)} 触顶且全忙，队列位置 ${this.dispatchQueueItems.length}）`);
+    return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
+  }
+
+  // 排队排水：组内出现空闲（回合收口/成员除名释放）时按 FIFO 接续。重入 dispatchWorker
+  // （queue_replay 带原单 id，台账同 id 收敛 queued→dispatched/failed）。重入又 queued =
+  // 仍触顶全忙（enqueueCapDispatch 已把单挪回队首），break 等下一轮空闲。drainReentrant
+  // 旗标断环（drain → dispatchWorker → closeOpenDispatches → drain 理论环）。
+  private drainDispatchQueue(gid: string): void {
+    if (this.drainReentrant) return;
+    this.drainReentrant = true;
+    try {
+      for (;;) {
+        const next = this.dispatchQueueItems.find((x) => (x.input as { gid?: string }).gid === gid);
+        if (!next) break;
+        this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== next.dispatch_id);
+        try {
+          const r = this.dispatchWorker({ ...(next.input as Parameters<SessionManager["dispatchWorker"]>[0]), queue_replay: next.dispatch_id });
+          if (r.ok && r.queued) break; // 仍触顶全忙：单已由 enqueueCapDispatch 挪回队首，等下一轮
+        } catch (e) {
+          // dispatchWorker 契约是不抛（错误走返回值）；真抛（bug 面）照 failed 收口防悬账
+          const msg = e instanceof Error ? e.message : String(e);
+          const input = next.input as { anchor?: string; actor?: string; gid?: string };
+          const qtier: DispatchTier = (input.gid ? findGroup(input.gid)?.tier : undefined) ?? "随手办";
+          appendDispatch({ ts: Date.now(), id: next.dispatch_id, tier: qtier, target: "cap-queue", status: "failed", receipt: truncate(`排队重放异常: ${msg}`, 200), session_id: "", ...(input.anchor ? { project_anchor: input.anchor } : {}), actor: input.actor ?? "leader" });
+        }
+      }
+      saveDispatchQueue(this.dispatchQueueItems);
+    } finally {
+      this.drainReentrant = false;
+    }
+  }
+
+  // 排队水位（内存权威；面板可见性——组详情/cap-set 回显）
+  private queueDepth(gid: string): number {
+    return this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === gid).length;
+  }
+
+  // 重启回灌：队列文件 → 内存 + 立即试排一轮（各组有 idle 即接续；触顶全忙单留在
+  // 队列等收口联动）。boot 在 adopt 之后调（index.ts）。
+  reloadDispatchQueue(): number {
+    this.dispatchQueueItems = loadDispatchQueue();
+    const n = this.dispatchQueueItems.length;
+    if (n === 0) return 0;
+    console.log(`[dispatch-queue] 重启回灌 ${n} 条排队单，尝试接续`);
+    for (const gid of new Set(this.dispatchQueueItems.map((x) => (x.input as { gid?: string }).gid ?? ""))) {
+      if (gid) this.drainDispatchQueue(gid);
+    }
+    return this.dispatchQueueItems.length;
+  }
+
+  // ---------- P0 headcount 裁剪（编制清理，2026-10-15 用户实锤） ----------
+
+  // 三路聚合「最后活动」：路由表 last_ts（熟手最近收工）∨ 台账 session_id 最新行
+  // ∨ 会话 updated_at（adopt 收养在卡的历史卡也有值）。裁剪判定与清单输出共用。
+  private lastActiveOfSid(sid: string): number {
+    let last = 0;
+    for (const r of listRouting()) {
+      if (r.session_id === sid && r.last_ts > last) last = r.last_ts;
+    }
+    for (const e of readDispatchLog()) {
+      if (e.session_id === sid && e.ts > last) last = e.ts;
+    }
+    const s = this.sessions.get(sid);
+    if (s && s.state.updated_at > last) last = s.state.updated_at;
+    return last;
+  }
+
+  // 「会话存活」口径：在册（adopt 收养在卡）且（忙碌 ∨ 近期有动静 keepIdleMs 内）。
+  // 纯历史卡（DONE 且数日未动）不算存活——出编制不删会话，复拉走 member-add。
+  private isLiveRosterSession(sid: string, now: number, keepIdleMs: number): boolean {
+    const s = this.sessions.get(sid);
+    if (!s) return false;
+    if (s.state.status === "WORKING" || s.state.status === "WAITING") return true;
+    return now - (s.state.updated_at ?? 0) < keepIdleMs;
+  }
+
+  // 编制裁剪编排：对全部 active 组跑 planHeadcountTrim 纯函数（规则与原因见该函数
+  // 头注），非 dryRun 时 setGroupHeadcount 一次写穿 + 广播 + 报告落盘
+  //（<orgDir>/headcount-trim-report.json 最新一份覆盖写）+ org 通知（有裁剪才发，
+  // 防骚扰）。dryRun 只出报告不动盘（orgAction headcount-trim 预览面）。
+  // onlyGid：只清本组（派单触顶路径用——「开新 worker 前先清过期旧席」轻量触发，
+  // 不全组扫描）。
+  trimHeadcounts(opts?: { dryRun?: boolean; keepIdleMs?: number; onlyGid?: string }): { ok: true; data: { groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[]; totalTrimmed: number } } {
+    const now = Date.now();
+    const keepIdleMs = opts?.keepIdleMs ?? 24 * 3_600_000;
+    const groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[] = [];
+    for (const g of listGroups()) {
+      if (g.status !== "active") continue; // 挂起/结项组编制是快照档案，不动
+      if (opts?.onlyGid && g.id !== opts.onlyGid) continue;
+      const plan = planHeadcountTrim({
+        headcount: g.headcount,
+        isLiveSession: (sid) => this.isLiveRosterSession(sid, now, keepIdleMs),
+        lastActiveOf: (sid) => this.lastActiveOfSid(sid),
+        now,
+        keepIdleMs,
+      });
+      if (plan.trimmed.length === 0) continue;
+      const trimReport = plan.trimmed.map((t) => ({
+        session_id: t.entry.session_id,
+        role: t.entry.role || "worker",
+        ...(t.entry.nick ? { nick: t.entry.nick } : {}),
+        last_active: this.lastActiveOfSid(t.entry.session_id),
+        reason: t.reason,
+      }));
+      groups.push({ gid: g.id, name: g.name, before: g.headcount.length, after: plan.keep.length, trimmed: trimReport });
+      if (!opts?.dryRun) {
+        const r = setGroupHeadcount(g.id, plan.keep);
+        if (!r.ok) {
+          console.warn(`[headcount-trim] ${g.name} 裁剪写盘失败: ${r.error}（本组跳过，下轮重试）`);
+          groups.pop();
+          continue;
+        }
+        // 被裁成员若静止在本组归属态，清归属标记（与 member-retire 口径一致：
+        // 列表归组/徽标随散；会话卡不删，路由档案不删）
+        for (const t of plan.trimmed) {
+          const s = this.sessions.get(t.entry.session_id);
+          if (s && s.state.project_gid === g.id && s.state.status !== "WORKING" && s.state.status !== "WAITING") {
+            s.state.project_gid = undefined;
+            s.state.dispatch_tier = undefined;
+          }
+        }
+      }
+    }
+    const totalTrimmed = groups.reduce((n, x) => n + x.trimmed.length, 0);
+    if (!opts?.dryRun && totalTrimmed > 0) {
+      try {
+        const d = orgDir();
+        mkdirSync(d, { recursive: true });
+        writeFileSync(join(d, "headcount-trim-report.json"), JSON.stringify({ ts: now, groups }, null, 2) + "\n", "utf-8");
+      } catch { /* 报告落盘失败不阻断主路径（清单在通知+日志双备） */ }
+      for (const x of groups) {
+        console.log(`[headcount-trim] ${x.name}: ${x.before} → ${x.after} 席（裁 ${x.trimmed.length}）`);
+      }
+      this.upsertNotification("system", `headcount-trim-${now}`, String(now), {
+        title: `编制清理：裁减 ${totalTrimmed} 席`,
+        body: truncate(groups.map((x) => `${x.name} ${x.before}→${x.after} 席`).join("；") + "。被裁成员出编制不删会话，清单见 headcount-trim-report.json", 160),
+        severity: "info", group: "activity", actionable: false, domain: "org", returnPath: "org",
+      });
+      this.emitOrgState();
+    }
+    return { ok: true, data: { groups, totalTrimmed } };
+  }
+
+  // 裁剪节拍：boot 首轮（index.ts 显式调）+ 定时（CCR_ORG_TRIM_HOURS 缺省 6，0=关
+  // 定时；CCR_NO_HEADCOUNT_TRIM=1 全停——测试/沙盒缝，与 CCR_NO_AUTOREVIVE 同范式）。
+  startHeadcountTrim(): void {
+    if (process.env.CCR_NO_HEADCOUNT_TRIM === "1") return;
+    if (!this.trimTimer) {
+      const hours = Number(process.env.CCR_ORG_TRIM_HOURS);
+      const ms = Number.isFinite(hours) && hours > 0 ? hours * 3_600_000 : 6 * 3_600_000;
+      if (ms > 0) {
+        this.trimTimer = setInterval(() => {
+          try { this.trimHeadcounts(); } catch { /* 定时轮失败不炸，下轮再来 */ }
+        }, ms);
+        this.trimTimer.unref?.();
+      }
+    }
   }
 
   // ---------- #26 M3 两层联动（§6.2：组挂起 → 成员会话全 parked；恢复 → 路由表拉原班） ----------

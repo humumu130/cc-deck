@@ -290,7 +290,11 @@ export function clearOrgAnchor(dir?: string): void {
 // "看门狗"（#25-P7）非派单档位：SDK 流中断看门狗的自愈动作记台账行专用——设计稿
 // §2.5「watchdog 告警进台账」，WATCHDOG 瞬态帧三端零消费，动作此前用户完全不可见
 export type DispatchTier = "咨询" | "随手办" | "轻立项" | "正经立项" | "暂缓" | "看门狗";
-export type DispatchStatus = "dispatched" | "running" | "done" | "failed";
+// "queued"（P0 编制上限 2026-10-15）：编制触顶且全忙时的排队态——单已受理未派发，
+// 有 idle 名额/空闲 worker 时由 drainDispatchQueue 接续（不自动扩编）。消费面天然
+// 兼容：closeHungDispatchRows/开放单过滤都白名单 running|dispatched，queued 不会被
+// 重启断档补记误收口；端上未知状态原样显示（宽容惯例）
+export type DispatchStatus = "dispatched" | "running" | "done" | "failed" | "queued";
 
 export interface DispatchEntry {
   ts: number;

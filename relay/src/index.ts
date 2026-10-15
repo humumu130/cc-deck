@@ -356,6 +356,26 @@ const parkedRehydrated = mgr.rehydrateParkedMembers();
 // 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
 mgr.startStaleScan();
 
+// P0 编制膨胀根修（2026-10-15 用户实锤「编制膨胀 65 席」）：①boot 首轮裁剪——
+// 保留命名角色/会话存活/24h 内有活动，其余泛 worker 出编制（不删会话，复拉走
+// member-add；面板团队数即时收敛）；②裁剪定时（CCR_ORG_TRIM_HOURS 缺省 6h，0=关，
+// CCR_NO_HEADCOUNT_TRIM=1 全停）；③派单排队队列重启回灌（触顶全忙排队不扩编，
+// 有空闲即接续）。首轮裁剪在收养广播之后跑，报告落 org/headcount-trim-report.json
+try {
+  const trim = mgr.trimHeadcounts();
+  if (trim.data.totalTrimmed > 0) {
+    console.log(`[headcount-trim] boot 首轮：裁减 ${trim.data.totalTrimmed} 席（${trim.data.groups.map((g) => `${g.name} ${g.before}→${g.after}`).join("；")}），清单见 org/headcount-trim-report.json`);
+  }
+} catch (e) {
+  console.warn(`[headcount-trim] boot 首轮失败（下轮定时重试）: ${e instanceof Error ? e.message : String(e)}`);
+}
+mgr.startHeadcountTrim();
+try {
+  mgr.reloadDispatchQueue();
+} catch (e) {
+  console.warn(`[dispatch-queue] 重启回灌失败（队列按空处理）: ${e instanceof Error ? e.message : String(e)}`);
+}
+
 // W-EXPP1 角色经验回流 P1（2026-10-10）：① 旧 lessons 内容性条目一次性迁移——先迁后
 // 切（REL 建-2）：报错只 warn 不阻断启动，旧域数据原样冻结（停灌不删），下次启动按
 // source lesson id 幂等重跑；② GC 机械档调度挂载（双轨触发+启动补跑+饱和降频，tick

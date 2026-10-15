@@ -35,6 +35,7 @@
     "test:decision-notify": "tsx scripts/test-decision-notify.ts",
     "test:decision-ledger": "tsx scripts/test-decision-ledger.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
+    "test:headcount": "tsx scripts/test-headcount.ts",
     "test:routing": "tsx scripts/test-routing.ts",
     "test:experience": "tsx scripts/test-experience.ts",
     "test:experience-broadcast": "tsx scripts/test-experience-broadcast.ts",
