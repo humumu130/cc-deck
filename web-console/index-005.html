@@ -1717,17 +1717,27 @@
     #d-team .crewfoot { margin-top: 2px; padding: 6px 0 2px; border-top: 1px dashed var(--line-soft); color: var(--dim); font-size: var(--fs-C); line-height: 1.8; text-align: center; }
     #d-team .crewfoot .lamp-key { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; }
     #d-team .crewfoot .lamp-key i { width: 7px; height: 7px; border-radius: 50%; }
-    /* ---- 活动时间线（原型 feedwrap/.fi 轻列表）---- */
+    /* ---- 活动时间线（v3 原型 feedwrap/.fi 轻列表——W-ACTIVITY3 #116）---- */
     #d-team .activity-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 9px; min-height: 0; padding: 6px 0; border-bottom: 1px dashed var(--line-soft); color: var(--card-sub); font-size: var(--fs-C); line-height: 1.5; }
     #d-team .activity-row::before { content: none; } /* 竖线时间轴退役（原型无） */
     #d-team .activity-row time { flex: 0 0 40px; min-width: 0; padding: 1px 0 0; color: var(--faint); font: var(--fs-C) var(--mono); font-variant-numeric: tabular-nums; }
-    #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--dim); font: var(--fs-C)/1.5 var(--mono); }
-    #d-team .activity-row .act-glyph.ok { color: var(--done); }
-    #d-team .activity-row .act-glyph.bad { color: var(--error); }
+    /* 五色词表 glyph/状态词（1014 定版灯 token 全产品唯一事实源；派单=品牌橙 #E08A63 系——
+       dispatched 橙/running 工作琥珀/done 空闲绿/failed 出错红/未知兜底=关闭灰） */
+    #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--st-closed); font: var(--fs-C)/1.5 var(--mono); }
+    #d-team .activity-row .act-st { font-weight: 600; color: var(--st-closed); }
+    #d-team .activity-row.activity-dispatched .act-glyph, #d-team .activity-row.activity-dispatched .act-st { color: var(--brand); }
+    #d-team .activity-row.activity-running .act-glyph, #d-team .activity-row.activity-running .act-st { color: var(--st-working); }
+    #d-team .activity-row.activity-done .act-glyph, #d-team .activity-row.activity-done .act-st { color: var(--st-idle); }
+    #d-team .activity-row.activity-failed .act-glyph, #d-team .activity-row.activity-failed .act-st { color: var(--st-error); }
     #d-team .activity-row > span { flex: 1; min-width: 0; }
     #d-team .activity-row b { color: var(--text); font-weight: 600; }
-    /* 活动筛选 chips（原型 fchips） */
-    #d-team .feed-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 4px 0 10px; }
+    #d-team .activity-row .act-note { color: var(--dim); }
+    /* TODO(W-ACTIVITY3 拍板项)：密度双档（标准/紧凑）——v3 原型活动区无明示开关
+       （1373/1618「密度·标准」为左列列表、1917 为全局会话列表设置，均非活动面），
+       留待用户拍板后实装，不抢跑 */
+    /* 活动筛选 chips（v3 原型 fchips；筛选语义=Codex 轨拍板：类型/源双轴） */
+    #d-team .feed-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 4px 0 10px; }
+    #d-team .feed-chips .feed-axis { color: var(--faint); font-size: var(--fs-E); }
     #d-team .feed-chips .fchip { padding: 4px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); font-size: var(--fs-C); cursor: pointer; transition: color .15s ease, border-color .15s ease, background-color .15s ease; }
     #d-team .feed-chips .fchip:hover { color: var(--text); border-color: var(--border-strong); }
     #d-team .feed-chips .fchip.on { color: var(--brand-hover); border-color: var(--brand-line, color-mix(in srgb, var(--brand) 42%, transparent)); background: var(--brand-soft); font-weight: 600; }
@@ -6808,7 +6818,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all" }; // feedFilter：V8R 活动页状态筛选（纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all" }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -7064,25 +7074,48 @@
                   const boardFoot = '<div class="boardfoot">板面实时同步 · 断线自动补齐 · 卡面 ✓✗○ = AI 自验进度，最终验收以确认卡为准 · 新建任务走来源会话派单</div>';
                   return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + boardOverview + '<div class="board">' + columns + "</div>" + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
                 }
-                function activityMarkup(project) {
+                function activityMarkup(project, opts = {}) {
+                  // W-ACTIVITY3（#116，1015 拍板）：视觉基准=v3 原型活动页（feedwrap/.fi 轻列表
+                  // ——行=时间+glyph+状态词+标题，dashed 分隔，去卡片墙重徽章）；筛选语义=Codex
+                  // 轨拍板（类型/源双轴——团队/项目轴在 per-team pane 内退化恒单值不单列）。
+                  // 数据源沿用派单回执（dispatch-log 收敛末行）零 relay 改动：engine 为 M12-5
+                  // 可选键（缺省=Claude 不写键），receipt 仅终态行携带。
+                  // opts.compact=右侧栏「最近派单回执」复用行渲染（v3 dispfeed 同形态：
+                  // 无头无 chips 纯行流）。
                   const receipts = state.receipts.get(project?.id);
+                  const compact = Boolean(opts.compact);
                   if (!receipts) return banner("尚未取得派单回执，请加载项目详情。");
-                  if (!receipts.length) return banner("暂无派单回执");
+                  const head = '<div class="pane-summary">活动 <span class="faint">团队时间线 · 共 ' + receipts.length + " 条</span></div>";
+                  if (!receipts.length) return (compact ? "" : head) + banner("暂无派单回执");
                   const statuses = new Map([["dispatched", "已派单"], ["running", "运行中"], ["done", "完成"], ["failed", "失败"]]);
-                  // W-V8 批4b 活动时间线 v8 化：①倒序（最新在上——v8 时间线倒序口径）②类型
-                  // glyph 家族（▶ 派单 / ● 运行 / ✓ 完成 / ⚠ 失败——v8 事件 glyph 语言）
+                  // glyph 家族（v3 事件 glyph 语言）：▶ 派单 / ● 运行 / ✓ 完成 / ⚠ 失败；
+                  // 色随 .activity-* 父类走五色词表（见 CSS 块注释）
                   const glyphs = new Map([["dispatched", "▶"], ["running", "●"], ["done", "✓"], ["failed", "⚠"]]);
-                  const glyphTone = new Map([["dispatched", "info"], ["running", "info"], ["done", "ok"], ["failed", "bad"]]);
-                  // V8R：筛选 chips（原型 fchips）——状态轴纯前端过滤（全部/四态，零链路改动）
-                  const counts = new Map([["all", receipts.length]]);
-                  for (const r of receipts) counts.set(r.status, (counts.get(r.status) || 0) + 1);
-                  const chips = ['<div class="feed-chips" role="group" aria-label="活动状态筛选">']
-                    .concat([["all", "全部"], ["dispatched", "已派单"], ["running", "运行中"], ["done", "完成"], ["failed", "失败"]]
-                      .filter(([key]) => key === "all" || counts.get(key))
-                      .map(([key, label]) => '<button type="button" class="fchip' + (state.feedFilter === key ? " on" : "") + '" data-feed-chip="' + key + '">' + label + ' <b>' + (counts.get(key) || 0) + "</b></button>"))
-                    .concat(["</div>"]).join("");
+                  // 源轴=引擎（entry.engine 缺省回会话引擎，再缺省 claude——与派单解析链缺省一致）
+                  const engineOf = (entry) => entry.engine || state.sessions.get(entry.session_id)?.engine || "claude";
+                  const srcCounts = new Map();
+                  for (const r of receipts) { const e = engineOf(r); srcCounts.set(e, (srcCounts.get(e) || 0) + 1); }
+                  const stCounts = new Map();
+                  for (const r of receipts) stCounts.set(r.status, (stCounts.get(r.status) || 0) + 1);
+                  const chip = (axis, key, label, n, on) => '<button type="button" class="fchip' + (on ? " on" : "") + '" data-feed-' + axis + '="' + escape(key) + '">' + escape(label) + " <b>" + n + "</b></button>";
+                  // 防御：已选源在本组回执中不存在（换组后引擎集变化）→ 视同 all，不空转
+                  const srcLive = state.feedSrc === "all" || srcCounts.has(state.feedSrc);
+                  const chips = compact ? "" :
+                    '<div class="feed-chips" role="group" aria-label="活动类型筛选"><span class="feed-axis">类型</span>'
+                    + [["all", "全部", receipts.length], ["dispatched", "已派单", 0], ["running", "运行中", 0], ["done", "完成", 0], ["failed", "失败", 0]]
+                      .map(([key, label]) => [key, label, key === "all" ? receipts.length : (stCounts.get(key) || 0)])
+                      .filter(([key, , n]) => key === "all" || n)
+                      .map(([key, label, n]) => chip("chip", key, label, n, state.feedFilter === key))
+                      .join("")
+                    + "</div>"
+                    + '<div class="feed-chips" role="group" aria-label="活动来源筛选"><span class="feed-axis">源</span>'
+                    + [["all", "全部源", receipts.length], ...[...srcCounts.entries()].sort((a, b) => b[1] - a[1]).map(([e, n]) => [e, (engines.get(e)?.[0] || e), n])]
+                      .filter(([key, , n]) => key === "all" || n)
+                      .map(([key, label, n]) => chip("src", key, label, n, state.feedSrc === key || (key === "all" && !srcLive)))
+                      .join("")
+                    + "</div>";
                   const ordered = receipts.slice()
-                    .filter((entry) => state.feedFilter === "all" || entry.status === state.feedFilter)
+                    .filter((entry) => (state.feedFilter === "all" || entry.status === state.feedFilter) && (!srcLive || state.feedSrc === "all" || engineOf(entry) === state.feedSrc))
                     .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
                   const rows = ordered.map((entry) => {
                     const timestamp = Number(entry.ts);
@@ -7090,9 +7123,12 @@
                     const validDate = date && Number.isFinite(date.getTime());
                     const time = validDate ? String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") : "时间未知";
                     const session = state.sessions.get(entry.session_id);
-                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph ' + (glyphTone.get(entry.status) || "") + '" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b>' + escape(statuses.get(entry.status) || entry.status || "状态未知") + " · " + escape(entry.target || session?.title || entry.session_id) + "</b> · " + escape(entry.tier || "") + " · " + escape(entry.receipt || "暂无收口回执") + " " + engineBadge(entry.engine || session?.engine) + sourceBadge() + "</span></div>";
+                    const note = String(entry.receipt || "").trim();
+                    // v3 轻行正文：状态词（五色）+ 目标（承接人/会话）+ 收口回执（终态才有，
+                    // 附注灰字）；tier/引擎徽章/来源徽章随卡片墙语汇退役（v3 .fi 无徽章位）
+                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + "</span></div>";
                   }).join("");
-                  return '<div class="team-activity">' + chips + (rows || banner("当前筛选无条目")) + "</div>";
+                  return '<div class="team-activity">' + (compact ? "" : head) + chips + (rows || banner("当前筛选无条目")) + "</div>";
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
                 // 数据源：SNAPSHOT.experience（覆盖式锚定）+ EXPERIENCE_UPDATED 帧（帧双载
@@ -7498,7 +7534,7 @@
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
                   query("[data-team-members]").innerHTML = memberHtml;
-                  query("[data-team-activity]").innerHTML = activityHtml;
+                  query("[data-team-activity]").innerHTML = activityMarkup(project, { compact: true }); // W-ACTIVITY3：右栏回执流=compact 态（v3 dispfeed 纯行形态，无头无 chips）
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
                   panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
                   if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
@@ -7861,9 +7897,11 @@
                     }
                     const decision = event.target.closest("[data-team-decision]");
                     if (decision) { event.preventDefault(); if (decision.dataset.approve === "true" || decision.dataset.approve === "false") void decide(decision.dataset.teamDecision, decision.dataset.approve === "true"); return; }
-                    // V8R 活动页筛选 chips（纯前端过滤，零链路）
+                    // V8R 活动页筛选 chips（纯前端过滤，零链路）；W-ACTIVITY3 加源轴（Codex 轨双轴口径）
                     const feedChip = event.target.closest("[data-feed-chip]");
                     if (feedChip) { state.feedFilter = feedChip.dataset.feedChip || "all"; render(); return; }
+                    const feedSrcChip = event.target.closest("[data-feed-src]");
+                    if (feedSrcChip) { state.feedSrc = feedSrcChip.dataset.feedSrc || "all"; render(); return; }
                     const project = event.target.closest("[data-team-project]");
                     if (project) { select(project.dataset.teamProject); return; }
                     const confirm = event.target.closest("[data-team-pick-confirm]");
