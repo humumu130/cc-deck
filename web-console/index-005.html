@@ -1024,9 +1024,14 @@
     body[data-ui-scale="90"] { --ui-scale: 0.9; }
     body[data-ui-scale="110"] { --ui-scale: 1.1; }
     body[data-ui-scale="125"] { --ui-scale: 1.25; }
-    /* FB5 引擎置灰：未就绪引擎行整体降不透明度（状态 tag 仍可读，不再与已接引擎同权重） */
+    /* FB5 引擎置灰：未就绪引擎行整体降不透明度（状态 tag 仍可读，不再与已接引擎同权重）
+       W-SETTINGS3 批2：行式化后 v8-swrow.engine-off 同口径 */
     .settings-row.engine-off { opacity: .55; }
     .settings-row.engine-off .engine-badge { filter: saturate(.35); }
+    #d-settings .v8-swrow.engine-off { opacity: .55; }
+    #d-settings .v8-swrow.engine-off .engine-badge { filter: saturate(.35); }
+    /* W-SETTINGS3 批2：引擎徽章叠 v8-swico 格子——保胶囊形态（30×30 方格会让胶囊扭曲） */
+    #d-settings .v8-swico.engine-badge { width: auto; height: auto; border-radius: 999px; }
     .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
     .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
     /* W-CTXFIX B3 压缩前状态摘要折叠：灰调低调（存档查阅属性），details 原生折叠默认收起 */
@@ -1921,18 +1926,19 @@
     /* W-V8R 批6（连接与设备 v8 化，v8 setpage-conn 形态·现网 token 映射）：sethead 页头+
        setcard 三卡（relay/已配设备/云桥）+relaystat 主行+swrow 设备行+prbtn 小钮+escape 尾注 */
     .v8-sethead { margin: 2px 2px 14px; }
-    .v8-sethead .t { color: var(--text-strong); font-size: 15px; font-weight: 700; }
-    .v8-sethead .s { margin-top: 2px; color: var(--faint); font-size: var(--fs-C); }
-    .v8-setcard { margin: 0 0 12px; padding: 12px 14px 10px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
-    .v8-setcard > h5 { margin: 0 0 8px; color: var(--dim); font-size: var(--fs-C); font-weight: 600; letter-spacing: .3px; }
+    .v8-sethead .t { color: var(--text-strong); font-size: 15.5px; font-weight: 600; }
+    .v8-sethead .s { margin-top: 4px; color: var(--faint); font-size: var(--fs-C); }
+    .v8-setcard { margin: 0 0 12px; padding: 3px 14px 7px; border: 1px solid var(--line-soft); border-radius: 13px; background: var(--surface2); }
+    .v8-setcard > h5 { margin: 6px 0 2px; color: var(--dim); font-size: var(--fs-C); font-weight: 600; letter-spacing: .3px; }
     .v8-setcard .settings-list { gap: 4px; }
     .v8-relaystat { display: flex; align-items: flex-start; gap: 10px; }
     .v8-relaystat .st { color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 600; }
     .v8-relaystat .meta, .v8-swd { margin-top: 1px; color: var(--faint); font-size: var(--fs-C); }
+    .v8-relaystat .meta { font-family: var(--mono, ui-monospace, monospace); } /* W-SETTINGS3 批2（视觉清单）：端口/路径等值类文本回 V3 mono 码值语言 */
     .v8-rdot2 { flex: none; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--done); box-shadow: 0 0 8px color-mix(in srgb, var(--done) 45%, transparent); }
     .v8-rdot2.off { background: var(--working); box-shadow: 0 0 8px color-mix(in srgb, var(--working) 45%, transparent); }
     .v8-relaystat .row-share { margin-left: auto; flex: none; }
-    .v8-swrow { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--line-soft); }
+    .v8-swrow { display: flex; align-items: center; gap: 10px; padding: var(--setrow-py, 8px) 2px; border-bottom: 1px dashed var(--line-soft); }
     .v8-setcard .v8-swrow:last-of-type { border-bottom: 0; }
     .v8-swico { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface1); color: var(--info); font-size: 13px; }
     .v8-swtxt { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-A-item); font-weight: 550; }
@@ -2281,7 +2287,7 @@
     .density-control { display: inline-flex; gap: 2px; padding: 2px; margin-left: auto; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); }
     .density-control button {padding: 4px 11px; border: 0; border-radius: 999px; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E); transition: background .16s ease, color .16s ease;}
     .density-control button:hover { color: var(--text-strong); }
-    .density-control button.active { background: var(--brand); color: #fff; box-shadow: 0 1px 4px rgba(1,8,16,.3); }
+    .density-control button.active { background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; box-shadow: none; } /* W-SETTINGS3 批2：分段选中换 V3 seg token（brand-soft 淡底+橙字 600，原 brand 实底白字退役） */
     /* #160 空闲置灰时长输入（设置·通用与快捷键）：数字输入 + 单位小字，同 density-control 量级 */
     .idle-dim-field { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
     .idle-dim-field input {width: 62px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface1); color: var(--text-strong); font-size: var(--fs-E); text-align: right;}
@@ -2361,13 +2367,36 @@
     .demo-error-actions button {padding: 4px 7px; border: 1px solid var(--danger-line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: var(--fs-E);}
     .demo-error-actions button:hover { border-color: var(--error); }
     @keyframes demo-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
-    /* 件七：设置导航卡贴合+分割线（参照会话面板卡语言）——高度调小一档（内容高+9px×2，
-       原 min-height:57 时代 76px）；block-size:auto 挣脱 :1516 的 density 固定高（ID 特化
-       优先级高于本处类选择器，不显式覆盖会钉住卡高） */
-    .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; border-radius: 0; margin-bottom: 0; padding: 9px 12px; block-size: auto; transition: background .06s linear; }
-    .settings-nav .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+    /* 件七：设置导航卡——W-SETTINGS3 批1 换 V3 snav 语言（v8-ui-interactive-v3 setnav）：
+       圆角 9 悬浮淡底；选中=brand-soft 底+橙字 600+左缘 2.5px 品牌条（取代旧分隔线+3px 内阴影）；
+       block-size:auto 挣脱 :1516 的 density 固定高（ID 特化优先级高于本处类选择器） */
+    .settings-nav .queue-card { position: relative; border-color: transparent; background: transparent; box-shadow: none; border-radius: 9px; margin-bottom: 2px; padding: 8px 11px; block-size: auto; transition: color .15s ease, background-color .15s ease; }
+    .settings-nav .queue-card + .queue-card { border-top: 0; }
     .settings-nav .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
-    .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--brand); }
+    .settings-nav .queue-card.selected { border-color: transparent; background: color-mix(in srgb, var(--brand) 16%, transparent); box-shadow: none; } /* 视觉清单：选中态整块暖琥珀填充（原 brand-soft 极淡近中性，高亮重量不足） */
+    .settings-nav .queue-card.selected::before { content: ""; position: absolute; left: 2px; top: 8px; bottom: 8px; width: 2.5px; border-radius: 2px; background: var(--brand); }
+    .settings-nav .queue-card.selected .row strong { color: var(--brand-strong); font-weight: 600; }
+    .settings-nav .queue-card .row .avatar { background: transparent; border-color: transparent; color: var(--dim); }
+    .settings-nav .queue-card.selected .row .avatar { color: var(--brand-strong); }
+    /* W-SETTINGS3 批2：去重复页头——面板 sethead 是唯一标题（V3 无域头重复标题；activateSettings
+       仍写 h2 供无障碍/标题链，视觉上隐藏） */
+    #d-settings .workspace-title-row h2 { display: none; }
+    /* W-SETTINGS3 批2（视觉对照清单）：设置域按钮语言回 V3 描边幽灵系——橙实心收敛到
+       「检查更新」单一最高权重主操作（about hero 主钮），卡内操作一律描边 */
+    #d-settings .primary-btn { background: transparent; border: 1px solid color-mix(in srgb, var(--brand) 45%, transparent); color: var(--brand-strong); font-weight: 600; }
+    #d-settings .primary-btn:hover { background: var(--brand-soft); }
+    #d-settings .about-hero .primary-btn { background: var(--brand); border-color: var(--brand); color: #fff; }
+    /* W-SETTINGS3 批2（视觉清单）：扩展页图标容器上色+关于 hero 卡 */
+    .v8-swico.ext-ico { background: color-mix(in srgb, var(--brand) 14%, transparent); border-color: color-mix(in srgb, var(--brand) 35%, transparent); color: var(--brand-strong); }
+    .about-hero { text-align: center; padding: 22px 14px 16px; }
+    .about-hero .logo { font-size: 28px; font-weight: 800; letter-spacing: 1px; color: var(--text-strong); }
+    .about-hero .logo b { color: var(--brand); }
+    .about-hero .ver { margin-top: 8px; font-size: var(--fs-B); color: var(--dim); }
+    /* W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（父列 flex 撑满才吸底） */
+    .queue.settings-nav { display: flex; flex-direction: column; }
+    .settings-nav-foot { margin-top: auto; padding: 10px 8px 2px; font-size: var(--fs-micro); color: var(--faint); line-height: 1.7; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+    /* W-SETTINGS3 批1：快捷键行内键位码（V3 prcode 语言，键位当前值随行展示） */
+    .kbd-inline-chip { display: inline-block; margin-left: 7px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface1); color: var(--dim); font-family: var(--mono, ui-monospace, monospace); font-size: var(--fs-micro); white-space: nowrap; }
     /* #df2-E 面板底部动作右下角：panel 尾按钮右靠 + workspace-footer 全线右对齐（composer 场景 flex:1 不受影响） */
     .settings-panel > button.primary-btn, .settings-panel > button.secondary-btn, .settings-panel .settings-connection-tabs > button.primary-btn { display: block; margin-left: auto; }
     .workspace-footer { justify-content: flex-end; }
@@ -2758,9 +2787,17 @@
       padding: 4px 0 10px;
     }
     #d-settings .settings-panel .settings-row {
-      min-height: 50px;
-      padding: 10px 0;
+      min-height: var(--setrow-minh, 50px);
+      padding: var(--setrow-py, 10px) 0;
     }
+    /* W-SETTINGS3 批3：设置域密度双档（V3 通用页「列表密度」seg 语言，作用于设置页自身
+       行距与留白）——comfortable=呼吸感默认；compact=一屏多看几行。变量挂 #d-settings，
+       导航/页头/分组卡留白随档联动 */
+    #d-settings[data-settings-density="compact"] { --setrow-py: 4px; --setrow-minh: 36px; --setcard-gap: 8px; --setcard-py: 8px; }
+    #d-settings[data-settings-density="compact"] .v8-setcard { padding: var(--setcard-py, 12px) 14px calc(var(--setcard-py, 12px) - 2px); margin-bottom: var(--setcard-gap, 12px); }
+    #d-settings[data-settings-density="compact"] .v8-swd { margin-top: 0; line-height: 1.4; }
+    #d-settings[data-settings-density="compact"] .v8-setcard > h5 { padding-top: 4px; }
+    #d-settings[data-settings-density="compact"] .toggle-switch { transform: scale(.92); }
     .pair-pop {
       width: min(420px, calc(100vw - 40px));
       border: 1px solid var(--line);
@@ -9123,7 +9160,7 @@
           </section>
 
           <section class="desktop-screen" id="d-settings">
-            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接管理</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-sliders"></use></svg></span><strong>通用</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-keyboard"></use></svg></span><strong>快捷键</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-table"></use></svg></span><strong>扩展</strong></div></div><div class="queue-card"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-card" data-settings-nav="general"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><strong>通用</strong></div></div><div class="queue-card" data-settings-nav="provider"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div></div><div class="queue-card selected" data-settings-nav="connections"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong></div></div><div class="queue-card" data-settings-nav="identity"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div></div><div class="queue-card" data-settings-nav="extensions"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-table"></use></svg></span><strong>扩展</strong></div></div><div class="queue-card" data-settings-nav="about"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div></div><div class="settings-nav-foot" data-settings-nav-foot>v0.0.0<br>本机 relay</div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><h2>连接与设备</h2></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>端口 8787 · 事件流自动补发</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>云桥连接详情</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>本页设备 · 配对 token 已就绪</p></div><span class="tag done">在线</span></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn" data-settings-help type="button">查看连接帮助</button><button class="primary-btn" data-settings-verify type="button">验证全部连接</button></footer></section>
             <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>—</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
           </section>
@@ -9936,8 +9973,8 @@ function connectLan(ctx) {
       }
 
       // ---------- ⑥c-1 设置域 B6：六面板装配（原型 setupSettingsContent 同构）+ 真数据经 B4 桥 ----------
-      const SETTINGS_PANELS = ["connections", "provider", "general", "shortcuts", "identity", "extensions", "about"];
-      const SETTINGS_TITLES = ["连接与设备", "Agent 引擎", "通用", "快捷键", "团队身份模板", "扩展", "关于"];
+      const SETTINGS_PANELS = ["general", "provider", "connections", "identity", "extensions", "about"];
+      const SETTINGS_TITLES = ["通用", "Agent 引擎", "连接与设备", "团队身份模板", "扩展", "关于"];
       const SETTINGS_SUBS = {
         connections: "relay · 云桥 · 已配设备 · 异常项单独处理",
         provider: "六引擎接入 · 状态取自 relay 引擎目录",
@@ -10181,17 +10218,35 @@ function connectLan(ctx) {
         const body = section?.querySelector(".workspace-body");
         if (!section || !queue || !body || body.dataset.settingsReady) return;
         queue.classList.add("settings-nav");
-        const pairBanner = '<div class="readonly-banner">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>';
+        const pairBanner = '<div class="v8-escape">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>'; /* W-SETTINGS3 批2：组尾注释降回灰字内联（视觉清单：全宽橙描边提示框非 V3 语言） */
         body.innerHTML = `
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">relay · 远程源 · 本页设备——连接管理面</div></div><div class="v8-setcard"><h5>relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard"><h5>已配设备</h5><div class="settings-list" data-settings-live="devices"></div><div class="v8-escape">设备身份 = 配对密钥（E2E）· 踢出后需重新配对；凭证与配对历史存于 relay 本机</div></div>${pairBanner}<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary-btn" data-settings-add type="button">＋ 添加服务器 · 连其他电脑</button><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list" data-settings-live="provider"></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-bell"></use></svg></span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></span><div><strong>界面字号</strong><p>只改文字大小，布局不变 · 立即生效</p></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clock"></use></svg></span><div><strong>空闲置灰</strong><p>完成/出错会话静默超时后退后显示</p></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div><div class="settings-row fs-debug-row-wrap"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-sliders"></use></svg></span><div class="fs-debug-body"><strong>字号调试</strong><p class="fs-debug-note">临时调试 · 调完截图给 PM 固化（不进正式配置）</p><div class="fs-debug-grid"><label class="fs-debug-item"><span>消息内容</span><input type="range" min="10" max="22" step="1" data-fs-slider="msg" aria-label="消息内容字号（px）" /><b data-fs-val="msg"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="msg" title="重置本项" aria-label="重置消息内容字号">↺</button></label><label class="fs-debug-item"><span>卡片标题</span><input type="range" min="10" max="22" step="1" data-fs-slider="title" aria-label="卡片标题字号（px）" /><b data-fs-val="title"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="title" title="重置本项" aria-label="重置卡片标题字号">↺</button></label><label class="fs-debug-item"><span>卡片描述</span><input type="range" min="10" max="22" step="1" data-fs-slider="desc" aria-label="卡片描述字号（px）" /><b data-fs-val="desc"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="desc" title="重置本项" aria-label="重置卡片描述字号">↺</button></label><label class="fs-debug-item"><span>界面 UI</span><input type="range" min="10" max="22" step="1" data-fs-slider="ui" aria-label="界面 UI 字号（px）" /><b data-fs-val="ui"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="ui" title="重置本项" aria-label="重置界面 UI 字号">↺</button></label><label class="fs-debug-item"><span>等宽代码</span><input type="range" min="10" max="22" step="1" data-fs-slider="mono" aria-label="等宽代码字号（px）" /><b data-fs-val="mono"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="mono" title="重置本项" aria-label="重置等宽代码字号">↺</button></label></div><button type="button" class="secondary-btn fs-dbg-reset-all" data-fs-reset-all>全部重置</button></div></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="shortcuts"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-search"></use></svg></span><div><strong>全局搜索</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">${escapeHtml(keyDisplay("search"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-plus-doc"></use></svg></span><div><strong>新建会话</strong><p>点击右侧键位自定义 · Esc 取消</p></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">${escapeHtml(keyDisplay("new"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-panel"></use></svg></span><div><strong>呼出 / 收起面板</strong><p>全局快捷键 · 最小化时唤回窗口</p></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">${escapeHtml(toggleHotkeyDisplay())}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-arrows-v"></use></svg></span><div><strong>切换会话</strong><p>会话列表内上下移动 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("↑↓"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>切换数据源</strong><p>多源间快速切换 · 点击修改修饰键</p></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">${escapeHtml(kbmodDisplay("←→"))}</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-code"></use></svg></span><div><strong>恢复默认键位</strong><p>清除全部自定义，回到出厂键位</p></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list" data-settings-live="identity"></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><div><strong>cc-deck</strong><p><a class="about-link" data-about-link="https://cc.humumu.online">项目主页</a><span class="about-sep">·</span><a class="about-link" data-about-link="https://github.com/humumu130/cc-deck">仓库地址</a></p></div><span class="tag info" data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><div><strong>检查更新</strong><p data-update-status>当前已是最新版本</p></div><button class="secondary-btn" data-update-check type="button">检查更新</button></div><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div><strong>下载手机 App</strong><p>扫码安装 · 手机端仅浏览、验证和换路由</p></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="settings-list" data-settings-live="design" hidden></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div><div class="s">外观 · 快捷键 · 通知——基座偏好（连接状态见连接与设备页）</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号<div class="v8-swd">只改文字大小，布局不变 · 立即生效</div></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度<div class="v8-swd">会话卡片信息密度 · 紧凑=一屏多看两条</div></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">设置密度<div class="v8-swd">本设置页行距与留白 · 舒适=呼吸感，紧凑=一屏多看几行</div></div><div class="density-control" role="group" aria-label="设置密度"><button type="button" data-settings-density-option="compact">紧凑</button><button type="button" data-settings-density-option="comfortable">舒适</button></div></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span><div class="v8-swd">跨会话 / 团队 / 任务的模糊搜索 · 点右侧自定义</div></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span><div class="v8-swd">普通会话 · 点右侧自定义</div></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span><div class="v8-swd">全局快捷键 · 最小化时唤回窗口</div></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span><div class="v8-swd">会话列表内上下移动</div></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span><div class="v8-swd">多源间快速切换</div></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义，回到出厂键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音<div class="v8-swd">行动项到达时提示</div></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知<div class="v8-swd">后台 relay 有新行动时提示</div></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div></div><div class="v8-setcard"><h5>高级</h5><div class="v8-swrow"><div class="v8-swtxt">空闲置灰<div class="v8-swd">完成/出错会话静默超时后退后显示</div></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div><div class="v8-swrow fs-debug-row-wrap"><div class="fs-debug-body"><strong>字号调试</strong><p class="fs-debug-note">临时调试 · 调完截图给 PM 固化（不进正式配置）</p><div class="fs-debug-grid"><label class="fs-debug-item"><span>消息内容</span><input type="range" min="10" max="22" step="1" data-fs-slider="msg" aria-label="消息内容字号（px）" /><b data-fs-val="msg"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="msg" title="重置本项" aria-label="重置消息内容字号">↺</button></label><label class="fs-debug-item"><span>卡片标题</span><input type="range" min="10" max="22" step="1" data-fs-slider="title" aria-label="卡片标题字号（px）" /><b data-fs-val="title"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="title" title="重置本项" aria-label="重置卡片标题字号">↺</button></label><label class="fs-debug-item"><span>卡片描述</span><input type="range" min="10" max="22" step="1" data-fs-slider="desc" aria-label="卡片描述字号（px）" /><b data-fs-val="desc"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="desc" title="重置本项" aria-label="重置卡片描述字号">↺</button></label><label class="fs-debug-item"><span>界面 UI</span><input type="range" min="10" max="22" step="1" data-fs-slider="ui" aria-label="界面 UI 字号（px）" /><b data-fs-val="ui"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="ui" title="重置本项" aria-label="重置界面 UI 字号">↺</button></label><label class="fs-debug-item"><span>等宽代码</span><input type="range" min="10" max="22" step="1" data-fs-slider="mono" aria-label="等宽代码字号（px）" /><b data-fs-val="mono"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="mono" title="重置本项" aria-label="重置等宽代码字号">↺</button></label></div><button type="button" class="secondary-btn fs-dbg-reset-all" data-fs-reset-all>全部重置</button></div></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">引擎目录 · 登录态与模型——凭证只存引擎本机</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">relay · 远程源 · 本页设备——连接管理面</div></div><div class="v8-setcard"><h5>relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard"><h5>已配设备</h5><div class="settings-list" data-settings-live="devices"></div><div class="v8-escape">设备身份 = 配对密钥（E2E）· 踢出后需重新配对；凭证与配对历史存于 relay 本机</div></div>${pairBanner}<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">模型路由 · 系统提示 · 工具白名单都长在模板上——开团的初始编制</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">开团时可逐成员覆盖 · 模板只给初始值，不当牢笼。</div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">控制面能力扩展——内建三件随软件发行、免安装确认 · 统一鉴权无特权通道</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span><div class="v8-swd">出单 · 回填 · 收单闭环 · 验收单分发与提醒</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span><div class="v8-swd">意图声明制登记 · 输出物看板数据源</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span><div class="v8-swd">登记查询 · 产物打开与分享</div></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载、可停用——停用即对应能力面下线；M1 骨架期三件恒启用，停用开关随注册表就绪后生效。</div></div><div class="v8-setcard"><h5>权限声明（只读）· 授权以命令面权限表为准</h5><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div><div class="v8-setcard"><h5>第三方扩展</h5><div class="v8-escape">🧩 尚无第三方扩展——规范与市场 M2 开放，不预建目录。技能（skill）/ MCP 兼容投送是 Agent 侧资产（舰队配装），不在本页——本页只管控制面扩展。</div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 诊断</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录<div class="v8-swd">GitHub Releases · tag 即档案（git tag + 提交信息 + Release 页）</div></div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页<div class="v8-swd">在线演示与文档入口</div></div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App<div class="v8-swd">扫码安装 · 手机端仅浏览、验证和换路由</div></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
         wireCardDensityControls(body);
         wireFsDebugPanel(body); // 件十六：字号调试面板回填已存值/默认值
+        // W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（活读壳版本/桥连接态）
+        const navFoot = queue.querySelector("[data-settings-nav-foot]");
+        if (navFoot) navFoot.innerHTML = escapeHtml(String(window.__shellVer || CONSOLE_VERSION)) + "<br>本机 relay · 已连接";
+        // W-SETTINGS3 批3：设置域密度双档——comfortable 默认；点击切档挂 #d-settings
+        // data-settings-density（CSS 变量联动行距/卡留白）+ localStorage ccd_settings_density 持久
+        const DENSITY_KEY = "ccd_settings_density";
+        const applySettingsDensity = (mode) => {
+          const m = mode === "compact" ? "compact" : "comfortable";
+          section.dataset.settingsDensity = m;
+          body.querySelectorAll("[data-settings-density-option]").forEach((b) => b.classList.toggle("active", b.dataset.settingsDensityOption === m));
+        };
+        applySettingsDensity((() => { try { return localStorage.getItem(DENSITY_KEY) || "comfortable"; } catch (_) { return "comfortable"; } })());
+        body.addEventListener("click", (event) => {
+          const btn = event.target.closest("[data-settings-density-option]");
+          if (!btn) return;
+          const m = btn.dataset.settingsDensityOption === "compact" ? "compact" : "comfortable";
+          try { localStorage.setItem(DENSITY_KEY, m); } catch (_) {}
+          applySettingsDensity(m);
+        });
         // FB9 设置 queue 头 ×：返回进入设置前的域（设置无独立关闭语义，等价「关门走人」）
         queue.querySelector(".queue-head .icon-btn")?.addEventListener("click", () => setDesktopDomain(lastNonSettingsDomain));
         // FB9/FB3 移动设置「扫码添加新设备」与桌面同链（云形态输码 / LAN 弹配对四件套）
@@ -10317,7 +10372,7 @@ function connectLan(ctx) {
           }
           if (event.target.closest("[data-keymap-reset]")) { resetKeymap(); return; }
         });
-        activateSettings(0);
+        activateSettings(SETTINGS_PANELS.indexOf("connections")); // W-SETTINGS3 批1：面板序 V3 化后默认页仍=连接与设备（source-manage「管理与配对新源」跳入语义不变；旧序 0=connections）
       }
       function initSettingsLiveData() {
         const bridge = window.__ccDeck005B4;
@@ -10371,7 +10426,7 @@ function connectLan(ctx) {
           if (devLive) devLive.innerHTML = '<div class="v8-escape">当前 relay 未下发已配设备清单 · 设备管理在桌面端完成。</div>';
           const provLive = section.querySelector('[data-settings-live="provider"]');
           if (provLive) {
-            if (!catalog) provLive.innerHTML = '<div class="readonly-banner">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>';
+            if (!catalog) provLive.innerHTML = '<div class="v8-escape">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>'; /* W-SETTINGS3 批2：空态蓝描边 banner 退役，回 V3 灰字内联说明 */
             else provLive.innerHTML = catalog.map((e) => {
               if (!e || typeof e.id !== "string") return "";
               const ok = e.state === "ready";
@@ -10385,7 +10440,8 @@ function connectLan(ctx) {
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
-              return `<div class="settings-row engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div><strong>${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}</strong><p>${copy}</p></div>${loginBtn || tag}</div>`;
+              // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
+              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd">${copy}</div></div>${loginBtn || tag}</div>`;
             }).join("");
           }
           // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
@@ -10402,8 +10458,8 @@ function connectLan(ctx) {
               designLive.innerHTML = groups.map((g) =>
                 '<div class="queue-group">' + esc(g) + " · " + docs.filter((d) => d.group === g).length + "</div>"
                 + docs.filter((d) => d.group === g).map((d) =>
-                  '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div><strong>' + esc(d.title) + "</strong><p>" + esc(d.path) + "</p></div>"
-                  + '<button class="secondary-btn" data-design-doc="' + esc(d.path) + '" type="button" title="新窗打开图纸">打开 ↗</button></div>').join("")
+                  '<div class="v8-swrow"><span class="v8-swico"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div class="v8-swtxt">' + esc(d.title) + '<div class="v8-swd">' + esc(d.path) + "</div></div>"
+                  + '<button class="v8-prbtn" data-design-doc="' + esc(d.path) + '" type="button" title="新窗打开图纸">打开 ↗</button></div>').join("")
               ).join("");
             }
           }
@@ -10415,12 +10471,13 @@ function connectLan(ctx) {
             // 旧 relay 不渲染，deliverables 同口径）。两态分段钮复用 density-control
             // 语言；点击走 COMMAND_ORG_ACTION（接线在下方独立委托，闭包内有 bridge）
             const cm = snap.collab_mode;
+            // W-SETTINGS3 批2：协作模式行+角色行 v8 化（V3 tplrow：ico 左+名/描述+引擎 chip 右）
             const cmRow = (cm === "leader" || cm === "no-leader")
-              ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>协作模式</strong><p>无 Leader 时隐藏常驻 Leader 卡（挂死恢复用）· 团队与看板照常</p></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
+              ? '<div class="v8-swrow"><span class="v8-swico"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div class="v8-swtxt">协作模式<div class="v8-swd">无 Leader 时隐藏常驻 Leader 卡（挂死恢复用）· 团队与看板照常</div></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
               : "";
             idLive.innerHTML = cmRow + (roleMap.size
-              ? [...roleMap.entries()].map(([role, e]) => `<div class="member-card"><span class="avatar">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div><strong>${esc(role)}</strong><p>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省引擎</p></div></div>`).join("")
-              : '<div class="readonly-banner">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
+              ? [...roleMap.entries()].map(([role, e]) => `<div class="v8-swrow"><span class="v8-swico">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div class="v8-swtxt">${esc(role)}<div class="v8-swd">开团初始编制 · 模板只给初始值不当牢笼</div></div><span class="kbd-inline-chip">${esc(e.label || ENGINE_SHORT[e.id] || e.id)}</span></div>`).join("")
+              : '<div class="v8-escape">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
