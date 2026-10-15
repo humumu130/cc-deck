@@ -50,3 +50,11 @@ docs-internal/
 # worker worktree 副本（嵌套仓库，勿入库）
 .artifacts-persist-cdx/
 .pmwake-cdx/
+
+# 构建产物（1015 实锤：build/070test5 的 APK/dmg 曾误入历史致仓库 295MB——
+# 产物一律走 KV 分发通道 cc.humumu.online/dl/，不入 git）
+/build/
+*.apk
+*.dmg
+*.exe.sig
+docs-internal/archive/
