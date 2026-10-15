@@ -197,7 +197,7 @@ assert((await fetch(`${http}/health`)).ok, "server listening");
 // 注意：本套件若跑在 relay 托管会话里，Bash/子进程继承 CCR_RELAY_CHILD=1，会触发
 // hook 首行守卫静默退出——子进程 env 必须剥离该变量（2026-10-15 T6 假阴性实录）
 const hookEnv = (home: string): NodeJS.ProcessEnv => {
-  const e = { ...process.env, HOME: home };
+  const e: NodeJS.ProcessEnv = { ...process.env, HOME: home };
   delete e.CCR_RELAY_CHILD;
   return e;
 };
