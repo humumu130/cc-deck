@@ -3,6 +3,9 @@
 // 逐键直译，暗亮双主题同名键；旧接口键全部保留（全端引用零改动即整体换装），
 // 005 新增键（textStrong/qRow*/ctx*/tag*/me*/art* 六类分色等）随阶段三~五接入。
 // 更新 token 时以 index-005.html 为准同步两端。
+// 2026-10-14 拍板品牌色统一橙（#109①）：brand 族键（brandA/B/Hover、tint*、
+// qRowSel、fabPlus、sendFg、onBrand、me*）改以 docs/mockups/v8-ui-interactive-v3.html
+// 手机壳段（--p-brand 系）为准；其余中性/状态/语义键仍循 index-005.html。
 export interface ThemeColors {
   bg: string;
   panel: string;
@@ -64,7 +67,9 @@ export interface ThemeColors {
 }
 
 export const DARK: ThemeColors = {
-  // V8 手机壳直译（蓝紫体系；会话详情只消费 token，不改信息架构）
+  // V8 手机壳直译（品牌色已统一橙 · 1014 拍板；会话详情只消费 token，不改信息架构）
+  // 品牌族色值照抄 v8-ui-interactive-v3.html 手机壳段：--p-brand #EC9A73 /
+  // --p-brand2 #C96442 / soft·line 系 rgba(224,138,99,·)
   bg: "#070D18",
   panel: "#0C1727",
   panel2: "#122034",
@@ -74,9 +79,9 @@ export const DARK: ThemeColors = {
   textStrong: "#EAF2FC",
   dim: "#8CA3BF",
   faint: "#546784",
-  brandA: "#4D9FFF",
-  brandB: "#7C6CF2",
-  brandHover: "#7AB9FF",
+  brandA: "#EC9A73",
+  brandB: "#C96442",
+  brandHover: "#F0AF91",
   working: "#FFC53D",
   waiting: "#FFC53D",
   error: "#F0524F",
@@ -84,23 +89,23 @@ export const DARK: ThemeColors = {
   info: "#7CB8FF",
   onDone: "#062619",
   dangerFg: "#FF7B78",
-  onBrand: "#07111D",
-  tintSoft: "rgba(77,159,255,0.13)",
-  tintStrong: "rgba(77,159,255,0.20)",
+  onBrand: "#FFFFFF",
+  tintSoft: "rgba(224,138,99,0.13)",
+  tintStrong: "rgba(224,138,99,0.20)",
   overlay: "rgba(7,13,24,0.97)",
   fabBg: "#122034",
   fabLine: "#29415F",
-  fabPlus: "#4D9FFF",
+  fabPlus: "#EC9A73",
   sendBg: "#0C1727",
   sendLine: "#29415F",
-  sendFg: "#4D9FFF",
+  sendFg: "#EC9A73",
   // 005 增补键
   hover: "#172B46",
   chrome: "#070D18",
   headBg: "rgba(12,23,39,0.96)",
   navBg: "rgba(12,23,39,0.98)",
   qRowHov: "rgba(140,163,191,0.08)",
-  qRowSel: "rgba(77,159,255,0.14)",
+  qRowSel: "rgba(224,138,99,0.14)",
   tagBg: "rgba(84,103,132,0.19)",
   tagBorder: "rgba(117,145,180,0.22)",
   tagInk: "#DCE9F8",
@@ -111,8 +116,8 @@ export const DARK: ThemeColors = {
   ctxSafeFill: "#7FE8B7",
   ctxAttentionFill: "#FFD76C",
   ctxCriticalFill: "#FF8582",
-  meBg: "#122034",
-  meLine: "#486B95",
+  meBg: "rgba(224,138,99,0.13)",
+  meLine: "rgba(224,138,99,0.45)",
   artDoc: "#B7A5F0",
   artSheet: "#E9B84C",
   artCode: "#7EAFE8",
@@ -122,7 +127,8 @@ export const DARK: ThemeColors = {
 };
 
 export const LIGHT: ThemeColors = {
-  // V8 手机壳浅色档（与 --p-* light token 同源）
+  // V8 手机壳浅色档（与 --p-* light token 同源；品牌橙亮档 v3：#B85228/#96391A、
+  // soft·line 系 rgba(192,91,51,·)）
   bg: "#F1F4F9",
   panel: "#FFFFFF",
   panel2: "#ECF1F8",
@@ -132,9 +138,9 @@ export const LIGHT: ThemeColors = {
   textStrong: "#16202F",
   dim: "#66758E",
   faint: "#8494AC",
-  brandA: "#2563D9",
-  brandB: "#6554E0",
-  brandHover: "#4A7FE4",
+  brandA: "#B85228",
+  brandB: "#96391A",
+  brandHover: "#C2603E",
   working: "#E0A43C",
   waiting: "#E0A43C",
   error: "#D63B3B",
@@ -143,21 +149,21 @@ export const LIGHT: ThemeColors = {
   onDone: "#073C27",
   dangerFg: "#C22F2F",
   onBrand: "#FFFFFF",
-  tintSoft: "rgba(37,99,217,0.10)",
-  tintStrong: "rgba(37,99,217,0.16)",
+  tintSoft: "rgba(192,91,51,0.10)",
+  tintStrong: "rgba(192,91,51,0.16)",
   overlay: "rgba(241,244,249,0.98)",
   fabBg: "#FFFFFF",
   fabLine: "#C8D5E5",
-  fabPlus: "#2563D9",
+  fabPlus: "#B85228",
   sendBg: "#ECF1F8",
   sendLine: "#C8D5E5",
-  sendFg: "#2563D9",
+  sendFg: "#B85228",
   hover: "#E2E9F2",
   chrome: "#F1F4F9",
   headBg: "rgba(255,255,255,0.96)",
   navBg: "rgba(255,255,255,0.98)",
   qRowHov: "rgba(16,24,40,0.05)",
-  qRowSel: "rgba(37,99,217,0.10)",
+  qRowSel: "rgba(192,91,51,0.10)",
   tagBg: "rgba(132,151,169,0.16)",
   tagBorder: "rgba(96,117,138,0.24)",
   tagInk: "#2D4358",
@@ -168,8 +174,8 @@ export const LIGHT: ThemeColors = {
   ctxSafeFill: "#168D60",
   ctxAttentionFill: "#A56D00",
   ctxCriticalFill: "#C84C51",
-  meBg: "#ECF1F8",
-  meLine: "#C8D5E5",
+  meBg: "rgba(192,91,51,0.10)",
+  meLine: "rgba(192,91,51,0.35)",
   artDoc: "#6D5BD8",
   artSheet: "#A56D00",
   artCode: "#3978B8",

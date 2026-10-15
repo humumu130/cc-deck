@@ -59,7 +59,7 @@ const makeStyles = (c: ThemeColors) =>
     // 紧凑态动作位：标题行右端品牌蓝文字链（与全 App 文字链同语言）
     kaLink: { marginLeft: "auto", color: c.brandA, fontSize: 12.5, fontWeight: "600" },
     kaSub: { color: c.faint, fontSize: 11, lineHeight: 15, marginTop: 3 },
-    // detail 态整宽按钮（pairGen 同语言：tintStrong 底 + 品牌蓝描边）
+    // detail 态整宽按钮（pairGen 同语言：tintStrong 底 + 品牌色描边）
     kaBtn: {
       marginTop: 9, height: 32, borderRadius: 12, alignItems: "center", justifyContent: "center",
       backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45), overflow: "hidden",

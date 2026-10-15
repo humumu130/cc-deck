@@ -1974,10 +1974,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   aggTOn: { color: c.brandA, fontWeight: "700" },
   // W-EXPO 005 通栏行（军规①②）：无框无圆角、行间零分隔线（纯留白分行）；卡面用
   // 页面底色保持不透明（左滑动作排藏在卡后，透明底会提前露出）
-  swipeWrap: { marginBottom: 8, borderRadius: 13, overflow: "hidden" },
-  swipeWrapC: { marginBottom: 8 },
-  swipeWrapM: { marginBottom: 6 },
-  swipeCard: { borderRadius: 13, overflow: "hidden", backgroundColor: c.panel, borderWidth: 1, borderColor: c.line },
+  // 1015 回归修复：eaf5a15（W-MLR2 续作）误把定版直角通栏行改回 13 圆角描边卡，
+  // 用户 test.25 实测打回——形态键（圆角/底色/描边/行距）回 c6d1691 定版；
+  // 行高回调（paddingVertical）系用户行高反馈闭环成果，保留不回退
+  swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
+  swipeWrapC: { marginBottom: 2 },
+  swipeWrapM: { marginBottom: 1 },
+  swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
   // #32 离线源降权 + 空闲置灰：向页面背景渐隐的蒙层（不用 opacity——会让底层
   // 动作排透出，2026-09-17 测试机截图实锤）
   dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.45) },
@@ -1994,14 +1997,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuLabel: { color: c.text, fontSize: 14, fontWeight: "600" },
   menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12,
+    backgroundColor: "transparent", borderWidth: 0,
+    borderRadius: 0, paddingVertical: 10, paddingHorizontal: 14,
   },
-  cardC: { borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12 },
+  cardC: { borderRadius: 0, paddingVertical: 9, paddingHorizontal: 14 },
   // 极简平铺行：同通栏语言，行高最矮
   // 1013 高度压缩批：单行内容 ~31px 低于 44px 触控底线（改前 ~33 同欠账）——
   // minHeight 44 兜底 + 内容垂直居中（设置行 minHeight 48 同语言），视觉仍为三档最矮
-  cardM: { borderRadius: 11, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel, paddingVertical: 8, paddingHorizontal: 12, minHeight: 44, justifyContent: "center" },
+  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
