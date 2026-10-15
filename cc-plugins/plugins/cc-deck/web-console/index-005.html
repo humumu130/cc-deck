@@ -3458,7 +3458,12 @@
                   // 与 SNAPSHOT merge 同锚 relay_name；p 将来若携带 relay_source 以 p 为准。
                   const srcState = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
                   const srcName = evSource === "cloud" ? String((srcState && srcState.cloudRelayName) || "") : String((srcState && srcState.lanRelayName) || S.relayName || "");
-                  S.sessions.set(sid, Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, srcName ? { relay_source: srcName } : {}, p || {}));
+                  // W-P2FIX P2-2：帧通道（evSource）是内核级权威事实，同落 relay_channel（与 B4 桥
+                  // T10 同锚同式）——聚合两源同名时 RouteWs 的名字比对兜底会被同名劫持（LAN 名=
+                  // 云名 → bsCloud 误 true → LAN 新卡误投云 shim 报「会话不存在」，#110 镜像形态），
+                  // 通道字段在场即以其为准（11985 消费端已改通道优先，名字比对降级为无字段兜底）。
+                  const chanTag = { relay_channel: evSource === "cloud" ? "cloud" : "lan" };
+                  S.sessions.set(sid, Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, srcName ? { relay_source: srcName } : {}, chanTag, p || {}));
                   renderMyList();
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
@@ -11982,7 +11987,11 @@ function connectLan(ctx) {
         // 目视截断成「残缺 id」假象）。会话卡现带 relay_channel（实时帧建卡）或 relay_source
         //（SNAPSHOT 打的源名），按真实归属路由：
         const bs = window.__ccDeck005B4 && window.__ccDeck005B4.sessions.get(sid);
-        const bsCloud = !!(bs && (bs.relay_channel === "cloud" || (bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source))));
+        // W-P2FIX P2-2：通道字段优先——relay_channel 在场即信它（内核级帧通道事实），名字比对只在
+        // 无通道字段的卡上兜底。原 OR 结构下同名双源（LAN 名=云名）时 relay_source 比对会碾过
+        // relay_channel（channel="lan" 的卡仍 bsCloud=true）——SNAPSHOT merge 的 relay_source 打标
+        // 就地污染 payload 对象（onEvent 先于总线 emit），桥浅拷贝常态带入，同名即误投云 shim。
+        const bsCloud = !!(bs && (bs.relay_channel ? bs.relay_channel === "cloud" : (bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source))));
         if (bsCloud) return cloudCtx.status === "online" ? cloudCmdShim : null;
         if (bs && (bs.relay_channel === "lan" || bs.relay_source)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
         // 两源表 + 桥都查不到：拒发——会话可能已删/所属源离线，盲投视角通道只会产出误导性的
