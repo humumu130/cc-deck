@@ -185,8 +185,9 @@ async function main() {
     const wid2 = d2.ok ? (d2 as { session_id: string }).session_id : "";
     const w2 = mgr.snapshot().find((s) => s.session_id === wid2);
     assert(w2?.project_gid === gidA && w2?.dispatch_tier === "轻立项", "组派单会话态带归属+组档位");
-    // 冲刺 F-05 补锁：派单 title 双写内存态（此前只落盘，重启前后列表标题劈叉）
-    assert(w2?.title === "[轻立项] 按钮任务", "派单 title 即时进会话运行态（F-05，含档位前缀，无需重启）");
+    // 冲刺 F-05 补锁：派单 title 双写内存态（此前只落盘，重启前后列表标题劈叉）。
+    // 1013 用户拍板「会话名不带 [立项档] 前缀」后行为改裸标题，断言随批跟改（原断言陈旧红）。
+    assert(w2?.title === "按钮任务", "派单 title 即时进会话运行态（F-05，无档位前缀——1013 拍板，无需重启）");
     assert((listGroups().find((g) => g.id === gidA)?.headcount ?? []).some((h) => h.session_id === wid2), "worker 入编（headcount）");
     assert(loadBoard(gidA).entries.some((e) => e.dispatch_id === did2 && e.status === "claimed"), "板联动：承接条目 doing");
     assert(await waitFor(() => readDispatchLog().filter((e) => e.id === did2).some((e) => e.status === "failed")), "失败回合 → 台账 failed");
