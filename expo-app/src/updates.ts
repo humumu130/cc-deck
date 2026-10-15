@@ -97,8 +97,11 @@ export function releasePageUrl(): string {
 
 // "v0.3.13" → [0,3,13]；非数字段按 0，预发布后缀（-beta 等）忽略
 // semver 解析：core 三段数值 + pre 预发布串（"0.5.1-test.17" → core [0,5,1], pre "test.17"）
+// #130（2026-10-16 真机实锤）：pre 段须允许连字符——-nova 等壳通道烙印含 "-"，
+// 旧则 [\w.]+ 匹配失败整串落 core [0,0,0]，远端任意 0.7.x 直接判大 = 降级提示
+//（0.7.0-test.27-nova 装机被推 test.25 实锤链）
 function parseSemver(v: string): { core: number[]; pre: string | null } {
-  const m = String(v).replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([\w.]+))?$/);
+  const m = String(v).replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?$/);
   if (!m) return { core: [0, 0, 0], pre: String(v) || null };
   return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
 }// 更新通道（与 SettingsPage 通道角标同规则：-test/-snap 后缀判定）：
@@ -115,6 +118,13 @@ export function channelOf(v: string): UpdateChannel {
   return "release";
 }
 
+// 通道后缀透明化（#130）：-nova 是壳通道烙印不是预发布版本要素——比较取 pre 段
+// 首个 "-" 前的部分（数字段+字典兜底都用它），后缀不参与任何比较：
+// test.27-nova ≡ test.27（同版本不同通道不互推，双向皆 false）
+function preKey(pre: string | null): string | null {
+  return pre === null ? null : pre.split("-")[0];
+}
+
 export function isNewer(remote: string, local: string): boolean {
   const r = parseSemver(remote);
   const l = parseSemver(local);
@@ -122,14 +132,16 @@ export function isNewer(remote: string, local: string): boolean {
     if ((r.core[i] ?? 0) !== (l.core[i] ?? 0)) return (r.core[i] ?? 0) > (l.core[i] ?? 0);
   }
   // core 相等：semver 规则——正式版 > 预发布版（0.5.1 > 0.5.1-test.17）
-  if (!r.pre && l.pre) return true;
-  if (r.pre && !l.pre) return false;
-  if (r.pre && l.pre) {
+  const rp = preKey(r.pre);
+  const lp = preKey(l.pre);
+  if (!rp && lp) return true;
+  if (rp && !lp) return false;
+  if (rp && lp) {
     // 同为预发布：通道序号比数值（test.17 > test.9）
-    const rn = Number((r.pre.match(/\d+/g) ?? ["0"]).pop());
-    const ln = Number((l.pre.match(/\d+/g) ?? ["0"]).pop());
+    const rn = Number((rp.match(/\d+/g) ?? ["0"]).pop());
+    const ln = Number((lp.match(/\d+/g) ?? ["0"]).pop());
     if (rn !== ln) return rn > ln;
-    return r.pre > l.pre;
+    return rp > lp;
   }
   return false;
 }
