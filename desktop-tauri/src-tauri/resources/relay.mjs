@@ -51855,6 +51855,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.waiting_request = void 0;
     s.state.waiting_started_at = void 0;
     s.state.updated_at = at;
+    if (dutyEnabled() && s.state.external) {
+      if (id2 === this.dutyTargetId()) {
+        this.workerDonePending = 0;
+        this.feedPM("turn_end");
+      } else if (reason === "completed") {
+        this.workerDonePending += 1;
+        this.feedPM("worker_done");
+      }
+    }
     this.bus.emit(id2, "SESSION_DONE", {
       terminal_reason: reason,
       duration_ms: durationMs,
@@ -53127,7 +53136,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.ctxWatchdogOnTurnBoundary(managed, managed.state.status);
         this.syncWaitingNotification(managed);
         if (dutyEnabled()) {
-          if (this.isLeaderSession(managed.state.session_id)) {
+          if (managed.state.session_id === this.dutyTargetId()) {
             this.workerDonePending = 0;
             this.feedPM("turn_end");
           } else if (ok2) {
@@ -54152,6 +54161,38 @@ provider=${opts.provider ?? "default"}` : void 0,
       running_sessions: running
     };
   }
+  // #105 值守目标解析（协作模式感知）：leader 模式=Leader 锚卡（现行为不变）；
+  // no-leader 模式=用户实际交互的 PM 会话——锚卡在 no-leader 下已被 snapshot 过滤
+  // （用户判定弃用的托管卡），resumeAgent 喂它是喂幽灵（1015 实锤：duty-rounds 128
+  // 行全 sleep、result=continue 零次，仅有的注入全落在弃用锚卡）。判定口径：external
+  // 会话（用户自开 CLI 桥接——no-leader 语义=用户自任 PM，其终端会话即 PM 会话）
+  // 且非 historical、cli_pid 在册且活（进程探测信号 0 只验存在；无 pid=重启补水
+  // 失败/未定位，注入是黑洞，1014 ab91190d 死壳实录），最近活跃（updated_at 最大）
+  // 一张。无显式 role 面可用（external 无 role 字段），「最近活跃的 external」即
+  // 任务书口径「role=PM 且非锚、最近活跃」的可落地最大似然。全不满足 → null
+  // （调用侧写 no_pm_target 审计行哑值守——可观测优于静默喂幽灵）。
+  dutyTargetId() {
+    if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
+    let best = null;
+    let bestAt = -1;
+    for (const s of this.sessions.values()) {
+      if (!s.state.external || s.state.historical) continue;
+      if (this.leaderId && s.state.session_id === this.leaderId) continue;
+      const pid = s.state.cli_pid;
+      if (!pid) continue;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        continue;
+      }
+      const at = s.state.updated_at || 0;
+      if (at > bestAt) {
+        bestAt = at;
+        best = s.state.session_id;
+      }
+    }
+    return best;
+  }
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
   // （四值 reason：actionable→喂；all_running/blocked/empty→sleep 放行——「全 running
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
@@ -54168,7 +54209,21 @@ provider=${opts.provider ?? "default"}` : void 0,
       });
       return;
     }
-    const leader2 = this.sessions.get(this.leaderId);
+    const targetId = this.dutyTargetId();
+    if (!targetId) {
+      this.appendDutyRound({
+        feed_id: randomUUID10(),
+        feed_generation: randomUUID10(),
+        trigger: [trigger],
+        result: "sleep",
+        reason: "no_pm_target",
+        detail: "no-leader \u6A21\u5F0F\u4E0B\u65E0\u5728\u518C PM \u4F1A\u8BDD\uFF08external \u4E14\u8FDB\u7A0B\u6D3B\uFF09",
+        from: Date.now()
+      });
+      return;
+    }
+    const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
+    const leader2 = this.sessions.get(targetId);
     if (leader2?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID10();
@@ -54235,8 +54290,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       `\u8BF7\u9A8C\u6536\u56DE\u6267\u3001\u6D3E\u53D1\u4E0B\u4E00\u6279\u6216\u540C\u6B65\u4EFB\u52A1\u677F\uFF1B\u5B8C\u6210\u540E\u672B\u884C\u5355\u72EC\u8F93\u51FA\u4E00\u884C JSON\uFF08\u4E0D\u52A0\u4EE3\u7801\u5757\uFF09\uFF1A`,
       `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`
     ].join("\n");
-    const leaderSession = this.sessions.get(this.leaderId);
-    if (leaderSession) {
+    const leaderSession = this.sessions.get(targetId);
+    if (leaderSession && !targetIsExternal) {
       const tripped = !!leaderSession.resumeCooldownUntil && Date.now() < leaderSession.resumeCooldownUntil;
       const parked = !!leaderSession.state.saved && !leaderSession.agent;
       if (tripped || parked) {
@@ -54254,8 +54309,14 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
     try {
-      this.pushExternalLog(this.leaderId, "system", `[\u503C\u5B88\u5582\u6D3B] \u53D1\u73B0 ${verdict.candidates.length} \u9879\u53EF\u5904\u7406\uFF08\u6700\u8001\uFF1A${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}\uFF09`);
-      this.resumeAgent(this.require(this.leaderId), prompt, void 0, void 0, void 0, { renewable: true });
+      this.pushExternalLog(targetId, "system", `[\u503C\u5B88\u5582\u6D3B] \u53D1\u73B0 ${verdict.candidates.length} \u9879\u53EF\u5904\u7406\uFF08\u6700\u8001\uFF1A${top?.kind ?? "?"} ${truncate(top?.id ?? "", 12)}\uFF09`);
+      if (targetIsExternal) {
+        if (!this.bridge) throw new Error("\u5916\u90E8\u4F1A\u8BDD\u901A\u9053\u672A\u5C31\u7EEA\uFF08bridge \u672A\u6302\uFF09");
+        const r = this.bridge.extInput(targetId, prompt);
+        if (!r.ok) throw new Error(r.error ?? "\u5916\u90E8\u4F1A\u8BDD\u6CE8\u5165\u5931\u8D25");
+      } else {
+        this.resumeAgent(this.require(targetId), prompt, void 0, void 0, void 0, { renewable: true });
+      }
       this.appendDutyRound({
         feed_id: feedId,
         feed_generation: generation,
@@ -54276,13 +54337,13 @@ provider=${opts.provider ?? "default"}` : void 0,
         from
       });
       try {
-        this.upsertNotification("system", `duty:${this.leaderId}`, void 0, {
+        this.upsertNotification("system", `duty:${targetId}`, void 0, {
           title: "\u9700\u8981\u5904\u7406\uFF1A\u56E2\u961F\u503C\u5B88\u65E0\u6CD5\u7EE7\u7EED",
-          body: truncate(`\u503C\u5B88\u5582\u6D3B\u5931\u8D25\uFF1A${detail}\uFF1B\u4ECD\u6709 ${verdict.candidates.length} \u9879\u5019\u9009\u5F85\u5904\u7406\uFF0C\u8BF7\u68C0\u67E5 Leader \u4F1A\u8BDD\u3002`, 160),
+          body: truncate(`\u503C\u5B88\u5582\u6D3B\u5931\u8D25\uFF1A${detail}\uFF1B\u4ECD\u6709 ${verdict.candidates.length} \u9879\u5019\u9009\u5F85\u5904\u7406\uFF0C\u8BF7\u68C0\u67E5\u503C\u5B88\u76EE\u6807\u4F1A\u8BDD\uFF08${targetIsExternal ? "PM \u5916\u90E8\u4F1A\u8BDD" : "Leader \u4F1A\u8BDD"}\uFF09\u3002`, 160),
           severity: "error",
           group: "action",
           actionable: true,
-          sessionId: this.leaderId ?? void 0,
+          sessionId: targetId,
           domain: "duty",
           returnPath: "sessions"
         });

@@ -2338,9 +2338,17 @@ export class SessionManager {
     // 限定「本会话是当前值守目标」：其他 external 会话回合结束不碰值守账。compact
     // 归档旧身也走此口（同 pid 新身接管后照常重算，与托管 Leader 回合终态归零同
     // 口径——worker_done 若仍待处理，下一轮事件照常进候选）。
-    if (dutyEnabled() && s.state.external && id === this.dutyTargetId()) {
-      this.workerDonePending = 0;
-      this.feedPM("turn_end");
+    // 1015 实测回归修复：非值守目标的 external worker 交付（ccops 派单主场景）
+    // 也要 workerDonePending++ + feedPM——worker 交付是「给 PM 盘点的信号」，与
+    // 谁是值守目标无关；此前只挂钩目标自身回合，ccops 快任务交付静默断链。
+    if (dutyEnabled() && s.state.external) {
+      if (id === this.dutyTargetId()) {
+        this.workerDonePending = 0;
+        this.feedPM("turn_end");
+      } else if (reason === "completed") {
+        this.workerDonePending += 1;
+        this.feedPM("worker_done");
+      }
     }
     this.bus.emit(id, "SESSION_DONE", {
       terminal_reason: reason,
