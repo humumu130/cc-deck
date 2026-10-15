@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
+import { isDataDirIsolated } from "./config.js";
 import { injectText, injectEsc, injectEnter, injectShiftTab, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
 import { guardConfig, guardCompensateEnter } from "./type-guard.js";
 import {
@@ -566,6 +567,19 @@ export class Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   private adoptOrphans(): void {
     try {
+      // W-SANDBOXFIX P1-2（2026-10-16）：CCR_DATA_DIR 隔离态（沙盒/多实例）不做全机
+      // 孤儿扫描——transcript 根是全局 ~/.claude/projects，扫了会把生产 ext- 会话
+      // 收养进沙盒（W-TESTSYS 实锤）；且生产数据不回流沙盒，扫描纯烧。隔离判定
+      // 见 isDataDirIsolated（生产内嵌 relay 显式 set 的缺省值不算隔离）。例外：
+      // CCR_PROJECTS_ROOT 显式在场 = 扫描根已受控（test-bridge 等定向配方）——
+      // 扫描无害且必要，不跳。once 备案
+      if (isDataDirIsolated() && !process.env.CCR_PROJECTS_ROOT) {
+        if (!this.orphanSkipBannerShown) {
+          this.orphanSkipBannerShown = true;
+          console.log("[orphan-scan] CCR_DATA_DIR 隔离：跳过全机孤儿扫描（沙盒不收养生产会话；CCR_PROJECTS_ROOT 可显式恢复）");
+        }
+        return;
+      }
       const root =
         process.env.CCR_PROJECTS_ROOT ?? path.join(homedir(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 60_000;
@@ -731,6 +745,7 @@ export class Bridge {
   // 其余（纯文本首回合 / claude -p 单发）：不收养，返回 size 供调用方观察增长——
   //   活跃会话下一轮必然变长，-p 单发不会。
   private orphanProbe = new Map<string, { size: number; ts: number; adopt: boolean }>();
+  private orphanSkipBannerShown = false; // W-SANDBOXFIX：隔离态跳过横幅 once（60s 轮询防刷屏）
 
   private scanOrphanActivity(p: string): { adopt: boolean; size: number } {
     let fd: number | undefined;

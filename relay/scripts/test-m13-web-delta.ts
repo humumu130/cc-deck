@@ -259,21 +259,25 @@ ok(html.includes("ctx.legacyMode"), "legacyMode consumption untouched (sanity)")
 
 // ---- ⑤ 板泳道按值分组直跑（D18 五态已落：词表升级，机制锁不变） ----
 {
-  const run = new Function("ents", "BOARD_LANE", "BOARD_LANE_ORD", laneSrc + "\nreturn lanes;") as
-    (ents: Array<{ status?: string; [k: string]: unknown }>, lane: Record<string, string>, ord: Record<string, number>) => { st: string; lb: string; list: unknown[] }[];
+  // W-SANDBOXFIX P2-2：lanes 块（index.html:6315）对未知状态值调 escapeHtml（XSS
+  // 防线）——原作用域缺该定义，前向兼容 case（未知状态值）一跑即 ReferenceError
+  // 崩套件。补注入（语义与 web-console/index.html:8322 同源逐字节一致）
+  const escapeHtml = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as Record<string, string>)[c] ?? c));
+  const run = new Function("ents", "BOARD_LANE", "BOARD_LANE_ORD", "escapeHtml", laneSrc + "\nreturn lanes;") as
+    (ents: Array<{ status?: string; [k: string]: unknown }>, lane: Record<string, string>, ord: Record<string, number>, esc: (s: unknown) => string) => { st: string; lb: string; list: unknown[] }[];
   const L = { backlog: "待认领", claimed: "进行中", submitted: "待复核", ready_to_install: "待装机", done: "完成" };
   const O = { backlog: 0, claimed: 1, submitted: 2, ready_to_install: 3, done: 4 };
   const e = (s: string, n: number) => ({ status: s, n });
   // 五态：序/标/非空（backlog→done 定序，freeze §1.2 词表）
-  const lanes5 = run([e("done", 1), e("backlog", 2), e("submitted", 3), e("backlog", 4), e("ready_to_install", 5), e("claimed", 6)], L, O);
+  const lanes5 = run([e("done", 1), e("backlog", 2), e("submitted", 3), e("backlog", 4), e("ready_to_install", 5), e("claimed", 6)], L, O, escapeHtml);
   ok(j(lanes5.map((c) => [c.st, c.lb, c.list.length])) === j([["backlog", "待认领", 2], ["claimed", "进行中", 1], ["submitted", "待复核", 1], ["ready_to_install", "待装机", 1], ["done", "完成", 1]]),
     "lanes: five-state order/labels/non-empty (D18 vocab, freeze §1.2)");
   // 前向兼容：未知状态值原样成列排最后（不丢弃——旧实现 filter 直接吃掉）
-  const lanesX = run([e("backlog", 1), e("blocked", 2), e("claimed", 3)], L, O);
+  const lanesX = run([e("backlog", 1), e("blocked", 2), e("claimed", 3)], L, O, escapeHtml);
   ok(j(lanesX.map((c) => [c.st, c.lb, c.list.length])) === j([["backlog", "待认领", 1], ["claimed", "进行中", 1], ["blocked", "blocked", 1]]),
     "lanes: unknown status value renders as its own column after known five (forward-compat)");
   // 无 status 归 backlog；无空列产出
-  const lanesN = run([e("backlog", 1), { n: 9 }, e("done", 2)], L, O);
+  const lanesN = run([e("backlog", 1), { n: 9 }, e("done", 2)], L, O, escapeHtml);
   ok(j(lanesN.map((c) => [c.st, c.list.length])) === j([["backlog", 2], ["done", 1]]) &&
     lanesN.every((c) => c.list.length > 0),
     "lanes: missing status falls into backlog; no empty lanes constructed");

@@ -59,6 +59,16 @@ export function resolveDataDir(): string {
   );
 }
 
+// W-SANDBOXFIX P1 判定（2026-10-16）：CCR_DATA_DIR 显式隔离（沙盒/多实例）且值
+// ≠ 生产缺省 ~/.cc-deck/data（resolve 归一比较——生产内嵌 relay 显式 set 了
+// CCR_DATA_DIR=/Users/xdd/.cc-deck/data，值等缺省，判「非隔离」防 org 目录被
+// 联动搬走炸生产）。消费点：orgDir() 联动 / bridge.ts 孤儿扫描跳过
+export function isDataDirIsolated(): boolean {
+  const v = process.env.CCR_DATA_DIR;
+  if (!v) return false;
+  return resolve(v) !== resolve(join(homedir(), ".cc-deck", "data"));
+}
+
 export function loadConfig(): RelayConfig {
   const port = Number(process.env.CCR_PORT ?? 8787);
   const dataDir = resolveDataDir();

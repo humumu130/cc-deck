@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { isDataDirIsolated } from "./config.js";
 import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
 import type { SessionEngine } from "./types.js";
 
@@ -105,8 +106,23 @@ export const ORG_LEADER_TITLE = "Leader";
 export const ORG_LEADER_BOOTSTRAP_PROMPT =
   "（Leader 上岗引导，系统消息）你已被创建为常驻团队的 Leader。请只做一件事：阅读本目录的 CLAUDE.md（团队记忆与分诊通道），然后用一两句话确认上岗——复述你的五响应分诊（咨询/随手办/轻立项/正经立项/建议暂缓）即可。不要执行其他操作、不要改动任何文件。";
 
+// W-SANDBOXFIX P1-1（2026-10-16）：旧缺省恒指 ~/.cc-deck/org，与 CCR_DATA_DIR 不联动
+// ——沙盒 relay（CCR_DATA_DIR=tmp）建团直写生产 projects.json（W-TESTSYS 实锤）。
+// 现口径：显式 CCR_ORG_DIR 最高优先；CCR_DATA_DIR 隔离态（isDataDirIsolated，值≠
+// 生产缺省）org 目录随 data 走（<CCR_DATA_DIR>/org）；其余（未设/生产缺省值/开发态）
+// 维持 ~/.cc-deck/org 原样。横幅 once 备案（orgDir 是热路径，防刷屏）
+let orgDirBannerShown = false;
 export function orgDir(): string {
-  return process.env.CCR_ORG_DIR || join(homedir(), ".cc-deck", "org");
+  if (process.env.CCR_ORG_DIR) return process.env.CCR_ORG_DIR;
+  if (isDataDirIsolated()) {
+    const dir = join(process.env.CCR_DATA_DIR as string, "org");
+    if (!orgDirBannerShown) {
+      orgDirBannerShown = true;
+      console.log(`[org] CCR_DATA_DIR 隔离：org 目录随 data 目录走 → ${dir}（显式 CCR_ORG_DIR 可覆盖）`);
+    }
+    return dir;
+  }
+  return join(homedir(), ".cc-deck", "org");
 }
 
 export function ensureOrgDir(dir?: string): string {

@@ -4839,10 +4839,14 @@ export class SessionManager {
       // 台账/通知文本与板卡、派单 prompt 头同键，回执流按 ref 精确对卡（废除按标题
       // 模糊对账的启发式）。卡定位按 dispatch_id（relay 内部精确键）；无 gid/无卡
       // （随手办/悬空）无 ref 头，receipt 原样。
-      const taskRef = e.gid
-        ? (() => { try { return loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id)?.id ?? ""; } catch { return ""; } })()
-        : "";
-      const refReceipt = taskRef ? `[task_ref:${taskRef}] ${receipt}` : receipt;
+      // W-SANDBOXFIX P2-1：ref 头后补卡标题截断段（≤40）——端侧台账对账免二次
+      // 映射（原来只有 [task_ref:id] 得再查板卡才知道是哪单）
+      const taskHit = e.gid
+        ? (() => { try { return loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id); } catch { return undefined; } })()
+        : undefined;
+      const taskRef = taskHit?.id ?? "";
+      const titleSeg = taskHit?.text ? ` ${truncate(taskHit.text, 40)}` : "";
+      const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}` : receipt;
       appendDispatch({
         ts: Date.now(), id: e.id, tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
@@ -7360,7 +7364,9 @@ export class SessionManager {
     const item: QueuedDispatch = { dispatch_id: dispatchId, enqueued_at: enqueuedAt, input: { ...input } as Record<string, unknown> };
     if (this.dispatchQueueItems.length >= 200) {
       // 队列满（护栏 200）：编制触顶且长期全忙的真实堵塞——failed 收口给人看，不静默丢
-      const receipt = truncate(`派单队列已满（200）——编制触顶且长期全忙，请先清理编制或调 headcount_cap`, 200);
+      // W-SANDBOXFIX P2-1：receipt 带任务标题截断段（≤40）——台账/端侧对账免二次映射
+      const titleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
+      const receipt = truncate(`${titleSeg}派单队列已满（200）——编制触顶且长期全忙，请先清理编制或调 headcount_cap`, 200);
       appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
       this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
       return { ok: false, error: "派单队列已满（200）" };
@@ -7373,7 +7379,9 @@ export class SessionManager {
     if (!saveDispatchQueue(this.dispatchQueueItems)) {
       console.warn("[dispatch-queue] 排队落盘失败（内存队列有效，重启该单丢失）");
     }
-    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
+    // W-SANDBOXFIX P2-1：排队行同带标题截断段（与满队 failed 行同口径）
+    const queuedTitleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
     this.pushExternalLog(this.leaderId ?? "", "system", `派单排队：${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}（编制 ${genericWorkerCount(g.headcount)}/${headcountCapOf(g)} 触顶且全忙，队列位置 ${this.dispatchQueueItems.length}）`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
   }

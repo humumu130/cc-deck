@@ -195,7 +195,9 @@ try {
     const rows1 = readPermissionAudit(auditPort());
     const r1 = rows1[0];
     assert(forbiddenShape(d1, "unknown_role_mapping", "dispatchWorker") && rows1.length === before1 + 1, "类 1 unknown_role_mapping：forbidden ACK 形状+审计落一行");
-    assert(r1.actor === "web-d" && r1.reason === "unknown_role_mapping" && r1.environment === "sandbox" && r1.dir_scope === "sandbox" && r1.session_id === null, "类 1 审计可观测：actor/reason/environment/dir_scope 落值+session_id null（拒绝面无会话）");
+    // W-SANDBOXFIX P2-2：r1 空守卫——审计行缺席时旧断言 `r1.actor` 直接 TypeError
+    // FATAL 崩套件（红不可读）；守卫后红是可读的断言失败（含行号语义）
+    assert(r1 && r1.actor === "web-d" && r1.reason === "unknown_role_mapping" && r1.environment === "sandbox" && r1.dir_scope === "sandbox" && r1.session_id === null, "类 1 审计可观测：actor/reason/environment/dir_scope 落值+session_id null（拒绝面无会话）");
     assert(readDispatchLog().length === logBefore1 && spawned.length === 0, "类 1 拒即无副作用：零台账+零 spawn");
 
     // 类 2：above_role_tier_ceiling（越 tier——review_pm ceiling edit-auto < bypass full-auto）
