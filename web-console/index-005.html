@@ -2838,6 +2838,7 @@
                   engineCatalog: null, models: [], projects: [],
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
+                  tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
@@ -6638,6 +6639,31 @@
                   if (UI.ctxMeter) {
                     UI.ctxMeter.addEventListener("click", () => { if (UI.tabs[3]) UI.tabs[3].click(); });
                   }
+                  // #124 tab 往返滚动保持：四 pane 共享 #session-body 滚动容器，切到任务/输出物/更多
+                  // 时对话 pane display:none → scrollHeight 骤缩 → scrollTop 被 clamp（用户实锤「切回
+                  // 跳到很上面」），clamp 派发的 scroll 事件还会把残值记回 S.scrollKeep。修复=离开对话
+                  // tab 瞬间（捕获阶段，先于地基 wireSegmentTabs 冒泡 activate，display 未切、值未被
+                  // clamp）记 memo 真值；切回后 activate 已完成（setTimeout 0），恢复位置——贴底态恢复
+                  // 贴底。不碰 onScroll 记账/autoScroll/renderTasks：新消息贴底链与任务列表零回归。
+                  section.querySelector(".segment-bar")?.addEventListener("click", (ev) => {
+                    const btn = ev.target.closest("button");
+                    const idx = btn ? UI.tabs.indexOf(btn) : -1;
+                    if (idx < 0) return;
+                    if (idx !== 0 && UI.tabs[0]?.classList.contains("active")) { // 离开对话 tab：此刻 DOM 未变，scrollTop 是真值
+                      if (S.selected) {
+                        const el = UI.body;
+                        S.tabChatMemo = { sid: S.selected, top: el.scrollTop, bottom: el.scrollHeight - el.scrollTop - el.clientHeight < 120 };
+                      }
+                    } else if (idx === 0) { // 回到对话 tab（含重复点击，幂等）：activate 完成后恢复
+                      setTimeout(() => {
+                        const memo = S.tabChatMemo;
+                        S.tabChatMemo = null;
+                        if (!memo || memo.sid !== S.selected) return; // 期间换过会话：不恢复（选中链自会定位）
+                        const el = UI.body;
+                        el.scrollTop = memo.bottom ? el.scrollHeight : Math.max(0, Math.min(memo.top, el.scrollHeight - el.clientHeight));
+                      }, 0);
+                    }
+                  }, true); // 捕获阶段：先于 target/冒泡上的 activate
                   // UIPOLISH2 件九：会话列表搜索接线（原死控件激活）——150ms 防抖后重渲列表；
                   // 空态/隐藏记账（_filterHiddenIds）走 renderMyList 内的合并谓词
                   if (UI.listTools) {
@@ -12975,7 +13001,37 @@ function connectLan(ctx) {
       // ---------- ⑥c-3 m-detail 五 tab 真数据（对话/任务/输出物/用量/⋯；B2 数据面 + 桌面口径复刻） ----------
       let detailSid = "";
       let detailBase = null; // { content, convHost, conv, tasks, arts, usage, more }
-      const b2Api = () => window.__ccDeck005B2 || null;
+      // #124 tab 往返滚动保持（手机同桌面 S.tabChatMemo 口径）：手机形态 .mode-stage 无高度
+      // 约束，真滚动容器是 document（window 滚动；.mobile-content 自身被内容撑高、scrollTop
+      // 恒 0——CDP 实测）。切走对话 pane display:none → document scrollHeight 骤缩 → window
+      // scrollY 被 clamp。离开瞬间（捕获阶段）记 memo，切回（activate 完成后）恢复，贴底态
+      // 恢复贴底；换会话（sid 不匹配）不恢复。
+      let mTabChatMemo = null;
+      (() => {
+        const bar = document.querySelector("#m-detail .mobile-detail-tabs");
+        if (!bar) return;
+        const se = () => document.scrollingElement || document.documentElement;
+        const btns = [...bar.querySelectorAll("button")];
+        bar.addEventListener("click", (ev) => {
+          const btn = ev.target.closest("button");
+          const idx = btn ? btns.indexOf(btn) : -1;
+          if (idx < 0) return;
+          if (idx !== 0 && btns[0]?.classList.contains("active")) { // 离开对话 tab：DOM 未变，真值
+            if (detailSid) {
+              const el = se();
+              mTabChatMemo = { sid: detailSid, top: el.scrollTop, bottom: el.scrollHeight - el.scrollTop - window.innerHeight < 120 };
+            }
+          } else if (idx === 0) { // 回到对话 tab：activate 完成后恢复
+            setTimeout(() => {
+              const memo = mTabChatMemo;
+              mTabChatMemo = null;
+              if (!memo || memo.sid !== detailSid) return;
+              const el = se();
+              el.scrollTop = memo.bottom ? el.scrollHeight : Math.max(0, Math.min(memo.top, el.scrollHeight - window.innerHeight));
+            }, 0);
+          }
+        }, true);
+      })();
       // #169 手机详情当前会话暴露（桌面文档级拖放收件时借道定位 sid，替代桌面 S.selected）
       if (window.__ccDeck005B4) window.__ccDeck005B4.currentDetail = () => detailSid;
       const DETAIL_TL_MAX = 30;
