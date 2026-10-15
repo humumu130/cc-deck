@@ -7151,12 +7151,21 @@ export class SessionManager {
         // closeOpenDispatches 才收口，路由表无感）
         // P0 编制闸例外：触顶复用路径（capReuse）resume 失败**不降级新会话**——
         // 那是变相扩编绕过上限闸；照 failed 收口（单可重投/等队列），熟手不记账
+        // W-P2FIX P2-3：普通熟手路径同语义补防——在编熟手 resume 熔断降级 create 时
+        // 组触顶则 addMember 必撞兜底闸（「极窄竞态」注释的前提在跳过 7012 前置闸的
+        // 熟手路径上不成立，是常态路径）：白烧一次 spawn、B 卡端上闪现即 retire、单
+        // failed。与 capReuse 同口径 failed 收口（不走 enqueueCapDispatch——队列消费
+        // 重走派单链会再选中同一熔断熟手，形成重复入队循环；熔断冷却/过期席清理由
+        // 重投时的 7012 闸自然承接）。
         const msg = e instanceof Error ? e.message : String(e);
-        if (capReuse) {
-          const receipt = truncate(`编制已满，复用 worker resume 失败且不扩编降级: ${msg}`, 200);
+        // veteran 非空 ⇒ input.gid 非空（6994 派单侧熟手必带 gid）——非空断言仅类型收窄
+        const gCap = input.gid ? findGroup(input.gid) : null;
+        const veteranGroupAtCap = !capReuse && !!gCap && gCap.status === "active" && genericWorkerCount(gCap.headcount) >= headcountCapOf(gCap);
+        if (capReuse || veteranGroupAtCap) {
+          const receipt = truncate(`编制已满${capReuse ? "，复用 worker resume 失败且不扩编降级" : "，在编熟手 resume 熔断且不扩编降级"}: ${msg}`, 200);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
-          return { ok: false, error: `编制已满（触顶复用 resume 失败，不扩编）: ${msg}` };
+          return { ok: false, error: `编制已满（${capReuse ? "触顶复用" : "在编熟手"} resume 失败，不扩编）: ${msg}` };
         }
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {

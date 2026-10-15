@@ -7,6 +7,8 @@
 //       H7 trimHeadcounts 编排（裁剪准确+报告落盘+projects.json 收敛）
 //       H8 触顶先清后判（过期席清理腾名额→正常新建，PM 补充③）
 //       H9 member-retire 腾名额排水（除名即试排，队列接续新建）
+//       H11 在编熟手 resume 熔断+组触顶 → 不降级扩编（W-P2FIX P2-3：failed 收口
+//           与 capReuse 同口径零 spawn；未触顶对照=原降级链保持）
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,6 +16,7 @@ import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { readDispatchLog } from "../src/org.js";
+import { routingFor } from "../src/routing.js";
 import {
   addMember, createGroup, findGroup, genericWorkerCount, headcountCapOf, listGroups,
   maxHeadcountWorkers, planHeadcountTrim, setGroupStatus,
@@ -286,6 +289,49 @@ async function main() {
     assert(created.length === spawnH10 + 1, `排水新建承接（spawn ${spawnH10}→${created.length}）`);
     const ledH10 = readDispatchLog().find((e) => e.id === dH10);
     assert(ledH10?.status === "running", `排队单接续 running（实际 ${ledH10?.status ?? "无"}）`);
+
+    // ---- H11 在编熟手 resume 熔断+组触顶 → 不降级扩编（W-P2FIX P2-3，与 capReuse 同口径）----
+    console.log("H11 熟手熔断触顶不降级");
+    // 场景根因：7012 前置闸只拦「无熟手」（input.gid && !veteran）——pickVeteranEligible
+    // 不滤 resumeCooldownUntil，熔断熟手被直选 → 7143 throw → 降级 create 的 B 必撞
+    // addMember 兜底闸（白烧一次 spawn+B 卡闪现即 retire+单 failed）。
+    const anchor3 = join(ORG, "anchor-fuse");
+    mkdirSync(anchor3, { recursive: true });
+    const cg3 = createGroup({ name: "熔断组", anchor_dir: anchor3, tier: "轻立项" });
+    const gid3 = cg3.ok ? cg3.group.id : "";
+    setGroupStatus(gid3, "active");
+    const cs3 = mgr.orgAction("cap-set", { gid: gid3, cap: 1 });
+    assert(cs3.ok, "夹具：cap=1");
+    // 熟手养成：派单新建 → 在编 → 交付收口（routing 记录写入，pickVeteran 直选资格）
+    const rA = mgr.dispatchWorker({ anchor: anchor3, gid: gid3, prompt: "熟手养成单", title: "HA" });
+    const sA = rA.ok ? rA.session_id : "";
+    await wait(30);
+    const idxA = created.findIndex((x) => x.prompt?.includes("熟手养成单"));
+    if (idxA >= 0) created[idxA].cb.onTurnEnd(true, "success", 5);
+    await wait(60);
+    const stA0 = sessionsOf(mgr).get(sA);
+    assert(!!stA0 && stA0.state.status === "DONE", `前置：熟手 A 已收口 DONE（实际 ${stA0?.state.status ?? "无"}）`);
+    assert(genericWorkerCount(findGroup(gid3)!.headcount) === 1 && headcountCapOf(findGroup(gid3)!) === 1, "前置：泛 worker 1/1 触顶");
+    // 置熔断冷却（直改会话顶层字段——resumeCooldownUntil 在 ManagedSession 顶层不在
+    // state；pickVeteranEligible 无熔断滤，直选即入 7143 throw 路径）
+    const stA = sessionsOf(mgr).get(sA);
+    if (stA) (stA as unknown as { resumeCooldownUntil?: number }).resumeCooldownUntil = Date.now() + 60_000;
+    const spawnH11 = created.length;
+    const rB = mgr.dispatchWorker({ anchor: anchor3, gid: gid3, prompt: "熔断触顶单", title: "HB" });
+    assert(!rB.ok && (rB.error ?? "").includes("不扩编"), `触顶+熟手熔断 → failed 拒绝不扩编（实际 ${rB.ok ? "ok" : rB.error}）`);
+    assert(created.length === spawnH11, `零新 spawn（降级 create 被收口，实际 ${created.length - spawnH11} 次）`);
+    const failedRows = readDispatchLog().filter((e) => e.status === "failed");
+    const ledB = failedRows[failedRows.length - 1];
+    assert((ledB?.receipt ?? "").includes("在编熟手 resume 熔断"), `台账 failed 收口 receipt 口径=在编熟手熔断不扩编（实际「${ledB?.receipt ?? "无"}」）`);
+    assert(genericWorkerCount(findGroup(gid3)!.headcount) === 1, "泛 worker 恒 1（无闪现扩编/retire 往返）");
+    // 对照（修复不误伤正常降级）：未触顶同熔断 → 降级新会话承接（7161 原降级链保持）
+    mgr.orgAction("cap-set", { gid: gid3, cap: 3 });
+    const spawnH11b = created.length;
+    const rC = mgr.dispatchWorker({ anchor: anchor3, gid: gid3, prompt: "熔断未触顶单", title: "HC" });
+    assert(rC.ok && rC.session_id !== sA, `未触顶+熟手熔断 → 降级新会话承接（实际 ${rC.ok ? rC.session_id.slice(0, 8) : rC.error}）`);
+    assert(created.length === spawnH11b + 1, `降级 create 恰一次 spawn（实际 +${created.length - spawnH11b}）`);
+    const ledC = readDispatchLog().filter((e) => e.status === "running");
+    assert(ledC.length > 0 && ledC[ledC.length - 1].session_id === (rC.ok ? rC.session_id : ""), "降级单台账收敛 running 承接=B 新会话");
   } finally {
     // 环境还原
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
