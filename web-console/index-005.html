@@ -3925,9 +3925,15 @@
                     mountTwoPane(ph);
                     return;
                   }
-                  const sessions = [...S.sessions.values()].filter((x) => filterDef.test(x) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // 1015 置顶常驻（用户需求）：筛选档不隐藏置顶卡——pinned 豁免 filterDef.test 恒进
+                  // 渲染集钉最顶（不因「进行中/已完成」等状态档不匹配而被筛掉）；搜索不豁免——
+                  // sessionSearchTest 是用户显式找词，置顶卡不匹配搜索词照隐藏；slim 收起不豁免——
+                  // slimIsHidden 本就置顶例外（:3709）。主过滤与 filterHidden 记账共用 pinnedKeep
+                  // 谓词，记账恒等于真实隐藏集（mo 完整性检查口径不漂）。
+                  const pinnedKeep = (x) => x.pinned === true;
+                  const sessions = [...S.sessions.values()].filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
                   // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径
-                  const filterHidden = [...S.sessions.values()].filter((x) => !(filterDef.test(x) && sessionSearchTest(x))).map((x) => x.session_id);
+                  const filterHidden = [...S.sessions.values()].filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
                   // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
                   const slimHiddenIds = [...S.sessions.values()].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);

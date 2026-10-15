@@ -102,7 +102,8 @@ ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc
 
 // ---- §C 列表渲染链 ----
 console.log("-- §C render chain");
-ok(html.includes("const slimRoster = slimRosterOf(S.projects);") && html.includes(".filter((x) => filterDef.test(x) && sessionSearchTest(x) && slimVisible(x))") && html.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
+ok(html.includes("const slimRoster = slimRosterOf(S.projects);") && html.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x))") && html.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
+ok(html.includes("const pinnedKeep = (x) => x.pinned === true;") && html.includes(".filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x)))"), "1015 pinned keep: pinned cards exempt from status filter (always rendered, pinned-first top); filterHidden ledger shares the same predicate so observer amnesty stays exact");
 ok(html.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
 ok(html.includes('data-group-toggle="slim-teams"') && html.includes("<span>team</span>") && html.includes("session-group teams-dock") && html.includes(".session-group.teams-dock {") && html.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
 ok(html.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && html.includes("mountTwoPane(tpl.content);") && html.includes('upper.className = "list-upper";'), "list assembly: two-pane (#103) — upper sessions pane, dock below");
