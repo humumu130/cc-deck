@@ -291,6 +291,35 @@ section("\nS6 GC 机械档");
   assert(res3.actions.length === 0, "年轻从未命中不淘汰（90 天租期未到）");
 }
 
+// ---------- S9 手动整理（W-POLISH #96）：mode 贯通 + manual 轮日志双标 + 默认 auto 不回归 ----------
+section("\nS9 手动整理（W-POLISH #96）");
+{
+  const dir = mkDir("s9-manual");
+  dirs.push(dir);
+  const now = Date.now();
+  const DAY9 = 86_400_000;
+  // 造一条可整条目：从未命中超 90 天（手动整理应清它）
+  const stale = appendExperience({ text: "手动整理靶：从未命中超期", kind: "practice", source: USER_SRC }, dir);
+  assert(stale.ok, "S9 造数");
+  const staleId = mustOk(stale).id;
+  {
+    const raw = JSON.parse(readFileSync(join(dir, "experience.json"), "utf-8")) as { entries: ExperienceEntry[] };
+    const hit = raw.entries.find((e) => e.id === staleId)!;
+    hit.created_at = now - 91 * DAY9;
+    writeFileSync(join(dir, "experience.json"), JSON.stringify(raw, null, 2) + "\n");
+  }
+  const r = runExperienceGc("manual", now, dir, "manual");
+  assert(r.ran && r.actions.some((a) => a.type === "retire" && a.target_ids.includes(staleId)), "S9 手动轮清掉超期条目");
+  const logRaw = readFileSync(expGcLogPath(dir), "utf-8").trim().split("\n");
+  const row = JSON.parse(logRaw[logRaw.length - 1]!) as { trigger: string; mode: string };
+  assert(row.trigger === "manual" && row.mode === "manual", "S9 manual 轮日志双标（trigger+mode）——exp-gc-log 可回溯");
+  assert(listExperience(undefined, dir).find((e) => e.id === staleId)?.status === "retired", "S9 手动淘汰可恢复（retired 非物理删）");
+  // 默认 mode=auto 不回归：新库跑默认参（饱和轮，日志不落——只验签名兼容）
+  resetExperienceRuntimeForTests();
+  const r2 = runExperienceGc("threshold", Date.now(), dir);
+  assert(r2.ran, "S9 默认 mode=auto 签名兼容（既有调用零改动）");
+}
+
 // ---------- S6b term kind 特化（KWP 批件二/C 路 E2）：免从未命中 retire + 注入/配额 + 申报 + 其余梯度照旧 ----------
 section("\nS6b term kind 特化");
 {

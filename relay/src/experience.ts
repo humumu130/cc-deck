@@ -291,7 +291,7 @@ export interface GcAction {
 
 export interface GcLogRow {
   ts: number;
-  trigger: "scheduled" | "threshold" | "startup" | "resurrection" | "retire" | "import";
+  trigger: "scheduled" | "threshold" | "startup" | "resurrection" | "retire" | "import" | "manual";
   mode: "auto" | "manual";
   actions: GcAction[];
   /** 指向本轮受影响条目的执行前快照（exp-gc-backup.json 内的轮次 ts） */
@@ -752,7 +752,7 @@ function notifyGcRound(ts: number, s: ExperienceGcSummary): void {
  * （从未命中 90d 自动 retire——复活环兜底；命中过超期未用降权）+ retired 归档。
  * write-ahead 快照先于任何动作落盘（REL 必-3）。全同步（文件头并发纪律）。
  */
-export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?: string): GcRunResult {
+export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?: string, mode: "auto" | "manual" = "auto"): GcRunResult {
   if (!readPluginConfig().experience) return { ran: false, actions: [], reason: "总开关关闭" };
   const { store, corrupted } = loadExperience(dir);
   if (corrupted) return { ran: false, actions: [], reason: "坏 JSON 保护态" };
@@ -810,7 +810,7 @@ export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?:
     const archiveOnly = maybeArchiveRetired(store.entries, dir);
     if (archiveOnly) {
       saveExperience(store, dir);
-      appendGcLog({ ts: now, trigger, mode: "auto", actions: [archiveOnly], snapshot_ref: now }, dir);
+      appendGcLog({ ts: now, trigger, mode, actions: [archiveOnly], snapshot_ref: now }, dir);
       gcLastRunAt = now;
       gcLastRoundHadActions = true;
       notifyGcRound(now, { ts: now, retired: 0, merged: 0, demoted: 0 }); // W-EXPP2：归档移出=面板可见变化，广播面回调（无淘汰/合并不发通知）
@@ -867,7 +867,7 @@ export function runExperienceGc(trigger: GcLogRow["trigger"], now: number, dir?:
     saveExperience(store, dir);
     actions.push(archiveAction);
   }
-  appendGcLog({ ts: now, trigger, mode: "auto", actions, snapshot_ref: affected.length > 0 ? now : undefined }, dir);
+  appendGcLog({ ts: now, trigger, mode, actions, snapshot_ref: affected.length > 0 ? now : undefined }, dir);
   gcLastRunAt = now;
   gcLastRoundHadActions = true;
   // W-EXPP2：轮收口回调（dedupe=merged、neverUsed=retired、降权=demoted）

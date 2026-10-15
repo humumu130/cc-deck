@@ -76,7 +76,7 @@ import { AllowRuleStore } from "./allow-rules.js";
 import {
   appendExperience, bumpExperiences, retireExperience, restoreExperience, listExperience,
   buildExperienceInjection, parseExperienceDeclaration, resetExperienceRuntimeForTests,
-  exportExperience, importExperience, setExperienceGcSummaryHook,
+  exportExperience, importExperience, setExperienceGcSummaryHook, runExperienceGc,
   type ExperienceEntry, type ExperienceGcSummary, type ExperienceKind,
 } from "./experience.js";
 // W-KWP1 件三（2026-10-11）岗位模板库（知识轴 fail-open，bizRole 权限轴不经过此）：
@@ -6191,6 +6191,28 @@ export class SessionManager {
           this.auditExpAction("exp-restore", r, "global");
           if (r.ok) this.emitExperience(); // W-EXPP2
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "exp-gc": {
+          // ---------- W-POLISH #96 手动整理（立即跑一轮机械档 GC）----------
+          // 定时档（周档 scheduled/阈值档 threshold）在 experience.ts 自转；手动入口
+          // 绕过冷却立即执行，trigger/mode 双标 manual 进 GC 日志（exp-gc-log.ndjson
+          // 可回溯）。返回动作摘要（淘汰/合并/降权计数）——端上一行反馈「清了几条」。
+          // 有动作才广播（空轮/饱和轮面板无变化不吵）；日志侧 runExperienceGc 内部落。
+          const r = runExperienceGc("manual", Date.now(), undefined, "manual");
+          this.auditExpAction("exp-gc", r.ran ? { ok: true } : { ok: false, error: r.reason }, "global");
+          if (r.ran && r.actions.length > 0) this.emitExperience(); // W-EXPP2：条目变化广播
+          const n = (t: string) => r.actions.filter((a) => a.type === t).reduce((s, a) => s + a.target_ids.length, 0);
+          return {
+            ok: true,
+            data: {
+              ran: r.ran,
+              reason: r.reason,
+              retired: n("retire"),
+              merged: n("dedupe"),
+              demoted: n("demote"),
+              archived: n("archive"),
+            },
+          };
         }
         case "exp-regroup": {
           // ---------- W-EXPP2 P2 面板组合动作（设计 §7.1 D1-6）：补申报/改归组 =
