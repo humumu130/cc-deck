@@ -11,13 +11,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { withA, type ThemeColors } from "../theme";
-import { displaySrcName } from "../fmt";
+import { statusColor, withA, type ThemeColors } from "../theme";
+import { displaySrcName, fmtLastActive } from "../fmt";
 import type { ProjectGroup, SessionState } from "../protocol";
 import { useRelay, type SourceStatus } from "../store";
 import { PlusMark } from "../brand";
 import { ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgData, useOrgDecide } from "./OrgZone";
-import { TeamDetailPage } from "./TeamDetailPage";
+import { EngineBadge, TeamDetailPage } from "./TeamDetailPage";
 import TeamCreateWizard from "./TeamCreateWizard";
 
 // 未立项折叠组展开态持久键（折叠态独立记账：默认折叠，用户展开过的桶记展开——与桌面
@@ -52,13 +52,21 @@ function OrgPageShell({ title, sub, onAdd, addLabel, children }: { title: string
 }
 
 // ---------- 团队 tab：确认卡队列置顶 + 团队列表卡 ----------
+// W-MV8A（v8.5 v3 手机壳 ph-pteam 对齐）：团队卡改 hcard team 语言——首字头像 +
+// 名 + 右缘健康灯（orgStColor），计数行「编制 N · 进行中 N · 待确认 N · 最近活跃」，
+// 可展开成员迷你行（任务书点名；headcount × sessions join：名+状态灯+引擎徽）。
+// 品牌渐变边框形态对齐 v3 .hcard.team（brand line + soft 渐变底）；归档组不占常驻位
+// （useOrgData 已滤）。
 export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => void }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const { confirms, groups } = useOrgData();
+  const snap = useRelay();
   const { decide, err, clearErr, flights, accepted } = useOrgDecide();
   const [detailOpen, setDetailOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  // 成员迷你行展开集（本地内存级——进详情/切 tab 即回默认收起，轻浏览态不持久）
+  const [openGids, setOpenGids] = useState<Set<string>>(new Set());
   const pendingN = confirms.length;
   const multiSrc = useMemo(() => new Set(confirms.map((x) => x.src.id)).size > 1, [confirms]);
   // 团队卡统计行（A1-8 图标化 + A1-11 待确认数）：席位=编制数+1（Leader 兼管）
@@ -70,10 +78,16 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
       onAdd={() => setWizardOpen(true)}
       addLabel="新建团队（分步向导）"
     >
-      {/* ① 确认卡队列置顶（A9：节头对齐详情页 ① 节语言；跨源平铺；多源时逐卡标源名防歧义） */}
+      {/* ① 确认卡队列置顶（A9 节头 + v3 pcfq 语言：红计数徽——「手机置顶」是 v3 修订②
+          拍板（确认卡队列=现网第一 citizen）；跨源平铺；多源时逐卡标源名防歧义） */}
       {confirms.length ? (
         <View style={styles.cfQueue}>
-          <Text style={styles.cfH}>待你确认 · {confirms.length}</Text>
+          <View style={styles.cfHRow}>
+            <Text style={styles.cfH}>待你确认</Text>
+            <View style={styles.cfCount}>
+              <Text style={styles.cfCountT}>{confirms.length > 99 ? "99+" : confirms.length}</Text>
+            </View>
+          </View>
           {confirms.map(({ src, cf }) => (
             <View key={cf.id}>
               {multiSrc ? <Text style={styles.cfSrc} numberOfLines={1}>{displaySrcName(src.relayName || src.name)}</Text> : null}
@@ -90,34 +104,97 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
           ) : null}
         </View>
       ) : null}
-      {/* ② 团队列表卡 */}
+      {/* ② 团队列表卡（v3 hcard team 语言） */}
       {groups.length ? (
         groups.map(({ src, g }) => {
           const stColor = orgStColor(g.status, c);
           const pend = pendingOf(g.id);
+          const members = (Array.isArray(g.headcount) ? g.headcount : []).filter((m) => m && typeof m.session_id === "string");
+          // 进行中计数：live 板缓存（src.boards[gid]，BOARD_UPDATED delta 维护）；
+          // 无板数据不显（宁缺毋滥——UPOLISH3 水位同哲学，不伪造 0）
+          const ents = src.boards?.[g.id]?.entries;
+          const running = ents ? ents.filter((e) => e.status === "claimed").length : null;
+          // 最近活跃：成员会话 max(updated_at)（无会话数据回落「—」）
+          const lastTs = members.reduce(
+            (mx, m) => Math.max(mx, snap.sessions.find((s) => s.session_id === m.session_id)?.updated_at ?? 0),
+            0,
+          );
+          const open = openGids.has(g.id);
           return (
-            <Pressable
-              key={g.id}
-              style={styles.teamCard}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-              accessibilityLabel={`团队 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${tierZh(g.tier)}，${(g.headcount ?? []).length + 1} 人，点按查看详情`}
-              onPress={() => setDetailOpen({ srcId: src.id, gid: g.id, name: g.name })}
-            >
-              <View style={styles.teamR1}>
-                <View style={styles.teamIcon}><Text style={styles.teamIconT}>T</Text></View>
-                <Text style={styles.teamName} numberOfLines={1}>{g.name}</Text>
-                <View style={[styles.stPill, { borderColor: withA(stColor, 0.5), backgroundColor: withA(stColor, 0.1) }]}>
-                  <View style={[styles.stPillDot, { backgroundColor: stColor }]} />
-                  <Text style={[styles.stPillT, { color: stColor }]}>{ORG_ST_ZH[g.status] ?? g.status}</Text>
+            <View key={g.id} style={styles.teamCard}>
+              <Pressable
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                accessibilityLabel={`团队 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${tierZh(g.tier)}，${members.length + 1} 人，点按查看详情`}
+                onPress={() => setDetailOpen({ srcId: src.id, gid: g.id, name: g.name })}
+              >
+                <View style={styles.teamR1}>
+                  <View style={styles.teamAva}>
+                    <Text style={styles.teamAvaT}>{(g.name || "T").trim().slice(0, 1).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.teamNameRow}>
+                      <Text style={styles.teamName} numberOfLines={1}>{g.name}</Text>
+                      {pend ? (
+                        <View style={styles.teamPendBadge}>
+                          <Text style={styles.teamPendBadgeT}>{pend}</Text>
+                        </View>
+                      ) : null}
+                      {/* 健康灯（v3 .dot）：状态色 7px 右缘锚 */}
+                      <View style={[styles.teamDot, { backgroundColor: stColor }]} />
+                    </View>
+                    <Text style={styles.teamMeta} numberOfLines={1}>
+                      <Text style={styles.teamMetaStrong}>{members.length + 1} 人</Text>
+                      {running != null ? <Text>{" · 进行中 "}{running}</Text> : ""}
+                      {pend ? <Text style={styles.teamMetaPend}> · 待确认 {pend}</Text> : ""}
+                      {lastTs > 0 ? <Text>{" · "}{fmtLastActive(lastTs)}活跃</Text> : ""}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              {/* A1：去 emoji——席位数字提亮（text 位），待确认品牌色（有才显）；胶囊退为状态锚 */}
-              <Text style={styles.teamMeta} numberOfLines={1}>
-                <Text style={styles.teamMetaStrong}>{(g.headcount ?? []).length + 1} 人</Text>
-                {pend ? <Text style={styles.teamMetaPend}> · 待确认 {pend}</Text> : ""}
-                {" · "}{tierZh(g.tier)} · {displaySrcName(src.relayName || src.name)}
-              </Text>
-            </Pressable>
+              </Pressable>
+              {/* 成员迷你行（任务书点名）：展开=编制成员 名+状态灯+引擎徽，一行一人；
+                  点行进成员会话（详情页 memberCard 同链） */}
+              <Pressable
+                style={styles.teamExpRow}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                accessibilityLabel={`团队 ${g.name} 成员 ${members.length} 人，点按${open ? "收起" : "展开"}成员迷你行`}
+                onPress={() => setOpenGids((prev) => {
+                  const n = new Set(prev);
+                  if (n.has(g.id)) n.delete(g.id);
+                  else n.add(g.id);
+                  return n;
+                })}
+              >
+                <Text style={styles.teamExpT}>成员 {members.length}</Text>
+                <Text style={styles.teamExpChev}>{open ? "▾" : "▸"}</Text>
+              </Pressable>
+              {open ? (
+                members.length ? (
+                  <View style={styles.teamMiniList}>
+                    {members.map((m) => {
+                      const ses = snap.sessions.find((s) => s.session_id === m.session_id);
+                      const name = m.nick || ses?.title || m.session_id.slice(0, 8);
+                      const dot = ses ? statusColor(ses.status, c) : c.faint;
+                      return (
+                        <Pressable
+                          key={m.session_id}
+                          style={styles.teamMiniRow}
+                          android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                          accessibilityLabel={`成员 ${name}，${m.role || "角色未标注"}，点按打开成员会话`}
+                          onPress={() => onOpenSession(m.session_id)}
+                        >
+                          <View style={[styles.teamMiniDot, { backgroundColor: dot }]} />
+                          <Text style={styles.teamMiniName} numberOfLines={1}>{name}</Text>
+                          <Text style={styles.teamMiniRole} numberOfLines={1}>{m.role || ""}</Text>
+                          <EngineBadge engine={m.engine || ses?.engine} />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.teamMiniEmpty}>暂无编制数据（建团成员或电脑端派单入编后出现）</Text>
+                )
+              ) : null}
+            </View>
           );
         })
       ) : !confirms.length ? (
@@ -232,7 +309,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
               <Text style={[styles.stPillT, { color: stColor }]}>{ORG_ST_ZH[g.status] ?? g.status}</Text>
             </View>
           </View>
-          <Text style={styles.teamMeta} numberOfLines={1}>
+          <Text style={[styles.teamMeta, styles.projMeta]} numberOfLines={1}>
             <Text style={styles.teamMetaStrong}>{n} 会话</Text>
             {" · "}{shortDirOf(g.anchor_dir)} · {displaySrcName(src.relayName || src.name)}
           </Text>
@@ -303,7 +380,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
                       <Text style={styles.teamName} numberOfLines={1}>{shortDirOf(b.native || b.dir)}</Text>
                       <Text style={styles.unfiledTag}>未立项</Text>
                     </View>
-                    <Text style={styles.teamMeta} numberOfLines={1}>
+                    <Text style={[styles.teamMeta, styles.projMeta]} numberOfLines={1}>
                       <Text style={styles.teamMetaStrong}>{b.items.length} 会话</Text>
                       {" · "}{b.dir} · 最近 {displayLastAt(b.items)}
                     </Text>
@@ -389,10 +466,17 @@ const makeStyles = (c: ThemeColors) =>
     plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.38), overflow: "hidden" },
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
     list: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
-    // 确认卡队列（A9：队列加节头，与详情页 ① 节语言一致）
+    // 确认卡队列（A9 节头 + v3 pcfq 语言：标题行 + 红计数徽 cfcount）
     // dda6490 并集合并残留收口：上方 A2 块（dim 副语/36＋钮）为终态，旧块（brandA/44×44 件七）重复键删除——JS 对象字面量后者静默覆盖前者，残留即回退
     cfQueue: { gap: 9, marginBottom: 14 },
-    cfH: { color: c.faint, fontSize: 11, fontWeight: "700", marginBottom: 1 },
+    cfHRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    cfH: { color: c.dim, fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
+    // v3 .cfcount：红底白字计数徽（团队域行动队列的视觉锚——区别于底栏琥珀 badge）
+    cfCount: {
+      minWidth: 15, height: 15, borderRadius: 8, paddingHorizontal: 4,
+      backgroundColor: c.error, alignItems: "center", justifyContent: "center",
+    },
+    cfCountT: { color: "#FFFFFF", fontSize: 9.5, fontWeight: "800" },
     cfSrc: { color: c.dim, fontSize: 10.5, fontWeight: "700", marginBottom: -3 },
     errRow: {
       flexDirection: "row", alignItems: "center", gap: 8,
@@ -401,28 +485,56 @@ const makeStyles = (c: ThemeColors) =>
     },
     errT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
     errX: { color: c.faint, fontSize: 15, fontWeight: "600" },
-    // 团队/项目卡（同形制）：r1 名称+状态胶囊 / r2 元信息行（A1：去 emoji，席位数字
-    // 提亮 text 色、待确认品牌色——信息进对视觉位，胶囊退为状态锚不抢色）
+    // 团队卡（W-MV8A v3 .hcard.team）：brand 线框 + soft 渐变底观感（RN 无 CSS 渐变，
+    // 用 tintSoft 实底近似 v3 linear-gradient(135deg, soft, panel 55%) 的前段）；
+    // 首字头像 + 健康灯 + 计数行 + 可展开成员迷你行
     teamCard: {
-      borderRadius: 14, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
-      paddingHorizontal: 12, paddingVertical: 12, marginBottom: 9, gap: 7, overflow: "hidden",
+      borderRadius: 14, borderWidth: 1, backgroundColor: c.panel, borderColor: withA(c.brandA, 0.4),
+      paddingHorizontal: 12, paddingVertical: 11, marginBottom: 9, gap: 4, overflow: "hidden",
     },
+    teamAva: {
+      width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center",
+      backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.32),
+    },
+    teamAvaT: { color: c.brandA, fontSize: 16, fontWeight: "800" },
+    teamNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    // v3 .pbadge：待确认琥珀徽（卡位级——与队列红徽分工：红=队列总量，琥珀=本组）
+    teamPendBadge: {
+      minWidth: 15, height: 15, borderRadius: 8, paddingHorizontal: 4, flexShrink: 0,
+      backgroundColor: c.working, alignItems: "center", justifyContent: "center",
+    },
+    teamPendBadgeT: { color: "#2B2100", fontSize: 9.5, fontWeight: "800" },
+    teamDot: { width: 7, height: 7, borderRadius: 4, marginLeft: "auto", flexShrink: 0 },
     projCard: {
       borderRadius: 14, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
       paddingHorizontal: 12, paddingVertical: 12, marginBottom: 9, gap: 8, overflow: "hidden",
     },
-    teamR1: { flexDirection: "row", alignItems: "center", gap: 8 },
-    teamIcon: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.32) },
-    teamIconT: { color: c.brandA, fontSize: 13, fontWeight: "800" },
+    teamR1: { flexDirection: "row", alignItems: "center", gap: 10 },
     projectIcon: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: withA(c.brandB, 0.14), borderWidth: 1, borderColor: withA(c.brandB, 0.32) },
     projectIconT: { color: c.brandB, fontSize: 13, fontWeight: "800" },
-    teamName: { color: c.textStrong, fontSize: 13.5, fontWeight: "700", flex: 1, minWidth: 0 },
+    teamName: { color: c.textStrong, fontSize: 13.5, fontWeight: "700", flexShrink: 1 },
     stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
     stPillDot: { width: 6, height: 6, borderRadius: 3 },
     stPillT: { fontSize: 10, fontWeight: "700" },
-    teamMeta: { color: c.dim, fontSize: 10.5, marginTop: 0, paddingLeft: 38 },
-    teamMetaStrong: { color: c.dim, fontWeight: "700", fontVariant: ["tabular-nums"] },
+    teamMeta: { color: c.dim, fontSize: 10.5, marginTop: 2, fontVariant: ["tabular-nums"] },
+    // 项目卡平铺结构的 meta 缩进（projectIcon 30 + gap 8 对齐——teamMeta 已被团队卡
+    // 嵌套结构占用无缩进，项目卡两处叠加本键）
+    projMeta: { paddingLeft: 38 },
+    teamMetaStrong: { color: c.text, fontWeight: "700", fontVariant: ["tabular-nums"] },
     teamMetaPend: { color: c.brandA, fontWeight: "700", fontVariant: ["tabular-nums"] },
+    // 成员迷你行（W-MV8A 任务书点名）：展开钮行 + 迷你行列表
+    teamExpRow: {
+      flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 48,
+      paddingVertical: 5, borderRadius: 8, marginTop: 1,
+    },
+    teamExpT: { color: c.faint, fontSize: 10.5, fontWeight: "600", flex: 1 },
+    teamExpChev: { color: c.faint, fontSize: 11 },
+    teamMiniList: { gap: 2, paddingLeft: 48 },
+    teamMiniRow: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 4, borderRadius: 8 },
+    teamMiniDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
+    teamMiniName: { color: c.text, fontSize: 11.5, fontWeight: "600", flexShrink: 1 },
+    teamMiniRole: { color: c.faint, fontSize: 10, flexShrink: 1 },
+    teamMiniEmpty: { color: c.faint, fontSize: 10.5, paddingLeft: 48, paddingVertical: 4 },
     // 项目卡动作行（A4：触达 36+主钮字重 700）
     actRow: { flexDirection: "row", gap: 8, marginTop: 6 },
     actBtn: {

@@ -269,7 +269,7 @@ async function main(): Promise<void> {
   check(appSrc.includes("onNewInDir") && appSrc.includes("onViewSessionsInDir"), "App 接线项目卡两动作");
   // A3-5：状态 tag 退役 + r3 条件渲染
   check(!/function StatusTag/.test(listSrc) && !/<StatusTag/.test(listSrc), "A3-5 状态 tag 退役");
-  check(listSrc.includes("s.context_usage ?? 0) > 0 ? ("), "A3-5 r3 全空整行不渲染（条件含水位）");
+  check(listSrc.includes("s.context_usage ?? 0) > 0 || engineBadgeable(s.engine) ? ("), "A3-5 r3 全空整行不渲染（条件含水位+引擎徽可显，W-MV8A 扩——engineBadgeable 词表命中才算，空行不渲染语义保持）");
   // A3-7：头像引擎淡彩
   check(listSrc.includes('ENGINE_ACCENT[s.engine ?? "claude"]'), "A3-7 头像底色=引擎品牌色淡彩");
   // A4-4：信息行序 目录→水位→活跃时间
@@ -402,7 +402,7 @@ async function main(): Promise<void> {
   console.log("K. 回归双修（铃铛恒显/分组对齐）+ 件七/件八");
   // 🔧回归①：铃铛恒显（0=无计数态，不再整钮消失）
   check(/notifPending\.length > 0 \? null/.test(listSrc) === false, "铃铛不再条件消失（0 也显示）");
-  check(listSrc.includes("通知{notifPending.length > 0"), "铃铛计数条件拼接（0=无计数态文案）");
+  check(listSrc.includes("notifPending.length > 99 ? \"99+\" : notifPending.length") && listSrc.includes("bellBadgeOff: { display: \"none\" }"), "铃铛计数 badge 化（W-MV8A：胶囊退役、顶栏 bbadge 红底计数 99+ 封顶，0=display 隐藏态常挂）");
   // 🔧回归②：分组结构断言（投影纯函数面已覆盖；此处锚渲染层折叠/持久）
   check(listSrc.includes("TEAM_EXPANDED_KEY"), "团队组折叠态持久键（件九：进行中组键随组退役）");
   check(!listSrc.includes("sec-active"), "「进行中」组渲染层退役（件九：状态过滤交筛选档）");

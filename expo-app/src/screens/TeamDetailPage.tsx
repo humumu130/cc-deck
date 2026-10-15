@@ -11,7 +11,7 @@
 // 增量（PROJECTS_UPDATED/BOARD_UPDATED/experience/rules/org_confirms）。板数据 live
 // 优先（conn.boards[gid] 由 BOARD_UPDATED delta 维护，M13-4 锚定纪律），detail 拉取
 // 结果兜底。对话不设 tab（A1-13）——经成员卡/看板 owner 点开成员会话即达。
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -102,18 +102,68 @@ export function taskOwnerResolve(
 }
 
 // 引擎徽标（词表外/缺失不渲染——件六口径：兜底「引擎未知」上卡=噪音）
+// W-MV8A 导出复用：会话卡 r3 徽章行（ListScreen）与团队卡成员迷你行（OrgTabs）
+// 同一徽章形制单源
 const ENGINE_ZH: Record<string, string> = {
   claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode",
 };
-function EngineBadge({ engine }: { engine?: string }) {
+// 引擎徽可显判定（词表命中才算——r3 徽章行渲染条件消费，保「全空整行不渲染」语义：
+// 有 engine 但词表外时 EngineBadge 为 null，不抬高条件让空行渲染）
+export const engineBadgeable = (e: string | undefined): boolean => !!e && !!ENGINE_ZH[e];
+export function EngineBadge({ engine, size = "md" }: { engine?: string; size?: "md" | "sm" }) {
   const styles = useThemeStyles(makeStyles);
   if (!engine || !ENGINE_ZH[engine]) return null;
+  const dot = size === "sm" ? styles.engDotSm : styles.engDot;
+  const txt = size === "sm" ? styles.engBadgeTSm : styles.engBadgeT;
   return (
     <View style={styles.engBadge}>
-      <View style={[styles.engDot, { backgroundColor: ENGINE_ACCENT[engine] }]} />
-      <Text style={styles.engBadgeT}>{ENGINE_ZH[engine]}</Text>
+      <View style={[dot, { backgroundColor: ENGINE_ACCENT[engine] }]} />
+      <Text style={txt}>{ENGINE_ZH[engine]}</Text>
     </View>
   );
+}
+
+// ---------- W-MV8A 看板 v8.5 v3 视觉层 ----------
+// 泳道五色（v3 手机壳 --p-b/--p-r/--p-v/--p-ok/--p-d 深浅双档直译；色只表达
+// 「哪个泳道」一个维度——产品三原则①）
+export const LANE_COLORS: Record<string, { dark: string; light: string }> = {
+  backlog: { dark: "#55677F", light: "#C3CEDD" },
+  claimed: { dark: "#2FBF71", light: "#22A06B" },
+  submitted: { dark: "#E08A63", light: "#C05B33" },
+  ready_to_install: { dark: "#FFC53D", light: "#E0A43C" },
+  done: { dark: "#2C3B52", light: "#D7DEE9" },
+};
+export function laneColorOf(st: string, mode: "dark" | "light"): string {
+  const pair = LANE_COLORS[st];
+  return pair ? pair[mode] : "#55677F";
+}
+// 渲染序（v3 ph-pteamd plane 序）：待收单置顶（用户行动队列——产品三原则②「需 PM
+// 决策的事进一个行动队列」，v3 顺手拍板项）→ 进行中 → 待审查 → 待认领 → 完成。
+// 词表序（BOARD_LANES）是数据面契约不动；此处只影响详情页渲染序
+export const LANE_RENDER_ORDER: readonly string[] = [
+  "ready_to_install", "claimed", "submitted", "backlog", "done",
+];
+// 总览条比例（v3 .prog 五色分段）：各泳道 count / 全量，min 4% 防细段不可点不可见；
+// 全空板返回空数组（总览条整块不渲染）
+export function laneSharesOf(counts: Record<string, number>): { st: string; pct: number; n: number }[] {
+  const total = LANE_RENDER_ORDER.reduce((s, st) => s + (counts[st] ?? 0), 0);
+  if (total <= 0) return [];
+  return LANE_RENDER_ORDER
+    .filter((st) => (counts[st] ?? 0) > 0)
+    .map((st) => ({ st, n: counts[st] ?? 0, pct: Math.max(4, Math.round(((counts[st] ?? 0) / total) * 100)) }));
+}
+// 成员状态五色词（v3 五态：工作中/空闲/阻塞/出错/关闭——双信号=会话状态灯）。
+// SessionState 四态映射：WORKING=工作中 / WAITING=阻塞（等你输入=链路停摆）/
+// ERROR=出错 / DONE=空闲；不在册（无会话）=关闭
+export const MEMBER_ST_ZH: Record<string, { zh: string; tone: "g" | "y" | "r" | "b" }> = {
+  WORKING: { zh: "工作中", tone: "g" },
+  WAITING: { zh: "阻塞", tone: "y" },
+  ERROR: { zh: "出错", tone: "r" },
+  DONE: { zh: "空闲", tone: "b" },
+};
+export function memberStatusOf(status: string | undefined): { zh: string; tone: "g" | "y" | "r" | "b" } {
+  if (!status) return { zh: "关闭", tone: "b" };
+  return MEMBER_ST_ZH[status] ?? { zh: "关闭", tone: "b" };
 }
 
 export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highlightEntryId }: {
@@ -124,7 +174,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   onOpenSession: (sid: string) => void;
   highlightEntryId?: string; // 验收回跳：命中台账卡高亮（orgDetail 现拉板内查无=不高亮，防御）
 }) {
-  const { c } = useTheme();
+  const { c, mode } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const snap = useRelay();
   // undefined=加载中 / null=失败 / 对象=详情（orgDetail ack 必达回调）
@@ -197,6 +247,14 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   // 编制折叠组（默认折叠）+ 看板卡展开集（id 键控——BOARD_UPDATED 增量不收回展开态）
   const [hcOpen, setHcOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // W-MV8A 泳道折叠组（v3 plane 语言）：默认全展开，点 laneh 收起/展开；
+  // 待收单（ready_to_install）不参与折叠——行动队列恒显（v3 置顶 + pin 语义）
+  const [lanesOpen, setLanesOpen] = useState<Set<string>>(new Set(BOARD_LANES.map(([st]) => st)));
+  // 泳道锚点（总览图例点击跳组）：laneYs 记各泳道在滚动内容中的 y 偏移
+  const scrollRef = useRef<ScrollView>(null);
+  const laneYs = useRef<Map<string, number>>(new Map());
+  // board 容器相对滚动内容的 y（lane onLayout 的 y 相对 board，跳转换算要加上这层）
+  const boardYRef = useRef(0);
   const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => {
       const n = new Set(prev);
@@ -230,17 +288,24 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
       >
         <Text style={styles.tCardT} numberOfLines={open ? 4 : 2}>{r.text}</Text>
         {e.note ? <Text style={styles.tCardNote} numberOfLines={open ? 4 : 1}>{e.note}</Text> : null}
+        {/* W-MV8A v3 pcard 徽章行：running 灯 + 引擎徽 + 执行者 chip + 角色 dim +
+            更新时间右缘（pcline 语言） */}
         <View style={styles.tCardOwner}>
           {running ? <View style={styles.tRunDot} /> : null}
-          {engKnown ? <EngineBadge engine={info!.engine} /> : null}
+          {engKnown ? <EngineBadge engine={info!.engine} size="sm" /> : null}
           {r.resolved && info ? (
-            <Text style={styles.tCardOwnerT} numberOfLines={1}>
-              <Text style={styles.tCardOwnerName}>{info.name}</Text>
-              {info.role && info.role !== "角色未标注" ? ` · ${info.role}` : ""}
-            </Text>
+            <>
+              <View style={styles.tCardChip}>
+                <Text style={styles.tCardChipT} numberOfLines={1}>{info.name}</Text>
+              </View>
+              {info.role && info.role !== "角色未标注" ? (
+                <Text style={styles.tCardOwnerT} numberOfLines={1}>{info.role}</Text>
+              ) : null}
+            </>
           ) : (
             <Text style={[styles.tCardOwnerT, styles.tCardUnass]}>未指派</Text>
           )}
+          <Text style={styles.tCardTime}>{fmtMdHm(e.updated_at)}</Text>
         </View>
         {open ? (
           <View style={styles.tCardX}>
@@ -259,17 +324,43 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     );
   };
 
-  // 泳道渲染：backlog=有主在前+「未指派」小节；claimed=按成员分区（组内 ts 升序=排队序，
-  // 运行中置顶）+离编/无主尾节；其余态平铺。轻立项=单列简化态（渲染降级维持）
+  // 泳道渲染（W-MV8A v3 plane 语言）：laneh = 色竖条 + 名 + 计数 + 折叠钮；待收单
+  // go 态置顶高亮（行动队列）；折叠集 lanesOpen（待收单恒显不折）。backlog=有主在前
+  // +「未指派」小节；claimed=按成员分区（组内 ts 升序=排队序，运行中置顶）+离编/无主
+  // 尾节；其余态平铺。轻立项=单列简化态（渲染降级维持）
   const laneSection = (st: string, label: string) => {
     const items = ents.filter((e) => e.status === st);
     if (!items.length) return null;
+    const isActionLane = st === "ready_to_install";
+    const open = isActionLane || lanesOpen.has(st);
+    const lc = laneColorOf(st, mode);
     return (
-      <View key={st} style={styles.lane}>
-        <Text style={styles.laneH}>{label} · <Text style={styles.laneHN}>{items.length}</Text></Text>
-        {g?.tier === "轻立项" ? (
-          <View style={styles.laneBody}>{items.map(boardCard)}</View>
-        ) : st === "backlog" ? (() => {
+      <View
+        key={st}
+        style={[styles.lane, isActionLane && styles.laneGo]}
+        onLayout={(e) => { laneYs.current.set(st, e.nativeEvent.layout.y); }}
+      >
+        <Pressable
+          style={styles.laneHead}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+          accessibilityLabel={`${label} ${items.length}，点按${open ? "收起" : "展开"}`}
+          onPress={() => setLanesOpen((prev) => {
+            const n = new Set(prev);
+            if (n.has(st)) n.delete(st);
+            else n.add(st);
+            return n;
+          })}
+        >
+          {isActionLane ? <Text style={styles.lanePin}>置顶</Text> : null}
+          <View style={[styles.laneBar, { backgroundColor: lc }]} />
+          <Text style={[styles.laneH, isActionLane && styles.laneHGo]}>{label}</Text>
+          <Text style={[styles.laneHN, { color: isActionLane ? c.working : undefined }]}>{items.length}</Text>
+          <Text style={styles.laneChev}>{open ? "▾" : "▸"}</Text>
+        </Pressable>
+        {open ? (
+          g?.tier === "轻立项" ? (
+            <View style={styles.laneBody}>{items.map(boardCard)}</View>
+          ) : st === "backlog" ? (() => {
           const assigned: BoardEntry[] = [];
           const unassigned: BoardEntry[] = [];
           for (const e of items) (taskOwnerResolve(e, members, snap.sessions).resolved ? assigned : unassigned).push(e);
@@ -317,8 +408,9 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
             </View>
           );
         })() : (
-          <View style={styles.laneBody}>{items.map(boardCard)}</View>
-        )}
+            <View style={styles.laneBody}>{items.map(boardCard)}</View>
+          )
+        ) : null}
       </View>
     );
   };
@@ -328,11 +420,20 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     !g ? "该团队不在最新快照中（可能已结项或源已断开）"
     : !board ? (detail === undefined ? "正在加载任务板…" : detail === null ? "详情拉取失败（源可能已断开或 relay 版本过旧），可点右上刷新重试" : "尚未取得任务板，点右上刷新重试")
     : !ents.length ? "任务板暂无任务" : null;
+  // 五色总览条数据（W-MV8A v3 .prog/.ovleg）：各泳道计数比例
+  const laneShares = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const e of ents) counts[e.status] = (counts[e.status] ?? 0) + 1;
+    return laneSharesOf(counts);
+  }, [ents]);
 
-  // ---------- 成员卡（编制折叠组，UPOLISH3 显示规则全量） ----------
+  // ---------- 成员卡（编制折叠组，UPOLISH3 显示规则全量 + W-MV8A v3 五色状态词） ----------
   const memberCard = ({ m, s }: { m: NonNullable<ProjectGroup["headcount"]>[number]; s: SessionState | undefined }) => {
     const info = memberInfoOf(m, s);
     const dot = info.status ? statusColor(info.status, c) : c.faint;
+    // v3 五色状态词（ppill g/y/r/b 灯形统一）：工作中/空闲/阻塞/出错/关闭
+    const mst = memberStatusOf(info.status);
+    const mstColor = mst.tone === "g" ? c.done : mst.tone === "y" ? c.working : mst.tone === "r" ? c.error : c.dim;
     const used = Number(info.ctxUsed) || 0;
     const limit = Number(info.ctxLimit) || 0;
     // 水位真比例（件十六防护：NaN/无数据不渲染——宁缺毋滥）
@@ -343,7 +444,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
         key={m.session_id}
         style={styles.memCard}
         android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
-        accessibilityLabel={`成员 ${info.name}，${info.role}${info.status ? `，${info.status}` : "，不在册"}`}
+        accessibilityLabel={`成员 ${info.name}，${info.role}，${mst.zh}`}
         onPress={() => { onClose(); onOpenSession(m.session_id); }}
       >
         <View style={styles.memRow}>
@@ -352,7 +453,13 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
             <View style={[styles.memDot, { backgroundColor: dot, borderColor: c.panel }]} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.memName} numberOfLines={1}>{info.name}</Text>
+            <View style={styles.memNameRow}>
+              <Text style={styles.memName} numberOfLines={1}>{info.name}</Text>
+              <View style={[styles.memPill, { borderColor: withA(mstColor, 0.45), backgroundColor: withA(mstColor, 0.1) }]}>
+                <View style={[styles.memPillDot, { backgroundColor: mstColor }]} />
+                <Text style={[styles.memPillT, { color: mstColor }]}>{mst.zh}</Text>
+              </View>
+            </View>
             <Text style={styles.memMeta} numberOfLines={1}>
               {info.role}{info.model && info.model !== "模型未标注" ? ` · ${info.model}` : ""}{info.provider ? ` · ${info.provider}` : ""}
             </Text>
@@ -406,27 +513,27 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.page}>
-        {/* 头部：‹返回 + 组名 + 状态胶囊/档位 + 刷新（状态点色随态，件九/件十口径） */}
+        {/* 头部：‹返回 + 组名 + 副题行（W-MV8A v3 appbar 语言：live 点 + 状态词 ·
+            编制 N · 档位 · 源名 dim 小字）+ 刷新 */}
         <View style={styles.head}>
           <Pressable android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} hitSlop={8} accessibilityLabel="返回团队列表" onPress={onClose} style={styles.back}>
             <Text style={styles.backT}>‹</Text>
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.headT} numberOfLines={1}>{name}</Text>
-            <View style={styles.headTags}>
-              <View style={[styles.stPill, { borderColor: withA(orgStColor(g?.status ?? "", c), 0.5), backgroundColor: withA(orgStColor(g?.status ?? "", c), 0.1) }]}>
-                <View style={[styles.stPillDot, { backgroundColor: orgStColor(g?.status ?? "", c) }]} />
-                <Text style={[styles.stPillT, { color: orgStColor(g?.status ?? "", c) }]}>{ORG_ST_ZH[g?.status ?? ""] ?? g?.status ?? "…"}</Text>
-              </View>
-              {g?.tier ? <Text style={styles.headTag}>{tierZh(g.tier)}</Text> : null}
-              {src ? <Text style={styles.headTag} numberOfLines={1}>{displaySrcName(src.relayName || src.name)}</Text> : null}
+            <View style={styles.headSub}>
+              <View style={[styles.headLiveDot, { backgroundColor: orgStColor(g?.status ?? "", c) }]} />
+              <Text style={[styles.headSubT, { color: orgStColor(g?.status ?? "", c) }]}>{ORG_ST_ZH[g?.status ?? ""] ?? g?.status ?? "…"}</Text>
+              <Text style={styles.headSubDim}> · 编制 {members.length}</Text>
+              {g?.tier ? <Text style={styles.headSubDim}> · {tierZh(g.tier)}</Text> : null}
+              {src ? <Text style={styles.headSubDim} numberOfLines={1}> · {displaySrcName(src.relayName || src.name)}</Text> : null}
             </View>
           </View>
           <Pressable android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} hitSlop={6} accessibilityLabel="刷新团队详情" onPress={fetchDetail} style={styles.refresh}>
             <Text style={styles.refreshT}>⟳</Text>
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           {detail === undefined && !g ? (
             <Text style={styles.empty}>加载中…</Text>
           ) : (
@@ -451,15 +558,49 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
                 </View>
               ) : null}
 
-              {/* ②③ 看板（纵向五态；轻立项=单列简化态） */}
+              {/* ②③ 看板（纵向五态；轻立项=单列简化态）。W-MV8A v3：五色总览条吸顶
+                  （分段比例 + 图例 chip 带 count，点图例跳泳道锚）+ 渲染序按
+                  LANE_RENDER_ORDER（待收单置顶） */}
               <Text style={styles.secH}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
               {boardEmpty ? (
                 <Text style={styles.empty}>{boardEmpty}</Text>
               ) : (
-                <View style={styles.board}>
+                <View style={styles.board} onLayout={(e) => { boardYRef.current = e.nativeEvent.layout.y; }}>
+                  {!boardEmpty && g?.tier !== "轻立项" && laneShares.length ? (
+                    <View style={styles.ovBox}>
+                      <View style={styles.ovProg}>
+                        {laneShares.map(({ st, pct }) => (
+                          <View key={st} style={{ flex: pct, height: 8, backgroundColor: laneColorOf(st, mode) }} />
+                        ))}
+                      </View>
+                      <View style={styles.ovLeg}>
+                        {laneShares.map(({ st, n }) => (
+                          <Pressable
+                            key={st}
+                            style={styles.ovChip}
+                            android_ripple={{ color: c.tintSoft, borderless: false, radius: 7 }}
+                            accessibilityLabel={`${BOARD_LANES.find(([k]) => k === st)?.[1] ?? st} ${n}，点按跳到该泳道`}
+                            onPress={() => {
+                              // 跳转换算：lane onLayout 相对 board、board 相对 contentContainer
+                              // （onLayout 恒相对直接父节点），两级串联即内容坐标；-8 余量防节头贴边
+                              const y = laneYs.current.get(st);
+                              if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, boardYRef.current + y - 8), animated: true });
+                            }}
+                          >
+                            <View style={[styles.ovDot, { backgroundColor: laneColorOf(st, mode) }]} />
+                            <Text style={styles.ovChipT}>{BOARD_LANES.find(([k]) => k === st)?.[1] ?? st}</Text>
+                            <Text style={styles.ovChipN}>{n}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
                   {g?.tier === "轻立项"
                     ? ents.length ? <View style={styles.laneBody}>{ents.map(boardCard)}</View> : null
-                    : BOARD_LANES.map(([st, lb]) => laneSection(st, lb))}
+                    : LANE_RENDER_ORDER.map((st) => {
+                      const lb = BOARD_LANES.find(([k]) => k === st)?.[1] ?? st;
+                      return laneSection(st, lb);
+                    })}
                 </View>
               )}
 
@@ -577,11 +718,11 @@ const makeStyles = (c: ThemeColors) =>
     back: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden" },
     backT: { color: c.brandA, fontSize: 24, fontWeight: "600", marginTop: -2 },
     headT: { color: c.textStrong, fontSize: 16, fontWeight: "700" },
-    headTags: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" },
-    stPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
-    stPillDot: { width: 6, height: 6, borderRadius: 3 },
-    stPillT: { fontSize: 10, fontWeight: "700" },
-    headTag: { color: c.dim, fontSize: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: c.line },
+    // W-MV8A v3 appbar 副题行：live 点 + 状态词（状态色）+ dim 小字串联
+    headSub: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+    headLiveDot: { width: 7, height: 7, borderRadius: 4 },
+    headSubT: { fontSize: 10.5, fontWeight: "700" },
+    headSubDim: { color: c.dim, fontSize: 10.5, flexShrink: 1 },
     refresh: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 10, overflow: "hidden" },
     refreshT: { color: c.dim, fontSize: 19 },
     // B1：节间距节奏（gap 7→8 + 节头 marginTop 10→14，七节分堆更清）
@@ -600,11 +741,33 @@ const makeStyles = (c: ThemeColors) =>
     },
     errT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
     errX: { color: c.faint, fontSize: 15, fontWeight: "600" },
-    // 看板（B2：泳道头计数数字品牌色强化）
+    // 看板（B2 + W-MV8A v3 plane/ov 语言）
     board: { gap: 4 },
-    lane: { marginBottom: 4 },
-    laneH: { color: c.text, fontSize: 12, fontWeight: "700", marginBottom: 5 },
-    laneHN: { color: c.brandA, fontVariant: ["tabular-nums"] },
+    // 五色总览条（v3 .ovpit）：分段比例条 + 图例 chip 行（点 chip 跳泳道锚）
+    ovBox: { gap: 0, marginBottom: 8 },
+    ovProg: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2 },
+    ovLeg: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 7 },
+    ovChip: {
+      flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 7,
+      borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
+      paddingHorizontal: 8, paddingVertical: 3,
+    },
+    ovDot: { width: 7, height: 7, borderRadius: 4 },
+    ovChipT: { color: c.dim, fontSize: 10.5 },
+    ovChipN: { color: c.text, fontSize: 10.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
+    // 泳道（v3 .plane）：laneh 折叠组头（色竖条 + 名 + 计数 + ▾）；待收单 go 态置顶
+    lane: { marginBottom: 4, borderRadius: 10, overflow: "hidden" },
+    laneGo: { borderWidth: 1, borderColor: withA(c.working, 0.45), backgroundColor: withA(c.working, 0.06), paddingHorizontal: 6, paddingVertical: 4 },
+    laneHead: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8 },
+    laneBar: { width: 3, height: 12, borderRadius: 2, flexShrink: 0 },
+    lanePin: {
+      color: c.faint, fontSize: 9.5, borderWidth: 1, borderColor: withA(c.working, 0.4),
+      borderRadius: 5, paddingHorizontal: 5, overflow: "hidden", flexShrink: 0,
+    },
+    laneH: { color: c.text, fontSize: 12, fontWeight: "700" },
+    laneHGo: { color: c.working },
+    laneHN: { color: c.brandA, fontVariant: ["tabular-nums"], fontSize: 12, fontWeight: "700" },
+    laneChev: { color: c.faint, fontSize: 11, marginLeft: "auto" },
     laneSub: { color: c.faint, fontSize: 10.5, fontWeight: "700", marginTop: 6, marginBottom: 4 },
     laneBody: { gap: 6 },
     claimGrp: { marginBottom: 6 },
@@ -618,14 +781,22 @@ const makeStyles = (c: ThemeColors) =>
     tCardNote: { color: c.faint, fontSize: 10.5, lineHeight: 15 },
     tCardOwner: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
     tCardOwnerT: { color: c.faint, fontSize: 10.5, flexShrink: 1 },
-    tCardOwnerName: { color: c.text, fontSize: 10.5, fontWeight: "600" },
     tCardUnass: { fontStyle: "italic" },
+    // v3 pchip：执行者名徽章（panel2 底）+ 右缘更新时间
+    tCardChip: {
+      backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 6,
+      paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1, overflow: "hidden",
+    },
+    tCardChipT: { color: c.text, fontSize: 10, fontWeight: "600" },
+    tCardTime: { color: c.faint, fontSize: 10, marginLeft: "auto", fontVariant: ["tabular-nums"], flexShrink: 0 },
     tRunDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
     tCardX: { marginTop: 4, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line, gap: 2 },
     tCardXL: { color: c.faint, fontSize: 10, lineHeight: 14 },
     engBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
     engDot: { width: 7, height: 7, borderRadius: 4 },
     engBadgeT: { color: c.dim, fontSize: 10, fontWeight: "600" },
+    engDotSm: { width: 6, height: 6, borderRadius: 3 },
+    engBadgeTSm: { color: c.dim, fontSize: 9.5, fontWeight: "600" },
     // 成员卡
     memCard: {
       borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
@@ -635,7 +806,12 @@ const makeStyles = (c: ThemeColors) =>
     memAva: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
     memAvaT: { color: c.text, fontSize: 14, fontWeight: "700" },
     memDot: { position: "absolute", right: -2, bottom: -2, width: 10, height: 10, borderRadius: 5, borderWidth: 2 },
-    memName: { color: c.text, fontSize: 13, fontWeight: "600" },
+    // v3 五色状态词胶囊（.ppill 灯形统一）：名行右置
+    memNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    memPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0 },
+    memPillDot: { width: 6, height: 6, borderRadius: 3 },
+    memPillT: { fontSize: 9.5, fontWeight: "700" },
+    memName: { color: c.text, fontSize: 13, fontWeight: "600", flexShrink: 1 },
     memMeta: { color: c.faint, fontSize: 10.5, marginTop: 1 },
     memCtx: { flexDirection: "row", alignItems: "center", gap: 7, paddingLeft: 41 },
     memCtxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: withA(c.faint, 0.25), overflow: "hidden" },

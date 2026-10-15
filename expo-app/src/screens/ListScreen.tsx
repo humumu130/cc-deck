@@ -18,6 +18,7 @@ import { FadeIn } from "../motion";
 import { hasActivityCapability, type ProjectGroup, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf } from "../notify-jump";
 import NotifCenterSheet from "./NotifCenterPage";
+import { EngineBadge, engineBadgeable } from "./TeamDetailPage";
 import RenameModal from "./RenameModal";
 
 // 硬件返回句柄（#282）：返回键收敛为 App.tsx 顶层单订阅统一分发，抽屉/图例浮层
@@ -523,6 +524,18 @@ function DeskGlyph({ color }: { color: string }) {
   );
 }
 
+// W-MV8A 顶栏铃铛 glyph（v3 #i-bell 同形 lucide bell 线稿——通知中心入口对齐 v3
+// appbar bell + bbadge 语言）；badge 红底白字（v3 .bbadge：需你行动计数，与底栏
+// 琥珀 badge 色轴分工——红=通知行动，琥珀=tab 待处理）
+function BellGlyph({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <Path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </Svg>
+  );
+}
+
 function ThemeGlyph({ dark }: { dark: boolean }) {
   const { c } = useTheme();
   return (
@@ -957,12 +970,15 @@ const SessionCard = memo(function SessionCard({
                   <Text style={styles.srowSum} numberOfLines={1}>{s.action_summary || "…"}</Text>
                 )}
               </View>
-              {/* r3 徽章行：源胶囊 + 元信息（foldMeta 超 3 个折叠 +N，行高恒定）+ 右端水位
-                  mini。A3-5 查漏（桌面 #164 同口径）：状态文字 tag 退役——AvaBadge 状态灯+
-                  待处理段+摘要行已表达状态，文字 tag 是重复噪声；r3 全空（无源徽/无元信息/
-                  无水位）整行不渲染（桌面 r3 条件渲染同款） */}
-              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || (s.context_usage ?? 0) > 0 ? (
+              {/* r3 徽章行：引擎徽 + 源胶囊 + 元信息（foldMeta 超 3 个折叠 +N，行高恒定）+
+                  右端水位 mini。A3-5 查漏（桌面 #164 同口径）：状态文字 tag 退役——AvaBadge
+                  状态灯+待处理段+摘要行已表达状态，文字 tag 是重复噪声；r3 全空（无引擎徽/
+                  无源徽/无元信息/无水位）整行不渲染（桌面 r3 条件渲染同款）。W-MV8A：引擎徽
+                  补位（任务书「引擎源徽章行」——词表命中才显，与 TeamDetailPage EngineBadge
+                  单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
+              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || (s.context_usage ?? 0) > 0 || engineBadgeable(s.engine) ? (
                 <View style={styles.srowR3}>
+                  <EngineBadge engine={s.engine} size="sm" />
                   {srcBadge ? <SrcBadge {...srcBadge} /> : null}
                   {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
                       display 切换不插拔 */}
@@ -1449,6 +1465,22 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               与 web THEME_ICONS 同款；深色显太阳=点击切浅、浅色显月牙） */}
           <ThemeGlyph dark={mode === "dark"} />
         </Pressable>
+        {/* W-MV8A 顶栏铃铛（v3 appbar bell + bbadge）：通知中心唯一入口（统计行
+            「通知 · N」胶囊随之退役——入口唯一化，badge 红底白字=需你行动计数，
+            与铃铛内页面副题同源 notifActionableOf）。badge 常挂 display 切换
+            （P0 加固口径：条件插拔是 Fabric re-parent 崩面） */}
+        <Pressable
+          style={styles.bellBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+          onPress={() => setNotifOpen(true)}
+          hitSlop={4}
+          accessibilityLabel={notifPending.length > 0 ? `通知中心，${notifPending.length} 项需行动` : "通知中心"}
+        >
+          <BellGlyph color={c.dim} />
+          <View style={[styles.bellBadge, notifPending.length <= 0 && styles.bellBadgeOff]} pointerEvents="none">
+            <Text style={styles.bellBadgeT}>{notifPending.length > 99 ? "99+" : notifPending.length}</Text>
+          </View>
+        </Pressable>
         {/* W-EXPOLISH 件七：新增按钮统一「每域列表右上角 ＋」（对齐桌面 list-header
             右上角加号同语言）——会话页右下 FAB 退役（少一个悬浮遮挡元素，跨端动作
             位置肌肉记忆统一）；44px 触区，行为=原 FAB（新建会话弹层） */}
@@ -1517,21 +1549,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Text>
           </Pressable>
         ) : null}
-        {/* 🔧回归修①（test.21 实机）：铃铛恒显——原「notifPending>0 才渲染整个钮」
-            在无未决时把入口藏没（已处理区看不到、通知中心进不去）；0=无计数态 */
-        (
-          <Pressable
-            style={styles.chipBtn}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-            onPress={() => setNotifOpen(true)}
-            hitSlop={4}
-            accessibilityLabel={notifPending.length > 0 ? `通知中心，${notifPending.length} 项需行动` : "通知中心"}
-          >
-            <Text style={styles.chipT} numberOfLines={1}>
-              通知{notifPending.length > 0 ? ` · ${notifPending.length > 99 ? "99+" : notifPending.length}` : ""}
-            </Text>
-          </Pressable>
-        )}
+        {/* W-MV8A：统计行「通知 · N」胶囊退役——通知入口唯一化为顶栏铃铛（v3 appbar
+            bell 语言；🔧回归修①的「铃铛恒显」口径由顶栏钮继承：恒显、0=无计数态） */}
         {artPoolOn ? (
           <Pressable
             style={styles.chipBtn}
@@ -2085,6 +2104,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
     marginRight: -4, overflow: "hidden",
   },
+  // W-MV8A 顶栏铃铛（v3 appbar bell）：与 searchBtn/themeBtn 同 30px 触区族 +
+  // 红底白字 bbadge（display 切换常挂——P0 加固口径）
+  bellBtn: { width: 30, height: 30, alignItems: "center", justifyContent: "center", marginRight: 2 },
+  bellBadge: {
+    position: "absolute", top: -1, right: -5, minWidth: 14, height: 14, borderRadius: 7,
+    paddingHorizontal: 3, backgroundColor: c.error, alignItems: "center", justifyContent: "center",
+  },
+  bellBadgeOff: { display: "none" },
+  bellBadgeT: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
   // 删除撤销条（#247）：底部浮条；右侧留出让任务汇报悬浮钮（44dp@right12）的空档。
   // zIndex 50：高于列表/边缘手势条（5），低于抽屉/图例（60）——配合打开时隐藏双保险
   undoBar: {
