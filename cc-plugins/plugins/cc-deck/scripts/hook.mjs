@@ -68,9 +68,17 @@ function onceByKey(key) {
 
 // 定位 CLI 进程 pid（注入用）：hook 父链 node(hook)→shell×N→CLI 宿主，
 // 向上走祖先跳过 shell 层取第一个非 shell 进程（Windows 上 AttachConsole 同控制台
-// 任意进程均可，claude.exe 存活期=会话期，最稳）。缓存 session_id→pid，命中零开销；
-// attach 失败时 Relay 删缓存促下次事件重新定位（CLI 每次启动 session_id 变化，天然无陈旧）。
-// 平台：win32 走 powershell CIM；macOS/Linux 走 ps（登录 shell comm 可能带前导 -）
+// 任意进程均可，claude.exe 存活期=会话期，最稳）。平台：win32 走 powershell CIM；
+// macOS/Linux 走 ps（登录 shell comm 可能带前导 -）。
+// #113 根修（2026-10-15）：walk 结果永远权威，缓存只做两级兜底——
+// ①快路径：缓存 pid 恰为直接父进程（hook 由 CLI 直接拉起的常态）零探测采信；
+// ②walk 失败才回落缓存，且缓存 pid 仍须存活且为 CLI 映像（死 pid 不上报，
+//   relay 保留原定位，不给死亡扫描喂误报）。
+// 旧实现缓存优先 +「CLI 每次启动 session_id 变化天然无陈旧」的假设对
+// `claude --resume <id>` 不成立：resume 复用同 session_id 换新进程，旧缓存 pid
+// 已死却永久命中，hook 一直上报死 pid → relay 死亡扫描反复误报「CLI 进程已退出」
+//（生产 ext-29ab 单会话 4 小时 102 连报实锤）。attach 失败时 Relay 删缓存促重新
+// 定位的语义不变（walk 成功即回写缓存）。
 const SKIP_SHELL = /^-?(bash|sh|zsh|fish|dash|ksh)(\.exe)?$/i;
 
 function walkAncestorsWindows(execFileSync) {
@@ -102,16 +110,32 @@ function walkAncestorsUnix(execFileSync) {
   return 0;
 }
 
+// 缓存兜底前的存活校验：pid 须仍存活且映像为 CLI 宿主（claude|node），与 relay 侧
+// cliHostAlive 同语义。win32 无轻量探测（tasklist 重），回落时原样采信（relay 侧
+// 映像校验兜底）
+function cachedPidLooksAlive(execFileSync, pid) {
+  try {
+    const line = execFileSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5000 }).trim();
+    const name = (line.split("/").pop() ?? "").replace(/^-+/, "");
+    return /^(claude|node)(\.exe)?$/i.test(name);
+  } catch {
+    return false;
+  }
+}
+
 async function resolveCliPid(sessionId) {
   const cacheUrl = join(dataDir, "cli-pids.json");
+  let cached = 0;
   try {
-    const cache = JSON.parse(readFileSync(cacheUrl, "utf-8"));
-    if (cache[sessionId]) return cache[sessionId];
+    cached = JSON.parse(readFileSync(cacheUrl, "utf-8"))[sessionId] ?? 0;
   } catch {}
+  // 快路径：缓存 pid 恰为直接父进程（hook 由 CLI 直接拉起的常态）→ 零探测采信
+  if (cached > 0 && cached === process.ppid) return cached;
 
+  let execFileSync = null;
   let pid = 0;
   try {
-    const { execFileSync } = await import("node:child_process");
+    ({ execFileSync } = await import("node:child_process"));
     pid = process.platform === "win32" ? walkAncestorsWindows(execFileSync) : walkAncestorsUnix(execFileSync);
   } catch (e) {
     diag("cli_pid walk fail: " + (e?.message ?? e));
@@ -126,8 +150,16 @@ async function resolveCliPid(sessionId) {
       if (keys.length > 50) for (const k of keys.slice(0, keys.length - 50)) delete cache[k];
       writeFileSync(cacheUrl, JSON.stringify(cache));
     } catch {}
+    return pid;
   }
-  return pid;
+
+  // walk 失败才回落缓存：死 pid / 非 CLI 映像不上报（relay 保留原定位，
+  // 不给死亡扫描喂误报）
+  if (cached > 0 && execFileSync) {
+    if (process.platform === "win32" || cachedPidLooksAlive(execFileSync, cached)) return cached;
+    diag(`cli_pid cache stale: session=${sessionId.slice(0, 8)} pid=${cached}`);
+  }
+  return 0;
 }
 
 async function main() {

@@ -395,8 +395,11 @@ export class Bridge {
         scanner: new RolloutScanner(spec, engineRoot(spec, homedir()), path.join(opts.dataDir, `engine-cursors-${spec.engine}.json`)),
       });
     }
-    this.hydratePidsFromCache();
+    // #113（2026-10-15）顺序：先 sessions/*.json 活证据补定位，后 cli-pids.json
+    // 缓存兜底——缓存可能残留 resume 前的死 pid，活证据先行避免死 pid 抢占定位
+    //（与 healExternal 抢救路径的既有顺序对齐）
     this.reconcilePidsFromSessions();
+    this.hydratePidsFromCache();
     this.healExternal();
     // W-INJECT：先回种落盘排队（revive 的重投触发要见到非空队列），再跑存活自愈
     this.loadQueueDisk();
@@ -405,8 +408,9 @@ export class Bridge {
     this.scanExternalEngines();
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
     this.healTimer = setInterval(() => {
-      this.hydratePidsFromCache();
+      // #113 同 boot 顺序：活证据先行，缓存兜底殿后
       this.reconcilePidsFromSessions();
+      this.hydratePidsFromCache();
       this.healExternal();
       this.reviveAliveExternals(); // W-INJECT：迟定位 pid 的补自愈
       this.adoptOrphans();
@@ -843,20 +847,34 @@ export class Bridge {
     // 分发后捕获：新会话的首个事件（UserPromptSubmit/PreToolUse）在 handler 内才 ensureExternal
     if (ev.cli_pid && ev.cli_pid > 0) {
       const id = this.extId(ev);
-      // #50（2026-09-11 用户实测）compact 换代归档：CLI /compact 后续接会开新
-      // session_id（进程不变、无 SessionEnd），旧 ext 会话永久残留——同一台
-      // CLI 在手机/桌面显示成两个会话（「CC-watch-ba」+「0.4.3 memory 恢复点
-      // 接力」实录）。同 cli_pid 的其他 ext 会话 = 换代前旧身，立即归档收尾
-      for (const s of this.mgr.snapshot()) {
-        if (!s.external || s.session_id === id || s.cli_pid !== ev.cli_pid) continue;
-        this.streamDeltaStop(s.session_id); this.mgr.finishExternal(s.session_id, "completed", 0);
-        const old = this.mgr.getExternal(s.session_id);
-        if (old) old.historical = true; // 旧端仅可查看语义 + #32 离线降权视觉
-        this.mgr.pushExternalLog(s.session_id, "system", "上下文已压缩，续接为新会话（本条目归档）");
+      // #113（2026-10-15）防陈旧回退：hook 侧 pid 缓存对 resume 会话（`claude
+      // --resume <id>` 复用同 session_id 换新进程）会长期命中已死旧 pid。记录中的
+      // pid 仍活而事件 pid 已死 = 陈旧回报，拒绝采信（保留活 pid）——否则 3s 死亡
+      // 扫描立刻误报「CLI 进程已退出」，且 60s 补定位刚修好就被下一条 hook 事件
+      // 毒回，形成误报拉锯（生产 ext-29ab 单会话 4 小时 102 连报实锤）。反方向
+      //（事件 pid 活、记录 pid 死/无）= resume 换代，正常采纳。pid 相同（绝大多数
+      // 事件）时短路，零探测零开销
+      const prev = this.mgr.getExternal(id);
+      const stalePidReport = !!prev?.cli_pid && prev.cli_pid !== ev.cli_pid
+        && cliHostAlive(prev.cli_pid) && !cliHostAlive(ev.cli_pid);
+      if (!stalePidReport) {
+        // #50（2026-09-11 用户实测）compact 换代归档：CLI /compact 后续接会开新
+        // session_id（进程不变、无 SessionEnd），旧 ext 会话永久残留——同一台
+        // CLI 在手机/桌面显示成两个会话（「CC-watch-ba」+「0.4.3 memory 恢复点
+        // 接力」实录）。同 cli_pid 的其他 ext 会话 = 换代前旧身，立即归档收尾
+        //（陈旧 pid 被拒绝时连带跳过：死 pid 不构成换代信号）
+        for (const s of this.mgr.snapshot()) {
+          if (!s.external || s.session_id === id || s.cli_pid !== ev.cli_pid) continue;
+          this.streamDeltaStop(s.session_id); this.mgr.finishExternal(s.session_id, "completed", 0);
+          const old = this.mgr.getExternal(s.session_id);
+          if (old) old.historical = true; // 旧端仅可查看语义 + #32 离线降权视觉
+          this.mgr.pushExternalLog(s.session_id, "system", "上下文已压缩，续接为新会话（本条目归档）");
+        }
+        this.mgr.setExternalCliPid(id, ev.cli_pid);
       }
-      this.mgr.setExternalCliPid(id, ev.cli_pid);
       // W-INJECT：pid 重定位/刷新即清「等待定位」一次性标记；有落盘排队且状态可注入
-      // 时直接触发重投（重启回种 → hook 重连 → 自动补发的闭环口）
+      // 时直接触发重投（重启回种 → hook 重连 → 自动补发的闭环口）。陈旧 pid 被拒时
+      // 照常执行：记录 pid 已验活，排队投递通路有效
       this.noPidNote.delete(id);
       if ((this.inputQueue.get(id)?.length ?? 0) > 0 && !this.flushing.has(id)) {
         const qst = this.mgr.getExternal(id);
