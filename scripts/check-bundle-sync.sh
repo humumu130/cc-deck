@@ -39,6 +39,37 @@ FAIL=0
 [ "$W3" = "$S2" ] || { echo "❌ relay-service 静态面 ≠ web-console/index-005.html 源（cp web-console/index-005.html ~/.cc-deck/relay-service/web-console/ 同步后重启壳）"; FAIL=1; }
 [ "$S1" = "MISSING" ] && { echo "⚠️  relay-service/web-console 不存在（relay-service 未部署？）"; }
 
+# web 资产成对部署闸（#123，2026-10-15 事故的防再犯——test.27 第二波收割后忘重拷
+# index-005.html 进 Nova app，用户看到「重启没变化」）：三面口径——
+#   面① CONSOLE_VERSION 烙印一致且=VERSION：由下方 version.mjs --check 落点
+#      「web-console CONSOLE_VERSION」+「web-console-005 CONSOLE_VERSION」覆盖
+#      （单一事实源，不在本段重复实现——两落点互一致是其推论）；
+#   面② cc-plugins 副本=源：上方 W1/W2、W3/W4（既有）；
+#   面③ Nova app bundle 面（本段新增）：/Applications/CC Deck Nova.app 的
+#      web-console 两文件与源 SHA 全等。app 缺席=SKIP 提示不红（CI/非本机场景）；
+#      漂移→红+文件+面+diff 摘要首行（1015 形态：纯 CONSOLE_VERSION 落后或整页旧版）
+NOVA_WC='/Applications/CC Deck Nova.app/Contents/Resources/web-console'
+if [ -d "$NOVA_WC" ]; then
+  NOVA1=$( { shasum -a 256 "$NOVA_WC/index.html" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+  NOVA5=$( { shasum -a 256 "$NOVA_WC/index-005.html" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+  if [ "$W1" != "$NOVA1" ]; then
+    echo "❌ Nova app web-console/index.html ≠ 源（面③ app bundle——收割后忘重拷，1015 事故形态）："
+    echo "    diff 摘要: $(diff web-console/index.html "$NOVA_WC/index.html" | grep '^[<>]' | head -1 | cut -c1-160)"
+    echo "    修复: cp web-console/index.html web-console/index-005.html '$NOVA_WC/' 后重启 Nova"
+    FAIL=1
+  fi
+  if [ "$W3" != "$NOVA5" ]; then
+    echo "❌ Nova app web-console/index-005.html ≠ 源（面③ app bundle——收割后忘重拷，1015 事故形态）："
+    echo "    diff 摘要: $(diff web-console/index-005.html "$NOVA_WC/index-005.html" | grep '^[<>]' | head -1 | cut -c1-160)"
+    echo "    修复: cp web-console/index.html web-console/index-005.html '$NOVA_WC/' 后重启 Nova"
+    FAIL=1
+  fi
+  [ "$NOVA1" = "MISSING" ] && { echo "⚠️  Nova app web-console/index.html 缺失（app 安装不完整？）"; FAIL=1; }
+  [ "$NOVA5" = "MISSING" ] && { echo "⚠️  Nova app web-console/index-005.html 缺失（app 安装不完整？）"; FAIL=1; }
+else
+  echo "⏭️  Nova app 未安装（$NOVA_WC 不存在）——面③ app bundle SKIP（CI/非本机场景）"
+fi
+
 # git 工作区必须干净（发版前未提交改动 = 产物与仓库不一致的风险源）
 if [ -n "$(git status --porcelain)" ]; then
   echo "❌ git 工作区有未提交改动："
