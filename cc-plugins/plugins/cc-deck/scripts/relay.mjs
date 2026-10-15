@@ -48930,13 +48930,14 @@ var role_templates_default = {
       name: "\u4EA7\u54C1\u7ECF\u7406",
       audience: "\u5199\u89C4\u683C\u3001\u5206\u4F18\u5148\u7EA7\u3001\u7BA1\u8FDB\u5EA6\u98CE\u9669\u7684\u6D3E\u5355",
       rows: [
+        "\u4F60\u662F PM\uFF1A\u4E0D\u76F4\u63A5\u7F16\u7801\u3002\u5B9E\u73B0\u7C7B\u5DE5\u4F5C\u4E00\u5F8B\u6D3E\u53D1 worker \u6267\u884C\uFF1B\u4F60\u7684\u4EA7\u51FA\u662F\u5206\u8BCA\u3001\u9A8C\u6536\u3001\u62CD\u677F\u4E0E\u534F\u8C03\u2014\u2014\u76F4\u63A5\u7F16\u7801=\u89D2\u8272\u5931\u804C\u3002",
         "\u89C4\u683C\u5FC5\u542B\u56DB\u6BB5\uFF1A\u95EE\u9898\uFF082-3 \u53E5+\u8BC1\u636E\uFF09/\u76EE\u6807\uFF083-5 \u4E2A\u53EF\u6D4B\u7ED3\u679C\uFF09/\u975E\u76EE\u6807\uFF08\u663E\u5F0F\u6392\u9664+\u7406\u7531\uFF09/\u9A8C\u6536\u6807\u51C6\uFF08\u524D\u7F6E-\u52A8\u4F5C-\u9884\u671F\uFF09\u3002",
         "\u9700\u6C42\u5206\u7EA7 MoSCoW\uFF1AP0=\u780D\u6389\u5B83\u6838\u5FC3\u95EE\u9898\u5C31\u65E0\u89E3\uFF1B\u5982\u679C\u5168\u662F P0 \u8BF4\u660E\u5206\u7EA7\u5931\u8D25\uFF0C\u91CD\u65B0\u8D28\u8BE2\u3002",
         "\u8FDB\u5EA6\u72B6\u6001\u4E09\u8272\u5982\u5B9E\uFF1A\u9EC4=\u98CE\u9669\u5DF2\u73B0\u4F46\u53EF\u63A7\uFF08\u65E9\u62A5\u4F18\u4E8E\u665A\u62A5\uFF0C\u9EC4\u4E0D\u662F\u5931\u8D25\uFF09\uFF1B\u7EA2=\u9700\u8981\u5347\u7EA7\u51B3\u7B56\u3002",
         "\u6BCF\u6761\u98CE\u9669\u56DB\u4EF6\u5957\uFF1A\u98CE\u9669+\u5F71\u54CD+\u53EF\u80FD\u6027+\u7F13\u89E3\uFF1B\u5E26\u4E0D\u51FA\u7F13\u89E3\u5C31\u660E\u8BF4\u8981\u4EC0\u4E48\u5E2E\u52A9\u3002",
         "\u6C47\u62A5\u7ED3\u8BBA\u5148\u884C\uFF1A\u5148\u7ED3\u679C\u4E0E\u6307\u6807\u53D8\u5316\uFF0C\u518D\u8BB2\u8FC7\u7A0B\u3002"
       ],
-      updated_at: 17916768e5
+      updated_at: 17920224e5
     },
     {
       slug: "content-marketing",
@@ -49400,6 +49401,22 @@ function buildRuleInjection(input) {
   } catch (e) {
     console.warn(`[team-rules] \u89C4\u5219\u6CE8\u5165\u5757\u6784\u5EFA\u5931\u8D25\uFF08\u964D\u7EA7\u65E0\u89C4\u5219\u5757\uFF0C\u6D3E\u5355\u7167\u53D1\uFF09: ${e instanceof Error ? e.message : String(e)}`);
     return null;
+  }
+}
+var BUILTIN_RULE_PM_NO_CODE = "PM \u4E0D\u76F4\u63A5\u7F16\u7801\u2014\u2014\u5B9E\u73B0\u7C7B\u5DE5\u4F5C\u6D3E\u53D1 worker";
+function ensureBuiltinRulesSeed(dir) {
+  try {
+    const { store } = loadRules(dir);
+    const key = normRuleKey(BUILTIN_RULE_PM_NO_CODE);
+    if (store.rules.some((e) => normRuleKey(e.text) === key)) return "exists";
+    const r = appendRule(
+      { text: BUILTIN_RULE_PM_NO_CODE, audience: "role:pm", scope: "team", created_by: "user" },
+      dir
+    );
+    return r.ok ? "created" : "failed";
+  } catch (e) {
+    console.warn(`[team-rules] \u5185\u7F6E\u94C1\u5F8B\u79CD\u5B50\u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u4E0D\u5F71\u54CD\u542F\u52A8\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    return "failed";
   }
 }
 
@@ -53550,6 +53567,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       ensureOrgDir();
       ensureOrgClaudeMd();
       ensureOrgCli();
+      ensureBuiltinRulesSeed();
     } catch (e) {
       return { ok: false, error: `org \u76EE\u5F55\u4E0D\u53EF\u7528: ${e instanceof Error ? e.message : String(e)}` };
     }
@@ -54288,7 +54306,11 @@ provider=${opts.provider ?? "default"}` : void 0,
       `\u961F\u5217\u5019\u9009 ${verdict.candidates.length} \u9879\uFF1A${topList}\u3002\u4F18\u5148\u5904\u7F6E\u6700\u8001\u4E00\u9879\u3002`,
       ...verdict.blocked.length ? [`\u53E6\u6709 ${verdict.blocked.length} \u9879\u963B\u585E\uFF08\u7B49\u4F9D\u8D56/\u653E\u884C\uFF09\uFF0C\u672C\u8F6E\u4E0D\u5904\u7F6E\u3002`] : [],
       `\u8BF7\u9A8C\u6536\u56DE\u6267\u3001\u6D3E\u53D1\u4E0B\u4E00\u6279\u6216\u540C\u6B65\u4EFB\u52A1\u677F\uFF1B\u5B8C\u6210\u540E\u672B\u884C\u5355\u72EC\u8F93\u51FA\u4E00\u884C JSON\uFF08\u4E0D\u52A0\u4EE3\u7801\u5757\uFF09\uFF1A`,
-      `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`
+      `DUTY_RECEIPT {"v":1,"feed_id":"${feedId}","actions":[{"kind":"accept|dispatch|board|notify|none","ids":["..."]}],"blocked":[],"next_trigger":"event|turn_end|user"}`,
+      // #108 恒定尾注：值守行动里最易角色错位的就是「亲自下场写代码」——每轮值守
+      // prompt 无论候选如何都带这行（DUTY_RECEIPT 是「你回复的末行」协议，尾注在其
+      // 后不冲突）。与 PM 岗位模板纪律行、rules 内置铁律三面同源一句。
+      `\u5B9E\u73B0\u7C7B\u9700\u6C42\u8BF7\u6D3E\u53D1 worker \u5904\u7406\uFF0C\u52FF\u81EA\u884C\u7F16\u7801\u3002`
     ].join("\n");
     const leaderSession = this.sessions.get(targetId);
     if (leaderSession && !targetIsExternal) {

@@ -2032,7 +2032,7 @@
     #m-detail .session-state-dock { padding: 8px 12px; }
     #m-detail .session-state-activity { grid-column: 1 / -1; justify-content: flex-start; margin-left: 0; }
     #m-detail .session-state-operation { max-width: 46%; }
-    .toast {position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: var(--fs-B);}
+    .toast {position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: var(--fs-B); word-break: break-all;} /* T10：长 id（会话不存在类报错带 36 位 UUID）强制折行完整显示——窄屏 12 字符 hex 段不 break 时溢出/被目视截断成「残缺 id」误导排查 */
     .mobile-frame .toast { right: 12px; bottom: 74px; max-width: calc(100% - 24px); }
     .toast.show { opacity: 1; transform: none; }
     /* #102 批 B 引擎登录引导卡（把饭喂到嘴里）：二维码直接渲染在卡里，扫码即登录 */
@@ -3227,7 +3227,13 @@
 
                 function sendCmd(type, payload, wsOverride) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）；W-PORT-A R-2：wsOverride=新建弹窗显式目标源通道（云源创建走云 shim，最高优先）
                   const w = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs);
-                  if (!w || w.readyState !== 1) { b2Toast("relay 未连接，命令未发送"); return null; }
+                  if (!w || w.readyState !== 1) {
+                    // T10：路由器显式拒发（null——两源表+桥都查不到该会话）≠ 连接断——分开设文案，
+                    // 「会话不存在」类误导性错投报错从根上消除
+                    const sidMiss = !wsOverride && w === null && payload && typeof payload.session_id === "string";
+                    b2Toast(sidMiss ? "会话不在已连接的源上（可能已删除或所属源离线）" : "relay 未连接，命令未发送");
+                    return null;
+                  }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
                   w.send(JSON.stringify(cmd));
                   return cmd.command_id;
@@ -5959,6 +5965,12 @@
                   if (srcSel && srcSel.value === "cloud") {
                     wsOverride = window.__ccDeck005WsFor ? window.__ccDeck005WsFor("cloud") : null;
                     if (!wsOverride) { b2Toast("远程源不在线，无法在远程创建"); return; }
+                  } else if (srcSel && srcSel.value === "local") {
+                    // T10 同批（Leader 追加·聚合目标源不生效）：显式选本机也锁 LAN 通道——此前
+                    // local 不设 override 落入 RouteWs 无 sid 兜底=视角通道，云视角下创建错投云
+                    // （「选本机却落远程」实锤机制）；显式选择优先级最高，不随视角漂移
+                    wsOverride = window.__ccDeck005WsFor ? window.__ccDeck005WsFor("local") : null;
+                    if (!wsOverride) { b2Toast("本机源不在线，无法在本机创建"); return; }
                   }
                   const payload = { cwd: cwd || S.homedir || ".", prompt: prompt.trim() };
                   if (eng && eng !== "claude" && !isAutoEng) payload.engine = eng; // 显式选择才携带；claude=源缺省（v1 同口径）；auto=跟随源默认（R-7）
@@ -8079,11 +8091,15 @@
                 };
                 window.__ccDeck005B4 = bridge;
 
-                function applySnapshot(payload) {
+                function applySnapshot(payload, evSource) {
                   const p = payload && typeof payload === "object" ? payload : {};
+                  // T10 修复：快照会话打帧通道标（relay_channel）——RouteWs B4 兜底按真实归属路由，
+                  // 不再盲投视角通道（地基 onEvent 只吃 SNAPSHOT、实时帧建的会话两源表恒 miss，
+                  // 云视角下错投云 relay → 「会话不存在: <完整id>」——1015 用户实测实锤链）
+                  const chan = evSource === "cloud" ? "cloud" : "lan";
                   bridge.sessions = new Map();
                   for (const session of Array.isArray(p.sessions) ? p.sessions : []) {
-                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, { ...session }); // #150 R3：桥持会话浅拷贝，与 B2/地基切断共享别名（R3b P2——桥 merge 以信封 ts 覆写 updated_at 不得越权污染他域）
+                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, { ...session, relay_channel: chan }); // #150 R3：桥持会话浅拷贝，与 B2/地基切断共享别名（R3b P2——桥 merge 以信封 ts 覆写 updated_at 不得越权污染他域）
                   }
                   bridge.notifications = Array.isArray(p.notifications) ? p.notifications.map(normalizeNotification).filter(Boolean) : [];
                   bridge.notificationsSupported = Object.prototype.hasOwnProperty.call(p, "notifications");
@@ -8117,7 +8133,7 @@
                     if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
                       const keepSessions = new Map(bridge.sessions);
                       const keepLists = { projects: bridge.projects.slice(), pendingConfirms: bridge.pendingConfirms.slice(), accepts: bridge.accepts.slice(), notifications: bridge.notifications.slice(), designDocs: bridge.designDocs.slice() };
-                      applySnapshot(frame.payload);
+                      applySnapshot(frame.payload, evSource);
                       for (const [id, v] of keepSessions) if (!bridge.sessions.has(id)) bridge.sessions.set(id, v);
                       const byId = (keep, cur, idOf) => { const seen = new Set(cur.map((x) => x && idOf(x))); for (const x of keep) { const k = x && idOf(x); if (k !== undefined && k !== null && !seen.has(k)) { cur.push(x); seen.add(k); } } };
                       byId(keepLists.projects, bridge.projects, (x) => x.id);
@@ -8125,7 +8141,7 @@
                       byId(keepLists.accepts, bridge.accepts, (x) => x.id);
                       byId(keepLists.notifications, bridge.notifications, (x) => x.key); // 通知归一化后判重键=key
                       byId(keepLists.designDocs, bridge.designDocs, (x) => x.path); // W-SRCMENU2 ⑥：图纸按 path 去重并集（聚合两源）
-                    } else applySnapshot(frame.payload);
+                    } else applySnapshot(frame.payload, evSource);
                     changed = true;
                   }
                   else if (frame.type === "COLLAB_MODE_UPDATED") {
@@ -8172,7 +8188,9 @@
                     if (typeof frame.session_id === "string" && bridge.sessions.delete(frame.session_id)) changed = true;
                   } else if (frame.type === "SESSION_CREATED") {
                     if (typeof frame.session_id === "string" && !bridge.sessions.has(frame.session_id) && frame.payload && typeof frame.payload === "object") {
-                      bridge.sessions.set(frame.session_id, { ...frame.payload, session_id: frame.session_id, started_at: frame.ts, updated_at: frame.ts, status: frame.payload.status || "WORKING" });
+                      // T10 修复：实时帧建卡打帧通道标（relay_channel）——RouteWs B4 兜底按真实
+                      // 归属路由的锚（无此标时新会话在两源表恒 miss，兜底盲投视角通道错投云）
+                      bridge.sessions.set(frame.session_id, { ...frame.payload, session_id: frame.session_id, started_at: frame.ts, updated_at: frame.ts, status: frame.payload.status || "WORKING", relay_channel: evSource === "cloud" ? "cloud" : "lan" });
                       changed = true;
                     }
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
@@ -11861,10 +11879,19 @@ function connectLan(ctx) {
         if (!sid) return window.__ccDeck005MainWs || ctx.ws;
         if (cloudCtx.sessions.has(sid)) return cloudCtx.status === "online" ? cloudCmdShim : null;
         if (ctx.sessions.has(sid)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
-        // 聚合视图桥持有的会话兜底（relay_source 标识指向云源）
+        // T10 根修：聚合视图桥兜底泛化——地基链 onEvent 只锚 SNAPSHOT（增量帧不进 ctx.sessions），
+        // SNAPSHOT 之后新建的会话只有 B4 桥实时持有；旧版桥 SESSION_CREATED 建卡无源标 → 本分支
+        // miss → 盲投视角通道（云视角=云 shim）→ 云 relay 查无此会话报「会话不存在: <完整id>」
+        //（1015 用户实锤链：codebuddy 会话创建成功、发消息错投云报不存在，id 全长在窄 toast 被
+        // 目视截断成「残缺 id」假象）。会话卡现带 relay_channel（实时帧建卡）或 relay_source
+        //（SNAPSHOT 打的源名），按真实归属路由：
         const bs = window.__ccDeck005B4 && window.__ccDeck005B4.sessions.get(sid);
-        if (bs && bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source)) return cloudCtx.status === "online" ? cloudCmdShim : null;
-        return window.__ccDeck005MainWs || ctx.ws;
+        const bsCloud = !!(bs && (bs.relay_channel === "cloud" || (bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source))));
+        if (bsCloud) return cloudCtx.status === "online" ? cloudCmdShim : null;
+        if (bs && (bs.relay_channel === "lan" || bs.relay_source)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+        // 两源表 + 桥都查不到：拒发——会话可能已删/所属源离线，盲投视角通道只会产出误导性的
+        // 「会话不存在: <id>」（错投报错带完整 id，排查被带偏），明确拒发让端上给可操作提示
+        return null;
       };
       // W-PORT-A R-2：目标源显式通道（新建弹窗「创建到」行消费）——cloud=云 shim（在线才有），
       // local=LAN socket。与 RouteWs（按会话归属路由）互补：CREATE 类无 session_id 的命令按显式选择走。
