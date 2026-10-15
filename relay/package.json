@@ -23,6 +23,7 @@
     "test:005-cloud": "tsx scripts/test-005-cloud.ts",
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-engauth-web": "node --import tsx/esm scripts/test-005-engauth-web.ts",
+    "test:005-route-fix": "node --import tsx/esm scripts/test-005-route-fix.ts",
     "test:engine-auth": "tsx scripts/test-engine-auth.ts",
     "test:watchdog": "tsx scripts/test-watchdog.ts",
     "test:acceptance": "tsx scripts/test-acceptance.ts",
