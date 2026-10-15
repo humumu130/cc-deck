@@ -29,7 +29,7 @@ import {
   ensureAuthWatch, recordBlockedCreate, recordBlockedDispatch,
   setAuthWatchReadyHook, takeBlockedCreates, takeBlockedDispatches,
 } from "./engine-auth-watch.js";
-import { appendPermissionAudit, auditStore, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
+import { appendPermissionAudit, auditStore, readBypassAuthorization, resolveDirScope, resolveEnvScope } from "./permission-audit.js";
 import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
   type ProjectGroup, type ProjectBoard,
@@ -6993,6 +6993,7 @@ export class SessionManager {
       policy_source: group?.mixed_engine === true ? "mixed_team_default" : "tier_default",
       dir_scope: dirScope,
       env: envScope,
+      user_authorized_bypass: readBypassAuthorization(this.cfg.dataDir), // #69：用户授权的生产 bypass 通道（组织派单专用）
     }) : null;
     if (perm && perm.effective_mode === "forbidden") {
       appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));

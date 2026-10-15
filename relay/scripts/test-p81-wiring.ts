@@ -11,7 +11,7 @@
 // JSONL 降档+legacy_state_normalized 审计/缺字段 default 零审计/identity 恒等+回写收敛单次性）。
 // 隔离：mkdtemp 临时目录、env 五清、端口 8795（避 8787 生产与 8792/8793/8798/8799 禁用段）；
 // 生产 8787 与 ~/.cc-deck 零触达。
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -314,6 +314,25 @@ try {
     const rowsT = readPermissionAudit(auditPort());
     const rt = rowsT.find((x) => x.policy_source === "tier_default" && x.session_id !== null);
     assert(rt !== undefined && rt.effective_mode === "full-auto", "普通组审计行：policy_source=tier_default（混编/普通两路分立可查）");
+  }
+
+  // ---------- ⑨.5 授权位集成（#69：用户授权的生产 bypass 通道——派单专用+可撤销） ----------
+  console.log("S9.5 授权位");
+  {
+    const authFile = join(mgrCfg.dataDir, "permission-auth.json");
+    writeFileSync(authFile, JSON.stringify({ bypass_authorized: true, authorized_by: "test", scope: "org-dispatch", updated_at: Date.now() }));
+    const prevEnv = process.env.CCR_ENV;
+    process.env.CCR_ENV = "production";
+    const dA = mgr.dispatchWorker({ anchor: root, prompt: "授权生产派单", gid: gidAudit });
+    assert(dA.ok === true, "授权位×production×派单→放行（旧=production_bypass_denied 拒——#69 授权半边落位）");
+    const rowsA = readPermissionAudit(auditPort());
+    const ra = rowsA.find((x) => x.reason === "production_bypass_user_authorized");
+    assert(ra !== undefined && ra.requested_mode === "bypassPermissions" && ra.effective_mode === "full-auto" && ra.environment === "production", "授权放行审计行：reason=production_bypass_user_authorized 备案（requested/effective/environment 全对位）");
+    unlinkSync(authFile);
+    const dR = mgr.dispatchWorker({ anchor: root, prompt: "撤销后再派", gid: gidAudit });
+    assert(dR.ok === false && "error" in dR && dR.error.includes("production_bypass_denied"), "授权文件删除=即时撤销→拒面恢复（每次派单现读，fail-closed）");
+    process.env.CCR_ENV = prevEnv === undefined ? undefined : prevEnv;
+    if (prevEnv === undefined) delete process.env.CCR_ENV;
   }
 
   // ---------- ⑩ 收紧面已在 S7 集成（unknown_role_mapping）——本节锁 ACK 形状+零台账 ----------

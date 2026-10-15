@@ -8,6 +8,7 @@
 // 本模块零策略逻辑（求值归 permission-policy.ts 纯函数）；本文件是 audit 域唯一写者。
 import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
 import { ensureStore } from "./storage/read-mode.js";
 import { loadSqliteDriver } from "./storage/sqlite.js";
 import { orgDir } from "./org.js";
@@ -48,6 +49,21 @@ export function resolveEnvScope(port: number | null | undefined): EnvScope {
   if (explicit === "unknown") return "unknown";
   if (port === undefined || port === null || !Number.isFinite(port) || port <= 0) return "unknown";
   return port === 8787 ? "production" : "sandbox";
+}
+
+/** 用户授权 bypass 位读数（#69，081 §6.1「用户授权」半边）。持久化落
+ * <dataDir>/permission-auth.json：{"bypass_authorized":true,"authorized_by":"…",
+ * "scope":"org-dispatch","updated_at":…}——由用户明示指令写入（PM 代执须带授权出处）。
+ * 读失败/缺文件/字段非 true → false（fail-closed：授权证据缺失=未授权）。
+ * 每次派单现读（授权可随时撤销，文件删掉即收回）。 */
+export function readBypassAuthorization(dataDir: string): boolean {
+  try {
+    const raw = readFileSync(join(dataDir, "permission-auth.json"), "utf8");
+    const row = JSON.parse(raw) as { bypass_authorized?: unknown };
+    return row.bypass_authorized === true;
+  } catch {
+    return false;
+  }
 }
 
 /** 审计行（策略核 PolicyResult 十字段的存储投影——落库行宽型 string，不背核严格联合；

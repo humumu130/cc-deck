@@ -224,6 +224,17 @@ try {
     assert(x2.effective_mode === "forbidden", "dir=sandbox+env=production：任一维 production 即压");
     const x3 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "unknown", env: "sandbox" });
     assert(x3.effective_mode === "forbidden" && x3.reason === "env_unknown_bypass_denied", "dir=unknown+env=sandbox：任一维 unknown 即压（sandbox 不豁免另一维未知）");
+    // #69 授权位：用户明确授权的生产 bypass 通道——显式请求+授权位→放行+reason 备案
+    const a1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "production", user_authorized_bypass: true });
+    assert(a1.effective_mode === "full-auto" && a1.native_mode === "bypassPermissions" && a1.reason === "production_bypass_user_authorized", "授权位×production×显式 bypass→放行 full-auto（reason 备案审计可查——§6.1「用户授权」半边落位）");
+    const a2 = evaluatePermission({ ...BASE, requested_mode: "full-auto", env: "unknown", user_authorized_bypass: true });
+    assert(a2.effective_mode === "full-auto" && a2.reason === "env_unknown_bypass_user_authorized", "授权位×unknown×显式 full-auto→同款放行（授权豁免覆盖两维拒面族）");
+    const a3 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions", dir_scope: "production", user_authorized_bypass: false });
+    assert(a3.effective_mode === "forbidden" && a3.reason === "production_bypass_denied", "授权位 false/缺席→原拒面零变（fail-closed：授权证据缺失=未授权）");
+    const a4 = evaluatePermission({ engine: "claude", role: "worker", tier: "暂缓", requested_mode: "bypassPermissions", capability_state: "confirmed", policy_source: "explicit", dir_scope: "production", user_authorized_bypass: true });
+    assert(a4.effective_mode === "forbidden" && a4.reason === "above_role_tier_ceiling", "授权位不豁免 tier 闸（授权≠越权——ceiling 先于环境闸裁决）");
+    const a5 = evaluatePermission({ ...BASE, requested_mode: null, policy_source: "mixed_team_default", dir_scope: "production", user_authorized_bypass: true });
+    assert(a5.effective_mode === "edit-auto" && a5.reason === "production_demoted_from_full_auto", "授权位不翻物化降级面（物化请求本就不拒绝，降档语义不变）");
     // 缺席=未启用（P81-2 接线闸兼容路径）：bypass 恒过如旧——wiring 套件 24 断言零退自证
     const o1 = evaluatePermission({ ...BASE, requested_mode: "bypassPermissions" });
     assert(o1.effective_mode === "full-auto" && o1.native_mode === "bypassPermissions", "两维缺席=未启用：求值结果与 P81-2 全同（兼容路径——缺席≠unknown）");

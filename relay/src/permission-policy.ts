@@ -33,9 +33,10 @@
 //   5. ceiling 校验（§5.2「可用上限」）：normalized 高于 (role,tier) 上限→forbidden
 //      above_role_tier_ceiling（不静默降——越权是拒绝面不是降级面）。
 //   5.5 环境闸（§6.1，P81-3/4）：full-auto 显式请求遇 production/unknown→统一
-//      forbidden（*_bypass_denied）；物化请求→安全降 edit-auto+reason 备案（requested
-//      记录不伪装 effective）；unknown×edit-auto→降 ask；ask/plan 只读面不压；双
-//      sandbox 开放（§6.1 沙盒按 tier/capability 开放 full-auto）。两维缺席=未启用。
+//      forbidden（*_bypass_denied；#69 增补：用户授权位 user_authorized_bypass=true
+//      时放行+reason 备案=「用户授权」半边落位）；物化请求→安全降 edit-auto+reason 备案
+//     （requested 记录不伪装 effective）；unknown×edit-auto→降 ask；ask/plan 只读面
+//      不压；双 sandbox 开放（§6.1 沙盒按 tier/capability 开放 full-auto）。两维缺席=未启用。
 //   6. engine×capability 求值 effective（§4.4 :97-99）：confirmed→effective=normalized
 //      （仅 claude 填 native_mode——§4.4「native_mode 只有适配器确认后才填」；JSONL 引擎
 //      native 词表恒空 §7.1，native_mode 恒 null）；unverified→auto 档逐级降保守（full-auto
@@ -153,6 +154,12 @@ export interface PolicyInput {
   dir_scope?: "production" | "sandbox" | "unknown";
   /** 运行环境（§6.1 进程级）：relay 运行环境域。缺席语义同 dir_scope（未启用≠unknown）。 */
   env?: "production" | "sandbox" | "unknown";
+  /** 用户授权位（#69，081 §6.1「显式 bypass 请求若无**用户授权**与生产策略许可，返回
+   * 统一 forbidden」的授权半边落位）：持久化授权记录（permission-auth.json）读出，
+   * 仅豁免环境闸对**显式** full-auto 的统一拒绝（物化降级面/ceiling/engine 词表不受
+   * 影响——授权不越权，只把「未经授权的显式 bypass」翻成「有据可查的授权 bypass」，
+   * reason 备案审计可查）。缺席/false=未授权（原拒面零变）。 */
+  user_authorized_bypass?: boolean;
 }
 
 /** 081 :84-95 落库最小结构（八字段全齐=审计字段锁）。forbidden=拒绝决策非档位。 */
@@ -283,10 +290,16 @@ export function evaluatePermission(input: PolicyInput): PolicyResult {
       const threat = prod ? "production" : "env_unknown";
       if (normalized === "full-auto") {
         if (materialized === "") {
-          return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
+          // #69 授权位：有据可查的用户授权（permission-auth.json）把「未经授权的显式
+          // bypass」翻成「授权 bypass」——放行+reason 备案；未授权维持统一 forbidden
+          if (input.user_authorized_bypass !== true) {
+            return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
+          }
+          materialized = `${threat}_bypass_user_authorized`;
+        } else {
+          normalized = "edit-auto";
+          materialized = `${threat}_demoted_from_full_auto`;
         }
-        normalized = "edit-auto";
-        materialized = `${threat}_demoted_from_full_auto`;
       } else if (normalized === "edit-auto" && !prod) {
         normalized = "ask";
         materialized = "env_unknown_demoted_from_edit_auto";
