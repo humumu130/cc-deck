@@ -3296,7 +3296,7 @@
                       break;
                     }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
-                    case "SESSION_CREATED": onSessionCreated(sid, m.payload); break;
+                    case "SESSION_CREATED": onSessionCreated(sid, m.payload, evSource); break; // #110：帧通道随行（建卡打源标的锚）
                     case "SESSION_UPDATED": onSessionUpdated(sid, m.payload); break;
                     case "SESSION_HEARTBEAT": onHeartbeat(sid, m.payload); break;
                     case "SESSION_WAITING": onWaiting(sid, m.payload); break;
@@ -3383,9 +3383,18 @@
                   S.projects = [...byId.values()];
                   renderMyList();
                 }
-                function onSessionCreated(sid, p) {
+                function onSessionCreated(sid, p, evSource) {
                   if (!sid || S.sessions.has(sid)) return;
-                  S.sessions.set(sid, Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, p || {}));
+                  // #110 实时建卡打源标：SNAPSHOT merge（t25fix #5）与 B4 桥（T10 relay_channel）
+                  // 都打标，唯 B2 实时 SESSION_CREATED 漏打——聚合视角下选「远程」创建的会话卡
+                  // 回落显示名（会被后到的云快照覆写成云名）→「创建到选了远程/本机、卡/详情却挂
+                  // 另一源」=用户实锤的选源不生效目视假象（会话实际落点正确，是标签说谎）。
+                  // 源名一律走 __ccDeck005SourceState 走查钩子取链上真值（本 IIFE 跨 script 块
+                  // 不可直引 ctx/cloudCtx——直引即 ReferenceError 且被总线 try/catch 静默吞），
+                  // 与 SNAPSHOT merge 同锚 relay_name；p 将来若携带 relay_source 以 p 为准。
+                  const srcState = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                  const srcName = evSource === "cloud" ? String((srcState && srcState.cloudRelayName) || "") : String((srcState && srcState.lanRelayName) || S.relayName || "");
+                  S.sessions.set(sid, Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, srcName ? { relay_source: srcName } : {}, p || {}));
                   renderMyList();
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
@@ -11936,6 +11945,7 @@ function connectLan(ctx) {
         cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status, cloudRelayName: String(cloudCtx.relayName || ""),
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
+        lanRelayName: String(ctx.relayName || ""), // #110：B2 域建卡打源标读点（跨 script 块不可直引 ctx；S.relayName 会被后到云快照覆写，LAN 名必须取链上真值）
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });
       // W-WINPAIR-R3：快照注入钩子（排障/走查共用）——帧喂进对应链 context（onEvent 全字段缓存）
       // + 总线 emit，等同真实链路到达。页面内 window 级调用者本具全权，不新增信任面
