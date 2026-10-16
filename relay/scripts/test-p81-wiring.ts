@@ -335,9 +335,29 @@ try {
     if (prevEnv === undefined) delete process.env.CCR_ENV;
   }
 
-  // ---------- ⑩ 收紧面已在 S7 集成（unknown_role_mapping）——本节锁 ACK 形状+零台账 ----------
-  console.log("S10 收紧面 ACK");
+  // ---------- ⑨.6 授权位×COMMAND_CREATE（W-CCPERM：用户实锤 test.33——新建会话
+  // forbidden: production_bypass_denied，授权位此前只接 dispatchWorker（:7123）。
+  // 修后两路同源同策略：授权文件在=放行+审计备案，删=即时撤销拒面恢复） ----------
+  console.log("S9.6 授权位×COMMAND_CREATE");
   {
+    const authFile = join(mgrCfg.dataDir, "permission-auth.json");
+    writeFileSync(authFile, JSON.stringify({ bypass_authorized: true, authorized_by: "test", scope: "org-dispatch", updated_at: Date.now() }));
+    const prevEnv = process.env.CCR_ENV;
+    process.env.CCR_ENV = "production";
+    const ackA = mgr.handleCommand({ command_id: "p81-cc-auth", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "授权生产新建会话", permissionMode: "bypassPermissions" }, ts: Date.now() }, "web-d") as { ok: boolean; session_id?: string; error?: string };
+    assert(ackA.ok === true && typeof ackA.session_id === "string", "授权位×production×COMMAND_CREATE→放行（旧=forbidden: production_bypass_denied——W-CCPERM 断链修复）");
+    const rowsA = readPermissionAudit(auditPort());
+    const ra = rowsA.find((x) => x.reason === "production_bypass_user_authorized" && x.command_id === "p81-cc-auth");
+    assert(ra !== undefined && ra.requested_mode === "bypassPermissions" && ra.effective_mode === "full-auto" && ra.environment === "production" && ra.session_id === ackA.session_id, "COMMAND_CREATE 授权放行审计行：reason=production_bypass_user_authorized+新会话 id 落库（与派单路同备案）");
+    unlinkSync(authFile);
+    const ackR = mgr.handleCommand({ command_id: "p81-cc-revoke", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "撤销后再建", permissionMode: "bypassPermissions" }, ts: Date.now() }, "web-d") as { ok: boolean; error?: string };
+    assert(ackR.ok === false && (ackR.error ?? "").startsWith("forbidden:") && (ackR.error ?? "").includes("production_bypass_denied"), "授权文件删除=即时撤销→COMMAND_CREATE 拒面恢复（每次现读 fail-closed，与派单路同步）");
+    process.env.CCR_ENV = prevEnv === undefined ? undefined : prevEnv;
+    if (prevEnv === undefined) delete process.env.CCR_ENV;
+  }
+
+  // ---------- ⑩ 收紧面已在 S7 集成（unknown_role_mapping）——本节锁 ACK 形状+零台账 ----------
+  console.log("S10 收紧面 ACK");  {
     const before = readDispatchLog().length;
     const d = mgr.dispatchWorker({ anchor: root, prompt: "收紧 ACK 形状", gid: gidAudit, role: "cto" });
     assert(d.ok === false && "error" in d && d.error.startsWith("forbidden: unknown_role_mapping"), "收紧 ACK：ok:false+forbidden: unknown_role_mapping 前缀统一拒绝面");
