@@ -10,6 +10,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
+import { SessionStatSub } from "./page-head";
 import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
@@ -1163,6 +1164,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     () => notifActionableOf(snap.sources.flatMap((x) => x.notifications ?? [])),
     [snap.sources],
   );
+  // W-HEAD4 ②：会话四态计数（副题状态灯数据——V3 五色词表：working/waiting/done/error）
+  const sessionStatCounts = useMemo(() => {
+    const c2 = { working: 0, waiting: 0, done: 0, error: 0 };
+    for (const s of snap.sessions) {
+      const st = s.status;
+      if (st === "WORKING") c2.working++;
+      else if (st === "WAITING") c2.waiting++;
+      else if (st === "DONE") c2.done++;
+      else if (st === "ERROR") c2.error++;
+    }
+    return c2;
+  }, [snap.sessions]);
 
   // 硬件返回（#282）：浮层开着时先关浮层而不是退出 App（列表页是根路由）。
   // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发。
@@ -1385,6 +1398,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topbar}>
+        {/* W-HEAD4 ①②：会话页大标题+五色状态灯计数副题（用户 1016 拍板四页统一；
+            源胶囊/铃铛本页原有③④天然满足）——状态计数直扫 snap.sessions 四态 */}
+        <View style={{ flexShrink: 0, marginRight: 8 }}>
+          <Text style={styles.headTitleT}>会话</Text>
+          <SessionStatSub counts={sessionStatCounts} />
+        </View>
         {/* 件八（用户拍板 2026-10-12）：品牌行移除——「CC Deck」名+图标是单卡时代
             遗物（团队/项目页均无此行，风格不统一）；顶栏只留功能元素，品牌身份交
             系统状态栏/启动器图标。设置入口=底部导航设置域（logo 旧快捷位随之退役） */}
@@ -1887,6 +1906,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
     backgroundColor: c.headBg, borderBottomWidth: 1, borderBottomColor: c.line,
   },
+  headTitleT: { fontSize: 16, fontWeight: "600", color: c.textStrong, lineHeight: 20 }, /* W-HEAD4 ① */
   // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
   connChip: {
     flexDirection: "row", alignItems: "center", gap: 5,

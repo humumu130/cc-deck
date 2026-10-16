@@ -29,9 +29,9 @@ console.log("== W-MOBILE3 #121/#122：PageHead 统一 + 设置二级页结构 ==
 
 // ---- A. PageHead 组件（v3 .appbar 规格） ----
 ok(head.includes("export function PageHead"), "A1 PageHead 组件导出");
-ok(head.includes("fontSize: 16, fontWeight: \"600\"") && head.includes("fontSize: 11, color: c.dim, marginTop: 2"), "A2 v3 appbar 两行式规格（标题 16/600 + 副题 11/dim 上距 2）");
-ok(head.includes("paddingHorizontal: 14") && head.includes("paddingBottom: 10") && head.includes("borderBottomWidth: 1"), "A3 容器 14 水平/10 底+分隔线（v3 padding 40 14 10 顶由 SafeArea 承担）");
-ok(head.includes("width: 44, height: 44") && head.includes("ChevronLeft"), "A4 返回钮 44 触区 chev（v3 .back）");
+ok(head.includes("fontSize: 16, fontWeight: \"600\"") && head.includes("fontSize: 10.5, color: c.dim"), "A2 v2 两行式规格（标题 16/600 + 副题 10.5/dim——W-HEAD4 紧凑 52px）");
+ok(head.includes("paddingHorizontal: 12") && head.includes("paddingBottom: 6") && head.includes("borderBottomWidth: 1"), "A3 容器分隔线+紧凑 padding（W-HEAD4 v2：12 水平/6 底）");
+ok(head.includes("width: 36, height: 44") && head.includes("ChevronLeft"), "A4 返回钮 36×44 触区 chev（W-HEAD4 v2 紧凑）");
 
 // ---- B. 四页接入 ----
 ok(orgTabs.includes("<PageHead") && orgTabs.includes('from "./page-head"'), "B1 团队/项目页（OrgPageShell）接 PageHead");
@@ -71,6 +71,22 @@ ok(sp.includes("<AboutModal") && sp.includes("<DevicesModal"), "D6 弹层族原�
   ok((app.match(/BackHandler\.addEventListener/g) || []).length === 1, "E5 App 单点 BackHandler 订阅唯一（#282）");
   const rnImport = sp.slice(Math.max(0, sp.indexOf('"react-native"') - 200), sp.indexOf('"react-native"'));
   ok(!sp.includes("BackHandler.addEventListener") && !rnImport.includes("BackHandler"), "E6 SettingsPage 零自建订阅（经 ref 句柄承接，不 import/不订阅 BackHandler）");
+}
+
+
+// ---- F. W-HEAD4 四页 head 重做（1016 用户拍板五点） ----
+{
+  ok(head.includes("sourcePill?: { label: string; onPress: () => void }"), "F1 源胶囊槽（③全页保留）");
+  ok(head.includes("bell?: { badge: number; onPress: () => void }"), "F2 铃铛槽（④全页保留）");
+  ok(head.includes("export function SessionStatSub"), "F3 会话统计副题组件（②五色状态灯+计数）");
+  ok(head.includes("export function useBellBadge") && head.includes("export function useSourceLabel"), "F4 全页复用 hook（badge/label）");
+  ok(head.includes("minHeight: 44") && head.includes("paddingTop: 6") && head.includes("paddingBottom: 6"), "F5 紧凑规格（≤52px 含副题）");
+  ok(list.includes("headTitleT}>会话") || list.includes("会话</Text>") || /headTitleT.\{?\d?\}?..会话/.test(list) || list.includes("headTitleT}>{"), "F6 会话页大标题接入");
+  ok(list.includes("SessionStatSub"), "F7 会话页状态灯副题接入");
+  ok(orgTabs.includes("sourcePill={onGoSessions") && orgTabs.includes("bell={onGoSessions"), "F8 团队/项目页两槽接入");
+  ok(orgTabs.includes("个活跃"), "F9 团队页活跃口径副题");
+  ok(sp.includes("sourcePill={onGoSessions") && sp.includes("bell={onGoSessions"), "F10 设置页两槽接入");
+  ok(app.includes("onGoSessions={() => setTab(\"sessions\")}"), "F11 App 三页传回会话页跳转");
 }
 
 console.log(`\nmobile3-settings: ${pass} passed, ${fail} failed`);

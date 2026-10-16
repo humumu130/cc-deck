@@ -44,7 +44,7 @@ import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUr
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import type { AllowRule, ExperienceEntry, PairedDeviceInfo } from "../protocol";
 import { ExpLibraryModal } from "./OrgZone";
-import { PageHead } from "./page-head";
+import { PageHead, useSourceLabel, useBellBadge } from "./page-head";
 import { connStateNote, connStateTone, pairErrNote, peerKindLabel, peerRelTime } from "../protocol";
 import { PERM_CAP_STATE_LABEL, permissionModesText, permissionSummariesOf, type PermCapState } from "../permission";
 import { fgSupported } from "../notify";
@@ -412,13 +412,18 @@ export type SettingsBackHandle = { requestBack: () => boolean };
 function SettingsPageBase({
   onSetup,
   onEdit,
+  onGoSessions,
   ref,
 }: {
   onSetup: () => void;
   onEdit: (e: ServerEntry) => void;
   ref?: React.Ref<SettingsBackHandle>;
+  /** W-HEAD4 ③④：源胶囊/铃铛点击回会话页 */
+  onGoSessions?: () => void;
 }) {
   const { c } = useTheme();
+  const srcLabel = useSourceLabel();
+  const bellN = useBellBadge();
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const processFont = useProcessFont();
@@ -730,6 +735,8 @@ function SettingsPageBase({
           <PageHead
             title="设置"
             sub={`${CHANNEL_TAG ? CHANNEL_TAG + " · " : ""}${headSub}`}
+            sourcePill={onGoSessions ? { label: srcLabel, onPress: onGoSessions } : undefined}
+            bell={onGoSessions ? { badge: bellN, onPress: onGoSessions } : undefined}
             right={
               <Pressable
                 style={d.scanBtn}

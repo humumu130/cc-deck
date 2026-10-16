@@ -994,17 +994,19 @@ function Shell() {
               {tab !== "sessions" ? (
                 <View style={st.domain}>
                   {tab === "team" ? (
-                    <TeamTab onOpenSession={openDetail} />
+                    <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
                   ) : tab === "projects" ? (
                     <ProjectsTab
                       onOpenSession={openDetail}
                       onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
                       onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
                       onGoTeam={() => setTab("team")}
+                      onGoSessions={() => setTab("sessions")}
                     />
                   ) : (
                     <SettingsPage
                       ref={settingsBackRef}
+                      onGoSessions={() => setTab("sessions")}
                       onSetup={() => { setSetupScan(false); setSetup("new"); }}
                       onEdit={(e) => { setSetupScan(false); setSetup(e.id); }}
                     />
