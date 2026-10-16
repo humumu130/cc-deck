@@ -1304,7 +1304,8 @@ export class Bridge {
         this.dropEnqueuedKey(id, pBody(p));
         this.noteUserMsg(id, pBody(p), "promote");
         // FB14：晋升写正式消息日志随行图引用（气泡缩略数据源）
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000), ...(p.refs?.length ? { images: p.refs } : {}) });
+        // W-MSGFIX2（#144 源头根修）：full 由 truncate(_,2000)（≤cap 恒返回原串=external 会话短消息也带 full==text→端上假折叠「展开全文 20 字」+对账截断失配滞留）统一换 fullText(_,300)——与托管链 agent-adapter 同语义：≤300 字不带 full，>300 才带全文（10000 帽）
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: fullText(p.text, 300), ...(p.refs?.length ? { images: p.refs } : {}) });
       }
       this.resetStuckWatch(id); // #111：enqueue 回执晋升与 UPS 晋升同权，重置滞留快窗
       return;
@@ -1349,12 +1350,12 @@ export class Bridge {
     if (consumed.length) {
       for (const t of consumed) {
         // FB14：交付晋升随行图引用（consumePendingTexts 出队的 refs 与原文同源）
-        if (!this.recentlyLogged(id, t.text)) this.mgr.pushExternalLog(id, "user_message", truncate(t.text, 300), undefined, { full: truncate(t.text, 2000), ...(t.refs?.length ? { images: t.refs } : {}) });
+        if (!this.recentlyLogged(id, t.text)) this.mgr.pushExternalLog(id, "user_message", truncate(t.text, 300), undefined, { full: fullText(t.text, 300), ...(t.refs?.length ? { images: t.refs } : {}) });
         this.noteUserMsg(id, t.text, "promote");
       }
       this.resetStuckWatch(id); // #111：交付晋升同权，重置滞留快窗
     } else {
-      this.mgr.pushExternalLog(id, "user_message", text, undefined, { full: truncate(prompt, 2000) });
+      this.mgr.pushExternalLog(id, "user_message", text, undefined, { full: fullText(prompt, 300) });
     }
     this.noteUserMsg(id, text, "promote");
   }
@@ -1667,7 +1668,7 @@ export class Bridge {
       this.dropEnqueuedKey(sessionId, pBody(promoted));
       this.noteUserMsg(sessionId, pBody(promoted), "promote");
       // FB14：晋升写正式消息随行图引用（气泡缩略数据源；本函数是 UPS 晋升主路径）
-      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: truncate(promoted.text, 2000), ...(promoted.refs?.length ? { images: promoted.refs } : {}) });
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: fullText(promoted.text, 300), ...(promoted.refs?.length ? { images: promoted.refs } : {}) });
       this.resetStuckWatch(sessionId);
       return true;
     }
@@ -1684,7 +1685,7 @@ export class Bridge {
           for (const h of hits) {
             this.dropEnqueuedKey(sessionId, pBody(h));
             this.noteUserMsg(sessionId, pBody(h), "promote");
-            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000), ...(h.refs?.length ? { images: h.refs } : {}) });
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: fullText(h.text, 300), ...(h.refs?.length ? { images: h.refs } : {}) });
           }
           this.noteUserMsg(sessionId, prompt, "promote"); // 合并形态也记账：后续同形态到达直接跳过
           this.resetStuckWatch(sessionId);
@@ -1712,7 +1713,7 @@ export class Bridge {
       for (const h of subHits) {
         this.dropEnqueuedKey(sessionId, pBody(h));
         this.noteUserMsg(sessionId, pBody(h), "promote");
-        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000), ...(h.refs?.length ? { images: h.refs } : {}) });
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: fullText(h.text, 300), ...(h.refs?.length ? { images: h.refs } : {}) });
       }
       this.resetStuckWatch(sessionId);
       return true;
@@ -2093,7 +2094,7 @@ export class Bridge {
       // 60s 内已被晋升记录覆盖 → 跳过；PC 手敲重发（上一条也走 prompt 记录）不受影响
       if (!this.coveredByRecentPromote(id, rawPrompt)) {
         this.noteUserMsg(id, rawPrompt, "prompt");
-        this.mgr.pushExternalLog(id, "user_message", truncate(rawPrompt, 300), undefined, { full: truncate(rawPrompt, 2000) });
+        this.mgr.pushExternalLog(id, "user_message", truncate(rawPrompt, 300), undefined, { full: fullText(rawPrompt, 300) });
       }
     }
     void state;
@@ -3061,7 +3062,7 @@ export class Bridge {
       if (qi === -1) {
         this.noteUserMsg(id, pBody(p), "promote");
         // FB14：回合收尾清扫晋升同权随行图引用
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000), ...(p.refs?.length ? { images: p.refs } : {}) });
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: fullText(p.text, 300), ...(p.refs?.length ? { images: p.refs } : {}) });
       } else {
         avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
         kept.push(p);
