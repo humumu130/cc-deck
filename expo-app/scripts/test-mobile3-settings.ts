@@ -29,14 +29,14 @@ console.log("== W-MOBILE3 #121/#122：PageHead 统一 + 设置二级页结构 ==
 
 // ---- A. PageHead 组件（v3 .appbar 规格） ----
 ok(head.includes("export function PageHead"), "A1 PageHead 组件导出");
-ok(head.includes("fontSize: 16, fontWeight: \"600\"") && head.includes("fontSize: 10.5, color: c.dim"), "A2 v2 两行式规格（标题 16/600 + 副题 10.5/dim——W-HEAD4 紧凑 52px）");
-ok(head.includes("paddingHorizontal: 12") && head.includes("paddingBottom: 6") && head.includes("borderBottomWidth: 1"), "A3 容器分隔线+紧凑 padding（W-HEAD4 v2：12 水平/6 底）");
-ok(head.includes("width: 36, height: 44") && head.includes("ChevronLeft"), "A4 返回钮 36×44 触区 chev（W-HEAD4 v2 紧凑）");
+ok(head.includes("fontSize: 15, fontWeight: \"600\", color: c.text") && head.includes("fontSize: 10, color: c.dim, lineHeight: 13"), "A2 v3 详情页基准（标题 15/600 c.text + 副题 10/lh13——W-HEAD5 d.head 同款）");
+ok(head.includes("paddingVertical: 4") && head.includes("borderBottomWidth: 1") && head.includes("backgroundColor: c.bg"), "A3 v3 容器对齐 d.head（paddingVertical 4/常规 bg/分隔线）");
+ok(head.includes("width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft") && head.includes("strokeWidth={2.6}"), "A4 v3 返回钮 d.back 形制（26×26 r8 tintSoft+14px/2.6 chevron）");
 
 // ---- B. 四页接入 ----
 ok(orgTabs.includes("<PageHead") && orgTabs.includes('from "./page-head"'), "B1 团队/项目页（OrgPageShell）接 PageHead");
 ok(!orgTabs.includes("headT:") && !orgTabs.includes("headSub:"), "B2 OrgTabs 旧页头样式键零残留（headT/headSub 退役）");
-ok(list.includes("paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10") && list.includes("backgroundColor: c.headBg"), "B3 会话页 topbar 容器规格对齐（14/10/10+headBg）");
+ok(list.includes("paddingHorizontal: 12, paddingVertical: 4") && list.includes("backgroundColor: c.bg"), "B3 v3 会话页 topbar 对齐 d.head（12 水平/4 垂直/常规 bg）");
 
 // ---- C. #122 设置二级页骨架 ----
 ok(sp.includes("const [subPage, setSubPage]"), "C1 subPage 二级页状态");
@@ -80,7 +80,7 @@ ok(sp.includes("<AboutModal") && sp.includes("<DevicesModal"), "D6 弹层族原�
   ok(head.includes("bell?: { badge: number; onPress: () => void }"), "F2 铃铛槽（④全页保留）");
   ok(head.includes("export function SessionStatSub"), "F3 会话统计副题组件（②五色状态灯+计数）");
   ok(head.includes("export function useBellBadge") && head.includes("export function useSourceLabel"), "F4 全页复用 hook（badge/label）");
-  ok(head.includes("minHeight: 44") && head.includes("paddingTop: 6") && head.includes("paddingBottom: 6"), "F5 紧凑规格（≤52px 含副题）");
+  ok(head.includes("minHeight: 48") && head.includes("paddingVertical: 4"), "F5 v3 总高 48px（详情页 d.head 同高，W-HEAD5 拍板）");
   ok(list.includes("headTitleT}>会话") || list.includes("会话</Text>") || /headTitleT.\{?\d?\}?..会话/.test(list) || list.includes("headTitleT}>{"), "F6 会话页大标题接入");
   ok(list.includes("SessionStatSub"), "F7 会话页状态灯副题接入");
   ok(orgTabs.includes("sourcePill={onGoSessions") && orgTabs.includes("bell={onGoSessions"), "F8 团队/项目页两槽接入");

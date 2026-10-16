@@ -13,14 +13,6 @@ import { useRelay } from "../store";
 import { notifActionableOf } from "../notify-jump";
 import type { ThemeColors } from "../theme";
 
-export function ChevronLeft({ color }: { color: string }) {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24">
-      <Path d="M15 18l-6-6 6-6" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
 function BellGlyph({ color, badge, c }: { color: string; badge: number; c: ReturnType<typeof makeStyles> }) {
   return (
     <View>
@@ -67,15 +59,18 @@ export function PageHead({
   const { c: tc } = useTheme();
   return (
     <View style={c.head}>
+      {/* W-HEAD5：详情页 d.back 同形制（26×26 r8 tintSoft 方块+14px/2.6 chevron，hitSlop 8 补触区） */}
       {onBack ? (
         <Pressable
           style={c.backBtn}
-          hitSlop={6}
-          android_ripple={{ color: tc.tintSoft, borderless: false, radius: 16 }}
+          hitSlop={8}
+          android_ripple={{ color: tc.tintSoft, borderless: false }}
           onPress={onBack}
           accessibilityLabel={backLabel ?? `返回，当前页 ${title}`}
         >
-          <ChevronLeft color={tc.dim} />
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={tc.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M15 18l-6-6 6-6" />
+          </Svg>
         </Pressable>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -138,34 +133,37 @@ export function useBellBadge(): number {
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
+    // W-HEAD5（#148 用户拍板「外面的头对齐详情页」）：弃 headBg 特别底色（继承常规
+    // c.bg）；paddingVertical 4/总高≈48px/title 15·600 c.text/sub 10 lh13——全部
+    // d.head 同款（DetailScreen 一行未动，此为单向对齐）
     head: {
       flexDirection: "row",
       alignItems: "center",
+      gap: 8,
       paddingHorizontal: 12,
-      paddingTop: 6,
-      paddingBottom: 6,
-      backgroundColor: c.headBg,
+      paddingVertical: 4,
       borderBottomWidth: 1,
       borderBottomColor: c.line,
-      minHeight: 44,
+      backgroundColor: c.bg,
+      minHeight: 48,
     },
-    backBtn: { width: 36, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -6, flexShrink: 0 },
-    title: { fontSize: 16, fontWeight: "600", color: c.textStrong, lineHeight: 20 },
-    subRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 1 },
-    sub: { fontSize: 10.5, color: c.dim, lineHeight: 13, fontWeight: "400" },
+    backBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+    title: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 },
+    subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+    sub: { fontSize: 10, color: c.dim, lineHeight: 13, fontWeight: "400" },
     pillBtn: {
-      flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 8,
-      borderRadius: 13, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel2,
-      marginRight: 8, maxWidth: 120, flexShrink: 0,
+      flexDirection: "row", alignItems: "center", gap: 4, height: 24, paddingHorizontal: 8,
+      borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
+      marginRight: 4, maxWidth: 110, flexShrink: 0,
     },
-    pillT: { fontSize: 10.5, color: c.dim, maxWidth: 88 },
-    bellBtn: { width: 36, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: 2 },
+    pillT: { fontSize: 10, color: c.dim, maxWidth: 80 },
+    bellBtn: { width: 30, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: 2 },
     badge: {
       position: "absolute", top: -3, right: -6, minWidth: 15, height: 15, borderRadius: 8,
       backgroundColor: c.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 3,
     },
     badgeT: { color: "#FFFFFF", fontSize: 9.5, fontWeight: "700" },
     statItem: { flexDirection: "row", alignItems: "center", gap: 3 },
-    statDot: { width: 6, height: 6, borderRadius: 3 },
-    statT: { fontSize: 10.5, color: c.dim, lineHeight: 13 },
+    statDot: { width: 5, height: 5, borderRadius: 2.5 },
+    statT: { fontSize: 10, color: c.dim, lineHeight: 13 },
   });
