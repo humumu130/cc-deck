@@ -3371,7 +3371,11 @@
                       // 此前全部回退 S.relayName → srcSet 恒 1 → 源标签恒隐藏=用户实测「聚合模式
                       // 源标签缺失」根因）。keep 合回的另一源对象带旧标，两源齐后 srcSet>1 自动显形；
                       // 编制 session_id 的 running/PM 归属判定同链受益（#11/#12 的跨源失配面收敛）
-                      if (agg) {
+                      // W-SRC2（#110 复发 1016 实锤）：打标与聚合视角解耦——快照到达时 sourceView
+                      // 可能仍是 local（启动序：SNAPSHOT 先于视角恢复/先单源接入后加源），agg 门
+                      // 挡住打标=本源存量卡永不带标（切聚合后 srcSet 缺角→源标签缺失/部分缺）。
+                      // 恒打无副作用：单源视角下多打无害（srcSet=1 仍隐藏），对象随快照替换走
+                      {
                         const srcName = String((m.payload && m.payload.relay_name) || (evSource && evSource.relayName) || "");
                         if (srcName) for (const x of (Array.isArray(m.payload && m.payload.sessions) ? m.payload.sessions : [])) {
                           if (!x || typeof x.session_id !== "string") continue;
