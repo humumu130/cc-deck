@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>手机 head 重设计 · 变体投票页（#121 返工 W-HEAD3）</title>
+<style>
+  /* ---------- Token（--p-* 系，v8-ui-interactive-v3.html 手机壳直搬） ---------- */
+  :root, [data-theme="dark"] {
+    color-scheme: dark;
+    --p-bg: #060D18; --p-panel: #0C1727; --p-panel2: #122034; --p-line: #1A2942;
+    --p-text: #EAF2FC; --p-dim: #8CA3BF; --p-faint: #546784;
+    --p-brand: #EC9A73; --p-brand2: #C96442; --p-brand-soft: rgba(224,138,99,.13); --p-brand-line: rgba(224,138,99,.45);
+    --p-ok-chip: #7FD1A8; --p-warn: #E8B45A;
+    --pg-bg: #04080E; --pg-panel: #0B141F; --pg-line: #1B2739; --pg-text: #C9D3E0; --pg-dim: #7E8BA3; --pg-faint: #55617A;
+  }
+  [data-theme="light"] {
+    color-scheme: light;
+    --p-bg: #EDF0F5; --p-panel: #FFFFFF; --p-panel2: #F4F7FB; --p-line: #E2E8F1;
+    --p-text: #16283E; --p-dim: #5E7490; --p-faint: #8FA2B8;
+    --p-brand: #B85228; --p-brand2: #96391A; --p-brand-soft: rgba(192,91,51,.1); --p-brand-line: rgba(192,91,51,.35);
+    --p-ok-chip: #0E7A4A; --p-warn: #8F5B00;
+    --pg-bg: #EDF0F5; --pg-panel: #FFFFFF; --pg-line: #E2E8F1; --pg-text: #22354C; --pg-dim: #5E7490; --pg-faint: #8FA2B8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--pg-bg); color: var(--pg-text); font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif; padding-bottom: 60px; }
+  .pgwrap { max-width: 960px; margin: 0 auto; padding: 18px 14px; }
+  h1 { font-size: 17px; font-weight: 700; }
+  .sub { font-size: 12px; color: var(--pg-dim); margin: 6px 0 14px; line-height: 1.6; }
+  .themeBtn { position: fixed; right: 14px; bottom: 14px; z-index: 50; border: 1px solid var(--pg-line); background: var(--pg-panel); color: var(--pg-text); border-radius: 999px; padding: 9px 16px; font-size: 13px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+
+  /* ---------- 投票区 ---------- */
+  .vote { border: 1px solid var(--pg-line); background: var(--pg-panel); border-radius: 14px; padding: 14px; margin-bottom: 22px; }
+  .vote h2 { font-size: 14px; margin-bottom: 10px; }
+  .voteRow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .vbtn { flex: 1; min-width: 120px; border: 1.5px solid var(--pg-line); background: transparent; color: var(--pg-text); border-radius: 10px; padding: 11px 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .15s ease; }
+  .vbtn small { display: block; font-weight: 400; font-size: 10.5px; color: var(--pg-dim); margin-top: 3px; }
+  .vbtn:active { transform: scale(.97); }
+  .vbtn.on { border-color: var(--p-brand); background: var(--p-brand-soft); color: var(--p-brand); }
+  .voted { display: none; margin-top: 10px; font-size: 12px; color: var(--p-ok-chip); }
+  .voted.show { display: block; }
+
+  /* ---------- 形态 section ---------- */
+  .variant { margin-bottom: 30px; }
+  .vh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .vh .no { font-size: 12px; font-weight: 700; color: var(--p-brand); border: 1px solid var(--p-brand-line); border-radius: 6px; padding: 1px 7px; flex: none; }
+  .vh .nm { font-size: 15.5px; font-weight: 700; }
+  .vh .hgt { font-size: 11px; color: var(--pg-faint); }
+  .tradeoff { font-size: 12px; color: var(--pg-dim); line-height: 1.65; margin-bottom: 12px; padding-left: 2px; }
+  .flaw { color: var(--p-warn); }
+  .thumbs { display: flex; gap: 12px; overflow-x: auto; padding: 4px 1px 12px; scroll-snap-type: x mandatory; }
+  .phone390 { flex: none; width: 390px; scroll-snap-align: start; }
+  .pframe { border: 1px solid var(--pg-line); border-radius: 18px; overflow: hidden; background: var(--p-bg); box-shadow: 0 6px 24px rgba(0,0,0,.28); }
+  .safearea { background: var(--p-panel); padding-top: 40px; position: relative; }
+  .safearea::before { content: ""; position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 96px; height: 24px; background: #0A1220; border-radius: 12px; }
+  [data-theme="light"] .safearea::before { background: #D8DEE8; }
+  .pagelabel { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--pg-faint); padding: 8px 2px 6px; }
+  .pagelabel b { color: var(--pg-dim); }
+  .anno { font-size: 10.5px; color: var(--p-warn); background: rgba(232,180,90,.08); border: 1px dashed rgba(232,180,90,.4); border-radius: 8px; padding: 6px 9px; margin: 8px 10px; line-height: 1.5; }
+  .body-mock { padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .mcard { background: var(--p-panel2); border: 1px solid var(--p-line); border-radius: 10px; padding: 10px 11px; }
+  .mcard .r1 { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--p-text); }
+  .mcard .r2 { font-size: 10.5px; color: var(--p-dim); margin-top: 3px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.g { background: var(--p-ok-chip); } .dot.y { background: var(--p-warn); } .dot.b { background: var(--p-faint); }
+  .notice { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--p-brand); background: var(--p-brand-soft); border: 1px solid var(--p-brand-line); border-radius: 9px; padding: 8px 10px; }
+  .srcchips { display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--p-dim); }
+  .srcchips .chip { border: 1px solid var(--p-line); background: var(--p-panel2); border-radius: 999px; padding: 3px 9px; color: var(--p-text); font-size: 11px; }
+  .tabbar { display: flex; border-top: 1px solid var(--p-line); background: var(--p-panel); padding: 7px 6px 16px; }
+  .tb { flex: 1; text-align: center; font-size: 9.5px; color: var(--p-faint); }
+  .tb .ic { font-size: 15px; display: block; margin-bottom: 2px; }
+  .tb.on { color: var(--p-brand); }
+  svg.i { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i.sm { width: 15px; height: 15px; }
+
+  /* ---------- head 形态（变体核心差异全在这几组类） ---------- */
+  /* 现状：PageHead 两行常驻（expo 实装逐参数复刻） */
+  .h-now { display: flex; align-items: center; padding: 10px 14px; background: var(--p-panel); border-bottom: 1px solid var(--p-line); }
+  .h-now .tt { flex: 1; min-width: 0; }
+  .h-now .t { font-size: 16px; font-weight: 600; color: var(--p-text); line-height: 22px; }
+  .h-now .s { font-size: 11px; color: var(--p-dim); margin-top: 2px; line-height: 15px; }
+  .h-now .plusOrange { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(180deg, var(--p-brand), var(--p-brand2)); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  /* 变体 A：单行紧凑（v3 一级页 appbar；副题信息下沉；＋保留 expo 拍板橙底） */
+  .h-a { display: flex; align-items: center; padding: 9px 14px; background: var(--p-panel); border-bottom: 1px solid var(--p-line); min-height: 42px; }
+  .h-a .t { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 600; color: var(--p-text); }
+  .h-a .bell { position: relative; color: var(--p-dim); margin-right: 12px; display: inline-flex; flex: none; }
+  .h-a .bbadge { position: absolute; top: -4px; right: -7px; min-width: 14px; height: 14px; line-height: 14px; border-radius: 7px; background: var(--p-warn); color: #fff; font-size: 9px; text-align: center; padding: 0 3px; font-weight: 600; }
+  .h-a .plusOrange { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(180deg, var(--p-brand), var(--p-brand2)); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .h-a .menu { color: var(--p-dim); padding: 0 4px; display: inline-flex; flex: none; margin-left: 4px; }
+  /* 变体 B：两行压扁可折叠（副题并入 title 行尾·点 head 折叠成单行） */
+  .h-b { padding: 7px 14px 8px; background: var(--p-panel); border-bottom: 1px solid var(--p-line); cursor: pointer; }
+  .h-b .r1 { display: flex; align-items: center; }
+  .h-b .t { font-size: 15px; font-weight: 600; color: var(--p-text); flex: none; }
+  .h-b .s-inline { font-size: 10.5px; color: var(--p-dim); margin-left: 8px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-b .r2 { font-size: 10.5px; color: var(--p-dim); margin-top: 2px; line-height: 14px; }
+  .h-b.folded .r2 { display: none; }
+  .h-b .foldHint { font-size: 9px; color: var(--p-faint); margin-left: auto; flex: none; }
+  .h-b .plusOrange { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(180deg, var(--p-brand), var(--p-brand2)); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  /* 变体 C：v3 逐像素（appbar 40/14/10·t 15.5·s 10.5 可选·裸 dim 图标钮） */
+  .h-c { display: flex; align-items: center; padding: 40px 14px 10px; background: var(--p-panel); border-bottom: 1px solid var(--p-line); }
+  .h-c.nosafe { padding-top: 10px; }
+  .h-c .tt { flex: 1; min-width: 0; }
+  .h-c .t { font-size: 15.5px; font-weight: 600; color: var(--p-text); }
+  .h-c .s { font-size: 10.5px; color: var(--p-dim); margin-top: 2px; }
+  .h-c .bell { position: relative; color: var(--p-dim); margin-right: 12px; display: inline-flex; flex: none; }
+  .h-c .bbadge { position: absolute; top: -4px; right: -7px; min-width: 14px; height: 14px; line-height: 14px; border-radius: 7px; background: var(--p-warn); color: #fff; font-size: 9px; text-align: center; padding: 0 3px; font-weight: 600; }
+  .h-c .plus { color: var(--p-dim); padding: 0 4px; display: inline-flex; flex: none; }
+  .h-c .menu { color: var(--p-dim); padding: 0 4px; display: inline-flex; flex: none; }
+</style>
+</head>
+<body>
+<div class="pgwrap">
+  <h1>手机 head 重设计 · 变体对比</h1>
+  <div class="sub">#121 返工（W-HEAD3）——当前两行式已被实测推翻，以下给四个形态在手机上直接对比。<b>每形态含四页缩略</b>（左右滑动），看完回顶部投票，回话报编号即可。<b>所有缩略均为 390px 真宽。</b></div>
+
+  <!-- ================= 投票区 ================= -->
+  <div class="vote">
+    <h2>🗳️ 你选哪个？</h2>
+    <div class="voteRow">
+      <button class="vbtn" data-v="现状">保持现状<small>两行式不再动</small></button>
+      <button class="vbtn" data-v="A">变体 A<small>单行紧凑 · 副题下沉</small></button>
+      <button class="vbtn" data-v="B">变体 B<small>两行压扁 · 可折叠</small></button>
+      <button class="vbtn" data-v="C">变体 C<small>v3 原型逐像素</small></button>
+    </div>
+    <div class="voted" id="votedMsg"></div>
+  </div>
+
+  <!-- ================= 现状（对照基线） ================= -->
+  <section class="variant">
+    <div class="vh"><span class="no">基线</span><span class="nm">当前形态 · PageHead 两行常驻</span><span class="hgt">内容高 ≈59px（+SafeArea 40 = 99px 视觉顶）</span></div>
+    <div class="tradeoff"><span class="flaw">实测推翻点：</span>①副题每页常驻，四页统一两行——信息价值撑不起这个高度；②副题（「N 个团队」类）与列表内容重复；③总顶高 99px，390px 屏首屏近 1/4 被 head 吃掉。</div>
+    <div class="thumbs">
+      <div class="phone390"><div class="pagelabel"><b>会话</b>（特例：源胶囊主导 · 仅容器对齐）</div><div class="pframe">
+        <div class="safearea"><div class="h-now"><div class="tt"><div class="t" style="font-size:12.5px;font-weight:500"><span class="srcchips"><span class="chip">本机 ▾</span><span class="chip">＋项目 ▾</span></span></div></div><span class="plusOrange"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>ui-review 走查</div><div class="r2">清理截图引用 · 刚刚活跃</div></div><div class="mcard"><div class="r1"><span class="dot g"></span>0.7.0-test.29 出包</div><div class="r2">Actions 跑完 2/3</div></div></div>
+        <div class="tabbar"><div class="tb on"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>团队</b>（两行常驻主形态）</div><div class="pframe">
+        <div class="safearea"><div class="h-now"><div class="tt"><div class="t">团队</div><div class="s">2 张确认卡待决议</div></div><span class="plusOrange"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div></div>
+        <div class="body-mock"><div class="anno">⚠ 用户不满意的主形态：副题「N 张确认卡」常驻撑高</div><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck M1 攻坚团</div><div class="r2">6 成员 · 4 进行中 · 刚刚活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb on"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>项目</b></div><div class="pframe">
+        <div class="safearea"><div class="h-now"><div class="tt"><div class="t">项目</div><div class="s">3 个项目 · 未立项 1</div></div><span class="plusOrange"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck</div><div class="r2">~/dev/cc-deck · 6 会话</div></div><div class="mcard"><div class="r1"><span class="dot b"></span>blog</div><div class="r2">3 天前活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb on"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>设置</b></div><div class="pframe">
+        <div class="safearea"><div class="h-now"><div class="tt"><div class="t">设置</div><div class="s">0.7.0-test.29 · nova 通道</div></div></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1">通用</div><div class="r2">主题 · 通知</div></div><div class="mcard"><div class="r1">模型服务</div><div class="r2">引擎登录态</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb on"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================= 变体 A ================= -->
+  <section class="variant">
+    <div class="vh"><span class="no">A</span><span class="nm">单行紧凑式</span><span class="hgt">内容高 42px ≤52 上限（+SafeArea 40 = 82px）</span></div>
+    <div class="tradeoff">骨架=v3 一级页 appbar：标题单行 15.5/600 + 右槽动作全保留（铃铛 badge + ＋）；<b>副题信息下沉</b>——团队确认数走铃铛 badge 与列表顶 notice 条，项目数并入页面内容。动作钮视觉沿用 expo 两轮拍板终态（＋ 品牌橙底）。取舍：head 最薄、首屏让出最多；代价是团队「待决议」类状态不再在 head 常驻可见（靠 badge+notice 补偿）。</div>
+    <div class="thumbs">
+      <div class="phone390"><div class="pagelabel"><b>会话</b>（源胶囊特例保留 · 右槽同规格）</div><div class="pframe">
+        <div class="safearea"><div class="h-a"><div class="t" style="font-size:12.5px;font-weight:500"><span class="srcchips"><span class="chip">本机 ▾</span><span class="chip">＋项目 ▾</span></span></div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>ui-review 走查</div><div class="r2">清理截图引用 · 刚刚活跃</div></div><div class="mcard"><div class="r1"><span class="dot g"></span>0.7.0-test.29 出包</div><div class="r2">Actions 跑完 2/3</div></div></div>
+        <div class="tabbar"><div class="tb on"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>团队</b>（副题下沉 → badge + notice 条）</div><div class="pframe">
+        <div class="safearea"><div class="h-a"><div class="t">团队</div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="plusOrange"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div></div>
+        <div class="body-mock"><div class="notice">🔔 2 张确认卡待决议 · 点铃铛处理</div><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck M1 攻坚团</div><div class="r2">6 成员 · 4 进行中 · 刚刚活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb on"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>项目</b>（项目数沉到列表头）</div><div class="pframe">
+        <div class="safearea"><div class="h-a"><div class="t">项目</div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="menu"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span><span class="plusOrange" style="margin-left:4px"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck</div><div class="r2">~/dev/cc-deck · 6 会话 · 1 团队</div></div><div class="mcard"><div class="r1"><span class="dot b"></span>blog</div><div class="r2">3 天前活跃</div></div><div class="mcard" style="opacity:.6"><div class="r1"><span class="dot b"></span>＋ 未立项 1</div><div class="r2">扫描到但未立项的目录</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb on"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>设置</b>（版本号沉到「关于」行）</div><div class="pframe">
+        <div class="safearea"><div class="h-a"><div class="t">设置</div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="menu"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1">通用</div><div class="r2">主题 · 通知</div></div><div class="mcard"><div class="r1">关于</div><div class="r2">0.7.0-test.29 · nova 通道</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb on"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================= 变体 B ================= -->
+  <section class="variant">
+    <div class="vh"><span class="no">B</span><span class="nm">两行压扁 · 可折叠</span><span class="hgt">展开 ≈50px / 折叠 34px（+SafeArea）</span></div>
+    <div class="tradeoff">保留 PageHead 两行骨架但全面压扁（标题 15 / 副题 10 / 边距收紧），修正现版缺陷：<b>副题可点 head 折叠</b>成单行（默认展开，点一下收起只留标题，状态一行「▸ 展开摘要」示意）；副题文案只留<b>有行动价值的</b>（确认卡数），纯计数（N 个团队）不再上 head。取舍：信息保留度最高、用户自主控高；代价是交互多一层（折叠），且两行仍比 A/C 占高。</div>
+    <div class="thumbs">
+      <div class="phone390"><div class="pagelabel"><b>会话</b>（源胶囊特例 · 单行天然契合）</div><div class="pframe">
+        <div class="safearea"><div class="h-b" style="cursor:default"><div class="r1"><div class="t" style="font-size:12.5px;font-weight:500"><span class="srcchips"><span class="chip">本机 ▾</span><span class="chip">＋项目 ▾</span></span></div><span class="plusOrange" style="margin-left:auto"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>ui-review 走查</div><div class="r2">清理截图引用 · 刚刚活跃</div></div><div class="mcard"><div class="r1"><span class="dot g"></span>0.7.0-test.29 出包</div><div class="r2">Actions 跑完 2/3</div></div></div>
+        <div class="tabbar"><div class="tb on"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>团队</b>（展开态 · 副题=有行动价值的确认数）</div><div class="pframe">
+        <div class="safearea"><div class="h-b demo-fold"><div class="r1"><div class="t">团队</div><span class="foldHint">▾ 点折叠</span><span class="plusOrange" style="margin-left:8px"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="r2">2 张确认卡待决议 · 6 成员 · 4 进行中</div></div></div>
+        <div class="body-mock"><div class="anno">试试：点一下 head → 折叠成单行（本页可点）</div><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck M1 攻坚团</div><div class="r2">6 成员 · 4 进行中 · 刚刚活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb on"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>项目</b>（默认折叠态示意 · 纯计数不上 head）</div><div class="pframe">
+        <div class="safearea"><div class="h-b folded"><div class="r1"><div class="t">项目</div><span class="foldHint">▸ 3 个项目</span><span class="plusOrange" style="margin-left:8px"><svg class="i sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div><div class="r2">3 个项目 · 未立项 1</div></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck</div><div class="r2">~/dev/cc-deck · 6 会话</div></div><div class="mcard"><div class="r1"><span class="dot b"></span>blog</div><div class="r2">3 天前活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb on"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>设置</b>（折叠态 · 版本沉「关于」）</div><div class="pframe">
+        <div class="safearea"><div class="h-b folded" style="cursor:default"><div class="r1"><div class="t">设置</div></div></div></div>
+        <div class="body-mock"><div class="mcard"><div class="r1">通用</div><div class="r2">主题 · 通知</div></div><div class="mcard"><div class="r1">关于</div><div class="r2">0.7.0-test.29 · nova 通道</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb on"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================= 变体 C ================= -->
+  <section class="variant">
+    <div class="vh"><span class="no">C</span><span class="nm">v3 原型逐像素式</span><span class="hgt">内容高 42px / 项目页带副题 58px（严格照 v8 v3 手机壳 appbar）</span></div>
+    <div class="tradeoff">严格照 <b>docs/mockups/v8-ui-interactive-v3.html</b> 手机区 head 逐像素复刻：t 15.5/600、副题 10.5 <b>仅项目页在场</b>（v3 的两行本是偶发而非常态——现状实装走样点）、铃铛 badge+＋ 均为 v3 裸 dim 图标钮（18px 无底色）。取舍：与桌面 v8 视觉体系 1:1、原型即规格零转译损耗；代价是＋钮放弃 expo 两轮拍板的品牌橙底（回到 v3 裸钮），且副题仅项目页有——团队确认数同样走 badge 补偿。</div>
+    <div class="thumbs">
+      <div class="phone390"><div class="pagelabel"><b>会话</b>（v3：t 单行 + bell + plus）</div><div class="pframe">
+        <div class="h-c"><div class="tt"><div class="t">会话</div></div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="plus"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>ui-review 走查</div><div class="r2">清理截图引用 · 刚刚活跃</div></div><div class="mcard"><div class="r1"><span class="dot g"></span>0.7.0-test.29 出包</div><div class="r2">Actions 跑完 2/3</div></div></div>
+        <div class="tabbar"><div class="tb on"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>团队</b>（v3：t 单行 + bell + plus · 无副题）</div><div class="pframe">
+        <div class="h-c"><div class="tt"><div class="t">团队</div></div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="plus"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+        <div class="body-mock"><div class="notice">🔔 2 张确认卡待决议（badge 补偿位）</div><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck M1 攻坚团</div><div class="r2">6 成员 · 4 进行中 · 刚刚活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb on"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>项目</b>（v3 唯一带副题页：t + s + bell + ⋯ + plus）</div><div class="pframe">
+        <div class="h-c"><div class="tt"><div class="t">项目</div><div class="s">3 活跃 · 1 已隐藏</div></div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="menu"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span><span class="plus"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+        <div class="body-mock"><div class="mcard"><div class="r1"><span class="dot g"></span>cc-deck</div><div class="r2">~/dev/cc-deck · 6 会话 · 1 团队</div></div><div class="mcard"><div class="r1"><span class="dot b"></span>blog</div><div class="r2">3 天前活跃</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb on"><span class="ic">📁</span>项目</div><div class="tb"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+      <div class="phone390"><div class="pagelabel"><b>设置</b>（v3：t 单行 + bell + ⋯）</div><div class="pframe">
+        <div class="h-c"><div class="tt"><div class="t">设置</div></div><span class="bell"><svg class="i" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bbadge">2</span></span><span class="menu"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+        <div class="body-mock"><div class="mcard"><div class="r1">通用</div><div class="r2">主题 · 通知</div></div><div class="mcard"><div class="r1">模型服务</div><div class="r2">引擎登录态</div></div></div>
+        <div class="tabbar"><div class="tb"><span class="ic">💬</span>会话</div><div class="tb"><span class="ic">🤖</span>团队</div><div class="tb"><span class="ic">📁</span>项目</div><div class="tb on"><span class="ic">⚙️</span>设置</div></div>
+      </div></div>
+    </div>
+  </section>
+
+  <div class="sub" style="margin-top:4px">四形态均为静态示意（内容区 mock）；变体 B 的「点折叠」在本页真实可点。选完回顶部投票 → 回话报编号。</div>
+</div>
+
+<button class="themeBtn" id="themeBtn">🌗 深浅切换</button>
+
+<script>
+  // 投票：点=记录 localStorage 并高亮（回话报编号即闭环）
+  const KEY = "head3-vote";
+  const msg = document.getElementById("votedMsg");
+  const btns = document.querySelectorAll(".vbtn");
+  function show(v) {
+    btns.forEach(b => b.classList.toggle("on", b.dataset.v === v));
+    if (v) { msg.textContent = `已记录你的选择：${v} —— 回话报「${v}」即可（本机 localStorage 已存，换设备以回话为准）`; msg.classList.add("show"); }
+    else msg.classList.remove("show");
+  }
+  btns.forEach(b => b.addEventListener("click", () => {
+    const v = b.dataset.v;
+    localStorage.setItem(KEY, v);
+    show(v);
+    b.scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+  show(localStorage.getItem(KEY));
+  // 深浅主题
+  const tb = document.getElementById("themeBtn");
+  tb.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+  });
+  // 变体 B 折叠演示（demo-fold 类可点切换）
+  document.querySelectorAll(".h-b.demo-fold").forEach(h => h.addEventListener("click", () => {
+    h.classList.toggle("folded");
+    const hint = h.querySelector(".foldHint");
+    if (hint) hint.textContent = h.classList.contains("folded") ? "▸ 展开摘要" : "▾ 点折叠";
+  }));
+</script>
+</body>
+</html>
