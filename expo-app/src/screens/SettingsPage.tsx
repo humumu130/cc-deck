@@ -31,7 +31,7 @@
 // ⑥ 组头计数明确化：连接管理折叠态「· N」→「· N 台」。
 // 不动面（R7 口径继承）：服务器行视觉几何、六弹层（关于/图例/设备/经验库/扫码/
 // 导入）、规则/权限子节、Agent 引擎条件组、删码逻辑（store/protocol 零触碰）。
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
@@ -403,12 +403,20 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
   );
 }
 
-export default function SettingsPage({
+// W-BACKFIX（1016 test.31 用户实锤）：设置二级页的硬件返回/侧滑句柄——App.tsx
+// 单点 BackHandler 分发（#282 全 App 唯一订阅）经 ref 问询本页：二级页开 → 消费
+// 并清 subPage（与 PageHead onBack 同一 setState 同一状态源）；目录页 → false
+// 不拦截（走 tab 层回会话域/系统默认）。ListScreen ListBackHandle 同款先例。
+export type SettingsBackHandle = { requestBack: () => boolean };
+
+function SettingsPageBase({
   onSetup,
   onEdit,
+  ref,
 }: {
   onSetup: () => void;
   onEdit: (e: ServerEntry) => void;
+  ref?: React.Ref<SettingsBackHandle>;
 }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
@@ -450,6 +458,16 @@ export default function SettingsPage({
   // import 码在抽屉内弹 ImportPicker 选条目回发
   // W-MOBILE3 #122 设置二级页：null=一级目录页；conn/prefs/engines/about=二级详情
   const [subPage, setSubPage] = useState<"conn" | "prefs" | "engines" | "about" | null>(null);
+  // W-BACKFIX：返回键句柄（与 PageHead onBack 同一 setSubPage(null)——同一状态源）
+  useImperativeHandle(ref, () => ({
+    requestBack: () => {
+      if (subPage !== null) {
+        setSubPage(null);
+        return true;
+      }
+      return false;
+    },
+  }), [subPage]);
   const [scanOpen, setScanOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
@@ -1768,3 +1786,5 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   abBtnGhostT: { color: c.dim },
   abMsgT: { color: c.dim, fontSize: 12, marginTop: 10, textAlign: "center" },
 });
+
+export default SettingsPageBase;

@@ -35,7 +35,7 @@ import {
 import ListScreen, { splitPending, type ListBackHandle } from "./src/screens/ListScreen";
 import BottomTabs, { type TabKey } from "./src/bottom-tabs";
 import { TeamTab, ProjectsTab } from "./src/screens/OrgTabs";
-import SettingsPage from "./src/screens/SettingsPage";
+import SettingsPage, { type SettingsBackHandle } from "./src/screens/SettingsPage";
 import ArtPoolModal from "./src/screens/ArtPoolModal";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -718,6 +718,8 @@ function Shell() {
     if (v) setTdExpanded(false);
   }, []);
   const listBackRef = useRef<ListBackHandle | null>(null);
+  // W-BACKFIX：设置二级页返回句柄（subPage 开→消费清页；ListBackHandle 同款先例）
+  const settingsBackRef = useRef<SettingsBackHandle | null>(null);
   const detailBackRef = useRef<DetailBackHandle>(null);
   // 会话 tab badge（待处理数）：与列表「待处理」段同口径（splitPending 纯投影，
   // 通知未决绑定会话计入），待处理 >0 才显角标——W-EXPOLISH 红线：口径不变。
@@ -754,6 +756,10 @@ function Shell() {
     }
     // 详情开 → 关详情（动画窗口期被相位守卫拒绝时不消费，500ms 兜底放行后恢复）
     if (detail) return (detailBackRef.current?.requestBack() ?? false) || closeDetail();
+    // W-BACKFIX（1016 test.31 实锤）：设置域二级页（连接与设备等）开 → 先回设置
+    // 目录（ref 句柄问询，与 PageHead 返回钮同一 setSubPage(null)；目录页 false
+    // 落到下方 tab 层）。必须在 tab 层之前——否则二级页被拽回会话域
+    if (settingsBackRef.current?.requestBack()) return true;
     // 底部导航（0.7 批 1）：非会话域 tab 返回即回会话域（根层=会话列表，逐层出栈）
     if (tab !== "sessions") {
       setTab("sessions");
@@ -998,6 +1004,7 @@ function Shell() {
                     />
                   ) : (
                     <SettingsPage
+                      ref={settingsBackRef}
                       onSetup={() => { setSetupScan(false); setSetup("new"); }}
                       onEdit={(e) => { setSetupScan(false); setSetup(e.id); }}
                     />

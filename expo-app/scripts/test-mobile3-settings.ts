@@ -23,6 +23,7 @@ const sp = readFileSync(join(here, "../src/screens/SettingsPage.tsx"), "utf-8");
 const head = readFileSync(join(here, "../src/screens/page-head.tsx"), "utf-8");
 const orgTabs = readFileSync(join(here, "../src/screens/OrgTabs.tsx"), "utf-8");
 const list = readFileSync(join(here, "../src/screens/ListScreen.tsx"), "utf8");
+const app = readFileSync(join(here, "../App.tsx"), "utf8");
 
 console.log("== W-MOBILE3 #121/#122：PageHead 统一 + 设置二级页结构 ==");
 
@@ -53,6 +54,24 @@ for (const anchor of ["W-MSET3 ② 活动连接状态卡", "连接管理组（W-
   ok(sp.includes(anchor), `D 保留 ${anchor.slice(0, 12)}…`);
 }
 ok(sp.includes("<AboutModal") && sp.includes("<DevicesModal"), "D6 弹层族原样（About/Devices/图例/导入）");
+
+// ---- E. W-BACKFIX 返回键链路（1016 test.31 用户实锤修复） ----
+{
+  // E1 句柄导出+同源：requestBack 与 PageHead onBack 同一 setSubPage(null)（同一状态源）
+  ok(sp.includes("export type SettingsBackHandle = { requestBack: () => boolean }"), "E1 SettingsBackHandle 句柄类型导出");
+  const hIdx = sp.indexOf("useImperativeHandle(ref");
+  const handleSeg = hIdx >= 0 ? sp.slice(hIdx, hIdx + 600) : "";
+  ok(handleSeg.includes("if (subPage !== null)") && handleSeg.includes("setSubPage(null)") && handleSeg.includes("return true"), "E2 requestBack：二级页开→清 subPage 消费（与 onBack 同一 setSubPage）");
+  ok(handleSeg.includes("return false"), "E3 目录页 false 不拦截（落 tab 层/系统默认）");
+  // E4 App 单点分发：消费层在 tab 层之前（顺序错=二级页被拽回会话域，实锤病灶）
+  const appRef = app.indexOf("settingsBackRef.current?.requestBack()");
+  const appTab = app.indexOf('if (tab !== "sessions")');
+  ok(appRef > 0 && appTab > appRef, "E4 App 单点分发：settingsBackRef 消费层在 tab 层之前");
+  // E5 全 App 唯一 BackHandler 订阅不变（#282 架构未被破坏——SettingsPage 不自建订阅）
+  ok((app.match(/BackHandler\.addEventListener/g) || []).length === 1, "E5 App 单点 BackHandler 订阅唯一（#282）");
+  const rnImport = sp.slice(Math.max(0, sp.indexOf('"react-native"') - 200), sp.indexOf('"react-native"'));
+  ok(!sp.includes("BackHandler.addEventListener") && !rnImport.includes("BackHandler"), "E6 SettingsPage 零自建订阅（经 ref 句柄承接，不 import/不订阅 BackHandler）");
+}
 
 console.log(`\nmobile3-settings: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
