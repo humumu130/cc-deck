@@ -3,7 +3,7 @@
 # 15 分钟一轮（crontab），超 40 分钟无帧自动催办
 LOG=/Users/xdd/.cc-deck/data/delivery-tracker.log
 CCOPS=/Users/xdd/.cc-deck/bin/ccops.mjs
-BASE=45d67f0
+BASE=6396eb4
 NOW=$(date +%s)
 echo "[$(date '+%H:%M:%S')] delivery-tracker run" >> "$LOG"
 
