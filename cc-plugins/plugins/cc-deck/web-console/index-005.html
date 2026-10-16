@@ -2879,7 +2879,31 @@
             </section>
             <aside class="inspector" data-stub="B2"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div><div class="artifact-row">产物文件 <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span></span></div></div></aside>
             <aside class="team-drawer" data-slim-drawer hidden aria-label="团队成员会话（第四列）"></aside>
-            <script>
+            <!-- ===== W-BLANKSET2 诊断钩子·全局错误显形（test.33；摘除=删本 script 块）===== -->
+  <script>
+    // 任何域炸了都能肉眼看到：错误文本（message+文件:行:列）渲染进当前激活域容器顶部。
+    // 零外部 CSS 依赖（全内联样式）——样式系统塌陷时依然可见（这正是 Windows 现场的形态）
+    (() => {
+      const seen = [];
+      const paint = () => {
+        const host = document.querySelector(".desktop-screen.active .workspace") || document.querySelector(".desktop-screen.active") || document.body;
+        if (!host) return;
+        let bar = host.querySelector("[data-blankset2-diag]");
+        if (!bar) {
+          bar = document.createElement("div");
+          bar.setAttribute("data-blankset2-diag", "1");
+          bar.style.cssText = "position:sticky;top:0;left:0;right:0;z-index:99999;background:#3B0A0A;color:#FF9B9B;font:11px/1.5 Consolas,Menlo,monospace;padding:6px 10px;white-space:pre-wrap;word-break:break-all;border-bottom:2px solid #FF6B6B";
+          host.insertBefore(bar, host.firstChild);
+        }
+        bar.textContent = "⚠ 诊断版捕获 " + seen.length + " 处错误（截图回传此区）：\n" + seen.slice(0, 8).join("\n");
+      };
+      const push = (tag, msg) => { seen.push(tag + " " + String(msg).slice(0, 220)); paint(); console.error("[diag]", tag, msg); };
+      window.addEventListener("error", (e) => push("[JS]", (e.message || "Error") + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno + ":" + e.colno));
+      window.addEventListener("unhandledrejection", (e) => push("[Promise]", (e.reason && (e.reason.message || e.reason.stack && e.reason.stack.split("\n")[0])) || e.reason || "unknown"));
+      window.__blankset2Paint = paint; // 分段 try/catch 借道同一显形条
+    })();
+  </script>
+  <script>
               // #143-B2 会话域迁移：本块只存在于 #d-session 区间内，不触碰 <style> 与底部地基脚本。
               // 数据通道订阅地基帧总线（#150 R2 并轨：全页唯一 WS，SNAPSHOT+增量+COMMAND_ACK 同源）。
               (() => {
@@ -9323,7 +9347,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.31";
+      const CONSOLE_VERSION = "0.7.0-test.32";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -9348,7 +9372,7 @@
       // W-TOPBAR ②：windowbar ⌘K 教学提示已退役，walker 全树扫不受影响）；
       // 动态模板走 MOD_KEY 分支。只改命中 text node，禁对容器整体 textContent 赋值——会摧毁子树
       if (!IS_MAC) {
-        const swap = (s) => s.replaceAll("⌘K", "Ctrl+K").replaceAll("⌘N", "Ctrl+N").replaceAll("⌘", "Ctrl+");
+        const swap = (s) => s.replace(/⌘K/g, "Ctrl+K").replace(/⌘N/g, "Ctrl+N").replace(/⌘/g, "Ctrl+"); /* W-BLANKSET2：replaceAll→正则 g（WebView2<85 兼容） */
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         for (let n = walker.nextNode(); n; n = walker.nextNode()) {
           if (n.textContent.includes("⌘")) n.textContent = swap(n.textContent);
@@ -10288,7 +10312,17 @@ function connectLan(ctx) {
         const body = section?.querySelector(".workspace-body");
         if (!section || !queue || !body || body.dataset.settingsReady) return;
         queue.classList.add("settings-nav");
+        // ===== W-BLANKSET2 诊断钩子·逐段包裹（test.33；摘除=去 safe() 包裹还原直呼）=====
+        const segErrors = [];
+        const safe = (name, fn) => {
+          try { fn(); } catch (e) { segErrors.push(name + "：" + ((e && e.message) || e)); if (window.__blankset2Paint) window.__blankset2Paint(); }
+        };
+        const segBanner = () => segErrors.length
+          ? '<div data-blankset2-seg style="background:#3B0A0A;color:#FF9B9B;font:11px/1.5 Consolas,Menlo,monospace;padding:6px 10px;white-space:pre-wrap;border-bottom:2px solid #FF6B6B">⚠ 设置初始化分段错误：\n' + segErrors.map((s) => "· " + s).join("\n") + "</div>"
+          : "";
+
         const pairBanner = '<div class="v8-escape">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div>'; /* W-SETTINGS3 批2：组尾注释降回灰字内联（视觉清单：全宽橙描边提示框非 V3 语言） */
+        safe("六面板静态段", () => {
         body.innerHTML = `
 <div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div><div class="s">外观 · 快捷键 · 通知——基座偏好（连接状态见连接与设备页）</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号<div class="v8-swd">只改文字大小，布局不变 · 立即生效</div></div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度<div class="v8-swd">会话卡片信息密度 · 紧凑=一屏多看两条</div></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">设置密度<div class="v8-swd">本设置页行距与留白 · 舒适=呼吸感，紧凑=一屏多看几行</div></div><div class="density-control" role="group" aria-label="设置密度"><button type="button" data-settings-density-option="compact">紧凑</button><button type="button" data-settings-density-option="comfortable">舒适</button></div></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span><div class="v8-swd">跨会话 / 团队 / 任务的模糊搜索 · 点右侧自定义</div></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span><div class="v8-swd">普通会话 · 点右侧自定义</div></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span><div class="v8-swd">全局快捷键 · 最小化时唤回窗口</div></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span><div class="v8-swd">会话列表内上下移动</div></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span><div class="v8-swd">多源间快速切换</div></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义，回到出厂键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音<div class="v8-swd">行动项到达时提示</div></div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知<div class="v8-swd">后台 relay 有新行动时提示</div></div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div></div><div class="v8-setcard"><h5>高级</h5><div class="v8-swrow"><div class="v8-swtxt">空闲置灰<div class="v8-swd">完成/出错会话静默超时后退后显示</div></div><label class="idle-dim-field"><input type="number" step="1" data-idle-dim-input aria-label="空闲置灰分钟数" /><span>分钟（负数=永不）</span></label></div><div class="v8-swrow fs-debug-row-wrap"><div class="fs-debug-body"><strong>字号调试</strong><p class="fs-debug-note">临时调试 · 调完截图给 PM 固化（不进正式配置）</p><div class="fs-debug-grid"><label class="fs-debug-item"><span>消息内容</span><input type="range" min="10" max="22" step="1" data-fs-slider="msg" aria-label="消息内容字号（px）" /><b data-fs-val="msg"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="msg" title="重置本项" aria-label="重置消息内容字号">↺</button></label><label class="fs-debug-item"><span>卡片标题</span><input type="range" min="10" max="22" step="1" data-fs-slider="title" aria-label="卡片标题字号（px）" /><b data-fs-val="title"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="title" title="重置本项" aria-label="重置卡片标题字号">↺</button></label><label class="fs-debug-item"><span>卡片描述</span><input type="range" min="10" max="22" step="1" data-fs-slider="desc" aria-label="卡片描述字号（px）" /><b data-fs-val="desc"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="desc" title="重置本项" aria-label="重置卡片描述字号">↺</button></label><label class="fs-debug-item"><span>界面 UI</span><input type="range" min="10" max="22" step="1" data-fs-slider="ui" aria-label="界面 UI 字号（px）" /><b data-fs-val="ui"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="ui" title="重置本项" aria-label="重置界面 UI 字号">↺</button></label><label class="fs-debug-item"><span>等宽代码</span><input type="range" min="10" max="22" step="1" data-fs-slider="mono" aria-label="等宽代码字号（px）" /><b data-fs-val="mono"></b><button type="button" class="fs-dbg-reset" data-fs-reset-one="mono" title="重置本项" aria-label="重置等宽代码字号">↺</button></label></div><button type="button" class="secondary-btn fs-dbg-reset-all" data-fs-reset-all>全部重置</button></div></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">引擎目录 · 登录态与模型——凭证只存引擎本机</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
@@ -10296,6 +10330,22 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">模型路由 · 系统提示 · 工具白名单都长在模板上——开团的初始编制</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">开团时可逐成员覆盖 · 模板只给初始值，不当牢笼。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">控制面能力扩展——内建三件随软件发行、免安装确认 · 统一鉴权无特权通道</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span><div class="v8-swd">出单 · 回填 · 收单闭环 · 验收单分发与提醒</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span><div class="v8-swd">意图声明制登记 · 输出物看板数据源</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span><div class="v8-swd">登记查询 · 产物打开与分享</div></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载、可停用——停用即对应能力面下线；M1 骨架期三件恒启用，停用开关随注册表就绪后生效。</div></div><div class="v8-setcard"><h5>权限声明（只读）· 授权以命令面权限表为准</h5><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div><div class="v8-setcard"><h5>第三方扩展</h5><div class="v8-escape">🧩 尚无第三方扩展——规范与市场 M2 开放，不预建目录。技能（skill）/ MCP 兼容投送是 Agent 侧资产（舰队配装），不在本页——本页只管控制面扩展。</div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 诊断</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录<div class="v8-swd">GitHub Releases · tag 即档案（git tag + 提交信息 + Release 页）</div></div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页<div class="v8-swd">在线演示与文档入口</div></div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App<div class="v8-swd">扫码安装 · 手机端仅浏览、验证和换路由</div></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
+        });
+        // ===== W-BLANKSET2 诊断钩子·环境探针+localStorage 键值显形（③④）=====
+        safe("环境探针", () => {
+          const probe = document.createElement("div");
+          probe.setAttribute("data-blankset2-probe", "1");
+          const ua = navigator.userAgent || "";
+          const engines = (ua.match(/(Chrome|Edg|Firefox|Safari)\/[\d.]+/g) || []).join(" ");
+          const ls = [];
+          try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^(ccd_|cc-deck-005|ccr_|ccdeck)/i.test(k)) ls.push(k + "=" + String(localStorage.getItem(k)).slice(0, 48)); } } catch (_) {}
+          probe.style.cssText = "background:#101826;color:#9FB6D4;font:10.5px/1.6 Consolas,Menlo,monospace;padding:5px 10px;white-space:pre-wrap;word-break:break-all;border-bottom:1px solid #29415F";
+          probe.textContent = "环境探针: " + engines + " · 视口 " + window.innerWidth + "x" + window.innerHeight + " · 主题=" + (document.documentElement.dataset.theme || "缺省dark") + (segErrors.length ? "\n" + segBanner() : "") + "\n设置键: " + (ls.length ? ls.join("  |  ") : "（无 ccd_/cc-deck-005/ccr_ 相关键）");
+          body.insertBefore(probe, body.firstChild);
+        });
+
+
+        safe("控件接线段", () => {
         wireCardDensityControls(body);
         wireFsDebugPanel(body); // 件十六：字号调试面板回填已存值/默认值
         // W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（活读壳版本/桥连接态）
@@ -10303,6 +10353,8 @@ function connectLan(ctx) {
         if (navFoot) navFoot.innerHTML = escapeHtml(String(window.__shellVer || CONSOLE_VERSION)) + "<br>本机 relay · 已连接";
         // W-SETTINGS3 批3：设置域密度双档——comfortable 默认；点击切档挂 #d-settings
         // data-settings-density（CSS 变量联动行距/卡留白）+ localStorage ccd_settings_density 持久
+        });
+        safe("密度与本地存储段", () => {
         const DENSITY_KEY = "ccd_settings_density";
         const applySettingsDensity = (mode) => {
           const m = mode === "compact" ? "compact" : "comfortable";
@@ -10341,6 +10393,8 @@ function connectLan(ctx) {
             if (window.__ccDeck005IdleDim) window.__ccDeck005IdleDim.set(v);
           });
         }
+        });
+        safe("面板切换装配段", () => {
         body.dataset.settingsReady = "1";
         const panels = [...body.querySelectorAll("[data-settings-panel]")];
         const cards = [...queue.querySelectorAll(".queue-card")];
@@ -10443,6 +10497,7 @@ function connectLan(ctx) {
           if (event.target.closest("[data-keymap-reset]")) { resetKeymap(); return; }
         });
         activateSettings(SETTINGS_PANELS.indexOf("connections")); // W-SETTINGS3 批1：面板序 V3 化后默认页仍=连接与设备（source-manage「管理与配对新源」跳入语义不变；旧序 0=connections）
+        });
       }
       function initSettingsLiveData() {
         const bridge = window.__ccDeck005B4;
