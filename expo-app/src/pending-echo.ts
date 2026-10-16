@@ -61,8 +61,15 @@ export function reconcilePending(list: PendingEcho[], input: ReconcileInput): Pe
   if (!list.length) return list;
   const mine = list.filter((p) => p.sid === input.sid);
   if (!mine.length) return list;
+  // W-MSGFIX（1016 实锤「发送中」气泡滞留）：relay 下发 user_message 的 text=3 行截断
+  // 版、full=全文——长消息严格相等（norm(text)===key）永失配，气泡挂到 120s 安全阀。
+  // 回声匹配改截断兼容：text 或 full 任一相等即命中
+  const echoKeyOf = (e: LogEntry) => {
+    const t = norm(e.text ?? "");
+    return t || norm(e.full ?? "");
+  };
   const echoes = input.logs.filter(
-    (e) => e.kind === "user_message" && !!e.ts && norm(e.text ?? "") !== "",
+    (e) => e.kind === "user_message" && !!e.ts && echoKeyOf(e) !== "",
   );
   const echoCount = new Map<string, number>();
   for (const p of mine) {
@@ -70,7 +77,7 @@ export function reconcilePending(list: PendingEcho[], input: ReconcileInput): Pe
     if (!key || echoCount.has(key)) continue;
     echoCount.set(
       key,
-      echoes.filter((e) => norm(e.text ?? "") === key && e.ts >= p.ts - ECHO_SKEW_MS).length,
+      echoes.filter((e) => (norm(e.text ?? "") === key || norm(e.full ?? "") === key) && e.ts >= p.ts - ECHO_SKEW_MS).length,
     );
   }
   const queuedKeys = new Set((input.pendingInputs ?? []).map((p) => norm(p.text ?? "")).filter(Boolean));

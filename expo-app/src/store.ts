@@ -2573,7 +2573,8 @@ class RelayStore {
         break;
       }
       case "SESSION_LOG": {
-        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, msg.payload.text ?? "");
+        // W-MSGFIX：兜底对账 key 用 full 优先（text=截断版时 includes(pk) 对长文恒失配）
+        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, String(msg.payload.full || msg.payload.text || ""));
         this.pushLog(conn, sid, msg.payload);
         break;
       }

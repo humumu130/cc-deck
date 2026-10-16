@@ -334,7 +334,20 @@ async function main(): Promise<void> {
   const lm = pe.reconcilePending(peMixed, { sid: "s1", logs: [], pendingInputs: null, now: peNow + 100 });
   check(lm.find((x) => x.key === "m1") !== undefined && lm.find((x) => x.key === "o1") !== undefined,
     "跨会话条目键控隔离（别家 sid 不被本会话对账动）");
+  // ⑥b W-MSGFIX（1016 实锤「发送中」滞留）：relay 回声 text=3 行截断版/full=全文——
+  // 严格相等对长文恒失配气泡挂到安全阀。截断兼容：text 或 full 任一相等即命中
+  const longText = "这是一条超过三行显示会被 relay 截断的长消息".repeat(12);
+  const truncEcho = [{ kind: "user_message", text: longText.slice(0, 80) + "…", full: longText, ts: peNow + 400 }] as never[];
+  const peLong = [peMk("L1", longText, peNow)];
+  check(pe.reconcilePending(peLong, { sid: "s1", logs: truncEcho, pendingInputs: null, now: peNow + 500 }).length === 0,
+    "W-MSGFIX：截断回声（text≠原文/full=原文）正确消气泡（滞留根修）");
+  const plainEcho = [{ kind: "user_message", text: "你好", ts: peNow + 400 }] as never[];
+  const peM2 = pe.reconcilePending(l2, { sid: "s1", logs: plainEcho, pendingInputs: null, now: peNow + 500 });
+  check(peM2.find((x) => x.key === "k1") === undefined && peM2.find((x) => x.key === "k2") !== undefined,
+    "W-MSGFIX 回归：无 full 的全等回声照常消气泡（k1 消、k2 留——既有行为不回归）");
   // ⑦ 源码接线锚：发送注入/ack 失败/渲染挂点/重发/滚动跟随
+  check(detailSrc.includes("const long = !!e.full && e.full.length > e.text.length"), "W-MSGFIX：折叠判定=full 比 text 长才折叠（20/29 字假折叠根修）");
+  check(String(readFileSync(new URL("../src/store.ts", import.meta.url), "utf8")).includes("String(msg.payload.full || msg.payload.text || \"\")"), "W-MSGFIX：兜底对账 key full 优先（store 消费面）");
   check(detailSrc.includes("setPendingEcho((prev) =>\n      pushPending(prev,"), "send() 发送瞬间同步注入（乐观回显入口）");
   check(detailSrc.includes('markEchoState(prev, echoKey, "failed")'), "ack 失败→失败态（onAck 接线）");
   check(detailSrc.includes("<PendingEchoBubble"), "pending 气泡挂转录尾部");

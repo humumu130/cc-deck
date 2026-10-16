@@ -480,7 +480,10 @@ function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTas
   if (e.kind === "user_message") {
     // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
     // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
-    const long = !!e.full;
+    // W-MSGFIX（1016 实锤 20/29 字也显「展开全文」）：relay 对所有 user_message 都带
+    // full（text=截断版/full=全文）——!!e.full 恒真=假折叠。改为「full 比 text 长才折叠」
+    //（未截断时 text==full，长度相等即短消息不折叠不显钮）
+    const long = !!e.full && e.full.length > e.text.length;
     // FB14：随消息发送的图片在气泡内缩略呈现（点按放大），不再只发不显。
     // 引用形态 img-* basename，经 COMMAND_ARTIFACT_FETCH 按需拉取（≤4 张与 relay 同口径）
     const imgs = Array.isArray(e.images) ? e.images.filter((x) => typeof x === "string" && x).slice(0, 4) : [];
@@ -531,7 +534,7 @@ function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTas
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
         <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
         {cursor}
-        {e.full ? (
+        {e.full && e.full.length > e.text.length ? ( /* W-MSGFIX：同 user_message——未截断（text==full）不显展开钮 */
           <Pressable onPress={onToggle} hitSlop={6}>
             <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full.length} 字 ▾`}</Text>
           </Pressable>
