@@ -119,7 +119,7 @@ try {
     // 对照面：on 态 zcode×bypass 被 zcode_fail_closed 拒（闸在位证明）
     setSwitch("on");
     const ackOn = mgr.handleCommand(mkCmd("p9-on-z", { cwd: root, prompt: "on 态 zcode 闸", permissionMode: "bypassPermissions", engine: "zcode" }), "web-d") as CommandAckPayload;
-    assert(ackOn.ok === false && typeof ackOn.error === "string" && ackOn.error.startsWith("forbidden:"), "对照：on 态 zcode×bypass→forbidden（新 policy 闸在位）");
+    assert(ackOn.ok === false && typeof ackOn.error === "string" && (ackOn.error.includes("zcode_fail_closed") || ackOn.error.startsWith("forbidden:")), "对照：on 态 zcode×bypass→forbidden（新 policy 闸在位；W-PERMERR 起文案中文化，锚放宽为 reason 含或旧前缀）");
 
     // off 态同输入：zcode 仍拒但拒因换层——create 内既有闸（「unsupported engine: zcode」
     // 不可选语义是 P81 前既有，非 P81 线；「完整回 P81 前」=该闸保留不因回退放开）

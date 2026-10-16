@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -19,7 +19,7 @@ import {
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
 } from "./projects.js";
-import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permissionPolicyEnabled } from "./permission-policy.js";
+import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permDenyMessage, permissionPolicyEnabled } from "./permission-policy.js";
 import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
 import { authFailureHint, probeEngineAuth } from "./engine-auth.js";
@@ -2583,6 +2583,11 @@ export class SessionManager {
             policy_source: "explicit",
             dir_scope: dirScope,
             env: envScope,
+            // W-PERMERR：授权位接线补全（#69 半边）——此前仅组织派单口（:7123）传本字段，
+            // 用户自建卡勾「跳过权限确认」在生产/未知环境恒 forbidden 且授权对它无效
+            // （1016 用户 Windows 云通道实锤：连生产 relay 勾选即报错，无放行通道）。
+            // 授权读数与派单口同源（permission-auth.json，org auth-bypass 写入）
+            user_authorized_bypass: readBypassAuthorization(this.cfg.dataDir),
           }) : null;
           // 审计落库（§6.3 拒绝也写审计；session_id 拒=null 成功=新会话）。policy off
           // ⇒ perm=null，仅 forbidden 分支会落拒绝审计，null 不进该路径。
@@ -2595,7 +2600,10 @@ export class SessionManager {
               session_id: null, command_id: cmd.command_id, created_at: Date.now(),
             };
             appendPermissionAudit(auditStore(this.cfg.dataDir), denyRow);
-            return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
+            // W-PERMERR：拒绝面文案可操作化（1016 用户实锤：`forbidden: production_bypass_denied`
+            // 英文 reason 码直出 toast，用户不知如何处置）。reason 保留在文案尾部（审计/排障
+            // 对照），主文案=中文+行动指引（军规口径：动词开头、结果可察、无内部机制词）
+            return { command_id: cmd.command_id, ok: false, error: permDenyMessage(perm.reason) };
           }
           const spawnPmMode: Parameters<typeof this.create>[2] = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : (pm ?? "bypassPermissions");
           const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, spawnPmMode, cmd.payload.autoMkdir === true, {
@@ -5796,6 +5804,12 @@ export class SessionManager {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // W-PERMERR：auth-bypass 咽喉放行（#212 同款坑自查：case 在 orgAction switch 内，
+    // 此处不放行则 org CLI 恒收 unsupported）。写/撤授权文件，非决议类
+    if (action === "auth-bypass") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
 
@@ -5910,6 +5924,20 @@ export class SessionManager {
           ensureProjectClaudeMd(anchor, name); // §3.4 防漂移种子（幂等：存在即认不覆盖）
           this.emitOrgState();
           return { ok: true, data: { group: r.group, needsConfirm: r.needsConfirm, confirm: r.confirm } };
+        }
+        case "auth-bypass": {
+          // W-PERMERR：用户明示授权「跳过权限确认」的写入口（#69 授权半边落位——
+          // readBypassAuthorization 此前无写路径=授权位恒 false，生产环境勾选恒拒且
+          // 无放行通道，1016 用户实锤）。on/off 双向（撤销=删授权即收回，fail-closed
+          // 语义不破坏）；写 dataDir/permission-auth.json（与读侧同源同格式）
+          const on = bool("on");
+          const file = join(this.cfg.dataDir, "permission-auth.json");
+          if (on) {
+            writeFileSync(file, JSON.stringify({ bypass_authorized: true, authorized_by: str("by") || "org-cli", scope: "org-dispatch+create", updated_at: Date.now() }, null, 2) + "\n", "utf-8");
+          } else {
+            try { rmSync(file, { force: true }); } catch { /* 已不在场=目标态 */ }
+          }
+          return { ok: true, data: { bypass_authorized: on } };
         }
         case "project-status": {
           const id = str("id");

@@ -5938,6 +5938,18 @@
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-create-cancel>取消</button><button class="primary-btn" type="button" data-create-submit>创建会话</button></div>';
                   return html;
                 }
+                // W-PERMERR：权限拒绝文案兜底——新 relay 返回中文+指引；旧 relay 仍回
+                // `forbidden: <reason>` 英文码，此处翻译已知码（双端不同版本过渡期兼容）
+                function permErrText(raw) {
+                  const s = String(raw || "");
+                  const T = {
+                    "production_bypass_denied": "已按安全策略拒绝「跳过权限确认」——当前连接的是生产服务，取消勾选可直接创建；确需跳过，请在终端运行 org auth-bypass on 授权后重试",
+                    "env_unknown_bypass_denied": "已按安全策略拒绝「跳过权限确认」——无法确认工作目录安全域，取消勾选可直接创建；确需跳过，请在终端运行 org auth-bypass on 授权后重试",
+                    "above_role_tier_ceiling": "所选权限档位超出允许上限，请改选较低档位",
+                  };
+                  for (const k of Object.keys(T)) if (s.indexOf(k) >= 0) return T[k];
+                  return s || "未知错误";
+                }
                 function openCreatePop() {
                   closeCreatePop();
                   // FB15 智能默认：上次创建用的引擎优先（仍 ready 才算数），否则首个 ready 引擎
@@ -5974,6 +5986,22 @@
                   document.body.append(back, pop);
                   const prompt = pop.querySelector("[data-create-field='prompt']");
                   if (prompt) prompt.focus();
+                  // W-PERMERR：勾选「跳过权限确认」即时预警——生产/云连接下此勾选会被
+                  // relay 权限闸拒绝（1016 实锤），提前一行 hint 让用户知情（提交仍走
+                  // relay 裁决，双保险）；非生产连接零打扰
+                  const skipBox = pop.querySelector("[data-create-field='skipPerm']");
+                  if (skipBox) skipBox.addEventListener("change", () => {
+                    let hint = pop.querySelector("[data-perm-hint]");
+                    const prodConn = location.port === "8787" || !!(window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active());
+                    if (!(skipBox.checked && prodConn)) { if (hint) hint.remove(); return; }
+                    if (!hint) {
+                      hint = document.createElement("div");
+                      hint.dataset.permHint = "";
+                      hint.style.cssText = "margin:6px 0 0;font-size:var(--fs-C);color:var(--working);line-height:1.5";
+                      hint.textContent = "当前连接的是生产服务，「跳过权限确认」需先授权，直接创建会被拒——可取消勾选，或终端运行 org auth-bypass on 授权";
+                      pop.querySelector(".create-checks")?.after(hint);
+                    }
+                  });
                 }
                 function closeCreatePop() { closeEngineMenu(); document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); } // 件九：浮层随弹窗同收
                 // 件九：引擎分组浮层（可用置顶 / 不可用灰置+原因小字；壳复用 .model-menu）
@@ -6136,7 +6164,7 @@
                   S.ackWaiters.set(id, { res: (ack) => {
                     clearTimeout(wd);
                     if (ack && ack.ok === false && ack.needs_auth) { b2Toast("引擎未登录，未创建会话——登录引导已弹出", 5000); if (window.__ccDeck005LoginCard && eng && eng !== "auto") window.__ccDeck005LoginCard.open(eng); } // #102 批 B：fail-fast 拒绝自动弹登录卡（relay 拦截时已同步 kick，此处幂等兜底）
-                    else if (ack && ack.ok === false) b2Toast("新建会话失败: " + (ack.error || "未知错误"));
+                    else if (ack && ack.ok === false) b2Toast("新建会话失败: " + permErrText(ack.error), 5200); // W-PERMERR：拒绝文案中文化+长显（旧 relay 英文 reason 码翻译兜底）
                     else if (ack && ack.ok === true && ack.degraded) b2Toast("已创建 · 引擎降级为 " + ((ENGINES[ack.engine] || [ack.engine || "claude"])[0]) + "：" + (ack.degraded_reason || ""));
                   }, t: wd });
                 }
