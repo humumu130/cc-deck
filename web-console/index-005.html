@@ -460,6 +460,18 @@
     .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"], .source-option.active[data-source-choice="aggregate"] { border-left: 3px solid var(--brand); }
     .source-option strong {flex: 1; color: var(--text-strong); font-size: var(--fs-A-item);}
     .source-option small {color: var(--dim); font: var(--fs-B) var(--mono);}
+    /* W-ENGDROP（Windows WebView2 布局塌陷三症状根修，#b2-engine-menu 专用——
+       .source-option 为源选择/引擎菜单共用类，不全局改防波及）：
+       ① 弹窗宽度上限（JS 侧 minWidth 跟触发器，这里 max-width 弹性收口）
+       ② CJK 名称列 min-content=单字宽：flex 收缩即逐字竖排——nowrap+ellipsis+min-width:0
+       ③ 描述无截断策略长文折行错位（Qwen/ZCode 行）——nowrap+ellipsis 单行省略
+       ④ 徽章/灯为 flex item 可被压——flex:none；截断后 title 兜底看全文（渐进增强：
+       静态 nowrap 在前，宽屏富余时无视觉变化；窄屏旧内核降级=省略号而非塌陷） */
+    #b2-engine-menu { max-width: min(460px, calc(100vw - 32px)); }
+    #b2-engine-menu .source-option { min-height: 38px; }
+    #b2-engine-menu .source-option .engine-badge { flex: none; }
+    #b2-engine-menu .source-option strong { flex: 0 0 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 名称=标识符优先全显（多模态终验抓的细节：名称不应先于描述被截） */
+    #b2-engine-menu .source-option small { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 描述承担窄屏收缩（截断优先于名称） */
     .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
     .source-mode button {flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .source-mode button.active { border-color: var(--selected-line); background: var(--selected-bg); color: var(--text-strong); }
@@ -5971,7 +5983,12 @@
                   const menu = document.createElement("div");
                   menu.id = "b2-engine-menu";
                   menu.className = "model-menu";
-                  menu.style.width = "300px";
+                  // W-ENGDROP（Windows WebView2 实锤）：宽度不再钉死 300px——弹窗窄于
+                  // 触发器时 CJK 名称列被压到单字宽逐字竖排。改为 minWidth=max(300,
+                  // 触发器宽)，并 clamp 到视口（min-width 优先级高于 max-width，
+                  // 不 clamp 时窄视口下 CSS 收口失效必横溢）
+                  menu.style.minWidth = Math.min(Math.max(300, anchor ? anchor.offsetWidth : 0), window.innerWidth - 32) + "px";
+                  menu.style.width = "auto";
                   menu.setAttribute("role", "menu");
                   menu.setAttribute("aria-label", "选择引擎");
                   const chosen = S.engineChoice || defaultEngineId();
@@ -6004,6 +6021,11 @@
                     }
                   }
                   menu.innerHTML = html;
+                  // W-ENGDROP：名称/描述单行省略后 title 兜底看全文（悬停渐进增强）
+                  menu.querySelectorAll(".source-option").forEach((o) => {
+                    const st = o.querySelector("strong"); if (st) st.title = st.textContent;
+                    const sm = o.querySelector("small"); if (sm) sm.title = sm.textContent;
+                  });
                   menu.addEventListener("click", (ev) => { // 菜单挂 body，对话域大委托够不到——本层直连（b2-perm-menu 同款模式）
                     const pick = ev.target.closest("[data-engine-choice]");
                     if (pick) { pickEngine(pick); return; }
