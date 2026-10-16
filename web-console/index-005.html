@@ -455,6 +455,18 @@
     .source-option:hover { background: var(--hover); }
     .source-option.active { background: var(--selected-bg); }
     .source-option[data-source-choice="local"] { border-left: 2px solid var(--source-company); }
+    /* W-PILL4 ③（0.6 风格）：源图标右下角通道小标——☁=云通道 / ⌗=局域网直连（聚合行无标） */
+    .source-option .source-dot { position: relative; }
+    .source-option[data-source-choice="cloud"] .source-dot::after {
+      content: "☁"; position: absolute; right: -4px; bottom: -4px;
+      font: 8px/9px var(--mono); color: var(--dim); background: var(--panel);
+      border-radius: 4px; padding: 0 1px;
+    }
+    .source-option[data-source-choice="local"] .source-dot::after {
+      content: "⌗"; position: absolute; right: -4px; bottom: -4px;
+      font: 8px/9px var(--mono); color: var(--dim); background: var(--panel);
+      border-radius: 4px; padding: 0 1px;
+    }
     .source-option[data-source-choice="cloud"] { border-left: 2px solid var(--source-home); }
     .source-option[data-source-choice="aggregate"] { border-left: 2px solid var(--brand); }
     .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"], .source-option.active[data-source-choice="aggregate"] { border-left: 3px solid var(--brand); }
@@ -9941,13 +9953,13 @@ function connectLan(ctx) {
         // cloud→云源名（快照 relay_name 优先，未达显桥地址）；aggregate→「聚合 · 全部源」；local→本机
         let name;
         if (!bridge || state === "unconfigured") name = "＋ 添加服务器";
-        else if (v === "aggregate") name = "聚合 · 全部源";
+        else if (v === "aggregate") name = "聚合"; /* W-PILL4 ② 文案简化 */
         else if (v === "cloud") name = (cloudCtx.hasSnapshot && cloudCtx.relayName)
           ? sourceDisplayName(String(cloudCtx.relayName))
           : ((cloudCtx.cfg && cloudCtx.cfg.wsUrl) ? hostOf(cloudCtx.cfg.wsUrl) : "云桥");
         else name = sourceDisplayName(String(bridge.relayName || "relay"));
         const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
-        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? count + " 会话 · " + (v === "aggregate" ? "聚合视图" : "在线") : state === "connecting" ? "连接中…" : "已断开 · 自动重连中";
+        const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? String(count) + " 会话" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中"; /* W-PILL4 ③：去「· 在线」状态词 */
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
           switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
@@ -9976,14 +9988,13 @@ function connectLan(ctx) {
                 aggRow.className = "source-option";
                 aggRow.type = "button";
                 aggRow.dataset.sourceChoice = "aggregate";
-                aggRow.innerHTML = '<span class="source-dot status-disconnected"></span><strong>聚合 · 全部源</strong><small>—</small>';
+                aggRow.innerHTML = '<span class="source-dot status-disconnected"></span><strong>聚合</strong>'; /* W-PILL4 ②③：文案简化+small 副行退役 */
                 (cloudRow || localRow).after(aggRow);
               }
             } else if (aggRow) { aggRow.remove(); aggRow = null; }
             if (aggRow) {
               const bothOn = ctx.status === "online" && (cloudCtx.status === "online" || !cloudLinked);
-              const aggCount = ctx.sessions.size + (shellCloud ? cloudCtx.sessions.size : 0);
-              aggRow.querySelector("small").textContent = v === "aggregate" ? aggCount + " 会话 · 聚合中" : bothOn ? "全部源合并展示" : "等待源在线…";
+              /* W-PILL4 ③：small 三态副行退役（计数/「全部源合并展示」/等待提示全去）——只留状态灯 */
               aggRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(bothOn ? "online" : "connecting"));
               aggRow.classList.toggle("active", v === "aggregate");
             }
@@ -10007,7 +10018,7 @@ function connectLan(ctx) {
                 cloudRow.appendChild(renameBtn);
               } else if (renameBtn && cs !== "online") { renameBtn.remove(); }
               else if (renameBtn) { renameBtn.dataset.relayName = String(cloudCtx.relayName); }
-              cloudRow.querySelector("small").textContent = cs === "online" ? "云桥 · 在线" : cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : "云桥 · " + (cloudCtx.statusText || "离线");
+              cloudRow.querySelector("small").textContent = cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : (cloudAddr ? hostOf(cloudAddr) : "云桥"); /* W-PILL4 ③：去在线/离线文字（状态由连接灯承载） */
               cloudRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cs === "online" ? "online" : cs === "connecting" ? "connecting" : "offline"));
               cloudRow.classList.toggle("active", cloudActive);
             }
@@ -11996,9 +12007,16 @@ function connectLan(ctx) {
         const mk = (c, src) => {
           if (!c || !c.hasSnapshot) return;
           const p = c.lastSnapshotPayload;
+          // W-PILL4 ④：logs 融合——快照基线 + 视角切走期间的地基增量缓存（切回消息全量）
+          const logsMerged = { ...((p && typeof p === "object" && p.logs) || {}) };
+          if (c.logBuffer) for (const [sid, arr] of c.logBuffer) {
+            const base = Array.isArray(logsMerged[sid]) ? logsMerged[sid] : [];
+            const merged = [...base, ...arr].slice(-300);
+            if (merged.length) logsMerged[sid] = merged;
+          }
           const payload = (p && typeof p === "object")
-            ? { ...p, sessions: [...c.sessions.values()] } // 缓存 payload 全字段 + 最新会话态
-            : { relay_name: c.relayName, schema_version: 1, sessions: [...c.sessions.values()] };
+            ? { ...p, sessions: [...c.sessions.values()], logs: logsMerged } // 缓存 payload 全字段 + 最新会话态 + 增量日志融合
+            : { relay_name: c.relayName, schema_version: 1, sessions: [...c.sessions.values()], logs: logsMerged };
           window.__ccDeck005Frames.emit({ kind: "frame", source: src, frame: { type: "SNAPSHOT", payload } });
         };
         const v = viewSource();
@@ -12555,6 +12573,17 @@ function connectLan(ctx) {
         // 视角源走（cloud 视角吃云帧的团队字段，local/aggregate 吃本机——两源 SNAPSHOT 不互相覆盖团队域）。
         // W-WINPAIR-R3 补：视角错位的 SNAPSHOT 不丢——每源自存完整 payload，setSourceView 切换时
         // 对目标源补喂 Team.onFrame 重建团队域（SNAPSHOT 一次性，错过视角窗口≠永久丢数据）
+        // W-PILL4 ④（1016 用户实锤 P1）：切走视角期间本源的 SESSION_LOG 增量被 B2 门控丢弃，
+        // 切回后 replay 只补 sessions 不补 logs → 会话最后几条消息丢失。地基层（LAN/云两路共用
+        // 本 onEvent）环形缓存每会话日志增量，replaySnapshots 融合下发——切回即全量新。
+        if (message.type === "SESSION_LOG" && message.session_id) {
+          const buf = context.logBuffer || (context.logBuffer = new Map());
+          const arr = buf.get(message.session_id) || [];
+          const items = Array.isArray(message.payload) ? message.payload : [];
+          for (const l of items) if (l && typeof l === "object") arr.push(l);
+          if (arr.length > 300) arr.splice(0, arr.length - 300);
+          buf.set(message.session_id, arr);
+        }
         if (context === (viewSource() === "cloud" ? cloudCtx : ctx)) Team.onFrame(context, message);
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
         context.lastSnapshotPayload = message.payload; // W-WINPAIR-R3：全字段缓存（projects/org_confirms/acceptances/notifications…）
@@ -12563,6 +12592,9 @@ function connectLan(ctx) {
         context.sessions = new Map(message.payload.sessions.filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, Object.assign(session, { relay_source: session.relay_source || srcTag })]));
         context.hasSnapshot = true;
         context.relayName = message.payload.relay_name || location.host;
+        // W-PILL4 ① 加固：快照到达即刷源胶囊（云快照常滞后于视角切换——setSourceView 瞬间
+        // cloudCtx.hasSnapshot 还是 false 显「云桥」，快照几秒后到不刷则胶囊恒停旧名）
+        if (typeof refreshSourceSwitchers === "function") refreshSourceSwitchers();
         if (!context.sessions.has(context.selectedSessionId)) context.selectedSessionId = null;
         renderSessionList();
       }
@@ -12667,7 +12699,7 @@ function connectLan(ctx) {
             if (choice === "aggregate") { // W-WINPAIR-R3：聚合特殊源行（平级平权，与其他源行同语言）
               closeSourceMenu(switcher);
               setSourceView("aggregate");
-              showToast("多源聚合 · 全部源会话合并展示");
+              showToast("多源聚合"); /* W-PILL4 ② */
               return;
             }
             const wasActive = option.classList.contains("active");
