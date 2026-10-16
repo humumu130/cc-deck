@@ -198,7 +198,7 @@ ok(shell.includes("if (cloudMode) cloudDisconnect();"), "C11 pagehide 云链卸�
 // C12 语法门：六内联块 node --check（B批施工的主回归门）
 {
   const blocks = [...shell.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  ok(blocks.length === 6, `C12 内联块数量 6（实际 ${blocks.length}）`);
+  ok(blocks.length === 7, `C12 内联块数量 7（实际 ${blocks.length}；W-BLANKSET2 诊断版新增全局错误显形块——钩子摘除时还原 6）`);
   const dir = join(tmpdir(), "005-parity-blocks");
   mkdirSync(dir, { recursive: true });
   let synFails = 0;
