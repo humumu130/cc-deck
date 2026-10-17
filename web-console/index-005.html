@@ -9321,7 +9321,11 @@
                 setTimeout(render, 0);
               })();
             </script>
-          </section>
+          <!-- W-BLK3B（#145 根修）：此处原有一个多余 </section>——d-notify 改弹窗形态
+             （#119 V3）时壳已提前闭合于 9030 行，残留的旧尾部闭合越级关掉 stage-desktop，
+             使 d-settings 掉出到 main 直下（y=视口外=设置页「空白」，Mac 壳 test.32→37
+             存活 5 版的真凶；Chrome/WebKit 解析一致，此前 headless 验证只查 DOM 渲染未查
+             视觉几何故漏检）。删除该多余闭合，d-settings 回 desktop-frame 流内。 -->
 
           <section class="desktop-screen" id="d-settings">
             <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-card" data-settings-nav="general"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-gear"></use></svg></span><strong>通用</strong></div></div><div class="queue-card" data-settings-nav="provider"><div class="row"><span class="avatar">◈</span><strong>Agent 引擎</strong></div></div><div class="queue-card selected" data-settings-nav="connections"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong></div></div><div class="queue-card" data-settings-nav="identity"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队身份模板</strong></div></div><div class="queue-card" data-settings-nav="extensions"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-table"></use></svg></span><strong>扩展</strong></div></div><div class="queue-card" data-settings-nav="about"><div class="row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-info"></use></svg></span><strong>关于</strong></div></div><div class="settings-nav-foot" data-settings-nav-foot>v0.0.0<br>本机 relay</div></aside>
