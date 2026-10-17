@@ -157,7 +157,9 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         (ws as HbWs).isAlive = true;
       });
       ws.on("error", () => undefined);
-      ws.on("close", () => {
+      ws.on("close", (closeCode, closeReason) => {
+        // W-CLOUDFIX2：close 成对日志（与 DO 同口径）——自建桥同症排产
+        console.log(`[do-life] close dev=${dev} conn=${connId} code=${closeCode} reason=${String(closeReason)}`);
         socks.delete(connId);
         wanConns.delete(connId);
         router.unregister(connId);
