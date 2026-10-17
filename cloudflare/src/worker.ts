@@ -403,7 +403,12 @@ export class RouterDO extends DurableObject {
           } catch (e) {
             // 目标连接濒死时 send 会抛；不兜住会沿 webSocketMessage 冒泡，
             // 把发送方连接一起 1011 踢掉（桥无缓冲，此帧只能丢弃）
-            console.log(`[cloud-bridge] send failed conn=${connId}: ${e}`);
+            // W-CLOUDFIX（#149）：send 失败=该连接已死但 close 事件可能迟到/丢失
+            // （半开），路由位不腾则后续帧持续 ROUTE_MISS——立即 unregister 让
+            // 设备重连的 register 顶替路径干净（幂等：close 事件迟到时再 unregister
+            // 是 no-op）
+            this.router.unregister(connId);
+            console.log(`[cloud-bridge] send failed conn=${connId} (unregistered): ${e}`);
           }
         }
       },

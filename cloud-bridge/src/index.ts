@@ -71,7 +71,15 @@ export function startCloudServer(port: number, token: string, extraPorts: number
           } catch { /* 非信封帧按原样发 */ }
         }
         const ws = socks.get(connId);
-        if (ws?.readyState === WebSocket.OPEN) ws.send(frame);
+        if (ws?.readyState !== WebSocket.OPEN) return;
+        try {
+          ws.send(frame);
+        } catch (e) {
+          // W-CLOUDFIX（#149）：send 抛=半开死连接（readyState 还 OPEN），不兜会沿
+          // webSocketMessage 冒泡踢掉发送方；立即 unregister 腾路由位防持续 miss
+          router.unregister(connId);
+          console.log(`[bridge] send failed conn=${connId} (unregistered): ${e instanceof Error ? e.message : e}`);
+        }
       },
       close: (connId, code, reason) => {
         wanConns.get(connId)?.ws.close(code, reason);
