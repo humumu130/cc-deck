@@ -3336,27 +3336,10 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             异质分离。渲染条件放宽为 WORKING 或有子 Agent 条目：非 WORKING 但后台仍在跑/
             刚收尾定格时，盒形态保持、仅渲染子 Agent 部分（回合结束后仍可展开查看 ✓ 定格）。
             排队注入消息在盒下方，CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
-        {s.status === "WORKING" || (s?.subagents?.length ?? 0) > 0 ? (
+        {/* W-DETAIL2 件一：WORKING 主状态行（你在做什么…+计时）迁输入栏上方固定吸附
+            （原在对话流内随内容滚动——用户 1018 实锤）；本盒只留并行子 Agent 展开块 */}
+        {(s?.subagents?.length ?? 0) > 0 ? (
           <View style={d.liveRow}>
-            {s.status === "WORKING" ? (
-              <View style={d.liveMain}>
-                <LiveStatusLine
-                  summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
-                  startedAt={s.turn_started_at ?? s.updated_at}
-                  color={c.working}
-                  // 手机屏窄：状态栏不显 ctx（2026-09-16 用户反馈）——终端转轮行长文案
-                  // 只挤得下几个字，ctx 占用让位（桌面端不受限照常显示）
-                  tok={undefined}
-                />
-                <Pressable
-                  style={[d.stripBtnWarn, d.opRipple]}
-                  android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
-                  onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
-                >
-                  <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
-                </Pressable>
-              </View>
-            ) : null}
             {/* 并行子 Agent 状态（#142 三轮 + #186 并入/紧凑化）：标题行即折叠开关
                 （「subAgent + 总数」+ 尾部箭头，总数保留、无「运行中」字样，走帧星只属于
                 具体条目）；条目行相对标题行缩进形成层级；agCollapsed 模块级记忆；条目行首
@@ -3463,6 +3446,25 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             单行截断；落位=审批横幅/模板行/附件行之上、消息流之下。header 只留标题+
             元信息+权限胶囊。终态（DONE/ERROR）不入舱（StatusStrip 收口不变）；终端
             实时行（零宽前缀）隐藏 token 防双计；呼吸点 #148 低频步进（原口径迁移） */}
+        {/* W-DETAIL2 件一：WORKING 主状态行固定吸附（原对话流内随滚——用户实测拍板迁位）。
+            键盘弹出/收起随底部栈整体让位（root paddingBottom kb 收缩式）自然移动 */}
+        {s.status === "WORKING" ? (
+          <View style={d.dockWork}>
+            <LiveStatusLine
+              summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
+              startedAt={s.turn_started_at ?? s.updated_at}
+              color={c.working}
+              tok={undefined}
+            />
+            <Pressable
+              style={[d.stripBtnWarn, d.opRipple]}
+              android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
+              onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
+            >
+              <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {dock && (dock.state === "WORKING" || dock.state === "WAITING") ? (
           <View style={[d.dockLine, { borderLeftColor: dockColor }]}>
             <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
@@ -3884,7 +3886,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   thinkToggleT: { fontSize: 9, lineHeight: 10, color: c.dim },
   thinkToggleTOn: { color: c.brandA, fontWeight: "600" },
   // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应（paddingTop 收紧贴头部）
-  fixedBar: { paddingHorizontal: 14, paddingTop: 5, borderBottomWidth: 1, borderBottomColor: c.line },
+  /* W-DETAIL2 件二：去双线——fixedBar 底边框退役（tab 指示线承载选中态语义独占分隔）；
+      tab 行收紧（paddingVertical 4→2、filterRow marginBottom 10→6） */
+  fixedBar: { paddingHorizontal: 14, paddingTop: 4 },
   strip: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
@@ -3897,6 +3901,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 单行制）：左缘 2px 状态色（005 session-state-dock 语言保留）+ 一行流（呼吸点·
   // 状态词·走秒·token·当前操作），行高恒定 15，动作文本 flex 收缩单行截断——
   // 原头部两行制（dock/dockRow/dockStateT/dockElapsed/dockTok/dockTask/dockAct）退役
+  dockWork: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 12, marginBottom: 6, paddingLeft: 0, paddingVertical: 4 }, /* W-DETAIL2 件一：WORKING 主状态行（LiveStatusLine 自带转轮+计时） */
   dockLine: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 5 },
   dockLineState: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
   dockLineMeta: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
@@ -3928,12 +3933,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
   // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }, /* W-DETAIL2 件二 */
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 2, borderBottomWidth: 2, borderBottomColor: "transparent" }, /* W-DETAIL2 件二：降高 */
   // 005 mobile-detail-tabs：激活 text-strong 加粗 + brand 底杠（指示条动画保留）
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2, borderRadius: 1, backgroundColor: c.brandA },
-  tabT: { fontSize: 12, color: c.dim },
+  tabT: { fontSize: 11.5, color: c.dim }, /* W-DETAIL2 件三裁决=A 纯汉字收紧（理由见回执） */
   tabTOn: { color: c.textStrong, fontWeight: "700" },
   // #36 权限胶囊（R2 设置簇左位，思考开关右侧成组）：h14/r7 与思考开关同形态语言
   permCluster: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
