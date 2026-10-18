@@ -618,25 +618,92 @@ function Shell() {
   // 挂载与切换」因子；60s 稳定则崩面在域挂载面，仍崩则崩面在会话域本体
   const [tab, setTab] = useState<TabKey>("sessions");
   // 件六③：列表页左右滑切底部导航域（用户拍板，对齐主流 App 域切换手势）。横占优
-  // 判定（|dx| > |dy|*2 且 ≥48px）让垂直滚动（FlatList/ScrollView 纵滑）零冲突；
+  // 判定（|dx| > |dy|*2 且 ≥24px）让垂直滚动（FlatList/ScrollView 纵滑）零冲突；
   // 详情层（navLayer 盖顶）与各 Modal（向导/详情页/菜单 sheet）是独立渲染层，触点
   // 到不了这里，天然不打架；TAB_ORDER 序=底栏序（左滑进右滑退，边界 no-op）。
   // tabRef 镜像：PanResponder 创建一次，release 读实时 tab（闭包陈旧值防陈旧切回）
+  //
+  // W-NOTIFY2 件二（用户 1018 拍板：硬切改跟手过渡）：滑动期双页同相位位移+当前页
+  // 轻视差（0.35 系数，微信式）；松手按「过半 |dx|≥w/2 或速度 vx≥0.55」判定落位，
+  // spring 收尾后 setTab+卸载源页（落定仍单页挂载——保挂载纪律不破：会话域
+  // ListScreen 恒挂机制不变，仅动画期目标页临时挂载/恒挂容器参与位移）。native
+  // driver 全程（transform-only）。
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  // swipe 态：from=源 tab（正在显示），to=目标 tab，dir=+1 左滑进右页 / -1 右滑回左页
+  const [swipe, setSwipe] = useState<{ from: TabKey; to: TabKey; dir: 1 | -1 } | null>(null);
+  const swipeRef = useRef<{ to: TabKey; dir: 1 | -1; grabbed: boolean } | null>(null);
+  // 进度值：0=未动 .. W=完成切换（clamp）。动画期每帧 setValue（native driver）
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const swipeW = () => Dimensions.get("window").width;
   const swipeTabs = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       // 捕获阶段抢判（FlatList/ScrollView 滚动响应器会先占普通阶段——横占优时
-      // 父层在 capture 阶段接管，垂直滚动 dy 占优时放行给列表，零冲突）
-      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) >= 48 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
-      onPanResponderRelease: (_e, g) => {
+      // 父层在 capture 阶段接管，垂直滚动 dy 占优时放行给列表，零冲突）。
+      // swipe 进行中（grabbed）持续接管
+      onMoveShouldSetPanResponderCapture: (_e, g) => {
+        if (swipeRef.current?.grabbed) return true;
+        if (Math.abs(g.dx) < 24 || Math.abs(g.dx) <= Math.abs(g.dy) * 2) return false;
         const i = TAB_ORDER.indexOf(tabRef.current);
-        if (g.dx <= -48 && i >= 0 && i < TAB_ORDER.length - 1) setTab(TAB_ORDER[i + 1]);
-        else if (g.dx >= 48 && i > 0) setTab(TAB_ORDER[i - 1]);
+        const dir = g.dx < 0 ? 1 : -1; // 左滑(dir=1)=进右页；右滑(dir=-1)=回左页
+        const ni = i + dir;
+        if (ni < 0 || ni >= TAB_ORDER.length) return false; // 边界 no-op
+        swipeRef.current = { to: TAB_ORDER[ni], dir, grabbed: true };
+        swipeX.setValue(0);
+        setSwipe({ from: tabRef.current, to: TAB_ORDER[ni], dir });
+        return true;
+      },
+      onPanResponderMove: (_e, g) => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        // 跟手：反方向拖动允许退回（进度 clamp 0..w）
+        const prog = s.dir === 1 ? -g.dx : g.dx;
+        swipeX.setValue(Math.max(0, Math.min(swipeW(), prog)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        s.grabbed = false;
+        const w = swipeW();
+        const prog = s.dir === 1 ? -g.dx : g.dx;
+        const settle = prog >= w / 2 || (s.dir === 1 ? g.vx : -g.vx) <= -0.55;
+        if (settle) {
+          // 落位：spring 到 w → setTab（目标页接管）→ 卸载源页/清态
+          Animated.spring(swipeX, { toValue: w, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
+            if (!finished) return;
+            setTab(s.to);
+            setSwipe(null);
+            swipeRef.current = null;
+          });
+        } else {
+          // 回弹：spring 回 0 → 清态（停在源页）
+          Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
+            if (!finished) return;
+            setSwipe(null);
+            swipeRef.current = null;
+          });
+        }
+      },
+      onPanResponderTerminate: () => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        s.grabbed = false;
+        Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(() => {
+          setSwipe(null);
+          swipeRef.current = null;
+        });
       },
     }),
   ).current;
+  // 双页位移插值：目标页 toX = dir*w → 0（从侧缘进）；当前页 curX = 0 → -dir*w*0.35（轻视差）
+  const swipePageX = useMemo(() => {
+    const w = 500; // 占位量程（插值对象只建一次，实际 w 在 setValue clamp 已控）
+    return {
+      toX: swipeX.interpolate({ inputRange: [0, w], outputRange: [swipe?.dir === 1 ? w : -w, 0], extrapolate: "clamp" }),
+      curX: swipeX.interpolate({ inputRange: [0, w], outputRange: [0, (swipe?.dir === 1 ? -1 : 1) * w * 0.35], extrapolate: "clamp" }),
+    };
+  }, [swipe, swipeX]);
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
@@ -975,7 +1042,17 @@ function Shell() {
               覆盖（盖过底栏），从任一域推入、返回回原 tab */}
           <View style={st.tabRoot}>
             <View style={st.tabPane} {...swipeTabs.panHandlers}>
-              <View style={[st.domain, tab !== "sessions" && st.domainHidden]}>
+              {/* W-NOTIFY2 件二：swipe 态 ListScreen 域参与双页位移——
+                  to==='sessions'（回会话）=目标页角色（显示+toX 从左缘进）；
+                  from==='sessions'（离会话）=当前页角色（curX 视差退）；否则维持 hidden */}
+              <Animated.View
+                style={[
+                  st.domain,
+                  tab !== "sessions" && !swipe && st.domainHidden,
+                  swipe?.to === "sessions" && { transform: [{ translateX: swipePageX.toX }] },
+                  swipe?.from === "sessions" && { transform: [{ translateX: swipePageX.curX }] },
+                ]}
+              >
                 {(!detail || navPhase !== "idle") && (
                   <ListScreen
                     ref={listBackRef}
@@ -990,9 +1067,9 @@ function Shell() {
                     onOpenArtPool={() => setArtPoolOpen(true)}
                   />
                 )}
-              </View>
+              </Animated.View>
               {tab !== "sessions" ? (
-                <View style={st.domain}>
+                <Animated.View style={[st.domain, swipe?.from === tab ? { transform: [{ translateX: swipePageX.curX }] } : null]}>
                   {tab === "team" ? (
                     <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
                   ) : tab === "projects" ? (
@@ -1011,7 +1088,26 @@ function Shell() {
                       onEdit={(e) => { setSetupScan(false); setSetup(e.id); }}
                     />
                   )}
-                </View>
+                </Animated.View>
+              ) : null}
+              {/* swipe 目标页覆盖层（to!=='sessions'：三域轻挂，落位 setTab 后由上方
+                  正式渲染接管并清态卸载本层；to==='sessions' 走 ListScreen 恒挂容器） */}
+              {swipe && swipe.to !== "sessions" ? (
+                <Animated.View style={[st.domain, st.swipeOver, { transform: [{ translateX: swipePageX.toX }] }]}>
+                  {swipe.to === "team" ? (
+                    <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
+                  ) : swipe.to === "projects" ? (
+                    <ProjectsTab
+                      onOpenSession={openDetail}
+                      onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
+                      onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
+                      onGoTeam={() => setTab("team")}
+                      onGoSessions={() => setTab("sessions")}
+                    />
+                  ) : (
+                    <SettingsPage onGoSessions={() => setTab("sessions")} onSetup={() => undefined} onEdit={() => undefined} />
+                  )}
+                </Animated.View>
               ) : null}
             </View>
             <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount, team: teamBadge }} />
@@ -1083,6 +1179,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tabPane: { flex: 1 },
   domain: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   domainHidden: { display: "none" },
+  // W-NOTIFY2 件二：swipe 目标页覆盖层（盖当前页之上，实底防透）
+  swipeOver: { zIndex: 30, backgroundColor: c.bg },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,

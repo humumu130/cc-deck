@@ -407,10 +407,14 @@ async function main(): Promise<void> {
   // 休眠语义拆分（C-3 跟进）：saved 单字段判定
   check(listSrc.includes("s.saved === true && s.status !== \"WORKING\" && s.status !== \"WAITING\""), "休眠判定 saved 单字段（pinned=纯置顶，C-3 拆分落地）");
   // ③ App 滑切 tab：panHandlers 挂 tabPane + 横占优判定 + tabRef 防陈旧
+  // W-NOTIFY2 件二跟改：滑切升级为跟手过渡（判定改排除式语义同前：横不占优即放行）
   check(appSrc.includes("{...swipeTabs.panHandlers}"), "滑切手势挂 tabPane（件六③）");
   check(appSrc.includes("TAB_ORDER") && appSrc.includes('["sessions", "team", "projects", "settings"]'), "滑切序=底栏序");
-  check(appSrc.includes("Math.abs(g.dx) > Math.abs(g.dy) * 2"), "横占优判定（垂直滚动零冲突）");
+  check(appSrc.includes("Math.abs(g.dx) <= Math.abs(g.dy) * 2"), "横占优判定（排除式——垂直滚动零冲突，W-NOTIFY2 跟手版）");
   check(appSrc.includes("tabRef.current"), "tabRef 镜像防闭包陈旧");
+  check(appSrc.includes("swipePageX.toX") && appSrc.includes("swipePageX.curX"), "双页同相位位移（目标页+当前页视差 0.35）");
+  check(appSrc.includes("prog >= w / 2 || (s.dir === 1 ? g.vx : -g.vx) <= -0.55"), "松手过半/速度判定落位（spring 收尾）");
+  check(appSrc.includes("swipeOver"), "目标页覆盖层（落位 setTab 接管+清态卸载——保挂载纪律）");
 
   console.log("K. 回归双修（铃铛恒显/分组对齐）+ 件七/件八");
   // 🔧回归①：铃铛恒显（0=无计数态，不再整钮消失）

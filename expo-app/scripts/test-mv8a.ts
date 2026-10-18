@@ -191,10 +191,16 @@ async function main(): Promise<void> {
   check(tdSrc.includes("memberStatusOf(info.status)"), "成员词映射接线");
   check(tdSrc.includes("待你确认 · {groupConfirms.length}"), "节① 确认队列置顶保持（v3 修订②拍板）");
 
-  console.log("F. 通知中心（二级页形态 + 三分组）");
-  check(notifSrc.includes('<Modal visible={open} animationType="slide" onRequestClose={onClose}>'), "全屏二级页（非 transparent 贴底 sheet）");
-  check(!notifSrc.includes("transparent"), "transparent 退役（v3 ph-pnotif 整页形态）");
-  check(notifSrc.includes("SafeAreaView"), "SafeArea 顶（appbar 语言）");
+  console.log("F. 通知中心（W-NOTIFY2 抽屉形态 + 三分组）");
+  // 形态断言随用户 1018 拍板跟改：全屏覆盖退役 → bottom-sheet 抽屉（transparent Modal
+  // +压暗+上拉+grabber+滑删+清除全部；数据链/三分组/ACK 门硬条款全保持）
+  check(notifSrc.includes('<Modal visible={open} transparent animationType="none" onRequestClose={closeSheet} statusBarTranslucent>'), "抽屉宿主=transparent Modal（硬件返回走 closeSheet 下滑动画）");
+  check(notifSrc.includes("styles.grabber"), "grabber 把手（抽屉顶居中）");
+  check(notifSrc.includes("height: sheetH"), "72% 屏高抽屉（2/3~3/4 拿捏）");
+  check(notifSrc.includes("borderTopLeftRadius: 16"), "圆角顶");
+  check(notifSrc.includes("清除全部"), "清除全部按钮（批量 dismissed 权威账）");
+  check(notifSrc.includes("SWIPE_DELETE_PX = 72"), "行滑删阈值 72px（跟手+回弹）");
+  check(notifSrc.includes("g.dy >= 60 || g.vy >= 1.2"), "抽屉头下拉关闭（60px/速度判定）");
   check(notifSrc.includes("需你行动"), "「需你行动」组（v3 ndot r）");
   check(notifSrc.includes("groupHead(\"动态\""), "「动态」组（v3 ndot n）");
   check(notifSrc.includes("已处理"), "「已处理」折叠区保持（M13-6E 规格①）");
@@ -202,7 +208,7 @@ async function main(): Promise<void> {
   check(notifSrc.includes("NotifIcon"), "行首 severity 图标（v3 nrow .ic）");
   check(notifSrc.includes("notiRowAlert"), "行动行 alert 态（红边红底）");
   check(notifSrc.includes("定位来源 ↗"), "回跳钮 v3 act 语言");
-  check(notifSrc.includes("act(item.key, \"dismissed\")"), "× 忽略走 dismissed 权威账（不清零硬条款）");
+  check(notifSrc.includes("act(item.key, \"dismissed\")"), "× 忽略/滑删走 dismissed 权威账（不清零硬条款）");
   check(notifSrc.includes("act(item.key, \"handled\")"), "知道了走 handled 权威账");
 
   console.log("G. 会话页（ListScreen：顶栏铃铛 + r3 引擎徽章）");
