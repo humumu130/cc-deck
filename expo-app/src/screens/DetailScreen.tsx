@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
@@ -2166,6 +2166,13 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚。
   // 六视图翻页（#250）：消息/全部两页各自过滤，当前页的滚动容器才跟随滚底
   const logs = s ? store.timelineOf(sid) : [];
+  // W-PUSHPERF ①：渐进上屏——挂载首帧只渲染尾部 REVEAL_N 条（骨架即出转场跟手），
+  // InteractionManager 空闲后放开全量（长转录分帧上屏，JS 不被首帧阻塞饿死动画）
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const h = InteractionManager.runAfterInteractions(() => setRevealed(true));
+    return () => h.cancel();
+  }, [sid]);
   const procFont = useProcessFont();
   const procVisible = logs.filter(
     (e) =>
@@ -3233,7 +3240,9 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         </ScrollView>
       ) : (() => {
         // 转录页（对话过滤视图）：list 取过滤结果，跨天分隔游标随本页 map 推进
-        const list = shownMsg;
+        // W-PUSHPERF ①：渐进上屏——首帧只渲染尾部 REVEAL_N 条（转场顺滑），交互空闲后全量
+        const REVEAL_N = 40;
+        const list = revealed || shownMsg.length <= REVEAL_N ? shownMsg : shownMsg.slice(-REVEAL_N);
         let lastDay = "";
         return (
       <ScrollView

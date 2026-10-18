@@ -747,7 +747,9 @@ function Shell() {
     setNavPhase("closing");
     Animated.timing(navX, { toValue: Dimensions.get("window").width, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (finished) {
-        setDetail(null);
+        // W-PUSHPERF ②：返回不卸载详情（隐藏保挂载）——重开同 sid 零重建秒开；
+        // 换 sid 时 setDetail 新值触发换树（单槽 LRU=1，内存不涨）。navX 停在屏外宽
+        // = 隐藏态；openDetail 重置 navX 再滑入
         setNavPhase("idle");
       }
     });
@@ -759,7 +761,7 @@ function Shell() {
   useEffect(() => {
     if (navPhase === "idle") return;
     const t = setTimeout(() => {
-      if (navPhase === "closing") setDetail(null);
+      // W-PUSHPERF ②：closing 兜底也不卸载（保挂载口径统一）
       setNavPhase("idle");
     }, 500);
     return () => clearTimeout(t);
