@@ -12,7 +12,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
 import { SessionStatSub } from "./page-head";
 import { SourceSwitch } from "./source-switch";
-import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtLastActive, fmtTok, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
@@ -148,6 +148,18 @@ type ListRow =
   | { h: "sec"; key: string; label: string; count: number; grp?: "team" | "active"; collapsed?: boolean; teamColor?: string }
   | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
+
+// W-LIST2 件一：卡间微信风 hairline 分隔——单线、左右留边对齐卡 padding 14（不顶满
+// 屏宽）、组头下首卡不画（leadingItem=组头时跳过，与 SectionHeader 的 divided 组间线
+// 避重）、末卡后 RN 分隔器天然无线。色=主题 line 降透明度（深色主题融成 hairline、
+// 浅色主题本身即极浅灰），密度档通用（极简平铺行同线，原 swipeWrapM 注释口径的
+// 「极淡 hairline」从未实装，本件统一落地）。
+function ListRowSeparator({ leadingItem }: { leadingItem?: ListRow | null }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  if (!leadingItem || leadingItem.h !== false) return null;
+  return <View style={[styles.rowSep, { backgroundColor: withA(c.line, 0.6) }]} />;
+}
 
 // #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
 function clipSrcName(name: string): string {
@@ -780,44 +792,8 @@ function UndoBar({ shown, title, onUndo }: { shown: boolean; title: string; onUn
   );
 }
 
-// 上下文占用 mini 指示：30px 微型条 + 百分比（与详情页头部 ctx 行、网页端同口径同分级）
-function CtxMini({ s }: { s: SessionState }) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const used = s.context_usage ?? 0;
-  if (!used) return null;
-  const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
-  const pct = contextPct(used, limit);
-  const lv = contextLevel(used, limit);
-  return (
-    <View style={styles.ctxMini}>
-      <View style={styles.ctxMiniBar}>
-        <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[lv] }} />
-      </View>
-      <Text style={[styles.ctxMiniT, { color: c[lv] }]}>{pct}%</Text>
-    </View>
-  );
-}
-
-// 上下文水位区（极简行专用，常显）：右端固定 64px 区 = 3px 细条（宽按水位比例、
-// contextLevel 分级色）+ 下方 9px tabular 百分比；无数据出灰色 "–" 占位——右缘不空缺不跳位
-function CtxCell({ s }: { s: SessionState }) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const used = s.context_usage ?? 0;
-  const has = used > 0;
-  const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
-  const pct = contextPct(used, limit);
-  const lv = contextLevel(used, limit);
-  return (
-    <View style={styles.ctxCell}>
-      <View style={styles.ctxCellBar}>
-        {has ? <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[lv] }} /> : null}
-      </View>
-      <Text style={[styles.ctxCellT, has && { color: c[lv] }]}>{has ? `${pct}%` : "–"}</Text>
-    </View>
-  );
-}
+// W-LIST2 件二①：列表卡水位组件（CtxMini 标准档/CtxCell 极简档）整链退役——上下文
+// 水位迁移至详情页头部颗粒水位计（DetailScreen CtxSegMeter），列表卡不再承载水位。
 
 // memo：流式刷新只重渲变化的那一行（onCardMenu 引用稳定（setMenuFor）；
 // 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
@@ -905,7 +881,6 @@ const SessionCard = memo(function SessionCard({
           {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
           <View style={{ flex: 1 }} />
           {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-          <CtxCell s={s} />
         </View>
       ) : compact ? (
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
@@ -931,8 +906,8 @@ const SessionCard = memo(function SessionCard({
             {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
-            {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡 */}
-            <CtxMini s={s} />
+            {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡。
+                W-LIST2 件二①：列表卡水位 mini 退役（上下文水位迁详情页头部颗粒计） */}
           </View>
         </>
       ) : (
@@ -978,18 +953,18 @@ const SessionCard = memo(function SessionCard({
                   无源徽/无元信息/无水位）整行不渲染（桌面 r3 条件渲染同款）。W-MV8A：引擎徽
                   补位（任务书「引擎源徽章行」——词表命中才显，与 TeamDetailPage EngineBadge
                   单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
-              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || (s.context_usage ?? 0) > 0 || engineBadgeable(s.engine) ? (
+              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
                 <View style={styles.srowR3}>
                   <EngineBadge engine={s.engine} size="sm" />
                   {srcBadge ? <SrcBadge {...srcBadge} /> : null}
                   {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
-                      display 切换不插拔 */}
+                      display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
+                      条件同步摘水位段（防右端空挂） */}
                   {r3Meta.shown.map((m) => (
                     <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
                   ))}
                   {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
                   <View style={{ flex: 1 }} />
-                  <CtxMini s={s} />
                 </View>
               ) : null}
             </View>
@@ -1542,6 +1517,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         key={density}
         data={rows}
         keyExtractor={(r) => r.key}
+        ItemSeparatorComponent={ListRowSeparator}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1932,6 +1908,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 用户 test.25 实测打回——形态键（圆角/底色/描边/行距）回 c6d1691 定版；
   // 行高回调（paddingVertical）系用户行高反馈闭环成果，保留不回退
   swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
+  // W-LIST2 件一：卡间 hairline（色由组件内 withA(c.line,.6) 动态注入——双主题一套）
+  rowSep: { height: StyleSheet.hairlineWidth, marginHorizontal: 14 },
   swipeWrapC: { marginBottom: 2 },
   swipeWrapM: { marginBottom: 1 },
   swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
@@ -1964,11 +1942,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
   // 极简行水位区（常显）：固定 64px 右对齐 = 细条轨道（44px）+ 9px 百分比/占位，
   // 有无水位各行右缘恒定不跳
-  ctxCell: { width: 64, alignItems: "flex-end", gap: 2.5 },
-  ctxCellBar: { width: 44, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
-  ctxCellT: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"], color: c.faint },
-  // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
   liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, paddingLeft: 6 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7）；1013 行距压缩 -1 */
+  // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
   titleC: { lineHeight: 18, color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
   sumC: { lineHeight: 14, color: c.faint, fontSize: 11, marginTop: 1 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
@@ -2023,9 +1998,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
   meta: { fontSize: 10, color: c.faint, flexShrink: 1 },
   // 上下文占用 mini（foot 最右）：30px 微型条 + 百分比
-  ctxMini: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ctxMiniBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
-  ctxMiniT: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 24, textAlign: "right" },
   empty: { alignItems: "center", paddingTop: 90, paddingHorizontal: 30 },
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },

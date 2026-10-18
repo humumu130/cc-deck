@@ -1773,6 +1773,22 @@ export interface DetailBackHandle {
   requestBack: () => boolean;
 }
 
+// W-LIST2 件二②③：详情头颗粒水位计（电脑端 index-005 context-meter 分段形制移植）——
+// 20 格颗粒（w3×h6 圆角1，尺寸按手机屏定）替代完整条状；亮格色=报警档分级（正常
+// dim / 60-84 黄 / ≥85 红，与 ctxTone 同源同词表），暗格=ctxTrack；百分比文本保留在
+// 组件尾侧（视觉干净：颗粒承形、数字承精确值，不双条不双字）。
+function CtxSegMeter({ pct, tone, cells = 20 }: { pct: number; tone: string; cells?: number }) {
+  const { c } = useTheme();
+  const on = Math.round((Math.min(100, Math.max(0, pct)) / 100) * cells);
+  return (
+    <View style={{ flexDirection: "row", gap: 1.5, alignItems: "center" }}>
+      {Array.from({ length: cells }, (_, i) => (
+        <View key={i} style={{ width: 3, height: 6, borderRadius: 1, backgroundColor: i < on ? tone : c.ctxTrack }} />
+      ))}
+    </View>
+  );
+}
+
 export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; onOpenArtPool?: () => void; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
@@ -2603,20 +2619,26 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
           <View style={d.headMeta}>
-            {/* A4-4 查漏（桌面件十六信息行序）：目录→水位胶囊→活跃时间。#159 方案A 的
-                「一行一档字号一种形态」保持；水位百分比仍只在报警档亮色（60-84 黄 /
-                ≥85 红），正常档归入 dim；目录=尾两段缩短（全长在「更多」tab 统计区） */}
+            {/* A4-4 查漏（桌面件十六信息行序）：目录→水位→活跃时间。#159 方案A 的
+                「一行一档字号一种形态」保持；W-LIST2 件二②③：水位从纯文本百分比升级
+                颗粒水位计（20 格分段形制，正常 dim/60-84 黄/≥85 红）——颗粒承形、数字
+                承精确值；目录=尾两段缩短（全长在「更多」tab 统计区） */}
             {srcMeta || s.cwd || ctxUsed > 0 ? (
-              <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
-                {srcMeta}
-                {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
-                {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
-                {s.cwd && ctxUsed > 0 ? " · " : ""}
+              <>
+                <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
+                  {srcMeta}
+                  {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
+                  {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
+                  {s.cwd && ctxUsed > 0 ? " · " : ""}
+                </Text>
                 {ctxUsed > 0 ? (
-                  <Text style={{ color: ctxTone, fontVariant: ["tabular-nums"] }}>{ctxPct}%</Text>
+                  <View style={d.headCtx}>
+                    <CtxSegMeter pct={ctxPct} tone={ctxTone} />
+                    <Text style={[d.headCtxPct, { color: ctxTone }]}>{ctxPct}%</Text>
+                  </View>
                 ) : null}
-                {" · "}{fmtLastActive(s.updated_at || s.started_at)}
-              </Text>
+                <Text style={[d.sub, { flexShrink: 0 }]}>{" · "}{fmtLastActive(s.updated_at || s.started_at)}</Text>
+              </>
             ) : null}
             {/* #36 设置簇（右锚）：权限胶囊 + 思考开关成组——同为会话级 14px 小胶囊，
                 形态语言一致。权限胶囊是"状态灯"：标准=幽灵盾标（低噪声保锚点）、
@@ -3835,6 +3857,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   moreSecT: { marginBottom: 4, color: c.faint, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
   // 水位计（context-meter 005 形制）
   meterWrap: { paddingVertical: 4 },
+  // W-LIST2 件二②：headMeta 行内颗粒水位组（颗粒带+%文本，行高 ~14 内贴合）
+  headCtx: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 0 },
+  headCtxPct: { fontSize: 11, fontVariant: ["tabular-nums"] },
   meterHead: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   meterKicker: { color: c.faint, fontSize: 9, letterSpacing: 0.8 },
   meterModel: { color: c.textStrong, fontSize: 11, fontWeight: "700", marginTop: 2 },
