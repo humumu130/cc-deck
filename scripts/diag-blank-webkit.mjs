@@ -67,9 +67,45 @@ const probe = await page.evaluate(() => {
 });
 console.log("[diag] 结构探测:", JSON.stringify(probe).slice(0, 300));
 
+// ===== W-BLK4：连态注入（#145 第五轮）=====
+// 生产 relay 只读消费：WS 连 8787 收 SNAPSHOT，经帧总线（地基 emit 同款入口）
+// 注入页面——B2/B4 渲染链全跑，会话列表/团队卡塞满=真壳连态。零命令上行。
+if (process.argv.includes("--connected")) {
+  const token = fs.readFileSync(`${process.env.HOME}/.cc-deck/data/token`, "utf8").trim();
+  const wsUrl = `ws://127.0.0.1:8787/ws?token=${encodeURIComponent(token)}`;
+  console.log("[diag] 连态注入:", wsUrl.slice(0, 50) + "…");
+  const conn = await page.evaluate(async (u) => {
+    return await new Promise((resolve) => {
+      const frames = window.__ccDeck005Frames;
+      if (!frames) { resolve("no-bus"); return; }
+      let snap = 0, upd = 0;
+      const ws = new WebSocket(u);
+      const done = () => resolve(`ws=snap:${snap}/upd:${upd}`);
+      ws.onmessage = (ev) => {
+        try {
+          const m = JSON.parse(String(ev.data));
+          frames.emit({ kind: "frame", frame: m, source: "lan" });
+          if (m.type === "SNAPSHOT") snap++;
+          else if (m.type && m.type !== "COMMAND_ACK") upd++;
+        } catch {}
+      };
+      ws.onopen = () => console.log("[page] ws open");
+      ws.onerror = () => { resolve("ws-error"); };
+      ws.onclose = (e) => { resolve(`ws-closed code=${e.code}`); };
+      // 也喂 ws 状态事件（B2 的 status 语义）+ 挂 sessionCount 变化等待
+      frames.emit({ kind: "ws", state: "open" });
+      setTimeout(done, 6000); // 收 6s 帧（SNAPSHOT+可能的增量）
+    });
+  }, wsUrl);
+  console.log("[diag] 连态注入结果:", conn);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/01c-connected.png` });
+}
+
 // 切设置视图（多 selector 容错）
 const switched = await page.evaluate(() => {
-  const cand = document.querySelector('[data-d="set"]') || [...document.querySelectorAll("button,span,div")].find((x) => (x.textContent || "").trim() === "设置" && x.querySelector("svg, i"));
+  // W-BLK4：005 真实 rail 键优先（data-domain）——旧 fallback 易点中 mobile 导航
+  const cand = document.querySelector('.rail-btn[data-domain="settings"]') || document.querySelector('[data-d="set"]') || [...document.querySelectorAll("button,span,div")].find((x) => (x.textContent || "").trim() === "设置" && x.querySelector("svg, i"));
   if (!cand) return "no-entry";
   cand.click();
   return "clicked";
@@ -77,17 +113,35 @@ const switched = await page.evaluate(() => {
 console.log("[diag] 设置切换:", switched);
 await page.waitForTimeout(2000);
 await page.screenshot({ path: `${OUT}/02-settings.png` });
+// W-BLK4：再等 1s 动态渲染后补一张（连态下 live 区后续填充）
+await page.waitForTimeout(1200);
 
-// 设置容器渲染态
+await page.screenshot({ path: `${OUT}/02b-settings-late.png` });
+// 设置容器渲染态 + W-BLK4 全几何（连态撑高排查：谁把 d-settings 推出视口）
 const state = await page.evaluate(() => {
   const cands = [...document.querySelectorAll("#d-settings, [data-page='settings'], .settings-nav, .settings-row")];
   const first = cands[0];
   if (!first) return { found: 0 };
   const cs = getComputedStyle(first);
   const r = first.getBoundingClientRect();
-  return { found: cands.length, display: cs.display, visibility: cs.visibility, opacity: cs.opacity, height: Math.round(r.height), width: Math.round(r.width), children: first.children.length };
+  // 兄弟节点几何（找撑高者）：#d-settings 的父级 stage-desktop 的直接子域 + 关键层
+  const geo = {};
+  const stage = first.closest(".mode-stage, #stage-desktop") || first.parentElement;
+  if (stage) {
+    geo.stage = { tag: stage.id || stage.className.slice(0, 30), rect: { y: Math.round(stage.getBoundingClientRect().y), h: Math.round(stage.getBoundingClientRect().height), sh: stage.scrollHeight } };
+    geo.siblings = [...stage.children].map((c) => {
+      const cr = c.getBoundingClientRect();
+      return { id: c.id || String(c.className).slice(0, 26), y: Math.round(cr.y), h: Math.round(cr.height), sh: c.scrollHeight, off: Math.abs(cr.y) > 9000 ? "OFFSCREEN" : "" };
+    }).slice(0, 12);
+  }
+  // 全页滚动三件套 + d-settings 深处首行可见性
+  const de = document.documentElement;
+  geo.doc = { scrollH: de.scrollHeight, clientH: de.clientHeight, bodyScrollH: document.body.scrollHeight };
+  const row1 = first.querySelector(".settings-row, .v8-setcard, .v8-sethead");
+  if (row1) { const rr = row1.getBoundingClientRect(); geo.firstRow = { y: Math.round(rr.y), h: Math.round(rr.height), inView: rr.y >= 0 && rr.y < window.innerHeight }; }
+  return { found: cands.length, display: cs.display, visibility: cs.visibility, opacity: cs.opacity, height: Math.round(r.height), width: Math.round(r.width), y: Math.round(r.y), children: first.children.length, ...geo };
 });
-console.log("[diag] 设置容器:", JSON.stringify(state));
+console.log("[diag] 设置容器+几何:", JSON.stringify(state, null, 1));
 
 // 输出错误汇总
 console.log("\n===== console（全部）=====");

@@ -12,7 +12,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # tray-icon：托盘（关窗到托盘 + 右键菜单）；图标用 tauri-build 烙进二进制的默认窗口图标，不需 image-png
-tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "devtools"] } # W-BLK4 诊断批临时开 devtools（不部署不交付）
 # 单实例锁：二次启动唤起主窗口（v2 官方插件，须最先注册）
 tauri-plugin-single-instance = "2"
 # 外链走系统浏览器（v2 的 shell.openExternal 继任者；Rust 侧调用不经 IPC，无需 ACL 放行）
