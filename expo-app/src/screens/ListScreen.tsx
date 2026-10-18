@@ -16,7 +16,7 @@ import { fmtLastActive, fmtTok, displaySrcName, isLiveLine, stripLiveMark } from
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
-import { FadeIn } from "../motion";
+import { FadeIn, useLayoutPulse } from "../motion";
 import { hasActivityCapability, type ProjectGroup, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf } from "../notify-jump";
 import NotifCenterSheet from "./NotifCenterPage";
@@ -1333,6 +1333,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     (s: SessionState) => (s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null),
     [projNameById],
   );
+
+  // W-MOTION：换源/过滤/聚合切换/增删卡 → 列表布局补间（key 序列指纹驱动：同集合
+  // 内容微更新不触发——防 RecyclerView 复用幽灵动画；Android 实验开关+异常静默降级）
+  const rowKeySeq = useMemo(() => rows.map((r) => r.key).join("|"), [rows]);
+  useLayoutPulse(rowKeySeq);
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);

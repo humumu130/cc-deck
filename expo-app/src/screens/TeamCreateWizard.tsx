@@ -7,6 +7,7 @@
 // 手动席不搬（C-6：桌面自己都未入载荷）；反馈区分 needsConfirm（确认卡决议提示）。
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { FadeIn } from "../motion";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { withA, type ThemeColors } from "../theme";
 import { store, useRelay } from "../store";
@@ -171,7 +172,7 @@ export default function TeamCreateWizard({ visible, onClose }: { visible: boolea
             </Pressable>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled"><FadeIn key={step} dy={6} dur={150}>
             {/* 步1 名称 */}
             {step === 0 ? (
               <View style={styles.field}>
@@ -332,7 +333,8 @@ export default function TeamCreateWizard({ visible, onClose }: { visible: boolea
             ) : null}
 
             {err ? <Text style={styles.errT}>{err}</Text> : null}
-          </ScrollView>
+          </FadeIn>
+      </ScrollView>
         )}
 
         {/* 底部步进（结果页隐藏） */}

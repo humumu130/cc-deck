@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
+import { FadeIn, useLayoutPulse } from "../motion";
 import { ENGINE_ACCENT, statusColor, withA, type ThemeColors } from "../theme";
 import { displaySrcName, fmtLastActive } from "../fmt";
 import {
@@ -195,6 +196,10 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   // 拉取结果兜底（旧 relay 无增量帧 = 永远走兜底，行为同旧 GroupModal）
   const board = useMemo(() => src?.boards?.[gid] ?? detail?.board, [src, gid, detail]);
   const ents = useMemo(() => board?.entries ?? [], [board]);
+  // W-MOTION：看板卡增删/换道（BOARD_UPDATED 增量）→ 泳道布局补间；key 序列指纹防
+  // 内容微更幽灵动画（running 灯/时间行刷新不动画）
+  const entKeySeq = useMemo(() => ents.map((x) => `${x.id}:${x.status}`).join("|"), [ents]);
+  useLayoutPulse(entKeySeq);
   const receipts = detail?.receipts ?? [];
   const pool = detail?.pool ?? [];
   const anchor = normDir(g?.anchor_dir);
@@ -308,6 +313,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
           <Text style={styles.tCardTime}>{fmtMdHm(e.updated_at)}</Text>
         </View>
         {open ? (
+          <FadeIn dy={4} dur={140}>
           <View style={styles.tCardX}>
             <Text style={styles.tCardXL}>执行者：{r.resolved && info ? `${info.name} · ${info.role || "—"}` : "未指派"}</Text>
             <Text style={styles.tCardXL}>创建 {fmtMdHm(e.created_at)} · 更新 {fmtMdHm(e.updated_at)}</Text>
@@ -319,6 +325,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
               </Text>
             ) : null}
           </View>
+        </FadeIn>
         ) : null}
       </Pressable>
     );

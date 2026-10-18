@@ -16,6 +16,7 @@ import { displaySrcName, fmtLastActive } from "../fmt";
 import type { ProjectGroup, SessionState } from "../protocol";
 import { useRelay, type SourceStatus } from "../store";
 import { PlusMark } from "../brand";
+import { FadeIn, useLayoutPulse } from "../motion";
 import { ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgData, useOrgDecide } from "./OrgZone";
 import { EngineBadge, TeamDetailPage } from "./TeamDetailPage";
 import TeamCreateWizard from "./TeamCreateWizard";
@@ -85,6 +86,11 @@ export function TeamTab({ onOpenSession, onGoSessions }: { onOpenSession: (sid: 
   const multiSrc = useMemo(() => new Set(confirms.map((x) => x.src.id)).size > 1, [confirms]);
   // 团队卡统计行（A1-8 图标化 + A1-11 待确认数）：席位=编制数+1（Leader 兼管）
   const pendingOf = (gid: string) => confirms.filter((x) => (x.cf.payload as { gid?: unknown } | undefined)?.gid === gid).length;
+  // W-MOTION：团队/项目卡增删与确认卡进出 → 列表布局补间（key 指纹：同集合内容更新不触发）
+  const teamKeySeq = useMemo(() => groups.map((g) => g.g.id).join("|"), [groups]);
+  const confirmKeySeq = useMemo(() => confirms.map((x) => x.cf.id).join("|"), [confirms]);
+  useLayoutPulse(teamKeySeq);
+  useLayoutPulse(confirmKeySeq);
   return (
     <OrgPageShell
       title="团队"
@@ -96,6 +102,7 @@ export function TeamTab({ onOpenSession, onGoSessions }: { onOpenSession: (sid: 
       {/* ① 确认卡队列置顶（A9 节头 + v3 pcfq 语言：红计数徽——「手机置顶」是 v3 修订②
           拍板（确认卡队列=现网第一 citizen）；跨源平铺；多源时逐卡标源名防歧义） */}
       {confirms.length ? (
+        <FadeIn dy={6}>
         <View style={styles.cfQueue}>
           <View style={styles.cfHRow}>
             <Text style={styles.cfH}>待你确认</Text>
@@ -118,6 +125,7 @@ export function TeamTab({ onOpenSession, onGoSessions }: { onOpenSession: (sid: 
             </View>
           ) : null}
         </View>
+        </FadeIn>
       ) : null}
       {/* ② 团队列表卡（v3 hcard team 语言） */}
       {groups.length ? (

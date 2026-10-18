@@ -1830,11 +1830,17 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // 回到底部浮钮（#322 第四轮定位，用户拍板）：对话区顶部居中小胶囊（ChatGPT 手机端
   // 样式，带下箭头），上滑离开底部即出现，吸顶浮动不占布局、不与 App 壳悬浮钮打架
   const [showJump, setShowJump] = useState(false);
+  // W-MOTION：浮钮显隐走 opacity 过渡（常驻挂载+pointerEvents 门控——原条件渲染瞬跳）
+  const jumpOp = useRef(new Animated.Value(0)).current;
   // 回到底部浮钮（第五轮）：滚动中隐藏、停止 ~300ms 后浮现；atBottom/jumpScrollable 由 onScroll 维护
   const jumpIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpScrollable = useRef(false);
   useEffect(() => () => { if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current); }, []);
   useEffect(() => { setShowJump(false); }, [view]);
+  // W-MOTION：showJump/view 变化 → 150ms opacity 过渡（原生驱动）
+  useEffect(() => {
+    Animated.timing(jumpOp, { toValue: showJump && view === "msg" ? 1 : 0, duration: 150, useNativeDriver: true }).start();
+  }, [showJump, view, jumpOp]);
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   // #142 子 Agent 面板展开态（初始同步模块级记忆，点按写回）
@@ -3418,7 +3424,8 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
 
       {/* 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框正上方，
           正圆形；滚动进行中隐藏、停止 ~300ms 才浮现——绝对定位不占布局 */}
-      {showJump && view === "msg" ? (
+      {/* W-MOTION：显隐 150ms opacity 过渡（常驻挂载，pointerEvents 随显隐——隐藏态不挡触达） */}
+      <Animated.View pointerEvents={showJump && view === "msg" ? "auto" : "none"} style={[d.jumpFabHost, { opacity: jumpOp }]}>
         <Pressable
           style={d.jumpFab}
           android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 17 }}
@@ -3430,7 +3437,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         >
           <Text style={d.jumpFabT}>↓</Text>
         </Pressable>
-      ) : null}
+      </Animated.View>
       </View>
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏。
@@ -3823,8 +3830,9 @@ function MicIcon({ color }: { color: string }) {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   // 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框上方，正圆形
+  // W-MOTION：宿主承接定位（absolute/bottom），内层钮去定位——opacity 过渡作用在宿主
+  jumpFabHost: { position: "absolute", bottom: 10, left: 0, right: 0, alignItems: "center", pointerEvents: "box-none" },
   jumpFab: {
-    position: "absolute", bottom: 10, alignSelf: "center",
     width: 34, height: 34, borderRadius: 17,
     alignItems: "center", justifyContent: "center",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,

@@ -10,6 +10,7 @@
 // 文字链 + 副行一句话；detail 态保完整教育文案 + 整宽 32h 按钮（pairGen 同语言）
 import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { withA, type ThemeColors } from "./theme";
+import { FadeIn } from "./motion";
 import { useTheme, useThemeStyles } from "./theme-context";
 import { requestBatteryExempt } from "./notify";
 
@@ -96,6 +97,7 @@ export default function KeepAliveCard({ detail = false, card = false, style }: {
     );
   }
   return (
+    <FadeIn dy={5} dur={150}>
     <View style={[s.kaBox, style]}>
       <View style={s.kaRow1}>
         <View style={[s.kaDot, { backgroundColor: c.working }]} />
@@ -113,5 +115,6 @@ export default function KeepAliveCard({ detail = false, card = false, style }: {
         <Text style={s.kaBtnT}>去优化</Text>
       </Pressable>
     </View>
+    </FadeIn>
   );
 }
