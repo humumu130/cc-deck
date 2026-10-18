@@ -11,6 +11,7 @@ import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../the
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
 import { SessionStatSub } from "./page-head";
+import { SourceSwitch } from "./source-switch";
 import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
@@ -1401,66 +1402,19 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         {/* W-HEAD4 ①②：会话页大标题+五色状态灯计数副题（用户 1016 拍板四页统一；
             源胶囊/铃铛本页原有③④天然满足）——状态计数直扫 snap.sessions 四态 */}
         <View style={{ flexShrink: 0, marginRight: 8 }}>
-          <Text style={styles.headTitleT}>会话</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={styles.headTitleT}>会话</Text>
+            {/* W-HEAD6 追加：源切换标题行内联（与 PageHead 同位——间隔 8px 垂直居中） */}
+            <View style={{ marginLeft: 8 }}>
+              <SourceSwitch onOpenSettings={onOpenSettings} />
+            </View>
+          </View>
           <SessionStatSub counts={sessionStatCounts} />
         </View>
         {/* 件八（用户拍板 2026-10-12）：品牌行移除——「CC Deck」名+图标是单卡时代
             遗物（团队/项目页均无此行，风格不统一）；顶栏只留功能元素，品牌身份交
             系统状态栏/启动器图标。设置入口=底部导航设置域（logo 旧快捷位随之退役） */}
-        <Pressable
-          style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-          hitSlop={6}
-          accessibilityLabel={`连接状态 ${connText}，点击${snap.connState === "unpaired" ? "去设置重新配对" : "立即重连"}`}
-          onPress={() => {
-            // 方案 A（2026-09-16）：设备图标=源切换入口——点击展开源列表切换活动面板，
-            // 切换只动视图不拆连接（store #27 单源=视图过滤）。原三态分流（重试/去设置）
-            // 收进菜单：离线行点选即连接（connectServer 幂等）、菜单底部保留管理入口
-            setSrcMenu((v) => !v);
-          }}
-        >
-          {/* #52 chip 精简：去状态色点与通道后缀（多源混合通道无法单一展示），
-              文案颜色仍承载连接状态（绿/黄/红） */}
-          {/* #80 统计前配电脑图标（桌面端同款），颜色随连接态 */}
-          <DeskGlyph color={connColor} />
-          <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
-          {(snap.connState === "connecting" || snap.connState === "reconnecting") ? <ConnDots color={connColor} /> : null}
-        </Pressable>
-        {srcMenu ? (
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSrcMenu(false)} />
-        ) : null}
-        {srcMenu ? (
-          <View style={styles.srcMenu}>
-            {[...snap.sources].sort((a, b) => (b.id === snap.activeSourceId ? 1 : 0) - (a.id === snap.activeSourceId ? 1 : 0)).map((src) => {
-              const stc = src.state === "online" ? c.done : src.state === "offline" ? c.error : c.working;
-              const entry = srvEntries.find((e) => e.id === src.id);
-              const isActive = src.id === snap.activeSourceId;
-              return (
-                <Pressable
-                  key={src.id}
-                  style={[styles.srcRow, isActive && styles.srcRowOn]}
-                  android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => {
-                    setSrcMenu(false);
-                    if (entry) void store.connectServer(entry);
-                    else onOpenSettings(); // 快照有/落库无（异常态）：引导去设置 tab 看
-                  }}
-                >
-                  <View style={[styles.srcMenuDot, { backgroundColor: stc }]} />
-                  <Text style={styles.srcMenuName} numberOfLines={1}>{src.name}</Text>
-                  <Text style={styles.srcMenuChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              style={styles.srcMenuManage}
-              android_ripple={{ color: c.tintSoft, borderless: false }}
-              onPress={() => { setSrcMenu(false); onOpenSettings(); }}
-            >
-              <Text style={styles.srcMenuManageT}>管理连接（编辑 / 删除）…</Text>
-            </Pressable>
-          </View>
-        ) : null}
+
         {/* W-PORT-B P0-2：会话搜索入口（桌面件九同能力）——点按展开/收起统计行下
             搜索条；搜索激活时图标点亮（品牌色）作过滤中的可视锚 */}
         <Pressable
@@ -1503,6 +1457,32 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         {/* W-EXPOLISH 件七：新增按钮统一「每域列表右上角 ＋」（对齐桌面 list-header
             右上角加号同语言）——会话页右下 FAB 退役（少一个悬浮遮挡元素，跨端动作
             位置肌肉记忆统一）；44px 触区，行为=原 FAB（新建会话弹层） */}
+        {/* W-HEAD6 C：折叠空闲收进 head（原 statRow chip 迁入；有空闲才显） */}
+        {idleCount > 0 ? (
+          <Pressable
+            style={[styles.headCollapseBtn, collapseIdle && styles.headCollapseBtnOn]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+            onPress={toggleCollapse}
+            hitSlop={4}
+            accessibilityLabel={collapseIdle ? `展开空闲会话 ${idleCount} 个` : "折叠空闲会话"}
+          >
+            <Text style={[styles.headCollapseT, collapseIdle && styles.headCollapseTOn]} numberOfLines={1}>
+              {collapseIdle ? `闲 ${idleCount}` : "折闲"}
+            </Text>
+          </Pressable>
+        ) : null}
+        {/* W-HEAD6 C：输出物入口收进 head（原 statRow chip 迁入；能力开才显） */}
+        {artPoolOn ? (
+          <Pressable
+            style={styles.headCollapseBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+            onPress={onOpenArtPool}
+            hitSlop={4}
+            accessibilityLabel="打开全局输出物目录"
+          >
+            <Text style={styles.headCollapseT} numberOfLines={1}>物</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           style={styles.plusBtn}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
@@ -1513,75 +1493,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <PlusMark size={20} color={c.brandA} />
         </Pressable>
       </View>
-      <View style={styles.statRow}>
-        {/* #52 聚合胶囊（替代 #26 电脑图标）：开关与数量合一——聚合开=「聚合 · N」
-            品牌色高亮可点切回；关=「单源」中性色。即当前面板展示范围的自述 */}
-        <Pressable
-          style={{ paddingHorizontal: 7, paddingVertical: 6, borderRadius: 9 }}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-          hitSlop={6}
-          accessibilityLabel={snap.aggregate ? `聚合模式，展示 ${snap.sources.length} 台电脑，点击切回单源` : "单源模式，点击开启聚合"}
-          onPress={toggleAggregate}
-        >
-          {/* 2026-09-14 纯图标版（用户反馈：用图标就不配汉字、去外框）——单源=单台灰
-              电脑；聚合=品牌色主电脑 + 右后灰副电脑半叠放 */}
-          <View style={{ width: 20, height: 14, justifyContent: "flex-end", position: "relative" }}>
-            <View style={{ width: 17, height: 12.5, borderRadius: 3, borderWidth: 2, borderColor: snap.aggregate ? c.brandA : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 2.5 }}>
-              <View style={{ width: 9, height: 2, borderRadius: 1, backgroundColor: snap.aggregate ? c.brandA : c.dim }} />
-            </View>
-            {snap.aggregate && (
-              <View style={{ position: "absolute", top: -2, right: -3, width: 12, height: 9, borderRadius: 2.4, borderWidth: 1.7, borderColor: c.dim, opacity: 0.55 }} />
-            )}
-          </View>
-        </Pressable>
-        <View style={styles.statChips}>
-          {statusItems.map(({ k, n, color }) => (
-            <View key={k} style={styles.statChip}>
-              <View style={[styles.statDot, { backgroundColor: color }]} />
-              <Text style={[styles.statChipT, { color }]}>{n}</Text>
-            </View>
-          ))}
-          {statusItems.length > 0 ? (
-            <Pressable style={styles.helpBtn} onPress={() => setLegendOpen(true)} hitSlop={8}>
-              <Text style={styles.helpT}>?</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        {/* 布局三档循环胶囊（原抽屉「列表布局」拨杆迁入）：折叠空闲同款形制，随手切密度 */}
-        <Pressable
-          style={styles.densityBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-          onPress={cycleDensity}
-          hitSlop={4}
-          accessibilityLabel={`列表布局${DENSITY_LABEL[density]}，点击切换`}
-        >
-          <Text style={styles.densityT} numberOfLines={1}>{DENSITY_LABEL[density]}</Text>
-        </Pressable>
-        {idleCount > 0 ? (
-          <Pressable
-            style={[styles.collapseBtn, collapseIdle && styles.collapseBtnOn]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-            onPress={toggleCollapse}
-          >
-            <Text style={[styles.collapseT, collapseIdle && styles.collapseTOn]} numberOfLines={1}>
-              {collapseIdle ? `展开空闲 ${idleCount}` : "折叠空闲 ▾"}
-            </Text>
-          </Pressable>
-        ) : null}
-        {/* W-MV8A：统计行「通知 · N」胶囊退役——通知入口唯一化为顶栏铃铛（v3 appbar
-            bell 语言；🔧回归修①的「铃铛恒显」口径由顶栏钮继承：恒显、0=无计数态） */}
-        {artPoolOn ? (
-          <Pressable
-            style={styles.chipBtn}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-            onPress={onOpenArtPool}
-            hitSlop={4}
-            accessibilityLabel="打开全局输出物目录"
-          >
-            <Text style={styles.chipT} numberOfLines={1}>输出物</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      {/* W-HEAD6 C：statRow 整行退役——统计已由 head 副题承载（SessionStatSub）；
+        密度三档迁设置页通用面板；折叠空闲/输出物收进 head；聚合开关入源切换浮窗 */}
 
       {/* W-PORT-B P0-2：搜索条（顶栏图标展开；桌面件九同过滤口径）。✕=清空；
           收起随顶栏图标（收起即清空——过滤残留是隐藏态，用户看不见却改了列表） */}
@@ -2122,6 +2035,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   footHintT: { color: c.faint, fontSize: 12 },
   // W-EXPOLISH 件七：右下悬浮新增钮退役——新建统一顶栏右上角 ＋
   // 件七：三域 ＋ 统一规格——44×44 触区 + PlusMark 20px（brand.tsx 单源导出，三处同参）
+  headCollapseBtn: { height: 26, paddingHorizontal: 7, borderRadius: 13, borderWidth: 1, borderColor: c.line, justifyContent: "center", marginRight: 2 }, /* W-HEAD6 C：head 内折叠空闲/输出物小 chip */
+  headCollapseBtnOn: { borderColor: c.brandA, backgroundColor: c.tintSoft },
+  headCollapseT: { fontSize: 10, color: c.dim, lineHeight: 13 },
+  headCollapseTOn: { color: c.brandA },
   plusBtn: {
     width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
     marginRight: -4, overflow: "hidden",

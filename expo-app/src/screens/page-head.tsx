@@ -28,14 +28,6 @@ function BellGlyph({ color, badge, c }: { color: string; badge: number; c: Retur
   );
 }
 
-function PillGlyph({ color }: { color: string }) {
-  return (
-    <Svg width={14} height={14} viewBox="0 0 24 24">
-      <Path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
 export function PageHead({
   title,
   sub,
@@ -49,8 +41,8 @@ export function PageHead({
   sub?: React.ReactNode;
   onBack?: () => void;
   backLabel?: string;
-  /** ③ 源胶囊（全页保留）：{label, onPress}——点名当前源，点击回会话页开菜单 */
-  sourcePill?: { label: string; onPress: () => void };
+  /** ③ 源切换（全页保留，W-HEAD6 追加：标题行内联）：ReactNode——SourceSwitch 组件直入 */
+  sourcePill?: React.ReactNode;
   /** ④ 通知铃铛（全页保留）：{badge, onPress}——badge=需行动数 */
   bell?: { badge: number; onPress: () => void };
   right?: React.ReactNode;
@@ -74,17 +66,17 @@ export function PageHead({
         </Pressable>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={c.title} numberOfLines={1}>{title}</Text>
+        <View style={c.titleRow}>
+          <Text style={c.title} numberOfLines={1}>{title}</Text>
+          {/* W-HEAD6 追加（用户裁决）：源切换从 right 槽挪进标题行——高频主控件享主字号
+              行位置；间隔 8px、与标题行垂直居中（不对齐整 head）；副题行已有统计不拥挤，
+              四页副题有无不一也不漂移。sourcePill 为 ReactNode（SourceSwitch 直入） */}
+          {sourcePill ? <View style={{ marginLeft: 8 }}>{sourcePill}</View> : null}
+        </View>
         {sub != null && sub !== false ? (
           <View style={c.subRow}>{typeof sub === "string" ? <Text style={c.sub} numberOfLines={1}>{sub}</Text> : sub}</View>
         ) : null}
       </View>
-      {sourcePill ? (
-        <Pressable style={c.pillBtn} hitSlop={6} onPress={sourcePill.onPress} accessibilityLabel={`数据源 ${sourcePill.label}，点击去会话页切换`}>
-          <PillGlyph color={tc.dim} />
-          <Text style={c.pillT} numberOfLines={1}>{sourcePill.label}</Text>
-        </Pressable>
-      ) : null}
       {bell ? (
         <Pressable style={c.bellBtn} hitSlop={6} onPress={bell.onPress} accessibilityLabel={`通知${bell.badge ? ` · ${bell.badge} 个需行动` : ""}`}>
           <BellGlyph color={tc.dim} badge={bell.badge} c={c} />
@@ -149,14 +141,9 @@ const makeStyles = (c: ThemeColors) =>
     },
     backBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden", alignItems: "center", justifyContent: "center", flexShrink: 0 },
     title: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 },
+    titleRow: { flexDirection: "row", alignItems: "center" }, /* W-HEAD6 追加：标题行内联源切换 */
     subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
     sub: { fontSize: 10, color: c.dim, lineHeight: 13, fontWeight: "400" },
-    pillBtn: {
-      flexDirection: "row", alignItems: "center", gap: 4, height: 24, paddingHorizontal: 8,
-      borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
-      marginRight: 4, maxWidth: 110, flexShrink: 0,
-    },
-    pillT: { fontSize: 10, color: c.dim, maxWidth: 80 },
     bellBtn: { width: 30, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: 2 },
     badge: {
       position: "absolute", top: -3, right: -6, minWidth: 15, height: 15, borderRadius: 8,

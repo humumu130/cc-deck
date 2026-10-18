@@ -76,17 +76,35 @@ ok(sp.includes("<AboutModal") && sp.includes("<DevicesModal"), "D6 弹层族原�
 
 // ---- F. W-HEAD4 四页 head 重做（1016 用户拍板五点） ----
 {
-  ok(head.includes("sourcePill?: { label: string; onPress: () => void }"), "F1 源胶囊槽（③全页保留）");
+  ok(head.includes("sourcePill?: React.ReactNode"), "F1 源切换槽（③全页保留，W-HEAD6 追加：ReactNode 直入组件）");
   ok(head.includes("bell?: { badge: number; onPress: () => void }"), "F2 铃铛槽（④全页保留）");
   ok(head.includes("export function SessionStatSub"), "F3 会话统计副题组件（②五色状态灯+计数）");
   ok(head.includes("export function useBellBadge") && head.includes("export function useSourceLabel"), "F4 全页复用 hook（badge/label）");
   ok(head.includes("minHeight: 48") && head.includes("paddingVertical: 4"), "F5 v3 总高 48px（详情页 d.head 同高，W-HEAD5 拍板）");
   ok(list.includes("headTitleT}>会话") || list.includes("会话</Text>") || /headTitleT.\{?\d?\}?..会话/.test(list) || list.includes("headTitleT}>{"), "F6 会话页大标题接入");
   ok(list.includes("SessionStatSub"), "F7 会话页状态灯副题接入");
-  ok(orgTabs.includes("sourcePill={onGoSessions") && orgTabs.includes("bell={onGoSessions"), "F8 团队/项目页两槽接入");
+  ok(orgTabs.includes("sourcePill={<SourceSwitch onOpenSettings={onGoSessions} />}"), "F8 团队/项目页源切换接入（W-HEAD6 追加：sourcePill prop=标题行内联）");
   ok(orgTabs.includes("个活跃"), "F9 团队页活跃口径副题");
-  ok(sp.includes("sourcePill={onGoSessions") && sp.includes("bell={onGoSessions"), "F10 设置页两槽接入");
+  ok(sp.includes("sourcePill={<SourceSwitch />}"), "F10 设置页源切换接入（W-HEAD6 追加：标题行内联）");
   ok(app.includes("onGoSessions={() => setTab(\"sessions\")}"), "F11 App 三页传回会话页跳转");
+}
+
+
+// ---- G. W-HEAD6 四页 head v3 收口（用户 1018 深夜全量） ----
+{
+  const sw = readFileSync(join(here, "../src/screens/source-switch.tsx"), "utf8");
+  ok(sw.includes("onlineN}/{sources.length") || sw.includes("{onlineN}/{sources.length}"), "G1 源切换形态=icon+计数（B(a)）");
+  ok(sw.includes("多元聚合"), "G2 浮窗含多元聚合开关（B(c)）");
+  ok(sw.includes('"cc.display.aggregate"'), "G3 聚合键不变（同链双写，功能语义零改动）");
+  ok(sw.includes("sources.length > 1") || sw.includes("const multi = sources.length > 1"), "G4 单源不弹（=1 行为不变）");
+  ok(list.includes('styles.statRow}') === false || !list.includes('<View style={styles.statRow}>'), "G5 statRow 整行退役（C）");
+  ok(list.includes("折闲") && list.includes("headCollapseBtn"), "G6 折叠空闲进 head（C）");
+  ok(list.includes("物</Text>") && list.includes("onOpenArtPool}"), "G7 输出物进 head（C，能力开才显）");
+  ok(sp.includes("卡片密度") && sp.includes("setListDensity"), "G8 密度三档迁设置页（C）");
+  ok(orgTabs.includes("plusBtnBare"), "G9 ＋钮去边框裸形制（D）");
+  ok(list.includes("setSrcMenu((v) => !v)") === false, "G10 会话页旧 srcMenu 退役（B 统一）");
+  ok(head.includes("titleRow") && head.includes("marginLeft: 8"), "G11 源切换标题行内联 8px（W-HEAD6 追加：PageHead titleRow）");
+  ok(list.includes("headTitleT}>会话") || (list.includes("<Text style={styles.headTitleT}>会话</Text>") && list.includes("<SourceSwitch onOpenSettings={onOpenSettings} />")), "G12 会话页 topbar 同步内联位（追加件）");
 }
 
 console.log(`\nmobile3-settings: ${pass} passed, ${fail} failed`);
