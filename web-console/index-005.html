@@ -5025,6 +5025,10 @@
                   }
                   if (passive) {
                     content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
+                  } else if ((w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 600000) {
+                    // #159 件③ 过期治理：waiting_request 超 10min 视为已失效（CLI 多已越过，
+                    // relay sweepStalePending 同语义）——按钮全撤防「点了没反应」假死
+                    content += "\n（该请求已超过 10 分钟未处理，已失效——CLI 多已继续）";
                   } else if (isAsk) {
                     if (single) {
                       actions = '<div class="wait-actions">' + (w.questions[0].options || []).map((o, i) => '<button data-wait-answer="' + i + '">' + esc(o.label) + "</button>").join("") + '<button class="deny" data-wait-deny>取消提问</button></div>';

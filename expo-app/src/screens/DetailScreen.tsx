@@ -64,10 +64,17 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）。四档含"跳过"：
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
-// 005 #166 手机 waitbox 仅浏览口径（s2 定档）：等待卡在手机端只展示不决议——按钮全
-// disabled + 底部引导「请在电脑上处理」。decide/#212 remember 范围等真决议链路原样
-// 保留，后续阶段放开手机远程决议时翻此开关即可
-const WAITBOX_READONLY = true;
+// 005 #166 手机 waitbox 仅浏览口径（s2 定档）——已被 #159（AskUser 应答链路 P0，
+// 2026-10-19 用户令）推翻：开关翻开，手机恢复决议。COMMAND_ANSWER/REJECT 全链在
+// relay（ws-server/cloud 白名单 + session-manager COMMAND_ANSWER 路由 + 托管
+// agent.answer()/外部 bridge.answerPending()），手表端早有发送面（watch.ts），本端
+// 解锁即闭环。decide/#212 remember 范围等真决议链路原样保留
+const WAITBOX_READONLY = false;
+// #159 件③ 过期治理：waiting_request 超 10min 视为已失效（对齐 relay
+// sweepStalePending 的「CLI 已越过」语义）——卡片置灰禁点，防「点了没反应」假死
+const WAITBOX_STALE_MS = 10 * 60 * 1000;
+const isWaitStale = (wr?: { received_at?: number } | null): boolean =>
+  !!wr?.received_at && Date.now() - wr.received_at > WAITBOX_STALE_MS;
 type PermMode = (typeof PERM_CYCLE)[number];
 // P81-8W 权限摘要三端统一词表（specs/081 钉死段；与 web-console PERM_MODE_ZH /
 // 桌面端同表逐字一致，勿改字面——三端单一词表源，本表取代旧局部 PERM_LABEL 四键表）：
@@ -1631,7 +1638,18 @@ function WaitCard({ isAsk, children }: { isAsk: boolean; children: ReactNode }) 
 function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
+  // W-ASKFIX ③：TTL 置灰——下发 90s 后 CLI 已放行本地选择器（relay QUESTION_HOLD_MS），
+  // 晚答仍走 askFallback 注入可达，但 CLI 已死/终态时是死卡——置灰禁点防「点了没反应」
+  const [ttlTick, setTtlTick] = useState(0);
+  const askExpired = !!wr.received_at && Date.now() - wr.received_at > 90_000;
+  useEffect(() => {
+    if (!wr.received_at || Date.now() - wr.received_at > 90_000) return;
+    const t = setTimeout(() => setTtlTick((n) => n + 1), Math.max(1000, wr.received_at! + 90_000 - Date.now()));
+    return () => clearTimeout(t);
+  }, [wr.request_id, wr.received_at]);
   const qs = wr.questions ?? [];
+  const stale = isWaitStale(wr);
+  const ro = WAITBOX_READONLY || stale;
   const single = qs.length === 1 && !qs[0].multi;
   const stepped = qs.length > 1;
   const [picked, setPicked] = useState<Record<number, string[]>>({});
@@ -1671,11 +1689,15 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
     }
   };
   const allAnswered = qs.every((_, i) => answered(i));
-  const submit = () => answer(qs.map((_, i) => free[i]?.trim() || (picked[i] ?? []).join("、")));
+  const submit = () => {
+    if (askExpired) return; // W-ASKFIX ③：过期禁点（晚答已达不了已死 CLI）
+    answer(qs.map((_, i) => free[i]?.trim() || (picked[i] ?? []).join("、")));
+  };
   const freeText = free[qi] ?? "";
 
   return (
     <WaitCard isAsk>
+        {stale ? <Text style={{ color: c.faint, fontSize: 10.5, marginBottom: 4 }}>该提问已超过 10 分钟未处理，视为已失效（CLI 多已继续）</Text> : null}
       <Text style={d.waitT}>◉ Claude 在提问</Text>
       {stepped ? (
         <View style={d.askSteps}>
@@ -1688,7 +1710,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       {q ? (
         <View>
           <Text style={d.askQ}>{q.question}</Text>
-          <View style={[d.askOpts, WAITBOX_READONLY && d.roDim]}>
+          <View style={[d.askOpts, ro && d.roDim]}>
             {q.options.map((o) => {
               const on = (picked[qi] ?? []).includes(o.label);
               return (
@@ -1696,7 +1718,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
                   key={o.label}
                   style={[d.askChip, on && d.askChipOn]}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-                  disabled={WAITBOX_READONLY}
+                  disabled={ro}
                   onPress={() => (single ? answer([o.label]) : q.multi ? toggle(qi, o.label) : pickSingle(qi, o.label))}
                 >
                   <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && on ? "✓ " : "") + o.label}</Text>
@@ -1706,10 +1728,10 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           </View>
           {stepped ? (
             <TextInput
-              style={[d.askFree, { marginBottom: 4 }, WAITBOX_READONLY && d.roDim]}
+              style={[d.askFree, { marginBottom: 4 }, ro && d.roDim]}
               value={freeText}
               onChangeText={(t) => setFree((f) => ({ ...f, [qi]: t }))}
-              editable={!WAITBOX_READONLY}
+              editable={!ro}
               placeholder="或输入自定义回答…"
               placeholderTextColor={c.faint}
               returnKeyType="send"
@@ -1727,21 +1749,21 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       ) : null}
       {!single ? (
         <Pressable
-          style={[d.askSubmit, (WAITBOX_READONLY || !allAnswered) && { opacity: WAITBOX_READONLY ? 0.5 : 0.4 }]}
+          style={[d.askSubmit, (ro || !allAnswered) && { opacity: ro ? 0.5 : 0.4 }]}
           android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
-          disabled={!allAnswered || WAITBOX_READONLY}
+          disabled={!allAnswered || ro || askExpired}
           onPress={submit}
         >
-          <Text style={d.askSubmitT}>提交回答</Text>
+          <Text style={d.askSubmitT}>{askExpired ? "已失效（超时）" : "提交回答"}</Text>
         </Pressable>
       ) : null}
       {single ? (
-        <View style={[d.askFreeRow, WAITBOX_READONLY && d.roDim]}>
+        <View style={[d.askFreeRow, ro && d.roDim]}>
           <TextInput
             style={d.askFree}
             value={free[0] ?? ""}
             onChangeText={(t) => setFree((f) => ({ ...f, 0: t }))}
-            editable={!WAITBOX_READONLY}
+            editable={!ro}
             placeholder="或输入自定义回答…"
             placeholderTextColor={c.faint}
             returnKeyType="send"
@@ -1752,14 +1774,14 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           <Pressable
             style={[d.askFreeBtn, !(free[0] ?? "").trim() && { opacity: 0.4 }]}
             android_ripple={{ color: withA(c.brandA, 0.2), borderless: false }}
-            disabled={!(free[0] ?? "").trim() || WAITBOX_READONLY}
+            disabled={!(free[0] ?? "").trim() || ro}
             onPress={() => (free[0] ?? "").trim() && answer([(free[0] ?? "").trim()])}
           >
             <Text style={d.askFreeBtnT}>作答</Text>
           </Pressable>
         </View>
       ) : null}
-      <Pressable hitSlop={8} disabled={WAITBOX_READONLY} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
+      <Pressable hitSlop={8} disabled={ro} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
         <Text style={d.askSkip}>取消作答（视为拒绝回答）</Text>
       </Pressable>
     </WaitCard>
@@ -2396,6 +2418,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
   // 列表零改渲染层
   const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
+  const wrStale = isWaitStale(wr); // #159 件∆：审批卡同款过期置灰
   wrRef.current = wr; // E3b 决议定向守卫同步（见 wrRef 声明处）
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
@@ -3535,15 +3558,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               /* 005 #166 三级按钮：拒绝=次级描边、允许并记住=第三钮（同次级档次）、
                   允许=唯一实心主钮（done 色）；仅浏览口径下全 disabled 压灰 */
               <View style={[d.wbtns, WAITBOX_READONLY && d.roDim]}>
-                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
+                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => decide(false)}>
                   <Text style={d.btnRejectT}>✕ 拒绝</Text>
                 </PressScale>
                 {wr!.remember ? (
-                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
+                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => setRmOpen(true)}>
                     <Text style={d.btnRememberT}>允许并记住</Text>
                   </PressScale>
                 ) : null}
-                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(true)}>
+                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => decide(true)}>
                   <Text style={d.btnAllowT}>✓ 允许</Text>
                 </PressScale>
               </View>

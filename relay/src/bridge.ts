@@ -2912,6 +2912,7 @@ export class Bridge {
       input_summary: summary,
       suggestions: [],
       decidable: true,
+      received_at: Date.now(), // W-ASKFIX ③：端上 TTL 置灰锚
       ...(questions.length ? { questions } : {}),
       ...(remember ? { remember } : {}),
     };

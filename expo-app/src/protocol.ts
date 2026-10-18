@@ -304,9 +304,9 @@ export interface WaitingPayload {
   tool_name: string;
   input_summary: string;
   suggestions: string[];
+  received_at?: number; // W-ASKFIX ③：TTL 置灰锚（90s 窗口对齐 relay QUESTION_HOLD_MS）
   questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时渲染选项点选作答）
   decidable?: boolean;
-  received_at?: number;
   // #212 允许并记住：存在 = 可记忆（非危险形态），渲染「记住」入口；作答发
   // COMMAND_CONTINUE + remember_scope（relay 落规则）。旧 relay 无此字段
   remember?: { pattern: string; label: string };
