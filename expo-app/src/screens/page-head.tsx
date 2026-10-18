@@ -50,7 +50,10 @@ export function PageHead({
   const c = useThemeStyles(makeStyles);
   const { c: tc } = useTheme();
   return (
-    <View style={c.head}>
+    <View
+      style={c.head}
+      {...(__DEV__ ? { onLayout: (e: { nativeEvent: { layout: { height: number } } }) => console.log(`[head-h] ${title} = ${e.nativeEvent.layout.height}`) } : {})}
+    > /* W-UIFIX 件八：__DEV__ 高度实测钩子（debug 连 metro 读数，release 零开销） */
       {/* W-HEAD5：详情页 d.back 同形制（26×26 r8 tintSoft 方块+14px/2.6 chevron，hitSlop 8 补触区） */}
       {onBack ? (
         <Pressable

@@ -1799,13 +1799,14 @@ export interface DetailBackHandle {
 // 20 格颗粒（w3×h6 圆角1，尺寸按手机屏定）替代完整条状；亮格色=报警档分级（正常
 // dim / 60-84 黄 / ≥85 红，与 ctxTone 同源同词表），暗格=ctxTrack；百分比文本保留在
 // 组件尾侧（视觉干净：颗粒承形、数字承精确值，不双条不双字）。
-function CtxSegMeter({ pct, tone, cells = 20 }: { pct: number; tone: string; cells?: number }) {
+function CtxSegMeter({ pct, tone, cells = 20, small }: { pct: number; tone: string; cells?: number; small?: boolean }) {
   const { c } = useTheme();
   const on = Math.round((Math.min(100, Math.max(0, pct)) / 100) * cells);
+  // W-UIFIX 件二：small 档（标题行右端用）——段 2×5/gap 1，比副题行旧档小一号
   return (
-    <View style={{ flexDirection: "row", gap: 1.5, alignItems: "center" }}>
+    <View style={{ flexDirection: "row", gap: small ? 1 : 1.5, alignItems: "center" }}>
       {Array.from({ length: cells }, (_, i) => (
-        <View key={i} style={{ width: 3, height: 6, borderRadius: 1, backgroundColor: i < on ? tone : c.ctxTrack }} />
+        <View key={i} style={{ width: small ? 2 : 3, height: small ? 5 : 6, borderRadius: 1, backgroundColor: i < on ? tone : c.ctxTrack }} />
       ))}
     </View>
   );
@@ -2363,8 +2364,9 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     return (
       <SafeAreaView style={d.safe} edges={["top"]}>
         <View style={d.head}>
-          <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
-            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+          {/* W-UIFIX 件七同款：会话已消失态返回钮同改 */}
+          <Pressable style={d.backPlain} onPress={onBack} hitSlop={{ left: 14, right: 8, top: 10, bottom: 10 }} accessibilityLabel="返回会话列表">
+            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={c.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M15 18l-6-6 6-6" />
             </Svg>
           </Pressable>
@@ -2640,13 +2642,24 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
           仅报警档亮色），设置簇右锚（原时长已删：消息时间戳已提供时间感，统计区保留耗时全量）。
           可点元素统一圆角 8/tintSoft 底无边框；#164 红线：标题可用宽度不动 */}
       <View style={d.head}>
-        <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+        {/* W-UIFIX 件七：去 tintSoft 方块底，纯 chevron 放大到微信式 24px；触区 40 宽 */}
+        <Pressable style={d.backPlain} onPress={onBack} hitSlop={{ left: 14, right: 8, top: 10, bottom: 10 }} accessibilityLabel="返回会话列表">
+          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={c.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
+          {/* W-UIFIX 件二：水位计挪标题行右端+整体调小一号——副题行还给元信息文字
+              （目录/活跃时间不再被挤截断）；标题 flexShrink 保省略，水位 flexShrink:0 右锚 */}
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
+            {ctxUsed > 0 ? (
+              <View style={[d.headCtx, { marginLeft: "auto" }]}>
+                <CtxSegMeter pct={ctxPct} tone={ctxTone} small />
+                <Text style={[d.headCtxPct, { color: ctxTone }]}>{ctxPct}%</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={d.headMeta}>
             {/* A4-4 查漏（桌面件十六信息行序）：目录→水位→活跃时间。#159 方案A 的
                 「一行一档字号一种形态」保持；W-LIST2 件二②③：水位从纯文本百分比升级
@@ -2660,12 +2673,6 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                   {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
                   {s.cwd && ctxUsed > 0 ? " · " : ""}
                 </Text>
-                {ctxUsed > 0 ? (
-                  <View style={d.headCtx}>
-                    <CtxSegMeter pct={ctxPct} tone={ctxTone} />
-                    <Text style={[d.headCtxPct, { color: ctxTone }]}>{ctxPct}%</Text>
-                  </View>
-                ) : null}
                 <Text style={[d.sub, { flexShrink: 0 }]}>{" · "}{fmtLastActive(s.updated_at || s.started_at)}</Text>
               </>
             ) : null}
@@ -3869,6 +3876,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.line,
   },
   // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
+  // W-UIFIX 件七：纯 chevron 背钮（去 tintSoft 方块底）——40px 触区、图标 24px 微信式
+  backPlain: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -6 },
   back: {
     width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden",
     alignItems: "center", justifyContent: "center",
@@ -3892,7 +3901,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   meterWrap: { paddingVertical: 4 },
   // W-LIST2 件二②：headMeta 行内颗粒水位组（颗粒带+%文本，行高 ~14 内贴合）
   headCtx: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 0 },
-  headCtxPct: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  headCtxPct: { fontSize: 9.5, fontVariant: ["tabular-nums"] }, /* W-UIFIX 件二：随水位计调小一号 */
   meterHead: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   meterKicker: { color: c.faint, fontSize: 9, letterSpacing: 0.8 },
   meterModel: { color: c.textStrong, fontSize: 11, fontWeight: "700", marginTop: 2 },

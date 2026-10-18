@@ -61,9 +61,11 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
         style={c.trigger}
         hitSlop={6}
         android_ripple={{ color: tc.tintSoft, borderless: false, radius: 14 }}
-        accessibilityLabel={`数据源 ${onlineN}/${sources.length} 在线${multi ? "，点击切换或聚合" : ""}`}
+        accessibilityLabel={`数据源 ${onlineN}/${sources.length} 在线，点击${multi ? "切换或聚合" : "查看或管理连接"}`}
         onPress={() => {
-          if (!multi) return; // 单源不弹（行为不变）
+          // W-UIFIX 件六（用户 test.39 推翻「>1 源才弹」）：点击总弹——单源=自己行+
+          // 管理连接（查看/管理入口常在）；聚合行/切源自然只在多源时有意义（菜单内
+          // 聚合行对单源无操作对象，恒在场仅作状态展示）
           setOpen((v) => !v);
         }}
       >
@@ -102,10 +104,10 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     wrap: { position: "relative", flexShrink: 0 },
-    trigger: { flexDirection: "row", alignItems: "center", gap: 4, height: 30, paddingHorizontal: 6, borderRadius: 15 },
+    trigger: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 6, borderRadius: 13 }, /* W-UIFIX 件八：30→26——titleRow 内不撑高（设置页 51→48 与四页齐一） */
     countT: { fontSize: 11, fontWeight: "600" },
     menu: {
-      position: "absolute", top: 34, right: 0, minWidth: 208, zIndex: 100,
+      position: "absolute", top: 30, right: 0, minWidth: 208, zIndex: 100,
       backgroundColor: c.panel, borderRadius: 12, borderWidth: 1, borderColor: c.line,
       paddingVertical: 4, elevation: 6,
       shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },

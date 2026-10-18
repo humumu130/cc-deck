@@ -1055,20 +1055,25 @@ function Shell() {
                   swipe?.from === "sessions" && { transform: [{ translateX: swipePageX.curX }] },
                 ]}
               >
-                {(!detail || navPhase !== "idle") && (
-                  <ListScreen
-                    ref={listBackRef}
-                    sessions={snap.sessions}
-                    connected={snap.connected}
-                    connText={snap.connText}
-                    dirFilter={dirFilter}
-                    onClearDirFilter={() => setDirFilter(null)}
-                    onOpen={openDetail}
-                    onNew={() => { setNewPresetCwd(null); setSheet(true); }}
-                    onOpenSettings={() => setTab("settings")}
-                    onOpenArtPool={() => setArtPoolOpen(true)}
-                  />
-                )}
+                {/* W-UIFIX 件一 P0（返回黑屏根修）：列表常驻双页并存——原条件在
+                    idle+detail（保挂载隐藏态）把列表卸载，而详情 navX 已停屏外
+                    =两层皆空整屏黑（610b69a 保挂载假设「列表在详情底下」，真壳条件
+                    渲染不成立，test.39 主力机实锤）。改恒挂载：详情 navLayer 不透明
+                    盖顶零感知；返回=closing 滑出时列表本就渲染（navPhase!=="idle"
+                    分支既有），落 idle 后列表常驻=零黑屏+零重建秒出（保挂载初衷
+                    在列表侧正确落地）；转场视觉与原生导航一致 */}
+                <ListScreen
+                  ref={listBackRef}
+                  sessions={snap.sessions}
+                  connected={snap.connected}
+                  connText={snap.connText}
+                  dirFilter={dirFilter}
+                  onClearDirFilter={() => setDirFilter(null)}
+                  onOpen={openDetail}
+                  onNew={() => { setNewPresetCwd(null); setSheet(true); }}
+                  onOpenSettings={() => setTab("settings")}
+                  onOpenArtPool={() => setArtPoolOpen(true)}
+                />
               </Animated.View>
               {tab !== "sessions" ? (
                 <Animated.View style={[st.domain, swipe?.from === tab ? { transform: [{ translateX: swipePageX.curX }] } : null]}>

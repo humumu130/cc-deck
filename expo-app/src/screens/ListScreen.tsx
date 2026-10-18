@@ -1796,8 +1796,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担。
     // W-HEAD5（#148 用户拍板）：对齐详情页 d.head——弃 headBg 特别底色（常规 bg）、
     // paddingVertical 4、总高≈48px；headTitleT 15/600 c.text（d.title 同款）
-    paddingHorizontal: 12, paddingVertical: 4,
-    backgroundColor: c.bg, borderBottomWidth: 1, borderBottomColor: c.line,
+    paddingHorizontal: 12, paddingVertical: 4, minHeight: 48, /* W-UIFIX 件八：与 PageHead 统一（原无 minHeight，内容 28-36px 波动） */
+    backgroundColor: c.bg, borderBottomWidth: 1.5, borderBottomColor: c.lineStrong, /* W-UIFIX 件三：分隔线加深加粗一档（line→lineStrong+1.5px，双主题可见不喧宾） */
   },
   headTitleT: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 }, /* W-HEAD5：d.title 同款 */
   // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
@@ -1935,21 +1935,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
     backgroundColor: "transparent", borderWidth: 0,
-    borderRadius: 0, paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 0, paddingVertical: 12, paddingHorizontal: 14, /* W-UIFIX 件五：高度+2（10→12 纵距） */
   },
-  cardC: { borderRadius: 0, paddingVertical: 9, paddingHorizontal: 14 },
+  cardC: { borderRadius: 0, paddingVertical: 11, paddingHorizontal: 14 }, /* W-UIFIX 件五：紧凑档同步 +2 */
   // 极简平铺行：同通栏语言，行高最矮
   // 1013 高度压缩批：单行内容 ~31px 低于 44px 触控底线（改前 ~33 同欠账）——
   // minHeight 44 兜底 + 内容垂直居中（设置行 minHeight 48 同语言），视觉仍为三档最矮
   cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
-  titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
+  titleM: { color: c.text, fontSize: 14.5, fontWeight: "600", flexShrink: 1 }, /* W-UIFIX 件四：极简档同步 13.5→14.5 */
   // 极简行水位区（常显）：固定 64px 右对齐 = 细条轨道（44px）+ 9px 百分比/占位，
   // 有无水位各行右缘恒定不跳
   liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, paddingLeft: 6 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7）；1013 行距压缩 -1 */
   // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
-  titleC: { lineHeight: 18, color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
+  titleC: { lineHeight: 19, color: c.text, fontSize: 15, fontWeight: "600", flexShrink: 1 }, /* W-UIFIX 件四：标题 14→15 加大一档 */
   sumC: { lineHeight: 14, color: c.faint, fontSize: 11, marginTop: 1 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
   folderC: { lineHeight: 13, fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
