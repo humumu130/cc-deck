@@ -142,6 +142,16 @@ export class CloudClient {
   // relay-online，手机 awaitWake 在原连接补发 hello 会合——「错峰永不开会」的根治
   private routeMissStreak = 0;
   private lastMissKickAt = 0;
+  // P0 云桥三号（test.41 实锤）：per-device miss 计数与 park 集——失联旧身份（重装
+  // 前测试机）永久 miss 会绑架换桥风暴：每轮 terminate 把健康设备的下行一起踢断
+  // （41s 一轮循环）。park 三轮换桥仍无 hello 的 dev：停推（sendSealed 跳过）+
+  // 不再计入风暴——hello 到达即 unpark 恢复正常推送
+  private deviceMissCount = new Map<string, number>();
+  private parkedDevices = new Set<string>();
+  // W-ZOMBIEx ②（派单收紧口径）：dev 最近 hello 时刻——风暴统计只认「近 5min 有
+  // hello」的设备（cloudfix3 只排除 parked；未达 park 阈值但长期零 hello 的僵尸
+  // 同样不该绑架换桥——hello 是「设备还活着」的唯一铁证）
+  private lastHelloAt = new Map<string, number>();
   private hbTimer: ReturnType<typeof setInterval> | null = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   private resumeOnOpen = new Set<string>();
@@ -327,6 +337,9 @@ export class CloudClient {
   }
 
   private sendSealed(dev: string, obj: unknown): boolean {
+    // P0 云桥三号：parked 设备停推（每帧必 miss 的僵尸不烧桥——健康设备的下行
+    // 不再被它引发的换桥踢断；hello 到达 unpark 即恢复）
+    if (this.parkedDevices.has(dev)) return false;
     const peer = this.identity.peers.get(dev);
     if (!peer) return false;
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
@@ -532,12 +545,26 @@ export class CloudClient {
       // 落点。节流 30s 一脚（风暴期不连环踢）；阈值前手机真离线（正常 miss 1-2 次/
       // 设备级）不受影响——正常离线设备的 miss 由设备级 inactive 标记承接
       const nowMs = Date.now();
-      if (nowMs - this.lastMissKickAt > 30_000) {
+      // P0 云桥三号：parked 设备的 miss 不进风暴统计（它停推后本就不该再产生 miss——
+      // 残余 miss 只做静默丢弃），也不重置全局计数
+      const lastHello = this.lastHelloAt.get(to) ?? 0;
+      const zombieSilent = nowMs - lastHello > 5 * 60_000; // W-ZOMBIEx ②：5min 零 hello=僵尸静默
+      if (!this.parkedDevices.has(to) && !zombieSilent && nowMs - this.lastMissKickAt > 30_000) {
         this.routeMissStreak += 1;
+        // per-device 计数：同一 dev 在风暴窗内反复 miss（≥4）= 僵尸嫌疑（失联旧身份
+        // 每轮换桥都被推一次必 miss）——park 它，换桥风暴不再被单设备绑架
+        const dm = (this.deviceMissCount.get(to) ?? 0) + 1;
+        this.deviceMissCount.set(to, dm);
+        if (dm >= 4) {
+          this.parkedDevices.add(to);
+          this.routeRetryTimers.delete(to); // 清 pending resume（park 后不补发）
+          console.log(`[cloud] device parked (miss x${dm} during storms, no hello): ${to}`);
+        }
         if (this.routeMissStreak >= 3) {
           this.routeMissStreak = 0;
           this.lastMissKickAt = nowMs;
-          console.log(`[cloud] route-miss storm (${3}x no-ack in 30s), rotating bridge connection`);
+          const parkedList = [...this.parkedDevices];
+          console.log(`[cloud] route-miss storm (${3}x no-ack in 30s), rotating bridge connection${parkedList.length ? ` (parked: ${parkedList.join(",")})` : ""}`);
           if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try { this.ws.terminate(); } catch { /* close 链随后统一处理 */ }
           }
@@ -725,6 +752,13 @@ export class CloudClient {
     }
     if (inner.t === "hello") {
       this.routeMissStreak = 0; // W-CLOUDFIX：手机→relay 方向活——miss 风暴计数清零
+      // P0 云桥三号：parked 设备 hello 到达即复活（正常恢复链——真回网的旧身份
+      // 设备自动恢复推送；per-device 计数清零重新观察）
+      if (this.parkedDevices.delete(f.from) || this.deviceMissCount.has(f.from)) {
+        this.deviceMissCount.delete(f.from);
+        console.log(`[cloud] device unparked on hello: ${f.from}`);
+      }
+      this.lastHelloAt.set(f.from, Date.now()); // W-ZOMBIEx ②：风暴过滤锚
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       // dev 前缀即终端类型（ph-手机 App / wb-网页 / wt-手表）——旧模板硬编码 "phone"，
       // 网页端设备也被打成 phone，#135 排查被误导过一轮
