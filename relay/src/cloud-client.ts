@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import { homedir } from "node:os";
-import type { EventBus } from "./event-bus.js";
+import { REPLAY_FAST_MAX, type EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import type { CloudIdentity } from "./cloud-identity.js";
@@ -433,7 +433,7 @@ export class CloudClient {
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     // 落后太多 = 设备冷启动（内存空但持久化了旧 seq）：增量事件只能更新已知会话、
     // 建不出列表，且上千帧补发挤占桥带宽——超过阈值直接 SNAPSHOT 全量重建
-    if (replay && replay.length <= 200) {
+    if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendSealed(dev, env);
       return;
     }
@@ -900,7 +900,7 @@ export class CloudClient {
     this.wanWatches.set(dev, { lastSeq, active: true });
     if (!known) console.log(`[cloud] watch ${dev} online via wan`);
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
-    if (replay && replay.length <= 200) {
+    if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendWan(dev, env);
       return;
     }

@@ -1,3 +1,8 @@
+// W-RECONNECT：resume 快路径帧数帽——原各处字面 200 提为共享常量并贴 buffer 容量（500）
+// 收口到 460：后台久离线 lastSeq 落后 >200 帧即退化 SNAPSHOT 全量重建（用户实锤
+// 「重进重连很久」主因之一）——460 覆盖面 ×2.3，replay 空集自然无害；>460 仍 SNAPSHOT
+export const REPLAY_FAST_MAX = 460;
+
 import type { Envelope, EventType } from "./types.js";
 import { appendLine } from "./history.js";
 
@@ -18,6 +23,7 @@ export class EventBus {
   private listeners = new Set<Listener>();
 
   constructor(private opts: EventBusOptions = {}) {
+    // W-RECONNECT：resume 快路径帧数帽常量 REPLAY_FAST_MAX（文件顶部导出）——
     const capacity = opts.capacity ?? 500;
     if (opts.preload?.length) {
       const sorted = [...opts.preload].sort((a, b) => a.seq - b.seq);

@@ -26,7 +26,7 @@ import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experien
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import type { EventBus } from "./event-bus.js";
+import { REPLAY_FAST_MAX, type EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import { SNAPSHOT_LOGS_LAN } from "./session-manager.js"; // W-INJECT④：LAN 快照宽窗（云端 CF 安全默认不动）
 import type { RelayConfig } from "./config.js";
@@ -973,7 +973,7 @@ export function startServer(
     const replay = lastSeq > 0 && !bus.isBeyondBuffer(lastSeq) ? bus.replayAfter(lastSeq).filter((env) => !mgr.suppressLeaderEvent(env)) : null;
     // 落后太多 = 客户端冷启动（内存空但 localStorage 存着旧 seq）：增量事件只能更新
     // 已知会话、建不出列表，且上千帧补发挤占带宽——超过阈值直接 SNAPSHOT 全量重建
-    if (replay && replay.length <= 200) {
+    if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) ws.send(JSON.stringify(env));
     } else {
       // #408 大帧根治：日志不再全量内联（随历史膨胀，实测 3 会话即 0.63MiB，规模
