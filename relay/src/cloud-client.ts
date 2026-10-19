@@ -144,8 +144,11 @@ export class CloudClient {
   private lastMissKickAt = 0;
   // P0 云桥三号（test.41 实锤）：per-device miss 计数与 park 集——失联旧身份（重装
   // 前测试机）永久 miss 会绑架换桥风暴：每轮 terminate 把健康设备的下行一起踢断
-  // （41s 一轮循环）。park 三轮换桥仍无 hello 的 dev：停推（sendSealed 跳过）+
-  // 不再计入风暴——hello 到达即 unpark 恢复正常推送
+  // （41s 一轮循环）。park 后停推（sendSealed 跳过）+不再计入风暴——hello 到达即
+  // unpark 恢复正常推送。
+  // W-ZOMBIPARK：park 阈值前置——per-device 连续 miss≥3 直接触发（不经换桥：换桥
+  // 本身会踢健康设备下行）。原「风暴窗内 dm≥4」改为 miss 入口无条件计数（parked
+  // 除外），僵尸从第 1 秒被隔离、健康设备零误伤；风暴 terminate 保留给桥级信号
   private deviceMissCount = new Map<string, number>();
   private parkedDevices = new Set<string>();
   // W-ZOMBIEx ②（派单收紧口径）：dev 最近 hello 时刻——风暴统计只认「近 5min 有
@@ -545,21 +548,27 @@ export class CloudClient {
       // 落点。节流 30s 一脚（风暴期不连环踢）；阈值前手机真离线（正常 miss 1-2 次/
       // 设备级）不受影响——正常离线设备的 miss 由设备级 inactive 标记承接
       const nowMs = Date.now();
-      // P0 云桥三号：parked 设备的 miss 不进风暴统计（它停推后本就不该再产生 miss——
-      // 残余 miss 只做静默丢弃），也不重置全局计数
+      // W-ZOMBIPARK：per-device 连续 miss 计数前置（miss 入口无条件——parked 除外；
+      // 不看风暴窗/zombie 静默：僵尸第 1 秒就该被隔离）。阈值 3 直接触发 park，
+      // 不经换桥——换桥 terminate 会把健康设备的下行一起踢断（本补丁的根因面）。
+      // 「连续」语义：hello 到达清零（设备→relay 方向活=路由必通）；park 后残余
+      // miss 不再计数（静默丢弃）
+      if (!this.parkedDevices.has(to)) {
+        const dm = (this.deviceMissCount.get(to) ?? 0) + 1;
+        this.deviceMissCount.set(to, dm);
+        if (dm >= 3) {
+          this.parkedDevices.add(to);
+          this.routeRetryTimers.delete(to); // 清 pending resume（park 后不补发）
+          console.log(`[cloud] device parked early (miss x${dm}, pre-rotation): ${to}`);
+        }
+      }
+      // 风暴统计（桥级信号）：parked/zombie 静默不进（残余 miss 只做静默丢弃）
       const lastHello = this.lastHelloAt.get(to) ?? 0;
       const zombieSilent = nowMs - lastHello > 5 * 60_000; // W-ZOMBIEx ②：5min 零 hello=僵尸静默
       if (!this.parkedDevices.has(to) && !zombieSilent && nowMs - this.lastMissKickAt > 30_000) {
         this.routeMissStreak += 1;
-        // per-device 计数：同一 dev 在风暴窗内反复 miss（≥4）= 僵尸嫌疑（失联旧身份
-        // 每轮换桥都被推一次必 miss）——park 它，换桥风暴不再被单设备绑架
-        const dm = (this.deviceMissCount.get(to) ?? 0) + 1;
-        this.deviceMissCount.set(to, dm);
-        if (dm >= 4) {
-          this.parkedDevices.add(to);
-          this.routeRetryTimers.delete(to); // 清 pending resume（park 后不补发）
-          console.log(`[cloud] device parked (miss x${dm} during storms, no hello): ${to}`);
-        }
+        // W-ZOMBIPARK：per-device park 已前置到 miss 入口（阈值 3 不经换桥）——此处
+        // 只保留桥级风暴 terminate（hbDead/多设备持续 miss 的桥实例落点切换）
         if (this.routeMissStreak >= 3) {
           this.routeMissStreak = 0;
           this.lastMissKickAt = nowMs;

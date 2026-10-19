@@ -20,6 +20,7 @@
     "test:todo-env": "tsx scripts/test-todo-env.ts",
     "test:waiting-deadlock": "tsx scripts/test-waiting-deadlock.ts",
     "test:cloud": "tsx scripts/test-cloud.ts",
+    "replay:zombipark": "tsx scripts/replay-zombipark.ts",
     "test:005-cloud": "tsx scripts/test-005-cloud.ts",
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-blankset": "node --import tsx/esm scripts/test-005-blankset.ts",
