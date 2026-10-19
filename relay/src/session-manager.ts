@@ -4902,7 +4902,10 @@ export class SessionManager {
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       // W-TASKFLOW：通知文本同带 [task_ref] 头（回执流四处同键）
       this.notifyDispatchClosed(e, status, refReceipt, key);
-      if (status === "done") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath); // W-RESTARTDESIGN §三：done 边沿回执闸（带任务书约定路径）
+      // W-GATEFIX（首战未鸣根因）：failed 收口也查回执——SMALLFIX 8a6ea576 实锤：收口
+      // status=failed 走旧「done 才调度」被静默跳过，无回执+90s 黄框全无。failed 的
+      // 交付存疑度更高（收口异常+回执缺失=双疑），done/failed 统一调度
+      if (status === "done" || status === "failed") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath); // W-RESTARTDESIGN §三：收口边沿回执闸（带任务书约定路径）
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
@@ -7383,7 +7386,11 @@ export class SessionManager {
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     // W-RESTARTDESIGN §三：从任务书 prompt 提取约定回执路径（派单纪律固定写
     // ~/.cc-deck/artifacts/w-*.md）——收口后按此精确核对（无提取值回落前缀扫描）
-    const receiptPath = /(~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md))/i.exec(input.prompt)?.[1];
+    // W-GATEFIX：提取后归一 ~→绝对路径——existsSync 不展开波浪号，旧值 "~/..." 恒
+    // false（有约定路径的核对永远 miss=方向相反的误报 bug；与首战未鸣的 failed 静默
+    // 是两个独立缺陷，本批同修）
+    const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
+    const receiptPath = receiptRel ? join(homedir(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : undefined;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}) });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
@@ -7631,22 +7638,65 @@ export class SessionManager {
    * （随手办/咨询档无回执约定）；failed 不核（失败单的回执常在修复批内补）。
    * 重启窗内定时器丢失由 ledger 条目兜底。扫描失败跳过（artifacts 不可达）。
    */
+  // W-GATEFIX 修3：pending check 落盘（data/pending-receipt-checks.json）——90s 定时器
+  // 是内存态，触发窗内 relay 重启即丢（W-RESTARTDESIGN 注释声称「ledger 条目兜底」
+  // 但未实现——闸从未落任何账）。boot 由 recoverPendingReceiptChecks 补跑（TTL 10min：
+  // 过期单不再报——超过窗的旧单人工核，防重启风暴后陈账轰炸）
+  private pendingReceiptChecksPath(): string {
+    return join(this.cfg.dataDir, "pending-receipt-checks.json");
+  }
+  private loadPendingReceiptChecks(): { id: string; gid: string; title: string; receiptPath?: string; due: number }[] {
+    try {
+      return JSON.parse(readFileSync(this.pendingReceiptChecksPath(), "utf-8")) as { id: string; gid: string; title: string; receiptPath?: string; due: number }[];
+    } catch {
+      return [];
+    }
+  }
+  private savePendingReceiptChecks(list: { id: string; gid: string; title: string; receiptPath?: string; due: number }[]): void {
+    try {
+      writeFileSync(this.pendingReceiptChecksPath(), JSON.stringify(list), "utf-8");
+    } catch { /* 写失败=退回无兜底（现状行为），不炸收口 */ }
+  }
+  private runReceiptCheck(entry: { id: string; gid: string; title: string; receiptPath?: string }): void {
+    try {
+      const artsDir = join(homedir(), ".cc-deck", "artifacts");
+      // 精确优先：任务书提取的约定路径按文件存在性核对（多 worker 并行不假阳）；
+      // 无提取值（任务书未写路径）回落前缀扫描（任一新 w-*.md 即过——宽防误报）
+      const hit = entry.receiptPath
+        ? existsSync(entry.receiptPath)
+        : existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+      if (!hit) {
+        this.notifyLeaderSystem(`dispatch ${entry.id.slice(0, 8)}（${entry.title.slice(0, 30)}）收口无回执——交付存疑，请核 artifacts/`);
+      }
+    } catch { /* 扫描失败跳过 */ }
+  }
   private scheduleReceiptCheck(dispatchId: string, gid: string | undefined, title: string, receiptPath?: string): void {
     if (!gid) return; // 无 gid=随手办/咨询档，无回执约定
+    const checkMs = Number(process.env.CCR_RECEIPT_CHECK_MS) > 0 ? Number(process.env.CCR_RECEIPT_CHECK_MS) : 90_000;
+    const entry = { id: dispatchId, gid, title, ...(receiptPath ? { receiptPath } : {}), due: Date.now() + checkMs };
+    this.savePendingReceiptChecks([...this.loadPendingReceiptChecks().filter((x) => x.id !== dispatchId), entry]);
     const t = setTimeout(() => {
-      try {
-        const artsDir = join(homedir(), ".cc-deck", "artifacts");
-        // 精确优先：任务书提取的约定路径按文件存在性核对（多 worker 并行不假阳）；
-        // 无提取值（任务书未写路径）回落前缀扫描（任一新 w-*.md 即过——宽防误报）
-        const hit = receiptPath
-          ? existsSync(receiptPath)
-          : existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
-        if (!hit) {
-          this.notifyLeaderSystem(`dispatch ${dispatchId.slice(0, 8)}（${title.slice(0, 30)}）收口无回执——交付存疑，请核 artifacts/`);
-        }
-      } catch { /* 扫描失败跳过 */ }
-    }, 90_000);
+      this.savePendingReceiptChecks(this.loadPendingReceiptChecks().filter((x) => x.id !== dispatchId));
+      this.runReceiptCheck(entry);
+    }, checkMs);
     t.unref?.();
+  }
+  /** boot 补跑：重启窗内丢失的 90s 定时器由此兜底（TTL 10min 内的 pending 立即查） */
+  recoverPendingReceiptChecks(): number {
+    const now = Date.now();
+    const all = this.loadPendingReceiptChecks();
+    const due = all.filter((x) => x.due <= now + 5_000); // 已到期/将至期的立即跑
+    const keep = all.filter((x) => x.due > now + 5_000 && x.due - now < 10 * 60_000); // 未到期的重挂定时器
+    if (due.length) this.savePendingReceiptChecks(keep);
+    for (const x of due) this.runReceiptCheck(x);
+    for (const x of keep) {
+      const t = setTimeout(() => {
+        this.savePendingReceiptChecks(this.loadPendingReceiptChecks().filter((y) => y.id !== x.id));
+        this.runReceiptCheck(x);
+      }, Math.max(0, x.due - now));
+      t.unref?.();
+    }
+    return due.length;
   }
 
   private queueDepth(gid: string): number {

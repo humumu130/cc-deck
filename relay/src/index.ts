@@ -382,6 +382,13 @@ try {
 } catch (e) {
   console.warn(`[dispatch-queue] 重启回灌失败（队列按空处理）: ${e instanceof Error ? e.message : String(e)}`);
 }
+try {
+  // W-GATEFIX：90s 回执闸的重启兜底——触发窗内重启丢的定时器由此补跑（TTL 10min）
+  const n = mgr.recoverPendingReceiptChecks();
+  if (n > 0) console.log(`[receipt-gate] boot 补跑 ${n} 个到期回执核对`);
+} catch (e) {
+  console.warn(`[receipt-gate] boot 补跑失败（pending 账保留，下轮重启再试）: ${e instanceof Error ? e.message : String(e)}`);
+}
 
 // W-EXPP1 角色经验回流 P1（2026-10-10）：① 旧 lessons 内容性条目一次性迁移——先迁后
 // 切（REL 建-2）：报错只 warn 不阻断启动，旧域数据原样冻结（停灌不删），下次启动按

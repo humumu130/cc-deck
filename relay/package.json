@@ -25,6 +25,7 @@
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-blankset": "node --import tsx/esm scripts/test-005-blankset.ts",
     "test:permerr": "tsx scripts/test-permerr.ts",
+    "test:gatefix": "tsx scripts/test-gatefix.ts",
     "test:005-engauth-web": "node --import tsx/esm scripts/test-005-engauth-web.ts",
     "test:005-route-fix": "node --import tsx/esm scripts/test-005-route-fix.ts",
     "test:engine-auth": "tsx scripts/test-engine-auth.ts",
