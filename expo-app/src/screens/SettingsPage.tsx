@@ -32,7 +32,8 @@
 // 不动面（R7 口径继承）：服务器行视觉几何、六弹层（关于/图例/设备/经验库/扫码/
 // 导入）、规则/权限子节、Agent 引擎条件组、删码逻辑（store/protocol 零触碰）。
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
-import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native"
+import { HEAD_BASE } from "../head-unify";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
@@ -1540,7 +1541,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   content: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   // W-MSETSIG 头部重设计：005 mobile-head 域标题（h2 设置 15-17px + small 副题
   // 10.5px）——原「logo + CC Deck」品牌头部退役（品牌识别收敛到关于弹窗 abLogo）
-  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 13, borderBottomWidth: 1, borderBottomColor: c.line },
+  head: { flexDirection: "row", alignItems: "center", gap: 10, ...HEAD_BASE, borderBottomWidth: 1, borderBottomColor: c.line }, /* W-HEADUNI：统一基准（原 paddingBottom 13 漂移源） */
   nameT: { color: c.textStrong, fontSize: 16.5, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 10.5, marginTop: 2 },
   // 头部右上全局扫码钮：tintSoft 圆角方（#130 去描边），角标式扫描图标

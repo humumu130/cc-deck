@@ -6,7 +6,8 @@
 // 紧凑约束：总高 ≤52px（垂直 padding 6/6 + 标题 16/600 lh22 + 副题 10.5 lh13）；
 // 深浅双主题全 token；与底部导航同语言（44 触区/20 图标/底 1px 分隔线）。
 // v1 兼容：onBack 返回钮语义不变（W-BACKFIX 二级页）；旧 sub 字符串入参继续可用。
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native"
+import { HEAD_BASE } from "../head-unify";
 import Svg, { Path } from "react-native-svg";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { useRelay } from "../store";
@@ -135,12 +136,10 @@ const makeStyles = (c: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 4,
+      ...HEAD_BASE, /* W-HEADUNI：全页 head 高度单一基准（会话列表页口径）——常量入常量出 */
       borderBottomWidth: 1,
       borderBottomColor: c.line,
       backgroundColor: c.bg,
-      minHeight: 48,
     },
     backBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden", alignItems: "center", justifyContent: "center", flexShrink: 0 },
     title: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 },

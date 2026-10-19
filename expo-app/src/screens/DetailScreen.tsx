@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native"
+import { HEAD_BASE } from "../head-unify";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
@@ -3971,7 +3972,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 补偿——总高 49→48px 不增反减（#108 键盘顶升契约不受影响）
   head: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 12, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.line,
+    ...HEAD_BASE, /* W-HEADUNI：#148 旧对齐源退役——统一会话列表页基准（补 minHeight 48） */
+    borderBottomWidth: 1, borderBottomColor: c.line,
   },
   // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
   // W-UIFIX 件七：纯 chevron 背钮（去 tintSoft 方块底）——40px 触区、图标 24px 微信式

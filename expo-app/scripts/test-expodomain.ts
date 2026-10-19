@@ -345,6 +345,19 @@ async function main(): Promise<void> {
   const peM2 = pe.reconcilePending(l2, { sid: "s1", logs: plainEcho, pendingInputs: null, now: peNow + 500 });
   check(peM2.find((x) => x.key === "k1") === undefined && peM2.find((x) => x.key === "k2") !== undefined,
     "W-MSGFIX 回归：无 full 的全等回声照常消气泡（k1 消、k2 留——既有行为不回归）");
+  // W-HEADUNI：全页 head 高度单一基准锚（用户 1020 口径——会话列表页为唯一基准）
+  {
+    const hu = srcOf("../src/head-unify.ts");
+    const ls = srcOf("../src/screens/ListScreen.tsx");
+    const ph = srcOf("../src/screens/page-head.tsx");
+    const ds = srcOf("../src/screens/DetailScreen.tsx");
+    const td = srcOf("../src/screens/TeamDetailPage.tsx");
+    const sp = srcOf("../src/screens/SettingsPage.tsx");
+    check(hu.includes("minHeight: 48"), "HEADUNI-1 head-unify 基准常量 minHeight 48");
+    check(ls.includes("...HEAD_BASE") && !ls.includes("minHeight: 48,"), "HEADUNI-2 ListScreen 基准页引常量（无字面回退）");
+    check(ph.includes("...HEAD_BASE") && td.includes("...HEAD_BASE") && sp.includes("...HEAD_BASE") && ds.includes("...HEAD_BASE"), "HEADUNI-3 四消费页全部 spread HEAD_BASE（PageHead 容器/团队详情/设置/会话详情）");
+    check(!td.includes("paddingTop: 12, paddingBottom: 10") && !sp.includes("paddingBottom: 13,"), "HEADUNI-4 漂移源清除（团队详情 14/12/10、设置 paddingBottom 13 均退役）");
+  }
   // ⑦ 源码接线锚：发送注入/ack 失败/渲染挂点/重发/滚动跟随
   check(detailSrc.includes("const long = !!e.full && e.full.length > e.text.length"), "W-MSGFIX：折叠判定=full 比 text 长才折叠（20/29 字假折叠根修）");
   check(String(readFileSync(new URL("../src/store.ts", import.meta.url), "utf8")).includes("String(msg.payload.full || msg.payload.text || \"\")"), "W-MSGFIX：兜底对账 key full 优先（store 消费面）");

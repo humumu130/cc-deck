@@ -13,7 +13,8 @@
 // 结果兜底。对话不设 tab（A1-13）——经成员卡/看板 owner 点开成员会话即达。
 import { EngineBrandTile } from "../engine-icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { HEAD_BASE } from "../head-unify";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { FadeIn, useLayoutPulse } from "../motion";
@@ -722,7 +723,8 @@ const makeStyles = (c: ThemeColors) =>
     page: { flex: 1, backgroundColor: c.bg },
     head: {
       flexDirection: "row", alignItems: "center", gap: 8,
-      paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: c.line, backgroundColor: c.panel,
+      ...HEAD_BASE, /* W-HEADUNI：全页统一会话列表页基准（原 14/12/10 三值漂移源） */
+      borderBottomWidth: 1, borderBottomColor: c.line, backgroundColor: c.panel,
     },
     // B6：返回/刷新加容器底与 ripple（裸符号 affordance 弱）
     back: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden" },

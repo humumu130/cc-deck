@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 
 // dda6490+6fb7180 并集合并残留收口：w63（TextInput/PanResponder）与 w54（Modal）两行 import 并存致重复标识符——合一行取并集
-import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native";
+import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native"
+import { HEAD_BASE } from "../head-unify";
 
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1796,7 +1797,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担。
     // W-HEAD5（#148 用户拍板）：对齐详情页 d.head——弃 headBg 特别底色（常规 bg）、
     // paddingVertical 4、总高≈48px；headTitleT 15/600 c.text（d.title 同款）
-    paddingHorizontal: 12, paddingVertical: 4, minHeight: 48, /* W-UIFIX 件八：与 PageHead 统一（原无 minHeight，内容 28-36px 波动） */
+    ...HEAD_BASE, /* W-HEADUNI：本页=用户指定全页基准（原字面三值提常量自证一致） */
     backgroundColor: c.bg, borderBottomWidth: 1.5, borderBottomColor: c.lineStrong, /* W-UIFIX 件三：分隔线加深加粗一档（line→lineStrong+1.5px，双主题可见不喧宾） */
   },
   headTitleT: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 }, /* W-HEAD5：d.title 同款 */
