@@ -1,6 +1,7 @@
 # 全库架构拆分方案（design-split-plan）· 设计稿先审后拍
 
-> 2026-10-20 · W-REFACTOR2 · **零代码交付**（本稿=方案，拍板后才实施）
+> 2026-10-20 · W-REFACTOR2 · **已拍板（2026-10-20 用户四点全批：A 案先行/六阶段排期/旧壳顺带删/CI 行数闸 1500）**——进入实施，阶段顺序按本稿
+> 评审附注（Leader）：①错峰约束——阶段 1（DetailScreen）须等 W-HEADUNI（head 高度统一，在办）装机后再开，防同文件冲突 ②域稿三份（design-split-web/expo/relay.md）为阶段 3/4/5 的细化输入 ③script 块实测 10 处非 7（3 个为非内联 json 块，阶段 4 盘点时分类）
 > 缘起：用户多次批评 index-005.html「单文件 1.4 万行全部内联零框架，每句话都很可怕」；session-manager.ts 亦 8.6k 行。
 > 数据基线：dev 线 698bbb2（test.45）实查——relay 侧已含 restart-ledger/dispatch 三分支/回执契约闸（昨晚 dispatch 可靠性大改），本稿按当前代码盘点，非旧印象。
 
