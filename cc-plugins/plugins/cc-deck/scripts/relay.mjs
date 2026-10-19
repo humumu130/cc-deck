@@ -11001,6 +11001,7 @@ async function bootReplayFile(path6) {
 }
 
 // src/event-bus.ts
+var REPLAY_FAST_MAX = 460;
 var EventBus = class {
   constructor(opts = {}) {
     this.opts = opts;
@@ -54185,7 +54186,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         ...e.model ? { model: e.model } : {}
       });
       this.notifyDispatchClosed(e, status, refReceipt, key);
-      if (status === "done") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath);
+      if (status === "done" || status === "failed") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath);
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         if (status === "done") {
@@ -56363,7 +56364,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
-    const receiptPath = /(~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md))/i.exec(input.prompt)?.[1];
+    const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
+    const receiptPath = receiptRel ? join34(homedir13(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : void 0;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...receiptPath ? { receiptPath } : {} });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id ? (
@@ -56584,19 +56586,63 @@ provider=${opts.provider ?? "default"}` : void 0,
    * （随手办/咨询档无回执约定）；failed 不核（失败单的回执常在修复批内补）。
    * 重启窗内定时器丢失由 ledger 条目兜底。扫描失败跳过（artifacts 不可达）。
    */
+  // W-GATEFIX 修3：pending check 落盘（data/pending-receipt-checks.json）——90s 定时器
+  // 是内存态，触发窗内 relay 重启即丢（W-RESTARTDESIGN 注释声称「ledger 条目兜底」
+  // 但未实现——闸从未落任何账）。boot 由 recoverPendingReceiptChecks 补跑（TTL 10min：
+  // 过期单不再报——超过窗的旧单人工核，防重启风暴后陈账轰炸）
+  pendingReceiptChecksPath() {
+    return join34(this.cfg.dataDir, "pending-receipt-checks.json");
+  }
+  loadPendingReceiptChecks() {
+    try {
+      return JSON.parse(readFileSync29(this.pendingReceiptChecksPath(), "utf-8"));
+    } catch {
+      return [];
+    }
+  }
+  savePendingReceiptChecks(list) {
+    try {
+      writeFileSync19(this.pendingReceiptChecksPath(), JSON.stringify(list), "utf-8");
+    } catch {
+    }
+  }
+  runReceiptCheck(entry) {
+    try {
+      const artsDir = join34(homedir13(), ".cc-deck", "artifacts");
+      const hit = entry.receiptPath ? existsSync24(entry.receiptPath) : existsSync24(artsDir) && readdirSync12(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+      if (!hit) {
+        this.notifyLeaderSystem(`dispatch ${entry.id.slice(0, 8)}\uFF08${entry.title.slice(0, 30)}\uFF09\u6536\u53E3\u65E0\u56DE\u6267\u2014\u2014\u4EA4\u4ED8\u5B58\u7591\uFF0C\u8BF7\u6838 artifacts/`);
+      }
+    } catch {
+    }
+  }
   scheduleReceiptCheck(dispatchId, gid, title, receiptPath) {
     if (!gid) return;
+    const checkMs = Number(process.env.CCR_RECEIPT_CHECK_MS) > 0 ? Number(process.env.CCR_RECEIPT_CHECK_MS) : 9e4;
+    const entry = { id: dispatchId, gid, title, ...receiptPath ? { receiptPath } : {}, due: Date.now() + checkMs };
+    this.savePendingReceiptChecks([...this.loadPendingReceiptChecks().filter((x) => x.id !== dispatchId), entry]);
     const t = setTimeout(() => {
-      try {
-        const artsDir = join34(homedir13(), ".cc-deck", "artifacts");
-        const hit = receiptPath ? existsSync24(receiptPath) : existsSync24(artsDir) && readdirSync12(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
-        if (!hit) {
-          this.notifyLeaderSystem(`dispatch ${dispatchId.slice(0, 8)}\uFF08${title.slice(0, 30)}\uFF09\u6536\u53E3\u65E0\u56DE\u6267\u2014\u2014\u4EA4\u4ED8\u5B58\u7591\uFF0C\u8BF7\u6838 artifacts/`);
-        }
-      } catch {
-      }
-    }, 9e4);
+      this.savePendingReceiptChecks(this.loadPendingReceiptChecks().filter((x) => x.id !== dispatchId));
+      this.runReceiptCheck(entry);
+    }, checkMs);
     t.unref?.();
+  }
+  /** boot 补跑：重启窗内丢失的 90s 定时器由此兜底（TTL 10min 内的 pending 立即查） */
+  recoverPendingReceiptChecks() {
+    const now = Date.now();
+    const all = this.loadPendingReceiptChecks();
+    const due2 = all.filter((x) => x.due <= now + 5e3);
+    const keep = all.filter((x) => x.due > now + 5e3 && x.due - now < 10 * 6e4);
+    if (due2.length) this.savePendingReceiptChecks(keep);
+    for (const x of due2) this.runReceiptCheck(x);
+    for (const x of keep) {
+      const t = setTimeout(() => {
+        this.savePendingReceiptChecks(this.loadPendingReceiptChecks().filter((y) => y.id !== x.id));
+        this.runReceiptCheck(x);
+      }, Math.max(0, x.due - now));
+      t.unref?.();
+    }
+    return due2.length;
   }
   queueDepth(gid) {
     return this.dispatchQueueItems.filter((x) => x.input.gid === gid).length;
@@ -62356,7 +62402,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
     const replay = lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq) ? bus2.replayAfter(lastSeq).filter((env) => !mgr2.suppressLeaderEvent(env)) : null;
-    if (replay && replay.length <= 200) {
+    if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) ws2.send(JSON.stringify(env));
     } else {
       const snapLogs = mgr2.buildSnapshotLogs(SNAPSHOT_LOGS_LAN.budgetBytes, SNAPSHOT_LOGS_LAN.perSessionCap);
@@ -63245,7 +63291,7 @@ var CloudClient = class {
     this.phones.set(dev, { lastSeq, active: true });
     this.identity.touchPeer(dev);
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
-    if (replay && replay.length <= 200) {
+    if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendSealed(dev, env);
       return;
     }
@@ -63619,7 +63665,7 @@ var CloudClient = class {
     this.wanWatches.set(dev, { lastSeq, active: true });
     if (!known) console.log(`[cloud] watch ${dev} online via wan`);
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
-    if (replay && replay.length <= 200) {
+    if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendWan(dev, env);
       return;
     }
@@ -64041,6 +64087,12 @@ try {
   mgr.reloadDispatchQueue();
 } catch (e) {
   console.warn(`[dispatch-queue] \u91CD\u542F\u56DE\u704C\u5931\u8D25\uFF08\u961F\u5217\u6309\u7A7A\u5904\u7406\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+}
+try {
+  const n = mgr.recoverPendingReceiptChecks();
+  if (n > 0) console.log(`[receipt-gate] boot \u8865\u8DD1 ${n} \u4E2A\u5230\u671F\u56DE\u6267\u6838\u5BF9`);
+} catch (e) {
+  console.warn(`[receipt-gate] boot \u8865\u8DD1\u5931\u8D25\uFF08pending \u8D26\u4FDD\u7559\uFF0C\u4E0B\u8F6E\u91CD\u542F\u518D\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
 }
 try {
   const mig = migrateLessonsToExperience();
