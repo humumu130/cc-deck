@@ -55453,11 +55453,12 @@ provider=${opts.provider ?? "default"}` : void 0,
           const g2 = findGroup(str2("id"));
           if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${str2("id")}` };
           const memberSids = new Set(g2.headcount.map((h) => h.session_id));
-          const receipts = readDispatchLog().filter((e) => {
+          const receiptsRows = readDispatchLog().filter((e) => {
             const a = (e.project_anchor ?? "").replace(/\/+$/, "");
             if (a && a === g2.anchor_dir.replace(/\/+$/, "")) return true;
             return memberSids.has(e.session_id);
           }).slice(-30).reverse();
+          const receipts = receiptsRows.map((e) => ({ ...e, consumed: e.status === "done" || e.status === "failed" }));
           const pool = routingFor(g2.id).map((e) => {
             const s = this.sessions.get(e.session_id);
             return {
@@ -55479,7 +55480,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           return { ok: true, data: { group: g2, board: (() => {
             const b = loadBoard(g2.id);
             return b.lessons?.length ? { ...b, lessons: [] } : b;
-          })(), receipts, pool, cap: headcountCapOf(g2), workers: genericWorkerCount(g2.headcount), queued: this.queueDepth(g2.id) } };
+          })(), receipts, pool, cap: headcountCapOf(g2), workers: genericWorkerCount(g2.headcount), queued: this.queueDepth(g2.id), dispatch_queue: this.dispatchQueueItems.filter((x) => x.input.gid === g2.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g2.id, title: x.input.title || "" })) } };
         }
         // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
         case "rate": {
