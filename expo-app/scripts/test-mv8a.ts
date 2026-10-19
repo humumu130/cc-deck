@@ -137,12 +137,13 @@ async function main(): Promise<void> {
 
   console.log("B. 成员五色状态词（memberStatusOf）");
   eq(teamDetail.memberStatusOf("WORKING").zh, "工作中", "WORKING→工作中");
-  eq(teamDetail.memberStatusOf("WORKING").tone, "g", "工作中=绿");
+  eq(teamDetail.memberStatusOf("WORKING").tone, "y", "工作中=黄（1019 拍板：与列表卡状态灯同源，旧 v3 绿案退役）");
   eq(teamDetail.memberStatusOf("WAITING").zh, "阻塞", "WAITING→阻塞（等你输入=链路停摆）");
   eq(teamDetail.memberStatusOf("WAITING").tone, "y", "阻塞=琥珀");
   eq(teamDetail.memberStatusOf("ERROR").zh, "出错", "ERROR→出错");
   eq(teamDetail.memberStatusOf("ERROR").tone, "r", "出错=红");
   eq(teamDetail.memberStatusOf("DONE").zh, "空闲", "DONE→空闲");
+  eq(teamDetail.memberStatusOf("DONE").tone, "g", "空闲=绿（1019 拍板：旧灰案退役）");
   eq(teamDetail.memberStatusOf(undefined).zh, "关闭", "不在册→关闭");
   eq(teamDetail.memberStatusOf("WHATEVER").zh, "关闭", "词表外→关闭（不造词）");
   eq(typeof teamDetail.EngineBadge, "function", "EngineBadge 导出（跨屏单源徽章）");

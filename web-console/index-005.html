@@ -42,11 +42,11 @@
       --error: #E5484D;
       /* 1014 用户定版·状态灯词表五色（全产品唯一事实源，一切点形状态灯引用此处；
          黄闪=工作中/绿=空闲/橙=阻塞/红=出错/灰=关闭退役——常亮无动画，唯 working 闪） */
-      --st-working: #E8B84B; /* t25fix #14：#FFC53D 饱和度过高显刺眼，降饱和偏琥珀（保持与绿 #35DC97/橙 #E5895B 的色相区分） */
-      --st-idle: #35DC97;
+      --st-working: #FFD24D; /* 1019 用户拍板：工作灯提亮提饱和（t25fix #14 降饱和口径 #E8B84B 废弃；与手机端 theme.ts working 同源） */
+      --st-idle: var(--done); /* 1019：空闲=绿随主题（暗 #35DC97/亮 #168D60）；灰案系 W-HYBRID :root 误覆盖（已收窄回看板条） */
       --st-blocked: #E5895B;
-      --st-error: #E5484D;
-      --st-closed: #7A889F;
+      --st-error: var(--error); /* 随主题（暗 #E5484D/亮 #C84C51） */
+      --st-closed: var(--faint); /* 关闭退役=灰随主题（暗 #7A889F/亮 #42587A） */
       /* V8R 看板泳道进度色（v8-ui-interactive-v2 --p-* 原值直引）：待认领灰蓝/进行中绿/
          待审查品牌橙/待收单琥珀/完成暗色——总览分段条与图例共用同一映射 */
       --p-backlog: #55677F;
@@ -203,7 +203,7 @@
       --done: #168D60;
       --working: #A56D00;
       --error: #C84C51;
-      --st-working: #B8860B; /* t25fix #14：浅色底工作灯降饱和深琥珀（白底上仍可辨，与 #E8B84B 深色版同族） */
+      --st-working: #FFB020; /* 1019 用户拍板：浅色工作灯提亮提饱和（#B8860B 深琥珀偏闷废弃；与手机端 theme.ts 浅色 working 同源） */
       /* V8R 看板泳道进度色·浅色（v8-ui-interactive-v2 浅色 --p-* 原值直引） */
       --p-backlog: #C3CEDD;
       --p-claimed: #22A06B;
@@ -1479,7 +1479,10 @@
        --st-* 五键词表（working 琥珀/idle 灰/blocked 蓝/error 红/closed 绿）——
        状态映射 statusStripeOf：gate 阻塞恒 error（最高优信号覆盖 lane 色）；
        submitted/ready_to_install=等外部动作（复核/收单）同归 blocked；closed=done */
-    :root { --st-working: var(--working); --st-idle: var(--faint); --st-blocked: var(--info); --st-error: var(--error); --st-closed: var(--done); }
+    /* 1019 回修：本五键映射原以 :root 全局覆盖，把 1014 定版状态灯词表（绿=空闲/橙=阻塞/
+       灰=关闭）一并冲成看板口径（全产品状态灯 idle 变灰/blocked 变蓝/closed 变绿）——
+       现收窄到看板卡自身作用域：泳道条 1015 拍板配色原样保留，状态灯词表回归 1014 定版 */
+    .task-card[data-stripe] { --st-working: var(--working); --st-idle: var(--faint); --st-blocked: var(--info); --st-error: var(--error); --st-closed: var(--done); }
     .task-card[data-stripe] { position: relative; }
     .task-card[data-stripe]::before {
       content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
@@ -10339,6 +10342,50 @@ function connectLan(ctx) {
           if (btn) btn.disabled = false;
         }
       }
+      // ---------- W-MIG 设置导出/导入（设置迁移手动通道：换壳/换 identifier 分仓/换机）----------
+      // 壳的影子备份（desktop-storage-shadow.json）只覆盖本机同 deck_root 的迁移；
+      // 导出文件跨机可用。导出 = 全量 localStorage dump；壳形态走 saveArtifact 落
+      // 「下载」目录（b64 通道，与产物下载同链），浏览器形态 Blob + a.download
+      function exportSettings() {
+        const o = {};
+        try {
+          for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); o[k] = localStorage.getItem(k); }
+        } catch (e) { showToast("导出失败：localStorage 不可读"); return; }
+        const json = JSON.stringify(o, null, 2);
+        const name = "cc-deck-settings-" + new Date().toISOString().slice(0, 10) + ".json";
+        if (window.ccDeck && typeof window.ccDeck.saveArtifact === "function") {
+          try {
+            const u8 = new TextEncoder().encode(json);
+            let s = "";
+            for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+            window.ccDeck.saveArtifact(name, btoa(s))
+              .then((p) => showToast("已导出到 " + p))
+              .catch((e) => showToast("导出失败：" + (e && e.message ? e.message : e)));
+          } catch (e) { showToast("导出失败：" + e); }
+        } else {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+          a.download = name;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+          showToast("已导出 " + name);
+        }
+      }
+      // 导入 = 覆盖式恢复（导出文件即全量 dump）：清空 → 逐键写回 → 刷新生效；
+      // 两段确认（导入钮武装 3s）防误触——覆盖现行设置不可逆
+      function importSettingsFile(file) {
+        file.text().then((txt) => {
+          let obj;
+          try { obj = JSON.parse(txt); } catch (e) { showToast("导入失败：文件不是合法 JSON"); return; }
+          if (!obj || typeof obj !== "object" || Array.isArray(obj)) { showToast("导入失败：内容须为设置导出的 JSON 对象"); return; }
+          try {
+            localStorage.clear();
+            for (const k in obj) { try { localStorage.setItem(k, String(obj[k])); } catch (_) {} }
+          } catch (e) { showToast("导入失败：" + e); return; }
+          showToast("设置已导入 · 正在刷新…");
+          setTimeout(() => { try { location.reload(); } catch (_) {} }, 600);
+        }).catch(() => showToast("导入失败：文件读取失败"));
+      }
       // ---------- #158-批3 连接诊断（桌面形态，旧壳 relayStatus 11917-11959 消费范式） ----------
       // relayStatus 透出 { port:端口在听, embedded, node, err }——err（Node 过旧/spawn 失败）
       // 优先直出；缺 node 给安装引导（点击 openExternal nodejs.org）；端口在听显示运行端口。
@@ -10408,13 +10455,18 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">relay · 远程源 · 本页设备——连接管理面</div></div><div class="v8-setcard"><h5>relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard"><h5>已配设备</h5><div class="settings-list" data-settings-live="devices"></div><div class="v8-escape">设备身份 = 配对密钥（E2E）· 踢出后需重新配对；凭证与配对历史存于 relay 本机</div></div>${pairBanner}<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">模型路由 · 系统提示 · 工具白名单都长在模板上——开团的初始编制</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">开团时可逐成员覆盖 · 模板只给初始值，不当牢笼。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">控制面能力扩展——内建三件随软件发行、免安装确认 · 统一鉴权无特权通道</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span><div class="v8-swd">出单 · 回填 · 收单闭环 · 验收单分发与提醒</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span><div class="v8-swd">意图声明制登记 · 输出物看板数据源</div></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span><div class="v8-swd">登记查询 · 产物打开与分享</div></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载、可停用——停用即对应能力面下线；M1 骨架期三件恒启用，停用开关随注册表就绪后生效。</div></div><div class="v8-setcard"><h5>权限声明（只读）· 授权以命令面权限表为准</h5><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div><div class="v8-setcard"><h5>第三方扩展</h5><div class="v8-escape">🧩 尚无第三方扩展——规范与市场 M2 开放，不预建目录。技能（skill）/ MCP 兼容投送是 Agent 侧资产（舰队配装），不在本页——本页只管控制面扩展。</div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 诊断</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录<div class="v8-swd">GitHub Releases · tag 即档案（git tag + 提交信息 + Release 页）</div></div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页<div class="v8-swd">在线演示与文档入口</div></div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App<div class="v8-swd">扫码安装 · 手机端仅浏览、验证和换路由</div></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 诊断</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录<div class="v8-swd">GitHub Releases · tag 即档案（git tag + 提交信息 + Release 页）</div></div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页<div class="v8-swd">在线演示与文档入口</div></div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App<div class="v8-swd">扫码安装 · 手机端仅浏览、验证和换路由</div></div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置<div class="v8-swd">全部本地设置存为 JSON 文件 · 换壳 / 换设备迁移用</div></div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">从导出的 JSON 恢复（覆盖现有设置）· 导入后自动刷新</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
         });
 
 
         safe("控件接线段", () => {
         wireCardDensityControls(body);
         wireFsDebugPanel(body); // 件十六：字号调试面板回填已存值/默认值
+        // W-MIG 设置导入文件选择（change 委排在设置 body 上——导入钮武装确认后触发选档）
+        body.addEventListener("change", (event) => {
+          const f = event.target.closest("[data-settings-import-file]");
+          if (f && f.files && f.files[0]) { importSettingsFile(f.files[0]); f.value = ""; }
+        });
         // W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（活读壳版本/桥连接态）
         const navFoot = queue.querySelector("[data-settings-nav-foot]");
         if (navFoot) navFoot.innerHTML = escapeHtml(String(window.__shellVer || CONSOLE_VERSION)) + "<br>本机 relay · 已连接";
@@ -10544,6 +10596,20 @@ function connectLan(ctx) {
           const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
           if (diagRow) { void window.__ccDeck005OpenUrl("https://nodejs.org/zh-cn"); return; }
           if (event.target.closest("[data-update-check]")) { void manualCheckUpdate(); return; }
+          // W-MIG 设置导出/导入：导入两段确认（armed → 「确认导入？」3s 窗）防误触覆盖
+          if (event.target.closest("[data-settings-export]")) { exportSettings(); return; }
+          const importBtn = event.target.closest("[data-settings-import]");
+          if (importBtn) {
+            if (importBtn.dataset.armed) {
+              importBtn.dataset.armed = ""; importBtn.textContent = "导入";
+              const fileInput = document.querySelector('[data-settings-panel="about"] [data-settings-import-file]');
+              if (fileInput) fileInput.click();
+            } else {
+              importBtn.dataset.armed = "1"; importBtn.textContent = "确认导入？";
+              setTimeout(() => { importBtn.dataset.armed = ""; importBtn.textContent = "导入"; }, 3000);
+            }
+            return;
+          }
           const uiScaleBtn = event.target.closest("[data-ui-scale-option]"); // FB10：字号档点击（委排在设置 body 上，与密度档分离——密度档另有全局委排）
           if (uiScaleBtn) { applyUiScale(uiScaleBtn.dataset.uiScaleOption, true); return; }
           // W-ICON② 快捷键自定义接线：单组合类点 chip 进捕获态；方向键档点 chip 循环 Alt/Ctrl

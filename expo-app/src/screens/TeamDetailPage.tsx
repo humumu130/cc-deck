@@ -155,12 +155,14 @@ export function laneSharesOf(counts: Record<string, number>): { st: string; pct:
 }
 // 成员状态五色词（v3 五态：工作中/空闲/阻塞/出错/关闭——双信号=会话状态灯）。
 // SessionState 四态映射：WORKING=工作中 / WAITING=阻塞（等你输入=链路停摆）/
-// ERROR=出错 / DONE=空闲；不在册（无会话）=关闭
+// ERROR=出错 / DONE=空闲；不在册（无会话）=关闭。
+// 1019 用户拍板对齐 1014 状态灯词表（与列表卡 statusColor 同源一致）：
+// 黄=工作中/阻塞、绿=空闲、红=出错、灰=关闭（旧 v3 案 working=绿/空闲=灰退役）
 export const MEMBER_ST_ZH: Record<string, { zh: string; tone: "g" | "y" | "r" | "b" }> = {
-  WORKING: { zh: "工作中", tone: "g" },
+  WORKING: { zh: "工作中", tone: "y" },
   WAITING: { zh: "阻塞", tone: "y" },
   ERROR: { zh: "出错", tone: "r" },
-  DONE: { zh: "空闲", tone: "b" },
+  DONE: { zh: "空闲", tone: "g" },
 };
 export function memberStatusOf(status: string | undefined): { zh: string; tone: "g" | "y" | "r" | "b" } {
   if (!status) return { zh: "关闭", tone: "b" };

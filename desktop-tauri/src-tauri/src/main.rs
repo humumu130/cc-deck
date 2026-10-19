@@ -42,6 +42,17 @@ const DEFAULT_TOGGLE_KEY: &str = "alt+d";
 /// 页面启动前注入的桥（等价 desktop/preload.js）：probeLocal 优先走 window.ccDeck；
 /// 外链兜底：捕获阶段拦 target=_blank 与 window.open，转交壳侧系统浏览器打开
 const INIT_SCRIPT: &str = r##"
+// W-MIG 种子恢复（置顶）：localStorage 为空（换壳/换 origin/新容器后的首启）且壳侧有
+// 影子备份（setup 读 ~/.cc-deck/desktop-storage-shadow.json 注入 __CCDECK_SHADOW）时
+// 同步恢复——initialization_script 先于页面任何脚本执行，页面初始化读到的即迁移后设置。
+// 非空（同 origin 正常升级，WebKit 数据还在）一律不碰，永不覆盖现网设置
+try {
+  if (window.__CCDECK_SHADOW && localStorage.length === 0) {
+    for (const k in window.__CCDECK_SHADOW) {
+      try { localStorage.setItem(k, String(window.__CCDECK_SHADOW[k])); } catch (e) { /* 单键坏不挡其余 */ }
+    }
+  }
+} catch (e) { /* localStorage 不可用（隐私模式等）静默 */ }
 try { window.__TAURI__.core.invoke("web_diag", { msg: "init-script url=" + location.href + " rs=" + document.readyState }); } catch (e) { /* __TAURI__ 可能未就绪 */ }
 if (!window.ccDeck) {
   window.ccDeck = {
@@ -69,6 +80,35 @@ window.open = (url) => {
   window.ccDeck.openExternal(String(url)).catch(() => {});
   return null;
 };
+// ── W-MIG localStorage 影子镜像（迁移备份的写侧）：全量 dump → 壳落
+// ~/.cc-deck/desktop-storage-shadow.json（storage_shadow_write）。换壳/换 origin/
+// 清库后，新壳首启由顶部种子块据此恢复。浏览器形态（无 __TAURI__）静默跳过零副作用；
+// 幂等护栏防（理论上不发生的）脚本重复注入时监听器/定时器翻倍
+if (!window.__CCDECK_MIRROR__) {
+  window.__CCDECK_MIRROR__ = 1;
+  let lastDump = null;
+  const dumpLS = () => {
+    try {
+      const o = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        o[k] = localStorage.getItem(k);
+      }
+      return JSON.stringify(o);
+    } catch (e) { return null; }
+  };
+  const flush = () => {
+    if (!(window.__TAURI__ && window.__TAURI__.core)) return;
+    const d = dumpLS();
+    if (d === null || d === lastDump) return; // 无变化不写盘（15s 巡拍便宜的前提）
+    lastDump = d;
+    try { window.__TAURI__.core.invoke("storage_shadow_write", { payload: d }).catch(() => {}); } catch (e) { /* 壳桥异常静默 */ }
+  };
+  setTimeout(flush, 3000); // 首拍延迟：__TAURI__ 注入晚于本脚本时等它落地
+  setInterval(flush, 15000); // 巡拍兜底（关窗到托盘的 hide 路径不触发 pagehide）
+  window.addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+}
 "##;
 
 /// 本机 relay 探测（等价 Electron 的 cc-deck:probe-local）：
@@ -402,6 +442,55 @@ fn restore_window_state(win: &tauri::WebviewWindow) {
     if !visible { return; }
     let _ = win.set_size(tauri::PhysicalSize::new(w, h));
     let _ = win.set_position(PhysicalPosition::new(x, y));
+}
+
+// ── W-MIG localStorage 影子备份（跨壳/跨 origin 设置迁移）──
+// 背景：旧 Electron 壳（file:// 源，Chromium 存储）与 Tauri 壳（tauri.localhost /
+// tauri://localhost 源，WKWebView 存储）localStorage 互不可见，用户换壳即设置全丢；
+// nova 与标准壳 identifier 分仓同理。机制：页面侧 INIT_SCRIPT 全量 dump localStorage
+// 经 storage_shadow_write 落盘（写侧）；setup 建窗时读备份注入 __CCDECK_SHADOW 种子块，
+// 页面 localStorage 为空才恢复（读侧，见 INIT_SCRIPT 置顶）——种子文件 = 迁移起点，
+// 不做双向同步，运行中的设置永不被打回。
+fn storage_shadow_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()?;
+    // 放 deck_root 而非 app_config_dir：后者按 identifier 分仓（分仓恰是要迁移的场景）；
+    // deck_root 只随 M2_BUILD 变体隔离（M2 → ~/.cc-deck-m2，测试变体不串生产种子）
+    Some(deck_root(&home).join("desktop-storage-shadow.json"))
+}
+
+/// 影子备份容量闸：设置镜像正常几 KB，超 1MB 视为脏数据拒收/拒恢复
+const STORAGE_SHADOW_CAP: usize = 1024 * 1024;
+
+/// 读影子备份（种子注入用）：缺失/超限/非 JSON 对象一律 None（不注入种子，行为=无迁移）
+fn read_storage_shadow() -> Option<Value> {
+    let txt = std::fs::read_to_string(storage_shadow_path()?).ok()?;
+    if txt.len() > STORAGE_SHADOW_CAP {
+        return None;
+    }
+    serde_json::from_str::<Value>(&txt).ok().filter(|v| v.is_object())
+}
+
+/// 写侧命令（INIT_SCRIPT 15s 巡拍 + pagehide/visibilitychange 兜底触发；JS 侧已做
+/// 变更去重，无变化不触发）：只收 JSON 对象；tmp+rename 原子落盘——种子文件写一半
+/// 坏掉 = 迁移链断，值得多两行
+#[tauri::command]
+fn storage_shadow_write(payload: String) -> Result<(), String> {
+    let v: Value = serde_json::from_str(&payload).map_err(|_| "payload 非 JSON".to_string())?;
+    if !v.is_object() {
+        return Err("payload 须为 JSON 对象".into());
+    }
+    if payload.len() > STORAGE_SHADOW_CAP {
+        return Err("payload 超 1MB 上限".into());
+    }
+    let path = storage_shadow_path().ok_or("无法定位用户目录")?;
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, payload.as_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
 /// app 内部 sendEvent 不经 HID，零辅助功能权限。仅 macOS；其他平台返回 Err
@@ -1269,7 +1358,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen, storage_shadow_write])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
@@ -1327,7 +1416,19 @@ fn main() {
             } else {
                 ""
             };
-            let init_script = format!("{INIT_SCRIPT}{nova_marker}");
+            // W-MIG 种子注入：影子备份存在且非空对象时，把对象字面量塞进 __CCDECK_SHADOW
+            //（置于 INIT_SCRIPT 之前——恢复块在同串内先赋值后消费）。JSON 对象字面量即合法
+            // JS 表达式（serde 已转义控制字符）；U+2028/2029 补转义兼容老引擎
+            let shadow_seed = read_storage_shadow()
+                .map(|v| {
+                    let json = serde_json::to_string(&v).unwrap_or_default();
+                    format!(
+                        "window.__CCDECK_SHADOW = {};\n",
+                        json.replace('\u{2028}', "\\u2028").replace('\u{2029}', "\\u2029")
+                    )
+                })
+                .unwrap_or_default();
+            let init_script = format!("{shadow_seed}{INIT_SCRIPT}{nova_marker}");
             let win = tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
                 .initialization_script(&init_script)
                 // 只允许壳内源；等价 Electron will-navigate 的本地白名单（防页面被导航带离）。
