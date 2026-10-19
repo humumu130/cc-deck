@@ -10339,7 +10339,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir19, hostname, tmpdir as tmpdir3 } from "node:os";
 import { join as join41, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync26, openSync as openSync5, readFileSync as readFileSync37, rmSync as rmSync6, existsSync as existsSync28, readdirSync as readdirSync16, statSync as statSync14 } from "node:fs";
+import { writeFileSync as writeFileSync26, openSync as openSync5, readFileSync as readFileSync37, rmSync as rmSync7, existsSync as existsSync28, readdirSync as readdirSync16, statSync as statSync14 } from "node:fs";
 import { spawn as spawn7, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -11076,7 +11076,7 @@ var EventBus = class {
 
 // src/session-manager.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { appendFileSync as appendFileSync4, existsSync as existsSync23, mkdirSync as mkdirSync18, readFileSync as readFileSync28, realpathSync as realpathSync3, statSync as statSync9, writeFileSync as writeFileSync18 } from "node:fs";
+import { appendFileSync as appendFileSync4, existsSync as existsSync23, mkdirSync as mkdirSync18, readFileSync as readFileSync28, realpathSync as realpathSync3, rmSync as rmSync5, statSync as statSync9, writeFileSync as writeFileSync18 } from "node:fs";
 import { homedir as homedir13 } from "node:os";
 import { isAbsolute as isAbsolute7, join as join33, resolve as resolve8, sep as sep6 } from "node:path";
 
@@ -13885,6 +13885,7 @@ var ORG_CLI_TEMPLATE = `#!/bin/bash
 # Leader \u53EA\u63D0\u6848\u4E0D\u51B3\u8BAE\u2014\u2014\u786E\u8BA4\u5361 \u2713/\u2717 \u7531\u7528\u6237\u5728\u5BA2\u6237\u7AEF\u70B9\u3002
 # \u7528\u6CD5\uFF1A
 #   org status                                     \u56E2\u961F\u5168\u666F\uFF1A\u9879\u76EE\u7EC4\u7D22\u5F15/\u5F85\u51B3\u786E\u8BA4\u5355/\u8FDB\u884C\u4E2D\u6D3E\u5355
+#   org auth-bypass <on|off>                       \u6388\u6743/\u64A4\u9500\u300C\u8DF3\u8FC7\u6743\u9650\u786E\u8BA4\u300D\uFF08\u751F\u4EA7\u73AF\u5883\u663E\u5F0F\u8DF3\u8FC7\u653E\u884C\u6761\u4EF6\uFF0CW-PERMERR\uFF09
 #   org create <name> <anchor> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879>    \u7ACB\u9879\uFF08\u6863\u4F4D\u663E\u793A\u540D\uFF1A\u8F7B\u7ACB\u9879=\u8F7B\u91CF\u9879\u76EE\u3001\u6B63\u7ECF\u7ACB\u9879=\u6B63\u5F0F\u9879\u76EE\uFF1B\u6B63\u7ECF/\u9996\u6B21\u8F7B \u2192 \u7528\u6237\u786E\u8BA4\u5361\uFF1B\u5E42\u7B49\u79CD\u5B50\u9632\u6F02\u79FB CLAUDE.md\uFF09
 #   org set <id> <active|parked|archived> [note]   \u72B6\u6001\u8FC1\u79FB\uFF08\u7ED3\u9879\u6709\u60AC\u8D26/\u672A\u5B8C \u2192 \u51FA\u786E\u8BA4\u5361\u9644\u6838\u5BF9\u6E05\u5355\uFF09
 #   org tier <id> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879> <reason>        \u5347\u964D\u7EA7\uFF08\u5FC5\u987B\u5E26\u4E00\u53E5\u7406\u7531\uFF1B\u786E\u8BA4\u5361\uFF1B\u53C2\u6570\u4E3A\u5B58\u50A8\u6863\u4F4D\u8BCD\uFF09
@@ -13932,6 +13933,15 @@ abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
 case "$action" in
   status)
     body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    ;;
+  auth-bypass)
+    # W-PERMERR\uFF1A\u7528\u6237\u660E\u793A\u6388\u6743\u300C\u8DF3\u8FC7\u6743\u9650\u786E\u8BA4\u300D\u5199\u5165\u53E3\uFF08on=\u6388\u6743/off=\u64A4\u9500\uFF1B\u64A4\u9500\u5373\u6536\u56DE\uFF09
+    [ $# -ge 1 ] || { echo "\u7528\u6CD5: org auth-bypass <on|off>   \u6388\u6743/\u64A4\u9500\u300C\u8DF3\u8FC7\u6743\u9650\u786E\u8BA4\u300D\uFF08\u751F\u4EA7\u73AF\u5883\u663E\u5F0F\u8DF3\u8FC7\u7684\u653E\u884C\u6761\u4EF6\uFF09" >&2; exit 1; }
+    case "$1" in
+      on|off) ;;
+      *) echo "\u7528\u6CD5: org auth-bypass <on|off>" >&2; exit 1 ;;
+    esac
+    body="$(python3 -c 'import json,sys;print(json.dumps({"action":"auth-bypass","on":sys.argv[1]=="on"},ensure_ascii=False))' "$1")"
     ;;
   create)
     [ $# -ge 3 ] || { echo "\u7528\u6CD5: org create <name> <anchor> <\u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879>" >&2; exit 1; }
@@ -15127,6 +15137,21 @@ function permissionPolicyEnabled() {
   if (v === "off" || v === "0" || v === "false") return false;
   console.warn(`[p81-kill-switch] CCR_PERMISSION_POLICY \u672A\u77E5\u503C "${raw}"\u2014\u2014\u6309 off\uFF08\u56DE\u9000 P81 \u524D\uFF09\u5904\u7406`);
   return false;
+}
+var PERM_DENY_COPY = {
+  production_bypass_denied: "\u5DF2\u6309\u5B89\u5168\u7B56\u7565\u62D2\u7EDD\u300C\u8DF3\u8FC7\u6743\u9650\u786E\u8BA4\u300D\uFF1A\u5F53\u524D\u8FDE\u63A5\u7684\u662F\u751F\u4EA7\u670D\u52A1\uFF0C\u8DF3\u8FC7\u6743\u9650\u9700\u5148\u6388\u6743\u3002\u53D6\u6D88\u52FE\u9009\u53EF\u76F4\u63A5\u521B\u5EFA\uFF1B\u786E\u9700\u8DF3\u8FC7\uFF0C\u8BF7\u5728\u7EC8\u7AEF\u8FD0\u884C org auth-bypass on \u5B8C\u6210\u6388\u6743\u540E\u91CD\u8BD5",
+  env_unknown_bypass_denied: "\u5DF2\u6309\u5B89\u5168\u7B56\u7565\u62D2\u7EDD\u300C\u8DF3\u8FC7\u6743\u9650\u786E\u8BA4\u300D\uFF1A\u65E0\u6CD5\u786E\u8BA4\u5DE5\u4F5C\u76EE\u5F55\u7684\u5B89\u5168\u57DF\u3002\u53D6\u6D88\u52FE\u9009\u53EF\u76F4\u63A5\u521B\u5EFA\uFF1B\u786E\u9700\u8DF3\u8FC7\uFF0C\u8BF7\u6539\u7528\u670D\u52A1\u7684\u9ED8\u8BA4\u76EE\u5F55\uFF0C\u6216\u5728\u7EC8\u7AEF\u8FD0\u884C org auth-bypass on \u6388\u6743\u540E\u91CD\u8BD5",
+  above_role_tier_ceiling: "\u6240\u9009\u6743\u9650\u6863\u4F4D\u8D85\u51FA\u5F53\u524D\u8EAB\u4EFD\u5141\u8BB8\u7684\u4E0A\u9650\uFF0C\u5DF2\u62D2\u7EDD\u521B\u5EFA\u3002\u8BF7\u6539\u9009\u8F83\u4F4E\u7684\u6743\u9650\u6863\u4F4D\u540E\u91CD\u8BD5",
+  unknown_engine: "\u6240\u9009\u5F15\u64CE\u4E0D\u5728\u53D7\u652F\u6301\u6E05\u5355\u5185\uFF0C\u5DF2\u62D2\u7EDD\u521B\u5EFA\u3002\u8BF7\u4ECE\u5F15\u64CE\u5217\u8868\u4E2D\u91CD\u65B0\u9009\u62E9",
+  zcode_fail_closed: "\u8BE5\u5F15\u64CE\u6682\u4E0D\u5F00\u653E\u6743\u9650\u7BA1\u7406\uFF0C\u5DF2\u62D2\u7EDD\u521B\u5EFA\u3002\u8BF7\u66F4\u6362\u5F15\u64CE\u540E\u91CD\u8BD5",
+  unknown_role: "\u4F1A\u8BDD\u8EAB\u4EFD\u65E0\u6CD5\u8BC6\u522B\uFF0C\u5DF2\u62D2\u7EDD\u521B\u5EFA\u3002\u8BF7\u91CD\u65B0\u53D1\u8D77\u521B\u5EFA",
+  tier_not_in_policy_matrix: "\u8BE5\u4EFB\u52A1\u6863\u4F4D\u672A\u914D\u7F6E\u6743\u9650\u7B56\u7565\uFF0C\u5DF2\u62D2\u7EDD\u521B\u5EFA\u3002\u8BF7\u6539\u7528\u6807\u51C6\u6863\u4F4D\u53D1\u8D77",
+  unknown_requested_mode: "\u6743\u9650\u6863\u4F4D\u503C\u65E0\u6CD5\u8BC6\u522B\uFF0C\u5DF2\u62D2\u7EDD\u521B\u5EFA\u3002\u8BF7\u5237\u65B0\u9875\u9762\u540E\u91CD\u65B0\u9009\u62E9",
+  unknown_policy_source: "\u6743\u9650\u9009\u62E9\u6765\u6E90\u65E0\u6CD5\u8BC6\u522B\uFF0C\u5DF2\u6309\u5B89\u5168\u7B56\u7565\u62D2\u7EDD\u3002\u8BF7\u5237\u65B0\u9875\u9762\u540E\u91CD\u65B0\u53D1\u8D77"
+};
+function permDenyMessage(reason) {
+  const copy = PERM_DENY_COPY[reason];
+  return copy ? `${copy}\uFF08${reason}\uFF09` : `\u5DF2\u6309\u6743\u9650\u5B89\u5168\u7B56\u7565\u62D2\u7EDD\u672C\u6B21\u64CD\u4F5C\uFF0C\u8BF7\u8C03\u6574\u9009\u9879\u540E\u91CD\u8BD5\uFF08${reason}\uFF09`;
 }
 
 // src/agent-jsonl.ts
@@ -45903,6 +45928,8 @@ var AgentSession = class {
       tool_name: toolName,
       input_summary: summary,
       suggestions: [],
+      received_at: Date.now(),
+      // W-ASKFIX ③：端上 TTL 置灰锚
       ...questions.length ? { questions } : {},
       ...remember ? { remember } : {}
     });
@@ -52172,7 +52199,12 @@ provider=${opts.provider ?? "default"}` : void 0,
             capability_state: engineCapabilityState(engineForPolicy),
             policy_source: "explicit",
             dir_scope: dirScope,
-            env: envScope
+            env: envScope,
+            // W-PERMERR：授权位接线补全（#69 半边）——此前仅组织派单口（:7123）传本字段，
+            // 用户自建卡勾「跳过权限确认」在生产/未知环境恒 forbidden 且授权对它无效
+            // （1016 用户 Windows 云通道实锤：连生产 relay 勾选即报错，无放行通道）。
+            // 授权读数与派单口同源（permission-auth.json，org auth-bypass 写入）
+            user_authorized_bypass: readBypassAuthorization(this.cfg.dataDir)
           }) : null;
           if (perm && perm.effective_mode === "forbidden") {
             const denyRow = {
@@ -52193,7 +52225,7 @@ provider=${opts.provider ?? "default"}` : void 0,
               created_at: Date.now()
             };
             appendPermissionAudit(auditStore(this.cfg.dataDir), denyRow);
-            return { command_id: cmd.command_id, ok: false, error: `forbidden: ${perm.reason}` };
+            return { command_id: cmd.command_id, ok: false, error: permDenyMessage(perm.reason) };
           }
           const spawnPmMode = perm && perm.effective_mode !== "forbidden" ? EFFECTIVE_TO_MANAGED[perm.effective_mode] : pm2 ?? "bypassPermissions";
           const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, spawnPmMode, cmd.payload.autoMkdir === true, {
@@ -54118,7 +54150,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     const text = backlog.map((m) => m.text).join("\n\n");
     const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
     this.pushExternalLog(s.state.session_id, "system", `\u6062\u590D\u6210\u529F\uFF0C\u8865\u6295\u6392\u961F\u6D88\u606F ${backlog.length} \u6761`);
-    s.agent?.sendMessage(text, images.length ? images : void 0);
+    if (s.agent) {
+      s.unacked.push({ id: randomUUID10(), text, images: images.length ? images : void 0, ts: Date.now(), hold: "turn" });
+      s.agent.sendMessage(text, images.length ? images : void 0);
+    }
   }
   // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
   // 口径 + 通知对账）：上一进程遗留 running/dispatched 悬账各补一行 done 收口（事实
@@ -54871,6 +54906,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    if (action === "auth-bypass") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
   // org 命令审计行（dispatch-log 台账通道，append-only；org.ts 口径：审计不进
@@ -54982,6 +55021,19 @@ provider=${opts.provider ?? "default"}` : void 0,
           ensureProjectClaudeMd(anchor, name);
           this.emitOrgState();
           return { ok: true, data: { group: r.group, needsConfirm: r.needsConfirm, confirm: r.confirm } };
+        }
+        case "auth-bypass": {
+          const on2 = bool("on");
+          const file = join33(this.cfg.dataDir, "permission-auth.json");
+          if (on2) {
+            writeFileSync18(file, JSON.stringify({ bypass_authorized: true, authorized_by: str2("by") || "org-cli", scope: "org-dispatch+create", updated_at: Date.now() }, null, 2) + "\n", "utf-8");
+          } else {
+            try {
+              rmSync5(file, { force: true });
+            } catch {
+            }
+          }
+          return { ok: true, data: { bypass_authorized: on2 } };
         }
         case "project-status": {
           const id2 = str2("id");
@@ -56071,7 +56123,30 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (veteranSession.resumeCooldownUntil && Date.now() < veteranSession.resumeCooldownUntil) {
           throw new Error(`resume \u7194\u65AD\u51B7\u5374\u4E2D\uFF08\u8FDE\u7EED\u5931\u8D25 ${veteranSession.resumeFailStreak ?? "?"} \u6B21\uFF09`);
         }
-        this.resumeAgent(veteranSession, dispatchPrompt);
+        const veteranAgent = veteranSession.agent;
+        const veteranAlive = veteranSession.state.status === "DONE" && !!veteranAgent && this.agentStreamAlive(veteranSession);
+        if (veteranAlive && veteranAgent) {
+          const vs2 = veteranSession;
+          const wakeId = randomUUID10();
+          vs2.unacked.push({ id: wakeId, text: dispatchPrompt, ts: Date.now(), hold: "turn" });
+          veteranAgent.sendMessage(dispatchPrompt);
+          vs2.state.status = "WORKING";
+          vs2.state.historical = false;
+          vs2.state.saved = void 0;
+          vs2.state.org_parked = void 0;
+          vs2.state.action_summary = "";
+          vs2.state.done_reason = void 0;
+          vs2.state.last_error = void 0;
+          vs2.state.turn_started_at = Date.now();
+          vs2.lastProgressAt = Date.now();
+          vs2.lastProgressKind = "";
+          vs2.wd.phase = "idle";
+          vs2.wd.gaveUp = false;
+          this.emitUpdated(vs2, true);
+          this.pushExternalLog(vs2.state.session_id, "system", "\u6D3E\u5355\u76F4\u6CE8\uFF1Aworker \u7A7A\u95F2\u5728\u5C97\uFF0C\u4EFB\u52A1\u5373\u65F6\u9001\u8FBE\uFF08\u514D\u91CD\u542F\u62C9\u8D77\uFF09");
+        } else {
+          this.resumeAgent(veteranSession, dispatchPrompt);
+        }
         sessionId = veteran;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -56681,8 +56756,11 @@ provider=${opts.provider ?? "default"}` : void 0,
     wd.since = now;
     wd.lastPromptAt = now;
     wd.capture = [];
-    s.agent?.sendMessage(prompt, void 0, "\u3010relay\u3011\u4E0A\u4E0B\u6587\u6C34\u4F4D\u544A\u8B66\uFF0C\u5DF2\u8BF7\u6C42\u4EFB\u52A1\u72B6\u6001\u6458\u8981");
-    s.unacked.push({ id: randomUUID10(), text: prompt, ts: now });
+    if (s.agent) {
+      const msgId = randomUUID10();
+      s.unacked.push({ id: msgId, text: prompt, ts: now, hold: s.state.relay_session_id ? void 0 : "init" });
+      s.agent.sendMessage(prompt, void 0, "\u3010relay\u3011\u4E0A\u4E0B\u6587\u6C34\u4F4D\u544A\u8B66\uFF0C\u5DF2\u8BF7\u6C42\u4EFB\u52A1\u72B6\u6001\u6458\u8981", msgId);
+    }
     this.pushExternalLog(s.state.session_id, "system", `\u4E0A\u4E0B\u6587\u6C34\u4F4D ${Math.round(tokens / limit * 100)}%\uFF0C\u5DF2\u8BF7\u6C42\u538B\u7F29\u524D\u4EFB\u52A1\u72B6\u6001\u6458\u8981`);
     this.emitUpdated(s, true);
   }
@@ -57232,7 +57310,7 @@ import path5 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn6, execFileSync } from "node:child_process";
-import { existsSync as existsSync24, mkdirSync as mkdirSync19, appendFileSync as appendFileSync5, readFileSync as readFileSync30, writeFileSync as writeFileSync19, rmSync as rmSync5 } from "node:fs";
+import { existsSync as existsSync24, mkdirSync as mkdirSync19, appendFileSync as appendFileSync5, readFileSync as readFileSync30, writeFileSync as writeFileSync19, rmSync as rmSync6 } from "node:fs";
 import path4, { join as join35 } from "node:path";
 import { homedir as homedir14, tmpdir as tmpdir2 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
@@ -57266,7 +57344,7 @@ function ensureInjector() {
     mkdirSync19(binDir, { recursive: true });
     if (existsSync24(exe2) && !existsSync24(exe2 + ".v2") && srcPeek) {
       try {
-        rmSync5(exe2, { force: true });
+        rmSync6(exe2, { force: true });
       } catch {
       }
     }
@@ -57512,7 +57590,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       });
       child.on("error", (e) => {
         try {
-          rmSync5(tmp, { force: true });
+          rmSync6(tmp, { force: true });
         } catch {
         }
         resolve10({ ok: false, error: e.message });
@@ -57706,7 +57784,7 @@ async function captureConsoleBottom(pid, rows = 20) {
     return null;
   } finally {
     try {
-      rmSync5(tmp, { force: true });
+      rmSync6(tmp, { force: true });
     } catch {
     }
   }
@@ -59253,7 +59331,7 @@ var Bridge = class _Bridge {
       for (const p of hits2) {
         this.dropEnqueuedKey(id2, pBody(p));
         this.noteUserMsg(id2, pBody(p), "promote");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3), ...p.refs?.length ? { images: p.refs } : {} });
+        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: fullText(p.text, 300), ...p.refs?.length ? { images: p.refs } : {} });
       }
       this.resetStuckWatch(id2);
       return;
@@ -59291,12 +59369,12 @@ var Bridge = class _Bridge {
     const consumed = this.consumePendingTexts(id2, text);
     if (consumed.length) {
       for (const t of consumed) {
-        if (!this.recentlyLogged(id2, t.text)) this.mgr.pushExternalLog(id2, "user_message", truncate(t.text, 300), void 0, { full: truncate(t.text, 2e3), ...t.refs?.length ? { images: t.refs } : {} });
+        if (!this.recentlyLogged(id2, t.text)) this.mgr.pushExternalLog(id2, "user_message", truncate(t.text, 300), void 0, { full: fullText(t.text, 300), ...t.refs?.length ? { images: t.refs } : {} });
         this.noteUserMsg(id2, t.text, "promote");
       }
       this.resetStuckWatch(id2);
     } else {
-      this.mgr.pushExternalLog(id2, "user_message", text, void 0, { full: truncate(prompt, 2e3) });
+      this.mgr.pushExternalLog(id2, "user_message", text, void 0, { full: fullText(prompt, 300) });
     }
     this.noteUserMsg(id2, text, "promote");
   }
@@ -59536,7 +59614,7 @@ var Bridge = class _Bridge {
       this.mgr.setExternalPending(sessionId, list);
       this.dropEnqueuedKey(sessionId, pBody(promoted));
       this.noteUserMsg(sessionId, pBody(promoted), "promote");
-      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: truncate(promoted.text, 2e3), ...promoted.refs?.length ? { images: promoted.refs } : {} });
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: fullText(promoted.text, 300), ...promoted.refs?.length ? { images: promoted.refs } : {} });
       this.resetStuckWatch(sessionId);
       return true;
     }
@@ -59552,7 +59630,7 @@ var Bridge = class _Bridge {
           for (const h of hits2) {
             this.dropEnqueuedKey(sessionId, pBody(h));
             this.noteUserMsg(sessionId, pBody(h), "promote");
-            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3), ...h.refs?.length ? { images: h.refs } : {} });
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: fullText(h.text, 300), ...h.refs?.length ? { images: h.refs } : {} });
           }
           this.noteUserMsg(sessionId, prompt, "promote");
           this.resetStuckWatch(sessionId);
@@ -59570,7 +59648,7 @@ var Bridge = class _Bridge {
       for (const h of subHits) {
         this.dropEnqueuedKey(sessionId, pBody(h));
         this.noteUserMsg(sessionId, pBody(h), "promote");
-        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3), ...h.refs?.length ? { images: h.refs } : {} });
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: fullText(h.text, 300), ...h.refs?.length ? { images: h.refs } : {} });
       }
       this.resetStuckWatch(sessionId);
       return true;
@@ -59903,7 +59981,7 @@ var Bridge = class _Bridge {
     if (!this.promotePending(id2, rawPrompt)) {
       if (!this.coveredByRecentPromote(id2, rawPrompt)) {
         this.noteUserMsg(id2, rawPrompt, "prompt");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(rawPrompt, 300), void 0, { full: truncate(rawPrompt, 2e3) });
+        this.mgr.pushExternalLog(id2, "user_message", truncate(rawPrompt, 300), void 0, { full: fullText(rawPrompt, 300) });
       }
     }
     void state;
@@ -60581,6 +60659,8 @@ var Bridge = class _Bridge {
       input_summary: summary,
       suggestions: [],
       decidable: true,
+      received_at: Date.now(),
+      // W-ASKFIX ③：端上 TTL 置灰锚
       ...questions.length ? { questions } : {},
       ...remember ? { remember } : {}
     };
@@ -60701,7 +60781,7 @@ var Bridge = class _Bridge {
       const qi2 = avail.findIndex((t) => normKey(pBody(t)) === normKey(pBody(p)));
       if (qi2 === -1) {
         this.noteUserMsg(id2, pBody(p), "promote");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3), ...p.refs?.length ? { images: p.refs } : {} });
+        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: fullText(p.text, 300), ...p.refs?.length ? { images: p.refs } : {} });
       } else {
         avail.splice(qi2, 1);
         kept2.push(p);
@@ -61827,6 +61907,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             "exp-retire",
             "exp-restore",
             "exp-list",
+            "auth-bypass",
+            // W-PERMERR：授权位写入口（org CLI 专用；on/off 均非决议类——写/撤授权文件）
             // W-EXPP2 面板组合动作（D1-6 补申报/改归组）：HTTP 面与 WS 面同权开放
             "exp-regroup",
             // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）
@@ -62687,6 +62769,25 @@ var CloudClient = class {
   // 回收时半开 TCP 骗过 pong 检测——见 startHeartbeat 的 hb 块
   lastHbAt = 0;
   hbMiss = 0;
+  // W-CLOUDFIX（#149）：ROUTE_MISS 风暴计数——桥侧路由表对多设备持续 miss（手机 WS
+  // 半死占位/桥实例路由烂掉）时，relay 守着这条 bridge WS 盲推无意义。连续 miss 计数
+  // （任何成功手机交互/hello 清零）到阈值即 terminate 换桥落点：重连 register 会广播
+  // relay-online，手机 awaitWake 在原连接补发 hello 会合——「错峰永不开会」的根治
+  routeMissStreak = 0;
+  lastMissKickAt = 0;
+  // P0 云桥三号（test.41 实锤）：per-device miss 计数与 park 集——失联旧身份（重装
+  // 前测试机）永久 miss 会绑架换桥风暴：每轮 terminate 把健康设备的下行一起踢断
+  // （41s 一轮循环）。park 后停推（sendSealed 跳过）+不再计入风暴——hello 到达即
+  // unpark 恢复正常推送。
+  // W-ZOMBIPARK：park 阈值前置——per-device 连续 miss≥3 直接触发（不经换桥：换桥
+  // 本身会踢健康设备下行）。原「风暴窗内 dm≥4」改为 miss 入口无条件计数（parked
+  // 除外），僵尸从第 1 秒被隔离、健康设备零误伤；风暴 terminate 保留给桥级信号
+  deviceMissCount = /* @__PURE__ */ new Map();
+  parkedDevices = /* @__PURE__ */ new Set();
+  // W-ZOMBIEx ②（派单收紧口径）：dev 最近 hello 时刻——风暴统计只认「近 5min 有
+  // hello」的设备（cloudfix3 只排除 parked；未达 park 阈值但长期零 hello 的僵尸
+  // 同样不该绑架换桥——hello 是「设备还活着」的唯一铁证）
+  lastHelloAt = /* @__PURE__ */ new Map();
   hbTimer = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   resumeOnOpen = /* @__PURE__ */ new Set();
@@ -62824,6 +62925,7 @@ var CloudClient = class {
     return false;
   }
   sendSealed(dev, obj) {
+    if (this.parkedDevices.has(dev)) return false;
     const peer = this.identity.peers.get(dev);
     if (!peer) return false;
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
@@ -63009,6 +63111,33 @@ var CloudClient = class {
     if (f.type === "ROUTE_MISS" && f.to) {
       const to2 = f.to;
       const st2 = this.phones.get(to2) ?? this.wanWatches.get(to2);
+      const nowMs = Date.now();
+      if (!this.parkedDevices.has(to2)) {
+        const dm = (this.deviceMissCount.get(to2) ?? 0) + 1;
+        this.deviceMissCount.set(to2, dm);
+        if (dm >= 3) {
+          this.parkedDevices.add(to2);
+          this.routeRetryTimers.delete(to2);
+          console.log(`[cloud] device parked early (miss x${dm}, pre-rotation): ${to2}`);
+        }
+      }
+      const lastHello = this.lastHelloAt.get(to2) ?? 0;
+      const zombieSilent = nowMs - lastHello > 5 * 6e4;
+      if (!this.parkedDevices.has(to2) && !zombieSilent && nowMs - this.lastMissKickAt > 3e4) {
+        this.routeMissStreak += 1;
+        if (this.routeMissStreak >= 3) {
+          this.routeMissStreak = 0;
+          this.lastMissKickAt = nowMs;
+          const parkedList = [...this.parkedDevices];
+          console.log(`[cloud] route-miss storm (${3}x no-ack in 30s), rotating bridge connection${parkedList.length ? ` (parked: ${parkedList.join(",")})` : ""}`);
+          if (this.ws && this.ws.readyState === wrapper_default.OPEN) {
+            try {
+              this.ws.terminate();
+            } catch {
+            }
+          }
+        }
+      }
       if (st2?.active) {
         st2.active = false;
         console.log(`[cloud] route miss dev=${to2}, mark inactive`);
@@ -63134,6 +63263,12 @@ var CloudClient = class {
       return;
     }
     if (inner.t === "hello") {
+      this.routeMissStreak = 0;
+      if (this.parkedDevices.delete(f.from) || this.deviceMissCount.has(f.from)) {
+        this.deviceMissCount.delete(f.from);
+        console.log(`[cloud] device unparked on hello: ${f.from}`);
+      }
+      this.lastHelloAt.set(f.from, Date.now());
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       console.log(`[cloud] ${f.from} hello last_seq=${lastSeq}`);
       const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
@@ -63447,7 +63582,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync37(lockPath, "utf8").trim()) === process.pid) rmSync6(lockPath);
+      if (Number(readFileSync37(lockPath, "utf8").trim()) === process.pid) rmSync7(lockPath);
     } catch {
     }
   };
@@ -63582,7 +63717,7 @@ if (cliArgs.has("--stop")) {
     console.log("\u672A\u53D1\u73B0\u8FD0\u884C\u4E2D\u7684 CC Deck Relay");
   }
   try {
-    rmSync6(pidFile);
+    rmSync7(pidFile);
   } catch {
   }
   process.exit(0);
@@ -63604,7 +63739,7 @@ function sweepTmpImages(dir) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join41(dir, f);
       try {
-        if (Date.now() - statSync14(p).mtimeMs > 7 * 864e5) rmSync6(p, { force: true });
+        if (Date.now() - statSync14(p).mtimeMs > 7 * 864e5) rmSync7(p, { force: true });
       } catch {
       }
     }
