@@ -1632,6 +1632,8 @@ function WaitCard({ isAsk, children }: { isAsk: boolean; children: ReactNode }) 
   );
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable); // W-SWIPEASK：圆点跟手淡入淡出（插值 opacity 须挂 Animated 组件）
+
 // AskUserQuestion 作答横幅：单问题单选 = 点选项即发；多问题/多选 = 勾选后提交；单问题支持自由输入
 // #190 多问题 stepper（CLI 式，对齐桌面端）：一次只展示一题 + 题号指示器（可点击跳题）；
 // 单选题选中自动进下一题、末题留步等「提交回答」——题多时 banner 不再撑爆底部栈
@@ -1655,6 +1657,74 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   const [picked, setPicked] = useState<Record<number, string[]>>({});
   const [free, setFree] = useState<Record<number, string>>({});
   const [cur, setCur] = useState(0);
+  // W-SWIPEASK（#157 后半）：多问题左右滑切换（微信式跟手）。swipeTo=跟手目标题索引
+  // （null=非跟手态）；swipeX=进度 0..W；锁定时定方向：dx<0=看下一题（dir=1）。
+  // 松手「进度过半或 vx≥0.55」spring 落位 setCur(to)，否则回弹。横占优 ≥24px 判定
+  // 与域滑切/行滑删同款——纵滑（列表滚动/输入框）零冲突；单问题（!stepped）不启手势。
+  const [swipeTo, setSwipeTo] = useState<number | null>(null);
+  const swipeAskX = useRef(new Animated.Value(0)).current;
+  const askW = () => Dimensions.get("window").width;
+  const swipeRef = useRef<{ to: number; grabbed: boolean } | null>(null);
+  const curQi = stepped ? Math.min(cur, qs.length - 1) : 0;
+  const swipeAskPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponderCapture: (_e, g) => {
+        if (!stepped || swipeRef.current?.grabbed) return !!swipeRef.current?.grabbed;
+        if (Math.abs(g.dx) < 24 || Math.abs(g.dx) <= Math.abs(g.dy) * 2) return false;
+        const dir = g.dx < 0 ? 1 : -1;
+        const to = curQi + dir;
+        if (to < 0 || to >= qs.length) return false; // 边界 no-op
+        swipeRef.current = { to, grabbed: true };
+        swipeAskX.setValue(0);
+        setSwipeTo(to);
+        return true;
+      },
+      onPanResponderMove: (_e, g) => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        const dir = s.to > curQi ? 1 : -1;
+        const prog = dir === 1 ? -g.dx : g.dx; // 反向拖=回退进度
+        swipeAskX.setValue(Math.max(0, Math.min(askW(), prog)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        s.grabbed = false;
+        const dir = s.to > curQi ? 1 : -1;
+        const prog = dir === 1 ? -g.dx : g.dx;
+        const settle = prog >= askW() / 2 || (dir === 1 ? g.vx : -g.vx) <= -0.55;
+        if (settle) {
+          Animated.spring(swipeAskX, { toValue: askW(), speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
+            if (!finished) return;
+            setCur(s.to);
+            setSwipeTo(null);
+            swipeRef.current = null;
+            swipeAskX.setValue(0);
+          });
+        } else {
+          Animated.spring(swipeAskX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
+            if (!finished) return;
+            setSwipeTo(null);
+            swipeRef.current = null;
+          });
+        }
+      },
+      onPanResponderTerminate: () => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        s.grabbed = false;
+        Animated.spring(swipeAskX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(() => {
+          setSwipeTo(null);
+          swipeRef.current = null;
+        });
+      },
+    }),
+  ).current;
+  // 双面位移插值：当前题视差 0.35 退；目标题全跟手从侧缘进（dir 由 swipeTo 推出）
+  const askDir = swipeTo === null ? 1 : swipeTo > curQi ? 1 : -1;
+  const askPaneX = swipeAskX.interpolate({ inputRange: [0, 500], outputRange: [0, -askDir * 500 * 0.35], extrapolate: "clamp" });
+  const askToX = swipeAskX.interpolate({ inputRange: [0, 500], outputRange: [askDir * 500, 0], extrapolate: "clamp" });
   const advTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     setPicked({});
@@ -1702,13 +1772,22 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       {stepped ? (
         <View style={d.askSteps}>
           <Text style={d.askCount}>{qi + 1} / {qs.length}</Text>
-          {qs.map((_, i) => (
-            <Pressable key={i} hitSlop={7} onPress={() => setCur(i)} style={[d.askDot, answered(i) && d.askDotDone, i === qi && d.askDotCur]} />
-          ))}
+          {qs.map((_, i) => {
+            // W-SWIPEASK：圆点跟手同步——当前点随进度淡出、目标点淡入（插值连续，
+            // 落位 setCur 后 askDotCur 正常接管）
+            const curFade = swipeAskX.interpolate({ inputRange: [0, 500], outputRange: [1, 0.15], extrapolate: "clamp" });
+            const toFade = swipeAskX.interpolate({ inputRange: [0, 500], outputRange: [0.15, 1], extrapolate: "clamp" });
+            const dynOpacity = swipeTo === null ? undefined : i === curQi ? curFade : i === swipeTo ? toFade : undefined;
+            return (
+              <AnimatedPressable key={i} hitSlop={7} onPress={() => setCur(i)} style={[d.askDot, answered(i) && d.askDotDone, i === qi && d.askDotCur, dynOpacity ? { opacity: dynOpacity } : null]} />
+            );
+          })}
         </View>
       ) : null}
       {q ? (
-        <View>
+        <View style={{ position: "relative" }}>
+          {/* W-SWIPEASK：当前题面——跟手视差退（stepped 挂手势；single 无手势） */}
+          <Animated.View style={{ transform: [{ translateX: askPaneX }] }} {...(stepped ? swipeAskPan.panHandlers : {})}>
           <Text style={d.askQ}>{q.question}</Text>
           <View style={[d.askOpts, ro && d.roDim]}>
             {q.options.map((o) => {
@@ -1726,6 +1805,18 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
               );
             })}
           </View>
+          </Animated.View>
+          {/* 目标题面（跟手期）：简版（题文+选项灰显），落位后由上方正式渲染接管 */}
+          {stepped && swipeTo !== null ? (
+            <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, backgroundColor: c.panel2, borderRadius: 8, padding: 6, transform: [{ translateX: askToX }] }} pointerEvents="none">
+              <Text style={d.askQ}>{qs[swipeTo]?.question}</Text>
+              <View style={[d.askOpts, { opacity: 0.5 }]}>
+                {(qs[swipeTo]?.options ?? []).map((o) => (
+                  <View key={o.label} style={d.askChip}><Text style={d.askChipT}>{o.label}</Text></View>
+                ))}
+              </View>
+            </Animated.View>
+          ) : null}
           {stepped ? (
             <TextInput
               style={[d.askFree, { marginBottom: 4 }, ro && d.roDim]}
