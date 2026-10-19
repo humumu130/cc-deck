@@ -113,7 +113,7 @@ console.log("== W-RESTARTDESIGN：restart-ledger 四场景 + 收编/闸锚 ==");
 {
   const sm = rf(join(import.meta.dirname, "../src/session-manager.ts"), "utf-8");
   ok(sm.includes("private scheduleReceiptCheck("), "⑥① 回执闸方法体在场");
-  ok(sm.includes('if (status === "done") this.scheduleReceiptCheck('), "⑥② done 边沿挂点在场");
+  ok(sm.includes('if (status === "done" || status === "failed") this.scheduleReceiptCheck('), "⑥② 收口边沿挂点在场（done||failed，W-GATEFIX）");
   ok(sm.includes("notifyLeaderSystem"), "⑥③ 无会话落 ledger 方法在场");
   ok(sm.includes("user-note-"), "⑥④ notifyConfirm ledger 收编（source:user-note）在场");
   const ws = rf(join(import.meta.dirname, "../src/ws-server.ts"), "utf-8");
@@ -123,7 +123,7 @@ console.log("== W-RESTARTDESIGN：restart-ledger 四场景 + 收编/闸锚 ==");
   ok(sm.includes("loadRestartLedgerOnBoot(): "), "⑥⑦ 回灌方法体在场");
   ok(sm.includes("restart-undelivered-"), "⑥⑧ 用户消息终态未投递通知在场（F1）");
   ok(/receiptPath\?\) => \{/.test(sm) || sm.includes("receiptPath?: string"), "⑥⑨ 任务书回执路径提取+存 dispatch 记录（receiptPath 字段链）");
-  ok(/existsSync\(receiptPath\)/.test(sm), "⑥⑩ 精确核对优先（提取路径 existsSync；无提取值回落前缀扫描）");
+  ok(/existsSync\(entry\.receiptPath\)/.test(sm), "⑥⑩ 精确核对优先（entry.receiptPath existsSync；无提取值回落前缀扫描，W-GATEFIX 归一后）");
 }
 
 console.log(`\nrestart-ledger: ${pass} passed, ${fail} failed`);
