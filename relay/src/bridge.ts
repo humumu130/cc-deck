@@ -1509,6 +1509,9 @@ export class Bridge {
   extInput(sessionId: string, text: string, images?: string[], files?: UploadBlob[]): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
+    // F7（2026-10-19）：submit 面到达时刻打点——此前端上发消息到注入完成之间只有
+    // flush 内部的 [submit] 行，排队/WAITING 场景到达即无声，排障盲区（w-sched-c §五.3）
+    console.log(`[submit] ext-input sid=${sessionId.slice(0, 14)} status=${state.status} len=${text.length}${images?.length ? ` img=${images.length}` : ""}${files?.length ? ` file=${files.length}` : ""}`);
     // #54 路线 A：外部会话发图——base64 落盘专用临时目录 <dataDir>/../tmp（7 天自动清扫，
     // 见 index.ts sweepTmpImages），合成「正文 + 路径查看指令」后走既有注入/排队链路，
     // CLI 用 Read 工具渲染图片（Read 原生支持 PNG/JPG）。扩展名按魔数嗅探兜底 png。

@@ -551,6 +551,9 @@ startServer(bus, mgr, cfg, {
 });
 
 console.log("CC Deck Relay 已启动");
+// F7（2026-10-19）：启动行带 pid+运行模式——embedded-relay.log 排障对表（ps/launchd 比对）
+// 与「这段日志是哪个进程写的」一眼可判；时间戳由内嵌包装器统一加
+console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）`);
 console.log(`  模型:   ${cfg.model}`);
 console.log(`  端口:   ${cfg.port}`);
 console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);

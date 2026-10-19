@@ -7040,6 +7040,10 @@ export class SessionManager {
       ...(planned.provider ? { provider: planned.provider } : {}),
       ...(planned.model ? { model: planned.model } : {}),
     };
+    // F7（2026-10-19）：派单面结构化日志——dispatchWorker 此前零 console 输出（台账只落
+    // dispatch-log.ndjson 文件），embedded-relay.log 长时段无派单痕迹成排障盲区
+    //（w-sched-c §五.3）。只加日志不动逻辑；时间戳由 index.ts 内嵌包装器统一加
+    console.log(`[dispatch] start id=${dispatchId.slice(0, 8)} tier=${tier} gid=${input.gid ?? "-"} actor=${actor} engine=${planned.engine ?? "-"} title=${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}`);
     // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
     // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
     // 档案注入（记忆亲和：干净冷启动）。
@@ -7196,6 +7200,7 @@ export class SessionManager {
       : "";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
+    console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId: string;
     if (veteran) {
       try {
@@ -7260,6 +7265,7 @@ export class SessionManager {
           const receipt = truncate(`编制已满${capReuse ? "，复用 worker resume 失败且不扩编降级" : "，在编熟手 resume 熔断且不扩编降级"}: ${msg}`, 200);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=resume 编制已满不扩编: ${truncate(msg, 120)}`);
           return { ok: false, error: `编制已满（${capReuse ? "触顶复用" : "在编熟手"} resume 失败，不扩编）: ${msg}` };
         }
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
@@ -7277,6 +7283,7 @@ export class SessionManager {
           const receipt = truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=spawn 复用降级拉起失败: ${truncate(msg2, 120)}`);
           return { ok: false, error: `worker 拉起失败: ${msg2}` };
         }
       }
@@ -7295,6 +7302,7 @@ export class SessionManager {
         const receipt = truncate(msg, 200);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
         this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+        console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=spawn 新会话拉起失败: ${truncate(msg, 120)}`);
         return { ok: false, error: `worker 拉起失败: ${msg}` };
       }
     }
@@ -7324,10 +7332,12 @@ export class SessionManager {
         const receipt = truncate(`入编被编制上限闸拒绝: ${am.error ?? ""}`, 200);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "failed", receipt, session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
         this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, sessionId);
+        console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=enroll 入编失败: ${truncate(am.error ?? "未知", 120)}`);
         return { ok: false, error: am.error ?? "入编失败" };
       }
     }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
+    console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
@@ -7460,6 +7470,7 @@ export class SessionManager {
       const receipt = truncate(`${titleSeg}派单队列已满（200）——编制触顶且长期全忙，请先清理编制或调 headcount_cap`, 200);
       appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
       this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+      console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=queue-full 队列已满（200）gid=${g.id}`);
       return { ok: false, error: "派单队列已满（200）" };
     }
     // 重放再排队：同 id 条目挪回队首（保 FIFO——它原本排在同组未处理单之前）；
@@ -7473,6 +7484,7 @@ export class SessionManager {
     // W-SANDBOXFIX P2-1：排队行同带标题截断段（与满队 failed 行同口径）
     const queuedTitleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
     appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
+    console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g.id} actor=${actor} title=${queuedTitleSeg}`);
     this.pushExternalLog(this.leaderId ?? "", "system", `派单排队：${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}（编制 ${genericWorkerCount(g.headcount)}/${headcountCapOf(g)} 触顶且全忙，队列位置 ${this.dispatchQueueItems.length}）`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
   }

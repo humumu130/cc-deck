@@ -26,6 +26,18 @@ fi
 echo $$ > "$LOCK_DIR/pid"
 trap 'rm -rf "$LOCK_DIR"' EXIT
 
+# 清单配对闸（F1，2026-10-19）：回读的清单里 version 必须等于本次 VER，否则非零退出
+# 阻断出包收尾——清单漏推/滞留旧版 = App 检查更新拿到旧包谎报「已是最新」（test.25→36
+# 实锤事故）。ECS 与 KV 两路径写完各自回读过闸
+manifest_gate() { # $1=清单原文 $2=来源标签（ECS / KV 公网）
+  GOT=$(printf '%s' "$1" | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+  if [ "$GOT" != "$VER" ]; then
+    echo "ERR: ${2} 清单回读 version=${GOT:-<空>} ≠ 本次 ${VER}——清单漏推/滞留旧版（App 会拿到旧包谎报已是最新），阻断出包收尾" >&2
+    exit 1
+  fi
+  echo "    配对闸 ✓ ${2}: version=${GOT}"
+}
+
 NOTE="${1:-}"
 BASE=$(tr -d '[:space:]' < VERSION)
 ECS_HOST="root@8.133.211.170"
@@ -105,18 +117,32 @@ fi
 printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk"%s,"size":%s,"notes":"%s"}' \
   "$VER" "$VER" "$URL_CF_FIELD" "$(stat -f%z "$APK")" "$NOTE_JSON" \
   | $SSH "$ECS_HOST" "cat > $ECS_DIR/latest-test.json"
+# F1 配对闸（ECS 路径）：写完立即回读校验，version 不符即阻断（防「写失败静默半截」）
+ECS_BACK=$($SSH "$ECS_HOST" "cat $ECS_DIR/latest-test.json" 2>/dev/null || true)
+manifest_gate "$ECS_BACK" "ECS"
 # 清单也上 KV（2026-09-20）：ECS 裸 IP 被公司网屏蔽时清单单源会让 App 内检查更新
 # 失明（拿不到清单谎报「已是最新」）——updates.ts 的 TEST_MANIFEST_URLS CF 优先读
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
   $SSH "$ECS_HOST" "cat $ECS_DIR/latest-test.json" > /tmp/latest-test.json.$$
-  # 同 #154：失败必须带出真实报错——清单滞留旧版 = App 检查更新拿到旧包（用户实锤）
+  # 同 #154：失败必须带出真实报错。F1 起上传失败从警告改**阻断**——清单滞留旧版正是
+  # test.25→36 事故本体（公司网 App 读 CF 优先，KV 清单旧 = 拿旧包谎报最新）
   if scripts/kv-put-verified.sh "/tmp/latest-test.json.$$" "latest-test.json" >/tmp/kv-manifest-put.log 2>&1; then
     echo "    CF 清单: https://cc.humumu.online/dl/latest-test.json"
   else
-    echo "    ⚠️ CF 清单上传失败（App 内检查更新可能拿到旧版），根因："
-    tail -3 /tmp/kv-manifest-put.log
+    echo "ERR: CF 清单上传失败——KV 清单将滞留旧版（App 拿旧包谎报最新），阻断出包收尾；根因：" >&2
+    tail -3 /tmp/kv-manifest-put.log >&2
+    rm -f "/tmp/latest-test.json.$$"
+    exit 1
   fi
   rm -f "/tmp/latest-test.json.$$"
+  # F1 配对闸（KV 路径）：App 实际读的公网面回读（/dl/ 直出），KV 最终一致允许重读
+  KV_BACK=""
+  for i in 1 2 3 4; do
+    KV_BACK=$(curl -sf --max-time 30 "https://cc.humumu.online/dl/latest-test.json" 2>/dev/null || true)
+    [ -n "$KV_BACK" ] && break
+    [ "$i" = "4" ] || sleep 6
+  done
+  manifest_gate "$KV_BACK" "KV 公网"
 fi
 
 echo "[5/5] 完成"
