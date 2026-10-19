@@ -117,16 +117,20 @@ TaskCreate → ~/.claude/tasks/<cli_sid>/<n>.json   （单文件单任务：id/s
 ### 2.1 链路
 
 ```
-org dispatch（COMMAND_ORG_ACTION / /api/org）
-  ├─ 编制有空位 → dispatchWorker 认领 → wrapDispatchPrompt
-  │   （session-manager:7189：tier+经验块+岗位块+规则块拼接）
-  │     ├─ 新建 session：create → SDK spawn → 首回合 prompt（不排队，create 即回合）
-  │     └─ 复用既有 session → s.agent.sendMessage(prompt)（:4996）
-  │           → pushUserMessage → SDK 消息流【relay 层无队列，排队语义全在 SDK 黑盒】
+org dispatch（COMMAND_ORG_ACTION / /api/org，均汇入 orgAction 咽喉 session-manager:5622）
+  ├─ 形状校验（anchor/prompt/tier）→ 可选编排链（task 存在先写卡+computeReady 依赖闸）
+  ├─ 编制有空位 → dispatchWorker 认领 → wrapDispatchPrompt（:7189：tier+经验+岗位+规则块）
+  │     ├─ 新建 session：create → SDK spawn CLI → 首回合 prompt（create 即回合，无队列）
+  │     ├─ DONE 熟手+流健康（W-SCHEDFIX2 直注）：sendMessage 直注入账 hold:"turn"
+  │     │   ——不杀 CLI 不重载 transcript，窗长收敛到模型首 token
+  │     └─ DONE 熟手+流死/僵尸：resumeAgent（杀旧流→spawn resume→transcript 重载→首条带账注入；
+  │         R3 不变式：僵尸熟手必换流承接原班）
   └─ 编制触顶全忙 → dispatch-queue.json FIFO
         （内存权威+写穿持久+boot 回灌；drainReentrant 防重入；无容量上限）
 外部 CLI worker 链（bridge）：enqueue → state.pending_inputs
   （covered 去重 + CLI enqueue 回执晋升出队 #43 + 看门狗滞留跳过已进队）
+注入账面：注入即 unacked.push（hold:"turn"）→ CLI 回显 user_message 带 ackId → 对账出队；
+回合中断 → flushResumeBacklog 带账补投 → 补投文再入账（W-SCHEDFIX2 补全最后一公里）
 ```
 
 ### 2.2 丢失面（w-sched-b 问题清单，原文归档）
@@ -142,7 +146,7 @@ org dispatch（COMMAND_ORG_ACTION / /api/org）
 ### 2.3 生产实证（w-sched-c，2026-10-19 前夜 12h 窗）
 
 **今晚 21 单零丢失零不处理**：dispatch→台账 running 0-2s（21/21 配对）；dispatch→prompt 注入**全部 0.0s**（21/21，user_message 带 task_ref 精确对时）；prompt→CLI 首响应 13-323s（中位 ~65s）。受控复现单全链 35.6s 零卡点。
-**「收了不处理 SESSION_DONE」=拉活窗观感**：dispatch→prompt 即达（0.0s）→目标 worker 回合已 DONE→prompt 挂输入队列→等 autoRevive 拉活（轮询周期 30-60s 级）→CLI 新回合消费。窗长=轮询剩余相位+CLI 启动+模型首 token。
+**「收了不处理 SESSION_DONE」=拉活窗观感**：dispatch→prompt 即达（0.0s）→目标 worker 回合已 DONE→prompt 挂输入队列→等拉活→CLI 新回合消费。~~等 autoRevive 轮询 30-60s~~ **（W-SCHEDFIX2 证伪：全仓不存在 30-60s 拉活轮询——dispatch→DONE 熟手同步走 resumeAgent，「拉活」本就地发生；65s 中位窗实为 CLI 重启+transcript 重载+模型首 token，直注落地后健康熟手只剩首 token）**。
 **排队丢失 0 实证但有两点风险备案**：①历史前科在案（W-INJECT 批修过账本回退 miss 窗口事件永久丢失——relay 重启窗 in-flight 帧黑洞，已修）；②窗口内 relay 未重启，该风险面未被测试。
 
 ---
