@@ -725,7 +725,7 @@ export class SessionManager {
   // leaderOpenDispatch = 进行中派单 id FIFO（M2 泛化为 openDispatches：按会话键一
   // FIFO——Leader=咨询档同机制复用，worker=派单承接；回合串行，消息数=回合数。
   // 值带收口所需 tier/gid/anchor：收口行写回真实档位，gid 联动任务板搬卡）
-  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string }[]>();
+  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string }[]>();
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
   // chain 起算无对账风险；跨重启持久化属 #71 产品面
@@ -4731,7 +4731,7 @@ export class SessionManager {
   // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
   //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
   // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
-  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string }): void {
+  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string }): void {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
@@ -4840,7 +4840,7 @@ export class SessionManager {
         })()
       : all
         ? q.splice(0)
-        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string } => !!x);
+        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
     for (const e of es) {
       // W-TASKFLOW task_ref（2026-10-12 用户拍板）：回执头部携带 [task_ref:卡id]——
@@ -4871,6 +4871,8 @@ export class SessionManager {
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       // W-TASKFLOW：通知文本同带 [task_ref] 头（回执流四处同键）
       this.notifyDispatchClosed(e, status, refReceipt, key);
+
+      if (status === "done") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath); // W-RESTARTDESIGN §三：done 边沿回执闸（带任务书约定路径）
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
@@ -7346,7 +7348,10 @@ export class SessionManager {
     }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
-    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
+    // W-RESTARTDESIGN §三：从任务书 prompt 提取约定回执路径（派单纪律固定写
+    // ~/.cc-deck/artifacts/w-*.md）——收口后按此精确核对（无提取值回落前缀扫描）
+    const receiptPath = /(~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md))/i.exec(input.prompt)?.[1];
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}) });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
         ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
@@ -7594,12 +7599,16 @@ export class SessionManager {
    * （随手办/咨询档无回执约定）；failed 不核（失败单的回执常在修复批内补）。
    * 重启窗内定时器丢失由 ledger 条目兜底。扫描失败跳过（artifacts 不可达）。
    */
-  private scheduleReceiptCheck(dispatchId: string, gid: string | undefined, title: string): void {
+  private scheduleReceiptCheck(dispatchId: string, gid: string | undefined, title: string, receiptPath?: string): void {
     if (!gid) return; // 无 gid=随手办/咨询档，无回执约定
     const t = setTimeout(() => {
       try {
         const artsDir = join(homedir(), ".cc-deck", "artifacts");
-        const hit = existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+        // 精确优先：任务书提取的约定路径按文件存在性核对（多 worker 并行不假阳）；
+        // 无提取值（任务书未写路径）回落前缀扫描（任一新 w-*.md 即过——宽防误报）
+        const hit = receiptPath
+          ? existsSync(receiptPath)
+          : existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
         if (!hit) {
           this.notifyLeaderSystem(`dispatch ${dispatchId.slice(0, 8)}（${title.slice(0, 30)}）收口无回执——交付存疑，请核 artifacts/`);
         }

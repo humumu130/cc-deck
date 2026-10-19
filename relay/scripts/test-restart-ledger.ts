@@ -122,6 +122,8 @@ console.log("== W-RESTARTDESIGN：restart-ledger 四场景 + 收编/闸锚 ==");
   ok(/applyPinned[\s\S]{0,600}loadRestartLedgerOnBoot[\s\S]{0,400}reloadDispatchQueue/.test(idx), "⑥⑥ boot 顺序：pinned→ledger→queue（F2）");
   ok(sm.includes("loadRestartLedgerOnBoot(): "), "⑥⑦ 回灌方法体在场");
   ok(sm.includes("restart-undelivered-"), "⑥⑧ 用户消息终态未投递通知在场（F1）");
+  ok(/receiptPath\?\) => \{/.test(sm) || sm.includes("receiptPath?: string"), "⑥⑨ 任务书回执路径提取+存 dispatch 记录（receiptPath 字段链）");
+  ok(/existsSync\(receiptPath\)/.test(sm), "⑥⑩ 精确核对优先（提取路径 existsSync；无提取值回落前缀扫描）");
 }
 
 console.log(`\nrestart-ledger: ${pass} passed, ${fail} failed`);
