@@ -1,3 +1,4 @@
+import { EngineBrandTile } from "../engine-icon";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -401,7 +402,7 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                           if (!e.models || !e.models.length) setPickerOpen(false); // 无模型清单一步完成
                         }}
                       >
-                        <View style={[m.engDot, { backgroundColor: accent }]} />
+                        <EngineBrandTile engine={e.id} size={18} dim={e.state !== "ready"} />
                         <View style={m.engMain}>
                           <View style={m.engNameRow}>
                             <Text style={[m.engName, on && m.engNameOn]} numberOfLines={1}>{engineLabelOf(e)}</Text>

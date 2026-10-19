@@ -11,6 +11,7 @@
 // 增量（PROJECTS_UPDATED/BOARD_UPDATED/experience/rules/org_confirms）。板数据 live
 // 优先（conn.boards[gid] 由 BOARD_UPDATED delta 维护，M13-4 锚定纪律），detail 拉取
 // 结果兜底。对话不设 tab（A1-13）——经成员卡/看板 owner 点开成员会话即达。
+import { EngineBrandTile } from "../engine-icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -114,11 +115,11 @@ export const engineBadgeable = (e: string | undefined): boolean => !!e && !!ENGI
 export function EngineBadge({ engine, size = "md" }: { engine?: string; size?: "md" | "sm" }) {
   const styles = useThemeStyles(makeStyles);
   if (!engine || !ENGINE_ZH[engine]) return null;
-  const dot = size === "sm" ? styles.engDotSm : styles.engDot;
   const txt = size === "sm" ? styles.engBadgeTSm : styles.engBadgeT;
   return (
     <View style={styles.engBadge}>
-      <View style={[dot, { backgroundColor: ENGINE_ACCENT[engine] }]} />
+      {/* W-MSGUI 件二：彩点→品牌瓦片（EngineBrandTile 复用件，一处换全端生效） */}
+      <EngineBrandTile engine={engine} size={size === "sm" ? 12 : 14} />
       <Text style={txt}>{ENGINE_ZH[engine]}</Text>
     </View>
   );

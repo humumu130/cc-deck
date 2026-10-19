@@ -2454,6 +2454,13 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
       undefined,
       (r) => {
         if (!r.ok) setPendingEcho((prev) => markEchoState(prev, echoKey, "failed"));
+        // W-MSGUI 件一（#159 同族云桥版）：ack ok 即消气泡——relay 已受理=气泡使命
+        // 完成（转录行由 SESSION_LOG 回声到达自然插入；回声对账 reconcile 保留，
+        // 双路径消=no-op 幂等）。云桥下行 route miss 循环时（生产实锤：ph-* 推送
+        // miss→resume 再 miss），回声/ACK 帧闷死在桥侧，旧逻辑「sending 挂到 120s
+        // 安全阀」观感即「发送中滞留」——ACK 是唯一必达回执（命令通道原路回），
+        // 以它为准收口。
+        else setPendingEcho((prev) => prev.filter((p) => p.key !== echoKey));
       },
     );
     setPendingEcho((prev) =>
