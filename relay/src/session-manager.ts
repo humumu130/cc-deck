@@ -6430,7 +6430,7 @@ export class SessionManager {
           // anchor 匹配 ∪ session_id ∈ 编制（成员关联兜住 anchor 缺失行；生产实证 0/16 命中
           // 的历史行因 sid 也对不上编制不可追溯，见回执）
           const memberSids = new Set(g.headcount.map((h) => h.session_id));
-          const receipts = readDispatchLog()
+          const receiptsRows = readDispatchLog()
             .filter((e) => {
               const a = (e.project_anchor ?? "").replace(/\/+$/, "");
               if (a && a === g.anchor_dir.replace(/\/+$/, "")) return true;
@@ -6438,6 +6438,14 @@ export class SessionManager {
             })
             .slice(-30)
             .reverse();
+          // W-DISPVIS B4：逐行拼「已消费」——readDispatchLog 本就是同 id 收敛视图（org.ts
+          // byId 末行赢），读出的行即该单末行，逐行判定=末行判定。消费语义=回合收口
+          //（done/failed：消息必然被 CLI 吃下并跑完）；running 只是承接成功（消息可能仍在
+          // 注入队列/换流窗口/排队消息中——正是「已派单·等待处理」角标的可观测窗口，
+          // 托管链 unacked/外部链 pending_inputs 的消息级证据在台账上不可见，收口行是
+          // 最保守的可观测代理）。末行停在 dispatched/queued/running=已注入未消费。
+          // 服务端拼好端上零 join（本仓 detail 惯例）
+          const receipts = receiptsRows.map((e) => ({ ...e, consumed: e.status === "done" || e.status === "failed" }));
           const pool = routingFor(g.id).map((e) => {
             const s = this.sessions.get(e.session_id);
             return {
@@ -6459,7 +6467,7 @@ export class SessionManager {
           // W-EXPP1：lessons 摘除下发（与 emitBoard 同口径——detail 拉取是端上板缓存的
           // 另一条喂养链，磁盘文件不动）。P0 编制上限（2026-10-15）：cap/workers/queued
           // 随详情下发——面板可见席位水位（headcount_cap 缺席=全局缺省值生效）
-          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool, cap: headcountCapOf(g), workers: genericWorkerCount(g.headcount), queued: this.queueDepth(g.id) } };
+          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool, cap: headcountCapOf(g), workers: genericWorkerCount(g.headcount), queued: this.queueDepth(g.id), dispatch_queue: this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === g.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g.id, title: (x.input as { title?: string }).title || "" })) } };
         }
         // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
         case "rate": {

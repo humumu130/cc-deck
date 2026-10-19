@@ -753,6 +753,7 @@
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
     .tag.authn { background: transparent; background: color-mix(in srgb, var(--working) 14%, transparent); color: var(--working); } /* #102 批 A：引擎已装未登录 */
+    .tag.dispatch-pending { flex: none; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 32%, transparent); } /* W-DISPVIS C2：成员卡「已派单·等待处理」角标 */
     .eng-auth-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--working); margin-left: 5px; vertical-align: middle; }
     .tag.info { background: var(--info-bg); color: var(--info); }
     /* #172-F1 高度链：workspace 是 column flex 容器（grid 子项），缺 min-height:0 时内容撑开会把
@@ -1735,6 +1736,7 @@
     #d-team .task-owner .tchip b { min-width: 0; overflow: hidden; font-weight: 500; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .task-owner .tchip i { overflow: hidden; font-style: normal; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .task-owner.unassigned .tchip { color: var(--working); }
+    #d-team .task-owner .tchip.disp-pend { color: var(--working); border: 1px dashed color-mix(in srgb, var(--working) 40%, transparent); background: color-mix(in srgb, var(--working) 8%, transparent); } /* W-DISPVIS C2：看板卡执行者派单待处理角标（虚线框与 owner 实体 chip 区分） */
     #d-team .task-owner.unassigned .tchip b { color: var(--working); }
     #d-team .task-cline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; color: var(--dim); font-size: var(--fs-C); line-height: 1.45; }
     #d-team .task-cline .cline-sep { flex: none; color: var(--faint); font-style: normal; }
@@ -1778,7 +1780,13 @@
     #d-team .activity-row time { flex: 0 0 40px; min-width: 0; padding: 1px 0 0; color: var(--faint); font: var(--fs-C) var(--mono); font-variant-numeric: tabular-nums; }
     /* 五色词表 glyph/状态词（1014 定版灯 token 全产品唯一事实源；派单=品牌橙 #E08A63 系——
        dispatched 橙/running 工作琥珀/done 空闲绿/failed 出错红/未知兜底=关闭灰） */
-    #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--st-closed); font: var(--fs-C)/1.5 var(--mono); }
+/* W-DISPVIS：B4 注入/消费两态点（活动行 dispatched/queued 状态词前）+C2 已派单角标 */
+    .activity-row .act-consume { display: inline-block; width: 7px; height: 7px; border-radius: 4px; background: var(--faint); margin: 0 5px 0 1px; vertical-align: middle; }
+    .activity-row .act-consume.consumed { background: var(--done); }
+    .tag.dispatched-flag { color: var(--working); border-color: var(--brand-line); background: var(--brand-soft); flex: none; }
+        #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--st-closed); font: var(--fs-C)/1.5 var(--mono); }
+    #d-team .activity-row .act-consume { flex: none; width: 7px; height: 7px; margin: 0 5px 0 1px; border-radius: 50%; background: var(--faint); display: inline-block; vertical-align: middle; } /* W-DISPVIS B4：注入/消费两态点——灰=已注入未消费 */
+    #d-team .activity-row .act-consume.consumed { background: var(--done); } /* 绿=已消费（CLI 已真实吃下——同 id 末行到达 running/done/failed） */
     #d-team .activity-row .act-st { font-weight: 600; color: var(--st-closed); }
     #d-team .activity-row.activity-dispatched .act-glyph, #d-team .activity-row.activity-dispatched .act-st { color: var(--brand); }
     #d-team .activity-row.activity-running .act-glyph, #d-team .activity-row.activity-running .act-st { color: var(--st-working); }
@@ -3813,6 +3821,15 @@
                     // W-V8 批2a 状态语义对调：working 绿（v8 进行中=绿系；CTA 判定只认 action/danger 不受影响）
                     tagClass: ({ working: "done", waiting: "action", error: "danger", done: "done" })[status],
                     bg: bgCount(session), // #164 后台子 Agent 在跑数（⑂N 徽标）
+                    // W-DISPVIS C2：已派单·等待处理角标数据——本会话所属组的排队单数
+                    // （dispatchQueues 是 detail() 存的 gid→排队单表；组归属走
+                    // getSessionProject 现成链。DONE 态+队列非空=「派了没人吃」可视）
+                    queuedDispatch: (() => {
+                      const proj = getSessionProject(session);
+                      const gid = proj && proj.id;
+                      const q = gid && window.__ccDeck005DispatchQueues ? window.__ccDeck005DispatchQueues.get(gid) : null;
+                      return Array.isArray(q) ? q.length : 0;
+                    })(),
                     team: pmTeamChipOf(session.session_id), // V8R+：PM/Leader 所属团队归属（null=无归属不显）
                     engine: esc(engine[0]), engineClass: engine[1],
                     source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || S.relayName) : (session.relay_source || S.relayName)), // 件十三 + W-WINPAIR-R6：per-session 源标识优先（聚合两源各显其名）
@@ -3846,7 +3863,7 @@
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
                   const b2SourceBadge = (item) => '<span class="source-badge" style="color:' + b2SourceColor(item.source) + ";border-color:" + b2SourceColor(item.source) + ";background:color-mix(in srgb, " + b2SourceColor(item.source) + ' 14%, transparent)">' + item.source + "</span>"; // W-WINPAIR-R6：八色环源色徽章（源色底块增强辨识）
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.team || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.team ? '<span class="team-chip" title="所属团队：' + esc(item.team.name) + '" style="--team-accent:' + item.team.accent + '"><i aria-hidden="true"></i><span class="tc-name">' + esc(item.team.name) + "</span></span>" : "") + b2EngineBadge(item) + b2SourceBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.team || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.team ? '<span class="team-chip" title="所属团队：' + esc(item.team.name) + '" style="--team-accent:' + item.team.accent + '"><i aria-hidden="true"></i><span class="tc-name">' + esc(item.team.name) + "</span></span>" : "") + b2EngineBadge(item) + b2SourceBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -7089,6 +7106,23 @@
                     .sort((x, y) => x.r.pm - y.r.pm || x.r.work - y.r.work || y.r.lastAt - x.r.lastAt || x.i - y.i)
                     .map((x) => x.m);
                 }
+                // W-DISPVIS C2：组内「已派单未消费」会话集——detail receipts 已是同 id
+                // 收敛视图（relay readDispatchLog 末行赢，每 id 一行），逐行判定即末行
+                // 判定：停在 dispatched/queued/running 且 consumed!==true = 派单已注入、
+                // CLI 尚未吃下（running 是承接成功——消息可能在注入队列/换流窗口/排队
+                // 消息中，正是「等待处理」的可观测窗口）。旧 relay 无 consumed 字段时按
+                // status 判定仍成立（兼容）。
+                // 刷新链：派单建卡必发 BOARD_UPDATED → 7916 全量板帧触发 requestDetail
+                // 重拉 → receipts/consumed 收敛 → render() 角标跟随（复用既有帧，零新帧）
+                function pendingDispatchSids(gid) {
+                  const rows = state.receipts.get(gid);
+                  if (!Array.isArray(rows) || !rows.length) return new Set();
+                  const sids = new Set();
+                  for (const r of rows) {
+                    if (r && (r.status === "dispatched" || r.status === "queued" || r.status === "running") && r.consumed !== true && r.session_id) sids.add(r.session_id);
+                  }
+                  return sids;
+                }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
@@ -7116,7 +7150,12 @@
                   // data-team-member-session 跳转链（委托→selectSessionCard），触屏/键盘
                   // 可达性增强零新路由；状态标签=member-state 胶囊已落（文案贴会话语义）
                   const msgBtn = member.session_id ? '<span class="member-msg-btn" role="button" tabindex="0" title="直达成员会话" aria-label="直达 ' + escape(info.name) + ' 的会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg>消息</span>' : "";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
+                  // W-DISPVIS C2：成员有已派单未消费（含换流窗口）→ 轻量角标（identity-cluster
+                  // 轻量行，working 黄系 pill；数据缺席/旧 relay 不渲染）
+                  const dispPend = pendingDispatchSids(project.id).has(member.session_id)
+                    ? '<span class="tag dispatch-pending" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 等待处理</span>'
+                    : "";
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -7191,6 +7230,12 @@
                   const ownerBits = [];
                   if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
                   if (engKnown) ownerBits.push(engineBadge(info.engine));
+                  // W-DISPVIS C2：看板卡执行者有已派单未消费（含换流窗口）→ owner chip 旁
+                  // 轻量角标（同成员卡口径；q-run 是队列运行信号、本角标是消息级消费信号，
+                  // 两者互补不互斥——q-run 由排队上下文驱动、本角标由 receipts.consumed 驱动）
+                  if (task.owner_session && pendingDispatchSids(project.id).has(task.owner_session)) {
+                    ownerBits.push('<span class="tchip disp-pend" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 等待处理</span>');
+                  }
                   ownerBits.push('<span class="tchip owner">' + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>");
                   const fullText = String(task.text || task.id);
                   // 1013 件6：卡面标题渲染层 cap60 归一（relay 建卡已 cap，存量卡/owner 前缀回填
@@ -7351,7 +7396,14 @@
                     const note = String(entry.receipt || "").trim();
                     // v3 轻行正文：状态词（五色）+ 目标（承接人/会话）+ 收口回执（终态才有，
                     // 附注灰字）；tier/引擎徽章/来源徽章随卡片墙语汇退役（v3 .fi 无徽章位）
-                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span><b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + "</span></div>";
+                    // W-DISPVIS B4：注入/消费两态小点（consumed 布尔由 relay 侧按同 id 收敛
+                    // 末行拼好——queued/dispatched/running 停留=已注入未消费=灰点（running 是
+                    // 承接成功，消息可能仍在注入队列/换流窗口）；done/failed 收口=已消费=绿点。
+                    // 旧 relay 无此字段=灰点零副作用）
+                    const consumeDot = entry.status === "dispatched" || entry.status === "queued" || entry.status === "running"
+                      ? '<i class="act-consume' + (entry.consumed === true ? " consumed" : "") + '" title="' + (entry.consumed === true ? "已消费（worker 已真实吃下）" : "已注入（等待 worker 消费）") + '" aria-hidden="true"></i>'
+                      : "";
+                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span>' + consumeDot + '<b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + "</span></div>";
                   }).join("");
                   return '<div class="team-activity">' + (compact ? "" : head) + chips + (rows || banner("当前筛选无条目")) + "</div>";
                 }
@@ -7817,6 +7869,12 @@
                   state.projects = state.projects.map((item) => item.id === gid ? data.group : item);
                   state.boards.set(gid, data.board);
                   state.receipts.set(gid, entities(data.receipts).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
+                  // W-DISPVIS C2：组内排队单存本（dispatch_queue 能力位——旧 relay 缺省不
+                  // 标角标，端上零副作用）。跨域借道：B2 会话域闭包读不到本域 state——挂
+                  // window 键（__ccDeck005RefreshSettingsLive 同款 window 借道范式）
+                  state.dispatchQueues = state.dispatchQueues || new Map();
+                  state.dispatchQueues.set(gid, Array.isArray(data.dispatch_queue) ? data.dispatch_queue : []);
+                  window.__ccDeck005DispatchQueues = state.dispatchQueues;
                   state.loads.set(gid, "ready");
                   render();
                   return true;
