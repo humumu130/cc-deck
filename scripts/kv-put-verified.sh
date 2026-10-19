@@ -102,9 +102,12 @@ else
     VERIFY_OK=1; REMOTE_SIZE="$LOCAL_SIZE"; REMOTE_MD5="${LOCAL_MD5}(range 抽查判完整)"
   else
     # Range 面全挂（/dl/ 不可达、Range 不支持等）：回落全量 API 回读，超时放宽 600s 兜底
+    #（双路与 kv_api_read 同款：直连优先，被墙回落本地代理——E8 形态）
     echo "    Range 抽查未通过，回落全量 API 回读（大文件慢链路可能需数分钟）"
     for i in 1 2 3 4; do
       if curl -sf --max-time 600 -H "Authorization: Bearer $CF_TOKEN" -o "$TMP" \
+        "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY" \
+      || curl -sf --max-time 600 -x "$CF_PROXY" -H "Authorization: Bearer $CF_TOKEN" -o "$TMP" \
         "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY"; then
         REMOTE_MD5=$(md5_of "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
         if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
