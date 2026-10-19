@@ -143,6 +143,9 @@ async function main() {
       console.log(`    [dump ${tag}] agents=${created.length} 泛worker=${g ? genericWorkerCount(g.headcount) : "?"} members=[${g?.headcount.map((x) => x.session_id.slice(0, 6)).join(",")}] queue=[${loadDispatchQueue().map((x) => x.dispatch_id.slice(0, 6)).join(",")}] d3=${readDispatchLog().find((e) => e.id === d3)?.status}/${readDispatchLog().find((e) => e.id === d3)?.session_id?.slice(0, 6)} d4=${readDispatchLog().find((e) => e.id === d4)?.status}/${readDispatchLog().find((e) => e.id === d4)?.session_id?.slice(0, 6)}`);
     };
     dump("H3前");
+    // W-SCHEDFIX2：DONE 熟手活流直注免换流（不 spawn）——本段锁「排水复用走 resume
+    // 换流承接」的台账/队列收敛语义，杀流走 resume 路径保持断言前提
+    created[0].agent.ended = true;
     created[0].cb.onTurnEnd(true, "success", 5); // w1 交付收口
     await wait(80); // microtask 排水 + resume init
     dump("w1收口后");

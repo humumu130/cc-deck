@@ -272,10 +272,10 @@ section("\nS5 端到端（派单带岗位行→熟手 memo→改用户库重注�
   };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);
-  const created: { prompt: string | undefined; cb: AgentCallbacks; sent: string[] }[] = [];
+  const created: { prompt: string | undefined; cb: AgentCallbacks; sent: string[]; agent?: AgentLike }[] = [];
   mgr.setAgentFactory((cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined): AgentLike => {
     void cwd; void model;
-    const rec = { prompt, cb, sent: [] as string[] };
+    const rec = { prompt, cb, sent: [] as string[], agent: undefined as AgentLike | undefined };
     created.push(rec);
     const a: AgentLike = {
       id: randomUUID(), startedAt: Date.now(), ended: false,
@@ -283,6 +283,7 @@ section("\nS5 端到端（派单带岗位行→熟手 memo→改用户库重注�
       allow: () => false, deny: () => false, answer: () => false,
       stop: async () => { a.ended = true; }, setPermissionMode: async () => {},
     };
+    rec.agent = a;
     return a;
   });
   // ① 首单（role=engineering-dev）：岗位行+纪律段落位
@@ -303,6 +304,9 @@ section("\nS5 端到端（派单带岗位行→熟手 memo→改用户库重注�
   //（熟手首注重复可接受，W-EXPP1 同口径），此后未改版零重注。
   // resumeAgent 对非注入引擎重新过 agent factory（prompt=新 agent 的 prompt 参数，
   // P1FIX 首条走 initialPrompt 路径）——断言点在 created[N].prompt 非旧 agent.sendMessage
+  // W-SCHEDFIX2：DONE 熟手活流直注免换流（不 spawn）——本段锁 resume 首注 prompt
+  // 内容（memo 注入走 dispatchPrompt 两路同源），杀流走 resume spawn 保持断言前提
+  created[0]!.agent!.ended = true;
   const d2 = mgr.dispatchWorker({ anchor: ANCHOR, gid, prompt: "再干", role: "engineering-dev" });
   assert(d2.ok, "二单派单成功");
   assert((d2 as { ok: true; session_id: string }).session_id === sid1, "二单命中熟手（同 session resume）");
@@ -311,7 +315,9 @@ section("\nS5 端到端（派单带岗位行→熟手 memo→改用户库重注�
   assert(p2.includes("再干") && p2.includes("岗位纪律（"), "熟手首注：memo 键首建时注入一次（经验块同语义）");
   created[1]!.cb.onInit?.(`sdk-${randomUUID().slice(0, 6)}`, "test-model");
   created[1]!.cb.onTurnEnd?.(true, "success", 100);
-  // ③ 三单（模板未改版）：memo 命中零重注
+  // ③ 三单（模板未改版）：memo 命中零重注（W-SCHEDFIX2：杀流走 resume spawn 保持
+  // created[N].prompt 断言前提——直注路径的注入面等价，见 memo 单口注释）
+  created[1]!.agent!.ended = true;
   const d2b = mgr.dispatchWorker({ anchor: ANCHOR, gid, prompt: "还干", role: "engineering-dev" });
   assert(d2b.ok && created.length >= 3, "三单派单成功");
   const p2b = created[2]!.prompt ?? "";
@@ -324,6 +330,7 @@ section("\nS5 端到端（派单带岗位行→熟手 memo→改用户库重注�
   t.rows.push("用户新增：提交信息先写根因。");
   t.updated_at = t.updated_at + 1;
   writeUserLib(lib.templates, ORG);
+  created[2]!.agent!.ended = true; // W-SCHEDFIX2：同上——杀流走 resume spawn
   const d3 = mgr.dispatchWorker({ anchor: ANCHOR, gid, prompt: "三干", role: "engineering-dev" });
   assert(d3.ok, "四单派单成功");
   const p3 = created[3]!.prompt ?? "";

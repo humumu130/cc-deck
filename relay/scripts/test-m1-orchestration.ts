@@ -62,11 +62,12 @@ function assert(cond: boolean, name: string) {
   else { fail++; console.error(`  ✗ ${name}`); }
 }
 
-type SpawnRec = { prompt: string | undefined; cb: AgentCallbacks };
+type SpawnRec = { prompt: string | undefined; cb: AgentCallbacks; agent?: AgentLike };
 const makeFakeFactory = (created: SpawnRec[]) =>
   (_cwd: string, _model: string, cb: AgentCallbacks, prompt: string | undefined, _opts?: unknown): AgentLike => {
     void _cwd; void _model; void _opts;
-    created.push({ prompt, cb });
+    const rec: SpawnRec = { prompt, cb };
+    created.push(rec);
     const a: AgentLike = {
       id: randomUUID(),
       startedAt: Date.now(),
@@ -78,6 +79,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       stop: async () => { a.ended = true; },
       setPermissionMode: async () => {},
     };
+    rec.agent = a; // W-SCHEDFIX2：留 agent 引用（直注免换流时代杀流锁 resume 路径用）
     return a;
   };
 
@@ -186,6 +188,9 @@ try {
     //            重派口径=C8⑫「卡已入账不回滚，下轮可带 entry_id 重派」——task{} 键每次建新卡，
     //            认领既有卡必须 entry_id） ----------
     console.log("O4 就绪放行主卡");
+    // W-SCHEDFIX2：DONE 熟手活流直注免换流（不 spawn）——本段锁「认领放行走 spawn
+    // 承接」，杀流走 resume 路径保持 +1 断言前提（认领 ready 链语义不变）
+    created[baseO3]!.agent!.ended = true;
     const baseO4 = created.length;
     const mainAck2 = send(mgr, "o4main", "COMMAND_DISPATCH", { gid, prompt: "主卡活", entry_id: mainId, role: "worker" }, "web-1");
     const dMain2 = mainAck2.data as { entity_id?: string; dispatch_id?: string; session_id?: string } | undefined;

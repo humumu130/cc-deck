@@ -4993,7 +4993,15 @@ export class SessionManager {
     const text = backlog.map((m) => m.text).join("\n\n");
     const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
     this.pushExternalLog(s.state.session_id, "system", `恢复成功，补投排队消息 ${backlog.length} 条`);
-    s.agent?.sendMessage(text, images.length ? images : undefined);
+    // W-SCHEDFIX2 件一：补投文再入账（hold:"turn"——补投走 sendMessage 回显但账不
+    // 随回显出，出账点 = 补投回合 ok 结束；补投后流再断、回合没跑完 → 恢复链
+    //（recoverFromStall/下次 resume 的 flushResumeBacklog）带账再补投，补投链闭环。
+    // 此前补投即裸发：补投后的死亡窗口 = 积压消息静默丢（重放账最后一公里）。
+    // agent 不在场不落账（幽灵悬账纪律，同水位注入点）
+    if (s.agent) {
+      s.unacked.push({ id: randomUUID(), text, images: images.length ? images : undefined, ts: Date.now(), hold: "turn" });
+      s.agent.sendMessage(text, images.length ? images : undefined);
+    }
   }
 
   // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
@@ -7197,7 +7205,40 @@ export class SessionManager {
         if (veteranSession.resumeCooldownUntil && Date.now() < veteranSession.resumeCooldownUntil) {
           throw new Error(`resume 熔断冷却中（连续失败 ${veteranSession.resumeFailStreak ?? "?"} 次）`);
         }
-        this.resumeAgent(veteranSession, dispatchPrompt);
+        // W-SCHEDFIX2 件二（派单即醒）：DONE 熟手带健康活流时**免换流直注**——
+        // 此前一律 resumeAgent（停旧流+杀树+spawn resume），健康的空闲 CLI 被杀掉
+        // 重付全套启动+transcript 重载成本（实测窗中位 65s 的主要构成）；直注走
+        // sendMessage（与 COMMAND_MESSAGE 同一咽喉语义），空闲 CLI 即时开回合，
+        // 窗长收敛到模型首 token。死流/ended/gaveUp/ERROR 态不进本路（agentStreamAlive
+        // 判死 → resumeAgent 原路，僵尸补刀/互斥窗/熔断记账语义零变）。
+        // 账目与 resumeAgent 首条同款：hold:"turn" 入账（回显不出账——注入即投递，
+        // 换流面窄窗接受；首个 ok 回合结束出账，回合中断由恢复链带账重放）
+        const veteranAgent = veteranSession.agent;
+        const veteranAlive = veteranSession.state.status === "DONE" && !!veteranAgent && this.agentStreamAlive(veteranSession);
+        if (veteranAlive && veteranAgent) {
+          const vs = veteranSession;
+          const wakeId = randomUUID();
+          vs.unacked.push({ id: wakeId, text: dispatchPrompt, ts: Date.now(), hold: "turn" });
+          veteranAgent.sendMessage(dispatchPrompt);
+          // 状态推进对齐 resumeAgent（无换流：streamGen 不动、resumePending 不置、
+          // init 看门狗不挂——活流无 init 窗）
+          vs.state.status = "WORKING";
+          vs.state.historical = false;
+          vs.state.saved = undefined;
+          vs.state.org_parked = undefined;
+          vs.state.action_summary = "";
+          vs.state.done_reason = undefined;
+          vs.state.last_error = undefined;
+          vs.state.turn_started_at = Date.now();
+          vs.lastProgressAt = Date.now();
+          vs.lastProgressKind = "";
+          vs.wd.phase = "idle";
+          vs.wd.gaveUp = false;
+          this.emitUpdated(vs, true);
+          this.pushExternalLog(vs.state.session_id, "system", "派单直注：worker 空闲在岗，任务即时送达（免重启拉起）");
+        } else {
+          this.resumeAgent(veteranSession, dispatchPrompt);
+        }
         sessionId = veteran;
       } catch (e) {
         // 熟手复活失败（理论窗口：并发竞态后 require 抛/新 agent 拉起即抛）：同 id
@@ -7916,10 +7957,18 @@ export class SessionManager {
     wd.since = now;
     wd.lastPromptAt = now;
     wd.capture = [];
-    // 直发 + unacked 入账（#7 重放账同款：流死重放保必达；CLI 消费时回显出队）。
+    // W-SCHEDFIX2 件一：水位告警入 unacked 重放账——与用户消息同账同出账语义
+    //（:2757 先例：已 init 活流 = 无 hold，sendMessage 同步回显透传 ackId 精确出账，
+    // 出账语义 =「已投递」）。此前裸 push 不透传 ackId——条目永无出队点，成功消费后
+    // 恒滞留（污染 unacked 非空起疑判定，且下次 resume 被当积压重放成二次注入）。
+    // push 先于 sendMessage：回显同步到达时账必须在。agent 不在场不落账（原实现
+    // 裸 push 在 s.agent 为 null 时留幽灵悬账）。
     // echo 短文案：面板时间线显示一行系统动作，指令全文不刷屏
-    s.agent?.sendMessage(prompt, undefined, "【relay】上下文水位告警，已请求任务状态摘要");
-    s.unacked.push({ id: randomUUID(), text: prompt, ts: now }); // 合并修正：P1FIX 账目类型要 id（原 CTXFIX 旧形态）
+    if (s.agent) {
+      const msgId = randomUUID();
+      s.unacked.push({ id: msgId, text: prompt, ts: now, hold: s.state.relay_session_id ? undefined : "init" });
+      s.agent.sendMessage(prompt, undefined, "【relay】上下文水位告警，已请求任务状态摘要", msgId);
+    }
     this.pushExternalLog(s.state.session_id, "system", `上下文水位 ${Math.round((tokens / limit) * 100)}%，已请求压缩前任务状态摘要`);
     this.emitUpdated(s, true);
   }

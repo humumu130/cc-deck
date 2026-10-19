@@ -50,7 +50,19 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       id: randomUUID(),
       startedAt: Date.now(),
       ended: false,
-      sendMessage: () => {},
+      sendMessage: () => {
+        // F-07 挂死流：消息进死队列，CLI 不消费（零回调）——保持挂死前提
+        if (hangResume) return;
+        // W-SCHEDFIX2：熟手直注（免换流）路径的回合模拟——真 adapter 的 sendMessage
+        // 把消息排进 SDK 队列，空闲 CLI 随即开新回合；等价模拟（延时收口）让直注路径
+        // 的回合生命周期（路由记账/台账收口/账目出清）可断言。成败按发送时点取值
+        //（与 spawn 路径「spawn 时点取 okNext」语义对齐）
+        setTimeout(() => {
+          if (a.ended) return;
+          if (emitResultLine) cb.onLog("assistant_text", `分析并动手改了。\n${emitResultLine}`, {});
+          cb.onTurnEnd(okNext, okNext ? "success" : "error exit 1", 12);
+        }, 10);
+      },
       allow: () => false,
       deny: () => false,
       answer: () => false,
@@ -333,9 +345,11 @@ async function main() {
     const before2 = mgr.snapshot().length;
     const created2 = created.length;
     const e2 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第二单", gid: gidE }) as { ok: boolean; session_id?: string; dispatch_id?: string };
-    assert(e2.ok === true && e2.session_id === wE1, "空闲熟手 → resume 原会话（session_id 复用）");
+    assert(e2.ok === true && e2.session_id === wE1, "空闲熟手 → 原会话承接（session_id 复用）");
     assert(mgr.snapshot().length === before2, "未新增会话（会话亲和，非新拉）");
-    assert(created.length === created2 + 1, "resume 也走工厂（换流），但归属同一 relay 会话");
+    // W-SCHEDFIX2 件二：DONE 熟手带健康活流 → sendMessage 直注免换流（不重拉，
+    // 省全套 CLI 启动+transcript 重载；死流仍走 resumeAgent 换流，R3 段锁原语义）
+    assert(created.length === created2, "DONE 熟手直注免换流（零重拉）");
     const rawE2 = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; status: string; target: string });
     assert(rawE2.filter((x) => x.id === e2.dispatch_id)[0]?.target === wE1, "dispatched 行直指熟手（非 spawn-pending）");
     assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE1)?.count ?? 0) === 2), "熟手再收口 → count=2");
@@ -797,7 +811,7 @@ async function main() {
     assert(mgr.orgAction("tag", { gid: gidTa, sid: wT2, tags: ["Rust"] }).ok === true, "大写标签写入（前置）");
     assert((routingFor(gidTa).find((x) => x.session_id === wT2)?.tags ?? []).join(",") === "rust", "写侧归一：标签落库小写");
     const ta7 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 七单（要 Rust）", gid: gidTa, skills: ["rust"] }) as { ok: boolean; session_id?: string };
-    const wT2cb = created[created.length - 1].cb; // ta7 的 resume 流（W2 当前流）——d) 段收 phi 悬账用它
+    const wT2cb = created.find((c) => c.agent === (mgr as unknown as { sessions: Map<string, { agent: unknown }> }).sessions.get(wT2)!.agent)!.cb; // W2 当前流 cb（W-SCHEDFIX2：DONE 熟手直注免换流，不产生新 spawn 记录——按 agent 身份取，防陈旧流 mine() 失配）
     assert(ta7.ok === true && ta7.session_id === wT2, "大小写对偶命中（Rust 标签 × rust 查询，越过 W1 熟练序）");
     assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 4), "七单收口（前置）");
 
@@ -979,6 +993,9 @@ async function main() {
       assert(await waitFor(() => (routingFor(gid15).find((x) => x.session_id === f15.session_id)?.count ?? 0) === 1), "首单收口入路由表（前置）");
       assert(created.slice(before15c).every((c) => c.configHome === EMP), "组 worker fresh spawn 带 configHome");
       assert(mgr.snapshot().find((s) => s.session_id === f15.session_id)?.employee === true, "组 worker 卡带雇员标记");
+      // W-SCHEDFIX2：DONE 熟手活流直注免换流（不 spawn）——configHome 是 resume/spawn
+      // 面参数，杀流走 resume 路径锁「resume 原班带独立家」原语义
+      (hack.sessions.get(f15.session_id!)!.agent as { ended: boolean }).ended = true;
       const f15b = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "熟手二单", gid: gid15 }) as { ok: boolean; session_id?: string };
       assert(f15b.ok === true && f15b.session_id === f15.session_id, "第二单 resume 原班（会话 id 复用，前置）");
       const lastSpawn = created[created.length - 1];
@@ -1010,6 +1027,8 @@ async function main() {
       assert(created.slice(before15d).every((c) => c.configHome === undefined), "关态创建 spawn 不带 configHome");
       assert(mgr.snapshot().find((s) => s.session_id === l15.session_id)?.employee_home === undefined, "关态雇员卡无 employee_home 记录（=默认家）");
       cfg.employeeConfigDir = EMP;
+      // W-SCHEDFIX2：同 f15b 口径——杀流走 resume 路径锁「存量熟手 resume 不带 configHome」
+      (hack.sessions.get(l15.session_id!)!.agent as { ended: boolean }).ended = true;
       const l15b = mgr.orgAction("dispatch", { anchor: anchor15b, prompt: "存量熟手二单", gid: gid15c }) as { ok: boolean; session_id?: string };
       assert(l15b.ok === true && l15b.session_id === l15.session_id, "开关开启后熟手照常 resume 原班（前置）");
       const legacySpawn = created[created.length - 1];
