@@ -7,7 +7,7 @@
 // 本模块纯 fs 读写底座，projects.ts/routing.ts 同范式：坏 JSON 容忍为空态（读侧防御，
 // 绝不抛）、写穿全量、不 import session-manager（无环）。drain 编排（重派/收口联动）
 // 在 session-manager——本文件只管队列这份事实源。
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { orgDir } from "./org.js";
 
@@ -37,16 +37,41 @@ export function loadDispatchQueue(dir?: string): QueuedDispatch[] {
   }
 }
 
+let dqRetry: { attempt: number; timer?: NodeJS.Timeout } | null = null;
+
 export function saveDispatchQueue(items: QueuedDispatch[], dir?: string): boolean {
+  const target = queuePath(dir ?? orgDir());
+  const tmp = target + ".tmp";
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
-    writeFileSync(queuePath(d), JSON.stringify({ items }, null, 2) + "\n", "utf-8");
+    // W-RESTARTDESIGN ⑥：dispatch-queue 前科收编——原子写（tmp+rename，半写不落）+
+    // 指数退避重试（1s/4s/16s）+ 三次失败 error 高噪（静默弱化不可再现：磁盘满时
+    // 旧版 warn 一次重启丢单）。重试闭包带最新 items 引用（内存权威每次传参刷新）
+    writeFileSync(tmp, JSON.stringify({ items }, null, 2) + "\n", "utf-8");
+    renameSync(tmp, target);
+    if (dqRetry) { if (dqRetry.timer) clearTimeout(dqRetry.timer); dqRetry = null; }
     return true;
   } catch (e) {
-    console.warn(`[dispatch-queue] 写入失败: ${e instanceof Error ? e.message : String(e)}`);
+    const why = e instanceof Error ? e.message : String(e);
+    const attempt = (dqRetry?.attempt ?? 0) + 1;
+    if (dqRetry?.timer) clearTimeout(dqRetry.timer);
+    dqRetry = { attempt };
+    if (attempt >= 3) {
+      console.error(`[dispatch-queue] 写穿失败 x${attempt}（磁盘满/权限？）——内存队列权威但重启将丢：${why}`);
+      return false;
+    }
+    const delay = attempt === 1 ? 1_000 : attempt === 2 ? 4_000 : 16_000;
+    console.warn(`[dispatch-queue] 写穿失败（第 ${attempt} 次，${delay}ms 后重试）：${why}`);
+    dqRetry.timer = setTimeout(() => { void saveDispatchQueue(items, dir); }, delay);
+    dqRetry.timer.unref?.();
     return false;
   }
+}
+
+export function resetDispatchQueueRetryForTests(): void {
+  if (dqRetry?.timer) clearTimeout(dqRetry.timer);
+  dqRetry = null;
 }
 
 /** 入队（FIFO 尾插）。上限护栏 200：防病态堆积（触顶全忙长期不解时给人看的问题，

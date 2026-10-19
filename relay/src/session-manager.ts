@@ -132,6 +132,7 @@ import type {
 } from "./types.js";
 // #018-R1c 决策通知账（B3a 纯函数层，只消费不改）：stableKey 防重 + 生命周期迁移
 import { stableKey, transitionNotification } from "./decision-notify.js";
+import { saveRestartLedger, loadRestartLedger, type RestartLedgerEntry } from "./restart-ledger.js";
 import type { NotificationLifecycleAction, NotificationLifecycleItem } from "./decision-notify.js";
 import { CodexAgentSession, CODEX_ACTIVITY_CAPABILITIES } from "./agent-codex.js";
 import { TRAE_ACTIVITY_CAPABILITIES } from "./agent-trae.js";
@@ -1768,12 +1769,36 @@ export class SessionManager {
   // #393 黄色 [待确认] 悬浮框推送（/api/notify mode=confirm）：往目标会话 todos
   // 追加一条 pending [待确认] 条目——客户端 #300/#306 确认提醒链路天然接住（弹黄框，
   // 用户逐条 ✕ / 全部已读即消，会话任务面板同步可见）
+  // W-RESTARTDESIGN 案二：notifyConfirm ledger 条目的 revision 提示段——文本首 6
+  // 字符（同文本去重可见性优先；upsertNotification 的 stableKey 幂等按三键防重）
+  /** W-RESTARTDESIGN 案二：无目标会话的通知落 ledger（F6 排队面）——leader 在线走
+   * notifyConfirm 同款 ledger；leader 也不在（无 leaderId）就挂 leaderless 键 */
+  notifyLeaderSystem(text: string): void {
+    const sid = this.leaderId ?? "leaderless";
+    this.upsertNotification("system", `sysq-${this.stableKeyHint(text)}-${sid.slice(0, 8)}`, sid, {
+      title: "系统通知（排队）",
+      body: text,
+      severity: "waiting", group: "attention", actionable: true, sessionId: sid, domain: "session", returnPath: "/",
+    });
+  }
+
+  private stableKeyHint(text: string): string {
+    return String(text).replace(/\s+/g, "").slice(0, 6) || "note";
+  }
   notifyConfirm(sessionId: string, text: string): boolean {
     const s = this.sessions.get(sessionId);
     if (!s) return false;
     const todos = [...(s.state.todos ?? []), { content: `[待确认] ${text}`, status: "pending" as const }];
     this.setTodos(sessionId, todos);
     this.bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
+    // W-RESTARTDESIGN 案二（F5 收编）：同步落 decision ledger system 条目——USER_NOTE
+    // 是 seq:0 transient（离线端丢），todo 是弱兜底；ledger revision 持久=离线重载不丢（在线
+    // 黄框走 transient 不变，ledger 是兜底非替代）。source:user-note 区分来路
+    this.upsertNotification("system", `user-note-${sessionId.slice(0, 8)}-${this.stableKeyHint(text)}`, sessionId, {
+      title: "待确认（用户通知）",
+      body: text,
+      severity: "waiting", group: "attention", actionable: true, sessionId, domain: "session", returnPath: "/",
+    });
     return true;
   }
 
@@ -2704,6 +2729,7 @@ export class SessionManager {
               // 出账时点 = 首个 ok 回合结束（onTurnEnd 清 hold:"turn"）
               const msgId = randomUUID();
               s.unacked.push({ id: msgId, text, images: imgPayload.length ? imgPayload : undefined, refs: imgRefs.length ? imgRefs : undefined, ts: Date.now(), hold: "turn" });
+              this.persistRestartLedger(); // W-RESTARTDESIGN：入账写穿
               s.agent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo, msgId);
               this.emitUpdated(s, true);
               return { command_id: cmd.command_id, ok: true };
@@ -2761,6 +2787,7 @@ export class SessionManager {
             ts: Date.now(),
             hold: s.state.relay_session_id ? undefined : "init",
           });
+          this.persistRestartLedger(); // W-RESTARTDESIGN：入账写穿
           liveAgent.sendMessage(text, imgPayload.length ? imgPayload : undefined, echo, msgId);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
@@ -3613,6 +3640,7 @@ export class SessionManager {
           // 重试不清（连点绕不过退避），只有流真正活过一次冷却才归零
           managed.resumeFailStreak = undefined;
           managed.resumeCooldownUntil = undefined;
+          this.persistRestartLedger(); // W-RESTARTDESIGN：熔断复位写穿
           // #307：托管子会话 sid 即时落盘 child-sessions.json——relay 在此刻之后
           // 任意时点重启，孤儿扫描都认得它是自己的（不再被收养成"relay"垃圾会话）
           // #22 审查确认：迟到 init（卡已被 bootTimer/deleteSession 删掉）在此登记
@@ -3829,7 +3857,7 @@ export class SessionManager {
             }
             if (ackId) {
               const i = managed.unacked.findIndex((m) => m.id === ackId);
-              if (i >= 0 && !managed.unacked[i].hold) managed.unacked.splice(i, 1);
+              if (i >= 0 && !managed.unacked[i].hold) { managed.unacked.splice(i, 1); this.persistRestartLedger(); } // W-RESTARTDESIGN：出账写穿
             }
           }
           const entry: LogEntry = { ts: Date.now(), kind, text, ...logMeta };
@@ -3868,7 +3896,7 @@ export class SessionManager {
           // 清 hold:"turn" 账（resume 首条消息 + resume 互斥窗排队消息，均无回显
           // 可出账）。ok=false / recovering 保持入账（下次恢复重放）；新账不再持有
           // hold 标记（互斥窗已由 onInit 关闭，后续消息走回显即出账路径）
-          if (ok) managed.unacked = managed.unacked.filter((m) => m.hold !== "turn");
+          if (ok) { managed.unacked = managed.unacked.filter((m) => m.hold !== "turn"); this.persistRestartLedger(); } // W-RESTARTDESIGN：回合清账写穿
           // #26 派单台账收口（M2 泛化全会话）：一回合一单，FIFO 收最旧（多消息排队时
           // 按序逐回合收）；Leader 咨询档与 worker 派单同机制，FIFO 空 = no-op。
           // recovering 让位漏掉的收口由恢复流的下个 onTurnEnd 补上
@@ -4040,6 +4068,7 @@ export class SessionManager {
       // 首个 ok 回合结束（onTurnEnd 清 hold:"turn"）；流断在回合内则由看门狗带账重放
       // W-INJFIX：renewable 消息不记重放账——流断了这条就丢弃（duty 重推导再注入）
       s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn", ...(opts?.renewable ? { renewable: true } : {}) });
+      this.persistRestartLedger(); // W-RESTARTDESIGN：入账写穿（renewable 同账）
       this.emitUpdated(s, true);
       return;
     }
@@ -4154,6 +4183,7 @@ export class SessionManager {
     // 恢复全量重放（审计 P1 实锤）
     // W-INJFIX：renewable 消息（值守喂活 prompt）不入重放账——失败即丢，duty 再注入
     s.unacked.push({ id: randomUUID(), text: firstMessage, images, refs: refs?.length ? refs : undefined, ts: Date.now(), hold: "turn", ...(opts?.renewable ? { renewable: true } : {}) });
+      this.persistRestartLedger(); // W-RESTARTDESIGN：入账写穿（renewable 同账）
     initTimer = setTimeout(() => {
       initTimer = null;
       // 已 init / 流已换（stale timer）/ 流已被 STOP 或自然关闭 / 会话卡已被删
@@ -4184,6 +4214,7 @@ export class SessionManager {
         // 重放烧一个回合；首条本身 renewable 且无其他积压 → fresh 拉活不带 prompt
         const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart && !m.renewable);
         s.unacked = s.unacked.filter((m) => m.ts < resumeStart);
+    this.persistRestartLedger(); // W-RESTARTDESIGN：出账写穿
         if (pendingNow.length > 1) {
           for (let i = 1; i < pendingNow.length; i++) {
             const q = this.openDispatches.get(s.state.session_id);
@@ -4871,7 +4902,6 @@ export class SessionManager {
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       // W-TASKFLOW：通知文本同带 [task_ref] 头（回执流四处同键）
       this.notifyDispatchClosed(e, status, refReceipt, key);
-
       if (status === "done") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath); // W-RESTARTDESIGN §三：done 边沿回执闸（带任务书约定路径）
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
@@ -4958,6 +4988,7 @@ export class SessionManager {
       `恢复已连续失败 ${streak} 次（${detail}），自动恢复进入冷却（本次 ${min} 分钟）——期间自动注入只入队不再拉起，点卡片或发消息可手动恢复`,
     );
     this.emitUpdated(s, true);
+    this.persistRestartLedger(); // W-RESTARTDESIGN：熔断计数/冷却变化边写穿
   }
 
   // 自动恢复统一闸门：返回 true = 应压制（勿 resume）。压制原因两种：熔断冷却中 /
@@ -4969,7 +5000,7 @@ export class SessionManager {
     const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
     if (!tripped && !parkedPinned) return false;
     // 冷却/休眠期积压：无回显无 hold，恢复成功由 flushResumeBacklog 补投并出账
-    if (queueMessage !== undefined) s.unacked.push({ id: randomUUID(), text: queueMessage, ts: Date.now() });
+    if (queueMessage !== undefined) { s.unacked.push({ id: randomUUID(), text: queueMessage, ts: Date.now() }); this.persistRestartLedger(); } // W-RESTARTDESIGN：冷却/休眠积压入账写穿
     const why = tripped
       ? `恢复连续失败 ${s.resumeFailStreak ?? "?"} 次已熔断，约 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 60_000))} 分钟后自动重试`
       : "会话为置顶休眠（点卡片按需恢复）";
@@ -4991,6 +5022,7 @@ export class SessionManager {
     if (dropped > 0) console.log(`[duty] resume-backlog drops ${dropped} renewable prompt(s) sid=${s.state.session_id.slice(0, 14)}（duty 下轮重推导）`);
     const backlog = s.unacked.filter((m) => m.ts < beforeTs && !m.renewable);
     s.unacked = s.unacked.filter((m) => m.ts >= beforeTs && !m.renewable);
+    this.persistRestartLedger(); // W-RESTARTDESIGN：出账写穿
     if (backlog.length === 0) return;
     const text = backlog.map((m) => m.text).join("\n\n");
     const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
@@ -5003,6 +5035,7 @@ export class SessionManager {
     if (s.agent) {
       s.unacked.push({ id: randomUUID(), text, images: images.length ? images : undefined, ts: Date.now(), hold: "turn" });
       s.agent.sendMessage(text, images.length ? images : undefined);
+      this.persistRestartLedger(); // W-RESTARTDESIGN：补投合并入账写穿
     }
   }
 
@@ -7532,7 +7565,6 @@ export class SessionManager {
   }
 
   // 排队水位（内存权威；面板可见性——组详情/cap-set 回显）
-
   // W-RESTARTDESIGN 案一 A：全账快照写穿（unacked+熔断三字段）——四写点统一走此口。
   // 快照体量<10KB（cap 由 tickWatchdog 已有 200 条上限自然封顶），写放大可忽略
   private persistRestartLedger(): void {

@@ -1284,7 +1284,14 @@ async function handleNotify(
         sessions.find((s) => s.status === "WORKING" && s.external) ||
         sessions.find((s) => s.external) ||
         sessions[0];
-      if (!target) { res.writeHead(503).end('{"error":"无可投递会话"}'); return; }
+      // W-RESTARTDESIGN 案二（F6）：无在线会话不再 503 即丢——notifyConfirm 只吃在册
+      // session，此处无 target 时落 ledger（system/task-done 条目，离线重载不丢）后
+      // 200+queued（通知语义=最终被看到，非此刻弹窗；调用脚本无 -f 无 body 解析零改动）
+      if (!target) {
+        mgr.notifyLeaderSystem(`[待确认·排队] ${text}`);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", queued: true }));
+        return;
+      }
       mgr.notifyConfirm(target.session_id, text);
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target.session_id }));
       return;
@@ -1297,7 +1304,12 @@ async function handleNotify(
       sessions.find((s) => s.status === "WORKING" && s.external) ||
       sessions.find((s) => s.external) ||
       sessions[0];
-    if (!target) { res.writeHead(503).end('{"error":"无可投递会话"}'); return; }
+    // W-RESTARTDESIGN 案二（F6）：TASK_DONE 同款——无会话落 ledger 后 200+queued（不 503 即丢）
+    if (!target) {
+      mgr.notifyLeaderSystem(`[任务完成·排队] ${items.slice(0, 3).join("；")}${items.length > 3 ? ` 等 ${items.length} 项` : ""}`);
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, queued: true }));
+      return;
+    }
     const remaining = target.todos ? target.todos.filter((t) => t.status !== "completed").length : 0;
     mgr.notifyDone(target.session_id, items, remaining);
     res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, session_id: target.session_id }));

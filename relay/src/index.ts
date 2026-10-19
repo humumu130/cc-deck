@@ -370,6 +370,13 @@ try {
   console.warn(`[headcount-trim] boot 首轮失败（下轮定时重试）: ${e instanceof Error ? e.message : String(e)}`);
 }
 mgr.startHeadcountTrim();
+// W-RESTARTDESIGN F2 钉死顺序：adopt(:311)→applyPinned(:330)→ledger 回灌→reload
+// ——saved（pin 休眠）会话照灌（flushResumeBacklog 恢复时消费）；失败只 warn 队列按空
+try {
+  mgr.loadRestartLedgerOnBoot();
+} catch (e) {
+  console.warn(`[restart-ledger] boot 回灌失败（账面按空，未投递通知面丢失本轮）: ${e instanceof Error ? e.message : String(e)}`);
+}
 try {
   mgr.reloadDispatchQueue();
 } catch (e) {
