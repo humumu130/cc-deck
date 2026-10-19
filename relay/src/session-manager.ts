@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -7527,6 +7527,87 @@ export class SessionManager {
   }
 
   // 排队水位（内存权威；面板可见性——组详情/cap-set 回显）
+
+  // W-RESTARTDESIGN 案一 A：全账快照写穿（unacked+熔断三字段）——四写点统一走此口。
+  // 快照体量<10KB（cap 由 tickWatchdog 已有 200 条上限自然封顶），写放大可忽略
+  private persistRestartLedger(): void {
+    try {
+      const entries: RestartLedgerEntry[] = [];
+      for (const [sid, s] of this.sessions) {
+        if (!s.unacked.length && !s.resumeFailStreak && !s.resumeCooldownUntil) continue; // 有账才记（空会话不进文件）
+        entries.push({
+          session_id: sid,
+          unacked: s.unacked.map((m) => ({ id: m.id, text: m.text, ts: m.ts, ...(m.images?.length ? { images: m.images } : {}), ...(m.refs?.length ? { refs: m.refs } : {}), ...(m.hold ? { hold: m.hold } : {}), ...(m.renewable ? { renewable: true } : {}) })),
+          ...(s.resumeFailStreak ? { resumeFailStreak: s.resumeFailStreak } : {}),
+          ...(s.resumeCooldownUntil ? { resumeCooldownUntil: s.resumeCooldownUntil } : {}),
+        });
+      }
+      saveRestartLedger(this.cfg.dataDir, entries);
+    } catch { /* saveRestartLedger 内部已重试+高噪 */ }
+  }
+
+  /**
+   * W-RESTARTDESIGN 案一 A boot 回灌（F2 钉死顺序的第三步：adopt/ensureExternal →
+   * applyPinned → 本方法 → reloadDispatchQueue——index.ts 控序）。saved（pin 休眠）
+   * 会话照灌（flushResumeBacklog 恢复时消费）；用户消息（非 renewable）永不过期——
+   * 目标会话终态（DONE/退休无 resume 句柄）落「未投递」upsertNotification（:2729
+   * liveness-block 同款），不静默丢（#7 必达）。孤儿条目（session 不在册）warn 丢弃。
+   * 返回灌入统计（启动日志用）。
+   */
+  loadRestartLedgerOnBoot(): { restored: number; undelivered: number; droppedRenewable: number; orphans: number } {
+    const { entries, droppedRenewable } = loadRestartLedger(this.cfg.dataDir);
+    let restored = 0, undelivered = 0, orphans = 0;
+    for (const e of entries) {
+      const s = this.sessions.get(e.session_id);
+      if (!s) { orphans++; continue; } // 重建失败/已删——warn 不阻塞
+      // 用户消息终态分流：无 resume 句柄且无活 agent = 补投无门 → 未投递通知（不丢账面记录）
+      const canResume = !!s.state.relay_session_id || !!s.agent;
+      const userMsgs = e.unacked.filter((m) => !m.renewable);
+      if (userMsgs.length && !canResume) {
+        for (const m of userMsgs.slice(-3)) {
+          this.upsertNotification("system", `restart-undelivered-${e.session_id.slice(0, 8)}-${m.id.slice(0, 6)}`, e.session_id, {
+            title: "重启前消息未投递",
+            body: `${s.state.title || e.session_id.slice(0, 8)}：relay 重启前有 ${userMsgs.length} 条消息在队，会话已无恢复句柄未能补投——点会话卡片可手动恢复后重发`,
+            severity: "waiting", group: "attention", actionable: true, sessionId: e.session_id, domain: "session", returnPath: "/",
+          });
+        }
+        undelivered += userMsgs.length;
+        e.unacked = e.unacked.filter((m) => m.renewable); // 用户消息不灌入（已落通知面）；renewable 由 duty 重推导（load 已过期清）此处置空
+      }
+      if (e.unacked.length) {
+        s.unacked.push(...e.unacked);
+        restored += e.unacked.length;
+      }
+      if (e.resumeFailStreak) s.resumeFailStreak = e.resumeFailStreak;
+      if (e.resumeCooldownUntil) s.resumeCooldownUntil = e.resumeCooldownUntil;
+    }
+    if (restored || droppedRenewable || undelivered || orphans) {
+      console.log(`[restart-ledger] boot 回灌：恢复消息 ${restored} · renewable 过期丢 ${droppedRenewable} · 未投递通知 ${undelivered} · 孤儿丢 ${orphans}`);
+    }
+    return { restored, undelivered, droppedRenewable, orphans };
+  }
+
+  /**
+   * W-RESTARTDESIGN §三 回执契约机器闸：dispatch 收口（done）后 90s 核对约定回执
+   * （~/.cc-deck/artifacts/w-*.md 前缀扫描）存在性——缺失升级 notifyLeaderSystem+
+   * ledger system 条目（离线重载不丢）。不阻塞收口；只核有 gid 的正经立项单
+   * （随手办/咨询档无回执约定）；failed 不核（失败单的回执常在修复批内补）。
+   * 重启窗内定时器丢失由 ledger 条目兜底。扫描失败跳过（artifacts 不可达）。
+   */
+  private scheduleReceiptCheck(dispatchId: string, gid: string | undefined, title: string): void {
+    if (!gid) return; // 无 gid=随手办/咨询档，无回执约定
+    const t = setTimeout(() => {
+      try {
+        const artsDir = join(homedir(), ".cc-deck", "artifacts");
+        const hit = existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+        if (!hit) {
+          this.notifyLeaderSystem(`dispatch ${dispatchId.slice(0, 8)}（${title.slice(0, 30)}）收口无回执——交付存疑，请核 artifacts/`);
+        }
+      } catch { /* 扫描失败跳过 */ }
+    }, 90_000);
+    t.unref?.();
+  }
+
   private queueDepth(gid: string): number {
     return this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === gid).length;
   }
