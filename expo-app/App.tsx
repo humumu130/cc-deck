@@ -719,27 +719,34 @@ function Shell() {
   // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
   // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
   const [navPhase, setNavPhase] = useState<"idle" | "entering" | "closing">("idle");
+  // W-CARDFIX（P0 重派，技术方案同 pushperf2 e18f195）：保挂载隐藏态标记——
+  // closeDetail 滑出完置 true；openDetail 由此区分「页内换 sid（显示中，无动画
+  // 换树）」与「隐藏态重开（须滑入复活）」。缺它时 detail 恒非空 → 点列表卡走
+  // 页内换会话静默分支 → 只 setDetail 不滑入，navX 停屏外 = 点任何卡无响应
+  const [detailHidden, setDetailHidden] = useState(false);
   const navX = useRef(new Animated.Value(0)).current;
   // 宽度调用时取（分屏/折叠屏变化后首帧窗口已换宽，冻结值会让滑入起点露边/滑出残留）
   const openDetail = useCallback((sid: string, view?: ViewKind): boolean => {
     if (navPhase !== "idle") return false;
     setDetailView(view ?? "msg");
-    if (detail) {
-      // 详情页内直接换会话：无动画，且保留当前视图 tab（2026-09-16 用户反馈——
-      // 旧实现重置回消息页，"从会话 A 进详情切到 B 得重新进一遍"）
+    if (detail && !detailHidden) {
+      // 详情页内直接换会话（显示中）：无动画，且保留当前视图 tab（2026-09-16 用户
+      // 反馈——旧实现重置回消息页，"从会话 A 进详情切到 B 得重新进一遍"）
       setDetail(sid);
       if (view) setDetailView(view);
       return true;
     }
+    // W-CARDFIX：隐藏态重开（detail 保挂载但 navX 在屏外）= 完整滑入复活——与首开同路
     const w = Dimensions.get("window").width;
     setDetail(sid);
+    setDetailHidden(false);
     setNavPhase("entering");
     navX.setValue(w);
     Animated.timing(navX, { toValue: 0, duration: 230, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (finished) setNavPhase("idle");
     });
     return true;
-  }, [navPhase, detail, navX]);
+  }, [navPhase, detail, detailHidden, navX]);
   // 关详情：仅在空闲相位且详情确实开着时启动关闭动画，返回是否实际执行（#282 条件消费
   // 的依据——分发层据此决定 return true / false，不再无条件吞键）
   const closeDetail = useCallback((): boolean => {
@@ -749,7 +756,9 @@ function Shell() {
       if (finished) {
         // W-PUSHPERF ②：返回不卸载详情（隐藏保挂载）——重开同 sid 零重建秒开；
         // 换 sid 时 setDetail 新值触发换树（单槽 LRU=1，内存不涨）。navX 停在屏外宽
-        // = 隐藏态；openDetail 重置 navX 再滑入
+        // = 隐藏态；openDetail 重置 navX 再滑入。W-CARDFIX：置 detailHidden 让
+        // openDetail 走滑入复活分支（否则点列表卡被页内换会话分支短路=点卡无响应）
+        setDetailHidden(true);
         setNavPhase("idle");
       }
     });
@@ -761,7 +770,10 @@ function Shell() {
   useEffect(() => {
     if (navPhase === "idle") return;
     const t = setTimeout(() => {
-      // W-PUSHPERF ②：closing 兜底也不卸载（保挂载口径统一）
+      // W-PUSHPERF ②：closing 兜底也不卸载（保挂载口径统一）。
+      // W-CARDFIX 兜底双归位：closing 超时放行时 navX 已飞向屏外（或停在途中）——
+      // 与正常完成路径同置 hidden，隐藏标记与 navX 实际位置永不脱钩
+      if (navPhase === "closing") setDetailHidden(true);
       setNavPhase("idle");
     }, 500);
     return () => clearTimeout(t);

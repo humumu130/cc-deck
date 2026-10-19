@@ -24,5 +24,9 @@ ok(ds.includes("h.cancel()"), "P4 句柄清理（sid 切换防晚到放开）");
 ok(app.includes("W-PUSHPERF ②：返回不卸载详情"), "P5 返回保挂载（重开同 sid 零重建）");
 ok(app.includes("closing 兜底也不卸载"), "P6 兜底定时器同口径");
 ok(app.includes("navX.setValue(w)"), "P7 重开重置滑入起点（保挂载态复活）");
+// W-CARDFIX（P0 重派）：hidden 相位根修三锚+兜底双归位
+ok(app.includes("const [detailHidden, setDetailHidden] = useState(false)"), "P8 隐藏态标记（App.tsx:762 静默分支根修锚）");
+ok(app.includes("if (detail && !detailHidden)"), "P9 页内换会话分支排除隐藏态（点列表卡走滑入复活）");
+ok(app.includes('if (navPhase === "closing") setDetailHidden(true);'), "P10 兜底双归位（closing 超时放行同置 hidden——标记与 navX 位置不脱钩）");
 console.log(`\npushperf: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
