@@ -5025,6 +5025,12 @@
                   }
                   if (passive) {
                     content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
+                  } else if (isAsk && (w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 90000) {
+                    // W-DESKASK（W-ASKFIX 桌面同步）：ask 卡 90s 应答窗（relay
+                    // QUESTION_HOLD_MS）——过期 CLI 已放本地选择器，手机/网页晚答注入
+                    // 无门（CLI 已死/终态=死卡）——按钮全撤+置灰标注，对齐 expo
+                    // AskBanner「已失效（超时）」口径；审批类 10min 治理（#159 件③）不动
+                    content += "\n（已失效（超时）——CLI 已放行本地选择器，此处作答无法送达）";
                   } else if ((w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 600000) {
                     // #159 件③ 过期治理：waiting_request 超 10min 视为已失效（CLI 多已越过，
                     // relay sweepStalePending 同语义）——按钮全撤防「点了没反应」假死
