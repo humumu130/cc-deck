@@ -38,9 +38,7 @@ const GH_RELEASE_PAGE = "https://github.com/humumu130/cc-deck/releases/latest";
 // test 包内容 = dev 分支最新构建，无独立 Release 页；「查看完整变更」指提交历史
 const GH_COMMITS_PAGE = "https://github.com/humumu130/cc-deck/commits/dev";
 
-const KEY_LAST_CHECK = "cc_update_last_check";
 const KEY_SKIPPED = "cc_update_skipped";
-const CHECK_WINDOW_MS = 24 * 3600 * 1000;
 const FETCH_TIMEOUT_MS = 5000;
 
 // #313 本版特性摘要（关于弹窗分组展示），随版本发布同步维护。
@@ -146,16 +144,6 @@ export function isNewer(remote: string, local: string): boolean {
   return false;
 }
 
-// 上次检查时间距今满 24h 才允许静默检查（手动检查不受此限）
-export async function shouldAutoCheck(): Promise<boolean> {
-  try {
-    const last = Number((await AsyncStorage.getItem(KEY_LAST_CHECK)) ?? 0);
-    return Date.now() - last >= CHECK_WINDOW_MS;
-  } catch {
-    return false;
-  }
-}
-
 // "忽略此版"：记版本号，静默检查发现同版不再弹横幅（抽屉手动检查照常回结果）
 export async function getSkippedVersion(): Promise<string | null> {
   try {
@@ -257,7 +245,6 @@ export async function checkUpdate(): Promise<UpdateInfo | null | "miss"> {
     } finally {
       clearTimeout(timer);
     }
-    void AsyncStorage.setItem(KEY_LAST_CHECK, String(Date.now())).catch(() => {});
     if (!res.ok) return "miss";
     const rel = (await res.json()) as {
       tag_name?: string;
