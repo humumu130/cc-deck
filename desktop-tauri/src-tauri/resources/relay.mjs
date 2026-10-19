@@ -55996,6 +55996,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       ...planned.provider ? { provider: planned.provider } : {},
       ...planned.model ? { model: planned.model } : {}
     };
+    console.log(`[dispatch] start id=${dispatchId.slice(0, 8)} tier=${tier} gid=${input.gid ?? "-"} actor=${actor} engine=${planned.engine ?? "-"} title=${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}`);
     let veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
     if (veteran && (planned.engine || planned.model || planned.provider)) {
       const veteranState = this.require(veteran).state;
@@ -56116,6 +56117,7 @@ provider=${opts.provider ?? "default"}` : void 0,
 ` : "";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
+    console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId;
     if (veteran) {
       try {
@@ -56156,6 +56158,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           const receipt = truncate(`\u7F16\u5236\u5DF2\u6EE1${capReuse ? "\uFF0C\u590D\u7528 worker resume \u5931\u8D25\u4E14\u4E0D\u6269\u7F16\u964D\u7EA7" : "\uFF0C\u5728\u7F16\u719F\u624B resume \u7194\u65AD\u4E14\u4E0D\u6269\u7F16\u964D\u7EA7"}: ${msg}`, 200);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=resume \u7F16\u5236\u5DF2\u6EE1\u4E0D\u6269\u7F16: ${truncate(msg, 120)}`);
           return { ok: false, error: `\u7F16\u5236\u5DF2\u6EE1\uFF08${capReuse ? "\u89E6\u9876\u590D\u7528" : "\u5728\u7F16\u719F\u624B"} resume \u5931\u8D25\uFF0C\u4E0D\u6269\u7F16\uFF09: ${msg}` };
         }
         this.pushExternalLog(veteran, "system", `\u719F\u624B\u590D\u6D3B\u5931\u8D25\uFF0C\u672C\u5355\u964D\u7EA7\u65B0\u4F1A\u8BDD: ${msg}`);
@@ -56173,6 +56176,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           const receipt = truncate(`resume \u5931\u8D25(${msg}) \u540E\u65B0\u4F1A\u8BDD\u4EA6\u5931\u8D25: ${msg2}`, 200);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=spawn \u590D\u7528\u964D\u7EA7\u62C9\u8D77\u5931\u8D25: ${truncate(msg2, 120)}`);
           return { ok: false, error: `worker \u62C9\u8D77\u5931\u8D25: ${msg2}` };
         }
       }
@@ -56191,6 +56195,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         const receipt = truncate(msg, 200);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
         this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+        console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=spawn \u65B0\u4F1A\u8BDD\u62C9\u8D77\u5931\u8D25: ${truncate(msg, 120)}`);
         return { ok: false, error: `worker \u62C9\u8D77\u5931\u8D25: ${msg}` };
       }
     }
@@ -56212,10 +56217,12 @@ provider=${opts.provider ?? "default"}` : void 0,
         const receipt = truncate(`\u5165\u7F16\u88AB\u7F16\u5236\u4E0A\u9650\u95F8\u62D2\u7EDD: ${am2.error ?? ""}`, 200);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "failed", receipt, session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
         this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, sessionId);
+        console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=enroll \u5165\u7F16\u5931\u8D25: ${truncate(am2.error ?? "\u672A\u77E5", 120)}`);
         return { ok: false, error: am2.error ?? "\u5165\u7F16\u5931\u8D25" };
       }
     }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
+    console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields });
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id ? (
@@ -56323,6 +56330,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const receipt = truncate(`${titleSeg}\u6D3E\u5355\u961F\u5217\u5DF2\u6EE1\uFF08200\uFF09\u2014\u2014\u7F16\u5236\u89E6\u9876\u4E14\u957F\u671F\u5168\u5FD9\uFF0C\u8BF7\u5148\u6E05\u7406\u7F16\u5236\u6216\u8C03 headcount_cap`, 200);
       appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
       this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+      console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=queue-full \u961F\u5217\u5DF2\u6EE1\uFF08200\uFF09gid=${g2.id}`);
       return { ok: false, error: "\u6D3E\u5355\u961F\u5217\u5DF2\u6EE1\uFF08200\uFF09" };
     }
     this.dispatchQueueItems = input.queue_replay ? [item, ...this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId)] : [...this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId), item];
@@ -56331,6 +56339,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     const queuedTitleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
     appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
+    console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g2.id} actor=${actor} title=${queuedTitleSeg}`);
     this.pushExternalLog(this.leaderId ?? "", "system", `\u6D3E\u5355\u6392\u961F\uFF1A${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}\uFF08\u7F16\u5236 ${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)} \u89E6\u9876\u4E14\u5168\u5FD9\uFF0C\u961F\u5217\u4F4D\u7F6E ${this.dispatchQueueItems.length}\uFF09`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
   }
@@ -59505,6 +59514,7 @@ var Bridge = class _Bridge {
   extInput(sessionId, text, images, files) {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
+    console.log(`[submit] ext-input sid=${sessionId.slice(0, 14)} status=${state.status} len=${text.length}${images?.length ? ` img=${images.length}` : ""}${files?.length ? ` file=${files.length}` : ""}`);
     let body = text.trim();
     const savedImgs = images && images.length ? saveUploadImages(this.opts.dataDir, sessionId, images) : [];
     const imgRefs = imageRefsOf(savedImgs);
@@ -63933,6 +63943,7 @@ startServer(bus, mgr, cfg, {
   }
 });
 console.log("CC Deck Relay \u5DF2\u542F\u52A8");
+console.log(`  \u8FDB\u7A0B:   pid=${process.pid}\uFF08${process.env.CCR_PARENT_PID ? "\u5185\u5D4C\xB7\u58F3\u5B75\u5316" : "\u72EC\u7ACB\u524D\u53F0"}\uFF09`);
 console.log(`  \u6A21\u578B:   ${cfg.model}`);
 console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
 console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
