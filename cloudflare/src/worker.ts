@@ -403,7 +403,12 @@ export class RouterDO extends DurableObject {
           } catch (e) {
             // 目标连接濒死时 send 会抛；不兜住会沿 webSocketMessage 冒泡，
             // 把发送方连接一起 1011 踢掉（桥无缓冲，此帧只能丢弃）
-            console.log(`[cloud-bridge] send failed conn=${connId}: ${e}`);
+            // W-CLOUDFIX（#149）：send 失败=该连接已死但 close 事件可能迟到/丢失
+            // （半开），路由位不腾则后续帧持续 ROUTE_MISS——立即 unregister 让
+            // 设备重连的 register 顶替路径干净（幂等：close 事件迟到时再 unregister
+            // 是 no-op）
+            this.router.unregister(connId);
+            console.log(`[cloud-bridge] send failed conn=${connId} (unregistered): ${e}`);
           }
         }
       },
@@ -500,13 +505,19 @@ export class RouterDO extends DurableObject {
     this.rehydrate();
 
     // 顶替：踢掉同 dev 的旧连接（休眠唤醒后 getWebSockets 只返回存活的）
+    let replaced = 0;
     for (const old of this.ctx.getWebSockets(dev)) {
       try {
         old.close(4000, "replaced");
+        replaced++;
       } catch {
         // ignore
       }
     }
+    // W-CLOUDFIX2（#149 续）：DO 生命周期日志常驻（attach/顶替计数）——手机 socket
+    // 秒死排产：wrangler tail 直接看「谁杀了 socket」（close code/reason 在
+    // webSocketClose 侧成对打印）
+    console.log(`[do-life] attach dev=${dev} conn=${"?"} replaced=${replaced} ip=${req.headers.get("CF-Connecting-IP") ?? "?"}`);
 
     const connId = crypto.randomUUID();
     const pair = new WebSocketPair();
@@ -634,9 +645,13 @@ export class RouterDO extends DurableObject {
     this.router.handleFrame(a.connId, message);
   }
 
-  override async webSocketClose(ws: WebSocket): Promise<void> {
+  override async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
     this.rehydrate();
-    const connId = this.attachOf(ws)?.connId;
+    const a = this.attachOf(ws);
+    const connId = a?.connId;
+    // W-CLOUDFIX2：close 成对日志（dev+code+reason+wasClean）——4000=顶替/4291=限流/
+    // 1001=对端正常关/1006=异常断（网络/edge）/1011=服务端错。秒死排产的主证据面
+    console.log(`[do-life] close dev=${a?.dev ?? "?"} conn=${connId ?? "?"} code=${code} clean=${wasClean} reason=${JSON.stringify(reason)}`);
     if (connId) this.router.unregister(connId);
   }
 }

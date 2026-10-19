@@ -396,6 +396,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 # Leader 只提案不决议——确认卡 ✓/✗ 由用户在客户端点。
 # 用法：
 #   org status                                     团队全景：项目组索引/待决确认单/进行中派单
+#   org auth-bypass <on|off>                       授权/撤销「跳过权限确认」（生产环境显式跳过放行条件，W-PERMERR）
 #   org create <name> <anchor> <轻立项|正经立项>    立项（档位显示名：轻立项=轻量项目、正经立项=正式项目；正经/首次轻 → 用户确认卡；幂等种子防漂移 CLAUDE.md）
 #   org set <id> <active|parked|archived> [note]   状态迁移（结项有悬账/未完 → 出确认卡附核对清单）
 #   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡；参数为存储档位词）
@@ -443,6 +444,15 @@ abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
 case "$action" in
   status)
     body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    ;;
+  auth-bypass)
+    # W-PERMERR：用户明示授权「跳过权限确认」写入口（on=授权/off=撤销；撤销即收回）
+    [ $# -ge 1 ] || { echo "用法: org auth-bypass <on|off>   授权/撤销「跳过权限确认」（生产环境显式跳过的放行条件）" >&2; exit 1; }
+    case "$1" in
+      on|off) ;;
+      *) echo "用法: org auth-bypass <on|off>" >&2; exit 1 ;;
+    esac
+    body="$(python3 -c 'import json,sys;print(json.dumps({"action":"auth-bypass","on":sys.argv[1]=="on"},ensure_ascii=False))' "$1")"
     ;;
   create)
     [ $# -ge 3 ] || { echo "用法: org create <name> <anchor> <轻立项|正经立项>" >&2; exit 1; }

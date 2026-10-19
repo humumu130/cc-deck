@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
@@ -64,10 +64,17 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）。四档含"跳过"：
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
-// 005 #166 手机 waitbox 仅浏览口径（s2 定档）：等待卡在手机端只展示不决议——按钮全
-// disabled + 底部引导「请在电脑上处理」。decide/#212 remember 范围等真决议链路原样
-// 保留，后续阶段放开手机远程决议时翻此开关即可
-const WAITBOX_READONLY = true;
+// 005 #166 手机 waitbox 仅浏览口径（s2 定档）——已被 #159（AskUser 应答链路 P0，
+// 2026-10-19 用户令）推翻：开关翻开，手机恢复决议。COMMAND_ANSWER/REJECT 全链在
+// relay（ws-server/cloud 白名单 + session-manager COMMAND_ANSWER 路由 + 托管
+// agent.answer()/外部 bridge.answerPending()），手表端早有发送面（watch.ts），本端
+// 解锁即闭环。decide/#212 remember 范围等真决议链路原样保留
+const WAITBOX_READONLY = false;
+// #159 件③ 过期治理：waiting_request 超 10min 视为已失效（对齐 relay
+// sweepStalePending 的「CLI 已越过」语义）——卡片置灰禁点，防「点了没反应」假死
+const WAITBOX_STALE_MS = 10 * 60 * 1000;
+const isWaitStale = (wr?: { received_at?: number } | null): boolean =>
+  !!wr?.received_at && Date.now() - wr.received_at > WAITBOX_STALE_MS;
 type PermMode = (typeof PERM_CYCLE)[number];
 // P81-8W 权限摘要三端统一词表（specs/081 钉死段；与 web-console PERM_MODE_ZH /
 // 桌面端同表逐字一致，勿改字面——三端单一词表源，本表取代旧局部 PERM_LABEL 四键表）：
@@ -480,7 +487,10 @@ function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTas
   if (e.kind === "user_message") {
     // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
     // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
-    const long = !!e.full;
+    // W-MSGFIX（1016 实锤 20/29 字也显「展开全文」）：relay 对所有 user_message 都带
+    // full（text=截断版/full=全文）——!!e.full 恒真=假折叠。改为「full 比 text 长才折叠」
+    //（未截断时 text==full，长度相等即短消息不折叠不显钮）
+    const long = !!e.full && e.full.length > e.text.length;
     // FB14：随消息发送的图片在气泡内缩略呈现（点按放大），不再只发不显。
     // 引用形态 img-* basename，经 COMMAND_ARTIFACT_FETCH 按需拉取（≤4 张与 relay 同口径）
     const imgs = Array.isArray(e.images) ? e.images.filter((x) => typeof x === "string" && x).slice(0, 4) : [];
@@ -531,7 +541,7 @@ function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTas
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
         <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
         {cursor}
-        {e.full ? (
+        {e.full && e.full.length > e.text.length ? ( /* W-MSGFIX：同 user_message——未截断（text==full）不显展开钮 */
           <Pressable onPress={onToggle} hitSlop={6}>
             <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full.length} 字 ▾`}</Text>
           </Pressable>
@@ -1628,7 +1638,18 @@ function WaitCard({ isAsk, children }: { isAsk: boolean; children: ReactNode }) 
 function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
+  // W-ASKFIX ③：TTL 置灰——下发 90s 后 CLI 已放行本地选择器（relay QUESTION_HOLD_MS），
+  // 晚答仍走 askFallback 注入可达，但 CLI 已死/终态时是死卡——置灰禁点防「点了没反应」
+  const [ttlTick, setTtlTick] = useState(0);
+  const askExpired = !!wr.received_at && Date.now() - wr.received_at > 90_000;
+  useEffect(() => {
+    if (!wr.received_at || Date.now() - wr.received_at > 90_000) return;
+    const t = setTimeout(() => setTtlTick((n) => n + 1), Math.max(1000, wr.received_at! + 90_000 - Date.now()));
+    return () => clearTimeout(t);
+  }, [wr.request_id, wr.received_at]);
   const qs = wr.questions ?? [];
+  const stale = isWaitStale(wr);
+  const ro = WAITBOX_READONLY || stale;
   const single = qs.length === 1 && !qs[0].multi;
   const stepped = qs.length > 1;
   const [picked, setPicked] = useState<Record<number, string[]>>({});
@@ -1668,11 +1689,15 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
     }
   };
   const allAnswered = qs.every((_, i) => answered(i));
-  const submit = () => answer(qs.map((_, i) => free[i]?.trim() || (picked[i] ?? []).join("、")));
+  const submit = () => {
+    if (askExpired) return; // W-ASKFIX ③：过期禁点（晚答已达不了已死 CLI）
+    answer(qs.map((_, i) => free[i]?.trim() || (picked[i] ?? []).join("、")));
+  };
   const freeText = free[qi] ?? "";
 
   return (
     <WaitCard isAsk>
+        {stale ? <Text style={{ color: c.faint, fontSize: 10.5, marginBottom: 4 }}>该提问已超过 10 分钟未处理，视为已失效（CLI 多已继续）</Text> : null}
       <Text style={d.waitT}>◉ Claude 在提问</Text>
       {stepped ? (
         <View style={d.askSteps}>
@@ -1685,7 +1710,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       {q ? (
         <View>
           <Text style={d.askQ}>{q.question}</Text>
-          <View style={[d.askOpts, WAITBOX_READONLY && d.roDim]}>
+          <View style={[d.askOpts, ro && d.roDim]}>
             {q.options.map((o) => {
               const on = (picked[qi] ?? []).includes(o.label);
               return (
@@ -1693,7 +1718,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
                   key={o.label}
                   style={[d.askChip, on && d.askChipOn]}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-                  disabled={WAITBOX_READONLY}
+                  disabled={ro}
                   onPress={() => (single ? answer([o.label]) : q.multi ? toggle(qi, o.label) : pickSingle(qi, o.label))}
                 >
                   <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && on ? "✓ " : "") + o.label}</Text>
@@ -1703,10 +1728,10 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           </View>
           {stepped ? (
             <TextInput
-              style={[d.askFree, { marginBottom: 4 }, WAITBOX_READONLY && d.roDim]}
+              style={[d.askFree, { marginBottom: 4 }, ro && d.roDim]}
               value={freeText}
               onChangeText={(t) => setFree((f) => ({ ...f, [qi]: t }))}
-              editable={!WAITBOX_READONLY}
+              editable={!ro}
               placeholder="或输入自定义回答…"
               placeholderTextColor={c.faint}
               returnKeyType="send"
@@ -1724,21 +1749,21 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
       ) : null}
       {!single ? (
         <Pressable
-          style={[d.askSubmit, (WAITBOX_READONLY || !allAnswered) && { opacity: WAITBOX_READONLY ? 0.5 : 0.4 }]}
+          style={[d.askSubmit, (ro || !allAnswered) && { opacity: ro ? 0.5 : 0.4 }]}
           android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
-          disabled={!allAnswered || WAITBOX_READONLY}
+          disabled={!allAnswered || ro || askExpired}
           onPress={submit}
         >
-          <Text style={d.askSubmitT}>提交回答</Text>
+          <Text style={d.askSubmitT}>{askExpired ? "已失效（超时）" : "提交回答"}</Text>
         </Pressable>
       ) : null}
       {single ? (
-        <View style={[d.askFreeRow, WAITBOX_READONLY && d.roDim]}>
+        <View style={[d.askFreeRow, ro && d.roDim]}>
           <TextInput
             style={d.askFree}
             value={free[0] ?? ""}
             onChangeText={(t) => setFree((f) => ({ ...f, 0: t }))}
-            editable={!WAITBOX_READONLY}
+            editable={!ro}
             placeholder="或输入自定义回答…"
             placeholderTextColor={c.faint}
             returnKeyType="send"
@@ -1749,14 +1774,14 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
           <Pressable
             style={[d.askFreeBtn, !(free[0] ?? "").trim() && { opacity: 0.4 }]}
             android_ripple={{ color: withA(c.brandA, 0.2), borderless: false }}
-            disabled={!(free[0] ?? "").trim() || WAITBOX_READONLY}
+            disabled={!(free[0] ?? "").trim() || ro}
             onPress={() => (free[0] ?? "").trim() && answer([(free[0] ?? "").trim()])}
           >
             <Text style={d.askFreeBtnT}>作答</Text>
           </Pressable>
         </View>
       ) : null}
-      <Pressable hitSlop={8} disabled={WAITBOX_READONLY} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
+      <Pressable hitSlop={8} disabled={ro} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
         <Text style={d.askSkip}>取消作答（视为拒绝回答）</Text>
       </Pressable>
     </WaitCard>
@@ -1768,6 +1793,23 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
 // 返回句柄（#282 顶层分发的详情侧扩展）：非消息视图时返回键先回消息页而不是退出详情
 export interface DetailBackHandle {
   requestBack: () => boolean;
+}
+
+// W-LIST2 件二②③：详情头颗粒水位计（电脑端 index-005 context-meter 分段形制移植）——
+// 20 格颗粒（w3×h6 圆角1，尺寸按手机屏定）替代完整条状；亮格色=报警档分级（正常
+// dim / 60-84 黄 / ≥85 红，与 ctxTone 同源同词表），暗格=ctxTrack；百分比文本保留在
+// 组件尾侧（视觉干净：颗粒承形、数字承精确值，不双条不双字）。
+function CtxSegMeter({ pct, tone, cells = 20, small }: { pct: number; tone: string; cells?: number; small?: boolean }) {
+  const { c } = useTheme();
+  const on = Math.round((Math.min(100, Math.max(0, pct)) / 100) * cells);
+  // W-UIFIX 件二：small 档（标题行右端用）——段 2×5/gap 1，比副题行旧档小一号
+  return (
+    <View style={{ flexDirection: "row", gap: small ? 1 : 1.5, alignItems: "center" }}>
+      {Array.from({ length: cells }, (_, i) => (
+        <View key={i} style={{ width: small ? 2 : 3, height: small ? 5 : 6, borderRadius: 1, backgroundColor: i < on ? tone : c.ctxTrack }} />
+      ))}
+    </View>
+  );
 }
 
 export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; onOpenArtPool?: () => void; ref?: Ref<DetailBackHandle> }) {
@@ -1811,11 +1853,17 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // 回到底部浮钮（#322 第四轮定位，用户拍板）：对话区顶部居中小胶囊（ChatGPT 手机端
   // 样式，带下箭头），上滑离开底部即出现，吸顶浮动不占布局、不与 App 壳悬浮钮打架
   const [showJump, setShowJump] = useState(false);
+  // W-MOTION：浮钮显隐走 opacity 过渡（常驻挂载+pointerEvents 门控——原条件渲染瞬跳）
+  const jumpOp = useRef(new Animated.Value(0)).current;
   // 回到底部浮钮（第五轮）：滚动中隐藏、停止 ~300ms 后浮现；atBottom/jumpScrollable 由 onScroll 维护
   const jumpIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpScrollable = useRef(false);
   useEffect(() => () => { if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current); }, []);
   useEffect(() => { setShowJump(false); }, [view]);
+  // W-MOTION：showJump/view 变化 → 150ms opacity 过渡（原生驱动）
+  useEffect(() => {
+    Animated.timing(jumpOp, { toValue: showJump && view === "msg" ? 1 : 0, duration: 150, useNativeDriver: true }).start();
+  }, [showJump, view, jumpOp]);
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   // #142 子 Agent 面板展开态（初始同步模块级记忆，点按写回）
@@ -2163,6 +2211,13 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚。
   // 六视图翻页（#250）：消息/全部两页各自过滤，当前页的滚动容器才跟随滚底
   const logs = s ? store.timelineOf(sid) : [];
+  // W-PUSHPERF ①：渐进上屏——挂载首帧只渲染尾部 REVEAL_N 条（骨架即出转场跟手），
+  // InteractionManager 空闲后放开全量（长转录分帧上屏，JS 不被首帧阻塞饿死动画）
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const h = InteractionManager.runAfterInteractions(() => setRevealed(true));
+    return () => h.cancel();
+  }, [sid]);
   const procFont = useProcessFont();
   const procVisible = logs.filter(
     (e) =>
@@ -2309,8 +2364,9 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     return (
       <SafeAreaView style={d.safe} edges={["top"]}>
         <View style={d.head}>
-          <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
-            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+          {/* W-UIFIX 件七同款：会话已消失态返回钮同改 */}
+          <Pressable style={d.backPlain} onPress={onBack} hitSlop={{ left: 14, right: 8, top: 10, bottom: 10 }} accessibilityLabel="返回会话列表">
+            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={c.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M15 18l-6-6 6-6" />
             </Svg>
           </Pressable>
@@ -2364,6 +2420,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
   // 列表零改渲染层
   const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
+  const wrStale = isWaitStale(wr); // #159 件∆：审批卡同款过期置灰
   wrRef.current = wr; // E3b 决议定向守卫同步（见 wrRef 声明处）
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
@@ -2585,28 +2642,39 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
           仅报警档亮色），设置簇右锚（原时长已删：消息时间戳已提供时间感，统计区保留耗时全量）。
           可点元素统一圆角 8/tintSoft 底无边框；#164 红线：标题可用宽度不动 */}
       <View style={d.head}>
-        <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+        {/* W-UIFIX 件七：去 tintSoft 方块底，纯 chevron 放大到微信式 24px；触区 40 宽 */}
+        <Pressable style={d.backPlain} onPress={onBack} hitSlop={{ left: 14, right: 8, top: 10, bottom: 10 }} accessibilityLabel="返回会话列表">
+          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={c.text} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
+          {/* W-UIFIX 件二：水位计挪标题行右端+整体调小一号——副题行还给元信息文字
+              （目录/活跃时间不再被挤截断）；标题 flexShrink 保省略，水位 flexShrink:0 右锚 */}
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
+            {ctxUsed > 0 ? (
+              <View style={[d.headCtx, { marginLeft: "auto" }]}>
+                <CtxSegMeter pct={ctxPct} tone={ctxTone} small />
+                <Text style={[d.headCtxPct, { color: ctxTone }]}>{ctxPct}%</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={d.headMeta}>
-            {/* A4-4 查漏（桌面件十六信息行序）：目录→水位胶囊→活跃时间。#159 方案A 的
-                「一行一档字号一种形态」保持；水位百分比仍只在报警档亮色（60-84 黄 /
-                ≥85 红），正常档归入 dim；目录=尾两段缩短（全长在「更多」tab 统计区） */}
+            {/* A4-4 查漏（桌面件十六信息行序）：目录→水位→活跃时间。#159 方案A 的
+                「一行一档字号一种形态」保持；W-LIST2 件二②③：水位从纯文本百分比升级
+                颗粒水位计（20 格分段形制，正常 dim/60-84 黄/≥85 红）——颗粒承形、数字
+                承精确值；目录=尾两段缩短（全长在「更多」tab 统计区） */}
             {srcMeta || s.cwd || ctxUsed > 0 ? (
-              <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
-                {srcMeta}
-                {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
-                {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
-                {s.cwd && ctxUsed > 0 ? " · " : ""}
-                {ctxUsed > 0 ? (
-                  <Text style={{ color: ctxTone, fontVariant: ["tabular-nums"] }}>{ctxPct}%</Text>
-                ) : null}
-                {" · "}{fmtLastActive(s.updated_at || s.started_at)}
-              </Text>
+              <>
+                <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
+                  {srcMeta}
+                  {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
+                  {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
+                  {s.cwd && ctxUsed > 0 ? " · " : ""}
+                </Text>
+                <Text style={[d.sub, { flexShrink: 0 }]}>{" · "}{fmtLastActive(s.updated_at || s.started_at)}</Text>
+              </>
             ) : null}
             {/* #36 设置簇（右锚）：权限胶囊 + 思考开关成组——同为会话级 14px 小胶囊，
                 形态语言一致。权限胶囊是"状态灯"：标准=幽灵盾标（低噪声保锚点）、
@@ -3230,7 +3298,9 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         </ScrollView>
       ) : (() => {
         // 转录页（对话过滤视图）：list 取过滤结果，跨天分隔游标随本页 map 推进
-        const list = shownMsg;
+        // W-PUSHPERF ①：渐进上屏——首帧只渲染尾部 REVEAL_N 条（转场顺滑），交互空闲后全量
+        const REVEAL_N = 40;
+        const list = revealed || shownMsg.length <= REVEAL_N ? shownMsg : shownMsg.slice(-REVEAL_N);
         let lastDay = "";
         return (
       <ScrollView
@@ -3302,27 +3372,10 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             异质分离。渲染条件放宽为 WORKING 或有子 Agent 条目：非 WORKING 但后台仍在跑/
             刚收尾定格时，盒形态保持、仅渲染子 Agent 部分（回合结束后仍可展开查看 ✓ 定格）。
             排队注入消息在盒下方，CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
-        {s.status === "WORKING" || (s?.subagents?.length ?? 0) > 0 ? (
+        {/* W-DETAIL2 件一：WORKING 主状态行（你在做什么…+计时）迁输入栏上方固定吸附
+            （原在对话流内随内容滚动——用户 1018 实锤）；本盒只留并行子 Agent 展开块 */}
+        {(s?.subagents?.length ?? 0) > 0 ? (
           <View style={d.liveRow}>
-            {s.status === "WORKING" ? (
-              <View style={d.liveMain}>
-                <LiveStatusLine
-                  summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
-                  startedAt={s.turn_started_at ?? s.updated_at}
-                  color={c.working}
-                  // 手机屏窄：状态栏不显 ctx（2026-09-16 用户反馈）——终端转轮行长文案
-                  // 只挤得下几个字，ctx 占用让位（桌面端不受限照常显示）
-                  tok={undefined}
-                />
-                <Pressable
-                  style={[d.stripBtnWarn, d.opRipple]}
-                  android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
-                  onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
-                >
-                  <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
-                </Pressable>
-              </View>
-            ) : null}
             {/* 并行子 Agent 状态（#142 三轮 + #186 并入/紧凑化）：标题行即折叠开关
                 （「subAgent + 总数」+ 尾部箭头，总数保留、无「运行中」字样，走帧星只属于
                 具体条目）；条目行相对标题行缩进形成层级；agCollapsed 模块级记忆；条目行首
@@ -3401,7 +3454,8 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
 
       {/* 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框正上方，
           正圆形；滚动进行中隐藏、停止 ~300ms 才浮现——绝对定位不占布局 */}
-      {showJump && view === "msg" ? (
+      {/* W-MOTION：显隐 150ms opacity 过渡（常驻挂载，pointerEvents 随显隐——隐藏态不挡触达） */}
+      <Animated.View pointerEvents={showJump && view === "msg" ? "auto" : "none"} style={[d.jumpFabHost, { opacity: jumpOp }]}>
         <Pressable
           style={d.jumpFab}
           android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 17 }}
@@ -3413,7 +3467,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         >
           <Text style={d.jumpFabT}>↓</Text>
         </Pressable>
-      ) : null}
+      </Animated.View>
       </View>
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏。
@@ -3429,6 +3483,25 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             单行截断；落位=审批横幅/模板行/附件行之上、消息流之下。header 只留标题+
             元信息+权限胶囊。终态（DONE/ERROR）不入舱（StatusStrip 收口不变）；终端
             实时行（零宽前缀）隐藏 token 防双计；呼吸点 #148 低频步进（原口径迁移） */}
+        {/* W-DETAIL2 件一：WORKING 主状态行固定吸附（原对话流内随滚——用户实测拍板迁位）。
+            键盘弹出/收起随底部栈整体让位（root paddingBottom kb 收缩式）自然移动 */}
+        {s.status === "WORKING" ? (
+          <View style={d.dockWork}>
+            <LiveStatusLine
+              summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
+              startedAt={s.turn_started_at ?? s.updated_at}
+              color={c.working}
+              tok={undefined}
+            />
+            <Pressable
+              style={[d.stripBtnWarn, d.opRipple]}
+              android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
+              onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
+            >
+              <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {dock && (dock.state === "WORKING" || dock.state === "WAITING") ? (
           <View style={[d.dockLine, { borderLeftColor: dockColor }]}>
             <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
@@ -3492,15 +3565,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               /* 005 #166 三级按钮：拒绝=次级描边、允许并记住=第三钮（同次级档次）、
                   允许=唯一实心主钮（done 色）；仅浏览口径下全 disabled 压灰 */
               <View style={[d.wbtns, WAITBOX_READONLY && d.roDim]}>
-                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
+                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => decide(false)}>
                   <Text style={d.btnRejectT}>✕ 拒绝</Text>
                 </PressScale>
                 {wr!.remember ? (
-                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
+                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => setRmOpen(true)}>
                     <Text style={d.btnRememberT}>允许并记住</Text>
                   </PressScale>
                 ) : null}
-                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(true)}>
+                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => decide(true)}>
                   <Text style={d.btnAllowT}>✓ 允许</Text>
                 </PressScale>
               </View>
@@ -3787,8 +3860,9 @@ function MicIcon({ color }: { color: string }) {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   // 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框上方，正圆形
+  // W-MOTION：宿主承接定位（absolute/bottom），内层钮去定位——opacity 过渡作用在宿主
+  jumpFabHost: { position: "absolute", bottom: 10, left: 0, right: 0, alignItems: "center", pointerEvents: "box-none" },
   jumpFab: {
-    position: "absolute", bottom: 10, alignSelf: "center",
     width: 34, height: 34, borderRadius: 17,
     alignItems: "center", justifyContent: "center",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
@@ -3802,6 +3876,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.line,
   },
   // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
+  // W-UIFIX 件七：纯 chevron 背钮（去 tintSoft 方块底）——40px 触区、图标 24px 微信式
+  backPlain: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -6 },
   back: {
     width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden",
     alignItems: "center", justifyContent: "center",
@@ -3823,6 +3899,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   moreSecT: { marginBottom: 4, color: c.faint, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
   // 水位计（context-meter 005 形制）
   meterWrap: { paddingVertical: 4 },
+  // W-LIST2 件二②：headMeta 行内颗粒水位组（颗粒带+%文本，行高 ~14 内贴合）
+  headCtx: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 0 },
+  headCtxPct: { fontSize: 9.5, fontVariant: ["tabular-nums"] }, /* W-UIFIX 件二：随水位计调小一号 */
   meterHead: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   meterKicker: { color: c.faint, fontSize: 9, letterSpacing: 0.8 },
   meterModel: { color: c.textStrong, fontSize: 11, fontWeight: "700", marginTop: 2 },
@@ -3847,7 +3926,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   thinkToggleT: { fontSize: 9, lineHeight: 10, color: c.dim },
   thinkToggleTOn: { color: c.brandA, fontWeight: "600" },
   // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应（paddingTop 收紧贴头部）
-  fixedBar: { paddingHorizontal: 14, paddingTop: 5, borderBottomWidth: 1, borderBottomColor: c.line },
+  /* W-DETAIL2 件二：去双线——fixedBar 底边框退役（tab 指示线承载选中态语义独占分隔）；
+      tab 行收紧（paddingVertical 4→2、filterRow marginBottom 10→6） */
+  fixedBar: { paddingHorizontal: 14, paddingTop: 4 },
   strip: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
@@ -3860,6 +3941,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 单行制）：左缘 2px 状态色（005 session-state-dock 语言保留）+ 一行流（呼吸点·
   // 状态词·走秒·token·当前操作），行高恒定 15，动作文本 flex 收缩单行截断——
   // 原头部两行制（dock/dockRow/dockStateT/dockElapsed/dockTok/dockTask/dockAct）退役
+  dockWork: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 12, marginBottom: 6, paddingLeft: 0, paddingVertical: 4 }, /* W-DETAIL2 件一：WORKING 主状态行（LiveStatusLine 自带转轮+计时） */
   dockLine: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 5 },
   dockLineState: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
   dockLineMeta: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
@@ -3891,12 +3973,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
   // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }, /* W-DETAIL2 件二 */
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 2, borderBottomWidth: 2, borderBottomColor: "transparent" }, /* W-DETAIL2 件二：降高 */
   // 005 mobile-detail-tabs：激活 text-strong 加粗 + brand 底杠（指示条动画保留）
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2, borderRadius: 1, backgroundColor: c.brandA },
-  tabT: { fontSize: 12, color: c.dim },
+  tabT: { fontSize: 11.5, color: c.dim }, /* W-DETAIL2 件三裁决=A 纯汉字收紧（理由见回执） */
   tabTOn: { color: c.textStrong, fontWeight: "700" },
   // #36 权限胶囊（R2 设置簇左位，思考开关右侧成组）：h14/r7 与思考开关同形态语言
   permCluster: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },

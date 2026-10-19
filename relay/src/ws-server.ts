@@ -738,6 +738,7 @@ export function startServer(
             // W-EXPP1 经验库动作（非决议类：写入面走经验库自身硬校验+软上限+漏斗审计
             // 行，无用户决策卡语义；exp-list/exp-export 只读——org exp 子命令的 HTTP 面）
             "exp-append", "exp-bump", "exp-retire", "exp-restore", "exp-list",
+            "auth-bypass", // W-PERMERR：授权位写入口（org CLI 专用；on/off 均非决议类——写/撤授权文件）
             // W-EXPP2 面板组合动作（D1-6 补申报/改归组）：HTTP 面与 WS 面同权开放
             "exp-regroup",
             // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）

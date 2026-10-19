@@ -83,3 +83,38 @@ export function Collapse({ open, children, dur = 180 }: { open: boolean; childre
   if (!mounted) return null;
   return <Animated.View style={{ opacity: op }}>{children}</Animated.View>;
 }
+
+// ---------- W-MOTION：列表重排布局动画（第四原语；import 复用文件头 useEffect/useRef） ----------
+// 适用：换源/过滤切换/板增量导致 FlatList 条目增删重排的「瞬跳」面。dep 引用变化即
+// 触发一次 LayoutAnimation（布局差异原生补间）。约束：
+//   ① Android 需一次性开实验开关（try-catch 包——web/老架构失败静默，退回瞬切不炸）；
+//   ② 只在「数据集合形状变化」时用（增删/重排），勿对内容微更新的高频帧触发
+//     （RecyclerView 复用坑：更新也动画会出现幽灵位移动画——调用方选 dep 时自律）；
+//   ③ configureNext 本身 try-catch：任何平台异常静默降级为无动画（现状行为兜底）。
+import { LayoutAnimation, Platform, UIManager } from "react-native";
+
+let layoutAnimReady = false;
+function ensureLayoutAnim(): boolean {
+  if (layoutAnimReady) return true;
+  try {
+    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+    layoutAnimReady = true;
+  } catch {
+    layoutAnimReady = false;
+  }
+  return layoutAnimReady;
+}
+
+/** dep 引用变化 → 一次布局补间（spring 200ms——换源/重排的「不生硬」档；条目级微动效 preset） */
+export function useLayoutPulse(dep: unknown): void {
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; } // 首帧不动画（冷启动数据到位）
+    try {
+      if (!ensureLayoutAnim()) return;
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
+    } catch { /* 静默降级=瞬切（现状行为） */ }
+  }, [dep]);
+}

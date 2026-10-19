@@ -1473,7 +1473,7 @@ class RelayStore {
       // 同一 WiFi 时探测可达，「云桥 + LAN 直连」双条目无需用户点选即自动合一
       this.probeIdleLanIdentity();
     };
-    ws.onclose = () => {
+    ws.onclose = (ev: WebSocketMessageEvent & { code?: number; reason?: unknown }) => {
       if (conn.ws !== ws) return;
       clearTimeout(openTimer); // #85 开门超时器：正常终态即清（防误杀后续新连接）
       this.stopHb(conn);
@@ -1481,8 +1481,21 @@ class RelayStore {
       conn.awaitWake = false; // #34 桥 ws 断了：待唤醒作废，回落旧重连循环
       conn.state = "offline";
       conn.stateText = null;
-      // 从未开过门 = 桥不可达（桥地址错/网络断/封锁），不是配对问题——继续自动重试
-      if (!opened) conn.failNote = "连不上云桥：检查网络或桥地址";
+      // W-CLOUDFIX2（#149 续）：close code/reason 进 failNote（开门后才断=服务端/链路
+      // 侧断——4000=被顶替/4291=限流/1006=异常断；手机侧排产肉眼可察，与桥侧
+      // [do-life] close 成对印证）
+      const ccode = Number((ev as { code?: number }).code) || 0;
+      const creason = String((ev as { reason?: unknown }).reason ?? "");
+      if (opened) {
+        conn.failNote = ccode === 4000 ? "云桥连接被顶替（同设备另开了连接）"
+          : ccode === 4291 ? "云桥限流（连接过频）"
+          : ccode === 1006 ? "云桥连接异常断开（网络/边缘节点）"
+          : "云桥连接断开" + (ccode ? `（code ${ccode}${creason ? " · " + creason : ""}）` : "");
+        console.log(`[cloud] phone ws closed code=${ccode} reason=${creason} opened=${opened}`);
+      } else {
+        // 从未开过门 = 桥不可达（桥地址错/网络断/封锁），不是配对问题——继续自动重试
+        conn.failNote = "连不上云桥：检查网络或桥地址";
+      }
       conn.channel = null;
       this.emit();
       this.scheduleReconnect(conn);
@@ -2573,7 +2586,8 @@ class RelayStore {
         break;
       }
       case "SESSION_LOG": {
-        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, msg.payload.text ?? "");
+        // W-MSGFIX：兜底对账 key 用 full 优先（text=截断版时 includes(pk) 对长文恒失配）
+        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, String(msg.payload.full || msg.payload.text || ""));
         this.pushLog(conn, sid, msg.payload);
         break;
       }

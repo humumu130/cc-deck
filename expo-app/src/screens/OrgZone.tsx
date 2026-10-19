@@ -8,6 +8,7 @@
 //   ExpLibraryModal = 设置页经验库只读弹层（A2 判定保留）
 import { useCallback, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FadeIn } from "../motion";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { withA, type ThemeColors } from "../theme";
 import { displaySrcName } from "../fmt";
@@ -189,7 +190,9 @@ export function ConfirmCard({ srcId, cf, decide, flights, accepted }: {
         </Pressable>
       ) : null}
       {openPayload && payloadKeys.length ? (
-        <Text style={styles.orgCfPayload} selectable>{JSON.stringify(cf.payload, null, 2)}</Text>
+        <FadeIn dy={4} dur={130}>
+          <Text style={styles.orgCfPayload} selectable>{JSON.stringify(cf.payload, null, 2)}</Text>
+        </FadeIn>
       ) : null}
       <View style={styles.orgCfBtns}>
         <Pressable

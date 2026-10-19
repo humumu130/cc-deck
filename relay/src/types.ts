@@ -425,6 +425,9 @@ export interface WaitingPayload {
   tool_name: string;
   input_summary: string;
   suggestions: string[];
+  /** W-ASKFIX ③：下发时刻（端上 90s TTL 置灰判定——超时 CLI 已放本地选择器，晚答走
+   * askFallback 注入仍可达，但 CLI 已死/会话终态时=真死卡，置灰禁点防「点了没反应」） */
+  received_at?: number;
   questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时客户端渲染选项点选作答）
   decidable?: boolean;   // false = 仅通知（外部会话 CLI 本地在等，远程无法决定）；默认 true
   // #212 允许并记住：存在 = 该请求可记忆（非危险形态），客户端展示「记住」入口；

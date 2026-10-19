@@ -31,7 +31,7 @@
 // ⑥ 组头计数明确化：连接管理折叠态「· N」→「· N 台」。
 // 不动面（R7 口径继承）：服务器行视觉几何、六弹层（关于/图例/设备/经验库/扫码/
 // 导入）、规则/权限子节、Agent 引擎条件组、删码逻辑（store/protocol 零触碰）。
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
@@ -44,7 +44,9 @@ import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUr
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import type { AllowRule, ExperienceEntry, PairedDeviceInfo } from "../protocol";
 import { ExpLibraryModal } from "./OrgZone";
-import { PageHead } from "./page-head";
+import { PageHead, useBellBadge } from "./page-head";
+import { SourceSwitch } from "./source-switch";
+import { setListDensity, useListDensity, type ListDensity } from "../display-settings";
 import { connStateNote, connStateTone, pairErrNote, peerKindLabel, peerRelTime } from "../protocol";
 import { PERM_CAP_STATE_LABEL, permissionModesText, permissionSummariesOf, type PermCapState } from "../permission";
 import { fgSupported } from "../notify";
@@ -143,6 +145,7 @@ function Lever<T extends string>({ options, value, onChange }: {
 // #130 行前缀 12px 线性图标 → W-MSETSIG 升级为 IconTile 图标方格（28×28 软底
 // + 15px stroke 1.8 线图标），LineIcon 裸图标组件随之退役
 const ICON_MSG = "M4 5h16v10H9l-4 4z"; // 消息泡（过程消息）
+const ICON_GRID = "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"; /* W-HEAD6 C：密度行图标 */
 const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; // 半月（空闲变灰）
 const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回车发送）
 const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
@@ -403,14 +406,27 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
   );
 }
 
-export default function SettingsPage({
+// W-BACKFIX（1016 test.31 用户实锤）：设置二级页的硬件返回/侧滑句柄——App.tsx
+// 单点 BackHandler 分发（#282 全 App 唯一订阅）经 ref 问询本页：二级页开 → 消费
+// 并清 subPage（与 PageHead onBack 同一 setState 同一状态源）；目录页 → false
+// 不拦截（走 tab 层回会话域/系统默认）。ListScreen ListBackHandle 同款先例。
+export type SettingsBackHandle = { requestBack: () => boolean };
+
+function SettingsPageBase({
   onSetup,
   onEdit,
+  onGoSessions,
+  ref,
 }: {
   onSetup: () => void;
   onEdit: (e: ServerEntry) => void;
+  ref?: React.Ref<SettingsBackHandle>;
+  /** W-HEAD4 ③④：源胶囊/铃铛点击回会话页 */
+  onGoSessions?: () => void;
 }) {
   const { c } = useTheme();
+  const bellN = useBellBadge();
+  const listDensityCur = useListDensity(); // W-HEAD6 C：密度三档管理迁入设置页
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const processFont = useProcessFont();
@@ -450,6 +466,16 @@ export default function SettingsPage({
   // import 码在抽屉内弹 ImportPicker 选条目回发
   // W-MOBILE3 #122 设置二级页：null=一级目录页；conn/prefs/engines/about=二级详情
   const [subPage, setSubPage] = useState<"conn" | "prefs" | "engines" | "about" | null>(null);
+  // W-BACKFIX：返回键句柄（与 PageHead onBack 同一 setSubPage(null)——同一状态源）
+  useImperativeHandle(ref, () => ({
+    requestBack: () => {
+      if (subPage !== null) {
+        setSubPage(null);
+        return true;
+      }
+      return false;
+    },
+  }), [subPage]);
   const [scanOpen, setScanOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
@@ -712,16 +738,20 @@ export default function SettingsPage({
           <PageHead
             title="设置"
             sub={`${CHANNEL_TAG ? CHANNEL_TAG + " · " : ""}${headSub}`}
+            sourcePill={<SourceSwitch />}
+            bell={onGoSessions ? { badge: bellN, onPress: onGoSessions } : undefined}
             right={
-              <Pressable
-                style={d.scanBtn}
-                hitSlop={8}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
-                onPress={() => setScanOpen(true)}
-                accessibilityLabel="扫码（直连 / 登录 / 导入）"
-              >
-                <ScanGlyph color={c.brandA} />
-              </Pressable>
+              <>
+                <Pressable
+                  style={d.scanBtn}
+                  hitSlop={8}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+                  onPress={() => setScanOpen(true)}
+                  accessibilityLabel="扫码（直连 / 登录 / 导入）"
+                >
+                  <ScanGlyph color={c.brandA} />
+                </Pressable>
+              </>
             }
           />
         ) : (
@@ -1127,6 +1157,13 @@ export default function SettingsPage({
             title="过程消息"
             note="详情页过程消息展示 · 三档"
             right={<Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />}
+          />
+          {/* W-HEAD6 C：卡片密度三档迁入（原会话页 statRow 循环胶囊退役——设置页统一管理） */}
+          <Row
+            icon={ICON_GRID}
+            title="卡片密度"
+            note="会话列表信息密度 · 三档"
+            right={<Lever options={[{ k: "std", label: "标准" }, { k: "compact", label: "紧凑" }, { k: "minimal", label: "极简" }] as { k: ListDensity; label: string }[]} value={listDensityCur} onChange={setListDensity} />}
           />
           {/* #121 空闲变灰阈值（分钟）：数字输入（不锁数字键盘——要能输负号），失回
               提交；「负数 = 永不变灰」语义收进标签旁 ⓘ 弹窗（W-MSET3 ⑤ ⓘ 字符图
@@ -1768,3 +1805,5 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   abBtnGhostT: { color: c.dim },
   abMsgT: { color: c.dim, fontSize: 12, marginTop: 10, textAlign: "center" },
 });
+
+export default SettingsPageBase;

@@ -374,3 +374,25 @@ export function permissionPolicyEnabled(): boolean {
   console.warn(`[p81-kill-switch] CCR_PERMISSION_POLICY 未知值 "${raw}"——按 off（回退 P81 前）处理`);
   return false;
 }
+
+// ---------- W-PERMERR：拒绝面文案可操作化（reason → 中文+行动指引） ----------
+// 背景（1016 用户实锤）：`forbidden: production_bypass_denied` 英文 reason 码直出前端
+// toast，用户不可处置。本表覆盖 evaluatePermission 全部 denied() reason（词表同源）；
+// 未知 reason 兜底通用文案（reason 码保留尾部供排障对照）。文案口径=军规：动词开头、
+// 含具体动作、结果可察、无内部机制词（evaluatePermission/audit 等不进用户文案）。
+const PERM_DENY_COPY: Record<string, string> = {
+  production_bypass_denied: "已按安全策略拒绝「跳过权限确认」：当前连接的是生产服务，跳过权限需先授权。取消勾选可直接创建；确需跳过，请在终端运行 org auth-bypass on 完成授权后重试",
+  env_unknown_bypass_denied: "已按安全策略拒绝「跳过权限确认」：无法确认工作目录的安全域。取消勾选可直接创建；确需跳过，请改用服务的默认目录，或在终端运行 org auth-bypass on 授权后重试",
+  above_role_tier_ceiling: "所选权限档位超出当前身份允许的上限，已拒绝创建。请改选较低的权限档位后重试",
+  unknown_engine: "所选引擎不在受支持清单内，已拒绝创建。请从引擎列表中重新选择",
+  zcode_fail_closed: "该引擎暂不开放权限管理，已拒绝创建。请更换引擎后重试",
+  unknown_role: "会话身份无法识别，已拒绝创建。请重新发起创建",
+  tier_not_in_policy_matrix: "该任务档位未配置权限策略，已拒绝创建。请改用标准档位发起",
+  unknown_requested_mode: "权限档位值无法识别，已拒绝创建。请刷新页面后重新选择",
+  unknown_policy_source: "权限选择来源无法识别，已按安全策略拒绝。请刷新页面后重新发起",
+};
+/** 拒绝 reason → 用户可操作文案（纯函数：未知 reason 走通用兜底，reason 码保留尾部） */
+export function permDenyMessage(reason: string): string {
+  const copy = PERM_DENY_COPY[reason];
+  return copy ? `${copy}（${reason}）` : `已按权限安全策略拒绝本次操作，请调整选项后重试（${reason}）`;
+}

@@ -10,11 +10,13 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
-import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
+import { SessionStatSub } from "./page-head";
+import { SourceSwitch } from "./source-switch";
+import { fmtLastActive, fmtTok, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { artPoolGate } from "../artpool";
-import { FadeIn } from "../motion";
+import { FadeIn, useLayoutPulse } from "../motion";
 import { hasActivityCapability, type ProjectGroup, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf } from "../notify-jump";
 import NotifCenterSheet from "./NotifCenterPage";
@@ -146,6 +148,18 @@ type ListRow =
   | { h: "sec"; key: string; label: string; count: number; grp?: "team" | "active"; collapsed?: boolean; teamColor?: string }
   | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
+
+// W-LIST2 件一：卡间微信风 hairline 分隔——单线、左右留边对齐卡 padding 14（不顶满
+// 屏宽）、组头下首卡不画（leadingItem=组头时跳过，与 SectionHeader 的 divided 组间线
+// 避重）、末卡后 RN 分隔器天然无线。色=主题 line 降透明度（深色主题融成 hairline、
+// 浅色主题本身即极浅灰），密度档通用（极简平铺行同线，原 swipeWrapM 注释口径的
+// 「极淡 hairline」从未实装，本件统一落地）。
+function ListRowSeparator({ leadingItem }: { leadingItem?: ListRow | null }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  if (!leadingItem || leadingItem.h !== false) return null;
+  return <View style={[styles.rowSep, { backgroundColor: withA(c.line, 0.6) }]} />;
+}
 
 // #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
 function clipSrcName(name: string): string {
@@ -778,44 +792,8 @@ function UndoBar({ shown, title, onUndo }: { shown: boolean; title: string; onUn
   );
 }
 
-// 上下文占用 mini 指示：30px 微型条 + 百分比（与详情页头部 ctx 行、网页端同口径同分级）
-function CtxMini({ s }: { s: SessionState }) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const used = s.context_usage ?? 0;
-  if (!used) return null;
-  const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
-  const pct = contextPct(used, limit);
-  const lv = contextLevel(used, limit);
-  return (
-    <View style={styles.ctxMini}>
-      <View style={styles.ctxMiniBar}>
-        <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[lv] }} />
-      </View>
-      <Text style={[styles.ctxMiniT, { color: c[lv] }]}>{pct}%</Text>
-    </View>
-  );
-}
-
-// 上下文水位区（极简行专用，常显）：右端固定 64px 区 = 3px 细条（宽按水位比例、
-// contextLevel 分级色）+ 下方 9px tabular 百分比；无数据出灰色 "–" 占位——右缘不空缺不跳位
-function CtxCell({ s }: { s: SessionState }) {
-  const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  const used = s.context_usage ?? 0;
-  const has = used > 0;
-  const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
-  const pct = contextPct(used, limit);
-  const lv = contextLevel(used, limit);
-  return (
-    <View style={styles.ctxCell}>
-      <View style={styles.ctxCellBar}>
-        {has ? <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[lv] }} /> : null}
-      </View>
-      <Text style={[styles.ctxCellT, has && { color: c[lv] }]}>{has ? `${pct}%` : "–"}</Text>
-    </View>
-  );
-}
+// W-LIST2 件二①：列表卡水位组件（CtxMini 标准档/CtxCell 极简档）整链退役——上下文
+// 水位迁移至详情页头部颗粒水位计（DetailScreen CtxSegMeter），列表卡不再承载水位。
 
 // memo：流式刷新只重渲变化的那一行（onCardMenu 引用稳定（setMenuFor）；
 // 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
@@ -903,7 +881,6 @@ const SessionCard = memo(function SessionCard({
           {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
           <View style={{ flex: 1 }} />
           {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-          <CtxCell s={s} />
         </View>
       ) : compact ? (
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
@@ -929,8 +906,8 @@ const SessionCard = memo(function SessionCard({
             {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
-            {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡 */}
-            <CtxMini s={s} />
+            {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡。
+                W-LIST2 件二①：列表卡水位 mini 退役（上下文水位迁详情页头部颗粒计） */}
           </View>
         </>
       ) : (
@@ -976,18 +953,18 @@ const SessionCard = memo(function SessionCard({
                   无源徽/无元信息/无水位）整行不渲染（桌面 r3 条件渲染同款）。W-MV8A：引擎徽
                   补位（任务书「引擎源徽章行」——词表命中才显，与 TeamDetailPage EngineBadge
                   单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
-              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || (s.context_usage ?? 0) > 0 || engineBadgeable(s.engine) ? (
+              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
                 <View style={styles.srowR3}>
                   <EngineBadge engine={s.engine} size="sm" />
                   {srcBadge ? <SrcBadge {...srcBadge} /> : null}
                   {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
-                      display 切换不插拔 */}
+                      display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
+                      条件同步摘水位段（防右端空挂） */}
                   {r3Meta.shown.map((m) => (
                     <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
                   ))}
                   {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
                   <View style={{ flex: 1 }} />
-                  <CtxMini s={s} />
                 </View>
               ) : null}
             </View>
@@ -1163,6 +1140,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     () => notifActionableOf(snap.sources.flatMap((x) => x.notifications ?? [])),
     [snap.sources],
   );
+  // W-HEAD4 ②：会话四态计数（副题状态灯数据——V3 五色词表：working/waiting/done/error）
+  const sessionStatCounts = useMemo(() => {
+    const c2 = { working: 0, waiting: 0, done: 0, error: 0 };
+    for (const s of snap.sessions) {
+      const st = s.status;
+      if (st === "WORKING") c2.working++;
+      else if (st === "WAITING") c2.waiting++;
+      else if (st === "DONE") c2.done++;
+      else if (st === "ERROR") c2.error++;
+    }
+    return c2;
+  }, [snap.sessions]);
 
   // 硬件返回（#282）：浮层开着时先关浮层而不是退出 App（列表页是根路由）。
   // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发。
@@ -1345,6 +1334,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [projNameById],
   );
 
+  // W-MOTION：换源/过滤/聚合切换/增删卡 → 列表布局补间（key 序列指纹驱动：同集合
+  // 内容微更新不触发——防 RecyclerView 复用幽灵动画；Android 实验开关+异常静默降级）
+  const rowKeySeq = useMemo(() => rows.map((r) => r.key).join("|"), [rows]);
+  useLayoutPulse(rowKeySeq);
+
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
   // 顶栏设备图标源切换菜单（方案 A）：snap.sources 只含运行态摘要，connectServer
@@ -1385,63 +1379,22 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topbar}>
+        {/* W-HEAD4 ①②：会话页大标题+五色状态灯计数副题（用户 1016 拍板四页统一；
+            源胶囊/铃铛本页原有③④天然满足）——状态计数直扫 snap.sessions 四态 */}
+        <View style={{ flexShrink: 0, marginRight: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={styles.headTitleT}>会话</Text>
+            {/* W-HEAD6 追加：源切换标题行内联（与 PageHead 同位——间隔 8px 垂直居中） */}
+            <View style={{ marginLeft: 8 }}>
+              <SourceSwitch onOpenSettings={onOpenSettings} />
+            </View>
+          </View>
+          <SessionStatSub counts={sessionStatCounts} />
+        </View>
         {/* 件八（用户拍板 2026-10-12）：品牌行移除——「CC Deck」名+图标是单卡时代
             遗物（团队/项目页均无此行，风格不统一）；顶栏只留功能元素，品牌身份交
             系统状态栏/启动器图标。设置入口=底部导航设置域（logo 旧快捷位随之退役） */}
-        <Pressable
-          style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-          hitSlop={6}
-          accessibilityLabel={`连接状态 ${connText}，点击${snap.connState === "unpaired" ? "去设置重新配对" : "立即重连"}`}
-          onPress={() => {
-            // 方案 A（2026-09-16）：设备图标=源切换入口——点击展开源列表切换活动面板，
-            // 切换只动视图不拆连接（store #27 单源=视图过滤）。原三态分流（重试/去设置）
-            // 收进菜单：离线行点选即连接（connectServer 幂等）、菜单底部保留管理入口
-            setSrcMenu((v) => !v);
-          }}
-        >
-          {/* #52 chip 精简：去状态色点与通道后缀（多源混合通道无法单一展示），
-              文案颜色仍承载连接状态（绿/黄/红） */}
-          {/* #80 统计前配电脑图标（桌面端同款），颜色随连接态 */}
-          <DeskGlyph color={connColor} />
-          <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
-          {(snap.connState === "connecting" || snap.connState === "reconnecting") ? <ConnDots color={connColor} /> : null}
-        </Pressable>
-        {srcMenu ? (
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSrcMenu(false)} />
-        ) : null}
-        {srcMenu ? (
-          <View style={styles.srcMenu}>
-            {[...snap.sources].sort((a, b) => (b.id === snap.activeSourceId ? 1 : 0) - (a.id === snap.activeSourceId ? 1 : 0)).map((src) => {
-              const stc = src.state === "online" ? c.done : src.state === "offline" ? c.error : c.working;
-              const entry = srvEntries.find((e) => e.id === src.id);
-              const isActive = src.id === snap.activeSourceId;
-              return (
-                <Pressable
-                  key={src.id}
-                  style={[styles.srcRow, isActive && styles.srcRowOn]}
-                  android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => {
-                    setSrcMenu(false);
-                    if (entry) void store.connectServer(entry);
-                    else onOpenSettings(); // 快照有/落库无（异常态）：引导去设置 tab 看
-                  }}
-                >
-                  <View style={[styles.srcMenuDot, { backgroundColor: stc }]} />
-                  <Text style={styles.srcMenuName} numberOfLines={1}>{src.name}</Text>
-                  <Text style={styles.srcMenuChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              style={styles.srcMenuManage}
-              android_ripple={{ color: c.tintSoft, borderless: false }}
-              onPress={() => { setSrcMenu(false); onOpenSettings(); }}
-            >
-              <Text style={styles.srcMenuManageT}>管理连接（编辑 / 删除）…</Text>
-            </Pressable>
-          </View>
-        ) : null}
+
         {/* W-PORT-B P0-2：会话搜索入口（桌面件九同能力）——点按展开/收起统计行下
             搜索条；搜索激活时图标点亮（品牌色）作过滤中的可视锚 */}
         <Pressable
@@ -1484,6 +1437,32 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         {/* W-EXPOLISH 件七：新增按钮统一「每域列表右上角 ＋」（对齐桌面 list-header
             右上角加号同语言）——会话页右下 FAB 退役（少一个悬浮遮挡元素，跨端动作
             位置肌肉记忆统一）；44px 触区，行为=原 FAB（新建会话弹层） */}
+        {/* W-HEAD6 C：折叠空闲收进 head（原 statRow chip 迁入；有空闲才显） */}
+        {idleCount > 0 ? (
+          <Pressable
+            style={[styles.headCollapseBtn, collapseIdle && styles.headCollapseBtnOn]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+            onPress={toggleCollapse}
+            hitSlop={4}
+            accessibilityLabel={collapseIdle ? `展开空闲会话 ${idleCount} 个` : "折叠空闲会话"}
+          >
+            <Text style={[styles.headCollapseT, collapseIdle && styles.headCollapseTOn]} numberOfLines={1}>
+              {collapseIdle ? `闲 ${idleCount}` : "折闲"}
+            </Text>
+          </Pressable>
+        ) : null}
+        {/* W-HEAD6 C：输出物入口收进 head（原 statRow chip 迁入；能力开才显） */}
+        {artPoolOn ? (
+          <Pressable
+            style={styles.headCollapseBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+            onPress={onOpenArtPool}
+            hitSlop={4}
+            accessibilityLabel="打开全局输出物目录"
+          >
+            <Text style={styles.headCollapseT} numberOfLines={1}>物</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           style={styles.plusBtn}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
@@ -1494,75 +1473,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <PlusMark size={20} color={c.brandA} />
         </Pressable>
       </View>
-      <View style={styles.statRow}>
-        {/* #52 聚合胶囊（替代 #26 电脑图标）：开关与数量合一——聚合开=「聚合 · N」
-            品牌色高亮可点切回；关=「单源」中性色。即当前面板展示范围的自述 */}
-        <Pressable
-          style={{ paddingHorizontal: 7, paddingVertical: 6, borderRadius: 9 }}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-          hitSlop={6}
-          accessibilityLabel={snap.aggregate ? `聚合模式，展示 ${snap.sources.length} 台电脑，点击切回单源` : "单源模式，点击开启聚合"}
-          onPress={toggleAggregate}
-        >
-          {/* 2026-09-14 纯图标版（用户反馈：用图标就不配汉字、去外框）——单源=单台灰
-              电脑；聚合=品牌色主电脑 + 右后灰副电脑半叠放 */}
-          <View style={{ width: 20, height: 14, justifyContent: "flex-end", position: "relative" }}>
-            <View style={{ width: 17, height: 12.5, borderRadius: 3, borderWidth: 2, borderColor: snap.aggregate ? c.brandA : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 2.5 }}>
-              <View style={{ width: 9, height: 2, borderRadius: 1, backgroundColor: snap.aggregate ? c.brandA : c.dim }} />
-            </View>
-            {snap.aggregate && (
-              <View style={{ position: "absolute", top: -2, right: -3, width: 12, height: 9, borderRadius: 2.4, borderWidth: 1.7, borderColor: c.dim, opacity: 0.55 }} />
-            )}
-          </View>
-        </Pressable>
-        <View style={styles.statChips}>
-          {statusItems.map(({ k, n, color }) => (
-            <View key={k} style={styles.statChip}>
-              <View style={[styles.statDot, { backgroundColor: color }]} />
-              <Text style={[styles.statChipT, { color }]}>{n}</Text>
-            </View>
-          ))}
-          {statusItems.length > 0 ? (
-            <Pressable style={styles.helpBtn} onPress={() => setLegendOpen(true)} hitSlop={8}>
-              <Text style={styles.helpT}>?</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        {/* 布局三档循环胶囊（原抽屉「列表布局」拨杆迁入）：折叠空闲同款形制，随手切密度 */}
-        <Pressable
-          style={styles.densityBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-          onPress={cycleDensity}
-          hitSlop={4}
-          accessibilityLabel={`列表布局${DENSITY_LABEL[density]}，点击切换`}
-        >
-          <Text style={styles.densityT} numberOfLines={1}>{DENSITY_LABEL[density]}</Text>
-        </Pressable>
-        {idleCount > 0 ? (
-          <Pressable
-            style={[styles.collapseBtn, collapseIdle && styles.collapseBtnOn]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-            onPress={toggleCollapse}
-          >
-            <Text style={[styles.collapseT, collapseIdle && styles.collapseTOn]} numberOfLines={1}>
-              {collapseIdle ? `展开空闲 ${idleCount}` : "折叠空闲 ▾"}
-            </Text>
-          </Pressable>
-        ) : null}
-        {/* W-MV8A：统计行「通知 · N」胶囊退役——通知入口唯一化为顶栏铃铛（v3 appbar
-            bell 语言；🔧回归修①的「铃铛恒显」口径由顶栏钮继承：恒显、0=无计数态） */}
-        {artPoolOn ? (
-          <Pressable
-            style={styles.chipBtn}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
-            onPress={onOpenArtPool}
-            hitSlop={4}
-            accessibilityLabel="打开全局输出物目录"
-          >
-            <Text style={styles.chipT} numberOfLines={1}>输出物</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      {/* W-HEAD6 C：statRow 整行退役——统计已由 head 副题承载（SessionStatSub）；
+        密度三档迁设置页通用面板；折叠空闲/输出物收进 head；聚合开关入源切换浮窗 */}
 
       {/* W-PORT-B P0-2：搜索条（顶栏图标展开；桌面件九同过滤口径）。✕=清空；
           收起随顶栏图标（收起即清空——过滤残留是隐藏态，用户看不见却改了列表） */}
@@ -1610,6 +1522,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         key={density}
         data={rows}
         keyExtractor={(r) => r.key}
+        ItemSeparatorComponent={ListRowSeparator}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1881,12 +1794,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担。
-    // W-MOBILE3 #121 三域 Header 统一：容器规格对齐 PageHead/v3 .appbar（14 水平/
-    // 10 底 + headBg 底 + 底边框）——会话页无大标题（件八拍板品牌行移除的延续，
-    // 源胶囊即页面身份），统一的是容器与动作钮语言
-    paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
-    backgroundColor: c.headBg, borderBottomWidth: 1, borderBottomColor: c.line,
+    // W-HEAD5（#148 用户拍板）：对齐详情页 d.head——弃 headBg 特别底色（常规 bg）、
+    // paddingVertical 4、总高≈48px；headTitleT 15/600 c.text（d.title 同款）
+    paddingHorizontal: 12, paddingVertical: 4, minHeight: 48, /* W-UIFIX 件八：与 PageHead 统一（原无 minHeight，内容 28-36px 波动） */
+    backgroundColor: c.bg, borderBottomWidth: 1.5, borderBottomColor: c.lineStrong, /* W-UIFIX 件三：分隔线加深加粗一档（line→lineStrong+1.5px，双主题可见不喧宾） */
   },
+  headTitleT: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 }, /* W-HEAD5：d.title 同款 */
   // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
   connChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
@@ -2000,6 +1913,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 用户 test.25 实测打回——形态键（圆角/底色/描边/行距）回 c6d1691 定版；
   // 行高回调（paddingVertical）系用户行高反馈闭环成果，保留不回退
   swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
+  // W-LIST2 件一：卡间 hairline（色由组件内 withA(c.line,.6) 动态注入——双主题一套）
+  rowSep: { height: StyleSheet.hairlineWidth, marginHorizontal: 14 },
   swipeWrapC: { marginBottom: 2 },
   swipeWrapM: { marginBottom: 1 },
   swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
@@ -2020,24 +1935,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
     backgroundColor: "transparent", borderWidth: 0,
-    borderRadius: 0, paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 0, paddingVertical: 12, paddingHorizontal: 14, /* W-UIFIX 件五：高度+2（10→12 纵距） */
   },
-  cardC: { borderRadius: 0, paddingVertical: 9, paddingHorizontal: 14 },
+  cardC: { borderRadius: 0, paddingVertical: 11, paddingHorizontal: 14 }, /* W-UIFIX 件五：紧凑档同步 +2 */
   // 极简平铺行：同通栏语言，行高最矮
   // 1013 高度压缩批：单行内容 ~31px 低于 44px 触控底线（改前 ~33 同欠账）——
   // minHeight 44 兜底 + 内容垂直居中（设置行 minHeight 48 同语言），视觉仍为三档最矮
   cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
-  titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
+  titleM: { color: c.text, fontSize: 14.5, fontWeight: "600", flexShrink: 1 }, /* W-UIFIX 件四：极简档同步 13.5→14.5 */
   // 极简行水位区（常显）：固定 64px 右对齐 = 细条轨道（44px）+ 9px 百分比/占位，
   // 有无水位各行右缘恒定不跳
-  ctxCell: { width: 64, alignItems: "flex-end", gap: 2.5 },
-  ctxCellBar: { width: 44, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
-  ctxCellT: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"], color: c.faint },
-  // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
   liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 4, paddingLeft: 6 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7）；1013 行距压缩 -1 */
-  titleC: { lineHeight: 18, color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
+  // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
+  titleC: { lineHeight: 19, color: c.text, fontSize: 15, fontWeight: "600", flexShrink: 1 }, /* W-UIFIX 件四：标题 14→15 加大一档 */
   sumC: { lineHeight: 14, color: c.faint, fontSize: 11, marginTop: 1 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 },
   folderC: { lineHeight: 13, fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
@@ -2091,9 +2003,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
   meta: { fontSize: 10, color: c.faint, flexShrink: 1 },
   // 上下文占用 mini（foot 最右）：30px 微型条 + 百分比
-  ctxMini: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ctxMiniBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
-  ctxMiniT: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 24, textAlign: "right" },
   empty: { alignItems: "center", paddingTop: 90, paddingHorizontal: 30 },
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
@@ -2103,6 +2012,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   footHintT: { color: c.faint, fontSize: 12 },
   // W-EXPOLISH 件七：右下悬浮新增钮退役——新建统一顶栏右上角 ＋
   // 件七：三域 ＋ 统一规格——44×44 触区 + PlusMark 20px（brand.tsx 单源导出，三处同参）
+  headCollapseBtn: { height: 26, paddingHorizontal: 7, borderRadius: 13, borderWidth: 1, borderColor: c.line, justifyContent: "center", marginRight: 2 }, /* W-HEAD6 C：head 内折叠空闲/输出物小 chip */
+  headCollapseBtnOn: { borderColor: c.brandA, backgroundColor: c.tintSoft },
+  headCollapseT: { fontSize: 10, color: c.dim, lineHeight: 13 },
+  headCollapseTOn: { color: c.brandA },
   plusBtn: {
     width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
     marginRight: -4, overflow: "hidden",

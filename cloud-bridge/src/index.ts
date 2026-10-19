@@ -71,7 +71,15 @@ export function startCloudServer(port: number, token: string, extraPorts: number
           } catch { /* 非信封帧按原样发 */ }
         }
         const ws = socks.get(connId);
-        if (ws?.readyState === WebSocket.OPEN) ws.send(frame);
+        if (ws?.readyState !== WebSocket.OPEN) return;
+        try {
+          ws.send(frame);
+        } catch (e) {
+          // W-CLOUDFIX（#149）：send 抛=半开死连接（readyState 还 OPEN），不兜会沿
+          // webSocketMessage 冒泡踢掉发送方；立即 unregister 腾路由位防持续 miss
+          router.unregister(connId);
+          console.log(`[bridge] send failed conn=${connId} (unregistered): ${e instanceof Error ? e.message : e}`);
+        }
       },
       close: (connId, code, reason) => {
         wanConns.get(connId)?.ws.close(code, reason);
@@ -149,7 +157,9 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         (ws as HbWs).isAlive = true;
       });
       ws.on("error", () => undefined);
-      ws.on("close", () => {
+      ws.on("close", (closeCode, closeReason) => {
+        // W-CLOUDFIX2：close 成对日志（与 DO 同口径）——自建桥同症排产
+        console.log(`[do-life] close dev=${dev} conn=${connId} code=${closeCode} reason=${String(closeReason)}`);
         socks.delete(connId);
         wanConns.delete(connId);
         router.unregister(connId);

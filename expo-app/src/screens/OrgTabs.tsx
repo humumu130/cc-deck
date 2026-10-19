@@ -16,38 +16,47 @@ import { displaySrcName, fmtLastActive } from "../fmt";
 import type { ProjectGroup, SessionState } from "../protocol";
 import { useRelay, type SourceStatus } from "../store";
 import { PlusMark } from "../brand";
+import { FadeIn, useLayoutPulse } from "../motion";
 import { ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgData, useOrgDecide } from "./OrgZone";
 import { EngineBadge, TeamDetailPage } from "./TeamDetailPage";
 import TeamCreateWizard from "./TeamCreateWizard";
-import { PageHead } from "./page-head";
+import { PageHead, useBellBadge } from "./page-head";
+import { SourceSwitch } from "./source-switch";
 
 // 未立项折叠组展开态持久键（折叠态独立记账：默认折叠，用户展开过的桶记展开——与桌面
 // expandedTeams「集合=展开过的」同语义，防 collapsed 语义互染）
 const UNFILED_KEY = "ccdeck_proj_unfiled_open";
 
 // 页面骨架共享：SafeArea 顶 + 标题行（右上角 ＋ 钮）+ 滚动内容
-function OrgPageShell({ title, sub, onAdd, addLabel, children }: { title: string; sub: string; onAdd: () => void; addLabel: string; children: React.ReactNode }) {
+function OrgPageShell({ title, sub, onAdd, addLabel, onGoSessions, children }: { title: string; sub: string; onAdd: () => void; addLabel: string; onGoSessions?: () => void; children: React.ReactNode }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const bellN = useBellBadge();
   return (
     <SafeAreaView style={styles.page} edges={["top"]}>
       {/* W-MOBILE3 #121 三域 Header 统一：团队/项目页头换 PageHead（v3 .appbar 两行式
           规格——标题 16/600 上、副题 11/dim 下；容器 padding 14/10/10+底边框）。原
           baseline 单行式（headT+headSub 同行）退役；＋ 钮视觉保留 W-POLISH-MOBILE A2
           拍板的品牌色底 36 圆角（v3 裸图标 dim 钮不采用——expo 侧两轮拍板终态） */}
+      {/* W-HEAD6 B：源切换统一组件（icon+计数+浮窗）——W-HEAD4 的只读胶囊退役；
+          ④ 铃铛保留（回会话页开通知）。＋钮去边框裸形制（D 件，对齐会话页） */}
       <PageHead
         title={title}
         sub={sub}
+        sourcePill={<SourceSwitch onOpenSettings={onGoSessions} />}
+        bell={onGoSessions ? { badge: bellN, onPress: onGoSessions } : undefined}
         right={
-          <Pressable
-            style={styles.plusBtn}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-            onPress={onAdd}
-            hitSlop={4}
-            accessibilityLabel={addLabel}
-          >
-            <PlusMark size={20} color={c.brandA} />
-          </Pressable>
+          <>
+            <Pressable
+              style={styles.plusBtnBare}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+              onPress={onAdd}
+              hitSlop={4}
+              accessibilityLabel={addLabel}
+            >
+              <PlusMark size={20} color={c.brandA} />
+            </Pressable>
+          </>
         }
       />
       <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 28 }}>
@@ -63,7 +72,7 @@ function OrgPageShell({ title, sub, onAdd, addLabel, children }: { title: string
 // 可展开成员迷你行（任务书点名；headcount × sessions join：名+状态灯+引擎徽）。
 // 品牌渐变边框形态对齐 v3 .hcard.team（brand line + soft 渐变底）；归档组不占常驻位
 // （useOrgData 已滤）。
-export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => void }) {
+export function TeamTab({ onOpenSession, onGoSessions }: { onOpenSession: (sid: string) => void; onGoSessions?: () => void }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const { confirms, groups } = useOrgData();
@@ -77,16 +86,23 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
   const multiSrc = useMemo(() => new Set(confirms.map((x) => x.src.id)).size > 1, [confirms]);
   // 团队卡统计行（A1-8 图标化 + A1-11 待确认数）：席位=编制数+1（Leader 兼管）
   const pendingOf = (gid: string) => confirms.filter((x) => (x.cf.payload as { gid?: unknown } | undefined)?.gid === gid).length;
+  // W-MOTION：团队/项目卡增删与确认卡进出 → 列表布局补间（key 指纹：同集合内容更新不触发）
+  const teamKeySeq = useMemo(() => groups.map((g) => g.g.id).join("|"), [groups]);
+  const confirmKeySeq = useMemo(() => confirms.map((x) => x.cf.id).join("|"), [confirms]);
+  useLayoutPulse(teamKeySeq);
+  useLayoutPulse(confirmKeySeq);
   return (
     <OrgPageShell
       title="团队"
-      sub={pendingN > 0 ? `${pendingN} 张确认卡待决议` : groups.length > 0 ? `${groups.length} 个团队` : "还没有团队"}
+      sub={pendingN > 0 ? `${pendingN} 张确认卡待决议` : groups.length > 0 ? `${groups.filter((x) => x.g.status === "active").length} 个活跃` : "还没有团队"} /* W-HEAD4 ② 活跃口径 */
       onAdd={() => setWizardOpen(true)}
       addLabel="新建团队（分步向导）"
+      onGoSessions={onGoSessions}
     >
       {/* ① 确认卡队列置顶（A9 节头 + v3 pcfq 语言：红计数徽——「手机置顶」是 v3 修订②
           拍板（确认卡队列=现网第一 citizen）；跨源平铺；多源时逐卡标源名防歧义） */}
       {confirms.length ? (
+        <FadeIn dy={6}>
         <View style={styles.cfQueue}>
           <View style={styles.cfHRow}>
             <Text style={styles.cfH}>待你确认</Text>
@@ -109,6 +125,7 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
             </View>
           ) : null}
         </View>
+        </FadeIn>
       ) : null}
       {/* ② 团队列表卡（v3 hcard team 语言） */}
       {groups.length ? (
@@ -229,11 +246,12 @@ export function TeamTab({ onOpenSession }: { onOpenSession: (sid: string) => voi
 }
 
 // ---------- 项目 tab：项目卡三行制 + 未立项折叠组 ----------
-export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, onGoTeam }: {
+export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, onGoTeam, onGoSessions }: {
   onOpenSession: (sid: string) => void;
   onNewInDir: (dir: string) => void;
   onViewSessionsInDir: (dir: string) => void;
   onGoTeam: () => void;
+  onGoSessions?: () => void;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -348,6 +366,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
       sub={groups.length > 0 ? `${groups.length} 个项目${unfiledN ? ` · 未立项 ${unfiledN}` : ""}` : unfiledN ? `未立项 ${unfiledN}` : "尚未立项"}
       onAdd={() => setWizardOpen(true)}
       addLabel="新建项目（分步向导）"
+      onGoSessions={onGoSessions}
     >
       {/* ① 项目卡（三行制：名称+状态胶囊 / 路径·会话数 / 动作行） */}
       {groups.length ? (
@@ -463,6 +482,7 @@ const makeStyles = (c: ThemeColors) =>
     // W-MOBILE3 #121：head/headT/headSub 退役（页头上收 PageHead 统一组件——
     // v3 .appbar 两行式规格；样式键删除防残留回退）
     plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.38), overflow: "hidden" },
+    plusBtnBare: { width: 36, height: 40, alignItems: "center", justifyContent: "center", marginLeft: 2, overflow: "hidden" }, /* W-HEAD6 D：＋裸形制（去边框去底，对齐会话页） */
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
     list: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
     // 确认卡队列（A9 节头 + v3 pcfq 语言：标题行 + 红计数徽 cfcount）

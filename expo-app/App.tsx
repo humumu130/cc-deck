@@ -35,7 +35,7 @@ import {
 import ListScreen, { splitPending, type ListBackHandle } from "./src/screens/ListScreen";
 import BottomTabs, { type TabKey } from "./src/bottom-tabs";
 import { TeamTab, ProjectsTab } from "./src/screens/OrgTabs";
-import SettingsPage from "./src/screens/SettingsPage";
+import SettingsPage, { type SettingsBackHandle } from "./src/screens/SettingsPage";
 import ArtPoolModal from "./src/screens/ArtPoolModal";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -618,25 +618,92 @@ function Shell() {
   // 挂载与切换」因子；60s 稳定则崩面在域挂载面，仍崩则崩面在会话域本体
   const [tab, setTab] = useState<TabKey>("sessions");
   // 件六③：列表页左右滑切底部导航域（用户拍板，对齐主流 App 域切换手势）。横占优
-  // 判定（|dx| > |dy|*2 且 ≥48px）让垂直滚动（FlatList/ScrollView 纵滑）零冲突；
+  // 判定（|dx| > |dy|*2 且 ≥24px）让垂直滚动（FlatList/ScrollView 纵滑）零冲突；
   // 详情层（navLayer 盖顶）与各 Modal（向导/详情页/菜单 sheet）是独立渲染层，触点
   // 到不了这里，天然不打架；TAB_ORDER 序=底栏序（左滑进右滑退，边界 no-op）。
   // tabRef 镜像：PanResponder 创建一次，release 读实时 tab（闭包陈旧值防陈旧切回）
+  //
+  // W-NOTIFY2 件二（用户 1018 拍板：硬切改跟手过渡）：滑动期双页同相位位移+当前页
+  // 轻视差（0.35 系数，微信式）；松手按「过半 |dx|≥w/2 或速度 vx≥0.55」判定落位，
+  // spring 收尾后 setTab+卸载源页（落定仍单页挂载——保挂载纪律不破：会话域
+  // ListScreen 恒挂机制不变，仅动画期目标页临时挂载/恒挂容器参与位移）。native
+  // driver 全程（transform-only）。
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  // swipe 态：from=源 tab（正在显示），to=目标 tab，dir=+1 左滑进右页 / -1 右滑回左页
+  const [swipe, setSwipe] = useState<{ from: TabKey; to: TabKey; dir: 1 | -1 } | null>(null);
+  const swipeRef = useRef<{ to: TabKey; dir: 1 | -1; grabbed: boolean } | null>(null);
+  // 进度值：0=未动 .. W=完成切换（clamp）。动画期每帧 setValue（native driver）
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const swipeW = () => Dimensions.get("window").width;
   const swipeTabs = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       // 捕获阶段抢判（FlatList/ScrollView 滚动响应器会先占普通阶段——横占优时
-      // 父层在 capture 阶段接管，垂直滚动 dy 占优时放行给列表，零冲突）
-      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) >= 48 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
-      onPanResponderRelease: (_e, g) => {
+      // 父层在 capture 阶段接管，垂直滚动 dy 占优时放行给列表，零冲突）。
+      // swipe 进行中（grabbed）持续接管
+      onMoveShouldSetPanResponderCapture: (_e, g) => {
+        if (swipeRef.current?.grabbed) return true;
+        if (Math.abs(g.dx) < 24 || Math.abs(g.dx) <= Math.abs(g.dy) * 2) return false;
         const i = TAB_ORDER.indexOf(tabRef.current);
-        if (g.dx <= -48 && i >= 0 && i < TAB_ORDER.length - 1) setTab(TAB_ORDER[i + 1]);
-        else if (g.dx >= 48 && i > 0) setTab(TAB_ORDER[i - 1]);
+        const dir = g.dx < 0 ? 1 : -1; // 左滑(dir=1)=进右页；右滑(dir=-1)=回左页
+        const ni = i + dir;
+        if (ni < 0 || ni >= TAB_ORDER.length) return false; // 边界 no-op
+        swipeRef.current = { to: TAB_ORDER[ni], dir, grabbed: true };
+        swipeX.setValue(0);
+        setSwipe({ from: tabRef.current, to: TAB_ORDER[ni], dir });
+        return true;
+      },
+      onPanResponderMove: (_e, g) => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        // 跟手：反方向拖动允许退回（进度 clamp 0..w）
+        const prog = s.dir === 1 ? -g.dx : g.dx;
+        swipeX.setValue(Math.max(0, Math.min(swipeW(), prog)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        s.grabbed = false;
+        const w = swipeW();
+        const prog = s.dir === 1 ? -g.dx : g.dx;
+        const settle = prog >= w / 2 || (s.dir === 1 ? g.vx : -g.vx) <= -0.55;
+        if (settle) {
+          // 落位：spring 到 w → setTab（目标页接管）→ 卸载源页/清态
+          Animated.spring(swipeX, { toValue: w, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
+            if (!finished) return;
+            setTab(s.to);
+            setSwipe(null);
+            swipeRef.current = null;
+          });
+        } else {
+          // 回弹：spring 回 0 → 清态（停在源页）
+          Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
+            if (!finished) return;
+            setSwipe(null);
+            swipeRef.current = null;
+          });
+        }
+      },
+      onPanResponderTerminate: () => {
+        const s = swipeRef.current;
+        if (!s?.grabbed) return;
+        s.grabbed = false;
+        Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(() => {
+          setSwipe(null);
+          swipeRef.current = null;
+        });
       },
     }),
   ).current;
+  // 双页位移插值：目标页 toX = dir*w → 0（从侧缘进）；当前页 curX = 0 → -dir*w*0.35（轻视差）
+  const swipePageX = useMemo(() => {
+    const w = 500; // 占位量程（插值对象只建一次，实际 w 在 setValue clamp 已控）
+    return {
+      toX: swipeX.interpolate({ inputRange: [0, w], outputRange: [swipe?.dir === 1 ? w : -w, 0], extrapolate: "clamp" }),
+      curX: swipeX.interpolate({ inputRange: [0, w], outputRange: [0, (swipe?.dir === 1 ? -1 : 1) * w * 0.35], extrapolate: "clamp" }),
+    };
+  }, [swipe, swipeX]);
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
@@ -652,27 +719,34 @@ function Shell() {
   // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
   // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
   const [navPhase, setNavPhase] = useState<"idle" | "entering" | "closing">("idle");
+  // W-CARDFIX（P0 重派，技术方案同 pushperf2 e18f195）：保挂载隐藏态标记——
+  // closeDetail 滑出完置 true；openDetail 由此区分「页内换 sid（显示中，无动画
+  // 换树）」与「隐藏态重开（须滑入复活）」。缺它时 detail 恒非空 → 点列表卡走
+  // 页内换会话静默分支 → 只 setDetail 不滑入，navX 停屏外 = 点任何卡无响应
+  const [detailHidden, setDetailHidden] = useState(false);
   const navX = useRef(new Animated.Value(0)).current;
   // 宽度调用时取（分屏/折叠屏变化后首帧窗口已换宽，冻结值会让滑入起点露边/滑出残留）
   const openDetail = useCallback((sid: string, view?: ViewKind): boolean => {
     if (navPhase !== "idle") return false;
     setDetailView(view ?? "msg");
-    if (detail) {
-      // 详情页内直接换会话：无动画，且保留当前视图 tab（2026-09-16 用户反馈——
-      // 旧实现重置回消息页，"从会话 A 进详情切到 B 得重新进一遍"）
+    if (detail && !detailHidden) {
+      // 详情页内直接换会话（显示中）：无动画，且保留当前视图 tab（2026-09-16 用户
+      // 反馈——旧实现重置回消息页，"从会话 A 进详情切到 B 得重新进一遍"）
       setDetail(sid);
       if (view) setDetailView(view);
       return true;
     }
+    // W-CARDFIX：隐藏态重开（detail 保挂载但 navX 在屏外）= 完整滑入复活——与首开同路
     const w = Dimensions.get("window").width;
     setDetail(sid);
+    setDetailHidden(false);
     setNavPhase("entering");
     navX.setValue(w);
     Animated.timing(navX, { toValue: 0, duration: 230, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (finished) setNavPhase("idle");
     });
     return true;
-  }, [navPhase, detail, navX]);
+  }, [navPhase, detail, detailHidden, navX]);
   // 关详情：仅在空闲相位且详情确实开着时启动关闭动画，返回是否实际执行（#282 条件消费
   // 的依据——分发层据此决定 return true / false，不再无条件吞键）
   const closeDetail = useCallback((): boolean => {
@@ -680,7 +754,11 @@ function Shell() {
     setNavPhase("closing");
     Animated.timing(navX, { toValue: Dimensions.get("window").width, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (finished) {
-        setDetail(null);
+        // W-PUSHPERF ②：返回不卸载详情（隐藏保挂载）——重开同 sid 零重建秒开；
+        // 换 sid 时 setDetail 新值触发换树（单槽 LRU=1，内存不涨）。navX 停在屏外宽
+        // = 隐藏态；openDetail 重置 navX 再滑入。W-CARDFIX：置 detailHidden 让
+        // openDetail 走滑入复活分支（否则点列表卡被页内换会话分支短路=点卡无响应）
+        setDetailHidden(true);
         setNavPhase("idle");
       }
     });
@@ -692,7 +770,10 @@ function Shell() {
   useEffect(() => {
     if (navPhase === "idle") return;
     const t = setTimeout(() => {
-      if (navPhase === "closing") setDetail(null);
+      // W-PUSHPERF ②：closing 兜底也不卸载（保挂载口径统一）。
+      // W-CARDFIX 兜底双归位：closing 超时放行时 navX 已飞向屏外（或停在途中）——
+      // 与正常完成路径同置 hidden，隐藏标记与 navX 实际位置永不脱钩
+      if (navPhase === "closing") setDetailHidden(true);
       setNavPhase("idle");
     }, 500);
     return () => clearTimeout(t);
@@ -718,6 +799,8 @@ function Shell() {
     if (v) setTdExpanded(false);
   }, []);
   const listBackRef = useRef<ListBackHandle | null>(null);
+  // W-BACKFIX：设置二级页返回句柄（subPage 开→消费清页；ListBackHandle 同款先例）
+  const settingsBackRef = useRef<SettingsBackHandle | null>(null);
   const detailBackRef = useRef<DetailBackHandle>(null);
   // 会话 tab badge（待处理数）：与列表「待处理」段同口径（splitPending 纯投影，
   // 通知未决绑定会话计入），待处理 >0 才显角标——W-EXPOLISH 红线：口径不变。
@@ -754,6 +837,10 @@ function Shell() {
     }
     // 详情开 → 关详情（动画窗口期被相位守卫拒绝时不消费，500ms 兜底放行后恢复）
     if (detail) return (detailBackRef.current?.requestBack() ?? false) || closeDetail();
+    // W-BACKFIX（1016 test.31 实锤）：设置域二级页（连接与设备等）开 → 先回设置
+    // 目录（ref 句柄问询，与 PageHead 返回钮同一 setSubPage(null)；目录页 false
+    // 落到下方 tab 层）。必须在 tab 层之前——否则二级页被拽回会话域
+    if (settingsBackRef.current?.requestBack()) return true;
     // 底部导航（0.7 批 1）：非会话域 tab 返回即回会话域（根层=会话列表，逐层出栈）
     if (tab !== "sessions") {
       setTab("sessions");
@@ -969,40 +1056,77 @@ function Shell() {
               覆盖（盖过底栏），从任一域推入、返回回原 tab */}
           <View style={st.tabRoot}>
             <View style={st.tabPane} {...swipeTabs.panHandlers}>
-              <View style={[st.domain, tab !== "sessions" && st.domainHidden]}>
-                {(!detail || navPhase !== "idle") && (
-                  <ListScreen
-                    ref={listBackRef}
-                    sessions={snap.sessions}
-                    connected={snap.connected}
-                    connText={snap.connText}
-                    dirFilter={dirFilter}
-                    onClearDirFilter={() => setDirFilter(null)}
-                    onOpen={openDetail}
-                    onNew={() => { setNewPresetCwd(null); setSheet(true); }}
-                    onOpenSettings={() => setTab("settings")}
-                    onOpenArtPool={() => setArtPoolOpen(true)}
-                  />
-                )}
-              </View>
+              {/* W-NOTIFY2 件二：swipe 态 ListScreen 域参与双页位移——
+                  to==='sessions'（回会话）=目标页角色（显示+toX 从左缘进）；
+                  from==='sessions'（离会话）=当前页角色（curX 视差退）；否则维持 hidden */}
+              <Animated.View
+                style={[
+                  st.domain,
+                  tab !== "sessions" && !swipe && st.domainHidden,
+                  swipe?.to === "sessions" && { transform: [{ translateX: swipePageX.toX }] },
+                  swipe?.from === "sessions" && { transform: [{ translateX: swipePageX.curX }] },
+                ]}
+              >
+                {/* W-UIFIX 件一 P0（返回黑屏根修）：列表常驻双页并存——原条件在
+                    idle+detail（保挂载隐藏态）把列表卸载，而详情 navX 已停屏外
+                    =两层皆空整屏黑（610b69a 保挂载假设「列表在详情底下」，真壳条件
+                    渲染不成立，test.39 主力机实锤）。改恒挂载：详情 navLayer 不透明
+                    盖顶零感知；返回=closing 滑出时列表本就渲染（navPhase!=="idle"
+                    分支既有），落 idle 后列表常驻=零黑屏+零重建秒出（保挂载初衷
+                    在列表侧正确落地）；转场视觉与原生导航一致 */}
+                <ListScreen
+                  ref={listBackRef}
+                  sessions={snap.sessions}
+                  connected={snap.connected}
+                  connText={snap.connText}
+                  dirFilter={dirFilter}
+                  onClearDirFilter={() => setDirFilter(null)}
+                  onOpen={openDetail}
+                  onNew={() => { setNewPresetCwd(null); setSheet(true); }}
+                  onOpenSettings={() => setTab("settings")}
+                  onOpenArtPool={() => setArtPoolOpen(true)}
+                />
+              </Animated.View>
               {tab !== "sessions" ? (
-                <View style={st.domain}>
+                <Animated.View style={[st.domain, swipe?.from === tab ? { transform: [{ translateX: swipePageX.curX }] } : null]}>
                   {tab === "team" ? (
-                    <TeamTab onOpenSession={openDetail} />
+                    <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
                   ) : tab === "projects" ? (
                     <ProjectsTab
                       onOpenSession={openDetail}
                       onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
                       onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
                       onGoTeam={() => setTab("team")}
+                      onGoSessions={() => setTab("sessions")}
                     />
                   ) : (
                     <SettingsPage
+                      ref={settingsBackRef}
+                      onGoSessions={() => setTab("sessions")}
                       onSetup={() => { setSetupScan(false); setSetup("new"); }}
                       onEdit={(e) => { setSetupScan(false); setSetup(e.id); }}
                     />
                   )}
-                </View>
+                </Animated.View>
+              ) : null}
+              {/* swipe 目标页覆盖层（to!=='sessions'：三域轻挂，落位 setTab 后由上方
+                  正式渲染接管并清态卸载本层；to==='sessions' 走 ListScreen 恒挂容器） */}
+              {swipe && swipe.to !== "sessions" ? (
+                <Animated.View style={[st.domain, st.swipeOver, { transform: [{ translateX: swipePageX.toX }] }]}>
+                  {swipe.to === "team" ? (
+                    <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
+                  ) : swipe.to === "projects" ? (
+                    <ProjectsTab
+                      onOpenSession={openDetail}
+                      onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
+                      onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
+                      onGoTeam={() => setTab("team")}
+                      onGoSessions={() => setTab("sessions")}
+                    />
+                  ) : (
+                    <SettingsPage onGoSessions={() => setTab("sessions")} onSetup={() => undefined} onEdit={() => undefined} />
+                  )}
+                </Animated.View>
               ) : null}
             </View>
             <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount, team: teamBadge }} />
@@ -1074,6 +1198,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tabPane: { flex: 1 },
   domain: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   domainHidden: { display: "none" },
+  // W-NOTIFY2 件二：swipe 目标页覆盖层（盖当前页之上，实底防透）
+  swipeOver: { zIndex: 30, backgroundColor: c.bg },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,
