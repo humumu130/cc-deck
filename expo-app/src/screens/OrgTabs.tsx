@@ -196,7 +196,7 @@ export function TeamTab({ onOpenSession, onGoSessions }: { onOpenSession: (sid: 
                     {members.map((m) => {
                       const ses = snap.sessions.find((s) => s.session_id === m.session_id);
                       const name = m.nick || ses?.title || m.session_id.slice(0, 8);
-                      const dot = ses ? statusColor(ses.status, c) : c.faint;
+                      const dot = ses ? statusColor(ses.status, c) : c.done; // W-STATLIGHT2：无会话回落灯灰→绿（#162 用户定版补全）
                       return (
                         <Pressable
                           key={m.session_id}

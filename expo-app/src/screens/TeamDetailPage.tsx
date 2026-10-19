@@ -440,7 +440,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   // ---------- 成员卡（编制折叠组，UPOLISH3 显示规则全量 + W-MV8A v3 五色状态词） ----------
   const memberCard = ({ m, s }: { m: NonNullable<ProjectGroup["headcount"]>[number]; s: SessionState | undefined }) => {
     const info = memberInfoOf(m, s);
-    const dot = info.status ? statusColor(info.status, c) : c.faint;
+    const dot = info.status ? statusColor(info.status, c) : c.done; // W-STATLIGHT2：无会话回落灯灰→绿（#162 用户定版补全）
     // v3 五色状态词（ppill g/y/r/b 灯形统一）：工作中/空闲/阻塞/出错/关闭
     const mst = memberStatusOf(info.status);
     const mstColor = mst.tone === "g" ? c.done : mst.tone === "y" ? c.working : mst.tone === "r" ? c.error : c.dim;
