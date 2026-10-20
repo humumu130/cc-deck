@@ -423,18 +423,10 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable); // W-SWIP
 export function AskBanner({ wr, sid, send }: { wr: WaitingPayload; sid: string; send: (type: string, payload: Record<string, unknown>) => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
-  // W-ASKFIX ③：TTL 置灰——下发 90s 后 CLI 已放行本地选择器（relay QUESTION_HOLD_MS），
-  // 晚答仍走 askFallback 注入可达，但 CLI 已死/终态时是死卡——置灰禁点防「点了没反应」
-  const [ttlTick, setTtlTick] = useState(0);
-  const askExpired = !!wr.received_at && Date.now() - wr.received_at > 90_000;
-  useEffect(() => {
-    if (!wr.received_at || Date.now() - wr.received_at > 90_000) return;
-    const t = setTimeout(() => setTtlTick((n) => n + 1), Math.max(1000, wr.received_at! + 90_000 - Date.now()));
-    return () => clearTimeout(t);
-  }, [wr.request_id, wr.received_at]);
+  // W-ASKFIX ③ 原有 90s TTL 置灰已删（用户 1020 明确要求：不搞超时）——晚答走
+  // askFallback 注入仍可达，UI 永不置灰。问题卡直到用户主动提交/取消才消失
   const qs = wr.questions ?? [];
-  const stale = isWaitStale(wr);
-  const ro = WAITBOX_READONLY || stale;
+  const ro = WAITBOX_READONLY;
   const single = qs.length === 1 && !qs[0].multi;
   const stepped = qs.length > 1;
   const [picked, setPicked] = useState<Record<number, string[]>>({});
@@ -543,14 +535,12 @@ export function AskBanner({ wr, sid, send }: { wr: WaitingPayload; sid: string; 
   };
   const allAnswered = qs.every((_, i) => answered(i));
   const submit = () => {
-    if (askExpired) return; // W-ASKFIX ③：过期禁点（晚答已达不了已死 CLI）
     answer(qs.map((_, i) => free[i]?.trim() || (picked[i] ?? []).join("、")));
   };
   const freeText = free[qi] ?? "";
 
   return (
     <WaitCard isAsk>
-        {stale ? <Text style={{ color: c.faint, fontSize: 10.5, marginBottom: 4 }}>该提问已超过 10 分钟未处理，视为已失效（CLI 多已继续）</Text> : null}
       <Text style={d.waitT}>◉ Claude 在提问</Text>
       {stepped ? (
         <View style={d.askSteps}>
@@ -625,10 +615,10 @@ export function AskBanner({ wr, sid, send }: { wr: WaitingPayload; sid: string; 
         <Pressable
           style={[d.askSubmit, (ro || !allAnswered) && { opacity: ro ? 0.5 : 0.4 }]}
           android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
-          disabled={!allAnswered || ro || askExpired}
+          disabled={!allAnswered || ro}
           onPress={submit}
         >
-          <Text style={d.askSubmitT}>{askExpired ? "已失效（超时）" : "提交回答"}</Text>
+          <Text style={d.askSubmitT}>提交回答</Text>
         </Pressable>
       ) : null}
       {single ? (
