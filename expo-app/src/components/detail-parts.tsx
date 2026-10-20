@@ -5,8 +5,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as Clipboard from "expo-clipboard";
 import { StyleSheet, Text, type StyleProp, type TextStyle } from "react-native";
 import { useThemeStyles } from "../theme-context";
-<<<<<<< HEAD
-=======
 import { useProcessFont } from "../display-settings";
 import { MdText } from "../md";
 import { Collapse } from "../motion";
@@ -17,7 +15,6 @@ import { withA } from "../theme";
 import type { WaitingPayload } from "../protocol";
 import { store, useRelay } from "../store";
 import { fromB64, toB64 } from "../e2e";
->>>>>>> 0e5c287 (refactor: 拆分阶段 1D-②——AskBanner props 化（send/answer/snap 三回调注入，唯一批准改边界例外；DetailScreen -245 行）)
 import { isLiveLine, stripLiveMark } from "../fmt";
 import type { GestureResponderEvent } from "react-native";
 const PEND_PHASES = [0.35, 0.5, 0.65, 0.85, 0.65, 0.5];
@@ -214,8 +211,6 @@ export function StatRow({ k, v, vc, copy }: { k: string; v: string; vc?: string;
   );
 }
 
-<<<<<<< HEAD
-=======
 // ---- W-SPLIT-S1D（TranscriptRow 直搬——纯 props 五回调，只搬不改）----
 
 export function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; sid?: string; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
@@ -666,4 +661,3 @@ export function AskBanner({ wr, sid, send }: { wr: WaitingPayload; sid: string; 
     </WaitCard>
   );
 }
->>>>>>> 0e5c287 (refactor: 拆分阶段 1D-②——AskBanner props 化（send/answer/snap 三回调注入，唯一批准改边界例外；DetailScreen -245 行）)

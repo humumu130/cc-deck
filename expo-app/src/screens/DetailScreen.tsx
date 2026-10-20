@@ -378,12 +378,6 @@ export function decisionStillPending(wr: WaitingPayload | null | undefined, requ
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
 // 紧凑档双维度拉开差距：字号小 3px + 整体降不透明度（procOp），保证档位切换一眼可辨
-const PROC_FONT = {
-  compact: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
-  normal: { tool: 11.5, sys: 11, result: 11.5, thinkHead: 11.5, think: 12.5, thinkLH: 18, op: 1 },
-  // 隐藏档：工具/结果/系统行整行不渲染，思考沿用紧凑小字号
-  hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
-} as const;
 
 // ---------- FB14 气泡附图：引用 → 缩略（按需拉取 + 内存缓存） ----------
 // 引用拉取复用输出物 CHUNK 管线（COMMAND_ARTIFACT_FETCH 的 img 引用分支，relay 校验
@@ -392,71 +386,8 @@ const PROC_FONT = {
 // 气泡正文仍在；未连接/超时属瞬态不缓存（重连后 connState 触发 effect 自然补，同
 // 005 壳「离线不排拉取，重连全量重渲自然补」语义）。发送侧统一 JPEG 长边≤1568
 // （≤4 张），内存 data URI 量级可控；缓存不设上界与 005 壳同口径（LRU 备案后续统一）
-type BubbleImgState = { state: "loading" | "ready" | "failed"; uri?: string };
-const bubbleImgCache = new Map<string, BubbleImgState>();
-const bubbleImgInflight = new Map<string, Promise<BubbleImgState>>();
-const BUBBLE_IMG_TRANSIENT_RE = /未连接|超时/;
 
-async function fetchBubbleImg(sid: string, ref: string): Promise<BubbleImgState> {
-  const key = `${sid}/${ref}`;
-  const done = bubbleImgCache.get(key);
-  if (done) return done;
-  const run = bubbleImgInflight.get(key);
-  if (run) return run;
-  const p = (async (): Promise<BubbleImgState> => {
-    let st: BubbleImgState;
-    try {
-      const r = await store.fetchArtifact(sid, ref);
-      // 分块重组：chunk 边界不保证 base64 对齐，按字节拼回再统一编码（同 fetchArtView 口径）
-      const chunks = r.b64s.map(fromB64);
-      let n = 0;
-      for (const cc of chunks) n += cc.length;
-      const u8 = new Uint8Array(n);
-      let o = 0;
-      for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
-      st = { state: "ready", uri: `data:${r.mime || "image/jpeg"};base64,${toB64(u8)}` };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      st = BUBBLE_IMG_TRANSIENT_RE.test(msg) ? { state: "loading" } : { state: "failed" };
-    }
-    if (st.state !== "loading") bubbleImgCache.set(key, st);
-    bubbleImgInflight.delete(key);
-    return st;
-  })();
-  bubbleImgInflight.set(key, p);
-  return p;
-}
 
-function BubbleImage({ sid, imgref }: { sid: string; imgref: string }) {
-  const d = useThemeStyles(makeStyles);
-  const rl = useRelay();
-  const online = rl.connState === "online";
-  const key = `${sid}/${imgref}`;
-  const [st, setSt] = useState<BubbleImgState>(() => bubbleImgCache.get(key) ?? { state: "loading" });
-  const [zoom, setZoom] = useState(false);
-  useEffect(() => {
-    const hit = bubbleImgCache.get(key);
-    if (hit) { setSt(hit); return; }
-    if (!online) return; // 离线不排拉取；重连后 connState 变更重跑本 effect 自然补
-    let alive = true;
-    fetchBubbleImg(sid, imgref).then((s2) => { if (alive && s2.state !== "loading") setSt(s2); });
-    return () => { alive = false; };
-  }, [key, sid, imgref, online]);
-  if (st.state === "failed") return null; // 过期/拉取失败：不占位（气泡正文 [+N 图] 有交代）
-  if (st.state !== "ready" || !st.uri) return <View style={d.ubImgWait} />;
-  return (
-    <>
-      <Pressable onPress={() => setZoom(true)} accessibilityLabel="随消息发送的图片，点按放大">
-        <Image source={{ uri: st.uri }} style={d.ubImg} resizeMode="cover" />
-      </Pressable>
-      <Modal visible={zoom} transparent animationType="fade" onRequestClose={() => setZoom(false)}>
-        <Pressable style={d.ubPreviewWrap} onPress={() => setZoom(false)} accessibilityLabel="图片放大预览，点按关闭">
-          <Image source={{ uri: st.uri }} style={d.ubPreviewImg} resizeMode="contain" />
-        </Pressable>
-      </Modal>
-    </>
-  );
-}
 
 // 件五：乐观回显 pending 气泡（用户消息气泡同族视觉——右对齐圆角，降透明度区分
 // 正式态；状态脚注三态：发送中/已排队/失败·点按重试）。挂转录尾部，回声对账后消失
@@ -480,134 +411,6 @@ function PendingEchoBubble({ p, onRetry }: { p: PendingEcho; onRetry: (p: Pendin
   );
 }
 
-function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; sid?: string; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
-  const { c } = useTheme();
-  const d = useThemeStyles(makeStyles);
-  const pf = PROC_FONT[useProcessFont()];
-  const cursor = e.streaming ? <Text style={{ color: c.working }}>▌</Text> : null;
-  if (e.kind === "user_message") {
-    // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
-    // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
-    // W-MSGFIX（1016 实锤 20/29 字也显「展开全文」）：relay 对所有 user_message 都带
-    // full（text=截断版/full=全文）——!!e.full 恒真=假折叠。改为「full 比 text 长才折叠」
-    //（未截断时 text==full，长度相等即短消息不折叠不显钮）
-    const long = !!e.full && e.full.length > e.text.length;
-    // FB14：随消息发送的图片在气泡内缩略呈现（点按放大），不再只发不显。
-    // 引用形态 img-* basename，经 COMMAND_ARTIFACT_FETCH 按需拉取（≤4 张与 relay 同口径）
-    const imgs = Array.isArray(e.images) ? e.images.filter((x) => typeof x === "string" && x).slice(0, 4) : [];
-    return (
-      <View style={d.trUser}>
-        {/* URL 链接化：拆段渲染，链接段品牌色+可点开系统浏览器（2026-09-14 用户提） */}
-        <Text style={d.trUserText} selectable numberOfLines={long && !open ? 3 : undefined} ellipsizeMode="tail">
-          {(open ? e.full ?? e.text : e.text).split(/(https?:\/\/[^\s<>"')\]]+)/g).map((seg, i) =>
-            /^https?:\/\//.test(seg) ? (
-              <Text key={i} style={{ color: c.brandA }} onPress={() => { try { Linking.openURL(seg); } catch {} }}>{seg}</Text>
-            ) : (
-              <Text key={i}>{seg}</Text>
-            ),
-          )}
-        </Text>
-        {imgs.length > 0 && sid ? (
-          <View style={d.ubImgs}>
-            {imgs.map((ref, i) => <BubbleImage key={`${i}-${ref}`} sid={sid} imgref={ref} />)}
-          </View>
-        ) : null}
-        {long ? (
-          <Pressable onPress={onToggle} hitSlop={6}>
-            <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full!.length} 字 ▾`}</Text>
-          </Pressable>
-        ) : null}
-        {e.ts ? <Text style={d.trUserTime}>{fmtHM(e.ts)}</Text> : null}
-      </View>
-    );
-  }
-  if (e.kind === "thinking") {
-    const src = e.full ?? e.text;
-    return (
-      <Pressable
-        style={[d.trThink, { opacity: pf.op }]}
-        onPress={onToggle}
-        android_ripple={{ color: c.tintSoft, borderless: false }}
-      >
-        <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
-        <Collapse open={open}>
-          <MdText src={src} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
-        </Collapse>
-      </Pressable>
-    );
-  }
-  if (e.kind === "assistant_text") {
-    return (
-      <View style={d.trMsg}>
-        {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
-        <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
-        {cursor}
-        {e.full && e.full.length > e.text.length ? ( /* W-MSGFIX：同 user_message——未截断（text==full）不显展开钮 */
-          <Pressable onPress={onToggle} hitSlop={6}>
-            <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full.length} 字 ▾`}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    );
-  }
-  if (e.kind === "tool_use") {
-    if (e.detail) {
-      return (
-        <Pressable style={[d.trTool, { opacity: pf.op }]} onPress={onToggle} onLongPress={e.detail ? () => onContentMenu?.(e.detail!) : undefined} android_ripple={{ color: c.tintSoft, borderless: false }}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
-              <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
-              <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1} text={e.text} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
-            </View>
-            <Collapse open={open}>
-              <Text style={d.trDetail} selectable>{e.detail}</Text>
-            </Collapse>
-          </View>
-          <Text style={d.tlExpand}>{open ? "▴" : "▾"}</Text>
-        </Pressable>
-      );
-    }
-    return (
-      <View style={[d.trTool, { opacity: pf.op }]}>
-        <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
-        <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2} text={e.text} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
-      </View>
-    );
-  }
-  if (e.kind === "tool_result") {
-    if (e.diff && e.diff.length > 0) {
-      return (
-        <Pressable style={[d.trDiffWrap, { opacity: pf.op }]} onPress={onToggle} onLongPress={() => onContentMenu?.(e.diff!.join("\n"))} android_ripple={{ color: c.tintSoft, borderless: false }}>
-          <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 1}>
-            ↳ {open ? "收起变更 ▴" : `变更 · ${e.diff.filter((l) => l.startsWith("+")).length}+ ${e.diff.filter((l) => l.startsWith("-")).length}− ▾`}
-          </Text>
-          <Collapse open={open}>
-            <DiffBlock lines={e.diff} />
-          </Collapse>
-        </Pressable>
-      );
-    }
-    if (e.detail) {
-      return (
-        <Pressable onPress={onToggle} onLongPress={e.detail ? () => onContentMenu?.(e.detail!) : undefined} hitSlop={4} style={{ opacity: pf.op }}>
-          <TaskRefText
-            style={[d.trResult, { fontSize: pf.result }]}
-            numberOfLines={open ? undefined : 2}
-            text={`↳ ${e.text} `}
-            suffix={open ? "收起 ▴" : "展开 ▾"}
-            suffixStyle={d.tlExpand}
-            onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut}
-          />
-          <Collapse open={open}>
-            <Text style={d.trDetail} selectable>{e.detail}</Text>
-          </Collapse>
-        </Pressable>
-      );
-    }
-    return <TaskRefText style={[d.trResult, { fontSize: pf.result, opacity: pf.op }]} numberOfLines={2} text={`↳ ${e.text}`} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />;
-  }
-  return <Text style={[d.trSystem, { fontSize: pf.sys, opacity: pf.op }]}>{e.text}</Text>;
-}
 
 // diff 着色块：+/−/@@ 逐行着色（等宽），行数据由 relay 从 structuredPatch 提取
 
