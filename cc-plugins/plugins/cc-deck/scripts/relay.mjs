@@ -62160,6 +62160,21 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync36(qrJs));
       return;
     }
+    if (req.method === "GET" && (url.pathname.startsWith("/css/") || url.pathname.startsWith("/js/"))) {
+      const rel = url.pathname.slice(1).replace(/^\/+/, "");
+      if (!/^[a-z0-9._\-\/]+\.(css|js)$/.test(rel) || rel.includes("..")) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const assetPath = join41(webRoot, "web-console", rel);
+      if (!existsSync27(assetPath)) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const ct2 = rel.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
+      res.writeHead(200, { "content-type": ct2, "cache-control": "no-store" }).end(readFileSync36(assetPath));
+      return;
+    }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
       const file = join41(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync27(file)) {

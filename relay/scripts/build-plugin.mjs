@@ -64,6 +64,9 @@ copy(join(root, "web-console", "index-005.html"), join(out, "web-console", "inde
 copy(join(root, "web-console", "nacl.js"), join(out, "web-console", "nacl.js"));
 // qr.js（扫码登录编码器）：#150 补——此前漏拷，插件部署的网页端点扫码按钮静默抛错（#325 同坑）
 copy(join(root, "web-console", "qr.js"), join(out, "web-console", "qr.js"));
+// W-SPLIT-S4a/S4b：CSS/JS 外置子目录（css/tokens.css css/base.css + js/ 七文件）
+copy(join(root, "web-console", "css"), join(out, "web-console", "css"), { recursive: true });
+copy(join(root, "web-console", "js"), join(out, "web-console", "js"), { recursive: true });
 for (const f of ["manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "maskable-512.png"]) {
   copy(join(root, "web-console", f), join(out, "web-console", f));
 }
