@@ -49320,15 +49320,6 @@ function createBoardCommands(mgr2) {
       const r = mgr2.applyEmployeeHome(cmd.payload.employee_home);
       return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
     },
-    COMMAND_ALLOW_RULE_REMOVE(cmd, by) {
-      return mgr2.miscCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by);
-    },
-    COMMAND_REFRESH_TODOS(cmd, by) {
-      return mgr2.miscCmds.COMMAND_REFRESH_TODOS(cmd, by);
-    },
-    COMMAND_TODO_HIDE(cmd, by) {
-      return mgr2.miscCmds.COMMAND_TODO_HIDE(cmd, by);
-    },
     COMMAND_TASK_CREATE(cmd, by) {
       const m12Action = {
         COMMAND_TASK_CREATE: "task-create",
@@ -53189,10 +53180,10 @@ provider=${opts.provider ?? "default"}` : void 0,
           return this.miscCmds.COMMAND_EXT_STOP(cmd, by);
         }
         case "COMMAND_REFRESH_TODOS": {
-          return this.boardCmds.COMMAND_REFRESH_TODOS(cmd, by);
+          return this.miscCmds.COMMAND_REFRESH_TODOS(cmd, by);
         }
         case "COMMAND_TODO_HIDE": {
-          return this.boardCmds.COMMAND_TODO_HIDE(cmd, by);
+          return this.miscCmds.COMMAND_TODO_HIDE(cmd, by);
         }
         case "COMMAND_DELETE": {
           return this.sessionCmds.COMMAND_DELETE(cmd, by);
@@ -53202,7 +53193,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         // allowRules.onChange 统一触发（构造处挂接，覆盖落规则/删除/会话清理全部
         // mutation——见 AllowRuleStore.onChange 注释）
         case "COMMAND_ALLOW_RULE_REMOVE": {
-          return this.boardCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by);
+          return this.miscCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by);
         }
         case "COMMAND_RENAME": {
           return this.sessionCmds.COMMAND_RENAME(cmd, by);
