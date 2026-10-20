@@ -359,7 +359,9 @@ async function main(): Promise<void> {
     check(!td.includes("paddingTop: 12, paddingBottom: 10") && !sp.includes("paddingBottom: 13,"), "HEADUNI-4 漂移源清除（团队详情 14/12/10、设置 paddingBottom 13 均退役）");
   }
   // ⑦ 源码接线锚：发送注入/ack 失败/渲染挂点/重发/滚动跟随
-  check(detailSrc.includes("const long = !!e.full && e.full.length > e.text.length"), "W-MSGFIX：折叠判定=full 比 text 长才折叠（20/29 字假折叠根修）");
+  // W-SPLIT-S1C：TranscriptRow 迁 components/detail-parts.tsx，折叠判定锚随迁
+  const partsSrc = srcOf("../src/components/detail-parts.tsx");
+  check(partsSrc.includes("const long = !!e.full && e.full.length > e.text.length"), "W-MSGFIX：折叠判定=full 比 text 长才折叠（20/29 字假折叠根修；S1C 随组件迁 detail-parts）");
   check(String(readFileSync(new URL("../src/store.ts", import.meta.url), "utf8")).includes("String(msg.payload.full || msg.payload.text || \"\")"), "W-MSGFIX：兜底对账 key full 优先（store 消费面）");
   check(detailSrc.includes("setPendingEcho((prev) =>\n      pushPending(prev,"), "send() 发送瞬间同步注入（乐观回显入口）");
   check(detailSrc.includes('markEchoState(prev, echoKey, "failed")'), "ack 失败→失败态（onAck 接线）");
