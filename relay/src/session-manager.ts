@@ -2262,10 +2262,10 @@ export class SessionManager {
           return this.miscCmds.COMMAND_EXT_STOP(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts；bridge 依赖照搬）
         }
         case "COMMAND_REFRESH_TODOS": {
-          return this.boardCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
+          return this.miscCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-REVFIX（#186）：真体在 misc-commands——原经 board 双跳（S3c 误抓 S3b 委托行），改直委
         }
         case "COMMAND_TODO_HIDE": {
-          return this.boardCmds.COMMAND_TODO_HIDE(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
+          return this.miscCmds.COMMAND_TODO_HIDE(cmd, by); // W-REVFIX（#186）：真体在 misc-commands——原经 board 双跳（S3c 误抓 S3b 委托行），改直委
         }
         case "COMMAND_DELETE": {
           return this.sessionCmds.COMMAND_DELETE(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
@@ -2275,7 +2275,7 @@ export class SessionManager {
         // allowRules.onChange 统一触发（构造处挂接，覆盖落规则/删除/会话清理全部
         // mutation——见 AllowRuleStore.onChange 注释）
         case "COMMAND_ALLOW_RULE_REMOVE": {
-          return this.boardCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
+          return this.miscCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by); // W-REVFIX（#186）：真体在 misc-commands——原经 board 双跳（S3c 误抓 S3b 委托行），改直委
         }
         case "COMMAND_RENAME": {
           return this.sessionCmds.COMMAND_RENAME(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）

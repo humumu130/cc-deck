@@ -8,7 +8,10 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8")
+  + readFileSync(join(root, "web-console", "js", "team-domain.js"), "utf-8")
+  + readFileSync(join(root, "web-console", "js", "session-domain.js"), "utf-8")
+  + readFileSync(join(root, "web-console", "css", "base.css"), "utf-8"); // W-REVFIX（#186）：S4b JS/CSS 外置后锚面并集（同 blankset/engauth 随迁模式）
 
 let pass = 0;
 let fail = 0;
@@ -49,7 +52,7 @@ console.log("-- B. pendingDispatchSids 直跑（收敛视图逐行判定） --")
   ok(src.length > 0, "B1 pendingDispatchSids 函数在场（blockFrom 提取）");
   const state = { receipts: new Map() };
   const fn = eval("(" + src + ")");
-  const mk = (rows) => { state.receipts.set("g1", rows); return fn("g1"); };
+  const mk = (rows: any[]) => { state.receipts.set("g1", rows); return fn("g1"); };
   ok(mk([{ id: "d1", status: "running", session_id: "s1", consumed: false }]).has("s1"), "B2 running 停留（未消费）→ 会话入集合（角标显示）");
   ok(!mk([{ id: "d1", status: "done", session_id: "s1", consumed: true }]).has("s1"), "B3 done 收口（已消费）→ 不入集合（角标消失）");
   ok(!mk([{ id: "d1", status: "failed", session_id: "s1", consumed: true }]).has("s1"), "B4 failed 终态同 done（消费完成）");

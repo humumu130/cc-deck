@@ -192,15 +192,6 @@ export function createBoardCommands(mgr: any) {
           const r = mgr.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
     },
-    COMMAND_ALLOW_RULE_REMOVE(cmd: any, by: string): any {
-          return mgr.miscCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
-    },
-    COMMAND_REFRESH_TODOS(cmd: any, by: string): any {
-          return mgr.miscCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
-    },
-    COMMAND_TODO_HIDE(cmd: any, by: string): any {
-          return mgr.miscCmds.COMMAND_TODO_HIDE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
-    },
     COMMAND_TASK_CREATE(cmd: any, by: string): any {
           // M12-1 三新命令（v2-m10-freeze §3.1 新增候选定岗）：LAN/cloud 两入口都经
           // handleCommand 到这里，同走 orgCommand 咽喉（权限矩阵+审计一行），adapter
