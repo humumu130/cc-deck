@@ -130,7 +130,7 @@ const SectionHeader = memo(function SectionHeader({ label, count, collapsible, e
       <View style={styles.secHeadRow} accessibilityLabel={`${label}，${count} 个会话${collapsible ? `，点按${expanded ? "收起" : "展开"}` : ""}`}>
         {collapsible ? <Text style={styles.secChev}>{expanded ? "▾" : "▸"}</Text> : null}
         <Text style={styles.secHeadT}>{label}</Text>
-        <Text style={styles.secCount}>{count}</Text>
+        <View style={styles.secCountPill}><Text style={styles.secCount}>{count}</Text></View>
       </View>
     </View>
   );
@@ -1877,22 +1877,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   // E2a 段头（待处理/其他会话）：分组只靠间距+小节标题（005 军规③——去下衬线）；
   // 吸顶行定高 + 自带底色；左缘与行内容对齐（14）
-  // 件十：组间分界——20px 间距 + hairline（首组不出线；分隔线在组头容器顶部）
+  // 件十：组间分界——hairline（首组不出线；分隔线在组头容器顶部）
   // 1013 用户反馈（真机截图红框）：组头降级为轻盈小节头——非粗黑（700→600）、
   // 计数弱化、团队色条 3px→2px 细线且降透明、底距放大给呼吸
+  // #85 再重做（1014/1015 用户截图反馈：还是太高）：垂直占位 44→27px（marginTop
+  // 20→8 / marginBottom 8→3，组间节奏交还 divider）；计数裸数字→胶囊（桌面 .tag
+  // 语汇移动化=现代化可见变化）；行对齐 baseline→center（胶囊非纯文本）；
+  // 标题 11.5→11 收紧，团队色条/chev 语言不动（1013 刚定的区分度保留）
   secHead: {
-    marginTop: 20, marginBottom: 8, paddingHorizontal: 14,
+    marginTop: 8, marginBottom: 3, paddingHorizontal: 14,
     backgroundColor: c.bg,
   },
-  secHeadRow: { flexDirection: "row", alignItems: "baseline", gap: 6 },
+  secHeadRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   secDivider: {
-    position: "absolute", top: -10, left: 14, right: 14, height: StyleSheet.hairlineWidth,
+    position: "absolute", top: -6, left: 14, right: 14, height: StyleSheet.hairlineWidth,
     backgroundColor: withA(c.faint, 0.35),
   },
   // 团队色细线（原 3px 竖条过重——2px×10px 细线 + 半透明，双端区分度语言保留）
   secTeamBar: { width: 2, height: 10, borderRadius: 1, position: "absolute", left: 4, top: 2 },
-  secHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600", letterSpacing: 0.2 },
-  secCount: { color: withA(c.faint, 0.85), fontSize: 10.5, fontVariant: ["tabular-nums"] },
+  secHeadT: { color: c.dim, fontSize: 11, fontWeight: "600", letterSpacing: 0.3 },
+  // #85 计数胶囊：faint 弱底小 pill（圆角 999），数字 10pt tabular
+  secCountPill: {
+    backgroundColor: withA(c.faint, 0.16), borderRadius: 999,
+    paddingHorizontal: 6, paddingVertical: 1, minWidth: 18,
+    alignItems: "center", justifyContent: "center",
+  },
+  secCount: { color: c.dim, fontSize: 10, lineHeight: 13, fontVariant: ["tabular-nums"] },
   // 件六回归②：可折叠组头（团队收纳/进行中）caret——与 OrgTabs 未立项折叠头同语言
   secChev: { color: c.faint, fontSize: 11, lineHeight: 14 },
   // E2a 活动指标块：四行定高小字（行距 gap 3、lineHeight 定值、单行 ellipsis），

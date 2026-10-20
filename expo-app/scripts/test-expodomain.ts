@@ -451,10 +451,11 @@ async function main(): Promise<void> {
   check(!listSrc.includes("CC Deck</Text>") && !/titleT/.test(listSrc), "「CC Deck」标题行移除（件八）");
   check(!/logoBtn/.test(listSrc), "logo 钮退役（件八；设置入口=底栏设置域）");
 
-  console.log("L. 件十：组间分隔线 + 团队色竖条");
+  console.log("L. 件十：组间分隔线 + 团队色竖条（#85 波次2 重做跟改：间距 20→8 压缩，组间节奏交还 divider）");
   check(listSrc.includes("secDivider"), "组间 hairline 分隔线样式");
-  check(/marginTop: 20/.test(listSrc), "组间 20px 间距");
-  check(listSrc.includes("secTeamBar"), "团队色竖条样式（3px，桌面 grpBar 同语言）");
+  check(/marginTop: 8, marginBottom: 3/.test(listSrc), "组头垂直占位压缩（44→27px：marginTop 8/marginBottom 3——#85 用户截图反馈拍板）");
+  check(listSrc.includes("secCountPill"), "计数胶囊（桌面 .tag 语汇移动化——#85 现代化可见变化）");
+  check(listSrc.includes("secTeamBar"), "团队色竖条样式（2px 细线，桌面 grpBar 同语言）");
   check(listSrc.includes("teamColor: srcColor(t.gid)"), "团队组头带 gid 哈希色（SRC_COLORS 环）");
   check(listSrc.includes("divided={idx > 0}"), "首组不出线（idx>0 才分隔）");
 
