@@ -160,7 +160,8 @@ async function main(): Promise<void> {
   const tdSrc = srcOf("../src/screens/TeamDetailPage.tsx");
   const orgSrc = srcOf("../src/screens/OrgTabs.tsx");
   const notifSrc = srcOf("../src/screens/NotifCenterPage.tsx");
-  const detailSrc = srcOf("../src/screens/DetailScreen.tsx"); // W-SWIPEASK：AskBanner 滑切锚目标
+  const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
+  const partsSrc = srcOf("../src/components/detail-parts.tsx"); // W-SPLIT-S1D 锚跟改：AskBanner 滑切面外迁 // W-SWIPEASK：AskBanner 滑切锚目标
   const listSrc = srcOf("../src/screens/ListScreen.tsx");
   const appSrc = srcOf("../App.tsx");
 
@@ -213,10 +214,10 @@ async function main(): Promise<void> {
   check(notifSrc.includes("act(item.key, \"dismissed\")"), "× 忽略/滑删走 dismissed 权威账（不清零硬条款）");
   check(notifSrc.includes("act(item.key, \"handled\")"), "知道了走 handled 权威账");
   // W-SWIPEASK（#157 后半）：多问题左右滑切换四锚
-  check(detailSrc.includes("swipeAskPan"), "滑切手势 PanResponder（AskBanner 内）");
-  check(detailSrc.includes("Math.abs(g.dx) < 24 || Math.abs(g.dx) <= Math.abs(g.dy) * 2"), "横占优 24px 锁定（纵滑零冲突）");
-  check(detailSrc.includes("prog >= askW() / 2 || (dir === 1 ? g.vx : -g.vx) <= -0.55"), "松手过半/速度 0.55 spring 落位判定");
-  check(detailSrc.includes("toFade") && detailSrc.includes("stepped ? swipeAskPan.panHandlers"), "圆点跟手淡入淡出 + 仅多问题挂手势（单问题不启）");
+  check(partsSrc.includes("swipeAskPan"), "滑切手势 PanResponder（AskBanner 内）");
+  check(partsSrc.includes("Math.abs(g.dx) < 24 || Math.abs(g.dx) <= Math.abs(g.dy) * 2"), "横占优 24px 锁定（纵滑零冲突）");
+  check(partsSrc.includes("prog >= askW() / 2 || (dir === 1 ? g.vx : -g.vx) <= -0.55"), "松手过半/速度 0.55 spring 落位判定");
+  check(partsSrc.includes("toFade") && partsSrc.includes("stepped ? swipeAskPan.panHandlers"), "圆点跟手淡入淡出 + 仅多问题挂手势（单问题不启）");
 
   console.log("G. 会话页（ListScreen：顶栏铃铛 + r3 引擎徽章）");
   check(listSrc.includes("function BellGlyph"), "铃铛 glyph（v3 #i-bell 同形线稿）");

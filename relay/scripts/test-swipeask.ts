@@ -6,7 +6,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const src = readFileSync(join(root, "expo-app/src/screens/DetailScreen.tsx"), "utf-8");
+const src = readFileSync(join(root, "expo-app/src/components/detail-parts.tsx"), "utf-8");
 
 let pass = 0, fail = 0;
 function ok(cond: boolean, name: string) {
