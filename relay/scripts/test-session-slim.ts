@@ -16,6 +16,8 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+// W-SPLIT-S4a：CSS 外置跟锚——cssBlock/CSS 串断言改读 css/{tokens,base}.css（html 内 <style> 已退役）
+const css = readFileSync(join(root, "web-console", "css", "tokens.css"), "utf-8") + readFileSync(join(root, "web-console", "css", "base.css"), "utf-8");
 
 let pass = 0;
 let fail = 0;
@@ -46,13 +48,13 @@ function jsConst(name: string): string {
   return html.slice(i, end);
 }
 function cssBlock(selector: string): string {
-  const i = html.indexOf(selector + " {");
+  const i = css.indexOf(selector + " {");
   if (i < 0) return "";
-  const j = html.indexOf("{", i);
+  const j = css.indexOf("{", i);
   let depth = 0;
-  for (let k = j; k < html.length; k++) {
-    if (html[k] === "{") depth++;
-    else if (html[k] === "}") { depth--; if (depth === 0) return html.slice(j, k + 1); }
+  for (let k = j; k < css.length; k++) {
+    if (css[k] === "{") depth++;
+    else if (css[k] === "}") { depth--; if (depth === 0) return css.slice(j, k + 1); }
   }
   return "";
 }
@@ -96,8 +98,8 @@ console.log("-- §B css anchors");
 const entryCss = cssBlock(".team-entry");
 ok(entryCss.includes("cursor: pointer") && cssBlock(".team-entry .t-expand").length > 0, "team-entry card is clickable with inline expand button");
 const drawerCss = cssBlock(".team-drawer");
-ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 248px") && html.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column, re-anchors when inspector collapses");
-ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && html.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
+ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 248px") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column, re-anchors when inspector collapses");
+ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && css.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
 ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".t-expand.has-unread::after").includes("animation: slimPulseKf"), "inspector member chips + unread pulse styles exist (V8R+ ③未读点迁 t-expand 角标)");
 
 // ---- §C 列表渲染链 ----
@@ -105,7 +107,7 @@ console.log("-- §C render chain");
 ok(html.includes("const slimRoster = slimRosterOf(S.projects);") && html.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x))") && html.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
 ok(html.includes("const pinnedKeep = (x) => x.pinned === true;") && html.includes(".filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x)))"), "1015 pinned keep: pinned cards exempt from status filter (always rendered, pinned-first top); filterHidden ledger shares the same predicate so observer amnesty stays exact");
 ok(html.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
-ok(html.includes('data-group-toggle="slim-teams"') && html.includes("<span>team</span>") && html.includes("session-group teams-dock") && html.includes(".session-group.teams-dock {") && html.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
+ok(html.includes('data-group-toggle="slim-teams"') && html.includes("<span>team</span>") && html.includes("session-group teams-dock") && css.includes(".session-group.teams-dock {") && css.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
 ok(html.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && html.includes("mountTwoPane(tpl.content);") && html.includes('upper.className = "list-upper";'), "list assembly: two-pane (#103) — upper sessions pane, dock below");
 ok(fnBody("slimTeamEntryMarkup").includes('const isAllFilter = !filterDef || filterDef.id === "all";') && fnBody("slimTeamEntryMarkup").includes("if (!hit.length && (!isAllFilter || !team.members.length)) return \"\";") && fnBody("slimTeamEntryMarkup").includes("const rosterN = team.members.length;"), "team card for roster-present teams (#99-5: unsynced/PM-only included on all-filter via id check, filter purity kept) + roster headcount counting (#99-6)");
 
