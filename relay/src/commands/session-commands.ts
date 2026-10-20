@@ -17,7 +17,8 @@ import { findGroup } from "../projects.js";
 import { truncate } from "../summarizer.js";
 import { imageRefsOf, saveUploadFiles, saveUploadImages } from "../uploads.js";
 import { wrapPreCompactReminder } from "../context-watchdog.js";
-import { sanitizeFiles, sanitizeImages, resumePendingWindowMs } from "../session-manager.js"; // 本地三函数（原文件已 export 单源）
+import { sanitizeFiles, sanitizeImages } from "./misc-commands.js"; // S3MERGE：S3b 删了 session-manager 本地定义（misc 单源），同步改引
+import { resumePendingWindowMs } from "../session-manager.js"; // 本地函数（原文件 export 单源保留）
 import type { SessionEngine } from "../types.js";
 import type { CommandAckPayload } from "../types.js";
 

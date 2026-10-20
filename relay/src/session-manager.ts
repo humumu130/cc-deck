@@ -54,6 +54,7 @@ import { readPluginConfig, listWorkerPluginPaths } from "./plugin-config.js";
 import { devId } from "./e2e.js";
 import { createPairingCommands, peerKind } from "./commands/pairing-commands.js"; // W-SPLIT-S3R2c：配对域 mixin（peerKind 随迁单源）
 import { createSessionCommands } from "./commands/session-commands.js"; // W-SPLIT-S3a：session CRUD 域 mixin
+import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, sanitizeFiles } from "./commands/misc-commands.js"; // W-SPLIT-S3b：小族 mixin（四助手随迁单源，原定义删除防双源）
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
@@ -147,13 +148,8 @@ import { ZCODE_ACTIVITY_CAPABILITIES } from "./agent-zcode.js";
 import { createRegisteredEngine, getEngineDefinition, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
 import { preflightEngine } from "./agent-jsonl.js";
 
-function isManagedMode(m: unknown): m is ManagedPermissionMode {
-  // bypassPermissions 必须在内：① CLI init 回报 skip 会话时据此镜像记录 state（否则
-  // 挂起恢复 `state.permission_mode ?? "default"` 把 skip 会话掉回 default，每条命令
-  // 重新送审）② COMMAND_PERM 切换接受 skip 档——客户端切换器已含四档，缺此则一切走
-  // default/acceptEdits 就再也切不回 skip（用户实踩：skip 启动 → 点权限按钮 → 永久降级）
-  return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
-}
+// isManagedMode/PERM_MODE_ZH/sanitizeImages/sanitizeFiles：W-SPLIT-S3b 随 case 体
+// 迁 commands/misc-commands.ts（单源防双源），本文件经顶部 import 反向引用
 
 // 外部会话可携带的 CLI 权限模式全集：托管会话不许 bypass（门控语义），但用户自开
 // 终端会话可以是任意启动模式（bypass 常见）——恢复时需原样镜像，不复用 isManagedMode
@@ -285,35 +281,9 @@ export function resolveCreateCwd(
   };
 }
 
-const PERM_MODE_ZH: Record<ManagedPermissionMode, string> = {
-  default: "标准（每次确认）",
-  acceptEdits: "自动接受编辑",
-  plan: "规划（只读）",
-  bypassPermissions: "跳过权限确认",
-};
-
-// 图片消息清洗：最多 4 张、单张 8MB base64，剔除非法项
-export function sanitizeImages(raw: unknown): string[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const list = raw.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 8 * 1024 * 1024);
-  return list.length > 0 ? list.slice(0, 4) : undefined;
-}
-
-// #62 文件附件清洗：最多 2 个、单个 28MB base64（≈20MB 原文件，2026-09-19 用户反馈
-// 4.5MB 太小后放宽）。超限项剔除而非整单拒收——手机端选文件时已有前置大小提示，
-// 这里兜底防裸协议灌大包（28MB×2=56MB 仍在 ws 默认 100MB 单帧内）
-export function sanitizeFiles(raw: unknown): UploadBlob[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const list: UploadBlob[] = [];
-  for (const x of raw) {
-    if (!x || typeof x !== "object") continue;
-    const name = typeof (x as Record<string, unknown>).name === "string" ? (x as Record<string, unknown>).name : "";
-    const b64 = (x as Record<string, unknown>).b64;
-    if (typeof b64 !== "string" || b64.length === 0 || b64.length > 28 * 1024 * 1024) continue;
-    list.push({ name: String(name), b64 });
-  }
-  return list.length > 0 ? list.slice(0, 2) : undefined;
-}
+// PERM_MODE_ZH / sanitizeImages / sanitizeFiles：W-SPLIT-S3b 随 case 体迁
+// commands/misc-commands.ts（顶部 import 反向引用，原定义删除防双源——S3MERGE 裁决：
+  // 删本地定义走 misc 单源；S3a 的 session-commands.ts 同步改从同层 misc-commands 引）
 
 // relay 自拉的一次性 SDK 子会话记录（标题生成等），持久化到 <dataDir>/child-sessions.json；
 // 孤儿扫描（bridge.adoptOrphans）必须跳过这些 CLI session_id，否则被误收养成垃圾外部会话
@@ -710,6 +680,9 @@ export class SessionManager {
   private pairingCmds = createPairingCommands(this);
   // W-SPLIT-S3a：session CRUD 域命令 mixin（九 case 体迁 commands/session-commands.ts）
   private sessionCmds = createSessionCommands(this);
+  // W-SPLIT-S3b：小族命令 mixin（七 case 体迁 commands/misc-commands.ts——todos/perm/
+  // allow-rule/ext 四小族；EXT 族 bridge 依赖照搬 mgr.bridge）
+  private miscCmds = createMiscCommands(this);
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string }[]>();
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
@@ -2441,30 +2414,7 @@ export class SessionManager {
           return this.sessionCmds.COMMAND_MODEL(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
         }
         case "COMMAND_PERM": {
-          const live = this.requireLive(cmd.payload.session_id);
-          if (live.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持权限模式切换" };
-          }
-          const mode = cmd.payload.mode;
-          if (!isManagedMode(mode)) {
-            return { command_id: cmd.command_id, ok: false, error: `未知权限模式: ${mode}` };
-          }
-          void live.agent.setPermissionMode(mode)
-            .then(() => {
-              live.state.permission_mode = mode;
-              this.pushExternalLog(live.state.session_id, "system", `权限模式切换: ${PERM_MODE_ZH[mode]}`);
-              this.emitUpdated(live, true);
-            })
-            .catch((e) => {
-              // #217 SDK 硬约束的英文报错翻译成人话（切跳过被拒的真实原因），
-              // 其余错误原文透传
-              const raw = e instanceof Error ? e.message : String(e);
-              const friendly = /not launched with --dangerously-skip-permissions/.test(raw)
-                ? "跳过档不可用：该会话不是以跳过权限创建的（跳过档只能在创建会话时开启）"
-                : raw;
-              this.pushExternalLog(live.state.session_id, "system", `权限模式切换失败: ${friendly}`);
-            });
-          return { command_id: cmd.command_id, ok: true };
+          return this.miscCmds.COMMAND_PERM(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
         }
         case "COMMAND_STOP": {
           return this.sessionCmds.COMMAND_STOP(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
@@ -2479,86 +2429,29 @@ export class SessionManager {
           return this.sessionCmds.COMMAND_ANSWER(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
         }
         case "COMMAND_EXT_MODE": {
-          const s = this.require(cmd.payload.session_id);
-          if (!s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "not an external session" };
-          }
-          this.setRemoteMode(cmd.payload.session_id, cmd.payload.enabled);
-          return { command_id: cmd.command_id, ok: true };
+          return this.miscCmds.COMMAND_EXT_MODE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
         }
         case "COMMAND_EXT_INPUT": {
-          const s = this.require(cmd.payload.session_id);
-          if (!s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "托管会话请使用 COMMAND_MESSAGE" };
-          }
-          if (!this.bridge) {
-            return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
-          }
-          const r = this.bridge.extInput(
-            cmd.payload.session_id,
-            cmd.payload.text,
-            sanitizeImages(cmd.payload.images),
-            sanitizeFiles(cmd.payload.files),
-          );
-          return { command_id: cmd.command_id, ok: r.ok, error: r.error };
+          return this.miscCmds.COMMAND_EXT_INPUT(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts；bridge 依赖照搬）
         }
         case "COMMAND_EXT_STOP": {
-          const s = this.require(cmd.payload.session_id);
-          if (!s.state.external) {
-            return { command_id: cmd.command_id, ok: false, error: "托管会话请使用 COMMAND_STOP" };
-          }
-          if (!this.bridge) {
-            return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
-          }
-          const r = this.bridge.extStop(cmd.payload.session_id);
-          return { command_id: cmd.command_id, ok: r.ok, error: r.error };
+          return this.miscCmds.COMMAND_EXT_STOP(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts；bridge 依赖照搬）
         }
         case "COMMAND_REFRESH_TODOS": {
-          const s = this.require(cmd.payload.session_id);
-          if (s.state.external) {
-            if (!this.bridge) {
-              return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
-            }
-            const r = this.bridge.refreshTodos(cmd.payload.session_id);
-            return { command_id: cmd.command_id, ok: r.ok, error: r.error };
-          }
-          // 托管会话：任务目录是权威源（#206）。force 重读磁盘强制重发可见集，
-          // 不删轮询缓存——diff 仍与上轮比较，恰逢完成项照样发 TASK_DONE
-          this.pollTaskStore(true);
-          if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
-          return { command_id: cmd.command_id, ok: true };
+          return this.miscCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
         }
         case "COMMAND_TODO_HIDE": {
-          const s = this.require(cmd.payload.session_id);
-          const content = cmd.payload.content.trim();
-          if (!content) return { command_id: cmd.command_id, ok: false, error: "content 不能为空" };
-          if (s.state.external) {
-            if (!this.bridge) {
-              return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
-            }
-            const r = this.bridge.hideTodo(cmd.payload.session_id, content);
-            return { command_id: cmd.command_id, ok: r.ok, error: r.error };
-          }
-          // 托管会话：SDK feed 后续重推也被 setTodos 过滤兜住
-          addHiddenTodoKey(cmd.payload.session_id, normKey(content));
-          if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
-          // 删除闭环：让会话本体同步删掉本地任务条目（显示层过滤≠源头删除）
-          s.agent?.sendMessage(
-            `[移动端删除任务] 用户删除了任务清单条目：「${truncate(content.trim(), 120)}」。请将该条目从你的本地任务列表同步删除（任务工具置 deleted 或移除），不要重新创建或继续处理它。本条为系统通知，简短确认即可。`,
-          );
-          return { command_id: cmd.command_id, ok: true };
+          return this.miscCmds.COMMAND_TODO_HIDE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
         }
         case "COMMAND_DELETE": {
           return this.sessionCmds.COMMAND_DELETE(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
         }
-        // #212 删除「允许并记住」规则。删不存在的 id 回 ok:false；成功后的
-        // ALLOW_RULES_UPDATED 广播由 allowRules.onChange 统一触发（构造处挂接，
-        // 覆盖落规则/删除/会话清理全部 mutation——见 AllowRuleStore.onChange 注释）
+        // #212 删除「允许并记住」规则（注释随体迁 commands/misc-commands.ts）：
+        // 删不存在的 id 回 ok:false；成功后的 ALLOW_RULES_UPDATED 广播由
+        // allowRules.onChange 统一触发（构造处挂接，覆盖落规则/删除/会话清理全部
+        // mutation——见 AllowRuleStore.onChange 注释）
         case "COMMAND_ALLOW_RULE_REMOVE": {
-          if (!this.allowRules.remove(cmd.payload.id)) {
-            return { command_id: cmd.command_id, ok: false, error: "no such rule" };
-          }
-          return { command_id: cmd.command_id, ok: true };
+          return this.miscCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
         }
         case "COMMAND_RENAME": {
           return this.sessionCmds.COMMAND_RENAME(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
