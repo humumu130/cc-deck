@@ -421,7 +421,7 @@
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
     .tag.authn { background: transparent; background: color-mix(in srgb, var(--working) 14%, transparent); color: var(--working); } /* #102 批 A：引擎已装未登录 */
-    .tag.dispatch-pending { flex: none; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 32%, transparent); } /* W-DISPVIS C2：成员卡「已派单·等待处理」角标 */
+    .tag.dispatch-pending { flex: none; background: transparent; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); border: 1px solid transparent; border: 1px solid color-mix(in srgb, var(--working) 32%, transparent); } /* W-DISPVIS C2：成员卡「已派单·等待处理」角标 */
     .eng-auth-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--working); margin-left: 5px; vertical-align: middle; }
     .tag.info { background: var(--info-bg); color: var(--info); }
     /* #172-F1 高度链：workspace 是 column flex 容器（grid 子项），缺 min-height:0 时内容撑开会把
@@ -1404,7 +1404,7 @@
     #d-team .task-owner .tchip b { min-width: 0; overflow: hidden; font-weight: 500; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .task-owner .tchip i { overflow: hidden; font-style: normal; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .task-owner.unassigned .tchip { color: var(--working); }
-    #d-team .task-owner .tchip.disp-pend { color: var(--working); border: 1px dashed color-mix(in srgb, var(--working) 40%, transparent); background: color-mix(in srgb, var(--working) 8%, transparent); } /* W-DISPVIS C2：看板卡执行者派单待处理角标（虚线框与 owner 实体 chip 区分） */
+    #d-team .task-owner .tchip.disp-pend { color: var(--working); border: 1px dashed transparent; border: 1px dashed color-mix(in srgb, var(--working) 40%, transparent); background: transparent; background: color-mix(in srgb, var(--working) 8%, transparent); } /* W-DISPVIS C2：看板卡执行者派单待处理角标（虚线框与 owner 实体 chip 区分） */
     #d-team .task-owner.unassigned .tchip b { color: var(--working); }
     #d-team .task-cline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; color: var(--dim); font-size: var(--fs-C); line-height: 1.45; }
     #d-team .task-cline .cline-sep { flex: none; color: var(--faint); font-style: normal; }

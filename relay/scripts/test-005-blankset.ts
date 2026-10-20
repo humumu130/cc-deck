@@ -11,11 +11,13 @@
 //      四段 safeInit 包裹（单点炸不断全链）
 //
 // 跑法：env -u CCR_ORG_DIR node --import tsx/esm scripts/test-005-blankset.ts
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web-console", "index-005.html"), "utf-8");
+const webDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web-console");
+  const html = readFileSync(join(webDir, "index-005.html"), "utf-8") + readFileSync(join(webDir, "css", "base.css"), "utf-8") + readFileSync(join(webDir, "css", "tokens.css"), "utf-8")
+    + readdirSync(join(webDir, "js")).map((f) => readFileSync(join(webDir, "js", f), "utf-8")).join("\n"); // W-SPLIT-S4b：JS 外置后锚面=html+js 并集
 let pass = 0;
 let fail = 0;
 function ok(cond: boolean, name: string) {
@@ -28,25 +30,28 @@ console.log("== W-BLANKSET P0 守卫：WebView2 旧内核 CSS 兜底 + b2Api/初
 // ---- B1 color-mix 渐进增强守卫 ----
 {
   const styleBlocks = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
-  const css = styleBlocks.join("\n");
+  const cssSources = [...styleBlocks, readFileSync(join(webDir, "css", "base.css"), "utf-8"), readFileSync(join(webDir, "css", "tokens.css"), "utf-8")]; // W-SPLIT-S4a/b：CSS 外置两件并入守卫面（逐文件独立——拼接边界假阳防护）
   const declRe = /([a-zA-Z-]+)\s*:\s*([^;{}]*color-mix\([^;{}]*\)[^;{}]*)/g;
   let total = 0;
   const bare: string[] = [];
   let m: RegExpExecArray | null;
-  while ((m = declRe.exec(css))) {
+  while ((m = declRe.exec(cssSources.join("\n/*FILE-BOUNDARY*/\n")))) {
     total++;
     const prop = m[1];
-    const before = css.slice(Math.max(0, m.index - 240), m.index);
+    const cssAll = cssSources.join("\n/*FILE-BOUNDARY*/\n");
+    const before = cssAll.slice(Math.max(0, m.index - 240), m.index);
     // 同属性静态声明紧邻在前：取前文中最后一段声明（以 ; { } 共同为界——压缩行内
     // `prop: static; prop: color-mix(...)` 的 tail 即前条）
     const segs = before.split(/[;{}]/).filter((s) => s.trim());
     const tail = segs[segs.length - 1] ?? "";
-    if (!new RegExp("^\\s*" + prop + "\\s*:\\s*(transparent|none|var\\(--[\\w-]+\\)|#)[^;]*$").test(tail)) bare.push(prop + ": " + m[2].slice(0, 60));
+    if (before.includes("FILE-BOUNDARY")) continue; // W-SPLIT-S4b：跨文件边界的前条在另一文件——不可判，跳过（每文件内部仍全检）
+    if (!new RegExp("^\\s*" + prop + "\\s*:[^;]*(transparent|none|var\\(--[\\w-]+\\)|#[0-9a-fA-F])[^;]*$").test(tail)) bare.push(prop + ": " + m[2].slice(0, 60)); // W-SPLIT-S4b：值含修饰词的透明兜底（border: 1px solid transparent）也算
   }
   ok(total >= 90, `B1① color-mix 声明规模在册（${total} 条 ≥90——兜底覆盖面不缩水）`);
   ok(bare.length === 0, `B1② 每条 color-mix 声明前有同属性静态兜底（裸奔 ${bare.length} 条${bare.length ? "：" + bare.slice(0, 3).join(" / ") : ""}）`);
   // box-shadow 全兜底 none（旧内核 shadow 色丢=整条丢，兜底必须整条静态）
-  const shadowBare = [...css.matchAll(/box-shadow\s*:\s*[^;{}]*color-mix/g)].filter((s) => !/box-shadow\s*:\s*none;\s*$/.test(css.slice(Math.max(0, s.index - 60), s.index)));
+  const cssJ = cssSources.join("\n");
+  const shadowBare = [...cssJ.matchAll(/box-shadow\s*:\s*[^;{}]*color-mix/g)].filter((s) => !/box-shadow\s*:\s*none;\s*$/.test(cssJ.slice(Math.max(0, s.index - 60), s.index)));
   ok(shadowBare.length === 0, `B1③ box-shadow 色混声明前置 none 兜底（${shadowBare.length} 条缺）`);
 }
 

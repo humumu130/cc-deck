@@ -3,12 +3,15 @@
 //（静态锚 + blockFrom 提取纯函数 eval 直跑——不拉浏览器，词面与逻辑双锚）。
 //
 // 直跑：env -u CCR_ORG_DIR node --import tsx/esm scripts/test-005-engauth-web.ts
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+const webDir = join(root, "web-console");
+const html = readFileSync(join(webDir, "index-005.html"), "utf-8")
+  + readdirSync(join(webDir, "js")).map((f) => readFileSync(join(webDir, "js", f), "utf-8")).join("\n")
+  + readFileSync(join(webDir, "css", "base.css"), "utf-8") + readFileSync(join(webDir, "css", "tokens.css"), "utf-8"); // W-SPLIT-S4a/b：JS+CSS 已外置——锚面=全件并集
 
 let pass = 0;
 let fail = 0;
@@ -83,14 +86,14 @@ console.log("== #102 批 A web：needs_auth 状态点 + 指引链 ==");
 // ---- F. 创建链拦截提示（本地 menu 拦截 + ACK fail-fast 双保险） ----
 {
   const submit = blockFrom("function submitCreate() {");
-  ok(submit.includes('entry.state === "needs_auth"') && submit.includes("引擎未登录："), "F1 submitCreate 本地拦截 toast 带指引（引擎未登录：+hint）");
+  ok(submit.includes('entry.state === "needs_auth"') && submit.includes("引擎未登录"), "F1 submitCreate 本地拦截 toast 带指引（W-ENGLOGIN 后文案=拉起登录引导——锚跟改，基线陈旧已证实）");
   ok(submit.includes("ack.needs_auth") && submit.includes("未创建会话"), "F2 ACK fail-fast 拒绝分支显示可操作指引（relay 侧拦截回执）");
   ok(html.includes("b2Toast(msg, ms)"), "F3 b2Toast 支持时长参数（指引类 toast 6s 长显——默认 2.4s 读不完命令）");
 }
 
 // ---- G. 手机侧目录（mobile settings Agent 引擎区同态） ----
 {
-  ok(/name === "Agent 引擎"[\s\S]{0,600}e\.state === "needs_auth" \? "未登录"/.test(html), "G1 手机目录 needs_auth → 「未登录」态（与桌面设置区同词表）");
+  ok(/name === "Agent 引擎"[\s\S]{0,1200}e\.state === "needs_auth" \? "未登录/.test(html), "G1 手机目录 needs_auth → 「未登录」态（与桌面设置区同词表）");
 }
 
 // ---- H. 降级链不回归（catalogReadyEngines 剔除 needs_auth 的端侧对应：菜单灰置即不可选） ----

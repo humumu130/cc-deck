@@ -65,7 +65,7 @@ const targets = [
     // 新旧壳共存（用户拍板，2026-10-07）：/app2 的 005 新壳也是在线服务面（relay /app2、
     // CF /app2），版本统一纪律两处都刷，防主/副壳版本漂移各说各话
     name: "web-console-005 CONSOLE_VERSION",
-    file: "web-console/index-005.html",
+    file: "web-console/js/settings-domain.js", // W-SPLIT-S4b：版本常量随 settings 域块外置
     get: (s) => /^[ \t]*const CONSOLE_VERSION = "(.+?)";/m.exec(s)?.[1],
     set: (s) =>
       s.replace(/^([ \t]*)const CONSOLE_VERSION = "(?:.+?)";/m, `$1const CONSOLE_VERSION = "${canonical}";`),
