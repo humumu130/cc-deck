@@ -2114,8 +2114,16 @@
                     if (single) {
                       actions = '<div class="wait-actions">' + (w.questions[0].options || []).map((o, i) => '<button data-wait-answer="' + i + '">' + esc(o.label) + "</button>").join("") + '<button class="deny" data-wait-deny>取消提问</button></div>';
                     } else {
-                      content += "\n（多问题/多选作答待 B2b，可先取消）";
-                      actions = '<div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button></div>';
+                      // W-ASKUSER-FIX（B2b 补齐，2026-10-20 用户实锤「多问题只显标题+取消」）：
+                      // 多问题/多选=分组渲染（每题 header+题干+选项 chips），单选组点击即选中、
+                      // 多选组（multi:true）toggle 勾选——「提交回答」统一收齐经 COMMAND_ANSWER
+                      // 上送（answers 按题序，多选拼「、」——expo AskBanner 同交互模型移植）
+                      const groups = w.questions.map((q, qi) => {
+                        const chips = (q.options || []).map((o, oi) =>
+                          '<button type="button" class="wait-chip' + (q.multi ? " toggle" : "") + '" data-wait-chip="' + qi + ":" + oi + '"' + (o.description ? ' title="' + esc(o.description) + '"' : "") + '><span class="wc-label">' + esc(o.label) + "</span>" + (q.multi ? '<span class="wc-check"></span>' : "") + "</button>").join("");
+                        return '<div class="wait-qgroup" data-wait-qgroup="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") + '><div class="wq-head">' + esc(q.header || ("问题 " + (qi + 1))) + (q.multi ? '<span class="wq-multi-tag">可多选</span>' : "") + '</div><div class="wq-question">' + esc(q.question || "") + '</div><div class="wq-chips">' + chips + "</div></div>";
+                      }).join("");
+                      actions = '<div class="wait-multi">' + groups + '</div><div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button><button class="allow" data-wait-submit>提交回答</button></div>';
                     }
                   } else {
                     // 三级按钮：允许（主）、拒绝（次）、允许并记住（第三，点击展开范围选择）
@@ -2194,6 +2202,36 @@
                     const v = ackVerdict(ack);
                     if (v.ok) { markWaitCardDone(card, kind === "deny"); if (kind === "deny") b2Toast("已拒绝 · 可在输入栏补充说明"); }
                     else { delete card.dataset.busy; b2Toast("等待处理未确认：" + v.error); }
+                  });
+                }
+                // W-ASKUSER-FIX：多问题/多选交互——chip 点击（单选组=排他选中，多选组=toggle）
+                function handleWaitChip(chip) {
+                  const group = chip.closest("[data-wait-qgroup]");
+                  if (!group) return;
+                  if (group.dataset.multi === "1") chip.classList.toggle("on");
+                  else {
+                    group.querySelectorAll(".wait-chip").forEach((c) => c.classList.remove("on"));
+                    chip.classList.add("on");
+                  }
+                }
+                // 提交：按题序收集（单选=选中项 label；多选=所有 on 的 labels 拼「、」；未选题空串占位）
+                function handleWaitSubmit(btn) {
+                  const card = btn.closest("[data-b2-wait]");
+                  if (!card || card.dataset.busy) return;
+                  const sid = card.dataset.sid, rid = card.dataset.rid;
+                  const s = S.sessions.get(sid);
+                  const w = s && s.waiting_request;
+                  if (!sid || !rid || !w || !Array.isArray(w.questions)) return;
+                  const answers = w.questions.map((q, qi) => {
+                    const on = [...card.querySelectorAll('.wait-qgroup[data-wait-qgroup="' + qi + '"] .wait-chip.on .wc-label')].map((el) => el.textContent);
+                    return on.join("、");
+                  });
+                  if (answers.every((a) => !a)) { b2Toast("请先选择至少一项再提交"); return; }
+                  card.dataset.busy = "1";
+                  commandAck("COMMAND_ANSWER", { session_id: sid, request_id: rid, answers }).then((ack) => {
+                    const v = ackVerdict(ack);
+                    if (v.ok) markWaitCardDone(card, false);
+                    else { delete card.dataset.busy; b2Toast("作答未确认：" + v.error); }
                   });
                 }
                 function handleWaitAnswer(btn) {
@@ -3581,6 +3619,10 @@
                     if (deny) { ev.stopPropagation(); handleWaitVerdict(deny, "deny"); return; }
                     const answer = ev.target.closest("[data-wait-answer]");
                     if (answer) { ev.stopPropagation(); handleWaitAnswer(answer); return; }
+                    const chipEl = ev.target.closest("[data-wait-chip]");
+                    if (chipEl) { ev.stopPropagation(); handleWaitChip(chipEl); return; }
+                    const submitEl = ev.target.closest("[data-wait-submit]");
+                    if (submitEl) { ev.stopPropagation(); handleWaitSubmit(submitEl); return; }
                     const artRetry = ev.target.closest("[data-artifact-file-retry]");
                     if (artRetry) {
                       ev.stopPropagation();

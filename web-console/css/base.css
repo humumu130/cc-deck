@@ -2550,3 +2550,16 @@
     .pair-code-digits {
       color: var(--brand-hover);
     }
+
+/* W-ASKUSER-FIX：AskBanner 多问题/多选分组（B2b 补齐）——对齐 wait-actions 按钮语言 */
+.wait-multi { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 2px; }
+.wait-qgroup { border: 1px solid var(--line-soft); border-radius: 8px; padding: 7px 9px; }
+.wait-qgroup .wq-head { font-size: var(--fs-C); font-weight: 600; color: var(--text-strong); display: flex; align-items: center; gap: 6px; }
+.wait-qgroup .wq-multi-tag { font-size: var(--fs-D); color: var(--working); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 4px; font-weight: 500; }
+.wait-qgroup .wq-question { font-size: var(--fs-C); color: var(--dim); margin: 2px 0 6px; }
+.wq-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wait-chip { border: 1px solid var(--line); background: var(--surface2); color: var(--text); border-radius: 999px; padding: 4px 12px; font-size: var(--fs-C); cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
+.wait-chip:hover { border-color: var(--brand); }
+.wait-chip.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
+.wait-chip .wc-check { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
+.wait-chip.on .wc-check { background: var(--brand); }
