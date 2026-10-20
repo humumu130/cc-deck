@@ -11076,7 +11076,7 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { randomUUID as randomUUID11 } from "node:crypto";
+import { randomUUID as randomUUID12 } from "node:crypto";
 
 // src/decision-ledger-projection.ts
 function notificationsListOf(items) {
@@ -48771,6 +48771,307 @@ function createSessionCommands(mgr2) {
   };
 }
 
+// src/lifecycle/adopt.ts
+var MAX_SESSIONS = 20;
+function adoptReplayed(mgr2, replayed2) {
+  const entries = [...replayed2.entries()].sort((a, b) => b[1].state.updated_at - a[1].state.updated_at);
+  let adopted2 = 0;
+  for (const [id2, rs2] of entries) {
+    if (mgr2.sessions.size >= MAX_SESSIONS) break;
+    rs2.state.historical = true;
+    const ov2 = mgr2.titleOverrides[id2];
+    if (ov2) {
+      rs2.state.title = ov2;
+      rs2.state.title_locked = true;
+    }
+    mgr2.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
+    mgr2.applyDeclaredDeliverables(id2);
+    adopted2++;
+  }
+  return adopted2;
+}
+
+// src/task-store.ts
+import { readdirSync as readdirSync9, readFileSync as readFileSync23, statSync as statSync7 } from "node:fs";
+import { homedir as homedir11 } from "node:os";
+import path3 from "node:path";
+function readTaskStoreTodos(cliSessionId, base) {
+  const dir = path3.join(base ?? path3.join(homedir11(), ".claude"), "tasks", cliSessionId);
+  let files;
+  try {
+    files = readdirSync9(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  const out = [];
+  for (const f of files) {
+    try {
+      const fp2 = path3.join(dir, f);
+      const t = JSON.parse(readFileSync23(fp2, "utf-8"));
+      if (t.status === "deleted") continue;
+      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
+      if (!subject) continue;
+      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
+      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
+      const parsed = Number(t.id);
+      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync7(fp2).mtimeMs, ...activeForm });
+    } catch {
+    }
+  }
+  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  return out;
+}
+
+// src/lifecycle/revive.ts
+function autoReviveManaged(mgr2, limit = 3) {
+  if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
+  const candidates = [];
+  for (const s of mgr2.sessions.values()) {
+    if (reviveEligible(mgr2, s)) continue;
+    candidates.push({ s, updated: s.state.updated_at });
+  }
+  candidates.sort((a, b) => b.updated - a.updated);
+  let revived = 0;
+  for (const c of candidates) {
+    if (revived >= limit) break;
+    try {
+      mgr2.resumeAgent(c.s, "[relay \u81EA\u52A8\u6062\u590D] relay \u91CD\u542F\u5B8C\u6210\uFF0C\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002" + reviveInstruction(c.s));
+      revived++;
+    } catch (e) {
+      console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} \u6062\u590D\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (revived > 0) console.log(`[auto-revive] \u5DF2\u81EA\u52A8\u62C9\u8D77 ${revived} \u4E2A\u6709\u672A\u5B8C\u6210\u5F85\u529E\u7684\u6258\u7BA1\u4F1A\u8BDD`);
+  return revived;
+}
+function recoverEngineAfterAuth(mgr2, engine) {
+  const now = Date.now();
+  if (now - (mgr2.authRecoverAt.get(engine) ?? 0) < 1e4) return;
+  mgr2.authRecoverAt.set(engine, now);
+  const label = getEngineDefinition(engine)?.label ?? engine;
+  let resumed = 0;
+  for (const s of mgr2.sessions.values()) {
+    if (s.state.engine !== engine || !s.state.auth_hint || s.state.status !== "ERROR") continue;
+    s.state.auth_hint = void 0;
+    try {
+      mgr2.resumeAgent(
+        s,
+        `[\u5F15\u64CE\u767B\u5F55\u6062\u590D] ${label} \u5DF2\u767B\u5F55\uFF0C\u81EA\u52A8\u6062\u590D\u672C\u4F1A\u8BDD\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002` + reviveInstruction(s),
+        void 0,
+        void 0,
+        void 0,
+        { renewable: true }
+      );
+      mgr2.pushExternalLog(s.state.session_id, "system", `${label} \u5DF2\u767B\u5F55\uFF0C\u4F1A\u8BDD\u5DF2\u6062\u590D`);
+      resumed++;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      mgr2.pushExternalLog(s.state.session_id, "system", `${label} \u5DF2\u767B\u5F55\uFF0C\u4F46\u4F1A\u8BDD\u81EA\u52A8\u6062\u590D\u5931\u8D25\uFF1A${msg}\uFF08\u53EF\u624B\u52A8\u53D1\u6D88\u606F\u62C9\u8D77\uFF09`);
+    }
+  }
+  if (resumed > 0) {
+    try {
+      mgr2.upsertNotification("system", `auth-recover-${engine}`, String(now), {
+        title: `${label} \u5DF2\u767B\u5F55`,
+        body: truncate(`\u4EFB\u52A1\u5DF2\u6062\u590D\uFF08${resumed} \u4E2A\u4F1A\u8BDD\u81EA\u52A8\u62C9\u8D77\uFF09`, 160),
+        severity: "info",
+        group: "activity",
+        actionable: false,
+        domain: "session",
+        returnPath: "sessions"
+      });
+    } catch {
+    }
+  }
+  for (const c of takeBlockedCreates(engine)) {
+    try {
+      mgr2.upsertNotification("system", `auth-create-${engine}-${c.ts}`, String(c.ts), {
+        title: `${label} \u5DF2\u767B\u5F55\uFF0C\u53EF\u4EE5\u521B\u5EFA\u4E86`,
+        body: truncate(`\u6B64\u524D\u88AB\u62E6\u7684\u521B\u5EFA\u5DF2\u89E3\u9501\uFF1A${c.prompt_summary || "(\u65E0\u4EFB\u52A1\u6458\u8981)"}${c.cwd ? `\uFF08\u76EE\u5F55 ${c.cwd}\uFF09` : ""}`, 160),
+        severity: "info",
+        group: "activity",
+        actionable: false,
+        domain: "session",
+        returnPath: "sessions"
+      });
+    } catch {
+    }
+  }
+  for (const d2 of takeBlockedDispatches(engine)) {
+    try {
+      mgr2.upsertNotification("system", `auth-dispatch-${engine}-${d2.ts}`, String(d2.ts), {
+        title: `${label} \u5DF2\u767B\u5F55\uFF0C\u53EF\u4EE5\u91CD\u65B0\u6D3E\u5355`,
+        body: truncate(`\u6B64\u524D\u88AB\u62E6\u7684\u6D3E\u5355\u5DF2\u89E3\u9501\uFF1A${d2.title || d2.anchor}`, 160),
+        severity: "info",
+        group: "activity",
+        actionable: false,
+        domain: "session",
+        returnPath: "sessions"
+      });
+    } catch {
+    }
+  }
+}
+function scanNeedsAuthSessions(mgr2) {
+  const engines = /* @__PURE__ */ new Set();
+  for (const s of mgr2.sessions.values()) {
+    if (s.state.auth_hint && s.state.engine && s.state.engine !== "claude") engines.add(s.state.engine);
+  }
+  for (const e of engines) ensureAuthWatch(e);
+  return engines.size;
+}
+function reviveInstruction(s) {
+  return s.state.engine === "codex" ? "\u8BF7\u4ECE\u4E2D\u65AD\u5904\u63A5\u7EED\u63A8\u8FDB\u5F53\u524D\u4EFB\u52A1\uFF1A\u5148\u7B80\u8FF0\u5DF2\u5B8C\u6210\u90E8\u5206\u4E0E\u4E0B\u4E00\u6B65\uFF0C\u518D\u7EE7\u7EED\u6267\u884C\u3002" : "\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002";
+}
+function reviveEligible(mgr2, s) {
+  if (s.state.external) return "external";
+  if (s.agent) return "agent-alive";
+  if (s.state.org_parked) return "org-parked";
+  if (s.state.project_gid) {
+    const pg2 = findGroup(s.state.project_gid);
+    if (pg2 && pg2.status !== "active") return "group-not-active";
+  }
+  if (mgr2.isRetiredMember(s.state.session_id)) return "retired";
+  if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) return "resume-in-flight";
+  if (s.state.pinned && s.state.saved) return "pinned-dormant";
+  if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) return "resume-cooldown";
+  if (!s.state.relay_session_id) return "no-resume-anchor";
+  if (s.state.engine === "codex") {
+    if (s.state.status !== "ERROR" && s.state.status !== "WORKING") return "codex-idle";
+  } else {
+    const todos = readTaskStoreTodos(s.state.relay_session_id, mgr2.employeeHome(s.state));
+    if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+  }
+  if (Date.now() - s.state.updated_at > 48 * 36e5) return "stale-48h";
+  return null;
+}
+function reviveManagedSession(mgr2, id2, source, reason) {
+  const s = mgr2.sessions.get(id2);
+  if (!s) return { ok: false, skipped: "not-found" };
+  const why = reviveEligible(mgr2, s);
+  if (why) return { ok: false, skipped: why };
+  const title = s.state.title || id2.slice(0, 8);
+  try {
+    mgr2.resumeAgent(s, `[Agent \u6FC0\u6D3B\u5668 \xB7 ${source}] ${reason}\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u3002` + reviveInstruction(s));
+    mgr2.upsertNotification("system", "activator-revive", id2, {
+      title: "\u4F1A\u8BDD\u5DF2\u81EA\u52A8\u590D\u6D3B\uFF08\u6FC0\u6D3B\u5668\uFF09",
+      body: `${title}\uFF1A${reason}\u2014\u2014\u5DF2\u81EA\u52A8\u6062\u590D\uFF08\u6765\u6E90\uFF1A${source}\uFF09`,
+      severity: "info",
+      group: "attention",
+      actionable: false,
+      sessionId: id2,
+      domain: "session",
+      returnPath: "/"
+    });
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    mgr2.upsertNotification("system", "activator-fail", id2, {
+      title: "\u81EA\u52A8\u590D\u6D3B\u5931\u8D25\uFF08\u9700\u8981\u624B\u52A8\u5904\u7406\uFF09",
+      body: `${title}\uFF1A${reason}\u2014\u2014\u81EA\u52A8\u6062\u590D\u5931\u8D25\uFF1A${msg}\uFF08\u70B9\u4F1A\u8BDD\u5361\u7247\u53EF\u624B\u52A8\u6062\u590D\uFF09`,
+      severity: "waiting",
+      group: "attention",
+      actionable: true,
+      sessionId: id2,
+      domain: "session",
+      returnPath: "/"
+    });
+    return { ok: false, error: msg };
+  }
+}
+
+// src/lifecycle/context-link.ts
+import { randomUUID as randomUUID8 } from "node:crypto";
+function setExternalUsage(mgr2, id2, usage, model, contextUsage, at) {
+  const s = mgr2.sessions.get(id2);
+  if (!s) return;
+  s.state.usage = usage;
+  if (model) s.state.model = model;
+  if (contextUsage !== void 0) {
+    s.state.context_usage = contextUsage;
+    s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
+  }
+  s.state.updated_at = at ?? Date.now();
+  mgr2.bus.emit(id2, "SESSION_UPDATED", {
+    status: s.state.status,
+    action_summary: s.state.action_summary,
+    stats: { ...s.state.stats },
+    usage,
+    ...model ? { model } : {},
+    ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOfEffective(model ?? s.state.model) } : {},
+    // W-INJECT⑤
+    updated_at: s.state.updated_at
+  });
+}
+function ctxWdOf(s) {
+  if (!s.ctxWd) s.ctxWd = { capture: [] };
+  return s.ctxWd;
+}
+function ctxWdEnabled() {
+  return readPluginConfig().preCompactSummary !== false;
+}
+function ctxWatchdogOnContext(mgr2, s, tokens) {
+  if (!ctxWdEnabled() || s.state.external) return;
+  const limit = s.state.context_limit ?? 0;
+  if (limit <= 0 || tokens <= 0) return;
+  const wd = ctxWdOf(s);
+  const now = Date.now();
+  if ((wd.armed || wd.pending) && wd.since && now - wd.since > wdCaptureTimeoutMs()) {
+    wd.armed = false;
+    wd.pending = false;
+    wd.since = void 0;
+    wd.capture = [];
+    mgr2.pushExternalLog(s.state.session_id, "system", "\u538B\u7F29\u524D\u6458\u8981\u6D41\u7A0B\u8D85\u65F6\u653E\u5F03");
+  }
+  if (wd.lastWatermark !== void 0 && wd.lastWatermark - tokens > limit * wdDropRatio() && s.state.pre_compact_summary && !wd.reinjectPending) {
+    wd.reinjectPending = true;
+    mgr2.pushExternalLog(s.state.session_id, "system", "\u68C0\u6D4B\u5230\u4E0A\u4E0B\u6587\u5DF2\u538B\u7F29\uFF0C\u4EFB\u52A1\u72B6\u6001\u6458\u8981\u5C06\u5728\u4E0B\u4E00\u6761\u6D88\u606F\u81EA\u52A8\u6CE8\u5165");
+    mgr2.emitUpdated(s, true);
+  }
+  wd.lastWatermark = tokens;
+  if (tokens < limit * wdThreshold()) return;
+  if (wd.armed || wd.pending || wd.reinjectPending) return;
+  if (s.state.status !== "WORKING" || s.state.compacting) return;
+  if (wd.lastPromptAt && now - wd.lastPromptAt < wdCooldownMs()) return;
+  const prompt = compactPrompt();
+  wd.armed = true;
+  wd.since = now;
+  wd.lastPromptAt = now;
+  wd.capture = [];
+  if (s.agent) {
+    const msgId = randomUUID8();
+    s.unacked.push({ id: msgId, text: prompt, ts: now, hold: s.state.relay_session_id ? void 0 : "init" });
+    s.agent.sendMessage(prompt, void 0, "\u3010relay\u3011\u4E0A\u4E0B\u6587\u6C34\u4F4D\u544A\u8B66\uFF0C\u5DF2\u8BF7\u6C42\u4EFB\u52A1\u72B6\u6001\u6458\u8981", msgId);
+  }
+  mgr2.pushExternalLog(s.state.session_id, "system", `\u4E0A\u4E0B\u6587\u6C34\u4F4D ${Math.round(tokens / limit * 100)}%\uFF0C\u5DF2\u8BF7\u6C42\u538B\u7F29\u524D\u4EFB\u52A1\u72B6\u6001\u6458\u8981`);
+  mgr2.emitUpdated(s, true);
+}
+function ctxWatchdogOnTurnBoundary(mgr2, s, newStatus) {
+  const wd = s.ctxWd;
+  if (!wd) return;
+  if (newStatus === "WORKING") return;
+  const now = Date.now();
+  if (wd.armed) {
+    wd.armed = false;
+    wd.pending = true;
+    wd.since = now;
+    wd.capture = [];
+    return;
+  }
+  if (wd.pending) {
+    const text = wd.capture.join("\n").trim();
+    wd.pending = false;
+    wd.since = void 0;
+    wd.capture = [];
+    if (text) {
+      s.state.pre_compact_summary = text;
+      mgr2.pushExternalLog(s.state.session_id, "system", "\u538B\u7F29\u524D\u4EFB\u52A1\u72B6\u6001\u6458\u8981\u5DF2\u56FA\u5316");
+    }
+    mgr2.emitUpdated(s, true);
+  }
+}
+
 // src/commands/notify-commands.ts
 function createNotifyCommands(mgr2) {
   return {
@@ -48875,7 +49176,7 @@ function createCloudCommands(mgr2) {
 }
 
 // src/commands/board-commands.ts
-import { statSync as statSync7, readFileSync as readFileSync23 } from "node:fs";
+import { statSync as statSync8, readFileSync as readFileSync24 } from "node:fs";
 import { resolve as resolve8 } from "node:path";
 function createBoardCommands(mgr2) {
   return {
@@ -48932,7 +49233,7 @@ function createBoardCommands(mgr2) {
       }
       let st2;
       try {
-        st2 = statSync7(hit.path);
+        st2 = statSync8(hit.path);
       } catch {
         return { command_id: cmd.command_id, ok: false, error: imgHit ? "\u56FE\u7247\u5DF2\u8FC7\u671F\uFF08\u4E34\u65F6\u9644\u4EF6\u5B9A\u671F\u6E05\u626B\uFF09" : "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
       }
@@ -48942,7 +49243,7 @@ function createBoardCommands(mgr2) {
       }
       const ref = cmd.command_id;
       try {
-        const buf = readFileSync23(hit.path);
+        const buf = readFileSync24(hit.path);
         const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
         for (let seq = 0; seq < total; seq++) {
           mgr2.bus.emitTransient(
@@ -49097,7 +49398,7 @@ async function generateTitle(task, model, onSid, cwd, configHome) {
 }
 
 // src/cron.ts
-import { readFileSync as readFileSync24 } from "node:fs";
+import { readFileSync as readFileSync25 } from "node:fs";
 import { join as join30 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
 var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
@@ -49137,7 +49438,7 @@ function normalizeTask(raw, fallbackId) {
 function readCronTasks(cwd) {
   let text;
   try {
-    text = readFileSync24(join30(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+    text = readFileSync25(join30(cwd, ".claude", "scheduled_tasks.json"), "utf8");
   } catch (e) {
     return e.code === "ENOENT" ? void 0 : "bad";
   }
@@ -49165,38 +49466,6 @@ function readCronTasks(cwd) {
 }
 function cronTasksKey(tasks) {
   return JSON.stringify(tasks);
-}
-
-// src/task-store.ts
-import { readdirSync as readdirSync10, readFileSync as readFileSync25, statSync as statSync8 } from "node:fs";
-import { homedir as homedir11 } from "node:os";
-import path3 from "node:path";
-function readTaskStoreTodos(cliSessionId, base) {
-  const dir = path3.join(base ?? path3.join(homedir11(), ".claude"), "tasks", cliSessionId);
-  let files;
-  try {
-    files = readdirSync10(dir).filter((f) => f.endsWith(".json"));
-  } catch {
-    return null;
-  }
-  const out = [];
-  for (const f of files) {
-    try {
-      const fp2 = path3.join(dir, f);
-      const t = JSON.parse(readFileSync25(fp2, "utf-8"));
-      if (t.status === "deleted") continue;
-      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
-      if (!subject) continue;
-      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
-      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-      const parsed = Number(t.id);
-      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync8(fp2).mtimeMs, ...activeForm });
-    } catch {
-    }
-  }
-  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  return out;
 }
 
 // src/board-mirror.ts
@@ -49278,7 +49547,7 @@ function escalateClaimed(now, dir) {
 
 // src/experience.ts
 import { existsSync as existsSync20, mkdirSync as mkdirSync14, readFileSync as readFileSync26, readdirSync as readdirSync11, renameSync as renameSync6, writeFileSync as writeFileSync14, appendFileSync as appendFileSync3, statSync as statSync9 } from "node:fs";
-import { randomUUID as randomUUID8 } from "node:crypto";
+import { randomUUID as randomUUID9 } from "node:crypto";
 import { dirname as dirname8, join as join31 } from "node:path";
 var EXPERIENCE_KINDS = ["pitfall", "practice", "preference", "fact", "term"];
 function envNum2(name, fallback, min = 1) {
@@ -49520,7 +49789,7 @@ function appendExperience(input, dir) {
   if ((counts.byRole.get(roleScope) ?? 0) >= expCapRole()) return { ok: false, error: `\u89D2\u8272 ${roleScope} \u7684 active \u7ECF\u9A8C\u5DF2\u8FBE\u8F6F\u4E0A\u9650 ${expCapRole()}\u2014\u2014\u5148\u6DD8\u6C70\u518D\u7533\u62A5` };
   if ((counts.byProject.get(projectScope) ?? 0) >= expCapProject()) return { ok: false, error: `\u9879\u76EE ${projectScope === "global" ? "(global)" : projectScope} \u7684 active \u7ECF\u9A8C\u5DF2\u8FBE\u8F6F\u4E0A\u9650 ${expCapProject()}\u2014\u2014\u5148\u6DD8\u6C70\u518D\u7533\u62A5` };
   const entry = {
-    id: `exp-${randomUUID8().slice(0, 8)}`,
+    id: `exp-${randomUUID9().slice(0, 8)}`,
     text,
     kind: input.kind,
     role_scope: roleScope,
@@ -50022,7 +50291,7 @@ function importExperience(path6, dir) {
       counts.byProject.set(e.project_scope, (counts.byProject.get(e.project_scope) ?? 0) + 1);
     }
     const entry = JSON.parse(JSON.stringify(e));
-    if (store.entries.some((x) => x.id === entry.id)) entry.id = `exp-${randomUUID8().slice(0, 8)}`;
+    if (store.entries.some((x) => x.id === entry.id)) entry.id = `exp-${randomUUID9().slice(0, 8)}`;
     store.entries.push(entry);
     res.inserted++;
   }
@@ -50229,7 +50498,7 @@ function buildRoleInjection(input) {
 
 // src/team-rules.ts
 import { existsSync as existsSync22, mkdirSync as mkdirSync16, readFileSync as readFileSync28, readdirSync as readdirSync12, renameSync as renameSync8, writeFileSync as writeFileSync16 } from "node:fs";
-import { randomUUID as randomUUID9 } from "node:crypto";
+import { randomUUID as randomUUID10 } from "node:crypto";
 import { join as join33 } from "node:path";
 function envNum4(name, fallback, min = 1) {
   const raw = process.env[name];
@@ -50367,7 +50636,7 @@ function buildEntry(input, now, dir) {
   return {
     ok: true,
     entry: {
-      id: `rule-${randomUUID9().slice(0, 8)}`,
+      id: `rule-${randomUUID10().slice(0, 8)}`,
       text,
       audience: aud.value,
       scope: scope.value,
@@ -50902,7 +51171,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*\//,
 
 // src/agent-codex.ts
 import { spawn as spawn5 } from "node:child_process";
-import { randomUUID as randomUUID10 } from "node:crypto";
+import { randomUUID as randomUUID11 } from "node:crypto";
 import { existsSync as existsSync24, mkdtempSync, rmSync as rmSync5, writeFileSync as writeFileSync19 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter as delimiter3, dirname as dirname10, join as join36 } from "node:path";
@@ -51034,7 +51303,7 @@ function materializeImages(images) {
   return out;
 }
 var CodexAgentSession = class {
-  id = randomUUID10();
+  id = randomUUID11();
   startedAt = Date.now();
   stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   ended = false;
@@ -51417,7 +51686,7 @@ var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
 var ARTIFACT_STAT_INTERVAL_MS = 2e4;
-var MAX_SESSIONS = 20;
+var MAX_SESSIONS2 = 20;
 var ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
 var ARTIFACT_CHUNK_BYTES = 512 * 1024;
 var ARTIFACT_MIME = {
@@ -52045,23 +52314,10 @@ provider=${opts.provider ?? "default"}` : void 0,
   buildSnapshotLogs(budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES2, perSessionCap = SNAPSHOT_LOGS_PER_SESSION2) {
     return buildSnapshotLogs(this.sessions, budgetBytes, perSessionCap);
   }
-  // Relay 重启后收养历史会话（agent 为空，仅展示不可操作）
+  // Relay 重启后收养历史会话（agent 为空，仅展示不可操作）——W-SPLIT-S5①：算法体
+  // 迁 lifecycle/adopt.ts（本方法=委托壳，S2 buildSnapshotLogsBudget 同款）
   adopt(replayed2) {
-    const entries = [...replayed2.entries()].sort((a, b) => b[1].state.updated_at - a[1].state.updated_at);
-    let adopted2 = 0;
-    for (const [id2, rs2] of entries) {
-      if (this.sessions.size >= MAX_SESSIONS) break;
-      rs2.state.historical = true;
-      const ov2 = this.titleOverrides[id2];
-      if (ov2) {
-        rs2.state.title = ov2;
-        rs2.state.title_locked = true;
-      }
-      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
-      this.applyDeclaredDeliverables(id2);
-      adopted2++;
-    }
-    return adopted2;
+    return adoptReplayed(this, replayed2);
   }
   // #75 无人值守连续性（2026-09-19 用户拍板最小闭环：不追求完善机制，先保证
   // 「重启后当前工作会话能被拉起继续干活」）：relay 启动收养历史托管会话后，凡
@@ -52073,185 +52329,21 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 按最近活跃排序取 3 个；失败即止不重试（留 historical 态 = 与旧行为一致，
   // 等人来发消息）。CCR_NO_AUTOREVIVE=1 逃生阀（测试/紧急关闭）。
   autoReviveManaged(limit = 3) {
-    if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
-    const candidates = [];
-    for (const s of this.sessions.values()) {
-      if (this.reviveEligible(s)) continue;
-      candidates.push({ s, updated: s.state.updated_at });
-    }
-    candidates.sort((a, b) => b.updated - a.updated);
-    let revived = 0;
-    for (const c of candidates) {
-      if (revived >= limit) break;
-      try {
-        this.resumeAgent(c.s, "[relay \u81EA\u52A8\u6062\u590D] relay \u91CD\u542F\u5B8C\u6210\uFF0C\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002" + this.reviveInstruction(c.s));
-        revived++;
-      } catch (e) {
-        console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} \u6062\u590D\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-    if (revived > 0) console.log(`[auto-revive] \u5DF2\u81EA\u52A8\u62C9\u8D77 ${revived} \u4E2A\u6709\u672A\u5B8C\u6210\u5F85\u529E\u7684\u6258\u7BA1\u4F1A\u8BDD`);
-    return revived;
+    return autoReviveManaged(this, limit);
   }
-  // ---------- #102 批 C：引擎登录就绪恢复三面（探/登/通之「通」） ----------
-  // ready 三源（watch 兜底循环 / 批 B pane 轮验 / verify 手动验证）都收敛到本入口；
-  // 10s 幂等窗去重——同一就绪事件多源重复触发只跑一轮。
-  //   面一（会话恢复）：运行时失效进 needs_auth 的 ERROR 会话自动 resume——复用
-  //     resumeAgent + renewable 值守 prompt（流断即丢不记重放账，duty 重推导再注入），
-  //     恢复尝试即清 auth_hint（摘 needs_auth 牌防重复触发）；
-  //   面二（创建拦截）：无会话实体可恢复——消费 intent 快照发通知「已登录，可以创建了」
-  //     +anchor/task 摘要回显；
-  //   面三（派单拦截）：通知「已登录，可以重新派单」——不自动重放（失败重放有
-  //     副作用风险，重发是用户动作）。
+  // W-SPLIT-S5②：引擎登录恢复三面体+机制注释迁 lifecycle/revive.ts（构造区 :825/:830
+  // 的 ready-hook 与 boot 扫描回调不改，走本壳）
   recoverEngineAfterAuth(engine) {
-    const now = Date.now();
-    if (now - (this.authRecoverAt.get(engine) ?? 0) < 1e4) return;
-    this.authRecoverAt.set(engine, now);
-    const label = getEngineDefinition(engine)?.label ?? engine;
-    let resumed = 0;
-    for (const s of this.sessions.values()) {
-      if (s.state.engine !== engine || !s.state.auth_hint || s.state.status !== "ERROR") continue;
-      s.state.auth_hint = void 0;
-      try {
-        this.resumeAgent(
-          s,
-          `[\u5F15\u64CE\u767B\u5F55\u6062\u590D] ${label} \u5DF2\u767B\u5F55\uFF0C\u81EA\u52A8\u6062\u590D\u672C\u4F1A\u8BDD\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002` + this.reviveInstruction(s),
-          void 0,
-          void 0,
-          void 0,
-          { renewable: true }
-        );
-        this.pushExternalLog(s.state.session_id, "system", `${label} \u5DF2\u767B\u5F55\uFF0C\u4F1A\u8BDD\u5DF2\u6062\u590D`);
-        resumed++;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.pushExternalLog(s.state.session_id, "system", `${label} \u5DF2\u767B\u5F55\uFF0C\u4F46\u4F1A\u8BDD\u81EA\u52A8\u6062\u590D\u5931\u8D25\uFF1A${msg}\uFF08\u53EF\u624B\u52A8\u53D1\u6D88\u606F\u62C9\u8D77\uFF09`);
-      }
-    }
-    if (resumed > 0) {
-      try {
-        this.upsertNotification("system", `auth-recover-${engine}`, String(now), {
-          title: `${label} \u5DF2\u767B\u5F55`,
-          body: truncate(`\u4EFB\u52A1\u5DF2\u6062\u590D\uFF08${resumed} \u4E2A\u4F1A\u8BDD\u81EA\u52A8\u62C9\u8D77\uFF09`, 160),
-          severity: "info",
-          group: "activity",
-          actionable: false,
-          domain: "session",
-          returnPath: "sessions"
-        });
-      } catch {
-      }
-    }
-    for (const c of takeBlockedCreates(engine)) {
-      try {
-        this.upsertNotification("system", `auth-create-${engine}-${c.ts}`, String(c.ts), {
-          title: `${label} \u5DF2\u767B\u5F55\uFF0C\u53EF\u4EE5\u521B\u5EFA\u4E86`,
-          body: truncate(`\u6B64\u524D\u88AB\u62E6\u7684\u521B\u5EFA\u5DF2\u89E3\u9501\uFF1A${c.prompt_summary || "(\u65E0\u4EFB\u52A1\u6458\u8981)"}${c.cwd ? `\uFF08\u76EE\u5F55 ${c.cwd}\uFF09` : ""}`, 160),
-          severity: "info",
-          group: "activity",
-          actionable: false,
-          domain: "session",
-          returnPath: "sessions"
-        });
-      } catch {
-      }
-    }
-    for (const d2 of takeBlockedDispatches(engine)) {
-      try {
-        this.upsertNotification("system", `auth-dispatch-${engine}-${d2.ts}`, String(d2.ts), {
-          title: `${label} \u5DF2\u767B\u5F55\uFF0C\u53EF\u4EE5\u91CD\u65B0\u6D3E\u5355`,
-          body: truncate(`\u6B64\u524D\u88AB\u62E6\u7684\u6D3E\u5355\u5DF2\u89E3\u9501\uFF1A${d2.title || d2.anchor}`, 160),
-          severity: "info",
-          group: "activity",
-          actionable: false,
-          domain: "session",
-          returnPath: "sessions"
-        });
-      } catch {
-      }
-    }
+    recoverEngineAfterAuth(this, engine);
   }
-  // #102 批 C：重启扫描——relay 起动收养后为 needs_auth 态（auth_hint 在场）的会话
-  // 挂兜底重探（不拉活：拉活面归 autoReviveManaged 的待办判定；此处只挂探针监听，
-  // ready 即走恢复三面）。不受 CCR_NO_AUTOREVIVE 阀控（探测≠拉活）。
+  // W-SPLIT-S5②：needs_auth 兜底重探扫描体迁 lifecycle/revive.ts（注释同迁）
   scanNeedsAuthSessions() {
-    const engines = /* @__PURE__ */ new Set();
-    for (const s of this.sessions.values()) {
-      if (s.state.auth_hint && s.state.engine && s.state.engine !== "claude") engines.add(s.state.engine);
-    }
-    for (const e of engines) ensureAuthWatch(e);
-    return engines.size;
+    return scanNeedsAuthSessions(this);
   }
-  // ---------- W-ACTIVATOR 单会话复活资格链（autoReviveManaged 过滤链抽出共用） ----------
-  // 返回 null=可拉；字符串=skip 原因（审计/测试可断言）。boot 扫描与事件驱动激活器
-  // 共用同一链——两条入口纪律零分叉（外部/在场/parked/退休/互斥/pin 休眠/熔断/锚点/
-  // 待办/48h 新鲜度，语义逐条搬自 autoReviveManaged 原实现，行为零变）。
-  // W-CDXREV 复活注入指令 engine 感知：claude 读任务清单续跑（既有口径）；codex 无
-  // Claude 系任务存储可读——改为「从中断处接续」口径（resume 上下文在 thread 里）
-  reviveInstruction(s) {
-    return s.state.engine === "codex" ? "\u8BF7\u4ECE\u4E2D\u65AD\u5904\u63A5\u7EED\u63A8\u8FDB\u5F53\u524D\u4EFB\u52A1\uFF1A\u5148\u7B80\u8FF0\u5DF2\u5B8C\u6210\u90E8\u5206\u4E0E\u4E0B\u4E00\u6B65\uFF0C\u518D\u7EE7\u7EED\u6267\u884C\u3002" : "\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002";
-  }
-  reviveEligible(s) {
-    if (s.state.external) return "external";
-    if (s.agent) return "agent-alive";
-    if (s.state.org_parked) return "org-parked";
-    if (s.state.project_gid) {
-      const pg2 = findGroup(s.state.project_gid);
-      if (pg2 && pg2.status !== "active") return "group-not-active";
-    }
-    if (this.isRetiredMember(s.state.session_id)) return "retired";
-    if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) return "resume-in-flight";
-    if (s.state.pinned && s.state.saved) return "pinned-dormant";
-    if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) return "resume-cooldown";
-    if (!s.state.relay_session_id) return "no-resume-anchor";
-    if (s.state.engine === "codex") {
-      if (s.state.status !== "ERROR" && s.state.status !== "WORKING") return "codex-idle";
-    } else {
-      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
-      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
-    }
-    if (Date.now() - s.state.updated_at > 48 * 36e5) return "stale-48h";
-    return null;
-  }
-  // ---------- W-ACTIVATOR 事件驱动复活统一入口（agent-activator.ts 调用面） ----------
-  // 与 liveness 门的关系：投递点（sendMessage/dispatch）的判死拉活已在收编语义里
-  //（resumePending 互斥=天然去重锁，本入口的 Eligible 链同款检查——两路不会双拉）；
-  // 本入口补「没人投递时死了也能拉回」：agent-activator 订阅 SESSION_ERROR /
-  // DISPATCH_DONE(failed) 触发。通知面两态（stableKey 幂等）：成功=info/失败=waiting
-  // attention 级（可操作跳会话卡）。
+  // W-SPLIT-S5②：复活资格链（reviveInstruction/reviveEligible）整段迁 lifecycle/revive.ts 私有函数（类内互调全随迁）
+  // W-SPLIT-S5②：激活器统一复活入口体迁 lifecycle/revive.ts（agent-activator 调用面走本壳）
   reviveManagedSession(id2, source, reason) {
-    const s = this.sessions.get(id2);
-    if (!s) return { ok: false, skipped: "not-found" };
-    const why = this.reviveEligible(s);
-    if (why) return { ok: false, skipped: why };
-    const title = s.state.title || id2.slice(0, 8);
-    try {
-      this.resumeAgent(s, `[Agent \u6FC0\u6D3B\u5668 \xB7 ${source}] ${reason}\u3002\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u3002` + this.reviveInstruction(s));
-      this.upsertNotification("system", "activator-revive", id2, {
-        title: "\u4F1A\u8BDD\u5DF2\u81EA\u52A8\u590D\u6D3B\uFF08\u6FC0\u6D3B\u5668\uFF09",
-        body: `${title}\uFF1A${reason}\u2014\u2014\u5DF2\u81EA\u52A8\u6062\u590D\uFF08\u6765\u6E90\uFF1A${source}\uFF09`,
-        severity: "info",
-        group: "attention",
-        actionable: false,
-        sessionId: id2,
-        domain: "session",
-        returnPath: "/"
-      });
-      return { ok: true };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.upsertNotification("system", "activator-fail", id2, {
-        title: "\u81EA\u52A8\u590D\u6D3B\u5931\u8D25\uFF08\u9700\u8981\u624B\u52A8\u5904\u7406\uFF09",
-        body: `${title}\uFF1A${reason}\u2014\u2014\u81EA\u52A8\u6062\u590D\u5931\u8D25\uFF1A${msg}\uFF08\u70B9\u4F1A\u8BDD\u5361\u7247\u53EF\u624B\u52A8\u6062\u590D\uFF09`,
-        severity: "waiting",
-        group: "attention",
-        actionable: true,
-        sessionId: id2,
-        domain: "session",
-        returnPath: "/"
-      });
-      return { ok: false, error: msg };
-    }
+    return reviveManagedSession(this, id2, source, reason);
   }
   // ---------- 外部会话（hooks 桥接）----------
   bridge = null;
@@ -52859,25 +52951,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）。
   // at 语义同 setTodos：首读 usage 种子传转录时刻（#157）
   setExternalUsage(id2, usage, model, contextUsage, at) {
-    const s = this.sessions.get(id2);
-    if (!s) return;
-    s.state.usage = usage;
-    if (model) s.state.model = model;
-    if (contextUsage !== void 0) {
-      s.state.context_usage = contextUsage;
-      s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
-    }
-    s.state.updated_at = at ?? Date.now();
-    this.bus.emit(id2, "SESSION_UPDATED", {
-      status: s.state.status,
-      action_summary: s.state.action_summary,
-      stats: { ...s.state.stats },
-      usage,
-      ...model ? { model } : {},
-      ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOfEffective(model ?? s.state.model) } : {},
-      // W-INJECT⑤
-      updated_at: s.state.updated_at
-    });
+    setExternalUsage(this, id2, usage, model, contextUsage, at);
   }
   setExternalWaiting(id2, payload) {
     const s = this.sessions.get(id2);
@@ -53724,7 +53798,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.gaveUp = false;
-      s.unacked.push({ id: randomUUID11(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn", ...opts?.renewable ? { renewable: true } : {} });
+      s.unacked.push({ id: randomUUID12(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn", ...opts?.renewable ? { renewable: true } : {} });
       this.persistRestartLedger();
       this.emitUpdated(s, true);
       return;
@@ -53804,7 +53878,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.lastProgressKind = "";
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
-    s.unacked.push({ id: randomUUID11(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn", ...opts?.renewable ? { renewable: true } : {} });
+    s.unacked.push({ id: randomUUID12(), text: firstMessage, images, refs: refs?.length ? refs : void 0, ts: Date.now(), hold: "turn", ...opts?.renewable ? { renewable: true } : {} });
     this.persistRestartLedger();
     initTimer = setTimeout(() => {
       initTimer = null;
@@ -54341,7 +54415,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
       appendDispatch({
         ts: Date.now(),
-        id: randomUUID11(),
+        id: randomUUID12(),
         tier: e.tier,
         target: "org-command",
         ...e.anchor ? { project_anchor: e.anchor } : {},
@@ -54404,7 +54478,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           });
           appendDispatch({
             ts: Date.now(),
-            id: randomUUID11(),
+            id: randomUUID12(),
             tier: e.tier,
             target: "org-command",
             ...e.anchor ? { project_anchor: e.anchor } : {},
@@ -54469,7 +54543,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const parkedPinned = !!s.state.pinned && !!s.state.saved && !s.agent;
     if (!tripped && !parkedPinned) return false;
     if (queueMessage !== void 0) {
-      s.unacked.push({ id: randomUUID11(), text: queueMessage, ts: Date.now() });
+      s.unacked.push({ id: randomUUID12(), text: queueMessage, ts: Date.now() });
       this.persistRestartLedger();
     }
     const why = tripped ? `\u6062\u590D\u8FDE\u7EED\u5931\u8D25 ${s.resumeFailStreak ?? "?"} \u6B21\u5DF2\u7194\u65AD\uFF0C\u7EA6 ${Math.max(1, Math.round(((s.resumeCooldownUntil ?? 0) - Date.now()) / 6e4))} \u5206\u949F\u540E\u81EA\u52A8\u91CD\u8BD5` : "\u4F1A\u8BDD\u4E3A\u7F6E\u9876\u4F11\u7720\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF09";
@@ -54495,7 +54569,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const images = backlog.flatMap((m) => m.images ?? []).slice(0, 4);
     this.pushExternalLog(s.state.session_id, "system", `\u6062\u590D\u6210\u529F\uFF0C\u8865\u6295\u6392\u961F\u6D88\u606F ${backlog.length} \u6761`);
     if (s.agent) {
-      s.unacked.push({ id: randomUUID11(), text, images: images.length ? images : void 0, ts: Date.now(), hold: "turn" });
+      s.unacked.push({ id: randomUUID12(), text, images: images.length ? images : void 0, ts: Date.now(), hold: "turn" });
       s.agent.sendMessage(text, images.length ? images : void 0);
       this.persistRestartLedger();
     }
@@ -54733,8 +54807,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!dutyEnabled() || !this.leaderId) return;
     if (readPluginConfig().duty === false) {
       this.appendDutyRound({
-        feed_id: randomUUID11(),
-        feed_generation: randomUUID11(),
+        feed_id: randomUUID12(),
+        feed_generation: randomUUID12(),
         trigger: [trigger],
         result: "disabled",
         reason: "global_switch",
@@ -54745,8 +54819,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     const targetId = this.dutyTargetId();
     if (!targetId) {
       this.appendDutyRound({
-        feed_id: randomUUID11(),
-        feed_generation: randomUUID11(),
+        feed_id: randomUUID12(),
+        feed_generation: randomUUID12(),
         trigger: [trigger],
         result: "sleep",
         reason: "no_pm_target",
@@ -54759,8 +54833,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     const leader2 = this.sessions.get(targetId);
     if (leader2?.state.status === "WORKING") return;
     const from = Date.now();
-    const feedId = randomUUID11();
-    const generation = randomUUID11();
+    const feedId = randomUUID12();
+    const generation = randomUUID12();
     this.dutyEpoch += 1;
     let verdict;
     try {
@@ -55265,7 +55339,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   auditOrgCommand(actor, device, action, anchor, tier, ok2, receipt) {
     appendDispatch({
       ts: Date.now(),
-      id: randomUUID11(),
+      id: randomUUID12(),
       tier,
       target: "org-command",
       ...anchor ? { project_anchor: anchor } : {},
@@ -55286,7 +55360,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     try {
       appendDispatch({
         ts: Date.now(),
-        id: randomUUID11(),
+        id: randomUUID12(),
         tier: "\u968F\u624B\u529E",
         target: "org-command",
         ...projectScope !== "global" ? { project_anchor: projectScope } : {},
@@ -55305,7 +55379,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     try {
       appendDispatch({
         ts: Date.now(),
-        id: randomUUID11(),
+        id: randomUUID12(),
         tier: "\u968F\u624B\u529E",
         target: "org-command",
         ...scope.startsWith("project:") ? { project_anchor: scope.slice(8) } : {},
@@ -55461,7 +55535,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!id2) {
             appendDispatch({
               ts: Date.now(),
-              id: randomUUID11(),
+              id: randomUUID12(),
               tier: "\u6682\u7F13",
               target: "org-leader",
               status: "done",
@@ -56159,7 +56233,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
       appendDispatch({
         ts: Date.now(),
-        id: randomUUID11(),
+        id: randomUUID12(),
         tier: "\u770B\u95E8\u72D7",
         target: "board-mirror",
         status: "done",
@@ -56326,7 +56400,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!anchorSt.isDirectory()) {
       return { ok: false, error: `\u951A\u8DEF\u5F84\u4E0D\u662F\u76EE\u5F55: ${anchor}\uFF08\u662F\u4E2A\u6587\u4EF6\u2014\u2014\u6D3E\u5355\u9700\u8981\u76EE\u5F55\u951A\uFF0C\u8BF7\u6838\u5BF9\u8DEF\u5F84\u62FC\u5199\uFF09` };
     }
-    let dispatchId = input.queue_replay ?? randomUUID11();
+    let dispatchId = input.queue_replay ?? randomUUID12();
     if (input.redispatch_of && !input.queue_replay) {
       const root = input.redispatch_of.trim().replace(/#r\d+$/, "");
       if (!root) return { ok: false, error: "redispatch_of \u5FC5\u586B\u539F\u5355 dispatch_id" };
@@ -56458,7 +56532,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     const roleInjection = buildRoleInjection({ session_id: veteran ?? void 0, role: expRole });
     const rulesInjection = buildRuleInjection({ role: expRole, anchor });
-    const taskRefId = input.gid ? input.entry_id ?? `t-${randomUUID11().slice(0, 8)}` : "";
+    const taskRefId = input.gid ? input.entry_id ?? `t-${randomUUID12().slice(0, 8)}` : "";
     const taskRefHead = taskRefId ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}
 ` : "";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
@@ -56475,7 +56549,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         const veteranAlive = veteranSession.state.status === "DONE" && !!veteranAgent && this.agentStreamAlive(veteranSession);
         if (veteranAlive && veteranAgent) {
           const vs2 = veteranSession;
-          const wakeId = randomUUID11();
+          const wakeId = randomUUID12();
           vs2.unacked.push({ id: wakeId, text: dispatchPrompt, ts: Date.now(), hold: "turn" });
           veteranAgent.sendMessage(dispatchPrompt);
           vs2.state.status = "WORKING";
@@ -56670,7 +56744,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   //（boot reload 回灌）——enqueue 一律内存 push+写穿；若从盘 load-append（首版实现），
   // 排水期间盘落后内存，重放再排队会把整条旧队列复制回来（测试 H3 实锤四重账）。
   enqueueCapDispatch(input, g2, tier, anchor, actor, engineFields) {
-    const dispatchId = input.queue_replay ?? randomUUID11();
+    const dispatchId = input.queue_replay ?? randomUUID12();
     const enqueuedAt = Date.now();
     const item = { dispatch_id: dispatchId, enqueued_at: enqueuedAt, input: { ...input } };
     if (this.dispatchQueueItems.length >= 200) {
@@ -57215,75 +57289,14 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 产物落 s.state.pre_compact_summary（持久+下发+回放）。挂点：onContext（阈值/
   // 骤降判定）、onAssistantText（捕获）、onStatusChange（回合边界推进状态机）、
   // COMMAND_MESSAGE（首帧注回）。
-  ctxWdOf(s) {
-    if (!s.ctxWd) s.ctxWd = { capture: [] };
-    return s.ctxWd;
-  }
-  /** 看门狗总开关（plugin-config 第六键 preCompactSummary，缺省 true） */
-  ctxWdEnabled() {
-    return readPluginConfig().preCompactSummary !== false;
-  }
-  /** onContext 挂点：惰性超时 → 骤降判定（置注回标志）→ 阈值触发（发摘要指令） */
+  // W-SPLIT-S5③：ctxWdOf/ctxWdEnabled（看门狗开关 plugin-config 第六键）随体迁
+  // lifecycle/context-link.ts；两挂点留壳（:2833/:2958/:3095 调用面零改）
   ctxWatchdogOnContext(s, tokens) {
-    if (!this.ctxWdEnabled() || s.state.external) return;
-    const limit = s.state.context_limit ?? 0;
-    if (limit <= 0 || tokens <= 0) return;
-    const wd = this.ctxWdOf(s);
-    const now = Date.now();
-    if ((wd.armed || wd.pending) && wd.since && now - wd.since > wdCaptureTimeoutMs()) {
-      wd.armed = false;
-      wd.pending = false;
-      wd.since = void 0;
-      wd.capture = [];
-      this.pushExternalLog(s.state.session_id, "system", "\u538B\u7F29\u524D\u6458\u8981\u6D41\u7A0B\u8D85\u65F6\u653E\u5F03");
-    }
-    if (wd.lastWatermark !== void 0 && wd.lastWatermark - tokens > limit * wdDropRatio() && s.state.pre_compact_summary && !wd.reinjectPending) {
-      wd.reinjectPending = true;
-      this.pushExternalLog(s.state.session_id, "system", "\u68C0\u6D4B\u5230\u4E0A\u4E0B\u6587\u5DF2\u538B\u7F29\uFF0C\u4EFB\u52A1\u72B6\u6001\u6458\u8981\u5C06\u5728\u4E0B\u4E00\u6761\u6D88\u606F\u81EA\u52A8\u6CE8\u5165");
-      this.emitUpdated(s, true);
-    }
-    wd.lastWatermark = tokens;
-    if (tokens < limit * wdThreshold()) return;
-    if (wd.armed || wd.pending || wd.reinjectPending) return;
-    if (s.state.status !== "WORKING" || s.state.compacting) return;
-    if (wd.lastPromptAt && now - wd.lastPromptAt < wdCooldownMs()) return;
-    const prompt = compactPrompt();
-    wd.armed = true;
-    wd.since = now;
-    wd.lastPromptAt = now;
-    wd.capture = [];
-    if (s.agent) {
-      const msgId = randomUUID11();
-      s.unacked.push({ id: msgId, text: prompt, ts: now, hold: s.state.relay_session_id ? void 0 : "init" });
-      s.agent.sendMessage(prompt, void 0, "\u3010relay\u3011\u4E0A\u4E0B\u6587\u6C34\u4F4D\u544A\u8B66\uFF0C\u5DF2\u8BF7\u6C42\u4EFB\u52A1\u72B6\u6001\u6458\u8981", msgId);
-    }
-    this.pushExternalLog(s.state.session_id, "system", `\u4E0A\u4E0B\u6587\u6C34\u4F4D ${Math.round(tokens / limit * 100)}%\uFF0C\u5DF2\u8BF7\u6C42\u538B\u7F29\u524D\u4EFB\u52A1\u72B6\u6001\u6458\u8981`);
-    this.emitUpdated(s, true);
+    ctxWatchdogOnContext(this, s, tokens);
   }
-  /** onStatusChange 挂点：回合终态边界推进两段态（armed→pending 升级 / pending 收口） */
+  /** onStatusChange 挂点：回合终态边界推进两段态（体在 lifecycle/context-link.ts） */
   ctxWatchdogOnTurnBoundary(s, newStatus) {
-    const wd = s.ctxWd;
-    if (!wd) return;
-    if (newStatus === "WORKING") return;
-    const now = Date.now();
-    if (wd.armed) {
-      wd.armed = false;
-      wd.pending = true;
-      wd.since = now;
-      wd.capture = [];
-      return;
-    }
-    if (wd.pending) {
-      const text = wd.capture.join("\n").trim();
-      wd.pending = false;
-      wd.since = void 0;
-      wd.capture = [];
-      if (text) {
-        s.state.pre_compact_summary = text;
-        this.pushExternalLog(s.state.session_id, "system", "\u538B\u7F29\u524D\u4EFB\u52A1\u72B6\u6001\u6458\u8981\u5DF2\u56FA\u5316");
-      }
-      this.emitUpdated(s, true);
-    }
+    ctxWatchdogOnTurnBoundary(this, s, newStatus);
   }
   emitUpdated(s, force, at) {
     const now = Date.now();
@@ -57471,7 +57484,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       lane === "ended" ? `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2\u65AD\u5F00\u4E14 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u72B6\u6001\u672A\u6536\u5C3E\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D` : `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u8FDB\u7A0B\u6811 CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D`
     );
     const takeoverReceipt = truncate(lane === "ended" ? `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u6D41\u5DF2\u65AD\u5F00 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF0C\u81EA\u52A8\u6062\u590D` : `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6740\u6811\u6062\u590D`, 200);
-    const takeoverId = randomUUID11();
+    const takeoverId = randomUUID12();
     appendDispatch({
       ts: Date.now(),
       id: takeoverId,
@@ -57500,7 +57513,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         );
         this.notifyConfirm(sid, `\u4F1A\u8BDD\u300C${s.state.title || sid.slice(0, 8)}\u300D\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u624B\u52A8\u5904\u7406`);
         const gaveUpReceipt = truncate(`\u770B\u95E8\u72D7\uFF1A1 \u5C0F\u65F6\u5185\u81EA\u6108 ${s.wd.recoveries.length} \u6B21\u8FBE\u4E0A\u9650\uFF0C\u505C\u6B62\u81EA\u52A8\u5E72\u9884`, 200);
-        const gaveUpId = randomUUID11();
+        const gaveUpId = randomUUID12();
         appendDispatch({
           ts: Date.now(),
           id: gaveUpId,
@@ -57638,10 +57651,10 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   lastStoreTodos = /* @__PURE__ */ new Map();
   evictOldSessions() {
-    if (this.sessions.size < MAX_SESSIONS) return;
+    if (this.sessions.size < MAX_SESSIONS2) return;
     const finished = [...this.sessions.values()].filter((s) => (s.state.status === "DONE" || s.state.status === "ERROR") && !s.state.pinned).sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
-      if (this.sessions.size < MAX_SESSIONS) break;
+      if (this.sessions.size < MAX_SESSIONS2) break;
       this.closeOpenDispatches(s.state.session_id, "failed", "\u5BB9\u91CF\u9A71\u9010\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
       void s.agent?.stop();
       this.sessions.delete(s.state.session_id);
@@ -57675,7 +57688,7 @@ ${experienceBlock}
 
 // src/ws-server.ts
 import { createServer } from "node:http";
-import { randomUUID as randomUUID13 } from "node:crypto";
+import { randomUUID as randomUUID14 } from "node:crypto";
 import { readFileSync as readFileSync36, writeFileSync as writeFileSync24, mkdirSync as mkdirSync22, existsSync as existsSync27, readdirSync as readdirSync17, statSync as statSync14 } from "node:fs";
 import { join as join41, dirname as dirname11, sep as sep8 } from "node:path";
 import { homedir as homedir16, networkInterfaces as networkInterfaces2 } from "node:os";
@@ -57799,7 +57812,7 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
-import { randomUUID as randomUUID12 } from "node:crypto";
+import { randomUUID as randomUUID13 } from "node:crypto";
 import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync35, readdirSync as readdirSync16, statSync as statSync13, writeFileSync as writeFileSync23 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
 import path5 from "node:path";
@@ -61129,7 +61142,7 @@ var Bridge = class _Bridge {
     );
     if (!shouldGate) {
       if (questions.length) {
-        const requestId2 = randomUUID12();
+        const requestId2 = randomUUID13();
         this.mgr.setExternalWaiting(id2, {
           request_id: requestId2,
           tool_name: ev2.tool_name ?? "tool",
@@ -61148,7 +61161,7 @@ var Bridge = class _Bridge {
       });
       return { decision: "pass" };
     }
-    const requestId = randomUUID12();
+    const requestId = randomUUID13();
     const remember = questions.length ? void 0 : suggestPattern(ev2.tool_name ?? "tool", input);
     const payload = {
       request_id: requestId,
@@ -61244,7 +61257,7 @@ var Bridge = class _Bridge {
         return { decision: "pass" };
       }
       this.mgr.setExternalWaiting(id2, {
-        request_id: randomUUID12(),
+        request_id: randomUUID13(),
         tool_name: toolName,
         input_summary: msg,
         suggestions: [],
@@ -62577,7 +62590,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       return;
     }
-    const requestId = randomUUID13();
+    const requestId = randomUUID14();
     const name = (url.searchParams.get("name") ?? "\u624B\u8868").slice(0, 24);
     const code = String(Math.floor(1e5 + Math.random() * 9e5));
     const entry = { name, code, ws: ws2, timer: setTimeout(() => resolvePairing(requestId, "timeout"), PAIR_TTL_MS) };
