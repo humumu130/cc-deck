@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native"
 import { HEAD_BASE } from "../head-unify";
-import { MicIcon, DockDot, CtxSegMeter } from "../components/detail-parts";
+import { MicIcon, DockDot, CtxSegMeter, SPIN_FRAMES, DiffBlock, StatRow, WaitCard, PendingRow, LiveStatusLine, TaskRefText } from "../components/detail-parts";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
@@ -610,64 +610,11 @@ function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTas
 }
 
 // diff 着色块：+/−/@@ 逐行着色（等宽），行数据由 relay 从 structuredPatch 提取
-function DiffBlock({ lines }: { lines: string[] }) {
-  const d = useThemeStyles(makeStyles);
-  return (
-    <View style={d.diffBox}>
-      {lines.map((l, i) => {
-        const st = l.startsWith("@@")
-          ? d.diffHunk
-          : l.startsWith("+")
-            ? d.diffAdd
-            : l.startsWith("-")
-              ? d.diffDel
-              : d.diffCtx;
-        return <Text key={i} style={st} selectable>{l || " "}</Text>;
-      })}
-    </View>
-  );
-}
 
 // #264：摘要文本里的 #NNN 任务号渲染成可点高亮段（1~3 位数字，避免误吞时间戳/长号），
 // 点击跳任务 tab 并定位该条。找不到对应任务时仍切到任务 tab（无害回退）
 // #340 触点即气泡锚点（#NNN 数字处）：短点/长按事件都带 changedTouches
-const tpPt = (e: GestureResponderEvent): { x: number; y: number } | undefined => {
-  const t = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
-  return t ? { x: t.pageX, y: t.pageY } : undefined;
-};
 
-function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRef, onTaskRefOut }: { text: string; style: StyleProp<TextStyle>; numberOfLines?: number; suffix?: string; suffixStyle?: StyleProp<TextStyle>; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
-  const { c } = useTheme();
-  if (!onTaskRef || !/#\d{1,3}\b/.test(text)) {
-    return (
-      <Text style={style} numberOfLines={numberOfLines}>
-        {text}
-        {suffix ? <Text style={suffixStyle}>{suffix}</Text> : null}
-      </Text>
-    );
-  }
-  const parts = text.split(/#(\d{1,3})\b/g);
-  return (
-    <Text style={style} numberOfLines={numberOfLines}>
-      {parts.map((p, i) =>
-        i % 2 === 1 ? (
-          <Text
-            key={i}
-            style={{ color: c.brandA, fontWeight: "700" }}
-            onPress={(e) => onTaskRef(Number(p), false, tpPt(e))}
-            onLongPress={(e) => onTaskRef(Number(p), true, tpPt(e))}
-            onPressOut={onTaskRefOut}
-          >
-            #{p}
-          </Text>
-        ) : (
-          <Text key={i}>{p}</Text>
-        ),
-      )}
-      {suffix ? <Text style={suffixStyle}>{suffix}</Text> : null}
-    </Text>
-  );
-}
 
 // 内容长按菜单（#249/#260）：复制全文 / 系统分享，仅挂 detail/diff 摘要行——
 // 正文（用户/assistant/思考）长按即原生选择手柄可拖选片段，不走此菜单
@@ -1509,33 +1456,8 @@ function TaskPop({ n, todo, goneSession, hold, anchor, onClose, onGoList }: { n:
   );
 }
 
-const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
 
 // 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）。无边框，嵌入状态条内。
-function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; startedAt?: number; color: string; tok?: string }) {
-  const d = useThemeStyles(makeStyles);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 500);
-    return () => clearInterval(t);
-  }, []);
-  const live = isLiveLine(summary);
-  const text = stripLiveMark(summary);
-  const secs = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
-  // 实时行照转动画星：CLI 行首星已在 relay 剥除，客户端星是唯一指示不重复；
-  // 走秒保留（本回合时长与转轮行内活动时长语义不同）；ctx 已按反馈移除
-  const frame = SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
-  const m = Math.floor(secs / 60);
-  const timeText = m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
-  return (
-    <View style={d.statusLine}>
-      <Text style={[d.statusSpin, { color }]}>{frame}</Text>
-      <Text style={[d.statusText, { color }]} numberOfLines={1}>{text || "思考中…"}</Text>
-      {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
-      {tok && !live ? <Text style={d.statusTime}>· {tok}</Text> : null}
-    </View>
-  );
-}
 
 // W-EXPO 005 dock 呼吸点（.session-state-dot 等价）：#148 铁律低频步进——480ms/步
 // 四级三角波（≈1.9s 一拍，每秒仅 2 次提交），禁逐帧 Animated（RenderThread 风暴）
@@ -1587,36 +1509,9 @@ function StatusStrip({ s, wr, bannerVisible }: { s: SessionState; wr: WaitingPay
 // 排队注入消息：脉冲呼吸（类 CLI queued），CLI 处理/回合结束时上浮为正式消息。
 // #148 同源降级：原 Animated 逐帧呼吸（native 驱动 900ms 往返）与列表呼吸灯同一
 // 渲染风暴——改低频步进：六级三角波 600ms/步（3.6s 一拍），每秒 ~1.7 次提交
-const PEND_PHASES = [0.35, 0.5, 0.65, 0.85, 0.65, 0.5];
-function PendingRow({ text }: { text: string }) {
-  const d = useThemeStyles(makeStyles);
-  const [ph, setPh] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setPh((n) => (n + 1) % PEND_PHASES.length), 600);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <View style={[d.pendRow, { opacity: PEND_PHASES[ph] }]}>
-      <Text style={d.pendT} numberOfLines={3}>{text}</Text>
-    </View>
-  );
-}
 
 // 005 wait-card 容器（#166 双态）：isAsk 提问态=中性底+品牌描边（提问≠风险，不用
 // 警示色）；审批态=黄 tint 警示。手机仅浏览口径下底部挂引导条
-function WaitCard({ isAsk, children }: { isAsk: boolean; children: ReactNode }) {
-  const d = useThemeStyles(makeStyles);
-  return (
-    <View style={[d.waitBanner, isAsk ? d.waitCardAsk : d.waitCardApprove]}>
-      {children}
-      {WAITBOX_READONLY ? (
-        <View style={d.waitRO}>
-          <Text style={d.waitROT}>请在电脑上处理</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable); // W-SWIPEASK：圆点跟手淡入淡出（插值 opacity 须挂 Animated 组件）
 
@@ -3888,29 +3783,6 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
 // 统计视图行（原 StatsModal 的 Row 平铺化）
 // #205 统计行支持 copy：长按一键复制整串值（uuid 手动拖选太繁琐），复制后
 // 值临时变「已复制 ✓」1.5s（同 ContentMenu 反馈形态）。当前仅 Session ID 用
-function StatRow({ k, v, vc, copy }: { k: string; v: string; vc?: string; copy?: boolean }) {
-  const d = useThemeStyles(makeStyles);
-  const [copied, setCopied] = useState(false);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
-  return (
-    <View style={d.statRow}>
-      {/* W-EXPO 005 kv-row 形制：值左（粗体 text-strong，flexShrink 截断）、标签右（dim 10px） */}
-      <Text
-        style={[d.statRowV, vc ? { color: vc } : null]}
-        numberOfLines={1}
-        onLongPress={copy ? () => {
-          void Clipboard.setStringAsync(v).then(() => {
-            setCopied(true);
-            if (copiedTimer.current) clearTimeout(copiedTimer.current);
-            copiedTimer.current = setTimeout(() => setCopied(false), 1500);
-          });
-        } : undefined}
-      >{copied ? "已复制 ✓" : v}</Text>
-      <Text style={d.statRowK}>{k}</Text>
-    </View>
-  );
-}
 
 // 输入法风格麦克风矢量图标：胶囊 + U 形支架 + 立柱 + 底座（替代 emoji）
 import { makeStyles } from "../components/detail-styles";
