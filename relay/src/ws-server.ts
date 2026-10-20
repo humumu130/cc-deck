@@ -459,6 +459,20 @@ export function startServer(
       res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(qrJs));
       return;
     }
+    // W-SPLIT-S4a/S4b：CSS/JS 外置资产的静态路由（web-console/css/* 和 web-console/js/*）
+    // 安全：路径遍历防——pathname 只允许 [a-z0-9._-]，前缀限 css/ 或 js/
+    if (req.method === "GET" && (url.pathname.startsWith("/css/") || url.pathname.startsWith("/js/"))) {
+      const rel = url.pathname.slice(1).replace(/^\/+/, "");
+      if (!/^[a-z0-9._\-\/]+\.(css|js)$/.test(rel) || rel.includes("..")) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const assetPath = join(webRoot, "web-console", rel);
+      if (!existsSync(assetPath)) { res.writeHead(404).end("not found"); return; }
+      const ct = rel.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
+      res.writeHead(200, { "content-type": ct, "cache-control": "no-store" }).end(readFileSync(assetPath));
+      return;
+    }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
       const file = join(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync(file)) { res.writeHead(404).end("not found"); return; }
