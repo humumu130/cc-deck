@@ -19,6 +19,7 @@ import { PlusMark } from "../brand";
 import { FadeIn, useLayoutPulse } from "../motion";
 import { ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgData, useOrgDecide } from "./OrgZone";
 import { EngineBadge, TeamDetailPage } from "./TeamDetailPage";
+import { ProjectDetailPage } from "./ProjectDetailPage"; // W-WAVE3IMPL 件1（#189）：项目详情二级页
 import TeamCreateWizard from "./TeamCreateWizard";
 import { PageHead, useBellBadge } from "./page-head";
 import { SourceSwitch } from "./source-switch";
@@ -78,7 +79,7 @@ export function TeamTab({ onOpenSession, onGoSessions }: { onOpenSession: (sid: 
   const { confirms, groups } = useOrgData();
   const snap = useRelay();
   const { decide, err, clearErr, flights, accepted } = useOrgDecide();
-  const [detailOpen, setDetailOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
+  const [detailOpen, setDetailOpen] = useState<{ srcId: string; gid: string; name: string; anchor?: string } | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   // 成员迷你行展开集（本地内存级——进详情/切 tab 即回默认收起，轻浏览态不持久）
   const [openGids, setOpenGids] = useState<Set<string>>(new Set());
@@ -256,7 +257,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const { groups } = useOrgData();
-  const [detailOpen, setDetailOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
+  const [detailOpen, setDetailOpen] = useState<{ srcId: string; gid: string; name: string; anchor?: string } | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   // 未立项折叠组展开态（默认折叠，AsyncStorage 持久）
   const [unfiledOpen, setUnfiledOpen] = useState(false);
@@ -317,48 +318,36 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
 
   const projCard = ({ src, g }: { src: SourceStatus; g: ProjectGroup }) => {
     const stColor = orgStColor(g.status, c);
-    const n = grouped.byGroup.get(g.id)?.length ?? 0;
+    const list = grouped.byGroup.get(g.id) ?? [];
+    const n = list.length;
+    // W-WAVE3IMPL 件3（#189）：副行三计数（audit 3#3）——会话/编制/需行动（V3 pcard
+    // 「N 会话 · N 团队 · N 需行动」口径；需行动=WAITING/ERROR 计数）
+    const acting = list.filter((x) => x.status === "WAITING" || x.status === "ERROR").length;
+    const hc = Array.isArray(g.headcount) ? g.headcount.length : 0;
     return (
       <View key={g.id} style={styles.projCard}>
         <Pressable
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-          accessibilityLabel={`项目 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${n} 会话，点按查看团队详情`}
-          onPress={() => setDetailOpen({ srcId: src.id, gid: g.id, name: g.name })}
+          accessibilityLabel={`项目 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${n} 会话，点按打开项目详情`}
+          onPress={() => setDetailOpen({ srcId: src.id, gid: g.id, name: g.name, anchor: g.anchor_dir })}
         >
+          {/* W-WAVE3IMPL 件2（#189）：两行轻卡（audit 3#2）——行1 图标+名+状态点（V3 pcard
+              ●绿/蓝语言，状态胶囊降为点），行2 三计数副行（路径并入副行尾段截断） */}
           <View style={styles.teamR1}>
             <View style={styles.projectIcon}><Text style={styles.projectIconT}>P</Text></View>
             <Text style={styles.teamName} numberOfLines={1}>{g.name}</Text>
-            <View style={[styles.stPill, { borderColor: withA(stColor, 0.5), backgroundColor: withA(stColor, 0.1) }]}>
-              <View style={[styles.stPillDot, { backgroundColor: stColor }]} />
-              <Text style={[styles.stPillT, { color: stColor }]}>{ORG_ST_ZH[g.status] ?? g.status}</Text>
-            </View>
+            <View style={[styles.stPillDot, { backgroundColor: stColor, marginLeft: "auto" }]} />
           </View>
           <Text style={[styles.teamMeta, styles.projMeta]} numberOfLines={1}>
             <Text style={styles.teamMetaStrong}>{n} 会话</Text>
-            {" · "}{shortDirOf(g.anchor_dir)} · {displaySrcName(src.relayName || src.name)}
+            {hc ? <>{" · "}{hc} 编制</> : null}
+            {acting ? <>{" · "}<Text style={{ color: c.working }}>{acting} 需行动</Text></> : null}
+            {" · "}{shortDirOf(g.anchor_dir)}
           </Text>
         </Pressable>
-        <View style={styles.actRow}>
-          <Pressable
-            style={styles.actBtn}
-            android_ripple={{ color: withA(c.brandA, 0.14), borderless: false, radius: 9 }}
-            accessibilityLabel={`在 ${g.name} 目录新建会话`}
-            onPress={() => onNewInDir(g.anchor_dir)}
-          >
-            <Text style={styles.actBtnT}>＋ 新建会话于此目录</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.actBtn, styles.actBtnSub]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-            accessibilityLabel={`查看 ${g.name} 的项目会话`}
-            onPress={() => onViewSessionsInDir(g.anchor_dir)}
-          >
-            <Text style={[styles.actBtnT, styles.actBtnTSub]}>查看项目会话</Text>
-          </Pressable>
-        </View>
       </View>
     );
-  };
+  };;
 
   return (
     <OrgPageShell
@@ -451,12 +440,14 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
         <Text style={styles.hintT}>会话卡上的 ◈ 标签即项目组归属；未立项目录可快捷新建会话</Text>
       </View>
       {detailOpen ? (
-        <TeamDetailPage
+        <ProjectDetailPage
           srcId={detailOpen.srcId}
           gid={detailOpen.gid}
           name={detailOpen.name}
+          anchor={detailOpen.anchor ?? ""}
           onClose={() => setDetailOpen(null)}
           onOpenSession={onOpenSession}
+          onGoTeam={onGoTeam}
         />
       ) : null}
       <TeamCreateWizard visible={wizardOpen} onClose={() => setWizardOpen(false)} />
