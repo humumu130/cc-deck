@@ -211,10 +211,20 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     () => (Array.isArray(g?.headcount) ? g!.headcount! : []).filter((m) => m && typeof m.session_id === "string"),
     [g],
   );
-  const headcountSessions = members.map((m) => ({
-    m,
-    s: snap.sessions.find((x) => x.session_id === m.session_id),
-  }));
+  // W-WAVE1 件③（#95）：成员卡动态排列——工作中优先（WORKING/WAITING 算在岗，
+  // WAITING 需人确认更该置顶）→ 最近活跃倒序（updated_at）→ 静止（DONE/IDLE）沉底
+  // 同档内比活跃时间。编制序（headcount 原序=入编序）仅作末位稳定器（同状态同时间
+  // 不乱跳）。折叠组展开即见「谁在干活」不用扫全列
+  const inOffice = (st?: string) => st === "WORKING" || st === "WAITING";
+  const headcountSessions = members
+    .map((m, i) => ({ m, s: snap.sessions.find((x) => x.session_id === m.session_id), i }))
+    .sort((a, b) => {
+      const ao = inOffice(a.s?.status), bo = inOffice(b.s?.status);
+      if (ao !== bo) return ao ? -1 : 1; // 在岗置顶
+      const au = a.s?.updated_at ?? 0, bu = b.s?.updated_at ?? 0;
+      if (au !== bu) return bu - au; // 同档：最近活跃倒序（静止自然沉底——updated 旧）
+      return a.i - b.i; // 编制序稳定器
+    });
   // 本组确认卡（payload.gid 命中；rule-append 等团队级卡在团队 tab 队列决议，不进组页）
   const groupConfirms = useMemo(
     () => (src?.orgConfirms ?? []).filter((cf) => (cf.payload as { gid?: unknown } | undefined)?.gid === gid),

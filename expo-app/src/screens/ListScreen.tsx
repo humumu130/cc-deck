@@ -1330,9 +1330,27 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     for (const src of snap.sources) for (const g of src.projects ?? []) m.set(g.id, g.name);
     return m;
   }, [snap.sources]);
+  // W-WAVE1 件②（#97）：PM/Leader 成员卡角色徽——从快照 projects[].headcount 反查本
+  // 会话的编制角色（团队归属名 orgTag 已有 #26 M2，本件补「是 PM/Leader」维度：用户
+  // 1014「PM 卡加团队归属标识」成员侧半边）。词表与桌面 SLIM_KEEP_ROLE 同源；非 PM
+  // 零前缀零渲染（文本融合进 orgTag 单口——标准档元信息行/紧凑档目录位双形态自动继承）
+  const pmSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const src of snap.sources) {
+      for (const g of src.projects ?? []) {
+        for (const m of g.headcount ?? []) {
+          if (/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || ""))) ids.add(m.session_id);
+        }
+      }
+    }
+    return ids;
+  }, [snap.sources]);
   const orgTagOf = useCallback(
-    (s: SessionState) => (s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null),
-    [projNameById],
+    (s: SessionState) => {
+      const base = s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null;
+      return base && pmSessionIds.has(s.session_id) ? `PM · ${base}` : base;
+    },
+    [projNameById, pmSessionIds],
   );
 
   // W-MOTION：换源/过滤/聚合切换/增删卡 → 列表布局补间（key 序列指纹驱动：同集合
