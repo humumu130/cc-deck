@@ -54,7 +54,11 @@ import { readPluginConfig, listWorkerPluginPaths } from "./plugin-config.js";
 import { devId } from "./e2e.js";
 import { createPairingCommands, peerKind } from "./commands/pairing-commands.js"; // W-SPLIT-S3R2c：配对域 mixin（peerKind 随迁单源）
 import { createSessionCommands } from "./commands/session-commands.js"; // W-SPLIT-S3a：session CRUD 域 mixin
-import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, sanitizeFiles } from "./commands/misc-commands.js"; // W-SPLIT-S3b：小族 mixin（四助手随迁单源，原定义删除防双源）
+import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, sanitizeFiles } from "./commands/misc-commands.js";
+import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT-S3c
+import { createEngineCommands } from "./commands/engine-commands.js"; // W-SPLIT-S3c
+import { createCloudCommands } from "./commands/cloud-commands.js"; // W-SPLIT-S3c
+import { createBoardCommands } from "./commands/board-commands.js"; // W-SPLIT-S3c // W-SPLIT-S3b：小族 mixin（四助手随迁单源，原定义删除防双源）
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
@@ -157,7 +161,8 @@ const EXTERNAL_PERM_MODES = new Set(["default", "acceptEdits", "plan", "bypassPe
 
 // COMMAND_IMPORT_PUSH 条目校验（relay 不解释语义，只卡形状与尺寸——条目含令牌，
 // 长度上限压到防滥用档；cloud 子对象是出码端 pair 所需的全套身份，字段齐才放行）
-function sanitizeImportPushEntry(raw: unknown): ImportPushEntry | null {
+export type { ImportPushEntry };
+export function sanitizeImportPushEntry(raw: unknown): ImportPushEntry | null {
   if (!raw || typeof raw !== "object") return null;
   const e = raw as Record<string, unknown>;
   const kind = e.kind === "cloud" ? "cloud" : e.kind === "lan" ? "lan" : null;
@@ -378,7 +383,7 @@ function pinnedSessionsPath(dataDir: string): string {
   return join(dataDir, "pinned-sessions.json");
 }
 
-function readPinnedSessions(dataDir: string): string[] {
+export function readPinnedSessions(dataDir: string): string[] {
   try {
     const raw = JSON.parse(readFileSync(pinnedSessionsPath(dataDir), "utf-8")) as unknown;
     return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
@@ -387,7 +392,7 @@ function readPinnedSessions(dataDir: string): string[] {
   }
 }
 
-function writePinnedSessions(dataDir: string, ids: string[]): void {
+export function writePinnedSessions(dataDir: string, ids: string[]): void {
   try {
     writeFileSync(pinnedSessionsPath(dataDir), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
   } catch {} // 写穿失败静默降级：置顶只影响重启后的休眠登记，运行期状态不受影响
@@ -479,8 +484,8 @@ const MAX_SESSIONS = 20;
 
 // #79 输出物远程拉取限额：单文件 ≤20MB；明文分块 512KB（对齐 #408 快照预算——
 // 密文 ~700KB < CF Workers ws 1MiB 单帧硬限，云通道实测口径）
-const ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
-const ARTIFACT_CHUNK_BYTES = 512 * 1024;
+export const ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
+export const ARTIFACT_CHUNK_BYTES = 512 * 1024;
 
 // #79 预览分级用 MIME（扩展名推导，未命中给 application/octet-stream——客户端
 // 走下载+系统打开兜底）
@@ -683,6 +688,14 @@ export class SessionManager {
   // W-SPLIT-S3b：小族命令 mixin（七 case 体迁 commands/misc-commands.ts——todos/perm/
   // allow-rule/ext 四小族；EXT 族 bridge 依赖照搬 mgr.bridge）
   private miscCmds = createMiscCommands(this);
+  // W-SPLIT-S3c：通知域命令 mixin
+  private notifyCmds = createNotifyCommands(this);
+  // W-SPLIT-S3c：引擎登录域命令 mixin
+  private engineCmds = createEngineCommands(this);
+  // W-SPLIT-S3c：云桥/凭证域命令 mixin
+  private cloudCmds = createCloudCommands(this);
+  // W-SPLIT-S3c：组织/看板/任务域命令 mixin
+  private boardCmds = createBoardCommands(this);
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string }[]>();
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
@@ -2438,10 +2451,10 @@ export class SessionManager {
           return this.miscCmds.COMMAND_EXT_STOP(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts；bridge 依赖照搬）
         }
         case "COMMAND_REFRESH_TODOS": {
-          return this.miscCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
+          return this.boardCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_TODO_HIDE": {
-          return this.miscCmds.COMMAND_TODO_HIDE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
+          return this.boardCmds.COMMAND_TODO_HIDE(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_DELETE": {
           return this.sessionCmds.COMMAND_DELETE(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
@@ -2451,7 +2464,7 @@ export class SessionManager {
         // allowRules.onChange 统一触发（构造处挂接，覆盖落规则/删除/会话清理全部
         // mutation——见 AllowRuleStore.onChange 注释）
         case "COMMAND_ALLOW_RULE_REMOVE": {
-          return this.miscCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts）
+          return this.boardCmds.COMMAND_ALLOW_RULE_REMOVE(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_RENAME": {
           return this.sessionCmds.COMMAND_RENAME(cmd, by); // W-SPLIT-S3a：mixin 委托（体在 commands/session-commands.ts）
@@ -2469,308 +2482,55 @@ export class SessionManager {
           return this.pairingCmds.COMMAND_PEERS_IMPORT(cmd, by); // W-SPLIT-S3R2c：mixin 委托（体在 commands/pairing-commands.ts）
         }
         case "COMMAND_PEER_KICK": {
-          // 议题①踢除：幂等（dev 不存在也回 ok）；先广播 kick 让在线设备刷新清单，
-          // 再执行移除（peers 写穿落盘 + 各桥发 pair_nack 令其立即停止重连）
-          if (!this.cloud || !this.peerKicker) {
-            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
-          }
-          const dev = String((cmd.payload as { dev?: unknown }).dev ?? "");
-          if (!/^[a-z]{2}-[0-9a-f]{6,64}$/.test(dev)) {
-            return { command_id: cmd.command_id, ok: false, error: "无效的设备号" };
-          }
-          const name = this.cloud.peers.get(dev)?.name || dev.slice(0, 11);
-          this.peerKicker(dev);
-          this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "kick" });
-          return { command_id: cmd.command_id, ok: true };
+          return this.boardCmds.COMMAND_PEER_KICK(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_CLOUD_INFO": {
-          // #25b（2026-09-10 移动网络场景）：本机 relay 的云桥身份自述——控制台据此
-          // 给手机发「本机 relay 的云码」（手机在任何网络可连）。LAN token 鉴权内含
-          //（能发命令即受信端）。bt 只给首桥（多桥并发码留待需要时再扩）
-          if (!this.cloud) {
-            return { command_id: cmd.command_id, ok: true, cloudInfo: { cloud: false } };
-          }
-          return {
-            command_id: cmd.command_id,
-            ok: true,
-            cloudInfo: {
-              cloud: true,
-              bridge: (this.cfg.cloudUrls[0] ?? "").replace(/\/$/, "").replace(/^http/, "ws"),
-              bt: this.cfg.cloudToken,
-              rd: this.cloud.relayDev,
-              rk: this.cloud.keypair.publicKey,
-            },
-          };
+          return this.cloudCmds.COMMAND_CLOUD_INFO(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/cloud-commands.ts）
         }
         case "COMMAND_LOGIN_GRANT": {
-          // #325 扫码登录：手机（信任信道）授权网页端出示的会话公钥，relay 配对并回 ack。
-          // dev 必须与公钥派生值一致（与 pair_req 路径同款校验，防冒名占位）
-          const p = cmd.payload as { session_dev?: string; session_pk?: string; name?: string };
-          const dev = String(p.session_dev ?? "");
-          const pk = String(p.session_pk ?? "");
-          if (!this.cloud || !this.loginGranter) {
-            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
-          }
-          if (!/^wb-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pk) || devId(pk, "wb") !== dev) {
-            return { command_id: cmd.command_id, ok: false, error: "会话参数格式无效" };
-          }
-          this.loginGranter(dev, pk, String(p.name ?? "web").slice(0, 32) || "web");
-          return { command_id: cmd.command_id, ok: true };
+          return this.cloudCmds.COMMAND_LOGIN_GRANT(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/cloud-commands.ts）
         }
         case "COMMAND_IMPORT_PUSH": {
-          // 0.4.4 合并扫码跨网回传：手机把一条连接条目推给出示合并码的网页/exe 端。
-          // 校验后交云层密封投递；pusher 返回 false = 目标端离线（码浮层已关/断线）
-          const p = cmd.payload as { target_dev?: string; target_pk?: string; entry?: unknown; note?: unknown };
-          const dev = String(p.target_dev ?? "");
-          const pk = String(p.target_pk ?? "");
-          if (!this.cloud || !this.importPusher) {
-            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
-          }
-          if (!/^wb-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pk) || devId(pk, "wb") !== dev) {
-            return { command_id: cmd.command_id, ok: false, error: "目标设备参数无效" };
-          }
-          const entry = sanitizeImportPushEntry(p.entry);
-          if (!entry) {
-            return { command_id: cmd.command_id, ok: false, error: "回传条目格式无效" };
-          }
-          if (!this.importPusher(dev, pk, { t: "ccdeck-import-resp", entry, ...(p.note ? { note: String(p.note).slice(0, 80) } : {}) })) {
-            return { command_id: cmd.command_id, ok: false, error: "电脑端不在线（二维码可能已关闭）" };
-          }
-          return { command_id: cmd.command_id, ok: true };
+          return this.cloudCmds.COMMAND_IMPORT_PUSH(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/cloud-commands.ts）
         }
         case "COMMAND_PIN_SESSION": {
-          // #49 置顶/取消置顶：写穿 pinned-sessions.json。休眠态（saved）也可 unpin——
-          // 摘掉 saved 让卡片退回普通历史会话。
-          // UIPOLISH3 件一（2026-10-11 用户拍板）：外部 CLI 会话解锁置顶——原「由 CLI 自身
-          // 维护」的拦截无技术依据（置顶是纯列表整理：state.pinned 标记 + 文件写穿 +
-          // SESSION_UPDATED 回显，与托管/外部无关），CLI sid 一视同仁；applyPinned 重启
-          // 登记对 ext 只补 pinned 标记不做休眠登记（ext 无 agent 不可 resume）。
-          const s = this.require(cmd.payload.session_id);
-          const pinned = cmd.payload.pinned === true;
-          s.state.pinned = pinned || undefined;
-          if (!pinned) s.state.saved = undefined;
-          s.state.updated_at = Date.now();
-          writePinnedSessions(
-            this.cfg.dataDir,
-            [...readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id), ...(pinned ? [cmd.payload.session_id] : [])],
-          );
-          // 显式带 pinned/saved 布尔（含 false）：端上据此直接改卡片，不等快照
-          this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
-            status: s.state.status,
-            action_summary: s.state.action_summary,
-            stats: { ...s.state.stats },
-            pinned,
-            saved: !!s.state.saved,
-          });
-          return { command_id: cmd.command_id, ok: true };
+          return this.boardCmds.COMMAND_PIN_SESSION(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_RESUME_SESSION": {
-          // #49 按需恢复：点击「已保存」休眠卡触发。已在线会话幂等成功（顺手清残留
-          // 休眠标记）；失败同步抛错回 ACK，异步失败（流断/超时）走 SESSION_ERROR，
-          // saved 保留可重试
-          const s = this.require(cmd.payload.session_id);
-          if (s.state.external) {
-            // W-INJECT：外部会话恢复 = 重启收养误标 historical 的手动翻案通道（此前
-            // 一律「外部会话不支持恢复」拒死，客户端对误标只读卡毫无办法）。CLI 进程
-            // 活着 → 清只读标记即恢复可交互（进程在，无需也不应新开终端）；进程真死
-            // → 明确报错。真实「拉起+投递」在发消息路径的 resumeExternal（恢复语义与
-            // 消息投递绑定，点卡不该凭空开窗）
-            const pid = s.state.cli_pid;
-            let alive = false;
-            if (pid) {
-              try { process.kill(pid, 0); alive = true; } catch (e) {
-                alive = (e as NodeJS.ErrnoException).code === "EPERM";
-              }
-            }
-            if (!alive) {
-              return { command_id: cmd.command_id, ok: false, error: "该会话的终端进程已结束，无法在此恢复；在电脑终端里 claude --resume 后发消息即可重新接入" };
-            }
-            s.state.historical = false;
-            s.state.idle_archived = undefined;
-            this.emitUpdated(s, true);
-            return { command_id: cmd.command_id, ok: true };
-          }
-          if (s.agent && !s.agent.ended) {
-            if (s.state.saved) {
-              s.state.saved = undefined;
-              this.emitUpdated(s, true);
-            }
-            return { command_id: cmd.command_id, ok: true };
-          }
-          this.reviveSaved(s);
-          return { command_id: cmd.command_id, ok: true };
+          return this.boardCmds.COMMAND_RESUME_SESSION(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_ARTIFACT_FETCH": {
-          // #79 输出物远程访问（实时 E2E 传输，不落云存储）：授权锚点 = path 归一化
-          // 后必须命中该会话 state.artifacts 已登记条目（防任意读/路径穿越——客户端
-          // 只能拉它本就看得见的输出物）；≤20MB；成功 ACK 携带 size/mime，数据本体
-          // 经瞬态 ARTIFACT_CHUNK 帧按 ref=command_id 回发（LAN/云同路径，云侧自动
-          // E2E 密封，桥不落存储）。幂等重放（duplicate ack）不会重发数据——缺帧
-          // 重试必须换新 command_id
-          // FB14 气泡附图：path 为 img-* basename 引用时走临时目录分支（resolveUploadImage
-          // 校验形态+会话归属+目录钳制，授权口径同级：只能拉本会话收过的图）。复用同一
-          // CHUNK 回发管线，端上拉取代码零分叉
-          const s = this.require(cmd.payload.session_id);
-          const rawPath = String(cmd.payload.path ?? "");
-          const imgHit = resolveUploadImage(this.cfg.dataDir, s.state.session_id, rawPath);
-          const key = imgHit ? "" : resolve(rawPath).toLowerCase();
-          const hit = imgHit
-            ? { path: imgHit }
-            : (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
-          if (!hit) {
-            return { command_id: cmd.command_id, ok: false, error: "路径未登记在该会话的输出物清单里，无权拉取" };
-          }
-          let st;
-          try {
-            st = statSync(hit.path);
-          } catch {
-            return { command_id: cmd.command_id, ok: false, error: imgHit ? "图片已过期（临时附件定期清扫）" : "文件不存在或不可访问（可能已被移动/删除）" };
-          }
-          if (!st.isFile()) return { command_id: cmd.command_id, ok: false, error: "不是常规文件" };
-          if (st.size > ARTIFACT_FETCH_MAX_BYTES) {
-            return { command_id: cmd.command_id, ok: false, error: `文件 ${(st.size / 1048576).toFixed(1)}MB 超过 20MB 上限，请在电脑端查看` };
-          }
-          const ref = cmd.command_id;
-          try {
-            const buf = readFileSync(hit.path);
-            const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
-            for (let seq = 0; seq < total; seq++) {
-              this.bus.emitTransient(
-                "ARTIFACT_CHUNK",
-                {
-                  ref,
-                  seq,
-                  total,
-                  b64: buf.subarray(seq * ARTIFACT_CHUNK_BYTES, (seq + 1) * ARTIFACT_CHUNK_BYTES).toString("base64"),
-                },
-                by,
-              );
-            }
-            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, done: true }, by);
-          } catch (e) {
-            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, error: e instanceof Error ? e.message : String(e) }, by);
-          }
-          return { command_id: cmd.command_id, ok: true, artifact: { size: st.size, mime: mimeOf(hit.path) } };
+          return this.boardCmds.COMMAND_ARTIFACT_FETCH(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_ORG_ACTION": {
-          // #018-R1b org 命令真链路：LAN（ws-server）与 cloud（cloud-client）两入口
-          // 都经 handleCommand 到这里，统一收口 orgCommand 咽喉（权限矩阵 + B2a
-          // adapter + 审计）。ACK data 冻结口径 {group, needsConfirm, confirm?}。
-          // 现连接面全部持主 token（ws hello / cloud E2E 密封），无 viewer 通道——
-          // 角色统一记 owner；未来连接级角色（viewer 分享链接等）只换这里实参，
-          // 咽喉零改（org.ts：不信任客户端自报角色，actor 由连接身份解析）
-          const r = this.orgCommand(
-            "owner",
-            by,
-            String((cmd.payload as { action?: unknown }).action ?? ""),
-            cmd.payload as Record<string, unknown>,
-          );
-          if ("forbidden" in r) return r.forbidden;
-          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+          return this.boardCmds.COMMAND_ORG_ACTION(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_ORG_CONFIRM": {
-          // #26 M2 确认单决议（用户点击确认卡）：R1b 起同走 orgCommand 咽喉（审计 +
-          // 二次决议幂等收口）；决议后确认单状态与 projects 三态联动在咽喉内落地。
-          // ACK 保持既有口径（ok，不带 data——B0 冻结的客户端形状不动）
-          const r = this.orgCommand("owner", by, "confirm-decide", {
-            confirm_id: cmd.payload.confirm_id,
-            approve: cmd.payload.approve,
-          });
-          if ("forbidden" in r) return r.forbidden;
-          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? {} : { error: r.error }) };
+          return this.boardCmds.COMMAND_ORG_CONFIRM(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_PROJECT_DETAIL": {
-          // #26 M2 项目组详情：{ group, board, receipts }（编制/板/回执流四分节数据源）
-          const r = this.orgAction("project-detail", { id: cmd.payload.gid });
-          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+          return this.boardCmds.COMMAND_PROJECT_DETAIL(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_SETTINGS_UPDATE": {
-          // #17 第二批：雇员独立家开关热切换（三端设置项入口）。ack 带最新状态；
-          // env 锁定/写盘失败等拒改场景 ok:false 带可读指引。审查修正（P2）：字段
-          // 非布尔明确拒收——缺键/字符串一律按 false 落盘会把开关静默关掉
-          if (typeof cmd.payload.employee_home !== "boolean") {
-            return { command_id: cmd.command_id, ok: false, error: "employee_home 须为布尔值" };
-          }
-          const r = this.applyEmployeeHome(cmd.payload.employee_home);
-          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+          return this.boardCmds.COMMAND_SETTINGS_UPDATE(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_ENGINE_LOGIN": {
-          // #102 批 B 引擎登录引导（把饭喂到嘴里）：action 四态——
-          //   start  幂等起登录 pane（tmux 托管）+ AUTH_REQUIRED 事件流（url 增量推）
-          //   status 查当前流程（瞬态事件断线不补发，重连后靠这里兜底）
-          //   verify 「我已完成登录」：异步直探（不阻塞——结果走 AUTH_REQUIRED 事件：
-          //         ready 卡片转绿/仍 pending 回弹），ACK 只做受理
-          //   cancel 收 pane 推 cancelled（用户关卡）
-          // ACK data = 流程投影（与 AUTH_REQUIRED payload 同构，端上同一渲染面）；
-          // handleCommand 同步约束：全部接口同步受理、异步推进（spawn/探针不进 ACK 路径）
-          {
-            const p = cmd.payload as { engine?: unknown; action?: unknown };
-            const engine = p.engine;
-            if (!isSessionEngine(engine)) {
-              return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(engine)}` };
-            }
-            if (engine === "claude") {
-              return { command_id: cmd.command_id, ok: false, error: "claude 免登录（relay 内嵌 SDK）" };
-            }
-            const action = p.action === "status" || p.action === "verify" || p.action === "cancel" ? p.action : "start";
-            if (action === "status") {
-              const flow = engineLoginStatus(engine);
-              return { command_id: cmd.command_id, ok: true, data: flow };
-            }
-            if (action === "cancel") {
-              const flow = cancelEngineLogin(this.bus, engine);
-              return { command_id: cmd.command_id, ok: true, ...(flow ? { data: flow } : { data: null }) };
-            }
-            if (action === "verify") {
-              verifyEngineLogin(this.bus, engine); // 受理；探针结果走 AUTH_REQUIRED 事件
-              return { command_id: cmd.command_id, ok: true, data: { engine, accepted: true } };
-            }
-            const flow = startEngineLogin(this.bus, engine);
-            return { command_id: cmd.command_id, ok: true, data: flow };
-          }
+          return this.engineCmds.COMMAND_ENGINE_LOGIN(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/engine-commands.ts）
         }
         case "COMMAND_TASK_CREATE":
         case "COMMAND_TASK_UPDATE":
         case "COMMAND_DISPATCH": {
-          // M12-1 三新命令（v2-m10-freeze §3.1 新增候选定岗）：LAN/cloud 两入口都经
-          // handleCommand 到这里，同走 orgCommand 咽喉（权限矩阵+审计一行），adapter
-          // 把 canonical payload 映射到 orgAction 旧 shape 再执行——不建第二事实源。
-          // ACK data 冻结口径 {entity_id, gid}（dispatch 并列 dispatch_id/session_id）
-          // W-EXPP1：COMMAND_LESSON_APPEND 命令字下线（设计 §8 P1 退役清单）——经验
-          // 回流走经验库 exp 通道（经验库 HTTP 面 exp-append；P2 面板 COMMAND_EXP_*），
-          // case 单列显式退役报错优于落 generic unsupported（端上可读指引）
-          const m12Action: Record<string, string> = {
-            COMMAND_TASK_CREATE: "task-create",
-            COMMAND_TASK_UPDATE: "task-update",
-            COMMAND_DISPATCH: "dispatch",
-          };
-          const r = this.orgCommand("owner", by, m12Action[cmd.type] ?? "", cmd.payload as Record<string, unknown>);
-          if ("forbidden" in r) return r.forbidden;
-          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+          return this.boardCmds.COMMAND_TASK_CREATE(cmd, by); // W-SPLIT-S3c：三连 case 共享体迁 commands/board-commands.ts（三命令同体）
         }
         case "COMMAND_LESSON_APPEND": {
-          // W-EXPP1 退役（设计 §8 P1 旧域读侧退役清单）：#087 lessons 分区已被团队经验
-          // 库接管（relay/src/experience.ts），本命令字不再受理——M12-4 收口自动账仍走
-          // orgAction("lesson-append") 写旧域（维持现状，不经此命令面）
-          return {
-            command_id: cmd.command_id,
-            ok: false,
-            error: "lesson 命令已退役（经验回流走团队经验库：org CLI `org exp append` / HTTP exp-append；P2 起面板 COMMAND_EXP_*）",
-          };
+          return this.boardCmds.COMMAND_LESSON_APPEND(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
         }
         case "COMMAND_NOTIFICATION_ACK": {
-          // #018-R1c 通知生命周期（B0 冻结 action 词表 handled|dismissed；resolved
-          // 由来源事件驱动不经此）。幂等：已 resolved 的账 ok 不复活；未知 key 拒收
-          if (typeof cmd.payload.notification_key !== "string" || !cmd.payload.notification_key) {
-            return { command_id: cmd.command_id, ok: false, error: "notification_key 必填" };
-          }
-          const r = this.notificationAck(cmd.payload.notification_key, cmd.payload.action);
-          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? {} : { error: r.error }) };
+          return this.notifyCmds.COMMAND_NOTIFICATION_ACK(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/notify-commands.ts）
         }
-        case "COMMAND_WATCH_GRANT":
-          // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里
-          // 说明命令被路由错了——明确报错而非静默
-          return { command_id: cmd.command_id, ok: false, error: "手表配对授权仅限局域网信道" };
+        case "COMMAND_WATCH_GRANT": {
+          return this.cloudCmds.COMMAND_WATCH_GRANT(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/cloud-commands.ts）
+        }
         default:
           return { command_id: cmd.command_id, ok: false, error: "unsupported command" };
       }
