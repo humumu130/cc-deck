@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { notificationsListOf } from "./decision-ledger-projection.js";
+import { readTitleOverrides } from "./title-derive.js";
+import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
@@ -405,19 +408,7 @@ function appendDeliverable(dataDir: string, e: DeliverableEntry): void {
 // 手动命名的跨重启持久化（2026-09-16）：外部会话重启后经 ensureExternal 从 transcript
 // 重新推导标题，内存里的 rename 全丢——"改好名字过一会变回去"根因。sid -> title 落盘，
 // ensureExternal 建卡时回放并打 title_locked（后续智能标题/桥接升级路径都尊重该锁）
-function readTitleOverrides(dataDir: string): Record<string, string> {
-  try {
-    const raw = JSON.parse(readFileSync(join(dataDir, "title-overrides.json"), "utf-8")) as unknown;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(raw)) {
-      if (typeof v === "string" && v.trim()) out[k] = v.trim().slice(0, 40);
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
+// W-SPLIT-S2：实现外迁 title-derive.ts（只搬不改，本处保留注释与调用点）
 
 // #49 置顶会话清单：写穿 data/pinned-sessions.json（relay session_id 数组）。
 // 置顶 = 跨重启保留：重启后 applyPinned 把清单内托管会话登记为休眠（saved，
@@ -969,8 +960,7 @@ export class SessionManager {
   // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
   // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
   notificationsList(): NotificationItem[] {
-    return [...this.notifications.values()]
-      .sort((a, b) => a.created_at - b.created_at || (a.key < b.key ? -1 : 1));
+    return notificationsListOf(this.notifications.values()); // W-SPLIT-S2：投影外迁
   }
 
   // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
@@ -988,6 +978,8 @@ export class SessionManager {
 
   // 上限纪律（仿 org confirms 只留 200 条已决）：未决全留 + 最近 200 条已决
   private trimNotifications(): void {
+    // W-SPLIT-S2 复盘：此处需 NotificationLifecycleItem 全字段（dismissed_at 等生命周期域），
+    // 投影函数 notificationsListOf 类型窄化不适用——排序保留内联，仅 notificationsList 走投影
     const all = [...this.notifications.values()]
       .sort((a, b) => a.created_at - b.created_at || (a.key < b.key ? -1 : 1));
     const resolved = all.filter((n) => n.resolved_at !== undefined || n.handled_at !== undefined || n.dismissed_at !== undefined);
@@ -1290,51 +1282,8 @@ export class SessionManager {
     budgetBytes: number = SNAPSHOT_LOGS_BUDGET_BYTES,
     perSessionCap: number = SNAPSHOT_LOGS_PER_SESSION,
   ): { logs: Record<string, LogEntry[]>; logs_truncated: Record<string, number> } {
-    // 消息类条目判定（与客户端「消息」视图的 kind 口径一致）
-    const isMsg = (e: LogEntry): boolean => e.kind === "user_message" || e.kind === "assistant_text";
-    const logs: Record<string, LogEntry[]> = {};
-    const logsTruncated: Record<string, number> = {};
-    // 每条字节量先算一次，预算裁剪纯算术推进，不反复整体序列化
-    const kept: { id: string; entries: { e: LogEntry; b: number }[] }[] = [];
-    let total = 0;
-    for (const [id, s] of this.sessions) {
-      // 取证窗口 2×cap：长会话（内存上限 500 条）里消息稀疏，窗口不放宽的话
-      // 保护逻辑根本采不到窗口外的正文
-      const wide = s.logs.length > perSessionCap * 2 ? s.logs.slice(s.logs.length - perSessionCap * 2) : s.logs;
-      let pick: LogEntry[];
-      if (wide.length <= perSessionCap) {
-        pick = wide;
-      } else {
-        const msgIdx = wide.reduce<number[]>((acc, e, i) => (isMsg(e) ? (acc.push(i), acc) : acc), []);
-        // 消息全保（极端刷屏超 cap 时仍裁最旧的消息），剩余名额给最新的非消息条目
-        const keepMsg = msgIdx.length > perSessionCap ? new Set(msgIdx.slice(msgIdx.length - perSessionCap)) : new Set(msgIdx);
-        const restIdx = wide.map((_, i) => i).filter((i) => !keepMsg.has(i));
-        const room = Math.max(0, perSessionCap - keepMsg.size);
-        const keepRest = new Set(restIdx.slice(Math.max(0, restIdx.length - room)));
-        pick = wide.filter((_, i) => keepMsg.has(i) || keepRest.has(i));
-      }
-      if (pick.length < s.logs.length) logsTruncated[id] = s.logs.length - pick.length;
-      const entries = pick.map((e) => ({ e, b: Buffer.byteLength(JSON.stringify(e)) + 1 }));
-      if (entries.length) {
-        kept.push({ id, entries });
-        total += entries.reduce((acc, x) => acc + x.b, 0);
-      }
-    }
-    while (total > budgetBytes) {
-      // 条目最多的会话先裁：活跃会话（条目已被 K 帽截到同量级）相对公平；
-      // 会话内先丢最旧的非消息条目，全是消息才丢最旧一条消息（保底 1 条不变）
-      let big: (typeof kept)[number] | null = null;
-      for (const k of kept) if (k.entries.length > 1 && (!big || k.entries.length > big.entries.length)) big = k;
-      if (!big) break; // 每会话只剩 1 条：物理下限（MAX_SESSIONS 条单条日志远小于预算）
-      let dropAt = big.entries.findIndex((x) => !isMsg(x.e));
-      if (dropAt < 0) dropAt = 0;
-      const dropped = big.entries.splice(dropAt, 1)[0];
-      if (!dropped) break;
-      total -= dropped.b;
-      logsTruncated[big.id] = (logsTruncated[big.id] ?? 0) + 1;
-    }
-    for (const k of kept) logs[k.id] = k.entries.map((x) => x.e);
-    return { logs, logs_truncated: logsTruncated };
+    // W-SPLIT-S2：算法体外迁 snapshot-budget.ts（只搬不改，本方法=委托壳）
+    return buildSnapshotLogsBudget(this.sessions, budgetBytes, perSessionCap);
   }
 
   // Relay 重启后收养历史会话（agent 为空，仅展示不可操作）
@@ -7666,6 +7615,13 @@ export class SessionManager {
         ? existsSync(entry.receiptPath)
         : existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
       if (!hit) {
+        // W-GATEFIX-2：告警 key 带 dispatch 全 id——旧 notifyLeaderSystem 的 stableKeyHint
+        // 只取文本前 6 字符（"dispat"），所有派单告警互相覆盖（1020 实锤：e70212f4 与
+        // 171f394c 两单告警塌缩一条，后者静默丢失）。直达 ledger 唯一键+feedPM 强制上桌
+        this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
+          title: "收口无回执", body: `dispatch ${entry.id.slice(0, 8)}（${entry.title.slice(0, 30)}）收口无回执——交付存疑，请核 artifacts/`,
+          severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "/",
+        });
         this.notifyLeaderSystem(`dispatch ${entry.id.slice(0, 8)}（${entry.title.slice(0, 30)}）收口无回执——交付存疑，请核 artifacts/`);
       }
     } catch { /* 扫描失败跳过 */ }

@@ -12,7 +12,7 @@ check(REPLAY_FAST_MAX <= 500, "R2 ≤ EventBus 默认容量 500（replay 空集�
 
 // 行为：300 帧（旧 200 之外）在 buffer 内 → replayAfter 全量返回（快路径不退化）
 const bus = new EventBus();
-for (let i = 1; i <= 300; i++) bus.emit("s-fake" as never, { seq: i } as never);
+for (let i = 1; i <= 300; i++) bus.emit("s-fake", "SESSION_LOG" as never, { seq: i } as never);
 const replay = bus.replayAfter(0);
 check(replay.length === 300, `R3 300 帧场景走快路径（旧阈值 200 会退 SNAPSHOT 重建=「重进很久」；现 replay 全量 ${replay.length} 帧）`, String(replay.length));
 check(bus.isBeyondBuffer(0) === false, "R4 seq=0 仍在 buffer（isBeyondBuffer 不单向失聪此场景）");
