@@ -6225,8 +6225,14 @@ export class SessionManager {
             veteran = reuse;
             capReuse = true;
             this.pushExternalLog(reuse, "system", `编制已满（${genericWorkerCount(g1.headcount)}/${headcountCapOf(g1)}），本单复用空闲 worker（非新建）`);
-          } else {
+          } else if (this.groupHasLiveWorker(g1)) {
             return this.enqueueCapDispatch(input, g1, tier, anchor, actor, engineFields);
+          } else {
+            // #200 ③：全候选死（无忙者+无健康空闲者）不再「排队假 ok」——排队单在全员
+            // 假死组里永远排不出去=隐性丢失（本单背景）。响亮 error 收口（零台账零队列
+            // 留账，PM 端 ACK 可见原因，修死会话/retire 后重派即可）
+            const names = g1.headcount.slice(0, 4).map((h) => (h.session_id || "").slice(0, 8)).join(" ");
+            return { ok: false as const, error: `组「${g1.name}」${g1.headcount.length} 个会话全部无响应（假死/僵死/退休，无在忙者）——先处理死会话（member-retire 或人工查看）再重派 [${names}]` };
           }
         }
       }
@@ -6545,8 +6551,10 @@ export class SessionManager {
       // #92 W-NOTIFY2 B：假死探测——agent 在+pid 活但久无进度帧（≥15min）=CLI 挂起，
       // 派给它必烧窗（本单背景：两次被路由到此类死会话）。skip 选下一候选（fallback
       // 链天然重路由；全死则 pickVeteran 返 null 走新会话——「响亮」面由 ACK 台账可查）
-      if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 60_000) {
-        this.emitChainAudit("dispatch-reroute", `zombie-veteran skip: ${e.session_id.slice(0, 12)} 无进度帧 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 60_000)}min，重路由下一候选`);
+      // #200 W-ROUTE：zombie 探测收 routeLivenessSkip 单口（cap-reuse 路径同链接入，
+      // 两入口判据同源防「一处修一处漏」——本单来历即触顶复用路径漏网）
+      if (this.routeLivenessSkip(e.session_id, s)) {
+        this.emitChainAudit("dispatch-reroute", `zombie skip: ${e.session_id.slice(0, 12)} 无进度帧 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 60_000)}min，重路由下一候选`);
         continue;
       }
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
@@ -6567,6 +6575,27 @@ export class SessionManager {
   //   与 planned 显式要求逐项一致（engine/model/provider，同熟手引擎一致性判据）
   //   排序 = 会话 updated_at 升序（idle 最久优先）
   // 返回 null = 全忙/无人可复用（调用方排队）。
+  /** #200 W-ROUTE：路由候选统一探活单口——假死（agent 在+pid 活但 ≥15min 无进度帧
+   * =CLI 挂起，#92 NOTIFY2-B 判据同源）。retired 闸在 revive.ts reviveEligible 链既有
+   *（S5 出舱），本单口只补 zombie 面；两路由入口（revive 链/cap-reuse 链）判据同源。 */
+  /** #200 ③：组内是否存在任何可承接/在忙的活会话——忙者（WORKING/WAITING）=正常满载
+   *（排队合法）；空闲但健康（非 zombie/retired/熔断）=drain 可承接。两者皆无=全死。 */
+  private groupHasLiveWorker(g: ProjectGroup): boolean {
+    for (const h of g.headcount) {
+      const s = this.sessions.get(h.session_id);
+      if (!s || s.state.external) continue;
+      if (s.state.status === "WORKING" || s.state.status === "WAITING") return true; // 忙=活
+      if (!this.routeLivenessSkip(h.session_id, s) && !this.isRetiredMember(h.session_id) && !(s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) && s.state.relay_session_id) return true; // 健康空闲
+    }
+    return false;
+  }
+
+  private routeLivenessSkip(sid: string, s: { agent: unknown; lastProgressAt: number; state: { updated_at?: number } } | undefined): string | null {
+    if (!s) return null;
+    if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 60_000) return "zombie";
+    return null;
+  }
+
   private pickIdleRosterWorker(
     g: ProjectGroup,
     role: string,
@@ -6585,6 +6614,13 @@ export class SessionManager {
       if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) continue;
       if (s.resumePending && now - s.resumePending < resumePendingWindowMs()) continue;
       if (s.resumeCooldownUntil && now < s.resumeCooldownUntil) continue;
+      // #200：cap-reuse 路径补统一探活（retired 兜底+zombie）——#92 只修 routing 表路径，
+      // 本路径漏网=「编制满复用假死 worker」直注黑洞（本单背景 org 派单自落死会话）
+      const idleLiveness = this.routeLivenessSkip(h.session_id, s) ?? (this.isRetiredMember(h.session_id) ? "retired" : null);
+      if (idleLiveness) {
+        this.emitChainAudit("dispatch-reroute", `cap-reuse ${idleLiveness} skip: ${h.session_id.slice(0, 12)}，复用下一候选`);
+        continue;
+      }
       // 引擎三元组运行态一致性（同派单侧熟手引擎判据：显式要求 vs 会话现值）
       if ((planned.engine && s.state.engine !== planned.engine) ||
           (planned.model && s.state.model !== planned.model) ||

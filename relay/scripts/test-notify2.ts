@@ -80,6 +80,44 @@ try {
   ok(sm.includes('"pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close"'), "E③ 四动作审计词表在位");
   const pt = readFileSync(join(__dirname, "../src/patrol.ts"), "utf-8");
   ok(pt.includes('"stale-escalate"') && pt.includes("actionable: true"), "D① 40min 停滞升级可操作通知在位（patrol）");
+  // ---------- #200 W-ROUTE 三组：retired 不选中 / 假死 cap-reuse fallback / 全死响亮错 ----------
+  console.log("== #200 route-liveness ==");
+  const mk2 = (sid: string, agoMs: number, agent: unknown, status = "DONE") => ({
+    agent: agent ?? null, logs: [], lastUpdateEmit: 0, lastProgressAt: Date.now() - agoMs, lastProgressKind: "",
+    unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0,
+    state: { session_id: sid, relay_session_id: `sdk-${sid}`, external: false, status, title: sid, started_at: Date.now() - 7_200_000, updated_at: Date.now() - agoMs },
+  });
+  // R1 retired 不选中：cap-reuse 路径（编制满）——retired 兜底闸
+  writeFileSync(join(ORG, "projects.json"), JSON.stringify({ groups: [{ id: "g-r1", name: "R1 组", anchor_dir: DATA, status: "active", tier: "随手办", headcount_cap: 1, headcount: [
+    { session_id: "w-retired", role: "worker" }, { session_id: "w-ok", role: "worker" },
+  ], created_at: Date.now() - 86_400_000 }] }));
+  (mgr as any).sessions.set("w-retired", mk2("w-retired", 60_000, null));
+  (mgr as any).sessions.set("w-ok", mk2("w-ok", 60_000, null));
+  (mgr as any).isRetiredMember = (sid: string) => sid === "w-retired";
+  const r1 = (mgr as any).dispatchWorker({ anchor: DATA, prompt: "#200 R1 retired 闸", gid: "g-r1", tier: "随手办" });
+  ok(r1.ok === true && r1.session_id !== "w-retired", `R1 retired 不选中（实 target=${r1.session_id ?? JSON.stringify(r1).slice(0, 60)}）`);
+  (mgr as any).isRetiredMember = () => false;
+
+  // R2 假死 cap-reuse fallback：编制满+zombie 在前+健康在后 → 复用落健康
+  writeFileSync(join(ORG, "projects.json"), JSON.stringify({ groups: [{ id: "g-r2", name: "R2 组", anchor_dir: DATA, status: "active", tier: "随手办", headcount_cap: 1, headcount: [
+    { session_id: "w-zomb", role: "worker" }, { session_id: "w-fit2", role: "worker" },
+  ], created_at: Date.now() - 86_400_000 }] }));
+  (mgr as any).sessions.set("w-zomb", mk2("w-zomb", 20 * 60_000, { ended: false })); // agent 在+20min 无帧=zombie
+  (mgr as any).sessions.set("w-fit2", mk2("w-fit2", 60_000, null));
+  const r2 = (mgr as any).dispatchWorker({ anchor: DATA, prompt: "#200 R2 假死 fallback", gid: "g-r2", tier: "随手办" });
+  ok(r2.ok === true && r2.session_id === "w-fit2", `R2 cap-reuse 假死 skip 落健康（实 ${r2.session_id ?? JSON.stringify(r2).slice(0, 60)}）`);
+  ok(readFileSync(eventsPath, "utf-8").includes("cap-reuse zombie skip"), "R2② reroute 审计帧（cap-reuse zombie）落盘");
+
+  // R3 全死响亮错：编制满+全员 zombie（无忙者）→ ok:false 含「全部无响应」
+  writeFileSync(join(ORG, "projects.json"), JSON.stringify({ groups: [{ id: "g-r3", name: "R3 组", anchor_dir: DATA, status: "active", tier: "随手办", headcount_cap: 1, headcount: [
+    { session_id: "w-d1", role: "worker" }, { session_id: "w-d2", role: "worker" },
+  ], created_at: Date.now() - 86_400_000 }] }));
+  (mgr as any).sessions.set("w-d1", mk2("w-d1", 30 * 60_000, { ended: false }));
+  (mgr as any).sessions.set("w-d2", mk2("w-d2", 40 * 60_000, { ended: false }));
+  const r3 = (mgr as any).dispatchWorker({ anchor: DATA, prompt: "#200 R3 全死响亮错", gid: "g-r3", tier: "随手办" });
+  ok(r3.ok === false && String(r3.error).includes("全部无响应"), `R3 全死→ok:false 响亮错（实 ${JSON.stringify(r3).slice(0, 90)}）`);
+  ok(!String(JSON.stringify(r3)).includes("queued"), "R3② 不再排队假 ok");
+
 } finally {
   delete process.env.CCR_ORG_DIR;
 }
