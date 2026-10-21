@@ -4941,6 +4941,14 @@ export class SessionManager {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // #204②连带：编制面动作（member-retire/member-add/member-archive 等）咽喉放行——
+    // case 全在 orgAction switch（:5627 区），org CLI 走 orgCommand 时此前落
+    // "unsupported org action"（本单实锤：CLI org member-retire 必挂）。与 rule-*/
+    // collab-mode/auth-bypass 同款 #212 坑第 N 犯——编制动作清单直通
+    if (action === "member-retire" || action === "member-add" || action === "member-archive" || action === "member-restore" || action === "nick-set") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     // W-PERMERR：auth-bypass 咽喉放行（#212 同款坑自查：case 在 orgAction switch 内，
     // 此处不放行则 org CLI 恒收 unsupported）。写/撤授权文件，非决议类
     if (action === "auth-bypass") {
@@ -5632,18 +5640,26 @@ export class SessionManager {
           const g = findGroup(gid);
           if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
           if (g.status === "archived") return { ok: false, error: "结项组编制已解散（headcount 为快照档案），无成员可退" };
-          if (!g.headcount.some((h) => h.session_id === sid)) return { ok: false, error: `成员不在「${g.name}」编制内（已退休只剩档案？复拉走 member-add）` };
-          const s = this.sessions.get(sid);
+          // #204②：sid 支持唯一前缀匹配——台账/看板/通知全链显示 8 位短 sid，用户复制
+          // 短前缀来 retire 时全等必失（「明明在编制内却报不在」第 7 次事故实测根因）。
+          // 短前缀唯一命中=放行；多命中（前缀过短歧义）=响亮拒；全等仍优先
+          const retireTarget = g.headcount.find((h) => h.session_id === sid) ?? (sid.length >= 6
+            ? (() => { const hits = g.headcount.filter((h) => h.session_id.startsWith(sid)); return hits.length === 1 ? hits[0] : hits.length > 1 ? "AMBIG" : undefined; })()
+            : undefined);
+          if (retireTarget === "AMBIG") return { ok: false, error: `前缀 ${sid} 在「${g.name}」编制内命中多个成员——请给更长的前缀或完整 session_id` };
+          if (!retireTarget) return { ok: false, error: `成员不在「${g.name}」编制内（已退休只剩档案？复拉走 member-add）` };
+          const sidFull = retireTarget.session_id;
+          const s = this.sessions.get(sidFull);
           // 审查修正（A/C 双报）：会话卡被 evict/events 压缩后 headcount 残条不再
           // 死锁除名——人不在场（无卡）也照除编制（无会话可停流收口，纯档案清扫，
           // halted:false 语义与「他组在跑」一致）；外部会话不可入编（member-add
           // 挡过），出现即数据异常，仍拒
           if (s?.state.external) return { ok: false, error: "成员会话为外部会话（不可入编，数据异常）" };
-          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader 不可退休（逻辑常驻，锚是权威）" };
-          if ((this.openDispatches.get(sid)?.length ?? 0) > 0) {
-            this.closeOpenDispatches(sid, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
+          if (this.isLeaderSession(sidFull)) return { ok: false, error: "Leader 不可退休（逻辑常驻，锚是权威）" };
+          if ((this.openDispatches.get(sidFull)?.length ?? 0) > 0) {
+            this.closeOpenDispatches(sidFull, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
           }
-          removeMember(gid, sid);
+          removeMember(gid, sidFull); /* #204②：全等 sid 解析后的真身 */
           this.emitOrgState();
           this.emitBoard(gid);
           // P0 编制排队排水：除名即腾出泛 worker 名额（closeOpenDispatches 内的排水
@@ -5651,7 +5667,7 @@ export class SessionManager {
           try { this.drainDispatchQueue(gid); } catch { /* 排水失败留队等下一轮 */ }
           // 无卡（已驱逐）→ 纯除名；他组派单还在跑 → 只除名不停流（矩阵式正交：
           // 他组回合自然收口后空闲入池）
-          if (!s || (this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
+          if (!s || (this.openDispatches.get(sidFull)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
           this.retireSession(s, gid, "retired");
           return { ok: true, data: { retired: true, halted: true } };
         }
@@ -6591,7 +6607,10 @@ export class SessionManager {
   }
 
   private routeLivenessSkip(sid: string, s: { agent: unknown; lastProgressAt: number; state: { updated_at?: number } } | undefined): string | null {
-    if (!s) return null;
+    // #204①：会话整个不在 relay（s===undefined，进程回收后 roster 残条）此前被当
+    // 健康放行（return null）——第 7 次路由事故实测洞：派单落无会话条目=台账 running
+    // 悬空。改判 absent 跳过（fallback 下一候选；全死走 #200③ 响亮错）
+    if (!s) return "absent";
     if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 60_000) return "zombie";
     return null;
   }

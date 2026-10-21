@@ -9,6 +9,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import type { RelayConfig } from "../src/config.js";
 
+let prevPolicy: string | undefined; /* #204 */
 let pass = 0, fail = 0;
 function ok(cond: boolean, msg: string): void {
   if (cond) { pass++; console.log(`PASS ${msg}`); } else { fail++; console.error(`FAIL ${msg}`); }
@@ -118,7 +119,38 @@ try {
   ok(r3.ok === false && String(r3.error).includes("全部无响应"), `R3 全死→ok:false 响亮错（实 ${JSON.stringify(r3).slice(0, 90)}）`);
   ok(!String(JSON.stringify(r3)).includes("queued"), "R3② 不再排队假 ok");
 
+  // ---------- #204 W-ROUTE2 两组：undefined 会话跳过 / member-retire 短前缀清退 ----------
+  prevPolicy = process.env.CCR_PERMISSION_POLICY;
+  process.env.CCR_PERMISSION_POLICY = "off"; /* #204：orgCommand 过 P81 环境闸——测试关闸直测 member-retire 匹配逻辑 */
+  console.log("== #204 route2 ==");
+  // W1：headcount 条目但 sessions 里无会话（absent）→ dispatch 不落它（响亮错或跳下一）
+  writeFileSync(join(ORG, "projects.json"), JSON.stringify({ groups: [{ id: "g-w1", name: "W1 组", anchor_dir: DATA, status: "active", tier: "随手办", headcount: [
+    { session_id: "ghost-0000", role: "worker" },  // sessions 里不存在=absent
+  ], created_at: Date.now() - 86_400_000 }] }));
+  (mgr as any).sessions.delete("ghost-0000");
+  const w1 = (mgr as any).dispatchWorker({ anchor: DATA, prompt: "#204 W1 absent 洞", gid: "g-w1", tier: "随手办" });
+  ok(w1.ok === false || (w1.ok === true && w1.session_id !== "ghost-0000"), `W1 absent 会话不被选中（实 ${JSON.stringify(w1).slice(0, 70)}）`);
+
+  // W2：member-retire 短前缀——编制放全 UUID 成员，CLI 传 8 位前缀应清退成功
+  const FULL = "fe34bf33-5dee-4e31-a9c0-0966eb919e2e";
+  writeFileSync(join(ORG, "projects.json"), JSON.stringify({ groups: [{ id: "g-w2", name: "W2 组", anchor_dir: DATA, status: "active", tier: "随手办", headcount: [
+    { session_id: FULL, role: "worker" },
+    { session_id: "fe34bf99-aaaa-bbbb-cccc-dddddddddddd", role: "worker" },
+  ], created_at: Date.now() - 86_400_000 }] }));
+  const w2 = (mgr as any).orgCommand("owner", "test-device", "member-retire", { gid: "g-w2", sid: FULL.slice(0, 8), reason: "#204 前缀清退验证" });
+  ok(w2?.ok === true && w2?.data?.retired === true, `W2 8 位前缀唯一命中→清退成功（实 ${JSON.stringify(w2).slice(0, 80)}）`);
+  const g2 = JSON.parse(readFileSync(join(ORG, "projects.json"), "utf-8")).groups[0];
+  ok(!g2.headcount.some((h: { session_id: string }) => h.session_id === FULL), "W2② 该成员已从编制移除");
+  // 歧义前缀（新组放两个 fe34 开头成员，6 位前缀命中两个）→ 响亮拒
+  writeFileSync(join(ORG, "projects.json"), JSON.stringify({ groups: [{ id: "g-w3", name: "W3 组", anchor_dir: DATA, status: "active", tier: "随手办", headcount: [
+    { session_id: "fe34bf33-5dee-4e31-a9c0-0966eb919e2e", role: "worker" },
+    { session_id: "fe34bf99-aaaa-bbbb-cccc-dddddddddddd", role: "worker" },
+  ], created_at: Date.now() - 86_400_000 }] }));
+  const w3 = (mgr as any).orgCommand("owner", "test-device", "member-retire", { gid: "g-w3", sid: "fe34bf" });
+  ok(w3?.ok === false && String(w3?.error).includes("多个成员"), `W3 歧义前缀响亮拒（实 ${JSON.stringify(w3).slice(0, 70)}）`);
+
 } finally {
+  if (prevPolicy === undefined) delete process.env.CCR_PERMISSION_POLICY; else process.env.CCR_PERMISSION_POLICY = prevPolicy;
   delete process.env.CCR_ORG_DIR;
 }
 console.log(`notify2: ${pass} passed, ${fail} failed`);
