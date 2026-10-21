@@ -10339,7 +10339,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir19, hostname, tmpdir as tmpdir3 } from "node:os";
 import { join as join45, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync28, openSync as openSync5, readFileSync as readFileSync40, rmSync as rmSync8, existsSync as existsSync30, readdirSync as readdirSync18, statSync as statSync15 } from "node:fs";
+import { writeFileSync as writeFileSync28, openSync as openSync5, readFileSync as readFileSync40, rmSync as rmSync8, existsSync as existsSync30, readdirSync as readdirSync18, statSync as statSync16 } from "node:fs";
 import { spawn as spawn7, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -52065,8 +52065,148 @@ provider=${opts.provider ?? "default"}` : void 0,
   emitChainAudit(action, detail, target) {
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
+      this.chainAuditMirror(action, detail);
     } catch {
     }
+  }
+  // #199 C：审计镜像队列——emitChainAudit 四动作同步 append data/chain-audit.jsonl
+  // （云通道无运行时 KV 直推能力——云桥是 wss 中继；镜像文件=KV 批量同步的现成队列，
+  // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
+  chainAuditMirror(action, detail) {
+    try {
+      appendFileSync4(join37(this.cfg.dataDir, "chain-audit.jsonl"), JSON.stringify({ action, detail, ts: Date.now() }) + "\n");
+    } catch {
+    }
+  }
+  /** #199 A 对端：CLI Stop 钩子外报（/api/turn-report）。PM→重跑值守+对账；worker→60s
+   * 去重补审计（托管 onTurnEnd/external finishExternal 已是主信号，钩子报=relay 重启窗
+   * 与帧丢失窗的第一方补充——transcript 为证）。返回 true=已消费。 */
+  handleTurnReport(sid, key) {
+    const now = Date.now();
+    const last = this.turnReportSeen.get(sid);
+    if (last && now - last.at < 6e4 && last.key === key) return false;
+    this.turnReportSeen.set(sid, { at: now, key });
+    const isPm = this.dutyTargetId() === sid || this.isLeaderSession(sid);
+    if (isPm) {
+      this.emitChainAudit("pm-wake", `trigger=turn-report sid=${sid.slice(0, 12)}\uFF08CLI Stop \u7B2C\u4E00\u65B9\u4FE1\u53F7\uFF0C\u91CD\u8DD1\u503C\u5B88\uFF09`, sid);
+      this.feedPM("turn-report");
+      this.runLedgerRecon("turn-report");
+    } else {
+      this.emitChainAudit("pm-wake", `trigger=turn-report(worker) sid=${sid.slice(0, 12)} key=${String(key).slice(0, 12)}`, sid);
+      this.workerDonePending += 1;
+      this.feedPM("worker_done");
+    }
+    return true;
+  }
+  turnReportSeen = /* @__PURE__ */ new Map();
+  /** #199 D：三账对账——台账（dispatch-log running 行 title 提 #NN）↔ 任务面
+   *（~/.cc-deck 全局任务 json subject 提 #NN，限 pending/in_progress）↔ 板面（org
+   * board claimed/doing text 提 #NN）。三元缺角 upsert 告警（稳定键幂等）；心跳文件
+   * data/recon-heartbeat.json 供 patrol 查龄（对账停跳>70min 告警）。触发=PM
+   * turn-report + patrol full 周期（双触发天然低频，无独立定时器）。 */
+  runLedgerRecon(trigger) {
+    const now = Date.now();
+    try {
+      writeFileSync20(join37(this.cfg.dataDir, "recon-heartbeat.json"), JSON.stringify({ at: now, trigger }));
+    } catch {
+    }
+    const nn = (t) => {
+      const m = String(t ?? "").match(/#(\d{2,4})\b/);
+      return m ? "#" + m[1] : "";
+    };
+    const ledger = /* @__PURE__ */ new Set();
+    for (const e of readDispatchLog().filter((x) => x.status === "running" || x.status === "dispatched")) {
+      const k3 = nn(e.title);
+      if (k3) ledger.add(k3);
+    }
+    const task = /* @__PURE__ */ new Set();
+    try {
+      const tasksRoot = join37(homedir13(), ".claude", "tasks");
+      for (const d2 of readdirSync13(tasksRoot).slice(-80)) {
+        try {
+          for (const f of readdirSync13(join37(tasksRoot, d2))) {
+            try {
+              const j2 = JSON.parse(readFileSync31(join37(tasksRoot, d2, f), "utf-8"));
+              if (j2.status === "pending" || j2.status === "in_progress") {
+                const k3 = nn(j2.subject);
+                if (k3) task.add(k3);
+              }
+            } catch {
+            }
+          }
+        } catch {
+        }
+      }
+    } catch {
+    }
+    const board = /* @__PURE__ */ new Set();
+    try {
+      for (const g2 of listGroups()) {
+        const b = loadBoardFile(g2.id);
+        if (!b) continue;
+        for (const e of b.entries) {
+          if (e.status === "claimed" || e.status === "ready_to_install" || e.status === "submitted") {
+            const k3 = nn(e.text);
+            if (k3) board.add(k3);
+          }
+        }
+      }
+    } catch {
+    }
+    const missTask = [...ledger].filter((k3) => !task.has(k3));
+    const orphanTask = [...task].filter((k3) => !board.has(k3) && !ledger.has(k3));
+    const missLedger = [...board].filter((k3) => !ledger.has(k3) && !task.has(k3));
+    const report = [];
+    if (missTask.length) report.push(`\u53F0\u8D26 running \u4F46\u4EFB\u52A1\u9762\u65E0\u5355\uFF1A${missTask.slice(0, 5).join(" ")}`);
+    if (orphanTask.length) report.push(`\u4EFB\u52A1\u9762\u6709\u5355\u4F46\u53F0\u8D26/\u677F\u5747\u65E0\uFF1A${orphanTask.slice(0, 5).join(" ")}`);
+    if (missLedger.length) report.push(`\u677F\u5361 doing \u4F46\u53F0\u8D26/\u4EFB\u52A1\u5747\u65E0\uFF1A${missLedger.slice(0, 5).join(" ")}`);
+    if (report.length) {
+      this.emitChainAudit("pm-wake", `recon(${trigger}) \u4E09\u8D26\u7F3A\u89D2\uFF1A${report.join("\uFF1B").slice(0, 200)}`);
+      try {
+        this.upsertNotification("system", "ledger-recon", String(Math.floor(now / 18e5)), {
+          title: "\u4E09\u8D26\u5BF9\u8D26\u53D1\u73B0\u7F3A\u89D2",
+          body: truncate(report.join("\uFF1B"), 160),
+          severity: "waiting",
+          group: "attention",
+          actionable: true,
+          domain: "session",
+          returnPath: "sessions"
+        });
+      } catch {
+      }
+    }
+  }
+  /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
+  drainTurnSpool() {
+    const dir = join37(homedir13(), ".cc-deck", "data", "turn-spool");
+    let drained = 0;
+    try {
+      for (const f of readdirSync13(dir)) {
+        if (!f.endsWith(".jsonl")) continue;
+        const full = join37(dir, f);
+        try {
+          for (const line of readFileSync31(full, "utf-8").split("\n")) {
+            if (!line.trim()) continue;
+            try {
+              const j2 = JSON.parse(line);
+              if (j2?.sid && j2.key) {
+                this.handleTurnReport(j2.sid, j2.key);
+                drained++;
+              }
+            } catch {
+            }
+          }
+        } catch {
+        }
+        try {
+          rmSync6(full, { recursive: true, force: true });
+        } catch {
+        }
+      }
+    } catch {
+    }
+    if (drained > 0) this.emitChainAudit("pm-wake", `turn-spool drain \u56DE\u653E ${drained} \u6761\u65AD\u7535\u7A97\u5916\u62A5`);
+    return drained;
   }
   upsertNotification(kind, entityId, revision, seed) {
     const key = stableKey(kind, entityId, revision);
@@ -54831,6 +54971,18 @@ provider=${opts.provider ?? "default"}` : void 0,
         detail: "no-leader \u6A21\u5F0F\u4E0B\u65E0\u5728\u518C PM \u4F1A\u8BDD\uFF08external \u4E14\u8FDB\u7A0B\u6D3B\uFF09",
         from: Date.now()
       });
+      try {
+        this.upsertNotification("system", "pm-no-target", "noleader", {
+          title: "\u503C\u5B88\u65E0 PM \u76EE\u6807\uFF08no-leader \u6A21\u5F0F\uFF09",
+          body: truncate(`\u5019\u9009\u5F85\u5904\u7F6E\u9879\u65E0\u4EBA\u63A5\u2014\u2014\u65E0\u5728\u518C PM \u4F1A\u8BDD\uFF08external \u4E14\u8FDB\u7A0B\u6D3B\uFF09`, 160),
+          severity: "waiting",
+          group: "attention",
+          actionable: true,
+          domain: "session",
+          returnPath: "sessions"
+        });
+      } catch {
+      }
       return;
     }
     const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
@@ -54920,6 +55072,19 @@ provider=${opts.provider ?? "default"}` : void 0,
           observed,
           from
         });
+        try {
+          this.upsertNotification("system", tripped ? "pm-breaker" : "pm-parked", targetId, {
+            title: tripped ? "\u503C\u5B88\u6682\u505C\uFF1APM resume \u7194\u65AD\u4E2D" : "\u503C\u5B88\u6682\u505C\uFF1APM \u5DF2\u505C\u653E\uFF08\u4F11\u7720\uFF09",
+            body: truncate(`${tripped ? "\u8FDE\u7EED\u5931\u8D25\u51B7\u5374\u671F" : "\u7528\u6237\u4E3B\u52A8\u505C\u653E"}\u2014\u2014\u961F\u5217\u5019\u9009 ${observed.actionable_count} \u9879\u6682\u65E0\u4EBA\u5904\u7F6E\uFF1B${tripped ? "\u51B7\u5374\u7ED3\u675F\u81EA\u52A8\u6062\u590D" : "\u5524\u9192 PM \u9700\u7528\u6237\u53D1\u8BDD"}`, 160),
+            severity: tripped ? "waiting" : "info",
+            group: "attention",
+            actionable: !tripped,
+            sessionId: targetId,
+            domain: "session",
+            returnPath: "/"
+          });
+        } catch {
+        }
         return;
       }
     }
@@ -54940,6 +55105,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         observed,
         from
       });
+      this.emitChainAudit("pm-wake", `trigger=${trigger} candidates=${verdict.candidates.length} target=${targetId.slice(0, 12)}`, targetId);
       const now2 = Date.now();
       if (now2 - this.pmWakeNotifyAt > 6e4) {
         this.pmWakeNotifyAt = now2;
@@ -54956,7 +55122,6 @@ provider=${opts.provider ?? "default"}` : void 0,
           });
         } catch {
         }
-        this.emitChainAudit("pm-wake", `trigger=${trigger} candidates=${verdict.candidates.length} target=${targetId.slice(0, 12)}`, targetId);
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -56558,7 +56723,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const taskRefHead = taskRefId ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}
 ` : "";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...engineFields });
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId;
     if (veteran) {
@@ -62367,6 +62532,24 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       void handleNotify(req, res, mgr2, cfg2);
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/turn-report") {
+      let trBody = "";
+      req.on("data", (c) => {
+        trBody += c;
+      });
+      req.on("end", () => {
+        try {
+          const body = JSON.parse(trBody || "{}");
+          const sid = String(body.sid ?? "");
+          const key = String(body.key ?? "");
+          if (sid && key) mgr2.handleTurnReport(sid, key);
+        } catch {
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/artifacts") {
       if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
         res.writeHead(401).end("unauthorized");
@@ -62996,6 +63179,7 @@ var connectionCounter = 0;
 // src/patrol.ts
 import { statfsSync, writeFileSync as writeFileSync25, readFileSync as readFileSync37 } from "node:fs";
 import { join as join42 } from "node:path";
+import { statSync as statSync15 } from "node:fs";
 var WORKER_STALE_MIN = 40;
 var BOARD_CLAIMED_STALE_H = 48;
 var DISK_FREE_MIN_GB = 5;
@@ -63024,6 +63208,10 @@ var PatrolModule = class {
         this.runLight();
       } catch (e) {
         console.log(`[patrol] light error: ${e instanceof Error ? e.message : e}`);
+      }
+      try {
+        this.retryExpiredBreaker();
+      } catch {
       }
     }, lightMs);
     this.fullTimer = setInterval(() => {
@@ -63077,10 +63265,14 @@ var PatrolModule = class {
   runFull() {
     if (!this.opts.enabled()) return;
     const now = Date.now();
-    const stale = this.mgr.snapshot().filter((s) => s.status === "WORKING" && !s.compacting && now - (s.updated_at ?? 0) > WORKER_STALE_MIN * 6e4);
+    const stale = this.mgr.snapshot().filter((s) => s.status === "WORKING" && (!s.compacting || now - (s.updated_at ?? 0) > 90 * 6e4) && now - (s.updated_at ?? 0) > WORKER_STALE_MIN * 6e4);
+    const staleWaiting = this.mgr.snapshot().filter((s) => s.status === "WAITING" && now - (s.updated_at ?? 0) > 2 * 36e5);
     if (stale.length) {
       const text = `${stale.length} \u4E2A\u4F1A\u8BDD WORKING \u505C\u6EDE>${WORKER_STALE_MIN}min\uFF1A` + stale.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 6e4)}m)`).join("\u3001");
       this.push(`worker-stale`, text);
+      if (staleWaiting.length) {
+        this.push(`waiting-stuck`, `${staleWaiting.length} \u4E2A\u4F1A\u8BDD WAITING >2h\uFF1A` + staleWaiting.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 36e5)}h)`).join("\u3001"));
+      } else this.resolve(`waiting-stuck`);
       const first = stale[0];
       if (first) {
         try {
@@ -63118,6 +63310,17 @@ var PatrolModule = class {
     if (boardAlerts.length) this.push("board", boardAlerts.slice(0, 6).join("\uFF1B"));
     else this.resolve("board");
     this.appendReport(`full: worker-stale=${stale.length} board=${boardAlerts.length ? boardAlerts.length + "\u9879" : "OK"}`);
+    try {
+      this.mgr.runLedgerRecon?.("patrol-full");
+    } catch {
+    }
+    try {
+      const hb2 = join42(this.opts.dataDir, "recon-heartbeat.json");
+      const st2 = statSync15(hb2);
+      if (Date.now() - st2.mtimeMs > 70 * 6e4) this.push("recon-stalled", `\u4E09\u8D26\u5BF9\u8D26\u5FC3\u8DF3\u505C\u8DF3 ${Math.round((Date.now() - st2.mtimeMs) / 6e4)}min\uFF08PM turn-report \u4E0E patrol \u53CC\u89E6\u53D1\u5747\u672A\u8DD1\uFF09`);
+      else this.resolve("recon-stalled");
+    } catch {
+    }
   }
   // ---------- 去重推送（onset-only）+ 报告落盘 ----------
   push(key, text) {
@@ -63126,9 +63329,30 @@ var PatrolModule = class {
     this.lastAlerts.set(key, text);
     const sessions = this.mgr.snapshot();
     const target = sessions.find((s) => s.status === "WORKING" && s.external) || sessions.find((s) => s.external) || sessions[0];
-    if (!target) return;
+    if (!target) {
+      this.appendReport(`ALERT-NO-TARGET [${key}] ${text}`);
+      return;
+    }
     this.mgr.notifyDone(target.session_id, [`\u26A0\uFE0F \u5DE1\u68C0\uFF1A${text}`], 0);
     this.appendReport(`ALERT [${key}] ${text}`);
+  }
+  /** #199 B1：熔断到期补试——leader resumeCooldownUntil 在 [过期, 过期+light 周期] 窗内
+   * 且上次值守终态是 resume_breaker → 补一轮 feedPM("patrol-retry")。幂等窗=一个 light
+   * 周期只补一次（breakerRetryAt 记账），常态零成本（无熔断 leader 短路）。 */
+  breakerRetryAt = 0;
+  retryExpiredBreaker() {
+    const now = Date.now();
+    if (now - this.breakerRetryAt < 5 * 6e4) return;
+    const sm2 = this.mgr;
+    if (typeof sm2.feedPM !== "function" || !(sm2.sessions instanceof Map)) return;
+    for (const s of sm2.sessions.values()) {
+      if (s.resumeCooldownUntil && s.resumeCooldownUntil <= now && s.resumeCooldownUntil > now - 10 * 6e4) {
+        this.breakerRetryAt = now;
+        this.appendReport(`BREAKER-RETRY cooldown \u5230\u671F\u8865\u8BD5 feedPM\uFF08streak=${s.resumeFailStreak ?? "?"}\uFF09`);
+        sm2.feedPM("patrol-retry");
+        return;
+      }
+    }
   }
   resolve(key) {
     if (this.lastAlerts.delete(key)) {
@@ -64323,7 +64547,7 @@ function sweepTmpImages(dir) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join45(dir, f);
       try {
-        if (Date.now() - statSync15(p).mtimeMs > 7 * 864e5) rmSync8(p, { force: true });
+        if (Date.now() - statSync16(p).mtimeMs > 7 * 864e5) rmSync8(p, { force: true });
       } catch {
       }
     }
@@ -64410,6 +64634,11 @@ setTimeout(() => {
   }
   try {
     mgr.scanNeedsAuthSessions();
+  } catch {
+  }
+  try {
+    const n = mgr.drainTurnSpool();
+    if (n > 0) console.log(`[chain2] turn-spool drain ${n} \u6761`);
   } catch {
   }
 }, 5e3).unref?.();
