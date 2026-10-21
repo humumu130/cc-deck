@@ -221,8 +221,8 @@
       --card-border: #E0E0E0;
       --card-veil: #FFFFFF;
       --border-strong: #D5D5D5;
-      --selected-line: #E08A63; /* #193：选中=品牌橙整行（.queue-card.selected 形制同批改） */
-      --selected-bg: #D9A88F; /* #201 二轮：随 --brand 浅灰橙档 */
+      --selected-line: #07C160; /* #201⑥：同 selected-bg 绿 */
+      --selected-bg: #07C160; /* #201⑥：选中换微信绿档（灰橙仍被嫌难看） */ /* #201 二轮：随 --brand 浅灰橙档 */
       --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);

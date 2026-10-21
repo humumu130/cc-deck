@@ -333,7 +333,7 @@
       // 宽度按屏记忆（localStorage），双击把手恢复默认 327px（W-TOPBAR ⑧：rail 62px 之半
       // +31px，用户拍板加宽）。有第二列的屏（会话/团队等
       // 带列表列的域）统一生效；落点与 inspector 拖宽同范式（屏级 CSS 变量 + pointer capture）
-      function queueWidthKey(screen) { return "cc-deck-005-queue-w-" + (screen.id || "x"); }
+      function queueWidthKey(screen) { return "cc-deck-queue-w-shared"; } /* #201⑨：分域键→全域单键（一列宽调整全域生效；旧分域键自然废弃不迁移） */
       function applyQueueWidth(screen) {
         let w = null;
         try { w = Number(localStorage.getItem(queueWidthKey(screen))); } catch (_) {}
