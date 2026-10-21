@@ -15770,7 +15770,9 @@ function listAcceptances(limit = 20) {
       judged,
       submitted,
       done,
-      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}
+      ...typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {},
+      ...typeof a.gid === "string" && a.gid ? { gid: a.gid } : {}
+      // #198 W1：归因键随汇下发（NULL 档不带）
     });
   }
   out.sort((x, y) => y.created_at - x.created_at);
@@ -51875,6 +51877,8 @@ var SessionManager = class {
   // dutySnapshot.worker_done_pending → 值守候选「worker_done」→ PM 注入唤醒（1013 夜
   // 四报告落地 5h43m 无人收割实证；内存态即可，重启归零无害=重启后本就需重新盘点）
   workerDonePending = 0;
+  pmWakeNotifyAt = 0;
+  // #92 W-NOTIFY2 A：PM 唤醒手机通知 60s 频控窗（风暴聚合）
   leaderId = null;
   leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -52056,6 +52060,14 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 产生源统一入口：B3a stableKey 防重——同 key 已在账即静默（重复事件/重放不双发，
   // 已决议的账同 key 重放也不复活）。revision 语义对齐 B3a：org-confirm=created_at、
   // waiting=request_id、dispatch 无 revision（一单一行）
+  // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
+  // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
+  emitChainAudit(action, detail, target) {
+    try {
+      this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
+    } catch {
+    }
+  }
   upsertNotification(kind, entityId, revision, seed) {
     const key = stableKey(kind, entityId, revision);
     const existing = this.notifications.get(key);
@@ -54627,6 +54639,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   //     重启补记行）不注入。注入 try/catch 尽力而为：通知失败绝不阻断收口主路径
   //    （台账已落，板已搬）。
   notifyDispatchClosed(e, status, receipt, workerSessionId) {
+    this.emitChainAudit("dispatch-close", `id=${e.id.slice(0, 8)} status=${status} worker=${workerSessionId.slice(0, 12)} receipt=${truncate(receipt, 60)}`);
     this.bus.emitTransient("DISPATCH_DONE", {
       dispatch_id: e.id,
       tier: e.tier,
@@ -54927,6 +54940,24 @@ provider=${opts.provider ?? "default"}` : void 0,
         observed,
         from
       });
+      const now2 = Date.now();
+      if (now2 - this.pmWakeNotifyAt > 6e4) {
+        this.pmWakeNotifyAt = now2;
+        try {
+          this.upsertNotification("system", "pm-wake", String(now2), {
+            title: "\u503C\u5B88\u5524\u9192\u5DF2\u9001\u8FBE PM",
+            body: truncate(`\u961F\u5217\u5019\u9009 ${verdict.candidates.length} \u9879\uFF08\u6700\u8001 ${truncate(top?.id ?? "", 12)}\uFF09\u2014\u2014\u5DF2\u6CE8\u5165 PM \u5904\u7F6E`, 160),
+            severity: "info",
+            group: "attention",
+            actionable: false,
+            sessionId: targetId,
+            domain: "session",
+            returnPath: "/"
+          });
+        } catch {
+        }
+        this.emitChainAudit("pm-wake", `trigger=${trigger} candidates=${verdict.candidates.length} target=${targetId.slice(0, 12)}`, targetId);
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       this.appendDutyRound({
@@ -56690,6 +56721,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (!s || !s.state.relay_session_id) continue;
       if (s.state.external) continue;
       if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
+      if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 6e4) {
+        this.emitChainAudit("dispatch-reroute", `zombie-veteran skip: ${e.session_id.slice(0, 12)} \u65E0\u8FDB\u5EA6\u5E27 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 6e4)}min\uFF0C\u91CD\u8DEF\u7531\u4E0B\u4E00\u5019\u9009`);
+        continue;
+      }
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
       if (this.isLeaderSession(e.session_id)) continue;
       return e.session_id;
@@ -61838,6 +61873,10 @@ function parseGateTools(raw) {
 var SNAPSHOT_SCHEMA_VERSION = 1;
 
 // src/ws-server.ts
+function withRelaySource(sessions, relayName) {
+  if (!relayName) return sessions;
+  return sessions.map((s) => ({ ...s, relay_source: s.relay_source ?? relayName }));
+}
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -62645,7 +62684,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         ts: Date.now(),
         type: "SNAPSHOT",
         payload: {
-          sessions: mgr2.snapshot(),
+          // W-SRC2 #134：每条会话随 SNAPSHOT 自报 relay_source（=本 relay 显示名）——
+          // 聚合端零拼装（此前全靠客户端三处补丁打标：t25fix/B4 桥/B2 建卡，存量卡/
+          // 打标时序竞态漏标=用户 1016/1021 两报根因）。旧客户端 session.relay_source
+          // 客户端打标有 `|| srcTag`/`if (!s.relay_source)` 守卫=自带字段自动优先，
+          // 向前兼容零改
+          sessions: withRelaySource(mgr2.snapshot(), opts.relayName?.()),
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
@@ -63037,6 +63081,23 @@ var PatrolModule = class {
     if (stale.length) {
       const text = `${stale.length} \u4E2A\u4F1A\u8BDD WORKING \u505C\u6EDE>${WORKER_STALE_MIN}min\uFF1A` + stale.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 6e4)}m)`).join("\u3001");
       this.push(`worker-stale`, text);
+      const first = stale[0];
+      if (first) {
+        try {
+          this.mgr.upsertNotification("system", "stale-escalate", String(Math.floor(now / 6e4)), {
+            title: `\u4F1A\u8BDD\u505C\u6EDE\u5347\u7EA7\uFF08${stale.length} \u4E2A >${WORKER_STALE_MIN}min \u65E0\u5E27\uFF09`,
+            body: text,
+            severity: "waiting",
+            group: "attention",
+            actionable: true,
+            sessionId: first.session_id,
+            domain: "session",
+            returnPath: "/"
+          });
+          this.mgr.emitChainAudit?.("stale-escalate", text, first.session_id);
+        } catch {
+        }
+      }
     } else this.resolve(`worker-stale`);
     const boardAlerts = [];
     try {
@@ -63175,6 +63236,10 @@ function loadOrCreateIdentity(dataDir2) {
 
 // src/cloud-client.ts
 import { homedir as homedir17 } from "node:os";
+function withRelaySource2(sessions, relayName) {
+  if (!relayName) return sessions;
+  return sessions.map((x) => ({ ...x, relay_source: x.relay_source ?? relayName }));
+}
 var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -63534,14 +63599,14 @@ var CloudClient = class {
     const payloadSize = (p) => Buffer.byteLength(JSON.stringify(p));
     {
       const probe = {
-        sessions: this.mgr.snapshot(),
+        sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2 = {
-          sessions: this.mgr.snapshot(),
+          sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
         };
@@ -63560,7 +63625,8 @@ var CloudClient = class {
       // wan_dev（F7）：手机据此拼手表 /wan 连接配置的 dev 段（凭据即 dev）；
       // 旧客户端忽略多余字段，向前兼容
       payload: {
-        sessions: this.mgr.snapshot(),
+        // W-SRC2 #134：per-session relay_source 根修（与 ws-server LAN 快照同源，#117 教训）
+        sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
         server_time: Date.now(),
