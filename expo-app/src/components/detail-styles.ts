@@ -361,6 +361,11 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   trThinkHead: { color: c.faint, fontSize: 11.5, fontWeight: "600" },
   trThinkT: { color: c.dim, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  // W-AUTOMSG #194：自动注入消息折叠行（一行小灰字头+展开原文）——比 thinking 更轻
+  //（无底框，缩进弱化：噪音消息视觉权重最低档）
+  trAuto: { marginBottom: 6, paddingLeft: 8 },
+  trAutoHead: { color: c.faint, fontSize: 11, lineHeight: 16 },
+  trAutoText: { color: c.dim, fontSize: 11.5, lineHeight: 17, marginTop: 4 },
   trText: { color: c.text, fontSize: 14, lineHeight: 21 },
   trTool: {
     flexDirection: "row", gap: 8, alignItems: "flex-start", marginBottom: 8,

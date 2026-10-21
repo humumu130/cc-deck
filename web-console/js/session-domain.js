@@ -81,6 +81,11 @@
                 function b2Toast(msg, ms) { const t = $id("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400); }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
+                // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息标记表——与 expo-app/src/auto-msg.ts
+                // 同表副本（两端无共享机制，改清单两处同步）。「【cc-deck 巡检轮】」=用户自配
+                // cron 巡检文案；「[值守喂活]」=relay feedPM 值守注入首行固定格式（同语义噪音面）
+                const AUTO_MSG_PREFIXES = ["【cc-deck 巡检轮】", "[值守喂活]"];
+                function isAutoInjected(text) { const t = String(text ?? "").trimStart(); return AUTO_MSG_PREFIXES.some((p) => t.startsWith(p)); }
                 function dayKey(ts) { const d = new Date(ts); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
                 function dayLabel(ts) { // #162 微信式分级（今天/昨天/M月d日/yyyy年M月d日）
                   if (!ts) return "";
@@ -1876,6 +1881,17 @@
                   if (role === "user") {
                     // 旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文；任务号/裸 URL 链接化
                     const src = String(e.full ?? e.text ?? "");
+                    // W-AUTOMSG #194：自动注入消息（cron 巡检/值守喂活）折叠——不渲染用户
+                    // 气泡，收为一行小灰字「⏱ 定时巡检 · HH:MM」，点击展开/收起原文（默认收起；
+                    // am-head 复用 expanded 切换链）。样式全 inline（不碰样式类文件——wxstyle
+                    // 批并行面零冲突）
+                    if (isAutoInjected(src)) {
+                      return '<div class="automsg-row" data-x="' + ke + '" style="margin:2px 0 6px;padding-left:8px">'
+                        + '<span class="am-head" data-x="' + ke + '" role="button" tabindex="0" title="' + (open ? "收起" : "展开") + '自动注入消息原文" style="color:var(--faint);font-size:11px;line-height:16px;cursor:pointer">'
+                        + (open ? "▾ 定时巡检" : "⏱ 定时巡检") + (e.ts ? " · " + fmtHM(e.ts) : "") + "</span>"
+                        + (open ? '<div style="color:var(--dim);font-size:11.5px;line-height:17px;margin-top:4px;white-space:pre-wrap;word-break:break-word">' + esc(src) + "</div>" : "")
+                        + "</div>";
+                    }
                     const long = src.length > 100;
                     // FB14：随消息发送的图片在气泡内缩略呈现（点击放大/还原），不再只发不显。
                     // 元素形态两种：data: URL（前缀直用）或 relay 落盘引用（img-* basename，
@@ -3555,7 +3571,7 @@
                     if (cpy) { ev.stopPropagation(); copyText(cpy.dataset.copy || ""); b2Toast("已复制"); return; }
                     const fp = ev.target.closest(".fpath");
                     if (fp) { ev.stopPropagation(); copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || "")); return; }
-                    const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x]");
+                    const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x], .am-head[data-x]"); // W-AUTOMSG：am-head=自动注入折叠头（复用 expanded 切换链）
                     if (xEl) { ev.stopPropagation(); toggleExpand(xEl.dataset.x); return; }
                     const ubImg = ev.target.closest(".ub-img"); // FB14：缩略图点击放大/还原
                     if (ubImg) { ev.stopPropagation(); ubImg.classList.toggle("zoomed"); return; }

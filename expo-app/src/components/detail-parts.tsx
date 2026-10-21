@@ -9,6 +9,7 @@ import { useProcessFont } from "../display-settings";
 import { MdText } from "../md";
 import { Collapse } from "../motion";
 import { fmtHM } from "../fmt";
+import { isAutoInjected } from "../auto-msg";
 import type { LogEntry } from "../protocol";
 import { Animated, Dimensions, Image, Linking, Modal, PanResponder, Pressable, TextInput } from "react-native";
 import { withA } from "../theme";
@@ -219,6 +220,20 @@ export function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef
   const pf = PROC_FONT[useProcessFont()];
   const cursor = e.streaming ? <Text style={{ color: c.working }}>▌</Text> : null;
   if (e.kind === "user_message") {
+    // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息（调度器 cron 巡检/值守喂活）——
+    // 用户气泡视觉噪音大，收为一行小灰字「⏱ 定时巡检 · HH:MM」，点击展开/收起原文
+    //（默认收起；thinking 的 head+Collapse 同形制，open 态复用本行既有切换）
+    if (isAutoInjected(e.full ?? e.text)) {
+      const src = e.full ?? e.text;
+      return (
+        <Pressable style={d.trAuto} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+          <Text style={d.trAutoHead}>{open ? "▾ 定时巡检" : "⏱ 定时巡检"}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
+          <Collapse open={open}>
+            <Text style={d.trAutoText} selectable>{src}</Text>
+          </Collapse>
+        </Pressable>
+      );
+    }
     // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
     // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
     // W-MSGFIX（1016 实锤 20/29 字也显「展开全文」）：relay 对所有 user_message 都带
