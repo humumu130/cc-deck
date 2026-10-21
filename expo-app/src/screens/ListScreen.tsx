@@ -1311,13 +1311,17 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }, []);
   // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启且未
   // 走分组头（降级/单在线源混排）时恒显；配色与分组头共用 sourcePalette，同屏稳定
+  // W-SRC2 #134：nameOf miss（src id 在 sources 列表失配——云源离线残留卡/清单竞态）
+  // 回落会话自带的 relay_source（relay SNAPSHOT 现随每条会话下发本源显示名），不再
+  // 裸显「其他」——聚合模式逐卡标签双保险
   const srcBadgeMap = useMemo(() => {
     if (!badgeOn || grouped) return null;
     const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
     const colorOf = sourcePalette(snap.sources);
-    return (src: string | undefined): { name: string; color: string } | null => {
-      if (!src) return null;
-      return { name: nameOf.get(src) ?? "其他", color: colorOf.get(src) ?? srcColor(src) };
+    return (src: string | undefined, relaySource?: string): { name: string; color: string } | null => {
+      if (!src && !relaySource) return null;
+      const name = nameOf.get(src ?? "") ?? (relaySource ? displaySrcName(relaySource) : "其他");
+      return { name, color: colorOf.get(src ?? "") ?? srcColor(src ?? relaySource ?? "") };
     };
   }, [badgeOn, grouped, snap.sources]);
   const srcBadgeOf = srcBadgeMap ?? (() => null);
@@ -1590,7 +1594,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               onResume={handleResumeSaved}
               onCardMenu={setMenuFor}
               density={density}
-              srcBadge={srcBadgeOf(item.s.src)}
+              srcBadge={srcBadgeOf(item.s.src, item.s.relay_source)}
               orgTag={orgTagOf(item.s)}
             />
           )

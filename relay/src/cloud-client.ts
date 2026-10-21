@@ -4,6 +4,13 @@ import { REPLAY_FAST_MAX, type EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import type { CloudIdentity } from "./cloud-identity.js";
+
+/** W-SRC2 #134：云通道 SNAPSHOT 会话自报 relay_source（与 ws-server LAN 快照同源同构，
+ * #117 教训——两出口必须同键）。空名零注入原样；s.relay_source 已带（理论不发生）不覆盖 */
+function withRelaySource(sessions: ReturnType<SessionManager["snapshot"]>, relayName: string | undefined): ReturnType<SessionManager["snapshot"]> {
+  if (!relayName) return sessions;
+  return sessions.map((x) => ({ ...x, relay_source: x.relay_source ?? relayName }));
+}
 import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import { readPluginConfig } from "./ws-server.js";
@@ -450,14 +457,14 @@ export class CloudClient {
     const payloadSize = (p: Record<string, unknown>): number => Buffer.byteLength(JSON.stringify(p));
     {
       const probe: Record<string, unknown> = {
-        sessions: this.mgr.snapshot(),
+        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2: Record<string, unknown> = {
-          sessions: this.mgr.snapshot(),
+          sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         };
@@ -476,7 +483,8 @@ export class CloudClient {
       // wan_dev（F7）：手机据此拼手表 /wan 连接配置的 dev 段（凭据即 dev）；
       // 旧客户端忽略多余字段，向前兼容
       payload: {
-        sessions: this.mgr.snapshot(),
+        // W-SRC2 #134：per-session relay_source 根修（与 ws-server LAN 快照同源，#117 教训）
+        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),

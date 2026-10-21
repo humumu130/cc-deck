@@ -33,6 +33,15 @@ import type { RelayConfig } from "./config.js";
 import { Bridge, parseGateTools } from "./bridge.js";
 import { SNAPSHOT_SCHEMA_VERSION, type BridgeEvent, type Command, type CommandAckPayload, type Envelope } from "./types.js";
 
+/** W-SRC2 #134：SNAPSHOT 会话自报 relay_source（本 relay 显示名；空名=零注入原样）。
+ * per-session 打标根修——聚合端（web/expo）此前靠客户端三处补丁拼标，存量卡漏标
+ * =用户两报根因；relay 侧单点下发后端上守卫（`|| srcTag` / `if (!s.relay_source)`）
+ * 自动让位自带字段，旧端零改兼容 */
+function withRelaySource(sessions: ReturnType<SessionManager["snapshot"]>, relayName: string | undefined): ReturnType<SessionManager["snapshot"]> {
+  if (!relayName) return sessions;
+  return sessions.map((s) => ({ ...s, relay_source: s.relay_source ?? relayName }));
+}
+
 function localIps(): Set<string> {
   const out = new Set<string>();
   for (const list of Object.values(networkInterfaces())) {
@@ -1003,7 +1012,12 @@ export function startServer(
         ts: Date.now(),
         type: "SNAPSHOT",
         payload: {
-          sessions: mgr.snapshot(),
+          // W-SRC2 #134：每条会话随 SNAPSHOT 自报 relay_source（=本 relay 显示名）——
+          // 聚合端零拼装（此前全靠客户端三处补丁打标：t25fix/B4 桥/B2 建卡，存量卡/
+          // 打标时序竞态漏标=用户 1016/1021 两报根因）。旧客户端 session.relay_source
+          // 客户端打标有 `|| srcTag`/`if (!s.relay_source)` 守卫=自带字段自动优先，
+          // 向前兼容零改
+          sessions: withRelaySource(mgr.snapshot(), opts.relayName?.()),
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
