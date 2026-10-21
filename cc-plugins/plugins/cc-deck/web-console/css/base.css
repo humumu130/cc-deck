@@ -294,7 +294,8 @@
        展开不再挤压对话列（用户实测：往左展开遮盖挤压第三列）；screen 兼作定位父级 */
     .desktop-screen { display: none; flex: 1; min-width: 0; min-height: 0; }
     .desktop-screen.active { display: grid; position: relative; grid-template-columns: var(--queue-w, 235px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-    .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
+    .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: var(--surface1); border-right: 1px solid var(--line-soft); }
+    #d-session .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); } /* #193 P1：微信行间 1px 低对比分隔（rgba 约 #E0E0E0@.55；暗色自动随 --line） */ /* #193 W-WXSTYLE：微信平色列表区（渐变+侧投影退役；--surface1 亮=#EDEDED/暗=暗系原值，分隔=1px 细线） */
     /* W-TOPBAR ⑤：第二列拖宽把手——7px 热区骑在列界上（视觉同 inspector-resizer：悬停/拖动
        显 1px 短线）；挂 screen 层而非 queue 内——notify 等域会 replaceChildren 重建 queue，
        挂列内会被抹掉；位置锚屏级 --queue-w（JS 钳 235-420px、按屏记忆、双击回默认 235·W-V8R 批7 v8 栏宽） */
@@ -357,7 +358,11 @@
        #d-session 有横排 flex 特化不受影响 */
     .queue-card { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: none; } /* #193：微信选中=品牌色整行（cc-deck 橙），文字反白走下行 */
+    .queue-card.selected .row strong, .queue-card.selected strong { color: #FFFFFF; }
+    .queue-card.selected .row .avatar { color: #FFFFFF; background: transparent; border-color: transparent; }
+    .queue-card.selected p, .queue-card.selected small, .queue-card.selected .grp-count { color: rgba(255,255,255,.85); }
+    .queue-card.selected .status-dot { border-color: #FFFFFF; }
     /* W-V8 批2 团队域壳层（A 轨对照图①④ P1②）：选中态琥珀描边贯通（品牌色在
        「当前位置」反馈——旧选中态灰白脱离体系，只覆盖团队域不动通用类） */
     #d-team .queue-card.selected { border-color: transparent; border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: var(--surface1); background: color-mix(in srgb, var(--brand) 7%, var(--surface1)); box-shadow: inset 2px 0 0 var(--brand); }
@@ -480,6 +485,9 @@
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 22px; }
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
+    /* #195 件六⑦：会话域 footer 与消息区同色一体（分隔线/独立底退役）+ 左右 22px 与消息列对齐
+       （.workspace-body 22px；16px 时代 composer 比消息列宽 12px）——只 scope 会话域，别域 footer 不动 */
+    #d-session .workspace-footer { background: transparent; border-top: 0; padding-left: 22px; padding-right: 22px; }
     /* B12+B22 head 右端动作位：过程/思考开关 + 模型胶囊（标题行尾部）。
        W-TOPBAR ③ 的 .composer-tools（开关在输入栏）随用户 i=3 最新意见退役；胶囊同族
        24px 统一规格保留但去 composer-tools 选择器（W-TOPBAR ③ 与 W-UIFB 合并裁决） */
@@ -554,21 +562,22 @@
     .composer-input:focus-visible { outline: none; }
     .composer-input::placeholder { color: var(--faint); }
     .composer[data-composer="session"] .composer-input::placeholder { font-size: var(--fs-A-item); } /* W-UIPOLISH ④：排队提示等占位文案 14→13px（--fs-A 降一档），弱化不打扰 */
-    .composer-clip, .composer-img { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
-    .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
-    .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
+    /* #195 件二：[+] 单入口钮（clip/img 双钮退役；粘贴/拖入提示语同批撤，能力融进本钮浮层） */
+    .composer-plus { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
+    .composer-plus:hover, .composer-plus:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
+    .composer-plus .icon-inline { width: 16px; height: 16px; }
+    /* #195 件①④：输入框左下权限 chip（✓+模式名+∨）/右下模型 chip（品牌点+模型名+∨）——
+       WorkBuddy 同构紧凑形态：去底色弱化成文本钮，hover 才亮，字号降一档 */
+    .composer .head-capsule { min-height: 26px; padding: 0 8px; background: transparent; color: var(--dim); font: var(--fs-C) var(--ui, inherit); transition: color .15s ease, background .15s ease; }
+    .composer .head-capsule:hover, .composer .head-capsule:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
+    .composer .head-capsule[hidden] { display: none; }
+    .composer .head-capsule .cap-check { flex: none; width: 12px; height: 12px; color: var(--done); }
+    .composer .head-capsule .cap-chev { flex: none; width: 10px; height: 10px; }
+    /* svg use 图标默认 fill 黑——composer 内两 chip 的勾/箭头统一描边形（icon-inline 同参数） */
+    .composer .head-capsule svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .composer .head-capsule .cap-dot { width: 6px; height: 6px; background: var(--brand); border-radius: 50%; }
     /* #169 发送常驻（旧壳 #48 sendBtn 形态 005 化：中性面板+描边+品牌色➤，不做实底大色块） */
     .composer-sendbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: var(--brand); color: #0B141F; cursor: pointer; } /* W-V8 批5：发送钮 v8 实心橙 CTA（描边纸飞机退役） */
-    /* 件八（2026-10-10 test.10 反馈）：输入框高度折叠开关——发送钮左侧 unfold 双箭头钮，
-       多行（默认，composer 两行分区）/单行紧凑（top+bottom 同行、隐 hint）两态切换，
-       localStorage 记忆（ccd_composer_compact） */
-    .composer-unfold { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease, transform .15s ease; }
-    .composer-unfold:hover { background: var(--hover); color: var(--text-strong); }
-    .composer-unfold .icon-inline { width: 14px; height: 14px; }
-    .composer.compact .composer-unfold { transform: rotate(180deg); } /* 折叠态箭头倒置 */
-    .composer.compact { flex-direction: row; align-items: center; min-height: 0; gap: 8px; }
-    .composer.compact .composer-top { min-height: 34px; }
-    .composer.compact .composer-hint { display: none; }
     .composer-sendbtn:hover:not(:disabled) { background: var(--brand-hover); border-color: transparent; }
     .composer-sendbtn:focus-visible { outline: none; }
     .composer-sendbtn:disabled { background: var(--surface2); color: var(--faint); border-color: var(--line); opacity: 1; cursor: default; } /* 禁用回描边灰（禁用不亮橙） */
@@ -580,22 +589,18 @@
     /* W-TOPBAR ⑥ 会话输入卡分区（旧版 #inputcard 同构，只落会话域不影响手机/团队）：
        上层输入区加高（≤52px 行高区），下层按钮/提示行——附件钮+提示文字贴左下
        （提示小号弱化），模型胶囊/停止/发送居右；输入内容与按钮行互不干扰 */
-    .composer[data-composer="session"] { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 2px; min-height: 78px; padding: 6px 10px 8px 12px; border-radius: 10px; }
-    /* 件八：单行紧凑态（unfold 钮切换）——特异度压过上方 session 特化（compact 修饰符
-       同级但源序靠后必胜），两分区（top+bottom）并一行、隐提示语、下压最小高 */
-    .composer.compact[data-composer="session"] { flex-direction: row; align-items: center; gap: 8px; min-height: 0; }
-    .composer.compact[data-composer="session"] .composer-top { min-height: 34px; flex: 1 1 auto; }
-    .composer.compact[data-composer="session"] .composer-hint { display: none; }
+    /* #195 件六：输入区去独立底色与消息区同色一体——边框/聚焦环退役（WorkBuddy 同构），
+       composer 透明叠 footer，footer 底色随消息区（见 #d-session .workspace-footer 覆盖） */
+    .composer[data-composer="session"] { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 2px; min-height: 78px; padding: 6px 10px 8px 12px; border-color: transparent; border-radius: 10px; }
+    .composer[data-composer="session"]:focus-within { border-color: transparent; }
     .composer[data-composer="session"] .composer-top { display: flex; align-items: center; flex: 1 1 auto; min-height: 44px; }
     /* W-UIPOLISH4 件八（2026-10-12 用户实锤）：输入区超宽文本必须自动换行——input 换
        textarea（rows=1 起步，JS 随内容长高、上限 132px≈6 行后内滚）；pre-wrap 保换行符，
        break-word/overflow-wrap:anywhere 兜超长无断点串与 CJK。单行折叠态（用户显式选的
        紧凑模式）维持单行横滚语义不换行。 */
     .composer[data-composer="session"] .composer-input { display: block; padding: 4px 0; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; overflow-y: auto; max-height: 132px; }
-    .composer.compact[data-composer="session"] .composer-input { white-space: pre; overflow-x: auto; overflow-y: hidden; max-height: 36px; }
     .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .composer-bottom .composer-spring { flex: 1 1 0; min-width: 0; }
-    .composer-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
     /* W-SLASH 斜杠命令联想浮层：输入 / 前缀触发，浮在 composer 上方（透传方案——
        选中只是补全文本，发送走既有纯文本链路，CLI 自行解析）。主题走既有变量双主题
        自适应；定位 JS 按 composer rect 锚定（body 挂载避免被 workspace 裁切）。 */
@@ -612,6 +617,7 @@
     /* W-TOPBAR ⑥ 子 Agent 活性面板（旧壳 #142 同构移植）：状态栏下续行，标题行即折叠
        开关（subAgent N + 尾部箭头），条目=呼吸点/✓ + 描述 + 当前动作 + 走秒；无子 Agent 不占位 */
     .agbox { flex: 0 0 auto; padding: 0 20px 6px; background: var(--footer); }
+    #d-session .agbox { background: transparent; } /* #198 件④：输入区一体底（#195 件⑥ footer 透明后 agbox 独立底有色差，随批归一） */
     .agbox[hidden] { display: none; }
     .aghead { display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px 3px 0; border-radius: 6px; color: var(--faint); cursor: pointer; user-select: none; font-size: var(--fs-C); letter-spacing: .04em; }
     .aghead:hover { color: var(--dim); }
@@ -789,16 +795,17 @@
     /* W-TOPBAR ⑨：我方气泡对齐旧版 0.6——去阴影（用户「有阴影很割裂」）、底色单列
        --bubble-me-bg 取旧 --panel-2 双主题值（「纯白太突兀，旧版舒服」）、形制 14px 圆角
        右上收 5px、边框 --me-line 改旧 --border 同值；时间戳气泡下方右对齐（.msg-user-row） */
-    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);}
+    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid transparent; border-radius: 6px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);} /* #193：微信气泡形（白底无框 6px 圆角浮于浅灰聊天区；圆角 10→6） */
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
-    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 10px; border-top-right-radius: 5px; }
+    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 6px; border-top-right-radius: 5px; color: #FFFFFF; } /* #193：己方=品牌橙底白字 */
     .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 16px; } /* 件九：与 AI 块统一 16px 基线节奏（原 11/15 不齐） */
-    .conversation-pane .message-ai { margin-bottom: 16px; } /* 件九：同上（原 15；升特异度压 base 源序） */
+    .conversation-pane .message-ai { margin-bottom: 16px; }
+    .conversation-pane .message-ai .mt { text-align: center; color: var(--faint); font-size: 11px; } /* #193：AI 侧时间戳同款居中灰 */ /* 件九：同上（原 15；升特异度压 base 源序） */
     .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
     .message-ai.cont .message-author { display: none; } /* 件九：连续同作者正文去重署名行，正文 37px 基线不动 */
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
     .msg-user-row .bubble.me { margin-bottom: 0; }
-    .msg-user-row .mt { margin-top: 4px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+    .msg-user-row .mt { margin-top: 4px; align-self: center; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; } /* #193：微信居中分隔时间戳小灰字 */
     /* W-PORT-A R-4 发送乐观回显：气泡内状态行（发送中微降 / 未送达红角），与 .mt 同位不占额外行 */
     .msg-echo .bubble.me { opacity: .88; }
     .msg-echo .echo-state { margin-top: 3px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: right; }
@@ -825,6 +832,8 @@
     .timeline-note.subagent-live { padding-left: 14px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--working); }
     /* 用户气泡长文折叠（旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文） */
     .bubble.me .ub { white-space: pre-wrap; word-break: break-word; }
+    .bubble.me a { color: #FFFFFF; text-decoration: underline; }
+    .bubble.me code, .bubble.me pre { background: rgba(255,255,255,.16); color: #FFFFFF; }
     .bubble.me .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
     .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; margin-top: 5px; }
     .x-full:hover { text-decoration: underline; }
@@ -1888,7 +1897,18 @@
     /* W-UIFB ⑨：会话卡之间 hairline 分割线（用户追加，微信式细淡线）——相邻卡上缘 65% 透明
        line-soft，浅色呈极淡灰、深色呈微亮线；组头/空态横幅处天然断开不画 */
     #d-session .queue-card + .queue-card { border-top: transparent; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); } /* 件七：分割线加粗一档（原 line-soft 65% 几乎不可见） */
-    #d-session .queue-card.selected { border-color: transparent; background: var(--q-row-sel); box-shadow: none; }
+    #d-session .queue-card.selected { border-color: transparent; background: var(--brand); box-shadow: none; } /* #193 P1：微信选中=品牌橙整行（原 --q-row-sel 灰底退役） */
+    #d-session .queue-card.selected .srow-r1 strong, #d-session .queue-card.selected .srow-r2-t { color: #FFFFFF; } /* #198：死选择器 .srow-meta 删（类已退役，HTML/JS 零引用） */
+    #d-session .queue-card.selected .srow-time { color: rgba(255,255,255,.85); }
+    #d-session .queue-card.selected .srow-ava { color: #FFFFFF; background: rgba(255,255,255,.16); }
+    #d-session .queue-card.selected .tag, #d-session .queue-card.selected .team-chip { background: rgba(255,255,255,.2); color: #FFFFFF; border-color: transparent; }
+    #d-session .queue-card.selected .srow-more, #d-session .queue-card.selected .srow-pin, #d-session .queue-card.selected .srow-close { color: #FFFFFF; }
+    /* #198 件①：选中橙行反白清单补漏——走秒/「处理」浮层钮/源与引擎徽章（此前橙底上原色不可辨） */
+    #d-session .queue-card.selected .srow-sec { color: #FFFFFF; }
+    #d-session .queue-card.selected .srow-cta { border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); color: #FFFFFF; } /* 白描边钮形态 */
+    #d-session .queue-card.selected .srow-cta:hover { border-color: #FFFFFF; background: rgba(255,255,255,.22); color: #FFFFFF; }
+    #d-session .queue-card.selected .source-badge, #d-session .queue-card.selected .engine-badge { color: #FFFFFF; border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.14); }
+    #d-session .queue-card.selected .srow-pin.on svg { color: #FFFFFF; }
     /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
     #d-session .queue-card[data-session-card="mobile"]:hover { background: var(--danger-bg); }
