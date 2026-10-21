@@ -1886,10 +1886,12 @@
                     // am-head 复用 expanded 切换链）。样式全 inline（不碰样式类文件——wxstyle
                     // 批并行面零冲突）
                     if (isAutoInjected(src)) {
-                      return '<div class="automsg-row" data-x="' + ke + '" style="margin:2px 0 6px;padding-left:8px">'
-                        + '<span class="am-head" data-x="' + ke + '" role="button" tabindex="0" title="' + (open ? "收起" : "展开") + '自动注入消息原文" style="color:var(--faint);font-size:11px;line-height:16px;cursor:pointer">'
+                      // 居中精修（Leader 追加件）：完全居中系统提示形态——收起=水平居中
+                      // 一行小灰字（微信时间戳行视觉）；展开=居中无底色弱化块（限宽 85%）
+                      return '<div class="automsg-row" data-x="' + ke + '" style="margin:2px 0 6px;text-align:center">'
+                        + '<span class="am-head" data-x="' + ke + '" role="button" tabindex="0" title="' + (open ? "收起" : "展开") + '自动注入消息原文" style="color:var(--faint);font-size:11px;line-height:16px;cursor:pointer;display:inline-block">'
                         + (open ? "▾ 定时巡检" : "⏱ 定时巡检") + (e.ts ? " · " + fmtHM(e.ts) : "") + "</span>"
-                        + (open ? '<div style="color:var(--dim);font-size:11.5px;line-height:17px;margin-top:4px;white-space:pre-wrap;word-break:break-word">' + esc(src) + "</div>" : "")
+                        + (open ? '<div style="color:var(--dim);font-size:11.5px;line-height:17px;margin:4px auto 0;max-width:85%;width:fit-content;text-align:left;white-space:pre-wrap;word-break:break-word">' + esc(src) + "</div>" : "")
                         + "</div>";
                     }
                     const long = src.length > 100;

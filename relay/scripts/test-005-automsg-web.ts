@@ -47,7 +47,7 @@ console.log("-- A. isAutoInjected（web 副本直跑） --");
 // ---- B. entryHtml 折叠分支锚 ----
 console.log("-- B. entryHtml 折叠分支 --");
 {
-  const branch = js.slice(js.indexOf("W-AUTOMSG #194：自动注入消息"), js.indexOf("W-AUTOMSG #194：自动注入消息") + 1000);
+  const branch = js.slice(js.indexOf("W-AUTOMSG #194：自动注入消息"), js.indexOf("W-AUTOMSG #194：自动注入消息") + 1500); /* 追加件注释增长，窗口 1000→1500 */
   ok(branch.includes("isAutoInjected(src)"), "B1 user 分支头部先判 isAutoInjected（命中走折叠，未命中原气泡路径零变）");
   ok(branch.includes("⏱ 定时巡检") && branch.includes("fmtHM(e.ts)"), "B2 一行小灰字「⏱ 定时巡检 · HH:MM」（时间取消息时间戳）");
   ok(branch.includes('class="am-head" data-x=') || branch.includes("am-head"), "B3 折叠头 am-head 带 data-x（展开链键）");
@@ -76,6 +76,16 @@ console.log("-- D. 双端同表 --");
 console.log("-- E. 零波及 --");
 ok(!js.slice(js.indexOf("W-AUTOMSG #194：自动注入消息") + 1000, js.indexOf("W-AUTOMSG #194：自动注入消息") + 2200).includes("automsg"), "E1 折叠分支后紧跟原用户气泡路径（未命中零改动）");
 ok(!/th-head[^{]*\{[^}]*display/.test(js), "E2 未动 th-head 样式类（wxstyle 并行面）");
+
+// ---- F. 居中系统提示形态（Leader 追加件：微信时间戳行视觉） ----
+console.log("-- F. 完全居中形态 --");
+{
+  const branch2 = js.slice(js.indexOf("居中精修"), js.indexOf("居中精修") + 900);
+  ok(branch2.includes("text-align:center"), "F1 容器水平居中（不占左右对齐位）");
+  ok(branch2.includes("max-width:85%"), "F2 展开块限宽 85%（居中弱化块）");
+  ok(!/background|border(?!-radius)/.test(branch2), "F3 无底色无边框（系统提示形态非气泡）");
+  ok(branch2.includes("var(--dim)") && branch2.includes("var(--faint)"), "F4 收起 faint/展开 dim 双档弱化");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

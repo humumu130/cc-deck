@@ -361,11 +361,12 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   trThinkHead: { color: c.faint, fontSize: 11.5, fontWeight: "600" },
   trThinkT: { color: c.dim, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
-  // W-AUTOMSG #194：自动注入消息折叠行（一行小灰字头+展开原文）——比 thinking 更轻
-  //（无底框，缩进弱化：噪音消息视觉权重最低档）
-  trAuto: { marginBottom: 6, paddingLeft: 8 },
-  trAutoHead: { color: c.faint, fontSize: 11, lineHeight: 16 },
-  trAutoText: { color: c.dim, fontSize: 11.5, lineHeight: 17, marginTop: 4 },
+  // W-AUTOMSG #194 + 居中精修（Leader 追加件）：完全居中系统提示形态——收起=水平
+  // 居中一行小灰字（无气泡无底色不占左右对齐位，视觉同微信时间戳行）；展开=居中
+  // 无底色弱化块（限宽 85%、dim 色、无边框）。alignSelf stretch 让子级自身居中
+  trAuto: { marginBottom: 6, alignItems: "center" },
+  trAutoHead: { color: c.faint, fontSize: 11, lineHeight: 16, textAlign: "center" },
+  trAutoText: { color: c.dim, fontSize: 11.5, lineHeight: 17, marginTop: 4, width: "85%", textAlign: "left" },
   trText: { color: c.text, fontSize: 14, lineHeight: 21 },
   trTool: {
     flexDirection: "row", gap: 8, alignItems: "flex-start", marginBottom: 8,
