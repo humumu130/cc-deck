@@ -144,7 +144,7 @@ const makeStyles = (c: ThemeColors) =>
     backBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden", alignItems: "center", justifyContent: "center", flexShrink: 0 },
     title: { fontSize: 15, fontWeight: "600", color: c.text, lineHeight: 20 },
     titleRow: { flexDirection: "row", alignItems: "center" }, /* W-HEAD6 追加：标题行内联源切换 */
-    subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+    subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 }, /* #191 根修：mt 2→1——titleRow 26（pill 撑）+1+13+padV8=48 恰合 HEAD_BASE 固定高（SessionStatSub 同键联动） */
     sub: { fontSize: 10, color: c.dim, lineHeight: 13, fontWeight: "400" },
     bellBtn: { width: 30, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: 2 },
     badge: {
