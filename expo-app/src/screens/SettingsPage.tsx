@@ -468,6 +468,19 @@ function SettingsPageBase({
   // W-MOBILE3 #122 设置二级页：null=一级目录页；conn/prefs/engines/about=二级详情
   const [subPage, setSubPage] = useState<"conn" | "prefs" | "engines" | "about" | null>(null);
   // W-BACKFIX：返回键句柄（与 PageHead onBack 同一 setSubPage(null)——同一状态源）
+  // #207 追加：设置二级页侧滑返回（iOS 边缘滑/Android 手势导航同语义）——横向滑
+  // ≥50 且横占优 1.5:1 时判定（与域滑切 tab/行滑删同模型阈值）；只在 subPage≠null
+  /// 激活（一级页侧滑不吞——无二级可退）；与 #132 BackHandler 硬件键共存（两通道并行）
+  const subPageRef = useRef(subPage);
+  subPageRef.current = subPage;
+  const edgeSwipe = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        subPageRef.current !== null && Math.abs(g.dx) > 50 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5 && g.dx > 0,
+      onPanResponderRelease: () => { if (subPageRef.current !== null) setSubPage(null); },
+    }),
+  ).current;
   useImperativeHandle(ref, () => ({
     requestBack: () => {
       if (subPage !== null) {
@@ -745,7 +758,7 @@ function SettingsPageBase({
           />
         )}
       {/* W-HEADFIX2：content wrapper 只包内容体（head 已出壳；水平 16/顶 16 节奏保留给内容） */}
-      <View style={d.content}>
+      <View style={d.content} {...edgeSwipe.panHandlers}>
         {/* #130 底部补安全距离：contentContainerStyle 撑出手势条空间（原 Build 行贴底） */}
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}>
         {/* W-MOBILE3 #122 一级目录：活动连接卡（保留信息面）+ 四分区导航卡 → 点卡进二级页 */}

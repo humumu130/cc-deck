@@ -159,7 +159,7 @@ function ListRowSeparator({ leadingItem }: { leadingItem?: ListRow | null }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   if (!leadingItem || leadingItem.h !== false) return null;
-  return <View style={[styles.rowSep, { backgroundColor: withA(c.line, 0.6) }]} />;
+  return <View style={[styles.rowSep, { backgroundColor: c.lineStrong }]} />; /* #207：分割线加重——hairline+line@.6（几乎不可见）→1px+lineStrong 全值（对齐桌面 1.5px/lineStrong 档） */
 }
 
 // #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
@@ -1947,7 +1947,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 行高回调（paddingVertical）系用户行高反馈闭环成果，保留不回退
   swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
   // W-LIST2 件一：卡间 hairline（色由组件内 withA(c.line,.6) 动态注入——双主题一套）
-  rowSep: { height: StyleSheet.hairlineWidth, marginHorizontal: 14 },
+  rowSep: { height: 1, marginHorizontal: 14 }, /* #207：hairline→1px（hairline≈0.33px@3x 屏近隐形） */
   swipeWrapC: { marginBottom: 2 },
   swipeWrapM: { marginBottom: 1 },
   swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },

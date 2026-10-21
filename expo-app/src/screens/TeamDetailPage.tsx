@@ -812,7 +812,7 @@ const makeStyles = (c: ThemeColors) =>
     tCardChipT: { color: c.text, fontSize: 10, fontWeight: "600" },
     tCardTime: { color: c.faint, fontSize: 10, marginLeft: "auto", fontVariant: ["tabular-nums"], flexShrink: 0 },
     tRunDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
-    tCardX: { marginTop: 4, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line, gap: 2 },
+    tCardX: { marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: c.lineStrong, gap: 2 }, /* #207：同 ListScreen 统一加重 */
     tCardXL: { color: c.faint, fontSize: 10, lineHeight: 14 },
     engBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
     engDot: { width: 7, height: 7, borderRadius: 4 },
