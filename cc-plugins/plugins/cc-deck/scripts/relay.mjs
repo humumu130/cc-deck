@@ -55512,6 +55512,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    if (action === "member-retire" || action === "member-add" || action === "member-archive" || action === "member-restore" || action === "nick-set") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     if (action === "auth-bypass") {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
@@ -56122,21 +56126,27 @@ provider=${opts.provider ?? "default"}` : void 0,
           const g2 = findGroup(gid);
           if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4\u4E0D\u5B58\u5728: ${gid}` };
           if (g2.status === "archived") return { ok: false, error: "\u7ED3\u9879\u7EC4\u7F16\u5236\u5DF2\u89E3\u6563\uFF08headcount \u4E3A\u5FEB\u7167\u6863\u6848\uFF09\uFF0C\u65E0\u6210\u5458\u53EF\u9000" };
-          if (!g2.headcount.some((h) => h.session_id === sid)) return { ok: false, error: `\u6210\u5458\u4E0D\u5728\u300C${g2.name}\u300D\u7F16\u5236\u5185\uFF08\u5DF2\u9000\u4F11\u53EA\u5269\u6863\u6848\uFF1F\u590D\u62C9\u8D70 member-add\uFF09` };
-          const s = this.sessions.get(sid);
+          const retireTarget = g2.headcount.find((h) => h.session_id === sid) ?? (sid.length >= 6 ? (() => {
+            const hits2 = g2.headcount.filter((h) => h.session_id.startsWith(sid));
+            return hits2.length === 1 ? hits2[0] : hits2.length > 1 ? "AMBIG" : void 0;
+          })() : void 0);
+          if (retireTarget === "AMBIG") return { ok: false, error: `\u524D\u7F00 ${sid} \u5728\u300C${g2.name}\u300D\u7F16\u5236\u5185\u547D\u4E2D\u591A\u4E2A\u6210\u5458\u2014\u2014\u8BF7\u7ED9\u66F4\u957F\u7684\u524D\u7F00\u6216\u5B8C\u6574 session_id` };
+          if (!retireTarget) return { ok: false, error: `\u6210\u5458\u4E0D\u5728\u300C${g2.name}\u300D\u7F16\u5236\u5185\uFF08\u5DF2\u9000\u4F11\u53EA\u5269\u6863\u6848\uFF1F\u590D\u62C9\u8D70 member-add\uFF09` };
+          const sidFull = retireTarget.session_id;
+          const s = this.sessions.get(sidFull);
           if (s?.state.external) return { ok: false, error: "\u6210\u5458\u4F1A\u8BDD\u4E3A\u5916\u90E8\u4F1A\u8BDD\uFF08\u4E0D\u53EF\u5165\u7F16\uFF0C\u6570\u636E\u5F02\u5E38\uFF09" };
-          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader \u4E0D\u53EF\u9000\u4F11\uFF08\u903B\u8F91\u5E38\u9A7B\uFF0C\u951A\u662F\u6743\u5A01\uFF09" };
-          if ((this.openDispatches.get(sid)?.length ?? 0) > 0) {
-            this.closeOpenDispatches(sid, "failed", reason ? truncate(`\u6210\u5458\u9000\u4F11\uFF1A${reason}`, 200) : "\u6210\u5458\u9000\u4F11\uFF0C\u56DE\u5408\u4E2D\u65AD", false, false, gid);
+          if (this.isLeaderSession(sidFull)) return { ok: false, error: "Leader \u4E0D\u53EF\u9000\u4F11\uFF08\u903B\u8F91\u5E38\u9A7B\uFF0C\u951A\u662F\u6743\u5A01\uFF09" };
+          if ((this.openDispatches.get(sidFull)?.length ?? 0) > 0) {
+            this.closeOpenDispatches(sidFull, "failed", reason ? truncate(`\u6210\u5458\u9000\u4F11\uFF1A${reason}`, 200) : "\u6210\u5458\u9000\u4F11\uFF0C\u56DE\u5408\u4E2D\u65AD", false, false, gid);
           }
-          removeMember(gid, sid);
+          removeMember(gid, sidFull);
           this.emitOrgState();
           this.emitBoard(gid);
           try {
             this.drainDispatchQueue(gid);
           } catch {
           }
-          if (!s || (this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
+          if (!s || (this.openDispatches.get(sidFull)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
           this.retireSession(s, gid, "retired");
           return { ok: true, data: { retired: true, halted: true } };
         }
@@ -56924,7 +56934,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     return false;
   }
   routeLivenessSkip(sid, s) {
-    if (!s) return null;
+    if (!s) return "absent";
     if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 6e4) return "zombie";
     return null;
   }

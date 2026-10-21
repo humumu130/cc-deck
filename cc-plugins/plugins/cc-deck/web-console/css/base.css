@@ -365,7 +365,12 @@
     .queue-card.selected .status-dot { border-color: #FFFFFF; }
     /* W-V8 批2 团队域壳层（A 轨对照图①④ P1②）：选中态琥珀描边贯通（品牌色在
        「当前位置」反馈——旧选中态灰白脱离体系，只覆盖团队域不动通用类） */
-    #d-team .queue-card.selected { border-color: transparent; border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: var(--surface1); background: color-mix(in srgb, var(--brand) 7%, var(--surface1)); box-shadow: inset 2px 0 0 var(--brand); }
+    /* #201②：团队/项目选中卡统一整橙反白（原 7% 淡底特化叠加通用白字规则=橙淡底白字
+    名称隐形——用户实锤「无区别+名称被盖」根因；统一吃通用 :360 块，元素配套反白） */
+    #d-team .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: none; }
+    #d-team .queue-card.selected .team-ava { background: rgba(255,255,255,.18); color: #FFFFFF; border-color: transparent; }
+    #d-team .queue-card.selected .team-state-pill { background: rgba(255,255,255,.2); color: #FFFFFF; border-color: transparent; }
+    #d-team .queue-card.selected .team-state-pill i { background: #FFFFFF; }
     /* v8 scard 件：头像 tile / 点分 meta 行 / 活跃时间弱化 / 分组头 */
     #d-team .team-ava { flex: 0 0 auto; width: 26px; height: 26px; margin-right: 9px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--brand-hover); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
     #d-team .team-meta { color: var(--dim); }
@@ -556,7 +561,7 @@
     /* #172-F2 焦点环：外层 focus-within 圆角描边 + 内部元素 focus-visible 默认 outline 叠加成双重轮廓
        （用户实测「橙色方框很丑」，codex 盲评同样点名）——统一只留外层 border-color 变化，内部所有聚焦
        元素的 outline 全部禁用（键盘导航提示由外层圆角边框承载，符合卡片整体聚焦的语义） */
-    .composer {display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: var(--fs-A);}
+    .composer {display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text); font-size: var(--fs-A);} /* #201③：边框恢复可见（#195⑥ 一体化误删边框语义→恢复 token 边框升 border-strong 档：微信档三列提白后 --line 与面底近同色不可辨；bg 保持透明一体化不变） */
     .composer:focus-within { border-color: var(--brand); }
     .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; resize: none; }
     .composer-input:focus-visible { outline: none; }
@@ -797,7 +802,9 @@
        右上收 5px、边框 --me-line 改旧 --border 同值；时间戳气泡下方右对齐（.msg-user-row） */
     .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid transparent; border-radius: 6px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);} /* #193：微信气泡形（白底无框 6px 圆角浮于浅灰聊天区；圆角 10→6） */
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
-    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 6px; border-top-right-radius: 5px; color: #FFFFFF; } /* #193：己方=品牌橙底白字 */
+    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 12px; border-top-right-radius: 12px; color: var(--text-strong); } /* #201 二轮：己方=中性灰底+深色文字（WorkBuddy 实证大圆角 12px；白字退役）；暗色 --text-strong=浅字自动成立 */
+    .bubble.me a { color: var(--brand-strong, var(--brand)); }
+    .bubble.me code, .bubble.me pre { background: rgba(0,0,0,.06); color: inherit; }
     .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 16px; } /* 件九：与 AI 块统一 16px 基线节奏（原 11/15 不齐） */
     .conversation-pane .message-ai { margin-bottom: 16px; }
     .conversation-pane .message-ai .mt { text-align: center; color: var(--faint); font-size: 11px; } /* #193：AI 侧时间戳同款居中灰 */ /* 件九：同上（原 15；升特异度压 base 源序） */
@@ -832,8 +839,7 @@
     .timeline-note.subagent-live { padding-left: 14px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--working); }
     /* 用户气泡长文折叠（旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文） */
     .bubble.me .ub { white-space: pre-wrap; word-break: break-word; }
-    .bubble.me a { color: #FFFFFF; text-decoration: underline; }
-    .bubble.me code, .bubble.me pre { background: rgba(255,255,255,.16); color: #FFFFFF; }
+    /* #201 二轮：橙底白字期规则随灰系气泡退役 */
     .bubble.me .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
     .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; margin-top: 5px; }
     .x-full:hover { text-decoration: underline; }

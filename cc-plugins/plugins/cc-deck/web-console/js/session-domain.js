@@ -1572,10 +1572,12 @@
                 // 与 relay PERM_MODE_ZH 逐字对齐。外部/CLI 会话 relay 硬拒（hooks 单向桥接）→ 胶囊
                 // 置灰+tooltip 说明不硬闯；历史/无命令通道卡隐藏（模型胶囊同口径）。
                 const PERM_MODES = [
-                  { key: "default", zh: "标准（每次确认）" },
-                  { key: "acceptEdits", zh: "自动接受编辑" },
-                  { key: "plan", zh: "规划（只读）" },
-                  { key: "bypassPermissions", zh: "跳过权限确认" },
+                  /* #201④：照 Claude Code 原版权限菜单英文条目（弃中文模式名——用户拍板
+                  原版化；zh 键名保留=PERM_MODE_ZH/胶囊 title 消费面零动） */
+                  { key: "default", zh: "Ask before edits" },
+                  { key: "acceptEdits", zh: "Accept edits" },
+                  { key: "plan", zh: "Plan mode" },
+                  { key: "bypassPermissions", zh: "Bypass permissions" },
                 ];
                 // #195 件五：远程审批开关随 WorkBuddy 化退役（head 胶囊+COMMAND_EXT_MODE 入口移除；
                 // relay 命令面不动）。perm 胶囊已迁输入框左下角（件一），updatePermCapsule 保留 id 接线。
@@ -1994,6 +1996,111 @@
                   return g;
                 }
                 let openProcGrp = null; // 增量追加时的活动过程组（renderConversation 重建清零）
+                // ===== #203 W-RAIL 会话大纲导航条 =====
+                // 只锚用户消息（.msg-user-row 真历史+乐观回显）；短横线三态 16/24/28；hover 40ms
+                // 分层淡入摘要（24 全角截断）；点击按压回弹+smooth center；滚动联动 rAF 节流
+                // 唯一高亮仅颜色渐变（active 不动宽）；流式 MutationObserver 增删；暗色全套。
+                function setupOutlineRail() {
+                  const section = document.querySelector("#d-session");
+                  const ws = section?.querySelector(".workspace");
+                  const body = section?.querySelector("#session-body");
+                  if (!ws || !body || UI.outlineRail) return;
+                  const rail = document.createElement("nav");
+                  rail.className = "outline-rail empty";
+                  rail.setAttribute("role", "navigation");
+                  rail.setAttribute("aria-label", "会话大纲");
+                  ws.appendChild(rail);
+                  UI.outlineRail = rail; UI.outlineBody = body;
+                  ws.style.display = "grid";
+                  ws.style.gridTemplateColumns = "minmax(0,1fr) 150px";
+                  ws.style.gridTemplateRows = "auto minmax(0,1fr) auto";
+                  rail.style.gridColumn = "2"; rail.style.gridRow = "2";
+                  body.style.gridColumn = "1"; body.style.gridRow = "2";
+                  const head = ws.querySelector(".workspace-head");
+                  if (head) { head.style.gridColumn = "1 / -1"; head.style.gridRow = "1"; }
+                  const footer = ws.querySelector(".workspace-footer");
+                  if (footer) { footer.style.gridColumn = "1 / -1"; footer.style.gridRow = "3"; }
+                  const anchorRows = () => [...UI.convPane.querySelectorAll(".msg-user-row")];
+                  const labelOf = (row) => {
+                    const ub = row.querySelector(".ub");
+                    const t = (ub?.textContent || "").replace(/\s+/g, " ").trim();
+                    if (!t) return "（空消息）";
+                    let w = 0, out = "";
+                    for (const ch of t) { w += /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(ch) ? 1 : 0.5; if (w > 24) break; out += ch; }
+                    return out === t ? t : out + "…";
+                  };
+                  let activeKey = null, rafPending = false;
+                  const escQ = (k) => (window.CSS && CSS.escape) ? CSS.escape(k) : String(k).replace(/["\\]/g, "\\$&");
+                  const rebuild = () => {
+                    const rows = anchorRows();
+                    rail.classList.toggle("empty", rows.length === 0);
+                    rail.classList.toggle("spread", rows.length > 4);
+                    if (!rows.length) { rail.replaceChildren(); activeKey = null; return; }
+                    const prev = new Map([...rail.children].map((c) => [c.dataset.k, c]));
+                    const frag = document.createDocumentFragment();
+                    rows.forEach((row, i) => {
+                      const k = row.dataset.x || row.dataset.echoKey || "i" + i;
+                      let item = prev.get(k);
+                      const isNew = !item;
+                      if (isNew) {
+                        item = document.createElement("div");
+                        item.className = "or-item";
+                        item.dataset.k = k;
+                        item.setAttribute("role", "link");
+                        item.tabIndex = 0;
+                        item.innerHTML = '<span class="or-tick"></span><span class="or-label"></span>';
+                        item.addEventListener("click", () => activate(item, row));
+                        item.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); activate(item, row); } });
+                      }
+                      item._row = row;
+                      item.querySelector(".or-label").textContent = labelOf(row);
+                      if (k === activeKey) item.classList.add("active");
+                      frag.appendChild(item);
+                    });
+                    rail.replaceChildren(frag);
+                    if ([...rail.children].some((c) => !c._enterDone && !prev.has(c.dataset.k))) {
+                      [...rail.children].forEach((c) => { if (!prev.has(c.dataset.k)) { c.classList.add("enter"); c._enterDone = true; c.addEventListener("animationend", () => c.classList.remove("enter"), { once: true }); } });
+                    }
+                    computeActive();
+                  };
+                  const activate = (item, row) => {
+                    const tick = item.querySelector(".or-tick");
+                    if (tick) { tick.classList.remove("pressed"); void tick.offsetWidth; tick.classList.add("pressed"); tick.addEventListener("animationend", () => tick.classList.remove("pressed"), { once: true }); }
+                    setActive(item.dataset.k);
+                    try { row.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { row.scrollIntoView(); }
+                  };
+                  const setActive = (k) => {
+                    if (activeKey === k) return;
+                    activeKey = k;
+                    rail.querySelectorAll(".or-item").forEach((c) => { const on = c.dataset.k === k; c.classList.toggle("active", on); if (on) c.setAttribute("aria-current", "true"); else c.removeAttribute("aria-current"); });
+                  };
+                  const computeActive = () => {
+                    const items = [...rail.querySelectorAll(".or-item")];
+                    if (!items.length) return;
+                    const cb = UI.outlineBody.getBoundingClientRect();
+                    let best = null, bestTop = -Infinity;
+                    for (const it of items) {
+                      const row = it._row;
+                      if (!row || !row.isConnected) continue;
+                      const r = row.getBoundingClientRect();
+                      if (r.top >= cb.top - 40 && r.top < cb.bottom && r.top > bestTop) { best = it; bestTop = r.top; }
+                    }
+                    if (best) setActive(best.dataset.k);
+                    else if (!activeKey) setActive(items[0].dataset.k);
+                  };
+                  UI.outlineBody.addEventListener("scroll", () => {
+                    if (rafPending) return;
+                    rafPending = true;
+                    requestAnimationFrame(() => { rafPending = false; computeActive(); });
+                  }, { passive: true });
+                  const mo = new MutationObserver(() => rebuild());
+                  if (UI.convPane) mo.observe(UI.convPane, { childList: true });
+                  UI.outlineRailRebuild = rebuild;
+                  rebuild();
+                  if (rail.children.length === 1) setActive(rail.children[0].dataset.k);
+                  try { new ResizeObserver(() => computeActive()).observe(UI.outlineBody); } catch {}
+                }
+
                 function renderConversation() {
                   const pane = UI.convPane;
                   if (!pane) return;
@@ -3947,6 +4054,9 @@
                     panes[0].appendChild(cp);
                     UI.convPane = cp;
                   }
+                  // #203 W-RAIL：会话大纲导航条（规格 docs/design/outline-rail-spec.md 钉死值；
+                  // workspace 改 grid 三行两列——head 跨列/body+rail 同排/footer 跨列，禁 fixed）
+                  setupOutlineRail();
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }
                   setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
                   // B12 过程/思考开关：head-actions 点击由 #164 的 UI.section 域内委托统一接
