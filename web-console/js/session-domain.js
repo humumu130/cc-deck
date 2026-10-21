@@ -1572,10 +1572,12 @@
                 // 与 relay PERM_MODE_ZH 逐字对齐。外部/CLI 会话 relay 硬拒（hooks 单向桥接）→ 胶囊
                 // 置灰+tooltip 说明不硬闯；历史/无命令通道卡隐藏（模型胶囊同口径）。
                 const PERM_MODES = [
-                  { key: "default", zh: "标准（每次确认）" },
-                  { key: "acceptEdits", zh: "自动接受编辑" },
-                  { key: "plan", zh: "规划（只读）" },
-                  { key: "bypassPermissions", zh: "跳过权限确认" },
+                  /* #201④：照 Claude Code 原版权限菜单英文条目（弃中文模式名——用户拍板
+                  原版化；zh 键名保留=PERM_MODE_ZH/胶囊 title 消费面零动） */
+                  { key: "default", zh: "Ask before edits" },
+                  { key: "acceptEdits", zh: "Accept edits" },
+                  { key: "plan", zh: "Plan mode" },
+                  { key: "bypassPermissions", zh: "Bypass permissions" },
                 ];
                 // #195 件五：远程审批开关随 WorkBuddy 化退役（head 胶囊+COMMAND_EXT_MODE 入口移除；
                 // relay 命令面不动）。perm 胶囊已迁输入框左下角（件一），updatePermCapsule 保留 id 接线。
