@@ -15153,10 +15153,12 @@ function evaluatePermission(input) {
       const threat = prod ? "production" : "env_unknown";
       if (normalized === "full-auto") {
         if (materialized === "") {
-          if (input.user_authorized_bypass !== true) {
+          const authorized = input.user_authorized_bypass === true;
+          const skipConfirmed = input.skip_confirm_checked === true;
+          if (!authorized && !skipConfirmed) {
             return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
           }
-          materialized = `${threat}_bypass_user_authorized`;
+          materialized = authorized ? `${threat}_bypass_user_authorized` : `${threat}_skip_confirm_authorized`;
         } else {
           normalized = "edit-auto";
           materialized = `${threat}_demoted_from_full_auto`;
@@ -48503,11 +48505,14 @@ function createSessionCommands(mgr2) {
         policy_source: "explicit",
         dir_scope: dirScope,
         env: envScope,
-        // W-PERMERR：授权位接线补全（#69 半边）——此前仅组织派单口（:7123）传本字段，
-        // 用户自建卡勾「跳过权限确认」在生产/未知环境恒 forbidden 且授权对它无效
-        // （1016 用户 Windows 云通道实锤：连生产 relay 勾选即报错，无放行通道）。
-        // 授权读数与派单口同源（permission-auth.json，org auth-bypass 写入）
-        user_authorized_bypass: readBypassAuthorization(mgr2.cfg.dataDir)
+        // W-PERMERR：授权位接线补全（#69 半边）——授权读数与派单口同源
+        //（permission-auth.json，org auth-bypass 写入）。
+        // #205（用户拍板 2026-10-21）：勾选「跳过权限确认」=授权本身——create 面
+        // 用户显式勾选（pm=bypassPermissions）自带授权语义，生产/unknown 环境闸
+        // 直接放行（materialized=skip_confirm_authorized 进审计），不再要求终端
+        // 二次授权；授权位（org auth-bypass）语义保留=预授权全部（含派单面）。
+        user_authorized_bypass: readBypassAuthorization(mgr2.cfg.dataDir),
+        skip_confirm_checked: pm2 === "bypassPermissions"
       }) : null;
       if (perm && perm.effective_mode === "forbidden") {
         const denyRow = {
@@ -48539,6 +48544,12 @@ function createSessionCommands(mgr2) {
       });
       const okRow = perm ? { requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode, native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine, reason: perm.reason, policy_source: perm.policy_source, environment: envScope, dir_scope: dirScope, tier: "\u968F\u624B\u529E", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() } : { requested_mode: pm2 ?? null, normalized_mode: null, effective_mode: spawnPmMode, native_mode: null, capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy, reason: "p81_policy_off", policy_source: "explicit", environment: envScope, dir_scope: dirScope, tier: "\u968F\u624B\u529E", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() };
       appendPermissionAudit(auditStore(mgr2.cfg.dataDir), okRow);
+      if (perm && perm.effective_mode !== "forbidden" && pm2 === "bypassPermissions" && (envScope === "production" || envScope === "unknown" || dirScope === "production" || dirScope === "unknown")) {
+        try {
+          mgr2.emitChainAudit("gate-release", `skip-confirm \u653E\u884C actor=${by} engine=${engineForPolicy} env=${envScope ?? "?"} dir=${dirScope ?? "?"} sid=${session_id.slice(0, 8)}`);
+        } catch {
+        }
+      }
       return {
         command_id: cmd.command_id,
         ok: true,
@@ -52069,7 +52080,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     } catch {
     }
   }
-  // #199 C：审计镜像队列——emitChainAudit 四动作同步 append data/chain-audit.jsonl
+  // #199 C：审计镜像队列——emitChainAudit 五动作（#205 补 gate-release）同步 append data/chain-audit.jsonl
   // （云通道无运行时 KV 直推能力——云桥是 wss 中继；镜像文件=KV 批量同步的现成队列，
   // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
   chainAuditMirror(action, detail) {
