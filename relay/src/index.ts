@@ -417,6 +417,10 @@ setTimeout(() => {
   try {
     mgr.scanNeedsAuthSessions();
   } catch {}
+  try {
+    const n = mgr.drainTurnSpool(); /* #199 C：断电窗外报补账（回放 turn-spool） */
+    if (n > 0) console.log(`[chain2] turn-spool drain ${n} 条`);
+  } catch {}
 }, 5_000).unref?.();
 
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。

@@ -326,6 +326,8 @@ export interface DispatchEntry {
   receipt?: string;
   /** 承接会话 = Leader 的 relay session id */
   session_id: string;
+  /** #199 D：派单标题（任务 subject 同源，含 #NN 对账 join 键）——旧行缺省 undefined，对账侧容错 */
+  title?: string;
   /** #40 M4 谁派活谁收通知："leader"=Leader CLI 派 / "user"=咨询档（用户消息）/
    *  缺省=旧数据或未标注——读侧缺省不降级（通知仍广播端上，仅不定向注入） */
   actor?: string;

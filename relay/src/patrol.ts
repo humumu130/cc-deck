@@ -13,6 +13,7 @@
 // 开关：plugin-config 第十键 patrol（默认开，设置页 lever 随设置批）+ CCR_PATROL=0 应急停。
 import { statfsSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { statSync } from "node:fs";
 import { listGroups, loadBoardFile } from "./projects.js";
 import type { SessionManager } from "./session-manager.js";
 
@@ -55,7 +56,10 @@ export class PatrolModule {
     const fullMs = num(process.env.CCR_PATROL_FULL_MS, this.opts.fullMs ?? 30 * 60_000);
     this.lightTimer = setInterval(() => {
       if (!this.opts.enabled()) return;
+      // #199 B1：熔断到期补试——resumeCooldownUntil 过期后若无人触发（深夜无 turn_end/
+      // event），值守链会一直哑到下一事件；light 周期顺手探测「刚过期」窗口补一轮喂活
       try { this.runLight(); } catch (e) { console.log(`[patrol] light error: ${e instanceof Error ? e.message : e}`); }
+      try { this.retryExpiredBreaker(); } catch { /* 补试尽力而为 */ }
     }, lightMs);
     this.fullTimer = setInterval(() => {
       if (!this.opts.enabled()) return;
@@ -110,13 +114,22 @@ export class PatrolModule {
     if (!this.opts.enabled()) return;
     const now = Date.now();
     // ① worker 帧新鲜度：WORKING 且静默 >40min（压缩期静默合法，排除）
+    // #199 B3：盲面双补——①WAITING 久滞（等用户确认超 2h=疑似确认卡丢失/没人管，与
+    // WORKING 停滞分列报告）②compacting 挂死（压缩标志 >90min 不落=看门狗状态机卡死，
+    // 原判定直接排除 compacting 把这类永久静默）
     const stale = this.mgr.snapshot().filter((s) =>
-      s.status === "WORKING" && !s.compacting &&
+      s.status === "WORKING" && (!s.compacting || now - (s.updated_at ?? 0) > 90 * 60_000) &&
       now - (s.updated_at ?? 0) > WORKER_STALE_MIN * 60_000);
+    const staleWaiting = this.mgr.snapshot().filter((s) =>
+      s.status === "WAITING" && now - (s.updated_at ?? 0) > 2 * 3600_000);
     if (stale.length) {
       const text = `${stale.length} 个会话 WORKING 停滞>${WORKER_STALE_MIN}min：` +
         stale.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 60_000)}m)`).join("、");
       this.push(`worker-stale`, text);
+      if (staleWaiting.length) {
+        this.push(`waiting-stuck`, `${staleWaiting.length} 个会话 WAITING >2h：` +
+          staleWaiting.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 3600_000)}h)`).join("、"));
+      } else this.resolve(`waiting-stuck`);
       // #92 W-NOTIFY2 D：40min 无帧自动升级——可操作通知（点跳会话卡）替代纯文本
       // 推送（notifyDone 只兜底到首个 external，丢面大）；stableKey 同键幂等，恢复
       // resolve 面不变。首卡 actionable 跳转，severity=waiting 提级
@@ -153,6 +166,15 @@ export class PatrolModule {
     if (boardAlerts.length) this.push("board", boardAlerts.slice(0, 6).join("；"));
     else this.resolve("board");
     this.appendReport(`full: worker-stale=${stale.length} board=${boardAlerts.length ? boardAlerts.length + "项" : "OK"}`);
+    // #199 D：full 周期挂三账对账 + 对账心跳查龄（PM turn-report 双触发，此处兜底——
+    // PM 停帧时对账链不断）
+    try { (this.mgr as any).runLedgerRecon?.("patrol-full"); } catch { /* 尽力而为 */ }
+    try {
+      const hb = join(this.opts.dataDir, "recon-heartbeat.json");
+      const st = statSync(hb);
+      if (Date.now() - st.mtimeMs > 70 * 60_000) this.push("recon-stalled", `三账对账心跳停跳 ${Math.round((Date.now() - st.mtimeMs) / 60_000)}min（PM turn-report 与 patrol 双触发均未跑）`);
+      else this.resolve("recon-stalled");
+    } catch { /* 心跳文件未生成前静默 */ }
   }
 
   // ---------- 去重推送（onset-only）+ 报告落盘 ----------
@@ -166,9 +188,30 @@ export class PatrolModule {
       sessions.find((s) => s.status === "WORKING" && s.external) ||
       sessions.find((s) => s.external) ||
       sessions[0];
-    if (!target) return;
+    // #199 B5：无投递目标（零会话极端态）不再静默 return——报告仍落 patrol-report.md
+    // （排障面从「什么都没发生」变「告警了但没人可推」）
+    if (!target) { this.appendReport(`ALERT-NO-TARGET [${key}] ${text}`); return; }
     this.mgr.notifyDone(target.session_id, [`⚠️ 巡检：${text}`], 0);
     this.appendReport(`ALERT [${key}] ${text}`);
+  }
+
+  /** #199 B1：熔断到期补试——leader resumeCooldownUntil 在 [过期, 过期+light 周期] 窗内
+   * 且上次值守终态是 resume_breaker → 补一轮 feedPM("patrol-retry")。幂等窗=一个 light
+   * 周期只补一次（breakerRetryAt 记账），常态零成本（无熔断 leader 短路）。 */
+  private breakerRetryAt = 0;
+  private retryExpiredBreaker(): void {
+    const now = Date.now();
+    if (now - this.breakerRetryAt < 5 * 60_000) return;
+    const sm = this.mgr as unknown as { sessions: Map<string, { resumeCooldownUntil?: number; resumeFailStreak?: number }>; feedPM?: (t: string) => void };
+    if (typeof sm.feedPM !== "function" || !(sm.sessions instanceof Map)) return;
+    for (const s of sm.sessions.values()) {
+      if (s.resumeCooldownUntil && s.resumeCooldownUntil <= now && s.resumeCooldownUntil > now - 10 * 60_000) {
+        this.breakerRetryAt = now;
+        this.appendReport(`BREAKER-RETRY cooldown 到期补试 feedPM（streak=${s.resumeFailStreak ?? "?"}）`);
+        sm.feedPM("patrol-retry");
+        return;
+      }
+    }
   }
 
   private resolve(key: string): void {

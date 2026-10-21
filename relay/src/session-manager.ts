@@ -995,7 +995,123 @@ export class SessionManager {
   private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close", detail: string, target?: string): void {
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
+      this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
     } catch { /* 审计尽力而为，绝不阻断主路径 */ }
+  }
+
+  // #199 C：审计镜像队列——emitChainAudit 四动作同步 append data/chain-audit.jsonl
+  // （云通道无运行时 KV 直推能力——云桥是 wss 中继；镜像文件=KV 批量同步的现成队列，
+  // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
+  private chainAuditMirror(action: string, detail: string): void {
+    try { appendFileSync(join(this.cfg.dataDir, "chain-audit.jsonl"), JSON.stringify({ action, detail, ts: Date.now() }) + "\n"); } catch { /* 尽力而为 */ }
+  }
+
+  /** #199 A 对端：CLI Stop 钩子外报（/api/turn-report）。PM→重跑值守+对账；worker→60s
+   * 去重补审计（托管 onTurnEnd/external finishExternal 已是主信号，钩子报=relay 重启窗
+   * 与帧丢失窗的第一方补充——transcript 为证）。返回 true=已消费。 */
+  handleTurnReport(sid: string, key: string): boolean {
+    const now = Date.now();
+    const last = this.turnReportSeen.get(sid);
+    if (last && now - last.at < 60_000 && last.key === key) return false; // 同 sid 同 key 60s 内已消费（不同 key=新回合续报放行）
+    this.turnReportSeen.set(sid, { at: now, key });
+    const isPm = this.dutyTargetId() === sid || this.isLeaderSession(sid);
+    if (isPm) {
+      this.emitChainAudit("pm-wake", `trigger=turn-report sid=${sid.slice(0, 12)}（CLI Stop 第一方信号，重跑值守）`, sid);
+      this.feedPM("turn-report");
+      this.runLedgerRecon("turn-report");
+    } else {
+      this.emitChainAudit("pm-wake", `trigger=turn-report(worker) sid=${sid.slice(0, 12)} key=${String(key).slice(0, 12)}`, sid);
+      this.workerDonePending += 1;
+      this.feedPM("worker_done"); // 与 finishExternal turn_end 同边沿（60s 去重上幂等——K=3 退避兜底）
+    }
+    return true;
+  }
+  private turnReportSeen = new Map<string, { at: number; key: string }>();
+
+  /** #199 D：三账对账——台账（dispatch-log running 行 title 提 #NN）↔ 任务面
+   *（~/.cc-deck 全局任务 json subject 提 #NN，限 pending/in_progress）↔ 板面（org
+   * board claimed/doing text 提 #NN）。三元缺角 upsert 告警（稳定键幂等）；心跳文件
+   * data/recon-heartbeat.json 供 patrol 查龄（对账停跳>70min 告警）。触发=PM
+   * turn-report + patrol full 周期（双触发天然低频，无独立定时器）。 */
+  runLedgerRecon(trigger: string): void {
+    const now = Date.now();
+    try { writeFileSync(join(this.cfg.dataDir, "recon-heartbeat.json"), JSON.stringify({ at: now, trigger })); } catch {}
+    const nn = (t: unknown): string => {
+      const m = String(t ?? "").match(/#(\d{2,4})\b/);
+      return m ? "#" + m[1] : "";
+    };
+    // 台账面：running/dispatched 行的 #NN（title 缺省旧行容错跳过）
+    const ledger = new Set<string>();
+    for (const e of readDispatchLog().filter((x) => x.status === "running" || x.status === "dispatched")) {
+      const k = nn(e.title);
+      if (k) ledger.add(k);
+    }
+    // 任务面：全局任务 json（~/.claude/tasks/*/*.json——同 relay 任务店根，subject 可读）
+    const task = new Set<string>();
+    try {
+      const tasksRoot = join(homedir(), ".claude", "tasks");
+      for (const d of readdirSync(tasksRoot).slice(-80)) {
+        try {
+          for (const f of readdirSync(join(tasksRoot, d))) {
+            try {
+              const j = JSON.parse(readFileSync(join(tasksRoot, d, f), "utf-8")) as { subject?: string; status?: string };
+              if ((j.status === "pending" || j.status === "in_progress")) { const k = nn(j.subject); if (k) task.add(k); }
+            } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
+    // 板面：claimed/doing 卡 text 的 #NN
+    const board = new Set<string>();
+    try {
+      for (const g of listGroups()) {
+        const b = loadBoardFile(g.id);
+        if (!b) continue;
+        for (const e of b.entries) {
+          if (e.status === "claimed" || e.status === "ready_to_install" || e.status === "submitted") { const k = nn(e.text); if (k) board.add(k); } /* #199：板在途三态（claimed/ready_to_install/submitted）——status 词表无 doing */
+        }
+      }
+    } catch {}
+    // 缺角判定（只在「任一账有此号」时比另两账；三账同空的号不存在）
+    const missTask = [...ledger].filter((k) => !task.has(k));
+    const orphanTask = [...task].filter((k) => !board.has(k) && !ledger.has(k));
+    const missLedger = [...board].filter((k) => !ledger.has(k) && !task.has(k));
+    const report: string[] = [];
+    if (missTask.length) report.push(`台账 running 但任务面无单：${missTask.slice(0, 5).join(" ")}`);
+    if (orphanTask.length) report.push(`任务面有单但台账/板均无：${orphanTask.slice(0, 5).join(" ")}`);
+    if (missLedger.length) report.push(`板卡 doing 但台账/任务均无：${missLedger.slice(0, 5).join(" ")}`);
+    if (report.length) {
+      this.emitChainAudit("pm-wake", `recon(${trigger}) 三账缺角：${report.join("；").slice(0, 200)}`);
+      try { this.upsertNotification("system", "ledger-recon", String(Math.floor(now / 1_800_000)), {
+        title: "三账对账发现缺角",
+        body: truncate(report.join("；"), 160),
+        severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
+      }); } catch { /* 尽力而为 */ }
+    }
+  }
+
+  /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
+  drainTurnSpool(): number {
+    const dir = join(homedir(), ".cc-deck", "data", "turn-spool");
+    let drained = 0;
+    try {
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith(".jsonl")) continue;
+        const full = join(dir, f);
+        try {
+          for (const line of readFileSync(full, "utf-8").split("\n")) {
+            if (!line.trim()) continue;
+            try {
+              const j = JSON.parse(line) as { sid?: string; key?: string };
+              if (j?.sid && j.key) { this.handleTurnReport(j.sid, j.key); drained++; }
+            } catch {}
+          }
+        } catch {}
+        try { rmSync(full, { recursive: true, force: true }); } catch {} // 回放完清档（append-only 语义：drain 即消费）
+      }
+    } catch {}
+    if (drained > 0) this.emitChainAudit("pm-wake", `turn-spool drain 回放 ${drained} 条断电窗外报`);
+    return drained;
   }
 
   private upsertNotification(
@@ -4253,6 +4369,12 @@ export class SessionManager {
         detail: "no-leader 模式下无在册 PM 会话（external 且进程活）",
         from: Date.now(),
       });
+      // #199 B4：哑值守升级通知——no-leader 模式下无在册 PM=整条值守链哑（用户无感）
+      try { this.upsertNotification("system", "pm-no-target", "noleader", {
+        title: "值守无 PM 目标（no-leader 模式）",
+        body: truncate(`候选待处置项无人接——无在册 PM 会话（external 且进程活）`, 160),
+        severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
+      }); } catch { /* 尽力而为 */ }
       return;
     }
     const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
@@ -4348,6 +4470,13 @@ export class SessionManager {
           feed_id: feedId, feed_generation: generation, trigger: [trigger],
           result: "sleep", reason: tripped ? "resume_breaker" : "pm_parked", observed, from,
         });
+        // #199 B4：压制支升级通知——熔断期（连续 resume 失败）与用户停放（saved 休眠）都
+        // 是「队列有活但 PM 拉不动」的用户须知情态，此前只落审计文件手机无感
+        try { this.upsertNotification("system", tripped ? "pm-breaker" : "pm-parked", targetId, {
+          title: tripped ? "值守暂停：PM resume 熔断中" : "值守暂停：PM 已停放（休眠）",
+          body: truncate(`${tripped ? "连续失败冷却期" : "用户主动停放"}——队列候选 ${observed.actionable_count} 项暂无人处置；${tripped ? "冷却结束自动恢复" : "唤醒 PM 需用户发话"}`, 160),
+          severity: tripped ? "waiting" : "info", group: "attention", actionable: !tripped, sessionId: targetId, domain: "session", returnPath: "/",
+        }); } catch { /* 尽力而为 */ }
         return;
       }
     }
@@ -4375,6 +4504,9 @@ export class SessionManager {
       // #92 W-NOTIFY2 A：停帧唤醒上手机——值守注入成功即通知（worker 停帧+名下派单
       // 未收割的「PM 该盘点」信号直达手机绿框）。60s 频控聚合：worker_done 风暴
       // （多 worker 同窗交付）收敛为一通知，stableKey 同键 upsert 天然幂等刷正文
+      // #199 B2：审计移出频控门——唤醒事实每次都入 events.ndjson（频控只聚「手机通知」
+      // 这一个用户可见面；审计少记=风暴窗内丢归因，正是本批要堵的盲）
+      this.emitChainAudit("pm-wake", `trigger=${trigger} candidates=${verdict.candidates.length} target=${targetId.slice(0, 12)}`, targetId);
       const now2 = Date.now();
       if (now2 - this.pmWakeNotifyAt > 60_000) {
         this.pmWakeNotifyAt = now2;
@@ -4385,7 +4517,6 @@ export class SessionManager {
             severity: "info", group: "attention", actionable: false, sessionId: targetId, domain: "session", returnPath: "/",
           });
         } catch { /* 通知尽力而为 */ }
-        this.emitChainAudit("pm-wake", `trigger=${trigger} candidates=${verdict.candidates.length} target=${targetId.slice(0, 12)}`, targetId);
       }
     } catch (err) {
       // 注入失败（019 §3.2 第 4 步）：保留原回合终态不伪造继续成功，记录 pm_unwakeable
@@ -6205,7 +6336,7 @@ export class SessionManager {
       ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}\n`
       : "";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...engineFields });
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...engineFields }); /* #199 D：title 入台账（#NN 对账 join 键） */
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId: string;
     if (veteran) {

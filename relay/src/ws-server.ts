@@ -648,6 +648,26 @@ export function startServer(
       void handleNotify(req, res, mgr, cfg);
       return;
     }
+    // #199 A 对端：CLI Stop 钩子外报（~/.claude/hooks/turn-report.mjs）。LAN 本机回环
+    // 专用（钩子只打 127.0.0.1），无 token 面（回环即信任边界——与 /api/notify 同款
+    // 本机口径）；body {sid, key, transcript_size, at}。PM→重跑值守+三账对账；
+    // worker→60s 去重+worker_done 边沿。失败 relay 侧不回 5xx（钩子已 spool，回 200
+    // 防重报风暴——接受窗语义：收到即受理）
+    if (req.method === "POST" && url.pathname === "/api/turn-report") {
+      let trBody = "";
+      req.on("data", (c: Buffer) => { trBody += c; });
+      req.on("end", () => {
+        try {
+          const body = JSON.parse(trBody || "{}") as { sid?: string; key?: string };
+          const sid = String(body.sid ?? "");
+          const key = String(body.key ?? "");
+          if (sid && key) (mgr as unknown as { handleTurnReport(s: string, k: string): boolean }).handleTurnReport(sid, key);
+        } catch { /* 受理即 200 */ }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
     // Artifacts 产物中心（2026-09-14）：CLI 把输出物写 ~/.cc-deck/artifacts/ 即对全部
     // 客户端可见——列表 JSON + 静态服务（ui-review 汇总页亦由此分发，外网经 ECS 转发）
     if (req.method === "GET" && url.pathname === "/api/artifacts") {
