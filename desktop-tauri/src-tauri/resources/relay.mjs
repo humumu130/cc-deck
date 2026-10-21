@@ -56626,8 +56626,11 @@ provider=${opts.provider ?? "default"}` : void 0,
             veteran = reuse;
             capReuse = true;
             this.pushExternalLog(reuse, "system", `\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g12.headcount)}/${headcountCapOf(g12)}\uFF09\uFF0C\u672C\u5355\u590D\u7528\u7A7A\u95F2 worker\uFF08\u975E\u65B0\u5EFA\uFF09`);
-          } else {
+          } else if (this.groupHasLiveWorker(g12)) {
             return this.enqueueCapDispatch(input, g12, tier, anchor, actor, engineFields);
+          } else {
+            const names = g12.headcount.slice(0, 4).map((h) => (h.session_id || "").slice(0, 8)).join(" ");
+            return { ok: false, error: `\u7EC4\u300C${g12.name}\u300D${g12.headcount.length} \u4E2A\u4F1A\u8BDD\u5168\u90E8\u65E0\u54CD\u5E94\uFF08\u5047\u6B7B/\u50F5\u6B7B/\u9000\u4F11\uFF0C\u65E0\u5728\u5FD9\u8005\uFF09\u2014\u2014\u5148\u5904\u7406\u6B7B\u4F1A\u8BDD\uFF08member-retire \u6216\u4EBA\u5DE5\u67E5\u770B\uFF09\u518D\u91CD\u6D3E [${names}]` };
           }
         }
       }
@@ -56886,8 +56889,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (!s || !s.state.relay_session_id) continue;
       if (s.state.external) continue;
       if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
-      if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 6e4) {
-        this.emitChainAudit("dispatch-reroute", `zombie-veteran skip: ${e.session_id.slice(0, 12)} \u65E0\u8FDB\u5EA6\u5E27 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 6e4)}min\uFF0C\u91CD\u8DEF\u7531\u4E0B\u4E00\u5019\u9009`);
+      if (this.routeLivenessSkip(e.session_id, s)) {
+        this.emitChainAudit("dispatch-reroute", `zombie skip: ${e.session_id.slice(0, 12)} \u65E0\u8FDB\u5EA6\u5E27 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 6e4)}min\uFF0C\u91CD\u8DEF\u7531\u4E0B\u4E00\u5019\u9009`);
         continue;
       }
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
@@ -56906,6 +56909,25 @@ provider=${opts.provider ?? "default"}` : void 0,
   //   与 planned 显式要求逐项一致（engine/model/provider，同熟手引擎一致性判据）
   //   排序 = 会话 updated_at 升序（idle 最久优先）
   // 返回 null = 全忙/无人可复用（调用方排队）。
+  /** #200 W-ROUTE：路由候选统一探活单口——假死（agent 在+pid 活但 ≥15min 无进度帧
+   * =CLI 挂起，#92 NOTIFY2-B 判据同源）。retired 闸在 revive.ts reviveEligible 链既有
+   *（S5 出舱），本单口只补 zombie 面；两路由入口（revive 链/cap-reuse 链）判据同源。 */
+  /** #200 ③：组内是否存在任何可承接/在忙的活会话——忙者（WORKING/WAITING）=正常满载
+   *（排队合法）；空闲但健康（非 zombie/retired/熔断）=drain 可承接。两者皆无=全死。 */
+  groupHasLiveWorker(g2) {
+    for (const h of g2.headcount) {
+      const s = this.sessions.get(h.session_id);
+      if (!s || s.state.external) continue;
+      if (s.state.status === "WORKING" || s.state.status === "WAITING") return true;
+      if (!this.routeLivenessSkip(h.session_id, s) && !this.isRetiredMember(h.session_id) && !(s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) && s.state.relay_session_id) return true;
+    }
+    return false;
+  }
+  routeLivenessSkip(sid, s) {
+    if (!s) return null;
+    if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 6e4) return "zombie";
+    return null;
+  }
   pickIdleRosterWorker(g2, role, planned) {
     const now = Date.now();
     const cands = [];
@@ -56920,6 +56942,11 @@ provider=${opts.provider ?? "default"}` : void 0,
       if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) continue;
       if (s.resumePending && now - s.resumePending < resumePendingWindowMs()) continue;
       if (s.resumeCooldownUntil && now < s.resumeCooldownUntil) continue;
+      const idleLiveness = this.routeLivenessSkip(h.session_id, s) ?? (this.isRetiredMember(h.session_id) ? "retired" : null);
+      if (idleLiveness) {
+        this.emitChainAudit("dispatch-reroute", `cap-reuse ${idleLiveness} skip: ${h.session_id.slice(0, 12)}\uFF0C\u590D\u7528\u4E0B\u4E00\u5019\u9009`);
+        continue;
+      }
       if (planned.engine && s.state.engine !== planned.engine || planned.model && s.state.model !== planned.model || planned.provider && s.state.engine_provider !== planned.provider) continue;
       cands.push({ sid: h.session_id, last: s.state.updated_at ?? 0 });
     }
