@@ -288,10 +288,11 @@ jobs:
             echo "NOVA_SUFFIX=-Nova" >> "$GITHUB_ENV"
             echo "nova variant: overlay tauri.nova.conf.json active（productName/identifier/updater）"
           fi
-          # #190（W-UPDCHAIN）：dmg → dmg,updater——updater bundle 产 *.app.tar.gz+.sig
-          #（macOS 更新包格式；此前只打 dmg，桌面更新链 mac 侧永远无产物可推）。
+          # #190（W-UPDCHAIN）：dmg → app,dmg——Tauri v2 的 macOS updater 工件
+          #（*.app.tar.gz+.sig）附产于 app bundle（createUpdaterArtifacts:true；首 dispatch
+          # 实证 dmg,updater 不产——updater 非 v2 合法 target 被静默忽略）。dmg 保留直发。
           # artifact 上传的 macos/*.app.tar.gz* 通配本就在场，从此有物可收
-          npx tauri build --bundles dmg,updater --target aarch64-apple-darwin $CONFIG_ARGS
+          npx tauri build --bundles app,dmg --target aarch64-apple-darwin $CONFIG_ARGS
 
       - name: Artifact name suffix（分支名含 / 会炸 upload-artifact）
         shell: bash
