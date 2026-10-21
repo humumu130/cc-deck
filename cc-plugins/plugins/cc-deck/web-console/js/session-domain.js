@@ -81,6 +81,11 @@
                 function b2Toast(msg, ms) { const t = $id("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400); }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
+                // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息标记表——与 expo-app/src/auto-msg.ts
+                // 同表副本（两端无共享机制，改清单两处同步）。「【cc-deck 巡检轮】」=用户自配
+                // cron 巡检文案；「[值守喂活]」=relay feedPM 值守注入首行固定格式（同语义噪音面）
+                const AUTO_MSG_PREFIXES = ["【cc-deck 巡检轮】", "[值守喂活]"];
+                function isAutoInjected(text) { const t = String(text ?? "").trimStart(); return AUTO_MSG_PREFIXES.some((p) => t.startsWith(p)); }
                 function dayKey(ts) { const d = new Date(ts); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
                 function dayLabel(ts) { // #162 微信式分级（今天/昨天/M月d日/yyyy年M月d日）
                   if (!ts) return "";
@@ -1572,36 +1577,11 @@
                   { key: "plan", zh: "规划（只读）" },
                   { key: "bypassPermissions", zh: "跳过权限确认" },
                 ];
-                // W-PORT-A R-6：外部 CLI 会话「远程审批」胶囊——COMMAND_EXT_MODE 开关（手机 #56 同命令面）。
-                // 开=本机 CLI 的权限请求推到本端远程决议（wait-card 审批链）；关=CLI 本机自行处理。
-                // 乐观回显 s.remote_mode，UPDATED 帧权威归位（MERGE_KEYS 已含 remote_mode）。
-                function updateExtModeCapsule(s) {
-                  const cap = UI.extModeCapsule;
-                  if (!cap) return;
-                  if (!s || !s.external || !canCmd(s)) { cap.hidden = true; delete cap.dataset.extOn; return; }
-                  const on = s.remote_mode === true;
-                  cap.hidden = false;
-                  const txt = cap.querySelector("[data-extmode-text]");
-                  if (txt) txt.textContent = "远程审批 " + (on ? "开" : "关");
-                  cap.title = on ? "远程审批已开：CLI 的权限请求会推到这里决议（点击关闭）" : "远程审批已关：CLI 权限请求在本机处理（点击开启推送）";
-                  if (on) cap.dataset.extOn = "1"; else delete cap.dataset.extOn;
-                }
-                async function toggleExtMode() {
-                  const s = curSession();
-                  if (!s || !s.external || !canCmd(s)) return;
-                  const next = !(s.remote_mode === true);
-                  const ack = await commandAck("COMMAND_EXT_MODE", { session_id: s.session_id, enabled: next }); // relay 侧字段名=enabled（session-manager COMMAND_EXT_MODE 读 payload.enabled；types 注释笔误以实现为准）
-                  const v = ackVerdict(ack);
-                  if (v.ok) {
-                    s.remote_mode = next; // 乐观回显；UPDATED 权威归位
-                    updateExtModeCapsule(s);
-                    b2Toast(next ? "远程审批已开：权限请求将推到这里" : "远程审批已关");
-                  } else b2Toast("切换失败：" + v.error);
-                }
+                // #195 件五：远程审批开关随 WorkBuddy 化退役（head 胶囊+COMMAND_EXT_MODE 入口移除；
+                // relay 命令面不动）。perm 胶囊已迁输入框左下角（件一），updatePermCapsule 保留 id 接线。
                 function updatePermCapsule(s) {
                   const cap = UI.permCapsule;
                   if (!cap) return;
-                  updateExtModeCapsule(s); // W-PORT-A R-6：远程审批胶囊随 head 同步（external 专属）
                   if (!s || !canCmd(s)) { cap.hidden = true; return; } // 无会话/历史只读卡：隐藏
                   const txt = cap.querySelector("[data-perm-text]");
                   if (s.external) {
@@ -1876,6 +1856,19 @@
                   if (role === "user") {
                     // 旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文；任务号/裸 URL 链接化
                     const src = String(e.full ?? e.text ?? "");
+                    // W-AUTOMSG #194：自动注入消息（cron 巡检/值守喂活）折叠——不渲染用户
+                    // 气泡，收为一行小灰字「⏱ 定时巡检 · HH:MM」，点击展开/收起原文（默认收起；
+                    // am-head 复用 expanded 切换链）。样式全 inline（不碰样式类文件——wxstyle
+                    // 批并行面零冲突）
+                    if (isAutoInjected(src)) {
+                      // 居中精修（Leader 追加件）：完全居中系统提示形态——收起=水平居中
+                      // 一行小灰字（微信时间戳行视觉）；展开=居中无底色弱化块（限宽 85%）
+                      return '<div class="automsg-row" data-x="' + ke + '" style="margin:2px 0 6px;text-align:center">'
+                        + '<span class="am-head" data-x="' + ke + '" role="button" tabindex="0" title="' + (open ? "收起" : "展开") + '自动注入消息原文" style="color:var(--faint);font-size:11px;line-height:16px;cursor:pointer;display:inline-block">'
+                        + (open ? "▾ 定时巡检" : "⏱ 定时巡检") + (e.ts ? " · " + fmtHM(e.ts) : "") + "</span>"
+                        + (open ? '<div style="color:var(--dim);font-size:11.5px;line-height:17px;margin:4px auto 0;max-width:85%;width:fit-content;text-align:left;white-space:pre-wrap;word-break:break-word">' + esc(src) + "</div>" : "")
+                        + "</div>";
+                    }
                     const long = src.length > 100;
                     // FB14：随消息发送的图片在气泡内缩略呈现（点击放大/还原），不再只发不显。
                     // 元素形态两种：data: URL（前缀直用）或 relay 落盘引用（img-* basename，
@@ -3555,7 +3548,7 @@
                     if (cpy) { ev.stopPropagation(); copyText(cpy.dataset.copy || ""); b2Toast("已复制"); return; }
                     const fp = ev.target.closest(".fpath");
                     if (fp) { ev.stopPropagation(); copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || "")); return; }
-                    const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x]");
+                    const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x], .am-head[data-x]"); // W-AUTOMSG：am-head=自动注入折叠头（复用 expanded 切换链）
                     if (xEl) { ev.stopPropagation(); toggleExpand(xEl.dataset.x); return; }
                     const ubImg = ev.target.closest(".ub-img"); // FB14：缩略图点击放大/还原
                     if (ubImg) { ev.stopPropagation(); ubImg.classList.toggle("zoomed"); return; }
@@ -3738,30 +3731,18 @@
                     if (!ev.target.closest("#b2-create-pop") && !ev.target.closest("#d-session .queue-head") && !ev.target.closest("#b2-engine-menu")) closeCreatePop(); // 件九：点引擎浮层不误关弹窗
                     if (!ev.target.closest("#b2-model-menu") && !ev.target.closest("#session-model-capsule")) closeModelMenu();
                     if (!ev.target.closest("#b2-perm-menu") && !ev.target.closest("#session-perm-capsule")) closePermMenu(); // UIPOLISH3 件三
+                    if (!ev.target.closest("#b2-plus-menu") && !ev.target.closest("[data-composer-plus]")) window.__ccDeck005ClosePlusMenu && window.__ccDeck005ClosePlusMenu(); // #195 件二
                     if (!ev.target.closest(".artifact-menu-wrap")) document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open"));
                     if (!ev.target.closest(".slash-box") && !ev.target.closest(".composer")) slashHide(); // W-SLASH：点浮层/输入区外收起
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); window.__ccDeck005ClosePlusMenu && window.__ccDeck005ClosePlusMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
                   });
 
                   // composer：发送/停止/历史/IME
                   UI.sendBtn.addEventListener("click", sendMessage);
                   if (UI.stopBtn) UI.stopBtn.addEventListener("click", stopSession);
-                  // 件八（2026-10-10 test.10 反馈）：输入框高度折叠开关——多行（默认）/单行
-                  // 紧凑两态，localStorage 记忆；compact 类驱动 CSS 换行（composer row 单行）。
-                  // 全局查（desktop 仅一处 composer-bottom unfold，与 section 作用域解耦）
-                  const unfoldBtn = document.querySelector("[data-composer-unfold]");
-                  if (unfoldBtn) {
-                    const applyCompact = (on) => {
-                      UI.composer.classList.toggle("compact", on);
-                      try { localStorage.setItem("ccd_composer_compact", on ? "1" : "0"); } catch (_) {}
-                    };
-                    let compact = false;
-                    try { compact = localStorage.getItem("ccd_composer_compact") === "1"; } catch (_) {}
-                    applyCompact(compact); // 载入还原
-                    unfoldBtn.addEventListener("click", () => applyCompact(!UI.composer.classList.contains("compact")));
-                  }
+                  // #195 件三：单行/多行折叠开关退役（多行恒定，textarea 随内容自长高上限内滚）。
                   let composing = false, commitLockUntil = 0;
                   UI.input.addEventListener("compositionstart", () => { composing = true; });
                   UI.input.addEventListener("compositionend", () => { composing = false; commitLockUntil = Date.now() + 150; });
@@ -3793,27 +3774,47 @@
                     composer.classList.remove("dragover");
                     stageFiles(ev.dataTransfer && ev.dataTransfer.files);
                   });
-                  const clip = composer.querySelector(".composer-clip");
-                  if (clip) {
+                  // #195 件二：粘贴/拖入提示语退役，附件能力收进左下 [+] 单入口（WorkBuddy 同构）——
+                  // 点开两项浮层（添加图片/添加文件），选择器各异走原 stageFiles 限额链；⌘V 粘贴与
+                  // 拖入输入框两条免点路径不变（提示虽撤，能力在）。
+                  const plusBtn = composer.querySelector("[data-composer-plus]");
+                  if (plusBtn) {
                     const fileInput = document.createElement("input");
                     fileInput.type = "file";
-                    fileInput.multiple = true; // 任意类型（旧壳 #92 文件入口口径；图片走独立相机钮）
+                    fileInput.multiple = true; // 任意类型（旧壳 #92 文件入口口径）
                     fileInput.hidden = true;
                     document.body.appendChild(fileInput);
                     fileInput.addEventListener("change", () => { stageFiles(fileInput.files); fileInput.value = ""; });
-                    clip.addEventListener("click", (ev) => { ev.stopPropagation(); fileInput.click(); UI.input.focus(); });
-                  }
-                  // #169 图片独立入口（旧壳 #279 imgBtn：image/* 选择器，压缩/限额走既有 stageFiles）
-                  const imgBtn = composer.querySelector("[data-composer-img]");
-                  if (imgBtn) {
                     const imgInput = document.createElement("input");
                     imgInput.type = "file";
                     imgInput.multiple = true;
-                    imgInput.accept = "image/*";
+                    imgInput.accept = "image/*"; // #169 图片入口（image/* 选择器，压缩/限额走既有 stageFiles）
                     imgInput.hidden = true;
                     document.body.appendChild(imgInput);
                     imgInput.addEventListener("change", () => { stageFiles(imgInput.files); imgInput.value = ""; });
-                    imgBtn.addEventListener("click", (ev) => { ev.stopPropagation(); imgInput.click(); UI.input.focus(); });
+                    window.__ccDeck005ClosePlusMenu = () => { const m = document.getElementById("b2-plus-menu"); if (m) m.remove(); };
+                    plusBtn.addEventListener("click", (ev) => {
+                      ev.stopPropagation();
+                      window.__ccDeck005ClosePlusMenu();
+                      const menu = document.createElement("div");
+                      menu.id = "b2-plus-menu";
+                      menu.className = "model-menu"; // 与 perm/model 菜单同壳样式
+                      menu.setAttribute("role", "menu");
+                      menu.innerHTML = '<div class="source-menu-head">添加附件</div>'
+                        + '<button type="button" class="source-option" data-plus-img role="menuitem"><strong>添加图片</strong><small>最多 8 张 · 可 ⌘V 粘贴</small></button>'
+                        + '<button type="button" class="source-option" data-plus-file role="menuitem"><strong>添加文件</strong><small>最多 5 个 · 单个 20MB</small></button>';
+                      document.body.appendChild(menu);
+                      menu.classList.add("open");
+                      const r = plusBtn.getBoundingClientRect();
+                      const mw = menu.offsetWidth, mh = menu.offsetHeight;
+                      menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + "px";
+                      menu.style.top = Math.max(8, r.top - mh - 8) + "px"; // 输入框左下角 → 菜单向上弹
+                      menu.addEventListener("click", (me) => {
+                        const img = me.target.closest("[data-plus-img]");
+                        const file = me.target.closest("[data-plus-file]");
+                        if (img || file) { window.__ccDeck005ClosePlusMenu(); (img ? imgInput : fileInput).click(); UI.input.focus(); }
+                      });
+                    });
                   }
 
                   // 桌面会话输入框接线：input 触发重估 + keydown 先过浮层（↑↓/Enter/Tab/Esc），历史翻阅后同步重估
@@ -3960,9 +3961,7 @@
                       if (menu) closeModelMenu(); else openModelMenu(UI.modelCapsule);
                     });
                   }
-                  // UIPOLISH3 件三：权限胶囊同款静态接线（open/close 与模型菜单同构互不干扰）
-                  UI.extModeCapsule = $id("session-extmode-capsule"); // W-PORT-A R-6：远程审批开关（external 专属）
-                  if (UI.extModeCapsule) UI.extModeCapsule.addEventListener("click", () => void toggleExtMode());
+                  // UIPOLISH3 件三：权限胶囊静态接线（#195 件一：胶囊已迁 composer 左下角，id 不变引用直用）
                   UI.permCapsule = $id("session-perm-capsule");
                   if (UI.permCapsule) {
                     UI.permCapsule.addEventListener("click", () => {
