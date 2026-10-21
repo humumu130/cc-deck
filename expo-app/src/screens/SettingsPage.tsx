@@ -648,36 +648,14 @@ function SettingsPageBase({
   // ——偏好合并后仅四行一卡，折叠收益低于组头噪音；存过偏好的老用户键值留在
   // storage 无副作用（不再读取），连接组折叠记忆（cc.drawer.srvCollapsed）保留
 
-  // 连接状态卡（对齐设置原型）：活动源 = activeSourceId 命中项 → 缺失退第一个在线源 →
-  // 再退任一源；无源显示"未配置"。状态点按源 state 取色，副行 = 通道（cloud=云桥/LAN）
-  // + 状态文案
-  const activeSrc =
-    snap.sources.find((s) => s.id === snap.activeSourceId) ??
-    snap.sources.find((s) => s.state === "online") ??
-    snap.sources[0] ??
-    null;
+  // #192（W-RMCARD）：活动源派生随连接状态卡整卡移除退役（在线数摘要走 onlineCount）
   // W-MSET3 ① 头部副题实时化：静态目录文案 → 实时连接摘要
   const onlineCount = snap.sources.filter((s) => s.state === "online").length;
   const headSub =
-    servers.length === 0 ? "未连接 · 点下方添加电脑" : `${servers.length} 台电脑 · ${onlineCount} 台在线`;
-  // W-MSET3 ② 活动连接卡派生：登记项（triggerConnect 需 wsUrl/cloud）+ 通道词
-  //（在线时上报 channel 优先，退配置推断）+ 展示名（relayName 覆盖默认 host 名）
-  const activeEntry = activeSrc ? (servers.find((x) => x.id === activeSrc.id) ?? null) : null;
-  const activeChanWord = (() => {
-    if (!activeSrc || !activeEntry) return "";
-    const inferred = activeEntry.cloud ? "cloud" : isLanUrl(activeEntry.wsUrl) ? "lan" : "";
-    const chan = activeSrc.state === "online" ? (activeSrc.channel ?? inferred) : inferred;
-    return chan === "cloud" ? "云桥中转" : chan === "lan" ? "局域网直连" : chan ? "直连" : "";
-  })();
-  const activeTone = activeSrc ? connStateTone(activeSrc.state) : "off";
-  const activeToneColor =
-    activeTone === "online" ? c.done : activeTone === "busy" ? c.working : activeTone === "bad" ? c.error : c.faint;
-  const activeName =
-    activeSrc && activeEntry
-      ? activeSrc.relayName && activeEntry.name === defaultHostName(activeEntry)
-        ? activeSrc.relayName
-        : activeEntry.name
-      : "";
+    servers.length === 0 ? "未连接 · 进「连接与设备」添加" : `${servers.length} 台电脑 · ${onlineCount} 台在线`;
+  // #192（W-RMCARD）：活动连接卡整卡移除（用户点名——设置页 head 下直接接分组列表，
+  // 连接状态归「连接与设备」二级页）；卡专属派生量（activeEntry/activeChanWord/
+  // activeTone/activeToneColor/activeName）随之退役，headSub 无源文案改指二级页防悬空
 
   // #212 记住规则（设置抽屉「记住的规则」区数据）：各在线源合并展示；
   // legacy 计数支持分态——全部在线源都是旧 relay（allowRules 为 null）时显示
@@ -767,66 +745,9 @@ function SettingsPageBase({
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}>
         {/* W-MOBILE3 #122 一级目录：活动连接卡（保留信息面）+ 四分区导航卡 → 点卡进二级页 */}
         {subPage === null ? (<>
-        {/* W-MSET3 ② 活动连接状态卡（页面首卡，「连接为王」）：当前活动源升维——四态
-            灯（busy 黄闪）+ 名称 + 状态词·通道词，打开设置即知「连着谁、走哪条通道」
-            （原 #36 删状态卡后此信息只藏在服务器列表选中行里，多源时需逐行扫视）。
-            在线=静态展示；配对失效（云桥）=点按进编辑重配；其余非在线=点按触发连接
-            （triggerConnect 含 8s 云桥不通弹窗）；无任何源=点按进 setup（吸收原引导行） */}
-        {activeSrc ? (
-          <Pressable
-            style={d.activeCard}
-            android_ripple={
-              activeSrc.state !== "online" && activeEntry
-                ? { color: c.tintSoft, borderless: false, radius: 12 }
-                : undefined
-            }
-            onPress={
-              activeSrc.state === "online" || !activeEntry
-                ? undefined
-                : activeSrc.state === "unpaired" && activeEntry.cloud
-                  ? () => edit(activeEntry)
-                  : () => triggerConnect(activeEntry)
-            }
-            accessibilityLabel={`当前连接 ${activeName || activeSrc.name}，${connStateNote(activeSrc.state)}${activeChanWord ? `，${activeChanWord}` : ""}`}
-          >
-            <View style={[d.activeBar, { backgroundColor: activeToneColor }]} />
-            {activeTone === "busy" ? (
-              (() => {
-                ensurePlugBlink();
-                return (
-                  <Animated.View style={{ opacity: plugBlink }}>
-                    <PlugGlyph size={15} color={activeToneColor} />
-                  </Animated.View>
-                );
-              })()
-            ) : (
-              <PlugGlyph size={15} color={activeToneColor} />
-            )}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={d.activeNameT} numberOfLines={1}>{activeName || activeSrc.name}</Text>
-              <Text style={[d.activeSubT, activeSrc.state === "unpaired" && d.activeSubBadT]} numberOfLines={1}>
-                {connStateNote(activeSrc.state)}{activeChanWord ? ` · ${activeChanWord}` : ""}
-              </Text>
-            </View>
-            {activeSrc.state !== "online" && activeEntry ? <Text style={d.activeGoT}>›</Text> : null}
-          </Pressable>
-        ) : (
-          <Pressable
-            style={d.activeCard}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-            onPress={onSetup}
-            accessibilityLabel="未配置电脑，点此添加第一台"
-          >
-            <View style={[d.activeBar, { backgroundColor: c.faint }]} />
-            <PlugGlyph size={15} color={c.faint} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={d.activeNameT}>未配置电脑</Text>
-              <Text style={d.activeSubT}>点此扫码或手动添加第一台</Text>
-            </View>
-            <Text style={d.activeGoT}>›</Text>
-          </Pressable>
-        )}
-
+        {/* #192（W-RMCARD）：W-MSET3 ② 活动连接状态卡整卡移除（用户点名）——设置页
+            head 下直接接「连接与设备」等分组导航列表；连接状态/通道词/触发连接全部
+            归「连接与设备」二级页（服务器列表行内同款能力在） */}
         {SET_NAV.map((n, i) => (
           <Row
             key={n.key}
@@ -1679,20 +1600,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   body: { flex: 1 },
   // W-MSET3 ② 活动连接状态卡（页面首卡）：服务器卡同族语言（左缘 3dp 状态色条 =
-  // srvBar 同构 + panel 底 + line 边 + radius 12），但更大更重（首卡地位）：行高
-  // 更足、名称 textStrong 14.5/700、副行状态词+通道词；在线静态、非在线可点
-  activeCard: {
-    flexDirection: "row", alignItems: "center", gap: 11,
-    paddingVertical: 14, paddingHorizontal: 14, borderRadius: 14,
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,
-    marginBottom: 12, overflow: "hidden",
-  },
-  activeBar: { position: "absolute", left: 0, top: 12, bottom: 12, width: 3, borderRadius: 2 },
-  activeNameT: { color: c.textStrong, fontSize: 14.5, fontWeight: "700" },
-  activeSubT: { color: c.faint, fontSize: 10.5, marginTop: 2 },
-  // unpaired 染红（与服务器行 srvNoteBadT 同语义：唯一须人工重配的态）
-  activeSubBadT: { color: c.error },
-  activeGoT: { color: c.faint, fontSize: 13, marginLeft: 2 },
+  // #192（W-RMCARD）：活动连接卡样式簇（activeCard/activeBar/activeNameT/
+  // activeSubT/activeSubBadT/activeGoT）随卡整卡移除退役
   // #378 配对码平铺去框（W-MSETSIG 内嵌进「网页端配对」行 children）：大字码 +
   // 右侧倒计时/刷新（pairBox/pairTop 容器键随分节退役）
   pairSide: { flexDirection: "row", alignItems: "center", gap: 8 },
