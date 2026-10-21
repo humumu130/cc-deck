@@ -734,7 +734,7 @@ const makeStyles = (c: ThemeColors) =>
     head: {
       flexDirection: "row", alignItems: "center", gap: 8,
       ...HEAD_BASE, /* W-HEADUNI：全页统一会话列表页基准（原 14/12/10 三值漂移源） */
-      borderBottomWidth: 1, borderBottomColor: c.line, backgroundColor: c.panel,
+      borderBottomWidth: 1.5, borderBottomColor: c.lineStrong, backgroundColor: c.panel, /* W-HEADFIX2：分割线统一基准页口径 */
     },
     // B6：返回/刷新加容器底与 ripple（裸符号 affordance 弱）
     back: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden" },

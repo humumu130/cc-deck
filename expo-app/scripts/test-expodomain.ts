@@ -354,6 +354,8 @@ async function main(): Promise<void> {
     const td = srcOf("../src/screens/TeamDetailPage.tsx");
     const sp = srcOf("../src/screens/SettingsPage.tsx");
     check(hu.includes("height: 48,") && !/minHeight\s*:/.test(hu), "HEADUNI-1 head-unify 基准常量固定 height 48（#191 根修：minHeight→height——三档漂移根因；注释提及不算，查代码面无 minHeight: 键）");
+check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test(ph), "HEADUNI-3 PageHead 分割线统一基准页口径 1.5/lineStrong 相邻双行（#191 二轮：修会话页更粗异参）");
+    check(/borderBottomWidth: 1\.5, borderBottomColor: c\.lineStrong/.test(srcOf("../src/components/detail-styles.ts")), "HEADUNI-4 详情页分割线同口径（detail-styles.ts）");
     check(ls.includes("...HEAD_BASE") && !ls.includes("minHeight: 48,"), "HEADUNI-2 ListScreen 基准页引常量（无字面回退）");
     check(ph.includes("...HEAD_BASE") && td.includes("...HEAD_BASE") && sp.includes("...HEAD_BASE") && srcOf("../src/components/detail-styles.ts").includes("...HEAD_BASE"), "HEADUNI-3 四消费页全部 spread HEAD_BASE（detail 的 head 键随工厂外迁 detail-styles.ts——S1B 锚跟改）");
     check(!td.includes("paddingTop: 12, paddingBottom: 10") && !sp.includes("paddingBottom: 13,"), "HEADUNI-4 漂移源清除（团队详情 14/12/10、设置 paddingBottom 13 均退役）");

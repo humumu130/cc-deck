@@ -21,8 +21,8 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 补偿——总高 49→48px 不增反减（#108 键盘顶升契约不受影响）
   head: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    ...HEAD_BASE, /* W-HEADUNI：#148 旧对齐源退役——统一会话列表页基准（补 minHeight 48） */
-    borderBottomWidth: 1, borderBottomColor: c.line,
+    ...HEAD_BASE, /* W-HEADUNI：#148 旧对齐源退役——统一会话列表页基准 */
+    borderBottomWidth: 1.5, borderBottomColor: c.lineStrong, /* W-HEADFIX2：分割线统一基准页口径 */
   },
   // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
   // W-UIFIX 件七：纯 chevron 背钮（去 tintSoft 方块底）——40px 触区、图标 24px 微信式

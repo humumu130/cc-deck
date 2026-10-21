@@ -709,8 +709,11 @@ function SettingsPageBase({
 
   return (
     <View style={[d.page, { paddingTop: insets.top }]}>
-      <View style={d.content}>
-        {/* W-MOBILE3 #121/#122：头部换 PageHead 统一组件（v3 .appbar 规格）；#122 二级页化
+      {/* W-HEADFIX2 #191 二轮（test.47 实测设置系不齐根因）：PageHead 提出 d.content
+          wrapper——原被 paddingTop 16+paddingHorizontal 16 包裹，head 上方多 16px 且左右
+          多 16（其他三页 head 直挂页面根）=设置系整体不齐真相；首批只核 HEAD_BASE 样式键
+          消费面，漏了渲染路径 wrapper。head 全宽无包裹对齐 */}
+      {/* W-MOBILE3 #121/#122：头部换 PageHead 统一组件（v3 .appbar 规格）；#122 二级页化
             ——一级=「设置」域标题+扫码钮；二级=返回+分区标题+「设置 · X」副题（v3 appbar 二级形态）。
             原 W-MSETSIG 品牌头（nameT/verT/scanBtn 三键）退役，扫码钮视觉保留进 right 槽 */}
         {subPage === null ? (
@@ -741,6 +744,8 @@ function SettingsPageBase({
             backLabel="返回设置目录"
           />
         )}
+      {/* W-HEADFIX2：content wrapper 只包内容体（head 已出壳；水平 16/顶 16 节奏保留给内容） */}
+      <View style={d.content}>
         {/* #130 底部补安全距离：contentContainerStyle 撑出手势条空间（原 Build 行贴底） */}
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}>
         {/* W-MOBILE3 #122 一级目录：活动连接卡（保留信息面）+ 四分区导航卡 → 点卡进二级页 */}
@@ -1462,7 +1467,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   content: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   // W-MSETSIG 头部重设计：005 mobile-head 域标题（h2 设置 15-17px + small 副题
   // 10.5px）——原「logo + CC Deck」品牌头部退役（品牌识别收敛到关于弹窗 abLogo）
-  head: { flexDirection: "row", alignItems: "center", gap: 10, ...HEAD_BASE, borderBottomWidth: 1, borderBottomColor: c.line }, /* W-HEADUNI：统一基准（原 paddingBottom 13 漂移源） */
+  head: { flexDirection: "row", alignItems: "center", gap: 10, ...HEAD_BASE, borderBottomWidth: 1.5, borderBottomColor: c.lineStrong }, /* W-HEADFIX2：死键顺带对齐基准页分割线；本键现无消费（PageHead 接管头渲染） */
   nameT: { color: c.textStrong, fontSize: 16.5, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 10.5, marginTop: 2 },
   // 头部右上全局扫码钮：tintSoft 圆角方（#130 去描边），角标式扫描图标

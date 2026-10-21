@@ -137,8 +137,8 @@ const makeStyles = (c: ThemeColors) =>
       alignItems: "center",
       gap: 8,
       ...HEAD_BASE, /* W-HEADUNI：全页 head 高度单一基准（会话列表页口径）——常量入常量出 */
-      borderBottomWidth: 1,
-      borderBottomColor: c.line,
+      borderBottomWidth: 1.5, /* W-HEADFIX2 #191 二轮：分割线统一基准页口径（会话页 1.5/lineStrong——W-UIFIX 件三拍板），修「会话页更粗」异参 */
+      borderBottomColor: c.lineStrong,
       backgroundColor: c.bg,
     },
     backBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden", alignItems: "center", justifyContent: "center", flexShrink: 0 },
