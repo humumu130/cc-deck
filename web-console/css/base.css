@@ -617,6 +617,7 @@
     /* W-TOPBAR ⑥ 子 Agent 活性面板（旧壳 #142 同构移植）：状态栏下续行，标题行即折叠
        开关（subAgent N + 尾部箭头），条目=呼吸点/✓ + 描述 + 当前动作 + 走秒；无子 Agent 不占位 */
     .agbox { flex: 0 0 auto; padding: 0 20px 6px; background: var(--footer); }
+    #d-session .agbox { background: transparent; } /* #198 件④：输入区一体底（#195 件⑥ footer 透明后 agbox 独立底有色差，随批归一） */
     .agbox[hidden] { display: none; }
     .aghead { display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px 3px 0; border-radius: 6px; color: var(--faint); cursor: pointer; user-select: none; font-size: var(--fs-C); letter-spacing: .04em; }
     .aghead:hover { color: var(--dim); }
@@ -1897,11 +1898,16 @@
        line-soft，浅色呈极淡灰、深色呈微亮线；组头/空态横幅处天然断开不画 */
     #d-session .queue-card + .queue-card { border-top: transparent; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); } /* 件七：分割线加粗一档（原 line-soft 65% 几乎不可见） */
     #d-session .queue-card.selected { border-color: transparent; background: var(--brand); box-shadow: none; } /* #193 P1：微信选中=品牌橙整行（原 --q-row-sel 灰底退役） */
-    #d-session .queue-card.selected .srow-r1 strong, #d-session .queue-card.selected .srow-r2-t, #d-session .queue-card.selected .srow-meta { color: #FFFFFF; }
+    #d-session .queue-card.selected .srow-r1 strong, #d-session .queue-card.selected .srow-r2-t { color: #FFFFFF; } /* #198：死选择器 .srow-meta 删（类已退役，HTML/JS 零引用） */
     #d-session .queue-card.selected .srow-time { color: rgba(255,255,255,.85); }
     #d-session .queue-card.selected .srow-ava { color: #FFFFFF; background: rgba(255,255,255,.16); }
     #d-session .queue-card.selected .tag, #d-session .queue-card.selected .team-chip { background: rgba(255,255,255,.2); color: #FFFFFF; border-color: transparent; }
     #d-session .queue-card.selected .srow-more, #d-session .queue-card.selected .srow-pin, #d-session .queue-card.selected .srow-close { color: #FFFFFF; }
+    /* #198 件①：选中橙行反白清单补漏——走秒/「处理」浮层钮/源与引擎徽章（此前橙底上原色不可辨） */
+    #d-session .queue-card.selected .srow-sec { color: #FFFFFF; }
+    #d-session .queue-card.selected .srow-cta { border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); color: #FFFFFF; } /* 白描边钮形态 */
+    #d-session .queue-card.selected .srow-cta:hover { border-color: #FFFFFF; background: rgba(255,255,255,.22); color: #FFFFFF; }
+    #d-session .queue-card.selected .source-badge, #d-session .queue-card.selected .engine-badge { color: #FFFFFF; border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.14); }
     #d-session .queue-card.selected .srow-pin.on svg { color: #FFFFFF; }
     /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
