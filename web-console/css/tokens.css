@@ -16,7 +16,7 @@
       --card-sub: #A9B6C9;
       --faint: #7A889F;
       --progress-fill: #6E8299;
-      --brand: #C97F60; /* #201①：暗色品牌橙降饱和档（原 #E08A63 太艳） */
+      --brand: #A8826C; /* #201 二轮：暗色选中降深度（浅一档向中性靠） */
       --brand-hover: #EC9A73;
       --brand-strong: #C96442;
       --brand-soft: #3A251F;
@@ -81,8 +81,8 @@
       --action-bg: rgba(226,133,94,.16);
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
-      --me-bg: #9C5535; /* #193：随 bubble-me-bg 暗色橙深档 */ /* W-UIPOLISH4 件八（2026-10-12 用户深色实测「与背景全同色」）：#0E1927 与对话列底 #0B1624 差 3/千亮度不可辨——抬到表面层 surface2 同值（旧壳 panel-2「表面层」语义同源），仅边框语言保留 */
-      --bubble-me-bg: #9C5535; /* #193：暗色己方气泡=品牌橙深档（终验抓出的漏改行——.bubble.me 消费此键） */
+      --me-bg: #2A2F36; /* #201 二轮：暗色己方气泡=深灰底（亮 #E5E7EB 对应档）+浅字 */
+      --bubble-me-bg: #2A2F36; /* #201 二轮：暗色深灰底 */
       --me-line: rgba(224,138,99,.45); /* #198 件③：暗色己方气泡描边随品牌橙（蓝灰与橙底同框突兀） */
       --action-ink: #211B0E;
       --done-ink: #082116;
@@ -179,7 +179,7 @@
       --card-sub: #808080; /* 微信摘要灰（#198 件②：#999 对浅底对比不足，提到 4.0:1 档） */
       --faint: #808080;
       --progress-fill: #B2B2B2;
-      --brand: #C97B58; /* #201①：选中橙降饱和档（#B85228 太艳→降饱和提明度，保持橙系身份；三列梯度⑤同批校准） */
+      --brand: #D9A88F; /* #201 二轮：选中色再降深度——浅灰橙（#C97B58→#D9A88F，向中性靠一档；选中态仍可辨但轻） */
       --brand-hover: #C96442;
       --brand-strong: #96391A;
       --brand-soft: #FBE7DE;
@@ -222,7 +222,7 @@
       --card-veil: #FFFFFF;
       --border-strong: #D5D5D5;
       --selected-line: #E08A63; /* #193：选中=品牌橙整行（.queue-card.selected 形制同批改） */
-      --selected-bg: #E8A184; /* #201①：选中橙降饱和档（随 --brand 同批） */
+      --selected-bg: #D9A88F; /* #201 二轮：随 --brand 浅灰橙档 */
       --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
@@ -237,8 +237,8 @@
       --action-bg: rgba(200,100,64,.14);
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
-      --me-bg: #E8A184; /* #201①：气泡橙淡档（#E08A63 太艳→提明度降饱和） */
-      --bubble-me-bg: #E8A184; /* #201①：同 --me-bg 淡档（己方气泡白字可读保持） */
+      --me-bg: #E5E7EB; /* #201 二轮：己方气泡换中性浅灰（WorkBuddy 实证 #F1F1F1 系+深字——与微信同语言；橙气泡退役） */
+      --bubble-me-bg: #E5E7EB; /* #201 二轮：同 --me-bg 中性灰底 */
       --me-line: #E08A63;
       --action-ink: #3C2600;
       --done-ink: #073C27;
