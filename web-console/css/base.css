@@ -485,6 +485,9 @@
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 22px; }
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
+    /* #195 件六⑦：会话域 footer 与消息区同色一体（分隔线/独立底退役）+ 左右 22px 与消息列对齐
+       （.workspace-body 22px；16px 时代 composer 比消息列宽 12px）——只 scope 会话域，别域 footer 不动 */
+    #d-session .workspace-footer { background: transparent; border-top: 0; padding-left: 22px; padding-right: 22px; }
     /* B12+B22 head 右端动作位：过程/思考开关 + 模型胶囊（标题行尾部）。
        W-TOPBAR ③ 的 .composer-tools（开关在输入栏）随用户 i=3 最新意见退役；胶囊同族
        24px 统一规格保留但去 composer-tools 选择器（W-TOPBAR ③ 与 W-UIFB 合并裁决） */
@@ -559,21 +562,22 @@
     .composer-input:focus-visible { outline: none; }
     .composer-input::placeholder { color: var(--faint); }
     .composer[data-composer="session"] .composer-input::placeholder { font-size: var(--fs-A-item); } /* W-UIPOLISH ④：排队提示等占位文案 14→13px（--fs-A 降一档），弱化不打扰 */
-    .composer-clip, .composer-img { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
-    .composer-clip:hover, .composer-clip:focus-visible, .composer-img:hover, .composer-img:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
-    .composer-clip .icon-inline, .composer-img .icon-inline { width: 15px; height: 15px; }
+    /* #195 件二：[+] 单入口钮（clip/img 双钮退役；粘贴/拖入提示语同批撤，能力融进本钮浮层） */
+    .composer-plus { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
+    .composer-plus:hover, .composer-plus:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
+    .composer-plus .icon-inline { width: 16px; height: 16px; }
+    /* #195 件①④：输入框左下权限 chip（✓+模式名+∨）/右下模型 chip（品牌点+模型名+∨）——
+       WorkBuddy 同构紧凑形态：去底色弱化成文本钮，hover 才亮，字号降一档 */
+    .composer .head-capsule { min-height: 26px; padding: 0 8px; background: transparent; color: var(--dim); font: var(--fs-C) var(--ui, inherit); transition: color .15s ease, background .15s ease; }
+    .composer .head-capsule:hover, .composer .head-capsule:focus-visible { background: var(--hover); color: var(--text-strong); outline: none; }
+    .composer .head-capsule[hidden] { display: none; }
+    .composer .head-capsule .cap-check { flex: none; width: 12px; height: 12px; color: var(--done); }
+    .composer .head-capsule .cap-chev { flex: none; width: 10px; height: 10px; }
+    /* svg use 图标默认 fill 黑——composer 内两 chip 的勾/箭头统一描边形（icon-inline 同参数） */
+    .composer .head-capsule svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .composer .head-capsule .cap-dot { width: 6px; height: 6px; background: var(--brand); border-radius: 50%; }
     /* #169 发送常驻（旧壳 #48 sendBtn 形态 005 化：中性面板+描边+品牌色➤，不做实底大色块） */
     .composer-sendbtn { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: var(--brand); color: #0B141F; cursor: pointer; } /* W-V8 批5：发送钮 v8 实心橙 CTA（描边纸飞机退役） */
-    /* 件八（2026-10-10 test.10 反馈）：输入框高度折叠开关——发送钮左侧 unfold 双箭头钮，
-       多行（默认，composer 两行分区）/单行紧凑（top+bottom 同行、隐 hint）两态切换，
-       localStorage 记忆（ccd_composer_compact） */
-    .composer-unfold { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease, transform .15s ease; }
-    .composer-unfold:hover { background: var(--hover); color: var(--text-strong); }
-    .composer-unfold .icon-inline { width: 14px; height: 14px; }
-    .composer.compact .composer-unfold { transform: rotate(180deg); } /* 折叠态箭头倒置 */
-    .composer.compact { flex-direction: row; align-items: center; min-height: 0; gap: 8px; }
-    .composer.compact .composer-top { min-height: 34px; }
-    .composer.compact .composer-hint { display: none; }
     .composer-sendbtn:hover:not(:disabled) { background: var(--brand-hover); border-color: transparent; }
     .composer-sendbtn:focus-visible { outline: none; }
     .composer-sendbtn:disabled { background: var(--surface2); color: var(--faint); border-color: var(--line); opacity: 1; cursor: default; } /* 禁用回描边灰（禁用不亮橙） */
@@ -585,22 +589,18 @@
     /* W-TOPBAR ⑥ 会话输入卡分区（旧版 #inputcard 同构，只落会话域不影响手机/团队）：
        上层输入区加高（≤52px 行高区），下层按钮/提示行——附件钮+提示文字贴左下
        （提示小号弱化），模型胶囊/停止/发送居右；输入内容与按钮行互不干扰 */
-    .composer[data-composer="session"] { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 2px; min-height: 78px; padding: 6px 10px 8px 12px; border-radius: 10px; }
-    /* 件八：单行紧凑态（unfold 钮切换）——特异度压过上方 session 特化（compact 修饰符
-       同级但源序靠后必胜），两分区（top+bottom）并一行、隐提示语、下压最小高 */
-    .composer.compact[data-composer="session"] { flex-direction: row; align-items: center; gap: 8px; min-height: 0; }
-    .composer.compact[data-composer="session"] .composer-top { min-height: 34px; flex: 1 1 auto; }
-    .composer.compact[data-composer="session"] .composer-hint { display: none; }
+    /* #195 件六：输入区去独立底色与消息区同色一体——边框/聚焦环退役（WorkBuddy 同构），
+       composer 透明叠 footer，footer 底色随消息区（见 #d-session .workspace-footer 覆盖） */
+    .composer[data-composer="session"] { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 2px; min-height: 78px; padding: 6px 10px 8px 12px; border-color: transparent; border-radius: 10px; }
+    .composer[data-composer="session"]:focus-within { border-color: transparent; }
     .composer[data-composer="session"] .composer-top { display: flex; align-items: center; flex: 1 1 auto; min-height: 44px; }
     /* W-UIPOLISH4 件八（2026-10-12 用户实锤）：输入区超宽文本必须自动换行——input 换
        textarea（rows=1 起步，JS 随内容长高、上限 132px≈6 行后内滚）；pre-wrap 保换行符，
        break-word/overflow-wrap:anywhere 兜超长无断点串与 CJK。单行折叠态（用户显式选的
        紧凑模式）维持单行横滚语义不换行。 */
     .composer[data-composer="session"] .composer-input { display: block; padding: 4px 0; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; overflow-y: auto; max-height: 132px; }
-    .composer.compact[data-composer="session"] .composer-input { white-space: pre; overflow-x: auto; overflow-y: hidden; max-height: 36px; }
     .composer-bottom { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .composer-bottom .composer-spring { flex: 1 1 0; min-width: 0; }
-    .composer-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
     /* W-SLASH 斜杠命令联想浮层：输入 / 前缀触发，浮在 composer 上方（透传方案——
        选中只是补全文本，发送走既有纯文本链路，CLI 自行解析）。主题走既有变量双主题
        自适应；定位 JS 按 composer rect 锚定（body 挂载避免被 workspace 裁切）。 */
