@@ -1,6 +1,10 @@
-# 任务流转全链路审计（pipeline-audit）· v2 逐跳明细版
+# 任务流转全链路审计（pipeline-audit）· v4 五面扩展版
 
-> 2026-10-19 · W-PIPELINE2 初版 + Leader v2 扩写（逐跳触发三要素）· 零代码纯梳理
+> v4 2026-10-21（W-AUDIT4 #196）：在 v3 逐跳明细基底上新增**五块**——§8 主链拓扑两态
+> （可选 Leader 节点）/ §9 三可视面投影审计 / §10 验收单回流腿 / §11 旁路纠错通道
+> （含 1021 上线的 NOTIFY2+CHAIN2 五层栈）/ §12 数据层盘点（七账本+chain-audit+turn-spool）。
+> 1021 实战断点（死会话路由 6 次/交付零通知 2 波/对账 5 孤儿）写进对应损失点实证列。
+> v3 2026-10-19 · W-PIPELINE2 初版 + Leader v2 扩写（逐跳触发三要素）· 零代码纯梳理
 > 方法：代码走读 + 生产脚本/工具取证 + 前序审计吸收 + W-SCHEDFIX2 实施期机制证伪修正。
 > 素材来源：段二三四吸收 `~/.cc-deck/artifacts/w-sched-b.md`（注入通道三层队列 + stop 丢队根因）与 `~/.cc-deck/artifacts/w-sched-c.md`（生产取证 12h 窗 21 单零丢失）；段一、段五为 W-PIPELINE2 补查；段二/段三机制修正吸收 `~/.cc-deck/artifacts/w-schedfix2.md`（拉活轮询不存在实锤 + DONE 熟手直注落地）。
 > 每跳统一口径：**触发节点**（哪个进程/组件执行）·**触发时间**（何时发生）·**触发机制**（同步调用/事件推送/定时轮询/钩子/HTTP）·**数据落点**（中间存储）·**观测面**（在哪能查到）。
@@ -51,6 +55,8 @@
 │         → cwd 归因回填通知 + 看板卡 done 联动                   │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+**v4 新增五章导航**：§8 主链拓扑两态（协作模式开关）· §9 三可视面投影 · §10 验收回流腿 · §11 旁路纠错通道（NOTIFY2+CHAIN2 五层栈）· §12 数据层盘点。
 
 ### 每跳一览（存储 / 状态 / 监控）
 
@@ -318,3 +324,133 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 3. A4/A5 Stop hook 判据精化（mtime→按会话归属）——低危随手修。
 4. F8 装机遥测（等用户拍板隐私边界）、F2 镜像（等用户放行权限）、F3 文档口径。
 5. expo 侧死代码清理：updates.ts shouldAutoCheck/CHECK_WINDOW_MS（W-AUDIT-A #3 顺带立案）。
+
+---
+
+# ═══════════ v4 新增五章（2026-10-21，W-AUDIT4 #196）═══════════
+
+## 8. 主链拓扑两态：可选 Leader 节点（协作模式开关）
+
+主链不是恒定五段直线——`collab-mode.json`（settings.ts readCollabMode，SNAPSHOT.collab_mode 下发）决定**用户与 PM 之间是否插入独立 Leader 节点**。两态各自成链、损失点不同：
+
+### 8.1 两态拓扑
+
+```
+态 A：leader（协作模式开——Leader 节点在场）
+用户 → Leader CLI（org 锚卡 leader_session_id，no-leader 时隐藏）
+     → PM（dutyTargetId 解析：协作开=Leader 锚卡为值守目标）
+     → 派单系统 → worker → PM → Leader → 用户
+  特征：Leader 是常驻值守会话（feedPM 喂活目标=锚卡）；SNAPSHOT 过滤锚卡
+  （snapshot() hideLeader 分支 :866——锚卡不进会话列表）；isLeaderSession
+  判定链（:884 collabMode()=="no-leader" && env==leaderId）
+  损失点：Leader 自身死亡=整链头部失聪（pmwake 链=1014 事故族：PM 本体/
+  死壳/bg-spare 三 gap）；Leader 换届靠 org 锚卡回写（onInit 回写 leader_sdk_id）
+
+态 B：no-leader（协作模式关——当前生产态，PM 兼任 Leader）
+用户 → PM（同一 CLI 会话，dutyTargetId 解析：no-leader=用户实际 PM 会话，
+  external 且进程活；无目标=可观测哑值守 no_pm_target 审计行，优于喂弃用
+  锚卡的假象 continue）
+     → 派单系统 → worker → PM → 用户
+  特征：PM 一身两角（分诊+值守+收割）；值守目标=活 external PM；锚卡隐藏
+  损失点：PM 会话死亡=值守目标消失→feedPM 全部 sleep（no_pm_target）——
+  无人派单无人收割，直到 PM 复活或用户开新 PM；「PM 兼任」意味着 PM 的
+  上下文水位直接吃主链容量（1021 多波断点与此相关）
+```
+
+### 8.2 两态切换损失点
+
+| # | 损失点 | 证据 | 状态 |
+|---|---|---|---|
+| T1 | **切态瞬间的值守目标真空**——no-leader→leader 切换：锚卡尚未 ensureLeader 建立/换届前，dutyTargetId 空窗期 feed 全 sleep | dutyTargetId 两分支 | 未修（低频操作+哑值守审计行可查） |
+| T2 | **两态判定读盘每次现算**——readCollabMode 每 snapshot/每 isLeaderSession 调用读 collab-mode.json（低频路径可接受口径，与 employeeHomeState 同款） | :866/:884/:889 | 备案（性能面非正确性面） |
+| T3 | **态 A 的 Leader 死亡检测靠 dutyTargetId pid 闸**（external 且进程活）——pid 复用/换壳（1014 死壳 ab91190d 注入黑洞案例）判定漂移 | 1014 pmwake 事故族 memory | 部分（walk-first pid 根修 4b7ae45 落；死壳残留会话仍需 retire） |
+| T4 | **切换不迁移在途单**——切态时 dispatch-queue/台账 running 行不感知拓扑变化（承接者照旧，但「谁该收割」的语义在两态间漂移） | 设计现状 | 备案（单量低时可忍） |
+
+## 9. 三可视面投影审计（看板 / 任务 tab / 通知中心）
+
+同一任务生命周期在三个可视面各有一份**投影**——投影=从各自数据源单向派生，失真=投影与权威账本不一致。审计口径：数据源→同步机制→刷新时机→失真案例。
+
+| 可视面 | 权威数据源 | 同步机制 | 刷新时机 | 已知失真案例 |
+|---|---|---|---|---|
+| **看板**（org board） | org/<gid>/board.json（五态卡） | relay emitBoard 差分广播（BOARD_UPDATED entity_refs+delta，M13-2 v2 投影）+expo/board-mirror 单向镜像（autoRevive/pollTaskStore 不受镜像污染，W-NREV2 正面确认 58/58） | 板写边（upsert/搬卡/gate 翻转）+30s 轮询兜底 | ①mock 板帧不落列坑（W-V8A 实录：mock 数据源板帧被订阅链静默吞——IIFE 误用 root.querySelector）②裸设置器 moveEntryByDispatch 碾过业务闸（D2 待核——「第四写口」审查法）③SSOT 风险：板文件单点全量覆盖写无 journal（W-SSOT-C 架构级发现，建议 P2 前落 delta journal）④三账缺角（台账 running/任务面/板面不一致——CHAIN2 runLedgerRecon 上线前靠人眼，1021 对账 5 孤儿实证） |
+| **任务 tab**（会话 todos） | ~/.claude/tasks/<cli_sid>/<n>.json（CLI 侧权威） | relay pollTaskStore（30s 节拍+会话事件边）→SNAPSHOT.todos→手机 tab；PM 会话另有 mergeBoardMirror 单向镜像（只读不回写，W-TASKFLOW 锁死） | 30s 节拍 :863/:523+事件边 :2931 | ①s.state.todos 的「CLI 存储统一覆盖」与 autoReviveManaged 拉活链曾让外挂同步器恒输震荡（团队经验实录——candidate 镜像落点先查既有权威写者）②会话死亡任务滞留（A4——跨会话不自动携带，180 目录实查）③CLI 工具集缺 todo 工具=转录无任务调用（A2，GLM 别名已绕） |
+| **通知中心** | notifications.json（relay 内存+离线重载）+decision-notify ledger（五类持久） | 落盘事件（TASK_DONE/GREEN 黄框）+transient（USER_NOTE seq:0 不落盘）+ledger revision 快照 | 事件边+重启回放（loadNotifications） | ①transient 离线丢（F5——todo 兜底=弱兜底）②发版广播无在线端 503 即丢（F6）③通知头 chip 被移动链覆盖成「1」（W-NQA F11）④**交付零通知 2 波（1021 实战）**——worker 交付后 PM 侧无感知事件到达，D1 transient 丢失面实证（值守喂活计数兜住第 2 波）；NOTIFY2/CHAIN2 后 turn-report 外报补此面 |
+
+**投影失真的共性根因**：三面各自订阅不同账本（板 json/任务 json/通知账），**没有单一事务保证**跨账一致——一致性靠「写边顺序约定+事后对账」（CHAIN2 三账对账=事后对账的机器化）。
+
+## 10. 验收单回流腿损失点（独立审计）
+
+出单→用户填→回流→归因闭环是主链外**唯一用户直接参与的腿**（v3 §5.8-5.10 基础上独立成节补损失面）：
+
+| # | 损失点 | 机制 | 状态 |
+|---|---|---|---|
+| V1 | **归因失败静默**——回流后 matchSessionByCwd 按 cwd 归因：cwd 匹配不到/会话已收摊=零通知零卡动（设计取舍「不猜」） | ws-server:58→settleAcceptanceResult :5460 | 未修（设计取舍；#198 W1 gid 归因键已上——出单带 gid 的单归因精度提升，存量 cwd 单照旧） |
+| V2 | **60s 回流窗依赖 relay 存活**——KV 轮询拉回在 relay 重启窗暂停（重启后恢复，KV 提交数组不丢——服务端持久兜住） | acceptance.ts 60s 轮询 | 可接受（服务端持久） |
+| V3 | **双链同失效场景**——LAN IP 漂移（F3）+云通道故障同时发生=用户无可用填写入口；单链失效可忍 | bin/acceptance 双链 | 未修（F3 文档口径待改+云通道依赖 CF） |
+| V4 | **回填内容本身无校验**——用户填 ✓/✗/未测自由文本，写错行/看错任务号的错账不可检（颗粒度铁律降低概率） | 表单自由填 | 设计接受（验收纪律文档约定） |
+| V5 | **全 ✓ 触发卡 done 的单向性**——卡态不回转（done 终态），回填后发现误 ✓ 只能人工纠板 | 设计 | 备案 |
+| V6 | **待填汇总上限 20 张**——超限老单不进 SNAPSHOT 汇总（表单页仍可打开）：长期挂单多时手机看不到第 21 张 | listAcceptances limit=20 | 备案（帽防膨胀；分页属后续） |
+
+## 11. 旁路纠错通道（观察者 / 巡检 / 回执闸 / NOTIFY2+CHAIN2 五层栈）
+
+主链之外的纠错通道全景。**五层栈**=1021 上线的两批（W-NOTIFY2 #92 + W-CHAIN2 #199）构成的递进防御：
+
+```
+层 1 事后对账（最外圈）  runLedgerRecon 三账对账（CHAIN2 D）：台账 running↔任务面
+  （~/.claude/tasks 全局 pending/in_progress）↔板面（claimed/doing）三元缺角
+  upsert 告警+心跳文件（recon-heartbeat.json，patrol 查龄>70min 告警停跳）；
+  触发=PM turn-report+patrol full 双触发。1021 对账 5 孤儿=此层上线前的实证
+  （人工对账发现；上线后机器化）
+层 2 周期巡检            patrol light 5min/full 30min + CHAIN2 B 补盲六件：
+  ①熔断到期补试 feedPM(patrol-retry)（5min 幂等窗）②审计移出 60s 频控门
+  ③stale 补 WAITING>2h/compacting>90min（压缩卡死原永久静默）④三 sleep 支
+  升级通知（no_pm_target/resume_breaker/pm_parked 手机无感→waiting/actionable）
+  ⑤patrol.push 无 target 落 ALERT-NO-TARGET 账 ⑥[dispatch] 结构化日志七行
+  （W-RELFIX，queued/queue-full/ext-input 待顺验）
+层 3 事件外报（最内圈）  turn-report.mjs（CHAIN2 A）：CLI Stop 钩子外报
+  /api/turn-report（CCR_RELAY_CHILD 跳过/transcript 尾 uuid 幂等/无 uuid 退
+  指纹/失败静默落 turn-spool）；PM 收到=重跑 feedPM+对账，worker 收到=60s
+  同键去重+worker_done 边沿喂活——「PM 死了也没人报」的断电面收口
+层 4 断电补账            turn-spool/<sid>.jsonl（CLI 侧落盘池）+relay 启动 5s
+  drain（CHAIN2 C）——外报失败的 turn 窗在 relay 复活后回放补账
+层 5 审计镜像            NOTIFY_CHAIN_AUDIT 四动作镜像 data/chain-audit.jsonl
+  （emitChainAudit :1002——pm-wake/pm-sleep 等关键动作 append-only；云桥无
+  运行时 KV 直推能力，镜像文件=KV 批量同步现成队列，运维脚本后续挂载备案）
+```
+
+**既有旁路件**（五层栈之外常驻）：观察者（夜班观察者批——生产组零扰动五查范式）/回执闸（verify-receipt-claims.mjs 机器核验+check-deploy-complete.sh 五面闸）/Stop hook 双闸（task-context 注入+task-stop 拦截，review-gate 1021 起拦「未审查标完成」）/派单后探活（第一纪律：不信 ok 返回，必查落点会话活性）/死会话 member-retire（防「被路由」——1021 死会话路由 6 次实证催生）。
+
+**旁路自身损失点**：
+
+| # | 损失点 | 状态 |
+|---|---|---|
+| P1 | patrol/recon 双触发依赖 relay 进程存活——relay 挂=层 1/2 全灭（层 3/4 的 CLI 侧落盘不依赖 relay，设计上互补） | 架构性互补已备 |
+| P2 | chain-audit.jsonl 镜像→KV 的批量同步脚本未挂载（备案件） | 待运维批 |
+| P3 | turn-report 的 uuid 幂等退化指纹（无 uuid transcript）在重复内容回合假阳性去重（60s 窗内） | 低危备案 |
+| P4 | 五层栈全部 1021 上线——生产实战数据未积累（层 1 对账告警的真实噪音率未知） | 观察期 |
+
+## 12. 数据层盘点（七账本 + chain-audit + turn-spool）
+
+数据层=全链的地基（第一纪律扩口径：「账实一致是链路可靠的地基，漏记错记=下游可视面失真」）。盘点口径：**写点分布**（谁在写/几个写口）+**持久性**+**账实风险**+**已知险**。
+
+| 账本 | 路径 | 写点分布 | 持久性 | 账实风险与已知险 |
+|---|---|---|---|---|
+| **任务表** | ~/.claude/tasks/<sid>/<n>.json | 单写口：CLI task 工具（task-lib 权威）；relay 只读（pollTaskStore） | 落盘 ✓ | ①per-session 隔离（180 目录，跨会话不携带——A4）②CLI 工具集缺失=零写入（A2 别名已绕）③落盘滞后（A3 权威存储优先后收窄） |
+| **派单台账** | data/org/dispatch-log.ndjson | 单写口：appendDispatch（dispatchWorker/closeOpenDispatches/排队溢出/对账告警六入口同函数族） | append-only ✓ | ①status 行序=末行赢语义（读侧收敛 org.ts byId）②title 键 #NN 由 CHAIN2 D 补（对账 join 键齐备）③**台账 running 行与实际会话死活无绑定**——死会话 running 行滞留=对账孤儿（1021 5 孤儿实证；runLedgerRecon 上线后机器告警） |
+| **决策账本** | decision ledger（decision-notify.ts 五类） | 单写口：notify 族（org-confirm/waiting/dispatch/acceptance/system） | revision 快照 ✓ | 五类覆盖面外的事件（如 F6 发版广播）不走 ledger=无账 |
+| **通知账** | data/notifications.json | 单写口：upsertNotification/loadNotifications 重放 | 落盘+重启回放 ✓ | transient 类（USER_NOTE）不入账（F5）；通知头 chip 显示压缩失真（W-NQA F11） |
+| **artifacts 索引** | data/artifacts-index.json + deliverables.json | 双写口：deliver POST（登记面）/artifacts 关联持久化（W-ART） | 落盘 ✓ | ①两索引并存语义分叉面（W-ORPH 兜底落位批处理过孤儿）②登记=意图声明制（文件移动/删除后索引悬空——无失效扫描） |
+| **events 流** | data/events.ndjson | 单写口：bus.emit（seq 单调；transient 帧不带 seq 不落盘） | append-only ✓ | ①transient 帧离线不补发（设计）②重启窗 in-flight 帧黑洞（W-INJECT 已修账本回退）③seq 回绕客户端失聪（isBeyondBuffer 单向，W-NREV-B 拍板项）④体积单调涨（17.7/41MB 实测，无轮转策略——低危） |
+| **chain-audit** | data/chain-audit.jsonl | 单写口：emitChainAudit（#199 C 四动作） | append-only ✓ | 镜像→KV 同步未挂载（P2）；与 events.ndjson 职责分工——events=会话域帧、chain-audit=链路动作审计 |
+| **turn-spool** | data/turn-spool/<sid>.jsonl | 单写口：turn-report.mjs 失败静默落（CLI 侧） | 落盘 ✓ drain 清档 | ①spool 自身无帽（长期 relay 死亡=无限涨，低危）②drain 幂等靠 uuid/指纹（P3） |
+| **板文件** | org/<gid>/board.json | 多写口：upsertBoardEntry/moveEntryByDispatch（裸设置器！）/对账告警 upsert/gate 翻转/依赖解锁 | 全量覆盖写 | ①**无 journal**（单点全量覆盖写——W-SSOT-C 架构级风险，建议 delta journal）②第四写口碾闸面（D2）③三账缺角靠 runLedgerRecon 事后对账 |
+| **验收单** | data/acceptances/<id>.json+.results.json | 双写口：出单 bin/acceptance（写单）/回流+云回流（写 results） | 落盘 ✓ history 帽 50 | 归因键演进中（cwd→gid，#198 W1）；results 云回流 k nonce 去重 ✓ |
+
+**数据层三大结构性险**（横切）：①**多写口无事务**——板文件四写口/任务账本与台账无跨账原子性，一致性靠事后对账（层 1）；②**内存态账本重启即灭**——unacked/熔断计数/pending_inputs/duty 退避（v3 §2.5 六本账表）；③**账本间 join 键后补**——#NN 任务号作为人读键直到 CHAIN2 D 才进台账（机器 join 靠约定文本提取，脆弱面：标题不带 #NN 的单 join 不到——出单纪律「带 #NN」是行为层兜底）。
+
+## 13. v4 建议增量（叠加 §7）
+
+1. **P2 板 delta journal**（W-SSOT-C 建议+§9/§12 实证）——板文件单点全量覆盖写是三账失真的最大结构性面。
+2. **chain-audit→KV 同步脚本挂载**（§11 P2）——五层栈层 5 的最后一公里。
+3. **死会话 retire 机器化**（§12 台账风险③——「派单后探活+retire」从纪律升为 patrol 件：台账 running 行目标会话死亡 N 分钟→自动 member-retire+告警；1021 六次路由实证的最直接根治）。
+4. F5/F6 通知 ledger 收编维持 §7 建议（v4 无变化）。
