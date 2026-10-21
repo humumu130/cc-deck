@@ -205,17 +205,17 @@ try {
     const d2 = mgr.dispatchWorker({ anchor, prompt: "矩阵：越 tier", gid, role: "review_pm", actor: "web-d" });
     assert(forbiddenShape(d2, "above_role_tier_ceiling", "dispatchWorker") && auditCount() === before2 + 1, "类 2 above_role_tier_ceiling：forbidden ACK 形状+审计落一行");
 
-    // 类 3：production_bypass_denied（生产目录维——cwd 传 ~/.cc-deck 路径字符串：
-    // resolveDirScope 纯字符串判定零 IO，拒面在 create 前 return，无 mkdir/spawn 触达）
+    // 类 3（#205 W-GATE 随批改写）：生产目录+勾选 → **放行**（勾选即授权——用户拍板
+    // 语义，旧 forbidden 面退役）。审计行改验放行形态（skip_confirm_authorized 留痕）
     const before3 = auditCount();
     const a3 = mgr.handleCommand(
       { command_id: "p817-c3", type: "COMMAND_CREATE", payload: { cwd: join(homedir(), ".cc-deck", "data"), prompt: "矩阵：生产目录 bypass", permissionMode: "bypassPermissions" }, ts: Date.now() },
       "web-d",
     ) as CommandAckPayload;
-    assert(forbiddenShape(a3, "production_bypass_denied", "COMMAND_CREATE") && auditCount() === before3 + 1, "类 3 production_bypass_denied：forbidden ACK 形状+审计落一行（目录维 production）");
+    assert(a3.ok === true && typeof a3.session_id === "string" && auditCount() === before3 + 1, "类 3 勾选即授权：生产目录+勾选 → 放行+审计落一行（#205——旧 production_bypass_denied 拒面退役）");
     const r3 = readPermissionAudit(auditPort())[0];
-    assert(r3.dir_scope === "production" && r3.environment === "sandbox" && r3.actor === "web-d" && r3.command_id === "p817-c3", "类 3 审计可观测：dir_scope=production+environment=sandbox+actor/command_id 落值（两维分立可查）");
-    assert(spawned.length === 0, "类 3 拒即无会话：零 spawn（生产目录无任何触达）");
+    assert(r3.dir_scope === "production" && r3.environment === "sandbox" && r3.actor === "web-d" && r3.command_id === "p817-c3" && String(r3.reason ?? "").includes("skip_confirm_authorized"), "类 3 审计可观测：两维分立落值+reason=skip_confirm_authorized（放行留痕）");
+    assert(spawned.length === 1, "类 3 放行即 spawn（1 次——勾选放行与 spawn 对齐）");
 
     // 类 4：env_unknown_bypass_denied（非法环境——CCR_ENV=unknown 显式 fail-closed）
     const prevEnv = process.env.CCR_ENV;

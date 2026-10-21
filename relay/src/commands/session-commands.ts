@@ -144,11 +144,14 @@ export function createSessionCommands(mgr: any) {
             policy_source: "explicit",
             dir_scope: dirScope,
             env: envScope,
-            // W-PERMERR：授权位接线补全（#69 半边）——此前仅组织派单口（:7123）传本字段，
-            // 用户自建卡勾「跳过权限确认」在生产/未知环境恒 forbidden 且授权对它无效
-            // （1016 用户 Windows 云通道实锤：连生产 relay 勾选即报错，无放行通道）。
-            // 授权读数与派单口同源（permission-auth.json，org auth-bypass 写入）
+            // W-PERMERR：授权位接线补全（#69 半边）——授权读数与派单口同源
+            //（permission-auth.json，org auth-bypass 写入）。
+            // #205（用户拍板 2026-10-21）：勾选「跳过权限确认」=授权本身——create 面
+            // 用户显式勾选（pm=bypassPermissions）自带授权语义，生产/unknown 环境闸
+            // 直接放行（materialized=skip_confirm_authorized 进审计），不再要求终端
+            // 二次授权；授权位（org auth-bypass）语义保留=预授权全部（含派单面）。
             user_authorized_bypass: readBypassAuthorization(mgr.cfg.dataDir),
+            skip_confirm_checked: pm === "bypassPermissions",
           }) : null;
           // 审计落库（§6.3 拒绝也写审计；session_id 拒=null 成功=新会话）。policy off
           // ⇒ perm=null，仅 forbidden 分支会落拒绝审计，null 不进该路径。
@@ -177,6 +180,14 @@ export function createSessionCommands(mgr: any) {
             ? { requested_mode: perm.requested_mode, normalized_mode: perm.normalized_mode, effective_mode: perm.effective_mode, native_mode: perm.native_mode, capability_state: perm.capability_state, engine: perm.engine, reason: perm.reason, policy_source: perm.policy_source, environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() }
             : { requested_mode: pm ?? null, normalized_mode: null, effective_mode: spawnPmMode, native_mode: null, capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy, reason: "p81_policy_off", policy_source: "explicit", environment: envScope, dir_scope: dirScope, tier: "随手办", actor: by, session_id, command_id: cmd.command_id, created_at: Date.now() };
           appendPermissionAudit(auditStore(mgr.cfg.dataDir), okRow);
+          // #205：勾选放行进链路审计账（gate-release——谁何时勾选放行；materialized
+          // 命名 skip_confirm_authorized 同步进 PermissionAudit reason，双账可查）。
+          // 触发条件走本地事实（勾选+环境闸域+非拒），不依赖 reason 子串——unverified
+          // 引擎（codex 等）的 capability reason 会顶掉 materialized 命名，子串判定
+          // 对该面欠触发（审查 P2-1）；本地推导对任意 capability 精确命中
+          if (perm && perm.effective_mode !== "forbidden" && pm === "bypassPermissions" && (envScope === "production" || envScope === "unknown" || dirScope === "production" || dirScope === "unknown")) {
+            try { mgr.emitChainAudit("gate-release", `skip-confirm 放行 actor=${by} engine=${engineForPolicy} env=${envScope ?? "?"} dir=${dirScope ?? "?"} sid=${session_id.slice(0, 8)}`); } catch { /* 审计尽力而为 */ }
+          }
           return {
             command_id: cmd.command_id,
             ok: true,

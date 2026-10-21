@@ -631,7 +631,7 @@ export type EventType =
   | "EXPERIENCE_UPDATED"
   | "RULES_UPDATED"
   | "DISPATCH_DONE"
-  | "NOTIFY_CHAIN_AUDIT" /* #92 W-NOTIFY2 E：派发/回执链审计帧（pm-wake/dispatch-reroute/stale-escalate/dispatch-close 四动作，落盘可检索） */
+  | "NOTIFY_CHAIN_AUDIT" /* #92 W-NOTIFY2 E：派发/回执链审计帧（pm-wake/dispatch-reroute/stale-escalate/dispatch-close/gate-release 五动作——#205 补 gate-release，落盘可检索） */
   | "SETTINGS_UPDATED"
   | "NOTIFICATIONS_UPDATED"
   | "COLLAB_MODE_UPDATED"

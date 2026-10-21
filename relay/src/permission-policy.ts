@@ -160,6 +160,13 @@ export interface PolicyInput {
    * 影响——授权不越权，只把「未经授权的显式 bypass」翻成「有据可查的授权 bypass」，
    * reason 备案审计可查）。缺席/false=未授权（原拒面零变）。 */
   user_authorized_bypass?: boolean;
+  /** #205（用户拍板 2026-10-21）：勾选「跳过权限确认」=授权本身——create 面用户
+   * 显式勾选 skip-confirm 的请求（requested=bypassPermissions）自带授权语义，生产/
+   * unknown 环境闸直接放行（不再要求终端二次授权/授权位文件）；materialized 命名
+   * skip_confirm_authorized 进审计可查（与授权位 user_authorized 命名区分）。
+   * dispatch 面不传（组织派单的 bypass 是 PM/Leader 意图非终端用户勾选——仍走
+   * 授权位（org auth-bypass CLI，语义=预授权全部）唯一通道）。缺席=false=原语义零变。 */
+  skip_confirm_checked?: boolean;
 }
 
 /** 081 :84-95 落库最小结构（八字段全齐=审计字段锁）。forbidden=拒绝决策非档位。 */
@@ -291,11 +298,16 @@ export function evaluatePermission(input: PolicyInput): PolicyResult {
       if (normalized === "full-auto") {
         if (materialized === "") {
           // #69 授权位：有据可查的用户授权（permission-auth.json）把「未经授权的显式
-          // bypass」翻成「授权 bypass」——放行+reason 备案；未授权维持统一 forbidden
-          if (input.user_authorized_bypass !== true) {
+          // bypass」翻成「授权 bypass」——放行+reason 备案。
+          // #205（用户拍板）：勾选「跳过权限确认」=授权本身——create 面显式勾选
+          //（skip_confirm_checked）同样放行，不再要求终端二次授权；两路 materialized
+          // 命名区分（审计可查谁放的行）。两者都不在=原拒面（dispatch 面未勾选路径）。
+          const authorized = input.user_authorized_bypass === true;
+          const skipConfirmed = input.skip_confirm_checked === true;
+          if (!authorized && !skipConfirmed) {
             return denied(requested, input.engine, cap, source, `${threat}_bypass_denied`);
           }
-          materialized = `${threat}_bypass_user_authorized`;
+          materialized = authorized ? `${threat}_bypass_user_authorized` : `${threat}_skip_confirm_authorized`;
         } else {
           normalized = "edit-auto";
           materialized = `${threat}_demoted_from_full_auto`;

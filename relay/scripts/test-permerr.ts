@@ -82,31 +82,34 @@ try {
   const send = (payload: Record<string, unknown>): CommandAckPayload =>
     mgr.handleCommand({ command_id: `pe-${++seq}`, type: "COMMAND_CREATE", payload, ts: Date.now() } as unknown as Command, "web-permerr") as CommandAckPayload;
 
-  // a. 无授权+勾选 → 拒+可操作文案
+  // #205（用户拍板 2026-10-21）：勾选「跳过权限确认」=授权本身——生产/unknown 环境
+  // 闸对 create 面显式勾选直接放行，不再要求终端二次授权；授权位（org auth-bypass）
+  // 语义保留=预授权全部（含 dispatch 面）。P3 节断言随 #205 契约改写（W-GATE 批）。
+  // a. 无授权+勾选 → 放行（勾选即授权）+审计 reason=skip_confirm_authorized
   const ackA = send({ cwd: CWD, prompt: "permerr a", permissionMode: "bypassPermissions" });
-  assert(ackA.ok === false && (ackA.error ?? "").includes("org auth-bypass on") && (ackA.error ?? "").includes("生产"), `P3a 生产+勾选+未授权 → 拒绝且文案含指引（实测：${(ackA.error ?? "").slice(0, 40)}…）`);
-  assert(created.length === 0, "P3a' 拒绝即终局：零 spawn");
+  assert(ackA.ok === true && typeof ackA.session_id === "string", `P3a 生产+勾选+未授权位 → 放行（#205 勾选即授权；实测：${(ackA.error ?? ackA.session_id ?? "").slice(0, 40)}…）`);
+  assert(created.length === 1, "P3a' 放行即 spawn（1 次）");
 
-  // b. auth-bypass on（写授权）→ 同参创建放行
+  // b. auth-bypass on（写授权）→ 同参勾选仍放行（双通道并存；materialized 走授权位命名）
   const authOn = mgr.orgCommand("owner", "web-permerr", "auth-bypass", { on: true });
-  assert(authOn.ok === true && readBypassAuthorization(DATA) === true && existsSync(join(DATA, "permission-auth.json")), "P3b org auth-bypass on → 授权文件落盘+读数 true");
+  assert(authOn.ok === true && readBypassAuthorization(DATA) === true && existsSync(join(DATA, "permission-auth.json")), "P3b org auth-bypass on → 授权文件落盘+读数 true（CLI 保留=预授权通道）");
   const ackB = send({ cwd: CWD, prompt: "permerr b", permissionMode: "bypassPermissions" });
-  assert(ackB.ok === true && typeof ackB.session_id === "string" && created.length === 1, "P3b' 授权后同参勾选 → 创建成功+spawn（授权位接线闭环）");
+  assert(ackB.ok === true && typeof ackB.session_id === "string" && created.length === 2, "P3b' 授权位在场+勾选 → 放行走 bypass_user_authorized 命名（双通道并存闭环）");
 
-  // c. auth-bypass off → 再勾选拒（撤销即收回）
+  // c. auth-bypass off（撤销预授权）→ 勾选仍放行（勾选即授权不依赖授权位）
   const authOff = mgr.orgCommand("owner", "web-permerr", "auth-bypass", { on: false });
   assert(authOff.ok === true && readBypassAuthorization(DATA) === false && !existsSync(join(DATA, "permission-auth.json")), "P3c org auth-bypass off → 授权文件移除+读数 false");
   const ackC = send({ cwd: CWD, prompt: "permerr c", permissionMode: "bypassPermissions" });
-  assert(ackC.ok === false && created.length === 1, "P3c' 撤销后再勾选 → 拒绝（fail-closed 不破坏）");
+  assert(ackC.ok === true && created.length === 3, "P3c' 撤销授权位后再勾选 → 仍放行（#205：勾选即授权独立通道，撤销只收 dispatch 面）");
 
   // d. 不勾选 → 恒不受影响（回归锚）
   const ackD = send({ cwd: CWD, prompt: "permerr d" });
-  assert(ackD.ok === true && created.length === 2, "P3d 不勾选创建恒成功（1016 场景主通路零回归）");
+  assert(ackD.ok === true && created.length === 4, "P3d 不勾选创建恒成功（1016 场景主通路零回归）");
 
-  // e. 审计行落库（拒绝也写审计——sqlite 面，驱动不可用降级为跳过不阻断）
+  // e. 审计行落库（放行 reason 备案——sqlite 面，驱动不可用降级为跳过不阻断）
   const rows = readPermissionAudit(auditStore(DATA), 50);
-  assert(rows.length === 0 || rows.some((x) => x.effective_mode === "forbidden" && x.reason === "production_bypass_denied"), "P3e 拒绝审计行落库（§6.3 拒绝也写；sqlite 不可用时空集容忍）");
-  assert(rows.length === 0 || rows.some((x) => x.effective_mode !== "forbidden" && x.reason === "production_bypass_user_authorized"), "P3e' 授权放行审计 reason 备案");
+  assert(rows.length === 0 || rows.some((x) => x.effective_mode !== "forbidden" && String(x.reason ?? "").includes("skip_confirm_authorized")), "P3e 勾选放行审计 reason=skip_confirm_authorized 落库（#205 主通道留痕）");
+  assert(rows.length === 0 || rows.some((x) => x.effective_mode !== "forbidden" && x.reason === "production_bypass_user_authorized"), "P3e' 授权位放行审计 reason 备案（双通道命名区分）");
 
   rmSync(DATA, { recursive: true, force: true });
   rmSync(CWD, { recursive: true, force: true });

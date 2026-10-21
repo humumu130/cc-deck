@@ -217,16 +217,20 @@ try {
       { command_id: "p81-a1", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "生产 bypass 拒", permissionMode: "bypassPermissions" }, ts: Date.now() },
       "web-d",
     ) as CommandAckPayload;
-    assert(ackP.ok === false && (ackP.error ?? "").includes("production_bypass_denied"), "环境闸集成×production×bypass 勾选→forbidden（旧行为=放行——P81-5 新拒面）");
+    // #205（W-GATE 批随批改写）：勾选=授权本身——create 面勾选在 production 放行
+    //（旧行为 forbidden 退役）；审计行改验放行面（reason=skip_confirm_authorized，
+    // session_id 非 null=已 spawn）。十字段亲读保持。
+    assert(ackP.ok === true && typeof ackP.session_id === "string", "环境闸集成×production×bypass 勾选→放行（#205 勾选即授权；旧 forbidden 面退役）");
     const rowsP = readPermissionAudit(auditPort());
-    assert(rowsP.length === before + 1, "production 拒面审计行落库（拒绝也写审计 §6.3）");
+    assert(rowsP.length === before + 1, "production 放行面审计行落库（成功也写审计）");
     const r = rowsP[0];
     assert(
-      r.requested_mode === "bypassPermissions" && r.normalized_mode === null && r.effective_mode === "forbidden" && r.native_mode === null &&
-      r.capability_state === "confirmed" && r.engine === "claude" && r.reason === "production_bypass_denied" && r.policy_source === "explicit" &&
-      r.environment === "production" && r.dir_scope === "sandbox" && r.tier === "随手办" && r.session_id === null && r.command_id === "p81-a1",
-      "审计行十字段+运维列逐字段亲读（requested/normalized/effective/native/capability_state/engine/reason/policy_source/environment/dir_scope 全对位）",
+      r.requested_mode === "bypassPermissions" && r.effective_mode !== "forbidden" && r.native_mode === null &&
+      r.capability_state === "confirmed" && r.engine === "claude" && r.policy_source === "explicit" &&
+      r.environment === "production" && r.dir_scope === "sandbox" && r.tier === "随手办" && r.session_id !== null && r.command_id === "p81-a1",
+      "审计行十字段+运维列逐字段亲读（#205 放行形态：effective 非 forbidden）",
     );
+    assert(String(r.reason ?? "").match(/(skip_confirm_authorized|bypass_user_authorized)/) !== null, "放行 reason 双通道命名之一（skip_confirm=勾选即授权 / user_authorized=授权位——本套 dataDir 有授权位前置时走后者命名）");
     process.env.CCR_ENV = prevEnv === undefined ? undefined : prevEnv;
     if (prevEnv === undefined) delete process.env.CCR_ENV;
 

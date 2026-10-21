@@ -992,14 +992,14 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close", detail: string, target?: string): void {
+  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release", detail: string, target?: string): void { /* #205：gate-release=勾选跳过权限放行审计 */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
     } catch { /* 审计尽力而为，绝不阻断主路径 */ }
   }
 
-  // #199 C：审计镜像队列——emitChainAudit 四动作同步 append data/chain-audit.jsonl
+  // #199 C：审计镜像队列——emitChainAudit 五动作（#205 补 gate-release）同步 append data/chain-audit.jsonl
   // （云通道无运行时 KV 直推能力——云桥是 wss 中继；镜像文件=KV 批量同步的现成队列，
   // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
   private chainAuditMirror(action: string, detail: string): void {
