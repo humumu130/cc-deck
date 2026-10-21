@@ -107,9 +107,12 @@ export function SessionStatSub({ counts }: { counts: { working: number; waiting:
   if (!any) return <Text style={c.sub}>暂无会话</Text>;
   return (
     <View style={c.subRow}>
-      {dot(counts.working, tc.done, "working")}
-      {dot(counts.waiting, tc.working, "waiting")}
-      {dot(counts.done, tc.faint, "done")}
+      {/* #208 W-STATCOLOR：状态→灯色映射对齐 1019 五色定版（绿=空闲·黄=进行中·
+          橙=阻塞·红=错误）——原三键错配（working 配 done 绿/done 配 faint 灰/
+          waiting 配 working 黄）=「2 工作显绿灯、18 空闲显灰灯」的根因 */}
+      {dot(counts.working, tc.working, "working")}
+      {dot(counts.waiting, tc.waiting, "waiting")}
+      {dot(counts.done, tc.done, "done")}
       {dot(counts.error, tc.error, "error")}
     </View>
   );
