@@ -264,6 +264,7 @@ export interface SessionState {
   artifacts_truncated?: boolean; // #35 输出物超 200 条被截断保最新（汇总行提示用）
   compacting?: boolean;      // #363 true = CLI 正在压缩上下文（PreCompact hook 置位，Compacting conversation…）；下一事件/转录增长/8min 兜底清位
   auth_hint?: string;        // #102 批 A：引擎登录态中途失效（运行时兜底 pattern 命中）——存在即 needs_auth 态，值为登录指引；随 SNAPSHOT/UPDATE 下发，回合成功自动清
+  relay_source?: string;     // #134（W-SRC2）：本源显示名——SNAPSHOT 下发面注入（withRelaySource，ws-server/cloud-client 两出口），存储态不写；端上 per-session 源标签根修数据源
   // W-CTXFIX B3（2026-10-10）：压缩前任务状态摘要（context-watchdog.ts 看门狗在水位
   // ≥85% 时向会话发摘要指令、捕获该回合 assistant 输出固化于此）。CLI auto-compact
   // 发生后由此注回下一回合首帧（只注一次，运行态标志不落 state）。随 SESSION_UPDATED

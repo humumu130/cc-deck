@@ -14,10 +14,3 @@ export const HEAD_BASE = {
   paddingVertical: 4,
   height: 48,
 } as const;
-
-/** 统一 head 容器样式基（spread 进各页 StyleSheet.create 的 head 键；边框/底色按页语言保留差异项时显式覆盖） */
-export const HEAD_BASE_STYLE = {
-  ...HEAD_BASE,
-  borderBottomWidth: 1,
-  borderBottomColor: undefined as unknown as string, // 占位：消费方以 c.line / c.lineStrong 显式给（theme 闭包外不可引 c）
-} as const;

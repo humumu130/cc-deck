@@ -146,6 +146,10 @@ export interface AcceptanceSummary {
   // …html#<key>（无 key 的老单不下发该字段，端上退回无后缀链接）。密钥本就随
   // 填写链接到用户手里，下发到已配对设备是同信任级；绝不进表单页 DATA
   key?: string;
+  // #198 W1：项目归属（源头 Acceptance.gid 归因键随汇下发）——expo 项目详情验收
+  // 分节按 gid 精确筛本项目（修「全局最近 5 张冒充本项目」误导）。无归因旧单
+  // （NULL 档）不带字段，端上不进项目分节（不猜不补口径）
+  gid?: string;
 }
 
 // 扫 acceptances 目录汇总：<id>.json 为单，配对 <id>.results.json 取最新一次提交
@@ -184,6 +188,7 @@ export function listAcceptances(limit = 20): AcceptanceSummary[] {
     out.push({
       id, title: a.title, created_at: a.created_at, total: a.rows.length, judged, submitted, done,
       ...(typeof a.sheet_key === "string" && /^[0-9a-f]{32}$/.test(a.sheet_key) ? { key: a.sheet_key } : {}),
+      ...(typeof a.gid === "string" && a.gid ? { gid: a.gid } : {}), // #198 W1：归因键随汇下发（NULL 档不带）
     });
   }
   out.sort((x, y) => y.created_at - x.created_at);

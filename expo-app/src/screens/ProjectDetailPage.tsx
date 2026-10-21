@@ -29,6 +29,7 @@ interface AcceptanceSummaryLike {
   judged: number;
   total: number;
   submitted: boolean;
+  gid?: string; // #198 W1：归因键（旧 relay/NULL 档无字段）
 }
 
 function makeStyles(c: ThemeColors): { [k: string]: TextStyle | ViewStyle | number | any } {
@@ -98,14 +99,18 @@ export function ProjectDetailPage({
   }, [onClose]);
 
   // 归属会话：project_gid 真值优先 + cwd 锚点前缀（OrgTabs projOf 同口径）
+  // #198 W2：project_gid 命中**在册组**（任一源组表）时以 gid 为准——他组会话不因
+  // cwd 前缀残留（组迁移/锚重叠）误入本项目；gid 缺省或所指组不在册（历史脏值）
+  // 才回落 cwd 前缀链（对齐 OrgTabs byGid.has 语义，两页判定不再分叉）
   const sessions = useMemo(() => {
     const a = normDir(anchor);
+    const roster = new Set(snap.sources.flatMap((x) => x.projects ?? []).map((g) => g.id));
     return snap.sessions.filter((s) => {
-      if (s.project_gid === gid) return true;
+      if (s.project_gid && roster.has(s.project_gid)) return s.project_gid === gid;
       const cwd = normDir(s.cwd || "");
       return !!a && !!cwd && (cwd === a || cwd.startsWith(a + "/"));
     }).sort((x, y) => (y.updated_at || 0) - (x.updated_at || 0));
-  }, [snap.sessions, gid, anchor]);
+  }, [snap.sessions, snap.sources, gid, anchor]);
 
   // 组与验收单跨源聚合（store Snapshot 无顶层字段——sources[] 各带 projects/acceptances）
   const group: ProjectGroup | undefined = useMemo(
@@ -124,18 +129,20 @@ export function ProjectDetailPage({
         const prev = seen.get(a.path);
         const lastAt = Number(a.last_at) || Number(a.first_at) || 0;
         if (!prev || lastAt > prev.lastAt) {
-          seen.set(a.path, { name: a.path.split("/").filter(Boolean).pop() || a.path, lastAt, sid: s.session_id });
+          seen.set(a.path, { name: normDir(a.path).split("/").filter(Boolean).pop() || a.path, lastAt, sid: s.session_id }); /* #198 W4：basename 前先 normDir（反斜杠/重复斜杠/尾斜杠归一——Windows 风格 path 不再整段当名） */
         }
       }
     }
     return [...seen.values()].sort((x, y) => y.lastAt - x.lastAt);
   }, [sessions]);
 
-  // 验收单（SNAPSHOT acceptances——全局账本，此处按标题不筛项目：手机只读呈现；跳
-  // 过滤属数据面现状（acceptances 无 gid/anchor 字段），三态行足够（设计豁免页））
+  // 验收单（#198 W1：按 gid 精确筛本项目——修「全局最近 5 张冒充本项目」误导。
+  // 归因键=源头 Acceptance.gid（M12-7 出单方写入，NULL 档不猜不补）随 SNAPSHOT 汇总
+  // 下发；无归因旧单不进项目分节（回落全局待填 badge 面，不在本项目冒充）。旧 relay
+  // 无 gid 字段=全量筛空，分节显示空态（优于误导）
   const acceptances = useMemo(
-    () => snap.sources.flatMap((x) => (Array.isArray(x.acceptances) ? (x.acceptances as AcceptanceSummaryLike[]) : [])).slice(0, 5),
-    [snap.sources],
+    () => snap.sources.flatMap((x) => (Array.isArray(x.acceptances) ? (x.acceptances as AcceptanceSummaryLike[]) : [])).filter((a) => a.gid === gid).slice(0, 5),
+    [snap.sources, gid],
   );
 
   const stColor = group ? orgStColor(group.status, c) : c.faint;
@@ -202,7 +209,7 @@ export function ProjectDetailPage({
           const total = Number(a.total) || 0;
           const allPass = a.submitted && judged >= total && total > 0;
           const hasFail = a.submitted && judged > 0 && judged < total;
-          const [word, color] = allPass ? ["已收单", c.done] : hasFail ? ["修复中", c.error] : a.submitted ? ["已回填", c.working] : ["待填", c.working];
+          const [word, color] = allPass ? ["已收单", c.done] : hasFail ? ["回填中", c.error] /* #198 W3：回填语义（用户填单动作）非代码修复 */ : a.submitted ? ["已回填", c.working] : ["待填", c.working];
           return (
             <View key={a.id} style={styles.accRow}>
               <View style={styles.accT}>

@@ -70,6 +70,7 @@ export interface AcceptanceSummary {
   submitted?: boolean;
   done: boolean;
   key?: string; // #28 云通道 per-sheet 密钥（旧 relay 无字段；云卡链接拼 #key 用）
+  gid?: string; // #198 W1：项目归属归因键（relay 汇总下发；旧 relay/NULL 档无字段）——项目详情验收分节精确筛
 }
 
 // 源运行态（#294 批1，对齐网页端 ensureCtx 的 ctx）：单连接状态机按源实例化。
