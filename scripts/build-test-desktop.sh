@@ -91,8 +91,14 @@ echo "    $(basename "$EXE") ($(stat -f%z "$EXE")B)"
 
 # #190：mac updater 产物（app.tar.gz+.sig）——同 run 的 mac artifact 拉取；旧 run
 #（--bundles dmg 时代）无此产物：跳过 mac 侧（清单不带 darwin 字段），win 链照走
+# P2（审查）：拉取对齐 win 侧三次重试（gh 瞬断≠产物缺席——不区分会静默推迟 mac OTA）
 MAC_TGZ=""; MAC_SIG=""
-if gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-Mac-Nova-$TAG" -D "$TMP/mac" 2>/dev/null; then
+MAC_DL_OK=0
+for i in 1 2 3; do
+  if gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-Mac-Nova-$TAG" -D "$TMP/mac" 2>/dev/null; then MAC_DL_OK=1; break; fi
+  [ "$i" = "3" ] || { echo "    mac artifact 下载失败（第 $i 次），30s 后重试…"; sleep 30; }
+done
+if [ "$MAC_DL_OK" = "1" ]; then
   MAC_TGZ=$(find "$TMP/mac" -name '*.app.tar.gz' | head -1 || true)
   MAC_SIG=$(find "$TMP/mac" -name '*.app.tar.gz.sig' | head -1 || true)
 fi
@@ -100,8 +106,10 @@ if [ -n "$MAC_TGZ" ] && [ -n "$MAC_SIG" ]; then
   MAC_TGZ=$(cd "$(dirname "$MAC_TGZ")" && pwd)/$(basename "$MAC_TGZ")
   MAC_SIG=$(cd "$(dirname "$MAC_SIG")" && pwd)/$(basename "$MAC_SIG")
   echo "    mac updater: $(basename "$MAC_TGZ") ($(stat -f%z "$MAC_TGZ")B)"
+elif [ -n "$MAC_TGZ" ] || [ -n "$MAC_SIG" ]; then
+  echo "    ⚠ mac updater 产物不完整（tgz/sig 仅其一——下载截断或 bundle 异常）：tgz=${MAC_TGZ:-无} sig=${MAC_SIG:-无}——本次清单只带 windows 字段"
 else
-  echo "    mac updater 产物缺席（旧 run 或 dmg-only 构建）——本次清单只带 windows 字段"
+  echo "    mac updater 产物缺席（重试后仍无：旧 run dmg-only 构建或 artifact 未含）——本次清单只带 windows 字段"
 fi
 
 echo "[3/5] 产物双源上传…"
@@ -139,6 +147,15 @@ fi
 cp "$TMP/manifest-cf.json" "$TMP/manifest-ecs.json"
 $SCP -q "$TMP/manifest-ecs.json" "$ECS_HOST:$ECS_DIR/$MANIFEST_KEY"
 scripts/kv-put-verified.sh "$TMP/manifest-cf.json" "$MANIFEST_KEY"
+# #190 审查 P1（nova test key 无人写=OTA 对现役 nova 包落空）：-nova tag 时同一份
+# 清单再写一份到 tauri-latest-nova-test.json（nova overlay endpoint 整替后编译期
+# 烙死读这个 key，此前全仓无写入方——线上 404，b375fcc 起 nova test 包检查更新必失败）
+if [[ "$VER" == *-nova ]]; then
+  NOVA_MAN_KEY="tauri-latest-nova-test.json"
+  $SCP -q "$TMP/manifest-ecs.json" "$ECS_HOST:$ECS_DIR/$NOVA_MAN_KEY"
+  scripts/kv-put-verified.sh "$TMP/manifest-cf.json" "$NOVA_MAN_KEY"
+  echo "    nova test 清单已同步写 $NOVA_MAN_KEY（nova 包编译期烙死的 endpoint）"
+fi
 
 echo "[5/5] 回读校验（清单字段 + exe 可达 + 版本序号）…"
 CF_MAN=$(curl -sS --max-time 30 "https://cc.humumu.online/download/$MANIFEST_KEY")
@@ -162,7 +179,9 @@ import json
 m = json.loads('''$( echo "$ECS_MAN" )''')
 assert m['version'] == '$VER'
 assert m['platforms']['windows-x86_64']['url'] == 'https://cc.humumu.online/download/$EXE_KEY'
-print('    ECS 清单 OK: version=%s' % m['version'])
+if 'darwin-aarch64' in m['platforms']:
+    assert m['platforms']['darwin-aarch64']['url'].endswith('$MAC_KEY'), 'ECS mac url 不符'
+print('    ECS 清单 OK: version=%s%s' % (m['version'], '（含 mac 字段）' if 'darwin-aarch64' in m['platforms'] else '（win 单平台）'))
 "
 curl -sS --max-time 20 -o /dev/null -w "    CF exe HTTP=%{http_code} len=%{size_download}\n" -r 0-1023 "https://cc.humumu.online/download/$EXE_KEY"
 
