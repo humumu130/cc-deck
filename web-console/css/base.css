@@ -294,7 +294,8 @@
        展开不再挤压对话列（用户实测：往左展开遮盖挤压第三列）；screen 兼作定位父级 */
     .desktop-screen { display: none; flex: 1; min-width: 0; min-height: 0; }
     .desktop-screen.active { display: grid; position: relative; grid-template-columns: var(--queue-w, 235px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-    .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
+    .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: var(--surface1); border-right: 1px solid var(--line-soft); }
+    #d-session .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); } /* #193 P1：微信行间 1px 低对比分隔（rgba 约 #E0E0E0@.55；暗色自动随 --line） */ /* #193 W-WXSTYLE：微信平色列表区（渐变+侧投影退役；--surface1 亮=#EDEDED/暗=暗系原值，分隔=1px 细线） */
     /* W-TOPBAR ⑤：第二列拖宽把手——7px 热区骑在列界上（视觉同 inspector-resizer：悬停/拖动
        显 1px 短线）；挂 screen 层而非 queue 内——notify 等域会 replaceChildren 重建 queue，
        挂列内会被抹掉；位置锚屏级 --queue-w（JS 钳 235-420px、按屏记忆、双击回默认 235·W-V8R 批7 v8 栏宽） */
@@ -357,7 +358,11 @@
        #d-session 有横排 flex 特化不受影响 */
     .queue-card { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: none; } /* #193：微信选中=品牌色整行（cc-deck 橙），文字反白走下行 */
+    .queue-card.selected .row strong, .queue-card.selected strong { color: #FFFFFF; }
+    .queue-card.selected .row .avatar { color: #FFFFFF; background: transparent; border-color: transparent; }
+    .queue-card.selected p, .queue-card.selected small, .queue-card.selected .grp-count { color: rgba(255,255,255,.85); }
+    .queue-card.selected .status-dot { border-color: #FFFFFF; }
     /* W-V8 批2 团队域壳层（A 轨对照图①④ P1②）：选中态琥珀描边贯通（品牌色在
        「当前位置」反馈——旧选中态灰白脱离体系，只覆盖团队域不动通用类） */
     #d-team .queue-card.selected { border-color: transparent; border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: var(--surface1); background: color-mix(in srgb, var(--brand) 7%, var(--surface1)); box-shadow: inset 2px 0 0 var(--brand); }
@@ -789,16 +794,17 @@
     /* W-TOPBAR ⑨：我方气泡对齐旧版 0.6——去阴影（用户「有阴影很割裂」）、底色单列
        --bubble-me-bg 取旧 --panel-2 双主题值（「纯白太突兀，旧版舒服」）、形制 14px 圆角
        右上收 5px、边框 --me-line 改旧 --border 同值；时间戳气泡下方右对齐（.msg-user-row） */
-    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);}
+    .bubble {max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid transparent; border-radius: 6px; background: var(--surface2); color: var(--text); font-size: var(--fs-A);} /* #193：微信气泡形（白底无框 6px 圆角浮于浅灰聊天区；圆角 10→6） */
     .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; }
-    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 10px; border-top-right-radius: 5px; }
+    .bubble.me { margin-left: auto; background: var(--bubble-me-bg); border-color: var(--me-line); border-radius: 6px; border-top-right-radius: 5px; color: #FFFFFF; } /* #193：己方=品牌橙底白字 */
     .msg-user-row { display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 16px; } /* 件九：与 AI 块统一 16px 基线节奏（原 11/15 不齐） */
-    .conversation-pane .message-ai { margin-bottom: 16px; } /* 件九：同上（原 15；升特异度压 base 源序） */
+    .conversation-pane .message-ai { margin-bottom: 16px; }
+    .conversation-pane .message-ai .mt { text-align: center; color: var(--faint); font-size: 11px; } /* #193：AI 侧时间戳同款居中灰 */ /* 件九：同上（原 15；升特异度压 base 源序） */
     .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
     .message-ai.cont .message-author { display: none; } /* 件九：连续同作者正文去重署名行，正文 37px 基线不动 */
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
     .msg-user-row .bubble.me { margin-bottom: 0; }
-    .msg-user-row .mt { margin-top: 4px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+    .msg-user-row .mt { margin-top: 4px; align-self: center; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; } /* #193：微信居中分隔时间戳小灰字 */
     /* W-PORT-A R-4 发送乐观回显：气泡内状态行（发送中微降 / 未送达红角），与 .mt 同位不占额外行 */
     .msg-echo .bubble.me { opacity: .88; }
     .msg-echo .echo-state { margin-top: 3px; color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: right; }
@@ -825,6 +831,8 @@
     .timeline-note.subagent-live { padding-left: 14px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--working); }
     /* 用户气泡长文折叠（旧壳 #38/#149 口径：>100 字折 3 行 + 展开全文） */
     .bubble.me .ub { white-space: pre-wrap; word-break: break-word; }
+    .bubble.me a { color: #FFFFFF; text-decoration: underline; }
+    .bubble.me code, .bubble.me pre { background: rgba(255,255,255,.16); color: #FFFFFF; }
     .bubble.me .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
     .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; margin-top: 5px; }
     .x-full:hover { text-decoration: underline; }
@@ -1888,7 +1896,13 @@
     /* W-UIFB ⑨：会话卡之间 hairline 分割线（用户追加，微信式细淡线）——相邻卡上缘 65% 透明
        line-soft，浅色呈极淡灰、深色呈微亮线；组头/空态横幅处天然断开不画 */
     #d-session .queue-card + .queue-card { border-top: transparent; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); } /* 件七：分割线加粗一档（原 line-soft 65% 几乎不可见） */
-    #d-session .queue-card.selected { border-color: transparent; background: var(--q-row-sel); box-shadow: none; }
+    #d-session .queue-card.selected { border-color: transparent; background: var(--brand); box-shadow: none; } /* #193 P1：微信选中=品牌橙整行（原 --q-row-sel 灰底退役） */
+    #d-session .queue-card.selected .srow-r1 strong, #d-session .queue-card.selected .srow-r2-t, #d-session .queue-card.selected .srow-meta { color: #FFFFFF; }
+    #d-session .queue-card.selected .srow-time { color: rgba(255,255,255,.85); }
+    #d-session .queue-card.selected .srow-ava { color: #FFFFFF; background: rgba(255,255,255,.16); }
+    #d-session .queue-card.selected .tag, #d-session .queue-card.selected .team-chip { background: rgba(255,255,255,.2); color: #FFFFFF; border-color: transparent; }
+    #d-session .queue-card.selected .srow-more, #d-session .queue-card.selected .srow-pin, #d-session .queue-card.selected .srow-close { color: #FFFFFF; }
+    #d-session .queue-card.selected .srow-pin.on svg { color: #FFFFFF; }
     /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
     #d-session .queue-card[data-session-card="mobile"]:hover { background: var(--danger-bg); }

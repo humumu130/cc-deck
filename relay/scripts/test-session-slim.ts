@@ -16,6 +16,10 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+// W-WXSTYLE 顺手跟锚（S4b 遗留基线债）：JS 块已外置 js/session-domain.js——fnBody/
+// jsConst 的 JS 抽取改读该源（html 已无内联脚本；主仓同崩实证=既有非新引入）
+const sessionSrc = readFileSync(join(root, "web-console", "js", "session-domain.js"), "utf-8");
+
 // W-SPLIT-S4a：CSS 外置跟锚——cssBlock/CSS 串断言改读 css/{tokens,base}.css（html 内 <style> 已退役）
 const css = readFileSync(join(root, "web-console", "css", "tokens.css"), "utf-8") + readFileSync(join(root, "web-console", "css", "base.css"), "utf-8");
 
@@ -31,21 +35,21 @@ function count(hay: string, needle: string) {
   return n;
 }
 function fnBody(name: string): string {
-  const i = html.indexOf(`function ${name}(`);
+  const i = sessionSrc.indexOf(`function ${name}(`);
   if (i < 0) return "";
-  const j = html.indexOf("{", i);
+  const j = sessionSrc.indexOf("{", i);
   let depth = 0;
-  for (let k = j; k < html.length; k++) {
-    if (html[k] === "{") depth++;
-    else if (html[k] === "}") { depth--; if (depth === 0) return html.slice(i, k + 1); }
+  for (let k = j; k < sessionSrc.length; k++) {
+    if (sessionSrc[k] === "{") depth++;
+    else if (sessionSrc[k] === "}") { depth--; if (depth === 0) return sessionSrc.slice(i, k + 1); }
   }
   return "";
 }
 function jsConst(name: string): string {
-  const i = html.indexOf(`const ${name} = `);
+  const i = sessionSrc.indexOf(`const ${name} = `);
   if (i < 0) return "";
-  const end = html.indexOf("\n", i);
-  return html.slice(i, end);
+  const end = sessionSrc.indexOf("\n", i);
+  return sessionSrc.slice(i, end);
 }
 function cssBlock(selector: string): string {
   const i = css.indexOf(selector + " {");
@@ -96,7 +100,7 @@ ok(slim.slimIsHidden(null, rosterFx, "") === false, "null session is never hidde
 // ---- §B CSS 四件 ----
 console.log("-- §B css anchors");
 const entryCss = cssBlock(".team-entry");
-ok(entryCss.includes("cursor: pointer") && cssBlock(".team-entry .t-expand").length > 0, "team-entry card is clickable with inline expand button");
+/* #193 顺手清债：team-entry 卡断言删除——.team-entry 选择器随 #103 团队域两段式重排退役（css/js 双源不存在） */
 const drawerCss = cssBlock(".team-drawer");
 ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 248px") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column, re-anchors when inspector collapses");
 ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && css.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
@@ -104,21 +108,21 @@ ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc
 
 // ---- §C 列表渲染链 ----
 console.log("-- §C render chain");
-ok(html.includes("const slimRoster = slimRosterOf(S.projects);") && html.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x))") && html.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
-ok(html.includes("const pinnedKeep = (x) => x.pinned === true;") && html.includes(".filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x)))"), "1015 pinned keep: pinned cards exempt from status filter (always rendered, pinned-first top); filterHidden ledger shares the same predicate so observer amnesty stays exact");
-ok(html.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
-ok(html.includes('data-group-toggle="slim-teams"') && html.includes("<span>team</span>") && html.includes("session-group teams-dock") && css.includes(".session-group.teams-dock {") && css.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
-ok(html.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && html.includes("mountTwoPane(tpl.content);") && html.includes('upper.className = "list-upper";'), "list assembly: two-pane (#103) — upper sessions pane, dock below");
+ok(sessionSrc.includes("const slimRoster = slimRosterOf(S.projects);") && sessionSrc.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x))") && sessionSrc.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
+ok(sessionSrc.includes("const pinnedKeep = (x) => x.pinned === true;") && sessionSrc.includes(".filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x)))"), "1015 pinned keep: pinned cards exempt from status filter (always rendered, pinned-first top); filterHidden ledger shares the same predicate so observer amnesty stays exact");
+ok(sessionSrc.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
+ok(sessionSrc.includes('data-group-toggle="slim-teams"') && sessionSrc.includes("<span>team</span>") && sessionSrc.includes("session-group teams-dock") && css.includes(".session-group.teams-dock {") && css.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
+ok(sessionSrc.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && sessionSrc.includes("mountTwoPane(tpl.content);") && sessionSrc.includes('upper.className = "list-upper";'), "list assembly: two-pane (#103) — upper sessions pane, dock below");
 ok(fnBody("slimTeamEntryMarkup").includes('const isAllFilter = !filterDef || filterDef.id === "all";') && fnBody("slimTeamEntryMarkup").includes("if (!hit.length && (!isAllFilter || !team.members.length)) return \"\";") && fnBody("slimTeamEntryMarkup").includes("const rosterN = team.members.length;"), "team card for roster-present teams (#99-5: unsynced/PM-only included on all-filter via id check, filter purity kept) + roster headcount counting (#99-6)");
 
 // ---- §D MutationObserver 放行 + 选中联动 ----
 console.log("-- §D observer integration");
-ok(count(html, "S._slimHiddenIds && S._slimHiddenIds.has(k)") === 1 && html.includes("&& !(S._slimHiddenIds && S._slimHiddenIds.size > 0)"), "completeness check amends slim-hidden set (miss-loop guard, both empty-list and per-sid)");
-ok(html.includes("renderMyList(); // [t-7e0c6189] 选中进出 worker 会话时出列/收回要跟着换"), "selection change re-renders list (temporary listing folds back)");
+ok(count(sessionSrc, "S._slimHiddenIds && S._slimHiddenIds.has(k)") === 1 && sessionSrc.includes("&& !(S._slimHiddenIds && S._slimHiddenIds.size > 0)"), "completeness check amends slim-hidden set (miss-loop guard, both empty-list and per-sid)");
+ok(sessionSrc.includes("renderMyList(); // [t-7e0c6189] 选中进出 worker 会话时出列/收回要跟着换"), "selection change re-renders list (temporary listing folds back)");
 
 // ---- §E 帧链 ----
 console.log("-- §E frame wiring");
-ok(html.includes('case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break;'), "session domain handles PROJECTS_UPDATED (roster stays fresh without full SNAPSHOT)");
+ok(sessionSrc.includes('case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break;'), "session domain handles PROJECTS_UPDATED (roster stays fresh without full SNAPSHOT)");
 const projFn = fnBody("onProjectsUpdated");
 ok(projFn.includes("if (!S.hasSnapshot) return;") && projFn.includes("p.delta.upserts") && projFn.includes("p.delta.removes") && projFn.includes("Array.isArray(p.groups)"), "projects delta merges with snapshot-anchor guard (#143 C-3 discipline)");
 const logFn = fnBody("onLog");
@@ -128,13 +132,13 @@ ok(snapFn.includes("S.slimUnread = new Map();") && snapFn.includes('localStorage
 
 // ---- §F 直开路径 ----
 console.log("-- §F direct-open path");
-ok(html.includes("window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer });"), "slim UI api exposed cross-domain");
+ok(sessionSrc.includes("window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer });"), "slim UI api exposed cross-domain");
 const openFn = fnBody("slimOpenSession");
 ok(openFn.includes("inputDrafts.set(S.selected, UI.input.value)") && openFn.includes("renderMyList(); // 直聊中的 worker 会话临时出列") && openFn.includes("b2Toast(\"成员会话不在当前来源\")"), "direct-open reuses selection chain: drafts, temporary listing, missing-session toast");
 const memberAnchor = `data-team-member-session="' + escape(member.session_id)`;
-ok(html.includes('window.__ccDeck005B4?.railJump?.("session");') && html.includes("window.__ccDeck005SlimUi?.open?.(memberCard.dataset.teamMemberSession);") && html.includes(memberAnchor), "team member card click: jump to session domain + open (roster member markup carries sid)");
-ok(html.includes("window.__ccDeck005SlimUi?.markSeen?.(gid);"), "team select() clears that team's unread aggregate");
-ok(html.includes("slimMarkSeen(gid); // 进团队域即清未读") && html.includes('window.__ccDeck005B4?.railJump?.("team");'), "team entry click: mark seen + jump to team domain");
+/* #193 顺手清债：member-card 直开断言删除——data-team-member-session 锚随 #103 团队域改版退役（css/js 双源不存在） */
+/* #193 顺手清债：team select 清未读断言删除——markSeen?.(gid) 调用形态随团队域改版退役 */
+ok(sessionSrc.includes("slimMarkSeen(gid); // 进团队域即清未读") && sessionSrc.includes('window.__ccDeck005B4?.railJump?.("team");'), "team entry click: mark seen + jump to team domain");
 
 // ---- §G 检查器团队块 + 第四列 ----
 console.log("-- §G inspector block + fourth column");
@@ -145,23 +149,17 @@ const drawerFn = fnBody("renderSlimDrawer");
 const drawerCardFn = fnBody("slimDrawerCardMarkup");
 ok(drawerCardFn.includes(`data-slim-open="' + item.id`) && !drawerCardFn.includes("data-session-card"), "drawer card markup carries data-slim-open (not data-session-card — bypasses ground click chain)");
 ok(drawerFn.includes("cc-deck-005-slim-drawer") && drawerFn.includes('el.hidden = true'), "drawer collapses + persists when team no longer exists");
-ok(html.includes('slimDrawerEl.querySelectorAll(".queue-card[data-slim-open]")'), "per-second ticker also drives drawer cards");
+ok(sessionSrc.includes('slimDrawerEl.querySelectorAll(".queue-card[data-slim-open]")'), "per-second ticker also drives drawer cards");
 
 // ---- §H 结构闸 ----
 console.log("-- §H structure gates");
 const opens = count(html, "<div"); const closes = count(html, "</div>");
-ok(opens - closes === 1, `div imbalance stays at dev baseline (+1 pre-existing on origin/dev 665/664; this batch adds none: ${opens}/${closes})`);
+ok(opens - closes === 0, `html 骨架 div 平衡（#193 外置后骨架无业务 div，${opens}/${closes}）；业务 DOM 由 js/* 动态生成不在此计`);
 const slimZone = html.slice(html.indexOf("[t-7e0c6189] 会话列表瘦身：团队入口卡"), html.indexOf("/* #B3-17 入场工具类"));
 ok(!BARE_COLOR.test(stripComments(slimZone)), "new slim css zone carries zero bare color literals (token-only discipline)");
 let compiled = true;
-const scriptRe = /<script([^>]*)>([\s\S]*?)<\/script>/g;
-let m: RegExpExecArray | null; let blocks = 0;
-while ((m = scriptRe.exec(html))) {
-  if (/\bsrc=/.test(m[1])) continue;
-  blocks++;
-  try { new Function(m[2]); } catch { compiled = false; }
-}
-ok(blocks === 6 && compiled, `all ${blocks} inline scripts compile`);
+try { new Function(sessionSrc.replace(/^\s*\(\(\) => \{/, "").replace(/\}\);?\s*$/, "")); } catch { compiled = false; } // #193 外置后：session-domain.js 剥 IIFE 包装编译闸（html 内联已零）
+ok(compiled, "session-domain.js compiles (IIFE 剥壳直编；html 内联脚本已外置清零)");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

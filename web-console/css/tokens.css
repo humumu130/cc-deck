@@ -81,8 +81,8 @@
       --action-bg: rgba(226,133,94,.16);
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
-      --me-bg: #15273B; /* W-UIPOLISH4 件八（2026-10-12 用户深色实测「与背景全同色」）：#0E1927 与对话列底 #0B1624 差 3/千亮度不可辨——抬到表面层 surface2 同值（旧壳 panel-2「表面层」语义同源），仅边框语言保留 */
-      --bubble-me-bg: #15273B; /* W-UIFB 裁决④别名：与 --me-bg 同值保留（两套消费规则并存）；件八同改 */
+      --me-bg: #9C5535; /* #193：随 bubble-me-bg 暗色橙深档 */ /* W-UIPOLISH4 件八（2026-10-12 用户深色实测「与背景全同色」）：#0E1927 与对话列底 #0B1624 差 3/千亮度不可辨——抬到表面层 surface2 同值（旧壳 panel-2「表面层」语义同源），仅边框语言保留 */
+      --bubble-me-bg: #9C5535; /* #193：暗色己方气泡=品牌橙深档（终验抓出的漏改行——.bubble.me 消费此键） */
       --me-line: #4E6D8E;
       --action-ink: #211B0E;
       --done-ink: #082116;
@@ -166,19 +166,19 @@
     }
     html[data-theme="light"] {
       color-scheme: light;
-      --bg0: #F1F5F8;
-      --bg1: #F8FAFC;
-      --surface1: #E8EFF5;
+      --bg0: #F0F0F0; /* #193 W-WXSTYLE：微信桌面阶梯（0 饱和三级明度 #EDEDED→#F0F0F0→#F5F5F5；蓝灰系退役） */
+      --bg1: #F5F5F5;
+      --surface1: #EDEDED;
       --surface2: #FFFFFF;
-      --hover: #DDE8F1;
-      --line: #C6D3DF;
-      --line-soft: #DCE5EC;
-      --text-strong: #15283D;
-      --text: #30465B;
-      --dim: #3D5271; /* W-V8 批9：浅色文字灰阶向 v8 卡文字 #4C5C75 收 */
-      --card-sub: #4C5C75;
-      --faint: #42587A;
-      --progress-fill: #607D99;
+      --hover: #E4E4E4;
+      --line: #E0E0E0;
+      --line-soft: #E8E8E8;
+      --text-strong: #191919;
+      --text: #333333;
+      --dim: #7F7F7F; /* 微信次级灰 #7F7F7F（原蓝灰 #3D5271 退役） */
+      --card-sub: #999999; /* 微信摘要灰 */
+      --faint: #999999;
+      --progress-fill: #B2B2B2;
       --brand: #B85228; /* W-V8 批9：浅色品牌系对齐 v8（渐变主值） */
       --brand-hover: #C96442;
       --brand-strong: #96391A;
@@ -202,44 +202,44 @@
       --ctx-critical-fill: #C84C51;
       --ctx-track: #C6D3DF;
       --source: #6E8194;
-      --chrome: #E5ECF2;
-      --rail: #EDF3F7;
-      --queue-deep: #E3EBF2;
-      --workspace-top: #F8FBFD;
-      --footer: #E8EFF5;
-      --inspector-top: #EDF3F7;
+      --chrome: #EDEDED;
+      --rail: #EDEDED;
+      --queue-deep: #EDEDED; /* #193：queue 渐变退役改平色（.queue 形制同批改） */
+      --workspace-top: #F5F5F5;
+      --footer: #EDEDED;
+      --inspector-top: #F0F0F0;
       --phone-frame: #172636;
       --glow-brand: rgba(200,100,64,.1);
       --glow-blue: rgba(58,120,184,.08);
       --surface-veil: rgba(232,239,245,.92);
-      --source-switcher-bg: #E8EFF5;
+      --source-switcher-bg: #E6E6E6; /* #193 P2：归中性灰（蓝调退役） */
       --frame-line: #B8C8D6;
       --frame-highlight: rgba(255,255,255,.8);
       --window-dot: #A5B5C3;
       --rail-shadow: rgba(50,74,96,.08);
-      --panel-shadow: rgba(50,74,96,.08);
-      --card-border: #C6D3DF;
+      --panel-shadow: transparent; /* #193：微信无影（面板分隔=1px 细线） */
+      --card-border: #E0E0E0;
       --card-veil: #FFFFFF;
-      --border-strong: #7895AE;
-      --selected-line: #7895AE;
-      --selected-bg: #F3F7FA;
+      --border-strong: #D5D5D5;
+      --selected-line: #E08A63; /* #193：选中=品牌橙整行（.queue-card.selected 形制同批改） */
+      --selected-bg: #E08A63;
       --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
       --status-error-glow: rgba(200,76,81,.2);
       --status-working-glow: rgba(22,141,96,.3);
       --status-waiting-glow: rgba(165,109,0,.22);
-      --q-row-hov: rgba(16,24,40,.05);
-      --q-row-sel: rgba(16,24,40,.09);
+      --q-row-hov: rgba(0,0,0,.045); /* 微信 hover 浅灰 */
+      --q-row-sel: rgba(0,0,0,.08);
       --tag-border: rgba(96,117,138,.24);
       --tag-bg: rgba(132,151,169,.16);
       --tag-ink: #2D4358;
       --action-bg: rgba(200,100,64,.14);
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
-      --me-bg: #E9EFF6; /* W-UIPOLISH4 件八：浅色同口径再微降深（#EDF1F7→#E9EFF6），与近白列底 #F8FAFC 拉开一档 */
-      --bubble-me-bg: #E9EFF6; /* W-UIFB 裁决④别名：与 --me-bg 同值保留；件八同改 */
-      --me-line: #C6D3DF;
+      --me-bg: #E08A63; /* #193：随 --bubble-me-bg 同源品牌橙 */
+      --bubble-me-bg: #E08A63; /* #193：己方气泡=品牌色底白字（微信己方绿同构换 cc-deck 橙） */
+      --me-line: #E08A63;
       --action-ink: #3C2600;
       --done-ink: #073C27;
       --badge-ink: #FFFFFF;
@@ -254,7 +254,7 @@
       --mobile-head-bg: rgba(248,250,252,.94);
       --mobile-nav-bg: rgba(232,239,245,.97);
       --mobile-active-bg: rgba(200,100,64,.08);
-      --composer-bg: #E8EFF5;
+      --composer-bg: #E6E6E6; /* #193 P2：同上 */
       --scroll-track: rgba(96,117,138,.12);
       --scroll-thumb: rgba(96,117,138,.34);
       --scroll-thumb-hover: rgba(96,117,138,.52);
