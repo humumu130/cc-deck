@@ -930,7 +930,9 @@ fn node_path() -> Option<std::path::PathBuf> {
 }
 
 fn node_in_path() -> bool {
-    node_path().is_some()
+    // #206 审查 P1-1：状态口径与启动器同源（app-data 内置位在场=有 runtime）——
+    // 原只查系统面，一键装完后状态行恒显「缺少 Node」且可重复触发安装
+    relay_node_path().is_some()
 }
 
 // ── #206（W-NODE 定稿）：可选 Node + 应用内一键安装 ──
@@ -962,11 +964,21 @@ fn relay_node_path() -> Option<std::path::PathBuf> {
 }
 
 // node 探测结果进程内缓存：where.exe 首跑可能被 Defender 实时扫描拖 1-2s，
-// 每次状态查询都 spawn 会把设置面板开合卡出可感知延迟（#342 卡顿主因之一）
-static NODE_OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+// 每次状态查询都 spawn 会把设置面板开合卡出可感知延迟（#342 卡顿主因之一）。
+// #206 审查 P1-1：OnceLock→Mutex<Option<bool>>——一键安装完成后要失效缓存
+//（OnceLock 的 take 需 &mut，static 上不可用）；None=未探测，Some=缓存值
+static NODE_OK: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
+
+fn node_ok_cached() -> bool {
+    let mut cell = NODE_OK.lock().unwrap();
+    if let Some(v) = *cell { return v; }
+    let v = node_in_path();
+    *cell = Some(v);
+    v
+}
 
 fn relay_status_value() -> Value {
-    let node = *NODE_OK.get_or_init(node_in_path);
+    let node = node_ok_cached(); // #206 P1-1：经缓存包装（可失效）
     let err = EMBEDDED_RELAY_ERR.lock().unwrap().clone();
     serde_json::json!({
         "port": port_listening(relay_port()),
@@ -1135,8 +1147,10 @@ fn node_dist_download(home: &str) -> Result<std::path::PathBuf, String> {
             let _ = std::fs::set_permissions(dest.join("bin").join("node"), std::fs::Permissions::from_mode(0o755));
         }
     } else {
+        // 审查 P2-1：PS 单引号字面量内的 ' 需双写转义（TEMP 含撇号如 O'Brien 用户名）
+        let ps_quote = |p: &std::path::Path| p.to_string_lossy().replace('\'', "''");
         let out = std::process::Command::new("powershell").args(["-NoProfile", "-Command",
-            &format!("Expand-Archive -Force -Path '{}' -DestinationPath '{}'", tmp.to_string_lossy(), stage.to_string_lossy())])
+            &format!("Expand-Archive -Force -Path '{}' -DestinationPath '{}'", ps_quote(&tmp), ps_quote(&stage))])
             .output().map_err(|e| e.to_string())?;
         if !out.status.success() { return Err(format!("Expand-Archive 失败：{}", String::from_utf8_lossy(&out.stderr).trim())); }
         let src_bin = stage.join(format!("node-{}-win-x64", NODE_DIST_VER)).join("node.exe");
@@ -1167,21 +1181,29 @@ async fn node_install(app: tauri::AppHandle) -> Result<Value, String> {
             let _ = app2.emit("node-install-progress", serde_json::json!({ "stage": stage, "detail": detail }));
         };
         emit("downloading", "下载 Node 官方包（约 30MB）…".into());
-        let result = node_dist_download(&home)
-            .and_then(|bin| {
-                emit("spawning", format!("已装到 {}——拉起内置 relay…", bin.display()));
-                // 无需重启：直接走既有 spawn（找包序 app-data 优先自动命中）
-                let handle = app2.app_handle();
-                if let Err(e) = spawn_embedded_relay(&handle) {
-                    // relay 已被别方占用等非致命态：安装本身成功，relay 状态照常查询
-                    emit("done", format!("Node 已就绪（relay：{e}）"));
-                } else {
-                    emit("done", "Node 已就绪，内置 relay 已启动".into());
-                }
-                Ok(())
-            });
-        if let Err(e) = result {
-            emit("error", e);
+        // 审查 P3-6：panic 也要解锁（catch_unwind 兜底——否则重启前一键装永久卡死）
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            node_dist_download(&home)
+                .and_then(|bin| {
+                    // 审查 P1-1：装完失效探测缓存（OnceLock 进程内常驻——不 take 则
+                    // relay_status.node 恒 false，状态行永不翻绿）
+                    *NODE_OK.lock().unwrap() = None; // 缓存失效（下次状态查询重估——app-data 位在场即 true）
+                    emit("spawning", format!("已装到 {}——拉起内置 relay…", bin.display()));
+                    // 无需重启：直接走既有 spawn（找包序 app-data 优先自动命中）
+                    let handle = app2.app_handle();
+                    if let Err(e) = spawn_embedded_relay(&handle) {
+                        // relay 已被别方占用等非致命态：安装本身成功，relay 状态照常查询
+                        emit("done", format!("Node 已就绪（relay：{e}）"));
+                    } else {
+                        emit("done", "Node 已就绪，内置 relay 已启动".into());
+                    }
+                    Ok(())
+                })
+        }));
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => emit("error", e),
+            Err(_) => emit("error", "安装线程异常（panic）——可重试".into()),
         }
         NODE_INSTALLING.store(false, Ordering::SeqCst);
     });
