@@ -709,6 +709,7 @@ export class SessionManager {
   // dutySnapshot.worker_done_pending → 值守候选「worker_done」→ PM 注入唤醒（1013 夜
   // 四报告落地 5h43m 无人收割实证；内存态即可，重启归零无害=重启后本就需重新盘点）
   private workerDonePending = 0;
+  private pmWakeNotifyAt = 0; // #92 W-NOTIFY2 A：PM 唤醒手机通知 60s 频控窗（风暴聚合）
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -989,6 +990,14 @@ export class SessionManager {
   // 产生源统一入口：B3a stableKey 防重——同 key 已在账即静默（重复事件/重放不双发，
   // 已决议的账同 key 重放也不复活）。revision 语义对齐 B3a：org-confirm=created_at、
   // waiting=request_id、dispatch 无 revision（一单一行）
+  // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
+  // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
+  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close", detail: string, target?: string): void {
+    try {
+      this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
+    } catch { /* 审计尽力而为，绝不阻断主路径 */ }
+  }
+
   private upsertNotification(
     kind: NotificationKind,
     entityId: string,
@@ -4038,6 +4047,7 @@ export class SessionManager {
   //     重启补记行）不注入。注入 try/catch 尽力而为：通知失败绝不阻断收口主路径
   //    （台账已落，板已搬）。
   private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string): void {
+    this.emitChainAudit("dispatch-close", `id=${e.id.slice(0, 8)} status=${status} worker=${workerSessionId.slice(0, 12)} receipt=${truncate(receipt, 60)}`); /* #92 W-NOTIFY2 C：回执收口入审计流（通知面全链既有——transient/decision-ledger/upsert/failed 单注入 PM） */
     this.bus.emitTransient("DISPATCH_DONE", {
       dispatch_id: e.id, tier: e.tier, status,
       receipt: truncate(receipt, 200), worker_session_id: workerSessionId,
@@ -4362,6 +4372,21 @@ export class SessionManager {
         feed_id: feedId, feed_generation: generation, trigger: [trigger],
         result: "continue", observed, from,
       });
+      // #92 W-NOTIFY2 A：停帧唤醒上手机——值守注入成功即通知（worker 停帧+名下派单
+      // 未收割的「PM 该盘点」信号直达手机绿框）。60s 频控聚合：worker_done 风暴
+      // （多 worker 同窗交付）收敛为一通知，stableKey 同键 upsert 天然幂等刷正文
+      const now2 = Date.now();
+      if (now2 - this.pmWakeNotifyAt > 60_000) {
+        this.pmWakeNotifyAt = now2;
+        try {
+          this.upsertNotification("system", "pm-wake", String(now2), {
+            title: "值守唤醒已送达 PM",
+            body: truncate(`队列候选 ${verdict.candidates.length} 项（最老 ${truncate(top?.id ?? "", 12)}）——已注入 PM 处置`, 160),
+            severity: "info", group: "attention", actionable: false, sessionId: targetId, domain: "session", returnPath: "/",
+          });
+        } catch { /* 通知尽力而为 */ }
+        this.emitChainAudit("pm-wake", `trigger=${trigger} candidates=${verdict.candidates.length} target=${targetId.slice(0, 12)}`, targetId);
+      }
     } catch (err) {
       // 注入失败（019 §3.2 第 4 步）：保留原回合终态不伪造继续成功，记录 pm_unwakeable
       // 并升级用户（019 §5.2 语义一「需要处理」——通知账 action 桶可操作）。stableKey
@@ -6386,6 +6411,13 @@ export class SessionManager {
       if (!s || !s.state.relay_session_id) continue;
       if (s.state.external) continue;
       if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
+      // #92 W-NOTIFY2 B：假死探测——agent 在+pid 活但久无进度帧（≥15min）=CLI 挂起，
+      // 派给它必烧窗（本单背景：两次被路由到此类死会话）。skip 选下一候选（fallback
+      // 链天然重路由；全死则 pickVeteran 返 null 走新会话——「响亮」面由 ACK 台账可查）
+      if (s.agent && Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0) > 15 * 60_000) {
+        this.emitChainAudit("dispatch-reroute", `zombie-veteran skip: ${e.session_id.slice(0, 12)} 无进度帧 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 60_000)}min，重路由下一候选`);
+        continue;
+      }
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
       if (this.isLeaderSession(e.session_id)) continue;
       return e.session_id;

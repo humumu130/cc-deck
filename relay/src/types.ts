@@ -630,6 +630,7 @@ export type EventType =
   | "EXPERIENCE_UPDATED"
   | "RULES_UPDATED"
   | "DISPATCH_DONE"
+  | "NOTIFY_CHAIN_AUDIT" /* #92 W-NOTIFY2 E：派发/回执链审计帧（pm-wake/dispatch-reroute/stale-escalate/dispatch-close 四动作，落盘可检索） */
   | "SETTINGS_UPDATED"
   | "NOTIFICATIONS_UPDATED"
   | "COLLAB_MODE_UPDATED"
@@ -678,6 +679,7 @@ export type EventPayloadMap = {
   RULES_UPDATED: RulesUpdatedPayload;
   // #40 M4 派单完成回调（瞬态）：收口时广播，端上弹通知；见 DispatchDonePayload
   DISPATCH_DONE: DispatchDonePayload;
+  NOTIFY_CHAIN_AUDIT: { action: string; detail: string; ts: number };
   // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
   // SNAPSHOT.settings 兜底
   SETTINGS_UPDATED: EmployeeHomeSettingsPayload;

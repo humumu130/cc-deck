@@ -117,6 +117,20 @@ export class PatrolModule {
       const text = `${stale.length} 个会话 WORKING 停滞>${WORKER_STALE_MIN}min：` +
         stale.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}(${Math.round((now - (s.updated_at ?? 0)) / 60_000)}m)`).join("、");
       this.push(`worker-stale`, text);
+      // #92 W-NOTIFY2 D：40min 无帧自动升级——可操作通知（点跳会话卡）替代纯文本
+      // 推送（notifyDone 只兜底到首个 external，丢面大）；stableKey 同键幂等，恢复
+      // resolve 面不变。首卡 actionable 跳转，severity=waiting 提级
+      const first = stale[0];
+      if (first) {
+        try {
+          (this.mgr as any).upsertNotification("system", "stale-escalate", String(Math.floor(now / 60_000)), {
+            title: `会话停滞升级（${stale.length} 个 >${WORKER_STALE_MIN}min 无帧）`,
+            body: text,
+            severity: "waiting", group: "attention", actionable: true, sessionId: first.session_id, domain: "session", returnPath: "/",
+          });
+          (this.mgr as any).emitChainAudit?.("stale-escalate", text, first.session_id);
+        } catch { /* 升级尽力而为 */ }
+      }
     } else this.resolve(`worker-stale`);
     // ② 看板对账漂移（active 组）
     const boardAlerts: string[] = [];
