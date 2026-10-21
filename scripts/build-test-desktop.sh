@@ -3,10 +3,12 @@
 #   用法：scripts/build-test-desktop.sh <ver>（如 0.6.0-test.13）
 # 前置：仓库已提交并推 tag v<ver>（desktop.yml 的 -test 分支会把 updater endpoint
 #       烙成 tauri-latest-test.json，见该 workflow "Sync version from tag" 步骤）
-# 动作：[1/5] 等 desktop.yml 的 tag run 跑完 → [2/5] 拉 artifact（setup.exe + .sig）
-#       → [3/5] exe 双源上传（ECS + CF KV，KV 走带校验上传）
-#       → [4/5] 生成 tauri-latest-test.json 双源（url 统一指 CF https，见 #122 注）
-#       → [5/5] 回读校验（清单字段 + exe 可达）
+# 动作：[1/5] 等 desktop.yml 的 tag run 跑完 → [2/5] 拉 artifact（win setup.exe+.sig；
+#       mac app.tar.gz+.sig #190 起随 updater bundle 产出，旧 run 无 mac updater 产物
+#       时跳过 mac 侧不阻断 win 链）→ [3/5] exe/tar.gz 双源上传（ECS + CF KV）
+#       → [4/5] 生成 tauri-latest-test.json 双源（win 恒有；mac darwin-aarch64 字段
+#       在 updater 产物在场时一并写入，见 #122 注）→ [5/5] 回读校验（清单字段双源
+#       + 产物可达 + 版本==tag 配对闸——F1 同款语义：推错版本的清单在这里拦死）
 # 纪律：先传 exe 后传清单（清单指向必须先就绪）；test 包不上 GitHub Release
 #       （desktop.yml 已门控）、不动正式通道 tauri-latest.json / latest.json。
 set -euo pipefail
@@ -87,21 +89,53 @@ EXE=$(cd "$(dirname "$EXE")" && pwd)/$(basename "$EXE")
 SIG=$(cd "$(dirname "$SIG")" && pwd)/$(basename "$SIG")
 echo "    $(basename "$EXE") ($(stat -f%z "$EXE")B)"
 
-echo "[3/5] exe 双源上传…"
+# #190：mac updater 产物（app.tar.gz+.sig）——同 run 的 mac artifact 拉取；旧 run
+#（--bundles dmg 时代）无此产物：跳过 mac 侧（清单不带 darwin 字段），win 链照走
+MAC_TGZ=""; MAC_SIG=""
+if gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-Mac-Nova-$TAG" -D "$TMP/mac" 2>/dev/null; then
+  MAC_TGZ=$(find "$TMP/mac" -name '*.app.tar.gz' | head -1 || true)
+  MAC_SIG=$(find "$TMP/mac" -name '*.app.tar.gz.sig' | head -1 || true)
+fi
+if [ -n "$MAC_TGZ" ] && [ -n "$MAC_SIG" ]; then
+  MAC_TGZ=$(cd "$(dirname "$MAC_TGZ")" && pwd)/$(basename "$MAC_TGZ")
+  MAC_SIG=$(cd "$(dirname "$MAC_SIG")" && pwd)/$(basename "$MAC_SIG")
+  echo "    mac updater: $(basename "$MAC_TGZ") ($(stat -f%z "$MAC_TGZ")B)"
+else
+  echo "    mac updater 产物缺席（旧 run 或 dmg-only 构建）——本次清单只带 windows 字段"
+fi
+
+echo "[3/5] 产物双源上传…"
 $SCP -q "$EXE" "$ECS_HOST:$ECS_DIR/$EXE_KEY"
 LOCAL_MD5=$(md5 -q "$EXE")
 ECS_MD5=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/$EXE_KEY" | awk '{print $1}')
 [ "$LOCAL_MD5" = "$ECS_MD5" ] || { echo "ERR: ECS exe md5 不一致 local=$LOCAL_MD5 remote=$ECS_MD5"; exit 1; }
 echo "    ECS md5 校验一致"
 scripts/kv-put-verified.sh "$EXE" "$EXE_KEY"
+MAC_KEY=""
+if [ -n "$MAC_TGZ" ]; then
+  MAC_KEY="cc-deck-desktop-${VER}-aarch64.app.tar.gz"
+  $SCP -q "$MAC_TGZ" "$ECS_HOST:$ECS_DIR/$MAC_KEY"
+  MM_LOCAL=$(md5 -q "$MAC_TGZ")
+  MM_REMOTE=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/$MAC_KEY" | awk '{print $1}')
+  [ "$MM_LOCAL" = "$MM_REMOTE" ] || { echo "ERR: ECS mac tar.gz md5 不一致"; exit 1; }
+  scripts/kv-put-verified.sh "$MAC_TGZ" "$MAC_KEY"
+fi
 
 echo "[4/5] 生成并上传 ${MANIFEST_KEY}（双源，url 各指本源）…"
 SIGB64=$(base64 < "$SIG" | tr -d '\n')
 PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # 清单 url 双源统一指 CF https（#122：updater 对 http 敏感——endpoint 层启动即校验
 # https，下载 url 虽不校验也不冒险；exe 双源都存着，下载统一走 CF 即可）
-printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"https://cc.humumu.online/download/%s"}}}' \
-  "$VER" "$PUB_DATE" "$SIGB64" "$EXE_KEY" > "$TMP/manifest-cf.json"
+# #190：mac darwin-aarch64 字段（updater 产物在场才写——拼接式，缺席=纯 windows 清单
+# 与旧格式逐字节兼容）
+if [ -n "$MAC_KEY" ]; then
+  MAC_SIGB64=$(base64 < "$MAC_SIG" | tr -d '\n')
+  printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"https://cc.humumu.online/download/%s"},"darwin-aarch64":{"signature":"%s","url":"https://cc.humumu.online/download/%s"}}}' \
+    "$VER" "$PUB_DATE" "$SIGB64" "$EXE_KEY" "$MAC_SIGB64" "$MAC_KEY" > "$TMP/manifest-cf.json"
+else
+  printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"https://cc.humumu.online/download/%s"}}}' \
+    "$VER" "$PUB_DATE" "$SIGB64" "$EXE_KEY" > "$TMP/manifest-cf.json"
+fi
 cp "$TMP/manifest-cf.json" "$TMP/manifest-ecs.json"
 $SCP -q "$TMP/manifest-ecs.json" "$ECS_HOST:$ECS_DIR/$MANIFEST_KEY"
 scripts/kv-put-verified.sh "$TMP/manifest-cf.json" "$MANIFEST_KEY"
@@ -111,11 +145,16 @@ CF_MAN=$(curl -sS --max-time 30 "https://cc.humumu.online/download/$MANIFEST_KEY
 /usr/bin/python3 -c "
 import json,sys
 m = json.loads('''$( echo "$CF_MAN" )''')
-assert m['version'] == '$VER', 'version 不符: ' + m['version']
+assert m['version'] == '$VER', 'version 不符（配对闸 F1 同款——推错版本的清单在此拦死）: ' + m['version']
 p = m['platforms']['windows-x86_64']
 assert p['url'] == 'https://cc.humumu.online/download/$EXE_KEY', 'url 不符: ' + p['url']
 assert len(p['signature']) > 100, 'signature 疑似空'
-print('    CF 清单 OK: version=%s' % m['version'])
+if 'darwin-aarch64' in m['platforms']:
+    assert m['platforms']['darwin-aarch64']['url'].endswith('$MAC_KEY'), 'mac url 不符'
+    assert len(m['platforms']['darwin-aarch64']['signature']) > 100, 'mac signature 疑似空'
+    print('    CF 清单 OK: version=%s（win+mac 双平台字段）' % m['version'])
+else:
+    print('    CF 清单 OK: version=%s（win 单平台——mac updater 产物本次缺席）' % m['version'])
 "
 ECS_MAN=$($SSH "$ECS_HOST" "cat $ECS_DIR/$MANIFEST_KEY")
 /usr/bin/python3 -c "
