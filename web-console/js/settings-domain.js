@@ -992,6 +992,31 @@ function connectLan(ctx) {
       // 优先直出；缺 node 给安装引导（点击 openExternal nodejs.org）；端口在听显示运行端口。
       // fetch 带 6s 陈旧窗（帧事件高频重渲不刷屏 invoke）；结果只进小字行不动主行
       let relayDiag = null, relayDiagAt = 0, relayDiagBusy = false;
+      // #206：一键安装点击+进度事件（一次性文档级委托——按钮在诊断行内动态渲染）
+      if (!window.__ccDeckNodeInstallWired) {
+        window.__ccDeckNodeInstallWired = true;
+        document.addEventListener("click", (ev) => {
+          const btn = ev.target.closest("[data-node-install]");
+          if (!btn || btn.disabled) return;
+          const status = document.querySelector("[data-node-install-status]");
+          const setSt = (t) => { if (status) status.textContent = t; };
+          btn.disabled = true; btn.textContent = "安装中…";
+          setSt("开始下载…");
+          if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+            window.__TAURI__.core.invoke("node_install").catch((e) => { setSt("启动安装失败：" + e); btn.disabled = false; btn.textContent = "重试"; });
+          } else { setSt("仅桌面 App 内可用——浏览器形态请用 nodejs.org 手动安装"); btn.disabled = false; btn.textContent = "一键安装"; }
+        });
+        if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
+          window.__TAURI__.event.listen("node-install-progress", (ev) => {
+            const p = ev && ev.payload || {};
+            const status = document.querySelector("[data-node-install-status]");
+            const btn = document.querySelector("[data-node-install]");
+            if (status) status.textContent = String(p.detail || p.stage || "");
+            if (btn && p.stage === "error") { btn.disabled = false; btn.textContent = "重试"; }
+            if (btn && p.stage === "done") btn.textContent = "已安装";
+          });
+        }
+      }
       function paintRelayDiagRow(host) {
         const d = relayDiag;
         if (!d) { if (host) host.textContent = ""; return; }
@@ -1000,9 +1025,13 @@ function connectLan(ctx) {
           host.title = String(d.err);
           host.dataset.diag = "err";
         } else if (d.node === false) {
-          host.textContent = "缺少 Node.js 运行时 · 点击查看安装方法";
-          host.title = "内置 relay 需要 Node.js（Claude Code 的 VS Code 扩展不算——它自带运行时不进系统 PATH）";
+          // #206（W-NODE 定稿）：一键安装框——应用内下载 Node 官方包到 CC Deck 数据目录
+          //（不碰系统）+nodejs.org 手动备选；进度事件驱动；装完 relay 自动拉起无需重启
           host.dataset.diag = "node";
+          host.innerHTML = '<span>缺少 Node.js 运行时</span>'
+            + '<button class="secondary-btn" data-node-install type="button" style="margin:0 8px;padding:2px 10px">一键安装</button>'
+            + '<a href="https://nodejs.org" target="_blank" rel="noreferrer" style="font-size:11px;color:var(--brand)">或到 nodejs.org 下载 LTS（装完重启 CC Deck）</a>'
+            + '<span data-node-install-status style="display:block;font-size:11px;color:var(--dim);margin-top:2px"></span>';
         } else if (d.port) {
           host.textContent = "内置服务运行中 · 端口 " + ((localRelayInfo && localRelayInfo.port) || relayPortOfCfg());
           host.title = "";

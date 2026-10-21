@@ -25,7 +25,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::Value;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -856,12 +856,30 @@ fn apply_relay_spawn_env(cmd: &mut std::process::Command, envs: &[(String, Strin
 //   which 大概率落空——枚举常见安装位置 + which 双通道
 #[cfg(target_os = "windows")]
 fn node_path() -> Option<std::path::PathBuf> {
-    let out = std::process::Command::new("where").arg("node").output().ok()?;
-    if !out.status.success() { return None; }
-    for line in String::from_utf8_lossy(&out.stdout).lines() {
-        let first = line.trim();
-        if first.is_empty() || first.to_ascii_lowercase().contains("windowsapps") { continue; }
-        return Some(std::path::PathBuf::from(first));
+    // #206（W-NODE）：where 失败/无命中继续探用户级安装位（此前 where 一败即 None）
+    if let Ok(out) = std::process::Command::new("where").arg("node").output() {
+        if out.status.success() {
+            for line in String::from_utf8_lossy(&out.stdout).lines() {
+                let first = line.trim();
+                if first.is_empty() || first.to_ascii_lowercase().contains("windowsapps") { continue; }
+                return Some(std::path::PathBuf::from(first));
+            }
+        }
+    }
+    // 用户级安装位：nvm-windows（%APPDATA%\nvm\nodejs 常不在 GUI PATH）+ volta + fnm
+    let appdata = std::env::var("APPDATA").unwrap_or_default();
+    let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let mut candidates: Vec<String> = vec![
+        format!("{appdata}\\nvm\\nodejs\\node.exe"),
+        format!("{localappdata}\\Volta\\bin\\node.exe"),
+        format!("{localappdata}\\fnm\\node.exe"),
+    ];
+    if let Ok(nvm_home) = std::env::var("NVM_HOME") {
+        candidates.push(format!("{nvm_home}\\node.exe"));
+    }
+    for c in candidates {
+        let p = std::path::PathBuf::from(&c);
+        if p.is_file() { return Some(std::path::PathBuf::from(c)); }
     }
     None
 }
@@ -876,24 +894,67 @@ fn node_path() -> Option<std::path::PathBuf> {
             }
         }
     }
-    // ② GUI PATH 摸不到的用户安装位（zshrc 自定义 PATH 的常见形态）
+    // ② GUI PATH 摸不到的用户安装位（zshrc 自定义 PATH 的常见形态）。
+    // #206（W-NODE）：nvm 逐版本目录扫最新（"current" 链接多数发行不建）+ volta +
+    // ~/.local/bin 三族补齐——公司机装了 node 但 GUI 探不到的实锤面
     let home = std::env::var("HOME").unwrap_or_default();
-    let candidates = [
+    let mut candidates: Vec<String> = vec![
         format!("{home}/node/bin/node"),
-        format!("{home}/.nvm/current/bin/node"),
+        format!("{home}/.volta/bin/node"),
+        format!("{home}/.local/bin/node"),
         "/usr/local/bin/node".to_string(),
         "/opt/homebrew/bin/node".to_string(),
         "/opt/local/bin/node".to_string(),
     ];
+    let nvm_dir = format!("{home}/.nvm/versions/node");
+    if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+        let mut vers: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        vers.sort();
+        if let Some(latest) = vers.last() {
+            candidates.insert(0, format!("{nvm_dir}/{latest}/bin/node"));
+        }
+    }
     for c in candidates {
         let p = std::path::PathBuf::from(&c);
-        if p.exists() { return Some(p); }
+        if p.exists() { return Some(std::path::PathBuf::from(c)); }
     }
     None
 }
 
 fn node_in_path() -> bool {
     node_path().is_some()
+}
+
+// ── #206（W-NODE 定稿）：可选 Node + 应用内一键安装 ──
+// 找包序：app-data/node（应用内安装位，deck_root/app-data/node/）→ 系统 PATH（含
+// nvm/volta/用户级增强探测）。默认包不带 Node（体积不变）；无 Node 时前端弹一键
+// 安装框（node_install command：系统 curl 下载官方包+sha256 校验+系统 tar/
+// Expand-Archive 解压——零新增 Cargo 依赖）；装完无需重启（下次 spawn 即用新路径）
+const NODE_DIST_VER: &str = "v22.14.0"; // LTS；与开发机 node 22 同大版本
+
+#[cfg(target_os = "windows")]
+fn node_dist_bin(home: &std::path::Path) -> std::path::PathBuf {
+    deck_root(&home.to_string_lossy()).join("app-data").join("node").join("node.exe")
+}
+#[cfg(not(target_os = "windows"))]
+fn node_dist_bin(home: &std::path::Path) -> std::path::PathBuf {
+    deck_root(&home.to_string_lossy()).join("app-data").join("node").join("bin").join("node")
+}
+
+/// 一键安装后的内置运行时路径（在场才 Some）
+fn appdata_node_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
+    let p = node_dist_bin(std::path::Path::new(&home));
+    if p.is_file() { Some(p) } else { None }
+}
+
+/// relay 启动找包序（#206 ③）：app-data/node → 系统（nvm/volta/用户级）→ None
+fn relay_node_path() -> Option<std::path::PathBuf> {
+    appdata_node_path().or_else(node_path)
 }
 
 // node 探测结果进程内缓存：where.exe 首跑可能被 Defender 实时扫描拖 1-2s，
@@ -987,8 +1048,10 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
             .spawn()
     }
     let log = data_dir.join("embedded-relay.log");
-    let node = node_path().ok_or(
-        "未检测到 Node.js 运行时——内置 relay 需要它（VS Code 的 Claude Code 扩展自带运行时，不算已装）。请到 nodejs.org 安装 Node.js 后重启 CC Deck",
+    // #206：找包序 app-data → 系统；都无=可安装态（前端一键装框），err 文案带
+    // 双指引（一键装/手动 nodejs.org LTS）
+    let node = relay_node_path().ok_or(
+        "缺少 Node.js 运行时——点「一键安装」自动下载（约 30MB，装到 CC Deck 自己的数据目录，不动系统）；或浏览器打开 nodejs.org 下载 LTS 安装后重启",
     )?;
     match spawn_relay(&node, &script, port, &data_dir, &inject_cs, &log, &extra_env)
     {
@@ -999,6 +1062,126 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
         }
         Err(e) => Err(format!("relay 启动失败（node 不在 PATH？）：{e}")),
     }
+}
+
+// ── #206 ②：应用内一键安装 Node（curl 下载+sha256 校验+tar/Expand-Archive 解压，
+// 全系统工具零 Cargo 新依赖）。线程跑+事件 emit 进度（前端进度条）；装完直接
+// spawn_embedded_relay（无需重启 App——启动器每次现找 app-data 优先）。
+// 互斥锁防双击重入；失败 err 事件带原因（前端可重试）。
+static NODE_INSTALLING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn node_dist_download(home: &str) -> Result<std::path::PathBuf, String> {
+    #[cfg(target_os = "windows")]
+    let (fname, kind) = (format!("node-{}-win-x64.zip", NODE_DIST_VER), "zip");
+    #[cfg(not(target_os = "windows"))]
+    let (fname, kind) = (format!("node-{}-darwin-arm64.tar.gz", NODE_DIST_VER), "tar.gz");
+    let url = format!("https://nodejs.org/dist/{}/{}", NODE_DIST_VER, fname);
+    let tmp = std::env::temp_dir().join(format!("ccdeck-node-install-{fname}"));
+    println!("[node-install] {url}");
+    // -L 跟重定向；--retry 3 网络抖动；静默+失败码透传（curl stderr 进 String）
+    let out = std::process::Command::new("curl")
+        .args(["-fsSL", "--retry", "3", "-o"])
+        .arg(&tmp)
+        .arg(&url)
+        .output()
+        .map_err(|e| format!("curl 启动失败（系统缺 curl？）：{e}"))?;
+    if !out.status.success() {
+        return Err(format!("下载失败（HTTP {}）：{}", out.status.code().unwrap_or(0), String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    let size = tmp.metadata().map(|m| m.len()).unwrap_or(0);
+    if size < 5_000_000 { return Err(format!("下载产物异常（{}B <5MB——截断或坏包）", size)); }
+    // sha256 校验（系统工具：mac shasum / win certutil）
+    #[cfg(target_os = "windows")]
+    let sum_out = std::process::Command::new("certutil").args(["-hashfile", tmp.to_str().unwrap_or(""), "SHA256"]).output().map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "windows"))]
+    let sum_out = std::process::Command::new("shasum").args(["-a", "256", tmp.to_str().unwrap_or("")]).output().map_err(|e| e.to_string())?;
+    if !sum_out.status.success() { return Err("sha256 计算失败".into()); }
+    let sum_text = String::from_utf8_lossy(&sum_out.stdout).to_lowercase();
+    let got = sum_text.split_whitespace().find(|t| t.len() == 64).unwrap_or("").to_string();
+    // 官方 SHASUMS256.txt 拉取比对（小文件直接拉）
+    let shasum_url = format!("https://nodejs.org/dist/{}/SHASUMS256.txt", NODE_DIST_VER);
+    let shas = std::process::Command::new("curl").args(["-fsSL", &shasum_url]).output().map_err(|e| e.to_string())?;
+    if !shas.status.success() { return Err("SHASUMS256.txt 拉取失败".into()); }
+    let want = String::from_utf8_lossy(&shas.stdout)
+        .lines()
+        .find(|l| l.ends_with(&fname))
+        .and_then(|l| l.split_whitespace().next())
+        .unwrap_or("").to_lowercase();
+    if want.is_empty() || got != want {
+        return Err(format!("sha256 不符（want={}… got={}…）——坏包或被劫持，已中止", &want[..8.min(want.len())], &got[..8.min(got.len())]));
+    }
+    println!("[node-install] sha256 OK");
+    // 解压到 app-data/node/（deck_root/app-data/node/{bin/node|node.exe}）
+    let root = deck_root(home);
+    let dest = root.join("app-data").join("node");
+    let stage = std::env::temp_dir().join("ccdeck-node-stage");
+    let _ = std::fs::remove_dir_all(&stage);
+    std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
+    if kind == "tar.gz" {
+        let out = std::process::Command::new("tar").args(["-xzf"]).arg(&tmp).arg("-C").arg(&stage).output().map_err(|e| e.to_string())?;
+        if !out.status.success() { return Err(format!("tar 解压失败：{}", String::from_utf8_lossy(&out.stderr).trim())); }
+        // node-vX-darwin-arm64/bin/node → dest/bin/node（只取 node 本体，npm/corepack 不带）
+        let src_bin = stage.join(format!("node-{}-darwin-arm64", NODE_DIST_VER)).join("bin").join("node");
+        let _ = std::fs::remove_dir_all(&dest);
+        std::fs::create_dir_all(dest.join("bin")).map_err(|e| e.to_string())?;
+        std::fs::copy(&src_bin, dest.join("bin").join("node")).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(dest.join("bin").join("node"), std::fs::Permissions::from_mode(0o755));
+        }
+    } else {
+        let out = std::process::Command::new("powershell").args(["-NoProfile", "-Command",
+            &format!("Expand-Archive -Force -Path '{}' -DestinationPath '{}'", tmp.to_string_lossy(), stage.to_string_lossy())])
+            .output().map_err(|e| e.to_string())?;
+        if !out.status.success() { return Err(format!("Expand-Archive 失败：{}", String::from_utf8_lossy(&out.stderr).trim())); }
+        let src_bin = stage.join(format!("node-{}-win-x64", NODE_DIST_VER)).join("node.exe");
+        let _ = std::fs::remove_dir_all(&dest);
+        std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+        std::fs::copy(&src_bin, dest.join("node.exe")).map_err(|e| e.to_string())?;
+    }
+    let _ = std::fs::remove_dir_all(&stage);
+    let _ = std::fs::remove_file(&tmp);
+    // 终验：解出来的 node 能跑 --version（哑包/架构错在此拦截）
+    let bin = node_dist_bin(std::path::Path::new(home));
+    let ver = std::process::Command::new(&bin).arg("--version").output().map_err(|e| format!("解压后 node 不可执行：{e}"))?;
+    if !ver.status.success() { return Err("内置 node --version 失败（架构不符？）".into()); }
+    println!("[node-install] {} → {}", String::from_utf8_lossy(&ver.stdout).trim(), bin.display());
+    Ok(bin)
+}
+
+#[tauri::command]
+async fn node_install(app: tauri::AppHandle) -> Result<Value, String> {
+    if NODE_INSTALLING.swap(true, Ordering::SeqCst) {
+        return Err("安装已在进行中".into());
+    }
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "无法定位用户目录".to_string())?;
+    let app2 = app.clone();
+    // 后台线程：curl 同步下载（数十 MB 秒级~分钟级），不堵 IPC
+    std::thread::spawn(move || {
+        let emit = |stage: &str, detail: String| {
+            let _ = app2.emit("node-install-progress", serde_json::json!({ "stage": stage, "detail": detail }));
+        };
+        emit("downloading", "下载 Node 官方包（约 30MB）…".into());
+        let result = node_dist_download(&home)
+            .and_then(|bin| {
+                emit("spawning", format!("已装到 {}——拉起内置 relay…", bin.display()));
+                // 无需重启：直接走既有 spawn（找包序 app-data 优先自动命中）
+                let handle = app2.app_handle();
+                if let Err(e) = spawn_embedded_relay(&handle) {
+                    // relay 已被别方占用等非致命态：安装本身成功，relay 状态照常查询
+                    emit("done", format!("Node 已就绪（relay：{e}）"));
+                } else {
+                    emit("done", "Node 已就绪，内置 relay 已启动".into());
+                }
+                Ok(())
+            });
+        if let Err(e) = result {
+            emit("error", e);
+        }
+        NODE_INSTALLING.store(false, Ordering::SeqCst);
+    });
+    Ok(serde_json::json!({ "started": true }))
 }
 
 #[tauri::command]
@@ -1185,7 +1368,7 @@ fn relay_service_registered() -> bool {
 /// relay parentPid=0 自动跳过父进程轮询）
 #[cfg(target_os = "macos")]
 fn write_relay_service_plist(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    let node = node_path().ok_or("未检测到 Node.js 运行时——relay 服务化需要它")?;
+    let node = relay_node_path().ok_or("缺少 Node.js 运行时（一键安装或 nodejs.org LTS）——relay 服务化需要它")?;
     let node = node.to_string_lossy().into_owned();
     let res = app.path().resource_dir().map_err(|e| e.to_string())?;
     let abs = |p: std::path::PathBuf| {
@@ -1358,7 +1541,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen, storage_shadow_write])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen, storage_shadow_write, node_install])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
@@ -1690,5 +1873,45 @@ mod t2_tests {
 
         println!("t2 summary: ok={} fail={}", 6 - failures, failures);
         assert_eq!(failures, 0, "T2 probe failures");
+    }
+}
+
+// ── #206 测试：找包序优先级 + node_dist_download 全链（真下载校验解压） ──
+#[cfg(test)]
+mod node_tests {
+    use super::*;
+
+    #[test]
+    fn relay_node_path_prefers_appdata() {
+        // 临时 HOME 造 app-data/node/bin/node：relay_node_path 必命中它（优先级 ①）
+        let tmp = std::env::temp_dir().join(format!("ccdeck-nodetest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let home = tmp.join("home");
+        std::fs::create_dir_all(home.join(".cc-deck").join("app-data").join("node").join("bin")).unwrap();
+        let bin = home.join(".cc-deck").join("app-data").join("node").join("bin").join("node");
+        std::fs::write(&bin, b"#!/bin/sh\nexit 0").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::env::set_var("HOME", &home);
+        assert_eq!(relay_node_path(), Some(bin.clone()));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    #[ignore] // 真下载 30MB（网络+时长）——CI/本地显式 --ignored 跑
+    fn node_dist_download_full_chain() {
+        let tmp = std::env::temp_dir().join(format!("ccdeck-nodedl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("HOME", &tmp);
+        let bin = node_dist_download(tmp.to_str().unwrap()).expect("download+verify+extract 全链");
+        assert!(bin.is_file());
+        let out = std::process::Command::new(&bin).arg("--version").output().unwrap();
+        assert!(out.status.success(), "内置 node 可执行");
+        assert!(String::from_utf8_lossy(&out.stdout).contains("v22"));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
