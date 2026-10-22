@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/tweetnacl/nacl-fast.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// node_modules/ws/lib/constants.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "node_modules/ws/lib/constants.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/ws/lib/buffer-util.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// node_modules/ws/lib/limiter.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "node_modules/ws/lib/limiter.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// node_modules/ws/lib/permessage-deflate.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// node_modules/ws/lib/validation.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "node_modules/ws/lib/validation.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ws/lib/receiver.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "node_modules/ws/lib/receiver.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// node_modules/ws/lib/sender.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "node_modules/ws/lib/sender.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// node_modules/ws/lib/event-target.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "node_modules/ws/lib/event-target.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// node_modules/ws/lib/extension.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "node_modules/ws/lib/extension.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "node_modules/ws/lib/websocket.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// node_modules/ws/lib/stream.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "node_modules/ws/lib/stream.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// node_modules/ws/lib/subprotocol.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket-server.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num3, shift) {
       if (num3.length === void 0) {
@@ -6053,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/index.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/lib/main.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/dns-txt.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service-types.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/registry.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// node_modules/dns-packet/types.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "node_modules/dns-packet/types.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/dns-packet/rcodes.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "node_modules/dns-packet/rcodes.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/opcodes.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "node_modules/dns-packet/opcodes.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/classes.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "node_modules/dns-packet/classes.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/optioncodes.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "node_modules/dns-packet/optioncodes.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// node_modules/@leichtgewicht/ip-codec/index.cjs
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// node_modules/dns-packet/index.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "node_modules/dns-packet/index.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// node_modules/thunky/index.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "node_modules/thunky/index.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// node_modules/multicast-dns/index.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "node_modules/multicast-dns/index.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/es6/index.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/mdns-server.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/browser.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/bonjour.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/index.js
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -10337,9 +10337,9 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir19, hostname, tmpdir as tmpdir3 } from "node:os";
-import { join as join45, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync28, openSync as openSync5, readFileSync as readFileSync40, rmSync as rmSync8, existsSync as existsSync30, readdirSync as readdirSync18, statSync as statSync16 } from "node:fs";
+import { networkInterfaces as networkInterfaces3, homedir as homedir20, hostname, tmpdir as tmpdir3 } from "node:os";
+import { join as join46, sep as sep9 } from "node:path";
+import { writeFileSync as writeFileSync28, openSync as openSync5, readFileSync as readFileSync40, rmSync as rmSync8, existsSync as existsSync30, readdirSync as readdirSync19, statSync as statSync17 } from "node:fs";
 import { spawn as spawn7, execFileSync as execFileSync3 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -16100,7 +16100,7 @@ import { accessSync as accessSync3, constants as constants5 } from "node:fs";
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
-// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -57928,9 +57928,9 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID14 } from "node:crypto";
-import { readFileSync as readFileSync36, writeFileSync as writeFileSync24, mkdirSync as mkdirSync22, existsSync as existsSync27, readdirSync as readdirSync17, statSync as statSync14 } from "node:fs";
-import { join as join41, dirname as dirname11, sep as sep8 } from "node:path";
-import { homedir as homedir16, networkInterfaces as networkInterfaces2 } from "node:os";
+import { readFileSync as readFileSync36, writeFileSync as writeFileSync24, mkdirSync as mkdirSync22, existsSync as existsSync27, readdirSync as readdirSync18, statSync as statSync15 } from "node:fs";
+import { join as join42, dirname as dirname11, sep as sep8 } from "node:path";
+import { homedir as homedir17, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/design-docs.ts
 import { readFileSync as readFileSync32, readdirSync as readdirSync14, statSync as statSync11 } from "node:fs";
@@ -58039,7 +58039,7 @@ function resolveDesignFile(webRoot, relPath) {
 // src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// node_modules/ws/wrapper.mjs
+// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -58052,8 +58052,8 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID13 } from "node:crypto";
-import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync35, readdirSync as readdirSync16, statSync as statSync13, writeFileSync as writeFileSync23 } from "node:fs";
-import { homedir as homedir15 } from "node:os";
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync3, readFileSync as readFileSync35, readdirSync as readdirSync17, statSync as statSync14, writeFileSync as writeFileSync23 } from "node:fs";
+import { homedir as homedir16 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
@@ -58633,10 +58633,73 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
+// src/session-title.ts
+import { readdirSync as readdirSync15, statSync as statSync12 } from "node:fs";
+import { homedir as homedir15 } from "node:os";
+import { join as join40 } from "node:path";
+function titleFromLine(line) {
+  if (!line.includes('"ai-title"') && !line.includes('"custom-title"')) return void 0;
+  let obj;
+  try {
+    obj = JSON.parse(line);
+  } catch {
+    return void 0;
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return void 0;
+  const o = obj;
+  const out = {};
+  if (o.type === "custom-title" && typeof o.customTitle === "string" && o.customTitle.trim()) {
+    out.custom = o.customTitle;
+  }
+  if (o.type === "ai-title" && typeof o.aiTitle === "string" && o.aiTitle.trim()) {
+    out.ai = o.aiTitle;
+  }
+  return out.custom || out.ai ? out : void 0;
+}
+function scanTitleText(text) {
+  const out = {};
+  for (const line of text.split("\n")) {
+    const t = titleFromLine(line);
+    if (!t) continue;
+    if (t.custom) out.custom = t.custom;
+    if (t.ai) out.ai = t.ai;
+  }
+  return out;
+}
+function encodedProjectDir(cwd) {
+  return cwd.replace(/[^A-Za-z0-9-]/g, "-");
+}
+function resolveSessionTitleFile(opts) {
+  if (!opts.cwd || !opts.sessionId) return null;
+  const dir = join40(opts.home ?? homedir15(), ".claude", "projects", encodedProjectDir(opts.cwd));
+  const direct = join40(dir, `${opts.sessionId}.jsonl`);
+  try {
+    if (statSync12(direct).isFile()) return direct;
+  } catch {
+  }
+  let entries;
+  try {
+    entries = readdirSync15(dir);
+  } catch {
+    return null;
+  }
+  let best = null;
+  for (const f of entries) {
+    if (!f.endsWith(".jsonl")) continue;
+    const p = join40(dir, f);
+    try {
+      const m = statSync12(p).mtimeMs;
+      if (!best || m > best.m) best = { p, m };
+    } catch {
+    }
+  }
+  return best?.p ?? null;
+}
+
 // src/engine-rollouts.ts
 import { execFileSync as execFileSync2 } from "node:child_process";
-import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync34, readdirSync as readdirSync15, readSync as readSync2, renameSync as renameSync10, statSync as statSync12, writeFileSync as writeFileSync22 } from "node:fs";
-import { basename as basename6, join as join40, relative as relative3 } from "node:path";
+import { closeSync as closeSync3, openSync as openSync3, readFileSync as readFileSync34, readdirSync as readdirSync16, readSync as readSync2, renameSync as renameSync10, statSync as statSync13, writeFileSync as writeFileSync22 } from "node:fs";
+import { basename as basename6, join as join41, relative as relative3 } from "node:path";
 var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
 var ENGINE_SCAN_SPECS = [
   { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
@@ -58646,7 +58709,7 @@ var ENGINE_SCAN_SPECS = [
   { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") }
 ];
 function engineRoot(spec, home) {
-  return process.env[spec.envRoot] || join40(home, spec.homeDirName, "sessions");
+  return process.env[spec.envRoot] || join41(home, spec.homeDirName, "sessions");
 }
 var clip2 = (text, cap) => {
   const compact2 = text.replace(/\s+/g, " ").trim();
@@ -58812,12 +58875,12 @@ function rolloutFiles(root, pattern) {
     if (depth > 6) return;
     let entries;
     try {
-      entries = readdirSync15(dir, { withFileTypes: true });
+      entries = readdirSync16(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const p = join40(dir, entry.name);
+      const p = join41(dir, entry.name);
       if (entry.isDirectory()) walk(p, depth + 1);
       else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
     }
@@ -58853,7 +58916,7 @@ var RolloutScanner = class {
       for (const [rel, entry] of Object.entries(dump.files)) {
         if (!entry || typeof entry.offset !== "number" || !entry.profile) continue;
         if (!(entry.offset >= 0) || typeof entry.carry !== "string") continue;
-        const filePath = join40(this.root, rel);
+        const filePath = join41(this.root, rel);
         this.cursors.set(filePath, { offset: entry.offset, carry: entry.carry, profile: { ...entry.profile, filePath } });
       }
     } catch {
@@ -58890,7 +58953,7 @@ var RolloutScanner = class {
       let size = 0;
       let mtime = now;
       try {
-        const stat2 = statSync12(filePath);
+        const stat2 = statSync13(filePath);
         size = stat2.size;
         mtime = stat2.mtimeMs;
       } catch {
@@ -59049,7 +59112,7 @@ var QUESTION_HOLD_MS = 9e4;
 var sleep5 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
-    const f = path5.join(homedir15(), ".claude", "sessions", `${pid}.json`);
+    const f = path5.join(homedir16(), ".claude", "sessions", `${pid}.json`);
     const d2 = JSON.parse(readFileSync35(f, "utf-8"));
     return d2.status === "idle";
   } catch {
@@ -59058,7 +59121,7 @@ function cliSessionIdle(pid) {
 }
 function cliSessionStatus(pid) {
   try {
-    const f = path5.join(homedir15(), ".claude", "sessions", `${pid}.json`);
+    const f = path5.join(homedir16(), ".claude", "sessions", `${pid}.json`);
     const d2 = JSON.parse(readFileSync35(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
@@ -59095,7 +59158,7 @@ var Bridge = class _Bridge {
     for (const spec of ENGINE_SCAN_SPECS) {
       this.engineScanners.push({
         spec,
-        scanner: new RolloutScanner(spec, engineRoot(spec, homedir15()), path5.join(opts.dataDir, `engine-cursors-${spec.engine}.json`))
+        scanner: new RolloutScanner(spec, engineRoot(spec, homedir16()), path5.join(opts.dataDir, `engine-cursors-${spec.engine}.json`))
       });
     }
     this.reconcilePidsFromSessions();
@@ -59199,6 +59262,7 @@ var Bridge = class _Bridge {
     this.termLine.delete(id2);
     this.termCapAt.delete(id2);
     this.titleScanned.delete(id2);
+    this.sessionTitles.delete(id2);
     this.enqueuedKeys.delete(id2);
     this.turnShape.delete(id2);
     this.injectFails.delete(id2);
@@ -59454,13 +59518,13 @@ var Bridge = class _Bridge {
         }
         return;
       }
-      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir15(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir16(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync16(root, { withFileTypes: true })) {
+      for (const dir of readdirSync17(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync16(path5.join(root, dir.name));
+          files = readdirSync17(path5.join(root, dir.name));
         } catch {
           continue;
         }
@@ -59482,7 +59546,7 @@ var Bridge = class _Bridge {
           let mtime;
           let fileSize = 0;
           try {
-            const st2 = statSync13(p);
+            const st2 = statSync14(p);
             mtime = st2.mtimeMs;
             fileSize = st2.size;
           } catch {
@@ -59531,7 +59595,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync4(p, "r");
-      const size = statSync13(p).size;
+      const size = statSync14(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
       readSync3(fd2, buf, 0, len, size - len);
@@ -59601,7 +59665,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync4(p, "r");
-      const size = statSync13(p).size;
+      const size = statSync14(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -59654,10 +59718,10 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir15(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir16(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync16(dir);
+        files = readdirSync17(dir);
       } catch {
         return;
       }
@@ -59840,10 +59904,11 @@ var Bridge = class _Bridge {
   // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
   // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 48KB + 尾 48KB 两窗扫描
   //（96KB 缓冲前半留头、后半让尾窗覆写；标题多在会话前段，长会话后期任务切换的
-  // 新标题在尾部），取文件序最新一条
+  // 新标题在尾部），取文件序最新一条。#212 W-SESSLABEL：解析换 session-title 纯函数
+  //（utf8 行扫 + 类型词预过滤）——中段标题由 pushAssistantTexts 增量链跟随，两窗兜底。
   scanTranscriptTitles(p) {
     try {
-      const size = statSync13(p).size;
+      const size = statSync14(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
       const fd2 = openSync4(p, "r");
       try {
@@ -59856,29 +59921,31 @@ var Bridge = class _Bridge {
         } catch {
         }
       }
-      const text = buf.toString("latin1");
-      let custom, ai;
-      const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reC)) {
-        try {
-          custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
-        } catch {
-        }
-      }
-      const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reA)) {
-        try {
-          ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
-        } catch {
-        }
-      }
-      return { custom, ai };
+      return scanTitleText(buf.toString("utf-8"));
     } catch {
       return {};
     }
   }
   // 标题回写：不锁 title_locked（CLI 会随任务切换更新标题，保持跟随）；用户后续
-  // 在 App 改名仍走 titleOverrides 最高优先
+  // 在 App 改名仍走 titleOverrides 最高优先。#212 W-SESSLABEL 改造：
+  //   ① 值变才回写（sessionTitles 记忆——增量链每批扫到同一段标题行不再重复 emit）；
+  //   ② 命中即置 named（CC 自带标题到手，抑制 requestSmartTitle GLM 生成链，
+  //      同时 onPrompt 首升级路径保留标题不被 deriveTitle 覆盖）；
+  //   ③ transcriptPaths 缺失（relay 重启内存丢/hook 未上报窗口）时按 cwd 编码目录
+  //      零依赖定位兜底（session-title.resolveSessionTitleFile）。
+  sessionTitles = /* @__PURE__ */ new Map();
+  maybeApplyTranscriptTitle(id2, t) {
+    const title = t?.trim().slice(0, 120);
+    if (!title) return;
+    if (this.sessionTitles.get(id2) === title) return;
+    this.sessionTitles.set(id2, title);
+    const st2 = this.mgr.getExternal(id2);
+    if (!st2 || st2.title_locked) return;
+    this.named.add(id2);
+    if (st2.title !== title) this.mgr.setExternalTitle(id2, title);
+  }
+  // 全量两窗扫描兜底（titleScanned 每会话一次）：增量链（pushAssistantTexts）覆盖
+  // 后续刷新；冷启动接入的既有会话标题水合在这里。
   applyTranscriptTitle(id2, p) {
     if (this.titleScanned.has(id2)) return;
     const st2 = this.mgr.getExternal(id2);
@@ -59886,11 +59953,23 @@ var Bridge = class _Bridge {
       this.titleScanned.add(id2);
       return;
     }
-    const p2 = this.transcriptPaths.get(id2) ?? p;
+    const p2 = p ?? this.transcriptPaths.get(id2) ?? this.locateTranscriptByCwd(st2);
+    if (!p2) {
+      this.titleScanned.add(id2);
+      return;
+    }
     const { custom, ai } = this.scanTranscriptTitles(p2);
-    const t = custom || ai;
-    if (t && t.trim()) this.mgr.setExternalTitle(id2, t.trim().slice(0, 120));
+    this.maybeApplyTranscriptTitle(id2, custom || ai);
     this.titleScanned.add(id2);
+  }
+  // transcriptPaths 未挂时的零依赖定位：cwd 编码目录 + sessionId 直查，miss 扫该
+  // 目录 mtime 最新。.tmp- 段 cwd（titlegen 子会话/测试沙箱）不定位（同孤儿扫描口径）。
+  // 文件名 = CLI 会话 uuid（relay_session_id；ext id 是 "ext-" 前缀包装，须剥壳）
+  locateTranscriptByCwd(st2) {
+    if (!st2.cwd) return null;
+    if (st2.cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return null;
+    const sid = st2.relay_session_id || st2.session_id.replace(/^ext-/, "");
+    return resolveSessionTitleFile({ cwd: st2.cwd, sessionId: sid });
   }
   async pollTerminalLines() {
     if (this.pollTerminalLineBusy) return;
@@ -59902,8 +59981,7 @@ var Bridge = class _Bridge {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue;
         if (!this.titleScanned.has(s.session_id)) {
-          const tp2 = this.transcriptPaths.get(s.session_id);
-          if (tp2) this.applyTranscriptTitle(s.session_id, tp2);
+          this.applyTranscriptTitle(s.session_id);
         }
         if (now - (this.termCapAt.get(s.session_id) ?? 0) < 2500) continue;
         this.termCapAt.set(s.session_id, now);
@@ -60151,7 +60229,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync35(path5.join(homedir15(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync35(path5.join(homedir16(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -60319,7 +60397,7 @@ var Bridge = class _Bridge {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(shown, 80)}`);
       return { ok: true };
     }
-    const cwd = state.cwd || homedir15();
+    const cwd = state.cwd || homedir16();
     this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
@@ -60753,8 +60831,8 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path5.join(homedir15(), ".claude", "sessions");
-      for (const f of readdirSync16(dir)) {
+      const dir = path5.join(homedir16(), ".claude", "sessions");
+      for (const f of readdirSync17(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
           const d2 = JSON.parse(readFileSync35(path5.join(dir, f), "utf-8"));
@@ -60801,7 +60879,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync13(transcriptPath).size;
+      const size = statSync14(transcriptPath).size;
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -60865,6 +60943,11 @@ var Bridge = class _Bridge {
         if (tm2) {
           const tt = Date.parse(tm2[1]);
           if (Number.isFinite(tt)) lastTs2 = tt;
+        }
+        if (line.includes('"ai-title"') || line.includes('"custom-title"')) {
+          const t = titleFromLine(line);
+          if (t) this.maybeApplyTranscriptTitle(id2, t.custom || t.ai);
+          continue;
         }
         if (line.includes("<task-notification>")) {
           const m = /<tool-use-id>([^<]+)/.exec(line);
@@ -61164,7 +61247,7 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync13(path6).size;
+      const size = statSync14(path6).size;
       const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -61224,7 +61307,7 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync13(path6).size;
+      const size = statSync14(path6).size;
       const fd2 = openSync4(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -61752,7 +61835,7 @@ var Bridge = class _Bridge {
     if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
     let names;
     try {
-      names = readdirSync16(dir);
+      names = readdirSync17(dir);
     } catch {
       return null;
     }
@@ -61771,7 +61854,7 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync13(file);
+      st2 = statSync14(file);
     } catch {
       return null;
     }
@@ -61864,7 +61947,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync13(agentFile).size;
+          const sz2 = statSync14(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -62237,7 +62320,7 @@ var BUILTIN_COMMANDS = [
 function listCustomCommands(dir, source) {
   let entries;
   try {
-    entries = readdirSync17(dir, { withFileTypes: true });
+    entries = readdirSync18(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -62255,11 +62338,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join41(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join42(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync17(join41(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join41(dir, e.name, g2)), source });
+        for (const g2 of readdirSync18(join42(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join42(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -62273,11 +62356,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync27(join41(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
-  const consoleHtml005 = join41(webRoot, "web-console", "index-005.html");
-  const naclJs = join41(webRoot, "web-console", "nacl.js");
-  const qrJs = join41(webRoot, "web-console", "qr.js");
-  const mobileDir = join41(webRoot, "mobile") + sep8;
+  const webRoot = webRootCandidates.find((p) => p && existsSync27(join42(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
+  const consoleHtml005 = join42(webRoot, "web-console", "index-005.html");
+  const naclJs = join42(webRoot, "web-console", "nacl.js");
+  const qrJs = join42(webRoot, "web-console", "qr.js");
+  const mobileDir = join42(webRoot, "mobile") + sep8;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -62304,7 +62387,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync14(file).isFile();
+      isFile = statSync15(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -62325,7 +62408,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     let isFile = false;
     try {
-      isFile = statSync14(file).isFile();
+      isFile = statSync15(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -62379,7 +62462,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end("not found");
         return;
       }
-      const previewPath = join41(webRoot, "web-console", "preview", name);
+      const previewPath = join42(webRoot, "web-console", "preview", name);
       if (!existsSync27(previewPath)) {
         res.writeHead(404).end("preview \u4E0D\u5B58\u5728: " + name);
         return;
@@ -62409,7 +62492,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end("not found");
         return;
       }
-      const assetPath = join41(webRoot, "web-console", rel);
+      const assetPath = join42(webRoot, "web-console", rel);
       if (!existsSync27(assetPath)) {
         res.writeHead(404).end("not found");
         return;
@@ -62419,7 +62502,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join41(webRoot, "web-console", url.pathname.slice(1));
+      const file = join42(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync27(file)) {
         res.writeHead(404).end("not found");
         return;
@@ -62468,7 +62551,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join41(cfg2.dataDir, "relay-name");
+      const file = join42(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
@@ -62788,8 +62871,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join41(homedir16(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join41(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join42(homedir17(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join42(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -62925,7 +63008,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
-          homedir: homedir16(),
+          homedir: homedir17(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
           platform: process.platform,
@@ -63226,8 +63309,8 @@ var connectionCounter = 0;
 
 // src/patrol.ts
 import { statfsSync, writeFileSync as writeFileSync25, readFileSync as readFileSync37 } from "node:fs";
-import { join as join42 } from "node:path";
-import { statSync as statSync15 } from "node:fs";
+import { join as join43 } from "node:path";
+import { statSync as statSync16 } from "node:fs";
 var WORKER_STALE_MIN = 40;
 var BOARD_CLAIMED_STALE_H = 48;
 var DISK_FREE_MIN_GB = 5;
@@ -63291,7 +63374,7 @@ var PatrolModule = class {
     } catch {
     }
     try {
-      const probe = join42(this.opts.dataDir, ".patrol-probe");
+      const probe = join43(this.opts.dataDir, ".patrol-probe");
       writeFileSync25(probe, String(Date.now()));
       alerts.push({ key: "dataDir", text: "" });
     } catch {
@@ -63363,8 +63446,8 @@ var PatrolModule = class {
     } catch {
     }
     try {
-      const hb2 = join42(this.opts.dataDir, "recon-heartbeat.json");
-      const st2 = statSync15(hb2);
+      const hb2 = join43(this.opts.dataDir, "recon-heartbeat.json");
+      const st2 = statSync16(hb2);
       if (Date.now() - st2.mtimeMs > 70 * 6e4) this.push("recon-stalled", `\u4E09\u8D26\u5BF9\u8D26\u5FC3\u8DF3\u505C\u8DF3 ${Math.round((Date.now() - st2.mtimeMs) / 6e4)}min\uFF08PM turn-report \u4E0E patrol \u53CC\u89E6\u53D1\u5747\u672A\u8DD1\uFF09`);
       else this.resolve("recon-stalled");
     } catch {
@@ -63425,10 +63508,10 @@ var PatrolModule = class {
 
 // src/cloud-identity.ts
 import { existsSync as existsSync28, readFileSync as readFileSync38, writeFileSync as writeFileSync26 } from "node:fs";
-import { join as join43 } from "node:path";
+import { join as join44 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join43(dataDir2, "cloud-keypair.json");
+  const kpPath = join44(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync28(kpPath)) {
     keypair = JSON.parse(readFileSync38(kpPath, "utf-8"));
@@ -63437,7 +63520,7 @@ function loadOrCreateIdentity(dataDir2) {
     keypair = generateKeyPair();
     writeFileSync26(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join43(dataDir2, "wan-secret");
+  const wanSecretPath = join44(dataDir2, "wan-secret");
   let wanSecret = "";
   if (existsSync28(wanSecretPath)) wanSecret = readFileSync38(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
@@ -63445,7 +63528,7 @@ function loadOrCreateIdentity(dataDir2) {
     writeFileSync26(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join43(dataDir2, "cloud-peers.json");
+  const peersPath = join44(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync28(peersPath)) {
     try {
@@ -63507,7 +63590,7 @@ function loadOrCreateIdentity(dataDir2) {
 }
 
 // src/cloud-client.ts
-import { homedir as homedir17 } from "node:os";
+import { homedir as homedir18 } from "node:os";
 function withRelaySource2(sessions, relayName) {
   if (!relayName) return sessions;
   return sessions.map((x) => ({ ...x, relay_source: x.relay_source ?? relayName }));
@@ -63947,7 +64030,7 @@ var CloudClient = class {
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
-        homedir: homedir17(),
+        homedir: homedir18(),
         models: listModels(this.mgr.cfg.model),
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
@@ -64366,16 +64449,16 @@ function advertiseRelay(port, name) {
 
 // src/todo-tools-env.ts
 import { existsSync as existsSync29, readFileSync as readFileSync39, writeFileSync as writeFileSync27 } from "node:fs";
-import { join as join44 } from "node:path";
-import { homedir as homedir18 } from "node:os";
+import { join as join45 } from "node:path";
+import { homedir as homedir19 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join44(homedir18(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join45(homedir19(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync29(dir)) return "skip-no-dir";
-  const file = join44(dir, "settings.json");
+  const file = join45(dir, "settings.json");
   let obj;
   if (!existsSync29(file)) {
     obj = {};
@@ -64417,7 +64500,7 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath = join45(cfg.dataDir, "relay.lock");
+  const lockPath = join46(cfg.dataDir, "relay.lock");
   try {
     const prev = Number(readFileSync40(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
@@ -64479,7 +64562,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync40(join45(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync40(join46(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -64530,14 +64613,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync5(join45(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync5(join46(cfg.dataDir, "relay.log"), "a");
   const child = spawn7(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join45(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join46(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -64560,7 +64643,7 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join45(cfg.dataDir, "relay.pid");
+  const pidFile = join46(cfg.dataDir, "relay.pid");
   try {
     const pid = Number(readFileSync40(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
@@ -64588,21 +64671,21 @@ if (cliArgs.has("--stop")) {
   ensureEmployeeHomeSeed(cfg.dataDir);
 }
 probeSqliteDriverAtBoot();
-var persistPath = join45(cfg.dataDir, "events.ndjson");
+var persistPath = join46(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
-    for (const f of readdirSync18(dir)) {
+    for (const f of readdirSync19(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join45(dir, f);
+      const p = join46(dir, f);
       try {
-        if (Date.now() - statSync16(p).mtimeMs > 7 * 864e5) rmSync8(p, { force: true });
+        if (Date.now() - statSync17(p).mtimeMs > 7 * 864e5) rmSync8(p, { force: true });
       } catch {
       }
     }
   } catch {
   }
 }
-var tmpImageDir = join45(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join46(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var boot = await bootReplayFile(persistPath);
@@ -64720,7 +64803,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync40(join45(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync40(join46(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -64735,7 +64818,7 @@ startAcceptanceCloudPoll(cfg, mgr, bus);
 if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
   new PatrolModule(mgr, {
     dataDir: cfg.dataDir,
-    reportPath: join45(cfg.dataDir, "patrol-report.md"),
+    reportPath: join46(cfg.dataDir, "patrol-report.md"),
     enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
   }).start();
 }
@@ -64750,7 +64833,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync40(join45(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync40(join46(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -64784,15 +64867,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync28(join45(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync28(join46(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync28(join45(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join45(homedir19(), ".cc-deck", "data");
+    writeFileSync28(join46(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join46(homedir20(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir3(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep9).startsWith(t + sep9));
     if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync30(hookHome)) {
       try {
-        writeFileSync28(join45(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync28(join46(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -64818,7 +64901,7 @@ console.log(
 if (parkedRehydrated > 0) {
   console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join45(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join46(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

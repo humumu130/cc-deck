@@ -499,7 +499,14 @@
                       // 挡住打标=本源存量卡永不带标（切聚合后 srcSet 缺角→源标签缺失/部分缺）。
                       // 恒打无副作用：单源视角下多打无害（srcSet=1 仍隐藏），对象随快照替换走
                       {
-                        const srcName = String((m.payload && m.payload.relay_name) || (evSource && evSource.relayName) || "");
+                        // W-SRCLABEL #134：通道兜底修活——evSource 是帧总线源标（"lan"/"cloud"
+                        // 字符串），旧兜底 evSource.relayName 属性访问恒 undefined=死路 → relay 侧
+                        // 无名（relay-name 文件未设/旧 bundle）时两源全不打标 → srcSet 塌 1 →
+                        // CSS 门控隐藏全部源标签（1022 用户截图根因之二）。relay_name 在场优先
+                        // 真名（relay 缺省名根修配套），缺席按通道显「本机/云桥」——聚合两源恒
+                        // 得两个可辨源名；单源视角 srcSet=1 仍隐藏，观感不变
+                        const srcName = String((m.payload && m.payload.relay_name)
+                          || (evSource === "cloud" ? "云桥" : "本机"));
                         if (srcName) for (const x of (Array.isArray(m.payload && m.payload.sessions) ? m.payload.sessions : [])) {
                           if (!x || typeof x.session_id !== "string") continue;
                           const s = S.sessions.get(x.session_id);
