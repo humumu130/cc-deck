@@ -371,9 +371,58 @@
                     const consumeDot = entry.status === "dispatched" || entry.status === "queued" || entry.status === "running"
                       ? '<i class="act-consume' + (entry.consumed === true ? " consumed" : "") + '" title="' + (entry.consumed === true ? "已消费（worker 已真实吃下）" : "已注入（等待 worker 消费）") + '" aria-hidden="true"></i>'
                       : "";
-                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span>' + consumeDot + '<b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + "</span></div>";
+                    // W-CMDIMPL ①（#216）：终态条目带「收割检查」小钮——机器闸结果卡入口
+                    //（§1.3：只读不执行，squash 永远 PM 在终端亲手跑）
+                    const harvestBtn = !compact && (entry.status === "done" || entry.status === "failed") && entry.id
+                      ? ' <span class="tag action" role="button" tabindex="0" data-harvest-check="' + escape(entry.id) + '" title="机器闸检查（只读）：回执/分支账/收口建议">收割检查</span>'
+                      : "";
+                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span>' + consumeDot + '<b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + harvestBtn + "</span></div>";
                   }).join("");
-                  return '<div class="team-activity">' + (compact ? "" : head) + chips + (rows || banner("当前筛选无条目")) + "</div>";
+                  return '<div class="team-activity">' + (compact ? "" : head) + harvestResultMarkup() + chips + (rows || banner("当前筛选无条目")) + "</div>";
+                }
+                // ---------- W-CMDIMPL ①（#216）收割检查结果卡（§1.3 两段呈现）----------
+                // 上半「机器闸 N 项」逐条 ✓/✗（warning 黄）；下半「需你判断（不自动化）」
+                // 固定四项（SSOT 内核）；squash_plan 逐行「复制收口命令」（复制而非执行）。
+                function harvestResultMarkup() {
+                  const h = state.harvest;
+                  if (!h) return "";
+                  const body = h.loading
+                    ? banner("检查中…")
+                    : h.error
+                      ? banner("检查失败：" + h.error)
+                      : (() => {
+                          const r = h.result || {};
+                          const rows = (r.checks || []).map((c) => {
+                            const mark = c.pass ? "✓" : c.severity === "warning" ? "△" : "✗";
+                            const cls = c.pass ? "done" : c.severity === "warning" ? "waiting" : "failed";
+                            return '<div class="activity-row activity-' + cls + '"><i class="act-glyph" aria-hidden="true">' + mark + '</i><span><b class="act-st">' + escape(({ receipt: "回执", sections: "必需节", tail: "结果摘要", commits: "新提交", dirty: "未提交改动", acceptance: "验收单" })[c.gate] || c.gate) + "</b> " + escape(c.detail || "") + ((c.log && c.log.length) ? '<span class="act-note"><br>' + c.log.map((l) => escape(l)).join("<br>") + "</span>" : "") + "</span></div>";
+                          }).join("");
+                          const fails = Number(r.fails) || 0;
+                          const stages = (r.stages || []);
+                          return '<div class="inspector-block"><div class="inspector-title"><span>收割检查 · ' + escape(String(r.dispatch_id || h.id || "").slice(0, 8)) + '</span><span class="tag ' + (fails ? "action" : "done") + '">' + (fails ? "机器闸 " + fails + " 项待处置" : "机器闸全绿") + '</span><span class="tag" role="button" tabindex="0" data-harvest-close title="收起">收起</span></div>'
+                            + '<div class="inspector-copy"><b>机器闸 · ' + (r.checks || []).length + ' 项</b></div>' + rows
+                            + (stages.length ? '<div class="inspector-copy"><b>阶段推进</b>：' + stages.map((st) => escape(st.stage + (st.detail ? "（" + st.detail + "）" : ""))).join(" → ") + "</div>" : "")
+                            + '<div class="inspector-copy"><b>需你判断（不自动化）</b>：diff 抽查 ／ 自测证据 ／ 真机分级 ／ 是否收口合并</div>'
+                            + '<div class="inspector-copy"><b>收口命令（复制后在终端亲手跑）</b></div>'
+                            + (r.squash_plan || []).map((cmd, i) => '<div class="activity-row"><i class="act-glyph" aria-hidden="true">' + (i + 1) + '</i><span class="harvest-cmd"><code>' + escape(cmd) + '</code> <span class="tag action" role="button" tabindex="0" data-harvest-copy="' + escape(cmd) + '" title="复制到剪贴板">复制收口命令</span></span></div>').join("")
+                            + "</div>";
+                        })();
+                  return '<div class="harvest-result">' + body + "</div>";
+                }
+                async function runHarvestCheck(id) {
+                  if (!id || !state.command || !state.online) { feedback("检查不可用（命令通道未就绪）"); return; }
+                  state.harvest = { id, loading: true };
+                  render();
+                  try {
+                    const ack = await state.command("COMMAND_ORG_ACTION", { action: "harvest-check", dispatch_id: id });
+                    const ok = ack && ack.ok === true;
+                    if (state.harvest && state.harvest.id === id) {
+                      state.harvest = ok ? { id, result: ack.data } : { id, error: String((ack && ack.error) || "未知错误") };
+                    }
+                  } catch (e) {
+                    if (state.harvest && state.harvest.id === id) state.harvest = { id, error: String((e && e.message) || e) };
+                  }
+                  render();
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
                 // 数据源：SNAPSHOT.experience（覆盖式锚定）+ EXPERIENCE_UPDATED 帧（帧双载

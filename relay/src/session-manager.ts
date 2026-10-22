@@ -12,6 +12,7 @@ import {
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
 } from "./org.js";
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
+import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
@@ -5555,6 +5556,13 @@ export class SessionManager {
           this.auditRuleAction("exp-promote", r, exp.project_scope === "global" ? "team" : exp.project_scope);
           if (r.ok) this.emitRules(); // W-RULES2：升格复制入库后广播
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "harvest-check": {
+          // W-CMDIMPL ①（#216，设计 §1）：收割机器闸——纯机械只读，永不写（不 commit/
+          // 不 squash/不改台账终态，§7 SSOT 红线）。部署边界（§1.4）：仅本机语义，
+          // 云端 relay 无 worktree/主仓——闸②结构化降级（worktree 缺席占位），不炸 500。
+          const r = harvestCheck(p as Parameters<typeof harvestCheck>[0]);
+          return r.ok ? { ok: true, data: r as unknown as Record<string, unknown> } : { ok: false, error: r.error ?? "harvest-check 失败" };
         }
         case "project-detail": {
           const g = findGroup(str("id"));

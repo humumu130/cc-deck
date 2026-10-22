@@ -22,6 +22,8 @@ import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
+import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
+import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
 import { fileURLToPath } from "node:url";
@@ -795,6 +797,10 @@ export function startServer(
             "rule-append", "rule-list", "rule-retire", "rule-supersede",
             // W-RULES1 升格（经验→规则复制，拍板 #5；org rule promote 的 HTTP 面）
             "exp-promote",
+            // W-CMDIMPL ①（#216，设计 §1.1）：收割机器闸——纯机械只读+命令建议打印，
+            // 零写入/无确认卡语义，信任级低于 dispatch（写面）非决议类，可开 HTTP。
+            // WS 面同权开放（orgAction 单漏斗 case 同名——W-RULES2 的 P1 教训不复发）
+            "harvest-check",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(
@@ -1317,7 +1323,39 @@ async function handleNotify(
   req.setEncoding("utf-8");
   for await (const chunk of req) body += chunk;
   try {
-    const p = JSON.parse(body) as { session_id?: string; done?: unknown; mode?: string; text?: unknown };
+    const p = JSON.parse(body) as { session_id?: string; done?: unknown; mode?: string; text?: unknown; dispatch_id?: unknown; stage?: unknown; stage_detail?: unknown };
+    // W-CMDIMPL T1-STAGE（#216，设计 §1.5）：mode=stage——worker 阶段事件入派单台账
+    //（STAGE:{task, stage, detail} 语义）。纯记账面：同 id 追加行，status 保持 running
+    //（阶段事件不改终态语义）；stages 历史由 harvest-check 读侧扫描。词表（拍板 #9）：
+    // 基表 merged|bumped|tagged|ci-green|distributed|receipt-filed + custom.<名> 前缀
+    //——reducer schema 校验拒词表外（appendDispatch 内 applyOrgChange）。
+    if (p.mode === "stage") {
+      const did = typeof p.dispatch_id === "string" ? p.dispatch_id.trim() : "";
+      const stage = typeof p.stage === "string" ? p.stage.trim() : "";
+      const detail = typeof p.stage_detail === "string" ? p.stage_detail.trim().slice(0, 200) : undefined;
+      if (!did || !stage) { res.writeHead(400).end('{"error":"dispatch_id 与 stage 必填"}'); return; }
+      const last = readDispatchLog().find((x) => x.id === did);
+      if (!last) { res.writeHead(404).end('{"error":"台账无此 dispatch_id（阶段事件依附已有派单行）"}'); return; }
+      const row = {
+        ts: Date.now(),
+        id: last.id,
+        tier: last.tier,
+        target: last.target,
+        ...(last.project_anchor ? { project_anchor: last.project_anchor } : {}),
+        status: "running" as const, // 阶段事件不改终态语义（§1.5）
+        session_id: last.session_id,
+        ...(last.title ? { title: last.title } : {}),
+        ...(last.actor ? { actor: last.actor } : {}),
+        ...(last.engine ? { engine: last.engine } : {}),
+        ...(last.provider ? { provider: last.provider } : {}),
+        ...(last.model ? { model: last.model } : {}),
+        stage,
+        ...(detail ? { stage_detail: detail } : {}),
+      };
+      if (!appendDispatch(row)) { res.writeHead(422).end('{"error":"stage 行校验拒写（词表外？）"}'); return; }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "stage", dispatch_id: did, stage }));
+      return;
+    }
     // #393 mode=confirm：黄框 [待确认] 推送（text 单条），否则绿框 TASK_DONE（done 列表）
     if (p.mode === "confirm") {
       const text = typeof p.text === "string" ? p.text.trim().slice(0, 120) : "";

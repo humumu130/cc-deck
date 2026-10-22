@@ -2615,3 +2615,9 @@
 .wait-chip.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
 .wait-chip .wc-check { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
 .wait-chip.on .wc-check { background: var(--brand); }
+    /* ---- W-CMDIMPL #216 ①：收割检查结果卡（harvest-result/copy 钮）---- */
+    #d-team .harvest-result .inspector-block { margin: 8px 0; border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; }
+    #d-team .harvest-result .inspector-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #d-team .harvest-result .harvest-cmd { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    #d-team .harvest-result code { font: var(--fs-C) var(--mono); color: var(--card-sub); word-break: break-all; }
+    #d-team .harvest-result .tag[role="button"] { cursor: pointer; user-select: none; flex: none; }
