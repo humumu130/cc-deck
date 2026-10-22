@@ -154,7 +154,7 @@ if [[ "$VER" == *-nova ]]; then
   NOVA_MAN_KEY="tauri-latest-nova-test.json"
   $SCP -q "$TMP/manifest-ecs.json" "$ECS_HOST:$ECS_DIR/$NOVA_MAN_KEY"
   scripts/kv-put-verified.sh "$TMP/manifest-cf.json" "$NOVA_MAN_KEY"
-  echo "    nova test 清单已同步写 $NOVA_MAN_KEY（nova 包编译期烙死的 endpoint）"
+  echo "    nova test 清单已同步写 ${NOVA_MAN_KEY}（nova 包编译期烙死的 endpoint）"
 fi
 
 echo "[5/5] 回读校验（清单字段 + exe 可达 + 版本序号）…"

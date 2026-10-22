@@ -16,7 +16,7 @@ LOCK_DIR="/tmp/cc-deck-test-build.lock"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   OLD_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
   if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-    echo "ERR: 另一个 test 出包正在运行（pid $OLD_PID），等它完成后再试；确认无构建在跑可 rm -rf $LOCK_DIR" >&2
+    echo "ERR: 另一个 test 出包正在运行（pid ${OLD_PID}），等它完成后再试；确认无构建在跑可 rm -rf $LOCK_DIR" >&2
     exit 1
   fi
   echo "    清理死锁残留（pid ${OLD_PID:-unknown} 已退出）"
@@ -88,7 +88,7 @@ echo "[4/5] 推 ECS 版本化文件名"
 $SCP -q "$APK" "$ECS_HOST:$ECS_DIR/cc-deck-${VER}.apk"
 # 上传完整性校验（2026-09-17 KV 坏包事故防再犯：远端 md5 必须与本地一致）
 REMOTE_MD5=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/cc-deck-${VER}.apk | cut -d' ' -f1" 2>/dev/null)
-[ "$REMOTE_MD5" = "$(md5 -q "$APK")" ] || { echo "ERR: ECS 远端 md5 不一致（local=$(md5 -q "$APK") remote=$REMOTE_MD5）"; exit 1; }
+[ "$REMOTE_MD5" = "$(md5 -q "$APK")" ] || { echo "ERR: ECS 远端 md5 不一致（local=$(md5 -q "$APK") remote=${REMOTE_MD5}）"; exit 1; }
 echo "    ECS md5 校验一致"
 # 清掉旧固定名 test 包（今天之前的历史遗留，避免"分不清是哪个"的同类问题）
 $SSH "$ECS_HOST" "rm -f $ECS_DIR/cc-deck-${BASE}-test.apk" 2>/dev/null || true
