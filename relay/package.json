@@ -92,7 +92,8 @@
     "test:permission-compat": "tsx scripts/test-permission-compat.ts",
     "test:engine-auth-watch": "tsx scripts/test-engine-auth-watch.ts",
     "test:t10-login-loop": "tsx scripts/test-t10-login-loop.ts",
-    "test:session-title": "tsx scripts/test-session-title.ts"
+    "test:session-title": "tsx scripts/test-session-title.ts",
+    "test:leader-dispatch": "tsx scripts/test-leader-dispatch.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
