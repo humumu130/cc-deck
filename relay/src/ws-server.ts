@@ -24,6 +24,7 @@ import { listModels } from "./models.js";
 import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
 import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸
+import { ReleaseModule } from "./release.js"; // W-CMDIMPL ③：发版编排
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
 import { fileURLToPath } from "node:url";
@@ -270,6 +271,19 @@ function listCustomCommands(dir: string, source: "user" | "project"): SlashComma
     }
   }
   return out;
+}
+
+// W-CMDIMPL ③（#216）：发版编排模块单例（进程级——单飞互斥跨请求生效）
+let releaseModuleSingleton: { bus: EventBus | null; dataDir: string | null; mod: ReleaseModule | null } = { bus: null, dataDir: null, mod: null };
+let releaseInitDone = false;
+function getReleaseModule(bus: EventBus, dataDir: string): ReleaseModule {
+  const s = releaseModuleSingleton;
+  if (!s.mod || s.bus !== bus || s.dataDir !== dataDir) {
+    s.mod = new ReleaseModule(bus, dataDir);
+    s.bus = bus;
+    s.dataDir = dataDir;
+  }
+  return s.mod;
 }
 
 export interface StartServerOptions {
@@ -648,6 +662,53 @@ export function startServer(
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr, cfg);
+      return;
+    }
+    // W-CMDIMPL ③（#216，设计 §3.2）：POST /api/release——发版编排三 action（主 token
+    // 鉴权与 /api/org 同级）。仅本机语义：无发版环境返回 no_release_env+relay_source
+    //（UI 置灰）。RELEASE_PROGRESS/DONE/FAILED 三事件经 bus 出（PROGRESS 段落级节流）。
+    if (req.method === "POST" && url.pathname === "/api/release") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end("unauthorized"); return; }
+      let body = "";
+      req.on("data", (c: Buffer) => {
+        body += c;
+        if (body.length > 262144) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+        const payload = JSON.parse(body) as Record<string, unknown>;
+        const action = typeof payload.action === "string" ? payload.action : "";
+        const rel = getReleaseModule(bus, cfg.dataDir);
+        if (!releaseInitDone) {
+          releaseInitDone = true;
+          rel.markInterrupted(); // §7：relay 重启时进行中 run 标 interrupted（不复活子进程）
+          rel.notifyConfirmHook = (text) => {
+            try { mgr.notifyLeaderSystem(`[发版失败] ${text}`); } catch {}
+          };
+        }
+        if (action === "config-get") {
+          res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, data: { ...rel.configGet().data, relay_source: (opts.relayName?.() ?? "") } }));
+          return;
+        }
+        if (action === "config-set") {
+          const r = rel.configSet(payload);
+          res.writeHead(r.ok ? 200 : 422, { "content-type": "application/json" }).end(JSON.stringify(r));
+          return;
+        }
+        if (action === "run") {
+          const r = rel.run(payload);
+          if (r.ok) { res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, data: { ...r.data, relay_source: (opts.relayName?.() ?? "") } })); }
+          else {
+            const noEnv = r.error === "no_release_env";
+            res.writeHead(noEnv ? 503 : 422, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: r.error, ...(noEnv ? { relay_source: (opts.relayName?.() ?? "") } : {}) }));
+          }
+          return;
+        }
+        res.writeHead(400).end('{"ok":false,"error":"action 必须是 config-get|config-set|run"}');
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
       return;
     }
     // #199 A 对端：CLI Stop 钩子外报（~/.claude/hooks/turn-report.mjs）。LAN 本机回环

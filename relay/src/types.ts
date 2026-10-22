@@ -607,6 +607,10 @@ export interface NotificationsUpdatedPayload {
 
 export type EventType =
   | "SESSION_CREATED"
+  // W-CMDIMPL ③（#216）：发版编排事件（PROGRESS 段落级节流进持久流；DONE/FAILED 终态）
+  | "RELEASE_PROGRESS"
+  | "RELEASE_DONE"
+  | "RELEASE_FAILED"
   | "SESSION_UPDATED"
   | "SESSION_HEARTBEAT"
   | "SESSION_WAITING"
