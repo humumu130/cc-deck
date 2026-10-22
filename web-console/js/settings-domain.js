@@ -3214,6 +3214,9 @@ function connectLan(ctx) {
       // 未锚定收到 delta=丢弃——PROJECTS 域随 SNAPSHOT 自愈、BOARD 域由 COMMAND_PROJECT_DETAIL
       // 按需重拉，绝不空集起底 merge）由本层承接。命令走 ctx.ws 的 COMMAND/COMMAND_ACK
       //（#018-W1b 三态：ok===true 才算送达；断线/超时 resolve(null) 由 B3 verdict 判可重试）。
+      // W-VISFIX2 #215：会话帧放行集——团队域成员 tab 的灯/排序/统计消费实时会话状态，
+      // 原帧闸只放五类型=会话帧全被闸（团队域 sessions 恒停上一张快照）
+      const TEAM_SESSION_FRAME_TYPES = new Set(["SESSION_CREATED", "SESSION_UPDATED", "SESSION_WAITING", "SESSION_WAITING_RESOLVED", "SESSION_ERROR", "SESSION_DONE"]);
       const Team = {
         anchored: false, boardAnchored: new Set(), projects: [], boards: new Map(),
         ackWaiters: new Map(), cmdSeq: 0,
@@ -3245,7 +3248,8 @@ function connectLan(ctx) {
           this.ackWaiters.delete(ack.command_id); clearTimeout(waiter.timer); waiter.resolve(ack);
         },
         failFlights() { for (const waiter of this.ackWaiters.values()) { clearTimeout(waiter.timer); waiter.resolve(null); } this.ackWaiters.clear(); },
-        feed(api, context, type, payload) { try { api.onEvent(context, { type, payload }); } catch {} },
+        // W-VISFIX2 #215：转发带 session_id（会话帧的 sid 在信封上，团队域会话帧消费按它寻卡）
+        feed(api, context, type, payload, sessionId) { try { api.onEvent(context, { type, payload, ...(sessionId ? { session_id: sessionId } : {}) }); } catch {} },
         onFrame(context, message) {
           if (!message || typeof message.type !== "string") return;
           if (message.type === "SNAPSHOT") {
@@ -3277,10 +3281,12 @@ function connectLan(ctx) {
             const api = this.api(); if (api) { try { api.snapshot(p, { relayName: agg ? "聚合 · 全部源" : this.ctxName(context) }); } catch {} }
             return;
           }
-          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED" && message.type !== "RULES_UPDATED") return; // W-EXPP2/W-RULES2：经验域+规则域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
+          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED" && message.type !== "RULES_UPDATED" && !TEAM_SESSION_FRAME_TYPES.has(message.type)) return; // W-EXPP2/W-RULES2：经验域+规则域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）；W-VISFIX2 #215：会话帧放行（成员 tab 灯/排序/统计的实时数据源，原被闸=派单后团队域恒停上一张快照）
           const api = this.api(); if (!api) return;
           const p = message.payload || {};
           const teamContext = { relayName: this.ctxName(context) };
+          // W-VISFIX2 #215：会话帧直通团队域（sid 走信封随行），不落下方 delta 投影链
+          if (TEAM_SESSION_FRAME_TYPES.has(message.type)) { this.feed(api, teamContext, message.type, p, message.session_id); return; }
           if (message.type === "PROJECTS_UPDATED" && p.delta !== undefined) {
             if (!this.anchored) return; // 未锚定丢弃：随下一帧 SNAPSHOT 自愈
             const byId = new Map(this.projects.map((group) => [group.id, group]));
