@@ -15,7 +15,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all" }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", doneOpen: false }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）；doneOpen：成员页「已完成 · N」折叠条展开态（W-VISFIX2 #215，默认收起）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -38,9 +38,14 @@
                 const sourceBadge = () => '<span class="source-badge">' + escape(srcName(state.source)) + "</span>";
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
-                  const session = state.sessions.get(member.session_id) || {};
+                  // W-VISFIX2 #215：查无会话数据=「未同步」（编制在、会话帧未达——新派窗口/
+                  // 断链），不再冒充「离线」（离线暗示会话已终结，未同步是数据未达，处置=等帧
+                  // 而非等会话）。unsynced 供渲染层显词
+                  const sessionRow = state.sessions.get(member.session_id);
+                  const unsynced = !sessionRow;
+                  const session = sessionRow || {};
                   // 件十一：成员灯数据源=成员会话 run status（与会话卡 status-dot 唯一事实源同
-                  // 语义）；查无会话数据=缺省灰（offline）。
+                  // 语义）；查无会话数据=缺省灰。
                   // 件十⑤：别名解耦——显示名优先 nick（role 在 p 行小字自然弱化），无别名=现状
                   const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
                   const heartbeatAt = Number(member.last_heartbeat_at || session.activity?.updated_at || session.updated_at || 0);
@@ -50,29 +55,43 @@
                     const age = Math.max(0, Date.now() - at);
                     return age <= 10 * 60 * 1000 ? "good" : age <= 30 * 60 * 1000 ? "warn" : "bad";
                   };
-                  return { name: member.nick || session.title || member.session_id, role: member.role || "角色未标注", nick: member.nick || "", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit, status, heartbeat: signalTone(heartbeatAt), log: signalTone(logAt), summary: session.activity?.task_summary?.text || session.activity?.activity?.text || session.action_summary || "暂无最近活动" };
+                  return { name: member.nick || session.title || member.session_id, role: member.role || "角色未标注", nick: member.nick || "", engine: member.engine || session.engine, model: member.model || session.model || "模型未标注", provider: member.provider || session.provider || "", context_usage: session.context_usage, context_limit: session.context_limit, status, unsynced, heartbeat: signalTone(heartbeatAt), log: signalTone(logAt), summary: session.activity?.task_summary?.text || session.activity?.activity?.text || session.action_summary || "暂无最近活动" };
                 }
                 // V8R+（Leader 1014 追加，用户拍板）：成员卡动态排列——工作中（working/waiting）
                 // 优先靠前、闲置靠后；同档内按最近活跃时间降序（越活跃越靠前）；tiebreak 保持
                 // 编制序防抖动。W-POLISH #95（1016 派单口径）：WAITING 归入第 0 档（在动状态=
                 // WORKING/WAITING 双态，原实现仅 working——两端待认领单/等输入也算活跃位）。
                 // W-HYBRID #115④（1015 拍板）：PM/Leader 恒置首（pm 档 0——指挥位用户心智；
-                // 工作档顺延 1，其余 2；同档内活跃倒序与编制序 tiebreak 不变，sortRoster WAITING
+                // 同档内活跃倒序与编制序 tiebreak 不变，sortRoster WAITING
                 // 档语义完全兼容——PM 也在动时仍在首，非 PM 在动时仍前于闲置）。
+                // W-VISFIX2 #215（1022 用户实锤）：工作档三分细化——在岗=0/未同步=1/静止=2
+                // （原「查无=非在岗」与 done 同档且 lastAt=0 恒沉底=新派成员不可见），见函数内注。
                 // 行为逻辑非纯视觉：状态切换后顺序随每次渲染跟随变化（sortRoster 单口，
                 // 成员页 pane 与侧栏 data-team-members 共用同一排序）。
                 function sortRoster(list) {
                   const rank = (m) => {
-                    const session = state.sessions.get(m.session_id) || {};
-                    const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
-                    const lastAt = Number(session.activity?.updated_at || session.updated_at || session.started_at || 0);
+                    const session = state.sessions.get(m.session_id);
+                    const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session?.status] || "";
+                    const lastAt = Number(session?.activity?.updated_at || session?.updated_at || session?.started_at || 0);
                     const isPm = /^(pm|leader)$/i.test(String(m.role || ""));
-                    return { pm: isPm ? 0 : 1, work: status === "working" || status === "waiting" ? 0 : 1, lastAt };
+                    // W-VISFIX2 #215（1022 用户实锤）：档位三分——在岗(working/waiting)=0 /
+                    // 未同步(编制在、会话数据查无=新派或断链窗口)=1 / 静止(done/error 等)=2。
+                    // 原实现「查无=非在岗」与 done 同档且 lastAt=0 恒沉底 → 新派成员不可见、
+                    // 已完成旧卡凭 lastAt 置顶占屏（「成员 tab 旧卡淹没新卡」根因）；
+                    // 未同步必须压过已完成历史档——「每席可见」是团队可视面的底线
+                    const work = status === "working" || status === "waiting" ? 0 : session ? 2 : 1;
+                    return { pm: isPm ? 0 : 1, work, lastAt };
                   };
                   return list
                     .map((m, i) => ({ m, r: rank(m), i }))
                     .sort((x, y) => x.r.pm - y.r.pm || x.r.work - y.r.work || y.r.lastAt - x.r.lastAt || x.i - y.i)
                     .map((x) => x.m);
+                }
+                // W-VISFIX2 #215：已完成收敛判定（排序单口同源）——done 归历史区，
+                // error/离线不收敛（异常必须显眼；未同步在活跃区保可见）
+                function isDoneLike(m) {
+                  const session = state.sessions.get(m.session_id);
+                  return Boolean(session && session.status === "DONE");
                 }
                 // W-DISPVIS C2：组内「已派单未消费」会话集——detail receipts 已是同 id
                 // 收敛视图（relay readDispatchLog 末行赢，每 id 一行），逐行判定即末行
@@ -109,7 +128,7 @@
                   // 件十一：头像角点=状态灯（status-dot 同源绘画卡，working 橘呼吸/waiting 黄/done 绿/
                   // 查无=缺省灰）——原 avatar-engine-dot 引擎色点（claude 橘）被误读为运行灯，空闲成员
                   // 也亮橘=「成员灯与绘画卡矛盾」根因；引擎语义已有 engine-badge 表达不丢失
-                  const stateLabel = ({ working: "运行中", waiting: "待处理", error: "异常", done: "已完成" })[info.status] || "离线";
+                  const stateLabel = info.unsynced ? "未同步" : ({ working: "运行中", waiting: "待处理", error: "异常", done: "已完成" })[info.status] || "离线"; // W-VISFIX2 #215：查无会话数据显「未同步」（数据未达≠会话终结）
                   const signalLabel = (tone) => ({ good: "正常", warn: "滞后", bad: "失联", off: "无数据" })[tone] || "无数据";
                   // V8R 名册卡（原型 member/.mh/.mb/.ctxrow）：头行=头像+名/角色两行+模型 mono 虚线
                   // 胶囊+状态软底胶囊；引擎/源徽章收摘要下轻量行（owner 徽章保留）；五色叠角灯不变
@@ -779,7 +798,16 @@
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   query("[data-team-source]").textContent = srcName(state.source); // W-UIPOLISH ⑧：团队名称旁源徽标同走映射（用户实锤漏网点）
                   window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
-                  const memberHtml = sortRoster(members(project)).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
+                  // W-VISFIX2 #215（#95 收编三件之三）：已完成卡收敛——活跃区（PM/在岗/未同步）
+                  // 常驻，done 卡折进「已完成 · N」折叠条（默认收起），不再与活跃卡混排淹没
+                  // （用户实锤：已完成旧卡置顶占屏、今日新派四席不可见）
+                  const rosterSorted = sortRoster(members(project));
+                  const rosterActive = rosterSorted.filter((m) => !isDoneLike(m));
+                  const rosterDone = rosterSorted.filter(isDoneLike);
+                  const doneFoldHtml = rosterDone.length
+                    ? '<div class="member-done-fold"><div class="done-fold-head" role="button" tabindex="0" data-team-done-toggle aria-expanded="' + String(state.doneOpen) + '"><span class="done-fold-caret">' + (state.doneOpen ? "▾" : "▸") + '</span>已完成 · ' + rosterDone.length + "</div>" + (state.doneOpen ? '<div class="done-fold-body">' + rosterDone.map((m) => memberMarkup(m, project)).join("") + "</div>" : "") + "</div>"
+                    : "";
+                  const memberHtml = (rosterActive.map((m) => memberMarkup(m, project)).join("") + doneFoldHtml) || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   query("[data-team-member-count]").textContent = String(members(project).length);
                   query("[data-team-members]").innerHTML = memberHtml;
@@ -927,6 +955,31 @@
                 function onEvent(context, message) {
                   const payload = message?.payload;
                   if (message?.type === "SNAPSHOT") return snapshot(payload, context);
+                  // W-VISFIX2 #215：会话实时帧消费——成员 tab 数据源 state.sessions 原只随
+                  // SNAPSHOT 全量刷新，实时帧（CREATED/UPDATED/WAITING/DONE/ERROR）进不来
+                  // =派单后成员灯/排序/统计恒停在上一张快照（「4 WORKING 显 1」「新卡沉底」
+                  // 根因之一；上游 settings-domain 帧闸同步放行，转发带 session_id）。
+                  // merge 键=成员卡渲染面子集（与会话域 MERGE_KEYS 同源取交集）；置态帧
+                  // 语义对齐会话域 onDoneEvt/onWaiting/onErrorEvt 同款
+                  const sid = typeof message?.session_id === "string" ? message.session_id : "";
+                  if (sid) {
+                    if (message.type === "SESSION_CREATED" && payload && typeof payload === "object" && !state.sessions.has(sid)) {
+                      state.sessions.set(sid, { ...payload, session_id: sid });
+                      render();
+                      return true;
+                    }
+                    if (message.type === "SESSION_UPDATED" && payload && typeof payload === "object") {
+                      const s = state.sessions.get(sid);
+                      if (s) { for (const k of ["status", "title", "action_summary", "activity", "context_usage", "context_limit", "engine", "model", "provider", "updated_at", "started_at"]) if (payload[k] !== undefined) s[k] = payload[k]; }
+                      else state.sessions.set(sid, { ...payload, session_id: sid }); // UPDATED 先到=自愈建卡（同会话域 #215 自愈口径）
+                      render();
+                      return true;
+                    }
+                    if (message.type === "SESSION_WAITING" && state.sessions.has(sid)) { const s = state.sessions.get(sid); s.status = "WAITING"; s.waiting_request = payload ?? null; s.updated_at = Date.now(); render(); return true; }
+                    if (message.type === "SESSION_WAITING_RESOLVED" && state.sessions.has(sid)) { const s = state.sessions.get(sid); s.status = "WORKING"; s.waiting_request = null; s.updated_at = Date.now(); render(); return true; }
+                    if (message.type === "SESSION_ERROR" && state.sessions.has(sid)) { const s = state.sessions.get(sid); s.status = "ERROR"; s.waiting_request = null; s.last_error = (payload && payload.message) || ""; s.updated_at = Date.now(); render(); return true; }
+                    if (message.type === "SESSION_DONE" && state.sessions.has(sid)) { const s = state.sessions.get(sid); s.status = "DONE"; s.waiting_request = null; if (payload && typeof payload.duration_ms === "number") s.duration_ms = payload.duration_ms; s.updated_at = Date.now(); render(); return true; }
+                  }
                   if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups) && payload.delta === undefined) { updateProjects(payload.groups); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
                   if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(payload.pending); render(); return true; }
                   if (message?.type === "BOARD_UPDATED" && payload?.delta === undefined && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
@@ -1134,6 +1187,13 @@
                       event.stopPropagation();
                       window.__ccDeck005B4?.railJump?.("session");
                       window.__ccDeck005B4?.selectSessionCard?.(memberSession.dataset.teamMemberSession);
+                      return;
+                    }
+                    // W-VISFIX2 #215：「已完成 · N」折叠条开合（doneOpen 持久于域 state，重渲保持）
+                    if (event.target.closest("[data-team-done-toggle]")) {
+                      event.stopPropagation();
+                      state.doneOpen = !state.doneOpen;
+                      render();
                       return;
                     }
                     // W-DESIGNHUB 看板图纸打开（HttpOrigin 拼绝对地址新窗直开，同设置/项目域口径）

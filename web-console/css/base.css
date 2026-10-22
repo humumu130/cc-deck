@@ -1478,6 +1478,12 @@
     #d-team .crewfoot { margin-top: 2px; padding: 6px 0 2px; border-top: 1px dashed var(--line-soft); color: var(--dim); font-size: var(--fs-C); line-height: 1.8; text-align: center; }
     #d-team .crewfoot .lamp-key { display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; }
     #d-team .crewfoot .lamp-key i { width: 7px; height: 7px; border-radius: 50%; }
+    /* ---- W-VISFIX2 #215：成员页「已完成 · N」折叠条（done 卡收敛，默认收起）---- */
+    #d-team .member-done-fold { margin-top: 4px; }
+    #d-team .done-fold-head { display: flex; align-items: center; gap: 6px; padding: 7px 2px; border-top: 1px dashed var(--line-soft); color: var(--dim); font-size: var(--fs-C); cursor: pointer; user-select: none; }
+    #d-team .done-fold-head:hover { color: var(--card-sub); }
+    #d-team .done-fold-caret { font-size: 10px; line-height: 1; }
+    #d-team .done-fold-body { display: grid; gap: 10px; padding-top: 8px; }
     /* ---- 活动时间线（v3 原型 feedwrap/.fi 轻列表——W-ACTIVITY3 #116）---- */
     #d-team .activity-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 9px; min-height: 0; padding: 6px 0; border-bottom: 1px dashed var(--line-soft); color: var(--card-sub); font-size: var(--fs-C); line-height: 1.5; }
     #d-team .activity-row::before { content: none; } /* 竖线时间轴退役（原型无） */

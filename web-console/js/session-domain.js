@@ -624,8 +624,21 @@
                 }
                 const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
                 function onSessionUpdated(sid, p) {
-                  const s = S.sessions.get(sid);
-                  if (!s || !p || typeof p !== "object") return;
+                  let s = S.sessions.get(sid);
+                  // W-VISFIX2 #215：CREATED 丢失/晚到自愈——UPDATED 是最高频生命周期信号，
+                  // 对未知 sid 原样 return=miss CREATED 后永久 miss（团队入口卡 running 计数
+                  // 持续少计直到下次 SNAPSHOT，用户实锤「4 WORKING 显 1」根因之一）。
+                  // 以帧数据建卡兜底（不带 CREATED 的选中/入场动效；聚合视角源标签缺失走
+                  // 显示回落，比丢卡好）
+                  if (!s) {
+                    if (!p || typeof p !== "object") return;
+                    s = Object.assign({ session_id: sid, status: "WORKING", started_at: Date.now(), updated_at: Date.now(), todos: [], artifacts: [] }, p);
+                    S.sessions.set(sid, s);
+                    renderMyList();
+                    renderSlimDrawer();
+                    return;
+                  }
+                  if (!p || typeof p !== "object") return;
                   for (const k of MERGE_KEYS) if (p[k] !== undefined) s[k] = p[k];
                   if (Object.prototype.hasOwnProperty.call(p, "waiting_request")) s.waiting_request = p.waiting_request ?? null; // 权威自愈：null 即清
                   s.updated_at = p.updated_at || Date.now();

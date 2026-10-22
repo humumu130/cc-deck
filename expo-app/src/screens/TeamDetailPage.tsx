@@ -215,16 +215,23 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   // WAITING 需人确认更该置顶）→ 最近活跃倒序（updated_at）→ 静止（DONE/IDLE）沉底
   // 同档内比活跃时间。编制序（headcount 原序=入编序）仅作末位稳定器（同状态同时间
   // 不乱跳）。折叠组展开即见「谁在干活」不用扫全列
+  // W-VISFIX2 #215（1022 用户实锤）：未同步（编制在、会话数据查无=新派/断链窗口）
+  // 单列中档——原「查无=非在岗」与 DONE 同档且 updated_at=0 恒沉底=新派成员不可见；
+  // 未同步必须压过已完成历史档（「每席可见」是可视面底线；双端同构同修）
   const inOffice = (st?: string) => st === "WORKING" || st === "WAITING";
+  const rosterRank = (s?: SessionState) => (inOffice(s?.status) ? 0 : s ? 2 : 1);
   const headcountSessions = members
     .map((m, i) => ({ m, s: snap.sessions.find((x) => x.session_id === m.session_id), i }))
     .sort((a, b) => {
-      const ao = inOffice(a.s?.status), bo = inOffice(b.s?.status);
-      if (ao !== bo) return ao ? -1 : 1; // 在岗置顶
+      const ar = rosterRank(a.s), br = rosterRank(b.s);
+      if (ar !== br) return ar - br; // 在岗→未同步→静止
       const au = a.s?.updated_at ?? 0, bu = b.s?.updated_at ?? 0;
       if (au !== bu) return bu - au; // 同档：最近活跃倒序（静止自然沉底——updated 旧）
       return a.i - b.i; // 编制序稳定器
     });
+  // W-VISFIX2 #215：已完成收敛（桌面同构）——活跃区常驻，DONE 折进「已完成 · N」
+  const rosterActive = headcountSessions.filter((x) => x.s?.status !== "DONE");
+  const rosterDone = headcountSessions.filter((x) => x.s?.status === "DONE");
   // 本组确认卡（payload.gid 命中；rule-append 等团队级卡在团队 tab 队列决议，不进组页）
   const groupConfirms = useMemo(
     () => (src?.orgConfirms ?? []).filter((cf) => (cf.payload as { gid?: unknown } | undefined)?.gid === gid),
@@ -265,6 +272,7 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
 
   // 编制折叠组（默认折叠）+ 看板卡展开集（id 键控——BOARD_UPDATED 增量不收回展开态）
   const [hcOpen, setHcOpen] = useState(false);
+  const [hcDoneOpen, setHcDoneOpen] = useState(false); // W-VISFIX2 #215：「已完成 · N」折叠条（默认收起，桌面同构）
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // W-MV8A 泳道折叠组（v3 plane 语言）：默认全展开，点 laneh 收起/展开；
   // 待收单（ready_to_install）不参与折叠——行动队列恒显（v3 置顶 + pin 语义）
@@ -636,7 +644,22 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
               </Pressable>
               {hcOpen ? (
                 members.length ? (
-                  <View style={styles.secGap}>{headcountSessions.map(memberCard)}</View>
+                  <View style={styles.secGap}>
+                    {rosterActive.map(memberCard)}
+                    {rosterDone.length > 0 && (
+                      <>
+                        <Pressable
+                          style={styles.secHeadRow}
+                          accessibilityLabel={`已完成成员 ${rosterDone.length} 人，点按${hcDoneOpen ? "收起" : "展开"}`}
+                          onPress={() => setHcDoneOpen((v) => !v)}
+                        >
+                          <Text style={styles.secH}>已完成 · {rosterDone.length}</Text>
+                          <Text style={styles.secChev}>{hcDoneOpen ? "▾" : "▸"}</Text>
+                        </Pressable>
+                        {hcDoneOpen ? <View style={styles.secGap}>{rosterDone.map(memberCard)}</View> : null}
+                      </>
+                    )}
+                  </View>
                 ) : (
                   <Text style={styles.empty}>暂无编制数据（建团成员或电脑端派单入编后出现）</Text>
                 )
