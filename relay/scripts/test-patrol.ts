@@ -24,6 +24,8 @@ const DATA = mkdtempSync(join(tmpdir(), "ccr-patrol-"));
 process.env.CCR_DATA_DIR = DATA;
 const ORG = mkdtempSync(join(tmpdir(), "ccr-patrol-org-"));
 process.env.CCR_ORG_DIR = ORG;
+mkdirSync(join(DATA, "artifacts"), { recursive: true });
+process.env.CCR_ARTIFACTS_DIR = join(DATA, "artifacts"); // W-CMDIMPL ②：第五层回执扫描隔离（不扫家目录真验收单）
 process.env.CCR_NO_LEADER = "1";
 process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_STORAGE_READ_MODE = "json"; // W-PATROL：JSON fixture 读模式（缺省=sqlite 找不到库→空 groups）
