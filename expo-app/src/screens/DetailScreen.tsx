@@ -2225,121 +2225,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                   </Text>
                 </Pressable>
               ) : null}
-              {!external && canCmd && !s.historical ? (
-                <Pressable
-                  style={[
-                    d.permPill,
-                    perm === "default"
-                      ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
-                      : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
-                  ]}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  onPress={() => setPermPanel(true)}
-                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  accessibilityLabel={`权限模式：${PERM_MODE_ZH[perm] ?? perm}，点按选择`}
-                >
-                  <Svg
-                    width={10}
-                    height={10}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={perm === "default" ? c.dim : perm === "bypassPermissions" ? c.waiting : c.brandA}
-                    strokeWidth={2.4}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
-                    {perm === "bypassPermissions" ? (
-                      <>
-                        <Path d="M12 8.5v3.5" />
-                        <Path d="M12 15.8h0.01" strokeWidth={2.6} />
-                      </>
-                    ) : null}
-                  </Svg>
-                  {perm !== "default" ? (
-                    <Text style={[d.permT, perm === "bypassPermissions" && d.permTWarn]}>
-                      {PERM_SHORT[perm]}
-                    </Text>
-                  ) : null}
-                  {/* #117 切换符 ⇄（用户文字描述定形：上右箭头/下左箭头，贴近侧的箭头
-                      抹除=等号+右上捺+左下捺）——Lucide arrow-right-left 同款几何，SVG
-                      线稿不用文字字形（Android 字体对 U+21C4 覆盖不稳）。与盾标同色：
-                      点按可切换的 affordance 标记，幽灵态也有 */}
-                  <Svg
-                    width={10}
-                    height={10}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={perm === "default" ? c.dim : perm === "bypassPermissions" ? c.waiting : c.brandA}
-                    strokeWidth={2.4}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <Path d="M4 7h16" />
-                    <Path d="M16 3l4 4-4 4" />
-                    <Path d="M4 17h16" />
-                    <Path d="M8 13l-4 4 4 4" />
-                  </Svg>
-                </Pressable>
-              ) : null}
-              {/* #191 外部会话权限模式只读胶囊：relay 逐事件更新并下发 permission_mode，
-                  此前两端对外部会话整体隐藏——plan 模式无任何标识，远程审批照弹被误读成
-                  「权限跳过了还弹审批」。形态对齐托管胶囊（幽灵盾=标准/品牌蓝点亮=自动·
-                  规划/红警示=跳过），只读不带 ⇄：外部会话的权限在电脑终端切换 */}
-              {external && !s.historical ? (
-                <View
-                  style={[
-                    d.permPill,
-                    perm === "default"
-                      ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
-                      : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
-                  ]}
-                  accessibilityLabel={`权限模式：${PERM_MODE_ZH[perm] ?? perm}（外部会话，在电脑终端切换）`}
-                >
-                  <Svg
-                    width={10}
-                    height={10}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={perm === "default" ? c.dim : perm === "bypassPermissions" ? c.waiting : c.brandA}
-                    strokeWidth={2.4}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
-                    {perm === "bypassPermissions" ? (
-                      <>
-                        <Path d="M12 8.5v3.5" />
-                        <Path d="M12 15.8h0.01" strokeWidth={2.6} />
-                      </>
-                    ) : null}
-                  </Svg>
-                  {perm !== "default" ? (
-                    <Text style={[d.permT, perm === "bypassPermissions" && d.permTWarn]}>
-                      {(PERM_SHORT as Record<string, string>)[perm] ?? perm}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-              {/* #56 外部会话远程审批开关：开=Bash/Edit 等门控工具的权限确认挂起到
-                  手机/网页出按钮；手机离线 relay 自动回退终端本地弹框（hasClients 守卫）。
-                  状态回显走 SESSION_UPDATED remote_mode（协议早已就绪，本任务只补 UI） */}
-              {external && canCmd && !s.historical ? (
-                <Pressable
-                  style={[d.thinkToggle, s.remote_mode && d.thinkToggleOn]}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  onPress={() => {
-                    const next = !s.remote_mode;
-                    if (store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: next }) && next) {
-                      flashHint("远程审批已开：权限确认将挂起到手机，离线自动回退终端");
-                    }
-                  }}
-                  hitSlop={6}
-                  accessibilityLabel={s.remote_mode ? "远程审批：已开，权限确认挂起到手机" : "远程审批：已关，权限确认在终端本地"}
-                >
-                  <Text style={[d.thinkToggleT, s.remote_mode && d.thinkToggleTOn]}>审批</Text>
-                </Pressable>
-              ) : null}
+              {/* #218 追加件：托管权限胶囊整颗退役（Leader 裁决 R1——用户指的「审批开关」
+                  即这颗 bypassPermissions 循环切换胶囊；权限模式入口不挂 head，创建时勾选/
+                  桌面端设置即可，P81 语义下无需常驻切换）。head 设置簇只留模型 chip+思考开关 */}
+              {/* #218 追加件：外部只读胶囊（#191）同步退役——head 权限标识整族清（状态走
+                  状态条/横幅与「更多」tab 统计区，relay permission_mode 数据面不动） */}
+              {/* #218 件一：远程审批开关退役（用户点名 head 只留状态；审批横幅/状态条承载不变，
+                  relay COMMAND_EXT_MODE 命令面与 SESSION_UPDATED remote_mode 数据面不动；
+                  桌面对齐：W-COMPOSER ⑤ 同批已移桌面开关）。思考开关紧随模型 chip（共享
+                  thinkToggle 形态不动） */}
               <Pressable
                 style={[d.thinkToggle, showThink && d.thinkToggleOn]}
                 android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
@@ -3031,7 +2925,10 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             </Pressable>
           </View>
         ) : null}
-        {dock && (dock.state === "WORKING" || dock.state === "WAITING") ? (
+        {/* #218 件三：WORKING 态 dockLine 不再渲染——与 dockWork 黄行（执行摘要+走秒+停止钮）
+            同屏双显（用户 1022 实拍实锤）；WORKING 只留信息更全的黄行，WAITING 等非工作态
+            独立状态行保留 */}
+        {dock && s.status !== "WORKING" ? (
           <View style={[d.dockLine, { borderLeftColor: dockColor }]}>
             <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
             <Text style={[d.dockLineState, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
