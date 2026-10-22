@@ -1222,9 +1222,12 @@ function connectLan(ctx) {
             else showToast("验证未通过 · relay 未连接（自动重连中）");
             return;
           }
-          // #158-批3 连接诊断行：err / 缺 Node 态可点——跳 nodejs.org 安装引导（批4a 走统一外链兜底链）
-          const diagRow = event.target.closest('[data-relay-diag][data-diag="err"], [data-relay-diag][data-diag="node"]');
-          if (diagRow) { void window.__ccDeck005OpenUrl("https://nodejs.org/zh-cn"); return; }
+          // #158-批3 连接诊断行：err 态整行点击跳 nodejs.org 安装引导。
+          // #211（1022 用户公司机实锤）：node 态整行跳转退役——一键安装按钮就在行内，
+          // 点行内文字即弹浏览器是陷阱（用户点文字后以为「一键安装没装只开官网」）；
+          // 缺 Node 引导收敛到按钮+行尾手动链接两个明确目标。err 态保持整行跳转
+          const diagRow = event.target.closest('[data-relay-diag][data-diag="err"]');
+          if (diagRow && !event.target.closest("a")) { void window.__ccDeck005OpenUrl("https://nodejs.org/zh-cn"); return; }
           if (event.target.closest("[data-update-check]")) { void manualCheckUpdate(); return; }
           // W-MIG 设置导出/导入：导入两段确认（armed → 「确认导入？」3s 窗）防误触覆盖
           if (event.target.closest("[data-settings-export]")) { exportSettings(); return; }
