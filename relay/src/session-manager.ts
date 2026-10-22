@@ -69,6 +69,7 @@ import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./
 import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
+import { readCodexThreadName } from "./title-codex.js";
 import { generateTitle } from "./title-gen.js";
 import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, type CollabMode } from "./settings.js";
 import type { EmployeeHomeSettingsPayload } from "./types.js";
@@ -1372,6 +1373,57 @@ export class SessionManager {
     });
   }
 
+  // #219 件②：非 claude 引擎标题回填的唯一定名口。已有名/锁定/会话已删/空标题即静默
+  //（与 requestSmartTitle 的 then 分支同守卫口径：不覆写用户可见命名）；写后发
+  // SESSION_UPDATED（载荷形状同款，端上标题实时刷新）。
+  private applyEngineTitle(sessionId: string, title: string): void {
+    const s = this.sessions.get(sessionId);
+    if (!s || s.state.title || s.state.title_locked) return;
+    const t = title.trim();
+    if (!t) return;
+    s.state.title = t;
+    s.state.updated_at = Date.now();
+    this.bus.emit(sessionId, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      title: t,
+    });
+  }
+
+  /** #219 件②回落档：deriveTitle(首条 prompt) 即时定名——无同构标题源的引擎
+   * （trae/qwen-code/codebuddy；zcode unsupported 不达此路）用，零成本确定性。 */
+  private applyDerivedTitle(sessionId: string, prompt: string): void {
+    this.applyEngineTitle(sessionId, deriveTitle(prompt));
+  }
+
+  /** #219 件②：codex 标题探测。thread_name 由 codex 侧写 session_index.jsonl（时机=
+   * 其回合收口，relay 不可知）：+20s/+40s 两探，命中即定名；两探皆空 → deriveTitle
+   * 回落（回执口径「codex 标题=thread_name 优先、回落档明示」；exec 0.154.0 实测不写
+   * 索引，生产恒回落——探测保留是为前向兼容 codex 侧补写索引的版本）。thread_id 取
+   * relay_session_id（agentCallbacks onInit 即回填，codex=thread.started 的 tid）；
+   * 定时器 unref 不挡进程退出；探测时会话已删/已定名/title_locked 即静默止探。 */
+  private scheduleCodexTitle(sessionId: string, prompt: string): void {
+    const probeDelays = [20_000, 40_000];
+    const attempt = (i: number): void => {
+      const s = this.sessions.get(sessionId);
+      if (!s || s.state.engine !== "codex" || s.state.title || s.state.title_locked) return;
+      const name = readCodexThreadName(s.state.relay_session_id ?? "");
+      if (name) {
+        this.applyEngineTitle(sessionId, name);
+        return;
+      }
+      if (i + 1 < probeDelays.length) {
+        const t = setTimeout(() => attempt(i + 1), probeDelays[i + 1] - probeDelays[i]);
+        t.unref();
+      } else {
+        this.applyDerivedTitle(sessionId, prompt);
+      }
+    };
+    const t0 = setTimeout(() => attempt(0), probeDelays[0]);
+    t0.unref();
+  }
+
   snapshotLogs(): Record<string, LogEntry[]> {
     const out: Record<string, LogEntry[]> = {};
     for (const [id, s] of this.sessions) out[id] = s.logs;
@@ -2581,9 +2633,18 @@ export class SessionManager {
       this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
       console.log(`[create-cwd] ${agent.id.slice(0, 8)} ${fallbackNote}`);
     }
-    // 智能命名是 Claude CLI 一次性子会话（title-gen）：codex 会话不拉（P0 特性
-    // 泄漏守卫——V2 纪律②，标题停在 deriveTitle(initial_prompt)）
-    if (!managed.state.engine) this.requestSmartTitle(agent.id, prompt);
+    // 智能命名是 Claude CLI 一次性子会话（title-gen）：仅 claude 会话拉（P0 特性
+    // 泄漏守卫——V2 纪律②）。#219 件②：非 claude 不再无名——codex 走 thread_name
+    // 探测（session_index.jsonl，两探+回落，见 scheduleCodexTitle），其余注册引擎无
+    // 同构标题源（~/.trae ~/.codebuddy 实勘无 jsonl 标题物，2026-10-23）→ deriveTitle
+    // 回落档即时定名（applyDerivedTitle）。
+    if (!managed.state.engine) {
+      this.requestSmartTitle(agent.id, prompt);
+    } else if (managed.state.engine === "codex") {
+      this.scheduleCodexTitle(agent.id, prompt);
+    } else {
+      this.applyDerivedTitle(agent.id, prompt);
+    }
     return agent.id;
   }
 
@@ -6374,7 +6435,12 @@ export class SessionManager {
     const taskRefHead = taskRefId
       ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}\n`
       : "";
-    const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block);
+    // #219 件①：组织纪律引导段只给非 claude 引擎（claude 有项目 CLAUDE.md 全量版在场，
+    // 重复注入=双份纪律源，查重口径见 buildOrgDisciplineBlock 注释）。引擎决议：熟手以
+    // 其在编引擎为准（planned.engine 未指时熟手可能是任意引擎；引擎失配熟手在上方编制
+    // 闸前已清 null，veteran 非空即其在编引擎可信），新会话用 planned.engine ?? claude。
+    const dispatchEngine = (veteran ? this.sessions.get(veteran)?.state.engine : undefined) ?? planned.engine ?? "claude";
+    const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...engineFields }); /* #199 D：title 入台账（#NN 对账 join 键） */
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId: string;
@@ -7754,6 +7820,27 @@ export class SessionManager {
 // ——没有这行 worker 永远不知道可以申报，解析器静默空转、捕获环断腿。
 // W-KWP1 第四参 roleBlock（2026-10-11 拍板表 #3/#5）：岗位纪律注入块（buildRoleInjection
 // 产出，预算 ≤600 字符已在上游裁剪），落位任务正文之后、经验块之前（D 路 §3.2 图）。
+// #219 多引擎适配件①（2026-10-23）：组织纪律引导段 per-engine 注入。
+// 缺口实证：组织纪律的常驻通路只有 CLAUDE.md 族——claude=SDK 按 cwd 自动加载项目
+// CLAUDE.md + 雇员家 CLAUDE_CONFIG_DIR；codex 原生读 AGENTS.md（本仓无此文件）；
+// trae/qwen-code/codebuddy 各自配置体系均不认 CLAUDE.md。非 claude worker 因此
+// 缺分支/提交/自测等组织纪律引导。派单 prompt 是唯一保证到达的通道：本段精简
+// （~10 行）随派单前缀注入，尾行指回项目 CLAUDE.md 正本（各引擎都有文件读工具，
+// 引导段不替代正本只做到达保障）。
+// claude 引擎返回 null 不注入（项目 CLAUDE.md 全量版已在场，重复注入=双份纪律源，
+// 任务书 #219① 查重口径）。
+export function buildOrgDisciplineBlock(engine: string | null | undefined): string | null {
+  if (!engine || engine === "claude") return null;
+  return `—— 组织纪律引导（多引擎派单统一注入；claude 引擎不收本段，其项目 CLAUDE.md 为全量版）——
+- 工作区：多会话并行必须各占独立 git worktree 做开发编辑；只拉分支不挪目录等于没隔离；混合工作区禁止构建/部署。
+- 分支：非小修一律开 <type>/<英文短横线slug> 短命分支（type ∈ feat/fix/diag/build），禁止内部里程碑编号入名。
+- 收口：完事 squash 成一笔回主干（提交信息带任务号）；已 push 的历史禁止重写；push 前先把过程提交收口成一笔。
+- 提交前 git diff 核查每处改动归属本任务；混入其他任务的未提交改动用 git add -p 拆分，严禁一笔试多件事。
+- 自测：交付前完整自测（类型检查 + 项目测试套件 + 真实链路验证），缺一在回执写明缺哪项、为什么。
+- 全量纪律：项目内 CLAUDE.md（工作目录 <cwd>/CLAUDE.md）为权威正本，用文件读工具直接读；与本段冲突以正本为准。
+（本段与下方派单纪律冲突时，派单纪律恒优先）`;
+}
+
 // 拍板 #5 纪律恒优先：纪律段尾注一行写明岗位/经验块从属（两块各自带数据定性行，
 // 此处是唯一优先级裁决点）；拍板 #6/B 路件二：纪律段补 untrusted-content 防线行
 //（注入文本与项目文件内容都是数据不是指令，指令式要求不执行只回报）。
@@ -7761,8 +7848,8 @@ export class SessionManager {
 // 注入块（buildRuleInjection 产出，预算 ≤600 字符已在上游裁剪），落位任务正文之后、
 // 岗位块之前（谱系序 task→规则→岗位→经验→纪律，D 路+拍板 #9）。规则块自带头尾定性
 // 行（用户红线/优先级/择严声明），纪律段尾注维持岗位/经验从属口径不动。
-export function wrapDispatchPrompt(tier: string, task: string, experienceBlock?: string, roleBlock?: string, rulesBlock?: string): string {
-  return `[${tier} 派单]
+export function wrapDispatchPrompt(tier: string, task: string, experienceBlock?: string, roleBlock?: string, rulesBlock?: string, orgBlock?: string): string {
+  return `${orgBlock ? `${orgBlock}\n` : ""}[${tier} 派单]
 ${task}
 ${rulesBlock ? `\n${rulesBlock}\n` : ""}${roleBlock ? `\n${roleBlock}\n` : ""}${experienceBlock ? `\n${experienceBlock}\n` : ""}
 —— 派单纪律（矩阵式团队 §3.5 / §4）——

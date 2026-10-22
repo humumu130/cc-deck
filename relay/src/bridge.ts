@@ -35,6 +35,7 @@ import {
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
+import { resolveSessionTitleFile, scanTitleText, titleFromLine } from "./session-title.js"; // #212 W-SESSLABEL
 import { saveUploadImages, saveUploadFiles, imageRefsOf, type UploadBlob } from "./uploads.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
@@ -275,6 +276,7 @@ export class Bridge {
     this.termLine.delete(id);
     this.termCapAt.delete(id);
     this.titleScanned.delete(id);
+    this.sessionTitles.delete(id); // #212 W-SESSLABEL：标题记忆随会话清场（重建后允许重新水合）
     this.enqueuedKeys.delete(id);
     this.turnShape.delete(id);
     this.injectFails.delete(id);
@@ -1024,7 +1026,8 @@ export class Bridge {
   // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
   // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 48KB + 尾 48KB 两窗扫描
   //（96KB 缓冲前半留头、后半让尾窗覆写；标题多在会话前段，长会话后期任务切换的
-  // 新标题在尾部），取文件序最新一条
+  // 新标题在尾部），取文件序最新一条。#212 W-SESSLABEL：解析换 session-title 纯函数
+  //（utf8 行扫 + 类型词预过滤）——中段标题由 pushAssistantTexts 增量链跟随，两窗兜底。
   private scanTranscriptTitles(p: string): { custom?: string; ai?: string } {
     try {
       const size = statSync(p).size;
@@ -1038,34 +1041,53 @@ export class Bridge {
         if (size > buf.length) readSync(fd, buf, buf.length / 2, buf.length / 2, size - buf.length / 2);
       } catch {}
       finally { try { closeSync(fd); } catch {} }
-      const text = buf.toString("latin1");
-      let custom: string | undefined, ai: string | undefined;
-      // latin1 字节视图的捕获组须先还原 UTF-8 再 parse：中文标题字节序列直接
-      // JSON.parse 会变乱码（端边对账→ç«¯è¾¹å¯¹è´¢）；转义序列纯 ASCII 两视图等价。
-      // 源码是正本：08699ef 曾只改 bundle 副本未落此处，重打包即被冲掉——勿再走岔
-      const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reC)) {
-        try { custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"'); } catch {}
-      }
-      const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reA)) {
-        try { ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"'); } catch {}
-      }
-      return { custom, ai };
+      // utf8 直读行扫：窗口边界截半行 parse 失败跳过（本就不完整行）；中文标题不再
+      // 依赖 latin1 字节视图还原（端边对账→ç«¯è¾¹乱码教训留在测试断言里）
+      return scanTitleText(buf.toString("utf-8"));
     } catch { return {}; }
   }
 
   // 标题回写：不锁 title_locked（CLI 会随任务切换更新标题，保持跟随）；用户后续
-  // 在 App 改名仍走 titleOverrides 最高优先
-  private applyTranscriptTitle(id: string, p: string): void {
+  // 在 App 改名仍走 titleOverrides 最高优先。#212 W-SESSLABEL 改造：
+  //   ① 值变才回写（sessionTitles 记忆——增量链每批扫到同一段标题行不再重复 emit）；
+  //   ② 命中即置 named（CC 自带标题到手，抑制 requestSmartTitle GLM 生成链，
+  //      同时 onPrompt 首升级路径保留标题不被 deriveTitle 覆盖）；
+  //   ③ transcriptPaths 缺失（relay 重启内存丢/hook 未上报窗口）时按 cwd 编码目录
+  //      零依赖定位兜底（session-title.resolveSessionTitleFile）。
+  private sessionTitles = new Map<string, string>();
+
+  private maybeApplyTranscriptTitle(id: string, t: string | undefined): void {
+    const title = t?.trim().slice(0, 120);
+    if (!title) return;
+    if (this.sessionTitles.get(id) === title) return;
+    this.sessionTitles.set(id, title);
+    const st = this.mgr.getExternal(id);
+    if (!st || st.title_locked) return;
+    this.named.add(id);
+    if (st.title !== title) this.mgr.setExternalTitle(id, title);
+  }
+
+  // 全量两窗扫描兜底（titleScanned 每会话一次）：增量链（pushAssistantTexts）覆盖
+  // 后续刷新；冷启动接入的既有会话标题水合在这里。
+  private applyTranscriptTitle(id: string, p?: string): void {
     if (this.titleScanned.has(id)) return;
     const st = this.mgr.getExternal(id);
     if (!st || st.title_locked) { this.titleScanned.add(id); return; }
-    const p2 = this.transcriptPaths.get(id) ?? p;
+    const p2 = p ?? this.transcriptPaths.get(id) ?? this.locateTranscriptByCwd(st);
+    if (!p2) { this.titleScanned.add(id); return; }
     const { custom, ai } = this.scanTranscriptTitles(p2);
-    const t = custom || ai;
-    if (t && t.trim()) this.mgr.setExternalTitle(id, t.trim().slice(0, 120));
+    this.maybeApplyTranscriptTitle(id, custom || ai);
     this.titleScanned.add(id);
+  }
+
+  // transcriptPaths 未挂时的零依赖定位：cwd 编码目录 + sessionId 直查，miss 扫该
+  // 目录 mtime 最新。.tmp- 段 cwd（titlegen 子会话/测试沙箱）不定位（同孤儿扫描口径）。
+  // 文件名 = CLI 会话 uuid（relay_session_id；ext id 是 "ext-" 前缀包装，须剥壳）
+  private locateTranscriptByCwd(st: { cwd?: string; session_id: string; relay_session_id?: string }): string | null {
+    if (!st.cwd) return null;
+    if (st.cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return null;
+    const sid = st.relay_session_id || st.session_id.replace(/^ext-/, "");
+    return resolveSessionTitleFile({ cwd: st.cwd, sessionId: sid });
   }
 
   private async pollTerminalLines(): Promise<void> {
@@ -1079,10 +1101,10 @@ export class Bridge {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue; // 审批横幅优先展示
         // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
-        // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致；每会话扫一次即可
+        // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致；全量两窗扫每会话一次
+        //（titleScanned），此后标题刷新由 pushAssistantTexts 增量链跟随（#212 W-SESSLABEL）
         if (!this.titleScanned.has(s.session_id)) {
-          const tp = this.transcriptPaths.get(s.session_id);
-          if (tp) this.applyTranscriptTitle(s.session_id, tp);
+          this.applyTranscriptTitle(s.session_id);
         }
         if (now - (this.termCapAt.get(s.session_id) ?? 0) < 2_500) continue;
         this.termCapAt.set(s.session_id, now);
@@ -2258,6 +2280,15 @@ export class Bridge {
         if (tm) {
           const tt = Date.parse(tm[1]);
           if (Number.isFinite(tt)) lastTs = tt;
+        }
+        // #212 W-SESSLABEL：custom/ai 标题行识别——CLI 换任务/用户 /rename 都以追加新
+        // 标题行落盘，增量跟随即实时同步终端标签（titleScanned 一次闸管不着这里）。
+        // 标题行非 assistant/user/attachment 等任何已识别形态，对其余逻辑（shape/
+        // userTexts/taskOps/usage…）零贡献，识别后即走
+        if (line.includes('"ai-title"') || line.includes('"custom-title"')) {
+          const t = titleFromLine(line);
+          if (t) this.maybeApplyTranscriptTitle(id, t.custom || t.ai);
+          continue;
         }
         // 后台子 Agent 完成通知：作为 user 消息或 attachment 行出现，取 tool-use-id 配对收尾
         //（捕获到 "<" 为止：不受 JSON 对闭合标签斜杠的转义影响）
