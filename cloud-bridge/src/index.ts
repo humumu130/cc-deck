@@ -110,6 +110,27 @@ export function startCloudServer(port: number, token: string, extraPorts: number
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...SEC_HEADERS }).end(readFileSync(file));
       return;
     }
+    // 005 新壳托管（2026-10-22）：/index-005 + css/js 静态白名单——旧壳自足内联，
+    // 新壳拆了外部资产，无此路由则云端网页版恒停旧代（「网页版太旧还在37」根因之一）
+    if (req.method === "GET" && (url.pathname === "/index-005" || url.pathname === "/index-005.html")) {
+      const file = webDir("index-005.html");
+      if (!existsSync(file)) {
+        res.writeHead(503).end("web-console/index-005.html 不存在");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...SEC_HEADERS }).end(readFileSync(file));
+      return;
+    }
+    if (req.method === "GET" && /^\/(css|js)\/[A-Za-z0-9._-]+\.(css|js)$/.test(url.pathname)) {
+      const file = webDir(url.pathname.slice(1));
+      if (!existsSync(file)) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const ctype = url.pathname.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
+      res.writeHead(200, { "content-type": ctype, ...SEC_HEADERS }).end(readFileSync(file));
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
       const file = webDir("nacl.js");
       if (!existsSync(file)) {
