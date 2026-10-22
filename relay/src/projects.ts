@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
 import { appendJournal, atomicWriteJson, lastGoodJournalSnapshot } from "./fs-safe.js";
+import { applyOrgChange } from "./org-schema.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
 import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb } from "./storage/read-mode.js";
@@ -92,8 +93,11 @@ export interface ProjectGroup {
 // 用户拍板⑤排期项推翻，本词表为新权威（旧三态 todo/doing 词表外值读入即迁移）。
 export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_install" | "done";
 
-/** D18 词表运行时值（orgAction board 校验面/测试件静态锚共用单点，勿散写字面量） */
-export const BOARD_ENTRY_STATUSES: readonly BoardEntryStatus[] = ["backlog", "claimed", "submitted", "ready_to_install", "done"];
+/** D18 词表运行时值（orgAction board 校验面/测试件静态锚共用单点，勿散写字面量）。
+ *  W-CMDIMPL T0b：权威定义上移 org-schema.ts（reducer 校验层，依赖单向），此处
+ *  re-export 兼容既有消费面——语义不变。 */
+export { BOARD_ENTRY_STATUSES } from "./org-schema.js";
+import { BOARD_ENTRY_STATUSES } from "./org-schema.js";
 
 export interface BoardEntry {
   id: string;
@@ -418,6 +422,12 @@ export function setGroupHeadcountCap(gid: string, cap: number | undefined, dir?:
 }
 
 function saveGroup(g: ProjectGroup, dir?: string): boolean {
+  // W-CMDIMPL T0b：reducer 写严格（§5.6/拍板 #10）——组记录 schema 校验拒写
+  const chk = applyOrgChange("group", g);
+  if (!chk.ok) {
+    console.error(`[projects] ${chk.error}（gid=${g.id}）`);
+    return false;
+  }
   const f = readProjectsFile(dir);
   const i = f.groups.findIndex((x) => x.id === g.id);
   if (i >= 0) f.groups[i] = g;
@@ -872,6 +882,9 @@ export function upsertBoardEntry(
     w.board.entries.push(e);
   }
   w.board.updated_at = now;
+  // W-CMDIMPL T0b：reducer 写严格——板卡 schema 校验拒写（建/改共用此口）
+  const chk = applyOrgChange("board-entry", e);
+  if (!chk.ok) return { ok: false, error: chk.error };
   if (!saveBoardFile(w.board, dir, { action: jPrev ? "update" : "create", entry_id: e.id, ...(jPrev ? { prev: jPrev } : {}), next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
@@ -899,6 +912,9 @@ export function moveBoardEntry(
   else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
+  // W-CMDIMPL T0b：reducer 写严格——搬卡改后态 schema 校验拒写
+  const chk = applyOrgChange("board-entry", e);
+  if (!chk.ok) return { ok: false, error: chk.error };
   if (!saveBoardFile(w.board, dir, { action: "move", entry_id: e.id, prev: jPrev, next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
@@ -925,6 +941,13 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
   e.status = to;
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
+  // W-CMDIMPL T0b：reducer 写严格——裸设置器同样过闸（第四写口不断链）；void 返回
+  // 语义不变，拒写走 stderr 显式报（不静默吞）
+  const chk = applyOrgChange("board-entry", e);
+  if (!chk.ok) {
+    console.error(`[projects] dispatch-move 拒写：${chk.error}（gid=${gid} dispatch=${dispatchId}）`);
+    return;
+  }
   saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
 }
 

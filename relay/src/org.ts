@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
 import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
 import { atomicWriteJson } from "./fs-safe.js";
+import { applyOrgChange } from "./org-schema.js";
 import type { SessionEngine } from "./types.js";
 
 export type CommandRole = "owner" | "operator" | "viewer";
@@ -350,6 +351,13 @@ export function dispatchLogPath(dir?: string): string {
 // 无容量上限（append-only 审计语义，设计稿 §6.1 org_memory/dispatch_log 同口径）；
 // M1 量级 = 每次咨询 2 行，无需轮转。
 export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
+  // W-CMDIMPL T0b：reducer 写严格（§5.6/拍板 #10）——派单台账 schema 校验拒写
+  //（含 STAGE 词表：stage 基表+custom. 前缀，拍板 #9；drill 标记在 schema 内放行）
+  const chk = applyOrgChange("dispatch-entry", e);
+  if (!chk.ok) {
+    console.error(`[org] ${chk.error}（id=${e.id}）`);
+    return false;
+  }
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
