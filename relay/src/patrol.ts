@@ -17,6 +17,7 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile } from "./projects.js";
 import { readDispatchLog, orgDir } from "./org.js";
+import { drillDue, runDrill } from "./drill.js";
 import type { SessionManager } from "./session-manager.js";
 
 const WORKER_STALE_MIN = 40;     // WORKING 无帧判停滞（分钟）
@@ -258,6 +259,21 @@ export class PatrolModule {
       } else this.resolve("todo-stale");
     } catch (e) {
       console.log(`[patrol] todo scan error: ${e instanceof Error ? e.message : e}`);
+    }
+    // ⑦ W-CMDIMPL T6（#216，设计 §2.4）：链路代码变更自动演练——org/dispatch/harvest/
+    // patrol/drill 链路文件集主仓最新 commit 时间 > 上次 drill 时间则补跑一轮（relay 内
+    // 兜底；失败与巡检告警同通道推用户）。主仓不可达（云端）静默跳过。
+    try {
+      const mainRepo = process.env.CCR_MAIN_REPO || join(homedir(), "dev", "cc-deck");
+      if (drillDue(mainRepo, this.opts.dataDir)) {
+        const t = Date.now();
+        const r = runDrill(this.opts.dataDir);
+        if (!r.ok) this.push("drill-failed", `链路演练断点在「${r.failed_hop}」（全链 ${r.hops.length} 跳 / ${r.duration_ms}ms）——链路自身可能坏了`);
+        else this.resolve("drill-failed");
+        this.appendReport(`drill: ${r.ok ? "OK" : "FAIL@" + r.failed_hop} in ${Date.now() - t}ms`);
+      }
+    } catch (e) {
+      console.log(`[patrol] drill error: ${e instanceof Error ? e.message : e}`);
     }
     this.appendReport(`full: worker-stale=${stale.length} board=${boardAlerts.length ? boardAlerts.length + "项" : "OK"}`);
     // #199 D：full 周期挂三账对账 + 对账心跳查龄（PM turn-report 双触发，此处兜底——

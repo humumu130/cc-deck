@@ -341,6 +341,12 @@ export interface DispatchEntry {
   engine?: string;
   provider?: string;
   model?: string;
+  /** W-CMDIMPL T6（§2.4）：链路演练标记——true=假任务行（不触真实任务/用户）；
+   *  读侧宽容忽略（旧行/端上未知字段零影响），统计面对账面可按此排除。 */
+  drill?: boolean;
+  /** §1.5 阶段事件增量（T1-STAGE）：阶段名（词表=基表+custom. 前缀，拍板 #9）与明细 */
+  stage?: string;
+  stage_detail?: string;
 }
 
 export function dispatchLogPath(dir?: string): string {

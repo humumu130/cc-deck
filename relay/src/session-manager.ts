@@ -13,6 +13,7 @@ import {
 } from "./org.js";
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
+import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
@@ -5556,6 +5557,14 @@ export class SessionManager {
           this.auditRuleAction("exp-promote", r, exp.project_scope === "global" ? "team" : exp.project_scope);
           if (r.ok) this.emitRules(); // W-RULES2：升格复制入库后广播
           return r.ok ? { ok: true, data: { entry: r.entry } } : r;
+        }
+        case "drill-run": {
+          // W-CMDIMPL T6（#216，设计 §2.4）：链路演练手动触发面（假任务全链，drill
+          // 标记贯穿；部署闸到出包前一步为止，不真构建不真推送）。仅本机语义。
+          const r = runDrill(this.cfg.dataDir);
+          if (r.ok) return { ok: true, data: r as unknown as Record<string, unknown> };
+          // 演练失败也是有效结果（断点台账已落）——ok:false + 断点名，全量 hops 走 drill-log 查
+          return { ok: false, error: `演练断点：${r.failed_hop ?? "unknown"}（${r.hops.length} 跳 / ${r.duration_ms}ms，明细见 drill-log）` };
         }
         case "harvest-check": {
           // W-CMDIMPL ①（#216，设计 §1）：收割机器闸——纯机械只读，永不写（不 commit/
