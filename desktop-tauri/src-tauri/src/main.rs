@@ -867,12 +867,16 @@ fn node_path() -> Option<std::path::PathBuf> {
         }
     }
     // 用户级安装位：nvm-windows（%APPDATA%\nvm\nodejs 常不在 GUI PATH）+ volta + fnm
+    // + %USERPROFILE%\.local\bin（#210 用户公司机实锤：PowerShell profile 加的 PATH
+    // GUI 进程继承不到，where 也落空——unix 惯例目录在 win 侧同样出现，必须显式探）
     let appdata = std::env::var("APPDATA").unwrap_or_default();
     let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
     let mut candidates: Vec<String> = vec![
         format!("{appdata}\\nvm\\nodejs\\node.exe"),
         format!("{localappdata}\\Volta\\bin\\node.exe"),
         format!("{localappdata}\\fnm\\node.exe"),
+        format!("{userprofile}\\.local\\bin\\node.exe"),
     ];
     if let Ok(nvm_home) = std::env::var("NVM_HOME") {
         candidates.push(format!("{nvm_home}\\node.exe"));
