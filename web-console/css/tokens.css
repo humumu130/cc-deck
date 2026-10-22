@@ -66,7 +66,7 @@
       --card-veil: rgba(21,39,59,.78);
       --border-strong: #4E6D8E;
       --selected-line: #AFC0D2;
-      --selected-bg: rgba(232,239,248,.08);
+      --selected-bg: rgba(255,255,255,.1); /* #201 三轮：选中灰（任务书暗色档） */
       --shadow-hover: 0 10px 24px rgba(1,8,16,.28);
       --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
       --status-done-glow: rgba(75,203,145,.35);
@@ -222,7 +222,7 @@
       --card-veil: #FFFFFF;
       --border-strong: #D5D5D5;
       --selected-line: #07C160; /* #201⑥：同 selected-bg 绿 */
-      --selected-bg: #07C160; /* #201⑥：选中换微信绿档（灰橙仍被嫌难看） */ /* #201 二轮：随 --brand 浅灰橙档 */
+      --selected-bg: rgba(0,0,0,.08); /* #201 三轮：选中灰（任务书亮色档；绿/橙两代均被嫌） */
       --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
