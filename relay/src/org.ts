@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
 import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
+import { atomicWriteJson } from "./fs-safe.js";
 import type { SessionEngine } from "./types.js";
 
 export type CommandRole = "owner" | "operator" | "viewer";
@@ -283,11 +284,12 @@ export function readOrgAnchor(dir?: string): OrgAnchor | null {
 }
 
 export function writeOrgAnchor(a: OrgAnchor, dir?: string): boolean {
+  // W-CMDIMPL T0a（#216 设计 §5.3 附加条款）：org.json（Leader 锚）纳入原子写——
+  // 换届/锚回写频率不低，同为直写全量面；tmp+rename 消除崩溃半写窗口
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
-    writeFileSync(orgFilePath("org.json", d), JSON.stringify(a, null, 2) + "\n", "utf-8");
-    return true;
+    return atomicWriteJson(orgFilePath("org.json", d), JSON.stringify(a, null, 2) + "\n");
   } catch (e) {
     console.warn(`[org] 锚写入失败: ${e instanceof Error ? e.message : String(e)}`);
     return false;
