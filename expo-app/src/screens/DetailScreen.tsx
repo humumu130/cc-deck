@@ -1942,11 +1942,18 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
   // 列表零改渲染层
   const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
-  const wrStale = isWaitStale(wr); // #159 件∆：审批卡同款过期置灰
+  // #159 件∆：审批卡同款过期置灰。W-APPROVE #232：passive 卡豁免——CLI 本地弹窗无
+  // 超时（事故本体=干等到死），relay 侧注入任意时刻有效；10min TTL 的前提「relay 590s
+  // 已放行=CLI 已越过」对 passive 卡不成立，置灰恰杀隔夜/迟到发现的远程救援主场景
+  const wrStale = wr?.decidable !== false && isWaitStale(wr);
   wrRef.current = wr; // E3b 决议定向守卫同步（见 wrRef 声明处）
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
-  //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
-  const bannerVisible = !!wr && s.status === "WAITING" && wr.decidable !== false;
+  //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待。
+  // W-APPROVE #232：passive 权限卡（decidable=false，CLI 本地弹窗态）放开渲染——
+  // 按钮点击走同一 decide() 链（COMMAND_CONTINUE/REJECT），relay 侧按键注入应答
+  // CLI 弹窗；失败 ACK error → notifyCmdError「可重点按钮重试」，横幅保留。passive
+  // 提问卡（有 questions）仍不在此渲染（本地选择器兜底+晚答作答另链，保持现状）
+  const bannerVisible = !!wr && s.status === "WAITING" && (wr.decidable !== false || !wr.questions?.length);
   // E3a 头部活动舱投影：activity 缺失 / native_status 能力关 → null 整舱不渲染
   const dock = dockModelOf(s);
   // 舱态配色：四态各占主题色（图标+文字同色双通道）；其余态投影已滤不为 null

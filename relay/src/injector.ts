@@ -548,6 +548,68 @@ export async function injectShiftTab(pid: number): Promise<InjectResult> {
   return { ok: false, error: "Windows 宿主暂不支持会话内权限循环注入，请在终端内按 Shift+Tab" };
 }
 
+// W-APPROVE #232（2026-10-23）：被动权限卡远程可决化——CLI 本地权限弹窗的按键注入应答。
+// 场景：外部 CLI（无头 PM/worker）未被门控接战（remote_mode 关/gateTools 外/客户端离线）
+// 时权限请求落到 CLI 本地 TUI 弹窗，无人值守即干等到死（当日 5 CLI 级联死亡实锤）。
+// 注入面：tmux pane send-keys -l 数字键直达弹窗选项。**键位动态解析**（capture 弹窗
+// 文本锚「N. Yes 行尾 / N. No 行尾」取序号）——真弹窗实测（2026-10-23 沙盒校准）选项
+// 序会随版本/上下文漂移（4 选项形态 No="4"，硬编码 "3" 曾命中「Yes+切 auto 模式」危险
+// 档）；解析失败回退 PERM_DIALOG_KEYS 常量。**弹窗特征="Do you want to proceed?"**
+// （真 TUI 屏面文本；"Claude needs your permission" 是 Notification 消息文本不出现在
+// 弹窗屏——首版误用致验证循环对真弹窗假阳性，审查合流修正）。注入前确认锚在场（不在
+// =弹窗已被本地处理，注入只会污染输入框）；注入后 capture 验证锚离屏才算生效，未离屏
+// 重注一次（每次重解析键位），仍不离屏如实报错。capture 失败≠成功（不误判）。Terminal
+// 直开（do script 通道）数字键会先落 CLI 输入框而非弹窗选项——不支持（injectShiftTab
+// 同口径）；Windows inject.cs 无对应键位同报；Linux 走同一 tmux 通道（resolveTmuxTarget
+// 原生支持）。
+export const PERM_DIALOG_KEYS = { allow: "1", deny: "4" } as const;
+
+const PERM_DIALOG_MARK = "doyouwanttoproceed"; // tmuxNorm 归一后的真弹窗特征
+
+// 纯函数键位解析（可单测）：锚行尾防前缀误匹配——「1. Yes」✓ /「2. Yes, and always
+// allow…」✗（同为 Yes 前缀却是记忆/切档分支）；No 同理防「No, because…」自由文本
+export function permDialogKeyFrom(text: string, decision: "allow" | "deny"): string {
+  const re = decision === "allow" ? /^\s*(\d+)\.\s*Yes\s*$/m : /^\s*(\d+)\.\s*No\s*$/m;
+  const m = re.exec(text);
+  return m ? m[1] : PERM_DIALOG_KEYS[decision];
+}
+
+export async function injectPermChoice(pid: number, decision: "allow" | "deny"): Promise<InjectResult> {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
+  if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
+  if (process.platform === "win32") {
+    return { ok: false, error: "Windows 宿主暂不支持权限弹窗远程按键，请在电脑上处理" };
+  }
+  if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
+  const target = await resolveTmuxTarget(pid);
+  if (!target) {
+    return { ok: false, error: "该会话不在 tmux 里，无法远程按键（Terminal 直开窗口请在电脑上处理）" };
+  }
+  // 注入 + capture-pane 验证（防抢发三件套同思想）：每轮先 capture 确认弹窗锚在场
+  // （不在=已被本地处理，注入只会把数字打进输入框污染会话——审查合流修正），再动态
+  // 解析键位注入；注入后验证锚离屏，未离屏重注一次，仍不离屏如实报错。capture 失败
+  // 不判成功（第一轮抖动重试一轮，第二轮仍失败报错）
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cap = await runTmux(["capture-pane", "-p", "-t", target]);
+    if (!cap.ok) {
+      if (attempt === 0) { await sleep(400); continue; }
+      return { ok: false, error: "无法读取会话画面（capture 失败）——请在电脑上核对弹窗状态" };
+    }
+    if (!tmuxNorm(cap.text).toLowerCase().includes(PERM_DIALOG_MARK)) {
+      if (attempt === 0) return { ok: false, error: "权限弹窗已不在（可能已在电脑上处理）——无需远程注入" };
+      return { ok: false, error: "按键已注入但弹窗状态无法确认——请在电脑上核对" };
+    }
+    const key = permDialogKeyFrom(cap.text, decision);
+    const r = await runTmux(["send-keys", "-t", target, "-l", key]);
+    if (!r.ok) return { ok: false, error: `tmux send-keys 失败: ${r.error}` };
+    await sleep(600);
+    const cap2 = await runTmux(["capture-pane", "-p", "-t", target]);
+    if (cap2.ok && !tmuxNorm(cap2.text).toLowerCase().includes(PERM_DIALOG_MARK)) return { ok: true };
+    // cap2 失败或锚仍在 → 下一轮重解析重注；两轮耗尽走尾部报错
+  }
+  return { ok: false, error: "按键已注入但权限弹窗未消失（弹窗键位可能已变化）——请在电脑上处理" };
+}
+
 // 只发一个回车（空文本 + 默认带回车；inject.cs 对空文本不拒绝——
 // args=["pid",""] 通过长度检查，text="" 不产生字符记录，enter=true 只写 CR）：
 // 用于冲出滞留在 CLI 输入框、回车被界面层吞掉的排队消息
