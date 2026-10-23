@@ -55,11 +55,12 @@ while IFS= read -r f; do
 done <<< "$WC_LIST"
 [ "$WMISS" = "1" ] && FAIL=1
 # 副本陈旧件（源已无、副本还有 = 手工件/上一代产物残留；preview/ 为 gitignored
-# A/B 物两处都不查）
-for extra in $(find cc-plugins/plugins/cc-deck/web-console -type f -not -path '*/preview/*' -not -path '*/.wrangler/*' -not -name '.DS_Store' 2>/dev/null | sed 's|^cc-plugins/plugins/cc-deck/web-console/||' | sort); do
+# A/B 物两处都不查）。while-read 防 find 词分裂（文件名含空格即碎）
+while IFS= read -r extra; do
+  [ -z "$extra" ] && continue
   case "$extra" in site/*|wrangler.jsonc) continue ;; esac
   grep -qxF "$extra" <<< "$WC_LIST" || { echo "❌ 插件 Web 副本陈旧件（源已无此文件）: ${extra}（删除或重跑 build-plugin.mjs 后复查）"; FAIL=1; }
-done
+done < <(find cc-plugins/plugins/cc-deck/web-console -type f -not -path '*/preview/*' -not -path '*/.wrangler/*' -not -name '.DS_Store' 2>/dev/null | sed 's|^cc-plugins/plugins/cc-deck/web-console/||' | sort)
 
 # 生产面全量对照（#123 闸升级为 --check-all 全量版，2026-10-23 #237）：relay-service
 # 面 + Nova app 面，同一动态清单逐文件对工作区根源。原两文件口径（#123，2026-10-15
@@ -79,7 +80,7 @@ if [ "$CHECK_ALL" = "1" ]; then
       d=$( { shasum -a 256 "$dir/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
       if [ "$s" != "$d" ]; then
         if [ "$NOTE_SHOWN" = "0" ]; then
-          echo "ℹ️  注记：本闸对照工作区根源；部署面若刚被更新发版线刷过（发版真相=feat/testNN-integ 线 tag），红=分支线落后误报——先对比最近 tag 再处置"
+          echo "ℹ️  注记：本闸对照工作区根源；部署面若刚被更新发版线刷过（发版真相=feat/testNN-integ 线 tag），红=分支线落后误报——置灰前必须 git show 最近tag:web-console/<文件> 比对 hash，不许只看版本号就定性"
           NOTE_SHOWN=1
         fi
         echo "❌ $face 漂移: ${f}（跑 scripts/deploy-web.sh 同步后重启对应进程）"

@@ -9,6 +9,7 @@ cd "$(dirname "$0")/.."
 
 V="${1:?用法: release-test.sh <版本号>}"
 case "$V" in *-test.*) ;; *) echo "ERR: 版本号须带 -test 后缀（本脚本只出 test 包）"; exit 1;; esac
+case "${2:-}" in ""|--with-cf) ;; *) echo "ERR: 未知参数 $2（仅支持 --with-cf）"; exit 1;; esac
 git diff --quiet || { echo "ERR: 工作区有未提交改动，先收口"; exit 1; }
 
 echo "[1/7] VERSION → $V"
@@ -27,6 +28,9 @@ if [ "${2:-}" = "--with-cf" ]; then
 else
   bash scripts/deploy-web.sh --skip-cf
 fi
+# 幂等显式闸（审查 P1）：[3/7] 已跑 build-plugin 并提交，[3.5] 重跑 S1 应零 diff——
+# 出现 diff = esbuild 环境漂移产出了异源产物，带着它 tag 会烙错版本，必须停
+git diff --quiet || { echo "ERR: [3.5/7] deploy-web 后工作区出现新 diff（S1 产物非幂等，esbuild 环境漂移？）："; git status --short | head -5; exit 1; }
 echo "[4/7] 守卫（不绿即停，绝不 tag）"
 bash scripts/check-bundle-sync.sh | tail -2
 bash scripts/check-bundle-sync.sh | grep -q "✅ bundle 同步检查通过" || { echo "ERR: 守卫未过，已停止（可 git reset --soft HEAD~1 回退 bump 后修）"; exit 1; }

@@ -49,6 +49,35 @@ FAIL=0
 ok()  { echo "✅ $*"; }
 bad() { echo "❌ $*"; FAIL=1; }
 H()   { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}' || echo MISSING; }
+# 版本串提取（双壳格式，version.mjs 是口径权威：旧壳 index.html 内联 / 005 新壳
+# js/settings-domain.js 外置 const）。内嵌 || true 防 pipefail 杀——无匹配必须走
+# MISSING 报红而不是 set -e 静默死（裸 grep exit 1 经 pipefail 让赋值非零炸脚本）
+cv_html() {
+  local m; m="$(grep -m1 -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
+  if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
+}
+cv_js() {
+  local m; m="$(grep -m1 -o 'const CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
+  if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
+}
+# 面新鲜度闸（审查 P1：git-clean 闸只拦脏不拦旧——落后但干净的分支线跑本脚本会把
+# 新鲜部署面静默回滚到旧线内容，V1 随即自验假绿）。口径：面烙印 == 本地 VERSION
+# （升级中，release-test 时点常态）或 == 本线最近可达 tag（本线出过该版）才放行；
+# 两者皆非 = 面来自超前线（回滚风险），拒绝并要求 --force。纯等值判定，不写版本
+# 比较器（防「比较器跨线」bug 族）；拦程=版本级回滚，同版本异内容不在拦程（遗留注记）
+face_ver_check() { # $1=面名 $2=面 index.html
+  local fv baseline
+  fv="$(cv_html "$2")"
+  [ "$fv" = "MISSING" ] && return 0
+  [ "$fv" = "$VER" ] && return 0
+  baseline="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//; s/-nova$//' || echo "")"
+  if [ -n "$baseline" ] && [ "$fv" = "$baseline" ]; then return 0; fi
+  if [ "$FORCE" != "1" ]; then
+    echo "❌ 面$1当前烙印 $fv 既非本地 VERSION($VER) 也非本线基线 tag($baseline)——面可能来自超前线，同步=回滚（确认请 --force）"
+    exit 1
+  fi
+  echo "⚠️  --force 越过面新鲜度闸：面$1烙印 $fv → $VER"
+}
 # rsync 全量镜像排除项：preview/（A/B 对比临时物，gitignored 两处）、site/（营销站，
 # 只随 S4 CF 整目录上传，不属于插件/app/relay 面）、.wrangler/（CF 本地缓存）、.DS_Store。
 # 注意别加 --delete-excluded：排除项在接收端要受保护，不是要删
@@ -82,9 +111,11 @@ if [ "$SKIP_APP" != "1" ]; then
     echo "❌ Nova App 未安装（$NOVA_WC 不存在）——确认装位，或加 --skip-app"
     exit 1
   fi
-  # 面 rsync 前预剪除排除项（macOS 自带 rsync 2.6.9 实证：--checksum 与 --delete+
-  # --exclude 同用会整体破坏排除语义并错基 stat 报 IO error；且 --delete 对接收端
-  # 既有排除目录只保护不清——规格「除 preview/site」= 面上不该有，先剪后同步）
+  # 面新鲜度闸（防落后分支线把新鲜面静默回滚），再预剪除排除项（macOS 自带 rsync
+  # 2.6.9 实证：--checksum 与 --delete+--exclude 同用会整体破坏排除语义并错基 stat
+  # 报 IO error；且 --delete 对接收端既有排除目录只保护不清——规格「除 preview/site」
+  # = 面上不该有，先剪后同步）
+  face_ver_check "②" "$NOVA_WC/index.html"
   rm -rf "$NOVA_WC/preview" "$NOVA_WC/site" "$NOVA_WC/.wrangler"
   rsync -a --delete "${RSYNC_EX[@]}" "$SRC/" "$NOVA_WC/"
   ok "面② rsync 完成（重启 Nova 进程后运行面才换新）"
@@ -92,17 +123,20 @@ else
   echo "⏭️  S2 跳过（--skip-app）"
 fi
 
-# ---------- S3 relay-service 面（全量镜像：web-console + mobile + relay.mjs + 运行闭包） ----------
+# ---------- S3 relay-service 面（全量镜像：web-console + mobile + 运行闭包 + relay.mjs） ----------
 echo "—— S3 relay-service 面（${RS_DIR}）——"
 mkdir -p "$RS_DIR"
+face_ver_check "③" "$RS_DIR/web-console/index.html"
 rm -rf "$RS_DIR/web-console/preview" "$RS_DIR/web-console/site" "$RS_DIR/web-console/.wrangler"
 rsync -a --delete "${RSYNC_EX[@]}" "$SRC/" "$RS_DIR/web-console/"
 rsync -a --delete --exclude '.DS_Store' mobile/ "$RS_DIR/mobile/"
-cp "$COPY_BUNDLE/relay.mjs" "$RS_DIR/relay.mjs"
 # relay.mjs 运行闭包（better-sqlite3 三件，见 build-plugin.mjs 2b 节）：与 bundle 同源
-# 全量镜像，relay-service 是自足部署位。原生件仅当前平台（darwin）——跨平台部署走 CI
+# 全量镜像，relay-service 是自足部署位。原生件仅当前平台（darwin）——跨平台部署走 CI。
+# 顺序纪律：闭包先于 relay.mjs——活进程半程读盘时不能出现「新 bundle+旧原生件」
+# （external ABI 不匹配 dlopen 即崩）
 rsync -a --delete "$COPY_BUNDLE/node_modules/" "$RS_DIR/node_modules/"
 rsync -a --delete --exclude '.DS_Store' "$COPY_BUNDLE/../bin/" "$RS_DIR/bin/"
+cp "$COPY_BUNDLE/relay.mjs" "$RS_DIR/relay.mjs"
 ok "面③ 镜像完成（重启对应 relay 进程后运行面才换新）"
 
 # ---------- S4 CF 资产面 ----------
@@ -125,18 +159,8 @@ fi
 # ---------- V1 逐面机器验证锚 ----------
 echo "—— V1 逐面验证锚 ——"
 # V1-a 版本烙印：CONSOLE_VERSION 与 VERSION 全等（源 + 已同步各面双壳）。
-# 落点分壳（W-SPLIT-S4b 后，version.mjs 是口径权威）：旧壳=index.html 内联；
-# 005 新壳=js/settings-domain.js 外置 const。cv_* 内嵌 || true 防 pipefail 杀——
-# 无匹配（文件缺失/格式漂移）必须走 MISSING 报红而不是 set -e 静默死（005 实测：
-# index-005.html 根本没有版本串，裸 grep exit 1 经 pipefail 让赋值非零炸脚本）
-cv_html() { # 旧壳内联格式
-  local m; m="$(grep -m1 -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
-  if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
-}
-cv_js() { # 005 新壳外置格式
-  local m; m="$(grep -m1 -o 'const CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
-  if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
-}
+# 落点分壳（W-SPLIT-S4b 后）：旧壳=index.html 内联；005 新壳=js/settings-domain.js
+# 外置 const（cv_html/cv_js 定义在帮助函数区）
 check_ver() { # $1=面名 $2=取到的值 $3=文件路径（报红定位用）
   if [ "$2" = "$VER" ]; then ok "V1-a $1 版本烙印 = $VER"
   else bad "V1-a $1 版本烙印 '$2' ≠ VERSION '$VER'（$3）"; fi
@@ -204,6 +228,7 @@ fi
 echo "—— V2 后置闸（check-deploy-complete.sh）——"
 bash scripts/check-deploy-complete.sh || {
   echo "—— deploy-web 验证锚有红（V2 部署完整性未过），禁止当作同步完成——修完重跑"
+  echo "   （若红在进程新鲜度：文件已同步但 relay 进程还是旧代码——重启对应 relay 进程后重跑本脚本即可收口）"
   exit 1
 }
 
