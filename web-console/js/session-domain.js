@@ -123,6 +123,9 @@
                   return d.getFullYear() === now.getFullYear() ? md : d.getFullYear() + "年" + md;
                 }
                 function fmtDur(ms) { const s = Math.floor(ms / 1000); if (s < 60) return s + "s"; const m = Math.floor(s / 60); if (m < 60) return m + "m"; const h = Math.floor(m / 60); if (h < 24) return h + "h" + (m % 60) + "m"; return Math.floor(h / 24) + "d"; }
+                // #224 任务时长（CLI h/m/s 全显）+ 累计输出紧凑（↓ 同款）
+                function fmtTaskDur(sec) { const s2 = Math.max(0, Math.floor(sec)); const h2 = Math.floor(s2 / 3600); const m2 = Math.floor((s2 % 3600) / 60); if (h2 > 0) return h2 + "h" + m2 + "m" + (s2 % 60) + "s"; if (m2 > 0) return m2 + "m" + (s2 % 60) + "s"; return s2 + "s"; }
+                function fmtDownTok(n) { if (n >= 1e6) return (n / 1e6).toFixed(1) + "m"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "k"; return String(n); }
                 function tokStr(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(n); }
                 function sizeStr(n) { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; }
                 function ctxPct(s) { if (!s || !s.context_usage) return 0; return Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100)); }
@@ -1681,9 +1684,29 @@
                   const live = dockLiveLine(s); // A0-1：终端实时行（relay ​ 零宽前缀约定）→ 隐藏自家走秒/token 防双计
                   if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
                   const w = s.waiting_request;
-                  const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
-                  op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
-                  if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
+                  // #224 两层信息架构（WORKING）：标题行=✻ {任务名}（时长/↓累计输出由
+                  // tickDockElapsed 每秒续写 elapsed 段）；动作行=次行 ⚙ Running {命令} ·
+                  // {回合走秒}（mono dim，title hover 全量）。命令动作从主行让位次行
+                  let subEl = dock.querySelector("[data-dock-sub]");
+                  if (s.status === "WORKING" && !live) {
+                    op.textContent = s.title || "未命名任务";
+                    if (tok) tok.hidden = true;
+                    const act = String(s.action_summary || "").replace(/^\u200B+/, "");
+                    if (!subEl) {
+                      subEl = document.createElement("div");
+                      subEl.setAttribute("data-dock-sub", "");
+                      dock.appendChild(subEl);
+                    }
+                    subEl.dataset.act = act;
+                    subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
+                    subEl.textContent = act ? "⚙ Running " + act.slice(0, 110) : "";
+                    subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
+                  } else {
+                    if (subEl) subEl.remove();
+                    const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
+                    op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
+                    if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
+                  }
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
                   renderSubagents(s); // W-UIFB ⑧ 子 Agent 活性面板（状态栏下续行）
@@ -1737,7 +1760,21 @@
                   if (!el) return;
                   if (!s || UI.dock.hasAttribute("data-live-line")) { el.textContent = ""; return; }
                   if (s.status === "DONE" && s.duration_ms) { el.textContent = fmtDur(s.duration_ms); return; }
-                  const base = s.status === "WORKING" ? (s.turn_started_at || s.started_at) : (s.waiting_started_at || s.updated_at || s.started_at);
+                  // #224 WORKING：标题行尾=（任务时长 · ↓累计输出）——任务级时长=会话级
+                  // started_at 起跨回合累计（CLI 同语义），↓=usage.output_tokens（会话累计
+                  // 输出，统计页同源）；同时续写动作行（次行）的回合走秒
+                  if (s.status === "WORKING") {
+                    const dur = fmtTaskDur(Math.max(0, Date.now() - Number(s.started_at || Date.now())) / 1000);
+                    const out = s.usage && Number(s.usage.output_tokens) > 0 ? " · ↓" + fmtDownTok(Number(s.usage.output_tokens)) : "";
+                    el.textContent = "(" + dur + out + ")";
+                    const subEl = UI.dock.querySelector("[data-dock-sub]");
+                    if (subEl && subEl.dataset.act) {
+                      const runSec = Math.max(0, Math.floor((Date.now() - Number(subEl.dataset.turnStarted || Date.now())) / 1000));
+                      subEl.textContent = "⚙ Running " + String(subEl.dataset.act).slice(0, 110) + " · " + runSec + "s";
+                    }
+                    return;
+                  }
+                  const base = s.waiting_started_at || s.updated_at || s.started_at;
                   el.textContent = base ? fmtDur(Math.max(0, Date.now() - base)) : "";
                   // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，不重建面板）
                   document.querySelectorAll("#session-agbox [data-ag-at]").forEach((at) => {
