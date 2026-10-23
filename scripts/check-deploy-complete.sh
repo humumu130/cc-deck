@@ -26,7 +26,7 @@ bad() { echo "❌ $*"; FAIL=1; }
 
 [ -d "$DEPLOY_DIR" ] || { echo "❌ 部署位不存在: ${DEPLOY_DIR}（relay-service 未部署？）"; exit 1; }
 
-say "== 部署完整性检查 ==（部署位: $DEPLOY_DIR）"
+say "== 部署完整性检查 ==（部署位: ${DEPLOY_DIR}）"
 
 # ---------- 1. relay.mjs 部署位 vs 构建产物 ----------
 SRC_BUNDLE="cc-plugins/plugins/cc-deck/scripts/relay.mjs"
