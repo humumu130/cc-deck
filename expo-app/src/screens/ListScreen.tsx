@@ -1219,6 +1219,23 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
   // 左缘手势条随抽屉退役（W-EXPOLISH 件三）：它的唯一用途是呼出设置抽屉，设置升
   // 独立 tab 后手势与常驻 tab 入口重复——移除，避免维护第二入口路径
+  // #240 W-LEADERHIDE：Leader 会话识别集——组织锚 id（SNAPSHOT.leader_session_id，唯一
+  // 可靠识别：锚不在任何团队编制 headcount，2026-10-23 生产 projects.json 实锤）+ 编制
+  // role 词表（leader|领队）反查双口径。词表不含 pm：PM 会话照常出卡（桌面同口径，语义
+  // 判别=删 Leader 形制卡非 PM 会话卡）。滤点收在 sorted 上游单口：状态 chip 计数/折叠
+  // 空闲钮/可见列表三消费方自动同口径（卡面不出现而计数 +1 的漂移在源头消除）
+  const leaderSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const src of snap.sources) {
+      if (src.leaderSessionId) ids.add(src.leaderSessionId);
+      for (const g of src.projects ?? []) {
+        for (const m of g.headcount ?? []) {
+          if (/^(leader|领队)$/i.test(String(m.role || ""))) ids.add(m.session_id);
+        }
+      }
+    }
+    return ids;
+  }, [snap.sources]);
   const sorted = useMemo(() => {
     // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
     // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失。
@@ -1228,10 +1245,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     const rank = (s: SessionState) =>
       s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" ||
       (s.subagents ?? []).some((a) => !a.ended_at) ? 0 : 1;
-    return [...sessions].sort(
+    // #240 W-LEADERHIDE：Leader 卡不进列表基准集（用户口径①；桌面 renderMyList 同批同口径）
+    return [...sessions].filter((s) => !leaderSessionIds.has(s.session_id)).sort(
       (a, b) => rank(a) - rank(b) || (b.updated_at ?? b.started_at) - (a.updated_at ?? a.started_at),
     );
-  }, [sessions]);
+  }, [sessions, leaderSessionIds]);
 
   // 聚合多源 = 分组态（信息层级重设计：#294 批2 逐卡源角标改为分组头归属）；
   // 统计行「N 源聚合」/空态文案/顶栏副标题沿用同一开关
@@ -1248,7 +1266,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const soloName = soloOnline ? displaySrcName(soloOnline.name) : "";
 
   const counts: Record<string, number> = {};
-  for (const s of sessions) {
+  for (const s of sorted) { // #240：吃 leader 滤后基准集——chip 计数与卡面同口径
     counts[s.status] = (counts[s.status] ?? 0) + 1;
   }
   // P0 加固（Fabric addViewAt 闪退）：统计 chip 从「过滤 0 值动态 map」改「定长四槽
@@ -1297,7 +1315,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       })
       // W-PORT-B P0-2：搜索过滤挂链末端（段头/组头计数与待处理段自然联动）
       .filter((s) => sessionSearchTest(s, searchQ)),
-    [sorted, collapseIdle, idleDimMin, pendingDel, deleting, dirFilter, searchQ],
+    [sorted, collapseIdle, idleDimMin, pendingDel, deleting, dirFilter, searchQ], // #240：leader 滤点收在 sorted 上游单口，此处不再重复滤
   );
 
   // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶（E2a-up 富版：

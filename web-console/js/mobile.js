@@ -535,10 +535,29 @@
 
       // ---------- 四屏渲染 ----------
       const mobileProjOpen = new Set(); // FB16：手机闲置项目组手动展开账（会话内记忆）
+      // #240 W-LEADERHIDE：Leader 卡不进手机壳收件箱（桌面 renderMyList 同批同口径）——
+      // 锚 id（B2 S.leaderSessionId = SNAPSHOT.leader_session_id 透传）+ 编制 role 词表
+      //（leader|领队）双口径，词表不含 pm（PM 会话照常直列，删的是 Leader 形制卡非 PM 卡）。
+      // b2Api 缺席时词表段退化，锚 id 单口径仍兜底；词表匹配 S.projects（SNAPSHOT headcount）
+      const mobileLeaderIds = () => {
+        const ids = new Set();
+        const api = b2Api();
+        const S = api && api.S;
+        if (S && typeof S.leaderSessionId === "string" && S.leaderSessionId) ids.add(S.leaderSessionId);
+        const projects = S && Array.isArray(S.projects) ? S.projects : [];
+        for (const p of projects) {
+          const hc = Array.isArray(p && p.headcount) ? p.headcount : [];
+          for (const m of hc) {
+            if (m && /^(leader|领队)$/i.test(String(m.role || "")) && m.session_id) ids.add(String(m.session_id));
+          }
+        }
+        return ids;
+      };
       function renderInbox() {
         const list = document.querySelector("#m-inbox [data-mobile-session-list]");
         if (!list) return;
-        const sessions = allSessions().sort(byPinnedUpdated);
+        const leaderIds = mobileLeaderIds();
+        const sessions = allSessions().filter((s) => !leaderIds.has(s.session_id)).sort(byPinnedUpdated);
         // B18 活跃优先（手机同口径）：顶部「进行中」收全部活跃；闲置按项目分组
         // FB16：手机补折叠机制——闲置组默认折叠、组头可点展开（与桌面 B11 同语言）
         const pend = sessions.filter((s) => s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR");
@@ -589,7 +608,7 @@
       function renderTeam() {
         const screen = screenOf("team");
         if (!screen) return;
-        const sessions = allSessions();
+        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id)); // #240：泳道任务卡不吃 Leader 锚卡（同收件箱口径）
         const confirms = Array.isArray(bridge.pendingConfirms) ? bridge.pendingConfirms : [];
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         const head = screen.querySelector(".mobile-head h2 small");
@@ -616,7 +635,7 @@
       function renderProject() {
         const screen = screenOf("project");
         if (!screen) return;
-        const sessions = allSessions();
+        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id)); // #240：项目聚合 lane/统计不吃 Leader 锚卡（同收件箱口径）
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         const actN = sessions.filter(needAction).length;
         const artifactsN = sessions.reduce((n, s) => n + (Array.isArray(s.artifacts) ? s.artifacts.length : 0), 0);

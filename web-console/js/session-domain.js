@@ -56,6 +56,7 @@
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
+                  leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id（组织锚 Leader 会话 id，空串=无锚/旧 relay）——列表滤 Leader 卡用
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
                   tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
@@ -582,6 +583,7 @@
                   S.hasSnapshot = true;
                   S.relayName = p.relay_name || location.host;
                   S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
+                  S.leaderSessionId = typeof p.leader_session_id === "string" ? p.leader_session_id : ""; // #240：锚 id（缺席重置空串——旧 relay/换源不残留陈旧锚 id 误滤）
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
@@ -679,17 +681,16 @@
                 function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
                 // W-MODE 协作模式切换帧（relay orgAction collab-mode set 成功边广播）：
-                // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）；
-                // leader → 锚卡 upsert 回列表（帧带完整卡）。设置页开关回显走桥缓存（bridge 侧同帧合并）
+                // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）。
+                // #240 W-LEADERHIDE：leader 分支的锚卡 upsert 回列表退役——用户口径「会话列表
+                // 不放 Leader 卡」（切回 leader 时锚卡仍随 SNAPSHOT 进 S.sessions，列表渲染集
+                // 由 isLeaderSession 过滤；团队域/组织视图语义不受影响）
                 function onCollabMode(p) {
                   if (!p || (p.mode !== "leader" && p.mode !== "no-leader")) return;
                   S.collabMode = p.mode;
                   if (p.mode === "no-leader") {
                     const lid = typeof p.leader_session_id === "string" ? p.leader_session_id : "";
                     if (lid && S.sessions.has(lid)) onDeleted(lid);
-                  } else if (p.leader_session && typeof p.leader_session.session_id === "string" && !S.sessions.has(p.leader_session.session_id)) {
-                    S.sessions.set(p.leader_session.session_id, p.leader_session);
-                    renderMyList();
                   }
                 }
                 function onDeleted(sid) {
@@ -1246,13 +1247,25 @@
                   // sessionSearchTest 是用户显式找词，置顶卡不匹配搜索词照隐藏；slim 收起不豁免——
                   // slimIsHidden 本就置顶例外（:3709）。主过滤与 filterHidden 记账共用 pinnedKeep
                   // 谓词，记账恒等于真实隐藏集（mo 完整性检查口径不漂）。
+                  // #240 W-LEADERHIDE：Leader 卡不进列表——组织锚 id（SNAPSHOT.leader_session_id）
+                  // + 编制 role 词表（leader|领队）双口径。词表不含 pm：PM 会话照常直列（口径②
+                  // 语义判别：删的是 Leader 形制卡非 PM 会话卡）。锚不在任何团队编制 headcount
+                  //（2026-10-23 生产 projects.json 实锤）——headcount 反查滤不到锚，锚 id 是
+                  // 唯一可靠识别（relay SNAPSHOT 同批补发该字段）。leader 卡显式并入 filterHidden
+                  // 记账（observer 遍历 S.sessions 全量，缺记账=「缺卡→重渲→仍缺」死循环，FB17）
+                  const isLeaderSession = (x) => {
+                    if (S.leaderSessionId && x.session_id === S.leaderSessionId) return true;
+                    const m = slimRoster.bySid.get(x.session_id);
+                    return !!(m && /^(leader|领队)$/i.test(String(m.role || "")));
+                  };
+                  const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
-                  const sessions = [...S.sessions.values()].filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
-                  // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径
-                  const filterHidden = [...S.sessions.values()].filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
+                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径；#240 leader 卡恒进记账
+                  const filterHidden = [...S.sessions.values()].filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
                   // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
-                  const slimHiddenIds = [...S.sessions.values()].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
+                  const slimHiddenIds = [...liveSessions].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
                   S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;
                   if (!sessions.length) {
                     const ph = document.createElement("div");

@@ -503,6 +503,8 @@ export class CloudClient {
         // W-MODE 协作模式（与 ws-server 直连快照同源同步，#117 教训——云桥手机
         // 设置页开关回显；no-leader 时 sessions 已由 mgr.snapshot() 过滤锚卡）
         collab_mode: this.mgr.collabMode(),
+        // #240 W-LEADERHIDE：锚 Leader 会话 id（与 ws-server 直连快照同源同步）
+        leader_session_id: this.mgr.leaderSessionId(),
         // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
         // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
         // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，

@@ -1148,6 +1148,9 @@ export function startServer(
           // W-MODE 协作模式（设置-团队域开关数据源；no-leader 时 sessions 已由
           // snapshot() 过滤锚卡；cloud-client 云通道快照同步携带，#117 教训）
           collab_mode: mgr.collabMode(),
+          // #240 W-LEADERHIDE：锚 Leader 会话 id 随快照下发（空串=无锚/旧 relay 缺席）
+          // ——端上列表滤 Leader 卡唯一可靠识别（锚不在团队编制 headcount，反查失效）
+          leader_session_id: mgr.leaderSessionId(),
           // W-DESIGNHUB 系统设计图纸清单（设置-关于「系统设计图纸」区 + 项目域总览
           // 「设计图纸」区数据源；空数组/缺键 = 入口隐藏——旧 relay 与缺 docs 部署
           // 自动降级。移动端暂缓，云通道不带）

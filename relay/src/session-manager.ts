@@ -893,6 +893,13 @@ export class SessionManager {
     return readCollabMode(this.cfg.dataDir);
   }
 
+  // #240 W-LEADERHIDE：组织锚 Leader 会话 id（空串=无锚）。SNAPSHOT 随 collab_mode
+  // 同区下发——端上列表据此滤 Leader 卡（headcount 反查滤不到锚卡：锚不在任何团队
+  // 编制，2026-10-23 生产 projects.json 实锤）
+  leaderSessionId(): string {
+    return this.leaderId ?? "";
+  }
+
   // W-MODE：切换协作模式（orgAction collab-mode set 的执行体）。写盘成功 → 广播
   // 瞬态帧（在线端即时增删锚卡；离线端下次快照收敛）→ 返回最新态。no-leader 端
   // 上删卡依据 = leader_session_id；切回 leader 带 leader_session 完整卡端上 upsert
