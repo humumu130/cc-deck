@@ -522,6 +522,13 @@
                         const seen = new Set(S.projects.map((g) => g && g.id));
                         for (const g of keepProjects) if (g && g.id !== undefined && !seen.has(g.id)) S.projects.push(g);
                       }
+                      // #241 A:聚合下合回后复验 selected+重渲列表——此前 renderMyList 跑在
+                      // onSnapshot 内(本源集合上),keep 合回不重渲=列表恒缺后到帧的源(用户
+                      // 实锤「他源运行中会话卡消失」根因)
+                      if (agg) {
+                        if (!S.sessions.has(S.selected)) S.selected = "";
+                        renderMyList();
+                      }
                       break;
                     }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
@@ -598,7 +605,10 @@
                   if (S.selected && !S.sessions.has(S.selected) && UI && UI.input && UI.input.value) {
                     inputDrafts.set(S.selected, UI.input.value);
                   }
-                  if (!S.sessions.has(S.selected)) S.selected = "";
+                  // #241 A:聚合视角下不在此清 selected——本源快照替换≠最终集合(外层
+                  // SNAPSHOT case 会把上一轮并集合回,异源已选会话合回后仍在);清早了会把
+                  // 用户正看着的会话丢选中(实锤「会话消失」的选中态面)。单源视角照旧清理
+                  if (!(window.__ccDeck005SourceView && window.__ccDeck005SourceView() === "aggregate") && !S.sessions.has(S.selected)) S.selected = "";
                   S.slimUnread = new Map(); // [t-7e0c6189] 换源/重连全量回放：未读随增量重建（快照历史 log 不回灌未读）
                   try { S.drawerGid = localStorage.getItem("cc-deck-005-slim-drawer") || ""; } catch (_) {} // [t-7e0c6189] 第四列展开态记忆（gid 已不存在时 renderSlimDrawer 自动收起）
                   renderMyList();

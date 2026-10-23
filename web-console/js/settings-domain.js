@@ -3341,7 +3341,12 @@ function connectLan(ctx) {
         // 数据时整域假空（「暂无项目组/暂无编制数据」，1023 用户截图实锤），另一源团队
         // 永不可见。聚合下不走单源喂（下方 SNAPSHOT 缓存更新后合成两源并集重喂）；单源
         // 视角门控原样
-        if (viewSource() !== "aggregate" && context === (viewSource() === "cloud" ? cloudCtx : ctx)) Team.onFrame(context, message);
+        // #241 B 件(teamvis 遗留 1 补齐):聚合下团队增量帧(ORG_CONFIRM/BOARD_UPDATED/
+        // EXPERIENCE/RULES/PROJECTS)也路由喂——增量即时上屏(原「等下次任一源 SNAPSHOT
+        // 到达才收敛」)。Team 内部 per-type 处理(ORG_CONFIRM W-WINPAIR-R4 两源并集/
+        // BOARD 锚定投影/经验规则覆盖透传)与 #236 B 合成 SNAPSHOT 兜底共存:增量按帧源
+        // 粒度更新混合态,跨源重叠低域的覆盖由合成重喂自愈(teamvis 已备案取舍)
+        if ((viewSource() !== "aggregate" && context === (viewSource() === "cloud" ? cloudCtx : ctx)) || (viewSource() === "aggregate" && message.type !== "SNAPSHOT")) Team.onFrame(context, message);
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
         context.lastSnapshotPayload = message.payload; // W-WINPAIR-R3：全字段缓存（projects/org_confirms/acceptances/notifications…）
         // W-WINPAIR-R6 件九：每条会话挂源标识（relay_name）——聚合合并后徽章/色块按源渲染的锚
