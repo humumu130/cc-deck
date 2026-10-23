@@ -32,7 +32,7 @@
 
                   function markup() {
                     const c = state.cfg;
-                    if (!state.online) return '<div class="readonly-banner">等待 relay 连接…</div>';
+                    if (!state.online) return '<div class="readonly-banner">等待 relay 连接…<br><span style="opacity:.65">发版是仅本机操作（在公司网/云通道下不可用）——请回到家庭网直连本机后再打开此页</span></div>';
                     if (!c) return '<div class="readonly-banner">正在加载发版面板…</div>';
                     if (c.has_release_env === false) return '<div class="readonly-banner">此源没有发版环境（发版在本机进行）</div>';
                     const runningIds = new Set((c.running || []).map((j) => j.channel));
