@@ -24,19 +24,20 @@ const head = readFileSync(join(here, "../src/screens/page-head.tsx"), "utf-8");
 const orgTabs = readFileSync(join(here, "../src/screens/OrgTabs.tsx"), "utf-8");
 const list = readFileSync(join(here, "../src/screens/ListScreen.tsx"), "utf8");
 const app = readFileSync(join(here, "../App.tsx"), "utf8");
+const headUnify = readFileSync(join(here, "../src/head-unify.ts"), "utf8");
 
 console.log("== W-MOBILE3 #121/#122：PageHead 统一 + 设置二级页结构 ==");
 
 // ---- A. PageHead 组件（v3 .appbar 规格） ----
 ok(head.includes("export function PageHead"), "A1 PageHead 组件导出");
 ok(head.includes("fontSize: 15, fontWeight: \"600\", color: c.text") && head.includes("fontSize: 10, color: c.dim, lineHeight: 13"), "A2 v3 详情页基准（标题 15/600 c.text + 副题 10/lh13——W-HEAD5 d.head 同款）");
-ok(head.includes("paddingVertical: 4") && head.includes("borderBottomWidth: 1") && head.includes("backgroundColor: c.bg"), "A3 v3 容器对齐 d.head（paddingVertical 4/常规 bg/分隔线）");
+ok(head.includes("...HEAD_BASE") && head.includes("borderBottomWidth: 1.5") && head.includes("backgroundColor: c.bg"), "A3 v3 容器对齐 d.head（HEAD_BASE 展开+分隔线 1.5/lineStrong——W-HEADUNI/W-HEADFIX2 演进跟随）");
 ok(head.includes("width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft") && head.includes("strokeWidth={2.6}"), "A4 v3 返回钮 d.back 形制（26×26 r8 tintSoft+14px/2.6 chevron）");
 
 // ---- B. 四页接入 ----
 ok(orgTabs.includes("<PageHead") && orgTabs.includes('from "./page-head"'), "B1 团队/项目页（OrgPageShell）接 PageHead");
 ok(!orgTabs.includes("headT:") && !orgTabs.includes("headSub:"), "B2 OrgTabs 旧页头样式键零残留（headT/headSub 退役）");
-ok(list.includes("paddingHorizontal: 12, paddingVertical: 4") && list.includes("backgroundColor: c.bg"), "B3 v3 会话页 topbar 对齐 d.head（12 水平/4 垂直/常规 bg）");
+ok(list.includes("...HEAD_BASE") && list.includes("backgroundColor: c.bg") && list.includes("borderBottomColor: c.lineStrong"), "B3 v3 会话页 topbar 对齐 d.head（HEAD_BASE 展开+lineStrong 分隔——W-HEADUNI 演进跟随）");
 
 // ---- C. #122 设置二级页骨架 ----
 ok(sp.includes("const [subPage, setSubPage]"), "C1 subPage 二级页状态");
@@ -80,7 +81,7 @@ ok(sp.includes("<AboutModal") && sp.includes("<DevicesModal"), "D6 弹层族原�
   ok(head.includes("bell?: { badge: number; onPress: () => void }"), "F2 铃铛槽（④全页保留）");
   ok(head.includes("export function SessionStatSub"), "F3 会话统计副题组件（②五色状态灯+计数）");
   ok(head.includes("export function useBellBadge") && head.includes("export function useSourceLabel"), "F4 全页复用 hook（badge/label）");
-  ok(head.includes("minHeight: 48") && head.includes("paddingVertical: 4"), "F5 v3 总高 48px（详情页 d.head 同高，W-HEAD5 拍板）");
+  ok(headUnify.includes("height: 48") && head.includes("...HEAD_BASE"), "F5 v3 总高 48px（HEAD_BASE height 恒定，W-HEADUNI 全页单一基准）");
   ok(list.includes("headTitleT}>会话") || list.includes("会话</Text>") || /headTitleT.\{?\d?\}?..会话/.test(list) || list.includes("headTitleT}>{"), "F6 会话页大标题接入");
   ok(list.includes("SessionStatSub"), "F7 会话页状态灯副题接入");
   ok(orgTabs.includes("sourcePill={<SourceSwitch onOpenSettings={onGoSessions} />}"), "F8 团队/项目页源切换接入（W-HEAD6 追加：sourcePill prop=标题行内联）");
