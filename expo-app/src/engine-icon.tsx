@@ -71,3 +71,52 @@ export function EngineBrandTile({ engine, size = 18, dim = false }: { engine: En
     </View>
   );
 }
+
+// ---------- #226 件B（W-CARDTAGS 追加）：引擎品牌裸图标（胶囊前缀 12-14px 用） ----------
+// 与 EngineBrandTile（方块瓦片，选项行 18px）互补：本件为「无底框裸图标」形态，供
+// r3 引擎胶囊前缀/头像角标位使用。来源与取色（回执「图标体系」节同口径）：
+//   claude   像素小螃蟹复刻 V2（用户 1023 截图——橘 #E8815A 系非上版橙棕；16×12 网格）
+//   codex    圆形花边+>_ 终端符（用户截图 2 Codex CLI 官方形——替代上版 OpenAI 环结）
+//   qwen-code simple-icons siQwen path 内嵌（品牌紫 #6950EF）
+//   trae     simple-icons siTrae path 内嵌（品牌绿 #32F08C）
+//   glm/codebuddy/zcode：simple-icons 无收录且无公开官方 SVG——保持现状（回执标注）
+export function hasEngineIcon(engine: string | undefined | null): boolean {
+  return engine === "claude" || engine === "codex" || engine === "qwen-code" || engine === "trae";
+}
+
+export function EngineIcon({ engine, size = 13, color }: { engine: string | undefined | null; size?: number; color?: string }) {
+  if (engine === "claude") {
+    const h = (size * 12) / 16;
+    return (
+      <Svg width={size} height={h} viewBox="0 0 16 12">
+        <Rect x={0} y={1} width={2} height={1} fill="#E8815A" /><Rect x={0} y={2} width={1} height={2} fill="#E8815A" />
+        <Rect x={14} y={1} width={2} height={1} fill="#E8815A" /><Rect x={15} y={2} width={1} height={2} fill="#E8815A" />
+        <Rect x={2} y={3} width={1} height={1} fill="#E8815A" /><Rect x={13} y={3} width={1} height={1} fill="#E8815A" />
+        <Rect x={4} y={4} width={8} height={1} fill="#E8815A" /><Rect x={3} y={5} width={10} height={1} fill="#E8815A" />
+        <Rect x={3} y={6} width={10} height={1} fill="#E8815A" /><Rect x={3} y={7} width={10} height={1} fill="#E8815A" />
+        <Rect x={4} y={8} width={8} height={1} fill="#E8815A" />
+        <Rect x={2} y={8} width={1} height={2} fill="#E8815A" /><Rect x={1} y={10} width={1} height={1} fill="#E8815A" /><Rect x={4} y={9} width={1} height={2} fill="#E8815A" />
+        <Rect x={13} y={8} width={1} height={2} fill="#E8815A" /><Rect x={14} y={10} width={1} height={1} fill="#E8815A" /><Rect x={11} y={9} width={1} height={2} fill="#E8815A" />
+        <Rect x={5} y={5} width={1} height={1} fill="#5A2E1F" /><Rect x={10} y={5} width={1} height={1} fill="#5A2E1F" />
+      </Svg>
+    );
+  }
+  if (engine === "codex") {
+    const c = color ?? "#666";
+    const dots: Array<[number, number]> = [[12, 1.6], [16.2, 2.7], [19.3, 4.7], [21.3, 7.8], [22.4, 12], [21.3, 16.2], [19.3, 19.3], [16.2, 21.3], [12, 22.4], [7.8, 21.3], [4.7, 19.3], [2.7, 16.2], [1.6, 12], [2.7, 7.8], [4.7, 4.7], [7.8, 2.7]];
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        {dots.map(([cx, cy], i) => <Circle key={i} cx={cx} cy={cy} r={0.9} fill={c} />)}
+        <Path d="M8.2 9.2l3.4 2.8-3.4 2.8" stroke={c} strokeWidth={1.7} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <Rect x={13} y={14.2} width={4.2} height={1.7} rx={0.6} fill={c} />
+      </Svg>
+    );
+  }
+  if (engine === "qwen-code") {
+    return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#6950EF" d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z" /></Svg>;
+  }
+  if (engine === "trae") {
+    return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#32F08C" d="M24 20.5H3.5V17H0V3.5h24ZM3.5 17h17V7h-17Zm8.5-5-2.5 2.5L7 12l2.5-2.5Zm7 0-2.5 2.5L14 12l2.5-2.5z" /></Svg>;
+  }
+  return null;
+}

@@ -1,0 +1,10 @@
+<!-- #226 件B：Codex CLI 图标复刻（用户截图2）——圆形花边 + >_ 终端符，黑白线框。
+     花边=圆点环（24 点均匀分布模拟官方花边）；中心 >_ 用 path -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <g fill="currentColor">
+    <circle cx="12" cy="1.6" r="0.9"/><circle cx="16.2" cy="2.7" r="0.9"/><circle cx="19.3" cy="4.7" r="0.9"/><circle cx="21.3" cy="7.8" r="0.9"/><circle cx="22.4" cy="12" r="0.9"/><circle cx="21.3" cy="16.2" r="0.9"/><circle cx="19.3" cy="19.3" r="0.9"/><circle cx="16.2" cy="21.3" r="0.9"/><circle cx="12" cy="22.4" r="0.9"/><circle cx="7.8" cy="21.3" r="0.9"/><circle cx="4.7" cy="19.3" r="0.9"/><circle cx="2.7" cy="16.2" r="0.9"/><circle cx="1.6" cy="12" r="0.9"/><circle cx="2.7" cy="7.8" r="0.9"/><circle cx="4.7" cy="4.7" r="0.9"/><circle cx="7.8" cy="2.7" r="0.9"/>
+    <!-- >_ 终端符 -->
+    <path d="M8.2 9.2l3.4 2.8-3.4 2.8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="13" y="14.2" width="4.2" height="1.7" rx="0.6"/>
+  </g>
+</svg>

@@ -11,7 +11,7 @@
 // 增量（PROJECTS_UPDATED/BOARD_UPDATED/experience/rules/org_confirms）。板数据 live
 // 优先（conn.boards[gid] 由 BOARD_UPDATED delta 维护，M13-4 锚定纪律），detail 拉取
 // 结果兜底。对话不设 tab（A1-13）——经成员卡/看板 owner 点开成员会话即达。
-import { EngineBrandTile } from "../engine-icon";
+import { EngineBrandTile, EngineIcon, hasEngineIcon } from "../engine-icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { HEAD_BASE } from "../head-unify";
@@ -119,8 +119,14 @@ export function EngineBadge({ engine, size = "md" }: { engine?: string; size?: "
   const txt = size === "sm" ? styles.engBadgeTSm : styles.engBadgeT;
   return (
     <View style={styles.engBadge}>
-      {/* W-MSGUI 件二：彩点→品牌瓦片（EngineBrandTile 复用件，一处换全端生效） */}
-      <EngineBrandTile engine={engine} size={size === "sm" ? 12 : 14} />
+      {/* W-MSGUI 件二：彩点→品牌瓦片；#226 件B（W-CARDTAGS 追加）：四引擎有裸品牌
+          图标（螃蟹/终端符/官方 path）时胶囊前缀用裸图标替代方块瓦片——更轻、识别
+          更强；无图标引擎（glm/codebuddy/zcode）维持瓦片不劣化 */}
+      {hasEngineIcon(engine) ? (
+        <EngineIcon engine={engine} size={size === "sm" ? 12 : 14} color="#9AA7B8" />
+      ) : (
+        <EngineBrandTile engine={engine} size={size === "sm" ? 12 : 14} />
+      )}
       <Text style={txt}>{ENGINE_ZH[engine]}</Text>
     </View>
   );

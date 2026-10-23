@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Rect } from "react-native-svg";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay } from "../store";
 import type { ThemeColors } from "../theme";
@@ -80,7 +80,12 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
             const isActive = src.id === snap.activeSourceId;
             return (
               <Pressable key={src.id} style={[c.row, isActive && c.rowOn]} android_ripple={{ color: tc.tintSoft, borderless: false }} onPress={() => pick(src.id)}>
-                <View style={[c.dot, { backgroundColor: stc }]} />
+                {/* #226 件A：源标前缀换电脑图标（用户 1023 截图——⤷/色点升级）；
+                    显示器形随源色填充，在线态语义并入色值本身（离线灰） */}
+                <Svg width={11} height={11} viewBox="0 0 24 24">
+                  <Rect x="2" y="3.5" width="20" height="13.5" rx="2" fill={stc} />
+                  <Path d="M8 21h8" stroke={stc} strokeWidth="2.4" strokeLinecap="round" />
+                </Svg>
                 <Text style={c.rowT} numberOfLines={1}>{src.name}</Text>
                 <Text style={c.rowChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
               </Pressable>

@@ -1,0 +1,13 @@
+<!-- #226 件B：Claude 像素小螃蟹（用户 1023 截图复刻——社区梗吉祥物非官方花瓣）。
+     16×12 像素网格 → SVG rect 复刻；橘 #E8815A 系（截图取色）。单 fill，任意缩放 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 12" width="16" height="12">
+  <g fill="#E8815A">
+    <!-- 左钳（上翘两格+关节） --><rect x="0" y="1" width="2" height="1"/><rect x="0" y="2" width="1" height="2"/>
+    <!-- 右钳（镜像） --><rect x="14" y="1" width="2" height="1"/><rect x="15" y="2" width="1" height="2"/>
+    <!-- 眼柄（两侧向内上） --><rect x="2" y="3" width="1" height="1"/><rect x="13" y="3" width="1" height="1"/>
+    <!-- 身体（圆壳，像素近似） --><rect x="4" y="4" width="8" height="1"/><rect x="3" y="5" width="10" height="1"/><rect x="3" y="6" width="10" height="1"/><rect x="3" y="7" width="10" height="1"/><rect x="4" y="8" width="8" height="1"/>
+    <!-- 眼睛（深色两粒，壳上前部） --><rect x="5" y="5" width="1" height="1" fill="#5A2E1F"/><rect x="10" y="5" width="1" height="1" fill="#5A2E1F"/>
+    <!-- 左腿三对（向下外伸） --><rect x="2" y="8" width="1" height="2"/><rect x="1" y="10" width="1" height="1"/><rect x="4" y="9" width="1" height="2"/>
+    <!-- 右腿镜像 --><rect x="13" y="8" width="1" height="2"/><rect x="14" y="10" width="1" height="1"/><rect x="11" y="9" width="1" height="2"/>
+  </g>
+</svg>

@@ -103,6 +103,12 @@
     .source-trigger.source-company { border-color: var(--source-company); background: var(--source-company-bg); }
     .source-trigger.source-home { border-color: var(--source-home); background: var(--source-home-bg); }
     .source-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
+    /* #226 件A：源标前缀电脑图标（用户 1023 截图——色点升级显示器形）；状态色沿用
+       sourceDotClass 三态类（connected/reconnecting/disconnected 既有底色类继续生效） */
+    .source-option .source-dot, .cloud-row-src .source-dot {
+      width: 12px; height: 12px; border-radius: 2.5px; box-shadow: none;
+      clip-path: polygon(0 0, 100% 0, 100% 72%, 62% 72%, 62% 100%, 38% 100%, 38% 72%, 0 72%);
+    }
     .source-dot.status-reconnecting { background: var(--working); color: var(--working); }
     .source-dot.status-disconnected { background: var(--error); color: var(--error); }
     /* W-UIFB ①：源胶囊连接图标四态（旧版 connChip 线条电脑图标同形移植，随态染色）——

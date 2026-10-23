@@ -62,5 +62,26 @@ ok(css.includes("8px 3px color-mix(in srgb, var(--st-working) 85%"), "H3 glow �
 ok(ls.includes("right: -3, bottom: -3, width: 9, height: 9"), "I1 expo dot 原位（头像左下）9px");
 ok(css.includes(".srow-ava"), "I2 web 灯仍随 srow-ava（原位）");
 
-console.log(`\n${pass} passed, ${fail} failed`);
+  // ── J/K. #226 追加件二：源标电脑图标 + 引擎品牌图标体系 ──
+  {
+    console.log("== #226 件二：源标图标+引擎品牌体系 ==");
+    const ei = readFileSync(join(ROOT, "expo-app/src/engine-icon.tsx"), "utf-8");
+    const ss = readFileSync(join(ROOT, "expo-app/src/screens/source-switch.tsx"), "utf-8");
+    const tdp = readFileSync(join(ROOT, "expo-app/src/screens/TeamDetailPage.tsx"), "utf-8");
+    // 件A
+    ok(ss.includes("Rect x=\"2\" y=\"3.5\" width=\"20\" height=\"13.5\" rx=\"2\"") && ss.includes("M8 21h8"), "J1 expo 源行色点→显示器 SVG（屏体+底座）");
+    ok(ss.includes('fill={stc}'), "J2 显示器随源色填充（在线色/离线灰语义并入色值）");
+    ok(css.includes("clip-path: polygon(0 0, 100% 0, 100% 72%, 62% 72%"), "J3 web source-dot 显示器 clip-path（菜单/云桥行）");
+    // 件B
+    ok(ei.includes("#E8815A") && ei.includes('engine === "claude"') && ei.includes("16 12"), "K1 claude 像素螃蟹（#E8815A 橘系 16×12 网格复刻）");
+    ok(ei.includes("M8.2 9.2l3.4 2.8-3.4 2.8") && ei.includes("22.4"), "K2 codex 圆形花边 16 点+>_ 终端符");
+    ok(ei.includes("#6950EF") && ei.includes("#32F08C"), "K3 qwen/trae simple-icons 官方 path 内嵌（品牌色）");
+    ok(ei.includes("export function EngineIcon") && ei.includes("export function hasEngineIcon"), "K4 EngineIcon/hasEngineIcon 组件导出");
+    ok(tdp.includes("hasEngineIcon(engine) ? (") && tdp.includes("<EngineIcon engine={engine}"), "K5 EngineBadge 胶囊前缀接线（四引擎裸图标，其余瓦片不劣化）");
+    ok(sd.includes("ENGINE_BRAND_SVG") && sd.includes('ENGINE_BRAND_SVG[item.engineClass] ??'), "K6 web 引擎胶囊品牌 SVG 前缀（无图标回落 sprite）");
+    ok(ei.includes("glm/codebuddy/zcode：simple-icons 无收录"), "K7 无官方 SVG 引擎标注备案（占位不劣化）");
+    ok(tdp.includes('import { EngineBrandTile, EngineIcon, hasEngineIcon }'), "K8 EngineBrandTile 原件保留（选项行瓦片不受影响）");
+  }
+
+  console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
