@@ -24,7 +24,7 @@ FAIL=0
 say() { echo "$@"; }
 bad() { echo "❌ $*"; FAIL=1; }
 
-[ -d "$DEPLOY_DIR" ] || { echo "❌ 部署位不存在: $DEPLOY_DIR（relay-service 未部署？）"; exit 1; }
+[ -d "$DEPLOY_DIR" ] || { echo "❌ 部署位不存在: ${DEPLOY_DIR}（relay-service 未部署？）"; exit 1; }
 
 say "== 部署完整性检查 ==（部署位: $DEPLOY_DIR）"
 
@@ -32,7 +32,7 @@ say "== 部署完整性检查 ==（部署位: $DEPLOY_DIR）"
 SRC_BUNDLE="cc-plugins/plugins/cc-deck/scripts/relay.mjs"
 DEP_RELAY="$DEPLOY_DIR/relay.mjs"
 if [ ! -f "$SRC_BUNDLE" ]; then
-  bad "构建产物缺失: $SRC_BUNDLE（先跑 relay/scripts/build-plugin.mjs）"
+  bad "构建产物缺失: ${SRC_BUNDLE}（先跑 relay/scripts/build-plugin.mjs）"
 elif [ "$(H "$SRC_BUNDLE")" != "$(H "$DEP_RELAY")" ]; then
   bad "relay.mjs 部署位 ≠ 构建产物（部署位过期/异源）"
   say "    同步: cp $SRC_BUNDLE $DEP_RELAY && 重启 relay 服务"
@@ -76,7 +76,7 @@ if [ -d "$DEPLOY_DIR/web-console/web-console" ]; then
   say "    处置: 确认无引用后删除: rm -rf $DEPLOY_DIR/web-console/web-console"
 fi
 for f in "$DEPLOY_DIR"/relay.mjs.bak-* "$DEPLOY_DIR"/relay.mjs.old; do
-  [ -e "$f" ] && say "ℹ️  部署位备份残留: $f（不拦，介意可清）"
+  [ -e "$f" ] && say "ℹ️  部署位备份残留: ${f}（不拦，介意可清）"
 done
 
 # ---------- 5. 进程新鲜度（文件同步了但没重启 = 运行面仍旧代码） ----------
