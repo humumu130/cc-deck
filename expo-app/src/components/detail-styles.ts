@@ -104,6 +104,10 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusSpin: { fontSize: 14, fontWeight: "700" },
   statusText: { flex: 1, fontSize: 12.5, fontWeight: "600" },
   statusTime: { color: c.faint, fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  /* #224 动作行（布局细则定稿 1023）：⚙ Running {命令} · {回合走秒}——mono 等宽+dim
+     弱色小一档（CLI 原生小字味道）；单行截断+点按展开全量（组件侧 numberOfLines 切
+     换），不折叠（暂态行常驻即「在跑什么」的存在感） */
+  dockSub: { color: c.dim, fontSize: 10.5, fontFamily: "monospace", lineHeight: 14, marginTop: 3 },
   // 工作状态盒（对话流内，类 CLI）+ 其下方的排队注入消息。
   // #186 改 column：主状态行（liveMain）+ 并行子 Agent 块（agBox）同盒收拢；
   // marginBottom 10 承接原 agBox 的底部间距（与 pendWrap marginTop 8 叠加 18）。含子

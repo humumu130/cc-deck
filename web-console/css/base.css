@@ -1003,6 +1003,9 @@
     @keyframes dock-spin { to { transform: rotate(360deg); } }
     @keyframes dock-breath { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
     .session-state-flow { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+    /* #224 动作行（次行）：⚙ Running {命令} · {回合走秒}——mono+dim 弱色小一档
+       （CLI 原生小字）；单行截断（title hover 全量），不折叠 */
+    .session-state-dock [data-dock-sub] { overflow: hidden; color: var(--dim); font: 10.5px/15px var(--mono); white-space: nowrap; text-overflow: ellipsis; cursor: default; }
     .session-state-operation { display: block; min-width: 0; overflow: hidden; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; }
     .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
     /* B2 批2 A0-1/B#133：token 内联 + 终端实时行防双计 + 终态收口（DONE ✓ 8s 淡出在 terminal-fade） */
