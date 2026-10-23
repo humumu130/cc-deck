@@ -149,18 +149,19 @@ type ListRow =
   | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
 
-// W-LIST2 件一：卡间微信风 hairline 分隔——单线、左右留边对齐卡 padding 14（不顶满
-// 屏宽）、组头下首卡不画（leadingItem=组头时跳过；#218 后组间线已退役改留白）
-// 避重）、末卡后 RN 分隔器天然无线。色=主题 line 降透明度（深色主题融成 hairline、
-// 浅色主题本身即极浅灰），密度档通用（极简平铺行同线，原 swipeWrapM 注释口径的
-// 「极淡 hairline」从未实装，本件统一落地）。
+// 卡间 hairline 分隔——#242 以桌面端为基准（用户 2026-10-23：手机分割线难看，参考
+// 电脑端）：桌面会话行分隔=通栏 border-top（base.css:1926 件七定档，#193 微信风取代
+// 原 line-soft 65%），1px、--line@60%、零缩进零专属上下距（行 padding-block 撑行高）。
+// expo 同式：1px、line@0.6、通栏顶满宽（容器 paddingHorizontal 0 + 卡 borderRadius 0
+// 本就是桌面满宽行语言，#218 的 59 文字列缩进退役）。组头下首卡不画（leadingItem=
+// 组头时跳过）、末卡后 RN 分隔器天然无线；密度档通用（极简平铺行同线）。
 function ListRowSeparator({ leadingItem }: { leadingItem?: ListRow | null }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   if (!leadingItem || leadingItem.h !== false) return null;
-  /* #218 件二：微信基准——缩进从文字列起点（pad 14+ava 34+gap 11=59，头像右缘）画到
-     右缘不通栏；线重回「淡但可辨」档（1px 稳+line@.6，#207 lineStrong 全值 overshoot
-     微信那条几乎不可见的观感） */
+  /* #242 桌面基准：通栏（零缩进）+ 1px + line@.6——桌面 base.css:1926「件七」现行档
+     （color-mix --line 60%），缩进/透明度双参数与桌面逐项对齐；色板用自家 line token
+     （暗 #1A2942/亮 #E2E9F2，与桌面 --line #1C2A3E/#E0E0E0 近似同源，公式一致） */
   return <View style={[styles.rowSep, { backgroundColor: withA(c.line, 0.6) }]} />;
 }
 
@@ -2008,7 +2009,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 行高回调（paddingVertical）系用户行高反馈闭环成果，保留不回退
   swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
   // W-LIST2 件一：卡间 hairline（色由组件内 withA(c.line,.6) 动态注入——双主题一套）
-  rowSep: { height: 1, marginHorizontal: 59 }, /* #218 件二：缩进=卡 pad 14+ava 34+gap 11（文字列起点），微信 76pt 同语义 */
+  rowSep: { height: 1 }, /* #242 桌面基准：通栏零缩进（桌面 border-top 卡 margin 0 顶满宽），1px 线高本值 */
   swipeWrapC: { marginBottom: 2 },
   swipeWrapM: { marginBottom: 1 },
   swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
