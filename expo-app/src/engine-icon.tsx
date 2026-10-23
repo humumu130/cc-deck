@@ -6,8 +6,12 @@
 //   品牌图标的用品牌色首字母方块）；未接入（dim=true）一律灰调同款+「?」
 // 接入点：NewSessionModal 引擎选项行（原 engDot 彩点）、EngineBadge（详情 head
 // 引擎 chip 与各域复用件——一处替换全端生效）。
-import { Text, View } from "react-native";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { Image, Text, View } from "react-native";
+import Svg, { Circle, Path, Rect, SvgXml } from "react-native-svg";
+// W-ICONHUNT #228 接线：用户点选图标源（图集 1023 拍板，claude=SI Anthropic/
+// codex=SI OpenAI/glm=Z.ai logo/trae=官方 favicon PNG/qwen=SI Qwen/codebuddy=
+// 官网 logo/zcode=像素描边 Z）。SVG 全文内嵌+trae base64，见 engine-icon-xml.ts。
+import { ENGINE_PNG_B64, ENGINE_SVG_XML } from "./engine-icon-xml";
 
 export type EngineId = string;
 
@@ -87,6 +91,16 @@ export function hasEngineIcon(engine: string | undefined | null): boolean {
 }
 
 export function EngineIcon({ engine, size = 13, color }: { engine: string | undefined | null; size?: number; color?: string }) {
+  // W-ICONHUNT #228：用户点选图标源优先（engine-icon-xml.ts，图集拍板 1023）——
+  // SVG 引擎走 SvgXml 直渲；trae=官方 favicon PNG（base64 Image）；未知引擎落到
+  // 尾部像素占位（既有 fallback 不变）。原手绘分支（螃蟹复刻/终端符）随源替换退役。
+  const key = engine ?? "";
+  if (ENGINE_SVG_XML[key]) {
+    void color; // 图标自带品牌色（SI path/Z.ai logo 内嵌 fill），外层 color 不覆写
+  }
+  if (ENGINE_PNG_B64[key]) {
+    return <Image source={{ uri: `data:image/png;base64,${ENGINE_PNG_B64[key]}` }} style={{ width: size, height: size, borderRadius: Math.max(2, size * 0.15) }} resizeMode="contain" />;
+  }
   if (engine === "claude") {
     const h = (size * 12) / 16;
     return (
