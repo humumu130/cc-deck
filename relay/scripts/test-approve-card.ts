@@ -14,6 +14,7 @@ import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
 import { evaluatePermission, engineCapabilityState } from "../src/permission-policy.js";
+import { permDialogKeyFrom } from "../src/injector.js";
 
 let pass = 0;
 let fail = 0;
@@ -75,6 +76,24 @@ writeFileSync(process.env.CCR_OSASCRIPT_CMD, "#!/bin/sh\nexit 0\n");
   assert(unknownEnv.effective_mode === "full-auto", "unknown 环境勾选同样放行（口径②：用户已同意）");
 }
 
+// ---------- ①b 键位解析 fail-closed（W-KEYFIX，W-REV54-B P1/P2 修复面） ----------
+{
+  const hist = "⎿ 1. Yes\n（上轮应答留痕）\n";
+  const dialog = "Bash command\n Create empty file\n Do you want to proceed?\n 1. Yes\n 2. Yes, and always allow access\n 3. No\n";
+  // 反方攻击 1a 构造复跑（验收点 1）：历史留痕在场 + 当前弹窗——解析必须落锚后当前选项
+  assert(permDialogKeyFrom(hist + dialog, "allow") === "1", "1a 复跑：历史留痕在场，allow 解析锚后当前弹窗 1. Yes（不落历史区重复行）");
+  assert(permDialogKeyFrom(hist + dialog, "deny") === "3", "1a 复跑：deny 唯一性保持（解析 3. No）");
+  // 攻击形态变体：当前弹窗首选项带后缀（无行尾 Yes）→ fail-closed null 不注（旧实现落历史 "1"）
+  const drift = hist + "Do you want to proceed?\n 1. Yes, and always allow access\n 2. Yes, and switch to auto mode\n 3. No\n";
+  assert(permDialogKeyFrom(drift, "allow") === null, "形态漂移 fail-closed：无行尾 Yes → null 不注入（旧实现误落历史 1）");
+  assert(permDialogKeyFrom(drift, "deny") === "3", "形态漂移 deny 仍可达（3. No 在锚后域）");
+  // 锚缺失（弹窗不在屏/形态完全不同）→ null
+  assert(permDialogKeyFrom("random output\n1. Yes\n2. No\n", "allow") === null, "锚缺失 fail-closed：无 proceed 锚 → null（旧实现误落裸文本编号行）");
+  // 正常校准形态回归（原批行为一致，验收点 3）
+  assert(permDialogKeyFrom("Do you want to proceed?\n 1. Yes\n 2. Yes, and always allow access to /tmp from this project\n 3. Yes, and switch to auto mode\n 4. No\n", "allow") === "1", "校准形态回归：allow=1");
+  assert(permDialogKeyFrom("Do you want to proceed?\n 1. Yes\n 2. Yes, and always allow access to /tmp from this project\n 3. Yes, and switch to auto mode\n 4. No\n", "deny") === "4", "校准形态回归：deny=4");
+}
+
 // ---------- ② A 面：injectPendingDecision 预检分支 ----------
 const cfg = loadConfig();
 const bus = new EventBus();
@@ -120,10 +139,11 @@ if (!hasTmux) {
   // pid 防护拒掉）。脚本：显示弹窗特征行→raw 单键读→收到 1/3 清屏打标记（特征行离屏
   // =injectPermChoice 的 capture 验证通过）
   const markScript = join(root, "pane-mark.js");
-  // 真弹窗屏面仿真（2026-10-23 校准形态）：proceed 特征行+选项行——动态键位解析真实
-  // 生效（deny 解析「3. No」→"3"；allow 解析「1. Yes」→"1"），非常量回退路径
+  // 真弹窗屏面仿真（2026-10-23 校准形态）+ 历史区留痕行（W-REV54-B P1 攻击形态）：
+  // 锚前有上轮弹窗留痕「1. Yes」——解析域限定 proceed 锚后，allow/deny 都必须命中
+  // 当前弹窗选项（1/3）而非历史行（首匹配旧实现会落历史 "1"）
   writeFileSync(markScript, `const mark = process.argv[2] || "MARK";
-process.stdout.write("Bash command\\n Create empty file\\n Do you want to proceed?\\n 1. Yes\\n 2. Yes, and always allow access\\n 3. No\\n");
+process.stdout.write("⎿ 1. Yes\\n（上轮应答留痕）\\n Bash command\\n Create empty file\\n Do you want to proceed?\\n 1. Yes\\n 2. Yes, and always allow access\\n 3. No\\n");
 process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.once("data", (d) => {
@@ -178,7 +198,9 @@ process.stdin.once("data", (d) => {
   assert(br.includes(".finally(() => this.injectInFlight.delete"), "relay：inFlight finally 收口锚");
   assert(br.includes("cur.request_id !== requestId"), "relay：rid 覆写守卫锚（防清新卡）");
   const inj = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/injector.ts"), "utf-8");
-  assert(inj.includes("doyouwanttoproceed") && inj.includes("permDialogKeyFrom"), "relay：真弹窗特征+动态键位解析锚");
+  assert(inj.includes("do you want to proceed?") && inj.includes("permDialogKeyFrom"), "relay：真弹窗特征+动态键位解析锚");
+  assert(inj.includes("弹窗形态未识别") && !inj.includes("PERM_DIALOG_KEYS"), "relay：fail-closed 锚（形态未识别不注+常量回退已删）");
+  assert(inj.includes("lastIndexOf(PERM_DIALOG_ANCHOR_TEXT)"), "relay：解析域限定 proceed 锚后锚（历史区排除）");
 }
 
 // ---------- 清理 ----------
