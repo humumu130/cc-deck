@@ -8,7 +8,7 @@ import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
 import { isDataDirIsolated } from "./config.js";
-import { injectText, injectEsc, injectEnter, injectShiftTab, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
+import { injectText, injectEsc, injectEnter, injectShiftTab, injectPermChoice, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
 import { guardConfig, guardCompensateEnter } from "./type-guard.js";
 import {
   addHiddenTodoKey,
@@ -1525,6 +1525,61 @@ export class Bridge {
 
   hasPending(sessionId: string): boolean {
     return this.pending.has(sessionId);
+  }
+
+  // ---------- W-APPROVE #232（2026-10-23）：被动权限卡远程应答（按键注入） ----------
+  // 门控未接战（remote_mode 关/gateTools 外/客户端离线）时权限请求落到 CLI 本地 TUI
+  // 弹窗（waiting_request.decidable=false 纯通知态，当日 5 外部 CLI 级联干死的形态）。
+  // 本方法给它补远程应答面：经 injector.injectPermChoice 向 CLI 所在 tmux pane 注入
+  // 数字键（allow="1"/deny="3"），capture-pane 验证弹窗消失才算生效。
+  // 受理模型：handler 签名同步（CommandAckPayload），故本方法做**同步预检+异步执行**——
+  // 预检（waiting 形状/pid 定位/inFlight 防连点）同步返回 error=拒绝受理（ACK ok:false
+  // 文案直达端上 toast）/null=受理（ACK ok:true），注键验证异步完成后 emitWaitingResolved
+  // 广播收卡；失败 pushExternalLog 留时间线+横幅保留（端上可重试，心智同「等待条保留
+  // 可重点按钮」）。inFlight 期间重复点击同步拒绝，防弹窗消失后键落输入框污染会话。
+  private injectInFlight = new Set<string>();
+
+  isInjectInFlight(sessionId: string): boolean {
+    return this.injectInFlight.has(sessionId);
+  }
+
+  injectPendingDecision(sessionId: string, requestId: string, decision: "allow" | "deny", by: string, reason?: string): string | null {
+    const st = this.mgr.getExternal(sessionId);
+    const w = st?.waiting_request;
+    if (!st || !w || w.request_id !== requestId) return "no such waiting request";
+    if (w.questions?.length) return "提问类请走作答通道（COMMAND_ANSWER）";
+    if (w.decidable !== false) return "该请求在远程审批挂起（或已超时放行）——请重试允许/拒绝或本地处理";
+    if (this.injectInFlight.has(sessionId)) return "上一次远程决议仍在验证中，稍候重试";
+    const pid = st.cli_pid;
+    if (!pid) return "CLI 进程未定位（可能已退出）——请核对会话后重试或本地处理";
+    this.injectInFlight.add(sessionId);
+    void injectPermChoice(pid, decision)
+      .then((r) => {
+        if (!r.ok) {
+          // 注入失败不清 pid 定位（tmux 不在场≠进程死，onInjectFail 的 ERROR 自愈语义过重）；
+          // 横幅保留+时间线留痕，端上按钮可重试
+          this.mgr.pushExternalLog(sessionId, "system", `远程${decision === "allow" ? "批准" : "拒绝"}未生效：${r.error}`);
+          return;
+        }
+        // rid 覆写守卫（审查 P2）：注入验证窗内 CLI 若跑完快速工具又弹下一张卡
+        //（Notification 已覆写 waiting_request），本决议的收卡帧不得清掉新卡——
+        // 只留痕提示对新卡重新决议（键可能已落新弹窗，残余面备案 W-APPROVE 回执）
+        const cur = this.mgr.getExternal(sessionId)?.waiting_request;
+        if (cur && cur.request_id !== requestId) {
+          this.mgr.pushExternalLog(sessionId, "system", `远程决议生效前会话已推进到新权限请求（${cur.tool_name || "工具调用"}）——请对新卡重新决议`);
+          return;
+        }
+        const why = decision === "deny" && reason ? `｜原因：${truncate(reason, 80)}` : "";
+        this.mgr.pushExternalLog(sessionId, "system", `远程${decision === "allow" ? "批准" : "拒绝"}（按键注入）：${w.tool_name || "工具调用"}｜by ${by}${why}`);
+        this.mgr.emitWaitingResolved(sessionId, requestId, decision, by);
+      })
+      .catch((e) => {
+        // 防御收口（审查 P3）：注入链无预期抛点，但 unhandledRejection 可杀 relay——
+        // 异常同失败语义留痕，inFlight 由 finally 兜底清
+        this.mgr.pushExternalLog(sessionId, "system", `远程决议异常：${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => this.injectInFlight.delete(sessionId));
+    return null;
   }
 
   // ---------- 输入注入（COMMAND_EXT_INPUT / COMMAND_EXT_STOP）----------
@@ -3149,6 +3204,7 @@ export class Bridge {
         input_summary: msg,
         suggestions: [],
         decidable: false,
+        received_at: Date.now(), // W-APPROVE：端上 TTL 置灰锚（10min 过期治理同门控卡口径）
       });
     } else if (/waiting for your input/i.test(msg) && state.status === "WORKING") {
       // Esc 打断的回合不触发 Stop hook，CLI 空闲 60s 通知是唯一回退信号：

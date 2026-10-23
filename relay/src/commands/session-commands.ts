@@ -382,10 +382,17 @@ export function createSessionCommands(mgr: any) {
           // WaitingPayload.remember 为准，relay 侧 suggestPattern 二次校验，危险形态不落）
           const scope = cmd.payload.remember_scope;
           if (s.state.external) {
-            if (!mgr.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow", undefined, scope, by)) {
-              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            if (mgr.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow", undefined, scope, by)) {
+              mgr.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "allow", by);
+              return { command_id: cmd.command_id, ok: true };
             }
-            mgr.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "allow", by);
+            // W-APPROVE #232：门控挂起不在（被动权限卡，decidable=false）→ 按键注入应答
+            // CLI 本地弹窗。受理模型=同步预检+异步注键（bridge.injectPendingDecision 注释）：
+            // null=受理 ACK ok（结果经 SESSION_WAITING_RESOLVED 收卡/失败留卡重试）
+            const injErr = mgr.bridge?.injectPendingDecision(cmd.payload.session_id, cmd.payload.request_id, "allow", by);
+            if (injErr) {
+              return { command_id: cmd.command_id, ok: false, error: injErr };
+            }
             return { command_id: cmd.command_id, ok: true };
           }
           const live = mgr.requireLive(cmd.payload.session_id);
@@ -397,10 +404,16 @@ export function createSessionCommands(mgr: any) {
     COMMAND_REJECT(cmd: any, by: string): CommandAckPayload {
           const s = mgr.require(cmd.payload.session_id);
           if (s.state.external) {
-            if (!mgr.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "deny", cmd.payload.reason)) {
-              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            if (mgr.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "deny", cmd.payload.reason)) {
+              mgr.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "deny", by);
+              return { command_id: cmd.command_id, ok: true };
             }
-            mgr.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "deny", by);
+            // W-APPROVE #232：被动权限卡回退注入应答（reason 无法进 TUI 弹窗——拒绝
+            // 原因落时间线日志留痕，CLI 侧按「用户拒绝」继续）
+            const injErr = mgr.bridge?.injectPendingDecision(cmd.payload.session_id, cmd.payload.request_id, "deny", by, cmd.payload.reason);
+            if (injErr) {
+              return { command_id: cmd.command_id, ok: false, error: injErr };
+            }
             return { command_id: cmd.command_id, ok: true };
           }
           const live = mgr.requireLive(cmd.payload.session_id);

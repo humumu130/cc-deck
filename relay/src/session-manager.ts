@@ -6408,7 +6408,20 @@ export class SessionManager {
       dir_scope: dirScope,
       env: envScope,
       user_authorized_bypass: readBypassAuthorization(this.cfg.dataDir), // #69：用户授权的生产 bypass 通道（组织派单专用）
+      // W-APPROVE #232（2026-10-23 用户口径③）：派单=授权——org dispatch 请求 bypass
+      // 即「跳过权限确认」勾选语义（worker 例行工具权限属预授权范围），生产/unknown
+      // 环境闸即放（materialized=production_skip_confirm_authorized 进审计，与 create
+      // 面 #205 同款）。授权位缺省不再卡死派单面（此前本路径 authorized+skipConfirm
+      // 双缺=forbidden「dispatch 面未勾选路径」——PM 无法代勾导致派单被闸，断点实测）；
+      // PM/用户自建会话（create 面）语义零变，仍按实际勾选
+      skip_confirm_checked: true,
     }) : null;
+    if (perm && perm.effective_mode !== "forbidden" && (envScope === "production" || envScope === "unknown" || dirScope === "production" || dirScope === "unknown")) {
+      // #232 对齐 create 面 gate-release 先例（commands/session-commands.ts:188）：dispatch
+      // 面勾选语义放行必落链审计——materialized（permission audit）只记档位事实，谁放的行
+      // （系统代填勾选+role+环境）在 chain-audit 可查（审查 P2-3 缺口补齐）
+      try { this.emitChainAudit("gate-release", `skip-confirm 放行（dispatch 预授权，系统代填勾选） actor=${actor} role=${bizRole} engine=${engineForPolicy} env=${envScope ?? "?"} dir=${dirScope ?? "?"} dispatch=${dispatchId.slice(0, 8)}`); } catch { /* 审计尽力而为 */ }
+    }
     if (perm && perm.effective_mode === "forbidden") {
       appendPermissionAudit(auditStore(this.cfg.dataDir), auditRow(perm, null));
       return { ok: false, error: `forbidden: ${perm.reason}` };

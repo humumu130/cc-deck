@@ -2191,7 +2191,15 @@
                     content = w.input_summary || "";
                     if (Array.isArray(w.suggestions) && w.suggestions.length) content += (content ? "\n" : "") + "建议：" + w.suggestions.join(" / ");
                   }
-                  if (passive) {
+                  if (passive && !isAsk) {
+                    // W-APPROVE #232：被动权限卡可决化——按钮点击仍走 COMMAND_CONTINUE/REJECT，
+                    // relay 侧经按键注入应答 CLI 本地弹窗（tmux pane 直达数字键+capture 验证；
+                    // 注入失败横幅保留可重试，toast 给失败原因）。无人值守的外部 CLI（无头
+                    // PM/worker）不再「请在电脑上处理」干等到死
+                    content += "\n（CLI 本地弹窗等待中——可远程批准，无需到电脑前）";
+                    actions = '<div class="wait-actions"><button class="deny" data-wait-deny>✕ 拒绝</button>' +
+                      '<button class="allow" data-wait-allow>✓ 允许</button></div>';
+                  } else if (passive) {
                     content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
                   } else if (isAsk && (w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 90000) {
                     // W-DESKASK（W-ASKFIX 桌面同步）：ask 卡 90s 应答窗（relay
@@ -2229,6 +2237,7 @@
                   card.dataset.b2Wait = "1";
                   card.dataset.sid = s.session_id;
                   card.dataset.rid = w.request_id || "";
+                  if (passive && !isAsk) card.dataset.passive = "1"; // W-APPROVE：受理≠生效，收卡等状态帧
                   card.dataset.waitStart = String(waitStart);
                   // 标题行：title + 呼吸点 + elapsed
                   const elapsed = Math.floor((Date.now() - waitStart) / 1000);
@@ -2293,7 +2302,18 @@
                   const extra = {};
                   commandAck(type, Object.assign({ session_id: sid, request_id: rid }, extra)).then((ack) => {
                     const v = ackVerdict(ack);
-                    if (v.ok) { markWaitCardDone(card, kind === "deny"); if (kind === "deny") b2Toast("已拒绝 · 可在输入栏补充说明"); }
+                    if (v.ok) {
+                      if (card.dataset.passive === "1") {
+                        // W-APPROVE #232（审查 P1 修正）：被动卡 ACK ok=受理≠生效（relay 异步
+                        // 注键验证）——不本地终态化，等状态帧收卡；8s 无帧=注入未生效，解 busy
+                        // 可重试（时间线有失败留痕）。终态化会让失败后卡不可重试
+                        b2Toast("已受理 · 等待注入结果…");
+                        setTimeout(() => { if (card.isConnected) delete card.dataset.busy; }, 8000);
+                      } else {
+                        markWaitCardDone(card, kind === "deny");
+                        if (kind === "deny") b2Toast("已拒绝 · 可在输入栏补充说明");
+                      }
+                    }
                     else { delete card.dataset.busy; b2Toast("等待处理未确认：" + v.error); }
                   });
                 }
