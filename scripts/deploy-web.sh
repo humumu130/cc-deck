@@ -33,7 +33,7 @@ for a in "$@"; do case "$a" in
   --skip-app) SKIP_APP=1 ;;
   --skip-cf)  SKIP_CF=1 ;;
   --force)    FORCE=1 ;;
-  *) echo "❌ 未知参数: $a（支持 --skip-app --skip-cf --force）"; exit 1 ;;
+  *) echo "❌ 未知参数: ${a}（支持 --skip-app --skip-cf --force）"; exit 1 ;;
 esac; done
 
 VER="$(cat VERSION)"
@@ -66,7 +66,7 @@ if ! node scripts/version.mjs --check >/dev/null 2>&1; then
   node scripts/version.mjs --check
   exit 1
 fi
-echo "== deploy-web 单源同步 ==（版本 $VER，$(git branch --show-current) 线）"
+echo "== deploy-web 单源同步 ==（版本 ${VER}，$(git branch --show-current) 线）"
 
 # ---------- S1 刷新产物单口 ----------
 echo "—— S1 build-plugin.mjs（cc-plugins 副本+bundle 唯一合法写口）——"
@@ -77,7 +77,7 @@ ok "S1 产物刷新完成（$COPY + bundle）"
 
 # ---------- S2 Nova App 面 ----------
 if [ "$SKIP_APP" != "1" ]; then
-  echo "—— S2 Nova App 面（$NOVA_WC）——"
+  echo "—— S2 Nova App 面（${NOVA_WC}）——"
   if [ ! -d "$(dirname "$NOVA_WC")" ]; then
     echo "❌ Nova App 未安装（$NOVA_WC 不存在）——确认装位，或加 --skip-app"
     exit 1
@@ -89,7 +89,7 @@ else
 fi
 
 # ---------- S3 relay-service 面（全量镜像：web-console + mobile + relay.mjs + 运行闭包） ----------
-echo "—— S3 relay-service 面（$RS_DIR）——"
+echo "—— S3 relay-service 面（${RS_DIR}）——"
 mkdir -p "$RS_DIR"
 rsync -a --delete --checksum "${RSYNC_EX[@]}" "$SRC/" "$RS_DIR/web-console/"
 rsync -a --delete --exclude '.DS_Store' mobile/ "$RS_DIR/mobile/"
@@ -106,7 +106,7 @@ if [ "$SKIP_CF" != "1" ]; then
   if [ -x "$WRANGLER_BIN" ]; then
     WR="\"$WRANGLER_BIN\""
   else
-    echo "⚠️  固定 wrangler bin 不在（$WRANGLER_BIN，npx 缓存被清？）——回落 npx 现解析（需网络）"
+    echo "⚠️  固定 wrangler bin 不在（${WRANGLER_BIN}，npx 缓存被清？）——回落 npx 现解析（需网络）"
     WR="npx --yes wrangler"
   fi
   # 代理大小写都设：undici 只读小写（大写单独设不通），别处工具读大写不吃亏
@@ -124,7 +124,7 @@ cv() { grep -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null | head -1 | cut -d'"
 check_ver() { # $1=面名 $2=html 路径
   local got; got="$(cv "$2")"
   if [ "$got" = "$VER" ]; then ok "V1-a $1 版本烙印 = $VER"
-  else bad "V1-a $1 版本烙印 '$got' ≠ VERSION '$VER'（$2）"; fi
+  else bad "V1-a $1 版本烙印 '$got' ≠ VERSION '$VER'（${2}）"; fi
 }
 check_ver "源"             "$SRC/index.html"
 check_ver "源(005)"        "$SRC/index-005.html"
@@ -147,7 +147,7 @@ while IFS= read -r f; do
   # 源 vs cc-plugins 副本（build-plugin 拷贝清单漂移在此现形）
   d="$(H "$COPY/$f")"
   if [ "$d" != "$s" ]; then
-    bad "V1-c cc-plugins 副本漂移: $f（build-plugin.mjs 拷贝清单需核对/重跑 S1）"; DRIFT=1
+    bad "V1-c cc-plugins 副本漂移: ${f}（build-plugin.mjs 拷贝清单需核对/重跑 S1）"; DRIFT=1
   fi
   if [ "$SKIP_APP" != "1" ]; then
     d="$(H "$NOVA_WC/$f")"
