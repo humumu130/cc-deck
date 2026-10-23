@@ -588,6 +588,14 @@
                   S.experiences = Array.isArray(p.experience) ? p.experience.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null; // W-EXPP2
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
+                  // #236 A（切源零副作用·P0）：快照替换会把异源已选会话挤掉（下方清 selected）——
+                  // 清空前先把当前输入框活文本落草稿桶。此前切源路径无 inputDrafts.set，活文本
+                  // 不落桶，回点会话时 selectSession 的桶恢复（:1107/:3592 `?? ""`）把半截输入
+                  // 覆写成空=用户实测「切源丢半截消息」；落桶后切回同会话原样恢复。顺手覆盖
+                  // 断线重连快照的同类清选。输入框物理值不清（纯显示切换，口径①）
+                  if (S.selected && !S.sessions.has(S.selected) && UI && UI.input && UI.input.value) {
+                    inputDrafts.set(S.selected, UI.input.value);
+                  }
                   if (!S.sessions.has(S.selected)) S.selected = "";
                   S.slimUnread = new Map(); // [t-7e0c6189] 换源/重连全量回放：未读随增量重建（快照历史 log 不回灌未读）
                   try { S.drawerGid = localStorage.getItem("cc-deck-005-slim-drawer") || ""; } catch (_) {} // [t-7e0c6189] 第四列展开态记忆（gid 已不存在时 renderSlimDrawer 自动收起）

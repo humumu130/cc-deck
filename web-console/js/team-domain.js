@@ -305,7 +305,14 @@
                     const body = laneBody(status, items);
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    return '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
+                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
+                    // #236 D（看板陈旧·用户口径③）：完成泳道默认折叠为归档区——已收割任务
+                    // 不再占据板面主视野（10-11 时代旧卡整列刷存在感=用户实测）；点开仍可查
+                    // 全量，数据零删除（收敛写面在 relay 台账扫，见 convergeBoardsWithDispatchLog）
+                    if (status === "done" && items.length) {
+                      return '<details class="lane-archive" style="flex-basis:100%;min-width:0"><summary>归档 · ' + label + " <b>" + items.length + "</b> 张（点击展开）</summary>" + lane + "</details>";
+                    }
+                    return lane;
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   // V8R boardfoot（原型 .boardfoot）：口径脚注——自验点语义 + 操作指引
@@ -802,7 +809,9 @@
                     const archived = state.projects.filter((p) => p.status === "archived");
                     const grp = (label, n) => '<div class="team-grp"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>' + label + ' <span class="team-grp-n">' + n + "</span></div>";
                     let html = "";
-                    if (live.length) html += grp("进行中", live.length) + live.map(card).join("");
+                    // #236 C（口径纠偏）：原「进行中 N」被用户读成「N 个成员在跑」（1023 实锤
+                    // ——组卡统计误解源头）；N 实为非归档团队数，措辞点明
+                    if (live.length) html += grp("进行中团队", live.length) + live.map(card).join("");
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
                     return html;
                   })() : banner(projectsEmpty());
@@ -815,7 +824,14 @@
                       const boardTotal = state.boards.get(project.id)?.entries?.length;
                       const createdDay = Number(project.created_at) > 0 ? (() => { const d = new Date(Number(project.created_at)); const pad = (n) => String(n).padStart(2, "0"); return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); })() : "";
                       meta.innerHTML = [
-                        "编制 " + members(project).length + " 席",
+                        // #236 C（编制对账·分档明示）：席数与成员卡数同源（members()=headcount
+                        // 带 session_id 过滤，渲染两侧无二次过滤——19 vs 12-1 3 为网格滚动可见数
+                        // 的误读面）；分档把「查无会话数据」的离线席显性化，对账不再靠数卡
+                        (() => {
+                          const roster = members(project);
+                          const online = roster.filter((m) => state.sessions.get(m.session_id)).length;
+                          return "编制 " + roster.length + " 席（会话在场 " + online + " · 离线 " + (roster.length - online) + "）";
+                        })(),
                         Number.isFinite(boardTotal) ? "任务卡 " + boardTotal : "",
                         count ? "待确认 " + count + " 项" : "",
                         createdDay ? "开团 " + createdDay : "",

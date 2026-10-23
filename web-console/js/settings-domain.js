@@ -3337,7 +3337,11 @@ function connectLan(ctx) {
           if (arr.length > 300) arr.splice(0, arr.length - 300);
           buf.set(message.session_id, arr);
         }
-        if (context === (viewSource() === "cloud" ? cloudCtx : ctx)) Team.onFrame(context, message);
+        // #236 B（聚合团队域空·根修）：旧门控 aggregate 落 ctx=只喂本机——本机无团队
+        // 数据时整域假空（「暂无项目组/暂无编制数据」，1023 用户截图实锤），另一源团队
+        // 永不可见。聚合下不走单源喂（下方 SNAPSHOT 缓存更新后合成两源并集重喂）；单源
+        // 视角门控原样
+        if (viewSource() !== "aggregate" && context === (viewSource() === "cloud" ? cloudCtx : ctx)) Team.onFrame(context, message);
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
         context.lastSnapshotPayload = message.payload; // W-WINPAIR-R3：全字段缓存（projects/org_confirms/acceptances/notifications…）
         // W-WINPAIR-R6 件九：每条会话挂源标识（relay_name）——聚合合并后徽章/色块按源渲染的锚
@@ -3350,6 +3354,42 @@ function connectLan(ctx) {
         if (typeof refreshSourceSwitchers === "function") refreshSourceSwitchers();
         if (!context.sessions.has(context.selectedSessionId)) context.selectedSessionId = null;
         renderSessionList();
+        // #236 B：聚合=两源团队数据合成一张 SNAPSHOT 喂 Team（此时本源 lastSnapshotPayload
+        // 已更新，并集恒最新）。快照级字段覆盖团队域全部渲染面（组列表/成员卡/板/回执流/
+        // 经验铁律）；增量帧（ORG_CONFIRM/BOARD_UPDATED 等）聚合下不重喂——下次任一源
+        // SNAPSHOT 到达自动重合成（增量实时性换合并确定性，最小面取舍入回执）。
+        // requestDetail 命令通道仍走视角源（__ccDeck005MainWs=ctx）：远端组详情刷新会
+        // 失败降级 toast，快照级数据可渲染不受阻——跨源命令路由属增强面留拍板。
+        if (message.type === "SNAPSHOT") {
+          const merged = mergedTeamPayload();
+          if (merged) Team.onFrame({ relayName: "聚合 · 全部源" }, { type: "SNAPSHOT", payload: merged });
+        }
+      }
+
+      // #236 B：两源 lastSnapshotPayload 合成聚合团队载荷——projects 按 id 并集（先到先
+      // 占防同 id 互覆）、sessions 按 sid 并集、receipts/org_confirms 并集、boards 按 gid
+      // 并集、experience/rules 取先到有值侧（知识域跨源重叠低，逐条合并属增强面）。
+      // 单源在线时并集=该源自身，行为与旧单喂等价。
+      function mergedTeamPayload() {
+        const parts = [ctx, cloudCtx].filter((c) => c && c.hasSnapshot && c.lastSnapshotPayload);
+        if (!parts.length) return null;
+        const projectsById = new Map();
+        const sessionsById = new Map();
+        const boardsByGid = new Map();
+        const out = { projects: [], sessions: [], receipts: [], org_confirms: [], boards: [], relay_name: "聚合 · 全部源" };
+        for (const c of parts) {
+          const p = c.lastSnapshotPayload || {};
+          for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(g); }
+          for (const s of (Array.isArray(p.sessions) ? p.sessions : [])) if (s && typeof s.session_id === "string" && !sessionsById.has(s.session_id)) { sessionsById.set(s.session_id, s); out.sessions.push(s); }
+          for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(b); }
+          for (const r of (Array.isArray(p.receipts) ? p.receipts : [])) out.receipts.push(r);
+          for (const cf of (Array.isArray(p.org_confirms) ? p.org_confirms : [])) out.org_confirms.push(cf);
+          if (out.experience === undefined && p.experience !== undefined) out.experience = p.experience;
+          if (out.experience_enabled === undefined && p.experience_enabled !== undefined) out.experience_enabled = p.experience_enabled;
+          if (out.rules === undefined && p.rules !== undefined) out.rules = p.rules;
+          if (out.rules_enabled === undefined && p.rules_enabled !== undefined) out.rules_enabled = p.rules_enabled;
+        }
+        return out;
       }
 
       // 1013 件9（用户反馈：看板清了但页面没变化、找不到刷新入口）：顶栏页内刷新钮。
