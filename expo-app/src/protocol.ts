@@ -668,6 +668,9 @@ export interface SnapshotPayload {
   rules_enabled?: boolean;
   notifications?: NotificationItem[];
   source_capabilities?: SourceCapabilities;
+  // #240 W-LEADERHIDE：组织锚 Leader 会话 id（空串=无锚；旧 relay 缺席=undefined）——
+  // 列表滤 Leader 卡唯一可靠识别（锚不在任何团队编制 headcount，反查失效）
+  leader_session_id?: string;
 }
 
 const ACTIVITY_KINDS: readonly ActivityKind[] = ["tool_use", "tool_result", "assistant_text", "system"];

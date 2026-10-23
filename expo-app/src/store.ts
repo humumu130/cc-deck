@@ -110,6 +110,7 @@ export interface SourceConn {
   projects: ProjectGroup[] | null;
   orgConfirms: OrgConfirm[];
   boards: Map<string, ProjectBoard>;
+  leaderSessionId: string; // #240 W-LEADERHIDE：组织锚 Leader 会话 id（SNAPSHOT.leader_session_id，空串=无锚/旧 relay）——列表滤 Leader 卡
   // W-EXPP2 经验域（SNAPSHOT.experience 覆盖式锚定 + EXPERIENCE_UPDATED 帧双载）：
   // null = 旧 relay 不支持（orgZone 经验分节不渲染）；experienceEnabled=false=总开关
   // 关（分节置灰说明）。手机只读——操作面在 web/桌面端
@@ -247,6 +248,7 @@ export interface SourceStatus {
   // 不支持（列表组织区不渲染）；orgConfirms = 待决议确认卡（✓/✗ 决议入口）
   projects?: ProjectGroup[] | null;
   orgConfirms?: OrgConfirm[];
+  leaderSessionId?: string; // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id 透出
   // W-EXPP2 经验域透出（conn.experiences 同名）：null = 旧 relay 不支持；
   // experienceEnabled = SNAPSHOT.experience_enabled（总开关关=分节置灰）
   experiences?: ExperienceEntry[] | null;
@@ -621,6 +623,7 @@ class RelayStore {
       allowRules: c.allowRules, // #212 记住规则（设置抽屉列表 + 按源路由删除）
       projects: c.projects, // #26 M2 项目组（列表组织区 + 组详情）
       orgConfirms: c.orgConfirms, // #26 M2 待决议确认卡
+      leaderSessionId: c.leaderSessionId, // #240 W-LEADERHIDE：列表滤 Leader 卡识别源
       experiences: c.experiences, // W-EXPP2 经验域（orgZone 分节只读消费）
       experienceEnabled: c.experienceEnabled,
       rules: c.rules, // W-RULES2 铁律域（团队详情铁律节只读消费）
@@ -1020,6 +1023,7 @@ class RelayStore {
         empHome: null, // #17 第二批 SNAPSHOT 覆盖式更新（null = 旧 relay 无 settings 字段）
         projects: null, // #26 M2 SNAPSHOT 覆盖式更新（null = 旧 relay 无团队字段）
         orgConfirms: [],
+        leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT 覆盖式更新（空串=未收到/无锚/旧 relay）
         boards: new Map(),
         experiences: null, // W-EXPP2 SNAPSHOT 覆盖式锚定（null = 旧 relay 无经验域）
         experienceEnabled: true, // 缺省开（第七键缺省 true；SNAPSHOT.experience_enabled 收敛）
@@ -2374,6 +2378,10 @@ class RelayStore {
         conn.projects = Array.isArray(projs)
           ? projs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name)
           : null;
+        // #240 W-LEADERHIDE：锚 Leader 会话 id 随快照覆盖式更新（旧 relay 缺席=空串）
+        conn.leaderSessionId = typeof (msg.payload as { leader_session_id?: unknown }).leader_session_id === "string"
+          ? (msg.payload as { leader_session_id: string }).leader_session_id
+          : "";
         // M13-4ADD→P0 板持久信道（夜审 B2-F1，2026-10-14）：快照带 boards（relay 本批
         // 起）——断连重连直接全量追平（多变更窗口收敛为最新盘态），并整体重锚；键缺席
         //（旧 relay / 体积守卫弃发）保留原自愈：清板锚定，后继首帧 delta → drop+重拉
