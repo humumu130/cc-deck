@@ -14,6 +14,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
 import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
+import { atomicWriteJson } from "./fs-safe.js";
+import { applyOrgChange } from "./org-schema.js";
 import type { SessionEngine } from "./types.js";
 
 export type CommandRole = "owner" | "operator" | "viewer";
@@ -283,11 +285,12 @@ export function readOrgAnchor(dir?: string): OrgAnchor | null {
 }
 
 export function writeOrgAnchor(a: OrgAnchor, dir?: string): boolean {
+  // W-CMDIMPL T0a（#216 设计 §5.3 附加条款）：org.json（Leader 锚）纳入原子写——
+  // 换届/锚回写频率不低，同为直写全量面；tmp+rename 消除崩溃半写窗口
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
-    writeFileSync(orgFilePath("org.json", d), JSON.stringify(a, null, 2) + "\n", "utf-8");
-    return true;
+    return atomicWriteJson(orgFilePath("org.json", d), JSON.stringify(a, null, 2) + "\n");
   } catch (e) {
     console.warn(`[org] 锚写入失败: ${e instanceof Error ? e.message : String(e)}`);
     return false;
@@ -338,6 +341,12 @@ export interface DispatchEntry {
   engine?: string;
   provider?: string;
   model?: string;
+  /** W-CMDIMPL T6（§2.4）：链路演练标记——true=假任务行（不触真实任务/用户）；
+   *  读侧宽容忽略（旧行/端上未知字段零影响），统计面对账面可按此排除。 */
+  drill?: boolean;
+  /** §1.5 阶段事件增量（T1-STAGE）：阶段名（词表=基表+custom. 前缀，拍板 #9）与明细 */
+  stage?: string;
+  stage_detail?: string;
 }
 
 export function dispatchLogPath(dir?: string): string {
@@ -348,6 +357,13 @@ export function dispatchLogPath(dir?: string): string {
 // 无容量上限（append-only 审计语义，设计稿 §6.1 org_memory/dispatch_log 同口径）；
 // M1 量级 = 每次咨询 2 行，无需轮转。
 export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
+  // W-CMDIMPL T0b：reducer 写严格（§5.6/拍板 #10）——派单台账 schema 校验拒写
+  //（含 STAGE 词表：stage 基表+custom. 前缀，拍板 #9；drill 标记在 schema 内放行）
+  const chk = applyOrgChange("dispatch-entry", e);
+  if (!chk.ok) {
+    console.error(`[org] ${chk.error}（id=${e.id}）`);
+    return false;
+  }
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });

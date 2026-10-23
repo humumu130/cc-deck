@@ -429,6 +429,18 @@ let lanAuthNonces: Map<string, number> | null = null;
 let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
 const cloudClients: CloudClient[] = [];
 const pairCodes = createPairingCodes();
+// W-SRCLABEL #134：relay 源显示名单点（ws-server LAN 快照 + cloud-client 云快照共用）。
+// #100 自定义名（dataDir/relay-name 文件）优先；**缺省回落主机名**——此前文件未设即
+// 空名，W-SRC2 的 withRelaySource「空名=零注入」守卫随之清零：两台 relay 的会话全无
+// relay_source，web 聚合 srcSet 塌成 1 → CSS 门控隐藏全部源标签（1022 用户截图根因）。
+// 主机名恒在场 → relay_name/relay_source 恒下发，源身份不再依赖用户先去设置页命名
+const relayNameOf = (dataDir: string): string => {
+  try {
+    return readFileSync(join(dataDir, "relay-name"), "utf8").trim().slice(0, 40) || hostname().slice(0, 40);
+  } catch {
+    return hostname().slice(0, 40);
+  }
+};
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
@@ -460,9 +472,7 @@ if (cfg.cloudUrls.length) {
           const ip = detectLanIp(networkInterfaces());
           return ip ? `${ip}:${cfg.port}` : "";
         },
-        relayName: () => {
-          try { return readFileSync(join(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || ""; } catch { return ""; }
-        },
+        relayName: () => relayNameOf(cfg.dataDir),
       });
       cloudClients.push(c);
       c.start();
@@ -493,10 +503,9 @@ startServer(bus, mgr, cfg, {
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
   ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
   ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
-  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
-  relayName: () => {
-    try { return readFileSync(join(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || ""; } catch { return ""; }
-  },
+  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
+  // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
+  relayName: () => relayNameOf(cfg.dataDir),
   // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
   lanHint: () => {
     const ip = detectLanIp(networkInterfaces());

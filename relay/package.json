@@ -39,6 +39,7 @@
     "test:decision-notify": "tsx scripts/test-decision-notify.ts",
     "test:decision-ledger": "tsx scripts/test-decision-ledger.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
+    "test:multieng": "tsx scripts/test-multieng.ts",
     "test:headcount": "tsx scripts/test-headcount.ts",
     "test:routing": "tsx scripts/test-routing.ts",
     "test:experience": "tsx scripts/test-experience.ts",
@@ -91,7 +92,8 @@
     "test:d18-five-states": "tsx scripts/test-d18-five-states.ts",
     "test:permission-compat": "tsx scripts/test-permission-compat.ts",
     "test:engine-auth-watch": "tsx scripts/test-engine-auth-watch.ts",
-    "test:t10-login-loop": "tsx scripts/test-t10-login-loop.ts"
+    "test:t10-login-loop": "tsx scripts/test-t10-login-loop.ts",
+    "test:session-title": "tsx scripts/test-session-title.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

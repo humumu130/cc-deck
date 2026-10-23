@@ -11,15 +11,23 @@
 //   轻探针(5min)：④ 磁盘余量（Data 卷 <5GB）+ dataDir 可写 + 事件循环漂移自检
 // 去重口径：同 key 告警文本未变化不重推（onset-only），条件解除写恢复行不推送。
 // 开关：plugin-config 第十键 patrol（默认开，设置页 lever 随设置批）+ CCR_PATROL=0 应急停。
-import { statfsSync, writeFileSync, readFileSync } from "node:fs";
+import { statfsSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { statSync } from "node:fs";
+import { homedir } from "node:os";
 import { listGroups, loadBoardFile } from "./projects.js";
+import { readDispatchLog, orgDir } from "./org.js";
+import { drillDue, runDrill } from "./drill.js";
 import type { SessionManager } from "./session-manager.js";
 
 const WORKER_STALE_MIN = 40;     // WORKING 无帧判停滞（分钟）
 const BOARD_CLAIMED_STALE_H = 48; // claimed 停滞（小时）
 const DISK_FREE_MIN_GB = 5;      // 磁盘余量红线
+// W-CMDIMPL ②（#216，设计 §2）：新层阈值——env 可调（拍板 #2：24h+env；§2.5 不加
+// plugin-config 键，阈值全走 env，对齐既有惯例）
+const RECEIPT_STALE_H_DEFAULT = 24; // 新回执落盘无收口提醒阈值（小时）
+const TODO_STALE_H_DEFAULT = 48;    // 会话任务单 pending 陈旧阈值（小时）
+const CBC_PREFETCH_MAX = 20;        // cbc-update-prefetch 目录数水位（超则自动清+通知）
 
 export interface PatrolAlert {
   key: string;
@@ -95,6 +103,33 @@ export class PatrolModule {
     } catch {
       alerts.push({ key: "dataDir", text: "数据目录不可写（磁盘满或权限被收）" });
     }
+    // W-CMDIMPL ②（#216 任务书）：cbc-update-prefetch 磁盘水位——Claude Code 每 CLI
+    // 会话留 ~288MB prefetch 目录永不清理（1022 磁盘反复满真根因）。超 20 个自动清
+    // （仅清 cbc-update-prefetch-* 前缀目录，误伤面为零）+ 通知
+    try {
+      const tmpRoot = "/private/var/folders";
+      const hit: string[] = [];
+      const scan = (d: string, depth: number) => {
+        if (depth > 3) return;
+        let entries: string[] = [];
+        try { entries = readdirSync(d); } catch { return; }
+        for (const n of entries) {
+          const full = join(d, n);
+          if (n.startsWith("cbc-update-prefetch-")) hit.push(full);
+          else if (depth < 3) scan(full, depth + 1);
+        }
+      };
+      if (existsSync(tmpRoot)) {
+        for (const top of readdirSync(tmpRoot)) scan(join(tmpRoot, top), 1);
+      }
+      if (hit.length > CBC_PREFETCH_MAX) {
+        let freed = 0;
+        for (const d of hit) {
+          try { rmSync(d, { recursive: true, force: true }); freed++; } catch { /* 占用中的跳过 */ }
+        }
+        this.push("cbc-prefetch", `清理了 ${freed} 个更新预取残留目录（每个约 288MB，磁盘反复吃紧的已知源头）`);
+      } else this.resolve("cbc-prefetch");
+    } catch { /* 扫描失败不告警（非本机平台/权限） */ }
     // 事件循环漂移：500ms 定时器实际延迟 >5s = 循环被饿（CPU 烧蚀/同步阻塞前兆）
     const t0 = Date.now();
     setTimeout(() => {
@@ -165,6 +200,81 @@ export class PatrolModule {
     }
     if (boardAlerts.length) this.push("board", boardAlerts.slice(0, 6).join("；"));
     else this.resolve("board");
+    // ⑤ W-CMDIMPL ②（#216，设计 §2.1）：新回执扫描——近 N 小时落盘的回执/验收单文件
+    // 无台账收口关联 → 低置信提醒（**不自动重派**——帧况停≠工作没做，重派前必查四证）。
+    // 账源（P2-3 修正）：设计假设 artifacts-index.json 实不存在——以现实落点为准：
+    // CCR_ARTIFACTS_DIR（~/.cc-deck/artifacts）+ dataDir/deliverables.json 双账；
+    // 收口判定=文件名出现于 dispatch-log 任一终态行 receipt 字段（弱匹配从宽）。
+    try {
+      const staleH = num(process.env.CCR_PATROL_RECEIPT_STALE_H, RECEIPT_STALE_H_DEFAULT);
+      const cutoff = now - staleH * 3600_000;
+      const artDir = process.env.CCR_ARTIFACTS_DIR || join(homedir(), ".cc-deck", "artifacts");
+      const candidates: { name: string; ageH: number }[] = [];
+      const scanDir = (d: string) => {
+        if (!existsSync(d)) return;
+        for (const n of readdirSync(d)) {
+          if (!/^receipt|^acceptance/i.test(n)) continue; // 只认回执/验收单命名面（模式收窄防误报）
+          const full = join(d, n);
+          try {
+            const st = statSync(full);
+            if (st.isFile() && st.mtimeMs < cutoff) candidates.push({ name: n, ageH: Math.round((now - st.mtimeMs) / 3600_000) });
+          } catch {}
+        }
+      };
+      scanDir(artDir);
+      // deliverables.json 登记面（deliver 工具账）：近阈值登记的 path 也算候选
+      try {
+        const dv = JSON.parse(readFileSync(join(this.opts.dataDir, "deliverables.json"), "utf-8")) as { items?: { path?: string; ts?: number }[] };
+        for (const it of dv.items ?? []) {
+          if (!it.path || !/^receipt|^acceptance/i.test(it.path.split("/").pop() || "")) continue;
+          const ts = Number(it.ts) || 0;
+          if (ts && ts < cutoff) candidates.push({ name: it.path.split("/").pop() || it.path, ageH: Math.round((now - ts) / 3600_000) });
+        }
+      } catch {}
+      // 收口弱匹配：文件名出现在台账任一终态行 receipt 字段=已收口
+      let openNames: string[] = [];
+      if (candidates.length) {
+        const closedText = readDispatchLog(orgDir(), 2000)
+          .filter((e) => e.status === "done" || e.status === "failed")
+          .map((e) => String(e.receipt || ""))
+          .join("\n");
+        openNames = [...new Set(candidates.filter((c) => !closedText.includes(c.name)).map((c) => c.name))];
+      }
+      if (openNames.length) {
+        this.push("receipt-stale", `${openNames.length} 份回执/验收单落盘>${staleH}h 未见派单收口：${openNames.slice(0, 4).join("、")}${openNames.length > 4 ? ` 等` : ""}（可能被遗忘的完成——人工核对后处置，不自动重派）`);
+      } else this.resolve("receipt-stale");
+    } catch (e) {
+      console.log(`[patrol] receipt scan error: ${e instanceof Error ? e.message : e}`);
+    }
+    // ⑥ W-CMDIMPL ②（#216，设计 §2.2）：会话任务单维度陈年 pending——板维度 claimed
+    // >48h 已有（②），会话 todos 维度缺。updated_at 缺席的项无法判龄（宽容跳过）。
+    try {
+      const todoH = num(process.env.CCR_PATROL_TODO_STALE_H, TODO_STALE_H_DEFAULT);
+      const todoCutoff = now - todoH * 3600_000;
+      const staleTodo = this.mgr.snapshot().filter((s) =>
+        Array.isArray(s.todos) && s.todos.some((t) => t.status === "pending" && Number(t.updated_at ?? 0) > 0 && Number(t.updated_at) < todoCutoff));
+      if (staleTodo.length) {
+        this.push("todo-stale", `${staleTodo.length} 个会话存在 >${todoH}h 未动的待办任务：` +
+          staleTodo.slice(0, 5).map((s) => `${s.title || s.session_id.slice(0, 8)}`).join("、"));
+      } else this.resolve("todo-stale");
+    } catch (e) {
+      console.log(`[patrol] todo scan error: ${e instanceof Error ? e.message : e}`);
+    }
+    // ⑦ W-CMDIMPL T6（#216，设计 §2.4）：链路代码变更自动演练——org/dispatch/harvest/
+    // patrol/drill 链路文件集主仓最新 commit 时间 > 上次 drill 时间则补跑一轮（relay 内
+    // 兜底；失败与巡检告警同通道推用户）。主仓不可达（云端）静默跳过。
+    try {
+      const mainRepo = process.env.CCR_MAIN_REPO || join(homedir(), "dev", "cc-deck");
+      if (drillDue(mainRepo, this.opts.dataDir)) {
+        const t = Date.now();
+        const r = runDrill(this.opts.dataDir);
+        if (!r.ok) this.push("drill-failed", `链路演练断点在「${r.failed_hop}」（全链 ${r.hops.length} 跳 / ${r.duration_ms}ms）——链路自身可能坏了`);
+        else this.resolve("drill-failed");
+        this.appendReport(`drill: ${r.ok ? "OK" : "FAIL@" + r.failed_hop} in ${Date.now() - t}ms`);
+      }
+    } catch (e) {
+      console.log(`[patrol] drill error: ${e instanceof Error ? e.message : e}`);
+    }
     this.appendReport(`full: worker-stale=${stale.length} board=${boardAlerts.length ? boardAlerts.length + "项" : "OK"}`);
     // #199 D：full 周期挂三账对账 + 对账心跳查龄（PM turn-report 双触发，此处兜底——
     // PM 停帧时对账链不断）

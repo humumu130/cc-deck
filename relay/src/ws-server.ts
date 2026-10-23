@@ -22,6 +22,9 @@ import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
+import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
+import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸
+import { ReleaseModule } from "./release.js"; // W-CMDIMPL ③：发版编排
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
 import { fileURLToPath } from "node:url";
@@ -268,6 +271,19 @@ function listCustomCommands(dir: string, source: "user" | "project"): SlashComma
     }
   }
   return out;
+}
+
+// W-CMDIMPL ③（#216）：发版编排模块单例（进程级——单飞互斥跨请求生效）
+let releaseModuleSingleton: { bus: EventBus | null; dataDir: string | null; mod: ReleaseModule | null } = { bus: null, dataDir: null, mod: null };
+let releaseInitDone = false;
+function getReleaseModule(bus: EventBus, dataDir: string): ReleaseModule {
+  const s = releaseModuleSingleton;
+  if (!s.mod || s.bus !== bus || s.dataDir !== dataDir) {
+    s.mod = new ReleaseModule(bus, dataDir);
+    s.bus = bus;
+    s.dataDir = dataDir;
+  }
+  return s.mod;
 }
 
 export interface StartServerOptions {
@@ -648,6 +664,53 @@ export function startServer(
       void handleNotify(req, res, mgr, cfg);
       return;
     }
+    // W-CMDIMPL ③（#216，设计 §3.2）：POST /api/release——发版编排三 action（主 token
+    // 鉴权与 /api/org 同级）。仅本机语义：无发版环境返回 no_release_env+relay_source
+    //（UI 置灰）。RELEASE_PROGRESS/DONE/FAILED 三事件经 bus 出（PROGRESS 段落级节流）。
+    if (req.method === "POST" && url.pathname === "/api/release") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end("unauthorized"); return; }
+      let body = "";
+      req.on("data", (c: Buffer) => {
+        body += c;
+        if (body.length > 262144) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+        const payload = JSON.parse(body) as Record<string, unknown>;
+        const action = typeof payload.action === "string" ? payload.action : "";
+        const rel = getReleaseModule(bus, cfg.dataDir);
+        if (!releaseInitDone) {
+          releaseInitDone = true;
+          rel.markInterrupted(); // §7：relay 重启时进行中 run 标 interrupted（不复活子进程）
+          rel.notifyConfirmHook = (text) => {
+            try { mgr.notifyLeaderSystem(`[发版失败] ${text}`); } catch {}
+          };
+        }
+        if (action === "config-get") {
+          res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, data: { ...rel.configGet().data, relay_source: (opts.relayName?.() ?? "") } }));
+          return;
+        }
+        if (action === "config-set") {
+          const r = rel.configSet(payload);
+          res.writeHead(r.ok ? 200 : 422, { "content-type": "application/json" }).end(JSON.stringify(r));
+          return;
+        }
+        if (action === "run") {
+          const r = rel.run(payload);
+          if (r.ok) { res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, data: { ...r.data, relay_source: (opts.relayName?.() ?? "") } })); }
+          else {
+            const noEnv = r.error === "no_release_env";
+            res.writeHead(noEnv ? 503 : 422, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: r.error, ...(noEnv ? { relay_source: (opts.relayName?.() ?? "") } : {}) }));
+          }
+          return;
+        }
+        res.writeHead(400).end('{"ok":false,"error":"action 必须是 config-get|config-set|run"}');
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
+      return;
+    }
     // #199 A 对端：CLI Stop 钩子外报（~/.claude/hooks/turn-report.mjs）。LAN 本机回环
     // 专用（钩子只打 127.0.0.1），无 token 面（回环即信任边界——与 /api/notify 同款
     // 本机口径）；body {sid, key, transcript_size, at}。PM→重跑值守+三账对账；
@@ -795,6 +858,10 @@ export function startServer(
             "rule-append", "rule-list", "rule-retire", "rule-supersede",
             // W-RULES1 升格（经验→规则复制，拍板 #5；org rule promote 的 HTTP 面）
             "exp-promote",
+            // W-CMDIMPL ①（#216，设计 §1.1）：收割机器闸——纯机械只读+命令建议打印，
+            // 零写入/无确认卡语义，信任级低于 dispatch（写面）非决议类，可开 HTTP。
+            // WS 面同权开放（orgAction 单漏斗 case 同名——W-RULES2 的 P1 教训不复发）
+            "harvest-check",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(
@@ -1317,7 +1384,39 @@ async function handleNotify(
   req.setEncoding("utf-8");
   for await (const chunk of req) body += chunk;
   try {
-    const p = JSON.parse(body) as { session_id?: string; done?: unknown; mode?: string; text?: unknown };
+    const p = JSON.parse(body) as { session_id?: string; done?: unknown; mode?: string; text?: unknown; dispatch_id?: unknown; stage?: unknown; stage_detail?: unknown };
+    // W-CMDIMPL T1-STAGE（#216，设计 §1.5）：mode=stage——worker 阶段事件入派单台账
+    //（STAGE:{task, stage, detail} 语义）。纯记账面：同 id 追加行，status 保持 running
+    //（阶段事件不改终态语义）；stages 历史由 harvest-check 读侧扫描。词表（拍板 #9）：
+    // 基表 merged|bumped|tagged|ci-green|distributed|receipt-filed + custom.<名> 前缀
+    //——reducer schema 校验拒词表外（appendDispatch 内 applyOrgChange）。
+    if (p.mode === "stage") {
+      const did = typeof p.dispatch_id === "string" ? p.dispatch_id.trim() : "";
+      const stage = typeof p.stage === "string" ? p.stage.trim() : "";
+      const detail = typeof p.stage_detail === "string" ? p.stage_detail.trim().slice(0, 200) : undefined;
+      if (!did || !stage) { res.writeHead(400).end('{"error":"dispatch_id 与 stage 必填"}'); return; }
+      const last = readDispatchLog().find((x) => x.id === did);
+      if (!last) { res.writeHead(404).end('{"error":"台账无此 dispatch_id（阶段事件依附已有派单行）"}'); return; }
+      const row = {
+        ts: Date.now(),
+        id: last.id,
+        tier: last.tier,
+        target: last.target,
+        ...(last.project_anchor ? { project_anchor: last.project_anchor } : {}),
+        status: "running" as const, // 阶段事件不改终态语义（§1.5）
+        session_id: last.session_id,
+        ...(last.title ? { title: last.title } : {}),
+        ...(last.actor ? { actor: last.actor } : {}),
+        ...(last.engine ? { engine: last.engine } : {}),
+        ...(last.provider ? { provider: last.provider } : {}),
+        ...(last.model ? { model: last.model } : {}),
+        stage,
+        ...(detail ? { stage_detail: detail } : {}),
+      };
+      if (!appendDispatch(row)) { res.writeHead(422).end('{"error":"stage 行校验拒写（词表外？）"}'); return; }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "stage", dispatch_id: did, stage }));
+      return;
+    }
     // #393 mode=confirm：黄框 [待确认] 推送（text 单条），否则绿框 TASK_DONE（done 列表）
     if (p.mode === "confirm") {
       const text = typeof p.text === "string" ? p.text.trim().slice(0, 120) : "";

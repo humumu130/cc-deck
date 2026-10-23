@@ -64,5 +64,80 @@ ok(ls.includes("relaySource ? displaySrcName(relaySource) : \"其他\""), "D2 na
 ok(pt.includes("relay_source?: string"), "D3 protocol.ts 类型字段（旧 relay 缺省兼容）");
 ok(ls.includes("if (!src && !relaySource) return null"), "D4 双缺才 null（云源离线残留卡靠 relay_source 仍显标）");
 
+// ---- E. W-SRCLABEL #134：relay 源显示名缺省回落主机名（1022 用户实锤根因之一：
+//         relay-name 文件从未设置 → 空名 → withRelaySource 零注入 → 全链无源身份） ----
+console.log("-- E. relayNameOf 缺省回落（W-SRCLABEL） --");
+{
+  const idx = readFileSync(join(RELAY_ROOT, "src", "index.ts"), "utf-8");
+  const m = idx.match(/const relayNameOf = [\s\S]*?\n};/)?.[0] ?? "";
+  ok(m.includes("hostname()"), "E1 relayNameOf helper 在场且回落 hostname");
+  ok(m.includes("relay-name"), "E2 自定义名文件优先（#100 语义保留）");
+  const js = m
+    .replace(/\(dataDir: string\): string =>/, "(dataDir) =>")
+    .replace(/\bhostname\(\)/g, "__hn()")
+    .replace(/\bjoin\(/g, "__j(")
+    .replace(/\breadFileSync/g, "__rf");
+  const mk = (rf: (p: string) => string, hn: () => string) =>
+    eval("(function (__rf, __hn, __j) {" + js + " return relayNameOf;})")(
+      rf, hn, (a: string, b: string) => a + "/" + b,
+    );
+  const missing = mk((_p: string) => { throw new Error("ENOENT"); }, () => "MacBook-Pro-Local");
+  ok(missing("/d/x") === "MacBook-Pro-Local", "E3 文件缺失→回落主机名（注入不再被空名清零）");
+  const custom = mk((_p: string) => "  自定义源名 \n", () => "MacBook-Pro-Local");
+  ok(custom("/d/x") === "自定义源名", "E4 文件在场→自定义名优先并 trim（#100 语义）");
+  const blank = mk((_p: string) => "   \n", () => "MacBook-Pro-Local");
+  ok(blank("/d/x") === "MacBook-Pro-Local", "E5 空名文件→视同缺失回落主机名");
+  const trunc = mk((_p: string) => Array.from({ length: 60 }, (_, i) => String(i % 10)).join(""), () => "H");
+  ok(trunc("/d/x").length === 40, "E6 超 40 截断（原口径保留）");
+  // 双出口接线：ws-server 与 cloud-client opts 都指 relayNameOf 单点，无残留旧 inline lambda
+  ok((idx.match(/relayName: \(\) => relayNameOf\(cfg\.dataDir\)/g) ?? []).length === 2, "E7 双出口（LAN+云）同指 relayNameOf 单点");
+  ok(!idx.includes("relayName: () => {"), "E8 无残留旧 inline lambda（单点收口防漂移）");
+}
+
+// ---- F. W-SRCLABEL #134：web 通道兜底修活（evSource.relayName 死路 → 通道标签） ----
+console.log("-- F. web 通道兜底（W-SRCLABEL） --");
+ok(sd.includes('(evSource === "cloud" ? "云桥" : "本机")'), "F1 SNAPSHOT 打标通道兜底在场（relay 无名时两源恒可辨）");
+ok(!sd.includes("(evSource && evSource.relayName)"), "F2 死兜底表达式已移除（字符串源标无属性=恒 undefined）");
+ok(sd.includes("if (s && !s.relay_source) s.relay_source = srcName"), "F3 首标守卫保留（relay 自报字段让位语义不回退）");
+ok(sd.includes("(x.relay_source || x.source)"), "F4 srcSet 门消费 relay_source（聚合 >1 显形链在位）");
+
+// ---- G. W-SRCLABEL #134：打标块逻辑直跑（blockFrom 提取 + eval，四场景） ----
+console.log("-- G. 打标块逻辑直跑（W-SRCLABEL） --");
+{
+  const needle = "const srcName = String((m.payload && m.payload.relay_name)";
+  const i = sd.indexOf(needle);
+  ok(i >= 0, "G1 打标块锚点在场");
+  if (i >= 0) {
+    const open = sd.lastIndexOf("{", sd.lastIndexOf("//", i)); // 块首注释前的 {
+    let depth = 0, end = -1;
+    for (let k = open; k < sd.length; k++) {
+      if (sd[k] === "{") depth++;
+      else if (sd[k] === "}") { depth--; if (depth === 0) { end = k; break; } }
+    }
+    const block = sd.slice(open, end + 1).replace(/\bArray\.isArray\b/g, "Array.isArray");
+    const run = (payload: unknown, evSource: string, pre: [string, Record<string, unknown>][] = []) => {
+      const S = { sessions: new Map<string, Record<string, unknown>>(pre) };
+      eval("(function (m, evSource, S) {" + block + "})")({ payload }, evSource, S);
+      return S.sessions;
+    };
+    // 场景①：LAN 无名 relay（旧 bundle）→ store 存量卡全盖「本机」
+    const s1 = run({ sessions: [{ session_id: "a" }, { session_id: "b" }] }, "lan",
+      [["a", { session_id: "a" }], ["b", { session_id: "b" }]]);
+    ok(s1.get("a")!.relay_source === "本机" && s1.get("b")!.relay_source === "本机", "G2 LAN 无名→通道兜底「本机」");
+    // 场景②：云无名 relay → 盖「云桥」（聚合两源恒两可辨名）
+    const s2 = run({ sessions: [{ session_id: "c" }] }, "cloud", [["c", { session_id: "c" }]]);
+    ok(s2.get("c")!.relay_source === "云桥", "G3 cloud 无名→通道兜底「云桥」");
+    // 场景③：relay_name 在场（W-SRCLABEL 缺省名/自定义名）→ 真名优先
+    const s3 = run({ relay_name: "MacBook-Pro", sessions: [{ session_id: "d" }] }, "lan", [["d", { session_id: "d" }]]);
+    ok(s3.get("d")!.relay_source === "MacBook-Pro", "G4 relay_name 在场→真名优先");
+    // 场景④：relay 自带 relay_source（W-SRC2 注入）→ 首标守卫让位不覆盖
+    const s4 = run({ relay_name: "X", sessions: [{ session_id: "e" }] }, "cloud", [["e", { session_id: "e", relay_source: "自带源" }]]);
+    ok(s4.get("e")!.relay_source === "自带源", "G5 已带字段不覆盖（首标守卫）");
+    // 场景⑤：畸形 payload（无 sessions/坏条目）不抛不误伤；payload 有 store 无的 id 不建卡
+    const s5 = run({ sessions: [null, {}, { session_id: 42 }, { session_id: "f" }] }, "lan", [["f", { session_id: "f", relay_source: "存量" }]]);
+    ok(s5.get("f")!.relay_source === "存量" && s5.size === 1, "G6 畸形条目跳过、存量卡不受扰");
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

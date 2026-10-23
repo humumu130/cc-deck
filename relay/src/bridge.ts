@@ -35,6 +35,7 @@ import {
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
+import { resolveSessionTitleFile, scanTitleText, titleFromLine } from "./session-title.js"; // #212 W-SESSLABEL
 import { saveUploadImages, saveUploadFiles, imageRefsOf, type UploadBlob } from "./uploads.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
@@ -275,6 +276,7 @@ export class Bridge {
     this.termLine.delete(id);
     this.termCapAt.delete(id);
     this.titleScanned.delete(id);
+    this.sessionTitles.delete(id); // #212 W-SESSLABEL：标题记忆随会话清场（重建后允许重新水合）
     this.enqueuedKeys.delete(id);
     this.turnShape.delete(id);
     this.injectFails.delete(id);
@@ -365,6 +367,11 @@ export class Bridge {
   // W-INJECT：粘贴后立即提交——注入成功后的补发回车定时器（ integrated Return 被
   // TUI 吞掉时的快路径，详见 scheduleSubmitEnter）
   private submitEnterTimers = new Map<string, NodeJS.Timeout>();
+  // #221（W-INJECT3 P0）：注入起跑探针——inject done 后 T 秒仍未起跑立即补发。
+  // 独立于 submit 快路径/看门狗 sweep：sweep 受 stuckRetryMs 60s 每会话限速，而快
+  // 路径盲发（unknown-failopen）失败的那发恰好把 lastTry 记上=慢层被锁 60s+周期
+  // （用户实锤 22:34 fired → 24:03 sent 的 89s 空窗真身）。探针直接调 fireStuckEnter
+  private injectProbeTimers = new Map<string, NodeJS.Timeout>();
 
   // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
   private get resumeWindowMs(): number {
@@ -1024,7 +1031,8 @@ export class Bridge {
   // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
   // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 48KB + 尾 48KB 两窗扫描
   //（96KB 缓冲前半留头、后半让尾窗覆写；标题多在会话前段，长会话后期任务切换的
-  // 新标题在尾部），取文件序最新一条
+  // 新标题在尾部），取文件序最新一条。#212 W-SESSLABEL：解析换 session-title 纯函数
+  //（utf8 行扫 + 类型词预过滤）——中段标题由 pushAssistantTexts 增量链跟随，两窗兜底。
   private scanTranscriptTitles(p: string): { custom?: string; ai?: string } {
     try {
       const size = statSync(p).size;
@@ -1038,34 +1046,53 @@ export class Bridge {
         if (size > buf.length) readSync(fd, buf, buf.length / 2, buf.length / 2, size - buf.length / 2);
       } catch {}
       finally { try { closeSync(fd); } catch {} }
-      const text = buf.toString("latin1");
-      let custom: string | undefined, ai: string | undefined;
-      // latin1 字节视图的捕获组须先还原 UTF-8 再 parse：中文标题字节序列直接
-      // JSON.parse 会变乱码（端边对账→ç«¯è¾¹å¯¹è´¢）；转义序列纯 ASCII 两视图等价。
-      // 源码是正本：08699ef 曾只改 bundle 副本未落此处，重打包即被冲掉——勿再走岔
-      const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reC)) {
-        try { custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"'); } catch {}
-      }
-      const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reA)) {
-        try { ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"'); } catch {}
-      }
-      return { custom, ai };
+      // utf8 直读行扫：窗口边界截半行 parse 失败跳过（本就不完整行）；中文标题不再
+      // 依赖 latin1 字节视图还原（端边对账→ç«¯è¾¹乱码教训留在测试断言里）
+      return scanTitleText(buf.toString("utf-8"));
     } catch { return {}; }
   }
 
   // 标题回写：不锁 title_locked（CLI 会随任务切换更新标题，保持跟随）；用户后续
-  // 在 App 改名仍走 titleOverrides 最高优先
-  private applyTranscriptTitle(id: string, p: string): void {
+  // 在 App 改名仍走 titleOverrides 最高优先。#212 W-SESSLABEL 改造：
+  //   ① 值变才回写（sessionTitles 记忆——增量链每批扫到同一段标题行不再重复 emit）；
+  //   ② 命中即置 named（CC 自带标题到手，抑制 requestSmartTitle GLM 生成链，
+  //      同时 onPrompt 首升级路径保留标题不被 deriveTitle 覆盖）；
+  //   ③ transcriptPaths 缺失（relay 重启内存丢/hook 未上报窗口）时按 cwd 编码目录
+  //      零依赖定位兜底（session-title.resolveSessionTitleFile）。
+  private sessionTitles = new Map<string, string>();
+
+  private maybeApplyTranscriptTitle(id: string, t: string | undefined): void {
+    const title = t?.trim().slice(0, 120);
+    if (!title) return;
+    if (this.sessionTitles.get(id) === title) return;
+    this.sessionTitles.set(id, title);
+    const st = this.mgr.getExternal(id);
+    if (!st || st.title_locked) return;
+    this.named.add(id);
+    if (st.title !== title) this.mgr.setExternalTitle(id, title);
+  }
+
+  // 全量两窗扫描兜底（titleScanned 每会话一次）：增量链（pushAssistantTexts）覆盖
+  // 后续刷新；冷启动接入的既有会话标题水合在这里。
+  private applyTranscriptTitle(id: string, p?: string): void {
     if (this.titleScanned.has(id)) return;
     const st = this.mgr.getExternal(id);
     if (!st || st.title_locked) { this.titleScanned.add(id); return; }
-    const p2 = this.transcriptPaths.get(id) ?? p;
+    const p2 = p ?? this.transcriptPaths.get(id) ?? this.locateTranscriptByCwd(st);
+    if (!p2) { this.titleScanned.add(id); return; }
     const { custom, ai } = this.scanTranscriptTitles(p2);
-    const t = custom || ai;
-    if (t && t.trim()) this.mgr.setExternalTitle(id, t.trim().slice(0, 120));
+    this.maybeApplyTranscriptTitle(id, custom || ai);
     this.titleScanned.add(id);
+  }
+
+  // transcriptPaths 未挂时的零依赖定位：cwd 编码目录 + sessionId 直查，miss 扫该
+  // 目录 mtime 最新。.tmp- 段 cwd（titlegen 子会话/测试沙箱）不定位（同孤儿扫描口径）。
+  // 文件名 = CLI 会话 uuid（relay_session_id；ext id 是 "ext-" 前缀包装，须剥壳）
+  private locateTranscriptByCwd(st: { cwd?: string; session_id: string; relay_session_id?: string }): string | null {
+    if (!st.cwd) return null;
+    if (st.cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return null;
+    const sid = st.relay_session_id || st.session_id.replace(/^ext-/, "");
+    return resolveSessionTitleFile({ cwd: st.cwd, sessionId: sid });
   }
 
   private async pollTerminalLines(): Promise<void> {
@@ -1079,10 +1106,10 @@ export class Bridge {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue; // 审批横幅优先展示
         // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
-        // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致；每会话扫一次即可
+        // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致；全量两窗扫每会话一次
+        //（titleScanned），此后标题刷新由 pushAssistantTexts 增量链跟随（#212 W-SESSLABEL）
         if (!this.titleScanned.has(s.session_id)) {
-          const tp = this.transcriptPaths.get(s.session_id);
-          if (tp) this.applyTranscriptTitle(s.session_id, tp);
+          this.applyTranscriptTitle(s.session_id);
         }
         if (now - (this.termCapAt.get(s.session_id) ?? 0) < 2_500) continue;
         this.termCapAt.set(s.session_id, now);
@@ -1842,6 +1869,7 @@ export class Bridge {
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue→written)`);
         this.armVerify(sessionId, text);
         this.scheduleSubmitEnter(sessionId, state.cli_pid, text, sentAt); // W-INJECT：粘贴后立即提交快路径
+        this.scheduleInjectProbe(sessionId, state.cli_pid, text, sentAt); // #221：起跑探针——T 秒未起跑立即补发（快路径盲发失败的快速兜底）
         await sleep(400); // 等 UserPromptSubmit 翻状态/给连续注入留节奏
       }
     } finally {
@@ -1877,6 +1905,85 @@ export class Bridge {
   // 修：短预算守门（≤600ms 内出判定）+ timeout 直发（宁扰勿吞）+ skip-absent 250ms 复捕
   // 一次（渲染追平；两捕皆净=原生队列，静默守 111 红线）+ 账本按消息隔离 + [submit] ms 打点。
   // 总预算：注入→补发回车 ≤1s。
+  // #221（W-INJECT3 P0）：注入起跑探针——inject done 后 T 秒（CCR_INJECT_PROBE_MS
+  // 缺省 4000，0=关）仍未起跑（消息滞留 pending 且会话未 WORKING）立即补发回车。
+  // 不依赖快照可用/下次 submit/看门狗 sweep——三者的慢速面是 89s 空窗真身：
+  // ①快路径盲发（unknown-failopen）失败即无重试（fire 后只写账）②armVerify 对
+  // unknown 静默交回看门狗 ③看门狗 sweep 被 stuckRetryMs 60s 每会话限速锁死，而
+  // 快路径那发恰好把 lastTry 记上=锁 60s+一个 sweep 周期。
+  // 安全边界：WORKING（已起跑/输出中）绝不发（误发打断输出——起跑判定用「消息已
+  // 晋升 ∨ status===WORKING」双证）；WAITING 交看门狗；flush/队列在途复挂 250ms
+  // 等平稳；守门在途不抢；tries≥3 封顶由 fireStuckEnter 共享账本自然守（探针与
+  // 其他入口共用同一封顶，防叠发）。
+  private scheduleInjectProbe(sessionId: string, pid: number, text: string, sentAt: number, rearm = false): void {
+    const ms = Number(process.env.CCR_INJECT_PROBE_MS);
+    const wait = Number.isFinite(ms) && ms >= 0 ? ms : 4000;
+    if (wait === 0) return; // 显式关闭
+    const prev = this.injectProbeTimers.get(sessionId);
+    if (prev && !rearm) clearTimeout(prev); // 新注入顶旧探针（同会话去重）
+    const t = setTimeout(() => {
+      this.injectProbeTimers.delete(sessionId);
+      const st = this.mgr.getExternal(sessionId);
+      if (!st || st.cli_pid !== pid) return; // pid 换代：不盲发
+      // 晋升（integrated Return 已生效）= 已起跑：收工
+      if (!(st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
+      // #221 三证之二：已入队（CLI enqueue 回执在案，ext-input 链 #43）= 原生队列
+      // 已吃、等工具边界自然晋升——非滞留（skip-absent 语义同源，111 红线不误发：
+      // test-inject-revive ⑨b 实锤本探针首版对此误发）
+      if (this.isEnqueued(sessionId, text)) return;
+      // 起跑双证之 status：WORKING=输出中绝不发；WAITING=权限悬停交看门狗
+      if (st.status === "WORKING" || st.status === "WAITING") return;
+      // flush/新队列在途：消息可能正在写——等平稳再查（250ms 复挂，上限 20 次防挂死）
+      if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) {
+        if (rearm && Number(process.env.CCR_INJECT_PROBE_REARM) === 0) return;
+        const rearms = (this.injectProbeRearms.get(sessionId) ?? 0) + 1;
+        if (rearms > 20) return; // 异常挂死保护：交回看门狗
+        this.injectProbeRearms.set(sessionId, rearms);
+        this.scheduleInjectProbe(sessionId, pid, text, sentAt, true);
+        return;
+      }
+      if (this.stuckGuarding.has(sessionId)) return; // 守门在途：不抢
+      // 最后判定复用既有守门（600ms 短预算，与 submit 快路径同款）——探针的「触发
+      // 时机」不依赖快照（T 秒定时到点即评估），但「发不发」借一次快照做安全分诊：
+      //   enter/enter-after-wait（框内=我们的滞留文）→ 发（用户实锤 89s 空窗的真场景）
+      //   skip-absent（框净=CLI 原生队列已吃，enqueue 回执未到）→ 静默交看门狗（111
+      //     红线 natively-queued never compensated——test-inject-revive ⑨b 实锤首版
+      //     直发对此误发；真实链里 enqueue 回执会先让探针三证静默，此处兜 fake/无回执态）
+      //   unknown/timeout → 发（快照盲区正是 89s 空窗真身——宁扰勿吞既定口径）
+      const waited = Date.now() - sentAt;
+      this.stuckGuarding.add(sessionId);
+      void guardCompensateEnter([text], () => captureConsoleBottom(pid), {
+        cfg: { pollMs: 150, stableMs: 300, maxMs: 600, enabled: true },
+        abort: () => {
+          const s2 = this.mgr.getExternal(sessionId);
+          return !s2 || s2.cli_pid !== pid || s2.status === "WAITING" || this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0;
+        },
+      })
+        .then((v) => {
+          const s2 = this.mgr.getExternal(sessionId);
+          const still = !!s2 && s2.cli_pid === pid && s2.status !== "WAITING" &&
+            (s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text));
+          if (!still) return; // 晋升/pid 换代：收工
+          if (v.kind === "enter" || v.kind === "enter-after-wait") {
+            this.fireStuckEnter(sessionId, pid,
+              `probe: 注入后 ${Math.round(waited / 100) / 10}s 未起跑，立即补发（#221 不依赖快照/下次消息）`, [text]);
+            return;
+          }
+          if (v.kind === "skip-absent") {
+            console.log(`[submit] probe skip-absent sid=${sessionId.slice(0, 14)}：框净=原生队列态，交看门狗慢层（111 红线不误发）`);
+            return;
+          }
+          // unknown（快照盲区）/timeout（外来内容让路到顶）：直发——89s 空窗真身场景
+          this.fireStuckEnter(sessionId, pid,
+            `probe(${v.kind}): 注入后 ${Math.round(waited / 100) / 10}s 未起跑，快照盲区直发（#221）`, [text]);
+        })
+        .finally(() => this.stuckGuarding.delete(sessionId));
+    }, rearm ? 250 : wait);
+    t.unref?.();
+    this.injectProbeTimers.set(sessionId, t);
+  }
+  private injectProbeRearms = new Map<string, number>();
+
   private scheduleSubmitEnter(sessionId: string, pid: number, text: string, sentAt: number, round = 0): void {
     const prev = this.submitEnterTimers.get(sessionId);
     if (prev) clearTimeout(prev);
@@ -2258,6 +2365,15 @@ export class Bridge {
         if (tm) {
           const tt = Date.parse(tm[1]);
           if (Number.isFinite(tt)) lastTs = tt;
+        }
+        // #212 W-SESSLABEL：custom/ai 标题行识别——CLI 换任务/用户 /rename 都以追加新
+        // 标题行落盘，增量跟随即实时同步终端标签（titleScanned 一次闸管不着这里）。
+        // 标题行非 assistant/user/attachment 等任何已识别形态，对其余逻辑（shape/
+        // userTexts/taskOps/usage…）零贡献，识别后即走
+        if (line.includes('"ai-title"') || line.includes('"custom-title"')) {
+          const t = titleFromLine(line);
+          if (t) this.maybeApplyTranscriptTitle(id, t.custom || t.ai);
+          continue;
         }
         // 后台子 Agent 完成通知：作为 user 消息或 attachment 行出现，取 tool-use-id 配对收尾
         //（捕获到 "<" 为止：不受 JSON 对闭合标签斜杠的转义影响）
@@ -3517,6 +3633,10 @@ export class Bridge {
   // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
   private resetStuckWatch(sessionId: string): void {
     this.stuckWatch.delete(sessionId);
+    // #221：晋升=链路证活，探针定时器一并清（防迟到的探针对已晋升会话空转）
+    const probe = this.injectProbeTimers.get(sessionId);
+    if (probe) { clearTimeout(probe); this.injectProbeTimers.delete(sessionId); }
+    this.injectProbeRearms.delete(sessionId);
     this.injectFails.delete(sessionId); // W-INJECT：晋升=链路证活，重投上限闸归零
   }
 

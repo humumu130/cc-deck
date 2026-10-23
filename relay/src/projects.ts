@@ -14,6 +14,8 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rena
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
+import { appendJournal, atomicWriteJson, lastGoodJournalSnapshot } from "./fs-safe.js";
+import { applyOrgChange } from "./org-schema.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
 import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb } from "./storage/read-mode.js";
@@ -91,8 +93,11 @@ export interface ProjectGroup {
 // 用户拍板⑤排期项推翻，本词表为新权威（旧三态 todo/doing 词表外值读入即迁移）。
 export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_install" | "done";
 
-/** D18 词表运行时值（orgAction board 校验面/测试件静态锚共用单点，勿散写字面量） */
-export const BOARD_ENTRY_STATUSES: readonly BoardEntryStatus[] = ["backlog", "claimed", "submitted", "ready_to_install", "done"];
+/** D18 词表运行时值（orgAction board 校验面/测试件静态锚共用单点，勿散写字面量）。
+ *  W-CMDIMPL T0b：权威定义上移 org-schema.ts（reducer 校验层，依赖单向），此处
+ *  re-export 兼容既有消费面——语义不变。 */
+export { BOARD_ENTRY_STATUSES } from "./org-schema.js";
+import { BOARD_ENTRY_STATUSES } from "./org-schema.js";
 
 export interface BoardEntry {
   id: string;
@@ -191,18 +196,40 @@ function confirmsFilePath(dir?: string): string {
 
 // ---------- 项目组索引 ----------
 
+// W-CMDIMPL T0a（#216，设计 §5.3 案甲第三件）：坏 JSON 拒绝空态写回——只读模式。
+// 原状：坏 JSON 静默返回空组表，下一个写操作就以空表+新组写回 = 整库物理丢失且不可
+// 恢复（boards 有 journal 可回放，projects 三无）。现：坏文件 → 只读模式（写侧拒绝）
+// + journal 回放自动恢复；恢复成功清除只读，失败保持只读等人工处置。
+let projectsReadOnly = false;
+export function isProjectsReadOnly(): boolean {
+  return projectsReadOnly;
+}
+
 function readProjectsFile(dir?: string): ProjectsFile {
   // M11-G1 读入口接线（三档：json 原样 / sqlite 表投影 / shadow 返回值以 JSON 为准+旁路对比）
   return viaReadMode("group", {
     json: () => {
       try {
         const raw = JSON.parse(readFileSync(projectsFilePath(dir), "utf-8")) as Partial<ProjectsFile>;
+        // T0a：读到好文件 = 人工已修复（或本轮回放已重建）——自动解除只读
+        projectsReadOnly = false;
         return {
           groups: Array.isArray(raw.groups) ? (raw.groups as ProjectGroup[]) : [],
           trust_light: raw.trust_light === true,
         };
-      } catch {
-        // 无文件 / 坏 JSON：空态（读侧防御，同 pinned-sessions 口径）
+      } catch (e) {
+        // W-CMDIMPL T0a：无文件=首建空态（正常）；坏 JSON（SyntaxError 类）=走进只读+
+        // 回放，绝不静默空态（下一个写会把空表写回=整库丢失）
+        const code = (e as { code?: string })?.code;
+        if (code === "ENOENT") return { groups: [], trust_light: false };
+        console.error(`[projects] 索引文件损坏，进入只读模式并尝试 journal 回放: ${e instanceof Error ? e.message : String(e)}`);
+        const recovered = recoverProjectsFromJournal(dir);
+        if (recovered) {
+          console.error(`[projects] journal 回放成功，索引已重建（含 ${recovered.groups.length} 组），只读解除`);
+          return recovered;
+        }
+        projectsReadOnly = true;
+        console.error(`[projects] journal 回放失败——保持只读模式，写操作将拒绝（人工处置前不覆盖损坏文件）`);
         return { groups: [], trust_light: false };
       }
     },
@@ -212,16 +239,42 @@ function readProjectsFile(dir?: string): ProjectsFile {
   });
 }
 
-function writeProjectsFile(f: ProjectsFile, dir?: string): boolean {
+/** T0a 第三件恢复面：坏 projects.json → 从 projects-journal.ndjson 最近好快照重建。
+ *  重建走原子写（journal 最后好态 → projects.json），失败返回 null。 */
+function recoverProjectsFromJournal(dir?: string): ProjectsFile | null {
   try {
     const d = dir ?? orgDir();
-    mkdirSync(d, { recursive: true });
-    writeFileSync(projectsFilePath(d), JSON.stringify(f, null, 2) + "\n", "utf-8");
-    return true;
+    const snap = lastGoodJournalSnapshot(join(d, "projects-journal.ndjson"));
+    if (!snap || typeof snap !== "object") return null;
+    const cand = snap as Partial<ProjectsFile>;
+    if (!Array.isArray(cand.groups)) return null;
+    const f: ProjectsFile = { groups: cand.groups as ProjectGroup[], trust_light: cand.trust_light === true };
+    if (writeProjectsFile(f, dir)) return f; // 写成功才清除只读（writeProjectsFile 内部只读闸此时未触发——恢复路径直通原子写）
+    return null;
   } catch (e) {
-    console.warn(`[projects] 索引写入失败: ${e instanceof Error ? e.message : String(e)}`);
+    console.error(`[projects] journal 回放异常: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+function writeProjectsFile(f: ProjectsFile, dir?: string): boolean {
+  // T0a：只读闸（坏文件未恢复期间拒绝一切写——防空态覆盖损坏文件）
+  if (projectsReadOnly) {
+    console.error(`[projects] 只读模式中，拒绝索引写入（坏文件人工处置或 journal 回放成功前不覆盖）`);
     return false;
   }
+  const d = dir ?? orgDir();
+  // T0a 第二件：变更进 journal（append-only，先于主写——主写失败 journal 也留痕）。
+  // 行含全量快照（回放重建的最小充分数据）；首字段 ts/kind 供审计与未来分类。
+  appendJournal(join(d, "projects-journal.ndjson"), {
+    ts: Date.now(),
+    kind: "projects",
+    groups_n: Array.isArray(f.groups) ? f.groups.length : -1,
+    trust_light: f.trust_light === true,
+    snapshot: f,
+  });
+  // T0a 第一件：tmp+rename 原子写（消除崩溃半写窗口；同目录 rename = POSIX 原子）
+  return atomicWriteJson(projectsFilePath(d), JSON.stringify(f, null, 2) + "\n");
 }
 
 export function listGroups(dir?: string): ProjectGroup[] {
@@ -369,6 +422,12 @@ export function setGroupHeadcountCap(gid: string, cap: number | undefined, dir?:
 }
 
 function saveGroup(g: ProjectGroup, dir?: string): boolean {
+  // W-CMDIMPL T0b：reducer 写严格（§5.6/拍板 #10）——组记录 schema 校验拒写
+  const chk = applyOrgChange("group", g);
+  if (!chk.ok) {
+    console.error(`[projects] ${chk.error}（gid=${g.id}）`);
+    return false;
+  }
   const f = readProjectsFile(dir);
   const i = f.groups.findIndex((x) => x.id === g.id);
   if (i >= 0) f.groups[i] = g;
@@ -823,6 +882,9 @@ export function upsertBoardEntry(
     w.board.entries.push(e);
   }
   w.board.updated_at = now;
+  // W-CMDIMPL T0b：reducer 写严格——板卡 schema 校验拒写（建/改共用此口）
+  const chk = applyOrgChange("board-entry", e);
+  if (!chk.ok) return { ok: false, error: chk.error };
   if (!saveBoardFile(w.board, dir, { action: jPrev ? "update" : "create", entry_id: e.id, ...(jPrev ? { prev: jPrev } : {}), next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
@@ -850,6 +912,9 @@ export function moveBoardEntry(
   else if (t.review_required === false) delete e.review_required;
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
+  // W-CMDIMPL T0b：reducer 写严格——搬卡改后态 schema 校验拒写
+  const chk = applyOrgChange("board-entry", e);
+  if (!chk.ok) return { ok: false, error: chk.error };
   if (!saveBoardFile(w.board, dir, { action: "move", entry_id: e.id, prev: jPrev, next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
@@ -876,6 +941,13 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
   e.status = to;
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
+  // W-CMDIMPL T0b：reducer 写严格——裸设置器同样过闸（第四写口不断链）；void 返回
+  // 语义不变，拒写走 stderr 显式报（不静默吞）
+  const chk = applyOrgChange("board-entry", e);
+  if (!chk.ok) {
+    console.error(`[projects] dispatch-move 拒写：${chk.error}（gid=${gid} dispatch=${dispatchId}）`);
+    return;
+  }
   saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
 }
 

@@ -9,7 +9,7 @@ import {
   createGroup, setGroupStatus, setGroupTier, canTransition, addMember, removeMember,
   loadBoard, upsertBoardEntry, moveBoardEntry, removeBoardEntry, moveEntryByDispatch,
   listConfirms, listPendingConfirms, addConfirm, decideConfirm,
-  ensureProjectClaudeMd, buildArchiveChecklist, setLightConfirmTrusted, isLightConfirmTrusted,
+  ensureProjectClaudeMd, buildArchiveChecklist, setLightConfirmTrusted, isLightConfirmTrusted, isProjectsReadOnly,
   computeReady, computeReadySet, addLesson, listLessons,
 } from "../src/projects.js";
 
@@ -31,7 +31,12 @@ const dir = mkdtempSync(join(tmpdir(), "cc-deck-projects-"));
 console.log("索引:");
 assert(listGroups(dir).length === 0, "无文件 → 空列表");
 writeFileSync(join(dir, "projects.json"), "{not json", "utf-8");
-assert(listGroups(dir).length === 0, "坏 JSON → 空列表（读侧防御）");
+assert(listGroups(dir).length === 0, "坏 JSON → 空列表（读侧防御；T0a 起进入只读模式）");
+// W-CMDIMPL T0a：坏 JSON 不再静默可写——只读模式（防空态写回）+ 好文件读入自动解除
+assert(isProjectsReadOnly() === true, "坏 JSON → 只读模式（T0a 防空态写回闸）");
+writeFileSync(join(dir, "projects.json"), JSON.stringify({ groups: [], trust_light: false }), "utf-8");
+listGroups(dir);
+assert(isProjectsReadOnly() === false, "人工修复文件读入 → 只读自动解除");
 assert(isLightConfirmTrusted(dir) === false, "初始信任未建立");
 
 // ---------- 立项：确认门槛与信任累积 ----------

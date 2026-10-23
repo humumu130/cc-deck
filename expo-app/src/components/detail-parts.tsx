@@ -135,7 +135,24 @@ export function DiffBlock({ lines }: { lines: string[] }) {
   );
 }
 
-export function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; startedAt?: number; color: string; tok?: string }) {
+// #224 任务时长格式化（CLI 状态栏同款 h/m/s 全显：16h55m33s / 5m12s / 42s）
+export function fmtTaskDur(sec: number): string {
+  const s2 = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s2 / 3600);
+  const m = Math.floor((s2 % 3600) / 60);
+  if (h > 0) return `${h}h${m}m${s2 % 60}s`;
+  if (m > 0) return `${m}m${s2 % 60}s`;
+  return `${s2}s`;
+}
+
+// #224 累计输出 tokens 紧凑格式（CLI ↓ 同款：107.4k / 2.3m / 860）
+export function fmtDownTok(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "m";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
+  return String(n);
+}
+
+export function LiveStatusLine({ summary, startedAt, color, tok, title, durFrom, outTokens, sub }: { summary: string; startedAt?: number; color: string; tok?: string; title?: string; durFrom?: number; outTokens?: number; sub?: string }) {
   const d = useThemeStyles(makeStyles);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -145,11 +162,35 @@ export function LiveStatusLine({ summary, startedAt, color, tok }: { summary: st
   const live = isLiveLine(summary);
   const text = stripLiveMark(summary);
   const secs = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+  const [subOpen, setSubOpen] = useState(false); // #224 动作行点按展开全量（细则②：单行截断不折叠）
   // 实时行照转动画星：CLI 行首星已在 relay 剥除，客户端星是唯一指示不重复；
   // 走秒保留（本回合时长与转轮行内活动时长语义不同）；ctx 已按反馈移除
   const frame = SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
   const m = Math.floor(secs / 60);
   const timeText = m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
+  // #224 两层信息架构（布局定稿 1023）：
+  //   标题行（常驻）= ✻ {任务名} ({任务时长} · ↓{累计输出 tokens})
+  //   动作行（仅 WORKING，标题行下）= ⚙ Running {当前命令} · {回合走秒}
+  // 两行职责单一：任务级 vs 命令级暂态（DONE/空闲随 dockWork 卸载自然消失）。
+  // title 在场即走此形态（dockWork 主行）；WAITING strip 等旧调用不传 title 走原形态。
+  if (title) {
+    const dur = durFrom ? fmtTaskDur((Date.now() - durFrom) / 1000) : "";
+    const tail = dur ? `(${dur}${outTokens ? ` · ↓${fmtDownTok(outTokens)}` : ""})` : "";
+    return (
+      <View>
+        <View style={d.statusLine}>
+          <Text style={[d.statusSpin, { color }]}>{frame}</Text>
+          <Text style={[d.statusText, { color }]} numberOfLines={1}>{title}</Text>
+          {tail ? <Text style={d.statusTime} numberOfLines={1}>{tail}</Text> : null}
+        </View>
+        {sub ? (
+          <Pressable onPress={() => setSubOpen((v) => !v)} hitSlop={4} accessibilityLabel={subOpen ? "收起当前命令" : "展开当前命令全量"}>
+            <Text style={[d.dockSub, { color }]} numberOfLines={subOpen ? undefined : 1}>⚙ Running {sub} · {timeText}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
   return (
     <View style={d.statusLine}>
       <Text style={[d.statusSpin, { color }]}>{frame}</Text>
