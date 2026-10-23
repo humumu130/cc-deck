@@ -1,16 +1,16 @@
-// W-MSGUI 件二：Agent 引擎品牌图标（用户 1019 拍板——彩点/文字胶囊换品牌图标）。
-// 形制：16-20px 圆角 4 方块，SVG 内联零外部资源（永不联网约束）。
-//   claude：像素小螃蟹（Anthropic 吉祥物风几何简笔，橙棕底）
-//   codex：OpenAI 风环结简形（弧环+内核）
-//   trae / qwen-code / codebuddy / zcode：品牌色首字母方块（任务书口径：无现成
-//   品牌图标的用品牌色首字母方块）；未接入（dim=true）一律灰调同款+「?」
-// 接入点：NewSessionModal 引擎选项行（原 engDot 彩点）、EngineBadge（详情 head
-// 引擎 chip 与各域复用件——一处替换全端生效）。
+// Agent 引擎图标（双轨）：
+//   EngineBrandTile——W-MSGUI 件二遗留形制（圆角方块+手绘 Glyph/首字母），仅
+//     NewSessionModal 引擎选项行在用；未随点选源更换（遗留，见 W-CARDTAGS2 回执）。
+//   EngineIcon——用户点选图标源唯一渲染口（#228 W-ICONHUNT 图集 1023 拍板：
+//     claude=SI Anthropic/codex=SI OpenAI/glm=Z.ai logo/trae=官方 favicon PNG/
+//     qwen=SI Qwen/codebuddy=官网 logo/zcode=像素描边 Z；字节权威=assets/engines/，
+//     内嵌常量见 engine-icon-xml.ts）。消费位：卡片头像（AvaBadge brandIcon）、
+//     r3 引擎胶囊前缀（TeamDetailPage EngineBadge）。
+//   #231 纠错（W-CARDTAGS2）：89ad76f 接线时 SVG 分支漏写 return（`void color`
+//     占位残留）——五引擎落到手绘/字母残支，「头像螃蟹不是点选素材」根因；手绘
+//     分支（螃蟹复刻 V2/终端符/内嵌 SI 重复）随本修整体退役。
 import { Image, Text, View } from "react-native";
-import Svg, { Circle, Path, Rect, SvgXml } from "react-native-svg";
-// W-ICONHUNT #228 接线：用户点选图标源（图集 1023 拍板，claude=SI Anthropic/
-// codex=SI OpenAI/glm=Z.ai logo/trae=官方 favicon PNG/qwen=SI Qwen/codebuddy=
-// 官网 logo/zcode=像素描边 Z）。SVG 全文内嵌+trae base64，见 engine-icon-xml.ts。
+import Svg, { Circle, Path, Rect, SvgXml, Text as SvgText } from "react-native-svg";
 import { ENGINE_PNG_B64, ENGINE_SVG_XML } from "./engine-icon-xml";
 
 export type EngineId = string;
@@ -76,79 +76,31 @@ export function EngineBrandTile({ engine, size = 18, dim = false }: { engine: En
   );
 }
 
-// ---------- #226 件B（W-CARDTAGS 追加）：引擎品牌裸图标（胶囊前缀 12-14px 用） ----------
-// 与 EngineBrandTile（方块瓦片，选项行 18px）互补：本件为「无底框裸图标」形态，供
-// r3 引擎胶囊前缀/头像角标位使用。来源与取色（回执「图标体系」节同口径）：
-//   claude   像素小螃蟹复刻 V2（用户 1023 截图——橘 #E8815A 系非上版橙棕；16×12 网格）
-//   codex    圆形花边+>_ 终端符（用户截图 2 Codex CLI 官方形——替代上版 OpenAI 环结）
-//   qwen-code simple-icons siQwen path 内嵌（品牌紫 #6950EF）
-//   trae     simple-icons siTrae path 内嵌（品牌绿 #32F08C）
-//   glm/codebuddy/zcode：simple-icons 无收录且无公开官方 SVG——保持现状（回执标注）
+// ---------- 引擎裸图标（卡片头像 18px / r3 引擎胶囊前缀 12-14px） ----------
+// 用户点选源（engine-icon-xml.ts）唯一渲染口：SVG 引擎 SvgXml 直渲（图标自带品牌
+// fill，外层 color 不覆写）；trae=官方 favicon PNG（base64 Image）。未知引擎=圆角
+// 块+首字母兜底（#231 C：原此处 RN <Text> 嵌 <Svg> 无效嵌套——字母恒不渲染只剩
+// 底块=用户点名「灰色方块」；改 react-native-svg SvgText 正常出字）。
 export function hasEngineIcon(engine: string | undefined | null): boolean {
-  // #227 件四：全引擎覆盖（codebuddy=simple-icons 官方；zcode/glm=像素风品牌色占位；
-  // 任意未知引擎=fallback 首字母占位——EngineIcon 内建，恒有图标）
+  // 全引擎覆盖：七引擎已接点选源；任意未知引擎=fallback 首字母占位（EngineIcon 内建）
   return !!engine;
 }
 
 export function EngineIcon({ engine, size = 13, color }: { engine: string | undefined | null; size?: number; color?: string }) {
-  // W-ICONHUNT #228：用户点选图标源优先（engine-icon-xml.ts，图集拍板 1023）——
-  // SVG 引擎走 SvgXml 直渲；trae=官方 favicon PNG（base64 Image）；未知引擎落到
-  // 尾部像素占位（既有 fallback 不变）。原手绘分支（螃蟹复刻/终端符）随源替换退役。
   const key = engine ?? "";
-  if (ENGINE_SVG_XML[key]) {
-    void color; // 图标自带品牌色（SI path/Z.ai logo 内嵌 fill），外层 color 不覆写
+  const xml = ENGINE_SVG_XML[key];
+  if (xml) {
+    return <SvgXml xml={xml} width={size} height={size} />;
   }
-  if (ENGINE_PNG_B64[key]) {
-    return <Image source={{ uri: `data:image/png;base64,${ENGINE_PNG_B64[key]}` }} style={{ width: size, height: size, borderRadius: Math.max(2, size * 0.15) }} resizeMode="contain" />;
+  const png = ENGINE_PNG_B64[key];
+  if (png) {
+    return <Image source={{ uri: `data:image/png;base64,${png}` }} style={{ width: size, height: size, borderRadius: Math.max(2, size * 0.15) }} resizeMode="contain" />;
   }
-  if (engine === "claude") {
-    const h = (size * 12) / 16;
-    return (
-      <Svg width={size} height={h} viewBox="0 0 16 12">
-        <Rect x={0} y={1} width={2} height={1} fill="#E8815A" /><Rect x={0} y={2} width={1} height={2} fill="#E8815A" />
-        <Rect x={14} y={1} width={2} height={1} fill="#E8815A" /><Rect x={15} y={2} width={1} height={2} fill="#E8815A" />
-        <Rect x={2} y={3} width={1} height={1} fill="#E8815A" /><Rect x={13} y={3} width={1} height={1} fill="#E8815A" />
-        <Rect x={4} y={4} width={8} height={1} fill="#E8815A" /><Rect x={3} y={5} width={10} height={1} fill="#E8815A" />
-        <Rect x={3} y={6} width={10} height={1} fill="#E8815A" /><Rect x={3} y={7} width={10} height={1} fill="#E8815A" />
-        <Rect x={4} y={8} width={8} height={1} fill="#E8815A" />
-        <Rect x={2} y={8} width={1} height={2} fill="#E8815A" /><Rect x={1} y={10} width={1} height={1} fill="#E8815A" /><Rect x={4} y={9} width={1} height={2} fill="#E8815A" />
-        <Rect x={13} y={8} width={1} height={2} fill="#E8815A" /><Rect x={14} y={10} width={1} height={1} fill="#E8815A" /><Rect x={11} y={9} width={1} height={2} fill="#E8815A" />
-        <Rect x={5} y={5} width={1} height={1} fill="#5A2E1F" /><Rect x={10} y={5} width={1} height={1} fill="#5A2E1F" />
-      </Svg>
-    );
-  }
-  if (engine === "codex") {
-    const c = color ?? "#666";
-    const dots: Array<[number, number]> = [[12, 1.6], [16.2, 2.7], [19.3, 4.7], [21.3, 7.8], [22.4, 12], [21.3, 16.2], [19.3, 19.3], [16.2, 21.3], [12, 22.4], [7.8, 21.3], [4.7, 19.3], [2.7, 16.2], [1.6, 12], [2.7, 7.8], [4.7, 4.7], [7.8, 2.7]];
-    return (
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        {dots.map(([cx, cy], i) => <Circle key={i} cx={cx} cy={cy} r={0.9} fill={c} />)}
-        <Path d="M8.2 9.2l3.4 2.8-3.4 2.8" stroke={c} strokeWidth={1.7} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <Rect x={13} y={14.2} width={4.2} height={1.7} rx={0.6} fill={c} />
-      </Svg>
-    );
-  }
-  if (engine === "qwen-code") {
-    return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#6950EF" d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z" /></Svg>;
-  }
-  if (engine === "trae") {
-    return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#32F08C" d="M24 20.5H3.5V17H0V3.5h24ZM3.5 17h17V7h-17Zm8.5-5-2.5 2.5L7 12l2.5-2.5Zm7 0-2.5 2.5L14 12l2.5-2.5z" /></Svg>;
-  }
-  if (engine === "codebuddy") {
-    // simple-icons siCodebuddy（品牌紫 #6C4DFF 官方 path 内嵌）
-    return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#6C4DFF" d="M18.636.289a1 1 0 0 0-.11 0c-.18.01-.195.02-.442.24-.716.636-1.722 2.546-2.703 5.137l-.274.72-.499.16c-1.554.498-2.934 1.128-4.157 1.893-1.174.73-1.81 1.207-2.768 2.056l-.578.51-.262-.045c-2.528-.447-4.63-.37-6.255.23-1.676.62-2.695 1.67-3.046 3.13-.383 1.595.135 3.29 1.54 5.037 1.203 1.494 2.904 2.787 5.092 3.876 1.885.94 3.74 1.482 5.567 1.625l.65.051.486-.318c1.234-.81 2.51-1.883 3.826-3.219l.618-.627-.055-.866-.056-.866.78-.363c2.035-.946 3.636-2.19 4.8-3.733 1.057-1.402 1.422-2.79 1.095-4.166-.234-.984-.833-1.835-1.795-2.554-.844-.628-1.906-1.128-3.187-1.5l-.646-.187-.383-.555c-.863-1.24-1.555-2.29-2.076-3.147a16 16 0 0 1-.728-1.243c-.043-.082-.08-.145-.11-.19a1 1 0 0 0-.076-.093Zm-5.32 8.65c1.23 0 2.427.18 3.591.538l.508.158.345.39c1.472 1.666 2.686 3.286 3.643 4.862l.32.528-.096.546c-.16.914-.628 1.6-1.404 2.057-.983.579-2.376.868-4.18.868-1.456 0-2.98-.205-4.574-.614l-.475-.122-.362-.335c-1.797-1.66-3.204-3.524-4.222-5.591l-.28-.568.072-.532c.147-1.083.742-1.798 1.785-2.146 1.003-.33 2.2-.443 3.591-.34l.356.027.322.273c.634.54 1.254 1.053 1.86 1.54l.512.414.663-.152c.4-.092.797-.165 1.19-.22Z" /></Svg>;
-  }
-  // #227 件四：无官方 SVG 的引擎=像素风品牌色首字母占位（与螃蟹同风格族谱；24×24
-  // currentColor 单色可着色）。zcode=#546784（EngineBrandTile 同源）/glm=#3E8EF7 智谱蓝系
-  const PLACEHOLDER: Record<string, { bg: string; letter: string }> = {
-    zcode: { bg: "#546784", letter: "Z" },
-    glm: { bg: "#3E8EF7", letter: "G" },
-  };
-  const ph = PLACEHOLDER[engine ?? ""] ?? { bg: color ?? "#546784", letter: (engine ?? "?").charAt(0).toUpperCase() };
+  const letter = (engine ?? "?").charAt(0).toUpperCase();
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Rect x={1} y={1} width={22} height={22} rx={5} fill={ph.bg} />
-      <Text selectable={false} style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", textAlign: "center", lineHeight: 22 }}>{ph.letter}</Text>
+      <Rect x={1} y={1} width={22} height={22} rx={5} fill={color ?? "#546784"} />
+      <SvgText x={12} y={16.5} textAnchor="middle" fontSize={13} fontWeight={700} fill="#FFFFFF">{letter}</SvgText>
     </Svg>
   );
 }

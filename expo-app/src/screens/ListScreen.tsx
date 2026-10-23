@@ -989,13 +989,17 @@ const SessionCard = memo(function SessionCard({
                   回归）+引擎胶囊居右，两端分布中间弹性 */}
               {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
                 <View style={styles.srowR3}>
+                  {/* #233 源标签标签化（W-CARDTAGS2，用户口径②「参考 0.6.x」）：legacy
+                      SrcBadge #98 桌面同款胶囊移植——源色底+E6、白字 8.5 粗、radius 4.5、
+                      padding 5.5/1.5、clipSrcName 限长；#226 件A 电脑图标保留入囊（转白），
+                      弱色裸字样退役 */}
                   {srcBadge ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: srcBadge.color + "E6", borderRadius: 4.5, paddingHorizontal: 5.5, paddingVertical: 1.5 }}>
                       <Svg width={9} height={9} viewBox="0 0 24 24">
-                        <Rect x="2" y="3.5" width="20" height="13.5" rx="2" fill={srcBadge.color} />
-                        <Path d="M8 21h8" stroke={srcBadge.color} strokeWidth="2.4" strokeLinecap="round" />
+                        <Rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)" />
+                        <Path d="M8 21h8" stroke="rgba(255,255,255,0.92)" strokeWidth="2.4" strokeLinecap="round" />
                       </Svg>
-                      <Text style={{ fontSize: 9.5, color: c.dim }} numberOfLines={1}>{clipSrcName(srcBadge.name)}</Text>
+                      <Text style={{ fontSize: 8.5, color: "#FFFFFF", fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{clipSrcName(srcBadge.name)}</Text>
                     </View>
                   ) : null}
                   {r3Meta.shown.map((m) => (
