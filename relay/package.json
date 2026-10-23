@@ -40,6 +40,7 @@
     "test:decision-ledger": "tsx scripts/test-decision-ledger.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
     "test:multieng": "tsx scripts/test-multieng.ts",
+    "test:teamvis": "tsx scripts/test-teamvis.ts",
     "test:headcount": "tsx scripts/test-headcount.ts",
     "test:routing": "tsx scripts/test-routing.ts",
     "test:experience": "tsx scripts/test-experience.ts",

@@ -951,6 +951,50 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
   saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
 }
 
+// ---------- #236 D：台账终态 → 看板收敛扫（boot 一次性，W-TEAMVIS） ----------
+// 缺口实证（用户 1023 口径③）：派单收口 done 边（session-manager closeOpenDispatches）
+// 会把联动卡搬进 done，但历史断点让已完成单的卡长挂非 done 泳道——relay 重启
+// closeHungDispatchRows 把中断单搬回 backlog（interrupted≠真交付）、跨组锚失配漏搬等；
+// 10-11 时代 W-RELFIX/W-AUDIT-A/B/W-SCHEDFIX2 等收割任务至今挂板（1023 截图）。
+// 收敛口径：卡带 dispatch_id、台账末行终态=done（且非中断补记）、卡不在 done → 搬 done
+// （台账=派单生命周期 SSOT，收口事实已发生）。三道防碾：failed 不动（失败单留板待人
+// 处置）；中断补记行（receipt 带「relay 重启」）不算收割（F-08 退 backlog 有意设计）；
+// 卡 updated_at 严格晚于终态行 ts=收口后被人工/流程搬过，不碾——收敛只清断点残留，不碾压
+// 人工板面操作。只扫 active 组（parked/archived 板冻结由 writableBoard 天然挡）。
+export function convergeBoardsWithDispatchLog(dir?: string): number {
+  // 读预算（#25-P3 同款教训：readDispatchLog 全文件读，循环内重读=每卡一遍全量）——
+  // 一次读入，末行赢语义按追加序后写覆盖。max 显式放大（默认 500 行窗口装不下长史
+  // 项目，10-11 时代旧单恰是本扫的目标面，漏读=白扫）。
+  // 中断收口排除（F-08 口径「活没交付不能停 doing」）：closeHungDispatchRows 的补记行
+  // receipt 恒带「relay 重启」前缀——那是「回合被打断」非「交付完成」，其退 backlog 是
+  // 有意设计（待人重派），本扫不得把它当收割拽进 done。1023 实测教训：无此排除时
+  // test-dispatch「断档补记板条退 todo」用例被本扫反向碾掉。
+  const doneAtById = new Map<string, number>();
+  for (const row of readDispatchLog(dir, 20_000)) {
+    if (row.status !== "done" || !row.id) continue;
+    if (String(row.receipt || "").startsWith("relay 重启")) continue;
+    doneAtById.set(row.id, Number(row.ts) || 0);
+  }
+  if (!doneAtById.size) return 0;
+  let moved = 0;
+  for (const g of listGroupsByStatus(dir).active) {
+    let board: ReturnType<typeof loadBoard>;
+    try { board = loadBoard(g.id, dir); } catch { continue; }
+    for (const entry of board.entries) {
+      if (entry.status === "done" || !entry.dispatch_id) continue;
+      const doneAt = doneAtById.get(entry.dispatch_id);
+      if (doneAt === undefined) continue;
+      // 严格晚于即不碾（无容差）：closeHungDispatchRows 的「补记 done(T1)→立即退 backlog
+      // (T2>T1)」序列里 T2-T1<1s，60s 容差会放过它=把中断单拽进 done（1023 实测教训；
+      // 同机时钟无抖动，容差无必要）
+      if (Number(entry.updated_at || 0) > doneAt) continue;
+      moveEntryByDispatch(g.id, entry.dispatch_id, "done", dir);
+      moved++;
+    }
+  }
+  return moved;
+}
+
 // ---------- #087 beads 思想采纳（009 §4 M1/M2 + §5 裁决；零外部依赖，不引 bd/Dolt） ----------
 //
 // 四件：depends_on 依赖字段 / ready 就绪集 / gate→blocked / lessons 回流。

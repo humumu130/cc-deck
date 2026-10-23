@@ -18,6 +18,7 @@ import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
   adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
+  convergeBoardsWithDispatchLog,
   findGroup, findGroupByAnchor, findStaleGroups, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
@@ -3624,6 +3625,15 @@ export class SessionManager {
     // #26 断档补记（P1-2 后抽为 closeHungDispatchRows：补记 + 板条退 todo + 结构化
     // 通知账对账，注释与口径见该方法）
     this.closeHungDispatchRows();
+    // #236 D（W-TEAMVIS）：台账终态→板收敛扫（boot 一次性）——closeHungDispatchRows 把
+    // 中断单退回 backlog 的历史断点残留（10-11 时代收割卡）在此归位 done；口径与防碾见
+    // convergeBoardsWithDispatchLog 注释。失败自吞不阻断启动（收敛是清扫非关键路径）
+    try {
+      const converged = convergeBoardsWithDispatchLog();
+      if (converged) console.log(`[projects] 板收敛：${converged} 张已收口卡归 done 泳道`);
+    } catch (e) {
+      console.warn(`[projects] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
+    }
     const anchor = readOrgAnchor();
     if (!anchor) return this.createLeaderFirstTime();
     const s = this.sessions.get(anchor.leader_session_id);
