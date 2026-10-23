@@ -126,6 +126,17 @@ async function main() {
     ok(true, "⑥d WORKING/WAITING 双保护在 ②⑤ 已行为验证");
   }
 
+  // ── #221 同族①②（W-INJECT3 扩展）：web 面静态+语义锚 ──
+  {
+    console.log("== #221 同族：web echo 收敛 + 状态条活性 ==");
+    const web = (await import("node:fs")).readFileSync(join(import.meta.dirname, "..", "..", "web-console", "js", "session-domain.js"), "utf-8");
+    ok(web.includes("dropEchoKeys") && web.includes("assistant_text\" || entry.kind === \"thinking"), "W1 回显对账双兜底在场（匹配放宽 fn+回合推进撤除）");
+    ok(web.includes("startsWith(normTxt(x.text))"), "W2 匹配放宽（trim+空白折叠+前缀容忍——短回显/变体失配面）");
+    ok(web.includes("frameTs + 500"), "W3 assistant 帧早于其的 sending echo 全撤（回合推进=已消费证据，秒收敛）");
+    ok(web.includes("staleWorking"), "W4 状态条活性时限在场（WORKING 停滞>3min 按空闲显示）");
+    ok(web.includes("180_000") && web.includes("!staleWorking"), "W5 3 分钟阈值+running 判定接线");
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 }

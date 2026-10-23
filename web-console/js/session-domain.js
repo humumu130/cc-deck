@@ -715,13 +715,37 @@
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
                   if (s) s.updated_at = entry.ts || Date.now();
-                  // W-PORT-A R-4 回显对账：本会话自己发出的 user 消息回显到达 → 撤最早同文 sending 态 echo
+                  // #221 同族①（W-INJECT3 扩展）：回显对账双兜底——原唯一路径「精确文本匹配」
+                  // 对回显形态差异（空白规整/短回显变体）失配=「发送中…」气泡永挂（用户实锤：
+                  // CLI 已回复后续内容气泡仍滞留）。a) 匹配放宽（trim+多空白折叠）b) 回合推进
+                  // 兜底：assistant 帧到达=CLI 已消费更早消息在干活 → 撤所有早于该帧的 sending
+                  // echo（秒级收敛，不待 30s 惰性窗/全量渲染）
+                  const dropEchoKeys = (keys) => {
+                    if (!keys.length) return;
+                    const eq = S.echo.get(sid);
+                    if (!eq) return;
+                    const keep = eq.filter((x) => !keys.includes(x.key));
+                    if (keep.length === eq.length) return;
+                    if (keep.length) S.echo.set(sid, keep); else S.echo.delete(sid);
+                    // 选中会话同步移除 DOM 行（增量日志路径不触发全量 render，气泡行须直删）
+                    if (UI && sid === S.selected) document.querySelectorAll('.msg-echo[data-echo-key]').forEach((el) => { if (keys.includes(el.dataset.echoKey)) el.remove(); });
+                  };
                   if (msgRoleOf(entry.kind) === "user") {
                     const eq = S.echo.get(sid);
                     if (eq && eq.length) {
-                      const txt = String(entry.full ?? entry.text ?? "");
-                      const i = eq.findIndex((x) => x.state === "sending" && x.text === txt);
-                      if (i >= 0) { eq.splice(i, 1); if (!eq.length) S.echo.delete(sid); if (UI && sid === S.selected) renderConversation(); }
+                      const normTxt = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
+                      const txt = normTxt(entry.full ?? entry.text ?? "");
+                      const hit = eq.filter((x) => x.state === "sending" && (normTxt(x.text) === txt || txt.startsWith(normTxt(x.text)) || normTxt(x.text).startsWith(txt)));
+                      dropEchoKeys(hit.map((x) => x.key));
+                      if (UI && sid === S.selected && hit.length) renderConversation();
+                    }
+                  } else if (entry.kind === "assistant_text" || entry.kind === "thinking") {
+                    // 回合推进兜底：模型已在输出=更早的 sending 消息必已被消费（CLI 不会
+                    // 带着未消费输入开工）——早于此帧的 sending echo 全撤（fail 态保留展示窗）
+                    const eq = S.echo.get(sid);
+                    if (eq && eq.length) {
+                      const frameTs = Number(entry.ts) || Date.now();
+                      dropEchoKeys(eq.filter((x) => x.state === "sending" && x.ts <= frameTs + 500).map((x) => x.key));
                     }
                   }
                   const out = pushLog(sid, entry);
@@ -2787,7 +2811,12 @@
                 function syncComposerState() {
                   const s = curSession();
                   const editable = !!(s && canCmd(s));
-                  const running = !!(editable && (s.status === "WORKING" || s.status === "WAITING"));
+                  // #221 同族②（W-INJECT3 扩展）：running 加活性时限——status WORKING 停滞
+                  // （外部会话 Stop 帧丢失时 relay status 滞留，与 enter/快照判定同族的回合
+                  // 结束感知缺口）超过 3 分钟无任何日志帧 → 输入条按空闲显示（CLI 实态等待
+                  // 输入，不吓用户「发送将排队」）；status 数据不动（其余面板仍显 relay 真值）
+                  const staleWorking = s && s.status === "WORKING" && (Date.now() - Number(s.updated_at || 0) > 180_000);
+                  const running = !!(editable && !staleWorking && (s.status === "WORKING" || s.status === "WAITING"));
                   if (UI.stopBtn) UI.stopBtn.hidden = !running; // 停止只在运行中出现（旧壳 #124 语义），不再占用发送钮
                   UI.sendBtn.disabled = !editable || !(UI.input.value.trim() || S.staged.length); // 常驻判空：运行中有内容仍可发（排队链）
                   UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
