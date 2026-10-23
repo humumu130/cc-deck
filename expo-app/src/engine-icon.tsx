@@ -1,8 +1,9 @@
 // Agent 引擎图标（双轨）：
 //   EngineBrandTile——W-MSGUI 件二遗留形制（圆角方块+手绘 Glyph/首字母），仅
 //     NewSessionModal 引擎选项行在用；未随点选源更换（遗留，见 W-CARDTAGS2 回执）。
-//   EngineIcon——用户点选图标源唯一渲染口（#228 W-ICONHUNT 图集 1023 拍板：
-//     claude=SI Anthropic/codex=SI OpenAI/glm=Z.ai logo/trae=官方 favicon PNG/
+//   EngineIcon——用户点选图标源唯一渲染口（#228 W-ICONHUNT 图集 1023 拍板 + #231
+//     W-CLAUDECRAB 1023 终稿：claude=像素螃蟹原图（用户提供样本，黑底转透明零加工）/
+//     codex=SI OpenAI/glm=Z.ai logo/trae=官方 favicon PNG/
 //     qwen=SI Qwen/codebuddy=官网 logo/zcode=像素描边 Z；字节权威=assets/engines/，
 //     内嵌常量见 engine-icon-xml.ts）。消费位：卡片头像（AvaBadge brandIcon）、
 //     r3 引擎胶囊前缀（TeamDetailPage EngineBadge）。
