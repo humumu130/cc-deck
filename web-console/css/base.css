@@ -538,6 +538,8 @@
     #d-session .head-sub [data-sub-time] { font-size: var(--fs-C); }
     #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 3px; }
     #d-session .workspace-title-row .identity-cluster .engine-badge .engine-icon { width: 10px; height: 10px; }
+    #d-session .workspace-title-row .identity-cluster .engine-badge .badge-brand svg,
+    #d-session .workspace-title-row .identity-cluster .engine-badge .badge-brand img { width: 10px; height: 10px; } /* #239：详情徽章品牌图跟随现行 10px 档 */
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
     #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
     #d-session #session-extmode-capsule[data-ext-on] .cap-dot { background: var(--ok); box-shadow: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); } /* 开态绿点示 approvals 正在推送 */
@@ -1853,6 +1855,12 @@
     .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
     .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
     .engine-badge:has(.engine-icon)::before { display: none; }
+    /* #239 W-DETAILAVATAR：徽章品牌图标（ENGINE_BRAND_SVG 直嵌）——尺寸跟随现行
+       .engine-icon 档（12px），有品牌图即藏 ::before 色点（同 :has(.engine-icon) 先例）；
+       img（claude/trae data-uri）自带 12px 属性，此处统一约束双形态一致 */
+    .engine-badge:has(.badge-brand)::before { display: none; }
+    .engine-badge .badge-brand { display: inline-flex; align-items: center; }
+    .engine-badge .badge-brand svg, .engine-badge .badge-brand img { width: 12px; height: 12px; display: block; }
     .engine-badge .engine-icon { width: 12px; height: 12px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .engine-badge.claude { --engine-color: var(--engine-claude); }
     .engine-badge.codex { --engine-color: var(--engine-codex); }
