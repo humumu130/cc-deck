@@ -1558,7 +1558,13 @@
                   // 「CLI」标从独立 tag 降为徽章内文字后缀（身份类三胶囊 → 一颗）。
                   // W-UIFB ③（合并裁决）：徽章加 sprite 图标（b2EngineIconFor，与第二列同款）；
                   // 模型胶囊维持 W-TOPBAR ③ 静态落 composer 位（U5 验收 pass 形态），不随 renderHeader 重建
-                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>' + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
+                  // #239 W-DETAILAVATAR：徽章图标改接 ENGINE_BRAND_SVG 品牌源（列表卡 srow-ava
+                  // 同源，claude=像素螃蟹七引擎同表）；未知引擎 PH 字母占位兜底（engineBrandSvgOf
+                  // 内建），sprite 形态保留为结构回落——尺寸/圆角走 .badge-brand 约束跟随现行徽章
+                  const brandIconHtml = engineBrandSvgOf({ engineClass: eng[1], engine: s.engine || "claude" });
+                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
+                    ? '<span class="badge-brand">' + brandIconHtml + "</span>"
+                    : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
                   // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
                   {
                     const el = UI.subDirEl && UI.subDirEl.isConnected ? UI.subDirEl : ($id("session-head-sub") || null);
