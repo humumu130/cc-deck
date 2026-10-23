@@ -70,6 +70,25 @@ N=$(( ${EXISTING:-0} + 1 ))
 VER="${BASE}-test.${N}"
 echo "    → ${VER}"
 
+# 缝合包闸（2026-10-23 实锤转基建）：test.53 期从主仓旧 checkout 跑本脚本，构建出
+# 0.7.0-test.50 旧代码 + 新版号 test.N 的缝合包并推上清单（手机会拿到错版）。脏树 =
+# 混合代码面，一律拒绝出包；烙印两文件（build.gradle/app.json）是本脚本工作对象放行，
+# 其余未提交改动一律拦。worktree 三件套（node_modules/local.properties）自动兜底
+#（ship52 R2：expo autolinking 的 settings.gradle node 探测与 ANDROID_HOME 各自 3 秒炸）
+DIRTY=$(git status --porcelain 2>/dev/null | grep -v '^??' | grep -vE 'expo-app/android/app/build\.gradle|expo-app/app\.json' || true)
+if [ -n "$DIRTY" ]; then
+  echo "ERR: 工作树有未提交改动（烙印两文件除外）——脏树出包=缝合包（旧代码+新版本号上清单），先 commit/stash 再出包：" >&2
+  printf '%s\n' "$DIRTY" | head -5 >&2
+  exit 1
+fi
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | xargs dirname)
+if [ -n "$MAIN_ROOT" ] && [ "$MAIN_ROOT" != "$(pwd -P)" ]; then
+  [ -e expo-app/node_modules ] || { ln -s "$MAIN_ROOT/expo-app/node_modules" expo-app/node_modules && echo "    worktree 兜底: node_modules ← 主仓 symlink"; }
+  if [ ! -f expo-app/android/local.properties ] && [ -f "$MAIN_ROOT/expo-app/android/local.properties" ]; then
+    cp "$MAIN_ROOT/expo-app/android/local.properties" expo-app/android/local.properties && echo "    worktree 兜底: local.properties ← 主仓拷贝"
+  fi
+fi
+
 echo "[2/5] 烙版本（build.gradle + app.json，工作区不提交）"
 sed -i '' "s/versionName \"[^\"]*\"/versionName \"${VER}\"/" expo-app/android/app/build.gradle
 sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${VER}\"/" expo-app/app.json
