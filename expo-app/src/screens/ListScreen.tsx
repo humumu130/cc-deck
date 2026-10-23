@@ -598,6 +598,19 @@ function AvaBadge({ letter, srcColor, dotColor, breathe }: { letter: string; src
   return (
     <View style={[styles.ava, { backgroundColor: bg }]}>
       <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
+      {/* #226 追加（用户 1023 灯显眼度）：WORKING 态发光脉冲环——光环层（dot 外扩
+          6px 的半透明 working 色圆）随 BLINK_PHASES 同步呼吸，跑不跑一眼可辨；与
+          #211 团队卡裸点+发光语言统一、与 web st-glow-pulse 同构（1.5s 级明暗）。
+          空闲/其他态不加环（绿保持低调可辨） */}
+      {breathe ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute", right: -9, bottom: -9, width: 21, height: 21, borderRadius: 11,
+            backgroundColor: dotColor, opacity: 0.28 * BLINK_PHASES[ph],
+          }}
+        />
+      ) : null}
       <View
         style={{
           position: "absolute", right: -3, bottom: -3, width: 9, height: 9, borderRadius: 5,
@@ -675,19 +688,32 @@ function Elapsed({ s }: { s: SessionState }) {
 // 菜单语义对齐）；长按 400ms 弹贴底 sheet（CardMenuSheet）。卡壳只保留点按+长按+
 // 离线置灰蒙层；同时把整个横向手势位让给「左右滑切 tab」（App 层，件六③）
 function CardShell({
-  onPress, onLongPress, compact, minimal, dim, children,
+  onPress, onLongPress, compact, minimal, dim, srcBar, pinned, children,
 }: {
   onPress: () => void;
   onLongPress: () => void;
   compact?: boolean;
   minimal?: boolean;
   dim?: boolean; // #32 离线源降权（缓存会话与在线视觉区分）
+  srcBar?: string | null; // #226：源竖条色（sourcePalette 同色；左缘贯穿卡高——单源不传即不显）
+  pinned?: boolean; // #226：置顶图钉（右上角时间戳左侧；非置顶不显）
   children: React.ReactNode;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   return (
     <View style={[styles.swipeWrap, compact && styles.swipeWrapC, minimal && styles.swipeWrapM]}>
+      {srcBar ? (
+        // #226 用户定稿②：源胶囊→左缘竖条（宽 3.5 贯穿含 padding 全高；sourcePalette
+        // 与源切换面板同源同色——勿造新色）。absolute 贴 swipeWrap 左缘，圆角顶底微收
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 2, bottom: 2, width: 3.5, borderRadius: 2, backgroundColor: srcBar, opacity: 0.9 }} />
+      ) : null}
+      {pinned ? (
+        // #226 用户定稿①：置顶文字胶囊→图钉图标右上角（与时间戳同排右侧；非置顶不显）
+        <View pointerEvents="none" style={{ position: "absolute", right: 10, top: 6, opacity: 0.75 }}>
+          <Text style={{ fontSize: 10, color: c.faint }}>📌</Text>
+        </View>
+      ) : null}
       <Pressable
         style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
         android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -866,6 +892,8 @@ const SessionCard = memo(function SessionCard({
       compact={compact}
       minimal={minimal}
       dim={dim || isIdleCard || dormant}
+      srcBar={srcBadge ? srcBadge.color : null}
+      pinned={s.pinned === true}
     >
       {minimal ? (
         // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
@@ -882,7 +910,6 @@ const SessionCard = memo(function SessionCard({
           </Text>
           {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
           <View style={{ flex: 1 }} />
-          {srcBadge ? <SrcBadge {...srcBadge} /> : null}
         </View>
       ) : compact ? (
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
@@ -896,7 +923,6 @@ const SessionCard = memo(function SessionCard({
             <Text style={[styles.titleC, idle && styles.titleIdle]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
             {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
             <View style={{ flex: 1 }} />
-            {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Elapsed s={s} />
           </View>
           {s.status === "WAITING" && s.waiting_request ? (
@@ -955,10 +981,9 @@ const SessionCard = memo(function SessionCard({
                   无源徽/无元信息/无水位）整行不渲染（桌面 r3 条件渲染同款）。W-MV8A：引擎徽
                   补位（任务书「引擎源徽章行」——词表命中才显，与 TeamDetailPage EngineBadge
                   单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
-              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
+              {r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
                 <View style={styles.srowR3}>
                   <EngineBadge engine={s.engine} size="sm" />
-                  {srcBadge ? <SrcBadge {...srcBadge} /> : null}
                   {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
                       display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
                       条件同步摘水位段（防右端空挂） */}
