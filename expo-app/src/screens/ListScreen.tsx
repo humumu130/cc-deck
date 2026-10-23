@@ -112,20 +112,18 @@ const GroupHeader = memo(function GroupHeader({ name, color, online, count }: {
 // 段头（E2a 只读投影）：小节标题 + 实际渲染卡数；与源分组头同族形制。吸顶行自带
 // 底色，滚动叠加不透字。件十：组间 20px 间距 + hairline 分隔线（组与组边界可见）；
 // 团队收纳组头加团队色竖条（3px，桌面 grpBar 同语言——双端区分度规格一致）
-const SectionHeader = memo(function SectionHeader({ label, count, collapsible, expanded, onToggle, teamColor, divided }: {
+const SectionHeader = memo(function SectionHeader({ label, count, collapsible, expanded, onToggle, teamColor }: {
   label: string;
   count: number;
   collapsible?: boolean;
   expanded?: boolean;
   onToggle?: () => void;
   teamColor?: string; // 件十：团队色竖条（有=团队收纳组）
-  divided?: boolean; // 件十：组间分隔线（非首组渲染）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const body = (
     <View style={styles.secHead}>
-      {divided ? <View style={styles.secDivider} pointerEvents="none" /> : null}
       {teamColor ? <View style={[styles.secTeamBar, { backgroundColor: withA(teamColor, 0.55) }]} /> : null}
       <View style={styles.secHeadRow} accessibilityLabel={`${label}，${count} 个会话${collapsible ? `，点按${expanded ? "收起" : "展开"}` : ""}`}>
         {collapsible ? <Text style={styles.secChev}>{expanded ? "▾" : "▸"}</Text> : null}
@@ -151,7 +149,7 @@ type ListRow =
   | { h: false; key: string; s: SessionState };
 
 // W-LIST2 件一：卡间微信风 hairline 分隔——单线、左右留边对齐卡 padding 14（不顶满
-// 屏宽）、组头下首卡不画（leadingItem=组头时跳过，与 SectionHeader 的 divided 组间线
+// 屏宽）、组头下首卡不画（leadingItem=组头时跳过；#218 后组间线已退役改留白）
 // 避重）、末卡后 RN 分隔器天然无线。色=主题 line 降透明度（深色主题融成 hairline、
 // 浅色主题本身即极浅灰），密度档通用（极简平铺行同线，原 swipeWrapM 注释口径的
 // 「极淡 hairline」从未实装，本件统一落地）。
@@ -159,7 +157,10 @@ function ListRowSeparator({ leadingItem }: { leadingItem?: ListRow | null }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   if (!leadingItem || leadingItem.h !== false) return null;
-  return <View style={[styles.rowSep, { backgroundColor: c.lineStrong }]} />; /* #207：分割线加重——hairline+line@.6（几乎不可见）→1px+lineStrong 全值（对齐桌面 1.5px/lineStrong 档） */
+  /* #218 件二：微信基准——缩进从文字列起点（pad 14+ava 34+gap 11=59，头像右缘）画到
+     右缘不通栏；线重回「淡但可辨」档（1px 稳+line@.6，#207 lineStrong 全值 overshoot
+     微信那条几乎不可见的观感） */
+  return <View style={[styles.rowSep, { backgroundColor: withA(c.line, 0.6) }]} />;
 }
 
 // #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
@@ -1583,7 +1584,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               expanded={!item.collapsed}
               onToggle={item.grp ? () => toggleSection(item.key) : undefined}
               teamColor={item.teamColor}
-              divided={idx > 0}
             />
           ) : item.h === "src" ? (
             <GroupHeader name={item.name} color={item.color || c.faint} online={item.online} count={item.count} />
@@ -1889,14 +1889,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 语汇移动化=现代化可见变化）；行对齐 baseline→center（胶囊非纯文本）；
   // 标题 11.5→11 收紧，团队色条/chev 语言不动（1013 刚定的区分度保留）
   secHead: {
-    marginTop: 8, marginBottom: 3, paddingHorizontal: 14,
+    marginTop: 12, marginBottom: 5, paddingHorizontal: 14, /* #218 件二：组间线退役后留白撑呼吸（上 12/下 5） */
     backgroundColor: c.bg,
   },
   secHeadRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  secDivider: {
-    position: "absolute", top: -6, left: 14, right: 14, height: StyleSheet.hairlineWidth,
-    backgroundColor: withA(c.faint, 0.35),
-  },
+  /* #218 件二：组间贴邻线已退役——与上一卡的行分隔线贴成双线是用户点名
+     最丑处；组间分界改留白承载（secHead 上下呼吸位），组内卡间保留缩进细线 */
   // 团队色细线（原 3px 竖条过重——2px×10px 细线 + 半透明，双端区分度语言保留）
   secTeamBar: { width: 2, height: 10, borderRadius: 1, position: "absolute", left: 4, top: 2 },
   secHeadT: { color: c.dim, fontSize: 11, fontWeight: "600", letterSpacing: 0.3 },
@@ -1947,7 +1945,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 行高回调（paddingVertical）系用户行高反馈闭环成果，保留不回退
   swipeWrap: { marginBottom: 2, borderRadius: 0, overflow: "hidden" },
   // W-LIST2 件一：卡间 hairline（色由组件内 withA(c.line,.6) 动态注入——双主题一套）
-  rowSep: { height: 1, marginHorizontal: 14 }, /* #207：hairline→1px（hairline≈0.33px@3x 屏近隐形） */
+  rowSep: { height: 1, marginHorizontal: 59 }, /* #218 件二：缩进=卡 pad 14+ava 34+gap 11（文字列起点），微信 76pt 同语义 */
   swipeWrapC: { marginBottom: 2 },
   swipeWrapM: { marginBottom: 1 },
   swipeCard: { borderRadius: 0, overflow: "hidden", backgroundColor: c.bg },
