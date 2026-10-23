@@ -124,22 +124,30 @@ fi
 
 # ---------- V1 逐面机器验证锚 ----------
 echo "—— V1 逐面验证锚 ——"
-# V1-a 版本烙印：CONSOLE_VERSION 与 VERSION 全等（源 + 已同步各面双壳）
-# -m1 防管爆：pipefail 下 grep 多行输出会被 head -1 的 SIGPIPE 打成 141 静默死
-# （005 壳版本串出现两处实测）——取首个匹配后干净收尾
-cv() { grep -m1 -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null | cut -d'"' -f2; }
-check_ver() { # $1=面名 $2=html 路径
-  local got; got="$(cv "$2")"
-  if [ "$got" = "$VER" ]; then ok "V1-a $1 版本烙印 = $VER"
-  else bad "V1-a $1 版本烙印 '$got' ≠ VERSION '$VER'（${2}）"; fi
+# V1-a 版本烙印：CONSOLE_VERSION 与 VERSION 全等（源 + 已同步各面双壳）。
+# 落点分壳（W-SPLIT-S4b 后，version.mjs 是口径权威）：旧壳=index.html 内联；
+# 005 新壳=js/settings-domain.js 外置 const。cv_* 内嵌 || true 防 pipefail 杀——
+# 无匹配（文件缺失/格式漂移）必须走 MISSING 报红而不是 set -e 静默死（005 实测：
+# index-005.html 根本没有版本串，裸 grep exit 1 经 pipefail 让赋值非零炸脚本）
+cv_html() { # 旧壳内联格式
+  local m; m="$(grep -m1 -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
+  if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
 }
-check_ver "源"             "$SRC/index.html"
-check_ver "源(005)"        "$SRC/index-005.html"
-check_ver "cc-plugins 副本" "$COPY/index.html"
-check_ver "副本(005)"      "$COPY/index-005.html"
-[ "$SKIP_APP" != "1" ] && check_ver "Nova 面"    "$NOVA_WC/index.html" && check_ver "Nova 面(005)" "$NOVA_WC/index-005.html"
-check_ver "relay-service 面"     "$RS_DIR/web-console/index.html"
-check_ver "relay-service 面(005)" "$RS_DIR/web-console/index-005.html"
+cv_js() { # 005 新壳外置格式
+  local m; m="$(grep -m1 -o 'const CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
+  if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
+}
+check_ver() { # $1=面名 $2=取到的值 $3=文件路径（报红定位用）
+  if [ "$2" = "$VER" ]; then ok "V1-a $1 版本烙印 = $VER"
+  else bad "V1-a $1 版本烙印 '$2' ≠ VERSION '$VER'（$3）"; fi
+}
+check_ver "源"             "$(cv_html "$SRC/index.html")"                   "$SRC/index.html"
+check_ver "源(005)"        "$(cv_js "$SRC/js/settings-domain.js")"          "$SRC/js/settings-domain.js"
+check_ver "cc-plugins 副本" "$(cv_html "$COPY/index.html")"                  "$COPY/index.html"
+check_ver "副本(005)"      "$(cv_js "$COPY/js/settings-domain.js")"         "$COPY/js/settings-domain.js"
+[ "$SKIP_APP" != "1" ] && check_ver "Nova 面"    "$(cv_html "$NOVA_WC/index.html")"          "$NOVA_WC/index.html" && check_ver "Nova 面(005)" "$(cv_js "$NOVA_WC/js/settings-domain.js")" "$NOVA_WC/js/settings-domain.js"
+check_ver "relay-service 面"      "$(cv_html "$RS_DIR/web-console/index.html")"          "$RS_DIR/web-console/index.html"
+check_ver "relay-service 面(005)" "$(cv_js "$RS_DIR/web-console/js/settings-domain.js")"  "$RS_DIR/web-console/js/settings-domain.js"
 
 # V1-b/V1-c 全量 byte 闸：git ls-files 动态清单（防新增文件漏锁）逐文件 sha256，
 # 源 vs cc-plugins 副本 + 各已同步面。site/（只随 CF 整目录上传）与 wrangler.jsonc
