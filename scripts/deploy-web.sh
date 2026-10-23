@@ -125,7 +125,9 @@ fi
 # ---------- V1 逐面机器验证锚 ----------
 echo "—— V1 逐面验证锚 ——"
 # V1-a 版本烙印：CONSOLE_VERSION 与 VERSION 全等（源 + 已同步各面双壳）
-cv() { grep -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null | head -1 | cut -d'"' -f2; }
+# -m1 防管爆：pipefail 下 grep 多行输出会被 head -1 的 SIGPIPE 打成 141 静默死
+# （005 壳版本串出现两处实测）——取首个匹配后干净收尾
+cv() { grep -m1 -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null | cut -d'"' -f2; }
 check_ver() { # $1=面名 $2=html 路径
   local got; got="$(cv "$2")"
   if [ "$got" = "$VER" ]; then ok "V1-a $1 版本烙印 = $VER"
