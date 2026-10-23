@@ -25,6 +25,11 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const PROBE_MS = Number(process.env.CCR_INJECT_PROBE_MS ?? 150);
 if (PROBE_MS > 500) { console.error("CCR_INJECT_PROBE_MS 需 ≤500ms 快跑"); process.exit(2); }
+// W-CMDIMPL 集成修（Leader 1023）：回写 env——scheduleInjectProbe 读同源值。缺省值
+// 不对称是裸跑挂 ① 的根因（Number(undefined)=NaN → 探针缺省 4s，断言窗口 750ms 早
+// 结束 → tries -1→-1）。测试自给自足后带/不带 env 跑法等价，文件头直跑命令的
+// CCR_INJECT_PROBE_MS=150 前缀变为可选。
+process.env.CCR_INJECT_PROBE_MS = String(PROBE_MS);
 
 const bus = new EventBus();
 const cfg: RelayConfig = {
