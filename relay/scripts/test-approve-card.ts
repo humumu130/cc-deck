@@ -5,7 +5,6 @@
 // 无 tmux 环境自动 skip）。跑法：cd relay && npx tsx scripts/test-approve-card.ts
 import { execSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
