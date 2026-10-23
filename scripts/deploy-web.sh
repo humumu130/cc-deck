@@ -82,7 +82,11 @@ if [ "$SKIP_APP" != "1" ]; then
     echo "❌ Nova App 未安装（$NOVA_WC 不存在）——确认装位，或加 --skip-app"
     exit 1
   fi
-  rsync -a --delete --checksum "${RSYNC_EX[@]}" "$SRC/" "$NOVA_WC/"
+  # 面 rsync 前预剪除排除项（macOS 自带 rsync 2.6.9 实证：--checksum 与 --delete+
+  # --exclude 同用会整体破坏排除语义并错基 stat 报 IO error；且 --delete 对接收端
+  # 既有排除目录只保护不清——规格「除 preview/site」= 面上不该有，先剪后同步）
+  rm -rf "$NOVA_WC/preview" "$NOVA_WC/site" "$NOVA_WC/.wrangler"
+  rsync -a --delete "${RSYNC_EX[@]}" "$SRC/" "$NOVA_WC/"
   ok "面② rsync 完成（重启 Nova 进程后运行面才换新）"
 else
   echo "⏭️  S2 跳过（--skip-app）"
@@ -91,7 +95,8 @@ fi
 # ---------- S3 relay-service 面（全量镜像：web-console + mobile + relay.mjs + 运行闭包） ----------
 echo "—— S3 relay-service 面（${RS_DIR}）——"
 mkdir -p "$RS_DIR"
-rsync -a --delete --checksum "${RSYNC_EX[@]}" "$SRC/" "$RS_DIR/web-console/"
+rm -rf "$RS_DIR/web-console/preview" "$RS_DIR/web-console/site" "$RS_DIR/web-console/.wrangler"
+rsync -a --delete "${RSYNC_EX[@]}" "$SRC/" "$RS_DIR/web-console/"
 rsync -a --delete --exclude '.DS_Store' mobile/ "$RS_DIR/mobile/"
 cp "$COPY_BUNDLE/relay.mjs" "$RS_DIR/relay.mjs"
 # relay.mjs 运行闭包（better-sqlite3 三件，见 build-plugin.mjs 2b 节）：与 bundle 同源
