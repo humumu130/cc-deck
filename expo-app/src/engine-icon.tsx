@@ -81,7 +81,9 @@ export function EngineBrandTile({ engine, size = 18, dim = false }: { engine: En
 //   trae     simple-icons siTrae path 内嵌（品牌绿 #32F08C）
 //   glm/codebuddy/zcode：simple-icons 无收录且无公开官方 SVG——保持现状（回执标注）
 export function hasEngineIcon(engine: string | undefined | null): boolean {
-  return engine === "claude" || engine === "codex" || engine === "qwen-code" || engine === "trae";
+  // #227 件四：全引擎覆盖（codebuddy=simple-icons 官方；zcode/glm=像素风品牌色占位；
+  // 任意未知引擎=fallback 首字母占位——EngineIcon 内建，恒有图标）
+  return !!engine;
 }
 
 export function EngineIcon({ engine, size = 13, color }: { engine: string | undefined | null; size?: number; color?: string }) {
@@ -118,5 +120,21 @@ export function EngineIcon({ engine, size = 13, color }: { engine: string | unde
   if (engine === "trae") {
     return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#32F08C" d="M24 20.5H3.5V17H0V3.5h24ZM3.5 17h17V7h-17Zm8.5-5-2.5 2.5L7 12l2.5-2.5Zm7 0-2.5 2.5L14 12l2.5-2.5z" /></Svg>;
   }
-  return null;
+  if (engine === "codebuddy") {
+    // simple-icons siCodebuddy（品牌紫 #6C4DFF 官方 path 内嵌）
+    return <Svg width={size} height={size} viewBox="0 0 24 24"><Path fill="#6C4DFF" d="M18.636.289a1 1 0 0 0-.11 0c-.18.01-.195.02-.442.24-.716.636-1.722 2.546-2.703 5.137l-.274.72-.499.16c-1.554.498-2.934 1.128-4.157 1.893-1.174.73-1.81 1.207-2.768 2.056l-.578.51-.262-.045c-2.528-.447-4.63-.37-6.255.23-1.676.62-2.695 1.67-3.046 3.13-.383 1.595.135 3.29 1.54 5.037 1.203 1.494 2.904 2.787 5.092 3.876 1.885.94 3.74 1.482 5.567 1.625l.65.051.486-.318c1.234-.81 2.51-1.883 3.826-3.219l.618-.627-.055-.866-.056-.866.78-.363c2.035-.946 3.636-2.19 4.8-3.733 1.057-1.402 1.422-2.79 1.095-4.166-.234-.984-.833-1.835-1.795-2.554-.844-.628-1.906-1.128-3.187-1.5l-.646-.187-.383-.555c-.863-1.24-1.555-2.29-2.076-3.147a16 16 0 0 1-.728-1.243c-.043-.082-.08-.145-.11-.19a1 1 0 0 0-.076-.093Zm-5.32 8.65c1.23 0 2.427.18 3.591.538l.508.158.345.39c1.472 1.666 2.686 3.286 3.643 4.862l.32.528-.096.546c-.16.914-.628 1.6-1.404 2.057-.983.579-2.376.868-4.18.868-1.456 0-2.98-.205-4.574-.614l-.475-.122-.362-.335c-1.797-1.66-3.204-3.524-4.222-5.591l-.28-.568.072-.532c.147-1.083.742-1.798 1.785-2.146 1.003-.33 2.2-.443 3.591-.34l.356.027.322.273c.634.54 1.254 1.053 1.86 1.54l.512.414.663-.152c.4-.092.797-.165 1.19-.22Z" /></Svg>;
+  }
+  // #227 件四：无官方 SVG 的引擎=像素风品牌色首字母占位（与螃蟹同风格族谱；24×24
+  // currentColor 单色可着色）。zcode=#546784（EngineBrandTile 同源）/glm=#3E8EF7 智谱蓝系
+  const PLACEHOLDER: Record<string, { bg: string; letter: string }> = {
+    zcode: { bg: "#546784", letter: "Z" },
+    glm: { bg: "#3E8EF7", letter: "G" },
+  };
+  const ph = PLACEHOLDER[engine ?? ""] ?? { bg: color ?? "#546784", letter: (engine ?? "?").charAt(0).toUpperCase() };
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x={1} y={1} width={22} height={22} rx={5} fill={ph.bg} />
+      <Text selectable={false} style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", textAlign: "center", lineHeight: 22 }}>{ph.letter}</Text>
+    </Svg>
+  );
 }

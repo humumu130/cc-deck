@@ -23,13 +23,13 @@ ok(ls.includes("right: 10, top: 6"), "A2 图钉右上角绝对定位");
 ok(ls.includes("s.pinned === true") && ls.includes("pinned={s.pinned === true}"), "A3 SessionCard 传 pinned（非置顶不显）");
 
 // ── B. expo：源竖条（CardShell srcBar 左缘贯穿）──
-ok(ls.includes("srcBar?: string | null"), "B1 CardShell srcBar prop");
-ok(ls.includes("left: 0, top: 2, bottom: 2, width: 3.5"), "B2 左缘 3.5px 贯穿（top/bottom 收边）");
-ok(ls.includes("srcBar={srcBadge ? srcBadge.color : null}"), "B3 srcBadge 色透传（sourcePalette 同色；单源 null 不显）");
-ok(!ls.includes("{srcBadge ? <SrcBadge {...srcBadge} /> : null}"), "B4 SrcBadge 胶囊三处全撤（头行/compact/r3）");
+ok(!ls.includes("srcBar?: string | null"), "B1(#227) 竖条退役：srcBar prop 移除");
+ok(!ls.includes("left: 0, top: 2, bottom: 2, width: 3.5"), "B2(#227) 竖条渲染移除");
+ok(!ls.includes("srcBar={"), "B3(#227) 竖条挂载点移除");
+ok(!ls.includes("{srcBadge ? <SrcBadge {...srcBadge} /> : null}"), "B4 SrcBadge 老胶囊撤（#227 新形态=b2SrcCap 双胶囊）");
 
 // ── C. expo：引擎胶囊=r3 唯一徽章成员 ──
-ok(ls.includes("<EngineBadge engine={s.engine} size=\"sm\" />") && !ls.includes("srcBadge || r3Meta.shown"), "C1 r3 引擎胶囊保留、条件渲染去 srcBadge（行高自然压缩）");
+ok(ls.includes("engineBadgeable(s.engine) ? <EngineBadge engine={s.engine} size=\"sm\" /> : null"), "C1(#227) 引擎胶囊 r3 右端（条件渲染含 srcBadge 双胶囊）");
 
 // ── D. expo：灯显眼度（#226 追加）──
 ok(ls.includes("width: 21, height: 21, borderRadius: 11"), "D1 WORKING 光环层 21px（dot 9px 外扩）");
@@ -43,11 +43,11 @@ ok(css.includes(".srow-pinned {"), "E3 图钉 CSS");
 ok(!sd.includes('<span class="tag pin-flag">置顶</span>'), "E4 pin-flag 文字胶囊退役");
 
 // ── F. web：源竖条 ──
-ok(sd.includes("b2SrcBar"), "F1 b2SrcBar 变量（--src-bar inline）");
-ok(sd.includes("b2SrcBar(item) + ' data-session-card="), "F2 queue-card 开标签挂竖条");
-ok(!sd.includes("b2SourceBadge"), "F3 源胶囊函数退役");
-ok(css.includes('.queue-card[style*="--src-bar"]::before'), "F4 ::before 竖条选择器（有变量才显）");
-ok(css.includes("width: 3.5px"), "F5 3.5px 宽与 expo 同值");
+ok(sd.includes("b2SrcCap") && !sd.includes("b2SrcBar"), "F1(#227) b2SrcBar 退役→b2SrcCap");
+ok(!sd.includes("b2SrcBar(item)"), "F2(#227) 开标签竖条挂载退役");
+ok(!sd.includes("b2SourceBadge") && sd.includes("b2SrcCap"), "F3 b2SrcCap 新源胶囊（电脑图标+源名）");
+ok(!css.includes("--src-bar"), "F4(#227) web 竖条规则退役");
+ok(css.includes(".src-cap"), "F5(#227) web src-cap 源胶囊样式");
 
 // ── G. web：r3 唯一成员+行条件 ──
 ok(!sd.includes("item.source || item.pinned ? '<span class=\"srow-r3\""), "G1 r3 条件去 source/pinned（引擎+团队为准）");
@@ -81,6 +81,22 @@ ok(css.includes(".srow-ava"), "I2 web 灯仍随 srow-ava（原位）");
     ok(sd.includes("ENGINE_BRAND_SVG") && sd.includes('ENGINE_BRAND_SVG[item.engineClass] ??'), "K6 web 引擎胶囊品牌 SVG 前缀（无图标回落 sprite）");
     ok(ei.includes("glm/codebuddy/zcode：simple-icons 无收录"), "K7 无官方 SVG 引擎标注备案（占位不劣化）");
     ok(tdp.includes('import { EngineBrandTile, EngineIcon, hasEngineIcon }'), "K8 EngineBrandTile 原件保留（选项行瓦片不受影响）");
+  }
+
+  // ── L. #227 三排定稿：双胶囊+品牌化头像+竖条退役+全引擎覆盖 ──
+  {
+    console.log("== #227 三排定稿 ==");
+    const ei2 = readFileSync(join(ROOT, "expo-app/src/engine-icon.tsx"), "utf-8");
+    ok(ls.includes("srcBadge ? (") && ls.includes('fill={srcBadge.color}') && ls.includes('clipSrcName(srcBadge.name)'), "L1 expo r3 源胶囊居左（电脑图标+源名，源色）");
+    ok(ls.includes('<View style={{ flex: 1 }} />') && ls.includes("engineBadgeable(s.engine) ? <EngineBadge"), "L2 引擎胶囊居右（r3-spring 两端分布）");
+    ok(ls.includes("brandIcon={pmMember ? null : hasEngineIcon(s.engine) ? s.engine : null}"), "L3 品牌化头像（PM 豁免字母保留）");
+    ok(ls.includes("pmMember={pmSessionIds.has(item.s.session_id)}"), "L4 PM 判定接线（headcount role 词表）");
+    ok(sd.includes("b2SrcCap(item)") && sd.includes('class="r3-spring"'), "L5 web r3 双胶囊（src-cap 左+engine 右）");
+    ok(sd.includes('class="ava-brand"'), "L6 web 品牌化头像");
+    ok(ei2.includes("codebuddy") && ei2.includes("#6C4DFF"), "L7 codebuddy simple-icons 官方");
+    ok(ei2.includes('zcode: { bg: "#546784"') && ei2.includes('glm: { bg: "#3E8EF7"'), "L8 zcode/glm 品牌色占位（像素风族谱）");
+    ok(ei2.includes("return !!engine;"), "L9 hasEngineIcon 全引擎恒真（fallback 首字母兜底）");
+    ok(sd.includes("engineBrandSvgOf"), "L10 web engineBrandSvgOf fallback getter");
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

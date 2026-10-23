@@ -415,14 +415,12 @@
     .project-unfiled-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
     .project-unfiled-toggle .status-dot { margin-left: auto; }
     .status-dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--st-closed); }
-    /* #226（W-CARDTAGS）：会话卡左缘源竖条（--src-bar 在场才显——sourcePalette 同色
-       贯穿卡高，与源切换面板同源同色）+ 右上角置顶图钉（时间戳左侧，非置顶不显） */
+    /* #227 三排定稿：竖条退役；r3 双胶囊（源胶囊左+引擎胶囊右）+右上置顶图钉 */
     .queue-card { position: relative; }
-    .queue-card[style*="--src-bar"]::before {
-      content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3.5px;
-      border-radius: 2px; background: var(--src-bar); opacity: .9; pointer-events: none;
-    }
-    .srow-pinned { color: var(--faint); width: 12px; height: 12px; flex: none; } /* #226 追加：6/7→9px——灯显眼度（用户 1023） */
+    .srow-pinned { color: var(--faint); width: 12px; height: 12px; flex: none; }
+    .src-cap { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; color: var(--dim); max-width: 40%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: none; }
+    .r3-spring { flex: 1; }
+    .srow-ava .ava-brand { display: flex; align-items: center; justify-content: center; } /* #226 追加：6/7→9px——灯显眼度（用户 1023） */
     /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
        黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
        灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */

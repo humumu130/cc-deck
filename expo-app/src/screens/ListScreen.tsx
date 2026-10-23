@@ -7,7 +7,7 @@ import { HEAD_BASE } from "../head-unify";
 import * as Clipboard from "expo-clipboard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
@@ -22,6 +22,7 @@ import { hasActivityCapability, type ProjectGroup, type SessionState, type Sessi
 import { notifActionableOf } from "../notify-jump";
 import NotifCenterSheet from "./NotifCenterPage";
 import { EngineBadge, engineBadgeable } from "./TeamDetailPage";
+import { EngineIcon, hasEngineIcon } from "../engine-icon";
 import RenameModal from "./RenameModal";
 
 // 硬件返回句柄（#282）：返回键收敛为 App.tsx 顶层单订阅统一分发，抽屉/图例浮层
@@ -584,7 +585,7 @@ function BgBadge({ n, color }: { n: number; color: string }) {
 // W-EXPO 005 srow 头像（.srow-ava 等价）：34px **圆形**（双端对齐 2026-10-12 用户实锤：
 // 桌面已 50% 圆、手机仍圆角方块），源色 16% 淡染底 +
 // 首字母；右下角状态灯叠角（2px 页底光圈遮接缝，.status-dot 同口径四色）
-function AvaBadge({ letter, srcColor, dotColor, breathe }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean }) {
+function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean; brandIcon?: string | null }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const bg = srcColor ? mix(srcColor, c.panel2, 0.84) : c.panel2;
@@ -596,7 +597,13 @@ function AvaBadge({ letter, srcColor, dotColor, breathe }: { letter: string; src
   }, [breathe]);
   return (
     <View style={[styles.ava, { backgroundColor: bg }]}>
-      <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
+      {brandIcon ? (
+        <View style={{ alignItems: "center", justifyContent: "center" }}>
+          <EngineIcon engine={brandIcon} size={18} color={srcColor ?? c.textStrong} />
+        </View>
+      ) : (
+        <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
+      )}
       {/* #226 追加（用户 1023 灯显眼度）：WORKING 态发光脉冲环——光环层（dot 外扩
           6px 的半透明 working 色圆）随 BLINK_PHASES 同步呼吸，跑不跑一眼可辨；与
           #211 团队卡裸点+发光语言统一、与 web st-glow-pulse 同构（1.5s 级明暗）。
@@ -687,26 +694,20 @@ function Elapsed({ s }: { s: SessionState }) {
 // 菜单语义对齐）；长按 400ms 弹贴底 sheet（CardMenuSheet）。卡壳只保留点按+长按+
 // 离线置灰蒙层；同时把整个横向手势位让给「左右滑切 tab」（App 层，件六③）
 function CardShell({
-  onPress, onLongPress, compact, minimal, dim, srcBar, pinned, children,
+  onPress, onLongPress, compact, minimal, dim, pinned, children,
 }: {
   onPress: () => void;
   onLongPress: () => void;
   compact?: boolean;
   minimal?: boolean;
   dim?: boolean; // #32 离线源降权（缓存会话与在线视觉区分）
-  srcBar?: string | null; // #226：源竖条色（sourcePalette 同色；左缘贯穿卡高——单源不传即不显）
-  pinned?: boolean; // #226：置顶图钉（右上角时间戳左侧；非置顶不显）
+  pinned?: boolean; // #226：置顶图钉（右上角时间戳左侧；非置顶不显）。#227：竖条退役（三排定稿③）
   children: React.ReactNode;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   return (
     <View style={[styles.swipeWrap, compact && styles.swipeWrapC, minimal && styles.swipeWrapM]}>
-      {srcBar ? (
-        // #226 用户定稿②：源胶囊→左缘竖条（宽 3.5 贯穿含 padding 全高；sourcePalette
-        // 与源切换面板同源同色——勿造新色）。absolute 贴 swipeWrap 左缘，圆角顶底微收
-        <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 2, bottom: 2, width: 3.5, borderRadius: 2, backgroundColor: srcBar, opacity: 0.9 }} />
-      ) : null}
       {pinned ? (
         // #226 用户定稿①：置顶文字胶囊→图钉图标右上角（与时间戳同排右侧；非置顶不显）
         <View pointerEvents="none" style={{ position: "absolute", right: 10, top: 6, opacity: 0.75 }}>
@@ -841,7 +842,7 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
 // 呈现位，逐项明细在详情页；activityMetricsOf 纯投影保留（test-e2a-list 断言面）。
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag,
+  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag, pmMember,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -850,6 +851,7 @@ const SessionCard = memo(function SessionCard({
   density: ListDensity;
   dim?: boolean; // #32 离线源降权
   srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
+  pmMember?: boolean; // #227：PM/Leader 会话（保留字母头像的品牌化头像豁免位）
   orgTag?: string | null; // #26 M2 组织归属（项目组名/派单档位）：标准档缀元信息行、紧凑档占目录位、极简档无位不显
 }) {
   const { c } = useTheme();
@@ -891,7 +893,6 @@ const SessionCard = memo(function SessionCard({
       compact={compact}
       minimal={minimal}
       dim={dim || isIdleCard || dormant}
-      srcBar={srcBadge ? srcBadge.color : null}
       pinned={s.pinned === true}
     >
       {minimal ? (
@@ -946,6 +947,9 @@ const SessionCard = memo(function SessionCard({
           <View style={styles.srow}>
             <AvaBadge
               letter={(s.title || "未").trim().slice(0, 1) || "未"}
+              /* #227 三排定稿②：品牌化头像——非 PM 会话且有品牌图标时头像=引擎图标居中
+                 （EngineIcon 裸标）；PM/Leader 保留字母头像（P/L 有特殊辨识意义） */
+              brandIcon={pmMember ? null : hasEngineIcon(s.engine) ? s.engine : null}
               /* A3-7 查漏（桌面 UIPOLISH2 件一同口径）：头像底色=引擎品牌色淡彩（引擎
                  语义徽章/状态灯/身份头像三分离）；词表外引擎回落源色（不丢信息） */
               srcColor={ENGINE_ACCENT[s.engine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
@@ -980,17 +984,28 @@ const SessionCard = memo(function SessionCard({
                   无源徽/无元信息/无水位）整行不渲染（桌面 r3 条件渲染同款）。W-MV8A：引擎徽
                   补位（任务书「引擎源徽章行」——词表命中才显，与 TeamDetailPage EngineBadge
                   单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
-              {r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
+              {/* #227 三排定稿①：第三排双胶囊——源胶囊居左（电脑图标前缀=件A 形态
+                  回归）+引擎胶囊居右，两端分布中间弹性 */}
+              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
                 <View style={styles.srowR3}>
-                  <EngineBadge engine={s.engine} size="sm" />
-                  {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
-                      display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
-                      条件同步摘水位段（防右端空挂） */}
+                  {srcBadge ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                      <Svg width={9} height={9} viewBox="0 0 24 24">
+                        <Rect x="2" y="3.5" width="20" height="13.5" rx="2" fill={srcBadge.color} />
+                        <Path d="M8 21h8" stroke={srcBadge.color} strokeWidth="2.4" strokeLinecap="round" />
+                      </Svg>
+                      <Text style={{ fontSize: 9.5, color: c.dim }} numberOfLines={1}>{clipSrcName(srcBadge.name)}</Text>
+                    </View>
+                  ) : null}
                   {r3Meta.shown.map((m) => (
                     <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
                   ))}
                   {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
                   <View style={{ flex: 1 }} />
+                  {engineBadgeable(s.engine) ? <EngineBadge engine={s.engine} size="sm" /> : null}
+                  {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
+                      display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
+                      条件同步摘水位段（防右端空挂） */}
                 </View>
               ) : null}
             </View>
@@ -1621,6 +1636,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               density={density}
               srcBadge={srcBadgeOf(item.s.src, item.s.relay_source)}
               orgTag={orgTagOf(item.s)}
+              pmMember={pmSessionIds.has(item.s.session_id)}
             />
           )
         }
