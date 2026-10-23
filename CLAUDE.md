@@ -73,3 +73,4 @@
 - 直连 github.com 超时，git 走仓库本地配置的 `http.https://github.com/.proxy`（Clash 127.0.0.1:7890）；gh CLI 需手动 export 同款代理。
 - 手机无线 adb：配对已完成，连接端口会漂移，先 `adb mdns services` 发现再连；adb 在 `~/Library/Android/sdk/platform-tools/`。
 - relay 数据目录 `~/.cc-deck/data/`（events.ndjson 事件流、cli-pids.json、embedded-relay.log）。
+- **web 面同步只走脚本，禁手工 cp**（#237，2026-10-23）：全落点单命令 `scripts/deploy-web.sh`（cc-plugins 副本/Nova App/relay-service/CF 资产，逐面验证锚收尾）；cc-plugins 副本是纯构建产物，唯一合法写口 `relay/scripts/build-plugin.mjs`，禁止手工 cp/编辑。CF 部署代理必须**小写** `https_proxy`（wrangler/undici 只读小写，大写 HTTPS_PROXY 不通，三跑实证）；wrangler 固定 bin=`~/.npm/_npx/32026684e21afda6/node_modules/.bin/wrangler`（npx 免网络）。文件同步≠进程换新：Nova/relay 进程须重启运行面才换新。
