@@ -1053,7 +1053,10 @@
                 // 接通现状（回执「追加批」详述）：relay sanitizeHeadcount 硬性要求 session_id 且
                 // org adapter 不透传 role_defaults，手动席暂不进创建载荷，创建成功后明示用户。
                 function teamSeatCount(pop) {
-                  return pop.querySelectorAll("[data-team-member]:checked").length + pop.querySelectorAll(".team-manual-row").length;
+                  // W-TEAMSNC ①：PM 带队模板（pm-led，默认档）占 1 席——relay sanitizeHeadcount
+                  // 的 8 席硬闸按行数计（PM 身份行也占），表单侧同步计数防提交才被拒
+                  const pmLed = pop.querySelector("[data-team-field='template']")?.value === "pm-led";
+                  return pop.querySelectorAll("[data-team-member]:checked").length + pop.querySelectorAll(".team-manual-row").length + (pmLed ? 1 : 0);
                 }
                 function addTeamManualRow(pop) {
                   if (teamSeatCount(pop) >= 8) { toast("编制最多 8 席"); return; }
@@ -1101,7 +1104,7 @@
                   html += '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
                   html += '<button type="button" class="team-add-btn" data-team-add-member>＋ 添加成员</button>';
                   html += "</div>";
-                  if (cands.length) html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>';
+                  if (cands.length) html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="pm-led">PM 带队（当前选中会话任 PM，勾选成员为 worker）</option><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>'; // W-TEAMSNC ①：pm-led 默认档=建团自动补 PM 行（relay pm_session_id 单点）
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit>创建团队</button></div>';
                   pop.innerHTML = html;
                   back.addEventListener("click", closeTeamCreate);
@@ -1139,9 +1142,15 @@
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
                     const roleInput = pop.querySelector("[data-team-role='" + cssEscape(sid) + "']");
-                    const role = template === "free" ? String(roleInput?.value ?? "").trim() : template;
+                    const role = template === "free" ? String(roleInput?.value ?? "").trim() : template === "pm-led" ? "worker" : template;
                     return { session_id: sid, role: role || "worker" };
                   });
+                  // W-TEAMSNC ①：PM 带队默认档——pm_session_id=会话域当前选中会话（跨域取
+                  // __ccDeck005SlimUi.selectedSid；relay orgCommand create 单点插 role="pm" 身份行）。
+                  // 无选中/选中会话不在册：降级不带 PM 行继续建团（feedback 提示，不拦单）
+                  const pmSid = template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "";
+                  if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                  if (pmSid) { const i = headcount.findIndex((h) => h.session_id === pmSid); if (i >= 0) headcount.splice(i, 1); } // PM 会话被同时勾选：让位 pm_session_id 身份行（同 sid 双行会被 relay 去重，先去保角色正确）
                   // W-UIFB 追加⑮：手动席（agent 类型+角色名）——relay sanitizeHeadcount 现版
                   // 硬性要求 session_id 且 adapter 不透传 role_defaults，入载会整单被拒；
                   // 故手动席暂不进创建载荷，创建成功后明示「待补齐」，接通条件见回执。
@@ -1153,7 +1162,7 @@
                   if (state.flights.has(flight)) return;
                   state.flights.add(flight);
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}) }));
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSid ? { pm_session_id: pmSid } : {}) }));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";

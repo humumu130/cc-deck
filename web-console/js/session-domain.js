@@ -68,6 +68,7 @@
                   forceScroll: true,
                   slimUnread: new Map(), // [t-7e0c6189] 团队未读聚合：gid → Set<sid>（编制内 worker/QA 有新输出且未在看）；进团队域/展第四列/直开即清（内存态，重启随增量重建）
                   drawerGid: "", // [t-7e0c6189] 第四列展开的团队（""=收起；localStorage 记忆）
+                  boards: new Map(), // W-TEAMSNC ④：gid → 板 entries（SNAPSHOT.boards 锚定 + BOARD_UPDATED 帧跟随；团队域 state.boards 同源数据）
                 };
                 let UI = null;
                 // #B3-4 每会话输入草稿（旧壳 inputDrafts 同语义）：切走存 / 切回恢复 / 发送清，
@@ -544,6 +545,12 @@
                     case "SESSION_LOG_PATCH": onLogRemove(sid, m.payload); break; // W-STREAMDELTA：终态撤流块
                     case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break; // [t-7e0c6189] 编制增量（S.projects 原只吃 SNAPSHOT 全量，编制一变列表过滤就陈旧）
+                    case "BOARD_UPDATED": { // W-TEAMSNC ④：板帧跟随（第四列抽屉在办概览 ≤1s 新鲜度）——会话域唯一新增消费点；守门三连（B 稿 R1）：gid 有效 + 抽屉开且同 gid 才重渲，稳态早退在 renderSlimDrawer
+                      const bgid = m.payload && typeof m.payload.gid === "string" ? m.payload.gid : "";
+                      const bents = m.payload && m.payload.board && Array.isArray(m.payload.board.entries) ? m.payload.board.entries : null;
+                      if (bgid && bents) { if (!S.boards) S.boards = new Map(); S.boards.set(bgid, bents); if (S.drawerGid === bgid) renderSlimDrawer(); }
+                      break;
+                    }
                   }
                 }
                 function onProjectsUpdated(p) {
@@ -594,6 +601,7 @@
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
+                  S.boards = new Map((Array.isArray(p.boards) ? p.boards : []).filter((b) => b && typeof b.gid === "string" && Array.isArray(b.entries)).map((b) => [b.gid, b.entries])); // W-TEAMSNC ④：板随快照（缺席=空 Map → 抽屉概览走降级文案，不伪造空板）
                   S.experiences = Array.isArray(p.experience) ? p.experience.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null; // W-EXPP2
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
@@ -902,22 +910,30 @@
                   renderMyList();
                 }
                 const GRP_ACCENTS = ["var(--brand)", "var(--info)", "var(--done)", "var(--working)"]; // 件C③：团队色轮（组序注入，>4 组循环）；V8R+ 提升共享——PM 归属 chip 同轮取色
-                // V8R+（Leader 1014 追加）：PM/Leader 直列卡的「所属团队」归属 chip 数据——
-                // 编制内 role 命中 pm/leader 的会话返回 {name, accent}（团队名+色轮色，按 S.projects
-                // 序取色=同团队恒同色）；无归属返回 null（不显示空标识）。worker/QA 会话已被
-                // 团队收纳/入口卡聚合，不在直列面，天然不触发。
+                // V8R+（Leader 1014 追加）：PM/Leader 直列卡的「所属团队」归属 chip 数据。
+                // W-TEAMSNC ②⑤（2026-10-24）：单口升级——返回**团队数组** [{gid, name, accent, idle}]
+                //（多团队归属=多枚 chip 平铺，C 稿 E1 口径；首枚=编制序首团）；边界态按 C 稿表：
+                // archived 团队 chip 退役（E4：删除/归档，对齐手机端 active 过滤精神）；零成员团队
+                // 天然无 sid 命中不出 chip（E2）；全闲团队 chip 置灰 idle（E5，title 补「团队空闲」）。
+                // 词表不变（SLIM_KEEP_ROLE 同源）。调用方：卡 myCardItem / 详情 head renderHeader。
                 function pmTeamChipOf(sid) {
-                  if (!Array.isArray(S.projects)) return null;
+                  if (!Array.isArray(S.projects)) return [];
+                  const out = [];
                   for (let pi = 0; pi < S.projects.length; pi++) {
                     const p = S.projects[pi];
-                    const hc = Array.isArray(p && p.headcount) ? p.headcount : [];
+                    if (!p || typeof p.id !== "string") continue;
+                    if (String(p.status || "") === "archived") continue; // E4：归档/结项团队 chip 不渲染
+                    const hc = Array.isArray(p.headcount) ? p.headcount : [];
+                    let hit = false;
                     for (const m of hc) {
-                      if (m && m.session_id === sid && /^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || ""))) {
-                        return { name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length] };
-                      }
+                      if (m && m.session_id === sid && SLIM_KEEP_ROLE.test(String(m.role || ""))) { hit = true; break; }
                     }
+                    if (!hit) continue;
+                    // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
+                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" ? 1 : 0); }, 0);
+                    out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0 });
                   }
-                  return null;
+                  return out;
                 }
                 function myCardItem(session) {
                   const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "done";
@@ -943,7 +959,7 @@
                       const q = gid && window.__ccDeck005DispatchQueues ? window.__ccDeck005DispatchQueues.get(gid) : null;
                       return Array.isArray(q) ? q.length : 0;
                     })(),
-                    team: pmTeamChipOf(session.session_id), // V8R+：PM/Leader 所属团队归属（null=无归属不显）
+                    teams: pmTeamChipOf(session.session_id), // W-TEAMSNC ②⑤：PM/Leader 所属团队数组（[]=无归属不显；多团队=多枚 chip）
                     engine: esc(engine[0]), engineClass: engine[1],
                     source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || S.relayName) : (session.relay_source || S.relayName)), // 件十三 + W-WINPAIR-R6：per-session 源标识优先（聚合两源各显其名）
                     time: activityTime ? fmtListTime(activityTime) : "",
@@ -991,6 +1007,12 @@
                   claude: "var(--engine-claude)", codex: "var(--engine-codex)", trae: "var(--engine-trae)",
                   qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)",
                 }[item.engineClass] || b2SourceColor(item.source));
+                // W-TEAMSNC ②③：团队 chip 单口 markup——button 化（data-team-chip 开第四列团队抽屉，
+                // 委托链见 UI.section data-team-chip 分支）+ ✦ 前缀（复用 member-chip SLIM_KEEP_ROLE
+                // 徽记符号=「编制特卡」语义）；卡 r3 与详情 head identity-cluster 同款同链。
+                // idle=E5 全闲置灰；aria-expanded 随抽屉开合同 gid 置 true（入口态可视）。
+                const teamChipMarkup = (t) => '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '"><i aria-hidden="true"></i><span class="tc-name">✦ ' + esc(t.name) + "</span></button>";
+                const teamChipsOf = (item) => (Array.isArray(item.teams) ? item.teams : []).map(teamChipMarkup).join("");
                 function myCardMarkup(item) {
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
@@ -999,7 +1021,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (engineBrandSvgOf(item) ? '<span class="ava-brand">' + engineBrandSvgOf(item) + "</span>" : (item.title || "·").trim().charAt(0).toUpperCase()) + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.pinned ? '<svg class="icon-inline srow-pinned" aria-label="已置顶"><use href="#icon-pin"></use></svg>' : "") + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.team || item.engine || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + (item.team ? '<span class="team-chip" title="所属团队：' + esc(item.team.name) + '" style="--team-accent:' + item.team.accent + '"><i aria-hidden="true"></i><span class="tc-name">' + esc(item.team.name) + "</span></span>" : "") + '<span class="r3-spring"></span>' + b2EngineBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (engineBrandSvgOf(item) ? '<span class="ava-brand">' + engineBrandSvgOf(item) + "</span>" : (item.title || "·").trim().charAt(0).toUpperCase()) + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.pinned ? '<svg class="icon-inline srow-pinned" aria-label="已置顶"><use href="#icon-pin"></use></svg>' : "") + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.engine || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + teamChipsOf(item) + '<span class="r3-spring"></span>' + b2EngineBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -1089,20 +1111,107 @@
                   const teamAlive = running > 0;
                   return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '<i class="lamp-dot team-health ' + (teamAlive ? "working" : "idle") + '" title="整队健康度：' + running + ' 人在跑"></i></span><span class="t-main"><span class="t-name">' + esc(team.name) + teamSrcBadges + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="编制席位"><svg class="icon-inline" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + rosterN + '</b></span><span class="t-count" title="在跑（工作中）"><svg class="icon-inline t-running-icon" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
                 }
-                function slimDrawerCardMarkup(item) {
-                  return '<div class="queue-card" data-slim-open="' + item.id + '" role="button" tabindex="0" aria-label="打开 ' + item.title + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source ? '<span class="srow-r3">' + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span></div>";
+                // slimDrawerCardMarkup（旧成员会话卡列）随 W-TEAMSNC ④ 厚抽屉退役——roster 行直开
+                //（data-slim-open）吸收其职能（B 稿 D3/R5：YAGNI，Leader 拍板主战方案）
+                // ---------- W-TEAMSNC ④ 第四列团队信息抽屉（B 稿主战方案定稿）----------
+                // 原「成员会话卡列」原位升级为厚信息抽屉：四区=在办概览（板）/成员 roster（行直开）/
+                // 输出物计数/跳团队域钮组；296px + .open class 滑入动效（替代 [hidden] 硬切）；开抽屉
+                // 清未读（slimMarkSeen 现成）。数据面（B 稿 §3）：S.boards 吃 SNAPSHOT.boards +
+                // BOARD_UPDATED 帧跟随（会话域唯一新增消费点）；板缺席=「板未同步」降级文案不伪造
+                // 0/0/0；成员态/水位吃 S.sessions 现成字段。板新鲜度承诺=快照级+帧级跟随，深度实时
+                // 去团队域（域职责不越界）。泳道词表与 team-domain lanes 同源（legacy 归并+五段条）。
+                const TEAM_DRAWER_LANES = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
+                const TEAM_DRAWER_LEGACY = { todo: "backlog", doing: "claimed" };
+                /** 纯函数拼装模型（单测锚：relay/scripts/test-session-slim.ts 纯函数直跑同范式）。
+                 * boardEntries=null=板未同步（旧 relay/未随快照）——概览区走降级，不伪造空板。 */
+                function teamDrawerModelOf(team, boardEntries, sessionsMap) {
+                  const members = (team && Array.isArray(team.members)) ? team.members : [];
+                  const roster = members.map((m) => {
+                    const s = sessionsMap.get(m.session_id);
+                    const pct = s && Number(s.context_limit) ? Math.min(100, Math.round((Number(s.context_usage) || 0) / Number(s.context_limit) * 100)) : null;
+                    return {
+                      sid: m.session_id, role: String(m.role || ""), nick: String(m.nick || ""),
+                      pm: SLIM_KEEP_ROLE.test(String(m.role || "")),
+                      online: !!s, status: s ? s.status : null,
+                      title: s ? String(s.title || s.session_id) : String(m.session_id).slice(0, 8),
+                      pct,
+                      arts: s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [],
+                    };
+                  });
+                  const running = roster.filter((r) => r.status === "WORKING").length;
+                  const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
+                  const entries = Array.isArray(boardEntries) ? boardEntries : null;
+                  const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
+                  const activeN = lanes ? lanes.slice(0, 4).reduce((n, l) => n + l.n, 0) : null; // 在办=四未完泳道合计（done 除外）
+                  const keyTasks = entries ? entries.filter((e) => e && e.gate && e.gate.reason).slice(0, 3) : [];
+                  const arts = roster.flatMap((r) => r.arts.map((a) => ({ path: String(a.path || ""), last_at: Number(a.last_at || 0), sid: r.sid, who: r.nick || r.title.slice(0, 8) }))).sort((a, b) => b.last_at - a.last_at);
+                  return { gid: team ? String(team.id || "") : "", name: team ? String(team.name || "") : "", rosterN: members.length, running, roster, lanes, activeN, keyTasks, artsCount: arts.length, recentArts: arts.slice(0, 3) };
+                }
+                // roster 行排序：PM/Leader 前置 → 在跑前置 → 编制序（B 稿 sortRoster 同口径）
+                function teamDrawerRosterSort(a, b) {
+                  return Number(b.pm) - Number(a.pm) || Number(b.status === "WORKING") - Number(a.status === "WORKING") || 0;
+                }
+                function teamDrawerMarkup(model) {
+                  // 头：「名 · N 席 · 在办 M」（A 稿附计数带口径：M=成员 WORKING 计数，无板依赖）
+                  const head = '<div class="drawer-head"><span class="d-name">' + esc(model.name) + " · " + model.rosterN + " 席 · 在办 " + model.running + '</span><button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(model.gid) + '" title="收起团队抽屉" aria-label="收起团队抽屉">✕</button></div>';
+                  // 区一：在办概览（板比例条+关键任务；板缺席=降级文案，入口钮兜底——B 稿 §3 降级口径）
+                  let overview;
+                  if (model.lanes) {
+                    const segs = model.lanes.filter((l) => l.n > 0).map((l) => '<i class="' + l.k + '" style="flex-grow:' + l.n + '" title="' + l.label + " " + l.n + '"></i>').join("");
+                    const legend = model.lanes.map((l) => '<span style="--legend-color:var(--p-' + (l.k === "ready_to_install" ? "ready" : l.k) + ')"><i></i>' + l.label + " <b>" + l.n + "</b></span>").join("");
+                    const keys = model.keyTasks.length ? '<div class="key-task-head">⚠ 关键任务 ' + model.keyTasks.length + "</div>" + model.keyTasks.map((e) => '<div class="key-task" title="' + esc(String(e.text || "").slice(0, 80)) + '">⚠ ' + esc(String(e.text || "").slice(0, 26)) + " · 阻塞：" + esc(String((e.gate && e.gate.reason) || "").slice(0, 18)) + "</div>").join("") : "";
+                    overview = '<div class="dr-sec"><span>在办 ' + (model.activeN || 0) + '</span><span class="dr-sub">板未完任务</span></div>'
+                      + '<div class="lane-bar" role="img" aria-label="任务状态分布">' + segs + '</div><div class="lane-legend">' + legend + "</div>" + keys;
+                  } else {
+                    overview = '<div class="dr-sec"><span>在办 ' + model.running + '</span><span class="dr-sub">成员口径</span></div><div class="readonly-banner slim">板未同步 · 深度板况去团队域看板 ↓</div>';
+                  }
+                  // 区二：成员 roster（行点击=直开成员会话，data-slim-open 既有链；异源未同步=灰行不隐行 #99件5 口径）
+                  const rosterRows = model.roster.slice().sort(teamDrawerRosterSort).map((r) => {
+                    const st = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[r.status] || "closed";
+                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[r.status] || "离线";
+                    return '<div class="roster-row' + (r.online ? "" : " offline") + '" data-slim-open="' + esc(r.sid) + '" role="button" tabindex="0" title="' + esc((r.pm ? "✦ " : "") + r.title + " · " + (r.nick || r.role || "成员") + " · " + stWord + (r.online ? " · 点击直开" : " · 会话未同步")) + '"><i class="lamp-dot ' + st + '"></i><span class="rr-name">' + (r.pm ? "✦ " : "") + esc(r.nick || r.title.slice(0, 14)) + '</span><span class="rr-role">' + esc(r.role || "worker") + '</span><span class="rr-ctx">' + (r.pct !== null ? r.pct + "%" : "") + "</span></div>";
+                  }).join("");
+                  const rosterSec = '<div class="dr-sec"><span>成员 ' + model.rosterN + '</span><span class="dr-sub">在跑 ' + model.running + " · 点击行直开</span></div>"
+                    + (rosterRows || '<div class="readonly-banner slim">编制为空 · 团队域维护</div>');
+                  // 区三：输出物计数+最近 3 件（成员 artifacts 聚合，团队域 teamOutputsMarkup 同口径）
+                  const artsHtml = model.artsCount
+                    ? '<div class="dr-arts">' + model.recentArts.map((a) => '<div class="dr-art" title="' + esc(a.path) + " · " + esc(a.who) + '"><span class="da-name">' + esc(a.path.split(/[\\/]/).pop() || a.path) + "</span><span>" + esc(a.who) + "</span></div>").join("") + "</div>"
+                    : '<div class="readonly-banner slim">尚无输出物登记</div>';
+                  const artsSec = '<div class="dr-sec"><span>输出物 ' + model.artsCount + "</span></div>" + artsHtml;
+                  // 区四：跳团队域钮组（railJump 三链：railJump→ccDeckTeam.select→clickTab，notify.js 先例）
+                  const entrySec = '<div class="entry-btns">'
+                    + ["看板", "成员", "输出"].map((lbl) => '<button type="button" class="dr-jump" data-team-jump="' + esc(model.gid) + '" data-team-jump-tab="' + esc(lbl) + '" title="团队域 · ' + esc(lbl) + '">' + esc(lbl) + " ↗</button>").join("")
+                    + "</div>";
+                  return head + '<div class="drawer-body">' + overview + rosterSec + artsSec + entrySec + "</div>";
+                }
+                // docked/overlay 双形态（B 稿 §1.4 共存矩阵）：≥1360px docked 贴检查器左缘无遮罩；
+                // <1360px overlay 贴屏右缘盖检查器+半透明遮罩（点遮罩关）。类切换挂 #d-session
+                //（.drawer-overlay），与检查器拖宽 --inspector-w 正交；遮罩仅 overlay+开态挂载。
+                function syncDrawerOverlay() {
+                  const screen = document.querySelector("#d-session");
+                  const drawer = document.querySelector("#d-session [data-slim-drawer]");
+                  if (!screen || !drawer) return;
+                  const overlay = !window.matchMedia("(min-width: 1360px)").matches;
+                  screen.classList.toggle("drawer-overlay", overlay);
+                  let mask = screen.querySelector(".drawer-mask");
+                  const needMask = overlay && drawer.classList.contains("open");
+                  if (needMask && !mask) {
+                    mask = document.createElement("div");
+                    mask.className = "drawer-mask";
+                    mask.addEventListener("click", () => { if (S.drawerGid) slimToggleDrawer(S.drawerGid); });
+                    drawer.before(mask);
+                  } else if (!needMask && mask) mask.remove();
                 }
                 function renderSlimDrawer() {
                   const el = document.querySelector("#d-session [data-slim-drawer]");
                   if (!el) return;
-                  if (!S.drawerGid && el.hidden) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
+                  if (!S.drawerGid && !el.classList.contains("open")) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
                   const team = S.drawerGid ? slimRosterOf(S.projects).teams.get(S.drawerGid) : null;
-                  if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.hidden = true; el.replaceChildren(); return; }
-                  el.hidden = false;
-                  const cards = team.members.filter((m) => !SLIM_KEEP_ROLE.test(String(m.role || "")) && S.sessions.has(m.session_id)).map((m) => ({ s: S.sessions.get(m.session_id), m })).sort((a, b) => Number(b.s.updated_at || 0) - Number(a.s.updated_at || 0));
-                  const head = '<div class="drawer-head"><span class="d-name">' + esc(team.name) + " · 成员会话</span><span class=\"d-cnt\">" + cards.length + '</span><button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="收起成员会话" aria-label="收起成员会话">✕</button></div>';
-                  const body = cards.length ? '<div class="drawer-body">' + cards.map((x) => slimDrawerCardMarkup(myCardItem(x.s))).join("") + "</div>" : '<div class="drawer-body"><div class="readonly-banner">该团队暂无成员会话 · 编制在团队域维护</div></div>';
-                  el.innerHTML = head + body;
+                  if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.classList.remove("open"); el.replaceChildren(); syncDrawerOverlay(); return; }
+                  el.hidden = false; // keep-mounted（首帧解除 hidden 兜底）；显隐交 .open class 过渡
+                  requestAnimationFrame(() => el.classList.add("open")); // 下一帧加 class=首开也走滑入（同帧加无过渡）
+                  el.innerHTML = teamDrawerMarkup(teamDrawerModelOf(team, S.boards ? S.boards.get(S.drawerGid) : null, S.sessions));
+                  syncDrawerOverlay();
                 }
                 function slimMarkSeen(gid) {
                   if (!gid || !S.slimUnread.has(gid)) return;
@@ -1116,6 +1225,7 @@
                   try { localStorage.setItem("cc-deck-005-slim-drawer", S.drawerGid); } catch (_) {}
                   if (S.drawerGid) slimMarkSeen(S.drawerGid); // 展开即清该团队未读（设计要点 1）
                   renderSlimDrawer();
+                  renderMyList(); // W-TEAMSNC ②：chip aria-expanded 随抽屉开合同步（markSeen 无未读时不触发重渲，此处单口补齐）
                 }
                 function slimOpenSession(sid) {
                   if (!UI) return;
@@ -1134,7 +1244,7 @@
                   renderMyList(); // 直聊中的 worker 会话临时出列并打标 selected（mo 读到幂等，不重复结算）
                   renderAll();
                 }
-                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）
+                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）；W-TEAMSNC ①：selectedSid=建团表单取「当前选中会话」任 PM（team-domain pm-led 模板消费）
                 // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
                 // W-UIPOLISH4 件十三（2026-10-12 用户截图）：加「最近活跃」档（隐藏超时置灰的
                 // 空闲僵尸卡=idleDimmed 同源判定，只显近期有活动的）+「非进行中」档；档位序=
@@ -1595,7 +1705,12 @@
                   // 同源，claude=像素螃蟹七引擎同表）；未知引擎 PH 字母占位兜底（engineBrandSvgOf
                   // 内建），sprite 形态保留为结构回落——尺寸/圆角走 .badge-brand 约束跟随现行徽章
                   const brandIconHtml = engineBrandSvgOf({ engineClass: eng[1], engine: s.engine || "claude" });
-                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
+                  // W-TEAMSNC ③：详情 head identity-cluster 团队 chip——置于引擎徽章前（团队归属>引擎
+                  // 阅读序，B 稿态 B）；pmTeamChipOf 单口同源（命中才渲染，null 不占位），点击同卡上
+                  // chip 开/收第四列抽屉（data-team-chip 同链同委托）
+                  const headTeams = pmTeamChipOf(s.session_id);
+                  UI.identity.innerHTML = (headTeams.length ? headTeams.map(teamChipMarkup).join("") : "")
+                    + '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
                     ? '<span class="badge-brand">' + brandIconHtml + "</span>"
                     : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
                   // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
@@ -1920,7 +2035,7 @@
                           const unread = unreadSet && unreadSet.has(m.session_id);
                           return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
                         }).join("");
-                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">展开成员会话 ⤢</button></div>';
+                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">团队信息 ⤢</button></div>'; // W-TEAMSNC ④：链接文案随厚抽屉升级（属性/路由零改动）
                       }
                     }
                     if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
@@ -3684,9 +3799,10 @@
                   mo.observe(UI.sessionList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
                   // [t-7e0c6189] 键盘可达：团队入口卡/成员胶囊/第四列卡（role=button）Enter/Space 走点击链
+                  // W-TEAMSNC ②④：团队 chip（button）原生键盘可达免委托；roster 行（role=button）+跳域钮并入本链
                   UI.section.addEventListener("keydown", (ev) => {
                     if (ev.key !== "Enter" && ev.key !== " ") return;
-                    const t = ev.target.closest("[data-slim-team], [data-slim-open], [data-slim-drawer-toggle]");
+                    const t = ev.target.closest("[data-slim-team], [data-slim-open], [data-slim-drawer-toggle], [data-team-jump]");
                     if (!t) return;
                     ev.preventDefault();
                     t.click();
@@ -3746,6 +3862,22 @@
                     //（顺序敏感：按钮先于团队卡身，防 team 卡吞掉 ⤢/胶囊点击）
                     const slimTgl = ev.target.closest("[data-slim-drawer-toggle]");
                     if (slimTgl) { ev.stopPropagation(); slimToggleDrawer(slimTgl.dataset.slimDrawerToggle); return; }
+                    // W-TEAMSNC ②：团队 chip 点击=开/收第四列团队抽屉（卡 r3 与详情 head 同链；
+                    // stopPropagation 防冒泡到地基 document 卡选中链——srow-more 同款先例，chip 在
+                    // 卡热区内必须隔离）
+                    const teamChip = ev.target.closest("[data-team-chip]");
+                    if (teamChip) { ev.stopPropagation(); slimToggleDrawer(teamChip.dataset.teamChip); return; }
+                    // W-TEAMSNC ④：抽屉跳团队域钮组（railJump 三链：railJump→ccDeckTeam.select→
+                    // clickTab，notify.js focusSource 同款先例；tab 文案值与 #d-team .segment-bar 对齐）
+                    const teamJump = ev.target.closest("[data-team-jump]");
+                    if (teamJump) {
+                      ev.stopPropagation();
+                      const jgid = teamJump.dataset.teamJump, jtab = teamJump.dataset.teamJumpTab || "看板";
+                      window.__ccDeck005B4?.railJump?.("team");
+                      if (window.ccDeckTeam?.select?.(jgid) === false) b2Toast("团队已不在编制");
+                      window.__ccDeck005B4?.clickTab?.("#d-team .segment-bar", jtab);
+                      return;
+                    }
                     const slimOpen = ev.target.closest("[data-slim-open]");
                     if (slimOpen) { ev.stopPropagation(); slimOpenSession(slimOpen.dataset.slimOpen); return; }
                     const slimTeam = ev.target.closest("[data-slim-team]");
@@ -3907,8 +4039,16 @@
                     if (!ev.target.closest(".slash-box") && !ev.target.closest(".composer")) slashHide(); // W-SLASH：点浮层/输入区外收起
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); window.__ccDeck005ClosePlusMenu && window.__ccDeck005ClosePlusMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); window.__ccDeck005ClosePlusMenu && window.__ccDeck005ClosePlusMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); if (S.drawerGid) slimToggleDrawer(S.drawerGid); } // W-TEAMSNC ④：Esc 关抽屉（B 稿 1.3，通知弹窗同款收口习惯）
                   });
+                  // W-TEAMSNC ④：docked/overlay 形态随视口切换（≥1360 docked / <1360 overlay+遮罩；
+                  // 与检查器拖宽 --inspector-w 正交）；resize 兜底（matchMedia 无回调的老链不依赖）
+                  if (window.matchMedia) {
+                    const drawerMq = window.matchMedia("(min-width: 1360px)");
+                    const onDrawerMq = () => syncDrawerOverlay();
+                    if (drawerMq.addEventListener) drawerMq.addEventListener("change", onDrawerMq);
+                    else window.addEventListener("resize", onDrawerMq);
+                  }
 
                   // composer：发送/停止/历史/IME
                   UI.sendBtn.addEventListener("click", sendMessage);

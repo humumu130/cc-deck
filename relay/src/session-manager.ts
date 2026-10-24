@@ -4703,15 +4703,43 @@ export class SessionManager {
     if (action === "create") {
       const anchor = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
       const tier = payload.tier === "轻立项" || payload.tier === "正经立项" ? payload.tier : "随手办";
+      // W-TEAMSNC ① 建团默认补 PM 行（role="pm"+PM 会话 sid）：可选 pm_session_id → headcount
+      // 前插 PM 身份行（PM 卡团队 chip 点亮的数据链，A 稿「数据缺口是唯一硬缺口」定案）。
+      // PM 行是身份行不是派单对象——三闸结构性排除：pickIdleRosterWorker 对 external 会话
+      // 跳过 + 角色精确匹配（pm≠泛 worker 派单）、planHeadcountTrim 规则①命名角色不裁。
+      // 校验：在册（**外部允许**——生产 PM 主会话即 ext- 外部会话，身份行非派单位）；Leader
+      // 锚拒绝（锚卡不进列表，chip 无宿主）。幂等：sid 已在编制或已有 pm 词表行则不重复插
+      //（sanitizeHeadcount seen 去重保首行=PM 行胜出，用户显式勾选的同 sid worker 行被并掉）。
+      const pmSidRaw = typeof payload.pm_session_id === "string" ? payload.pm_session_id.trim() : "";
+      if (pmSidRaw) {
+        const pmS = this.sessions.get(pmSidRaw);
+        if (!pmS) {
+          this.auditOrgCommand(actor, device, action, anchor, tier, false, `PM 行拒绝：会话 ${pmSidRaw.slice(0, 8)} 不在册`);
+          return { ok: false, error: `PM 会话 ${pmSidRaw.slice(0, 8)} 不在册（PM 需是已有会话卡）` };
+        }
+        if (this.isLeaderSession(pmSidRaw)) {
+          this.auditOrgCommand(actor, device, action, anchor, tier, false, "PM 行拒绝：Leader 不可入编");
+          return { ok: false, error: "Leader 不可入编（PM 行请用其他会话）" };
+        }
+        const hcArr = Array.isArray(payload.headcount) ? (payload.headcount as unknown[]) : [];
+        const hasPmRow =
+          hcArr.some((item) => item && typeof item === "object" && (item as { session_id?: unknown }).session_id === pmSidRaw)
+          || hcArr.some((item) => item && typeof item === "object" && /^(pm|leader|产品经理|项目经理|领队)$/i.test(String((item as { role?: unknown }).role ?? "")));
+        if (!hasPmRow) {
+          payload = { ...payload, headcount: [{ session_id: pmSidRaw, role: "pm" }, ...hcArr] };
+        }
+      }
       // FB4 团队创建表单：随团种子编制会话校验（门禁对齐 member-add：在册/非外部/非
       // Leader；形状与去重在 adaptOrgAction→sanitizeHeadcount）。任一席不合法整单拒——
-      // 半编组比拒单更难解释
+      // 半编组比拒单更难解释。PM 身份行（W-TEAMSNC ①）豁免外部门禁：外部会话不可入编的
+      // 理据是「成员须是可派单的托管会话」，PM 行不接派单（见上注三闸），身份标记允许外部。
       if (Array.isArray(payload.headcount)) {
         for (const item of payload.headcount as unknown[]) {
           const sid = item && typeof item === "object" && typeof (item as { session_id?: unknown }).session_id === "string"
             ? ((item as { session_id: string }).session_id).trim()
             : "";
           if (!sid) continue; // 形状由 sanitizeHeadcount 拒，这里只做在册性
+          if (sid === pmSidRaw) continue; // W-TEAMSNC ①：PM 身份行已在上方单点校验（在册+非 Leader+外部允许），不重复门禁
           const s = this.sessions.get(sid);
           if (!s) {
             this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`);
