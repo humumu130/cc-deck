@@ -421,6 +421,10 @@
     .src-cap { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; color: var(--dim); max-width: 40%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: none; }
     .r3-spring { flex: 1; }
     .srow-ava .ava-brand { display: flex; align-items: center; justify-content: center; } /* #226 追加：6/7→9px——灯显眼度（用户 1023） */
+    /* #243 B：螃蟹放大——品牌图内联 12px 占 34px 圆 ~35%（用户实拍「占圆比例太小」），
+       CSS 强制盖内联属性到 29px≈85% 满铺（取原图内容区 bbox 视觉近满圆）；expo 同批
+       AvaBadge size 18→29 同口径 */
+    .srow-ava .ava-brand img, .srow-ava .ava-brand svg { width: 29px !important; height: 29px !important; border-radius: 6px; }
     /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
        黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
        灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */
@@ -859,6 +863,8 @@
     .message-author { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; color: var(--text-strong); }
     /* 旧壳 ai-ava ✻ 形态贴 005 token：28px 中性圆，头像在前、署名行与头像同行 */
     .message-author .ai-ava { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; }
+    /* #243 D：消息流对方头像品牌图满铺（28px 圆 ~85%，对齐列表头像口径） */
+    .message-author .ai-ava .badge-brand svg, .message-author .ai-ava .badge-brand img { width: 24px; height: 24px; }
     .message-author strong {font-size: var(--fs-B);}
     .message-author .role-label {color: var(--faint); font-size: var(--fs-micro); font-weight: 400;}
     /* W-TOPBAR ⑨①：AI 时间戳贴名字（旧版 .ai-head 行内 .mt：去 margin-left:auto 推右，
@@ -1853,12 +1859,9 @@
     .desktop-only-note {color: var(--faint); font-size: var(--fs-C);}
     .engine-badge, .source-badge {display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: var(--fs-C); line-height: 1;}
     .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
-    .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
-    .engine-badge:has(.engine-icon)::before { display: none; }
-    /* #239 W-DETAILAVATAR：徽章品牌图标（ENGINE_BRAND_SVG 直嵌）——尺寸跟随现行
-       .engine-icon 档（12px），有品牌图即藏 ::before 色点（同 :has(.engine-icon) 先例）；
-       img（claude/trae data-uri）自带 12px 属性，此处统一约束双形态一致 */
-    .engine-badge:has(.badge-brand)::before { display: none; }
+    /* #243 A：badge 色点（::before 灰块）整组退役——用户实拍「标签左侧灰色小方块没有
+       意义，移除掉简洁」（品牌图/codex 修复后色点更无存在必要；三条 :has 隐藏规则
+       同批清，隐藏条件因 b2EngineBadge 未包 badge-brand 从未生效过） */
     .engine-badge .badge-brand { display: inline-flex; align-items: center; }
     .engine-badge .badge-brand svg, .engine-badge .badge-brand img { width: 12px; height: 12px; display: block; }
     .engine-badge .engine-icon { width: 12px; height: 12px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
