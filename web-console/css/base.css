@@ -402,7 +402,7 @@
     /* W-PROJP1 P1-1：项目卡副行 flex 化（仅带 project-card-sub 类的副行，其余 <p> 元数据行不受影响）——
        快捷钮行内尾随（D2-4 定案，弃 absolute 右缘案），32px 命中区以负 margin 垂直出槽（卡定高 76px
        overflow:hidden 内不越界，紧凑档 58px 也容得下 ±7px 出槽），省略号转移到内层 span 保路径截断 */
-    .queue-card p.project-card-sub { display: flex; align-items: center; gap: 5px; overflow: visible; }
+    .queue-card p.project-card-sub { display: flex; align-items: center; gap: 5px; overflow: visible; flex-wrap: wrap; } /* #248 用户 1024：胶囊群挤爆一行→换行兜底不重叠 */
     .queue-card p.project-card-sub > .project-card-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .project-open-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; margin: -7px 0; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
     .project-open-btn:hover { color: var(--text-strong); background: var(--hover); }
@@ -424,7 +424,7 @@
     /* #243 B：螃蟹放大——品牌图内联 12px 占 34px 圆 ~35%（用户实拍「占圆比例太小」），
        CSS 强制盖内联属性到 29px≈85% 满铺（取原图内容区 bbox 视觉近满圆）；expo 同批
        AvaBadge size 18→29 同口径 */
-    .srow-ava .ava-brand img, .srow-ava .ava-brand svg { width: 29px !important; height: 29px !important; border-radius: 6px; }
+    .srow-ava .ava-brand img, .srow-ava .ava-brand svg { width: 26px !important; height: 26px !important; border-radius: 6px; } /* #248 用户 1024：0.9x（原 29 过大） */
     /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
        黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
        灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */
@@ -1284,7 +1284,7 @@
     右栏 inspector 成员块保持行式 */
     /* #244（W-SRCLABEL-MIG C）：成员卡黄金比例定尺寸——高 148 定死、宽=148×1.618≈239
        （grid 定轨+card 高定，内容 overflow 截断不撑破）；原 minmax(420px,1fr) 自适应宽退役 */
-    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, 239px); gap: 10px; justify-content: start; }
+    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(239px, 1fr)); gap: 10px; } /* #248 用户 1024：弃定轨改响应式铺满面板宽（239 起最低可读宽，1fr 拉伸不留空列） */
     /* W-V8 批3 名册卡第①层头行+第④层底行（v8 名册卡语言）：头像/名/职责 chip/模型 mono chip/三态 badge；徽章簇+详情钮 */
     #d-team .workspace-pane .member-card { flex-direction: column; gap: 7px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
     #d-team .workspace-pane .member-list { align-content: start; }
