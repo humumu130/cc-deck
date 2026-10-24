@@ -32,7 +32,7 @@
 // 不动面（R7 口径继承）：服务器行视觉几何、六弹层（关于/图例/设备/经验库/扫码/
 // 导入）、规则/权限子节、Agent 引擎条件组、删码逻辑（store/protocol 零触碰）。
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
-import { Alert, Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native"
+import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native"
 import { HEAD_BASE } from "../head-unify";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
