@@ -601,7 +601,8 @@ function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: 
     <View style={[styles.ava, { backgroundColor: bg }]}>
       {brandIcon ? (
         <View style={{ alignItems: "center", justifyContent: "center" }}>
-          <EngineIcon engine={brandIcon} size={18} color={srcColor ?? c.textStrong} />
+          {/* #243 B：螃蟹放大 18→29（34px ava ~85% 满铺，桌面同口径） */}
+          <EngineIcon engine={brandIcon} size={29} color={srcColor ?? c.textStrong} />
         </View>
       ) : (
         <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
