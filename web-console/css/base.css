@@ -1294,7 +1294,9 @@
     右栏 inspector 成员块保持行式 */
     /* #244（W-SRCLABEL-MIG C）：成员卡黄金比例定尺寸——高 148 定死、宽=148×1.618≈239
        （grid 定轨+card 高定，内容 overflow 截断不撑破）；原 minmax(420px,1fr) 自适应宽退役 */
-    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(239px, 1fr)); gap: 10px; } /* #248 用户 1024：弃定轨改响应式铺满面板宽（239 起最低可读宽，1fr 拉伸不留空列） */
+    /* 【退役 W-MEMBERGRID】#248 首修 minmax(239px,1fr) 原落点——同文件后置两处同特异性
+       member-list 轨道规则层叠盖死（本行从未生效，基线 CDP 实测生效者=t25fix 定列块）；
+       权威落点移至文件后段 W-MEMBERGRID 块 */
     /* W-V8 批3 名册卡第①层头行+第④层底行（v8 名册卡语言）：头像/名/职责 chip/模型 mono chip/三态 badge；徽章簇+详情钮 */
     #d-team .workspace-pane .member-card { flex-direction: column; gap: 7px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
     #d-team .workspace-pane .member-list { align-content: start; }
@@ -1311,9 +1313,12 @@
     #d-team .workspace-pane .member-card .m-state.fail { border: 1px solid rgba(229,72,77,.42); background: rgba(229,72,77,.07); color: var(--error); }
     #d-team .workspace-pane .member-card .m-state.idle { border: 1px solid var(--line); color: var(--dim); }
     #d-team .workspace-pane .member-card .m-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    /* #244：黄金比例定尺寸（高 148×宽 239≈1.618:1，定尺寸不随内容伸缩）；
-       摘要两行截断、溢出隐藏——内容自适应不撑破 */
-    #d-team .workspace-pane .member-card { height: 148px; aspect-ratio: 1.618 / 1; overflow: hidden; }
+    /* W-MEMBERGRID（#248 用户 1024 二次实锤）：黄金比例改宽驱动——卡宽随轨道（280 起步、
+       380 封顶），高按 1.618/1 跟随。弃 #244 高 148 定轴：height 定轴+aspect-ratio 会把
+       宽反算锁死 148×1.618≈239.5px（css-sizing-4：一轴定尺寸时另一轴 auto 按比例解析，
+       grid item 不再 stretch 到轨道宽）——1fr 轨道再宽卡也不动，卡右空带即「两列空旷」
+       卡层根因。width:100% 拉满轨道+max-width:380 封顶+轨内居中；摘要截断语义不变 */
+    #d-team .workspace-pane .member-card { width: 100%; max-width: 380px; justify-self: center; aspect-ratio: 1.618 / 1; overflow: hidden; }
     #d-team .workspace-pane .member-card .member-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     #d-team .workspace-pane .member-card .m-open { flex: none; margin-left: auto; padding: 2px 9px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--dim); font-size: var(--fs-E); cursor: pointer; }
     #d-team .workspace-pane .member-card .m-open:hover { color: var(--brand-hover); border-color: var(--brand-line); }
@@ -1395,7 +1400,7 @@
     #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { flex: none; }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; } /* W-LV8：v8 h4 b——计数亮色锚住列头 */
     #d-team .workspace-body > .workspace-pane.board-pane .task-card { flex: 0 0 auto; }
-    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; } /* 【退役 W-MEMBERGRID】同被后置 t25fix 定列块盖死，从未生效；权威落点见文件后段 W-MEMBERGRID 块 */
     #d-team .workspace-pane .member-card { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 11px; min-height: 142px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--surface2); } /* t25fix #8：145deg brand 渐变退役 */
     #d-team .workspace-pane .member-card:hover { border-color: var(--border-strong); background: var(--hover); }
     #d-team .member-card .avatar { width: 38px; height: 38px; border-radius: 12px; font-size: 12px; }
@@ -1490,9 +1495,15 @@
     /* lane-subhead 退役兜底（markup 已停产出；防历史快照/旧缓存渲染残留） */
     #d-team .lane-subhead { display: none; }
     /* ---- 成员名册卡（原型 member/crewgrid）---- */
-    #d-team .workspace-pane .member-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-content: start; } /* t25fix #10：用户验收 T5「卡片宽度减到当前的 1/3」——2 列→3 列 */
-    @media (max-width: 1420px) { #d-team .workspace-pane .member-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 1080px) { #d-team .workspace-pane .member-list { grid-template-columns: 1fr; } }
+    /* W-MEMBERGRID（#248 用户 1024 截图实锤：两列卡+右侧大片空旷，该宽度应 3 列起）：
+       列数随面板宽动态铺满+卡宽限幅。轨道 minmax(min(280px,100%), 1fr)+auto-fill——列数
+       按 280 下限贪心（多列优先，1fr 伸满面板不留大空列；极窄窗轨道可缩不溢出），卡层
+       max-width:380px 封顶（防「特别宽」）+justify-self:center 轨内对称。弃
+       minmax(280px,380px) 定上限轨道案：auto-fill 按 growth limit(380) 数列，中段宽
+       （1500 档面板 1150px）3×380 放不下即退化 2 列浪费空间（CDP 实测）。t25fix #10
+       定 3/2/1 列与 1420/1080 媒体档退役——定列大屏封顶 3 列，叠加卡层 aspect-ratio
+       锁宽 239.5px 每轨漏 140-240px 空带（基线 CDP 实测三档右空 20.2%/11.7%/16%） */
+    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 10px; align-content: start; }
     #d-team .workspace-pane .member-card { display: flex; flex-direction: column; gap: 7px; min-height: 0; padding: 12px 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface1); }
     #d-team .workspace-pane .member-card:hover { border-color: var(--border-strong); background: var(--surface1); }
     #d-team .member-card .avatar { position: relative; flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); color: var(--dim); font: 700 12px/1 var(--mono); }
