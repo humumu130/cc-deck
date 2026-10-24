@@ -600,9 +600,10 @@ function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: 
   return (
     <View style={[styles.ava, { backgroundColor: bg }]}>
       {brandIcon ? (
-        <View style={{ alignItems: "center", justifyContent: "center" }}>
-          {/* #243 B：螃蟹放大 18→29（34px ava ~85% 满铺，桌面同口径） */}
-          <EngineIcon engine={brandIcon} size={29} color={srcColor ?? c.textStrong} />
+        <View style={{ width: 26, height: 26, borderRadius: 6, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
+          {/* W-AVA09：0.9x 统一——头像盒图标 29→26（桌面 .ava-brand 26 同口径）；外框
+              26×26/radius 6 裁切同桌面 img/svg 6px 圆角（方 LOGO 引擎如 glm 角不炸出） */}
+          <EngineIcon engine={brandIcon} size={26} color={srcColor ?? c.textStrong} />
         </View>
       ) : (
         <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>

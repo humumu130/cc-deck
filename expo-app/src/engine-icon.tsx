@@ -95,7 +95,9 @@ export function EngineIcon({ engine, size = 13, color }: { engine: string | unde
   }
   const png = ENGINE_PNG_B64[key];
   if (png) {
-    return <Image source={{ uri: `data:image/png;base64,${png}` }} style={{ width: size, height: size, borderRadius: Math.max(2, size * 0.15) }} resizeMode="contain" />;
+    // W-AVA09：圆角随桌面双档——26 头像盒 6px（.srow-ava .ava-brand radius 6）、
+    // 10.8 徽章≈2px（badge img 内联 2px）；0.23 系数两头命中（26→5.98/10.8→2.48）
+    return <Image source={{ uri: `data:image/png;base64,${png}` }} style={{ width: size, height: size, borderRadius: Math.max(2, size * 0.23) }} resizeMode="contain" />;
   }
   const letter = (engine ?? "?").charAt(0).toUpperCase();
   return (

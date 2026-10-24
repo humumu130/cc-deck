@@ -123,7 +123,9 @@ export function EngineBadge({ engine, size = "md" }: { engine?: string; size?: "
           图标（螃蟹/终端符/官方 path）时胶囊前缀用裸图标替代方块瓦片——更轻、识别
           更强；无图标引擎（glm/codebuddy/zcode）维持瓦片不劣化 */}
       {hasEngineIcon(engine) ? (
-        <EngineIcon engine={engine} size={size === "sm" ? 12 : 14} color="#9AA7B8" />
+        // W-AVA09：0.9x 统一——sm/md 全归 10.8（桌面 #248 全局统一档：12×0.9，9px 专属
+        // 档已退役「消除大小不一最后一处」，md 14 无桌面大档依据同归）
+        <EngineIcon engine={engine} size={10.8} color="#9AA7B8" />
       ) : (
         <EngineBrandTile engine={engine} size={size === "sm" ? 12 : 14} />
       )}
@@ -820,7 +822,7 @@ const makeStyles = (c: ThemeColors) =>
     tRunDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
     tCardX: { marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: c.lineStrong, gap: 2 }, /* #207：同 ListScreen 统一加重 */
     tCardXL: { color: c.faint, fontSize: 10, lineHeight: 14 },
-    engBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+    engBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6 }, // W-AVA09：chip 左右 pad 6（桌面同口径）
     engDot: { width: 7, height: 7, borderRadius: 4 },
     engBadgeT: { color: c.dim, fontSize: 10, fontWeight: "600" },
     engDotSm: { width: 6, height: 6, borderRadius: 3 },
