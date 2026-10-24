@@ -2468,6 +2468,7 @@
     .team-drawer .drawer-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
     .team-drawer .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
     .team-drawer .drawer-head .d-cnt { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
+    .team-drawer .drawer-head .d-stale { flex: none; padding: 1px 7px; border: 1px solid color-mix(in srgb, var(--warn, #C08A3E) 45%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--warn, #C08A3E) 12%, transparent); color: var(--warn, #C08A3E); font-size: var(--fs-micro); white-space: nowrap; } /* W-TS63FIX（review-tsync-web P3-3）：抽屉离线陈旧标记（S.status 断线态；重连随帧自愈后消失） */
     .team-drawer .drawer-body { flex: 1; overflow: hidden auto; padding: 6px 6px 10px; }
     .team-drawer .queue-card { border: 1px solid transparent; }
     /* W-TEAMSNC ④ 四区内容样式 */

@@ -1047,6 +1047,11 @@
                   const bySid = new Map(), teams = new Map();
                   for (const p of (Array.isArray(projects) ? projects : [])) {
                     if (!p || typeof p.id !== "string") continue;
+                    // W-TS63FIX（review-tsync-web P2-1）：归档门控统一——archived 团队与 chip 侧
+                    //（pmTeamChipOf E4 过滤）对齐：dock 入口/第四列抽屉/worker 收纳（slimIsHidden
+                    // 经 bySid）四面同退役；已开归档团队抽屉在下次 renderSlimDrawer team-miss
+                    // 路径自动收起（自愈链现成，S.boards 残帧随 teams 缺席自然失效）。
+                    if (String(p.status || "") === "archived") continue;
                     const list = (Array.isArray(p.headcount) ? p.headcount : []).filter((m) => m && typeof m.session_id === "string");
                     if (!list.length) continue;
                     teams.set(p.id, { id: p.id, name: String(p.name || p.id), members: list });
@@ -1153,7 +1158,7 @@
                 }
                 function teamDrawerMarkup(model) {
                   // 头：「名 · N 席 · 在办 M」（A 稿附计数带口径：M=成员 WORKING 计数，无板依赖）
-                  const head = '<div class="drawer-head"><span class="d-name">' + esc(model.name) + " · " + model.rosterN + " 席 · 在办 " + model.running + '</span><button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(model.gid) + '" title="收起团队抽屉" aria-label="收起团队抽屉">✕</button></div>';
+                  const head = '<div class="drawer-head"><span class="d-name">' + esc(model.name) + " · " + model.rosterN + " 席 · 在办 " + model.running + '</span>' + (S.status !== "online" ? '<span class="d-stale" title="连接断开 · 板况与成员态可能陈旧（重连后随帧自愈）">离线·陈旧</span>' : "") + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(model.gid) + '" title="收起团队抽屉" aria-label="收起团队抽屉">✕</button></div>';
                   // 区一：在办概览（板比例条+关键任务；板缺席=降级文案，入口钮兜底——B 稿 §3 降级口径）
                   let overview;
                   if (model.lanes) {
@@ -1209,9 +1214,27 @@
                   const team = S.drawerGid ? slimRosterOf(S.projects).teams.get(S.drawerGid) : null;
                   if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.classList.remove("open"); el.replaceChildren(); syncDrawerOverlay(); return; }
                   el.hidden = false; // keep-mounted（首帧解除 hidden 兜底）；显隐交 .open class 过渡
-                  requestAnimationFrame(() => el.classList.add("open")); // 下一帧加 class=首开也走滑入（同帧加无过渡）
+                  // W-TS63FIX（review-tsync-web P3-1）：rAF 守卫——同帧开→关边界（程序性连击
+                  // toggle）时，已入队回调不得给 team-miss 清空后的空抽屉补 .open（幽灵抽屉，
+                  // 至下次 renderSlimDrawer 才自愈）；回调内复核 drawerGid 仍指向本团才加。
+                  const gidForFrame = S.drawerGid;
+                  requestAnimationFrame(() => { if (S.drawerGid && S.drawerGid === gidForFrame) el.classList.add("open"); }); // 下一帧加 class=首开也走滑入（同帧加无过渡）
+                  // W-TS63FIX（review-tsync-web P2-2）：重渲保滚动位+保焦点——BOARD_UPDATED 同团
+                  // 帧 innerHTML 整替换会丢 drawer-body 滚动与活动元素焦点（活跃团队 1-2s 一帧体感
+                  // 明显）；先存后还：scrollTop 原位回放，焦点按 roster 行锚（data-slim-open=sid）
+                  // 同位行复焦。
+                  const bodyPrev = el.querySelector(".drawer-body");
+                  const stPrev = bodyPrev ? bodyPrev.scrollTop : 0;
+                  const aePrev = document.activeElement;
+                  const aeAnchor = aePrev && el.contains(aePrev) && aePrev.closest ? (aePrev.closest("[data-slim-open]")?.getAttribute("data-slim-open") ?? null) : null;
                   el.innerHTML = teamDrawerMarkup(teamDrawerModelOf(team, S.boards ? S.boards.get(S.drawerGid) : null, S.sessions));
                   syncDrawerOverlay();
+                  const bodyNext = el.querySelector(".drawer-body");
+                  if (bodyNext) bodyNext.scrollTop = stPrev;
+                  if (aeAnchor) {
+                    const rowAgain = el.querySelector('[data-slim-open="' + cssEsc(aeAnchor) + '"]');
+                    if (rowAgain && typeof rowAgain.focus === "function") rowAgain.focus();
+                  }
                 }
                 function slimMarkSeen(gid) {
                   if (!gid || !S.slimUnread.has(gid)) return;
@@ -1221,11 +1244,20 @@
                 }
                 function slimToggleDrawer(gid) {
                   const want = String(gid || "");
+                  // W-TS63FIX（review-tsync-web P3-2）：键盘可达性——toggle 前 chip 若持焦点，
+                  // renderMyList 重建列表节点会丢焦点（落 body，Tab 从头再来）；记 chip gid 重建后还焦。
+                  const ae = document.activeElement;
+                  const chipGid = ae && ae.matches && ae.matches("[data-team-chip]") ? ae.getAttribute("data-team-chip") : null;
                   S.drawerGid = S.drawerGid === want ? "" : want;
                   try { localStorage.setItem("cc-deck-005-slim-drawer", S.drawerGid); } catch (_) {}
                   if (S.drawerGid) slimMarkSeen(S.drawerGid); // 展开即清该团队未读（设计要点 1）
                   renderSlimDrawer();
                   renderMyList(); // W-TEAMSNC ②：chip aria-expanded 随抽屉开合同步（markSeen 无未读时不触发重渲，此处单口补齐）
+                  renderHeader(); // W-TS63FIX（review-tsync-web P3-2）：head chip aria-expanded 同步（renderHeader 链不进 renderMyList，不补则停旧值）
+                  if (chipGid) {
+                    const chipAgain = document.querySelector('#d-session [data-team-chip="' + cssEsc(chipGid) + '"]');
+                    if (chipAgain && typeof chipAgain.focus === "function") chipAgain.focus();
+                  }
                 }
                 function slimOpenSession(sid) {
                   if (!UI) return;

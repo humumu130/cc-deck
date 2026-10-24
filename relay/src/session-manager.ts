@@ -24,6 +24,7 @@ import {
   moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
+  PM_ROLE_RE,
 } from "./projects.js";
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permDenyMessage, permissionPolicyEnabled } from "./permission-policy.js";
 import type { PermissionAuditRow } from "./permission-audit.js";
@@ -4710,7 +4711,16 @@ export class SessionManager {
       // 校验：在册（**外部允许**——生产 PM 主会话即 ext- 外部会话，身份行非派单位）；Leader
       // 锚拒绝（锚卡不进列表，chip 无宿主）。幂等：sid 已在编制或已有 pm 词表行则不重复插
       //（sanitizeHeadcount seen 去重保首行=PM 行胜出，用户显式勾选的同 sid worker 行被并掉）。
-      const pmSidRaw = typeof payload.pm_session_id === "string" ? payload.pm_session_id.trim() : "";
+      // W-TS63FIX ③（review-tsync-relay P3-2）：非 string 类型静默忽略改 audit 记一行 +
+      // sid 长度上限 128（超长串原样直存 projects.json/sqlite 的既有病在此入口收口）
+      let pmSidRaw = typeof payload.pm_session_id === "string" ? payload.pm_session_id.trim() : "";
+      if (payload.pm_session_id !== undefined && payload.pm_session_id !== null && typeof payload.pm_session_id !== "string") {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, "pm_session_id 类型无效（非字符串）已忽略，本团不带 PM 行");
+      }
+      if (pmSidRaw.length > 128) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, `pm_session_id 超长（${pmSidRaw.length} > 128）已忽略，本团不带 PM 行`);
+        pmSidRaw = "";
+      }
       if (pmSidRaw) {
         const pmS = this.sessions.get(pmSidRaw);
         if (!pmS) {
@@ -4721,10 +4731,12 @@ export class SessionManager {
           this.auditOrgCommand(actor, device, action, anchor, tier, false, "PM 行拒绝：Leader 不可入编");
           return { ok: false, error: "Leader 不可入编（PM 行请用其他会话）" };
         }
+        // W-TS63FIX ①（review-tsync-relay P2-1 修法 b）：hasPmRow 收窄为仅认 role∈pm 词表
+        // 行——旧第一支「session_id===pmSidRaw 即算已有 PM 行」正是同 sid 组合绕过入口
+        //（外部会话挂 pm_session_id + 显式 worker 勾选 → 跳过外部门禁入编）。
         const hcArr = Array.isArray(payload.headcount) ? (payload.headcount as unknown[]) : [];
         const hasPmRow =
-          hcArr.some((item) => item && typeof item === "object" && (item as { session_id?: unknown }).session_id === pmSidRaw)
-          || hcArr.some((item) => item && typeof item === "object" && /^(pm|leader|产品经理|项目经理|领队)$/i.test(String((item as { role?: unknown }).role ?? "")));
+          hcArr.some((item) => item && typeof item === "object" && PM_ROLE_RE.test(String((item as { role?: unknown }).role ?? "")));
         if (!hasPmRow) {
           payload = { ...payload, headcount: [{ session_id: pmSidRaw, role: "pm" }, ...hcArr] };
         }
@@ -4739,7 +4751,16 @@ export class SessionManager {
             ? ((item as { session_id: string }).session_id).trim()
             : "";
           if (!sid) continue; // 形状由 sanitizeHeadcount 拒，这里只做在册性
-          if (sid === pmSidRaw) continue; // W-TEAMSNC ①：PM 身份行已在上方单点校验（在册+非 Leader+外部允许），不重复门禁
+          if (sid === pmSidRaw) {
+            // W-TS63FIX ①（review-tsync-relay P2-1 修法 b 主刀）：pm_sid 行按角色分流——
+            // role∈pm 词表=身份行（单点校验已过，外部允许）放行；**非 pm 角色（如显式
+            // worker 勾选）=与 pm_session_id 显式冲突，整单拒**（旧 `continue` 过宽正是
+            // 外部会话借道入编的绕过入口，同 sid worker 组合反例断言锁死于 test-session-slim）
+            const rowRole = item && typeof item === "object" ? String((item as { role?: unknown }).role ?? "") : "";
+            if (PM_ROLE_RE.test(rowRole)) continue;
+            this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：pm_session_id 会话被显式勾为 ${rowRole || "worker"}（与 PM 身份行冲突）`);
+            return { ok: false, error: "pm_session_id 会话不可同时勾为成员角色（PM 行已自动补入，请移除该勾选后重试）" };
+          }
           const s = this.sessions.get(sid);
           if (!s) {
             this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`);
@@ -4757,7 +4778,17 @@ export class SessionManager {
       }
       // B2a 单漏斗：create → createGroup（校验 name/anchor_dir/tier；needsConfirm 时
       // addConfirm 已落 confirms.json，组停 pending 等用户 ✓/✗）
-      const r = adaptOrgAction(payload);
+      // W-TS63FIX ②（review-tsync-relay P2-1 修法 c）：sanitize 层防御纵深门——与上方
+      // 前置门同判据（在册/非外部/非 Leader；pm 词表身份行豁免），闭包注入保持 projects
+      // 层会话盲分层；未来新增 create 入口走本漏斗即默认带门。
+      const r = adaptOrgAction(payload, undefined, (sid, role) => {
+        if (PM_ROLE_RE.test(role)) return null;
+        const s = this.sessions.get(sid);
+        if (!s) return `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`;
+        if (s.state.external) return `随团编制拒绝：外部会话 ${sid.slice(0, 8)} 不可作成员角色（仅 PM 身份行允许外部）`;
+        if (this.isLeaderSession(sid)) return `随团编制拒绝：Leader 不可入编`;
+        return null;
+      });
       if (!r.ok) {
         this.auditOrgCommand(actor, device, action, anchor, tier, false, r.error);
         return { ok: false, error: r.error };
@@ -6765,6 +6796,12 @@ export class SessionManager {
     const cands: { sid: string; last: number }[] = [];
     for (const h of g.headcount) {
       if ((h.role || "worker") !== (role || "worker")) continue; // 角色精确匹配（泛 worker↔泛派单）
+      // W-TS63FIX ②（review-tsync-relay P3-1）：PM 身份行反向排除——managed 会话被立为
+      // PM 行时「不接派单」原仅靠词表约定；词表若未来收录 "pm" 即被此处命中接单。显式排除。
+      if (PM_ROLE_RE.test(h.role || "")) {
+        this.emitChainAudit("dispatch-reroute", `PM 身份行不接派单 skip: ${h.session_id.slice(0, 12)}`);
+        continue;
+      }
       if (planned.engine && h.engine && h.engine !== planned.engine) continue;
       const s = this.sessions.get(h.session_id);
       if (!s || !s.state.relay_session_id) continue;

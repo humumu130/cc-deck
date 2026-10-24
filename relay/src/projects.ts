@@ -514,8 +514,21 @@ export interface OrgActionCreatePayload {
   headcount?: { session_id: string; role: string }[];
 }
 
+/** W-TS63FIX ①（review-tsync-relay P2-1 修法 b/c）：PM/Leader 身份行角色词表单源——
+ * session-manager 建团门（hasPmRow 收窄/同 sid 分流/picker 反向排除）共用；与 web 端
+ * session-domain.js SLIM_KEEP_ROLE 同词表镜像（pm/leader/产品经理/项目经理/领队，含
+ * 中文 PM 角色实况——t25fix #11 词表口径）。命中=身份行语义：豁免外部门禁/不接派单/
+ * trim 不裁。 */
+export const PM_ROLE_RE = /^(pm|leader|产品经理|项目经理|领队)$/i;
+
+/** W-TS63FIX ②（review-tsync-relay P2-1 修法 c）：随团编制会话门（防御纵深）——
+ * 形状层保持会话盲（本文件分层口径不变），会话在册性/外部/Leader 判定经闭包注入，
+ * 由持有 this.sessions 视野的调用方（session-manager）提供；返回 error 串=该席不合法
+ * 整单拒。防未来新增 create 入口漏走 session-manager 前置门。 */
+export type HeadcountGate = (sid: string, role: string) => string | null;
+
 /** FB4：随团编制形状校验（≤8 席；role 缺省 worker；session_id 去重）。 */
-function sanitizeHeadcount(raw: unknown): { ok: true; headcount?: ProjectHeadcountEntry[] } | { ok: false; error: string } {
+function sanitizeHeadcount(raw: unknown, gate?: HeadcountGate): { ok: true; headcount?: ProjectHeadcountEntry[] } | { ok: false; error: string } {
   if (raw === undefined) return { ok: true };
   if (!Array.isArray(raw)) return { ok: false, error: "headcount 必须是数组" };
   if (raw.length > 8) return { ok: false, error: "headcount 超上限（8 席）" };
@@ -525,19 +538,23 @@ function sanitizeHeadcount(raw: unknown): { ok: true; headcount?: ProjectHeadcou
     if (!item || typeof item !== "object" || Array.isArray(item)) return { ok: false, error: "headcount 条目必须是对象" };
     const sid = typeof (item as { session_id?: unknown }).session_id === "string" ? ((item as { session_id: string }).session_id).trim() : "";
     if (!sid) return { ok: false, error: "headcount 条目缺 session_id" };
-    if (seen.has(sid)) continue; // 重复选择静默去重
+    if (seen.has(sid)) continue; // 重复选择静默去重（幂等保首行——PM 行 unshift 在前胜出；同 sid 冲突由 session-manager 前置门整单拒，纵深层不再判）
     seen.add(sid);
     const roleRaw = (item as { role?: unknown }).role;
     const role = typeof roleRaw === "string" && roleRaw.trim() ? roleRaw.trim().slice(0, 24) : "worker";
     const nickRaw = (item as { nick?: unknown }).nick;
     const nick = typeof nickRaw === "string" && nickRaw.trim() ? nickRaw.trim().slice(0, 24) : undefined;
+    if (gate) {
+      const deny = gate(sid, role);
+      if (deny) return { ok: false, error: deny };
+    }
     out.push({ session_id: sid, role, ...(nick ? { nick } : {}) });
   }
   return { ok: true, ...(out.length ? { headcount: out } : {}) };
 }
 
 /** B2a adapter：只把 COMMAND_ORG_ACTION=create 收敛到既有 createGroup 单漏斗。 */
-export function handleOrgActionCreate(payload: unknown, dir?: string): CreateGroupResult {
+export function handleOrgActionCreate(payload: unknown, dir?: string, gate?: HeadcountGate): CreateGroupResult {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false, error: "org action payload 无效" };
   }
@@ -549,7 +566,7 @@ export function handleOrgActionCreate(payload: unknown, dir?: string): CreateGro
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir 必填" };
   if (!isAbsolute(anchor)) return { ok: false, error: "anchor_dir 必须是绝对路径" };
   if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
-  const hc = sanitizeHeadcount(raw.headcount);
+  const hc = sanitizeHeadcount(raw.headcount, gate);
   if (!hc.ok) return { ok: false, error: hc.error };
   return createGroup({ name, anchor_dir: anchor, tier, ...(hc.headcount ? { headcount: hc.headcount } : {}), ...(raw.mixed_engine === true ? { mixed_engine: true } : {}) }, dir);
 }

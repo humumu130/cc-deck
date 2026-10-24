@@ -239,6 +239,49 @@ assert(!!group5 && Array.isArray(group5.headcount) && group5.headcount.length ==
 const ackDup = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "同锚团队", anchor_dir: anchor5, tier: "轻立项" }));
 assert(ackDup.ok === false, "5 same-anchor second team rejected (one anchor one group)");
 
+// ---------- ⑤b W-TS63FIX：P2-1 同 sid 组合反例 + P3-2 非法 pm_session_id ----------
+// P2-1 主反例：pm_session_id=外部会话 + 同 sid 显式 worker 勾选 = 整单拒（旧「sid 命中
+// 即 continue」过宽分支=外部门禁绕过入口，review-tsync-relay 实锤；修法 b 主刀锁死）
+const anchor5b = join(TDATA, "team-anchor-b");
+mkdirSync(anchor5b, { recursive: true });
+const ackConflictExt = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "冲突团A", anchor_dir: anchor5b, tier: "轻立项", pm_session_id: extSid, headcount: [{ session_id: extSid, role: "worker" }] }));
+assert(ackConflictExt.ok === false && String(ackConflictExt.error ?? "").includes("不可同时勾为成员角色"), "5b external same-sid worker combo rejected (P2-1 修法 b)");
+// managed 会话同款反例（同分支第二路径）
+const ackConflictMgd = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "冲突团B", anchor_dir: anchor5b, tier: "轻立项", pm_session_id: sidA, headcount: [{ session_id: sidA, role: "worker" }] }));
+assert(ackConflictMgd.ok === false && String(ackConflictMgd.error ?? "").includes("不可同时勾为成员角色"), "5b managed same-sid worker combo rejected");
+// 正例回归锁：外部会话作 PM 身份行（生产 PM 主会话即 ext- 形态）放行 + PM 行落位首位
+const anchor5c = join(TDATA, "team-anchor-c");
+mkdirSync(anchor5c, { recursive: true });
+const ackExtPm = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "外PM团", anchor_dir: anchor5c, tier: "轻立项", pm_session_id: extSid }));
+assert(ackExtPm.ok === true, "5b external PM identity row allowed");
+const groupPm = (ackExtPm.data as { group?: { headcount?: { session_id: string; role: string }[] } })?.group;
+assert(!!groupPm && Array.isArray(groupPm.headcount) && groupPm.headcount.length === 1 && groupPm.headcount[0].session_id === extSid && groupPm.headcount[0].role === "pm", "5b PM row seeded first (role=pm)");
+// P3-2：非 string pm_session_id → 忽略不带 PM 行，整单成功（audit 已记）
+const anchor5d = join(TDATA, "team-anchor-d");
+mkdirSync(anchor5d, { recursive: true });
+const ackBadType = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "类型团", anchor_dir: anchor5d, tier: "轻立项", pm_session_id: 12345 }));
+assert(ackBadType.ok === true, "5b non-string pm_session_id ignored (order succeeds)");
+const groupT = (ackBadType.data as { group?: { headcount?: unknown[] } })?.group;
+assert(!!groupT && !(groupT.headcount ?? []).some((r) => /^(pm|leader|产品经理|项目经理|领队)$/i.test(r.role)), "5b no PM row for non-string pm_session_id");
+// P3-2：超长 sid（>128）→ 同上收口（不进「不在册」拒——pmSidRaw 已清空）
+const anchor5e = join(TDATA, "team-anchor-e");
+mkdirSync(anchor5e, { recursive: true });
+const ackLong = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "超长团", anchor_dir: anchor5e, tier: "轻立项", pm_session_id: "x".repeat(200) }));
+assert(ackLong.ok === true, "5b overlong pm_session_id ignored (order succeeds)");
+const groupL = (ackLong.data as { group?: { headcount?: unknown[] } })?.group;
+assert(!!groupL && !(groupL.headcount ?? []).some((r) => /^(pm|leader|产品经理|项目经理|领队)$/i.test(r.role)), "5b no PM row for overlong pm_session_id");
+// 修法 c 纵深单测：sanitize gate 对非 pm 角色外部会话拒（绕过 session-manager 前置门的直调路径）；
+// 同时锁 PM_ROLE_RE 真导出（前席 diff 的 import 缺陷正是此常量未定义——本断言在位即防复发）
+import { adaptOrgAction, PM_ROLE_RE } from "../src/projects.js";
+const deepDeny = adaptOrgAction({ action: "create", name: "纵深团", anchor_dir: anchor5b, tier: "轻立项", headcount: [{ session_id: "ext-deepgate", role: "worker" }] }, undefined, (sid, role) =>
+  PM_ROLE_RE.test(role) ? null : `gate 拒 ${sid.slice(0, 4)}:${role}`);
+assert(deepDeny.ok === false && String((deepDeny as { error?: string }).error ?? "").includes("gate 拒"), "5b sanitize gate defense-in-depth rejects (修法 c)");
+const anchor5f = join(TDATA, "team-anchor-f");
+mkdirSync(anchor5f, { recursive: true });
+const deepOk = adaptOrgAction({ action: "create", name: "纵深豁免团", anchor_dir: anchor5f, tier: "轻立项", headcount: [{ session_id: "ext-deepgate2", role: "pm" }] }, undefined, (sid, role) =>
+  PM_ROLE_RE.test(role) ? null : `gate 拒 ${sid.slice(0, 4)}:${role}`);
+assert(deepOk.ok === true, "5b sanitize gate exempts pm-role identity row (修法 c 豁免口径)");
+
 ws2.close();
 console.log("FB14 all assertions passed");
 process.exit(0);
