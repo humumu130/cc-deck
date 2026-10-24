@@ -425,6 +425,7 @@
        CSS 强制盖内联属性到 29px≈85% 满铺（取原图内容区 bbox 视觉近满圆）；expo 同批
        AvaBadge size 18→29 同口径 */
     .srow-ava .ava-brand img, .srow-ava .ava-brand svg { width: 26px !important; height: 26px !important; border-radius: 6px; } /* #248 用户 1024：0.9x（原 29 过大） */
+    .srow-ava .ava-brand img { object-fit: contain; } /* W-CSSMICRO2：crab 191×150 非方图被 26 方盒压扁 21% 矫正（只限 img，svg 矢量无比例损伤不动） */
     /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
        黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
        灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */
@@ -1866,6 +1867,7 @@
        同批清，隐藏条件因 b2EngineBadge 未包 badge-brand 从未生效过） */
     .engine-badge .badge-brand { display: inline-flex; align-items: center; }
     .engine-badge .badge-brand svg, .engine-badge .badge-brand img { width: 10.8px; height: 10.8px; display: block; } /* #248：12×0.9=10.8，列表/详情 head 统一档 */
+    .engine-badge .badge-brand img { object-fit: contain; } /* W-CSSMICRO2：同上，徽章 10.8 方盒同病灶（详情 head 同族走本全局规则） */
     .engine-badge .engine-icon { width: 10.8px; height: 10.8px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .engine-badge.claude { --engine-color: var(--engine-claude); }
     .engine-badge.codex { --engine-color: var(--engine-codex); }
@@ -1887,12 +1889,13 @@
     /* #245 B：项目/团队列表卡源胶囊同门（单源隐藏/聚合显示，对齐会话列表口径）；
        #248 追缺（W-SRCCOUNT，1024 装机实锤）：视角=聚合但数据单源（mode=aggregate ∧
        count=1，两台 relay 同名/仅一台在线残留）时旧 mode 单门放行 src-cap 全显——
-       语义=「无第二个源可辨则不显标」，各门补 data-source-count="1" 孪生选择器
-       （写点 session-domain B2 渲染恒写，sd:1214） */
-    body[data-source-mode="single"] .team-projects .src-cap, body[data-source-mode="single"] [data-project-key] .src-cap,
-    body[data-source-count="1"] .team-projects .src-cap, body[data-source-count="1"] [data-project-key] .src-cap { display: none !important; }
-    body[data-source-mode="single"] #d-session .queue-card .src-cap, body[data-source-mode="single"] #m-inbox .mobile-card .src-cap,
-    body[data-source-count="1"] #d-session .queue-card .src-cap, body[data-source-count="1"] #m-inbox .mobile-card .src-cap { display: none; } /* #248：单源会话卡源胶囊隐藏（srclabelmig 只门控了项目/团队卡，会话卡漏门） */
+       语义=「无第二个源可辨则不显标」，活门各补 data-source-count="1" 孪生键
+       （写点 session-domain B2 渲染恒写，sd:1214）；
+       W-CSSMICRO2 考古清理：.team-projects/[data-project-key]（项目卡 src-cap 发射体已随
+       #248 整排退役，team 入口卡容器无 .team-projects 类）与 #m-inbox .mobile-card 半句
+       （mobile 三发射体产 .source-badge 零 src-cap）均零发射体，死选择器整删 */
+    body[data-source-mode="single"] #d-session .queue-card .src-cap,
+    body[data-source-count="1"] #d-session .queue-card .src-cap { display: none; }
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge .icon-inline { width: 12px; height: 12px; }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
