@@ -454,3 +454,16 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 2. **chain-audit→KV 同步脚本挂载**（§11 P2）——五层栈层 5 的最后一公里。
 3. **死会话 retire 机器化**（§12 台账风险③——「派单后探活+retire」从纪律升为 patrol 件：台账 running 行目标会话死亡 N 分钟→自动 member-retire+告警；1021 六次路由实证的最直接根治）。
 4. F5/F6 通知 ledger 收编维持 §7 建议（v4 无变化）。
+
+## 13. 1024 实战断点增补（test.57→63 七连包日）
+
+> 1024 全天七连包（test.57→63）高频派单实战新增四条损失点。当日纪律变更：worker_done 喂活到达=立即收割（memory feedback-harvest-on-done，用户「非常重点」定调），巡检降为兜底——运转有效。
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1024-1 | **内容安全过滤杀席**：bigmodel API 400「敏感内容」无预警击杀 worker CLI 会话，席上多单全废 | 1024 16:16 审查席三单全废（review-t57-a 首派即殁）；触发词不可知（正常审查文本命中） | 不可预防只可快速恢复：无回执即对账军规+重派（当日四发落地） | 喂活/巡检对 SESSION_ERROR 帧告警升级（区别于正常 DONE） |
+| L-1024-2 | **relay 重启双分身竞态**：auto-revive 与路由侧并存拉起同一 CLI 会话双进程，同写一 transcript+worktree | 1024 22:19 teamsync 席实锤（两 uuid 链交错；worker 击毙分身收编工作未丢，w-teamsync-impl.md 事故记录） | worker 自处置+Leader 收编 | **revive 前「同会话活进程」检测闸**（test-bridge 189g 只测同管理器防双拉，跨重启+路由并存复合场景无闸） |
+| L-1024-3 | **派单路由无定向追加通道**：dispatch 路由避开忙碌席→无法给在跑 worker 追加规格/勘误 | 1024 皇冠尺寸勘误两次误投（membergrid 席/designer C 席），靠误投忽略通知兜住 | 误投忽略通知+收割时强校验 | dispatch 支持 `--seat` 定向（允许排队注入忙碌席）或队列化追加 API |
+| L-1024-4 | **同文重复卡**：重派未关旧卡致板面同文卡簇 | 编制膨胀×7/优先修复批×3/SRCVANISH×5（W-STALETRIAGE 1024 审计实锤） | 分诊审计 30 条+人工清板 | 建卡前 normalizeBoardCardText 查重闸（单口已立，闸缺位） |
+
+附：当日另一断点「worker 无回执静默收工」三起（审查 A 两连+TS63FIX+AUDITLOG）——与 L-1021「交付零通知」同族，worker_done 即收割军规已兜住恢复侧，**根因=worker 侧收工时回执写入失败无重试无告警**，根治归 §11 回执契约机器闸的收工自检扩展（回执未落盘则 SESSION 拒绝 DONE）。
