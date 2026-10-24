@@ -429,6 +429,12 @@
        AvaBadge size 18→29 同口径 */
     .srow-ava .ava-brand img, .srow-ava .ava-brand svg { width: 26px !important; height: 26px !important; border-radius: 6px; } /* #248 用户 1024：0.9x（原 29 过大） */
     .srow-ava .ava-brand img { object-fit: contain; } /* W-CSSMICRO2：crab 191×150 非方图被 26 方盒压扁 21% 矫正（只限 img，svg 矢量无比例损伤不动） */
+    /* W-CRABINTEGRATE：角色蟹变体（191×176 含旗杆/冠高>方盒）contain 防压扁（img 已被
+       上行 W-CSSMICRO2 规则覆盖，无需重复）+ 非 claude 角色皇冠角标（-15° 金色右上叠角；
+       角尺寸随 26px 头像档定死 12px，svg !important 压制 :427 后代 26px 规则——审查 P1） */
+    .srow-ava .role-badge-host { position: relative; }
+    .srow-ava .ava-crown { position: absolute; top: -5px; right: -6px; width: 12px; height: 12px; transform: rotate(-15deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); pointer-events: none; }
+    .srow-ava .ava-crown svg { width: 100% !important; height: 100% !important; display: block; }
     /* W-CODEX09（用户 1024 口径修正）：Codex 字形头像面再 ×0.9——基础 SVG 的 g[transform]
        0.9 全局档不动（引擎标签 .engine-badge .badge-brand 面【禁止】进本规则，保持 0.9 档），
        此处面级 CSS transform 与字形内 g 变换叠加=头像内累计 0.81（26px 盒实测渲染 ~23.4px）；
