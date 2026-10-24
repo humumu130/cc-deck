@@ -299,10 +299,15 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
           // #49 口径：服务端重启对用户是"服务更新"，不暴露 Relay/CLI 内部机制字眼
           rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启 · 会话继续跟踪中" });
         } else {
+          // #247 W-READONLY-KILL（用户铁口径 2026-10-24）：pid 判死不再降级 historical——
+          // relay 记的 cli_pid 会过期（CLI 自己重启换 pid/压缩挤掉 pid 帧/kill(0) 对他人
+          // 进程 EPERM），而 transcript 在=可注入（EXT_INPUT 链）的铁证；误标 historical
+          // 曾把用户本机活跃终端会话（rea/修图）锁成只读三次实锤。状态落 DONE（进程态
+          // 未知不再报 WORKING），historical 保持 false——发送即自动注入
           rs.state.status = "DONE";
           rs.state.done_reason = "ended";
-          rs.state.historical = true;
-          rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启 · 会话已结束" });
+          rs.state.historical = false;
+          rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启 · 发送消息即可继续" });
         }
       } else if (rs.state.relay_session_id) {
         // #52 批：托管会话带 SDK 会话号即可靠 resume 恢复——归 DONE 中性态而非

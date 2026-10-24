@@ -1856,7 +1856,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const stA2 = mgr2.snapshot().find((s) => s.session_id === sidA)!;
   assert(stA2.pinned === true && stA2.saved === true, "46c 休眠卡 pinned+saved");
   assert(stA2.status === "DONE" && stA2.done_reason === "已保存（重启休眠）", "46c 休眠状态 DONE/已保存");
-  assert(stA2.historical === true, "46c 休眠卡保留 historical（旧端仅可查看语义）");
+  // #247 W-READONLY-KILL（用户铁口径）：「历史只读」退役——historical 降为展示分组位
+  //（web canCmd 退役 + COMMAND_MESSAGE 无 agent 走 resumeAgent，休眠卡发送即唤醒），
+  // 不再作为操作锁断言；pinned/saved/DONE 休眠语义不变
+  console.log(`  info 46c 休眠卡 historical=${stA2.historical}（展示位，非操作锁）`);
   assert(
     (() => { try { return !(JSON.parse(readFileSync(PIN_FILE, "utf-8")) as string[]).includes("ghost-session-id"); } catch { return true; } })(),
     "46c 失联条目（无会话）从清单清理",
