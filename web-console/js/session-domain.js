@@ -1582,7 +1582,11 @@
                   UI.title.textContent = s.title || s.initial_prompt || s.session_id;
                   // W-UIFB ③：「运行中」状态胶囊退役（i=3）——会话态由 dock 态图标单点表达（B21 语义，
                   // B13 DONE 隐藏口径的全量版）；外部会话仍标「CLI」（用户语言：本机 CLI 里开的会话）
-                  const eng = ENGINES[s.engine || "claude"] || [s.engine || "Claude", ""];
+                  // W-MOBLIST 双端同链：engine 缺失按 model 子串推断（PM/外部会话 engine 空=
+                  // 「?」/错挂 Claude 根因；expo 镜像=src/engine-infer.ts，改链两处同步）
+                  const MODEL_HINTS = [["claude", "claude"], ["codex", "codex"], ["codebuddy", "codebuddy"], ["qwen-code", "qwen-code"], ["qwen", "qwen-code"], ["glm", "glm"], ["trae", "trae"], ["zcode", "zcode"]];
+                  const effEngine = s.engine || ((MODEL_HINTS.find(([n]) => String(s.model || "").toLowerCase().includes(n)) || [])[1] || "");
+                  const eng = ENGINES[effEngine || "claude"] || [s.engine || "Claude", ""];
                   // W-TOPBAR ③ head 身份收敛：只剩 engine 徽章一颗；数据源归顶栏源胶囊、外部会话
                   // 「CLI」标从独立 tag 降为徽章内文字后缀（身份类三胶囊 → 一颗）。
                   // W-UIFB ③（合并裁决）：徽章加 sprite 图标（b2EngineIconFor，与第二列同款）；

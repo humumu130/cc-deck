@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
+import { inferEngine } from "../engine-infer";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
 import { SessionStatSub } from "./page-head";
@@ -868,6 +869,9 @@ const SessionCard = memo(function SessionCard({
   const compact = density === "compact";
   const minimal = density === "minimal";
   const color = statusColor(s.status, c);
+  // W-MOBLIST：engine 缺失兜底——PM/外部会话 engine 空时按 model 子串推断（util 双端同链，
+  // web 侧 session-domain renderHeader 内联同规则）
+  const effEngine = inferEngine(s.engine, s.model);
   // #100 后台任务态：主回合空闲但仍有子 Agent 在跑——灯转黄呼吸 + ⑂N 徽标 + 不置灰
   const bgCount = (s.subagents ?? []).filter((a) => !a.ended_at).length;
   const bgLive = bgCount > 0 && s.status !== "WORKING";
@@ -921,13 +925,18 @@ const SessionCard = memo(function SessionCard({
         </View>
       ) : compact ? (
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
+        // W-MOBLIST：compact 补品牌头像（AvaBadge 桌面三排定稿同款 26px/codex 23.4，复用
+        // 组件）+ r3 引擎徽行（EngineBadge sm=10.8/pad6/gap4 桌面口径；顺序对齐桌面
+        // 源胶囊→引擎徽章，team chip 手机端由 footC ◈ orgTag 承载=口径差如实记录）
         <>
           <View style={styles.rowC}>
-            {s.status === "WORKING" || bgLive ? (
-              <BlinkDot color={dotColor} />
-            ) : (
-              <View style={[styles.dot, { backgroundColor: color }]} />
-            )}
+            <AvaBadge
+              letter={(s.title || "未").trim().slice(0, 1) || "未"}
+              brandIcon={pmMember ? null : effEngine}
+              srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
+              dotColor={dotColor}
+              breathe={s.status === "WORKING" || bgLive}
+            />
             <Text style={[styles.titleC, idle && styles.titleIdle]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
             {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
             <View style={{ flex: 1 }} />
@@ -938,6 +947,13 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
+          {srcBadge || engineBadgeable(effEngine ?? undefined) ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              {srcBadge ? <SrcBadge {...srcBadge} /> : null}
+              <View style={{ flex: 1 }} />
+              {engineBadgeable(effEngine ?? undefined) ? <EngineBadge engine={effEngine ?? undefined} size="sm" /> : null}
+            </View>
+          ) : null}
           <View style={styles.footC}>
             {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
@@ -957,10 +973,10 @@ const SessionCard = memo(function SessionCard({
               letter={(s.title || "未").trim().slice(0, 1) || "未"}
               /* #227 三排定稿②：品牌化头像——非 PM 会话且有品牌图标时头像=引擎图标居中
                  （EngineIcon 裸标）；PM/Leader 保留字母头像（P/L 有特殊辨识意义） */
-              brandIcon={pmMember ? null : hasEngineIcon(s.engine) ? s.engine : null}
+              brandIcon={pmMember ? null : effEngine}
               /* A3-7 查漏（桌面 UIPOLISH2 件一同口径）：头像底色=引擎品牌色淡彩（引擎
                  语义徽章/状态灯/身份头像三分离）；词表外引擎回落源色（不丢信息） */
-              srcColor={ENGINE_ACCENT[s.engine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
+              srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
               dotColor={dotColor}
               breathe={s.status === "WORKING" || bgLive}
             />
@@ -994,7 +1010,7 @@ const SessionCard = memo(function SessionCard({
                   单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
               {/* #227 三排定稿①：第三排双胶囊——源胶囊居左（电脑图标前缀=件A 形态
                   回归）+引擎胶囊居右，两端分布中间弹性 */}
-              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? (
+              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? (
                 <View style={styles.srowR3}>
                   {/* #233 源标签标签化（W-CARDTAGS2，用户口径②「参考 0.6.x」）：legacy
                       SrcBadge #98 桌面同款胶囊移植——源色底+E6、白字 8.5 粗、radius 4.5、
@@ -1014,7 +1030,7 @@ const SessionCard = memo(function SessionCard({
                   ))}
                   {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
                   <View style={{ flex: 1 }} />
-                  {engineBadgeable(s.engine) ? <EngineBadge engine={s.engine} size="sm" /> : null}
+                  {engineBadgeable(effEngine ?? undefined) ? <EngineBadge engine={effEngine ?? undefined} size="sm" /> : null}
                   {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
                       display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
                       条件同步摘水位段（防右端空挂） */}

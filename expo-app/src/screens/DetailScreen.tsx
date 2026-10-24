@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef,
 import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native"
 import { HEAD_BASE } from "../head-unify";
 import { EngineIcon } from "../engine-icon"; // #239 W-DETAILAVATAR：详情 head 头像=列表卡同款品牌图标
+import { inferEngine } from "../engine-infer"; // W-MOBLIST：engine 缺失按 model 推断（灭「?」）
 import { MicIcon, DockDot, CtxSegMeter, SPIN_FRAMES, TranscriptRow, AskBanner, DiffBlock, StatRow, WaitCard, PendingRow, LiveStatusLine, TaskRefText } from "../components/detail-parts";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -2187,8 +2188,10 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         </Pressable>
         {/* #239 W-DETAILAVATAR：详情 head 头像品牌化——列表卡 AvaBadge 同款 EngineIcon
             同 size(18) 同数据源（engine-icon.tsx 双表，claude=像素螃蟹）；d.head gap:8
-            自带间距，无底块无工作灯（head 现行规格不重设计，纯补图标源） */}
-        <EngineIcon engine={s.engine} size={18} />
+            自带间距，无底块无工作灯（head 现行规格不重设计，纯补图标源）。
+            W-MOBLIST：engine 缺失兜底灭「?」——PM/外部会话按 model 子串推断
+            （inferEngine 双端同链），双缺才落字母占位 */}
+        <EngineIcon engine={inferEngine(s.engine, s.model) ?? undefined} size={18} />
         <View style={{ flex: 1, minWidth: 0 }}>
           {/* W-UIFIX 件二：水位计挪标题行右端+整体调小一号——副题行还给元信息文字
               （目录/活跃时间不再被挤截断）；标题 flexShrink 保省略，水位 flexShrink:0 右锚 */}
