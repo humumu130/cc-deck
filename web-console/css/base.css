@@ -873,8 +873,11 @@
     /* ---------- #164 对话流域：旧壳消息生态全量移植（MD 渲染/语法着色/过程组/思考卡/工具行） ---------- */
     .message-ai {margin: 0 0 15px; color: var(--text); font-size: var(--fs-A);}
     .message-author { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; color: var(--text-strong); }
-    /* 旧壳 ai-ava ✻ 形态贴 005 token：28px 中性圆，头像在前、署名行与头像同行 */
-    .message-author .ai-ava { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; }
+    /* 旧壳 ai-ava ✻ 形态贴 005 token：28px 圆，头像在前、署名行与头像同行 */
+    /* W-AVABG（用户 1024 拍板）：底色对齐列表引擎品牌色淡彩——同 #d-session .srow-ava 公式
+       （--ai-ava-c 16% 淡彩罩 surface2，session-domain ai-text 渲染注入；--source 为回落兜底）。
+       边框/圆角维持现圆形不动 */
+    .message-author .ai-ava { flex: none; width: 28px; height: 28px; border-radius: 50%; background: transparent; background: color-mix(in srgb, var(--ai-ava-c, var(--source)) 16%, var(--surface2)); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; }
     /* #243 D：消息流对方头像品牌图满铺（28px 圆 ~85%，对齐列表头像口径） */
     .message-author .ai-ava .badge-brand svg, .message-author .ai-ava .badge-brand img { width: 24px; height: 24px; }
     .message-author .ai-ava .badge-brand img { object-fit: contain; } /* W-AVAFIX：crab 191×150 非方图被 24 方盒纵向拉长矫正（1024 装机实锤；渲染 24×18.85 与列表 26×20.4 同比例；img-only，svg 矢量无比例损伤不动） */

@@ -2024,8 +2024,15 @@
                   }
                   if (role === "ai-text") {
                     const eng = ENGINES[(s && s.engine) || "claude"] || ["Claude"];
+                    // W-AVABG：消息流 AI 头像底色对齐列表引擎品牌色淡彩（UIPOLISH2 件一同纲）——
+                    // eng[1] 与列表 engineClass 同源值（同出 ENGINES 表）；已知引擎走 --engine-* token，
+                    // PM/未知引擎（ENGINES 未命中 eng[1]=undefined）回落列表同款源色哈希 b2SourceColor
+                    // （输入对齐列表 source 口径=显示名）。CSS 端 16% 淡彩罩 surface2 公式同 .srow-ava
+                    const avaSrcRaw = String((s && (s.relay_source || S.relayName)) || "");
+                    // W-AVABG R2（审查 P2 修）：哈希输入对齐列表 item.source 口径=esc(显示名)——源名含 &<>"' 时与列表同源同色
+                    const aiAvaColor = { claude: "var(--engine-claude)", codex: "var(--engine-codex)", trae: "var(--engine-trae)", qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)" }[eng[1]] || b2SourceColor(esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(avaSrcRaw) : avaSrcRaw));
                     const full = e.full ? String(e.full) : "";
-                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
+                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
                       mdHtml(open ? String(e.full ?? e.text ?? "") : String(e.text ?? "")) +
                       (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") +
                       (full ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + full.length + " 字 ▾") + "</span>" : "") +
