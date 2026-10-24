@@ -4,6 +4,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# --check-all：加对 relay-service/Nova 两个**生产部署面**的逐文件对比（W-DEPLOYSSOT4
+# #237）。默认不开——日常闸只锁「仓内一致性」（root vs cc-plugins），部署面漂移由
+# deploy-web.sh 同步+check-deploy-complete 闸管；发版链（release-test.sh）带本开关，
+# 防止「日常碰生产面」（收割中期部署面本来就是旧的，日常闸对它红=狼来了）
+STRICT=0; CHECK_ALL=0
+for a in "$@"; do
+  case "$a" in
+    --strict) STRICT=1 ;;
+    --check-all) CHECK_ALL=1 ;;
+    *) echo "⚠️  未知参数 ${a}（忽略；支持 --strict/--check-all）" ;;
+  esac
+done
+
 # 哈希工具用 shasum -a 256（P1b 修复，2026-10-05）：Mac 无 PATH 内 md5（原 md5 -q
 # 两处全落 MISSING → B1=MISSING=B2 假通过，真漂移检不出+误报「bundle 不存在」）；
 # shasum macOS 自带且 Linux 通用（md5sum 语法跨平台不一致），256 位与 P1a 核验口径
@@ -29,15 +42,17 @@ S2=$( { shasum -a 256 ~/.cc-deck/relay-service/web-console/index-005.html 2>/dev
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
-[ "$B2" = "$B3" ] || { echo "⚠️  desktop-tauri resources ≠ /Applications 已装（Mac app 未热替换最新，构建前可接受，发版前必须替换）"; [ "${1:-}" = "--strict" ] && FAIL=1; }
+[ "$B2" = "$B3" ] || { echo "⚠️  desktop-tauri resources ≠ /Applications 已装（Mac app 未热替换最新，构建前可接受，发版前必须替换）"; [ "$STRICT" = "1" ] && FAIL=1; }
 [ "$B1" = "MISSING" ] && { echo "❌ cc-plugins bundle 不存在（先跑 build-plugin.mjs）"; FAIL=1; }
 [ "$W1" = "$W2" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
 [ "$W1" = "MISSING" ] && { echo "❌ web-console/index.html 源不存在"; FAIL=1; }
 [ "$W3" = "$W4" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index-005.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
 [ "$W3" = "MISSING" ] && { echo "❌ web-console/index-005.html 源不存在"; FAIL=1; }
-[ "$W1" = "$S1" ] || { echo "❌ relay-service 静态面 ≠ web-console/index.html 源（cp web-console/index.html ~/.cc-deck/relay-service/web-console/ 同步后重启壳）"; FAIL=1; }
-[ "$W3" = "$S2" ] || { echo "❌ relay-service 静态面 ≠ web-console/index-005.html 源（cp web-console/index-005.html ~/.cc-deck/relay-service/web-console/ 同步后重启壳）"; FAIL=1; }
-[ "$S1" = "MISSING" ] && { echo "⚠️  relay-service/web-console 不存在（relay-service 未部署？）"; }
+if [ "$CHECK_ALL" = "1" ]; then
+  [ "$W1" = "$S1" ] || { echo "❌ relay-service 静态面 ≠ web-console/index.html 源（跑 scripts/deploy-web.sh 同步后重启壳）"; FAIL=1; }
+  [ "$W3" = "$S2" ] || { echo "❌ relay-service 静态面 ≠ web-console/index-005.html 源（跑 scripts/deploy-web.sh 同步后重启壳）"; FAIL=1; }
+  [ "$S1" = "MISSING" ] && { echo "⚠️  relay-service/web-console 不存在（relay-service 未部署？）"; }
+fi
 
 # web 资产成对部署闸（#123，2026-10-15 事故的防再犯——test.27 第二波收割后忘重拷
 # index-005.html 进 Nova app，用户看到「重启没变化」）：三面口径——
@@ -48,8 +63,43 @@ FAIL=0
 #   面③ Nova app bundle 面（本段新增）：/Applications/CC Deck Nova.app 的
 #      web-console 两文件与源 SHA 全等。app 缺席=SKIP 提示不红（CI/非本机场景）；
 #      漂移→红+文件+面+diff 摘要首行（1015 形态：纯 CONSOLE_VERSION 落后或整页旧版）
+
+# W-ALL 全量清单对比（#237 W-DEPLOYSSOT4：调研 §0.3——旧闸只锁 2 html，css/js 七文件
+# 零闸是三起同族漂移的共性盲区）。清单用 git ls-files 动态取（新增文件自动入锁），
+# root vs cc-plugins 逐文件 sha256；漂移即红并列**文件名**（修复=single 写口
+# build-plugin.mjs 刷新，cc-plugins 副本=纯构建产物禁手工编辑）。
+# 对照基线注记（调研 §0.3/§0.4）：闸对的是**工作区根源**——本 checkout 线落后于发版
+# 真相线（feat/testNN-integ）时，对「已被刷到更新版本」的副本会误报，故失败输出附
+# 当前线与发版真相 tag 注记，先对线再对文件
+WDRIFT=0
+WALL_TOTAL=0
+# 清单口径=build-plugin/rsync 的产物范围：排除 site/（独立落地页）、preview/（预览
+# 样张）、wrangler.jsonc（旧 CF 配置杂件，真身=cloudflare/wrangler.toml）——三者本就
+# 不进 cc-plugins 副本，列入清单=永久假漂移（首跑实录 5+1 条 MISSING 假红）
+while IFS= read -r f; do
+  case "$f" in
+    web-console/site/*|web-console/preview/*|web-console/wrangler.jsonc) continue ;;
+  esac
+  WALL_TOTAL=$((WALL_TOTAL+1))
+  A=$( { shasum -a 256 "$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+  B=$( { shasum -a 256 "cc-plugins/plugins/cc-deck/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+  if [ "$A" != "$B" ]; then
+    [ "$WDRIFT" = "0" ] && { echo "❌ web 全量清单漂移（root vs cc-plugins 副本，重跑 node relay/scripts/build-plugin.mjs 刷新；副本=纯构建产物禁手工编辑）："; WDRIFT=1; }
+    echo "    漂移文件: ${f}（root ${A:0:12} vs 副本 ${B:0:12}）"
+    FAIL=1
+  fi
+done < <(git ls-files web-console)
+[ "$WDRIFT" = "0" ] && echo "✅ web 全量清单一致（$WALL_TOTAL 文件 root=cc-plugins）"
+if [ "$WDRIFT" = "1" ]; then
+  CUR_LINE=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+  TRUTH_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "?")
+  echo "    注记：对照对象=工作区根源（线 ${CUR_LINE}）；发版真相 tag=${TRUTH_TAG}——若本线落后于真相线，对已被刷新的副本属预期误报（先核对线，调研 w-wcssot.md §0.3/§0.4）"
+fi
+
 NOVA_WC='/Applications/CC Deck Nova.app/Contents/Resources/web-console'
-if [ -d "$NOVA_WC" ]; then
+if [ "$CHECK_ALL" != "1" ]; then
+  echo "⏭️  Nova app bundle 面：--check-all 未带，跳过（防日常闸碰生产面；发版链自动带）"
+elif [ -d "$NOVA_WC" ]; then
   NOVA1=$( { shasum -a 256 "$NOVA_WC/index.html" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
   NOVA5=$( { shasum -a 256 "$NOVA_WC/index-005.html" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
   if [ "$W1" != "$NOVA1" ]; then
