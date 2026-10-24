@@ -984,6 +984,7 @@
                   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
                   return b2SourcePalette[h % b2SourcePalette.length];
                 };
+                window.__ccDeck005SourceColor = b2SourceColor; // #245 跨 IIFE 暴露(team/bridge 域源胶囊取源色)
                 // UIPOLISH2 件一：头像底色引擎品牌色淡彩——地基 sessionAvaColor 逐字节同构（myCardMarkup
                 // 与地基 renderSessionCard 的 DOM 一致性是 observer 完整性检查的前提，两处必须同步改）
                 const b2AvaColor = (item) => ({

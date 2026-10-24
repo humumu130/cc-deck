@@ -1276,7 +1276,9 @@
     #d-team .head-refresh .icon-inline { width: 13px; height: 13px; }
     /* UIPOLISH3 件四⑥：成员 tab 矩形卡片网格（每行 2+，参照旧原型）——只改 pane 内成员列表，
     右栏 inspector 成员块保持行式 */
-    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 10px; }
+    /* #244（W-SRCLABEL-MIG C）：成员卡黄金比例定尺寸——高 148 定死、宽=148×1.618≈239
+       （grid 定轨+card 高定，内容 overflow 截断不撑破）；原 minmax(420px,1fr) 自适应宽退役 */
+    #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, 239px); gap: 10px; justify-content: start; }
     /* W-V8 批3 名册卡第①层头行+第④层底行（v8 名册卡语言）：头像/名/职责 chip/模型 mono chip/三态 badge；徽章簇+详情钮 */
     #d-team .workspace-pane .member-card { flex-direction: column; gap: 7px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); }
     #d-team .workspace-pane .member-list { align-content: start; }
@@ -1293,7 +1295,10 @@
     #d-team .workspace-pane .member-card .m-state.fail { border: 1px solid rgba(229,72,77,.42); background: rgba(229,72,77,.07); color: var(--error); }
     #d-team .workspace-pane .member-card .m-state.idle { border: 1px solid var(--line); color: var(--dim); }
     #d-team .workspace-pane .member-card .m-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    #d-team .workspace-pane .member-card { min-height: 118px; } /* W-V8 批5：无水位条卡不塌陷（行底对齐——批3核验瑕疵） */
+    /* #244：黄金比例定尺寸（高 148×宽 239≈1.618:1，定尺寸不随内容伸缩）；
+       摘要两行截断、溢出隐藏——内容自适应不撑破 */
+    #d-team .workspace-pane .member-card { height: 148px; aspect-ratio: 1.618 / 1; overflow: hidden; }
+    #d-team .workspace-pane .member-card .member-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     #d-team .workspace-pane .member-card .m-open { flex: none; margin-left: auto; padding: 2px 9px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--dim); font-size: var(--fs-E); cursor: pointer; }
     #d-team .workspace-pane .member-card .m-open:hover { color: var(--brand-hover); border-color: var(--brand-line); }
 
@@ -1879,6 +1884,8 @@
        聚合模式但数据单源同样隐藏；多源数据落地后自动回归 */
     body[data-source-count="1"] #d-session .queue-card .source-badge { display: none; }
     body[data-source-count="1"] .team-entry .source-badge, body[data-source-count="1"] .inspector .source-badge.insp-src { display: none; } /* t25fix #5：团队卡/详情面板源徽章同门控（单源省略，聚合恒显） */
+    /* #245 B：项目/团队列表卡源胶囊同门（单源隐藏/聚合显示，对齐会话列表口径） */
+    body[data-source-mode="single"] .team-projects .src-cap, body[data-source-mode="single"] [data-project-key] .src-cap { display: none !important; }
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge .icon-inline { width: 12px; height: 12px; }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
