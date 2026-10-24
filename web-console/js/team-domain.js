@@ -36,6 +36,19 @@
                 // 件十三只清了 9 处，团队域整域漏网（用户实锤团队名称旁仍挂 localhost）
                 const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
                 const sourceBadge = () => '<span class="source-badge">' + escape(srcName(state.source)) + "</span>";
+                // #245 A（W-SRCLABEL-MIG）：团队列表卡源胶囊——cardtags2 款（源色 E6 底/白字/
+                // 圆角 4.5/电脑图标转白，会话列表 src-cap 同构）；源=组内成员会话 relay_source
+                // 去重（state.sessions 为桥全量双源持有）；≤2 枚枚举、超出收「N 源」；
+                // 显隐=body[data-source-count] 门控（单源隐藏/聚合显示，CSS 侧）
+                const teamSrcCaps = (item) => {
+                  const srcs = [...new Set(members(item).map((m) => {
+                    const bs = state.sessions && state.sessions.get(m.session_id);
+                    return String((bs && (bs.relay_source || bs.source)) || "");
+                  }).filter(Boolean))];
+                  if (!srcs.length) return "";
+                  const cap = (src) => '<span class="src-cap" title="来自 ' + escape(src) + '" style="background:' + (window.__ccDeck005SourceColor ? window.__ccDeck005SourceColor(src) : "#546784") + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + escape(src) + "</span>";
+                  return srcs.slice(0, 2).map(cap).join("") + (srcs.length > 2 ? '<span class="src-cap" style="background:#546784E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700">' + srcs.length + " 源</span>" : "");
+                };
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
                   const session = state.sessions.get(member.session_id) || {};
@@ -123,7 +136,7 @@
                   const dispPend = pendingDispatchSids(project.id).has(member.session_id)
                     ? '<span class="tag dispatch-pending" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 等待处理</span>'
                     : "";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -803,7 +816,7 @@
                       const activeAgo = mins <= 0 ? "刚刚活跃" : mins < 60 ? mins + " 分钟前活跃" : mins < 1440 ? Math.round(mins / 60) + " 小时前活跃" : Math.round(mins / 1440) + " 天前活跃";
                       return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><span class="team-ava" aria-hidden="true">' + escape(String(item.name || item.id).trim().slice(0, 1) || "团") + '</span><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div>'
                         + '<p class="team-meta" title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + ' 席 · 待确认 ' + pending + (item.status === "archived" ? "" : ' · <span class="team-ago">' + activeAgo + '</span>') + '</p>'
-                        + '<div class="identity-cluster">' + sourceBadge() + "</div></div>";
+                        + '<div class="identity-cluster">' + teamSrcCaps(item) + "</div></div>";
                     };
                     const live = state.projects.filter((p) => p.status !== "archived");
                     const archived = state.projects.filter((p) => p.status === "archived");
