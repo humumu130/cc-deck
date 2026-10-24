@@ -1554,7 +1554,12 @@
                 }
                 // ---------- 渲染：头部 / dock / 检查器 ----------
                 function curSession() { return S.selected ? (S.sessions.get(S.selected) || null) : null; }
-                function canCmd(s) { return !!s && (!s.historical || s.external === true); }
+                // #247 W-READONLY-KILL（用户铁口径 2026-10-24）：「历史会话只读」整体退役——
+                // 所有会话一律可操作（发送即自动 resume/注入：managed 走 COMMAND_MESSAGE
+                // →resumeAgent 拉起，external 走 COMMAND_EXT_INPUT →tmux 注入）。旧式
+                // (!s.historical || s.external===true) 组合态把重启误标的用户本机活跃终端
+                // 会话锁成只读（rea/修图两会话三次实锤），relay 侧收编也不再降级 historical
+                function canCmd(s) { return !!s; }
                 function renderHeader() {
                   const s = curSession();
                   const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
