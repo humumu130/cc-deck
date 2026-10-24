@@ -602,8 +602,12 @@ function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: 
       {brandIcon ? (
         <View style={{ width: 26, height: 26, borderRadius: 6, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
           {/* W-AVA09：0.9x 统一——头像盒图标 29→26（桌面 .ava-brand 26 同口径）；外框
-              26×26/radius 6 裁切同桌面 img/svg 6px 圆角（方 LOGO 引擎如 glm 角不炸出） */}
-          <EngineIcon engine={brandIcon} size={26} color={srcColor ?? c.textStrong} />
+              26×26/radius 6 裁切同桌面 img/svg 6px 圆角（方 LOGO 引擎如 glm 角不炸出）。
+              W-CODEX09（用户 1024 口径修正）：codex 字形头像面再 ×0.9=23.4（26×0.9，
+              RN 支持小数与 TeamDetailPage 10.8 同例，桌面 svg.codex-brand 面级 scale(0.9)
+              同口径；标签面 EngineBadge 不动保持 0.9 全局档）——外框 26 不缩仅图标内缩，
+              EngineIcon 居中渲染天然等效 */}
+          <EngineIcon engine={brandIcon} size={brandIcon === "codex" ? 23.4 : 26} color={srcColor ?? c.textStrong} />
         </View>
       ) : (
         <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
