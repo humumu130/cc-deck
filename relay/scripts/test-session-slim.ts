@@ -69,6 +69,42 @@ const BARE_COLOR = /#[0-9a-fA-F]{3,8}\b|rgba?\(/;
 
 console.log("== [t-7e0c6189] session list slim: worker sessions fold into team domain ==");
 
+// ---- §T W-TEAMSNC（2026-10-24 一期：chip 点亮+厚抽屉）----
+console.log("-- §T W-TEAMSNC chip data chain + thick drawer");
+const chipFn = fnBody("pmTeamChipOf");
+ok(chipFn.includes("out.push({ gid: p.id") && chipFn.includes('=== "archived"') && chipFn.includes("idle: running === 0"), "pmTeamChipOf returns team array [{gid,name,accent,idle}] (多团队多枚 chip)；archived 退役（E4）+全闲置灰（E5）");
+ok(sessionSrc.includes('data-team-chip="' + "' + esc(t.gid)") && sessionSrc.includes("✦ ") && stripComments(sessionSrc).includes('const teamChip = ev.target.closest("[data-team-chip]");'), "chip is a button (data-team-chip) with ✦ badge; delegated click opens drawer with stopPropagation (srow-more precedent)");
+ok(sessionSrc.includes('headTeams.map(teamChipMarkup)') && fnBody("renderHeader").includes("identity"), "detail head identity-cluster carries same chip (③，null 不占位)");
+ok(sessionSrc.includes('case "BOARD_UPDATED"') && fnBody("onSnapshot").includes("p.boards"), "BOARD_UPDATED frame + SNAPSHOT.boards consumed (drawer 在办概览，S.boards 唯一新消费点)");
+ok(sessionSrc.includes("syncDrawerOverlay") && css.includes(".desktop-screen.drawer-overlay .team-drawer { right: 0; z-index: 5; }") && css.includes(".drawer-mask"), "docked(≥1360)/overlay(<1360)+mask dual form (B 稿共存矩阵)");
+// 纯函数直跑：teamDrawerModelOf（拼装模型单测锚——板缺席降级/泳道归并/在办计数/roster 排序）
+const lanesConst = jsConst("TEAM_DRAWER_LANES");
+const legacyConst = jsConst("TEAM_DRAWER_LEGACY");
+const modelFn = fnBody("teamDrawerModelOf");
+const sortFn = fnBody("teamDrawerRosterSort");
+ok(lanesConst !== "" && legacyConst !== "" && modelFn !== "" && sortFn !== "", "teamDrawerModelOf pure functions extracted for direct run");
+const keepRoleSrcT = jsConst("SLIM_KEEP_ROLE"); // §T 自取（§A 的 keepRoleSrc 声明在后，前置引用 TDZ 崩）
+const drawerFx = new Function(`${keepRoleSrcT}\n${lanesConst}\n${legacyConst}\n${modelFn}\n${sortFn}\nreturn { teamDrawerModelOf, teamDrawerRosterSort };`)() as {
+  teamDrawerModelOf: (t: unknown, b: unknown, m: Map<string, unknown>) => Record<string, unknown>;
+  teamDrawerRosterSort: (a: Record<string, unknown>, b: Record<string, unknown>) => number;
+};
+const sess = new Map([["pm1", { status: "WORKING", title: "PM 会话", context_usage: 50000, context_limit: 1000000, artifacts: [{ path: "/a/w-teamsync.md", last_at: 20 }] }], ["w1", { status: "DONE", title: "worker1", artifacts: [] }], ["w2", { status: "WORKING", title: "worker2", context_usage: 900000, context_limit: 1000000, artifacts: [{ path: "/a/fix.md", last_at: 10 }] }]]);
+const teamFx = { id: "g1", name: "矩阵团队", members: [{ session_id: "w1", role: "worker" }, { session_id: "w2", role: "worker" }, { session_id: "pm1", role: "pm" }, { session_id: "x9", role: "观察员" }] };
+const md = drawerFx.teamDrawerModelOf(teamFx, [
+  { status: "todo", text: "legacy 待办" }, { status: "claimed", text: "进行中", gate: { reason: "等 Leader" } },
+  { status: "done", text: "完成" }, { status: "submitted", text: "待审" },
+], sess) as { rosterN: number; running: number; roster: { sid: string; pm: boolean; online: boolean }[]; lanes: { k: string; n: number }[]; activeN: number; keyTasks: unknown[]; artsCount: number; recentArts: { path: string }[] };
+ok(md.rosterN === 4 && md.running === 2, `model counts roster/running (got ${md.rosterN}/${md.running})`);
+ok(md.lanes.find((l) => l.k === "backlog")?.n === 1 && md.lanes.find((l) => l.k === "claimed")?.n === 1 && md.lanes.find((l) => l.k === "done")?.n === 1, "legacy todo/doing fold into five-lane vocabulary");
+ok(md.activeN === 3 && md.keyTasks.length === 1, "active = four unfinished lanes; gate entries surface as key tasks (≤3)");
+ok(md.artsCount === 2 && md.recentArts[0].path.endsWith("w-teamsync.md"), "artifacts aggregated cross-member, latest first");
+const sorted = md.roster.slice().sort(drawerFx.teamDrawerRosterSort);
+ok(sorted[0].sid === "pm1" && sorted[0].pm === true && md.roster.find((r) => r.sid === "x9")?.online === false, "roster sort: PM first; unsynced member stays as offline row (不隐行)");
+const mdNoBoard = drawerFx.teamDrawerModelOf(teamFx, null, sess) as { lanes: null; running: number };
+ok(mdNoBoard.lanes === null && mdNoBoard.running === 2, "boardEntries=null → lanes null (板未同步降级，不伪造 0/0/0)；running 无板依赖");
+const mdEmpty = drawerFx.teamDrawerModelOf(null, [], sess) as { rosterN: number; name: string };
+ok(mdEmpty.rosterN === 0 && mdEmpty.name === "", "null team degrades to empty model (defensive)");
+
 // ---- §A 过滤口径直跑（纯函数：SLIM_KEEP_ROLE + slimRosterOf + slimIsHidden）----
 console.log("-- §A filter semantics (direct run)");
 const keepRoleSrc = jsConst("SLIM_KEEP_ROLE");
@@ -102,7 +138,7 @@ console.log("-- §B css anchors");
 const entryCss = cssBlock(".team-entry");
 /* #193 顺手清债：team-entry 卡断言删除——.team-entry 选择器随 #103 团队域两段式重排退役（css/js 双源不存在） */
 const drawerCss = cssBlock(".team-drawer");
-ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 248px") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column, re-anchors when inspector collapses");
+ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 296px") && css.includes(".team-drawer.open {") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column (W-TEAMSNC ④ 296px + .open transition), re-anchors when inspector collapses"); // W-TEAMSNC ④：248→296 + class 动效（.open 是独立规则，断言走全量 css 非 drawerCss 单块）
 ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && css.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
 ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".t-expand.has-unread::after").includes("animation: slimPulseKf"), "inspector member chips + unread pulse styles exist (V8R+ ③未读点迁 t-expand 角标)");
 
@@ -132,7 +168,7 @@ ok(snapFn.includes("S.slimUnread = new Map();") && snapFn.includes('localStorage
 
 // ---- §F 直开路径 ----
 console.log("-- §F direct-open path");
-ok(sessionSrc.includes("window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer });"), "slim UI api exposed cross-domain");
+ok(sessionSrc.includes("window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected })"), "slim UI api exposed cross-domain (W-TEAMSNC ① +selectedSid：建团表单 PM 带队档取当前选中会话)");
 const openFn = fnBody("slimOpenSession");
 ok(openFn.includes("inputDrafts.set(S.selected, UI.input.value)") && openFn.includes("renderMyList(); // 直聊中的 worker 会话临时出列") && openFn.includes("b2Toast(\"成员会话不在当前来源\")"), "direct-open reuses selection chain: drafts, temporary listing, missing-session toast");
 const memberAnchor = `data-team-member-session="' + escape(member.session_id)`;
@@ -143,13 +179,13 @@ ok(sessionSrc.includes("slimMarkSeen(gid); // 进团队域即清未读") && sess
 // ---- §G 检查器团队块 + 第四列 ----
 console.log("-- §G inspector block + fourth column");
 const inspFn = fnBody("renderInspector");
-ok(inspFn.includes("slim-team-block") && inspFn.includes("团队成员 · ") && inspFn.includes("data-slim-open=") && inspFn.includes("展开成员会话 ⤢"), "inspector renders team-member block with chips + drawer link for rostered session");
+ok(inspFn.includes("slim-team-block") && inspFn.includes("团队成员 · ") && inspFn.includes("data-slim-open=") && inspFn.includes("团队信息 ⤢"), "inspector renders team-member block with chips + drawer link for rostered session (W-TEAMSNC ④ 链接文案随厚抽屉升级)");
 ok(inspFn.includes('class="member-chip' + "' + (unread ? \" unread\" : \"\")") || inspFn.includes('(unread ? " unread" : "")'), "unread members highlight in inspector chips");
 const drawerFn = fnBody("renderSlimDrawer");
-const drawerCardFn = fnBody("slimDrawerCardMarkup");
-ok(drawerCardFn.includes(`data-slim-open="' + item.id`) && !drawerCardFn.includes("data-session-card"), "drawer card markup carries data-slim-open (not data-session-card — bypasses ground click chain)");
-ok(drawerFn.includes("cc-deck-005-slim-drawer") && drawerFn.includes('el.hidden = true'), "drawer collapses + persists when team no longer exists");
-ok(sessionSrc.includes('slimDrawerEl.querySelectorAll(".queue-card[data-slim-open]")'), "per-second ticker also drives drawer cards");
+/* W-TEAMSNC ④：旧成员会话卡列（slimDrawerCardMarkup）随厚抽屉退役——roster 行 data-slim-open
+   直开吸收职能；断言改锚新四区链 */
+ok(drawerFn.includes('el.classList.remove("open")') && drawerFn.includes("cc-deck-005-slim-drawer") && drawerFn.includes("requestAnimationFrame"), "drawer collapses via .open class (keep-mounted 动效) + persists when team no longer exists");
+ok(fnBody("teamDrawerMarkup").includes("dr-sec") && fnBody("teamDrawerMarkup").includes("lane-bar") && fnBody("teamDrawerMarkup").includes("roster-row") && fnBody("teamDrawerMarkup").includes("entry-btns") && fnBody("teamDrawerMarkup").includes("data-team-jump"), "thick drawer four zones render (概览/roster/输出物/跳域钮)");
 
 // ---- §H 结构闸 ----
 console.log("-- §H structure gates");

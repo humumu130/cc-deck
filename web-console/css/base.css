@@ -2010,6 +2010,14 @@
     #d-session .team-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 11em; min-width: 0; padding: 1px 7px 1px 5px; border: transparent; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: transparent; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--fs-micro); line-height: 16px; white-space: nowrap; }
     #d-session .team-chip i { flex: none; width: 3px; height: 9px; border-radius: 2px; background: var(--team-accent, var(--brand)); }
     #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    /* W-TEAMSNC ②：chip button 化（button reset+hover 微抬▸+focus 光环+idle 置灰+展开态） */
+    #d-session button.team-chip { cursor: pointer; transition: border-color .12s ease, background-color .12s ease, color .12s ease; }
+    #d-session button.team-chip::after { content: "▸"; margin-left: 1px; color: var(--faint); font-size: 8px; opacity: 0; transition: opacity .12s ease; }
+    #d-session button.team-chip:hover { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 62%, transparent); background: color-mix(in srgb, var(--team-accent, var(--brand)) 16%, transparent); color: var(--text); }
+    #d-session button.team-chip:hover::after, #d-session button.team-chip[aria-expanded="true"]::after { opacity: 1; }
+    #d-session button.team-chip[aria-expanded="true"] { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 62%, transparent); background: color-mix(in srgb, var(--team-accent, var(--brand)) 15%, transparent); }
+    #d-session button.team-chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+    #d-session .team-chip.idle { opacity: .58; } /* E5 全闲团队置灰（title 补「团队空闲」） */
     #d-session .srow-r3 > * { flex: none; margin-top: 0; }
     #d-session .srow-r3 .tag { padding: 1px 5px; font-size: var(--srow-badge-size); }
     #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .source-badge { padding: 1px 4px; font-size: var(--srow-badge-size); }
@@ -2408,16 +2416,54 @@
     /* .slim-unread-dot 本体随 V8R+ ③退役（未读点迁 t-expand.has-unread::after 角标，
        slimPulseKf 动画复用）；keyframes 留档（角标动画同引） */
     @keyframes slimPulseKf { 0% { box-shadow: 0 0 0 0 var(--glow-brand); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-    /* [t-7e0c6189] 第四列 team-drawer：该团队 worker/QA 会话列表（默认收起零占位，展开 248px；
-       覆盖式 absolute 贴检查器左缘——检查器收起时贴 42px 柄右缘） */
-    .team-drawer { position: absolute; top: 0; bottom: 0; right: var(--inspector-w, 320px); z-index: 3; display: flex; flex-direction: column; width: 248px; background: var(--queue-deep); border-left: 1px solid var(--line); box-shadow: -5px 0 18px var(--panel-shadow); }
+    /* [t-7e0c6189] 第四列 team-drawer —— W-TEAMSNC ④ 厚化（B 稿主战方案）：团队信息抽屉
+       （四区=在办概览/成员 roster/输出物/跳团队域钮），296px + .open class 滑入动效（替代
+       [hidden] 硬切；关态 keep-mounted visibility:hidden 保「收起态零 DOM」优化语义）。
+       docked（≥1360px）：贴检查器左缘（检查器收起贴 42px 柄），与第三列并置无遮罩；
+       overlay（<1360px，.drawer-overlay 类挂 #d-session）：贴屏右缘盖检查器+半透明遮罩 */
+    .team-drawer { position: absolute; top: 0; bottom: 0; right: var(--inspector-w, 320px); z-index: 3; display: flex; flex-direction: column; width: 296px; background: var(--queue-deep); border-left: 1px solid var(--line); box-shadow: -5px 0 18px var(--panel-shadow); visibility: hidden; transform: translateX(14px); transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s linear .22s; }
+    .team-drawer.open { visibility: visible; transform: none; transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s; }
     .desktop-screen.inspector-collapsed .team-drawer { right: 42px; }
-    .team-drawer[hidden] { display: none; }
+    .desktop-screen.drawer-overlay .team-drawer { right: 0; z-index: 5; } /* overlay 态：贴屏右缘盖检查器 */
+    .drawer-mask { position: absolute; inset: 0; z-index: 4; background: color-mix(in srgb, var(--bg0) 55%, transparent); } /* 仅 overlay+开态挂载（syncDrawerOverlay 单口增删）；配色 pair-pop-backdrop 同款 token */
+    .team-drawer[hidden] { display: none; } /* 首帧兜底（接管前 hidden 态不占位；JS 接管后恒 false） */
+    @media (prefers-reduced-motion: reduce) { .team-drawer { transition: opacity .12s linear, visibility 0s linear .12s; transform: none; opacity: 0; } .team-drawer.open { opacity: 1; transition: opacity .12s linear, visibility 0s; } }
     .team-drawer .drawer-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
     .team-drawer .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
     .team-drawer .drawer-head .d-cnt { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
-    .team-drawer .drawer-body { flex: 1; overflow: hidden auto; padding: 6px 4px 8px 6px; }
+    .team-drawer .drawer-body { flex: 1; overflow: hidden auto; padding: 6px 6px 10px; }
     .team-drawer .queue-card { border: 1px solid transparent; }
+    /* W-TEAMSNC ④ 四区内容样式 */
+    .team-drawer .dr-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin: 10px 2px 5px; color: var(--text-strong); font-size: 11.5px; font-weight: 650; }
+    .team-drawer .dr-sec:first-child { margin-top: 4px; }
+    .team-drawer .dr-sub { color: var(--faint); font-size: var(--fs-micro); font-weight: 400; }
+    .team-drawer .readonly-banner.slim { margin: 2px 2px 4px; padding: 6px 8px; font-size: var(--fs-C); }
+    .team-drawer .lane-bar { display: flex; gap: 2px; height: 7px; margin: 2px 2px 5px; border-radius: 4px; overflow: hidden; }
+    .team-drawer .lane-bar i { min-width: 2px; border-radius: 1px; } /* 段宽走内联 flex-grow（team-domain board-progress 同语汇） */
+    .team-drawer .lane-bar i.backlog { background: var(--p-backlog); }
+    .team-drawer .lane-bar i.claimed { background: var(--p-claimed); }
+    .team-drawer .lane-bar i.submitted { background: var(--p-submitted); }
+    .team-drawer .lane-bar i.ready_to_install { background: var(--p-ready); }
+    .team-drawer .lane-bar i.done { background: var(--p-done); }
+    .team-drawer .lane-legend { display: flex; flex-wrap: wrap; gap: 4px 9px; margin: 0 2px 4px; color: var(--dim); font-size: var(--fs-micro); }
+    .team-drawer .lane-legend span { display: inline-flex; align-items: center; gap: 3px; }
+    .team-drawer .lane-legend i { width: 6px; height: 6px; border-radius: 2px; background: var(--legend-color, var(--faint)); }
+    .team-drawer .lane-legend b { color: var(--text-strong); font: var(--fs-B) var(--mono); }
+    .team-drawer .key-task-head { margin: 5px 2px 3px; color: var(--error); font-size: var(--fs-micro); font-weight: 650; }
+    .team-drawer .key-task { margin: 2px; padding: 4px 7px; border-left: 2px solid var(--error); border-radius: 4px; background: color-mix(in srgb, var(--error) 8%, transparent); color: var(--dim); font-size: var(--fs-micro); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .team-drawer .roster-row { display: flex; align-items: center; gap: 6px; margin: 1px 0; padding: 4px 7px; border-radius: 6px; cursor: pointer; }
+    .team-drawer .roster-row:hover { background: var(--hover); }
+    .team-drawer .roster-row .lamp-dot { flex: none; }
+    .team-drawer .roster-row .rr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--fs-C); }
+    .team-drawer .roster-row .rr-role { flex: none; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: var(--fs-micro); }
+    .team-drawer .roster-row .rr-ctx { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
+    .team-drawer .roster-row.offline { opacity: .55; } /* 异源未同步：灰行不隐行（#99件5 口径） */
+    .team-drawer .dr-arts { display: flex; flex-direction: column; gap: 2px; }
+    .team-drawer .dr-art { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin: 1px 2px; color: var(--dim); font-size: var(--fs-micro); }
+    .team-drawer .dr-art .da-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .team-drawer .entry-btns { display: flex; gap: 6px; margin: 10px 2px 4px; }
+    .team-drawer .dr-jump { flex: 1; padding: 5px 0; border: 1px solid var(--tag-border); border-radius: 7px; background: var(--tag-bg); color: var(--tag-ink); cursor: pointer; font-size: var(--fs-C); }
+    .team-drawer .dr-jump:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
     /* [t-7e0c6189] 团队域成员卡可直开：hover 亮边 + 右上角「↗ 直开」角标显形 */
     .member-card[data-team-member-session] { cursor: pointer; position: relative; }
     .member-card[data-team-member-session]::after { content: "↗ 直开"; position: absolute; right: 9px; top: 8px; color: var(--faint); font: 9.5px var(--mono); opacity: 0; transition: opacity .12s ease; }
