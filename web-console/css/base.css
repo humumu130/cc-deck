@@ -335,7 +335,10 @@
        （实现同为这三字段+会话 ID；内容/正文搜索成本大，开放问题见回执） */
     .session-list-tools .search-wrap { position: relative; display: flex; min-width: 0; flex: 1; }
     .session-list-tools .search-wrap input { width: 100%; padding-right: 26px; }
-    .session-list-tools .search-glass { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; color: var(--faint); pointer-events: none; }
+    /* W-SEARCHROW ①：补描边渲染（icon-inline 同参数）——search-glass 未挂 icon-inline 类，
+       SVG 默认 fill 黑把 #icon-search 的 circle r7 填成实心黑点（用户 1024 实锤，W-NQA F3
+       同族）；补 fill:none+stroke 后圆环+斜柄显形=斜向放大镜，颜色仍随 var(--faint) 占位灰 */
+    .session-list-tools .search-glass { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; color: var(--faint); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
     /* UIPOLISH2 件八（2026-10-11 用户反馈）：筛选钮「漏斗图标+当前态文字」组合——纯文字「全部」
        不可读出这是筛选器；active 态品牌色描边+淡彩底与列表视觉语言同源（--brand-soft 同 avatar.pm） */
     .session-list-tools button[data-session-filter] { display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent; padding: 0 9px; border-radius: 999px; background: var(--surface2); }
@@ -1645,8 +1648,8 @@
     .notify-row-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
     .notify-source-kicker {color: var(--dim); font: var(--fs-C) var(--mono);}
     .notify-source-kicker .icon-inline { width: 12px; height: 12px; vertical-align: -2px; margin-right: 3px; }
-    [data-session-source-label] { display: inline-flex; align-items: center; gap: 5px; }
-    [data-session-source-label] .icon-inline { width: 13px; height: 13px; }
+    /* W-SEARCHROW ②：[data-session-source-label] 两规则随死 stub 元素删除（原
+       session-list-tools 行尾的电脑图标：零 JS 引用零交互零动态更新，纯 B2 骨架遗留） */
     .notify-source-card[data-notify-active="false"] .notice-icon, .mobile-notify-card .avatar:has(.icon-info) { color: var(--dim); background: var(--surface2); }
     section.artifact-source .source-badge::before { display: none; }
     section.artifact-source .source-badge.unreachable { color: var(--working); border-color: var(--working); background: transparent; }
