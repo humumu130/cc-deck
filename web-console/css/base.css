@@ -2010,8 +2010,7 @@
     #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     #d-session .srow-r3 > * { flex: none; margin-top: 0; }
     #d-session .srow-r3 .tag { padding: 1px 5px; font-size: var(--srow-badge-size); }
-    #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .source-badge { padding: 1px 4px; font-size: var(--srow-badge-size); }
-    #d-session .srow-r3 .engine-icon { width: 9px; height: 9px; }
+    #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .source-badge { padding: 1px 6px; font-size: var(--srow-badge-size); } /* #248：pad 4→6 与详情 head 拉平 */
     /* srow-cta「处理」浮层化（用户直馈 2026-10-05 两轮坐实：side 容器 min-width:22px 占文档流宽，
        待处理组时间右缘整体左移 22px 与普通组不齐——CTA 改绝对定位挂卡，出现/消失零布局位移；
        未读数角标 srow-n 已按用户拍板删除，需行动统计由通知域源分组头承载，行内不重复） */
