@@ -540,10 +540,7 @@
     #d-session .head-sub .head-ctx-meter { height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; font-size: var(--fs-D); margin: 0 3px; } /* 件十八：水位条前后呼吸位 */
     #d-session .head-sub .head-ctx-meter .ctx-mini-band i { height: 4px; }
     #d-session .head-sub [data-sub-time] { font-size: var(--fs-C); }
-    #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 3px; }
-    #d-session .workspace-title-row .identity-cluster .engine-badge .engine-icon { width: 10px; height: 10px; }
-    #d-session .workspace-title-row .identity-cluster .engine-badge .badge-brand svg,
-    #d-session .workspace-title-row .identity-cluster .engine-badge .badge-brand img { width: 10px; height: 10px; } /* #239：详情徽章品牌图跟随现行 10px 档 */
+    #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; } /* #248：与列表卡引擎徽章同规格（图标 10.8/间距 gap4/pad6 全统一），10px 档专用覆盖退役 */
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
     #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
     #d-session #session-extmode-capsule[data-ext-on] .cap-dot { background: var(--ok); box-shadow: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); } /* 开态绿点示 approvals 正在推送 */
@@ -1868,8 +1865,8 @@
        意义，移除掉简洁」（品牌图/codex 修复后色点更无存在必要；三条 :has 隐藏规则
        同批清，隐藏条件因 b2EngineBadge 未包 badge-brand 从未生效过） */
     .engine-badge .badge-brand { display: inline-flex; align-items: center; }
-    .engine-badge .badge-brand svg, .engine-badge .badge-brand img { width: 12px; height: 12px; display: block; }
-    .engine-badge .engine-icon { width: 12px; height: 12px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .engine-badge .badge-brand svg, .engine-badge .badge-brand img { width: 10.8px; height: 10.8px; display: block; } /* #248：12×0.9=10.8，列表/详情 head 统一档 */
+    .engine-badge .engine-icon { width: 10.8px; height: 10.8px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .engine-badge.claude { --engine-color: var(--engine-claude); }
     .engine-badge.codex { --engine-color: var(--engine-codex); }
     .engine-badge.trae { --engine-color: var(--engine-trae); }
@@ -1889,6 +1886,7 @@
     body[data-source-count="1"] .team-entry .source-badge, body[data-source-count="1"] .inspector .source-badge.insp-src { display: none; } /* t25fix #5：团队卡/详情面板源徽章同门控（单源省略，聚合恒显） */
     /* #245 B：项目/团队列表卡源胶囊同门（单源隐藏/聚合显示，对齐会话列表口径） */
     body[data-source-mode="single"] .team-projects .src-cap, body[data-source-mode="single"] [data-project-key] .src-cap { display: none !important; }
+    body[data-source-mode="single"] #d-session .queue-card .src-cap, body[data-source-mode="single"] #m-inbox .mobile-card .src-cap { display: none; } /* #248：单源会话卡源胶囊隐藏（srclabelmig 只门控了项目/团队卡，会话卡漏门） */
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge .icon-inline { width: 12px; height: 12px; }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
