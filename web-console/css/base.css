@@ -1884,9 +1884,15 @@
        聚合模式但数据单源同样隐藏；多源数据落地后自动回归 */
     body[data-source-count="1"] #d-session .queue-card .source-badge { display: none; }
     body[data-source-count="1"] .team-entry .source-badge, body[data-source-count="1"] .inspector .source-badge.insp-src { display: none; } /* t25fix #5：团队卡/详情面板源徽章同门控（单源省略，聚合恒显） */
-    /* #245 B：项目/团队列表卡源胶囊同门（单源隐藏/聚合显示，对齐会话列表口径） */
-    body[data-source-mode="single"] .team-projects .src-cap, body[data-source-mode="single"] [data-project-key] .src-cap { display: none !important; }
-    body[data-source-mode="single"] #d-session .queue-card .src-cap, body[data-source-mode="single"] #m-inbox .mobile-card .src-cap { display: none; } /* #248：单源会话卡源胶囊隐藏（srclabelmig 只门控了项目/团队卡，会话卡漏门） */
+    /* #245 B：项目/团队列表卡源胶囊同门（单源隐藏/聚合显示，对齐会话列表口径）；
+       #248 追缺（W-SRCCOUNT，1024 装机实锤）：视角=聚合但数据单源（mode=aggregate ∧
+       count=1，两台 relay 同名/仅一台在线残留）时旧 mode 单门放行 src-cap 全显——
+       语义=「无第二个源可辨则不显标」，各门补 data-source-count="1" 孪生选择器
+       （写点 session-domain B2 渲染恒写，sd:1214） */
+    body[data-source-mode="single"] .team-projects .src-cap, body[data-source-mode="single"] [data-project-key] .src-cap,
+    body[data-source-count="1"] .team-projects .src-cap, body[data-source-count="1"] [data-project-key] .src-cap { display: none !important; }
+    body[data-source-mode="single"] #d-session .queue-card .src-cap, body[data-source-mode="single"] #m-inbox .mobile-card .src-cap,
+    body[data-source-count="1"] #d-session .queue-card .src-cap, body[data-source-count="1"] #m-inbox .mobile-card .src-cap { display: none; } /* #248：单源会话卡源胶囊隐藏（srclabelmig 只门控了项目/团队卡，会话卡漏门） */
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge .icon-inline { width: 12px; height: 12px; }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
@@ -2263,8 +2269,10 @@
     .mobile-settings-detail { padding-top: 3px; }
     .mobile-settings-detail h3 {margin: 12px 0; color: var(--text-strong); font-size: var(--fs-page);}
     .settings-detail-back { margin-bottom: 4px; }
-    /* W-TOPBAR ③：#d-session .source-badge 分段退役（head 不再挂数据源胶囊，顶栏唯一身份） */
-    body[data-source-mode="single"] #d-project .workspace-title-row .source-badge, body[data-source-mode="single"] #m-detail .mobile-head .source-badge { display: none; }
+    /* W-TOPBAR ③：#d-session .source-badge 分段退役（head 不再挂数据源胶囊，顶栏唯一身份）；
+       #248 追缺（W-SRCCOUNT）：详情 head 同族补 count 孪生——聚合∧单源数据同样隐藏 */
+    body[data-source-mode="single"] #d-project .workspace-title-row .source-badge, body[data-source-mode="single"] #m-detail .mobile-head .source-badge,
+    body[data-source-count="1"] #d-project .workspace-title-row .source-badge, body[data-source-count="1"] #m-detail .mobile-head .source-badge { display: none; }
     html[data-source-mode="aggregate"] .identity-cluster { flex-direction: row-reverse; justify-content: flex-end; }
     ::-webkit-scrollbar { width: 9px; height: 9px; }
     ::-webkit-scrollbar-track { background: var(--scroll-track); }
