@@ -432,7 +432,11 @@
        transform-origin 默认盒中心即居中。经 grep 证伪：详情头无独立品牌头像容器
        （brandIconHtml 唯一落点=identity-cluster 徽章=标签面禁入），头像面仅两处=列表卡
        srow-ava + 消息作者 ai-ava */
-    .srow-ava svg.codex-brand, .message-author .ai-ava svg.codex-brand { transform: scale(0.9); }
+    .srow-ava svg.codex-brand, .message-author .ai-ava svg.codex-brand { transform: scale(0.9); transform-origin: center; } /* W-CODEXCENTER：origin 显式中位——WKWebView 系 SVG transform-origin 历史=左上，scale 向左上收缩=圆内偏上（Chrome 本就中位零变化） */
+    /* W-CODEXCENTER（1024 实锤量测）：ai-ava 品牌图盒 flex 居中——badge-brand 无 display
+       规则时 inline svg 基线隙把 24 盒顶高，字形圆内偏上 2.84px（CDP 量测）；img 品牌同
+       隙潜在受累一并归中，尺寸规则（865 行 24px）不动 */
+    .message-author .ai-ava .badge-brand { display: inline-flex; align-items: center; justify-content: center; }
     /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
        黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
        灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */
