@@ -225,7 +225,7 @@ async function main(): Promise<void> {
   check(listSrc.includes("bellBadge"), "bbadge 红底白字计数（display 切换常挂）");
   check(listSrc.includes("bellBadgeOff: { display: \"none\" }"), "badge 隐藏态不插拔（P0 加固口径）");
   check(!listSrc.includes("通知{notifPending.length > 0 ?"), "统计行「通知 · N」胶囊退役（入口唯一化）");
-  check(listSrc.includes('<EngineBadge engine={s.engine} size="sm" />'), "r3 徽章行引擎徽（任务书「引擎源徽章行」）");
+  check(listSrc.includes('<EngineBadge engine={effEngine ?? undefined} size="sm" />'), "r3 徽章行引擎徽（任务书「引擎源徽章行」；W-MOBLIST 跟改：engine 兜底走 effEngine 推断链）");
   check(listSrc.includes("srowR3"), "r3 三行制结构保持（定版通栏行不回退）");
   check(!/borderRadius: 13, borderWidth: 1, backgroundColor: c\.panel, borderColor: c\.line,\s*paddingHorizontal: 14/.test(listSrc), "通栏行形态未回退描边卡（1015 定版锚）");
 

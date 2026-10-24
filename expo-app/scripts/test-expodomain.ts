@@ -269,9 +269,9 @@ async function main(): Promise<void> {
   check(appSrc.includes("onNewInDir") && appSrc.includes("onViewSessionsInDir"), "App 接线项目卡两动作");
   // A3-5：状态 tag 退役 + r3 条件渲染
   check(!/function StatusTag/.test(listSrc) && !/<StatusTag/.test(listSrc), "A3-5 状态 tag 退役");
-  check(listSrc.includes("r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(s.engine) ? ("), "A3-5 r3 全空整行不渲染（r3Meta 重构形态锚——预存红跟改：W-ASKFIX b657569 同款，未进本基线）");
+  check(listSrc.includes("r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? ("), "A3-5 r3 全空整行不渲染（r3Meta 重构形态锚——W-MOBLIST 跟改：engine 兜底走 effEngine 推断链）");
   // A3-7：头像引擎淡彩
-  check(listSrc.includes('ENGINE_ACCENT[s.engine ?? "claude"]'), "A3-7 头像底色=引擎品牌色淡彩");
+  check(listSrc.includes('ENGINE_ACCENT[effEngine ?? "claude"]'), "A3-7 头像底色=引擎品牌色淡彩（W-MOBLIST 跟改：底色随推断链）");
   // A4-4：信息行序 目录→水位→活跃时间
   const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
   check(detailSrc.includes("A4-4 查漏"), "A4-4 信息行序注记");
