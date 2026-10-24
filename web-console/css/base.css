@@ -426,6 +426,13 @@
        AvaBadge size 18→29 同口径 */
     .srow-ava .ava-brand img, .srow-ava .ava-brand svg { width: 26px !important; height: 26px !important; border-radius: 6px; } /* #248 用户 1024：0.9x（原 29 过大） */
     .srow-ava .ava-brand img { object-fit: contain; } /* W-CSSMICRO2：crab 191×150 非方图被 26 方盒压扁 21% 矫正（只限 img，svg 矢量无比例损伤不动） */
+    /* W-CODEX09（用户 1024 口径修正）：Codex 字形头像面再 ×0.9——基础 SVG 的 g[transform]
+       0.9 全局档不动（引擎标签 .engine-badge .badge-brand 面【禁止】进本规则，保持 0.9 档），
+       此处面级 CSS transform 与字形内 g 变换叠加=头像内累计 0.81（26px 盒实测渲染 ~23.4px）；
+       transform-origin 默认盒中心即居中。经 grep 证伪：详情头无独立品牌头像容器
+       （brandIconHtml 唯一落点=identity-cluster 徽章=标签面禁入），头像面仅两处=列表卡
+       srow-ava + 消息作者 ai-ava */
+    .srow-ava svg.codex-brand, .message-author .ai-ava svg.codex-brand { transform: scale(0.9); }
     /* 1014 词表定版重写（推翻 W-V8 批2a 的 working=绿呼吸对调——用户最新拍板覆盖）：
        黄闪=工作中（st-blink 明灭非呼吸）/绿=空闲/橙=阻塞（等待确认）/红=出错/
        灰=关闭退役（缺省同）。类名与 JS 状态映射零动，色值层单点换血到 --st-* 五 token */
