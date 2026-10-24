@@ -319,12 +319,10 @@
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
                     const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
-                    // #236 D（看板陈旧·用户口径③）：完成泳道默认折叠为归档区——已收割任务
-                    // 不再占据板面主视野（10-11 时代旧卡整列刷存在感=用户实测）；点开仍可查
-                    // 全量，数据零删除（收敛写面在 relay 台账扫，见 convergeBoardsWithDispatchLog）
-                    if (status === "done" && items.length) {
-                      return '<details class="lane-archive" style="flex-basis:100%;min-width:0"><summary>归档 · ' + label + " <b>" + items.length + "</b> 张（点击展开）</summary>" + lane + "</details>";
-                    }
+                    // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
+                    // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
+                    // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
+                    // 默认展开同款样式。数据零删除不变（板面照常全量展示已收割任务）
                     return lane;
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
