@@ -863,6 +863,7 @@
     .message-author .ai-ava { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--dim); font-size: 14px; }
     /* #243 D：消息流对方头像品牌图满铺（28px 圆 ~85%，对齐列表头像口径） */
     .message-author .ai-ava .badge-brand svg, .message-author .ai-ava .badge-brand img { width: 24px; height: 24px; }
+    .message-author .ai-ava .badge-brand img { object-fit: contain; } /* W-AVAFIX：crab 191×150 非方图被 24 方盒纵向拉长矫正（1024 装机实锤；渲染 24×18.85 与列表 26×20.4 同比例；img-only，svg 矢量无比例损伤不动） */
     .message-author strong {font-size: var(--fs-B);}
     .message-author .role-label {color: var(--faint); font-size: var(--fs-micro); font-weight: 400;}
     /* W-TOPBAR ⑨①：AI 时间戳贴名字（旧版 .ai-head 行内 .mt：去 margin-left:auto 推右，
