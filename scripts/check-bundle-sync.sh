@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# bundle 同步护栏：发版/构建前必跑——校验三处 relay.mjs 一致 + git 工作区干净
-# 不一致立即 exit 1（2026-09-14 版本链断裂事故的防再犯护栏）
+# bundle 同步护栏：发版/构建前必跑——校验三处 relay.mjs 一致 + 插件 Web 副本全量
+# 清单一致 + git 工作区干净。不一致立即 exit 1（2026-09-14 版本链断裂事故的防再犯护栏）
+# 用法：scripts/check-bundle-sync.sh [--strict] [--check-all]
+#   --strict     把「已装 app 落后」警告升红（发版前最终口径）
+#   --check-all  加生产面全量对照（relay-service + Nova app，日常闸不碰生产面，
+#                防落后分支线误报——发版链的生产面验证由 scripts/deploy-web.sh
+#                V1 逐面锚承担，本开关供人工全量核对）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# --check-all：加对 relay-service/Nova 两个**生产部署面**的逐文件对比（W-DEPLOYSSOT4
-# #237）。默认不开——日常闸只锁「仓内一致性」（root vs cc-plugins），部署面漂移由
-# deploy-web.sh 同步+check-deploy-complete 闸管；发版链（release-test.sh）带本开关，
-# 防止「日常碰生产面」（收割中期部署面本来就是旧的，日常闸对它红=狼来了）
-STRICT=0; CHECK_ALL=0
-for a in "$@"; do
-  case "$a" in
-    --strict) STRICT=1 ;;
-    --check-all) CHECK_ALL=1 ;;
-    *) echo "⚠️  未知参数 ${a}（忽略；支持 --strict/--check-all）" ;;
-  esac
-done
+STRICT=0 CHECK_ALL=0
+for a in "$@"; do case "$a" in
+  --strict) STRICT=1 ;;
+  --check-all) CHECK_ALL=1 ;;
+  *) echo "未知参数: ${a}（支持 --strict --check-all）"; exit 1 ;;
+esac; done
 
 # 哈希工具用 shasum -a 256（P1b 修复，2026-10-05）：Mac 无 PATH 内 md5（原 md5 -q
 # 两处全落 MISSING → B1=MISSING=B2 假通过，真漂移检不出+误报「bundle 不存在」）；
@@ -24,100 +23,75 @@ done
 B1=$( { shasum -a 256 cc-plugins/plugins/cc-deck/scripts/relay.mjs 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 B2=$( { shasum -a 256 desktop-tauri/src-tauri/resources/relay.mjs 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
 B3=$( { shasum -a 256 '/Applications/CC Deck.app/Contents/Resources/resources/relay.mjs' 2>/dev/null || echo "not-installed not-installed"; } | awk '{print $1}')
-# 插件 Web 副本对（M13-7 补：此前 sh 面只锁 relay.mjs 两份——web-console/index.html 副本
-# 漂移只有 test-p1-build 锁，而本脚本是发版前必跑闸；副本过期=插件部署网页端 503/旧界面，
-# #150 同坑。源→副本单源复制，一致性=hash 全等）
-# 双壳两对（新旧壳共存，2026-10-07 用户拍板）：/app2 的 005 新壳（index-005.html）同样
-# 进插件包，副本漂移=插件 /app2 503 或旧界面，同口径同查
-W1=$( { shasum -a 256 web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-W2=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-W3=$( { shasum -a 256 web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-W4=$( { shasum -a 256 cc-plugins/plugins/cc-deck/web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-# relay-service 静态面（2026-10-11 用户实锤 P0：桌面壳页面从 relay HTTP 加载=
-# ~/.cc-deck/relay-service/web-console/，该目录 10/8 后漏同步停在 test.4-dev——
-# 用户看了一整天旧界面，15 件修复「全没解决」实为此幻象。部署脚本只拷 relay.mjs
-# 不拷 web-console 的盲区在此堵死：源≠部署位即红，修复=cp 同步）
-S1=$( { shasum -a 256 ~/.cc-deck/relay-service/web-console/index.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-S2=$( { shasum -a 256 ~/.cc-deck/relay-service/web-console/index-005.html 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+# 插件 Web 副本对（#237 全量 byte 闸，2026-10-23）：此前只锁 index.html +
+# index-005.html 两个文件——css/、js/ 全目录零 hash 零闸（全仓 grep 证实无任何
+# 脚本校验 js/ 子目录副本），三次同族漂移（#150 / #123 / 0927 幻象）闸不住的根源。
+# 现按 git ls-files 动态全量清单逐文件对比（新增文件自动入闸，防漏锁）；site/
+# （营销站，只随 S4 CF 整目录上传）与 wrangler.jsonc（旧 CF 杂件待清）不进副本
+# 口径，与 build-plugin.mjs 拷贝清单一致。修复口径已变：副本=纯构建产物禁手工
+# 编辑，漂移一律重跑 relay/scripts/build-plugin.mjs（或 scripts/deploy-web.sh
+# 单命令同步全部面）。
+# relay-service / Nova 生产面（原 S1/S2 + #123 Nova 段）移入 --check-all：日常闸
+# 只对仓库内两份（root vs cc-plugins），不碰生产面——落后分支线的工作区根源对
+# 新鲜部署面（常已刷至更新发版线）必红，2026-10-23 实测「狼来了」；发版链的
+# 生产面验证由 deploy-web.sh V1 逐面锚承担，--check-all 供人工全量核对
+WC_LIST=$(git ls-files web-console | grep -v '^web-console/site/' | grep -v '^web-console/wrangler\.jsonc$' | sed 's|^web-console/||')
+[ -n "$WC_LIST" ] || { echo "❌ git ls-files web-console 为空（仓库异常？）"; exit 1; }
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
 [ "$B2" = "$B3" ] || { echo "⚠️  desktop-tauri resources ≠ /Applications 已装（Mac app 未热替换最新，构建前可接受，发版前必须替换）"; [ "$STRICT" = "1" ] && FAIL=1; }
 [ "$B1" = "MISSING" ] && { echo "❌ cc-plugins bundle 不存在（先跑 build-plugin.mjs）"; FAIL=1; }
-[ "$W1" = "$W2" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
-[ "$W1" = "MISSING" ] && { echo "❌ web-console/index.html 源不存在"; FAIL=1; }
-[ "$W3" = "$W4" ] || { echo "❌ 插件 Web 副本 ≠ web-console/index-005.html 源（重跑 build-plugin.mjs 刷新）"; FAIL=1; }
-[ "$W3" = "MISSING" ] && { echo "❌ web-console/index-005.html 源不存在"; FAIL=1; }
-if [ "$CHECK_ALL" = "1" ]; then
-  [ "$W1" = "$S1" ] || { echo "❌ relay-service 静态面 ≠ web-console/index.html 源（跑 scripts/deploy-web.sh 同步后重启壳）"; FAIL=1; }
-  [ "$W3" = "$S2" ] || { echo "❌ relay-service 静态面 ≠ web-console/index-005.html 源（跑 scripts/deploy-web.sh 同步后重启壳）"; FAIL=1; }
-  [ "$S1" = "MISSING" ] && { echo "⚠️  relay-service/web-console 不存在（relay-service 未部署？）"; }
-fi
-
-# web 资产成对部署闸（#123，2026-10-15 事故的防再犯——test.27 第二波收割后忘重拷
-# index-005.html 进 Nova app，用户看到「重启没变化」）：三面口径——
-#   面① CONSOLE_VERSION 烙印一致且=VERSION：由下方 version.mjs --check 落点
-#      「web-console CONSOLE_VERSION」+「web-console-005 CONSOLE_VERSION」覆盖
-#      （单一事实源，不在本段重复实现——两落点互一致是其推论）；
-#   面② cc-plugins 副本=源：上方 W1/W2、W3/W4（既有）；
-#   面③ Nova app bundle 面（本段新增）：/Applications/CC Deck Nova.app 的
-#      web-console 两文件与源 SHA 全等。app 缺席=SKIP 提示不红（CI/非本机场景）；
-#      漂移→红+文件+面+diff 摘要首行（1015 形态：纯 CONSOLE_VERSION 落后或整页旧版）
-
-# W-ALL 全量清单对比（#237 W-DEPLOYSSOT4：调研 §0.3——旧闸只锁 2 html，css/js 七文件
-# 零闸是三起同族漂移的共性盲区）。清单用 git ls-files 动态取（新增文件自动入锁），
-# root vs cc-plugins 逐文件 sha256；漂移即红并列**文件名**（修复=single 写口
-# build-plugin.mjs 刷新，cc-plugins 副本=纯构建产物禁手工编辑）。
-# 对照基线注记（调研 §0.3/§0.4）：闸对的是**工作区根源**——本 checkout 线落后于发版
-# 真相线（feat/testNN-integ）时，对「已被刷到更新版本」的副本会误报，故失败输出附
-# 当前线与发版真相 tag 注记，先对线再对文件
-WDRIFT=0
-WALL_TOTAL=0
-# 清单口径=build-plugin/rsync 的产物范围：排除 site/（独立落地页）、preview/（预览
-# 样张）、wrangler.jsonc（旧 CF 配置杂件，真身=cloudflare/wrangler.toml）——三者本就
-# 不进 cc-plugins 副本，列入清单=永久假漂移（首跑实录 5+1 条 MISSING 假红）
+WMISS=0
 while IFS= read -r f; do
-  case "$f" in
-    web-console/site/*|web-console/preview/*|web-console/wrangler.jsonc) continue ;;
-  esac
-  WALL_TOTAL=$((WALL_TOTAL+1))
-  A=$( { shasum -a 256 "$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-  B=$( { shasum -a 256 "cc-plugins/plugins/cc-deck/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-  if [ "$A" != "$B" ]; then
-    [ "$WDRIFT" = "0" ] && { echo "❌ web 全量清单漂移（root vs cc-plugins 副本，重跑 node relay/scripts/build-plugin.mjs 刷新；副本=纯构建产物禁手工编辑）："; WDRIFT=1; }
-    echo "    漂移文件: ${f}（root ${A:0:12} vs 副本 ${B:0:12}）"
-    FAIL=1
+  [ -z "$f" ] && continue
+  W1=$( { shasum -a 256 "web-console/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+  W2=$( { shasum -a 256 "cc-plugins/plugins/cc-deck/web-console/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+  if [ "$W1" != "$W2" ]; then
+    echo "❌ 插件 Web 副本漂移: cc-plugins/plugins/cc-deck/web-console/$f ≠ 源（重跑 relay/scripts/build-plugin.mjs 刷新，副本禁手工编辑）"
+    WMISS=1
   fi
-done < <(git ls-files web-console)
-[ "$WDRIFT" = "0" ] && echo "✅ web 全量清单一致（$WALL_TOTAL 文件 root=cc-plugins）"
-if [ "$WDRIFT" = "1" ]; then
-  CUR_LINE=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
-  TRUTH_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "?")
-  echo "    注记：对照对象=工作区根源（线 ${CUR_LINE}）；发版真相 tag=${TRUTH_TAG}——若本线落后于真相线，对已被刷新的副本属预期误报（先核对线，调研 w-wcssot.md §0.3/§0.4）"
-fi
+  if [ "$W1" = "MISSING" ]; then echo "❌ web-console/$f 源不存在"; FAIL=1; fi
+done <<< "$WC_LIST"
+[ "$WMISS" = "1" ] && FAIL=1
+# 副本陈旧件（源已无、副本还有 = 手工件/上一代产物残留；preview/ 为 gitignored
+# A/B 物两处都不查）。while-read 防 find 词分裂（文件名含空格即碎）
+while IFS= read -r extra; do
+  [ -z "$extra" ] && continue
+  case "$extra" in site/*|wrangler.jsonc) continue ;; esac
+  grep -qxF "$extra" <<< "$WC_LIST" || { echo "❌ 插件 Web 副本陈旧件（源已无此文件）: ${extra}（删除或重跑 build-plugin.mjs 后复查）"; FAIL=1; }
+done < <(find cc-plugins/plugins/cc-deck/web-console -type f -not -path '*/preview/*' -not -path '*/.wrangler/*' -not -name '.DS_Store' 2>/dev/null | sed 's|^cc-plugins/plugins/cc-deck/web-console/||' | sort)
 
-NOVA_WC='/Applications/CC Deck Nova.app/Contents/Resources/web-console'
-if [ "$CHECK_ALL" != "1" ]; then
-  echo "⏭️  Nova app bundle 面：--check-all 未带，跳过（防日常闸碰生产面；发版链自动带）"
-elif [ -d "$NOVA_WC" ]; then
-  NOVA1=$( { shasum -a 256 "$NOVA_WC/index.html" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-  NOVA5=$( { shasum -a 256 "$NOVA_WC/index-005.html" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
-  if [ "$W1" != "$NOVA1" ]; then
-    echo "❌ Nova app web-console/index.html ≠ 源（面③ app bundle——收割后忘重拷，1015 事故形态）："
-    echo "    diff 摘要: $(diff web-console/index.html "$NOVA_WC/index.html" | grep '^[<>]' | head -1 | cut -c1-160)"
-    echo "    修复: cp web-console/index.html web-console/index-005.html '$NOVA_WC/' 后重启 Nova"
-    FAIL=1
-  fi
-  if [ "$W3" != "$NOVA5" ]; then
-    echo "❌ Nova app web-console/index-005.html ≠ 源（面③ app bundle——收割后忘重拷，1015 事故形态）："
-    echo "    diff 摘要: $(diff web-console/index-005.html "$NOVA_WC/index-005.html" | grep '^[<>]' | head -1 | cut -c1-160)"
-    echo "    修复: cp web-console/index.html web-console/index-005.html '$NOVA_WC/' 后重启 Nova"
-    FAIL=1
-  fi
-  [ "$NOVA1" = "MISSING" ] && { echo "⚠️  Nova app web-console/index.html 缺失（app 安装不完整？）"; FAIL=1; }
-  [ "$NOVA5" = "MISSING" ] && { echo "⚠️  Nova app web-console/index-005.html 缺失（app 安装不完整？）"; FAIL=1; }
-else
-  echo "⏭️  Nova app 未安装（$NOVA_WC 不存在）——面③ app bundle SKIP（CI/非本机场景）"
+# 生产面全量对照（#123 闸升级为 --check-all 全量版，2026-10-23 #237）：relay-service
+# 面 + Nova app 面，同一动态清单逐文件对工作区根源。原两文件口径（#123，2026-10-15
+# 事故的防再犯）收进来并扩全量；CONSOLE_VERSION 烙印=VERSION 仍由下方 version.mjs
+# --check 单一事实源覆盖，不在此重复。降噪注记：工作区根源可能是落后分支线（发版
+# 真相=feat/testNN-integ 线 tag），部署面常已刷至更新发版线——红时先 git log 对比
+# 最近 tag 定性「分支落后误报」还是真漂移；同步一律走 scripts/deploy-web.sh，禁手工 cp
+if [ "$CHECK_ALL" = "1" ]; then
+  echo "—— 生产面对照（--check-all）：对照对象 = 当前工作区（$(git branch --show-current) 线 @ $(git rev-parse --short HEAD)）——"
+  NOTE_SHOWN=0
+  check_face() { # $1=面名 $2=面目录
+    local face="$1" dir="$2" fm=0 f s d
+    if [ ! -d "$dir" ]; then echo "⏭️  $face 不存在（${dir}）——SKIP"; return 0; fi
+    while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      s=$( { shasum -a 256 "web-console/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+      d=$( { shasum -a 256 "$dir/$f" 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+      if [ "$s" != "$d" ]; then
+        if [ "$NOTE_SHOWN" = "0" ]; then
+          echo "ℹ️  注记：本闸对照工作区根源；部署面若刚被更新发版线刷过（发版真相=feat/testNN-integ 线 tag），红=分支线落后误报——置灰前必须 git show 最近tag:web-console/<文件> 比对 hash，不许只看版本号就定性"
+          NOTE_SHOWN=1
+        fi
+        echo "❌ $face 漂移: ${f}（跑 scripts/deploy-web.sh 同步后重启对应进程）"
+        fm=1
+      fi
+    done <<< "$WC_LIST"
+    [ "$fm" = "1" ] && FAIL=1
+    return 0
+  }
+  check_face "relay-service 面" "$HOME/.cc-deck/relay-service/web-console"
+  check_face "Nova app 面"     '/Applications/CC Deck Nova.app/Contents/Resources/web-console'
 fi
 
 # git 工作区必须干净（发版前未提交改动 = 产物与仓库不一致的风险源）
@@ -237,4 +211,4 @@ if [ "$FAIL" = "1" ]; then
   echo "——检查未通过，禁止打 tag/发版"
   exit 1
 fi
-echo "✅ bundle 同步检查通过（三处一致 + 工作区干净 + 诊断桩特征在）"
+echo "✅ bundle 同步检查通过（relay.mjs 三处一致 + Web 副本全量清单一致 + 工作区干净 + 冒烟/版本闸绿）"

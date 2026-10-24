@@ -91,7 +91,7 @@ if [ -f "$DEP_RELAY" ] && [ "$DEPLOY_DIR" = "$HOME/.cc-deck/relay-service" ]; th
     PROC_START=$(ps -o lstart= -p "$PID" 2>/dev/null | xargs -I{} date -j -f "%a %b %d %H:%M:%S %Y" "{}" +%s 2>/dev/null || echo 0)
     if [ "$PROC_START" != "0" ] && [ "$FILE_MTIME" -gt "$PROC_START" ]; then
       bad "relay 进程(pid $PID)启动早于 relay.mjs 修改时间——文件已同步但进程还是旧代码，重启才生效"
-      say "    重启: launchctl kickstart -k gui/\$(id -u)/online.humumu.ccdeck.relay"
+      say "    重启: 重启对应 relay 进程（launchd 作业已退役；App 内嵌 relay=重启 App，relay-service=重启其宿主进程）"
     else
       say "✅ relay 进程(pid $PID)晚于部署位文件修改（运行面是新的）"
     fi
