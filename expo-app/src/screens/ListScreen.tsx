@@ -629,7 +629,8 @@ function BgBadge({ n, color }: { n: number; color: string }) {
 // 首字母；右下角状态灯叠角（2px 页底光圈遮接缝，.status-dot 同口径四色）。
 // W-MOBFUSION 件①：size 密度化（桌面 --srow-ava 34/26 同源）——标准 34、紧凑 26，
 // 品牌图盒仍 26 满铺（紧凑档桌面 .ava-brand 26 !important 同口径），首字母字号随档
-function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon, size = 34 }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean; brandIcon?: string | null; size?: number }) {
+// W-CRABINTEGRATE：roleKind 角色蟹判定（pm=举旗蟹/leader=皇冠蟹；null=普通卡零变化）
+function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon, size = 34, roleKind }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean; brandIcon?: string | null; size?: number; roleKind?: "pm" | "leader" | null }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const bg = srcColor ? mix(srcColor, c.panel2, 0.84) : c.panel2;
@@ -639,21 +640,59 @@ function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon, size = 34 }:
     const t = setInterval(() => setPh((n) => (n + 1) % BLINK_PHASES.length), 480);
     return () => clearInterval(t);
   }, [breathe]);
+  // W-CRABINTEGRATE：claude 档角色蟹变体（PM=举旗蟹/Leader=皇冠蟹，contain 防压扁；
+  // 非 claude 档保本引擎字形+皇冠角标走外层叠角）；engine 缺失视同 claude（inferEngine 兜底同语义）
+  const roleCrab = roleKind && (brandIcon ?? "claude") === "claude"
+    ? roleKind === "leader"
+      ? require("../assets/engines/crab-leader.png") as { uri: string }
+      : require("../assets/engines/crab-pm.png") as { uri: string }
+    : null;
   return (
     <View style={[styles.ava, { backgroundColor: bg, width: size, height: size, borderRadius: size / 2 }]}>
-      {brandIcon ? (
+      {brandIcon || roleCrab ? (
         <View style={{ width: 26, height: 26, borderRadius: 6, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
           {/* W-AVA09：0.9x 统一——头像盒图标 29→26（桌面 .ava-brand 26 同口径）；外框
               26×26/radius 6 裁切同桌面 img/svg 6px 圆角（方 LOGO 引擎如 glm 角不炸出）。
               W-CODEX09（用户 1024 口径修正）：codex 字形头像面再 ×0.9=23.4（26×0.9，
               RN 支持小数与 TeamDetailPage 10.8 同例，桌面 svg.codex-brand 面级 scale(0.9)
               同口径；标签面 EngineBadge 不动保持 0.9 全局档）——外框 26 不缩仅图标内缩，
-              EngineIcon 居中渲染天然等效 */}
-          <EngineIcon engine={brandIcon} size={brandIcon === "codex" ? 23.4 : 26} color={srcColor ?? c.textStrong} />
+              EngineIcon 居中渲染天然等效。
+              W-CRABINTEGRATE：claude+角色=变体蟹整头替换（26 contain，191×176 旗杆/冠
+              高不压扁）；#227 字母豁免位由角色蟹接管（PM/Leader 不再回字母） */}
+          {roleCrab ? (
+            <Image source={roleCrab} style={{ width: 26, height: 26 }} resizeMode="contain" />
+          ) : (
+            <EngineIcon engine={brandIcon} size={brandIcon === "codex" ? 23.4 : 26} color={srcColor ?? c.textStrong} />
+          )}
         </View>
       ) : (
         <Text style={[styles.avaT, { color: srcColor ?? c.textStrong, fontSize: size >= 34 ? 15 : 11.5 }]}>{letter}</Text>
       )}
+      {/* W-CRABINTEGRATE：角色皇冠角标（非 claude 引擎的 PM/Leader——本引擎字形保 + 右上
+          -15° 金冠叠角，桌面 .ava-crown 同规格 12px；claude 档已整头换角色蟹不叠角）。
+          角标挂 frame 外层（frame overflow:hidden 会裁出界角） */}
+      {roleKind && (brandIcon ?? "claude") !== "claude" ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute", top: -5, right: -6, width: 12, height: 12,
+            transform: [{ rotate: "-15deg" }],
+          }}
+        >
+          <Svg viewBox="0 0 24 24" width={12} height={12}>
+            <Path
+              d="M3 17.5 L4.8 8 L9.4 12.8 L12 6 L14.6 12.8 L19.2 8 L21 17.5 Q12 20.5 3 17.5 Z"
+              fill="#D4AF37"
+              stroke="#8B6914"
+              strokeWidth={1.2}
+              strokeLinejoin="round"
+            />
+            <Circle cx={12} cy={4.6} r={1.4} fill="#D4AF37" />
+            <Circle cx={5.2} cy={6.9} r={1.1} fill="#D4AF37" />
+            <Circle cx={18.8} cy={6.9} r={1.1} fill="#D4AF37" />
+          </Svg>
+        </View>
+      ) : null}
       {/* #226 追加（用户 1023 灯显眼度）：WORKING 态发光脉冲环——光环层（dot 外扩
           6px 的半透明 working 色圆）随 BLINK_PHASES 同步呼吸，跑不跑一眼可辨；与
           #211 团队卡裸点+发光语言统一、与 web st-glow-pulse 同构（1.5s 级明暗）。
@@ -951,7 +990,7 @@ function UndoBar({ shown, title, onUndo }: { shown: boolean; title: string; onUn
 // 呈现位，逐项明细在详情页；activityMetricsOf 纯投影保留（test-e2a-list 断言面）。
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag, pmMember, teamChips,
+  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag, teamChips, roleKind,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -960,9 +999,9 @@ const SessionCard = memo(function SessionCard({
   density: ListDensity;
   dim?: boolean; // #32 离线源降权
   srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
-  pmMember?: boolean; // #227：PM/Leader 会话（保留字母头像的品牌化头像豁免位）
   orgTag?: string | null; // #26 M2 组织归属（项目组名/派单档位）：标准档缀元信息行、极简档无位不显
   teamChips?: PmTeamChip[]; // W-MOBFUSION 件③：PM 卡团队 chip（编制反查，非 PM 空）
+  roleKind?: "pm" | "leader" | null; // W-CRABINTEGRATE：角色蟹变体判定（pm=举旗蟹/leader=皇冠蟹；null=普通卡零变化）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -1040,7 +1079,8 @@ const SessionCard = memo(function SessionCard({
               letter={(s.title || "未").trim().slice(0, 1) || "未"}
               /* #227 三排定稿②：品牌化头像——非 PM 会话且有品牌图标时头像=引擎图标居中
                  （EngineIcon 裸标）；PM/Leader 保留字母头像（P/L 有特殊辨识意义） */
-              brandIcon={pmMember ? null : effEngine}
+              brandIcon={effEngine}
+              roleKind={roleKind}
               /* A3-7 查漏（桌面 UIPOLISH2 件一同口径）：头像底色=引擎品牌色淡彩（引擎
                  语义徽章/状态灯/身份头像三分离）；词表外引擎回落源色（不丢信息） */
               srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
@@ -1505,6 +1545,29 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     }
     return ids;
   }, [snap.sources]);
+  // W-CRABINTEGRATE（用户 1025 图集点选）：PM/Leader 角色种类图——头像变体判定源
+  //（PM=举旗蟹 D2 / Leader=皇冠蟹 A1；两遍扫描保 leader 优先=皇冠压举旗；词表与
+  // pmSessionIds/桌面 SLIM_KEEP_ROLE 同源）。worker 不入图=头像零变化
+  const pmRoleKindOf = useMemo(() => {
+    const m = new Map<string, "pm" | "leader">();
+    for (const src of snap.sources) {
+      for (const g of src.projects ?? []) {
+        for (const mem of g.headcount ?? []) {
+          const role = String(mem?.role || "");
+          if (/^(pm|产品经理|项目经理)$/i.test(role) && mem?.session_id) m.set(mem.session_id, "pm");
+        }
+      }
+    }
+    for (const src of snap.sources) {
+      for (const g of src.projects ?? []) {
+        for (const mem of g.headcount ?? []) {
+          const role = String(mem?.role || "");
+          if (/^(leader|领队)$/i.test(role) && mem?.session_id) m.set(mem.session_id, "leader");
+        }
+      }
+    }
+    return m;
+  }, [snap.sources]);
   const orgTagOf = useCallback(
     (s: SessionState) => {
       const base = s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null;
@@ -1782,8 +1845,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               density={density}
               srcBadge={srcBadgeOf(item.s.src, item.s.relay_source)}
               orgTag={orgTagOf(item.s)}
-              pmMember={pmSessionIds.has(item.s.session_id)}
               teamChips={chipsBySid.get(item.s.session_id) ?? EMPTY_CHIPS}
+              roleKind={pmRoleKindOf.get(item.s.session_id) ?? null}
             />
           )
         }
