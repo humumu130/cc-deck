@@ -110,8 +110,8 @@ android {
         manifestPlaceholders = [appLabel: "@string/app_name"]
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 69964
-        versionName "0.7.0-test.64"
+        versionCode 69965
+        versionName "0.7.0-test.65"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
