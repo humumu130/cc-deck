@@ -509,8 +509,7 @@
                     const hot = entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR");
                     const dot = entry.sessions.length === 0 ? "" : hot ? "waiting" : "done";
                     const actions = projectActionItems(entry).length;
-                    // FB8 三行制：行1 状态+名+行动 tag；行2 目录+计数；行3 引擎徽章+组态（与会话卡同语言）
-                    const engines = [...new Set(entry.sessions.map((s) => s.engine).filter(Boolean))].slice(0, 4);
+                    // FB8 三行制（#248 收敛：行3 引擎徽章/行2 源胶囊退役——拥挤重叠根源，仅留进行中徽章）
                     const working = entry.sessions.filter((s) => s.status === "WORKING").length;
                     // W-PROJP1 P1-1：快捷链接（reveal 定位高亮）。openPath/probePath 吃原生路径（#158-批4a 口径）：
                     // 组卡 anchor 即 anchor_dir 原值；未立项卡 anchor 是 normDir 产物（分桶 key），必须取分桶保留的
@@ -522,7 +521,7 @@
                     const shellOpen = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
                     const openBtn = '<button class="project-open-btn" type="button" data-project-open="' + escapeHtml(nativePath) + '" aria-label="在文件夹中定位" title="在文件夹中定位 · ' + escapeHtml(displayPath(nativePath)) + '"' + (nativePath && shellOpen ? "" : ' style="display:none"') + '><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg></button>';
                     return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + '</div><p class="project-card-sub"><span class="project-card-path">' + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未入项目") + "</span>" + openBtn + "</p>"
-                      + (engines.length || working ? '<div class="identity-cluster">' + engines.map((e2) => engineBadge(e2)).join("") + (working ? '<span class="source-badge">进行中 ' + working + "</span>" : "") + "</div>" : "") + "</div>";
+                      + (working ? '<div class="identity-cluster"><span class="source-badge">进行中 ' + working + "</span></div>" : "") + "</div>";
                   };
                   const group = (label, list) => list.length ? '<div class="queue-group">' + escapeHtml(label) + " · " + list.length + "</div>" + list.map(card).join("") : "";
                   // 未立项组头：折叠箭头 + 「未立项 · N」（贴卡副行既有徽标词汇，D2-2）+ hot 点——

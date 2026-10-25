@@ -42,7 +42,24 @@
                 const displayPath = window.__ccDeck005PathUi.displayPath;
                 const baseName = window.__ccDeck005PathUi.baseName;
 
-                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
+                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"], glm: ["GLM", "glm"] };
+                // W-ENGLM（#253）：model→engine 推断词表+共享解析——head/列表卡/消息流头像/
+                // inspector/详情 kv 五链同源（原 MODEL_HINTS 只在 renderHeader 内联，列表卡与
+                // 消息流对 engine 空会话各降级：head 错显 Claude、头像落 ✻）。词表序=匹配优先级。
+                // W-ENGLM2 A（用户 1025 拍板）：引擎徽章=宿主 CLI 身份——Claude Code 会话不管
+                // 挂什么模型（claude-*/glm-* 别名接 bigmodel）引擎恒=Claude。glm 不是注册引擎
+                //（engine catalog 六引擎无 glm），推断词表去 ["glm","glm"]：model 含 glm 推断
+                // 落空 → 兜底 claude → 螃蟹 Claude·CLI。ENGINES.glm 显示键保留（W-ENGLM C 纯
+                // 防御：engine 字段真出现 "glm" 也体面显示，不再错显）。
+                const MODEL_HINTS = [["claude", "claude"], ["codex", "codex"], ["codebuddy", "codebuddy"], ["qwen-code", "qwen-code"], ["qwen", "qwen-code"], ["trae", "trae"], ["zcode", "zcode"]];
+                const inferEngineOf = (s) => (s && s.engine) || ((MODEL_HINTS.find(([n]) => String((s && s.model) || "").toLowerCase().includes(n)) || [])[1] || "");
+                const engineMetaOf = (s) => {
+                  const key = inferEngineOf(s) || "claude";
+                  const meta = ENGINES[key];
+                  if (meta) return [meta[0], key];
+                  // W-ENGLM E：未收录引擎兜底不再错显 "Claude"——显示原引擎名（class 空=无 tint/品牌图，名实相符优先）
+                  return [(s && s.engine) || key, key];
+                };
                 const VERIFY_RE = /[〔\[【]\s*待验证\s*[〕\]】]/;   // #85 待验证档：in_progress + 前缀约定独立分组
                 const HIST_PREFIX = "cc.input.hist.";               // #95 按会话分桶的输入历史
                 const HIST_MAX = 200;
@@ -56,6 +73,7 @@
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
                   engineCatalog: null, models: [], projects: [],
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
+                  leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id（组织锚 Leader 会话 id，空串=无锚/旧 relay）——列表滤 Leader 卡用
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
                   tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
@@ -67,6 +85,8 @@
                   forceScroll: true,
                   slimUnread: new Map(), // [t-7e0c6189] 团队未读聚合：gid → Set<sid>（编制内 worker/QA 有新输出且未在看）；进团队域/展第四列/直开即清（内存态，重启随增量重建）
                   drawerGid: "", // [t-7e0c6189] 第四列展开的团队（""=收起；localStorage 记忆）
+                  _drawerMutex: false, // W-TEAMCHIP2 ③：互斥收起标记——true=第三列收起由抽屉互斥链开的（关抽屉/切 overlay 要还原；用户既定收起不还原）
+                  boards: new Map(), // W-TEAMSNC ④：gid → 板 entries（SNAPSHOT.boards 锚定 + BOARD_UPDATED 帧跟随；团队域 state.boards 同源数据）
                 };
                 let UI = null;
                 // #B3-4 每会话输入草稿（旧壳 inputDrafts 同语义）：切走存 / 切回恢复 / 发送清，
@@ -123,6 +143,9 @@
                   return d.getFullYear() === now.getFullYear() ? md : d.getFullYear() + "年" + md;
                 }
                 function fmtDur(ms) { const s = Math.floor(ms / 1000); if (s < 60) return s + "s"; const m = Math.floor(s / 60); if (m < 60) return m + "m"; const h = Math.floor(m / 60); if (h < 24) return h + "h" + (m % 60) + "m"; return Math.floor(h / 24) + "d"; }
+                // #224 任务时长（CLI h/m/s 全显）+ 累计输出紧凑（↓ 同款）
+                function fmtTaskDur(sec) { const s2 = Math.max(0, Math.floor(sec)); const h2 = Math.floor(s2 / 3600); const m2 = Math.floor((s2 % 3600) / 60); if (h2 > 0) return h2 + "h" + m2 + "m" + (s2 % 60) + "s"; if (m2 > 0) return m2 + "m" + (s2 % 60) + "s"; return s2 + "s"; }
+                function fmtDownTok(n) { if (n >= 1e6) return (n / 1e6).toFixed(1) + "m"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "k"; return String(n); }
                 function tokStr(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(n); }
                 function sizeStr(n) { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; }
                 function ctxPct(s) { if (!s || !s.context_usage) return 0; return Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100)); }
@@ -499,7 +522,14 @@
                       // 挡住打标=本源存量卡永不带标（切聚合后 srcSet 缺角→源标签缺失/部分缺）。
                       // 恒打无副作用：单源视角下多打无害（srcSet=1 仍隐藏），对象随快照替换走
                       {
-                        const srcName = String((m.payload && m.payload.relay_name) || (evSource && evSource.relayName) || "");
+                        // W-SRCLABEL #134：通道兜底修活——evSource 是帧总线源标（"lan"/"cloud"
+                        // 字符串），旧兜底 evSource.relayName 属性访问恒 undefined=死路 → relay 侧
+                        // 无名（relay-name 文件未设/旧 bundle）时两源全不打标 → srcSet 塌 1 →
+                        // CSS 门控隐藏全部源标签（1022 用户截图根因之二）。relay_name 在场优先
+                        // 真名（relay 缺省名根修配套），缺席按通道显「本机/云桥」——聚合两源恒
+                        // 得两个可辨源名；单源视角 srcSet=1 仍隐藏，观感不变
+                        const srcName = String((m.payload && m.payload.relay_name)
+                          || (evSource === "cloud" ? "云桥" : "本机"));
                         if (srcName) for (const x of (Array.isArray(m.payload && m.payload.sessions) ? m.payload.sessions : [])) {
                           if (!x || typeof x.session_id !== "string") continue;
                           const s = S.sessions.get(x.session_id);
@@ -510,6 +540,13 @@
                       if (keepProjects) {
                         const seen = new Set(S.projects.map((g) => g && g.id));
                         for (const g of keepProjects) if (g && g.id !== undefined && !seen.has(g.id)) S.projects.push(g);
+                      }
+                      // #241 A:聚合下合回后复验 selected+重渲列表——此前 renderMyList 跑在
+                      // onSnapshot 内(本源集合上),keep 合回不重渲=列表恒缺后到帧的源(用户
+                      // 实锤「他源运行中会话卡消失」根因)
+                      if (agg) {
+                        if (!S.sessions.has(S.selected)) S.selected = "";
+                        renderMyList();
                       }
                       break;
                     }
@@ -526,6 +563,12 @@
                     case "SESSION_LOG_PATCH": onLogRemove(sid, m.payload); break; // W-STREAMDELTA：终态撤流块
                     case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break; // [t-7e0c6189] 编制增量（S.projects 原只吃 SNAPSHOT 全量，编制一变列表过滤就陈旧）
+                    case "BOARD_UPDATED": { // W-TEAMSNC ④：板帧跟随（第四列抽屉在办概览 ≤1s 新鲜度）——会话域唯一新增消费点；守门三连（B 稿 R1）：gid 有效 + 抽屉开且同 gid 才重渲，稳态早退在 renderSlimDrawer
+                      const bgid = m.payload && typeof m.payload.gid === "string" ? m.payload.gid : "";
+                      const bents = m.payload && m.payload.board && Array.isArray(m.payload.board.entries) ? m.payload.board.entries : null;
+                      if (bgid && bents) { if (!S.boards) S.boards = new Map(); S.boards.set(bgid, bents); if (S.drawerGid === bgid) renderSlimDrawer(); }
+                      break;
+                    }
                   }
                 }
                 function onProjectsUpdated(p) {
@@ -572,13 +615,26 @@
                   S.hasSnapshot = true;
                   S.relayName = p.relay_name || location.host;
                   S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
+                  S.leaderSessionId = typeof p.leader_session_id === "string" ? p.leader_session_id : ""; // #240：锚 id（缺席重置空串——旧 relay/换源不残留陈旧锚 id 误滤）
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
+                  S.boards = new Map((Array.isArray(p.boards) ? p.boards : []).filter((b) => b && typeof b.gid === "string" && Array.isArray(b.entries)).map((b) => [b.gid, b.entries])); // W-TEAMSNC ④：板随快照（缺席=空 Map → 抽屉概览走降级文案，不伪造空板）
                   S.experiences = Array.isArray(p.experience) ? p.experience.filter((e) => e && typeof e.id === "string" && typeof e.text === "string") : null; // W-EXPP2
                   const caps = p.source_capabilities;
                   S.engineCatalog = caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null;
-                  if (!S.sessions.has(S.selected)) S.selected = "";
+                  // #236 A（切源零副作用·P0）：快照替换会把异源已选会话挤掉（下方清 selected）——
+                  // 清空前先把当前输入框活文本落草稿桶。此前切源路径无 inputDrafts.set，活文本
+                  // 不落桶，回点会话时 selectSession 的桶恢复（:1107/:3592 `?? ""`）把半截输入
+                  // 覆写成空=用户实测「切源丢半截消息」；落桶后切回同会话原样恢复。顺手覆盖
+                  // 断线重连快照的同类清选。输入框物理值不清（纯显示切换，口径①）
+                  if (S.selected && !S.sessions.has(S.selected) && UI && UI.input && UI.input.value) {
+                    inputDrafts.set(S.selected, UI.input.value);
+                  }
+                  // #241 A:聚合视角下不在此清 selected——本源快照替换≠最终集合(外层
+                  // SNAPSHOT case 会把上一轮并集合回,异源已选会话合回后仍在);清早了会把
+                  // 用户正看着的会话丢选中(实锤「会话消失」的选中态面)。单源视角照旧清理
+                  if (!(window.__ccDeck005SourceView && window.__ccDeck005SourceView() === "aggregate") && !S.sessions.has(S.selected)) S.selected = "";
                   S.slimUnread = new Map(); // [t-7e0c6189] 换源/重连全量回放：未读随增量重建（快照历史 log 不回灌未读）
                   try { S.drawerGid = localStorage.getItem("cc-deck-005-slim-drawer") || ""; } catch (_) {} // [t-7e0c6189] 第四列展开态记忆（gid 已不存在时 renderSlimDrawer 自动收起）
                   renderMyList();
@@ -661,17 +717,16 @@
                 function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
                 // W-MODE 协作模式切换帧（relay orgAction collab-mode set 成功边广播）：
-                // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）；
-                // leader → 锚卡 upsert 回列表（帧带完整卡）。设置页开关回显走桥缓存（bridge 侧同帧合并）
+                // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）。
+                // #240 W-LEADERHIDE：leader 分支的锚卡 upsert 回列表退役——用户口径「会话列表
+                // 不放 Leader 卡」（切回 leader 时锚卡仍随 SNAPSHOT 进 S.sessions，列表渲染集
+                // 由 isLeaderSession 过滤；团队域/组织视图语义不受影响）
                 function onCollabMode(p) {
                   if (!p || (p.mode !== "leader" && p.mode !== "no-leader")) return;
                   S.collabMode = p.mode;
                   if (p.mode === "no-leader") {
                     const lid = typeof p.leader_session_id === "string" ? p.leader_session_id : "";
                     if (lid && S.sessions.has(lid)) onDeleted(lid);
-                  } else if (p.leader_session && typeof p.leader_session.session_id === "string" && !S.sessions.has(p.leader_session.session_id)) {
-                    S.sessions.set(p.leader_session.session_id, p.leader_session);
-                    renderMyList();
                   }
                 }
                 function onDeleted(sid) {
@@ -715,13 +770,37 @@
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
                   if (s) s.updated_at = entry.ts || Date.now();
-                  // W-PORT-A R-4 回显对账：本会话自己发出的 user 消息回显到达 → 撤最早同文 sending 态 echo
+                  // #221 同族①（W-INJECT3 扩展）：回显对账双兜底——原唯一路径「精确文本匹配」
+                  // 对回显形态差异（空白规整/短回显变体）失配=「发送中…」气泡永挂（用户实锤：
+                  // CLI 已回复后续内容气泡仍滞留）。a) 匹配放宽（trim+多空白折叠）b) 回合推进
+                  // 兜底：assistant 帧到达=CLI 已消费更早消息在干活 → 撤所有早于该帧的 sending
+                  // echo（秒级收敛，不待 30s 惰性窗/全量渲染）
+                  const dropEchoKeys = (keys) => {
+                    if (!keys.length) return;
+                    const eq = S.echo.get(sid);
+                    if (!eq) return;
+                    const keep = eq.filter((x) => !keys.includes(x.key));
+                    if (keep.length === eq.length) return;
+                    if (keep.length) S.echo.set(sid, keep); else S.echo.delete(sid);
+                    // 选中会话同步移除 DOM 行（增量日志路径不触发全量 render，气泡行须直删）
+                    if (UI && sid === S.selected) document.querySelectorAll('.msg-echo[data-echo-key]').forEach((el) => { if (keys.includes(el.dataset.echoKey)) el.remove(); });
+                  };
                   if (msgRoleOf(entry.kind) === "user") {
                     const eq = S.echo.get(sid);
                     if (eq && eq.length) {
-                      const txt = String(entry.full ?? entry.text ?? "");
-                      const i = eq.findIndex((x) => x.state === "sending" && x.text === txt);
-                      if (i >= 0) { eq.splice(i, 1); if (!eq.length) S.echo.delete(sid); if (UI && sid === S.selected) renderConversation(); }
+                      const normTxt = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
+                      const txt = normTxt(entry.full ?? entry.text ?? "");
+                      const hit = eq.filter((x) => x.state === "sending" && (normTxt(x.text) === txt || txt.startsWith(normTxt(x.text)) || normTxt(x.text).startsWith(txt)));
+                      dropEchoKeys(hit.map((x) => x.key));
+                      if (UI && sid === S.selected && hit.length) renderConversation();
+                    }
+                  } else if (entry.kind === "assistant_text" || entry.kind === "thinking") {
+                    // 回合推进兜底：模型已在输出=更早的 sending 消息必已被消费（CLI 不会
+                    // 带着未消费输入开工）——早于此帧的 sending echo 全撤（fail 态保留展示窗）
+                    const eq = S.echo.get(sid);
+                    if (eq && eq.length) {
+                      const frameTs = Number(entry.ts) || Date.now();
+                      dropEchoKeys(eq.filter((x) => x.state === "sending" && x.ts <= frameTs + 500).map((x) => x.key));
                     }
                   }
                   const out = pushLog(sid, entry);
@@ -831,47 +910,46 @@
                   get: () => idleDimMin,
                   set: (v) => { idleDimMin = v; renderMyList(); },
                 };
-                // B11 分组折叠态：collapsedGroups 记「默认展开、点击收起」的组（active），
-                // 持久 localStorage；observer 完整性检查据 _collapsedIdleIds 放行缺卡防重渲
-                // 死循环（折叠未展开不进 DOM）。
-                // W-NOVAUI ⑤：闲置会话铺平（用户实测按项目分组太乱）——项目组/折叠语义整链退役
-                // UIPOLISH3 件二：团队组收纳（team:* 组 + expandedTeams 独立展开记账）——#103
-                // 两段式重排（2026-10-14 用户拍板）整链退役：编制会话（PM/Leader/置顶 worker）
-                // 一律直列平铺进上段，团队呈现收口到下段 dock 入口卡；team:* 前缀路由与
-                // TEAM_EXPAND_KEY/expandedTeams 随组退役，折叠只剩 slim-teams dock 一处，
-                // 走 collapsedGroups（默认展开，键在=折叠，与旧 slim-teams 态无缝续用）。
-                const GRP_COLLAPSE_KEY = "cc-deck-005-grp-collapsed";
-                let collapsedGroups = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_COLLAPSE_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
-                function persistCollapsedGroups() { try { localStorage.setItem(GRP_COLLAPSE_KEY, JSON.stringify([...collapsedGroups])); } catch (_) {} }
-                function toggleGroupCollapse(key) {
-                  if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
-                  persistCollapsedGroups();
-                  renderMyList();
-                }
+                // B11 分组折叠机制（collapsedGroups/toggleGroupCollapse）随 W-TEAMCHIP2 ②
+                // teams-dock 退役整链删除——历史沿革：项目组（W-NOVAUI ⑤）→team:* 组
+                //（UIPOLISH3 件二）→#103 两段式收口 slim-teams dock 唯一折叠面→dock 退役后
+                // data-group-toggle 零生产者。旧 localStorage 键 cc-deck-005-grp-collapsed
+                // 留存无害（不再读取）。
                 const GRP_ACCENTS = ["var(--brand)", "var(--info)", "var(--done)", "var(--working)"]; // 件C③：团队色轮（组序注入，>4 组循环）；V8R+ 提升共享——PM 归属 chip 同轮取色
-                // V8R+（Leader 1014 追加）：PM/Leader 直列卡的「所属团队」归属 chip 数据——
-                // 编制内 role 命中 pm/leader 的会话返回 {name, accent}（团队名+色轮色，按 S.projects
-                // 序取色=同团队恒同色）；无归属返回 null（不显示空标识）。worker/QA 会话已被
-                // 团队收纳/入口卡聚合，不在直列面，天然不触发。
+                // V8R+（Leader 1014 追加）：PM/Leader 直列卡的「所属团队」归属 chip 数据。
+                // W-TEAMSNC ②⑤（2026-10-24）：单口升级——返回**团队数组** [{gid, name, accent, idle}]
+                //（多团队归属=多枚 chip 平铺，C 稿 E1 口径；首枚=编制序首团）；边界态按 C 稿表：
+                // archived 团队 chip 退役（E4：删除/归档，对齐手机端 active 过滤精神）；零成员团队
+                // 天然无 sid 命中不出 chip（E2）；全闲团队 chip 置灰 idle（E5，title 补「团队空闲」）。
+                // 词表不变（SLIM_KEEP_ROLE 同源）。调用方：卡 myCardItem / 详情 head renderHeader。
                 function pmTeamChipOf(sid) {
-                  if (!Array.isArray(S.projects)) return null;
+                  if (!Array.isArray(S.projects)) return [];
+                  const out = [];
                   for (let pi = 0; pi < S.projects.length; pi++) {
                     const p = S.projects[pi];
-                    const hc = Array.isArray(p && p.headcount) ? p.headcount : [];
+                    if (!p || typeof p.id !== "string") continue;
+                    if (String(p.status || "") === "archived") continue; // E4：归档/结项团队 chip 不渲染
+                    const hc = Array.isArray(p.headcount) ? p.headcount : [];
+                    let hitRole = "";
                     for (const m of hc) {
-                      if (m && m.session_id === sid && /^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || ""))) {
-                        return { name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length] };
-                      }
+                      const mr = String((m && m.role) || "");
+                      if (m && m.session_id === sid && SLIM_KEEP_ROLE.test(mr)) { hitRole = /^(leader|领队)$/i.test(mr) ? "leader" : "pm"; break; }
                     }
+                    if (!hitRole) continue;
+                    // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
+                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" ? 1 : 0); }, 0);
+                    out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, running, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）；W-ENGLM2 F：running 随行下发（chip 数字位=活跃数）
                   }
-                  return null;
+                  return out;
                 }
                 function myCardItem(session) {
                   const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "done";
-                  const engineKey = session.engine || "claude";
+                  const engineKey = inferEngineOf(session) || "claude"; // W-ENGLM D：与 head 同链推断（engine 空按 model 子串）
                   const engine = ENGINES[engineKey] || [engineKey, ""];
                   const activityTime = Number(session.updated_at || session.started_at || 0);
                   const turnStart = Number(session.turn_started_at || session.started_at || Date.now());
+                  const teamsOf = pmTeamChipOf(session.session_id);
+                  const teamRole = teamsOf.some((t) => t.kind === "leader") ? "leader" : teamsOf.length ? "pm" : null; // W-CRABINTEGRATE：leader 优先（皇冠压举旗）
                   return {
                     id: esc(session.session_id),
                     title: esc(session.title || session.initial_prompt || session.session_id),
@@ -890,7 +968,8 @@
                       const q = gid && window.__ccDeck005DispatchQueues ? window.__ccDeck005DispatchQueues.get(gid) : null;
                       return Array.isArray(q) ? q.length : 0;
                     })(),
-                    team: pmTeamChipOf(session.session_id), // V8R+：PM/Leader 所属团队归属（null=无归属不显）
+                    teams: teamsOf, // W-TEAMSNC ②⑤：PM/Leader 所属团队数组（[]=无归属不显；多团队=多枚 chip）
+                    teamRole, // W-CRABINTEGRATE：头像角色蟹判定（leader 压 pm）
                     engine: esc(engine[0]), engineClass: engine[1],
                     source: esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(session.relay_source || S.relayName) : (session.relay_source || S.relayName)), // 件十三 + W-WINPAIR-R6：per-session 源标识优先（聚合两源各显其名）
                     time: activityTime ? fmtListTime(activityTime) : "",
@@ -903,7 +982,42 @@
                 // 与地基 renderSessionCard(desktop) 逐字节同构（含引擎小图标/来源配色/条件 r3），
                 // 保证地基重渲与本端补渲的 DOM 一致，observer 完整性检查不误判。
                 const b2EngineIconFor = (engineClass) => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
-                const b2EngineBadge = (item) => '<span class="engine-badge ' + item.engineClass + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>' + item.engine + "</span>";
+                // #231 纠错（W-CARDTAGS2）：用户点选图标源（#228 图集拍板，字节权威=expo
+                // assets/engines/ 七资产本批直引生成）——前版手绘螃蟹/终端符/SI Trae/
+                // SI Codebuddy 均为非点选素材，随本修退役；未知引擎回落 PH 字母占位
+                const ENGINE_BRAND_SVG = {
+                  "claude": "<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAL8AAACWCAYAAACPSVn4AAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAAlm0lEQVR42u2dS5ds2VHffxF7n5OZVfdBtyQkLEBYjQCDQSwQGMuLhfEMPPDMEy9/An8VTz3z0DPPvZYNA+wFiCVeMkIYqVutlkA81L26+z6qMvOcvSM82PucPJmVVff269ajT/SqPlVZebPOI3bsePzjHzDLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMstxkev84z/7Iy85j96hdcDr2dSjWzkKu9ed/SOAPOMKUirvGb5UJz8r5Fze5777Gn5+HgmhfnNw3sPPOe3/fHgU3V3HsfM0u3h+03NUvfr8hut75vk/498fu384mBzcMwerr5uDBPCm4ZuPerlpyh+v84//xpf/Bb/1xX/OyjpUFREZj+WGC17v7PQ4/V7Hp6+AXTiagYgjEsZjeYABMHLOIMc/eziHq0Tlovb4ZOVc+e/FyXmL6E5Dh+sfvszswrVPz/NZ168aj74+HP0ZqzznvPc8hmcE4NqQCBiCer1uL6vVHLJEEspbT874o6993f/n//4D3nh6cxbBtSr/Fz73OR62cC87ql4ti1fLUkyLVdN3qJi7hz/9RDtyVMARccDq59r4s/EM08jVyiFilyr+s5U/48EO9l/bUzbDLnz2/uIazK6VRXxwVDn++nB8lvJ7kMnfGu5HHhdvLwFDUQcVr3ZEAcEAXyyh62lTd6MU/9qVP/UbVvEep5IRsX1F8UPL/oyHPyrxs46pHvvyWWLjIimfpVdayv3jcUdyen7D4r1MmlZwN9ylWuLiO4mEqqCTvye7xTz8/fGeef39wbHv+qOvD8cQwpXXKbr7vXva+322TFSrl21El53yeyCL0/VrVp44DTfO67le5e+6Ddk2ZFtfsJKDAgXClZZVPbynv7n/7+uCEwcXzA189/Mzj8/8fIjx6ltsSSY+vY9hmDMEQvtfhxuJM3G4xS8cm9Beqfz5WUHBuJj94BodwRBPCEZwQ7MjrqgrEEAikNCuJ3qelX8q906WRAV12fNzp4vg8OEMv9pZvCFiPa6kgo4/ix6+T1FV3HO1bF4tsNcgzneR3dGjjbHDYLllYhndM+b5yp1DpRm1TEQnFj0AUj+X8fwuW2SQq37uH420WztiEx02ENvbWXe72fToe+d1+LsggiBgimqNkyyTvXz+SdvSJkElzsq/97i2G7D7RRekWhl8z3WQIwkpERkf4uhUVPdAUAQffy5uRLGong2X3c+4Y0PA6zbJwsi4OJ51LNmd4+8vrssV/x4wTwcBq08CUbvw+m7H0unVX+6GjWmxQeEPY+7+ebfMunimRycB6oq4YAJZHY+GkHAUz1tUI+fms/IfJDsmD04mmVd5RqAplwSkx63T8dcnCjdY1xd95FnB+nMcpwHv8XzUJf9+unie414Pgf3hsZqc4JGskCVhOoS7Cc0tLuDMlv8jWED2HhbHdMHN8jwlILvDV6jzQ57l4yrxbqxev8LuX23qDfnYK4FM3LBLkliXvi6z5b8uMWb5YI9fXN/X3TUpX7Plv3bLddFCDQ/Gx3rA5e+dRS+ESDYJaKf3yWT2+W/MyR8LYJ/3AYnPQY9fmhrQO28grt3yH1Z1BzDb8Lo/B7zyMDE6wiAOvg9MAFqTuumdtumql4D1Kkituj3uPvrvrj6U4MhjHeK9YZ6mz8LdZ+X/8M1WxZuMRVApNaRhQamgtl8VLfWs3YJ4Jib6lsuAypyiMYuBkVoX9tHOD997dtxzwVbFcKn3rz5b/huxc4jIHt7fRhRC/b054hUiLTIugLue7DkGzS7WeIAgazUaUu1Aqd4WTN3Fgpi6z27PTRATCBJBDDche8ZFyZ4xE1wySrFc4opOjioBF7vz+aIRe3+hF0AnruGujyIQRoStu+KXQL5lVv6b4/4UHxbypP3LVcBDxd5oecgo5jWSc7n9e/dz+vzTr+IGlZas3grOyRwEL//5Dl80IJHHxILsXJ451XlTylwKEFABE0WEasWKBZOq8J69As58gv2xO+/2DK7PrlOsGAUPio35zar8A9JKLmKsprbiti+AO+HzF+QmZHHMHMPJeDHu7mhts1ME8QLBLd1iTibDHff5p0o/WP+cE+aOxYZcXxscoSC7VkrM9lLCh6llvcWmI96FbT176YZK7qw9sDWjt4yxe6iNBloRTsgs1FFRREo30u3WbtkrXOwss2BoRVALWl1BM9gk4zzDJjuejISUXROhVWehsApGW3ty93ChIih+JwCC8ebAFOQglJJL88k+gULnnFl3W2LTEE8f8t/++//g1b/7AabCZrPB3Tk9OYGc+PwPv8x/+vf/Fu3OyX1HCIEoiole6io8O0dt1+ryqUdMDJfSrihegnqnAdHSCeBO8NKu2fUQ7r/Mf/4v/5VHWejMQSJuDWoZP3vKl3/xZ/gPv/WbkJ8S3EESWSJ5iJ0w4rhj6qz8H7y++P4WzbClO5mn6w3fe/NdvvG9H5BwutqnsVo8IrqwiA3nm46HaoQghCBku7oN8XZYfsUUiqrXfuTaS2uSwYsjWDJfytNt4o233uVvniTOuqGTIrLSwMI6vvBoy9k2cV8ycexxHuoiJWHg5IrZn5X/2iTjaAhoEzET1tuOR1vfs8fdGgLO2fmG7BQ6D+srbUngrouZkT0TYqRpGkIIpJQ472Cn2olgRqDECLFtiNri/fbOlkL0tp/+wI4gQdEQkBCIQBPKlwCxZj9jjGgIuEA2yG572YpDq+93oKATY9zr0xURYoy0bUurhbSqEFcpuXJc9DnT5TT2T+9gIHqn4CC33vKbO8nBktG5kczpAcsTb9zLhUqImAjJSi9ro83oE981pT9Mbw4sGCklOulIKdEbdFXhHUMJZQFoTQD7kPa8aCOFK0ksZuV/sVu7kx2y77byXB9SLkQa5XV3sjliIKFkie6q4gNst9vCVKdlEQy7gFmpbpsM+39DEEVzJjQRbWKpnndaKuFy4DC4zpb/RnhuAhICwQMhhPIs67PJNiljaUAklKKOGb35Xce1YVbY6QbAn6oSYyTGSAip1kfAs7EVIzp0faLrOrahZykjmcr4/7tSFNfbnuIefX4RDKfrMx2ULd125Ho9kMxxLRwyh/xAd9HqAyyXS2KMmBkpJVIqvryZkXMx4D7QxgwgwBiIbUMT20ugJLPy35AiVzluui0xtrgoQXb0O0MFQSeWcCznV/zKTcacfxiWf4fnkT0iXNWhcFW7nauPb2YlZrqCavEu7AB6N9oXL1Ycp4w0VhfBLjizPd4Z5laui/dNjmH39U71gOpdfqZ2BeNAwavMC0D2cpl6nN+oujoXIQ06K/+1wiLEBhQL05LNFUviOd73cdwBKs34gXKoHyOMvBs2U+8Sc4P41YxsM1vb8VZEnTS1ycC9+TFwEvRuXMTEmovtsX4eu9BhpxD3j7XrMxgLmSyE0SX0yzI7Miv/zVJ8nq/BWmxSoJ+D3in9yxEu7HEhXJpmnju53r/kDwFUNtp8UVy0WHPf9WhNLVoBwgWMCFIotO2O+H06sK5P4dmyg4qbKFkCWQrGP3gmONjIlp6QAcgguZKiK1mUUGlNFApK9Bjnj1idy0XtnCtp5/I3441cKNc7lkhaylyPobtKdlQifnybnVpzkwJR2G4Ty5de5qlFsDS6PUJp4nAvBNnWJ7xZQYh0j60uktvexliaTcwFryh7ESvzvuqdtZSxxZLz3qBtyAJLYAG8za4QEtTxBKI9zWrB+XrDSe0LUDeQtGNEH2aayX4/V3CQHHAasjSksGCzTcR2Mbs9U1kt2w+Flya5FRRi39GKsQJaILjTirMATgVWUQqgKzvJrQDcbnm2qyijjQMiyo5a8DhIJooSQiDEltguapPPOalMguKkgRChcdBUMFBp85TNZl1QnLKP41FKoGBiZN2pkNVVMYwlEg/gEfMCn7bubLb8U9m8/Sbh0z96FGrwvJmKpm1IZljaYpvMg1Z4GAqmoQMaKw/0pSU8aAXbPEVXkTYIqyaSUrqTGZxhw7SUEQfLPVgdGJc7PvUSPH4T0hZWDTQC9wIsMnxiuaD1zEkbYdsfjDMaNmYd2mZG78vQiTV1hMSyaThtnJeXwi8u8DXwzRvSIvCelP8//uav+2krpbsndzRNIMa28L2EsDdDd8DK9H1P0zR03YamaSa4kswvfOEniPTPN7bzqL9rkBy1TLCel06W/Ktf+nl+8ifXdBLIXlCM4omTIHzm4QkvnbTEtEFywqQ0t9/VsFe8QJXFgb7wscWoPDw94dd+5Rf56W1m7SeE5pRgPQ0J2az5/I9+hhMF324ryHnawzstIEp1unQyfHQ3/kiB3J9xv4Wf/vFP89u//rPI6pSn296TFrzRg9N7xfhpAAkldnMv07s903dbolT+oRDpkiPNkjffecQf/Nlf8PqjjXzkyv8zq+i/8ctf5Mc+9RJN7gjWs1i0PD57XBpJtGyvhxyb6/Wak5OT0cIO40XX51s+c7IgbLeXWv4pZ+dlD9esRz2hqeP+YsWXfu6nyKFBFivyEPylnsYz0RL3g9BvOyJWhxKGO0nbNvjmUUCbSPaC2FQFXTb8yi/9AhJXtPElgi7AOsgdtjln1SgrdbpugwSpvr1NBv9NK7+6R4Blsks7Sy2S3WsiX/iRT/KJ0y+yevgSCcGrklufcBVEI2iZ6evuYAkss92cs1otASFlZ5shLk949Y2/4et/8ecvxvKnbeLlk5aXFwHdOiFn2rzl/mksJy876tfCmlAXQVwQ20BKXnkjlaZpSIuApHPCAeXge0VXLmJA3ehzpj9/xP2g5Oi4b0njrOTMIgZidtL6KdGcVdugqpwnuxuVDjGO4XHcDQ2lycGBlHvSeeLlB/do4xI76wgG7hlRY/HwpADeckcMk4HTl6WRJ/GAHFl9TVBEjGXIfPK0JWomO7hJmQNcMdNez3/g0CuelmBNy73Vkk3fkbLQoSxPTzh7eELT9y9G+UvzU4+mDSeaWSwEsS3JOswOyJHqEDh3p4kL+vUGNaMJodAIpi3LpiFZNzInv1/ZpkxUJVSOmdM2FHw6jjc1zdc7rTpRle58sGaw7nrQO9zDK1amTVokp3qtltn2ibhc4WnNvbAgeE9vHTn3JSjOifP1U5omjPdqhwOaDJo+zHceztsTI+c6WTIbrQohJ5o6DSYEpevP63ury0OZ6ijmCF52ru1T2Ha0zRLLAttzmpxo/AX5/G0EDUa2NaqFCmO7eUK7bPaIn7wSHlGnmYdg5K64NqeLBX1OnJ2t0QiLoGOfqLzPrhIzkEVDFMhdKinN1GE2TBcXcrcFWkJsqttVbvS2X9MuTm69gh+bTRCqYhRXtMCVo0DQkn1ZtYHUZbzfIKIEDNdE0AbzhJNoFssLCYELMxF8N53RfXB7dm8ITSxBN0ITI5YcMcdSxs1YxpKZcitW36UknzXIWLPJOaGWOWkbvHO6vofUE/UFKb+FMtDYVUkketJO8cUu8Op43RLNEjEGTGCzXePAYtFglvbpBo+4Os9aEI6iIdKn0qmkWhZTQJAQRhqPRduizhh8mwt9ctrFyd0GN7giblifaDSAOUZi0Tb03ba4LlpbP0tDHOf9OS5Gs2rpcjfh5tQ9SMSu3pL2guFhZQz5/y6VQpuKYskJXkYhqSpCwiyXncK9zO11qcTDjldfzXAW7YrNpgNtEQKiLX16UcovpbE5K2SMXHlb/AAKe9UIG9/7Tj4k6LJiA9+s7FD8xxstZHxQOlZ374r624X7Mp30Ph1Or9ike6u2Mdbn5WPvg03mdl0SUFcr71KSnPnCs5E9EEp5j6IieE2SKrkY1TqhvXST6fi4bBgqOLJGK1kEkw9enX9+5dcdniNLsRbl/uqVirmndPLhDziwWtCxYwOXJ5POD0ft2K1mmXy+OTUmRXFNLlYzy2IwcuXkH56tT9zXoWg1fO7xZzWBh0vZIbLsnvmuSFaUVmpNXdCKtQpVycM+8+KkalDIcwvUojDHRfLB+z9S5RcbFKYotYtiWEWDyBHcvOztAMONG5h9P7wWONvbcfaDsYuMYrsh6HbrYc56ySyyEjT66PdPf++Hk23EpiCJvZ3iMqu/H9ROB9jpc8HIx8UokCsBge39Wyts2xPghBzsTkX/PpgBi+8lbxysEJqKG2KCepxY90OF1D3rLpXwdGD8/TA5X6ZT2PeAXQPFxiQmOT6x/ZZDHC7ZAYYxBFQ6l8Em2ZiT9+LLy86ntwPwt06mWFqZ9FTZr22i/BOsrFzs752OABnfWQFyx1K0+wvGDmjk7eKO81Erf/Byg9QUkYDUYMpdn4n4HsvtfjDu0j94O6hiI66kfJBd5JUZF4B9/OaRuu4hL/djAdt3bVwJz7gfdtgLerBjXFRgq3RZdsnusXNVh5ikJPl9hJ2rF8dHhn4NrwviRbk9MUPMkSYrjRTwkk6yOtO0W7EidrFPdLRHO8R4lg+a5vOCOKw+7mXxhe7ReNtezHC7F8DByJRqyX10F/TAxdRdzOMQ3PYmsA8LYXpLfDKXd4fj94mrqeMuMSj9IY257Lmn9XtXkEJ5y15fgVefP9V/5yhKItSQOSOkD+w6x/eTUxasQFeZ+s87aqNDn35HeWeTDMCHpXN2NJAb7dHE6ovfzQF0Ph0VdNRt2LmDU6OgHwDgu1N8OcruYNVvZwxZdS8w3p2Z7GcLq365gLnWvgzfudcuHxog+fnhDQGy2IjdKCj8XAOPi4p4VLE9XsqkcLn/ZpcPmBY/SqcxwnwHGMrUz3fZ5+O/xVa/+OA7OJk46JHuNJP9eyle743b6McfJg4uewLjlJZa6dWJWzXc17JTRNJQq7lwTra36GQvMzjsWlZT6bkOSmqLxklLJmISXlyq0wfLX/0x8YLcE7d6N+wZ1PvVAruOD+MDbVvy7IDh0kV1h/x8e+4mfbuwAN7veI2dazNxZ8adXQ9SphettFxyvl5TpOJ+6QYtzpXtlR9ZwDtU9qQORFDPBMmoPYMXZm+cSt7z+m2CCpzlNu48Xmce2+jP6yRrNAbQk6zbNBjWmnXyIVAZU60G4kgdhg095kLwksaN3r84bM+wxYnrRXKjKxrBL60OjmHM7W+E5mNM/5DFjqb4dLDeXmDNkOECtUwNbMccvu7tTOLV9anBs9U58WURpA8cvsX3E1yNJ+rPXyhSP+6LOmFWolvNimd7Jc0pB9BIHDDwAB1W2yWjbmOBTP3ydLlglU7FMIww5ohekPJbLTEnImFIfeGTPs7LK7h+5KKc2eTfCarPGstdyN/ILg3uewWxSXCrA44/Vh2RPe1QV1wyECu0RjEveugvSvmzQFIlSSRJLhBhT/VCfAx9xrL00aqdj9CyqYWY5TZ7PjrWevbgzr6DwpgCHkZ8jsuA3LFJCjxWT0DGepC6FViDZ1SV3hXTSPZIJw3pRRW5eoVeA9vQEAhkSYiHEYp8Iao/EuAoNglkSoElel/HZM5yO0F0FaLsh66PjspsFKXttXAmDajMEhDnCR5J9zwEdUMoQS8ayeaYNiQCW13R6QvC9uhpy//6/a/wzz73o0ja4N2axWKBW0BDw2KxoGlatCkfablg9B8/foyljpPlir7b0m/X3D89YX32hC998ed4KIFQR4oeDokoPbyzit3kPmEl7OoqY/zmg+3GNECz4PtvvsNffft1mnsPOO9zqdaqssA4PTmhXZySy8RsRIS+69icnbFZP+H03oqcnLP1htAskbjk1de/S2pOgKcfvfK/9nYn/PGf+Df++v+hqcP7DaqRbWe4xNoxFJAKNfWKs1FVuu2aRWzAM5Izp6slqnD68If4lX/6GZqDZnURmfw8s8tyg3GlAxxigLTI3kwEZZ2Mx+dn/N9Xv83v/P5XWJvypE/kUHqofb3hpF1AWJBrQ0sIAUuZbrtGcUIQPBvZIS5OaBZL3nl8xjcfnckLC3hfe7sT3u72puBWp+g9/tnCmPTvpPWEHLXwu2b2WcVuPEfQmPI+bDIKLE5PEDa8e97x2t9lvuMDmmuqR9v69TzyuH7dcsY2WSzwqvx7DfDvk8RqlhcvJlcXzVOyCkuIfOeGpfeulbFt3adZe+4AuKI0p9R8f90Bhtm92+2WvnduIjPktSq/ex5HZE4Nvc++DrcHUTp0glWo+IS4VlxZLVace9qbAj8rP+BkRDga2M4L4DYovte2QiMMCNE9sHLJ5ee+w7b9rPzscQE1qHhpWpgsAK+4kHwJXWHp+JGRR2OoKk+dz0tb4yZ89gWQJRcb3y8NkI4sSA/X6m/7XovmkWCu1lvsKBb/kmu6kr902rmVUdI4yb1QpQ+zvYysCUiYpz0446z8lUNTrUesG4PcQnq160iyI725Uwx68DxiQw2FgfXrsFVDrHaRWa0sDkwDzaQT7WJfsB5gUC/0KXtzbXkDxejrAhDXitHfH8YxXJseoSYJOOKpWm3dY1tQmV6x7oxJfS4DJ1CsAJdMW3N/WneCjLqTKqExTZiV/zJIvqDjBHAmjdeXpqhcx57OKUvDQHeH71u4XTl9X3nFr64k2Ei2AfuczrrHfsCF3tiP/vgsNKz4/n04mqlx3TcwE6qSPTqYSyavy7ggQoEmSOnNDgxGyYBwI3Fc1+vzVx6WJE2pFO7doGFOul7NuuCxwmp1d4Mr7HqKG9/FGaHuELZXmOGw4+ugJW93zs0+F6ZYrXfIhLLlRR2ZUBParstquvhlnzLcvO6aFWmWamFyh7Q83vOzd/+nu6LrSCPiyBVdeXPAe4FZIEsg02LV7dkB3wqa75gfO9zgsoXLBBZ9rKVS91CpWnmkIWCjW5MvMLodYxjYuVK6y3RIf23kVwVTI0ch5S6X92ntdtyqtKIXOO10GEwtdrRvTOtic9UDpKaPHV7KIbXhrPwHvQGRLIEgvmMmqlu62I6vRS8gQ4eHEyZKeejpH+khmFy2ihXIxV4r3uBY2N6Wb5NFMN1hgo9j3LjOCuuOpe153y+Yg9chdaPZ8B3l+aHp2LsDI8VIwC4kJUoTSmEZLIZmVv4jPuezbKZIpcSo/uQUOWgD49eFnWHCz3NAaKV7j9H2/X/sgISrBJI+cZFMFKksMjJY32ukPbyMgsiv4FKa9uBedMX9wpjXfZdzH8V7rOlEGDJwVp+d30hmvHjdJxBINWMjiNgB21cdpTmdCTUyGw3f245BeLT+fpSu0OrPOnyeHHKKTi3cbjcxn/Yy78cF5W/Ha1L8amGxi26OHDh+vm8idpXYvOPYEZvkyWyPg+cYP5xOorJiCMqkruDlS3CSlNf0BsLW4/WP0cwEukI77YdER34QBO9y/Fa/V2eyRU+54XccQz6qs+8rs++otPXSQG3gvMxHzz9LvDbgqcrU8sueVb6QlJVj7aY2BstajcVAKqZHgv/9LJpiexSUNga8g3s6fI643EhS1Ot1eyyB9+TujLZZlnFFKeHuhNCQbZLCPDb+xqGJynp9Ttu2SFBy7uuAvMjjs6csYlOH5RV+/vv3H/Lk0WNElOXJik1nlfh0NwO4jPMpPaIiQhMV6xNmRtsEcs50XYeHiDdL8jWV7kNl0nBzggayl/MKTaRZluF/ORf2A8vQhPK4T05Oefvtd1kuWxaNsl6fsVgsSKlju95wem9FjG0ZIWr1/hwwXLsU9P6yDXRdh3lCCXUGghBDZJt6XDIp+Y3kSL3eCu9yQdu2xNwCRsodKQ2NLWVqowSd0F9f3IT7bksMQmzK612WMiFEleW9+4DQ51QGn5nT91tio+Q+sT47Q5oFO154q5TePrbn5dSX/lHLeCqDOESE2DZIaNiQ9ygYX3QnVUaR2h6oQWkERJ3UG33qWK1WZQKmG9kg5Yx0PcvVqkzJ7Ne7XSAEFssyvWazPafvexbtaoyJhuJhmZ5SWLrPzs4wMywu0BjLJBZxtjnT9Yl4/yENeiPHP11ztiewtcHKVyhDC6KK22CNDzMu+5kLVSWKklIii9JZCUptm9FYRqVCwFyIAr05q+USiUZvTp+HTV/GYQ27xnzDJOLaIIsIIZPqNEmpiyV4JlxXwOtKdiE5SDI01JGdYohZaTftiuVXiYgKGVhvyqJ4utmiQfHQsEleJ2ouQJwQA7FZjGOjLpPlSVlcnSzozZHQss0drbRYG3ln3bGRBdsZ1XmxyPWkB5EWCYKqEETxnDHLBMJIObhHhcFuDlQMipmx2faE1SlhuaJZrDjveiwoT7tEEyKhaUi5Z332hBSVKMP8iqbWFCpfPUPDfrHnyRPJygRJXwq57kwukLdbFhqK/fWL7BUmEGrF+bLff5BjViE2K9SFvu/pc0/DLhnQhEjf94gE0DKLrIxrcprVCetsmEYkKP12Q0QIZHK3JWjZfZtqsfcNzy7sXW82uAZygKedlZ0GQaQhuUFYgi+wusPOyl/lzXefsP7spwgByFYJcJ0+bYgWeenhPbr1ebGuNbANbmNgKw59zqW0XmfvPnqyxXLPOjuhVUI8LRmH1NFg3Hv4CZaSkdxDTuRUC/lee06HsTcIWRU5PeXJ2TnuQmyXZAHRiMRItjXZ+oJjuQSEEAZWi48E5GCsn6558OAeMS5Im0LwpJbxnBECq3aFu9OlTBKQIISm4fFmzbubRDi5RxtXJF9CgD5tcQs8PF2R+jV97kcCKhmdnUpGhUGItMtTuuaUzeYRMZ7S91uyGtvUY97yzjbztJst/5589c++xhvf+hYLLcOIBaNV8L7jkw/v83NfeIWf/vyP18xGrkGTIe4jb2jOjjYNuljydJv5P1/9U958cs55LtYtp0Tabmg98+mH9/g3//JLPFxEtO+wriv9o26157jSe0vJQSUJfO3P/4pXv/s93n66RpsF2wymgaZdYv2G1nuCpyvrFB9dwJv5J596wBd/9qf49A9/EnFYakBVMDMUIfcJjRGRQjSwdWez2fCVP/oqf/PmuzyxEySekLZnrNpI4x0/8dlP82u//EUiTqsRJO0tgCH75UDvznrT8fobP+D3/uhPISzYbreslsq2T+jqPo9z5Bt/+9as/FP53T/71gXN+HzEPcErn11x78FDXnnllWptajpOHKhIRIEQG3oED4HHTzb8yV/8Jd/83hlfr2x2P9niqYOHLfzUj93jN3/9y0gTCOqsmga6rkAeRoxQqPYtkIl8+/s/4Ctf+wbffads9d+5YVRDv/1Z8ZdfesAPvfSApu5YUQRFiCFwvt3SaqGY0VBcyj4nfu/3v8a33yrdsG/Ua/o8+AL4179q/OqvfZmmcfL2aWFzlrIrl4aV3Sij03sPedzDP7z9Ln/w1Vc5S/DXID8f8E2GV28wNVO8aSf0elXaT617d20K7sR0HCoxDqIYBpvFhtw5RCE0K9bWcD653a91dREY/nibaZoF2/VTDKNpCgTafFL2lFwRpiVwThJ4tPVRQW6avPPUyaIslido7stIT3cwxw0WyyUaA2m9xnpFPXDv9Id4t4PzieIDvF6//1LGTQLn509YBd8B5ipNZYm9CljuyZMnbMOKjsiTBN+qn/H1fPP5yG4sPfLjTULjot74RLRE8DrZnYIETbIg9ZkmCKQed6EP9/l2f/HGv5YQlkssd5w0QutOTk6ngW0I9FLmDIv34F2dPWBYEDY3+DmaQNfXYdzidb6xESXiqUD41mmDtE5QJxpYgjOF1y5Z0BaW5JzKfbKOxvsR0uHekKXBiagrixCJKK5hVHxu6UA/bg4HZBwzL0NnkIyTcwsbwEBvvqsq1uaUSySX+ex7uP4CrNOxYiy1O0kH2MBz4Oav9z6FydjQOndr1+SGVarJEiOl4q+7kkSvoKaUsYpQgvk0YWFTjDjewUN6wln5Z5llVv5ZZpmV/33QmvhHwuDgMxfWLB9nyz9Pgpnlzin/0Hk3K/0sHxvld3nv7ozPC+JjL/GmntjzktW6FCpn5/liBLNaLX7OeOKjij1uvEH5GFz3nO2ZZXZ7bruISOnVU5mD3Vk+Tj6/vKd2Ep8XwSx3zfI/K044DIrnBTAr/+3O8swTXWaZA95ZZuFupDqzUElsA1stSM1secLoU3CXSRQPisuCJPFKV8ZRelmwDYrk0p+aXYCASeENAkha/manDUm1okfzDd39lExDpiGJ4CIECePYgCxeaakaXBaIRJK0V/JnZoUuCFtZ4CETvECYDcGljpqtPmTSho00dCHMyv9hyfL+KW+db3gnK21eEl2JVvpTg+989hyUvjPaeye89WiDXRH6mrY8lROQDLphScSz74/PlMKI0HlLb4HHvcEiwnm+ocHOgkdPM4+2LQ9OHrDtn7IVIaqw3W4RF5r2HufbDTEsSCa4t0h3RWzUBN7aZsKD+9hWaWzH/SY2sOMtSCp0uqBvFvz9082s/B+W/OU/PJIf+c533dyJ7rWZxYhmqNV5r2J0GGsz4uqUtSl//+YPLv3Mf3zrXX7nD/+YmLd4t+EkBIJLHVIhZKVg+0XpJZJUeP3v/4Fvv7O9sYHEO+dbvvHG37KuTBepO6cJSqtCzpntdku7XNB1CQ+RZMrq5JR3r1jM3/n+9/ndP/xjlgoLKT3TI42ky8jJn1Q5E4F2yTdf+86tnB9/o+Un7jUebMf9GHzXqOECcQHbXGg8dHnCN9+8ejDxFz6x8pB76BPLCLnbUfq5FHfLKwlUFuWNJ92tiKA//3Dprz/aCMArp3gjpbsrZ1isApadrEqfnZPT+/zVP7575XW98rB1yR2kSmnkF6EhDlijxMWSV986nzMNs8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLLPMMssss8wyyyyzzDLLLEX+PygjNGmSFi5BAAAAAElFTkSuQmCC\" width=\"12\" height=\"12\" alt=\"\" style=\"border-radius:2px;display:block\">",
+                  "codebuddy": "<svg width=\"40\" height=\"40\" viewBox=\"0 0 40 40\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<g clip-path=\"url(#clip0_5110_14771)\">\n<rect width=\"40\" height=\"40\" rx=\"20\" fill=\"url(#paint0_linear_5110_14771)\"/>\n<g filter=\"url(#filter0_f_5110_14771)\">\n<circle cx=\"12.6071\" cy=\"34.9794\" r=\"14.081\" fill=\"#32E6B9\" fill-opacity=\"0.4\"/>\n</g>\n<g filter=\"url(#filter1_f_5110_14771)\">\n<circle cx=\"33.3404\" cy=\"43.6185\" r=\"12.8704\" fill=\"#32E6B9\"/>\n</g>\n<path d=\"M27.6897 3.3426C28.057 3.01322 28.0795 2.99983 28.3485 2.98366C28.7851 2.95177 29.1858 3.16107 29.8664 3.78072C31.4566 5.22574 33.6703 8.19724 35.047 10.7343L35.5796 11.7191L36.3309 12.0927C37.0562 12.4593 38.2459 13.2111 38.7428 13.614C38.9673 13.7997 38.9992 13.8032 39.2326 13.7124C40.2872 13.3017 41.7982 13.846 43.1307 15.1244C44.3302 16.274 45.479 18.2384 45.9191 19.8778C45.9833 20.1417 46.0683 20.709 46.0994 21.1314C46.1997 22.6144 45.7243 23.7986 44.8085 24.3349C44.6213 24.443 44.6085 24.4725 44.6137 24.939C44.6559 27.1604 44.0571 29.3777 42.8543 31.54C41.4965 33.9678 39.0794 36.4798 35.8073 38.846C34.0502 40.1247 29.8918 42.5469 28.0122 43.3973C23.5096 45.4244 19.8999 46.2022 16.7645 45.8181C14.8943 45.5915 12.7771 44.8611 11.5246 44.0137C11.1951 43.786 11.1428 43.7719 10.8909 43.8439C9.55017 44.2289 7.79442 43.4374 6.30272 41.7817C5.70771 41.1197 4.74709 39.4939 4.43575 38.6241C3.71569 36.5887 3.85859 34.752 4.81783 33.6551C5.0657 33.3725 5.07387 33.3607 5.01972 32.8856C4.93033 32.1079 4.88982 30.9566 4.93066 30.2138L4.96343 29.5205L3.92091 27.6777C2.3078 24.8074 1.28326 22.3968 0.887982 20.5554C0.679402 19.546 0.692781 19.0981 0.949061 18.7667C1.10529 18.5666 1.61622 18.3594 2.23252 18.2455C3.78518 17.9729 7.17203 18.2198 10.9394 18.885L11.3303 18.9525L12.1903 18.1921C13.6179 16.9275 14.5665 16.2176 16.315 15.1274C18.1373 13.9872 20.1943 13.0498 22.5103 12.3071L23.2533 12.0687L23.6615 10.9964C25.1239 7.13587 26.6218 4.28969 27.6897 3.3426ZM15.4393 23.1261C13.7864 24.0804 12.9602 24.5582 12.3529 25.093C9.89364 27.2585 8.9738 30.6888 10.0208 33.7938C10.2794 34.5606 10.7568 35.387 11.7111 37.0398C12.6653 38.6926 13.1424 39.5194 13.6771 40.1267C15.8426 42.5859 19.2732 43.5045 22.3783 42.4574C23.145 42.1989 23.972 41.7223 25.6248 40.768L35.1333 35.2783C36.7862 34.324 37.6124 33.8462 38.2196 33.3114C40.6789 31.1459 41.5988 27.7156 40.5518 24.6105C40.2932 23.8438 39.8157 23.0174 38.8615 21.3646C37.9072 19.7117 37.4302 18.885 36.8955 18.2777C34.7299 15.8185 31.2993 14.8999 28.1943 15.947C27.4275 16.2055 26.6006 16.6821 24.9478 17.6364L15.4393 23.1261Z\" fill=\"url(#paint1_linear_5110_14771)\"/>\n<rect x=\"15.8816\" y=\"30.0273\" width=\"4.00904\" height=\"8.32646\" rx=\"2.00452\" transform=\"rotate(-30 15.8816 30.0273)\" fill=\"white\"/>\n<rect x=\"26.6978\" y=\"23.7812\" width=\"4.00904\" height=\"8.32646\" rx=\"2.00452\" transform=\"rotate(-30 26.6978 23.7812)\" fill=\"white\"/>\n</g>\n<defs>\n<filter id=\"filter0_f_5110_14771\" x=\"-14.9163\" y=\"7.45599\" width=\"55.0468\" height=\"55.047\" filterUnits=\"userSpaceOnUse\" color-interpolation-filters=\"sRGB\">\n<feFlood flood-opacity=\"0\" result=\"BackgroundImageFix\"/>\n<feBlend mode=\"normal\" in=\"SourceGraphic\" in2=\"BackgroundImageFix\" result=\"shape\"/>\n<feGaussianBlur stdDeviation=\"6.72123\" result=\"effect1_foregroundBlur_5110_14771\"/>\n</filter>\n<filter id=\"filter1_f_5110_14771\" x=\"9.46959\" y=\"19.7477\" width=\"47.7417\" height=\"47.741\" filterUnits=\"userSpaceOnUse\" color-interpolation-filters=\"sRGB\">\n<feFlood flood-opacity=\"0\" result=\"BackgroundImageFix\"/>\n<feBlend mode=\"normal\" in=\"SourceGraphic\" in2=\"BackgroundImageFix\" result=\"shape\"/>\n<feGaussianBlur stdDeviation=\"5.50019\" result=\"effect1_foregroundBlur_5110_14771\"/>\n</filter>\n<linearGradient id=\"paint0_linear_5110_14771\" x1=\"20\" y1=\"0\" x2=\"20\" y2=\"40\" gradientUnits=\"userSpaceOnUse\">\n<stop stop-color=\"#6C4DFF\"/>\n<stop offset=\"1\" stop-color=\"#583ED3\"/>\n</linearGradient>\n<linearGradient id=\"paint1_linear_5110_14771\" x1=\"14.639\" y1=\"10.7917\" x2=\"32.1712\" y2=\"41.1585\" gradientUnits=\"userSpaceOnUse\">\n<stop stop-color=\"white\" stop-opacity=\"0.8\"/>\n<stop offset=\"0.437689\" stop-color=\"white\"/>\n</linearGradient>\n<clipPath id=\"clip0_5110_14771\">\n<rect width=\"40\" height=\"40\" rx=\"20\" fill=\"white\"/>\n</clipPath>\n</defs>\n</svg>",
+                  "codex": "<svg class=\"codex-brand\" role=\"img\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"#10A37F\"><title>OpenAI</title><g transform=\"translate(1.2 1.2) scale(0.9)\"><path d=\"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z\"/></g></svg>",
+                  "glm": "<svg role=\"img\" viewBox=\"0 0 30 30\" xmlns=\"http://www.w3.org/2000/svg\"><title>Z.ai / GLM logo</title><path d=\"M24.51 28.51H5.49c-2.21 0-4-1.79-4-4V5.49c0-2.21 1.79-4 4-4h19.03c2.21 0 4 1.79 4 4v19.03c-.01 2.21-1.8 3.99-4.01 3.99z\" fill=\"#2D2D2D\"/><path d=\"M15.47 7.1l-1.3 1.85c-.2.29-.54.47-.9.47h-7.1V7.09h9.3z\" fill=\"#FFFFFF\"/><polygon points=\"24.3,7.1 13.14,22.91 5.7,22.91 16.86,7.1\" fill=\"#FFFFFF\"/><path d=\"M14.53 22.91l1.31-1.86c.2-.29.54-.47.9-.47h7.09v2.33h-9.3z\" fill=\"#FFFFFF\"/></svg>",
+                  "qwen-code": "<svg role=\"img\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><title>QWen</title><path d=\"M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z\"/></svg>",
+                  "trae": "<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAF9SURBVHgB7Zm9SsNQFMf/EYWiVB2KKGLBScHFN9BJurmoa0dn9QGqD1CdHbtWFzd10jfQQdBJqIgKGYw4VCR+nGD0ptqmsSectD0/CKXpbXJ+3HvOyYfVP5B+RxvTgzZHBaRRAWlUQBoVkEYFpOkNGzC0MgtJnPJZw99DBcZ2FiFJmIDmgDSdn8S1PB9d4aFwiDgY2cwhnZuK9J/IAq5TxevNI+Lg7amKqGgO/DrgYIplTNPnAyN9E8OYPF5FZmOu7hgKPrufZ+svkXOgHhR8di/vfWbW5719dvE0MMYPPjUz6m3E3doBWoFlBszgfUjCnAkzeB+6TGl1JuJNYuOJk/W1ccMiQGW1slwKlFe7eAJ7+2cJuZ8lsrJUwsvF/fc+us5JxBIiTIna4H1MCY7gCbYkJij464Xdhg3Jl3D/0bT+gj0HmummXMET2omlCc2By/GtwHeq3dO3BSQFXULSdN8dGdV6p3yOpGDpOzJhVEAaFZBGBaRRAWlUQJoPEeV5RYlN/QYAAAAASUVORK5CYII=\" width=\"12\" height=\"12\" alt=\"\" style=\"border-radius:2px;display:block\">",
+                  "zcode": "<svg role=\"img\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><title>Z pixel outline</title><rect x=\"1\" y=\"1\" width=\"22\" height=\"22\" rx=\"5\" fill=\"#13272B\"/><g fill=\"#0F8A80\"><rect x=\"5\" y=\"5\" width=\"14\" height=\"2.6\"/><rect x=\"14.6\" y=\"7.6\" width=\"2.6\" height=\"2.6\"/><rect x=\"11.4\" y=\"10.7\" width=\"2.6\" height=\"2.6\"/><rect x=\"8.2\" y=\"13.8\" width=\"2.6\" height=\"2.6\"/><rect x=\"5\" y=\"16.4\" width=\"14\" height=\"2.6\"/></g></svg>",
+                };
+                // #227 件四：占位 getter——无品牌 SVG 引擎（zcode/glm/未知）=品牌色圆角字母
+                // （与像素螃蟹同族谱；expo EngineIcon PLACEHOLDER 同源色）
+                const engineBrandSvgOf = (item) => ENGINE_BRAND_SVG[item.engineClass] ?? (() => {
+                  const PH = { zcode: ["#546784", "Z"], glm: ["#3E8EF7", "G"] }[item.engineClass] ?? ["#546784", (item.engine || "?").charAt(0).toUpperCase()];
+                  return '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="' + PH[0] + '"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">' + PH[1] + '</text></svg>';
+                })();
+                const b2EngineBadge = (item) => { const brand = engineBrandSvgOf(item); return '<span class="engine-badge ' + item.engineClass + '">' + (brand ? '<span class="badge-brand">' + brand + "</span>" : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>') + item.engine + "</span>"; };
+                // W-CRABINTEGRATE（用户 1025 图集点选）：角色蟹头像——PM=举旗蟹 D2 / Leader=皇冠蟹 A1
+                //（claude 引擎替标准蟹；非 claude 保本引擎字形+右上皇冠角标 -15° 金色=通用角色层兜底）。
+                // 角色判定=item.teamRole（pmTeamChipOf 词表单口扩展 kind），worker 卡零变化。
+                const ROLE_AVATAR_BRAND = {
+                  "pm": "<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAL8AAACwCAYAAABevL/TAAAqh0lEQVR4nO19SZMkyXXe5x5LLlXdhR7sCwGwBwNQgMiBkQAFjQygoBspM9F00UXSL9AP0EFnmumgq2460nTRTQeZSeSBgmEzgARHAAFxMDM9gwGxcGY000tVZcbmIfvec48lK2vp6e7Kpf1ry46szIjICI/nz58/f+97QERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERMT2wmz6AiIizsMLtz/Wfu0rt+X9N757R7bfvvPLxyaz6eM6UUTEk8Z/uH0bfwK04e9H7QhR+CN2rgMEPGpHiMIfsXcd4aqdIQp/xN51hKuOClH4I55a8ygKf8RT2xGi8Ec8tR3BbvRKIiI2iCj8EU8tovBHPLWIwh/x1GKjE97Pf/RWi3vvIuf8my/Tb1unW/FL+c9lmj7YyleXLGXUte4TXtYO/rZA0+h+bdu/wt9XQZL4NyvXHf5u6vHfq1teQ7iPddfp3NnrG14j97sI4f4uvf5Ljl/XfrwHZ1bajJ/5z7k1CdBmGV66V21dHNlGhf8PXvhH+MPn/yFmroS1FsaYbktw2/qWHW6H77m/glt3ZkvhMaaFMUm31QfIp+7Q8Oma9ecO13ARrJxnjHDspcebFk1TwNheQsP9h5dz7sy9D6/zsvu3Nl37Ofx2eK3rwPYZPo/wjOR6bIYaCRwMrHRK/qe9lYLfmBQ1LN5+cILvvvij9n/+72/h9ePt6QQbFf7nPvUpHOXAYUMhpmCi22qDt/Lw1wlm//CHZ3RrttyB5+T+zp/XdX87XKIax6vmZ2CMG++9IkwXC3+DNmHvHN/DUNh4havnHneuoHZ5nvbM1pr1n8NvLxP+NukvTi+L+4fhoEVlKPxWhN9Sucjp2Oa8dqCdTIGyQl6XWyH4f3JHo0M3Lvx1tcQsPcSBoXbpH7rAa5Jes13y8DshvmxLO4So9FwivNpJ9FzrNeT67RqY8fWFznsespyjGzWwdkrZtmyLxAvo4PdM35nD73dt1vrvV7ZVWa39HH6biN1z/n0a23/ftvXo+8Y1SK3eH0U9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\" width=\"12\" height=\"12\" alt=\"\" style=\"border-radius:2px;display:block\">",
+                  "leader": "<img src=\"data:image/png;base64,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\" width=\"12\" height=\"12\" alt=\"\" style=\"border-radius:2px;display:block\">",
+                };
+                const ROLE_CROWN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.5 L4.8 8 L9.4 12.8 L12 6 L14.6 12.8 L19.2 8 L21 17.5 Q12 20.5 3 17.5 Z" fill="#D4AF37" stroke="#8B6914" stroke-width="1.2" stroke-linejoin="round"/><circle cx="12" cy="4.6" r="1.4" fill="#D4AF37"/><circle cx="5.2" cy="6.9" r="1.1" fill="#D4AF37"/><circle cx="18.8" cy="6.9" r="1.1" fill="#D4AF37"/></svg>';
+                const avaBrandHtmlOf = (item) => {
+                  const role = item.teamRole;
+                  const brand = engineBrandSvgOf(item);
+                  if (role && ROLE_AVATAR_BRAND[role]) {
+                    if ((item.engineClass || "claude") === "claude") return '<span class="ava-brand role-ava">' + ROLE_AVATAR_BRAND[role] + "</span>";
+                    return '<span class="ava-brand role-badge-host">' + brand + '<span class="ava-crown" aria-hidden="true">' + ROLE_CROWN_SVG + "</span></span>";
+                  }
+                  return '<span class="ava-brand">' + brand + "</span>";
+                };
                 // FB19 源色块：源色不再「家里 iMac 二值」——按源名哈希取八色环，同名恒色异名易分
                 const b2SourcePalette = ["#3E8E7E", "#5B8FA8", "#8A7AB5", "#A8763E", "#7D9A3C", "#B55F7A", "#4E85C0", "#9A8A4E"];
                 const b2SourceColor = (source) => {
@@ -913,17 +1027,42 @@
                   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
                   return b2SourcePalette[h % b2SourcePalette.length];
                 };
+                window.__ccDeck005SourceColor = b2SourceColor; // #245 跨 IIFE 暴露(team/bridge 域源胶囊取源色)
                 // UIPOLISH2 件一：头像底色引擎品牌色淡彩——地基 sessionAvaColor 逐字节同构（myCardMarkup
                 // 与地基 renderSessionCard 的 DOM 一致性是 observer 完整性检查的前提，两处必须同步改）
                 const b2AvaColor = (item) => ({
-                  claude: "var(--engine-claude)", codex: "var(--engine-codex)", trae: "var(--engine-trae)",
+                  claude: "var(--engine-claude)", glm: "var(--engine-glm)", codex: "var(--engine-codex)", trae: "var(--engine-trae)",
                   qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)",
                 }[item.engineClass] || b2SourceColor(item.source));
+                // W-TEAMSNC ②③：团队 chip 单口 markup——button 化（data-team-chip 开第四列团队抽屉，
+                // 委托链见 UI.section data-team-chip 分支）+ ✦ 前缀（复用 member-chip SLIM_KEEP_ROLE
+                // 徽记符号=「编制特卡」语义）；卡 r3 与详情 head identity-cluster 同款同链。
+                // idle=E5 全闲置灰；aria-expanded 随抽屉开合同 gid 置 true（入口态可视）。
+                // W-TEAMCHIP2 ①（用户 1025 实锤「色块语义不明」）：左侧色块 i 换双人剪影内联 svg
+                //（team 通用符号，两人重叠剪影——后人（右小）半身与前辈（左大）几何交叠约
+                // 1.4px，同色 fill 融合成经典 people 形态），fill=currentColor 随 --team-accent 取色。
+                // W-TEAMCHIP2 ②：teams-dock 退役后未读聚合唯一列表可视面=chip 角标 tc-unread
+                //（slimUnread→chip，有未读显数防失焦；>9 收口 9+；title 带精确数）。
+                const TEAM_CHIP_ICON = '<svg class="tc-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.2" cy="4.4" r="2.7"/><path d="M0.7 13.8v-.9c0-2.9 1.9-4.7 4.5-4.7s4.5 1.8 4.5 4.7v.9z"/><circle cx="11.5" cy="4.7" r="2.3"/><path d="M8.3 13.8v-.8c0-2.4 1.5-4.1 3.2-4.1s3.2 1.7 3.2 4.1v.8z"/></svg>';
+                // W-ENGLM2 F（用户 1025 实锤）：chip 数字位=活跃成员数（编制内 WORKING 计数，
+                // 0 不显；working 色小数字 tc-run）——未读不再占数字位，降级为不带数字的小圆点
+                // tc-dot（保留注意力信号；slimUnread 基建改挂）。idle（全闲=running 0）自然无数字，
+                // 与活跃数并存语义成立（E5 判定不动）。unread 数据链原样（点击开抽屉=清零不变）。
+                const teamChipMarkup = (t) => {
+                  const un = S.slimUnread.get(t.gid);
+                  const hasUnread = un ? un.size > 0 : false;
+                  return '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + (hasUnread ? " has-unread" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + (t.running > 0 ? " · " + t.running + " 人在跑" : "") + (hasUnread ? " · 有新输出未在看" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '">' + TEAM_CHIP_ICON + '<span class="tc-name">' + esc(t.name) + "</span>" + (t.running > 0 ? '<span class="tc-run">' + t.running + "</span>" : "") + (hasUnread ? '<i class="tc-dot" aria-hidden="true"></i>' : "") + "</button>";
+                };
+                const teamChipsOf = (item) => (Array.isArray(item.teams) ? item.teams : []).map(teamChipMarkup).join("");
                 function myCardMarkup(item) {
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
-                  const b2SourceBadge = (item) => '<span class="source-badge" style="color:' + b2SourceColor(item.source) + ";border-color:" + b2SourceColor(item.source) + ";background:color-mix(in srgb, " + b2SourceColor(item.source) + ' 14%, transparent)">' + item.source + "</span>"; // W-WINPAIR-R6：八色环源色徽章（源色底块增强辨识）
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.team || item.engine || item.source || item.pinned ? '<span class="srow-r3">' + (item.pinned ? '<span class="tag pin-flag">置顶</span>' : "") + (item.team ? '<span class="team-chip" title="所属团队：' + esc(item.team.name) + '" style="--team-accent:' + item.team.accent + '"><i aria-hidden="true"></i><span class="tc-name">' + esc(item.team.name) + "</span></span>" : "") + b2EngineBadge(item) + b2SourceBadge(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  // #227 三排定稿③：竖条退役——源信息回归第三排双胶囊（b2SrcCap=件A
+                // 电脑图标前缀+源名，色=sourcePalette 同色）
+                const b2SrcCap = (item) => item.source
+                  ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
+                  : "";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.engine || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + b2EngineBadge(item) + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -949,6 +1088,11 @@
                   const bySid = new Map(), teams = new Map();
                   for (const p of (Array.isArray(projects) ? projects : [])) {
                     if (!p || typeof p.id !== "string") continue;
+                    // W-TS63FIX（review-tsync-web P2-1）：归档门控统一——archived 团队与 chip 侧
+                    //（pmTeamChipOf E4 过滤）对齐：dock 入口/第四列抽屉/worker 收纳（slimIsHidden
+                    // 经 bySid）四面同退役；已开归档团队抽屉在下次 renderSlimDrawer team-miss
+                    // 路径自动收起（自愈链现成，S.boards 残帧随 teams 缺席自然失效）。
+                    if (String(p.status || "") === "archived") continue;
                     const list = (Array.isArray(p.headcount) ? p.headcount : []).filter((m) => m && typeof m.session_id === "string");
                     if (!list.length) continue;
                     teams.set(p.id, { id: p.id, name: String(p.name || p.id), members: list });
@@ -963,70 +1107,157 @@
                   if (!m || SLIM_KEEP_ROLE.test(m.role)) return false; // PM/Leader 与无编制（直连）照旧直列
                   return session.session_id !== selectedSid; // 直聊中（选中）临时出列
                 }
-                function slimTeamEntryMarkup(team, roster, sessionsMap, filterDef) {
-                  const kept = [], hidden = [];
-                  for (const m of team.members) {
+                // slimTeamEntryMarkup（dock 入口卡）随 W-TEAMCHIP2 ② teams-dock 整体退役删除
+                //（用户 1025 拍板：融合已成，列表下方团队卡组移除，C 稿 dock 退役项落地）——
+                // 团队入口收口 chip（列表/详情 head）+抽屉 roster 行+团队域三链；收纳逻辑
+                //（slimIsHidden/SLIM_KEEP_ROLE）保留，收起会话入口=抽屉 roster 行直开+chip。
+                // slimDrawerCardMarkup（旧成员会话卡列）随 W-TEAMSNC ④ 厚抽屉退役——roster 行直开
+                //（data-slim-open）吸收其职能（B 稿 D3/R5：YAGNI，Leader 拍板主战方案）
+                // ---------- W-TEAMSNC ④ 第四列团队信息抽屉（B 稿主战方案定稿）----------
+                // 原「成员会话卡列」原位升级为厚信息抽屉：四区=在办概览（板）/成员 roster（行直开）/
+                // 输出物计数/跳团队域钮组；296px + .open class 滑入动效（替代 [hidden] 硬切）；开抽屉
+                // 清未读（slimMarkSeen 现成）。数据面（B 稿 §3）：S.boards 吃 SNAPSHOT.boards +
+                // BOARD_UPDATED 帧跟随（会话域唯一新增消费点）；板缺席=「板未同步」降级文案不伪造
+                // 0/0/0；成员态/水位吃 S.sessions 现成字段。板新鲜度承诺=快照级+帧级跟随，深度实时
+                // 去团队域（域职责不越界）。泳道词表与 team-domain lanes 同源（legacy 归并+五段条）。
+                const TEAM_DRAWER_LANES = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
+                const TEAM_DRAWER_LEGACY = { todo: "backlog", doing: "claimed" };
+                /** 纯函数拼装模型（单测锚：relay/scripts/test-session-slim.ts 纯函数直跑同范式）。
+                 * boardEntries=null=板未同步（旧 relay/未随快照）——概览区走降级，不伪造空板。 */
+                function teamDrawerModelOf(team, boardEntries, sessionsMap) {
+                  const members = (team && Array.isArray(team.members)) ? team.members : [];
+                  const roster = members.map((m) => {
                     const s = sessionsMap.get(m.session_id);
-                    if (!s) continue; // 编制在、会话未同步（异源）不计（仅影响 mini 灯/命中，不再影响出卡）
-                    (SLIM_KEEP_ROLE.test(String(m.role || "")) ? kept : hidden).push({ m, s });
-                  }
-                  // t25fix #4（验收 T2）：快照刚到的时序窗内，0 同步成员的团队卡先不出——
-                  // 编制帧与会话帧到达有先后，首渲染易闪「0/0/0 无灯」残卡；1.2s 稳定窗后
-                  // 恢复 #99件5 出卡口径（编制在场即出卡，异源团队不回归）
-                  if (!kept.length && !hidden.length && S.snapshotAt && Date.now() - S.snapshotAt < 1200) return "";
-                  const hit = hidden.filter((x) => !filterDef || filterDef.test(x.s));
-                  // #99件5（Watchtower 等缺入口卡根修）：出卡前提从「有已同步收起会话」放宽为
-                  // 「编制在场即出卡」——成员会话未同步（异源）或全 PM/Leader 的团队不再被
-                  // continue 链路筛没（入口卡承担「点击去团队域」职能，与成员会话同步与否解耦）；
-                  // 筛选语义保留：非「全部」档下该团队无命中状态仍不出卡（纯粹性不破）。注意
-                  // sessionFilterOf 恒返回对象（全部档=test 恒真），「全部」判定必须走 id，不能
-                  // 以 filterDef 真值为据（首版实错：Watchtower 恒被筛没）
-                  const isAllFilter = !filterDef || filterDef.id === "all";
-                  if (!hit.length && (!isAllFilter || !team.members.length)) return "";
-                  // #99件6（口径归一）：计数从「已同步收起会话数」（hit.length）统一为编制
-                  // roster 口径——rosterN=编制席全量（含 PM/Leader 与未同步成员，与团队域
-                  // 「N 席」/检查器成员块同源）；running=编制内已同步且 WORKING 数（原含
-                  // WAITING/ERROR 的「进行中」宽口径退役，与组头 workingN 同判）
-                  const rosterN = team.members.length;
-                  const running = team.members.filter((m) => { const s = sessionsMap.get(m.session_id); return s && s.status === "WORKING"; }).length;
-                  const acceptance = Number.isFinite(Number(team.acceptance_count)) ? Math.max(0, Number(team.acceptance_count)) : 0;
-                  // 1014 追加（用户：3 人在岗只见 1 颗队级绿点）：mini 行=每在岗成员一颗显性
-                  // 心态灯（WORKING=绿呼吸/其余=灰；角色与状态词收进 title 悬停）——原 badge
-                  // 字+6px 角点形态灯存在感为零；**在岗优先排序**（用户截图：绿点被折进
-                  // +N 看不见）——running 稳定前置再截 5+N，绿点恒前排可见
-                  const lampOrder = hit.slice().sort((a, b) => Number(b.s.status === "WORKING") - Number(a.s.status === "WORKING"));
-                  const minis = lampOrder.slice(0, 5).map((x) => {
-                    const stCls = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[x.s.status] || "closed"; // 1014 五色词表
-                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[x.s.status] || "离线";
-                    const who = (SLIM_KEEP_ROLE.test(String(x.m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(x.m.role || "")) ? "QA" : "W") + " " + (x.s.title || x.m.session_id).slice(0, 24);
-                    return '<span class="worker-mini lamp" title="' + esc(who + " · " + stWord) + '"><i class="lamp-dot ' + stCls + '"></i></span>';
-                  }).join("") + (hit.length > 5 ? '<span class="worker-mini more" title="还有 ' + (hit.length - 5) + ' 个成员会话">+' + (hit.length - 5) + "</span>" : "");
-                  const teamAria = team.name + " · " + rosterN + " 席编制 · " + running + " 个在跑 · " + acceptance + " 个待验收";
-                  // t25fix #5：团队入口卡源徽章（成员已同步会话的源去重；单源模式由
-                  // body[data-source-count="1"] CSS 隐藏，聚合模式恒显）
-                  const teamSrcs = [...new Set([kept, hidden].flat().map((x) => String((x.s && x.s.relay_source) || "")).filter(Boolean))];
-                  const teamSrcBadges = teamSrcs.slice(0, 2).map((src) => '<span class="source-badge" title="成员所属源" style="color:' + b2SourceColor(src) + ";border-color:" + b2SourceColor(src) + ';background:color-mix(in srgb, ' + b2SourceColor(src) + ' 14%, transparent)">' + esc(src) + "</span>").join("") + (teamSrcs.length > 2 ? '<span class="source-badge">' + teamSrcs.length + " 源</span>" : "");
-                  const avatar = String(team.name || team.id || "团").trim().charAt(0).toUpperCase() || "团";
-                  // 1014 追加：队级聚合灯语义明确化——头像角点=整队健康度（任一成员在跑=呼吸/
-                  // 全闲=灰），与成员 mini 灯形成「队健康 × 人人灯」两级；title 明示语义；
-                  // #99件6：判定同编制口径（running），未同步成员不算活
-                  const teamAlive = running > 0;
-                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '<i class="lamp-dot team-health ' + (teamAlive ? "working" : "idle") + '" title="整队健康度：' + running + ' 人在跑"></i></span><span class="t-main"><span class="t-name">' + esc(team.name) + teamSrcBadges + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="编制席位"><svg class="icon-inline" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + rosterN + '</b></span><span class="t-count" title="在跑（工作中）"><svg class="icon-inline t-running-icon" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
+                    const pct = s && Number(s.context_limit) ? Math.min(100, Math.round((Number(s.context_usage) || 0) / Number(s.context_limit) * 100)) : null;
+                    return {
+                      sid: m.session_id, role: String(m.role || ""), nick: String(m.nick || ""),
+                      pm: SLIM_KEEP_ROLE.test(String(m.role || "")),
+                      online: !!s, status: s ? s.status : null,
+                      title: s ? String(s.title || s.session_id) : String(m.session_id).slice(0, 8),
+                      pct,
+                      arts: s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [],
+                    };
+                  });
+                  const running = roster.filter((r) => r.status === "WORKING").length;
+                  const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
+                  const entries = Array.isArray(boardEntries) ? boardEntries : null;
+                  const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
+                  const activeN = lanes ? lanes.slice(0, 4).reduce((n, l) => n + l.n, 0) : null; // 在办=四未完泳道合计（done 除外）
+                  const keyTasks = entries ? entries.filter((e) => e && e.gate && e.gate.reason).slice(0, 3) : [];
+                  const arts = roster.flatMap((r) => r.arts.map((a) => ({ path: String(a.path || ""), last_at: Number(a.last_at || 0), sid: r.sid, who: r.nick || r.title.slice(0, 8) }))).sort((a, b) => b.last_at - a.last_at);
+                  return { gid: team ? String(team.id || "") : "", name: team ? String(team.name || "") : "", rosterN: members.length, running, roster, lanes, activeN, keyTasks, artsCount: arts.length, recentArts: arts.slice(0, 3) };
                 }
-                function slimDrawerCardMarkup(item) {
-                  return '<div class="queue-card" data-slim-open="' + item.id + '" role="button" tabindex="0" aria-label="打开 ' + item.title + '"><span class="srow-ava" style="--srow-ava-c:' + b2SourceColor(item.source) + '">' + (item.title || "·").trim().charAt(0).toUpperCase() + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '</span><span class="srow-r2"><span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + (item.engine || item.source ? '<span class="srow-r3">' + b2EngineBadge(item) + '<span class="source-badge">' + item.source + "</span></span>" : "") + "</span></div>";
+                // roster 行排序：PM/Leader 前置 → 在跑前置 → 编制序（B 稿 sortRoster 同口径）
+                function teamDrawerRosterSort(a, b) {
+                  return Number(b.pm) - Number(a.pm) || Number(b.status === "WORKING") - Number(a.status === "WORKING") || 0;
+                }
+                function teamDrawerMarkup(model) {
+                  // 头：「名 · N 席 · 在办 M」（A 稿附计数带口径：M=成员 WORKING 计数，无板依赖）
+                  const head = '<div class="drawer-head"><span class="d-name">' + esc(model.name) + " · " + model.rosterN + " 席 · 在办 " + model.running + '</span>' + (S.status !== "online" ? '<span class="d-stale" title="连接断开 · 板况与成员态可能陈旧（重连后随帧自愈）">离线·陈旧</span>' : "") + '<button type="button" class="d-close" data-slim-drawer-toggle="' + esc(model.gid) + '" title="收起团队抽屉" aria-label="收起团队抽屉">✕</button></div>';
+                  // 区一：在办概览（板比例条+关键任务；板缺席=降级文案，入口钮兜底——B 稿 §3 降级口径）
+                  let overview;
+                  if (model.lanes) {
+                    const segs = model.lanes.filter((l) => l.n > 0).map((l) => '<i class="' + l.k + '" style="flex-grow:' + l.n + '" title="' + l.label + " " + l.n + '"></i>').join("");
+                    const legend = model.lanes.map((l) => '<span style="--legend-color:var(--p-' + (l.k === "ready_to_install" ? "ready" : l.k) + ')"><i></i>' + l.label + " <b>" + l.n + "</b></span>").join("");
+                    const keys = model.keyTasks.length ? '<div class="key-task-head">⚠ 关键任务 ' + model.keyTasks.length + "</div>" + model.keyTasks.map((e) => '<div class="key-task" title="' + esc(String(e.text || "").slice(0, 80)) + '">⚠ ' + esc(String(e.text || "").slice(0, 26)) + " · 阻塞：" + esc(String((e.gate && e.gate.reason) || "").slice(0, 18)) + "</div>").join("") : "";
+                    overview = '<div class="dr-sec"><span>在办 ' + (model.activeN || 0) + '</span><span class="dr-sub">板未完任务</span></div>'
+                      + '<div class="lane-bar" role="img" aria-label="任务状态分布">' + segs + '</div><div class="lane-legend">' + legend + "</div>" + keys;
+                  } else {
+                    overview = '<div class="dr-sec"><span>在办 ' + model.running + '</span><span class="dr-sub">成员口径</span></div><div class="readonly-banner slim">板未同步 · 深度板况去团队域看板 ↓</div>';
+                  }
+                  // 区二：成员 roster（行点击=直开成员会话，data-slim-open 既有链；异源未同步=灰行不隐行 #99件5 口径）
+                  const rosterRows = model.roster.slice().sort(teamDrawerRosterSort).map((r) => {
+                    const st = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[r.status] || "closed";
+                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[r.status] || "离线";
+                    return '<div class="roster-row' + (r.online ? "" : " offline") + '" data-slim-open="' + esc(r.sid) + '" role="button" tabindex="0" title="' + esc((r.pm ? "✦ " : "") + r.title + " · " + (r.nick || r.role || "成员") + " · " + stWord + (r.online ? " · 点击直开" : " · 会话未同步")) + '"><i class="lamp-dot ' + st + '"></i><span class="rr-name">' + (r.pm ? "✦ " : "") + esc(r.nick || r.title.slice(0, 14)) + '</span><span class="rr-role">' + esc(r.role || "worker") + '</span><span class="rr-ctx">' + (r.pct !== null ? r.pct + "%" : "") + "</span></div>";
+                  }).join("");
+                  const rosterSec = '<div class="dr-sec"><span>成员 ' + model.rosterN + '</span><span class="dr-sub">在跑 ' + model.running + " · 点击行直开</span></div>"
+                    + (rosterRows || '<div class="readonly-banner slim">编制为空 · 团队域维护</div>');
+                  // 区三：输出物计数+最近 3 件（成员 artifacts 聚合，团队域 teamOutputsMarkup 同口径）
+                  const artsHtml = model.artsCount
+                    ? '<div class="dr-arts">' + model.recentArts.map((a) => '<div class="dr-art" title="' + esc(a.path) + " · " + esc(a.who) + '"><span class="da-name">' + esc(a.path.split(/[\\/]/).pop() || a.path) + "</span><span>" + esc(a.who) + "</span></div>").join("") + "</div>"
+                    : '<div class="readonly-banner slim">尚无输出物登记</div>';
+                  const artsSec = '<div class="dr-sec"><span>输出物 ' + model.artsCount + "</span></div>" + artsHtml;
+                  // 区四：跳团队域钮组（railJump 三链：railJump→ccDeckTeam.select→clickTab，notify.js 先例）
+                  const entrySec = '<div class="entry-btns">'
+                    + ["看板", "成员", "输出"].map((lbl) => '<button type="button" class="dr-jump" data-team-jump="' + esc(model.gid) + '" data-team-jump-tab="' + esc(lbl) + '" title="团队域 · ' + esc(lbl) + '">' + esc(lbl) + " ↗</button>").join("")
+                    + "</div>";
+                  return head + '<div class="drawer-body">' + overview + rosterSec + artsSec + entrySec + "</div>";
+                }
+                // docked/overlay 双形态（B 稿 §1.4 共存矩阵）：≥1360px docked 贴检查器左缘无遮罩；
+                // <1360px overlay 贴屏右缘盖检查器+半透明遮罩（点遮罩关）。类切换挂 #d-session
+                //（.drawer-overlay），与检查器拖宽 --inspector-w 正交；遮罩仅 overlay+开态挂载。
+                // W-TEAMCHIP2 ③：尾部串 syncDrawerMutex——本函数是抽屉形态/开合的唯一汇点
+                //（renderSlimDrawer 开/收两路+mq resize 钩全走此），互斥随每次汇入对账。
+                function syncDrawerOverlay() {
+                  const screen = document.querySelector("#d-session");
+                  const drawer = document.querySelector("#d-session [data-slim-drawer]");
+                  if (!screen || !drawer) return;
+                  const overlay = !window.matchMedia("(min-width: 1360px)").matches;
+                  screen.classList.toggle("drawer-overlay", overlay);
+                  let mask = screen.querySelector(".drawer-mask");
+                  const needMask = overlay && !!S.drawerGid; // W-TEAMCHIP2 ③顺手根修：.open 由 rAF 下一帧落，读 class 会晚一拍才挂 mask（改读开合态，与滑入同步）
+                  if (needMask && !mask) {
+                    mask = document.createElement("div");
+                    mask.className = "drawer-mask";
+                    mask.addEventListener("click", () => { if (S.drawerGid) slimToggleDrawer(S.drawerGid); });
+                    drawer.before(mask);
+                  } else if (!needMask && mask) mask.remove();
+                  syncDrawerMutex();
+                }
+                // W-TEAMCHIP2 ③：抽屉×第三列互斥（docked 形态）。重叠面实况——检查器「团队成员」
+                // 块（成员胶囊行+直开）与抽屉 roster 区同源同职能，且两列全高并置挤占工作区
+                //（296+320px）。方案=互斥而非内容差异化：复用既有 inspector-collapsed 基建
+                //（W-TOPBAR ①收起整块 display:none + W-UIFIX E 贴边 ‹ 把手，抽屉 CSS 已适配
+                // 收起锚位），检查器独有内容（会话任务/用量/输出物）在团队浏览场景非焦点，收起
+                // 零信息损失，‹ 把手一键展开/关抽屉自动还原。S._drawerMutex 只记「互斥收起是
+                // 本链开的」：用户既定收起态（默认收起/手动收起过）不碰不还原；overlay 态抽屉
+                // 盖检查器无需收，切形态时还原。类直切不走 setInspectorCollapsed（settings 域
+                // IIFE 内私有；两行类切换等价，且不触碰其 localStorage/manual 语义）。
+                function syncDrawerMutex() {
+                  const screen = document.querySelector("#d-session");
+                  const inspector = screen && screen.querySelector(".inspector");
+                  if (!screen || !inspector) return;
+                  const docked = window.matchMedia("(min-width: 1360px)").matches;
+                  const collapsedNow = screen.classList.contains("inspector-collapsed");
+                  if (docked && S.drawerGid && !collapsedNow) {
+                    S._drawerMutex = true;
+                    screen.classList.add("inspector-collapsed");
+                    inspector.classList.add("collapsed");
+                  } else if (S._drawerMutex && (!S.drawerGid || !docked)) {
+                    S._drawerMutex = false;
+                    screen.classList.remove("inspector-collapsed");
+                    inspector.classList.remove("collapsed");
+                  }
                 }
                 function renderSlimDrawer() {
                   const el = document.querySelector("#d-session [data-slim-drawer]");
                   if (!el) return;
-                  if (!S.drawerGid && el.hidden) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
+                  if (!S.drawerGid && !el.classList.contains("open")) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
                   const team = S.drawerGid ? slimRosterOf(S.projects).teams.get(S.drawerGid) : null;
-                  if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.hidden = true; el.replaceChildren(); return; }
-                  el.hidden = false;
-                  const cards = team.members.filter((m) => !SLIM_KEEP_ROLE.test(String(m.role || "")) && S.sessions.has(m.session_id)).map((m) => ({ s: S.sessions.get(m.session_id), m })).sort((a, b) => Number(b.s.updated_at || 0) - Number(a.s.updated_at || 0));
-                  const head = '<div class="drawer-head"><span class="d-name">' + esc(team.name) + " · 成员会话</span><span class=\"d-cnt\">" + cards.length + '</span><button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="收起成员会话" aria-label="收起成员会话">✕</button></div>';
-                  const body = cards.length ? '<div class="drawer-body">' + cards.map((x) => slimDrawerCardMarkup(myCardItem(x.s))).join("") + "</div>" : '<div class="drawer-body"><div class="readonly-banner">该团队暂无成员会话 · 编制在团队域维护</div></div>';
-                  el.innerHTML = head + body;
+                  if (!team) { if (S.drawerGid) { S.drawerGid = ""; try { localStorage.setItem("cc-deck-005-slim-drawer", ""); } catch (_) {} } el.classList.remove("open"); el.replaceChildren(); syncDrawerOverlay(); return; }
+                  el.hidden = false; // keep-mounted（首帧解除 hidden 兜底）；显隐交 .open class 过渡
+                  // W-TS63FIX（review-tsync-web P3-1）：rAF 守卫——同帧开→关边界（程序性连击
+                  // toggle）时，已入队回调不得给 team-miss 清空后的空抽屉补 .open（幽灵抽屉，
+                  // 至下次 renderSlimDrawer 才自愈）；回调内复核 drawerGid 仍指向本团才加。
+                  const gidForFrame = S.drawerGid;
+                  requestAnimationFrame(() => { if (S.drawerGid && S.drawerGid === gidForFrame) el.classList.add("open"); }); // 下一帧加 class=首开也走滑入（同帧加无过渡）
+                  // W-TS63FIX（review-tsync-web P2-2）：重渲保滚动位+保焦点——BOARD_UPDATED 同团
+                  // 帧 innerHTML 整替换会丢 drawer-body 滚动与活动元素焦点（活跃团队 1-2s 一帧体感
+                  // 明显）；先存后还：scrollTop 原位回放，焦点按 roster 行锚（data-slim-open=sid）
+                  // 同位行复焦。
+                  const bodyPrev = el.querySelector(".drawer-body");
+                  const stPrev = bodyPrev ? bodyPrev.scrollTop : 0;
+                  const aePrev = document.activeElement;
+                  const aeAnchor = aePrev && el.contains(aePrev) && aePrev.closest ? (aePrev.closest("[data-slim-open]")?.getAttribute("data-slim-open") ?? null) : null;
+                  el.innerHTML = teamDrawerMarkup(teamDrawerModelOf(team, S.boards ? S.boards.get(S.drawerGid) : null, S.sessions));
+                  syncDrawerOverlay();
+                  const bodyNext = el.querySelector(".drawer-body");
+                  if (bodyNext) bodyNext.scrollTop = stPrev;
+                  if (aeAnchor) {
+                    const rowAgain = el.querySelector('[data-slim-open="' + cssEsc(aeAnchor) + '"]');
+                    if (rowAgain && typeof rowAgain.focus === "function") rowAgain.focus();
+                  }
                 }
                 function slimMarkSeen(gid) {
                   if (!gid || !S.slimUnread.has(gid)) return;
@@ -1036,10 +1267,20 @@
                 }
                 function slimToggleDrawer(gid) {
                   const want = String(gid || "");
+                  // W-TS63FIX（review-tsync-web P3-2）：键盘可达性——toggle 前 chip 若持焦点，
+                  // renderMyList 重建列表节点会丢焦点（落 body，Tab 从头再来）；记 chip gid 重建后还焦。
+                  const ae = document.activeElement;
+                  const chipGid = ae && ae.matches && ae.matches("[data-team-chip]") ? ae.getAttribute("data-team-chip") : null;
                   S.drawerGid = S.drawerGid === want ? "" : want;
                   try { localStorage.setItem("cc-deck-005-slim-drawer", S.drawerGid); } catch (_) {}
                   if (S.drawerGid) slimMarkSeen(S.drawerGid); // 展开即清该团队未读（设计要点 1）
                   renderSlimDrawer();
+                  renderMyList(); // W-TEAMSNC ②：chip aria-expanded 随抽屉开合同步（markSeen 无未读时不触发重渲，此处单口补齐）
+                  renderHeader(); // W-TS63FIX（review-tsync-web P3-2）：head chip aria-expanded 同步（renderHeader 链不进 renderMyList，不补则停旧值）
+                  if (chipGid) {
+                    const chipAgain = document.querySelector('#d-session [data-team-chip="' + cssEsc(chipGid) + '"]');
+                    if (chipAgain && typeof chipAgain.focus === "function") chipAgain.focus();
+                  }
                 }
                 function slimOpenSession(sid) {
                   if (!UI) return;
@@ -1058,7 +1299,7 @@
                   renderMyList(); // 直聊中的 worker 会话临时出列并打标 selected（mo 读到幂等，不重复结算）
                   renderAll();
                 }
-                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）
+                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）；W-TEAMSNC ①：selectedSid=建团表单取「当前选中会话」任 PM（team-domain pm-led 模板消费）
                 // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
                 // W-UIPOLISH4 件十三（2026-10-12 用户截图）：加「最近活跃」档（隐藏超时置灰的
                 // 空闲僵尸卡=idleDimmed 同源判定，只显近期有活动的）+「非进行中」档；档位序=
@@ -1142,31 +1383,16 @@
                   // [t-7e0c6189] 瘦身过滤：编制内 worker/QA 会话收起（置顶/选中中/PM/Leader/无编制直列照旧）
                   const slimRoster = slimRosterOf(S.projects);
                   const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);
-                  // #103 两段式（用户提案+Leader 细化）：列表分上/下两块——上段=会话（.list-upper
-                  // flex:1 滚动），下段=团队 dock（flex:none 常驻列表底；折叠后只剩顶栏吸附最底=
-                  // IDE status-bar 形态，顶栏保留聚合健康灯+未读数+队数/在跑计数）。dock 构建
-                  // 前置于两个空态分支：会话空态（SNAPSHOT 空或筛选空）团队区照常渲染——编制
-                  // 在场即有入口（与件5 同源），上段空时 dock 自然上移。#99件4：标题「团队」→
-                  // 「team」；计数=队数（双人图标=团队概念，与成员单人图标分工）。
-                  const slimTeamsOpen = !collapsedGroups.has("slim-teams");
-                  const slimEntries = [...slimRoster.teams.values()].map((t) => slimTeamEntryMarkup(t, slimRoster, S.sessions, filterDef)).filter(Boolean);
-                  const dockRunning = [...slimRoster.teams.values()].reduce((n, t) => n + t.members.filter((m) => { const s = S.sessions.get(m.session_id); return s && s.status === "WORKING"; }).length, 0); // 编制口径在跑总数（与入口卡 running 同判）
-                  const dockAlive = dockRunning > 0;
-                  const unreadTeams = S.slimUnread.size;
-                  const dockNode = (() => {
-                    if (!slimEntries.length) return null;
-                    const head = '<div class="queue-group" data-group-toggle="slim-teams" role="button" tabindex="0" aria-expanded="' + (slimTeamsOpen ? "true" : "false") + '" title="展开/收起团队区"><span class="grp-caret">▸</span><span class="grp-ava" aria-hidden="true">T</span><span>team</span><i class="dock-lamp' + (dockAlive ? " on" : "") + '" title="' + (dockAlive ? dockRunning + " 人在跑" : "全部空闲") + '"></i><span class="grp-count" data-session-group-count><svg class="icon-inline grp-ic" aria-hidden="true"><use href="#icon-users"></use></svg>' + slimEntries.length + (dockRunning ? ' <svg class="icon-inline grp-ic on" aria-hidden="true"><use href="#icon-user"></use></svg>' + dockRunning : "") + '</span>' + (unreadTeams ? '<span class="dock-unread" title="有团队新输出未在看">' + unreadTeams + "</span>" : "") + "</div>";
-                    const tpl = document.createElement("template");
-                    tpl.innerHTML = '<div class="session-group teams-dock' + (slimTeamsOpen ? "" : " collapsed") + '" data-session-group="slim-teams">' + head + '<div class="grp-body">' + slimEntries.join("") + "</div></div>";
-                    return tpl.content.firstElementChild;
-                  })();
-                  const mountTwoPane = (upperContent) => { // 两段拼装单口：上段节点（会话卡/空态占位）+dock（编制空时不建）
+                  // W-TEAMCHIP2 ②（用户 1025 拍板，C 稿 dock 退役项落地）：#103 两段式的下段
+                  // teams-dock 整链退役——列表回归单段（.list-upper 独占滚动），团队存在感全分布
+                  // chip（列表 r3+详情 head，未读角标 tc-unread 唯一列表未读面）；收纳逻辑保留，
+                  // 收起会话入口=抽屉 roster 行直开；队级聚合健康/队数一览走 chip idle 态+团队域。
+                  const mountUpper = (upperContent) => { // 单段挂载单口（上段节点=会话卡/空态占位）
                     const upper = document.createElement("div");
                     upper.className = "list-upper";
                     upper.append(upperContent);
-                    if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩，dock 自然上移
-                    if (dockNode) list.replaceChildren(upper, dockNode);
-                    else list.replaceChildren(upper);
+                    if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩
+                    list.replaceChildren(upper);
                   };
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
@@ -1174,7 +1400,7 @@
                     ph.dataset.sessionEmpty = "true";
                     ph.setAttribute("role", "status");
                     ph.textContent = "暂无会话 · relay SNAPSHOT 已同步";
-                    mountTwoPane(ph);
+                    mountUpper(ph);
                     return;
                   }
                   // 1015 置顶常驻（用户需求）：筛选档不隐藏置顶卡——pinned 豁免 filterDef.test 恒进
@@ -1182,13 +1408,25 @@
                   // sessionSearchTest 是用户显式找词，置顶卡不匹配搜索词照隐藏；slim 收起不豁免——
                   // slimIsHidden 本就置顶例外（:3709）。主过滤与 filterHidden 记账共用 pinnedKeep
                   // 谓词，记账恒等于真实隐藏集（mo 完整性检查口径不漂）。
+                  // #240 W-LEADERHIDE：Leader 卡不进列表——组织锚 id（SNAPSHOT.leader_session_id）
+                  // + 编制 role 词表（leader|领队）双口径。词表不含 pm：PM 会话照常直列（口径②
+                  // 语义判别：删的是 Leader 形制卡非 PM 会话卡）。锚不在任何团队编制 headcount
+                  //（2026-10-23 生产 projects.json 实锤）——headcount 反查滤不到锚，锚 id 是
+                  // 唯一可靠识别（relay SNAPSHOT 同批补发该字段）。leader 卡显式并入 filterHidden
+                  // 记账（observer 遍历 S.sessions 全量，缺记账=「缺卡→重渲→仍缺」死循环，FB17）
+                  const isLeaderSession = (x) => {
+                    if (S.leaderSessionId && x.session_id === S.leaderSessionId) return true;
+                    const m = slimRoster.bySid.get(x.session_id);
+                    return !!(m && /^(leader|领队)$/i.test(String(m.role || "")));
+                  };
+                  const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
-                  const sessions = [...S.sessions.values()].filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
-                  // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径
-                  const filterHidden = [...S.sessions.values()].filter((x) => !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
+                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径；#240 leader 卡恒进记账
+                  const filterHidden = [...S.sessions.values()].filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
                   // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
-                  const slimHiddenIds = [...S.sessions.values()].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
+                  const slimHiddenIds = [...liveSessions].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
                   S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;
                   if (!sessions.length) {
                     const ph = document.createElement("div");
@@ -1197,7 +1435,7 @@
                     ph.textContent = sessionSearchQuery
                       ? "搜索「" + sessionSearchQuery + "」下暂无会话 · 可换个词或清空搜索"
                       : "「" + filterDef.label + "」筛选下暂无会话 · 切回「全部」查看";
-                    mountTwoPane(ph);
+                    mountUpper(ph);
                     return;
                   }
                   // B18 活跃优先：顶部「进行中」组收全部活跃会话（WORKING/WAITING/ERROR，按置顶
@@ -1235,11 +1473,11 @@
                   // 筛选档（件十三「进行中」档）。活跃与闲置合流平铺（unpinned 本就按置顶+recency
                   // 序，活跃卡自然浮前）。
                   S._collapsedIdleIds = null; // 团队组退役：无折叠缺卡形态（slim 收起走 _slimHiddenIds）
-                  // #103 两段式拼装：上段=置顶+活跃+闲置平铺（.list-upper 滚动），下段=dock（前置
-                  // 构建，编制空则不建）
+                  // W-TEAMCHIP2 ②拼装：单段平铺（置顶+活跃+闲置，.list-upper 独占滚动）——
+                  // #103 两段式下段 dock 已随本批退役
                   const tpl = document.createElement("template");
                   tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;
-                  mountTwoPane(tpl.content);
+                  mountUpper(tpl.content);
                 }
 
                 // ---------- ⑥a-1 右键行菜单整链（置顶/重命名/复制ID/删除，走 B2 命令通道） ----------
@@ -1467,7 +1705,12 @@
                 }
                 // ---------- 渲染：头部 / dock / 检查器 ----------
                 function curSession() { return S.selected ? (S.sessions.get(S.selected) || null) : null; }
-                function canCmd(s) { return !!s && (!s.historical || s.external === true); }
+                // #247 W-READONLY-KILL（用户铁口径 2026-10-24）：「历史会话只读」整体退役——
+                // 所有会话一律可操作（发送即自动 resume/注入：managed 走 COMMAND_MESSAGE
+                // →resumeAgent 拉起，external 走 COMMAND_EXT_INPUT →tmux 注入）。旧式
+                // (!s.historical || s.external===true) 组合态把重启误标的用户本机活跃终端
+                // 会话锁成只读（rea/修图两会话三次实锤），relay 侧收编也不再降级 historical
+                function canCmd(s) { return !!s; }
                 function renderHeader() {
                   const s = curSession();
                   const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
@@ -1489,12 +1732,26 @@
                   UI.title.textContent = s.title || s.initial_prompt || s.session_id;
                   // W-UIFB ③：「运行中」状态胶囊退役（i=3）——会话态由 dock 态图标单点表达（B21 语义，
                   // B13 DONE 隐藏口径的全量版）；外部会话仍标「CLI」（用户语言：本机 CLI 里开的会话）
-                  const eng = ENGINES[s.engine || "claude"] || [s.engine || "Claude", ""];
+                  // W-MOBLIST 双端同链：engine 缺失按 model 子串推断（PM/外部会话 engine 空=
+                  // 「?」/错挂 Claude 根因；expo 镜像=src/engine-infer.ts，改链两处同步）
+                  const effEngine = inferEngineOf(s) || "claude"; // W-ENGLM D：推断链共享化（原内联 MODEL_HINTS 退役）
+                  const eng = engineMetaOf(s);
                   // W-TOPBAR ③ head 身份收敛：只剩 engine 徽章一颗；数据源归顶栏源胶囊、外部会话
                   // 「CLI」标从独立 tag 降为徽章内文字后缀（身份类三胶囊 → 一颗）。
                   // W-UIFB ③（合并裁决）：徽章加 sprite 图标（b2EngineIconFor，与第二列同款）；
                   // 模型胶囊维持 W-TOPBAR ③ 静态落 composer 位（U5 验收 pass 形态），不随 renderHeader 重建
-                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>' + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
+                  // #239 W-DETAILAVATAR：徽章图标改接 ENGINE_BRAND_SVG 品牌源（列表卡 srow-ava
+                  // 同源，claude=像素螃蟹七引擎同表）；未知引擎 PH 字母占位兜底（engineBrandSvgOf
+                  // 内建），sprite 形态保留为结构回落——尺寸/圆角走 .badge-brand 约束跟随现行徽章
+                  const brandIconHtml = engineBrandSvgOf({ engineClass: eng[1], engine: s.engine || "claude" });
+                  // W-TEAMSNC ③：详情 head identity-cluster 团队 chip——置于引擎徽章前（团队归属>引擎
+                  // 阅读序，B 稿态 B）；pmTeamChipOf 单口同源（命中才渲染，null 不占位），点击同卡上
+                  // chip 开/收第四列抽屉（data-team-chip 同链同委托）
+                  const headTeams = pmTeamChipOf(s.session_id);
+                  UI.identity.innerHTML = (headTeams.length ? headTeams.map(teamChipMarkup).join("") : "")
+                    + '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
+                    ? '<span class="badge-brand">' + brandIconHtml + "</span>"
+                    : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
                   // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
                   {
                     const el = UI.subDirEl && UI.subDirEl.isConnected ? UI.subDirEl : ($id("session-head-sub") || null);
@@ -1681,9 +1938,29 @@
                   const live = dockLiveLine(s); // A0-1：终端实时行（relay ​ 零宽前缀约定）→ 隐藏自家走秒/token 防双计
                   if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
                   const w = s.waiting_request;
-                  const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
-                  op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
-                  if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
+                  // #224 两层信息架构（WORKING）：标题行=✻ {任务名}（时长/↓累计输出由
+                  // tickDockElapsed 每秒续写 elapsed 段）；动作行=次行 ⚙ Running {命令} ·
+                  // {回合走秒}（mono dim，title hover 全量）。命令动作从主行让位次行
+                  let subEl = dock.querySelector("[data-dock-sub]");
+                  if (s.status === "WORKING" && !live) {
+                    op.textContent = s.title || "未命名任务";
+                    if (tok) tok.hidden = true;
+                    const act = String(s.action_summary || "").replace(/^\u200B+/, "");
+                    if (!subEl) {
+                      subEl = document.createElement("div");
+                      subEl.setAttribute("data-dock-sub", "");
+                      dock.appendChild(subEl);
+                    }
+                    subEl.dataset.act = act;
+                    subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
+                    subEl.textContent = act ? "⚙ Running " + act.slice(0, 110) : "";
+                    subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
+                  } else {
+                    if (subEl) subEl.remove();
+                    const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
+                    op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
+                    if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
+                  }
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
                   renderSubagents(s); // W-UIFB ⑧ 子 Agent 活性面板（状态栏下续行）
@@ -1737,7 +2014,21 @@
                   if (!el) return;
                   if (!s || UI.dock.hasAttribute("data-live-line")) { el.textContent = ""; return; }
                   if (s.status === "DONE" && s.duration_ms) { el.textContent = fmtDur(s.duration_ms); return; }
-                  const base = s.status === "WORKING" ? (s.turn_started_at || s.started_at) : (s.waiting_started_at || s.updated_at || s.started_at);
+                  // #224 WORKING：标题行尾=（任务时长 · ↓累计输出）——任务级时长=会话级
+                  // started_at 起跨回合累计（CLI 同语义），↓=usage.output_tokens（会话累计
+                  // 输出，统计页同源）；同时续写动作行（次行）的回合走秒
+                  if (s.status === "WORKING") {
+                    const dur = fmtTaskDur(Math.max(0, Date.now() - Number(s.started_at || Date.now())) / 1000);
+                    const out = s.usage && Number(s.usage.output_tokens) > 0 ? " · ↓" + fmtDownTok(Number(s.usage.output_tokens)) : "";
+                    el.textContent = "(" + dur + out + ")";
+                    const subEl = UI.dock.querySelector("[data-dock-sub]");
+                    if (subEl && subEl.dataset.act) {
+                      const runSec = Math.max(0, Math.floor((Date.now() - Number(subEl.dataset.turnStarted || Date.now())) / 1000));
+                      subEl.textContent = "⚙ Running " + String(subEl.dataset.act).slice(0, 110) + " · " + runSec + "s";
+                    }
+                    return;
+                  }
+                  const base = s.waiting_started_at || s.updated_at || s.started_at;
                   el.textContent = base ? fmtDur(Math.max(0, Date.now() - base)) : "";
                   // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，不重建面板）
                   document.querySelectorAll("#session-agbox [data-ag-at]").forEach((at) => {
@@ -1751,7 +2042,7 @@
                   const gradeLabel = { safe: "安全", attention: "注意", critical: "拥挤" }[grade];
                   const lim = s.context_limit || 1e6;
                   const onCount = Math.round((pct / 100) * 12);
-                  const eng = ENGINES[s.engine || "claude"] || ["Claude"];
+                  const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
                   const modelShort = s.model ? String(s.model).split(/[/:]/).pop() : tokStr(lim) + " 上限";
                   const note = { safe: "余量充足，可继续当前任务", attention: "上下文偏高，留意即将压缩", critical: "上下文接近上限，建议收口或压缩" }[grade];
                   return '<div class="context-meter ' + grade + '"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">' + esc(eng[0] + " · " + modelShort) + '</strong></div><span class="context-meter-grade">' + gradeLabel + '</span></div><div class="context-meter-band" aria-label="上下文已使用 ' + pct + '%">' + Array.from({ length: 12 }, (_, i) => "<i" + (i < onCount ? ' class="on"' : "") + "></i>").join("") + '</div><div class="context-meter-stats"><span><b class="context-meter-used">' + tokStr(s.context_usage) + '</b> <span class="context-meter-limit">/ ' + tokStr(lim) + ' tokens</span></span><strong class="context-meter-pct">' + pct + '%</strong></div><div class="context-meter-note">' + note + '</div></div>';
@@ -1765,9 +2056,14 @@
                     const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
                     const done = todos.filter((t) => t.status === "completed").length;
                     const open = todos.filter((t) => t.status !== "completed").slice(0, 4);
-                    const eng = ENGINES[s.engine || "claude"] || ["Claude"];
+                    const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
                     const st = STATUS_TAG[s.status] || ["完成", "done"];
                     const inspSrc = String(s.relay_source || S.relayName || ""); // t25fix #5：详情面板源徽章（单源模式 CSS 隐藏）
+                    // W-DRAWMERGE（用户 1025 补充定稿）：PM 会话检查器瘦身——用量/输出物两块
+                    // 在他 tab 已有（详情 tab/输出物看板），PM 检查器聚焦团队内容（团队成员块+
+                    // 任务清单保留；审批/确认区本就在对话流 wait-banner 非本面板）。分支判据=
+                    // pmTeamChipOf 词表单口命中（与 chip/头像角色蟹同源）；非 PM 检查器零变化
+                    const pmInspectorFocus = pmTeamChipOf(s.session_id).length > 0;
                     html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + (inspSrc ? '<br><span class="source-badge insp-src">' + esc(inspSrc) + "</span>" : "") + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
                     // [t-7e0c6189] 团队成员块：选中会话属于某编制时，成员胶囊行（点头像=直开）+ 展开第四列
                     const slimMem = slimRosterOf(S.projects).bySid.get(s.session_id);
@@ -1783,15 +2079,15 @@
                           const unread = unreadSet && unreadSet.has(m.session_id);
                           return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
                         }).join("");
-                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">展开成员会话 ⤢</button></div>';
+                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">团队信息 ⤢</button></div>'; // W-TEAMSNC ④：链接文案随厚抽屉升级（属性/路由零改动）
                       }
                     }
                     if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
-                    if (s.context_usage) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>";
+                    if (s.context_usage && !pmInspectorFocus) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>"; // W-DRAWMERGE：PM 瘦身去水位（他 tab 已有）
                     // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
                     if (s.pre_compact_summary) html += '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>";
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
-                    if (arts.length) {
+                    if (arts.length && !pmInspectorFocus) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
                       html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
                     }
@@ -1886,9 +2182,16 @@
                       (e.ts ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
-                    const eng = ENGINES[(s && s.engine) || "claude"] || ["Claude"];
+                    const eng = engineMetaOf(s); // W-ENGLM G：消息流头像同链（engine 空按 model 推断，glm 不再落 ✻）
+                    // W-AVABG：消息流 AI 头像底色对齐列表引擎品牌色淡彩（UIPOLISH2 件一同纲）——
+                    // eng[1] 与列表 engineClass 同源值（同出 ENGINES 表）；已知引擎走 --engine-* token，
+                    // PM/未知引擎（ENGINES 未命中 eng[1]=undefined）回落列表同款源色哈希 b2SourceColor
+                    // （输入对齐列表 source 口径=显示名）。CSS 端 16% 淡彩罩 surface2 公式同 .srow-ava
+                    const avaSrcRaw = String((s && (s.relay_source || S.relayName)) || "");
+                    // W-AVABG R2（审查 P2 修）：哈希输入对齐列表 item.source 口径=esc(显示名)——源名含 &<>"' 时与列表同源同色
+                    const aiAvaColor = { claude: "var(--engine-claude)", glm: "var(--engine-glm)", codex: "var(--engine-codex)", trae: "var(--engine-trae)", qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)" }[eng[1]] || b2SourceColor(esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(avaSrcRaw) : avaSrcRaw));
                     const full = e.full ? String(e.full) : "";
-                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava">✻</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
+                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
                       mdHtml(open ? String(e.full ?? e.text ?? "") : String(e.text ?? "")) +
                       (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") +
                       (full ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + full.length + " 字 ▾") + "</span>" : "") +
@@ -2093,7 +2396,15 @@
                     content = w.input_summary || "";
                     if (Array.isArray(w.suggestions) && w.suggestions.length) content += (content ? "\n" : "") + "建议：" + w.suggestions.join(" / ");
                   }
-                  if (passive) {
+                  if (passive && !isAsk) {
+                    // W-APPROVE #232：被动权限卡可决化——按钮点击仍走 COMMAND_CONTINUE/REJECT，
+                    // relay 侧经按键注入应答 CLI 本地弹窗（tmux pane 直达数字键+capture 验证；
+                    // 注入失败横幅保留可重试，toast 给失败原因）。无人值守的外部 CLI（无头
+                    // PM/worker）不再「请在电脑上处理」干等到死
+                    content += "\n（CLI 本地弹窗等待中——可远程批准，无需到电脑前）";
+                    actions = '<div class="wait-actions"><button class="deny" data-wait-deny>✕ 拒绝</button>' +
+                      '<button class="allow" data-wait-allow>✓ 允许</button></div>';
+                  } else if (passive) {
                     content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
                   } else if (isAsk && (w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 90000) {
                     // W-DESKASK（W-ASKFIX 桌面同步）：ask 卡 90s 应答窗（relay
@@ -2131,6 +2442,7 @@
                   card.dataset.b2Wait = "1";
                   card.dataset.sid = s.session_id;
                   card.dataset.rid = w.request_id || "";
+                  if (passive && !isAsk) card.dataset.passive = "1"; // W-APPROVE：受理≠生效，收卡等状态帧
                   card.dataset.waitStart = String(waitStart);
                   // 标题行：title + 呼吸点 + elapsed
                   const elapsed = Math.floor((Date.now() - waitStart) / 1000);
@@ -2195,7 +2507,18 @@
                   const extra = {};
                   commandAck(type, Object.assign({ session_id: sid, request_id: rid }, extra)).then((ack) => {
                     const v = ackVerdict(ack);
-                    if (v.ok) { markWaitCardDone(card, kind === "deny"); if (kind === "deny") b2Toast("已拒绝 · 可在输入栏补充说明"); }
+                    if (v.ok) {
+                      if (card.dataset.passive === "1") {
+                        // W-APPROVE #232（审查 P1 修正）：被动卡 ACK ok=受理≠生效（relay 异步
+                        // 注键验证）——不本地终态化，等状态帧收卡；8s 无帧=注入未生效，解 busy
+                        // 可重试（时间线有失败留痕）。终态化会让失败后卡不可重试
+                        b2Toast("已受理 · 等待注入结果…");
+                        setTimeout(() => { if (card.isConnected) delete card.dataset.busy; }, 8000);
+                      } else {
+                        markWaitCardDone(card, kind === "deny");
+                        if (kind === "deny") b2Toast("已拒绝 · 可在输入栏补充说明");
+                      }
+                    }
                     else { delete card.dataset.busy; b2Toast("等待处理未确认：" + v.error); }
                   });
                 }
@@ -2705,7 +3028,7 @@
                   const statusLabel = { WORKING: "运行中", WAITING: "等待确认", DONE: "已完成", ERROR: "错误", CLOSING: "结束中" }[s.status] || s.status || "—";
                   html += '<div class="kv-row"><b>' + esc(statusLabel) + "</b><span>状态</span></div>";
                   html += '<div class="kv-row"><b>' + esc(shortPath(s.cwd) || "—") + "</b><span>目录</span></div>";
-                  const eng = ENGINES[s.engine || "claude"] || ["Claude"];
+                  const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
                   html += '<div class="kv-row"><b>' + esc(eng[0]) + (s.model ? " · " + esc(s.model) : "") + "</b><span>引擎·模型</span></div>";
                   const permMode = s.permission_mode || "—";
                   html += '<div class="kv-row"><b>' + esc(permMode) + "</b><span>权限模式</span></div>";
@@ -2787,7 +3110,12 @@
                 function syncComposerState() {
                   const s = curSession();
                   const editable = !!(s && canCmd(s));
-                  const running = !!(editable && (s.status === "WORKING" || s.status === "WAITING"));
+                  // #221 同族②（W-INJECT3 扩展）：running 加活性时限——status WORKING 停滞
+                  // （外部会话 Stop 帧丢失时 relay status 滞留，与 enter/快照判定同族的回合
+                  // 结束感知缺口）超过 3 分钟无任何日志帧 → 输入条按空闲显示（CLI 实态等待
+                  // 输入，不吓用户「发送将排队」）；status 数据不动（其余面板仍显 relay 真值）
+                  const staleWorking = s && s.status === "WORKING" && (Date.now() - Number(s.updated_at || 0) > 180_000);
+                  const running = !!(editable && !staleWorking && (s.status === "WORKING" || s.status === "WAITING"));
                   if (UI.stopBtn) UI.stopBtn.hidden = !running; // 停止只在运行中出现（旧壳 #124 语义），不再占用发送钮
                   UI.sendBtn.disabled = !editable || !(UI.input.value.trim() || S.staged.length); // 常驻判空：运行中有内容仍可发（排队链）
                   UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
@@ -3515,9 +3843,10 @@
                   mo.observe(UI.sessionList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
                   // [t-7e0c6189] 键盘可达：团队入口卡/成员胶囊/第四列卡（role=button）Enter/Space 走点击链
+                  // W-TEAMSNC ②④：团队 chip（button）原生键盘可达免委托；roster 行（role=button）+跳域钮并入本链
                   UI.section.addEventListener("keydown", (ev) => {
                     if (ev.key !== "Enter" && ev.key !== " ") return;
-                    const t = ev.target.closest("[data-slim-team], [data-slim-open], [data-slim-drawer-toggle]");
+                    const t = ev.target.closest("[data-slim-open], [data-slim-drawer-toggle], [data-team-jump]");
                     if (!t) return;
                     ev.preventDefault();
                     t.click();
@@ -3577,19 +3906,27 @@
                     //（顺序敏感：按钮先于团队卡身，防 team 卡吞掉 ⤢/胶囊点击）
                     const slimTgl = ev.target.closest("[data-slim-drawer-toggle]");
                     if (slimTgl) { ev.stopPropagation(); slimToggleDrawer(slimTgl.dataset.slimDrawerToggle); return; }
-                    const slimOpen = ev.target.closest("[data-slim-open]");
-                    if (slimOpen) { ev.stopPropagation(); slimOpenSession(slimOpen.dataset.slimOpen); return; }
-                    const slimTeam = ev.target.closest("[data-slim-team]");
-                    if (slimTeam) {
+                    // W-TEAMSNC ②：团队 chip 点击=开/收第四列团队抽屉（卡 r3 与详情 head 同链；
+                    // stopPropagation 防冒泡到地基 document 卡选中链——srow-more 同款先例，chip 在
+                    // 卡热区内必须隔离）
+                    const teamChip = ev.target.closest("[data-team-chip]");
+                    if (teamChip) { ev.stopPropagation(); slimToggleDrawer(teamChip.dataset.teamChip); return; }
+                    // W-TEAMSNC ④：抽屉跳团队域钮组（railJump 三链：railJump→ccDeckTeam.select→
+                    // clickTab，notify.js focusSource 同款先例；tab 文案值与 #d-team .segment-bar 对齐）
+                    const teamJump = ev.target.closest("[data-team-jump]");
+                    if (teamJump) {
                       ev.stopPropagation();
-                      const gid = slimTeam.dataset.slimTeam;
-                      slimMarkSeen(gid); // 进团队域即清未读（设计要点 1）
-                      window.__ccDeck005B4?.railJump?.("team"); // 跳团队域（rail-btn 点击链）
-                      window.ccDeckTeam?.select?.(gid);
+                      const jgid = teamJump.dataset.teamJump, jtab = teamJump.dataset.teamJumpTab || "看板";
+                      window.__ccDeck005B4?.railJump?.("team");
+                      if (window.ccDeckTeam?.select?.(jgid) === false) b2Toast("团队已不在编制");
+                      window.__ccDeck005B4?.clickTab?.("#d-team .segment-bar", jtab);
                       return;
                     }
-                    const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中组；W-NOVAUI ⑤ 项目组已退役）
-                    if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
+                    const slimOpen = ev.target.closest("[data-slim-open]");
+                    if (slimOpen) { ev.stopPropagation(); slimOpenSession(slimOpen.dataset.slimOpen); return; }
+                    // [data-slim-team] dock 入口卡点击链随 W-TEAMCHIP2 ② dock 退役删除
+                    //（进团队域即清未读由团队域 select 侧 __ccDeck005SlimUi.markSeen 承接）；
+                    // B11 data-group-toggle 折叠链同批退役（零生产者）。
                     const taskHide = ev.target.closest("[data-task-hide]");
                     if (taskHide) { ev.stopPropagation(); const cs = curSession(); if (cs) { hiddenTaskKeys.add(cs.session_id + "#" + taskHide.dataset.taskHide); renderTasks(); } return; } // #B3-9
                     const taskJump = ev.target.closest("[data-task-jump]");
@@ -3738,8 +4075,24 @@
                     if (!ev.target.closest(".slash-box") && !ev.target.closest(".composer")) slashHide(); // W-SLASH：点浮层/输入区外收起
                   });
                   document.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); window.__ccDeck005ClosePlusMenu && window.__ccDeck005ClosePlusMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); }
+                    if (ev.key === "Escape") { closeCreatePop(); closeModelMenu(); closePermMenu(); window.__ccDeck005ClosePlusMenu && window.__ccDeck005ClosePlusMenu(); closeArtViewer(); slashHide(); document.querySelectorAll("#d-session .artifact-menu.open").forEach((x) => x.classList.remove("open")); if (S.drawerGid) slimToggleDrawer(S.drawerGid); } // W-TEAMSNC ④：Esc 关抽屉（B 稿 1.3，通知弹窗同款收口习惯）
                   });
+                  // W-TEAMSNC ④：docked/overlay 形态随视口切换（≥1360 docked / <1360 overlay+遮罩；
+                  // 与检查器拖宽 --inspector-w 正交）；resize 兜底（matchMedia 无回调的老链不依赖）
+                  if (window.matchMedia) {
+                    const drawerMq = window.matchMedia("(min-width: 1360px)");
+                    const onDrawerMq = () => syncDrawerOverlay();
+                    // W-TEAMCHIP2 ③ 反向互斥：抽屉互斥收起了第三列后，用户点 ‹ 把手手动展开
+                    // 检查器=明确要检查器 → 收抽屉让位（对称互斥；capture 先于地基 data-inspector-
+                    // toggle 委托跑，抽屉关→syncDrawerMutex 还原分支与用户点击同向，幂等不冲突）。
+                    // overlay 态检查器被盖本就点不到把手，不拦。
+                    UI.section.addEventListener("click", (ev) => {
+                      if (!S.drawerGid) return;
+                      if (ev.target.closest(".inspector-expand") && !document.querySelector("#d-session").classList.contains("drawer-overlay")) setTimeout(() => slimToggleDrawer(S.drawerGid), 0); // 延迟一拍：地基 toggle 先按当前态完成展开翻转，本链再关抽屉（同步跑会先把互斥类还原，地基读到「已展开」反手收回去——E2E D7 实锤竞态）
+                    }, true);
+                    if (drawerMq.addEventListener) drawerMq.addEventListener("change", onDrawerMq);
+                    else window.addEventListener("resize", onDrawerMq);
+                  }
 
                   // composer：发送/停止/历史/IME
                   UI.sendBtn.addEventListener("click", sendMessage);
@@ -3987,15 +4340,6 @@
                         }, 150);
                       });
                     }
-                  }
-                  if (UI.sessionList) { // B11 组头键盘可达（role=button）
-                    UI.sessionList.addEventListener("keydown", (ev) => {
-                      if (ev.key !== "Enter" && ev.key !== " ") return;
-                      const head = ev.target.closest("[data-group-toggle]");
-                      if (!head) return;
-                      ev.preventDefault();
-                      toggleGroupCollapse(head.dataset.groupToggle);
-                    });
                   }
                   // 占位标记收编：已绑定面移除 data-stub；搜索/筛选拨给 B2b
                   UI.queueHead.removeAttribute("data-stub");

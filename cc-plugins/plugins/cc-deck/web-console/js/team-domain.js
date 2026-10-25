@@ -36,6 +36,19 @@
                 // 件十三只清了 9 处，团队域整域漏网（用户实锤团队名称旁仍挂 localhost）
                 const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
                 const sourceBadge = () => '<span class="source-badge">' + escape(srcName(state.source)) + "</span>";
+                // #245 A（W-SRCLABEL-MIG）：团队列表卡源胶囊——cardtags2 款（源色 E6 底/白字/
+                // 圆角 4.5/电脑图标转白，会话列表 src-cap 同构）；源=组内成员会话 relay_source
+                // 去重（state.sessions 为桥全量双源持有）；≤2 枚枚举、超出收「N 源」；
+                // 显隐=body[data-source-count] 门控（单源隐藏/聚合显示，CSS 侧）
+                const teamSrcCaps = (item) => {
+                  const srcs = [...new Set(members(item).map((m) => {
+                    const bs = state.sessions && state.sessions.get(m.session_id);
+                    return String((bs && (bs.relay_source || bs.source)) || "");
+                  }).filter(Boolean))];
+                  if (!srcs.length) return "";
+                  const cap = (src) => '<span class="src-cap" title="来自 ' + escape(src) + '" style="background:' + (window.__ccDeck005SourceColor ? window.__ccDeck005SourceColor(src) : "#546784") + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + escape(src) + "</span>";
+                  return srcs.slice(0, 2).map(cap).join("") + (srcs.length > 2 ? '<span class="src-cap" style="background:#546784E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700">' + srcs.length + " 源</span>" : "");
+                };
                 const members = (project) => (Array.isArray(project?.headcount) ? project.headcount : []).filter((member) => member && typeof member.session_id === "string");
                 function memberInfo(member) {
                   const session = state.sessions.get(member.session_id) || {};
@@ -91,6 +104,18 @@
                   }
                   return sids;
                 }
+                // W-SMIMPL ②：回执缺失单集（relay 收口边落 receipt_missing:true 的 done 单）——
+                // 看板 done 卡「无回执」角标数据源。与 pendingDispatchSids 同构（receipts
+                // 已是同 id 末行收敛视图，逐行判定即末行判定）；旧 relay 无此字段=空集零影响
+                function missingReceiptIds(gid) {
+                  const rows = state.receipts.get(gid);
+                  if (!Array.isArray(rows) || !rows.length) return new Set();
+                  const ids = new Set();
+                  for (const r of rows) {
+                    if (r && r.status === "done" && r.receipt_missing === true && r.id) ids.add(r.id);
+                  }
+                  return ids;
+                }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
@@ -123,7 +148,7 @@
                   const dispPend = pendingDispatchSids(project.id).has(member.session_id)
                     ? '<span class="tag dispatch-pending" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 等待处理</span>'
                     : "";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + sourceBadge() + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head"><span class="avatar ' + roleClass + '">' + (roleClass === "pm" ? "✦" : roleClass === "qa" ? "QA" : "W") + '<i class="status-dot ' + (info.status || "") + '"></i></span><div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -226,6 +251,11 @@
                   if (updated && updated !== "—" && updated !== created) clineBits.push("更新 " + shortTime(task.updated_at));
                   if (queueCtx && queueCtx.ordinal) clineBits.push("排队 #" + queueCtx.ordinal);
                   if (queueCtx && queueCtx.running) clineBits.push('<span class="cline-run">▶ 运行中</span>');
+                  // W-SMIMPL ②：done 卡「无回执」角标（worker 静默收工可见化——账面 done
+                  // 内容空，Leader 不抽查不知情的三次实锤止痛件；done 泳道专用）
+                  if (isDone && task.dispatch_id && missingReceiptIds(project.id).has(task.dispatch_id)) {
+                    clineBits.push('<span class="cline-miss" title="收口 done 但回执无「结果：」行（worker 静默收工）——请抽查该单交付">⚠ 无回执</span>');
+                  }
                   const selfCheck = taskSelfCheck(task);
                   const selfCheckLabel = selfCheck ? "AI 自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
                   const selfCheckHtml = selfCheck ? '<span class="task-verify" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span>" : "";
@@ -305,7 +335,12 @@
                     const body = laneBody(status, items);
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    return '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
+                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
+                    // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
+                    // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
+                    // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
+                    // 默认展开同款样式。数据零删除不变（板面照常全量展示已收割任务）
+                    return lane;
                   }).join("");
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   // V8R boardfoot（原型 .boardfoot）：口径脚注——自验点语义 + 操作指引
@@ -371,9 +406,58 @@
                     const consumeDot = entry.status === "dispatched" || entry.status === "queued" || entry.status === "running"
                       ? '<i class="act-consume' + (entry.consumed === true ? " consumed" : "") + '" title="' + (entry.consumed === true ? "已消费（worker 已真实吃下）" : "已注入（等待 worker 消费）") + '" aria-hidden="true"></i>'
                       : "";
-                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span>' + consumeDot + '<b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + "</span></div>";
+                    // W-CMDIMPL ①（#216）：终态条目带「收割检查」小钮——机器闸结果卡入口
+                    //（§1.3：只读不执行，squash 永远 PM 在终端亲手跑）
+                    const harvestBtn = !compact && (entry.status === "done" || entry.status === "failed") && entry.id
+                      ? ' <span class="tag action" role="button" tabindex="0" data-harvest-check="' + escape(entry.id) + '" title="机器闸检查（只读）：回执/分支账/收口建议">收割检查</span>'
+                      : "";
+                    return '<div class="activity-row activity-' + escape(entry.status || "") + '"><time' + (validDate ? ' datetime="' + date.toISOString() + '" title="' + escape(date.toLocaleString()) + '"' : "") + ">" + time + '</time><i class="act-glyph" aria-hidden="true">' + (glyphs.get(entry.status) || "·") + '</i><span>' + consumeDot + '<b class="act-st">' + escape(statuses.get(entry.status) || entry.status || "状态未知") + "</b> " + escape(entry.target || session?.title || entry.session_id || "未知目标") + (note ? ' <span class="act-note">· ' + escape(note) + "</span>" : "") + harvestBtn + "</span></div>";
                   }).join("");
-                  return '<div class="team-activity">' + (compact ? "" : head) + chips + (rows || banner("当前筛选无条目")) + "</div>";
+                  return '<div class="team-activity">' + (compact ? "" : head) + harvestResultMarkup() + chips + (rows || banner("当前筛选无条目")) + "</div>";
+                }
+                // ---------- W-CMDIMPL ①（#216）收割检查结果卡（§1.3 两段呈现）----------
+                // 上半「机器闸 N 项」逐条 ✓/✗（warning 黄）；下半「需你判断（不自动化）」
+                // 固定四项（SSOT 内核）；squash_plan 逐行「复制收口命令」（复制而非执行）。
+                function harvestResultMarkup() {
+                  const h = state.harvest;
+                  if (!h) return "";
+                  const body = h.loading
+                    ? banner("检查中…")
+                    : h.error
+                      ? banner("检查失败：" + h.error)
+                      : (() => {
+                          const r = h.result || {};
+                          const rows = (r.checks || []).map((c) => {
+                            const mark = c.pass ? "✓" : c.severity === "warning" ? "△" : "✗";
+                            const cls = c.pass ? "done" : c.severity === "warning" ? "waiting" : "failed";
+                            return '<div class="activity-row activity-' + cls + '"><i class="act-glyph" aria-hidden="true">' + mark + '</i><span><b class="act-st">' + escape(({ receipt: "回执", sections: "必需节", tail: "结果摘要", commits: "新提交", dirty: "未提交改动", acceptance: "验收单" })[c.gate] || c.gate) + "</b> " + escape(c.detail || "") + ((c.log && c.log.length) ? '<span class="act-note"><br>' + c.log.map((l) => escape(l)).join("<br>") + "</span>" : "") + "</span></div>";
+                          }).join("");
+                          const fails = Number(r.fails) || 0;
+                          const stages = (r.stages || []);
+                          return '<div class="inspector-block"><div class="inspector-title"><span>收割检查 · ' + escape(String(r.dispatch_id || h.id || "").slice(0, 8)) + '</span><span class="tag ' + (fails ? "action" : "done") + '">' + (fails ? "机器闸 " + fails + " 项待处置" : "机器闸全绿") + '</span><span class="tag" role="button" tabindex="0" data-harvest-close title="收起">收起</span></div>'
+                            + '<div class="inspector-copy"><b>机器闸 · ' + (r.checks || []).length + ' 项</b></div>' + rows
+                            + (stages.length ? '<div class="inspector-copy"><b>阶段推进</b>：' + stages.map((st) => escape(st.stage + (st.detail ? "（" + st.detail + "）" : ""))).join(" → ") + "</div>" : "")
+                            + '<div class="inspector-copy"><b>需你判断（不自动化）</b>：diff 抽查 ／ 自测证据 ／ 真机分级 ／ 是否收口合并</div>'
+                            + '<div class="inspector-copy"><b>收口命令（复制后在终端亲手跑）</b></div>'
+                            + (r.squash_plan || []).map((cmd, i) => '<div class="activity-row"><i class="act-glyph" aria-hidden="true">' + (i + 1) + '</i><span class="harvest-cmd"><code>' + escape(cmd) + '</code> <span class="tag action" role="button" tabindex="0" data-harvest-copy="' + escape(cmd) + '" title="复制到剪贴板">复制收口命令</span></span></div>').join("")
+                            + "</div>";
+                        })();
+                  return '<div class="harvest-result">' + body + "</div>";
+                }
+                async function runHarvestCheck(id) {
+                  if (!id || !state.command || !state.online) { feedback("检查不可用（命令通道未就绪）"); return; }
+                  state.harvest = { id, loading: true };
+                  render();
+                  try {
+                    const ack = await state.command("COMMAND_ORG_ACTION", { action: "harvest-check", dispatch_id: id });
+                    const ok = ack && ack.ok === true;
+                    if (state.harvest && state.harvest.id === id) {
+                      state.harvest = ok ? { id, result: ack.data } : { id, error: String((ack && ack.error) || "未知错误") };
+                    }
+                  } catch (e) {
+                    if (state.harvest && state.harvest.id === id) state.harvest = { id, error: String((e && e.message) || e) };
+                  }
+                  render();
                 }
                 // ---------- W-EXPP2 经验库 pane（团队域第五 tab；relay experience 域 P2 端面）----------
                 // 数据源：SNAPSHOT.experience（覆盖式锚定）+ EXPERIENCE_UPDATED 帧（帧双载
@@ -747,13 +831,15 @@
                       const activeAgo = mins <= 0 ? "刚刚活跃" : mins < 60 ? mins + " 分钟前活跃" : mins < 1440 ? Math.round(mins / 60) + " 小时前活跃" : Math.round(mins / 1440) + " 天前活跃";
                       return '<div role="button" tabindex="0" class="queue-card' + (state.selected === item.id ? " selected" : "") + '" data-team-project="' + escape(item.id) + '" aria-pressed="' + String(state.selected === item.id) + '"><div class="row"><span class="team-ava" aria-hidden="true">' + escape(String(item.name || item.id).trim().slice(0, 1) || "团") + '</span><strong>' + escape(item.name || item.id) + '</strong><span class="team-state-pill" data-state="' + escape(item.status || "") + '" title="团队状态：' + escape(groupStatuses.get(item.status) || item.status || "未知") + '"><i></i>' + escape(groupStatuses.get(item.status) || item.status || "未知") + '</span></div>'
                         + '<p class="team-meta" title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + ' 席 · 待确认 ' + pending + (item.status === "archived" ? "" : ' · <span class="team-ago">' + activeAgo + '</span>') + '</p>'
-                        + '<div class="identity-cluster">' + sourceBadge() + "</div></div>";
+                        + '<div class="identity-cluster">' + teamSrcCaps(item) + "</div></div>";
                     };
                     const live = state.projects.filter((p) => p.status !== "archived");
                     const archived = state.projects.filter((p) => p.status === "archived");
                     const grp = (label, n) => '<div class="team-grp"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>' + label + ' <span class="team-grp-n">' + n + "</span></div>";
                     let html = "";
-                    if (live.length) html += grp("进行中", live.length) + live.map(card).join("");
+                    // #236 C（口径纠偏）：原「进行中 N」被用户读成「N 个成员在跑」（1023 实锤
+                    // ——组卡统计误解源头）；N 实为非归档团队数，措辞点明
+                    if (live.length) html += grp("进行中团队", live.length) + live.map(card).join("");
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
                     return html;
                   })() : banner(projectsEmpty());
@@ -766,7 +852,14 @@
                       const boardTotal = state.boards.get(project.id)?.entries?.length;
                       const createdDay = Number(project.created_at) > 0 ? (() => { const d = new Date(Number(project.created_at)); const pad = (n) => String(n).padStart(2, "0"); return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); })() : "";
                       meta.innerHTML = [
-                        "编制 " + members(project).length + " 席",
+                        // #236 C（编制对账·分档明示）：席数与成员卡数同源（members()=headcount
+                        // 带 session_id 过滤，渲染两侧无二次过滤——19 vs 12-1 3 为网格滚动可见数
+                        // 的误读面）；分档把「查无会话数据」的离线席显性化，对账不再靠数卡
+                        (() => {
+                          const roster = members(project);
+                          const online = roster.filter((m) => state.sessions.get(m.session_id)).length;
+                          return "编制 " + roster.length + " 席（会话在场 " + online + " · 离线 " + (roster.length - online) + "）";
+                        })(),
                         Number.isFinite(boardTotal) ? "任务卡 " + boardTotal : "",
                         count ? "待确认 " + count + " 项" : "",
                         createdDay ? "开团 " + createdDay : "",
@@ -977,7 +1070,10 @@
                 // 接通现状（回执「追加批」详述）：relay sanitizeHeadcount 硬性要求 session_id 且
                 // org adapter 不透传 role_defaults，手动席暂不进创建载荷，创建成功后明示用户。
                 function teamSeatCount(pop) {
-                  return pop.querySelectorAll("[data-team-member]:checked").length + pop.querySelectorAll(".team-manual-row").length;
+                  // W-TEAMSNC ①：PM 带队模板（pm-led，默认档）占 1 席——relay sanitizeHeadcount
+                  // 的 8 席硬闸按行数计（PM 身份行也占），表单侧同步计数防提交才被拒
+                  const pmLed = pop.querySelector("[data-team-field='template']")?.value === "pm-led";
+                  return pop.querySelectorAll("[data-team-member]:checked").length + pop.querySelectorAll(".team-manual-row").length + (pmLed ? 1 : 0);
                 }
                 function addTeamManualRow(pop) {
                   if (teamSeatCount(pop) >= 8) { toast("编制最多 8 席"); return; }
@@ -1025,7 +1121,7 @@
                   html += '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
                   html += '<button type="button" class="team-add-btn" data-team-add-member>＋ 添加成员</button>';
                   html += "</div>";
-                  if (cands.length) html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>';
+                  if (cands.length) html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="pm-led">PM 带队（当前选中会话任 PM，勾选成员为 worker）</option><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>'; // W-TEAMSNC ①：pm-led 默认档=建团自动补 PM 行（relay pm_session_id 单点）
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit>创建团队</button></div>';
                   pop.innerHTML = html;
                   back.addEventListener("click", closeTeamCreate);
@@ -1063,9 +1159,15 @@
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
                     const roleInput = pop.querySelector("[data-team-role='" + cssEscape(sid) + "']");
-                    const role = template === "free" ? String(roleInput?.value ?? "").trim() : template;
+                    const role = template === "free" ? String(roleInput?.value ?? "").trim() : template === "pm-led" ? "worker" : template;
                     return { session_id: sid, role: role || "worker" };
                   });
+                  // W-TEAMSNC ①：PM 带队默认档——pm_session_id=会话域当前选中会话（跨域取
+                  // __ccDeck005SlimUi.selectedSid；relay orgCommand create 单点插 role="pm" 身份行）。
+                  // 无选中/选中会话不在册：降级不带 PM 行继续建团（feedback 提示，不拦单）
+                  const pmSid = template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "";
+                  if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                  if (pmSid) { const i = headcount.findIndex((h) => h.session_id === pmSid); if (i >= 0) headcount.splice(i, 1); } // PM 会话被同时勾选：让位 pm_session_id 身份行（同 sid 双行会被 relay 去重，先去保角色正确）
                   // W-UIFB 追加⑮：手动席（agent 类型+角色名）——relay sanitizeHeadcount 现版
                   // 硬性要求 session_id 且 adapter 不透传 role_defaults，入载会整单被拒；
                   // 故手动席暂不进创建载荷，创建成功后明示「待补齐」，接通条件见回执。
@@ -1077,7 +1179,7 @@
                   if (state.flights.has(flight)) return;
                   state.flights.add(flight);
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}) }));
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSid ? { pm_session_id: pmSid } : {}) }));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";
