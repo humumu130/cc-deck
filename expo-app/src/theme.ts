@@ -217,6 +217,7 @@ export const ENGINE_ACCENT: Record<string, string> = {
   "qwen-code": "#B493FF",
   codebuddy: "#4BA8F0",
   zcode: "#E58DB0",
+  glm: "#3E8EF7", // W-ENGLM #253：glm 显示色补链（engine-infer 已有推断，此处显示断链）
 };
 
 // 005 STATUS_TAG 口径（index-005.html :1484）：WAITING 词面从「等待确认」

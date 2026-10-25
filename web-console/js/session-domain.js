@@ -42,7 +42,19 @@
                 const displayPath = window.__ccDeck005PathUi.displayPath;
                 const baseName = window.__ccDeck005PathUi.baseName;
 
-                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
+                const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"], glm: ["GLM", "glm"] };
+                // W-ENGLM（#253）：model→engine 推断词表+共享解析——head/列表卡/消息流头像/
+                // inspector/详情 kv 五链同源（原 MODEL_HINTS 只在 renderHeader 内联，列表卡与
+                // 消息流对 engine 空会话各降级：head 错显 Claude、头像落 ✻）。词表序=匹配优先级。
+                const MODEL_HINTS = [["claude", "claude"], ["codex", "codex"], ["codebuddy", "codebuddy"], ["qwen-code", "qwen-code"], ["qwen", "qwen-code"], ["glm", "glm"], ["trae", "trae"], ["zcode", "zcode"]];
+                const inferEngineOf = (s) => (s && s.engine) || ((MODEL_HINTS.find(([n]) => String((s && s.model) || "").toLowerCase().includes(n)) || [])[1] || "");
+                const engineMetaOf = (s) => {
+                  const key = inferEngineOf(s) || "claude";
+                  const meta = ENGINES[key];
+                  if (meta) return [meta[0], key];
+                  // W-ENGLM E：未收录引擎兜底不再错显 "Claude"——显示原引擎名（class 空=无 tint/品牌图，名实相符优先）
+                  return [(s && s.engine) || key, key];
+                };
                 const VERIFY_RE = /[〔\[【]\s*待验证\s*[〕\]】]/;   // #85 待验证档：in_progress + 前缀约定独立分组
                 const HIST_PREFIX = "cc.input.hist.";               // #95 按会话分桶的输入历史
                 const HIST_MAX = 200;
@@ -927,7 +939,7 @@
                 }
                 function myCardItem(session) {
                   const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "done";
-                  const engineKey = session.engine || "claude";
+                  const engineKey = inferEngineOf(session) || "claude"; // W-ENGLM D：与 head 同链推断（engine 空按 model 子串）
                   const engine = ENGINES[engineKey] || [engineKey, ""];
                   const activityTime = Number(session.updated_at || session.started_at || 0);
                   const turnStart = Number(session.turn_started_at || session.started_at || Date.now());
@@ -1014,7 +1026,7 @@
                 // UIPOLISH2 件一：头像底色引擎品牌色淡彩——地基 sessionAvaColor 逐字节同构（myCardMarkup
                 // 与地基 renderSessionCard 的 DOM 一致性是 observer 完整性检查的前提，两处必须同步改）
                 const b2AvaColor = (item) => ({
-                  claude: "var(--engine-claude)", codex: "var(--engine-codex)", trae: "var(--engine-trae)",
+                  claude: "var(--engine-claude)", glm: "var(--engine-glm)", codex: "var(--engine-codex)", trae: "var(--engine-trae)",
                   qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)",
                 }[item.engineClass] || b2SourceColor(item.source));
                 // W-TEAMSNC ②③：团队 chip 单口 markup——button 化（data-team-chip 开第四列团队抽屉，
@@ -1713,9 +1725,8 @@
                   // B13 DONE 隐藏口径的全量版）；外部会话仍标「CLI」（用户语言：本机 CLI 里开的会话）
                   // W-MOBLIST 双端同链：engine 缺失按 model 子串推断（PM/外部会话 engine 空=
                   // 「?」/错挂 Claude 根因；expo 镜像=src/engine-infer.ts，改链两处同步）
-                  const MODEL_HINTS = [["claude", "claude"], ["codex", "codex"], ["codebuddy", "codebuddy"], ["qwen-code", "qwen-code"], ["qwen", "qwen-code"], ["glm", "glm"], ["trae", "trae"], ["zcode", "zcode"]];
-                  const effEngine = s.engine || ((MODEL_HINTS.find(([n]) => String(s.model || "").toLowerCase().includes(n)) || [])[1] || "");
-                  const eng = ENGINES[effEngine || "claude"] || [s.engine || "Claude", ""];
+                  const effEngine = inferEngineOf(s) || "claude"; // W-ENGLM D：推断链共享化（原内联 MODEL_HINTS 退役）
+                  const eng = engineMetaOf(s);
                   // W-TOPBAR ③ head 身份收敛：只剩 engine 徽章一颗；数据源归顶栏源胶囊、外部会话
                   // 「CLI」标从独立 tag 降为徽章内文字后缀（身份类三胶囊 → 一颗）。
                   // W-UIFB ③（合并裁决）：徽章加 sprite 图标（b2EngineIconFor，与第二列同款）；
@@ -2022,7 +2033,7 @@
                   const gradeLabel = { safe: "安全", attention: "注意", critical: "拥挤" }[grade];
                   const lim = s.context_limit || 1e6;
                   const onCount = Math.round((pct / 100) * 12);
-                  const eng = ENGINES[s.engine || "claude"] || ["Claude"];
+                  const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
                   const modelShort = s.model ? String(s.model).split(/[/:]/).pop() : tokStr(lim) + " 上限";
                   const note = { safe: "余量充足，可继续当前任务", attention: "上下文偏高，留意即将压缩", critical: "上下文接近上限，建议收口或压缩" }[grade];
                   return '<div class="context-meter ' + grade + '"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">' + esc(eng[0] + " · " + modelShort) + '</strong></div><span class="context-meter-grade">' + gradeLabel + '</span></div><div class="context-meter-band" aria-label="上下文已使用 ' + pct + '%">' + Array.from({ length: 12 }, (_, i) => "<i" + (i < onCount ? ' class="on"' : "") + "></i>").join("") + '</div><div class="context-meter-stats"><span><b class="context-meter-used">' + tokStr(s.context_usage) + '</b> <span class="context-meter-limit">/ ' + tokStr(lim) + ' tokens</span></span><strong class="context-meter-pct">' + pct + '%</strong></div><div class="context-meter-note">' + note + '</div></div>';
@@ -2036,7 +2047,7 @@
                     const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
                     const done = todos.filter((t) => t.status === "completed").length;
                     const open = todos.filter((t) => t.status !== "completed").slice(0, 4);
-                    const eng = ENGINES[s.engine || "claude"] || ["Claude"];
+                    const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
                     const st = STATUS_TAG[s.status] || ["完成", "done"];
                     const inspSrc = String(s.relay_source || S.relayName || ""); // t25fix #5：详情面板源徽章（单源模式 CSS 隐藏）
                     // W-DRAWMERGE（用户 1025 补充定稿）：PM 会话检查器瘦身——用量/输出物两块
@@ -2162,14 +2173,14 @@
                       (e.ts ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
-                    const eng = ENGINES[(s && s.engine) || "claude"] || ["Claude"];
+                    const eng = engineMetaOf(s); // W-ENGLM G：消息流头像同链（engine 空按 model 推断，glm 不再落 ✻）
                     // W-AVABG：消息流 AI 头像底色对齐列表引擎品牌色淡彩（UIPOLISH2 件一同纲）——
                     // eng[1] 与列表 engineClass 同源值（同出 ENGINES 表）；已知引擎走 --engine-* token，
                     // PM/未知引擎（ENGINES 未命中 eng[1]=undefined）回落列表同款源色哈希 b2SourceColor
                     // （输入对齐列表 source 口径=显示名）。CSS 端 16% 淡彩罩 surface2 公式同 .srow-ava
                     const avaSrcRaw = String((s && (s.relay_source || S.relayName)) || "");
                     // W-AVABG R2（审查 P2 修）：哈希输入对齐列表 item.source 口径=esc(显示名)——源名含 &<>"' 时与列表同源同色
-                    const aiAvaColor = { claude: "var(--engine-claude)", codex: "var(--engine-codex)", trae: "var(--engine-trae)", qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)" }[eng[1]] || b2SourceColor(esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(avaSrcRaw) : avaSrcRaw));
+                    const aiAvaColor = { claude: "var(--engine-claude)", glm: "var(--engine-glm)", codex: "var(--engine-codex)", trae: "var(--engine-trae)", qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)" }[eng[1]] || b2SourceColor(esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(avaSrcRaw) : avaSrcRaw));
                     const full = e.full ? String(e.full) : "";
                     return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
                       mdHtml(open ? String(e.full ?? e.text ?? "") : String(e.text ?? "")) +
@@ -3008,7 +3019,7 @@
                   const statusLabel = { WORKING: "运行中", WAITING: "等待确认", DONE: "已完成", ERROR: "错误", CLOSING: "结束中" }[s.status] || s.status || "—";
                   html += '<div class="kv-row"><b>' + esc(statusLabel) + "</b><span>状态</span></div>";
                   html += '<div class="kv-row"><b>' + esc(shortPath(s.cwd) || "—") + "</b><span>目录</span></div>";
-                  const eng = ENGINES[s.engine || "claude"] || ["Claude"];
+                  const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
                   html += '<div class="kv-row"><b>' + esc(eng[0]) + (s.model ? " · " + esc(s.model) : "") + "</b><span>引擎·模型</span></div>";
                   const permMode = s.permission_mode || "—";
                   html += '<div class="kv-row"><b>' + esc(permMode) + "</b><span>权限模式</span></div>";

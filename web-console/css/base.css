@@ -1898,6 +1898,7 @@
     .engine-badge.qwen { --engine-color: var(--engine-qwen); }
     .engine-badge.codebuddy { --engine-color: var(--engine-codebuddy); }
     .engine-badge.zcode { --engine-color: var(--engine-zcode); }
+    .engine-badge.glm { --engine-color: var(--engine-glm); } /* W-ENGLM #253：glm tint 入组（#3E8EF7 expo PH 同源蓝） */
     /* W-UIFB ⑥：agent 标签低饱和官方色填充（i=7 设计结论，详见回执）——会话卡第三行 + head
        身份簇的引擎标签底/描边取 --engine-color 低透明 color-mix（暗 14%/亮同值皆低饱和），
        文字维持中性 identity-ink 保对比度，点/小图标继续用引擎色；其余语境徽章维持原中性皮 */

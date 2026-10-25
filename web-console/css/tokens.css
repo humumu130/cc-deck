@@ -114,6 +114,7 @@
       --source-home-bg: rgba(91,143,168,.16);
       --source-home-ink: #A8D6EA;
       --engine-claude: #A97A62;
+      --engine-glm: #3E8EF7;
       --engine-codex: #8DABFF;
       --engine-trae: #58C9B1;
       --engine-qwen: #B493FF;
@@ -270,6 +271,7 @@
       --source-home-bg: rgba(45,113,139,.14);
       --source-home-ink: #245D73;
       --engine-claude: #B85232;
+      --engine-glm: #5B9BFF;
       --engine-codex: #4B6FCA;
       --engine-trae: #168C78;
       --engine-qwen: #7652C4;
