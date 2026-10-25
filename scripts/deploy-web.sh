@@ -60,23 +60,98 @@ cv_js() {
   local m; m="$(grep -m1 -o 'const CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
   if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
 }
-# 面新鲜度闸（审查 P1：git-clean 闸只拦脏不拦旧——落后但干净的分支线跑本脚本会把
-# 新鲜部署面静默回滚到旧线内容，V1 随即自验假绿）。口径：面烙印 == 本地 VERSION
-# （升级中，release-test 时点常态）或 == 本线最近可达 tag（本线出过该版）才放行；
-# 两者皆非 = 面来自超前线（回滚风险），拒绝并要求 --force。纯等值判定，不写版本
-# 比较器（防「比较器跨线」bug 族）；拦程=版本级回滚，同版本异内容不在拦程（遗留注记）
+# 面新鲜度闸（#253 W-DEPLOYGATE 方向感知版）：git-clean 闸只拦脏不拦旧——本闸拦
+# 「面来自超前线」的版本级回滚。旧口径纯等值（==VERSION 或 ==基线 tag）方向盲：
+# 面②烙印 0.7.0-test.66-nova（通道后缀）与陈旧面 0.7.0-test.50（明明落后）全被误判
+# 「可能超前」拦截，正常升级死锁（--force 被 P81 分类器拦=无逃生口）。新口径：
+#   剥 -nova 通道后缀 → semver-prerelease 方向比较（0.7.0-test.50 < 0.7.0-test.66）：
+#   face > VERSION = 真·超前（拦截，文案指明面/烙印/VERSION）；face <= VERSION 放行
+#   （陈旧面正是本次部署要刷的对象）；MISSING=待刷放行；非法版本形状=无法判向
+#   fail-closed 拦（沿用 --force 出口，不崩）。旧「基线 tag 等值」支随之退役（方向
+#   比较已覆盖其全部放行场景）。防比较器跨线：数字段数值比较（非字典序），跨大版本
+#   照判（0.8.0 面 vs 0.7.0 VER=真超前拦）。
+ver_shape_ok() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; }
+ver_core_cmp() { # $1/$2 点分数字 core → -1|0|1（数值逐段）
+  local IFS=.
+  local A=() B=()
+  read -ra A <<< "$1"; read -ra B <<< "$2"
+  local n=${#A[@]}
+  if (( ${#B[@]} > n )); then n=${#B[@]}; fi
+  local i x y
+  for ((i=0; i<n; i++)); do
+    x="${A[i]:-0}"; y="${B[i]:-0}"
+    if ! [[ "$x" =~ ^[0-9]+$ ]]; then x=0; fi
+    if ! [[ "$y" =~ ^[0-9]+$ ]]; then y=0; fi
+    if (( x < y )); then echo -1; return; fi
+    if (( x > y )); then echo 1; return; fi
+  done
+  echo 0
+}
+ver_pre_cmp() { # $1/$2 prerelease 段（.-分隔）→ -1|0|1（semver：数字段数值<字母段字典；短前缀小；无 pre>有 pre 由调用方先判）
+  local IFS='.-'
+  local A=() B=()
+  read -ra A <<< "$1"; read -ra B <<< "$2"
+  local n=${#A[@]}
+  if (( ${#B[@]} > n )); then n=${#B[@]}; fi
+  local i x y xn yn
+  for ((i=0; i<n; i++)); do
+    x="${A[i]:-}"; y="${B[i]:-}"
+    if [ -z "$x" ]; then echo -1; return; fi
+    if [ -z "$y" ]; then echo 1; return; fi
+    xn=0; yn=0
+    if [[ "$x" =~ ^[0-9]+$ ]]; then xn=1; fi
+    if [[ "$y" =~ ^[0-9]+$ ]]; then yn=1; fi
+    if (( xn && yn )); then
+      if (( x < y )); then echo -1; return; fi
+      if (( x > y )); then echo 1; return; fi
+    elif (( xn != yn )); then
+      if (( xn )); then echo -1; else echo 1; fi
+      return
+    else
+      if [[ "$x" < "$y" ]]; then echo -1; return; fi
+      if [[ "$x" > "$y" ]]; then echo 1; return; fi
+    fi
+  done
+  echo 0
+}
+ver_cmp() { # $1/$2 版本串（调用方已剥通道后缀+形状闸）→ -1|0|1（semver 方向）
+  local a="$1" b="$2" ac bc ap="" bp="" r
+  ac="${a%%-*}"; bc="${b%%-*}"
+  if [[ "$a" == *-* ]]; then ap="${a#*-}"; fi
+  if [[ "$b" == *-* ]]; then bp="${b#*-}"; fi
+  r="$(ver_core_cmp "$ac" "$bc")"
+  if [ "$r" != "0" ]; then echo "$r"; return; fi
+  if [ -z "$ap" ] && [ -z "$bp" ]; then echo 0; return; fi
+  if [ -z "$ap" ]; then echo 1; return; fi
+  if [ -z "$bp" ]; then echo -1; return; fi
+  ver_pre_cmp "$ap" "$bp"
+}
 face_ver_check() { # $1=面名 $2=面 index.html
-  local fv baseline
+  local fv fvc r
   fv="$(cv_html "$2")"
-  [ "$fv" = "MISSING" ] && return 0
-  [ "$fv" = "$VER" ] && return 0
-  baseline="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//; s/-nova$//' || echo "")"
-  if [ -n "$baseline" ] && [ "$fv" = "$baseline" ]; then return 0; fi
-  if [ "$FORCE" != "1" ]; then
-    echo "❌ 面$1当前烙印 $fv 既非本地 VERSION($VER) 也非本线基线 tag($baseline)——面可能来自超前线，同步=回滚（确认请 --force）"
+  if [ "$fv" = "MISSING" ]; then return 0; fi
+  fvc="${fv%-nova}"
+  if ! ver_shape_ok "$fvc"; then
+    if [ "$FORCE" != "1" ]; then
+      echo "❌ 面$1烙印 '$fv' 非法版本形状（剥 -nova 后 '$fvc'）——无法判向，fail-closed 拦截（确认请 --force）"
+      exit 1
+    fi
+    echo "⚠️  --force 越过面新鲜度闸：面$1烙印 ${fv}（非法形状）→ $VER"
+    return 0
+  fi
+  if ! ver_shape_ok "$VER"; then
+    echo "❌ 本地 VERSION '$VER' 非法版本形状——version.mjs 闸应已拦，此处 fail-closed"
     exit 1
   fi
-  echo "⚠️  --force 越过面新鲜度闸：面$1烙印 $fv → $VER"
+  r="$(ver_cmp "$fvc" "$VER")"
+  if [ "$r" = "1" ]; then
+    if [ "$FORCE" != "1" ]; then
+      echo "❌ 面$1当前烙印 $fv > 本地 VERSION($VER)——面来自超前线，同步=回滚（确认请 --force）"
+      exit 1
+    fi
+    echo "⚠️  --force 越过面新鲜度闸：面$1烙印 $fv → $VER"
+  fi
+  # r=-1（陈旧面=本次要刷的对象）/r=0（含剥 -nova 后相等）→ 放行
 }
 # rsync 全量镜像排除项：preview/（A/B 对比临时物，gitignored 两处）、site/（营销站，
 # 只随 S4 CF 整目录上传，不属于插件/app/relay 面）、.wrangler/（CF 本地缓存）、.DS_Store。
