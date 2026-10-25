@@ -176,12 +176,15 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permDesc: { color: c.dim, fontSize: 10, lineHeight: 13, marginTop: 1 },
   permCheck: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   // W-PORT-B P0-1：模型 chip（R2 右锚幽灵胶囊）与 ModelSheet 内部件
+  // W-FB66REST ④（用户 1026 test.66「太高了有点突兀」）：22→18 降高——与 r3 chip
+  // 18px 同族视觉档（桌面 FB66C ⑫ 定档；手机 r3 teamChip 同 ~17-18 撑高），横内距
+  // 收 8→7、lineHeight 12→11 同步收；hitSlop 8 保留触达面积不缩
   modelChip: {
-    height: 22, paddingHorizontal: 8, borderRadius: 8, justifyContent: "center",
+    height: 18, paddingHorizontal: 7, borderRadius: 9, justifyContent: "center",
     borderWidth: 1, borderColor: c.line,
-    maxWidth: 120, marginRight: 2,
+    maxWidth: 120, marginRight: 3,
   },
-  modelChipT: { color: c.dim, fontSize: 10, lineHeight: 12, fontWeight: "600" },
+  modelChipT: { color: c.dim, fontSize: 10, lineHeight: 11, fontWeight: "600" },
   modelRowT: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5, lineHeight: 16 },
   modelEmpty: { color: c.faint, fontSize: 10.5, lineHeight: 14, paddingVertical: 8 },
   modelCustomRow: {
