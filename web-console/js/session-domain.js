@@ -68,6 +68,7 @@
                   forceScroll: true,
                   slimUnread: new Map(), // [t-7e0c6189] 团队未读聚合：gid → Set<sid>（编制内 worker/QA 有新输出且未在看）；进团队域/展第四列/直开即清（内存态，重启随增量重建）
                   drawerGid: "", // [t-7e0c6189] 第四列展开的团队（""=收起；localStorage 记忆）
+                  _drawerMutex: false, // W-TEAMCHIP2 ③：互斥收起标记——true=第三列收起由抽屉互斥链开的（关抽屉/切 overlay 要还原；用户既定收起不还原）
                   boards: new Map(), // W-TEAMSNC ④：gid → 板 entries（SNAPSHOT.boards 锚定 + BOARD_UPDATED 帧跟随；团队域 state.boards 同源数据）
                 };
                 let UI = null;
@@ -892,23 +893,11 @@
                   get: () => idleDimMin,
                   set: (v) => { idleDimMin = v; renderMyList(); },
                 };
-                // B11 分组折叠态：collapsedGroups 记「默认展开、点击收起」的组（active），
-                // 持久 localStorage；observer 完整性检查据 _collapsedIdleIds 放行缺卡防重渲
-                // 死循环（折叠未展开不进 DOM）。
-                // W-NOVAUI ⑤：闲置会话铺平（用户实测按项目分组太乱）——项目组/折叠语义整链退役
-                // UIPOLISH3 件二：团队组收纳（team:* 组 + expandedTeams 独立展开记账）——#103
-                // 两段式重排（2026-10-14 用户拍板）整链退役：编制会话（PM/Leader/置顶 worker）
-                // 一律直列平铺进上段，团队呈现收口到下段 dock 入口卡；team:* 前缀路由与
-                // TEAM_EXPAND_KEY/expandedTeams 随组退役，折叠只剩 slim-teams dock 一处，
-                // 走 collapsedGroups（默认展开，键在=折叠，与旧 slim-teams 态无缝续用）。
-                const GRP_COLLAPSE_KEY = "cc-deck-005-grp-collapsed";
-                let collapsedGroups = (() => { try { const v = JSON.parse(localStorage.getItem(GRP_COLLAPSE_KEY) || "[]"); return new Set(Array.isArray(v) ? v.filter((x) => typeof x === "string") : []); } catch (_) { return new Set(); } })();
-                function persistCollapsedGroups() { try { localStorage.setItem(GRP_COLLAPSE_KEY, JSON.stringify([...collapsedGroups])); } catch (_) {} }
-                function toggleGroupCollapse(key) {
-                  if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
-                  persistCollapsedGroups();
-                  renderMyList();
-                }
+                // B11 分组折叠机制（collapsedGroups/toggleGroupCollapse）随 W-TEAMCHIP2 ②
+                // teams-dock 退役整链删除——历史沿革：项目组（W-NOVAUI ⑤）→team:* 组
+                //（UIPOLISH3 件二）→#103 两段式收口 slim-teams dock 唯一折叠面→dock 退役后
+                // data-group-toggle 零生产者。旧 localStorage 键 cc-deck-005-grp-collapsed
+                // 留存无害（不再读取）。
                 const GRP_ACCENTS = ["var(--brand)", "var(--info)", "var(--done)", "var(--working)"]; // 件C③：团队色轮（组序注入，>4 组循环）；V8R+ 提升共享——PM 归属 chip 同轮取色
                 // V8R+（Leader 1014 追加）：PM/Leader 直列卡的「所属团队」归属 chip 数据。
                 // W-TEAMSNC ②⑤（2026-10-24）：单口升级——返回**团队数组** [{gid, name, accent, idle}]
@@ -1011,7 +1000,17 @@
                 // 委托链见 UI.section data-team-chip 分支）+ ✦ 前缀（复用 member-chip SLIM_KEEP_ROLE
                 // 徽记符号=「编制特卡」语义）；卡 r3 与详情 head identity-cluster 同款同链。
                 // idle=E5 全闲置灰；aria-expanded 随抽屉开合同 gid 置 true（入口态可视）。
-                const teamChipMarkup = (t) => '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '"><i aria-hidden="true"></i><span class="tc-name">✦ ' + esc(t.name) + "</span></button>";
+                // W-TEAMCHIP2 ①（用户 1025 实锤「色块语义不明」）：左侧色块 i 换双人剪影内联 svg
+                //（team 通用符号，两人重叠剪影——后人（右小）半身与前辈（左大）几何交叠约
+                // 1.4px，同色 fill 融合成经典 people 形态），fill=currentColor 随 --team-accent 取色。
+                // W-TEAMCHIP2 ②：teams-dock 退役后未读聚合唯一列表可视面=chip 角标 tc-unread
+                //（slimUnread→chip，有未读显数防失焦；>9 收口 9+；title 带精确数）。
+                const TEAM_CHIP_ICON = '<svg class="tc-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.2" cy="4.4" r="2.7"/><path d="M0.7 13.8v-.9c0-2.9 1.9-4.7 4.5-4.7s4.5 1.8 4.5 4.7v.9z"/><circle cx="11.5" cy="4.7" r="2.3"/><path d="M8.3 13.8v-.8c0-2.4 1.5-4.1 3.2-4.1s3.2 1.7 3.2 4.1v.8z"/></svg>';
+                const teamChipMarkup = (t) => {
+                  const un = S.slimUnread.get(t.gid);
+                  const n = un ? un.size : 0;
+                  return '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + (n ? " has-unread" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + (n ? " · " + n + " 条新输出未在看" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '">' + TEAM_CHIP_ICON + '<span class="tc-name">✦ ' + esc(t.name) + "</span>" + (n ? '<sup class="tc-unread">' + (n > 9 ? "9+" : n) + "</sup>" : "") + "</button>";
+                };
                 const teamChipsOf = (item) => (Array.isArray(item.teams) ? item.teams : []).map(teamChipMarkup).join("");
                 function myCardMarkup(item) {
                   // B2 批2 A#bg-live：⑂N 徽标从 r3 迁 r2 走秒行前（warn 呼吸点 + task-ref chip 形制 tag）；
@@ -1066,56 +1065,10 @@
                   if (!m || SLIM_KEEP_ROLE.test(m.role)) return false; // PM/Leader 与无编制（直连）照旧直列
                   return session.session_id !== selectedSid; // 直聊中（选中）临时出列
                 }
-                function slimTeamEntryMarkup(team, roster, sessionsMap, filterDef) {
-                  const kept = [], hidden = [];
-                  for (const m of team.members) {
-                    const s = sessionsMap.get(m.session_id);
-                    if (!s) continue; // 编制在、会话未同步（异源）不计（仅影响 mini 灯/命中，不再影响出卡）
-                    (SLIM_KEEP_ROLE.test(String(m.role || "")) ? kept : hidden).push({ m, s });
-                  }
-                  // t25fix #4（验收 T2）：快照刚到的时序窗内，0 同步成员的团队卡先不出——
-                  // 编制帧与会话帧到达有先后，首渲染易闪「0/0/0 无灯」残卡；1.2s 稳定窗后
-                  // 恢复 #99件5 出卡口径（编制在场即出卡，异源团队不回归）
-                  if (!kept.length && !hidden.length && S.snapshotAt && Date.now() - S.snapshotAt < 1200) return "";
-                  const hit = hidden.filter((x) => !filterDef || filterDef.test(x.s));
-                  // #99件5（Watchtower 等缺入口卡根修）：出卡前提从「有已同步收起会话」放宽为
-                  // 「编制在场即出卡」——成员会话未同步（异源）或全 PM/Leader 的团队不再被
-                  // continue 链路筛没（入口卡承担「点击去团队域」职能，与成员会话同步与否解耦）；
-                  // 筛选语义保留：非「全部」档下该团队无命中状态仍不出卡（纯粹性不破）。注意
-                  // sessionFilterOf 恒返回对象（全部档=test 恒真），「全部」判定必须走 id，不能
-                  // 以 filterDef 真值为据（首版实错：Watchtower 恒被筛没）
-                  const isAllFilter = !filterDef || filterDef.id === "all";
-                  if (!hit.length && (!isAllFilter || !team.members.length)) return "";
-                  // #99件6（口径归一）：计数从「已同步收起会话数」（hit.length）统一为编制
-                  // roster 口径——rosterN=编制席全量（含 PM/Leader 与未同步成员，与团队域
-                  // 「N 席」/检查器成员块同源）；running=编制内已同步且 WORKING 数（原含
-                  // WAITING/ERROR 的「进行中」宽口径退役，与组头 workingN 同判）
-                  const rosterN = team.members.length;
-                  const running = team.members.filter((m) => { const s = sessionsMap.get(m.session_id); return s && s.status === "WORKING"; }).length;
-                  const acceptance = Number.isFinite(Number(team.acceptance_count)) ? Math.max(0, Number(team.acceptance_count)) : 0;
-                  // 1014 追加（用户：3 人在岗只见 1 颗队级绿点）：mini 行=每在岗成员一颗显性
-                  // 心态灯（WORKING=绿呼吸/其余=灰；角色与状态词收进 title 悬停）——原 badge
-                  // 字+6px 角点形态灯存在感为零；**在岗优先排序**（用户截图：绿点被折进
-                  // +N 看不见）——running 稳定前置再截 5+N，绿点恒前排可见
-                  const lampOrder = hit.slice().sort((a, b) => Number(b.s.status === "WORKING") - Number(a.s.status === "WORKING"));
-                  const minis = lampOrder.slice(0, 5).map((x) => {
-                    const stCls = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[x.s.status] || "closed"; // 1014 五色词表
-                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[x.s.status] || "离线";
-                    const who = (SLIM_KEEP_ROLE.test(String(x.m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(x.m.role || "")) ? "QA" : "W") + " " + (x.s.title || x.m.session_id).slice(0, 24);
-                    return '<span class="worker-mini lamp" title="' + esc(who + " · " + stWord) + '"><i class="lamp-dot ' + stCls + '"></i></span>';
-                  }).join("") + (hit.length > 5 ? '<span class="worker-mini more" title="还有 ' + (hit.length - 5) + ' 个成员会话">+' + (hit.length - 5) + "</span>" : "");
-                  const teamAria = team.name + " · " + rosterN + " 席编制 · " + running + " 个在跑 · " + acceptance + " 个待验收";
-                  // t25fix #5：团队入口卡源徽章（成员已同步会话的源去重；单源模式由
-                  // body[data-source-count="1"] CSS 隐藏，聚合模式恒显）
-                  const teamSrcs = [...new Set([kept, hidden].flat().map((x) => String((x.s && x.s.relay_source) || "")).filter(Boolean))];
-                  const teamSrcBadges = teamSrcs.slice(0, 2).map((src) => '<span class="source-badge" title="成员所属源" style="color:' + b2SourceColor(src) + ";border-color:" + b2SourceColor(src) + ';background:color-mix(in srgb, ' + b2SourceColor(src) + ' 14%, transparent)">' + esc(src) + "</span>").join("") + (teamSrcs.length > 2 ? '<span class="source-badge">' + teamSrcs.length + " 源</span>" : "");
-                  const avatar = String(team.name || team.id || "团").trim().charAt(0).toUpperCase() || "团";
-                  // 1014 追加：队级聚合灯语义明确化——头像角点=整队健康度（任一成员在跑=呼吸/
-                  // 全闲=灰），与成员 mini 灯形成「队健康 × 人人灯」两级；title 明示语义；
-                  // #99件6：判定同编制口径（running），未同步成员不算活
-                  const teamAlive = running > 0;
-                  return '<div class="team-entry" data-slim-team="' + esc(team.id) + '" role="button" tabindex="0" aria-label="' + esc(teamAria + "，点击去团队域") + '"><span class="t-ava" aria-hidden="true">' + esc(avatar) + '<i class="lamp-dot team-health ' + (teamAlive ? "working" : "idle") + '" title="整队健康度：' + running + ' 人在跑"></i></span><span class="t-main"><span class="t-name">' + esc(team.name) + teamSrcBadges + '</span><span class="t-counts" aria-label="' + esc(teamAria) + '"><span class="t-count" title="编制席位"><svg class="icon-inline" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + rosterN + '</b></span><span class="t-count" title="在跑（工作中）"><svg class="icon-inline t-running-icon" aria-hidden="true"><use href="#icon-user"></use></svg><b>' + running + '</b></span><span class="t-count" title="待验收"><svg class="icon-inline t-accept-icon" aria-hidden="true"><use href="#icon-accept"></use></svg><b>' + acceptance + '</b></span></span><span class="worker-mini-row">' + minis + "</span></span>" + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(team.id) + '" title="展开该团队成员会话（第四列）" aria-label="展开 ' + esc(team.name) + ' 成员会话">⤢</button></div>';
-                }
+                // slimTeamEntryMarkup（dock 入口卡）随 W-TEAMCHIP2 ② teams-dock 整体退役删除
+                //（用户 1025 拍板：融合已成，列表下方团队卡组移除，C 稿 dock 退役项落地）——
+                // 团队入口收口 chip（列表/详情 head）+抽屉 roster 行+团队域三链；收纳逻辑
+                //（slimIsHidden/SLIM_KEEP_ROLE）保留，收起会话入口=抽屉 roster 行直开+chip。
                 // slimDrawerCardMarkup（旧成员会话卡列）随 W-TEAMSNC ④ 厚抽屉退役——roster 行直开
                 //（data-slim-open）吸收其职能（B 稿 D3/R5：YAGNI，Leader 拍板主战方案）
                 // ---------- W-TEAMSNC ④ 第四列团队信息抽屉（B 稿主战方案定稿）----------
@@ -1158,7 +1111,7 @@
                 }
                 function teamDrawerMarkup(model) {
                   // 头：「名 · N 席 · 在办 M」（A 稿附计数带口径：M=成员 WORKING 计数，无板依赖）
-                  const head = '<div class="drawer-head"><span class="d-name">' + esc(model.name) + " · " + model.rosterN + " 席 · 在办 " + model.running + '</span>' + (S.status !== "online" ? '<span class="d-stale" title="连接断开 · 板况与成员态可能陈旧（重连后随帧自愈）">离线·陈旧</span>' : "") + '<button type="button" class="t-expand" data-slim-drawer-toggle="' + esc(model.gid) + '" title="收起团队抽屉" aria-label="收起团队抽屉">✕</button></div>';
+                  const head = '<div class="drawer-head"><span class="d-name">' + esc(model.name) + " · " + model.rosterN + " 席 · 在办 " + model.running + '</span>' + (S.status !== "online" ? '<span class="d-stale" title="连接断开 · 板况与成员态可能陈旧（重连后随帧自愈）">离线·陈旧</span>' : "") + '<button type="button" class="d-close" data-slim-drawer-toggle="' + esc(model.gid) + '" title="收起团队抽屉" aria-label="收起团队抽屉">✕</button></div>';
                   // 区一：在办概览（板比例条+关键任务；板缺席=降级文案，入口钮兜底——B 稿 §3 降级口径）
                   let overview;
                   if (model.lanes) {
@@ -1192,6 +1145,8 @@
                 // docked/overlay 双形态（B 稿 §1.4 共存矩阵）：≥1360px docked 贴检查器左缘无遮罩；
                 // <1360px overlay 贴屏右缘盖检查器+半透明遮罩（点遮罩关）。类切换挂 #d-session
                 //（.drawer-overlay），与检查器拖宽 --inspector-w 正交；遮罩仅 overlay+开态挂载。
+                // W-TEAMCHIP2 ③：尾部串 syncDrawerMutex——本函数是抽屉形态/开合的唯一汇点
+                //（renderSlimDrawer 开/收两路+mq resize 钩全走此），互斥随每次汇入对账。
                 function syncDrawerOverlay() {
                   const screen = document.querySelector("#d-session");
                   const drawer = document.querySelector("#d-session [data-slim-drawer]");
@@ -1199,13 +1154,39 @@
                   const overlay = !window.matchMedia("(min-width: 1360px)").matches;
                   screen.classList.toggle("drawer-overlay", overlay);
                   let mask = screen.querySelector(".drawer-mask");
-                  const needMask = overlay && drawer.classList.contains("open");
+                  const needMask = overlay && !!S.drawerGid; // W-TEAMCHIP2 ③顺手根修：.open 由 rAF 下一帧落，读 class 会晚一拍才挂 mask（改读开合态，与滑入同步）
                   if (needMask && !mask) {
                     mask = document.createElement("div");
                     mask.className = "drawer-mask";
                     mask.addEventListener("click", () => { if (S.drawerGid) slimToggleDrawer(S.drawerGid); });
                     drawer.before(mask);
                   } else if (!needMask && mask) mask.remove();
+                  syncDrawerMutex();
+                }
+                // W-TEAMCHIP2 ③：抽屉×第三列互斥（docked 形态）。重叠面实况——检查器「团队成员」
+                // 块（成员胶囊行+直开）与抽屉 roster 区同源同职能，且两列全高并置挤占工作区
+                //（296+320px）。方案=互斥而非内容差异化：复用既有 inspector-collapsed 基建
+                //（W-TOPBAR ①收起整块 display:none + W-UIFIX E 贴边 ‹ 把手，抽屉 CSS 已适配
+                // 收起锚位），检查器独有内容（会话任务/用量/输出物）在团队浏览场景非焦点，收起
+                // 零信息损失，‹ 把手一键展开/关抽屉自动还原。S._drawerMutex 只记「互斥收起是
+                // 本链开的」：用户既定收起态（默认收起/手动收起过）不碰不还原；overlay 态抽屉
+                // 盖检查器无需收，切形态时还原。类直切不走 setInspectorCollapsed（settings 域
+                // IIFE 内私有；两行类切换等价，且不触碰其 localStorage/manual 语义）。
+                function syncDrawerMutex() {
+                  const screen = document.querySelector("#d-session");
+                  const inspector = screen && screen.querySelector(".inspector");
+                  if (!screen || !inspector) return;
+                  const docked = window.matchMedia("(min-width: 1360px)").matches;
+                  const collapsedNow = screen.classList.contains("inspector-collapsed");
+                  if (docked && S.drawerGid && !collapsedNow) {
+                    S._drawerMutex = true;
+                    screen.classList.add("inspector-collapsed");
+                    inspector.classList.add("collapsed");
+                  } else if (S._drawerMutex && (!S.drawerGid || !docked)) {
+                    S._drawerMutex = false;
+                    screen.classList.remove("inspector-collapsed");
+                    inspector.classList.remove("collapsed");
+                  }
                 }
                 function renderSlimDrawer() {
                   const el = document.querySelector("#d-session [data-slim-drawer]");
@@ -1360,31 +1341,16 @@
                   // [t-7e0c6189] 瘦身过滤：编制内 worker/QA 会话收起（置顶/选中中/PM/Leader/无编制直列照旧）
                   const slimRoster = slimRosterOf(S.projects);
                   const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);
-                  // #103 两段式（用户提案+Leader 细化）：列表分上/下两块——上段=会话（.list-upper
-                  // flex:1 滚动），下段=团队 dock（flex:none 常驻列表底；折叠后只剩顶栏吸附最底=
-                  // IDE status-bar 形态，顶栏保留聚合健康灯+未读数+队数/在跑计数）。dock 构建
-                  // 前置于两个空态分支：会话空态（SNAPSHOT 空或筛选空）团队区照常渲染——编制
-                  // 在场即有入口（与件5 同源），上段空时 dock 自然上移。#99件4：标题「团队」→
-                  // 「team」；计数=队数（双人图标=团队概念，与成员单人图标分工）。
-                  const slimTeamsOpen = !collapsedGroups.has("slim-teams");
-                  const slimEntries = [...slimRoster.teams.values()].map((t) => slimTeamEntryMarkup(t, slimRoster, S.sessions, filterDef)).filter(Boolean);
-                  const dockRunning = [...slimRoster.teams.values()].reduce((n, t) => n + t.members.filter((m) => { const s = S.sessions.get(m.session_id); return s && s.status === "WORKING"; }).length, 0); // 编制口径在跑总数（与入口卡 running 同判）
-                  const dockAlive = dockRunning > 0;
-                  const unreadTeams = S.slimUnread.size;
-                  const dockNode = (() => {
-                    if (!slimEntries.length) return null;
-                    const head = '<div class="queue-group" data-group-toggle="slim-teams" role="button" tabindex="0" aria-expanded="' + (slimTeamsOpen ? "true" : "false") + '" title="展开/收起团队区"><span class="grp-caret">▸</span><span class="grp-ava" aria-hidden="true">T</span><span>team</span><i class="dock-lamp' + (dockAlive ? " on" : "") + '" title="' + (dockAlive ? dockRunning + " 人在跑" : "全部空闲") + '"></i><span class="grp-count" data-session-group-count><svg class="icon-inline grp-ic" aria-hidden="true"><use href="#icon-users"></use></svg>' + slimEntries.length + (dockRunning ? ' <svg class="icon-inline grp-ic on" aria-hidden="true"><use href="#icon-user"></use></svg>' + dockRunning : "") + '</span>' + (unreadTeams ? '<span class="dock-unread" title="有团队新输出未在看">' + unreadTeams + "</span>" : "") + "</div>";
-                    const tpl = document.createElement("template");
-                    tpl.innerHTML = '<div class="session-group teams-dock' + (slimTeamsOpen ? "" : " collapsed") + '" data-session-group="slim-teams">' + head + '<div class="grp-body">' + slimEntries.join("") + "</div></div>";
-                    return tpl.content.firstElementChild;
-                  })();
-                  const mountTwoPane = (upperContent) => { // 两段拼装单口：上段节点（会话卡/空态占位）+dock（编制空时不建）
+                  // W-TEAMCHIP2 ②（用户 1025 拍板，C 稿 dock 退役项落地）：#103 两段式的下段
+                  // teams-dock 整链退役——列表回归单段（.list-upper 独占滚动），团队存在感全分布
+                  // chip（列表 r3+详情 head，未读角标 tc-unread 唯一列表未读面）；收纳逻辑保留，
+                  // 收起会话入口=抽屉 roster 行直开；队级聚合健康/队数一览走 chip idle 态+团队域。
+                  const mountUpper = (upperContent) => { // 单段挂载单口（上段节点=会话卡/空态占位）
                     const upper = document.createElement("div");
                     upper.className = "list-upper";
                     upper.append(upperContent);
-                    if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩，dock 自然上移
-                    if (dockNode) list.replaceChildren(upper, dockNode);
-                    else list.replaceChildren(upper);
+                    if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩
+                    list.replaceChildren(upper);
                   };
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
@@ -1392,7 +1358,7 @@
                     ph.dataset.sessionEmpty = "true";
                     ph.setAttribute("role", "status");
                     ph.textContent = "暂无会话 · relay SNAPSHOT 已同步";
-                    mountTwoPane(ph);
+                    mountUpper(ph);
                     return;
                   }
                   // 1015 置顶常驻（用户需求）：筛选档不隐藏置顶卡——pinned 豁免 filterDef.test 恒进
@@ -1427,7 +1393,7 @@
                     ph.textContent = sessionSearchQuery
                       ? "搜索「" + sessionSearchQuery + "」下暂无会话 · 可换个词或清空搜索"
                       : "「" + filterDef.label + "」筛选下暂无会话 · 切回「全部」查看";
-                    mountTwoPane(ph);
+                    mountUpper(ph);
                     return;
                   }
                   // B18 活跃优先：顶部「进行中」组收全部活跃会话（WORKING/WAITING/ERROR，按置顶
@@ -1465,11 +1431,11 @@
                   // 筛选档（件十三「进行中」档）。活跃与闲置合流平铺（unpinned 本就按置顶+recency
                   // 序，活跃卡自然浮前）。
                   S._collapsedIdleIds = null; // 团队组退役：无折叠缺卡形态（slim 收起走 _slimHiddenIds）
-                  // #103 两段式拼装：上段=置顶+活跃+闲置平铺（.list-upper 滚动），下段=dock（前置
-                  // 构建，编制空则不建）
+                  // W-TEAMCHIP2 ②拼装：单段平铺（置顶+活跃+闲置，.list-upper 独占滚动）——
+                  // #103 两段式下段 dock 已随本批退役
                   const tpl = document.createElement("template");
                   tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;
-                  mountTwoPane(tpl.content);
+                  mountUpper(tpl.content);
                 }
 
                 // ---------- ⑥a-1 右键行菜单整链（置顶/重命名/复制ID/删除，走 B2 命令通道） ----------
@@ -3834,7 +3800,7 @@
                   // W-TEAMSNC ②④：团队 chip（button）原生键盘可达免委托；roster 行（role=button）+跳域钮并入本链
                   UI.section.addEventListener("keydown", (ev) => {
                     if (ev.key !== "Enter" && ev.key !== " ") return;
-                    const t = ev.target.closest("[data-slim-team], [data-slim-open], [data-slim-drawer-toggle], [data-team-jump]");
+                    const t = ev.target.closest("[data-slim-open], [data-slim-drawer-toggle], [data-team-jump]");
                     if (!t) return;
                     ev.preventDefault();
                     t.click();
@@ -3912,17 +3878,9 @@
                     }
                     const slimOpen = ev.target.closest("[data-slim-open]");
                     if (slimOpen) { ev.stopPropagation(); slimOpenSession(slimOpen.dataset.slimOpen); return; }
-                    const slimTeam = ev.target.closest("[data-slim-team]");
-                    if (slimTeam) {
-                      ev.stopPropagation();
-                      const gid = slimTeam.dataset.slimTeam;
-                      slimMarkSeen(gid); // 进团队域即清未读（设计要点 1）
-                      window.__ccDeck005B4?.railJump?.("team"); // 跳团队域（rail-btn 点击链）
-                      window.ccDeckTeam?.select?.(gid);
-                      return;
-                    }
-                    const grpTgl = ev.target.closest("[data-group-toggle]"); // B11 通用分组折叠（进行中组；W-NOVAUI ⑤ 项目组已退役）
-                    if (grpTgl) { ev.stopPropagation(); toggleGroupCollapse(grpTgl.dataset.groupToggle); return; }
+                    // [data-slim-team] dock 入口卡点击链随 W-TEAMCHIP2 ② dock 退役删除
+                    //（进团队域即清未读由团队域 select 侧 __ccDeck005SlimUi.markSeen 承接）；
+                    // B11 data-group-toggle 折叠链同批退役（零生产者）。
                     const taskHide = ev.target.closest("[data-task-hide]");
                     if (taskHide) { ev.stopPropagation(); const cs = curSession(); if (cs) { hiddenTaskKeys.add(cs.session_id + "#" + taskHide.dataset.taskHide); renderTasks(); } return; } // #B3-9
                     const taskJump = ev.target.closest("[data-task-jump]");
@@ -4078,6 +4036,14 @@
                   if (window.matchMedia) {
                     const drawerMq = window.matchMedia("(min-width: 1360px)");
                     const onDrawerMq = () => syncDrawerOverlay();
+                    // W-TEAMCHIP2 ③ 反向互斥：抽屉互斥收起了第三列后，用户点 ‹ 把手手动展开
+                    // 检查器=明确要检查器 → 收抽屉让位（对称互斥；capture 先于地基 data-inspector-
+                    // toggle 委托跑，抽屉关→syncDrawerMutex 还原分支与用户点击同向，幂等不冲突）。
+                    // overlay 态检查器被盖本就点不到把手，不拦。
+                    UI.section.addEventListener("click", (ev) => {
+                      if (!S.drawerGid) return;
+                      if (ev.target.closest(".inspector-expand") && !document.querySelector("#d-session").classList.contains("drawer-overlay")) setTimeout(() => slimToggleDrawer(S.drawerGid), 0); // 延迟一拍：地基 toggle 先按当前态完成展开翻转，本链再关抽屉（同步跑会先把互斥类还原，地基读到「已展开」反手收回去——E2E D7 实锤竞态）
+                    }, true);
                     if (drawerMq.addEventListener) drawerMq.addEventListener("change", onDrawerMq);
                     else window.addEventListener("resize", onDrawerMq);
                   }
@@ -4328,15 +4294,6 @@
                         }, 150);
                       });
                     }
-                  }
-                  if (UI.sessionList) { // B11 组头键盘可达（role=button）
-                    UI.sessionList.addEventListener("keydown", (ev) => {
-                      if (ev.key !== "Enter" && ev.key !== " ") return;
-                      const head = ev.target.closest("[data-group-toggle]");
-                      if (!head) return;
-                      ev.preventDefault();
-                      toggleGroupCollapse(head.dataset.groupToggle);
-                    });
                   }
                   // 占位标记收编：已绑定面移除 data-stub；搜索/筛选拨给 B2b
                   UI.queueHead.removeAttribute("data-stub");
