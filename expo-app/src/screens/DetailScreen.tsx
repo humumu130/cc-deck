@@ -2058,7 +2058,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // #159 方案A：ctx 百分比只在报警档亮色（60-84 黄 / ≥85 红），正常档归入 dim——
   // 与源缝成一句单色元信息后，绿色常亮反而是唯一的高噪声源
   const ctxLevel = contextLevel(ctxUsed, ctxLimit);
-  const ctxTone = ctxLevel === "waiting" ? c.waiting : ctxLevel === "working" ? c.working : c.dim;
+  // W-FB66REST ⑤（用户 1026 test.66）：head 水位彩色分层——ctxLevel 本就是水位分级
+  // （<60 done / <85 working / ≥85 waiting，阈值=桌面 60/85 同款），三档直映
+  // ctxSafe 绿/ctxAttention 黄/ctxCritical 红（「更多」tab 统计区 gColor 同款链）。
+  // 旧版误挂会话状态三态（waiting/working 琥珀、else dim）=低水位恒灰=「现在是灰色的」根因
+  const ctxTone = ctxLevel === "waiting" ? c.ctxCritical : ctxLevel === "working" ? c.ctxAttention : c.ctxSafe;
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
