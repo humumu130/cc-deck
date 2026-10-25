@@ -50,13 +50,16 @@ interface Props {
 }
 
 // W-MOBFUSION 件③：PM 卡团队 chip 数据（桌面 pmTeamChipOf 同构）——编制 headcount
-// 反查本会话 KEEP_ROLE 命中的在办团队；n=编制席全量、idle=编制内已同步 WORKING=0
+// 反查本会话 KEEP_ROLE 命中的在办团队；n=编制席全量、idle=编制内已同步 WORKING=0。
+// W-ENGLM2 F（用户 1025 实锤）：running=编制内 WORKING 计数——chip 数字位显示活跃数
+//（0 不显，working 色；idle 全闲自然无数字）。n 字段保留（编制数供 accessibility/后续）。
 export interface PmTeamChip {
   gid: string;
   name: string;
   accent: string;
   idle: boolean;
   n: number;
+  running: number;
 }
 
 // W-MOBFUSION R2（审查 A/B P1）：非 PM 卡 chips 空态共享常量——renderItem 每卡新建
@@ -751,7 +754,7 @@ function TeamChip({ chip }: { chip: PmTeamChip }) {
       <View style={[styles.teamChipBar, { backgroundColor: chip.accent }]} />
       <PeopleIcon color={chip.accent} />
       <Text style={[styles.teamChipName, chip.idle && styles.teamChipIdle]} numberOfLines={1}>{chip.name}</Text>
-      <Text style={[styles.teamChipN, chip.idle && styles.teamChipIdle]}>{chip.n}</Text>
+      {chip.running > 0 ? <Text style={styles.teamChipRun}>{chip.running}</Text> : null}
     </View>
   );
 }
@@ -1596,7 +1599,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         for (const m of g.headcount) {
           if (!m || !SLIM_KEEP_ROLE.test(String(m.role || ""))) continue;
           const list = acc.get(m.session_id) ?? [];
-          list.push({ gid: g.id, name: g.name || g.id, accent: srcColor(g.id), idle: running === 0, n: g.headcount.length });
+          list.push({ gid: g.id, name: g.name || g.id, accent: srcColor(g.id), idle: running === 0, n: g.headcount.length, running }); // W-ENGLM2 F：running=活跃数（数字位）
           acc.set(m.session_id, list);
         }
       }
@@ -2285,7 +2288,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   teamChip: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, paddingLeft: 5, paddingRight: 7, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1 },
   teamChipBar: { width: 3, height: 9, borderRadius: 2 },
   teamChipName: { flexShrink: 1, color: c.dim, fontSize: 10, lineHeight: 14 },
-  teamChipN: { color: c.faint, fontSize: 9.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  teamChipRun: { color: c.working, fontSize: 9.5, fontWeight: "700", fontVariant: ["tabular-nums"], marginLeft: 4 }, // W-ENGLM2 F：活跃数（WORKING 计数；编制数 teamChipN 随语义返工退役）
   teamChipIdle: { opacity: 0.58 },
   // W-MOBFUSION 件②：团队入口卡（桌面 dock team-entry 同语言：首字头像+健康角灯、
   // 队名+双人计数行、成员 mini 灯行）

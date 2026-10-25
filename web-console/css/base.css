@@ -2041,7 +2041,8 @@
     #d-session .team-chip { display: inline-flex; align-items: center; gap: 3px; flex: none; max-width: 11em; min-width: 0; padding: 1px 6px; border: transparent; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: transparent; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--srow-badge-size); line-height: 14px; white-space: nowrap; } /* W-CHIP3 ②：缩档对齐引擎徽章（10.5px 字号+pad 1px 6px，视觉重量同档） */
     #d-session .team-chip .tc-ico { flex: none; width: 9px; height: 9px; color: var(--team-accent, var(--brand)); } /* W-TEAMCHIP2 ①：双人剪影 svg（fill=currentColor 随 accent）替代语义不明色块；W-CHIP3 ②：12→9 与缩档字号协调 */
     #d-session .team-chip .tc-ico circle, #d-session .team-chip .tc-ico path { fill: currentColor; }
-    #d-session .team-chip .tc-unread { flex: none; margin-left: 3px; padding: 0 4px; border-radius: 999px; background: var(--brand); color: #fff; font: 600 9px/13px var(--mono); font-variant-numeric: tabular-nums; animation: slimPulseKf 1.6s ease-out infinite; } /* W-TEAMCHIP2 ②：dock 退役后未读聚合唯一列表可视面（>9 显 9+，title 带精确数） */
+    #d-session .team-chip .tc-run { flex: none; margin-left: 4px; color: var(--st-working); font: 700 10px/14px var(--mono); font-variant-numeric: tabular-nums; } /* W-ENGLM2 F：数字位=活跃成员数（WORKING 计数，0 不显；working 色） */
+    #d-session .team-chip .tc-dot { flex: none; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; } /* W-ENGLM2 F：未读降级小圆点（保留注意力信号不占数字位；tc-unread 数字角标随语义返工退役） */
     #d-session .team-chip.has-unread { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 55%, transparent); color: var(--text-strong); }
     #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     /* W-TEAMSNC ②：chip button 化（button reset+hover 微抬▸+focus 光环+idle 置灰+展开态） */
@@ -2377,7 +2378,7 @@
     .idle-group-head .idle-caret { display: inline-block; margin-left: 3px; font-size: 9px; }
     /* 未读呼吸点：brand 色源 + glow 光圈动画（环色全走 var，零裸色值） */
     /* .slim-unread-dot 本体随 V8R+ ③退役（未读点迁 t-expand.has-unread::after 角标，
-       W-TEAMCHIP2 ②：dock/入口卡角标退役，slimPulseKf 由 chip 未读角标 .tc-unread 续用 */
+       W-TEAMCHIP2 ②→W-ENGLM2 F：dock/入口卡角标退役后 slimPulseKf 现由 chip 未读小圆点 .tc-dot 续用（数字位让给活跃数 .tc-run） */
     @keyframes slimPulseKf { 0% { box-shadow: 0 0 0 0 var(--glow-brand); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
     /* [t-7e0c6189] 第四列 team-drawer —— W-TEAMSNC ④ 厚化（B 稿主战方案）：团队信息抽屉
        （四区=在办概览/成员 roster/输出物/跳团队域钮），296px + .open class 滑入动效（替代

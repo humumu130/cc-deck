@@ -46,7 +46,12 @@
                 // W-ENGLM（#253）：model→engine 推断词表+共享解析——head/列表卡/消息流头像/
                 // inspector/详情 kv 五链同源（原 MODEL_HINTS 只在 renderHeader 内联，列表卡与
                 // 消息流对 engine 空会话各降级：head 错显 Claude、头像落 ✻）。词表序=匹配优先级。
-                const MODEL_HINTS = [["claude", "claude"], ["codex", "codex"], ["codebuddy", "codebuddy"], ["qwen-code", "qwen-code"], ["qwen", "qwen-code"], ["glm", "glm"], ["trae", "trae"], ["zcode", "zcode"]];
+                // W-ENGLM2 A（用户 1025 拍板）：引擎徽章=宿主 CLI 身份——Claude Code 会话不管
+                // 挂什么模型（claude-*/glm-* 别名接 bigmodel）引擎恒=Claude。glm 不是注册引擎
+                //（engine catalog 六引擎无 glm），推断词表去 ["glm","glm"]：model 含 glm 推断
+                // 落空 → 兜底 claude → 螃蟹 Claude·CLI。ENGINES.glm 显示键保留（W-ENGLM C 纯
+                // 防御：engine 字段真出现 "glm" 也体面显示，不再错显）。
+                const MODEL_HINTS = [["claude", "claude"], ["codex", "codex"], ["codebuddy", "codebuddy"], ["qwen-code", "qwen-code"], ["qwen", "qwen-code"], ["trae", "trae"], ["zcode", "zcode"]];
                 const inferEngineOf = (s) => (s && s.engine) || ((MODEL_HINTS.find(([n]) => String((s && s.model) || "").toLowerCase().includes(n)) || [])[1] || "");
                 const engineMetaOf = (s) => {
                   const key = inferEngineOf(s) || "claude";
@@ -933,7 +938,7 @@
                     if (!hitRole) continue;
                     // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
                     const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" ? 1 : 0); }, 0);
-                    out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）
+                    out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, running, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）；W-ENGLM2 F：running 随行下发（chip 数字位=活跃数）
                   }
                   return out;
                 }
@@ -1039,10 +1044,14 @@
                 // W-TEAMCHIP2 ②：teams-dock 退役后未读聚合唯一列表可视面=chip 角标 tc-unread
                 //（slimUnread→chip，有未读显数防失焦；>9 收口 9+；title 带精确数）。
                 const TEAM_CHIP_ICON = '<svg class="tc-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.2" cy="4.4" r="2.7"/><path d="M0.7 13.8v-.9c0-2.9 1.9-4.7 4.5-4.7s4.5 1.8 4.5 4.7v.9z"/><circle cx="11.5" cy="4.7" r="2.3"/><path d="M8.3 13.8v-.8c0-2.4 1.5-4.1 3.2-4.1s3.2 1.7 3.2 4.1v.8z"/></svg>';
+                // W-ENGLM2 F（用户 1025 实锤）：chip 数字位=活跃成员数（编制内 WORKING 计数，
+                // 0 不显；working 色小数字 tc-run）——未读不再占数字位，降级为不带数字的小圆点
+                // tc-dot（保留注意力信号；slimUnread 基建改挂）。idle（全闲=running 0）自然无数字，
+                // 与活跃数并存语义成立（E5 判定不动）。unread 数据链原样（点击开抽屉=清零不变）。
                 const teamChipMarkup = (t) => {
                   const un = S.slimUnread.get(t.gid);
-                  const n = un ? un.size : 0;
-                  return '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + (n ? " has-unread" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + (n ? " · " + n + " 条新输出未在看" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '">' + TEAM_CHIP_ICON + '<span class="tc-name">' + esc(t.name) + "</span>" + (n ? '<sup class="tc-unread">' + (n > 9 ? "9+" : n) + "</sup>" : "") + "</button>";
+                  const hasUnread = un ? un.size > 0 : false;
+                  return '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + (hasUnread ? " has-unread" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + (t.running > 0 ? " · " + t.running + " 人在跑" : "") + (hasUnread ? " · 有新输出未在看" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '">' + TEAM_CHIP_ICON + '<span class="tc-name">' + esc(t.name) + "</span>" + (t.running > 0 ? '<span class="tc-run">' + t.running + "</span>" : "") + (hasUnread ? '<i class="tc-dot" aria-hidden="true"></i>' : "") + "</button>";
                 };
                 const teamChipsOf = (item) => (Array.isArray(item.teams) ? item.teams : []).map(teamChipMarkup).join("");
                 function myCardMarkup(item) {

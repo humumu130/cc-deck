@@ -11,7 +11,8 @@ const MODEL_HINTS: [needle: string, engine: string][] = [
   ["codebuddy", "codebuddy"],
   ["qwen-code", "qwen-code"],
   ["qwen", "qwen-code"],
-  ["glm", "glm"],
+  // W-ENGLM2 B（用户 1025 拍板）：去 glm 推断条目——glm 非注册引擎，Claude Code 会话
+  // 挂 glm-* 模型引擎恒=Claude（双端同链，web session-domain MODEL_HINTS 同步）。
   ["trae", "trae"],
   ["zcode", "zcode"],
 ];
