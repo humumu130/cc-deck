@@ -40,12 +40,28 @@ interface Props {
   onNew: () => void;
   onOpenSettings: () => void; // 左上角 logo = 设置入口（W-EXPOLISH 件三：抽屉退役，落点改设置 tab）
   onOpenArtPool: () => void; // #72 E 线 入口①：产物池常驻胶囊（三重门显隐），App.tsx 开 ArtPoolModal
+  // W-MOBFUSION 件②：团队入口卡点按 → 跳团队域（App setTab("team")）
+  onOpenTeam?: () => void;
   // W-EXPODOMAIN 件三「查看项目会话」落点（C-7）：项目域跳入带目录过滤，顶部出
   // 可清除过滤条；null = 无过滤（常态）
   dirFilter?: string | null;
   onClearDirFilter?: () => void;
   ref?: Ref<ListBackHandle>;
 }
+
+// W-MOBFUSION 件③：PM 卡团队 chip 数据（桌面 pmTeamChipOf 同构）——编制 headcount
+// 反查本会话 KEEP_ROLE 命中的在办团队；n=编制席全量、idle=编制内已同步 WORKING=0
+export interface PmTeamChip {
+  gid: string;
+  name: string;
+  accent: string;
+  idle: boolean;
+  n: number;
+}
+
+// W-MOBFUSION R2（审查 A/B P1）：非 PM 卡 chips 空态共享常量——renderItem 每卡新建
+// [] 会让 SessionCard memo 的 props 浅比较恒不等（全卡击穿）
+const EMPTY_CHIPS: PmTeamChip[] = [];
 
 function folderOf(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter(Boolean);
@@ -148,6 +164,8 @@ const SectionHeader = memo(function SectionHeader({ label, count, collapsible, e
 type ListRow =
   | { h: "sec"; key: string; label: string; count: number; grp?: "team" | "active"; collapsed?: boolean; teamColor?: string }
   | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
+  // W-MOBFUSION 件②：团队入口卡行（桌面 dock team-entry 同语义）
+  | { h: "team"; key: string; gid: string; name: string; teamColor?: string; rosterN: number; running: number; minis: { status: string }[]; hidden: number }
   | { h: false; key: string; s: SessionState };
 
 // 卡间 hairline 分隔——#242 以桌面端为基准（用户 2026-10-23：手机分割线难看，参考
@@ -375,7 +393,14 @@ export type ProjectionRow =
   // "active"=「进行中」组（默认展开）；无 grp 的段头（其他会话等）不可折叠
   | { kind: "section"; key: string; label: string; count: number; grp?: "team"; teamColor?: string }
   | { kind: "source"; key: string; srcId: string | null; name: string; color: string; online: boolean; count: number }
-  | { kind: "card"; key: string; s: SessionState; pending: boolean; grp?: string };
+  | { kind: "card"; key: string; s: SessionState; pending: boolean; grp?: string }
+  // W-MOBFUSION 件②：团队入口卡（桌面 dock team-entry 同语义）——worker 会话不再
+  // 主列表直显（收纳进入口），入口卡承载 编制数/在跑数/成员 mini 灯，点按跳团队域
+  | { kind: "team-entry"; key: string; gid: string; name: string; teamColor?: string; rosterN: number; running: number; minis: { status: string }[]; hidden: number };
+
+// W-MOBFUSION 件②③：编制角色词表（桌面 SLIM_KEEP_ROLE 逐字同源，t25fix #11 口径）
+// ——命中=PM/Leader 保留主列表直列；未命中编制成员=worker（收纳进团队入口卡）
+const SLIM_KEEP_ROLE = /^(pm|leader|产品经理|项目经理|领队)$/i;
 
 export interface ProjectionSource {
   id: string;
@@ -395,6 +420,10 @@ export interface ProjectionParams {
   notifications?: unknown;
   // 🔧回归②：在办项目组（团队收纳分组的归属数据，snap.sources projects 平铺跨源）
   projects?: ProjectGroup[];
+  // W-MOBFUSION R2（审查 B P1）：入口卡统计基准池（全量会话）——p.sessions 是搜索/
+  // dirFilter 过滤后的可见集，统计吃它会在搜索态把在跑团队误显「全闲」；缺省回落
+  // p.sessions（纯函数向后兼容）
+  teamStatsSource?: SessionState[];
 }
 
 // 列表投影主入口：
@@ -427,42 +456,52 @@ export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
   }
   const isActive = (x: SessionState) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
   const recency = (x: SessionState) => x.updated_at || x.started_at || 0;
-  // 团队归属（桌面 teamOf 同口径）：在办组（status=active）编制成员 sid 映射，先建组赢
-  const teamOf = new Map<string, { gid: string; gname: string; created_at: number }>();
+  // W-MOBFUSION 件②：编制两分（桌面 slimRosterOf/slimIsHidden 同口径）——
+  //   PM/Leader（KEEP_ROLE 命中）→ 保留主列表直列；worker（编制在、词表外）→
+  //   不再直显，收进团队入口卡（桌面 dock team-entry 同语义）。置顶例外与桌面
+  //   slimIsHidden 一致：用户显式关注优先于 IA 规则（pinned 池已在前，天然豁免）。
+  //   无编制（直连）会话照旧直列。R2（审查 A P1）：归档门控对齐桌面 W-TS63FIX——
+  //   只滤 archived（pending/parked 团队照常收纳，原 active 误滤=口径相反）。
+  const rosterBySid = new Map<string, { gid: string; gname: string; role: string; created_at: number }>();
+  const teamDefs = new Map<string, { gid: string; name: string; created_at: number; headcount: { session_id: string; role: string }[] }>();
   for (const g of p.projects ?? []) {
-    if (g.status !== "active" || !Array.isArray(g.headcount)) continue;
+    if (g.status === "archived" || !Array.isArray(g.headcount) || !g.headcount.length) continue;
+    teamDefs.set(g.id, { gid: g.id, name: g.name || g.id, created_at: g.created_at ?? 0, headcount: g.headcount });
     for (const h of g.headcount) {
-      if (h && typeof h.session_id === "string" && !teamOf.has(h.session_id)) {
-        teamOf.set(h.session_id, { gid: g.id, gname: g.name || g.id, created_at: g.created_at ?? 0 });
+      if (h && typeof h.session_id === "string" && !rosterBySid.has(h.session_id)) {
+        rosterBySid.set(h.session_id, { gid: g.id, gname: g.name || g.id, role: String(h.role || ""), created_at: g.created_at ?? 0 });
       }
     }
   }
-  const teamSections = new Map<string, { gid: string; name: string; created_at: number; members: SessionState[] }>();
+  // R2（审查 B P1）：入口卡统计吃全量会话池（visible 是搜索/dirFilter 过滤后集合，
+  // 搜索词下在跑团队会误显「全闲」灰灯）；平铺卡仍吃 p.sessions（过滤语义不破）
+  const sessionsById = new Map((p.teamStatsSource ?? p.sessions).map((s) => [s.session_id, s] as const));
   const topUnpinned: SessionState[] = [];
   for (const s of unpinned) {
-    const t = teamOf.get(s.session_id);
-    if (!t) {
-      topUnpinned.push(s);
-      continue;
-    }
-    let sec = teamSections.get(t.gid);
-    if (!sec) {
-      sec = { gid: t.gid, name: t.gname, created_at: t.created_at ?? 0, members: [] };
-      teamSections.set(t.gid, sec);
-    }
-    sec.members.push(s);
+    const m = rosterBySid.get(s.session_id);
+    // PM/Leader 与无编制（直连）照旧直列；worker 落团队入口（不入平铺）
+    if (!m || SLIM_KEEP_ROLE.test(m.role)) topUnpinned.push(s);
   }
-  const teamList = [...teamSections.values()].sort((a, b) => a.created_at - b.created_at || a.name.localeCompare(b.name));
-  for (const t of teamList) {
-    t.members.sort((a, b) => Number(isActive(b)) - Number(isActive(a)) || recency(b) - recency(a));
-    rows.push({ kind: "section", key: `team-${t.gid}`, label: t.name, count: t.members.length, grp: "team", teamColor: srcColor(t.gid) });
-    for (const s of t.members) rows.push({ kind: "card", key: s.session_id, s, pending: false, grp: `team-${t.gid}` });
-  }
-  // 件九（用户拍板 2026-10-12）：「进行中」状态分组取消——列表=置顶+团队分组+平铺，
+  // 团队入口卡（桌面 slimTeamEntryMarkup 同语言）：编制在场即出卡（桌面 #99件5 口径，
+  // 成员会话未同步不影响出卡）；rosterN=编制席全量、running=编制内已同步 WORKING 数、
+  // mini 灯=每在岗成员一颗（在岗优先排序 cap5+N，桌面 1014 追加同款）。
+  // 入口卡落列表底部（桌面 dock 同位）——先攒定义，平铺段发射完再入行
+  const teamList = [...teamDefs.values()].sort((a, b) => a.created_at - b.created_at || a.name.localeCompare(b.name));
+  // 件九（用户拍板 2026-10-12）：「进行中」状态分组取消——列表=置顶+平铺+团队入口，
   // 状态过滤交给筛选档（「最近活跃/进行中/已完成」，与桌面同款另行派发联动）；
   // 平铺序沿用 all（真行动卡前置 + recency），组头心智只剩「谁在团里」一类
   void isActive;
   for (const s of topUnpinned) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  for (const t of teamList) {
+    const synced = t.headcount.map((h) => sessionsById.get(h.session_id)).filter((x): x is SessionState => !!x);
+    const running = synced.filter((x) => x.status === "WORKING").length;
+    const lampOrder = synced.slice().sort((a, b) => Number(b.status === "WORKING") - Number(a.status === "WORKING"));
+    const minis = lampOrder.slice(0, 5).map((x) => ({ status: x.status }));
+    rows.push({
+      kind: "team-entry", key: `team-${t.gid}`, gid: t.gid, name: t.name, teamColor: srcColor(t.gid),
+      rosterN: t.headcount.length, running, minis, hidden: Math.max(0, synced.length - minis.length),
+    });
+  }
   if (!rows.length && !p.sessions.length) return rows;
   // 聚合多源：保留源分组结构（多 relay 场景桌面无对应，维持既有源分组+组内 recency）
   const useGroups = p.aggregate && p.sources.length > 1;
@@ -587,8 +626,10 @@ function BgBadge({ n, color }: { n: number; color: string }) {
 
 // W-EXPO 005 srow 头像（.srow-ava 等价）：34px **圆形**（双端对齐 2026-10-12 用户实锤：
 // 桌面已 50% 圆、手机仍圆角方块），源色 16% 淡染底 +
-// 首字母；右下角状态灯叠角（2px 页底光圈遮接缝，.status-dot 同口径四色）
-function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean; brandIcon?: string | null }) {
+// 首字母；右下角状态灯叠角（2px 页底光圈遮接缝，.status-dot 同口径四色）。
+// W-MOBFUSION 件①：size 密度化（桌面 --srow-ava 34/26 同源）——标准 34、紧凑 26，
+// 品牌图盒仍 26 满铺（紧凑档桌面 .ava-brand 26 !important 同口径），首字母字号随档
+function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon, size = 34 }: { letter: string; srcColor: string | null; dotColor: string; breathe: boolean; brandIcon?: string | null; size?: number }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const bg = srcColor ? mix(srcColor, c.panel2, 0.84) : c.panel2;
@@ -599,7 +640,7 @@ function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: 
     return () => clearInterval(t);
   }, [breathe]);
   return (
-    <View style={[styles.ava, { backgroundColor: bg }]}>
+    <View style={[styles.ava, { backgroundColor: bg, width: size, height: size, borderRadius: size / 2 }]}>
       {brandIcon ? (
         <View style={{ width: 26, height: 26, borderRadius: 6, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
           {/* W-AVA09：0.9x 统一——头像盒图标 29→26（桌面 .ava-brand 26 同口径）；外框
@@ -611,7 +652,7 @@ function AvaBadge({ letter, srcColor, dotColor, breathe, brandIcon }: { letter: 
           <EngineIcon engine={brandIcon} size={brandIcon === "codex" ? 23.4 : 26} color={srcColor ?? c.textStrong} />
         </View>
       ) : (
-        <Text style={[styles.avaT, { color: srcColor ?? c.textStrong }]}>{letter}</Text>
+        <Text style={[styles.avaT, { color: srcColor ?? c.textStrong, fontSize: size >= 34 ? 15 : 11.5 }]}>{letter}</Text>
       )}
       {/* #226 追加（用户 1023 灯显眼度）：WORKING 态发光脉冲环——光环层（dot 外扩
           6px 的半透明 working 色圆）随 BLINK_PHASES 同步呼吸，跑不跑一眼可辨；与
@@ -646,6 +687,80 @@ function R2LiveDot() {
     return () => clearInterval(t);
   }, []);
   return <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.working, opacity: BLINK_PHASES[ph] }} />;
+}
+
+// W-MOBFUSION 件③：双人图标（桌面 dock t-count 的 icon-user 双枚同语义）——裸 Svg
+// 免引图标集，chip 计数行/入口卡共用；副人 0.72 透明度分层（前后景语言）
+function PeopleIcon({ color, size = 9 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx="9" cy="7.6" r="3.6" fill={color} />
+      <Path d="M2.6 19.4c.5-3.7 3-5.9 6.4-5.9s5.9 2.2 6.4 5.9z" fill={color} />
+      <Circle cx="17.2" cy="8.4" r="2.8" fill={color} opacity={0.72} />
+      <Path d="M16.4 13.6c2.9.3 5 2.3 5.5 5.8h-4.4c-.2-2.3-.6-4.2-1.1-5.8z" fill={color} opacity={0.72} />
+    </Svg>
+  );
+}
+
+// W-MOBFUSION 件③：PM 卡团队标签 chip（桌面 team-chip 同构：accent 色条+淡染底+
+// 32% 描边胶囊；Leader 口径补双人图标+编制数）——点击语义留待团队域深链，本期纯展示
+function TeamChip({ chip }: { chip: PmTeamChip }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  return (
+    <View style={[styles.teamChip, { borderColor: withA(chip.accent, 0.32), backgroundColor: withA(chip.accent, 0.09) }]}>
+      <View style={[styles.teamChipBar, { backgroundColor: chip.accent }]} />
+      <PeopleIcon color={chip.accent} />
+      <Text style={[styles.teamChipName, chip.idle && styles.teamChipIdle]} numberOfLines={1}>{chip.name}</Text>
+      <Text style={[styles.teamChipN, chip.idle && styles.teamChipIdle]}>{chip.n}</Text>
+    </View>
+  );
+}
+
+// W-MOBFUSION 件②：团队入口卡（桌面 dock slimTeamEntryMarkup 同语言）——队首字
+// 头像+整队健康角灯（任一在跑=working 色/全闲=faint）、队名+编制/在跑计数（双人
+// 图标）、成员 mini 灯行（在岗优先 cap5+N）；点按整卡跳团队域
+function TeamEntryCard({ e, onPress }: {
+  e: { name: string; teamColor?: string; rosterN: number; running: number; minis: { status: string }[]; hidden: number };
+  onPress: () => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const accent = e.teamColor || c.brandA;
+  const alive = e.running > 0;
+  const lampColor = (st: string) => (st === "WORKING" ? c.working : st === "ERROR" ? c.error : st === "WAITING" ? c.working : c.faint);
+  const letter = (e.name || "团").trim().charAt(0).toUpperCase() || "团";
+  return (
+    <Pressable
+      style={styles.teamEntry}
+      android_ripple={{ color: c.tintSoft, borderless: false }}
+      onPress={onPress}
+      accessibilityLabel={`${e.name} · ${e.rosterN} 席编制 · ${e.running} 个在跑，点按去团队域`}
+    >
+      <View style={[styles.teamEntryAva, { backgroundColor: withA(accent, 0.14) }]}>
+        <Text style={[styles.teamEntryAvaT, { color: accent }]}>{letter}</Text>
+        <View style={[styles.teamEntryLamp, { backgroundColor: alive ? c.working : c.faint, opacity: alive ? 1 : 0.55 }]} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={styles.teamEntryR1}>
+          <Text style={styles.teamEntryName} numberOfLines={1}>{e.name}</Text>
+          <View style={{ flex: 1 }} />
+          <Text style={[styles.teamEntryArrow, { color: c.faint }]}>›</Text>
+        </View>
+        <View style={styles.teamEntryR2}>
+          <PeopleIcon color={c.dim} />
+          <Text style={styles.teamEntryCount}>{e.rosterN}</Text>
+          <PeopleIcon color={alive ? c.working : c.faint} />
+          <Text style={[styles.teamEntryCount, { color: alive ? c.working : c.faint }]}>{e.running}</Text>
+          <View style={{ width: 4 }} />
+          {e.minis.map((m, i) => (
+            <View key={i} style={[styles.teamEntryMini, { backgroundColor: lampColor(m.status), opacity: m.status === "WORKING" ? 1 : 0.5 }]} />
+          ))}
+          {e.hidden > 0 ? <Text style={styles.teamEntryMore}>+{e.hidden}</Text> : null}
+        </View>
+      </View>
+    </Pressable>
+  );
 }
 
 // r3 状态 tag 胶囊已退役（W-EXPODOMAIN v2 A3-5 查漏，桌面 #164 同口径）：AvaBadge
@@ -703,26 +818,21 @@ function Elapsed({ s }: { s: SessionState }) {
 // 菜单语义对齐）；长按 400ms 弹贴底 sheet（CardMenuSheet）。卡壳只保留点按+长按+
 // 离线置灰蒙层；同时把整个横向手势位让给「左右滑切 tab」（App 层，件六③）
 function CardShell({
-  onPress, onLongPress, compact, minimal, dim, pinned, children,
+  onPress, onLongPress, compact, minimal, dim, children,
 }: {
   onPress: () => void;
   onLongPress: () => void;
   compact?: boolean;
   minimal?: boolean;
   dim?: boolean; // #32 离线源降权（缓存会话与在线视觉区分）
-  pinned?: boolean; // #226：置顶图钉（右上角时间戳左侧；非置顶不显）。#227：竖条退役（三排定稿③）
   children: React.ReactNode;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   return (
     <View style={[styles.swipeWrap, compact && styles.swipeWrapC, minimal && styles.swipeWrapM]}>
-      {pinned ? (
-        // #226 用户定稿①：置顶文字胶囊→图钉图标右上角（与时间戳同排右侧；非置顶不显）
-        <View pointerEvents="none" style={{ position: "absolute", right: 10, top: 6, opacity: 0.75 }}>
-          <Text style={{ fontSize: 10, color: c.faint }}>📌</Text>
-        </View>
-      ) : null}
+      {/* W-MOBFUSION 件①：置顶图钉从卡壳右上角绝对定位迁入 r1 行内（时间戳左侧，
+          桌面 srow-pinned 同位）——绝对定位版被摘要/r3 行压视觉、且与时间戳无关联 */}
       <Pressable
         style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
         android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -832,18 +942,8 @@ function UndoBar({ shown, title, onUndo }: { shown: boolean; title: string; onUn
 // W-LIST2 件二①：列表卡水位组件（CtxMini 标准档/CtxCell 极简档）整链退役——上下文
 // 水位迁移至详情页头部颗粒水位计（DetailScreen CtxSegMeter），列表卡不再承载水位。
 
-// memo：流式刷新只重渲变化的那一行（onCardMenu 引用稳定（setMenuFor）；
-// 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
-// #59 聚合源归属角标：源身份色点+源名（各密度档通用，行内右端）
-function SrcBadge({ name, color }: { name: string; color: string }) {
-  // #98 桌面版同款胶囊：源色底+白字圆角（原为色点+灰字）
-  return (
-    <View style={{ backgroundColor: color + "E6", borderRadius: 4.5, paddingHorizontal: 5.5, paddingVertical: 1.5 }}>
-      {/* #102 源胶囊限长：≤6 英文字符宽（中文 1 字≈2 英文宽），超长截断省略 */}
-      <Text style={{ color: "#fff", fontSize: 8.5, fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{clipSrcName(name)}</Text>
-    </View>
-  );
-}
+// W-MOBFUSION R2（审查 A P2 随批清）：SrcBadge 组件退役——件①统一三排后 r3 源胶囊
+// 内联渲染（W-CARDTAGS2 #233 形态），本组件自紧凑档拆除后零引用
 
 // W-EXPOLISH 件一：卡片上的活动指标块（原 ActivityBlock，状态/动作/耗时/审批 0~4 行
 // 门控伸缩）退役——它是「同密度卡高不一」的主源（4 行时卡高近翻倍，用户真机点单
@@ -851,7 +951,7 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
 // 呈现位，逐项明细在详情页；activityMetricsOf 纯投影保留（test-e2a-list 断言面）。
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag, pmMember,
+  s, onOpen, onResume, onCardMenu, density, dim, srcBadge, orgTag, pmMember, teamChips,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -861,7 +961,8 @@ const SessionCard = memo(function SessionCard({
   dim?: boolean; // #32 离线源降权
   srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
   pmMember?: boolean; // #227：PM/Leader 会话（保留字母头像的品牌化头像豁免位）
-  orgTag?: string | null; // #26 M2 组织归属（项目组名/派单档位）：标准档缀元信息行、紧凑档占目录位、极简档无位不显
+  orgTag?: string | null; // #26 M2 组织归属（项目组名/派单档位）：标准档缀元信息行、极简档无位不显
+  teamChips?: PmTeamChip[]; // W-MOBFUSION 件③：PM 卡团队 chip（编制反查，非 PM 空）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -898,6 +999,9 @@ const SessionCard = memo(function SessionCard({
     ...(dormant ? ["已保存"] : []),
     ...(s.historical && !s.external ? ["历史"] : []),
   ], 3);
+  // W-MOBFUSION R2（审查 B P2）：紧凑档 footC 退役后目录不丢——r3 元信息紧凑档保 📁
+  //（桌面 compact 只缩字号不删行；orgTag 由 PM chip/入口卡承载）
+  const metaRow = compact ? foldMeta(s.cwd ? [`📁 ${folderOf(s.cwd)}`] : [], 3) : r3Meta;
   return (
     <CardShell
       onPress={() => (dormant ? onResume(s.session_id) : onOpen(s.session_id))}
@@ -905,7 +1009,6 @@ const SessionCard = memo(function SessionCard({
       compact={compact}
       minimal={minimal}
       dim={dim || isIdleCard || dormant}
-      pinned={s.pinned === true}
     >
       {minimal ? (
         // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
@@ -923,51 +1026,15 @@ const SessionCard = memo(function SessionCard({
           {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
           <View style={{ flex: 1 }} />
         </View>
-      ) : compact ? (
-        // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
-        // W-MOBLIST：compact 补品牌头像（AvaBadge 桌面三排定稿同款 26px/codex 23.4，复用
-        // 组件）+ r3 引擎徽行（EngineBadge sm=10.8/pad6/gap4 桌面口径；顺序对齐桌面
-        // 源胶囊→引擎徽章，team chip 手机端由 footC ◈ orgTag 承载=口径差如实记录）
-        <>
-          <View style={styles.rowC}>
-            <AvaBadge
-              letter={(s.title || "未").trim().slice(0, 1) || "未"}
-              brandIcon={pmMember ? null : effEngine}
-              srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
-              dotColor={dotColor}
-              breathe={s.status === "WORKING" || bgLive}
-            />
-            <Text style={[styles.titleC, idle && styles.titleIdle]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-            {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
-            <View style={{ flex: 1 }} />
-            <Elapsed s={s} />
-          </View>
-          {s.status === "WAITING" && s.waiting_request ? (
-            <Text style={[styles.sumC, styles.sumWaiting]} numberOfLines={1}>需要确认 · {s.action_summary || ""}</Text>
-          ) : (
-            <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
-          )}
-          {srcBadge || engineBadgeable(effEngine ?? undefined) ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              {srcBadge ? <SrcBadge {...srcBadge} /> : null}
-              <View style={{ flex: 1 }} />
-              {engineBadgeable(effEngine ?? undefined) ? <EngineBadge engine={effEngine ?? undefined} size="sm" /> : null}
-            </View>
-          ) : null}
-          <View style={styles.footC}>
-            {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
-            {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
-            <View style={{ flex: 1 }} />
-            {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡。
-                W-LIST2 件二①：列表卡水位 mini 退役（上下文水位迁详情页头部颗粒计） */}
-          </View>
-        </>
       ) : (
         <>
-          {/* W-EXPO 005 srow 通栏行（.srow-* 等价，index-005 手机模式参照）：ava（源色
-              淡化头像+状态灯叠角）+ 三行制——r1 标题全宽+行尾时间；r2 摘要+行尾走秒·
-              ⑂N（warn 呼吸点+tag 形制，#bg-live 口径）；r3 徽章行 footnote 级（状态 tag/
-              源胶囊/目录/外部·历史，全空整行不渲染）。无框无底无圆角，间距分行（军规①②） */}
+          {/* W-EXPO 005 srow 通栏行（.srow-* 等价）+ W-MOBFUSION 件①三排统一（用户
+              1025「四行乱」实锤根治）：标准/紧凑两档同构三排制——ava 独立左列（密度化
+              34/26，桌面 --srow-ava 同源）；r1 标题+图钉+行尾时间（图钉迁时间戳左侧=
+              桌面 srow-pinned 同位）；r2 摘要与标题左对齐（⑂N 徽标迁行尾，bg-live 呼吸
+              点随行尾不再缩进摘要）；r3=源胶囊+团队 chip+元信息+引擎徽统一排。紧凑档
+              footC 第四行退役（org 息由 PM chip/入口卡承载、cwd 在详情页），原 compact
+              独立分支拆除 */}
           <View style={styles.srow}>
             <AvaBadge
               letter={(s.title || "未").trim().slice(0, 1) || "未"}
@@ -979,21 +1046,18 @@ const SessionCard = memo(function SessionCard({
               srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
               dotColor={dotColor}
               breathe={s.status === "WORKING" || bgLive}
+              size={compact ? 26 : 34}
             />
             <View style={styles.srowMain}>
               <View style={styles.srowR1}>
                 <Text style={[styles.srowTitle, idle && styles.titleIdle]} numberOfLines={1}>
                   {s.title || "未命名会话"}
                 </Text>
+                {/* W-MOBFUSION 件①：图钉行内化（时间戳左侧，桌面同款；非置顶不显） */}
+                {s.pinned === true ? <Text style={styles.pinIc}>📌</Text> : null}
                 <Elapsed s={s} />
               </View>
               <View style={styles.srowR2}>
-                {bgCount > 0 ? (
-                  <>
-                    <R2LiveDot />
-                    <Text style={styles.srowBgTag}>⑂{bgCount}</Text>
-                  </>
-                ) : null}
                 {s.status === "WORKING" ? (
                   <LiveStat s={s} />
                 ) : s.status === "WAITING" && s.waiting_request ? (
@@ -1001,21 +1065,21 @@ const SessionCard = memo(function SessionCard({
                 ) : (
                   <Text style={styles.srowSum} numberOfLines={1}>{s.action_summary || "…"}</Text>
                 )}
+                {/* 件①：⑂N 徽标迁行尾（原行首缩进摘要=「摘要与标题不对齐」根因之一） */}
+                {bgCount > 0 ? (
+                  <>
+                    <R2LiveDot />
+                    <Text style={styles.srowBgTag}>⑂{bgCount}</Text>
+                  </>
+                ) : null}
               </View>
-              {/* r3 徽章行：引擎徽 + 源胶囊 + 元信息（foldMeta 超 3 个折叠 +N，行高恒定）+
-                  右端水位 mini。A3-5 查漏（桌面 #164 同口径）：状态文字 tag 退役——AvaBadge
-                  状态灯+待处理段+摘要行已表达状态，文字 tag 是重复噪声；r3 全空（无引擎徽/
-                  无源徽/无元信息/无水位）整行不渲染（桌面 r3 条件渲染同款）。W-MV8A：引擎徽
-                  补位（任务书「引擎源徽章行」——词表命中才显，与 TeamDetailPage EngineBadge
-                  单源同形；AvaBadge 底色是色彩暗示，徽章是明示，r3 一眼辨引擎不再靠猜） */}
-              {/* #227 三排定稿①：第三排双胶囊——源胶囊居左（电脑图标前缀=件A 形态
-                  回归）+引擎胶囊居右，两端分布中间弹性 */}
-              {srcBadge || r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? (
+              {/* r3 徽章行（W-MOBFUSION 件①统一排）：源胶囊 → 团队 chip → 元信息
+                  （foldMeta 超 3 折叠 +N；紧凑档=仅 📁，R2 审查折衷）→ 弹性 → 引擎徽；
+                  全空整行不渲染 */}
+              {srcBadge || (teamChips && teamChips.length > 0) || metaRow.shown.length > 0 || metaRow.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? (
                 <View style={styles.srowR3}>
-                  {/* #233 源标签标签化（W-CARDTAGS2，用户口径②「参考 0.6.x」）：legacy
-                      SrcBadge #98 桌面同款胶囊移植——源色底+E6、白字 8.5 粗、radius 4.5、
-                      padding 5.5/1.5、clipSrcName 限长；#226 件A 电脑图标保留入囊（转白），
-                      弱色裸字样退役 */}
+                  {/* #233 源标签标签化（W-CARDTAGS2）：桌面同款胶囊——源色底+E6、白字
+                      8.5 粗、radius 4.5、padding 5.5/1.5、clipSrcName 限长；电脑图标入囊 */}
                   {srcBadge ? (
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: srcBadge.color + "E6", borderRadius: 4.5, paddingHorizontal: 5.5, paddingVertical: 1.5 }}>
                       <Svg width={9} height={9} viewBox="0 0 24 24">
@@ -1025,15 +1089,15 @@ const SessionCard = memo(function SessionCard({
                       <Text style={{ fontSize: 8.5, color: "#FFFFFF", fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{clipSrcName(srcBadge.name)}</Text>
                     </View>
                   ) : null}
-                  {r3Meta.shown.map((m) => (
+                  {(teamChips ?? []).map((ch) => (
+                    <TeamChip key={ch.gid} chip={ch} />
+                  ))}
+                  {metaRow.shown.map((m) => (
                     <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
                   ))}
-                  {r3Meta.hidden > 0 ? <Text style={styles.srowMeta}>+{r3Meta.hidden}</Text> : null}
+                  {metaRow.hidden > 0 ? <Text style={styles.srowMeta}>+{metaRow.hidden}</Text> : null}
                   <View style={{ flex: 1 }} />
                   {engineBadgeable(effEngine ?? undefined) ? <EngineBadge engine={effEngine ?? undefined} size="sm" /> : null}
-                  {/* P0 加固：key 用 meta 字符串本身（同卡内唯一）而非序号；「+N」常挂
-                      display 切换不插拔。W-LIST2 件二①：水位 mini 退役（迁详情页），r3 渲染
-                      条件同步摘水位段（防右端空挂） */}
                 </View>
               ) : null}
             </View>
@@ -1050,7 +1114,7 @@ const SessionCard = memo(function SessionCard({
 // ./SettingsPage.tsx（设置 tab 宿主，logo 落点改切 tab）。卡片组织徽标（orgTag）
 // 仍需组名映射，projNameById 保留在本屏。
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onOpenSettings, onOpenArtPool, dirFilter, onClearDirFilter, ref }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onOpenSettings, onOpenArtPool, onOpenTeam, dirFilter, onClearDirFilter, ref }: Props) {
   const { c } = useTheme();
   const { mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -1356,8 +1420,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       notifications: snap.sources.flatMap((x) => x.notifications ?? []),
       // 件六回归②：跨源项目组平铺（团队收纳归属数据）
       projects: snap.sources.flatMap((x) => x.projects ?? []),
+      // W-MOBFUSION R2（审查 B P1）：入口卡统计吃全量（过滤前），平铺卡仍吃 visible
+      teamStatsSource: sessions,
     }),
-    [visible, snap.aggregate, snap.sources, snap.sourceCapabilities],
+    [visible, sessions, snap.aggregate, snap.sources, snap.sourceCapabilities],
   );
   // 件六回归②：折叠态滤行（桌面「折叠不进 DOM」同语义）——团队组默认折叠（展开态
   // AsyncStorage 持久 = 用户展开过的组），「进行中」默认展开；段头恒渲染（计数自投影）
@@ -1371,6 +1437,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       }
       if (r.kind === "source") {
         out.push({ h: "src", key: r.key, name: r.name, color: r.color, online: r.online, count: r.count });
+        continue;
+      }
+      if (r.kind === "team-entry") {
+        out.push({ h: "team", key: r.key, gid: r.gid, name: r.name, ...(r.teamColor ? { teamColor: r.teamColor } : {}), rosterN: r.rosterN, running: r.running, minis: r.minis, hidden: r.hidden });
         continue;
       }
       if (!r.grp) {
@@ -1442,6 +1512,34 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     },
     [projNameById, pmSessionIds],
   );
+
+  // W-MOBFUSION 件③：PM 卡团队 chip 数据（桌面 pmTeamChipOf 同构）——编制 headcount
+  // 反查 KEEP_ROLE 命中；gid 去重先建赢（聚合跨源平铺同团队不双 chip）；idle=编制内
+  // 已同步 WORKING=0（桌面 E5 同判）。R2（审查 A/B P1-2）：预建 sid→chips Map + 空态
+  // 模块常量——原 renderItem 每卡现调返回新数组（非 PM 恒新 []）→ SessionCard memo
+  // 全卡击穿，流式每 tick 全列表重渲
+  const chipsBySid = useMemo(() => {
+    const sessionsBySid = new Map(snap.sessions.map((x) => [x.session_id, x] as const));
+    const acc = new Map<string, PmTeamChip[]>();
+    const seen = new Set<string>();
+    for (const src of snap.sources) {
+      for (const g of src.projects ?? []) {
+        if (g.status === "archived" || seen.has(g.id) || !Array.isArray(g.headcount)) continue;
+        seen.add(g.id);
+        const running = g.headcount.reduce((n, m) => {
+          const x = m && sessionsBySid.get(m.session_id);
+          return n + (x && x.status === "WORKING" ? 1 : 0);
+        }, 0);
+        for (const m of g.headcount) {
+          if (!m || !SLIM_KEEP_ROLE.test(String(m.role || ""))) continue;
+          const list = acc.get(m.session_id) ?? [];
+          list.push({ gid: g.id, name: g.name || g.id, accent: srcColor(g.id), idle: running === 0, n: g.headcount.length });
+          acc.set(m.session_id, list);
+        }
+      }
+    }
+    return acc;
+  }, [snap.sources, snap.sessions]);
 
   // W-MOTION：换源/过滤/聚合切换/增删卡 → 列表布局补间（key 序列指纹驱动：同集合
   // 内容微更新不触发——防 RecyclerView 复用幽灵动画；Android 实验开关+异常静默降级）
@@ -1672,6 +1770,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             />
           ) : item.h === "src" ? (
             <GroupHeader name={item.name} color={item.color || c.faint} online={item.online} count={item.count} />
+          ) : item.h === "team" ? (
+            // W-MOBFUSION 件②：团队入口卡（worker 收纳的落点）——整卡点按跳团队域
+            <TeamEntryCard e={item} onPress={() => onOpenTeam?.()} />
           ) : (
             <SessionCard
               s={item.s}
@@ -1682,6 +1783,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               srcBadge={srcBadgeOf(item.s.src, item.s.relay_source)}
               orgTag={orgTagOf(item.s)}
               pmMember={pmSessionIds.has(item.s.session_id)}
+              teamChips={chipsBySid.get(item.s.session_id) ?? EMPTY_CHIPS}
             />
           )
         }
@@ -2113,6 +2215,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   dirBarX: { color: c.faint, fontSize: 13, paddingHorizontal: 2 },
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
+  // W-MOBFUSION 件①：置顶图钉（r1 行内、时间戳左侧；桌面 srow-pinned 同位）
+  pinIc: { fontSize: 9.5, opacity: 0.75 },
+  // W-MOBFUSION 件③：PM 团队 chip（桌面 team-chip 同构：accent 色条+9% 淡染底+
+  // 32% 描边胶囊，补双人图标+编制数；idle 全闲置灰 0.58）
+  teamChip: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, paddingLeft: 5, paddingRight: 7, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1 },
+  teamChipBar: { width: 3, height: 9, borderRadius: 2 },
+  teamChipName: { flexShrink: 1, color: c.dim, fontSize: 10, lineHeight: 14 },
+  teamChipN: { color: c.faint, fontSize: 9.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  teamChipIdle: { opacity: 0.58 },
+  // W-MOBFUSION 件②：团队入口卡（桌面 dock team-entry 同语言：首字头像+健康角灯、
+  // 队名+双人计数行、成员 mini 灯行）
+  teamEntry: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginHorizontal: 14, marginVertical: 3, paddingVertical: 8, paddingHorizontal: 10,
+    borderRadius: 10, borderWidth: 1, borderColor: c.line, backgroundColor: c.panel,
+  },
+  teamEntryAva: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  teamEntryAvaT: { fontSize: 13, fontWeight: "700" },
+  teamEntryLamp: { position: "absolute", right: -2, bottom: -2, width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: c.bg },
+  teamEntryR1: { flexDirection: "row", alignItems: "center", gap: 5 },
+  teamEntryName: { flexShrink: 1, color: c.textStrong, fontSize: 13, fontWeight: "600", lineHeight: 17 },
+  teamEntryArrow: { fontSize: 15, lineHeight: 18 },
+  teamEntryR2: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  teamEntryCount: { color: c.dim, fontSize: 10.5, fontWeight: "700", fontVariant: ["tabular-nums"], marginRight: 3 },
+  teamEntryMini: { width: 6, height: 6, borderRadius: 3, marginLeft: 1 },
+  teamEntryMore: { color: c.faint, fontSize: 9.5, marginLeft: 2 },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 6 }, /* #83 同缩进 */
   /* #192 WAITING 卡摘要报警（对齐桌面 .card-summary.waiting；dangerFg 双主题保 AA） */
   sumWaiting: { color: c.dangerFg, fontWeight: "600" },

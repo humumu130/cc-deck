@@ -1085,6 +1085,9 @@ function Shell() {
                   onNew={() => { setNewPresetCwd(null); setSheet(true); }}
                   onOpenSettings={() => setTab("settings")}
                   onOpenArtPool={() => setArtPoolOpen(true)}
+                  // W-MOBFUSION R2（审查 B P1）：关详情再切 tab——详情层盖屏时只 setTab
+                  // 用户看不见（navLayer 在上层），切了等于没切
+                  onOpenTeam={() => { setTab("team"); closeDetail(); }}
                 />
               </Animated.View>
               {tab !== "sessions" ? (
@@ -1136,7 +1139,7 @@ function Shell() {
               style={[st.navLayer, { transform: [{ translateX: navX }] }]}
             >
               <DetailScreen
-          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} onOpenArtPool={() => setArtPoolOpen(true)} />
+          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} onOpenArtPool={() => setArtPoolOpen(true)} onOpenSession={(sid2) => openDetail(sid2)} onOpenTeam={() => { setTab("team"); closeDetail(); }} />
             </Animated.View>
           ) : null}
           {/* #72 E 线 产物池视图（入口①/②共用；NewSessionModal 同层全 App 弹面） */}
