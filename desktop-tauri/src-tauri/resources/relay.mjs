@@ -60610,6 +60610,10 @@ var Bridge = class _Bridge {
   // W-INJECT：连续注入失败计数（重投上限闸）。3 连败 = 链路真断，转显式失败终态；
   // 注入成功/消息晋升即清零
   injectFails = /* @__PURE__ */ new Map();
+  // W-INJDEGRADE（#142）：注入失败横幅降噪账本——同因连败只插首条红横幅（旧形态每次
+  // 重试插一条、3 连败连插 3-4 条=视觉污染，1026 06:02 用户拍屏实锤）；注入成功或降级
+  // 汇总时清零开新周期。
+  injectFailNoted = /* @__PURE__ */ new Map();
   // W-INJECT：无 pid 滞留提示一次性标记（防每轮 flush 刷屏；pid 重定位即清）
   noPidNote = /* @__PURE__ */ new Set();
   // W-INJECT：given_up 后的宽限期失败判定定时器（给最后一次补发回车留晋升窗口）
@@ -61696,8 +61700,7 @@ var Bridge = class _Bridge {
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
         this.resumeSpawns.delete(sessionId);
-        this.mgr.setExternalPending(sessionId, []);
-        this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5\u9519\u8BEF"}`);
+        this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5\u9519\u8BEF"}\uFF08\u6392\u961F\u6D88\u606F\u4FDD\u7559\uFF0C\u4E0B\u6B21\u53D1\u9001\u65F6\u81EA\u52A8\u91CD\u8BD5\u6062\u590D\uFF09`);
         return;
       }
       const prev = this.resumeClosures.get(sessionId);
@@ -61871,6 +61874,7 @@ var Bridge = class _Bridge {
         }
         this.noPidNote.delete(sessionId);
         this.injectFails.delete(sessionId);
+        this.injectFailNoted.delete(sessionId);
         this.saveQueueDisk();
         const sentAt = Date.now();
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue\u2192written)`);
@@ -62068,24 +62072,29 @@ var Bridge = class _Bridge {
       const texts = q2.map((p) => pBody(p));
       this.inputQueue.delete(sessionId);
       this.saveQueueDisk();
+      this.injectFailNoted.delete(sessionId);
       const st2 = this.mgr.getExternal(sessionId);
-      if (st2?.pending_inputs?.length) {
-        const qkeys = new Set(texts.map((t) => normKey(t)));
-        const kept2 = st2.pending_inputs.filter((p) => !qkeys.has(normKey(pBody(p))));
-        if (kept2.length !== st2.pending_inputs.length) this.mgr.setExternalPending(sessionId, kept2);
+      if (st2?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
+      for (let i = 0; i < q2.length; i++) {
+        this.resumeExternal(sessionId, texts[i], `\u6CE8\u5165\u8FDE\u7EED ${fails} \u6B21\u5931\u8D25\uFF08${why}\uFF09`, q2[i].text, q2[i].refs);
       }
       this.mgr.pushExternalLog(
         sessionId,
         "system",
-        `\u6CE8\u5165\u8FDE\u7EED ${fails} \u6B21\u5931\u8D25\uFF08${why}\uFF09\uFF0C${texts.length} \u6761\u6392\u961F\u6D88\u606F\u505C\u6B62\u6295\u9012${texts.length ? `\uFF1A${texts.map((t) => truncate(t, 60)).join("\uFF0F")}` : ""}\u2014\u2014\u8BF7\u5230\u7EC8\u7AEF\u7A97\u53E3\u68C0\u67E5\u540E\u91CD\u53D1`
+        `[\u964D\u7EA7:\u56DE\u5408\u672B] \u6CE8\u5165\u8FDE\u7EED ${fails} \u6B21\u5931\u8D25\uFF08${why}\uFF09\uFF0C${texts.length} \u6761\u6392\u961F\u6D88\u606F\u8F6C\u6062\u590D\u6295\u9012\uFF08claude --resume \u65B0\u7EC8\u7AEF\u6807\u7B7E\u5E26\u4E0A\uFF0C\u6062\u590D\u8FDB\u7A0B\u4E0A\u7EBF\u540E\u81EA\u52A8\u7EED\u6295\uFF09\u2014\u2014\u6392\u961F\u6C14\u6CE1\u4ECD\u5728\uFF0C\u65E0\u9700\u624B\u52A8\u91CD\u53D1`
       );
       return;
     }
     this.saveQueueDisk();
+    if (this.injectFailNoted.get(sessionId) === why) {
+      console.log(`[inject-fail] sid=${sessionId.slice(0, 14)} \u540C\u56E0\u8FDE\u8D25\u7B2C ${fails}/3 \u6B21\u6A2A\u5E45\u9759\u9ED8\uFF08why=${why}\uFF0C\u961F\u5217 ${q2.length} \u6761\u4FDD\u7559\uFF09`);
+      return;
+    }
+    this.injectFailNoted.set(sessionId, why);
     this.mgr.pushExternalLog(
       sessionId,
       "system",
-      `\u6CE8\u5165\u5931\u8D25\uFF08${why}\uFF09\uFF0C\u5DF2\u6E05\u9664\u8FDB\u7A0B\u5B9A\u4F4D\uFF1B${q2.length} \u6761\u6392\u961F\u6D88\u606F\u4FDD\u7559\uFF0C\u4F1A\u8BDD\u6062\u590D\u6D3B\u52A8\u540E\u81EA\u52A8\u91CD\u6295\uFF08\u7B2C ${fails}/3 \u6B21\uFF09`
+      `\u6CE8\u5165\u5931\u8D25\uFF08${why}\uFF09\uFF0C\u5DF2\u6E05\u9664\u8FDB\u7A0B\u5B9A\u4F4D\uFF1B${q2.length} \u6761\u6392\u961F\u6D88\u606F\u4FDD\u7559\uFF0C\u4F1A\u8BDD\u6062\u590D\u6D3B\u52A8\u540E\u81EA\u52A8\u91CD\u6295\uFF08\u8FDE\u7EED\u5931\u8D25\u8FBE 3 \u6B21\u5C06\u81EA\u52A8\u964D\u7EA7\u6062\u590D\u6295\u9012\uFF0C\u4E0D\u4E22\u5F03\uFF09`
     );
   }
   // ---------- W-INJECT 排队消息落盘（防丢 + 重启回种 + 重投） ----------
@@ -63389,6 +63398,7 @@ var Bridge = class _Bridge {
     }
     this.injectProbeRearms.delete(sessionId);
     this.injectFails.delete(sessionId);
+    this.injectFailNoted.delete(sessionId);
   }
   // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
   // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
