@@ -1059,7 +1059,20 @@ const SessionCard = memo(function SessionCard({
                   {s.title || "未命名会话"}
                 </Text>
                 {/* W-MOBFUSION 件①：图钉行内化（时间戳左侧，桌面同款；非置顶不显） */}
-                {s.pinned === true ? <Text style={styles.pinIc}>📌</Text> : null}
+                {/* W-FB66ALL ⑩（用户 1025）：置顶图钉去彩色——灰色线条 Pin（单色描边，
+                    双主题同档灰阶，对齐桌面 icon-pin 线稿风），替代彩色 📌 emoji */}
+                {s.pinned === true ? (
+                  <Svg width={11} height={11} viewBox="0 0 24 24">
+                    <Path
+                      d="M9 4 v6 l-3.5 3.5 h13 L15 10 V4 Z M12 13.5 V20"
+                      stroke="#9AA3AF"
+                      strokeWidth={1.6}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </Svg>
+                ) : null}
                 <Elapsed s={s} />
               </View>
               <View style={styles.srowR2}>
@@ -2239,7 +2252,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
   // W-MOBFUSION 件①：置顶图钉（r1 行内、时间戳左侧；桌面 srow-pinned 同位）
-  pinIc: { fontSize: 9.5, opacity: 0.75 },
   // W-MOBFUSION 件③：PM 团队 chip（桌面 team-chip 同构：accent 色条+9% 淡染底+
   // 32% 描边胶囊，补双人图标+编制数；idle 全闲置灰 0.58）
   teamChip: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, paddingLeft: 5, paddingRight: 7, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1 },
