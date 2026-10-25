@@ -2036,7 +2036,7 @@
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
     /* B2 批2 A#bg-live：r2 走秒行 warn 呼吸点 + ⑂N tag（task-ref chip 形制；bgCount>0 恒显，含 WORKING 态） */
     #d-session .srow-live-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
-    #d-session .srow-r2 .tag.bg-live-tag { flex: none; padding: 1px 6px; font-size: var(--srow-badge-size); font-weight: 600; border-color: transparent; border-color: color-mix(in srgb, var(--working) 45%, transparent); background: transparent; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
+    #d-session .srow-r2 .tag.bg-live-tag { flex: none; padding: 0 5px; font-size: 10px; line-height: 14px; font-weight: 600; border-color: transparent; border-color: color-mix(in srgb, var(--working) 45%, transparent); background: transparent; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); } /* W-FB66D ⑬：子 Agent 计数 chip 缩小不撑 r2 行——盒高 16px（14 行高+1px 边×2）==r2 行高 16px（旧 10.5 字号+1px 6px pad≈19px 撑行）；⑂与数字随字号同缩 */
     /* r3 徽章行：footnote 级（用户直馈二次微调：高度再降一档——字号/行高/徽章 padding
        整体压缩，比摘要行明显更小更淡）；三徽全空整行不渲染（高度自适应不虚胖） */
     #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: calc(12px * var(--ui-scale)); }
