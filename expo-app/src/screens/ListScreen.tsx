@@ -1035,15 +1035,17 @@ const SessionCard = memo(function SessionCard({
     s.saved === true && s.status !== "WORKING" && s.status !== "WAITING";
   // W-EXPOLISH 件一 r3 文本元信息收敛：目录/组织/已保存/历史超 3 个折叠「+N」
   //（源胶囊/状态 tag/水位恒显不占折叠额）
+  // W-FB66ALL ⑦+②：📁 工作目录 PM/Leader 卡不显（信息噪音；判定=roleKind 链与
+  // 头像角色蟹同源），普通会话保留
   const r3Meta = foldMeta([
-    ...(s.cwd ? [`📁 ${folderOf(s.cwd)}`] : []),
+    ...(s.cwd && roleKind == null ? [`📁 ${folderOf(s.cwd)}`] : []),
     ...(orgTag ? [`◈ ${orgTag}`] : []),
     ...(dormant ? ["已保存"] : []),
     ...(s.historical && !s.external ? ["历史"] : []),
   ], 3);
   // W-MOBFUSION R2（审查 B P2）：紧凑档 footC 退役后目录不丢——r3 元信息紧凑档保 📁
   //（桌面 compact 只缩字号不删行；orgTag 由 PM chip/入口卡承载）
-  const metaRow = compact ? foldMeta(s.cwd ? [`📁 ${folderOf(s.cwd)}`] : [], 3) : r3Meta;
+  const metaRow = compact ? foldMeta(s.cwd && roleKind == null ? [`📁 ${folderOf(s.cwd)}`] : [], 3) : r3Meta;
   return (
     <CardShell
       onPress={() => (dormant ? onResume(s.session_id) : onOpen(s.session_id))}
@@ -1132,15 +1134,17 @@ const SessionCard = memo(function SessionCard({
                       <Text style={{ fontSize: 8.5, color: "#FFFFFF", fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{clipSrcName(srcBadge.name)}</Text>
                     </View>
                   ) : null}
-                  {(teamChips ?? []).map((ch) => (
-                    <TeamChip key={ch.gid} chip={ch} />
-                  ))}
+                  {/* W-FB66ALL ⑦（用户 1025：引擎左/目录右，双端统一）：r3 左=源胶囊+引擎徽，
+                      右=📁 目录（PM/Leader 不显）→团队 chip 恒最右 */}
+                  {engineBadgeable(effEngine ?? undefined) ? <EngineBadge engine={effEngine ?? undefined} size="sm" /> : null}
+                  <View style={{ flex: 1 }} />
                   {metaRow.shown.map((m) => (
                     <Text key={m} style={styles.srowMeta} numberOfLines={1}>{m}</Text>
                   ))}
                   {metaRow.hidden > 0 ? <Text style={styles.srowMeta}>+{metaRow.hidden}</Text> : null}
-                  <View style={{ flex: 1 }} />
-                  {engineBadgeable(effEngine ?? undefined) ? <EngineBadge engine={effEngine ?? undefined} size="sm" /> : null}
+                  {(teamChips ?? []).map((ch) => (
+                    <TeamChip key={ch.gid} chip={ch} />
+                  ))}
                 </View>
               ) : null}
             </View>
