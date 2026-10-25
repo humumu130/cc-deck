@@ -35,7 +35,7 @@ if [ "$MODE" = "record" ]; then
   mkdir -p "$BASE"
   [ -z "$DOMAIN" ] || [ "$DOMAIN" = "relay" ] && run_domain relay relay "./node_modules/.bin/tsx" "relay/scripts/test-*.ts"
   [ -z "$DOMAIN" ] || [ "$DOMAIN" = "expo" ]  && run_domain expo-app expo "./node_modules/.bin/tsx" "expo-app/scripts/test-*.ts"
-  echo "基线已固化到 $BASE（$(ls $BASE | wc -l | tr -d ' ') 件）"
+  echo "基线已固化到 ${BASE}（$(ls $BASE | wc -l | tr -d ' ') 件）"
   exit 0
 fi
 
@@ -58,9 +58,9 @@ for f in $BASE/*.txt; do
     continue
   fi
   if [ "$base_fail" = "0" ] && [ "$new_fail" != "0" ]; then
-    echo "  ❌ $name：基线全绿 → 出现 $new_fail 失败（parity 破坏）"; FAIL_CHANGES=$((FAIL_CHANGES+1))
+    echo "  ❌ ${name}：基线全绿 → 出现 $new_fail 失败（parity 破坏）"; FAIL_CHANGES=$((FAIL_CHANGES+1))
   elif [ "$base_fail" != "0" ] && [ "$rc" = "0" ]; then
-    echo "  ⚠️  $name：基线含失败 → 现转绿（改善，但需人工确认非误报）"
+    echo "  ⚠️  ${name}：基线含失败 → 现转绿（改善，但需人工确认非误报）"
   else
     SAME=$((SAME+1))
   fi
