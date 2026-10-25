@@ -2031,6 +2031,8 @@
        chip test.66 r3 无发射体不涉。 */
     #d-session .srow-r3 .src-cap, #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .team-chip { height: 18px; align-items: center; justify-content: center; }
     #d-session .srow-r3 .team-chip { border-radius: 999px; }
+    /* W-FB66ALL ⑧：📁 目录 chip（非 PM 卡；与手机 ⑦ 对齐）——中性 dim 胶囊，同 ⑫ 18px 档 */
+    #d-session .srow-r3 .cwd-cap { display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: transparent; color: var(--dim); font-size: var(--fs-micro, 9.5px); white-space: nowrap; max-width: 11em; overflow: hidden; text-overflow: ellipsis; flex: none; }
     #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); /* W-V8 批10：摘要行提亮一档（路径/摘要全图最暗项） */ font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
