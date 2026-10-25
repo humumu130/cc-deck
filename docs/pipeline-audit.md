@@ -467,3 +467,12 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 | L-1024-4 | **同文重复卡**：重派未关旧卡致板面同文卡簇 | 编制膨胀×7/优先修复批×3/SRCVANISH×5（W-STALETRIAGE 1024 审计实锤） | 分诊审计 30 条+人工清板 | 建卡前 normalizeBoardCardText 查重闸（单口已立，闸缺位） |
 
 附：当日另一断点「worker 无回执静默收工」三起（审查 A 两连+TS63FIX+AUDITLOG）——与 L-1021「交付零通知」同族，worker_done 即收割军规已兜住恢复侧，**根因=worker 侧收工时回执写入失败无重试无告警**，根治归 §11 回执契约机器闸的收工自检扩展（回执未落盘则 SESSION 拒绝 DONE）。
+
+## 13. 1026 凌晨实战断点增补（test.66 反馈夜）
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1026-1 | **压缩恢复循环吞单**：worker 会话上下文吃紧陷入「压缩恢复锚」重播循环，唤醒后 125s 零产出即 SESSION_DONE（0 files/0 lines），席上队列单（FB66B+FB66 两批 9 件）静默丢失 3 小时 | 1026 00:15 深查实锤（671ad0dc：恢复锚 2 秒重播 8 次→DONE 无回执无提交；该席此前 CHIP3/RELBTN/FB66C/FB66D 四批正常交付=好席退化） | member-retire 退化席 + 合并重派 self-contained 批（W-FB66ALL → 3b5cd57c 落地） | SESSION_DONE **stats 零产出闸**：done 时 files=0 且该席有未完结派单 → 拒绝 DONE/自动升级 pm-wake（现回执闸只对「约定回执缺失」，对「零产出+有单在身」盲） |
+| L-1026-2 | **巡检活性假阳性（PM 侧方法 bug）**：`grep "会话id" events.ndjson` 会命中自家命令文本（命令里含 id 字符串），把 PM 自身心跳/日志误读为 worker 活性，掩盖 worker 已停 | 1026 全夜三轮巡检误判「671ad0dc 活跃在干」实为自回声；00:10 改 session_id 字段精确过滤后 5 分钟破案 | 巡检脚本已改字段级过滤 | 巡检件（patrol）固化过滤口径进 runLedgerRecon 同源代码，不留在人肉记忆 |
+
+附：本例零产出 DONE **未被任何机器闸捕获**（NOTIFY_CHAIN_AUDIT 当时只报三账缺角），靠用户巡检轮触发 PM 深查才发现——L-1026-1 的零产出闸与 §13（1024）「收工自检扩展」合并为同一根治件候选。
