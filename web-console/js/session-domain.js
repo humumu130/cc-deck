@@ -2073,6 +2073,11 @@
                     const eng = ENGINES[s.engine || "claude"] || ["Claude"];
                     const st = STATUS_TAG[s.status] || ["完成", "done"];
                     const inspSrc = String(s.relay_source || S.relayName || ""); // t25fix #5：详情面板源徽章（单源模式 CSS 隐藏）
+                    // W-DRAWMERGE（用户 1025 补充定稿）：PM 会话检查器瘦身——用量/输出物两块
+                    // 在他 tab 已有（详情 tab/输出物看板），PM 检查器聚焦团队内容（团队成员块+
+                    // 任务清单保留；审批/确认区本就在对话流 wait-banner 非本面板）。分支判据=
+                    // pmTeamChipOf 词表单口命中（与 chip/头像角色蟹同源）；非 PM 检查器零变化
+                    const pmInspectorFocus = pmTeamChipOf(s.session_id).length > 0;
                     html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + (inspSrc ? '<br><span class="source-badge insp-src">' + esc(inspSrc) + "</span>" : "") + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
                     // [t-7e0c6189] 团队成员块：选中会话属于某编制时，成员胶囊行（点头像=直开）+ 展开第四列
                     const slimMem = slimRosterOf(S.projects).bySid.get(s.session_id);
@@ -2092,11 +2097,11 @@
                       }
                     }
                     if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
-                    if (s.context_usage) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>";
+                    if (s.context_usage && !pmInspectorFocus) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>"; // W-DRAWMERGE：PM 瘦身去水位（他 tab 已有）
                     // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
                     if (s.pre_compact_summary) html += '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>";
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
-                    if (arts.length) {
+                    if (arts.length && !pmInspectorFocus) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
                       html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
                     }
