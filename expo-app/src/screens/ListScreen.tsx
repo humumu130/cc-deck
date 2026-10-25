@@ -2190,9 +2190,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuHint: { color: c.faint, fontSize: 10.5 },
   card: {
     backgroundColor: "transparent", borderWidth: 0,
-    borderRadius: 0, paddingVertical: 12, paddingHorizontal: 14, /* W-UIFIX 件五：高度+2（10→12 纵距） */
+    /* W-FB66REST ⑥（用户 1026 test.66「下方空白比上方大」）：上下不对称根源=末行文本
+       行盒（lineHeight 15/字号 12）CJK 无下延部、Android 字形盒居中分配≈底部空 2px，
+       叠加 padding 视觉下重——paddingBottom 12→10 补偿 2px 使上下视觉等高（样式数字
+       原本 12/12 对称，补偿的是字形底空；紧凑档 11→9 同步）。真机若仍偏可 ±1 微调 */
+    borderRadius: 0, paddingTop: 12, paddingBottom: 10, paddingHorizontal: 14, /* W-UIFIX 件五：高度+2（10→12 纵距） */
   },
-  cardC: { borderRadius: 0, paddingVertical: 11, paddingHorizontal: 14 }, /* W-UIFIX 件五：紧凑档同步 +2 */
+  cardC: { borderRadius: 0, paddingTop: 11, paddingBottom: 9, paddingHorizontal: 14 }, /* W-UIFIX 件五：紧凑档同步 +2 */
   // 极简平铺行：同通栏语言，行高最矮
   // 1013 高度压缩批：单行内容 ~31px 低于 44px 触控底线（改前 ~33 同欠账）——
   // minHeight 44 兜底 + 内容垂直居中（设置行 minHeight 48 同语言），视觉仍为三档最矮
