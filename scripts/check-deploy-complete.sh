@@ -24,15 +24,15 @@ FAIL=0
 say() { echo "$@"; }
 bad() { echo "❌ $*"; FAIL=1; }
 
-[ -d "$DEPLOY_DIR" ] || { echo "❌ 部署位不存在: $DEPLOY_DIR（relay-service 未部署？）"; exit 1; }
+[ -d "$DEPLOY_DIR" ] || { echo "❌ 部署位不存在: ${DEPLOY_DIR}（relay-service 未部署？）"; exit 1; }
 
-say "== 部署完整性检查 ==（部署位: $DEPLOY_DIR）"
+say "== 部署完整性检查 ==（部署位: ${DEPLOY_DIR}）"
 
 # ---------- 1. relay.mjs 部署位 vs 构建产物 ----------
 SRC_BUNDLE="cc-plugins/plugins/cc-deck/scripts/relay.mjs"
 DEP_RELAY="$DEPLOY_DIR/relay.mjs"
 if [ ! -f "$SRC_BUNDLE" ]; then
-  bad "构建产物缺失: $SRC_BUNDLE（先跑 relay/scripts/build-plugin.mjs）"
+  bad "构建产物缺失: ${SRC_BUNDLE}（先跑 relay/scripts/build-plugin.mjs）"
 elif [ "$(H "$SRC_BUNDLE")" != "$(H "$DEP_RELAY")" ]; then
   bad "relay.mjs 部署位 ≠ 构建产物（部署位过期/异源）"
   say "    同步: cp $SRC_BUNDLE $DEP_RELAY && 重启 relay 服务"
@@ -76,7 +76,7 @@ if [ -d "$DEPLOY_DIR/web-console/web-console" ]; then
   say "    处置: 确认无引用后删除: rm -rf $DEPLOY_DIR/web-console/web-console"
 fi
 for f in "$DEPLOY_DIR"/relay.mjs.bak-* "$DEPLOY_DIR"/relay.mjs.old; do
-  [ -e "$f" ] && say "ℹ️  部署位备份残留: $f（不拦，介意可清）"
+  [ -e "$f" ] && say "ℹ️  部署位备份残留: ${f}（不拦，介意可清）"
 done
 
 # ---------- 5. 进程新鲜度（文件同步了但没重启 = 运行面仍旧代码） ----------
@@ -91,7 +91,7 @@ if [ -f "$DEP_RELAY" ] && [ "$DEPLOY_DIR" = "$HOME/.cc-deck/relay-service" ]; th
     PROC_START=$(ps -o lstart= -p "$PID" 2>/dev/null | xargs -I{} date -j -f "%a %b %d %H:%M:%S %Y" "{}" +%s 2>/dev/null || echo 0)
     if [ "$PROC_START" != "0" ] && [ "$FILE_MTIME" -gt "$PROC_START" ]; then
       bad "relay 进程(pid $PID)启动早于 relay.mjs 修改时间——文件已同步但进程还是旧代码，重启才生效"
-      say "    重启: launchctl kickstart -k gui/\$(id -u)/online.humumu.ccdeck.relay"
+      say "    重启: 重启对应 relay 进程（launchd 作业已退役；App 内嵌 relay=重启 App，relay-service=重启其宿主进程）"
     else
       say "✅ relay 进程(pid $PID)晚于部署位文件修改（运行面是新的）"
     fi
