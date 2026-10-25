@@ -57,6 +57,10 @@ process.env.CCR_STUCK_AFTER_MS = "30000";
 process.env.CCR_STUCK_RETRY_MS = "20000";
 // 假注入器：参数含 FORCE_FAIL 即 exit 1（注入失败路径），否则记日志 exit 0
 const FAKE = join(DATA, "fake-injector.mjs");
+// W-INJDEGRADE：假 osascript（resumeSession macOS 分支走 runAppleScript→此假）——
+// 记录 argv 到日志供「降级=claude --resume 真被调起」实证，绝不碰真 Terminal.app
+const FAKE_OSA = join(DATA, "fake-osascript.mjs");
+const OSA_LOG = join(DATA, "osascript.log");
 const INJECT_LOG = join(DATA, "inject.log");
 writeFileSync(
   FAKE,
@@ -84,6 +88,16 @@ writeFileSync(
     "process.exit(0);",
   ].join("\n"),
 );
+writeFileSync(
+  FAKE_OSA,
+  [
+    'import { appendFileSync } from "node:fs";',
+    'appendFileSync(process.env.CCR_OSA_LOG, JSON.stringify(process.argv.slice(1)) + "\\n");',
+    "process.exit(0);",
+  ].join("\n"),
+);
+process.env.CCR_OSA_LOG = OSA_LOG;
+process.env.CCR_OSASCRIPT_CMD = FAKE_OSA;
 process.env.CCR_INJECT_CMD = FAKE;
 process.env.CCR_INJECT_LOG = INJECT_LOG;
 process.env.CCR_DATA_DIR = DATA;
@@ -205,20 +219,34 @@ const sessionLogText = (id: string) =>
   const disk1 = JSON.parse(readFileSync(qfile, "utf-8")) as Record<string, unknown[]>;
   assert((disk1[idFail]?.length ?? 0) === 1, "④ 失败消息保留在落盘队列（不再蒸发）");
   assert((sf.pending_inputs ?? []).length === 1, "④ pending 回显保留（重投期可见）");
-  assert(sessionLogText(idFail).includes("第 1/3 次"), "④ 失败留痕含重试进度");
+  assert(sessionLogText(idFail).includes("自动重投") && sessionLogText(idFail).includes("降级恢复投递"), "④ 失败留痕含重投进度与降级预告（首条横幅，降噪后无逐次进度）");
 
-  // 2、3 连败 → 终态。每次发消息前重挂 pid 模拟「hook 重连 → 重投周期」（失败即清 pid，
-  // 不重挂会走 resumeExternal 恢复路径，不进注入失败计数——与生产分诊一致）
+  // 2、3 连败 → W-INJDEGRADE 降级（#142）：不再丢弃，转恢复投递腿（claude --resume）。
+  // 每次发消息前重挂 pid 模拟「hook 重连 → 重投周期」（失败即清 pid，不重挂会走
+  // resumeExternal 恢复路径，不进注入失败计数——与生产分诊一致）
   mgr.setExternalCliPid(idFail, process.pid);
   bridge.extInput(idFail, "FORCE_FAIL 第二条");
-  await waitLog(() => sessionLogText(idFail).includes("第 2/3 次"), 6000);
+  await wait(1200); // 同因连败第 2 次：横幅静默（降噪）——等一拍再验
+  const banner2 = sessionLogText(idFail).match(/注入失败（[^）]*）/g) ?? [];
+  assert(banner2.length === 1, `④ 横幅降噪：同因连败只插首条（实测 ${banner2.length} 条「注入失败」横幅）`);
+  assert((sf.pending_inputs ?? []).length === 2, "④ 重试期 pending 回显保留（两条排队消息都在场）");
   mgr.setExternalCliPid(idFail, process.pid);
   bridge.extInput(idFail, "FORCE_FAIL 第三条");
-  await waitLog(() => sessionLogText(idFail).includes("停止投递"), 6000);
+  await waitLog(() => sessionLogText(idFail).includes("降级:回合末"), 6000);
   const disk3 = JSON.parse(readFileSync(qfile, "utf-8")) as Record<string, unknown[]>;
-  assert((disk3[idFail]?.length ?? 0) === 0, "④ 3 连败后队列清空（显式失败终态）");
-  assert((sf.pending_inputs ?? []).length === 0, "④ 3 连败后「排队中」气泡撤下（禁无限排队）");
-  assert(sessionLogText(idFail).includes("请到终端窗口检查后重发"), "④ 失败终态落人话日志");
+  assert((disk3[idFail]?.length ?? 0) === 0, "④ 3 连败后注入队列清空（消息已转投恢复腿，不滞留）");
+  assert((sf.pending_inputs ?? []).length >= 2, `④ 降级后 pending 回显保留≥转投条数（实测 ${sf.pending_inputs?.length}，不丢失）`);
+  assert(sessionLogText(idFail).includes("转恢复投递"), "④ 降级汇总横幅落人话日志");
+  // 降级实证：假 osascript 收到 claude --resume 调起（消息真被转交恢复腿，非仅改文案）
+  console.log('DEBUG-LOGS>>>' + sessionLogText(idFail));
+  // 降级实证（resumeSession 为 fire-and-forget 异步，横幅先落——轮询等 osascript 假记录）
+  let osaCalls = "";
+  for (let i = 0; i < 20 && !osaCalls.includes("claude --resume"); i++) {
+    await wait(300);
+    osaCalls = existsSync(OSA_LOG) ? readFileSync(OSA_LOG, "utf-8") : "";
+  }
+  assert(osaCalls.includes("claude --resume"), "④ 降级实证：resumeSession 真被调起（osascript argv 含 claude --resume）");
+  assert(osaCalls.includes("FORCE_FAIL"), "④ 降级实证：转投文本经 resume prompt 携带");
 
   // ⑤ 重启回种：手写 queue 文件 → 新 Bridge 回种 → hook 重连自动补投
   const idRestore = "ext-tir-restore-1";
@@ -395,6 +423,7 @@ const sessionLogText = (id: string) =>
       assert(rCx.ok === false && String(rCx.error ?? "").includes("不支持"), "⑩ codex 引擎如实报不支持权限循环");
       // claude + 真 tmux pane：cycle 一发 → ESC[Z 字节落盘（投递链物理证据）
       delete process.env.CCR_INJECT_CMD; // 解锁 tmux 通道（resolveTmuxTarget 的测试逃生门）
+      delete process.env.CCR_OSASCRIPT_CMD; // W-INJDEGRADE：同款解锁——OSASCRIPT 假在场会禁 tmux 解析（injector :254 同门）
       await wait(200);
       const rCy = bridge.cyclePerm(idCy, 1);
       assert(rCy.ok === true, "⑩ claude 会话权限循环受理 ok");
@@ -406,6 +435,7 @@ const sessionLogText = (id: string) =>
       assert(scx && scy.permission_mode === undefined, "⑩ 未识别档位不假镜像（fallback 仅本地日志）");
       try { execFileSync("tmux", ["kill-session", "-t", sess], { stdio: "ignore" }); } catch {}
       process.env.CCR_INJECT_CMD = FAKE; // 还原套件注入器
+      process.env.CCR_OSASCRIPT_CMD = FAKE_OSA; // W-INJDEGRADE：还原 osascript 假
     }
   }
 

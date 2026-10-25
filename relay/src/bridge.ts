@@ -360,6 +360,10 @@ export class Bridge {
   // W-INJECT：连续注入失败计数（重投上限闸）。3 连败 = 链路真断，转显式失败终态；
   // 注入成功/消息晋升即清零
   private injectFails = new Map<string, number>();
+  // W-INJDEGRADE（#142）：注入失败横幅降噪账本——同因连败只插首条红横幅（旧形态每次
+  // 重试插一条、3 连败连插 3-4 条=视觉污染，1026 06:02 用户拍屏实锤）；注入成功或降级
+  // 汇总时清零开新周期。
+  private injectFailNoted = new Map<string, string>();
   // W-INJECT：无 pid 滞留提示一次性标记（防每轮 flush 刷屏；pid 重定位即清）
   private noPidNote = new Set<string>();
   // W-INJECT：given_up 后的宽限期失败判定定时器（给最后一次补发回车留晋升窗口）
@@ -1706,9 +1710,10 @@ export class Bridge {
     this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume${why ? `，原因：${why}` : ""}）并投递：${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
+        // W-INJDEGRADE（#142）：恢复失败不再清 pending——降级转投的消息必须保持「排队中」
+        // 可见（不丢失）；窗口已解除，下条消息发送时会重试恢复并带上积压。
         this.resumeSpawns.delete(sessionId); // 恢复失败解除窗口，下条消息可重试恢复
-        this.mgr.setExternalPending(sessionId, []);
-        this.mgr.pushExternalLog(sessionId, "system", `恢复失败：${r.error ?? "未知错误"}`);
+        this.mgr.pushExternalLog(sessionId, "system", `恢复失败：${r.error ?? "未知错误"}（排队消息保留，下次发送时自动重试恢复）`);
         return;
       }
       // 恢复闭环（2026-09-18 公司机报障）：spawn 成功 ≠ 恢复进程上线——claude 不在
@@ -1919,6 +1924,7 @@ export class Bridge {
         }
         this.noPidNote.delete(sessionId);
         this.injectFails.delete(sessionId); // 注入成功：连续失败计数清零
+        this.injectFailNoted.delete(sessionId); // W-INJDEGRADE：失败横幅周期终结
         this.saveQueueDisk();
         const sentAt = Date.now();
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue→written)`);
@@ -2141,27 +2147,41 @@ export class Bridge {
     const q = this.inputQueue.get(sessionId) ?? [];
     const why = error === "pid-reuse" ? "进程定位失效（PID 被系统复用）" : (error ?? "未知");
     if (fails >= 3) {
+      // W-INJDEGRADE（#142，2026-10-26 用户拍屏实锤）：3 连败不再丢弃——降级到恢复投递腿
+      //（resumeExternal→claude --resume 带 prompt 开新终端标签）。该腿已被同窗实证可用：
+      // 无头 PM 会话（nohup，tty 不在任何 Terminal 标签）Terminal 腿连败丢消息的同时，
+      // 用户消息+图片经恢复腿实际送达（回合中被收下、图片落盘）。
+      // 队列消息逐条转投：首条触发 resume spawn，防重窗内余条自动排队（「恢复进行中，
+      // 消息已排队」）；恢复进程上线后 hook 到达触发 flushQueue 续投（新进程在 Terminal
+      // 标签内，Terminal 腿恢复可用）。#66 无限排队不复发：消息出队转交恢复腿+
+      // resumeVerifyMs 上线回查闭环兜底；pending 回显保持可见（不丢失）。
       const texts = q.map((p) => pBody(p));
       this.inputQueue.delete(sessionId);
       this.saveQueueDisk();
+      this.injectFailNoted.delete(sessionId); // 降级汇总横幅即周期终结，后续失败开新周期
       const st = this.mgr.getExternal(sessionId);
-      if (st?.pending_inputs?.length) {
-        const qkeys = new Set(texts.map((t) => normKey(t)));
-        const kept = st.pending_inputs.filter((p) => !qkeys.has(normKey(pBody(p))));
-        if (kept.length !== st.pending_inputs.length) this.mgr.setExternalPending(sessionId, kept);
+      if (st?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []); // 重建前清旧回显，防同消息双气泡
+      for (let i = 0; i < q.length; i++) {
+        this.resumeExternal(sessionId, texts[i], `注入连续 ${fails} 次失败（${why}）`, q[i].text, q[i].refs);
       }
       this.mgr.pushExternalLog(
         sessionId,
         "system",
-        `注入连续 ${fails} 次失败（${why}），${texts.length} 条排队消息停止投递${texts.length ? `：${texts.map((t) => truncate(t, 60)).join("／")}` : ""}——请到终端窗口检查后重发`,
+        `[降级:回合末] 注入连续 ${fails} 次失败（${why}），${texts.length} 条排队消息转恢复投递（claude --resume 新终端标签带上，恢复进程上线后自动续投）——排队气泡仍在，无需手动重发`,
       );
       return;
     }
     this.saveQueueDisk();
+    // W-INJDEGRADE 横幅降噪：同因连败只插首条（重试进度进 console 日志）；换因/新周期重新插
+    if (this.injectFailNoted.get(sessionId) === why) {
+      console.log(`[inject-fail] sid=${sessionId.slice(0, 14)} 同因连败第 ${fails}/3 次横幅静默（why=${why}，队列 ${q.length} 条保留）`);
+      return;
+    }
+    this.injectFailNoted.set(sessionId, why);
     this.mgr.pushExternalLog(
       sessionId,
       "system",
-      `注入失败（${why}），已清除进程定位；${q.length} 条排队消息保留，会话恢复活动后自动重投（第 ${fails}/3 次）`,
+      `注入失败（${why}），已清除进程定位；${q.length} 条排队消息保留，会话恢复活动后自动重投（连续失败达 3 次将自动降级恢复投递，不丢弃）`,
     );
   }
 
@@ -3694,6 +3714,7 @@ export class Bridge {
     if (probe) { clearTimeout(probe); this.injectProbeTimers.delete(sessionId); }
     this.injectProbeRearms.delete(sessionId);
     this.injectFails.delete(sessionId); // W-INJECT：晋升=链路证活，重投上限闸归零
+    this.injectFailNoted.delete(sessionId); // W-INJDEGRADE：失败横幅周期终结
   }
 
 
