@@ -421,7 +421,6 @@
     .status-dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--st-closed); }
     /* #227 三排定稿：竖条退役；r3 双胶囊（源胶囊左+引擎胶囊右）+右上置顶图钉 */
     .queue-card { position: relative; }
-    .srow-pinned { color: var(--faint); width: 12px; height: 12px; flex: none; }
     .src-cap { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; color: var(--dim); max-width: 40%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: none; }
     .r3-spring { flex: 1; }
     .srow-ava .ava-brand { display: flex; align-items: center; justify-content: center; } /* #226 追加：6/7→9px——灯显眼度（用户 1023） */
@@ -2022,10 +2021,16 @@
     #d-session .srow-more::before, #d-session .srow-pin::before, #d-session .srow-close::before { content: ""; position: absolute; inset: -5px; }
     #d-session .srow-more:hover, #d-session .srow-pin:hover, #d-session .srow-close:hover { background: var(--hover); color: var(--text-strong); }
     #d-session .srow-pin svg, #d-session .srow-close svg { width: 13px; height: 13px; }
-    #d-session .srow-pin.on { color: var(--brand); }
+    #d-session .srow-pin.on { opacity: 1; color: var(--brand); } /* W-FB66C ⑪：已置顶常驻显（hover 不再冒第二枚图钉——常驻/悬浮合一，点按=取消置顶，位置恒 right:28） */
     #d-session .srow-close:hover { color: var(--error); background: var(--danger-bg); }
     #d-session .queue-card:hover .srow-more, #d-session .queue-card:hover .srow-pin, #d-session .queue-card:hover .srow-close,
     #d-session .queue-card:focus-within .srow-more, #d-session .queue-card:focus-within .srow-pin, #d-session .queue-card:focus-within .srow-close { opacity: 1; }
+    /* W-FB66C ⑫：r3 chip 等高统一（源胶囊/引擎胶囊/团队 chip 同高 18px+垂直居中）。
+       形状结论：高度与 pill 圆角统一（团队 chip 6→999 对齐胶囊族），身份色/内容保留
+       （源胶囊深底白字/引擎 tint 淡彩/团队 chip 色条描边——身份区分度优先）；📁 目录
+       chip test.66 r3 无发射体不涉。 */
+    #d-session .srow-r3 .src-cap, #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .team-chip { height: 18px; align-items: center; justify-content: center; }
+    #d-session .srow-r3 .team-chip { border-radius: 999px; }
     #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); /* W-V8 批10：摘要行提亮一档（路径/摘要全图最暗项） */ font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
