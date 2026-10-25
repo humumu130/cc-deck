@@ -2031,8 +2031,8 @@
     /* V8R+（1014 Leader 追加）：PM/Leader 直列卡的「所属团队」归属 chip——左侧 3px 团队色条
        （GRP_ACCENTS 色轮同源，同团队恒同色）+ 团队名（超长截断）；徽章级、随 r3 徽章行，
        不破坏卡片信息架构；无归属不渲染 */
-    #d-session .team-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 11em; min-width: 0; padding: 1px 7px 1px 5px; border: transparent; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: transparent; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--fs-micro); line-height: 16px; white-space: nowrap; }
-    #d-session .team-chip .tc-ico { flex: none; width: 12px; height: 12px; color: var(--team-accent, var(--brand)); } /* W-TEAMCHIP2 ①：双人剪影 svg（fill=currentColor 随 accent）替代语义不明色块 */
+    #d-session .team-chip { display: inline-flex; align-items: center; gap: 3px; flex: none; max-width: 11em; min-width: 0; padding: 1px 6px; border: transparent; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: transparent; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--srow-badge-size); line-height: 14px; white-space: nowrap; } /* W-CHIP3 ②：缩档对齐引擎徽章（10.5px 字号+pad 1px 6px，视觉重量同档） */
+    #d-session .team-chip .tc-ico { flex: none; width: 9px; height: 9px; color: var(--team-accent, var(--brand)); } /* W-TEAMCHIP2 ①：双人剪影 svg（fill=currentColor 随 accent）替代语义不明色块；W-CHIP3 ②：12→9 与缩档字号协调 */
     #d-session .team-chip .tc-ico circle, #d-session .team-chip .tc-ico path { fill: currentColor; }
     #d-session .team-chip .tc-unread { flex: none; margin-left: 3px; padding: 0 4px; border-radius: 999px; background: var(--brand); color: #fff; font: 600 9px/13px var(--mono); font-variant-numeric: tabular-nums; animation: slimPulseKf 1.6s ease-out infinite; } /* W-TEAMCHIP2 ②：dock 退役后未读聚合唯一列表可视面（>9 显 9+，title 带精确数） */
     #d-session .team-chip.has-unread { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 55%, transparent); color: var(--text-strong); }
