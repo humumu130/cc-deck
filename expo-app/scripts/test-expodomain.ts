@@ -474,7 +474,24 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   check(srcOf("../src/store.ts").includes("startForegroundService()"), "后台保活：connConnect 收口 FGS（既有 #85 面）");
   check(srcOf("../src/store.ts").includes("resetBackoff();"), "回前台清退避（#114 既有面保持）");
 
-  console.log(`OK ${tests} assertions（W-EXPODOMAIN v2：件一~件十 + P0 重连 + 回归双修 + 查漏组）`);
+  console.log("N. W-FB66REST ③④⑤⑥（FB66ALL 续批——head 问号色块/模型钮降高/水位分层/卡 padding 对齐）");
+  {
+    const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
+    const styleSrc = srcOf("../src/components/detail-styles.ts");
+    const themeSrc = srcOf("../src/theme.ts");
+    // ③：双缺问号灰块根修——headRoleKind（pm/leader 词表+leader 压 pm）+双缺兜底 claude
+    check(detailSrc.includes("const headRoleKind = useMemo(") && detailSrc.includes("/^(leader|领队)$/i") && detailSrc.includes("/^(pm|产品经理|项目经理)$/i"), "③ head 头像角色档判定（列表卡 pmRoleKindOf 同词表，leader 后扫压 pm）");
+    check(detailSrc.includes('crab-leader.png') && detailSrc.includes('crab-pm.png') && detailSrc.includes('?? "claude") === "claude" ? (') && detailSrc.includes('inferEngine(s.engine, s.model) ?? "claude"'), "③ PM/Leader claude 档（双缺视同）=角色蟹；普通会话双缺兜底 claude（问号灰块灭迹）");
+    // ④：模型 chip 22→18 同族档
+    check(styleSrc.includes("height: 18, paddingHorizontal: 7") && styleSrc.includes("lineHeight: 11") && !styleSrc.includes("height: 22, paddingHorizontal: 8"), "④ modelChip 22→18/paddingH 7/lineHeight 11（r3 18px 同族档，桌面 FB66C ⑫）");
+    // ⑤：head 水位三档色（阈值=ctxLevel 60/85 桌面同款；色键=既有 ctx* 族）
+    check(detailSrc.includes('ctxLevel === "waiting" ? c.ctxCritical : ctxLevel === "working" ? c.ctxAttention : c.ctxSafe') && !detailSrc.includes('ctxLevel === "waiting" ? c.waiting : ctxLevel === "working" ? c.working : c.dim'), "⑤ head 水位彩色分层（低绿/中黄/高红，「更多」tab gColor 同链；旧会话状态三态退役）");
+    check(themeSrc.includes('ctxSafe: "#35DC97"') && themeSrc.includes('ctxSafe: "#168D60"'), "⑤ theme ctx 三档双主题色在场（既有键复用零新增）");
+    // ⑥：卡 padding 下补偿
+    check(listSrc.includes("paddingTop: 12, paddingBottom: 10") && listSrc.includes("paddingTop: 11, paddingBottom: 9"), "⑥ 卡上下 padding 12/10、紧凑 11/9（CJK 行盒底空 2px 视觉补偿）");
+  }
+
+  console.log(`OK ${tests} assertions（W-EXPODOMAIN v2：件一~件十 + P0 重连 + 回归双修 + 查漏组 + FB66REST ③④⑤⑥）`);
 }
 
 main().then(
