@@ -397,6 +397,7 @@
        hover 回一档便于辨认操作；后台子 Agent 在跑豁免（不加 idle 类） */
     .queue-card.idle { opacity: .55; }
     .queue-card.idle:hover { opacity: .8; }
+    #d-session .queue-card.idle strong { color: var(--dim); } /* 件C④：置灰卡标题降灰（升特异度压 #d-session .srow-r1 strong；opacity .55 基线之上再叠一层）——W-TEAMCHIP2 ② dock 清块时误删，idle 卡仍在生产（mo idle 检查依赖）复原 */
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
     .queue-card strong {flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--fs-A-item); text-overflow: ellipsis; white-space: nowrap;}
     .queue-card p {overflow: hidden; overflow-wrap: break-word; min-height: calc(18px * var(--ui-scale)); margin: 4px 138px 0 14px; color: var(--dim); font-size: var(--fs-B); text-overflow: ellipsis; white-space: nowrap;}
@@ -1568,20 +1569,6 @@
        用户 test.25 实测「仍卡片状」的真正根因（平台无关，win 截图显性）。旧规则随标记一并退役 */
     /* #103-B4 用户拍板：团队入口卡不做圆角、与会话卡统一行形态（直角/同 hover/上下分隔线）；
        原 12px 圆角+渐变底退役，对齐 #d-session .queue-card（2020 行族） */
-    #d-session .team-entry { gap: 11px; margin: 0; padding: 9px 14px; border: 0; border-radius: 0; background: none; }
-    #d-session .team-entry + .team-entry { border-top: transparent; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-    #d-session .team-entry:hover { border-color: transparent; background: var(--q-row-hov); }
-    #d-session .team-entry .t-ava { width: 32px; height: 32px; border-radius: 10px; background: var(--brand-soft); border-color: var(--line); border-color: color-mix(in srgb, var(--brand) 30%, var(--line)); color: var(--brand-strong); }
-    #d-session .team-entry .t-sub { display: none; }
-    #d-session .team-entry .t-name { font-size: var(--fs-A-item); }
-    #d-session .team-entry .t-counts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; color: var(--dim); font: var(--fs-C) var(--mono); }
-    #d-session .team-entry .t-count { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: none; } /* t25fix #3：计数裸文本化（图标+数字直排，无 chip 容器/白底/边框） */
-    #d-session .team-entry .t-count svg { width: 12px; height: 12px; }
-    #d-session .team-entry .t-count .t-running-icon { width: 11px; height: 11px; color: var(--st-working); } /* V8R+ ②：▶ 字符→黄色单人 svg（#icon-user） */
-    #d-session .team-entry .t-expand.has-unread { position: relative; } /* V8R+ ③：未读点从 t-name 后迁此角标（与头像健康灯去重，功能保留） */
-    #d-session .team-entry .t-expand.has-unread::after { content: ""; position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; } /* 描边省略：slimPulseKf 的 box-shadow 帧会覆盖静态描边，走纯呼吸环 */
-    #d-session .team-entry .t-count .t-accept-icon { color: var(--brand); }
-    #d-session .team-entry .t-count b { color: var(--text); font-weight: 700; }
     #d-session .workspace-head { background: var(--brand); background: linear-gradient(180deg, color-mix(in srgb, var(--workspace-top) 96%, var(--brand) 4%), var(--workspace-top)); }
     #d-session .workspace-head, #d-team .workspace-head { border-bottom-color: transparent; border-bottom-color: color-mix(in srgb, var(--line) 72%, transparent); }
     .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 0; margin-bottom: 15px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
@@ -1914,7 +1901,7 @@
     /* W-UIFB ⑥：单源数据下会话卡第三行源标签隐藏（i=7）——与既有 single 模式规则互补，
        聚合模式但数据单源同样隐藏；多源数据落地后自动回归 */
     body[data-source-count="1"] #d-session .queue-card .source-badge { display: none; }
-    body[data-source-count="1"] .team-entry .source-badge, body[data-source-count="1"] .inspector .source-badge.insp-src { display: none; } /* t25fix #5：团队卡/详情面板源徽章同门控（单源省略，聚合恒显） */
+    body[data-source-count="1"] .inspector .source-badge.insp-src { display: none; } /* t25fix #5：团队卡/详情面板源徽章同门控（单源省略，聚合恒显） */
     /* #245 B：项目/团队列表卡源胶囊同门（单源隐藏/聚合显示，对齐会话列表口径）；
        #248 追缺（W-SRCCOUNT，1024 装机实锤）：视角=聚合但数据单源（mode=aggregate ∧
        count=1，两台 relay 同名/仅一台在线残留）时旧 mode 单门放行 src-cap 全显——
@@ -2044,7 +2031,10 @@
        （GRP_ACCENTS 色轮同源，同团队恒同色）+ 团队名（超长截断）；徽章级、随 r3 徽章行，
        不破坏卡片信息架构；无归属不渲染 */
     #d-session .team-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 11em; min-width: 0; padding: 1px 7px 1px 5px; border: transparent; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: transparent; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--fs-micro); line-height: 16px; white-space: nowrap; }
-    #d-session .team-chip i { flex: none; width: 3px; height: 9px; border-radius: 2px; background: var(--team-accent, var(--brand)); }
+    #d-session .team-chip .tc-ico { flex: none; width: 12px; height: 12px; color: var(--team-accent, var(--brand)); } /* W-TEAMCHIP2 ①：双人剪影 svg（fill=currentColor 随 accent）替代语义不明色块 */
+    #d-session .team-chip .tc-ico circle, #d-session .team-chip .tc-ico path { fill: currentColor; }
+    #d-session .team-chip .tc-unread { flex: none; margin-left: 3px; padding: 0 4px; border-radius: 999px; background: var(--brand); color: #fff; font: 600 9px/13px var(--mono); font-variant-numeric: tabular-nums; animation: slimPulseKf 1.6s ease-out infinite; } /* W-TEAMCHIP2 ②：dock 退役后未读聚合唯一列表可视面（>9 显 9+，title 带精确数） */
+    #d-session .team-chip.has-unread { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 55%, transparent); color: var(--text-strong); }
     #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     /* W-TEAMSNC ②：chip button 化（button reset+hover 微抬▸+focus 光环+idle 置灰+展开态） */
     #d-session button.team-chip { cursor: pointer; transition: border-color .12s ease, background-color .12s ease, color .12s ease; }
@@ -2099,7 +2089,6 @@
     /* 行变量三档语义（原 --density-card-* 卡变量改造为行变量；档位循环与设置键不变）：
        紧凑=压缩两行（头像 26px/字号降档，对齐手机「简洁列表」）——见上方 body 三条 */
     /* 组头 sticky（旧版 #78 同拍板）：滚动时组名钉在列表顶，底色盖住穿行的行淡底 */
-    #d-session .session-list .list-upper .queue-group { position: sticky; top: 0; z-index: 2; margin: 10px 0 6px; padding: 2px 14px; background: var(--surface1); }
     /* 件七：#d-settings 剔除 density 固定高——设置导航卡走内容高（9px×2+行高），固定高
        76px 与「高度调小一档」冲突；team/project 卡保留固定高（flex column 居中已治通病） */
     #d-team .queue-card, #d-project .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
@@ -2378,80 +2367,9 @@
     .idle-group-head { cursor: pointer; user-select: none; }
     .idle-group-head:hover { color: var(--dim); }
     .idle-group-head .idle-caret { display: inline-block; margin-left: 3px; font-size: 9px; }
-    /* B11 会话分组折叠：组头=caret+文件夹图标+名+计数（可点整头），卡体入 .grp-body；
-       折叠态由 .session-group.collapsed 控制（闲置组旧 data-idle-toggle 机制并入本通用机制） */
-    .session-group > .queue-group { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-    .session-group > .queue-group:hover { color: var(--dim); }
-    .session-group > .queue-group .grp-caret { flex: none; width: 9px; font-size: 9px; color: var(--faint); transition: transform .16s ease; }
-    .session-group:not(.collapsed) > .queue-group .grp-caret { transform: rotate(90deg); }
-    .session-group > .queue-group .grp-folder { flex: none; display: inline-flex; color: var(--faint); }
-    .session-group > .queue-group:hover .grp-folder { color: var(--dim); }
-    .session-group > .queue-group .grp-folder .icon-inline { width: 13px; height: 13px; fill: currentColor; stroke: none; }
-    .session-group.collapsed > .grp-body { display: none; }
-    /* W-UIPOLISH4 件C 二次返工（2026-10-12 test.21 判层次不足，用户五项规格）：
-       ①组头带=surface2+4% 品牌 tint 底带+上下 hairline+字重 650+右侧计数徽章（件十五沿用）
-       ②组间=20px 间距+单根 hairline（由下组组头带上缘承担，不双线）
-       ③团队组头左 3px 竖色条（--grp-accent 按组序色轮注入，研发/观察/质检一眼分色）
-       ④空闲卡降权见 .queue-card.idle strong（opacity .55 原有+标题降灰新增）
-       ⑤组头吸顶（.session-list 滚动口 sticky，底带实色防透、滚动不迷路） */
-    .session-group + .session-group { margin-top: 20px; }
-    /* 1013 件5（用户截图反馈）：组头下缘横线去掉（带底 tint 已够分层，双 hairline 显重）；
-       左内边距 9→6 收窄=整组视觉左移回调（配套 grpHead 去文件夹图标，标题起点贴近卡片内容缘） */
-    .session-group > .queue-group { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 5px 8px 4px 6px; border-top: 1px solid var(--line-soft); border-left: 3px solid var(--grp-accent, var(--brand)); background: var(--surface2); background: color-mix(in srgb, var(--brand) 4%, var(--surface2)); font-weight: 650; color: var(--text); }
-    .session-group > .queue-group:hover { color: var(--text-strong); }
-    .session-group > .queue-group .grp-caret { width: 10px; font-size: 10px; color: var(--dim); }
-    .session-group > .queue-group:hover .grp-caret { color: var(--text); }
-    .session-group > .queue-group .grp-folder { color: var(--dim); }
-    .session-group > .queue-group .grp-count { display: inline-flex; align-items: center; margin-left: 2px; padding: 0 0 0 4px; border: 0; background: none; color: var(--dim); font-weight: 600; font-size: var(--fs-micro); font-variant-numeric: tabular-nums; } /* t25fix #3/#12：组头计数 chip 容器退役（裸图标+数字），dock 顶栏随之轻量化 */
-    /* W-V8 批4 组头 v8 化（用户点名2）：头像 tile + 计数图标（12px+11px 数字，状态色只落图标） */
-    .session-group > .queue-group .grp-ava { flex: 0 0 auto; width: 20px; height: 20px; margin: 0 2px 0 -2px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--line); color: var(--brand-hover); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-    .session-group > .queue-group .grp-ic { width: 12px; height: 12px; margin: 0 3px 0 2px; vertical-align: -2px; color: var(--faint); }
-    .session-group > .queue-group .grp-ic.on { color: var(--st-working); } /* #99件2：working 计数=黄人（对齐五色灯 working 黄），原 v8 绿退役 */
-    #d-session .queue-card.idle strong { color: var(--dim); } /* 件C④：置灰卡标题降灰（升特异度压 #d-session .srow-r1 strong；opacity .55 基线原有） */
-    .session-list-tools button.active { color: var(--text-strong); border-color: var(--border-strong); background: var(--hover); }
-    /* #103 两段式：团队区 dock——下段常驻列表底；折叠后只剩顶栏吸附列表最底（IDE
-       status-bar 形态，复用 data-group-toggle 折叠链）；展开限高约列表 40% 内部滚动；
-       会话区空时上段 flex:1 收缩、dock 自然上移。折叠态 grp-body 隐藏复用上方
-       .session-group.collapsed > .grp-body 规则 */
-    .session-group.teams-dock { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; max-height: 40%; margin: 0; border-top: transparent; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface1); }
-    .session-group.teams-dock > .queue-group { flex: none; display: flex; align-items: center; margin: 0; padding: 5px 14px; }
-    .session-group.teams-dock > .grp-body { flex: 1 1 auto; min-height: 0; overflow: hidden auto; padding: 2px 0 6px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-    /* dock 顶栏：聚合健康灯（任一队在跑=working 黄呼吸）+ 未读徽章（有新输出未在看） */
-    .teams-dock .dock-lamp { flex: none; width: 8px; height: 8px; border-radius: 50%; margin: 0 3px; background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-closed); }
-    .teams-dock .dock-lamp.on { background: var(--st-working); box-shadow: none; animation: st-glow-pulse 2s ease-in-out infinite; }
-    .teams-dock .dock-unread { margin-left: 4px; padding: 0 6px 1px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
-    /* [t-7e0c6189] 会话列表瘦身：团队入口卡——每团队一张聚合卡（worker 会话收进团队域，
-       卡身点击跳团队域、⤢ 钮就地展开第四列；未读呼吸点 = 团队内 worker 有新输出） */
-    .team-entry { display: flex; gap: 9px; align-items: center; margin: 0; padding: 8px 14px; border: 0; border-radius: 0; background: none; cursor: pointer; } /* t25fix #9：旧虚线圆角卡基线退役，容器属性对齐 #103-B4 行式（#d-session 覆盖层之外的挂载点不再回退卡片态） */
-    .team-entry:hover { background: var(--q-row-hov); }
-    .team-entry .t-ava { flex: none; position: relative; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--info); display: flex; align-items: center; justify-content: center; font-size: 13px; }
-    .team-entry .t-ava .team-health { position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border: 1.5px solid var(--surface1); } /* 1014：队级健康度角点（成员 mini 灯的上级聚合） */
-    .team-entry .t-main { flex: 1; min-width: 0; }
-    .team-entry .t-name { display: flex; align-items: center; gap: 6px; color: var(--text-strong); font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .team-entry .t-sub { color: var(--faint); font-size: var(--fs-C); margin-top: 1px; }
-    .team-entry .t-expand { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; }
-    .team-entry .t-expand:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
-    .worker-mini-row { display: flex; gap: 3px; margin-top: 4px; min-height: 16px; } /* t25fix #2：无成员灯（kept 角色团队/0 同步）时 16px 占位——两张团队卡行数恒齐，高度不随 mini 行有无跳变 */
-    /* 1014 追加：每成员一颗心态灯（灯为主体，角色收 title）——running=绿呼吸/idle=灰 */
-    /* 1014 五色词表（--st-* 唯一事实源）：working 黄闪/其余常亮 */
-    /* #201 六轮：状态灯裸点化（用户实拍白圆包裹丑）——包裹去底去框（16px 占位不变，
-       行高节奏与两卡恒齐机制不破），灯点 7→8px；关闭/阻塞由描边圈改纯色点（绿/黄/灰裸 dot） */
-    .worker-mini.lamp { display: inline-grid; place-items: center; background: transparent; border: 0; }
-    .worker-mini.lamp .lamp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-closed); box-shadow: none; }
-    .worker-mini.lamp .lamp-dot.idle { background: var(--st-idle); }
-    .worker-mini.lamp .lamp-dot.blocked { background: var(--st-blocked); }
-    .worker-mini.lamp .lamp-dot.error { background: var(--st-error); animation: st-shake-once .32s ease-in-out 1; }
-    .worker-mini.lamp .lamp-dot.working { background: var(--st-working); animation: st-glow-pulse 2s ease-in-out infinite; }
-
-    .team-entry .t-ava .lamp-dot.team-health { background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-closed); }
-    .team-entry .t-ava .lamp-dot.team-health.idle { background: var(--st-idle); box-shadow: none; }
-    .team-entry .t-ava .lamp-dot.team-health.working { background: var(--st-working); box-shadow: none; animation: st-glow-pulse 2s ease-in-out infinite; }
-    .worker-mini { flex: none; position: relative; width: 16px; height: 16px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); color: var(--faint); font: 600 8px/14px var(--mono); text-align: center; }
-    .worker-mini .status-dot { width: 6px; height: 6px; border-width: 1.5px; }
-    .worker-mini.more { border: 0; background: transparent; color: var(--faint); } /* #201 六轮：+N 随裸灯去虚线框 */
     /* 未读呼吸点：brand 色源 + glow 光圈动画（环色全走 var，零裸色值） */
     /* .slim-unread-dot 本体随 V8R+ ③退役（未读点迁 t-expand.has-unread::after 角标，
-       slimPulseKf 动画复用）；keyframes 留档（角标动画同引） */
+       W-TEAMCHIP2 ②：dock/入口卡角标退役，slimPulseKf 由 chip 未读角标 .tc-unread 续用 */
     @keyframes slimPulseKf { 0% { box-shadow: 0 0 0 0 var(--glow-brand); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
     /* [t-7e0c6189] 第四列 team-drawer —— W-TEAMSNC ④ 厚化（B 稿主战方案）：团队信息抽屉
        （四区=在办概览/成员 roster/输出物/跳团队域钮），296px + .open class 滑入动效（替代
@@ -2460,7 +2378,7 @@
        overlay（<1360px，.drawer-overlay 类挂 #d-session）：贴屏右缘盖检查器+半透明遮罩 */
     .team-drawer { position: absolute; top: 0; bottom: 0; right: var(--inspector-w, 320px); z-index: 3; display: flex; flex-direction: column; width: 296px; background: var(--queue-deep); border-left: 1px solid var(--line); box-shadow: -5px 0 18px var(--panel-shadow); visibility: hidden; transform: translateX(14px); transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s linear .22s; }
     .team-drawer.open { visibility: visible; transform: none; transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s; }
-    .desktop-screen.inspector-collapsed .team-drawer { right: 42px; }
+    .desktop-screen.inspector-collapsed .team-drawer { right: 20px; }
     .desktop-screen.drawer-overlay .team-drawer { right: 0; z-index: 5; } /* overlay 态：贴屏右缘盖检查器 */
     .drawer-mask { position: absolute; inset: 0; z-index: 4; background: color-mix(in srgb, var(--bg0) 55%, transparent); } /* 仅 overlay+开态挂载（syncDrawerOverlay 单口增删）；配色 pair-pop-backdrop 同款 token */
     .team-drawer[hidden] { display: none; } /* 首帧兜底（接管前 hidden 态不占位；JS 接管后恒 false） */
@@ -2469,6 +2387,8 @@
     .team-drawer .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
     .team-drawer .drawer-head .d-cnt { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
     .team-drawer .drawer-head .d-stale { flex: none; padding: 1px 7px; border: 1px solid color-mix(in srgb, var(--warn, #C08A3E) 45%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--warn, #C08A3E) 12%, transparent); color: var(--warn, #C08A3E); font-size: var(--fs-micro); white-space: nowrap; } /* W-TS63FIX（review-tsync-web P3-3）：抽屉离线陈旧标记（S.status 断线态；重连随帧自愈后消失） */
+    .team-drawer .drawer-head .d-close { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; line-height: 1; } /* W-TEAMCHIP2 ②：抽屉收起钮原复用 .t-expand（team-entry 下样式随 dock 删除裸奔）——换 d-close 专属类，规格沿用原 22px 方钮 */
+    .team-drawer .drawer-head .d-close:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
     .team-drawer .drawer-body { flex: 1; overflow: hidden auto; padding: 6px 6px 10px; }
     .team-drawer .queue-card { border: 1px solid transparent; }
     /* W-TEAMSNC ④ 四区内容样式 */

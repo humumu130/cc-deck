@@ -138,9 +138,9 @@ console.log("-- §B css anchors");
 const entryCss = cssBlock(".team-entry");
 /* #193 顺手清债：team-entry 卡断言删除——.team-entry 选择器随 #103 团队域两段式重排退役（css/js 双源不存在） */
 const drawerCss = cssBlock(".team-drawer");
-ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 296px") && css.includes(".team-drawer.open {") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 42px; }"), "team-drawer is an overlay fourth column (W-TEAMSNC ④ 296px + .open transition), re-anchors when inspector collapses"); // W-TEAMSNC ④：248→296 + class 动效（.open 是独立规则，断言走全量 css 非 drawerCss 单块）
+ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 296px") && css.includes(".team-drawer.open {") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 20px; }"), "team-drawer is an overlay fourth column (W-TEAMSNC ④ 296px + .open transition), re-anchors when inspector collapses"); // W-TEAMSNC ④：248→296 + class 动效（.open 是独立规则，断言走全量 css 非 drawerCss 单块）
 ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && css.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
-ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".t-expand.has-unread::after").includes("animation: slimPulseKf"), "inspector member chips + unread pulse styles exist (V8R+ ③未读点迁 t-expand 角标)");
+ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".team-chip .tc-unread").includes("animation: slimPulseKf"), "inspector member chips + unread pulse styles exist (W-TEAMCHIP2 ②未读角标迁 chip tc-unread，dock 入口卡角标退役)");
 
 // ---- §C 列表渲染链 ----
 console.log("-- §C render chain");
@@ -152,9 +152,9 @@ ok((() => { const b = fnBody("renderSlimDrawer"); return b.includes("scrollTop")
 ok((() => { const b = fnBody("slimToggleDrawer"); return b.includes("renderHeader()") && b.includes("[data-team-chip=\"") && b.includes("chipAgain"); })(), "W-TS63FIX P3-2: toggle re-renders header (head-chip aria sync) + restores focus to same-gid chip");
 ok((() => { const b = fnBody("slimRosterOf"); return b.includes("archived"); })(), "W-TS63FIX P2-1: slimRosterOf filters archived teams (chip/dock/drawer/fold four-face gate alignment)");
 ok((() => { const b = fnBody("teamDrawerMarkup"); return b.includes("d-stale") && b.includes("离线·陈旧"); })(), "W-TS63FIX P3-3: drawer-head stale badge when offline (S.status!=online)");
-ok(sessionSrc.includes('data-group-toggle="slim-teams"') && sessionSrc.includes("<span>team</span>") && sessionSrc.includes("session-group teams-dock") && css.includes(".session-group.teams-dock {") && css.includes(".teams-dock .dock-lamp"), "team dock renders as bottom pane with collapsible head (#103: title \"team\", status-bar collapse, B11 toggle reuse)");
-ok(sessionSrc.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && sessionSrc.includes("mountTwoPane(tpl.content);") && sessionSrc.includes('upper.className = "list-upper";'), "list assembly: two-pane (#103) — upper sessions pane, dock below");
-ok(fnBody("slimTeamEntryMarkup").includes('const isAllFilter = !filterDef || filterDef.id === "all";') && fnBody("slimTeamEntryMarkup").includes("if (!hit.length && (!isAllFilter || !team.members.length)) return \"\";") && fnBody("slimTeamEntryMarkup").includes("const rosterN = team.members.length;"), "team card for roster-present teams (#99-5: unsynced/PM-only included on all-filter via id check, filter purity kept) + roster headcount counting (#99-6)");
+ok(!stripComments(sessionSrc).includes("teams-dock") && !css.includes(".session-group.teams-dock") && !stripComments(sessionSrc).includes("slimTeamEntryMarkup") && !css.includes(".team-entry") && sessionSrc.includes('sup class="tc-unread"') && css.includes(".team-chip .tc-unread {"), "W-TEAMCHIP2 ②: teams-dock retired whole-chain (user 1025 verdict, C-稿 dock retirement lands) — no dock markup/entry css/B11 toggle; unread aggregation re-anchored on chip tc-unread badge");
+ok(sessionSrc.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && sessionSrc.includes("mountUpper(tpl.content);") && sessionSrc.includes('upper.className = "list-upper";'), "list assembly: single upper pane (W-TEAMCHIP2 ② dock retired, #103 two-pane ends)");
+ok(sessionSrc.includes("const TEAM_CHIP_ICON =") && sessionSrc.includes('class="tc-ico"') && sessionSrc.includes("function syncDrawerMutex()") && stripComments(sessionSrc).includes('ev.target.closest(".inspector-expand")'), "W-TEAMCHIP2 ①③: chip icon = two-person inline svg (tc-ico, accent-colored); drawer×inspector mutex in docked form with reverse handle (slimTeamEntryMarkup card assertions retired with the dock)");
 
 // ---- §D MutationObserver 放行 + 选中联动 ----
 console.log("-- §D observer integration");
@@ -179,7 +179,7 @@ ok(openFn.includes("inputDrafts.set(S.selected, UI.input.value)") && openFn.incl
 const memberAnchor = `data-team-member-session="' + escape(member.session_id)`;
 /* #193 顺手清债：member-card 直开断言删除——data-team-member-session 锚随 #103 团队域改版退役（css/js 双源不存在） */
 /* #193 顺手清债：team select 清未读断言删除——markSeen?.(gid) 调用形态随团队域改版退役 */
-ok(sessionSrc.includes("slimMarkSeen(gid); // 进团队域即清未读") && sessionSrc.includes('window.__ccDeck005B4?.railJump?.("team");'), "team entry click: mark seen + jump to team domain");
+ok(sessionSrc.includes("if (S.drawerGid) slimMarkSeen(S.drawerGid); // 展开即清该团队未读（设计要点 1）") && sessionSrc.includes('window.__ccDeck005B4?.railJump?.("team");'), "W-TEAMCHIP2: drawer-open clears unread (dock entry jump chain retired; team-jump buttons + team-domain select carry the rail jump / mark-seen)");
 
 // ---- §G 检查器团队块 + 第四列 ----
 console.log("-- §G inspector block + fourth column");
