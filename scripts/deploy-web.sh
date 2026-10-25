@@ -136,7 +136,7 @@ face_ver_check() { # $1=面名 $2=面 index.html
       echo "❌ 面$1烙印 '$fv' 非法版本形状（剥 -nova 后 '$fvc'）——无法判向，fail-closed 拦截（确认请 --force）"
       exit 1
     fi
-    echo "⚠️  --force 越过面新鲜度闸：面$1烙印 $fv（非法形状）→ $VER"
+    echo "⚠️  --force 越过面新鲜度闸：面$1烙印 ${fv}（非法形状）→ $VER"
     return 0
   fi
   if ! ver_shape_ok "$VER"; then
