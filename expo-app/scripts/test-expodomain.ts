@@ -415,16 +415,12 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   const keysP = rowsP.map((r) => r.key);
   check(keysP[0] === "pin1", "投影：置顶无头平铺恒首（跨组钉选）");
   check(!keysP.includes("sec-pending") && !keysP.includes("sec-pinned"), "投影：「待处理/置顶」段头退役（回归②新结构）");
-  // W-MOBFUSION 件②新口径：worker 会话不在主列表直显（收纳进团队入口卡）；PM/Leader
-  // 直列；置顶例外（桌面 slimIsHidden 同款——用户显式关注优先于 IA 规则）
-  check(keysP.includes("t1") === false && keysP.includes("t2") === false, "投影：worker 会话收纳不直显（件②）");
-  check(keysP.includes("pm1") && keysP.indexOf("pm1") < keysP.indexOf("team-gA"), "投影：PM 会话保留直列（件②，KEEP_ROLE 同词表）");
-  check(keysP.includes("pw1") && keysP.indexOf("pw1") < keysP.indexOf("team-gA"), "投影：置顶 worker 例外直列（桌面 slimIsHidden 同款）");
-  const teamEntry = rowsP[keysP.indexOf("team-gA")];
-  check(!!teamEntry && teamEntry.kind === "team-entry" && teamEntry.name === "甲团", "投影：团队入口卡在列（件②，编制在场即出卡）");
-  check(teamEntry.rosterN === 4 && teamEntry.running === 2, "投影：入口卡计数=编制席全量/已同步 WORKING（桌面 #99件6 口径）");
-  check(teamEntry.minis?.[0]?.status === "WORKING" && teamEntry.minis?.length === 4, "投影：mini 灯在岗优先（t1/pm1 前置，四成员全同步 cap5 内）");
-  check(keysP.indexOf("team-gA") > keysP.indexOf("idle1"), "投影：入口卡落列表底部（桌面 dock 同位）");
+  // W-FB66ALL ⑨（用户 1025：卡片已放团队标签，底部团队卡区=旧设计移除）——
+  // 收纳退役全量直列：PM/Leader/worker/pinned 皆直列（归属由卡上团队 chip 承载）
+  check(keysP.includes("t1") && keysP.includes("t2"), "投影：worker 会话直列（⑨收纳退役）");
+  check(keysP.includes("pm1"), "投影：PM 会话直列（KEEP_ROLE 同词表）");
+  check(keysP.includes("pw1") && keysP.indexOf("pw1") < keysP.indexOf("t1"), "投影：置顶 worker 恒前（pinned 池在前）");
+  check(keysP.includes("team-gA") === false, "投影：团队入口卡退役（⑨，dock 旧设计移除）");
   // 件九：「进行中」组取消——非编制卡（WORKING/WAITING/闲置）全部平铺
   check(!keysP.includes("sec-active"), "投影：「进行中」组已取消（件九，状态过滤交筛选档）");
   check(keysP.includes("act1") && keysP.includes("wait1") && keysP.includes("idle1"), "投影：非编制卡平铺（行动前置+recency）");
@@ -468,7 +464,7 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   check(/marginTop: 12, marginBottom: 5/.test(listSrc), "组头垂直占位（27→31px：marginTop 12/marginBottom 5——#218 件二组间线退役改留白撑呼吸）");
   check(listSrc.includes("secCountPill"), "计数胶囊（桌面 .tag 语汇移动化——#85 现代化可见变化）");
   check(listSrc.includes("secTeamBar"), "团队色竖条样式（2px 细线，桌面 grpBar 同语言）");
-  check(listSrc.includes("teamColor: srcColor(t.gid)"), "团队组头带 gid 哈希色（SRC_COLORS 环）");
+  check(listSrc.includes("accent: srcColor(g.id)"), "团队 chip 带 gid 哈希色（SRC_COLORS 环，⑨入口卡退役后 chip 承载）"); // W-FB66ALL ⑨：锚随入口卡退役迁移到 chipsBySid accent 单口
   check(!listSrc.includes("divided={idx > 0}") && !listSrc.includes("secDivider"), "#218 组间线退役（divided/secDivider 全链清，组间分界改留白）");
 
   console.log("M. 🔥P0：前台即时重连+重连提速");

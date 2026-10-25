@@ -205,13 +205,11 @@ const SRC_FIX = [
         // 源分组头（key=null）下的卡无 grp → 计入；可折叠组头（key 在）只收键匹配卡，
         // undefined=尾部平铺跳过
         if (cur.key === null ? g === undefined : g === cur.key) cur.n += 1;
-      } else if (r.kind === "team-entry") {
-        // W-MOBFUSION 件②：团队入口卡不是组头（无跟随卡计数契约）——先结算上一组
-        if (cur && cur.n !== cur.count) return false;
-        cur = null;
       } else {
+        // W-FB66ALL ⑨：团队入口卡整链退役（worker 直列平铺）——组完整性校验不再
+        // 有 team-entry 分支（原「不是组头先结算上一组」case 随卡退役）
         if (cur && cur.n !== cur.count) return false;
-        cur = { count: r.count, n: 0, key: r.kind === "section" ? r.key : null };
+        cur = { count: (r as { count: number }).count, n: 0, key: r.kind === "section" ? (r as { key: string | null }).key ?? null : null };
       }
     }
     return !cur || cur.n === cur.count;
