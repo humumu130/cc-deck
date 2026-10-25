@@ -269,7 +269,7 @@ async function main(): Promise<void> {
   check(appSrc.includes("onNewInDir") && appSrc.includes("onViewSessionsInDir"), "App 接线项目卡两动作");
   // A3-5：状态 tag 退役 + r3 条件渲染
   check(!/function StatusTag/.test(listSrc) && !/<StatusTag/.test(listSrc), "A3-5 状态 tag 退役");
-  check(listSrc.includes("r3Meta.shown.length > 0 || r3Meta.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? ("), "A3-5 r3 全空整行不渲染（r3Meta 重构形态锚——W-MOBLIST 跟改：engine 兜底走 effEngine 推断链）");
+  check(listSrc.includes("metaRow.shown.length > 0 || metaRow.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? ("), "A3-5 r3 全空整行不渲染（r3Meta 重构形态锚——W-MOBLIST 跟改：engine 兜底走 effEngine 推断链；W-MOBFUSION 件①跟改：r3 统一排补 teamChips；R2 审查跟改：紧凑档 metaRow=仅 📁 不摘行）");
   // A3-7：头像引擎淡彩
   check(listSrc.includes('ENGINE_ACCENT[effEngine ?? "claude"]'), "A3-7 头像底色=引擎品牌色淡彩（W-MOBLIST 跟改：底色随推断链）");
   // A4-4：信息行序 目录→水位→活跃时间
@@ -390,9 +390,10 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   check(!/function SwipeRow/.test(listSrc) && !/<SwipeRow/.test(listSrc), "SwipeRow 组件退役（件六②）");
   check(!/actPanel/.test(listSrc) && !/actBtn/.test(listSrc), "左滑操作面板样式零残留（件六②）");
   check(!/onReveal/.test(listSrc), "滑出 reveal 机制零残留");
-  // ③ 投影（纯函数，回归②新结构）：置顶无头平铺 → 团队收纳组（grp=team）→
-  // 「进行中」组（grp=active）→ 闲置平铺；「待处理」段退役（badge 仍计数真行动项）
-  const proj = list.buildListProjection as (p: unknown) => { kind: string; key: string; label?: string; grp?: string; count?: number; s?: { session_id: string; pinned?: boolean } }[];
+  // ③ 投影（纯函数，回归②新结构 + W-MOBFUSION 件②重构）：置顶无头平铺 → 非编制/
+  // PM/Leader 直列平铺 → 团队入口卡（worker 收纳落点，列表底部=桌面 dock 同位）；
+  // 「待处理」段退役（badge 仍计数真行动项）
+  const proj = list.buildListProjection as (p: unknown) => { kind: string; key: string; label?: string; grp?: string; count?: number; name?: string; rosterN?: number; running?: number; minis?: { status: string }[]; hidden?: number; s?: { session_id: string; pinned?: boolean } }[];
   const mkS = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
     session_id: id, relay_session_id: id, cwd: "/d/x", initial_prompt: "", title: id, model: "m",
     status: "DONE", action_summary: "", started_at: 1, updated_at: 1, stats: {}, ...over,
@@ -400,24 +401,33 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   const rowsP = proj({
     sessions: [
       mkS("pin1", { pinned: true, updated_at: 60 }),
+      mkS("pw1", { pinned: true, updated_at: 58, project_gid: "gA" }),
       mkS("t1", { status: "WORKING", updated_at: 55, project_gid: "gA" }),
       mkS("t2", { status: "DONE", updated_at: 50, project_gid: "gA" }),
+      mkS("pm1", { status: "WORKING", updated_at: 48, project_gid: "gA" }),
       mkS("act1", { status: "WORKING", updated_at: 45 }),
       mkS("wait1", { status: "WAITING", waiting_request: { request_id: "r1", tool_name: "Bash" }, updated_at: 42 }),
       mkS("idle1", { updated_at: 30 }),
     ],
     aggregate: false, sources: [], notifications: [],
-    projects: [{ id: "gA", name: "甲团", anchor_dir: "/d/a", tier: "轻立项", status: "active", created_at: 1, updated_at: 1, headcount: [{ session_id: "t1", role: "worker" }, { session_id: "t2", role: "worker" }] }],
+    projects: [{ id: "gA", name: "甲团", anchor_dir: "/d/a", tier: "轻立项", status: "active", created_at: 1, updated_at: 1, headcount: [{ session_id: "t1", role: "worker" }, { session_id: "t2", role: "worker" }, { session_id: "pm1", role: "pm" }, { session_id: "pw1", role: "worker" }] }],
   });
   const keysP = rowsP.map((r) => r.key);
   check(keysP[0] === "pin1", "投影：置顶无头平铺恒首（跨组钉选）");
   check(!keysP.includes("sec-pending") && !keysP.includes("sec-pinned"), "投影：「待处理/置顶」段头退役（回归②新结构）");
-  const teamIdx = keysP.indexOf("team-gA");
-  check(teamIdx > 0 && rowsP[keysP.indexOf("team-gA")].label === "甲团" && rowsP[teamIdx].grp === "team", "投影：团队收纳组（在办编制成员）");
-  check(keysP.indexOf("t1") > teamIdx && keysP.indexOf("t2") > teamIdx, "投影：团队卡收纳组内");
+  // W-MOBFUSION 件②新口径：worker 会话不在主列表直显（收纳进团队入口卡）；PM/Leader
+  // 直列；置顶例外（桌面 slimIsHidden 同款——用户显式关注优先于 IA 规则）
+  check(keysP.includes("t1") === false && keysP.includes("t2") === false, "投影：worker 会话收纳不直显（件②）");
+  check(keysP.includes("pm1") && keysP.indexOf("pm1") < keysP.indexOf("team-gA"), "投影：PM 会话保留直列（件②，KEEP_ROLE 同词表）");
+  check(keysP.includes("pw1") && keysP.indexOf("pw1") < keysP.indexOf("team-gA"), "投影：置顶 worker 例外直列（桌面 slimIsHidden 同款）");
+  const teamEntry = rowsP[keysP.indexOf("team-gA")];
+  check(!!teamEntry && teamEntry.kind === "team-entry" && teamEntry.name === "甲团", "投影：团队入口卡在列（件②，编制在场即出卡）");
+  check(teamEntry.rosterN === 4 && teamEntry.running === 2, "投影：入口卡计数=编制席全量/已同步 WORKING（桌面 #99件6 口径）");
+  check(teamEntry.minis?.[0]?.status === "WORKING" && teamEntry.minis?.length === 4, "投影：mini 灯在岗优先（t1/pm1 前置，四成员全同步 cap5 内）");
+  check(keysP.indexOf("team-gA") > keysP.indexOf("idle1"), "投影：入口卡落列表底部（桌面 dock 同位）");
   // 件九：「进行中」组取消——非编制卡（WORKING/WAITING/闲置）全部平铺
   check(!keysP.includes("sec-active"), "投影：「进行中」组已取消（件九，状态过滤交筛选档）");
-  check(keysP.indexOf("act1") > teamIdx && keysP.indexOf("wait1") > teamIdx && keysP.indexOf("idle1") > teamIdx, "投影：非编制卡平铺（行动前置+recency）");
+  check(keysP.includes("act1") && keysP.includes("wait1") && keysP.includes("idle1"), "投影：非编制卡平铺（行动前置+recency）");
   // badge 语义：WORKING 有活动证据不再计 pending（真行动=可决策 WAITING/验收单/通知）
   const spNew = list.splitPending([mkS("w1", { status: "WAITING", waiting_request: { request_id: "r2", tool_name: "Bash" } }), mkS("wk1", { status: "WORKING", activity: { state: "WORKING", capabilities: {}, activity: { kind: "tool", text: "npm test", observed_at: 1 }, updated_at: 1 } })] as never[]) as { pending: { session_id: string }[]; others: { session_id: string }[] };
   check(spNew.pending.length === 1 && spNew.pending[0].session_id === "w1", "badge 语义：WORKING 有活动≠待处理（真行动才计）");

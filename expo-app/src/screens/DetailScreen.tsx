@@ -30,7 +30,7 @@ import { artPoolGate } from "../artpool";
 import { markEchoState, pushPending, reconcilePending, type PendingEcho } from "../pending-echo";
 import { fromB64, toB64 } from "../e2e";
 // E3a：hasActivityCapability 为值导入（E1 落库面，只消费不修改）；其余仍纯类型
-import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
+import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type ProjectGroup, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
@@ -38,6 +38,110 @@ import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type Slas
 import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
+
+// W-MOBFUSION 件④：PM/Leader 角色词表（桌面 SLIM_KEEP_ROLE 逐字同源，列表屏同款）
+const SLIM_KEEP_ROLE_RE = /^(pm|leader|产品经理|项目经理|领队)$/i;
+
+// W-MOBFUSION 件④：详情页 PM「团队」tab（桌面第四列团队抽屉四区同构 tab 化——
+// Leader 拍板 tab 方案、弃边缘侧滑防与 tab 左右滑手势冲突）：
+//   ① 在办概览=任务板五泳道计数（SNAPSHOT.boards + BOARD_UPDATED 缓存；板缺席=
+//      「板未同步」降级不伪造 0/0/0）②成员 roster=角色徽+状态灯+水位+输出物数
+//      （行点按直开成员会话，桌面 data-slim-open 同职能）③输出物计数汇总
+//      ④跳团队域钮。泳道词表与桌面 TEAM_DRAWER_LANES 同源（legacy 归并）
+const TEAM_LANES: { k: string; label: string }[] = [
+  { k: "backlog", label: "待认领" },
+  { k: "claimed", label: "进行中" },
+  { k: "submitted", label: "待审查" },
+  { k: "ready_to_install", label: "待收单" },
+  { k: "done", label: "完成" },
+];
+const TEAM_LANE_LEGACY: Record<string, string> = { todo: "backlog", doing: "claimed" };
+const PM_STATUS_ZH: Record<string, string> = { WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" };
+
+function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
+  team: ProjectGroup;
+  sessions: SessionState[];
+  boards?: Record<string, { entries?: { status?: string }[] }>;
+  onOpenSession?: (sid: string) => void;
+  onOpenTeam?: () => void;
+}) {
+  const { c } = useTheme();
+  const board = team.id ? boards?.[team.id] : undefined;
+  const entries = Array.isArray(board?.entries) ? board!.entries : null;
+  const laneOf = (st?: string) => (st ? TEAM_LANE_LEGACY[st] ?? st : "");
+  const lanes = entries ? TEAM_LANES.map((l) => ({ ...l, n: entries.filter((e) => laneOf(e?.status) === l.k).length })) : null;
+  const activeN = lanes ? lanes.slice(0, 4).reduce((n, l) => n + l.n, 0) : null;
+  const sessionsById = useMemo(() => new Map(sessions.map((x) => [x.session_id, x] as const)), [sessions]);
+  // W-MOBFUSION R2（审查 B P2）：headcount 条目判空（wire 脏数据 null 成员防红屏，桌面 slimRosterOf 同滤）
+  const roster = (team.headcount ?? []).filter((m) => m && typeof m.session_id === "string").map((m) => {
+    const s = sessionsById.get(m.session_id) ?? undefined;
+    const role = String(m.role || "");
+    const pct = s && Number(s.context_limit) ? Math.min(100, Math.round((Number(s.context_usage) || 0) / (Number(s.context_limit) || 1) * 100)) : null;
+    const arts = s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path).length : 0;
+    return { sid: m.session_id, role, nick: String(m.nick || ""), pm: SLIM_KEEP_ROLE_RE.test(role), s, pct, arts };
+  });
+  const running = roster.filter((r) => r.s?.status === "WORKING").length;
+  const artsTotal = roster.reduce((n, r) => n + r.arts, 0);
+  const artsPeople = roster.filter((r) => r.arts > 0).length;
+  const roleBadge = (role: string, pm: boolean) => (pm ? "✦" : /^(qa|reviewer|验收)$/i.test(role) ? "QA" : "W");
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      {/* ① 在办概览（板五泳道） */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>在办概览{activeN != null ? ` · ${activeN} 在办` : ""}</Text>
+        {lanes ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {lanes.map((l) => (
+              <View key={l.k} style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: withA(c.line, 0.9), backgroundColor: c.panel }}>
+                <Text style={{ color: c.dim, fontSize: 10.5 }}>{l.label} <Text style={{ color: l.k === "done" ? c.faint : c.textStrong, fontWeight: "700" }}>{l.n}</Text></Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ color: c.faint, fontSize: 11.5 }}>板未同步 · 深度实时去团队域</Text>
+        )}
+      </View>
+      {/* ② 成员 roster（行点按直开成员会话） */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>成员编制 · {roster.length} 席 · {running} 在跑</Text>
+        {roster.map((r) => {
+          const st = r.s?.status;
+          const lamp = st === "WORKING" ? c.working : st === "ERROR" ? c.error : st === "WAITING" ? c.working : c.faint;
+          const name = r.nick || r.s?.title || r.sid.slice(0, 8);
+          return (
+            <Pressable
+              key={r.sid}
+              onPress={r.s ? () => onOpenSession?.(r.sid) : undefined}
+              disabled={!r.s}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, opacity: r.s ? 1 : 0.55 }}
+            >
+              <Text style={{ color: r.pm ? c.brandA : c.faint, fontSize: 10, fontWeight: "700", width: 16 }}>{roleBadge(r.role, r.pm)}</Text>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: lamp, opacity: st === "WORKING" ? 1 : 0.55 }} />
+              <Text style={{ flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 }} numberOfLines={1}>{name}</Text>
+              {r.pct != null ? <Text style={{ color: c.faint, fontSize: 10.5, fontVariant: ["tabular-nums"] }}>{r.pct}%</Text> : null}
+              {r.arts > 0 ? <Text style={{ color: c.faint, fontSize: 10.5 }}>◈{r.arts}</Text> : null}
+              <Text style={{ color: c.faint, fontSize: 10, width: 34, textAlign: "right" }}>{st ? PM_STATUS_ZH[st] ?? st : "未同步"}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {/* ③ 输出物计数汇总 */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>输出物</Text>
+        <Text style={{ color: c.dim, fontSize: 12 }}>{artsTotal > 0 ? `共 ${artsTotal} 件 · ${artsPeople} 人有产出` : "暂无产出"}</Text>
+      </View>
+      {/* ④ 跳团队域 */}
+      <Pressable
+        onPress={() => onOpenTeam?.()}
+        android_ripple={{ color: c.tintSoft, borderless: false }}
+        style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: withA(c.brandA, 0.4), backgroundColor: withA(c.brandA, 0.1) }}
+      >
+        <Text style={{ color: c.brandA, fontSize: 12.5, fontWeight: "600" }}>去团队域 ›</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
 
 // 详情页视图 tab（W-EXPO 005 化：对齐 index-005 四 tab 制——对话/任务/输出物/
 // 更多）。更多 = 水位计（context-meter）+ 统计键值行 + 定时任务收编（原
@@ -48,6 +152,9 @@ const VIEWS = [
   { k: "todos", label: "任务" },
   { k: "arts", label: "输出物" },
   { k: "more", label: "更多" },
+  // W-MOBFUSION 件④：PM 会话第 5 tab（Leader 拍板 tab 方案、弃边缘侧滑——与
+  // tab 左右滑手势冲突）；非 PM 会话运行时从 VS 滤除不显（VIEWS 静态全集同 arts 口径）
+  { k: "team", label: "团队" },
 ] as const;
 // tab 指示条几何参数：tabWrap 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
 
@@ -1336,7 +1443,7 @@ export interface DetailBackHandle {
 // dim / 60-84 黄 / ≥85 红，与 ctxTone 同源同词表），暗格=ctxTrack；百分比文本保留在
 // 组件尾侧（视觉干净：颗粒承形、数字承精确值，不双条不双字）。
 
-export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; onOpenArtPool?: () => void; ref?: Ref<DetailBackHandle> }) {
+export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, onOpenSession, onOpenTeam, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; onOpenArtPool?: () => void; onOpenSession?: (sid: string) => void; onOpenTeam?: () => void; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
   // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换。
@@ -1450,18 +1557,52 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     ? snap.sources.find((x) => x.id === s.src)?.deliverables
     : undefined;
   const deliverables = srcDeliverables ?? snap.deliverables;
-  const VS = deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
+  // W-MOBFUSION 件④：PM 判定（桌面 SLIM_KEEP_ROLE 同词表）——编制 headcount 反查
+  // 本会话 KEEP_ROLE 命中的在办团队（跨源平铺，gid 先建赢）；命中才出「团队」tab。
+  // 四区数据面=桌面第四列抽屉同构：板（snap.boards BOARD_UPDATED 跟随缓存）/成员
+  // roster/输出物计数/跳团队域
+  const allProjects = useMemo(() => {
+    const out: ProjectGroup[] = [];
+    const seen = new Set<string>();
+    for (const src of snap.sources) {
+      for (const g of src.projects ?? []) if (g?.id && !seen.has(g.id)) { seen.add(g.id); out.push(g); }
+    }
+    return out;
+  }, [snap.sources]);
+  // 板缓存跨源聚合（per-source boards Record；同 gid 先建赢）——件四概览区数据面
+  const boardsByGid = useMemo(() => {
+    const out: Record<string, { entries?: { status?: string }[] }> = {};
+    for (const src of snap.sources) {
+      for (const [gid, b] of Object.entries(src.boards ?? {})) if (!out[gid]) out[gid] = b;
+    }
+    return out;
+  }, [snap.sources]);
+  const pmTeam = useMemo(() => {
+    for (const g of allProjects) {
+      if (g.status !== "active" || !Array.isArray(g.headcount)) continue;
+      const hit = g.headcount.some((m) => m && m.session_id === sid && SLIM_KEEP_ROLE_RE.test(String(m.role || "")));
+      if (hit) return g;
+    }
+    return null;
+  }, [allProjects, sid]);
+  const VS: readonly { k: ViewKind; label: string }[] = useMemo(() => {
+    let base: readonly { k: ViewKind; label: string }[] = deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
+    if (!pmTeam) base = base.filter((v) => v.k !== "team");
+    return base;
+  }, [deliverables, pmTeam]);
   // #72 E 线 产物池入口②门（本会话所属源过三重门才显示「全局输出物目录」可达行）：
   // 与 deliverables 同款 per-源取数（s.src 盖章 → 源查找 → 回落活动源）。入口①常驻钮
   // 在列表页（ListScreen），此处是详情可达语义（web W 线两枚入口镜像）
   const srcForArt = s?.src ?? snap.activeSourceId;
   const artPoolSrc = srcForArt ? snap.sources.find((x) => x.id === srcForArt) : undefined;
   const poolOpenable = artPoolGate(artPoolSrc);
-  // 停在被关掉的页（开着「输出物」时关开关/重连到关闭的 relay）→ 回落消息页，防 -1 白屏
+  // 停在被关掉的页（开着「输出物」时关开关/重连到关闭的 relay）→ 回落消息页，防 -1 白屏。
+  // W-MOBFUSION R2（审查 A P1）：deps 补 pmTeam——团队 tab 是条件 tab，roster 行直开
+  // worker 会话（页内换 sid）/团队转 archived 后 pmTeam 失效，view="team" 悬空停空白页
   useEffect(() => {
     if (!VS.some((v) => v.k === view)) setView("msg");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deliverables, view]);
+  }, [deliverables, pmTeam, view]);
 
   // 手动刷新任务清单：↻ 发命令，等下一帧 todos 引用变化（或 2.5s 超时）结束等待态
   const [todoSpin, setTodoSpin] = useState(false);
@@ -2734,6 +2875,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             );
           })()}
         </ScrollView>
+      ) : v.k === "team" && pmTeam ? (
+        /* W-MOBFUSION 件④：PM 会话「团队」tab（桌面抽屉四区 tab 化） */
+        <TeamPane
+          team={pmTeam}
+          sessions={snap.sessions}
+          boards={boardsByGid}
+          onOpenSession={onOpenSession}
+          onOpenTeam={onOpenTeam}
+        />
       ) : (() => {
         // 转录页（对话过滤视图）：list 取过滤结果，跨天分隔游标随本页 map 推进
         // W-PUSHPERF ①：渐进上屏——首帧只渲染尾部 REVEAL_N 条（转场顺滑），交互空闲后全量
