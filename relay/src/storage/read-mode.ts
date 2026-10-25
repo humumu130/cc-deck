@@ -365,7 +365,8 @@ export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEnt
   const rows = port.query<{
     id: string; tier: string; target_member_id: string | null; source_session_id: string | null;
     actor: string; status: string; receipt: string | null; created_at: number; updated_at: number;
-  }>("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at FROM dispatch ORDER BY created_at, updated_at, id");
+    receipt_missing: number | null;
+  }>("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing FROM dispatch ORDER BY created_at, updated_at, id");
   const byId = new Map<string, DispatchEntry>();
   for (const r of rows) {
     byId.set(r.id.replace(/#r\d+$/, ""), {
@@ -377,6 +378,8 @@ export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEnt
       ...(r.receipt !== null ? { receipt: r.receipt } : {}),
       session_id: r.source_session_id ?? "",
       ...(r.actor ? { actor: r.actor } : {}),
+      // W-SMIMPL ②：回执缺失标记（v4 列；0/null 不带键=旧行宽容，json 源行本就缺省）
+      ...(r.receipt_missing === 1 ? { receipt_missing: true } : {}),
     });
   }
   const all = [...byId.values()];

@@ -215,4 +215,12 @@ export const migrations: readonly Migration[] = [
     name: "permission-audit",
     up: (p) => p.exec(PERMISSION_AUDIT_DDL),
   },
+  {
+    // W-SMIMPL ②：dispatch 表补回执缺失标记列（done 无「结果：」行=worker 静默收工的
+    // 观测标记）。v1 基线不动（迁移惯例），既有库/新库统一经 v4 增量；0/1 布尔，
+    // null/0 读侧不带键（宽容口径与 DispatchEntry.receipt_missing?: boolean 对齐）。
+    version: 4,
+    name: "dispatch-receipt-missing",
+    up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN receipt_missing INTEGER"),
+  },
 ];

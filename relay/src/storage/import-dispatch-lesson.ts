@@ -67,6 +67,7 @@ interface DispatchLine {
   receipt?: string;
   session_id?: string;
   actor?: string;
+  receipt_missing?: boolean; /* W-SMIMPL ②：回执缺失标记（dispatch-log.ndjson 行承载，v4 列透传） */
 }
 
 interface LessonEntryRaw {
@@ -234,9 +235,9 @@ function applyDispatchLine(
     // 开段 1：id 原样、attempt=1、parent=NULL、created_at=本行 ts
     port.exec(
       `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
-         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), 1, NULL, ?, ?)`,
-      [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts],
+         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), 1, NULL, ?, ?, ?)`,
+      [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts, e.receipt_missing === true ? 1 : 0], /* W-SMIMPL ②：回执缺失标记透传（v4 列） */
     );
     segs.set(e.id, { segId: e.id, attemptNo: 1, terminal: TERMINAL_STATUS.has(e.status) });
     dispatchIds.add(e.id);
@@ -254,9 +255,9 @@ function applyDispatchLine(
     }
     port.exec(
       `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
-         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), ?, ?, ?, ?)`,
-      [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts],
+         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)`,
+      [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts, e.receipt_missing === true ? 1 : 0], /* W-SMIMPL ②：重投新段=新回合，标记按本行重置（v4 列） */
     );
     segs.set(e.id, { segId, attemptNo: nextAttempt, terminal: TERMINAL_STATUS.has(e.status) });
     dispatchIds.add(segId);
@@ -265,8 +266,8 @@ function applyDispatchLine(
   // 当前段推进：status/归因列末行覆盖；created_at 不动（=首行 ts）；receipt 只被非空覆盖
   port.exec(
     `UPDATE dispatch SET status = ?, tier = ?, group_id = ?, target_member_id = ?, source_session_id = ?,
-       actor = ?, receipt = COALESCE(NULLIF(?, ''), receipt), updated_at = ? WHERE id = ?`,
-    [e.status, e.tier, groupId, targetMemberId, sourceSessionId, actor, receipt, e.ts, seg.segId],
+       actor = ?, receipt = COALESCE(NULLIF(?, ''), receipt), receipt_missing = ?, updated_at = ? WHERE id = ?`,
+    [e.status, e.tier, groupId, targetMemberId, sourceSessionId, actor, receipt, e.receipt_missing === true ? 1 : 0, e.ts, seg.segId], /* W-SMIMPL ②：同段末行覆盖（收口行是终值行，v4 列） */
   );
   segs.get(e.id)!.terminal = TERMINAL_STATUS.has(e.status);
 }

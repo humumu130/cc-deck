@@ -24,8 +24,9 @@ import {
   moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
-  PM_ROLE_RE,
+  PM_ROLE_RE, seatGate,
 } from "./projects.js";
+import type { SeatGateContext } from "./projects.js"; // W-SMIMPL ①：席位门单源判据
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permDenyMessage, permissionPolicyEnabled } from "./permission-policy.js";
 import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
@@ -60,6 +61,7 @@ import { createPairingCommands, peerKind } from "./commands/pairing-commands.js"
 import { createSessionCommands } from "./commands/session-commands.js"; // W-SPLIT-S3a：session CRUD 域 mixin
 import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, sanitizeFiles } from "./commands/misc-commands.js";
 import { adoptReplayed } from "./lifecycle/adopt.js"; // W-SPLIT-S5①：收养域出舱（类面留壳）
+import { transitionLegal } from "./lifecycle/transition.js"; // W-SMIMPL ③：状态转移断言层（纯观测；SessionStatus 用 types.js 既有 import）
 import * as reviveMod from "./lifecycle/revive.js"; // W-SPLIT-S5②：autoRevive/激活器协调出舱
 import { setExternalUsage as setExtUsageMod, ctxWatchdogOnContext as ctxWdOnCtx, ctxWatchdogOnTurnBoundary as ctxWdOnBoundary } from "./lifecycle/context-link.js"; // W-SPLIT-S5③：上下文链出舱
 import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT-S3c
@@ -1004,7 +1006,7 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release", detail: string, target?: string): void { /* #205：gate-release=勾选跳过权限放行审计 */
+  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal", detail: string, target?: string): void { /* #205：gate-release=勾选跳过权限放行审计；W-SMIMPL ③：transition-illegal=状态转移断言层观察 */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
@@ -1016,6 +1018,32 @@ export class SessionManager {
   // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
   private chainAuditMirror(action: string, detail: string): void {
     try { appendFileSync(join(this.cfg.dataDir, "chain-audit.jsonl"), JSON.stringify({ action, detail, ts: Date.now() }) + "\n"); } catch { /* 尽力而为 */ }
+  }
+
+  /** [W-SMIMPL ③] 会话状态转移单点（纯观测层，W-SMDESIGN 候选 3 第一步）——包住原 25 处
+   *  `state.status = "X"` 直写：行为零变化（取同一 Map 引用写入），唯一新增=非法转移
+   *  （v1 表：DONE→WORKING 非 spawn 系翻活）warn+chain-audit 记账不阻断。收尸数据攒
+   *  两周后按账收紧（第二步收编挂 backlog）。by=写点语义标签（词表见 lifecycle/transition.ts）。 */
+  private transition(sid: string, next: SessionStatus, by: string): void {
+    const s = this.sessions.get(sid);
+    if (!s) return; // 防御式：写点全在持有会话引用的作用域，此处不可达即静默让位（不改变原直写语义——无会话本就无处可写）
+    const cur = s.state.status;
+    if (!transitionLegal(cur, next, by)) {
+      const detail = `sid=${sid.slice(0, 12)} ${cur}→${next} by=${by}（DONE 翻活仅认 spawn 系入口，表外组合记账观察）`;
+      console.warn(`[sm:transition] 非法转移观察 ${detail}`);
+      this.emitChainAudit("transition-illegal", detail, sid);
+    }
+    s.state.status = next;
+  }
+
+  /** [W-SMIMPL ①] seatGate 事实注入（W-SMDESIGN 候选 1）：在册性/外部性/Leader 三轴
+   *  由持有 this.sessions 视野的本类提供——create 前置门 / HeadcountGate / member-add /
+   *  member-retire 四入口共用同一判据单源（判据零变化只归一，文案各入口自映射）。 */
+  private seatGateCtx(): SeatGateContext {
+    return {
+      seatInfo: (sid) => { const s = this.sessions.get(sid); return s ? { external: !!s.state.external } : undefined; },
+      isLeader: (sid) => this.isLeaderSession(sid),
+    };
   }
 
   /** #199 A 对端：CLI Stop 钩子外报（/api/turn-report）。PM→重跑值守+对账；worker→60s
@@ -2173,7 +2201,7 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return;
     const at = Date.now();
-    s.state.status = "WAITING";
+    this.transition(s.state.session_id, "WAITING", "ext-waiting"); /* W-SMIMPL③ 直写收口 */
     s.state.waiting_request = payload;
     s.state.waiting_started_at = at;
     s.state.updated_at = at;
@@ -2290,7 +2318,7 @@ export class SessionManager {
         updated_at: at,
       });
     }
-    s.state.status = "DONE";
+    this.transition(s.state.session_id, "DONE", "ext-finish"); /* W-SMIMPL③ 直写收口 */
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
     s.state.waiting_request = undefined;
@@ -2750,7 +2778,7 @@ export class SessionManager {
       // 并撤销放弃标记
       if (managed.wd.gaveUp) {
         managed.wd.gaveUp = false;
-        managed.state.status = "WORKING";
+        this.transition(managed.state.session_id, "WORKING", "wd-selfheal"); /* W-SMIMPL③ 直写收口 */
         managed.state.action_summary = "流已恢复";
         managed.state.waiting_request = undefined;
         managed.state.waiting_started_at = undefined;
@@ -2800,7 +2828,7 @@ export class SessionManager {
             // SDK 队列、init 先于模型输出到达）——pendingInitial 避让，否则回合
             // 还没跑就被假翻 DONE、首个流式帧又打回 WORKING
             if (managed.unacked.length === 0 && managed.state.status === "WORKING" && !managed.pendingInitial) {
-              managed.state.status = "DONE";
+              this.transition(managed.state.session_id, "DONE", "stream-idle"); /* W-SMIMPL③ 直写收口 */
               managed.state.done_reason = "待命（等待咨询）";
               managed.state.action_summary = "Leader · 待命";
               managed.state.turn_started_at = undefined;
@@ -2876,7 +2904,7 @@ export class SessionManager {
             capabilities: this.activityCapabilitiesOf(managed.state),
             allowWaiting: true,
           }));
-          managed.state.status = "WAITING";
+          this.transition(managed.state.session_id, "WAITING", "tool-wait"); /* W-SMIMPL③ 直写收口 */
           managed.state.waiting_request = p;
           managed.state.waiting_started_at = at;
           managed.state.updated_at = at;
@@ -2892,7 +2920,7 @@ export class SessionManager {
           // 无差别收口会把新请求的 WAITING 一并打掉，复刻死锁
           const cur = managed.state.waiting_request;
           if (!cur || cur.request_id === requestId) {
-            managed.state.status = "WORKING";
+            this.transition(managed.state.session_id, "WORKING", "tool-resolve"); /* W-SMIMPL③ 直写收口 */
             managed.state.waiting_request = undefined;
             managed.state.waiting_started_at = undefined;
             // 强制补一帧带 waiting_request:null 的 UPDATE：RESOLVED 是瞬态帧，云桥/
@@ -3052,14 +3080,19 @@ export class SessionManager {
             if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
             this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           }
+          // W-SMIMPL ②：回执契约双档（receiptWithResultLine 拆 {receipt,hasResultLine}）
+          // ——done 且无「结果：」行时 receipt_missing:true 透传台账（worker 静默收工
+          // 可见化：看板「无回执」角标+通知账一行；failed 不标=本身即异常信号不双计）
+          const receiptProbe = delivered ? this.receiptWithResultLine(managed.state.session_id, reason) : { receipt: reason, hasResultLine: true };
           this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
-            delivered ? this.receiptWithResultLine(managed.state.session_id, reason) : reason, false,
+            receiptProbe.receipt, false,
             // 路由表记账恢复原判：failed 回合照记（干砸也是 worker 的账，failed 计数
             // 是避开调度的信号）；仅「成功被用户中断」与「换家失联」不记——
             // 中断≠交付，换家≠干砸
             !(ok && reason === "interrupted") && !homeLost,
             undefined,
-            delivered ? undefined : "backlog");
+            delivered ? undefined : "backlog",
+            ok && !receiptProbe.hasResultLine ? { receiptMissing: true } : undefined);
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -3067,7 +3100,7 @@ export class SessionManager {
           managed.state.waiting_request = undefined;
           managed.state.waiting_started_at = undefined;
           if (ok) {
-            managed.state.status = "DONE";
+            this.transition(managed.state.session_id, "DONE", "turn-end"); /* W-SMIMPL③ 直写收口 */
             managed.state.done_reason = reason;
             // #102 批 A：回合成功=登录态恢复（或兜底误报自愈），清 needs_auth 标记
             if (managed.state.auth_hint) managed.state.auth_hint = undefined;
@@ -3077,7 +3110,7 @@ export class SessionManager {
               stats: { ...managed.state.stats },
             });
           } else {
-            managed.state.status = "ERROR";
+            this.transition(managed.state.session_id, "ERROR", "turn-end"); /* W-SMIMPL③ 直写收口 */
             managed.state.last_error = reason;
             // #102 批 A 运行时兜底：token 中途过期（创建闸过后才失效）——引擎输出/
             // 退出尾行命中登录失效 pattern → 会话进 needs_auth 态（auth_hint 随
@@ -3135,7 +3168,7 @@ export class SessionManager {
           this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "backlog");
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
-            managed.state.status = "DONE";
+            this.transition(managed.state.session_id, "DONE", "stream-close"); /* W-SMIMPL③ 直写收口 */
             managed.state.done_reason = reason;
             this.bus.emit(managed.state.session_id, "SESSION_DONE", {
               terminal_reason: reason,
@@ -3188,7 +3221,7 @@ export class SessionManager {
         ...(s.state.employee ? { employee: true } : {}), // W-KWP2 件一：插件通路守卫
       });
       s.agent = agent;
-      s.state.status = "WORKING";
+      this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */
       s.state.action_summary = "重新注入上下文";
       s.state.last_error = undefined;
       s.state.done_reason = undefined;
@@ -3291,7 +3324,7 @@ export class SessionManager {
     }
     s.agent = agent;
     // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
-    s.state.status = "WORKING";
+    this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */
     s.state.historical = false;
     s.state.saved = undefined;
     // #26 M3 审查修正：复活即脱离挂起休眠——不清的话组挂起后用户发消息救活的成员
@@ -3361,7 +3394,7 @@ export class SessionManager {
         s.resumePending = Date.now();
         s.lastProgressAt = Date.now();
         s.lastProgressKind = "";
-        s.state.status = "WORKING"; // 旧终态（如 stop 收口的 DONE）翻活，防新流跑期间卡面停旧态
+        this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */ // 旧终态（如 stop 收口的 DONE）翻活，防新流跑期间卡面停旧态
         s.agent = this.newAgent(
           s.state.cwd,
           s.state.model,
@@ -3383,7 +3416,7 @@ export class SessionManager {
             : `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话恢复（无可重发消息，值守类消息待下一轮值守再注入）`);
         this.emitUpdated(s, true);
       } else {
-        s.state.status = "ERROR";
+        this.transition(s.state.session_id, "ERROR", "stream-error"); /* W-SMIMPL③ 直写收口 */
         s.state.last_error = `恢复失败: 上游 ${waitS} 秒无响应（疑挂死），已保留现场可重试`;
         s.state.saved = true;
         s.state.action_summary = "恢复失败";
@@ -3429,7 +3462,7 @@ export class SessionManager {
       s.state.saved = undefined;
       s.state.historical = false;
       s.state.org_parked = undefined; // 同 claude 路径：恢复即脱离挂起休眠
-      s.state.status = "DONE";
+      this.transition(s.state.session_id, "DONE", "revive"); /* W-SMIMPL③ 直写收口 */
       s.state.done_reason = "已恢复（等待输入）";
       s.state.action_summary = "已恢复，等待输入";
       s.state.turn_started_at = undefined;
@@ -3463,7 +3496,7 @@ export class SessionManager {
       if (!s.logs.some((e) => e.kind === "assistant_text")) {
         reason += "（该会话首次回合未完成即中断，直接恢复走不通；给会话发一条消息可自动回退新会话续命）";
       }
-      s.state.status = "ERROR";
+      this.transition(s.state.session_id, "ERROR", "revive-fail"); /* W-SMIMPL③ 直写收口 */
       s.state.last_error = `恢复失败: ${reason}`;
       s.state.done_reason = undefined;
       s.state.action_summary = "恢复失败";
@@ -3495,13 +3528,13 @@ export class SessionManager {
         const backlog = s.unacked.filter((m) => m.ts < reviveStart && !m.renewable);
         if (backlog.length > 0 && s.agent && !s.agent.ended) {
           this.flushResumeBacklog(s, reviveStart);
-          s.state.status = "WORKING";
+          this.transition(s.state.session_id, "WORKING", "revive"); /* W-SMIMPL③ 直写收口 */
           s.state.action_summary = "已恢复，处理排队消息";
           this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
           this.emitUpdated(s, true);
           return;
         }
-        s.state.status = "DONE";
+        this.transition(s.state.session_id, "DONE", "revive"); /* W-SMIMPL③ 直写收口 */
         s.state.done_reason = "已恢复（等待输入）";
         s.state.action_summary = "已恢复，等待输入";
         s.state.turn_started_at = undefined;
@@ -3542,7 +3575,7 @@ export class SessionManager {
       throw e;
     }
     s.agent = agent;
-    s.state.status = "WORKING";
+    this.transition(s.state.session_id, "WORKING", "revive"); /* W-SMIMPL③ 直写收口 */
     s.state.action_summary = "恢复中";
     s.state.done_reason = undefined;
     s.state.last_error = undefined;
@@ -3574,7 +3607,7 @@ export class SessionManager {
         if (!s.agent && !s.state.external) {
           // 休眠登记：relay 刚启动，置顶会话一律无 agent（仅托管——ext 不休眠）
           s.state.saved = true;
-          s.state.status = "DONE";
+          this.transition(s.state.session_id, "DONE", "boot-dim"); /* W-SMIMPL③ 直写收口 */
           s.state.done_reason = "已保存（重启休眠）";
           s.state.action_summary = "已保存，点击恢复";
           s.state.last_error = undefined;
@@ -3804,7 +3837,7 @@ export class SessionManager {
     if (!s.agent) {
       s.state.saved = true;
       if (s.state.status !== "DONE") {
-        s.state.status = "DONE";
+        this.transition(s.state.session_id, "DONE", "boot-timeout"); /* W-SMIMPL③ 直写收口 */
         s.state.done_reason = "已保存（Leader 休眠）";
       }
     }
@@ -3914,9 +3947,9 @@ export class SessionManager {
   // 内容（§3.5 回执语义未落到台账字段）。回合收口时从时间线尾部捞最近一条 assistant
   // 消息里的「结果：」行拼进回执；无此行（咨询档/中断/未按纪律回）保持原 reason。
   // 只看最近一条 assistant（更早回合的回执不串台）；text 截断时 full 存原文优先取。
-  private receiptWithResultLine(key: string, reason: string): string {
+  private receiptWithResultLine(key: string, reason: string): { receipt: string; hasResultLine: boolean } {
     const m = this.sessions.get(key);
-    if (!m) return reason;
+    if (!m) return { receipt: reason, hasResultLine: false };
     for (let i = m.logs.length - 1; i >= 0; i--) {
       const e = m.logs[i];
       if (e.kind !== "assistant_text") continue;
@@ -3925,11 +3958,14 @@ export class SessionManager {
         const t = lines[j].trim();
         // 160 = terminal_reason 截 200 略收紧：组详情回执流单行不爆版（result 行
         // 本身是 worker 手写一句话，正常远短于此）
-        if (t.startsWith("结果：")) return `${reason}｜${truncate(t, 160)}`;
+        if (t.startsWith("结果：")) return { receipt: `${reason}｜${truncate(t, 160)}`, hasResultLine: true };
       }
       break;
     }
-    return reason;
+    // W-SMIMPL ②（W-SMDESIGN 候选 2）：无「结果：」行=回执契约缺席的显式状态分支
+    //（旧版 best-effort 捞取无此分支——账面 done 内容空三次实锤的病理），由
+    // closeOpenDispatches 落 receipt_missing:true 透传给读侧（看板角标+通知账）。
+    return { receipt: reason, hasResultLine: false };
   }
 
   // W-EXPP1 申报捕获（设计 §3.1②）：从最近一条 assistant 消息捞「经验：<一句话>
@@ -3997,7 +4033,7 @@ export class SessionManager {
     }
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog"): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog", opts?: { receiptMissing?: boolean }): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     // P0 排队排水挂点前置说明：方法尾部对本批受影响 gid 逐个 drainDispatchQueue——
@@ -4031,6 +4067,8 @@ export class SessionManager {
         ts: Date.now(), id: e.id, tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
         status, receipt: truncate(refReceipt, 200), session_id: key,
+        // W-SMIMPL ②：回执契约标记透传（done 无「结果：」行=账面闭环内容空，纯观测）
+        ...(opts?.receiptMissing && status === "done" ? { receipt_missing: true } : {}),
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
         ...(e.actor ? { actor: e.actor } : {}),
         // M12-5 引擎字段同 id 透传（收敛末行不丢——读侧末行赢，收口行不带会把
@@ -4043,6 +4081,23 @@ export class SessionManager {
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       // W-TASKFLOW：通知文本同带 [task_ref] 头（回执流四处同键）
       this.notifyDispatchClosed(e, status, refReceipt, key);
+      // W-SMIMPL ②：回执缺失通知账一行（Leader 巡检面放大——「账面 done 内容空」
+      // 三次实锤的止痛件；stableKey 按 dispatch id 去重幂等；纯信息行无跳转，
+      // actionable=false 不生成待办）。仅 done 单（failed 已有异常通道不双计）。
+      if (opts?.receiptMissing && status === "done") {
+        try {
+          this.upsertNotification("system", `receipt-missing:${e.id}`, undefined, {
+            title: "派单收口无结果行（worker 静默收工）",
+            body: truncate(`${taskRef ? `[task_ref:${taskRef}]` : ""}dispatch=${e.id.slice(0, 8)} 会话=${key.slice(0, 8)} 收口 done 但回执无「结果：」行——请抽查该单交付`, 160),
+            severity: "error", /* 词表无 warning 档：error 红=交付存疑（与看板角标 cline-miss 同色系） */
+            group: "activity",
+            actionable: false,
+            sessionId: key,
+            domain: "dispatch",
+            returnPath: "dispatch",
+          });
+        } catch { /* 通知面尽力而为不炸收口 */ }
+      }
       // W-GATEFIX（首战未鸣根因）：failed 收口也查回执——SMALLFIX 8a6ea576 实锤：收口
       // status=failed 走旧「done 才调度」被静默跳过，无回执+90s 黄框全无。failed 的
       // 交付存疑度更高（收口异常+回执缺失=双疑），done/failed 统一调度
@@ -4761,16 +4816,21 @@ export class SessionManager {
             this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：pm_session_id 会话被显式勾为 ${rowRole || "worker"}（与 PM 身份行冲突）`);
             return { ok: false, error: "pm_session_id 会话不可同时勾为成员角色（PM 行已自动补入，请移除该勾选后重试）" };
           }
-          const s = this.sessions.get(sid);
-          if (!s) {
-            this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`);
-            return { ok: false, error: `随团编制里的会话 ${sid.slice(0, 8)} 不在册（成员需先有会话卡）` };
-          }
-          if (s.state.external) {
-            this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：外部会话不可入编`);
-            return { ok: false, error: "外部会话不可入编（成员只能是托管会话）" };
-          }
-          if (this.isLeaderSession(sid)) {
+          // W-SMIMPL ①：判据收口 seatGate 单源（在册/外部/Leader/pm 词表四轴）——判据
+          // 归一（pm 词表豁免统一生效：旧前置门对非 pm_sid 的 pm 角色行无豁免、纵深
+          // gate 有，两门不一致正是散落判据病灶；归一后与 sanitize 层语义对齐）；
+          // 本入口文案按 reason 映射保用户面兼容（fb14 ⑤b 断言锚文案不动）
+          const hcRole = item && typeof item === "object" ? String((item as { role?: unknown }).role ?? "") : "";
+          const seat = seatGate(sid, hcRole, this.seatGateCtx());
+          if (!seat.ok) {
+            if (seat.reason === "not_present") {
+              this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`);
+              return { ok: false, error: `随团编制里的会话 ${sid.slice(0, 8)} 不在册（成员需先有会话卡）` };
+            }
+            if (seat.reason === "external") {
+              this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：外部会话不可入编`);
+              return { ok: false, error: "外部会话不可入编（成员只能是托管会话）" };
+            }
             this.auditOrgCommand(actor, device, action, anchor, tier, false, `随团编制拒绝：Leader 不可入编`);
             return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
           }
@@ -4782,12 +4842,13 @@ export class SessionManager {
       // 前置门同判据（在册/非外部/非 Leader；pm 词表身份行豁免），闭包注入保持 projects
       // 层会话盲分层；未来新增 create 入口走本漏斗即默认带门。
       const r = adaptOrgAction(payload, undefined, (sid, role) => {
-        if (PM_ROLE_RE.test(role)) return null;
-        const s = this.sessions.get(sid);
-        if (!s) return `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`;
-        if (s.state.external) return `随团编制拒绝：外部会话 ${sid.slice(0, 8)} 不可作成员角色（仅 PM 身份行允许外部）`;
-        if (this.isLeaderSession(sid)) return `随团编制拒绝：Leader 不可入编`;
-        return null;
+        // W-SMIMPL ①：判据收口 seatGate 单源（gate 闭包签名不变——fb14 ⑤b 直调
+        // adaptOrgAction 的纵深断言零改动照绿；判据四轴与前置门/member-add/retire 同源）
+        const seat = seatGate(sid, role, this.seatGateCtx());
+        if (seat.ok) return null;
+        if (seat.reason === "not_present") return `随团编制拒绝：会话 ${sid.slice(0, 8)} 不在册`;
+        if (seat.reason === "external") return `随团编制拒绝：外部会话 ${sid.slice(0, 8)} 不可作成员角色（仅 PM 身份行允许外部）`;
+        return `随团编制拒绝：Leader 不可入编`;
       });
       if (!r.ok) {
         this.auditOrgCommand(actor, device, action, anchor, tier, false, r.error);
@@ -5807,9 +5868,14 @@ export class SessionManager {
           // 审查修正（A/C 双报）：会话卡被 evict/events 压缩后 headcount 残条不再
           // 死锁除名——人不在场（无卡）也照除编制（无会话可停流收口，纯档案清扫，
           // halted:false 语义与「他组在跑」一致）；外部会话不可入编（member-add
-          // 挡过），出现即数据异常，仍拒
-          if (s?.state.external) return { ok: false, error: "成员会话为外部会话（不可入编，数据异常）" };
-          if (this.isLeaderSession(sidFull)) return { ok: false, error: "Leader 不可退休（逻辑常驻，锚是权威）" };
+          // 挡过），出现即数据异常，仍拒。
+          // W-SMIMPL ①：判据收口 seatGate 单源（本入口=除名健全性校验：只取 external/
+          // leader 两轴，not_present 是无卡清扫的合法路径不拒；**pm 豁免轴不适用**——
+          // 传固定 worker 角色绕开词表豁免，PM 身份行除名走组生命周期（挂起/结项），
+          // 与旧版行为严格一致）
+          const seat = seatGate(sidFull, "worker", this.seatGateCtx());
+          if (!seat.ok && seat.reason === "external") return { ok: false, error: "成员会话为外部会话（不可入编，数据异常）" };
+          if (!seat.ok && seat.reason === "leader") return { ok: false, error: "Leader 不可退休（逻辑常驻，锚是权威）" };
           if ((this.openDispatches.get(sidFull)?.length ?? 0) > 0) {
             this.closeOpenDispatches(sidFull, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
           }
@@ -5844,9 +5910,15 @@ export class SessionManager {
           const g = findGroup(gid);
           if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
           if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}（挂起冻结/结项只读），不可入编` };
-          const s = this.sessions.get(sid);
-          if (!s || s.state.external) return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
-          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
+          // W-SMIMPL ①：判据收口 seatGate 单源。**归一语义变化（任务书授权「全改调它」的
+          // 直接产物，W-SMDESIGN §2.2 记录的 P3-3 不对称正是旧结构病）**：本入口旧版无
+          // pm 词表豁免（外部会话不可勾 pm 身份行），归一后与 create/纵深门同口径获得
+          // 豁免——pm 词表角色行=身份标记语义全入口一致。文案按 reason 映射保兼容。
+          const seat = seatGate(sid, role, this.seatGateCtx());
+          if (!seat.ok) {
+            if (seat.reason === "leader") return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
+            return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
+          }
           const r = addMember(gid, sid, role, selection);
           if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
           this.emitOrgState();
@@ -6558,7 +6630,7 @@ export class SessionManager {
           veteranAgent.sendMessage(dispatchPrompt);
           // 状态推进对齐 resumeAgent（无换流：streamGen 不动、resumePending 不置、
           // init 看门狗不挂——活流无 init 窗）
-          vs.state.status = "WORKING";
+          this.transition(vs.state.session_id, "WORKING", "dispatch"); /* W-SMIMPL③ 直写收口 */
           vs.state.historical = false;
           vs.state.saved = undefined;
           vs.state.org_parked = undefined;
@@ -7257,7 +7329,7 @@ export class SessionManager {
         s.state.dispatch_tier = undefined;
       }
     }
-    s.state.status = "DONE";
+    this.transition(s.state.session_id, "DONE", "retire"); /* W-SMIMPL③ 直写收口 */
     s.state.done_reason = mode === "parked" ? "项目组挂起（成员退休进熟手池）"
       : mode === "disbanded" ? "项目组结项（编制解散）"
         : "成员退休（编制除名，路由表档案保留）";
@@ -7423,7 +7495,7 @@ export class SessionManager {
   emitWaitingResolved(sessionId: string, requestId: string, decision: "allow" | "deny" | "answer" | "answered", by: string): void {
     const s = this.sessions.get(sessionId);
     if (!s) return;
-    s.state.status = "WORKING";
+    this.transition(s.state.session_id, "WORKING", "wait-resolve"); /* W-SMIMPL③ 直写收口 */
     s.state.waiting_request = undefined;
     s.state.waiting_started_at = undefined;
     s.state.updated_at = Date.now();
@@ -7689,7 +7761,7 @@ export class SessionManager {
       if (s.wd.recoveries.length >= 2) {
         this.bus.emit(sid, "WATCHDOG", { action: "gave_up", lane, detail: `1 小时内已自愈 ${s.wd.recoveries.length} 次` });
         s.wd.gaveUp = true;
-        s.state.status = "WAITING";
+        this.transition(s.state.session_id, "WAITING", "wd-stall"); /* W-SMIMPL③ 直写收口 */
         s.state.action_summary = "流中断，自动恢复已达上限";
         s.state.waiting_request = undefined;
         s.state.waiting_started_at = undefined;
@@ -7787,7 +7859,7 @@ export class SessionManager {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.bus.emit(sid, "WATCHDOG", { action: "recover_fail", lane, detail: msg });
-      s.state.status = "ERROR";
+      this.transition(s.state.session_id, "ERROR", "wd-fail"); /* W-SMIMPL③ 直写收口 */
       s.state.last_error = `看门狗恢复失败: ${msg}`;
       s.state.waiting_request = undefined;
       s.state.waiting_started_at = undefined;

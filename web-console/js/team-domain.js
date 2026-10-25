@@ -104,6 +104,18 @@
                   }
                   return sids;
                 }
+                // W-SMIMPL ②：回执缺失单集（relay 收口边落 receipt_missing:true 的 done 单）——
+                // 看板 done 卡「无回执」角标数据源。与 pendingDispatchSids 同构（receipts
+                // 已是同 id 末行收敛视图，逐行判定即末行判定）；旧 relay 无此字段=空集零影响
+                function missingReceiptIds(gid) {
+                  const rows = state.receipts.get(gid);
+                  if (!Array.isArray(rows) || !rows.length) return new Set();
+                  const ids = new Set();
+                  for (const r of rows) {
+                    if (r && r.status === "done" && r.receipt_missing === true && r.id) ids.add(r.id);
+                  }
+                  return ids;
+                }
                 function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
@@ -239,6 +251,11 @@
                   if (updated && updated !== "—" && updated !== created) clineBits.push("更新 " + shortTime(task.updated_at));
                   if (queueCtx && queueCtx.ordinal) clineBits.push("排队 #" + queueCtx.ordinal);
                   if (queueCtx && queueCtx.running) clineBits.push('<span class="cline-run">▶ 运行中</span>');
+                  // W-SMIMPL ②：done 卡「无回执」角标（worker 静默收工可见化——账面 done
+                  // 内容空，Leader 不抽查不知情的三次实锤止痛件；done 泳道专用）
+                  if (isDone && task.dispatch_id && missingReceiptIds(project.id).has(task.dispatch_id)) {
+                    clineBits.push('<span class="cline-miss" title="收口 done 但回执无「结果：」行（worker 静默收工）——请抽查该单交付">⚠ 无回执</span>');
+                  }
                   const selfCheck = taskSelfCheck(task);
                   const selfCheckLabel = selfCheck ? "AI 自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
                   const selfCheckHtml = selfCheck ? '<span class="task-verify" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span>" : "";

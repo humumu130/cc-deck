@@ -1494,6 +1494,7 @@
     #d-team .task-cline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; color: var(--dim); font-size: var(--fs-C); line-height: 1.45; }
     #d-team .task-cline .cline-sep { flex: none; color: var(--faint); font-style: normal; }
     #d-team .task-cline .cline-run { color: var(--working); }
+    #d-team .task-cline .cline-miss { color: var(--error); } /* W-SMIMPL ②：done 卡「无回执」角标（回执缺失警示色，与 task-flag 同族） */
     #d-team .task-card.task-done { opacity: .45; }
     #d-team .task-card.task-done .task-title strong { color: var(--text); font-weight: 500; }
     #d-team .task-flag { margin-top: 5px; color: var(--error); font-size: var(--fs-C); }

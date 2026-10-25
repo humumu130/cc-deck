@@ -527,6 +527,38 @@ export const PM_ROLE_RE = /^(pm|leader|产品经理|项目经理|领队)$/i;
  * 整单拒。防未来新增 create 入口漏走 session-manager 前置门。 */
 export type HeadcountGate = (sid: string, role: string) => string | null;
 
+/** [W-SMIMPL ①]（W-SMDESIGN 候选 1，2026-10-25 Leader 拍板）席位门单源判据——
+ * 「在册/外部/Leader/pm 词表」四轴唯一权威（此前 create 前置门 / HeadcountGate /
+ * member-add / member-retire 四入口各写 90% 重叠的判据，P2-1 门序绕过与 P3-3
+ * 不对称正是这个结构的产物）。纯函数读注入事实（goose applies() 纪律：判据=
+ * 纯函数读状态，可直测、不在过程流里排 if 序）：
+ *   轴④ pm 词表身份行（PM_ROLE_RE）→ ok（不接派单的身位标记，允许外部——
+ *       W-TEAMSNC ① 三闸口径）
+ *   轴① 会话不在册 → not_present
+ *   轴② 外部会话作成员角色 → external（成员须是可派单的托管会话）
+ *   轴③ Leader 会话 → leader（分诊者不接活）
+ * 返回结构化 reason（不返回文案）：各入口按自己的用户面语境映射文案，判据单源、
+ * 文案兼容（fb14 ⑤b/TS63FIX 反例断言不破）。 */
+export type SeatDenyReason = "not_present" | "external" | "leader";
+export type SeatGateResult = { ok: true } | { ok: false; reason: SeatDenyReason };
+
+export interface SeatGateContext {
+  /** 会话事实：不在册=undefined；在册返回外部性（session-manager 由
+   *  this.sessions 视野提供——分层口径与 HeadcountGate 闭包注入同款） */
+  seatInfo(sid: string): { external: boolean } | undefined;
+  /** Leader 会话判定（this.isLeaderSession 直通） */
+  isLeader(sid: string): boolean;
+}
+
+export function seatGate(sid: string, role: string, ctx: SeatGateContext): SeatGateResult {
+  if (PM_ROLE_RE.test(role)) return { ok: true };
+  const info = ctx.seatInfo(sid);
+  if (!info) return { ok: false, reason: "not_present" };
+  if (info.external) return { ok: false, reason: "external" };
+  if (ctx.isLeader(sid)) return { ok: false, reason: "leader" };
+  return { ok: true };
+}
+
 /** FB4：随团编制形状校验（≤8 席；role 缺省 worker；session_id 去重）。 */
 function sanitizeHeadcount(raw: unknown, gate?: HeadcountGate): { ok: true; headcount?: ProjectHeadcountEntry[] } | { ok: false; error: string } {
   if (raw === undefined) return { ok: true };

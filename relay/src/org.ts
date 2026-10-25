@@ -347,6 +347,11 @@ export interface DispatchEntry {
   /** §1.5 阶段事件增量（T1-STAGE）：阶段名（词表=基表+custom. 前缀，拍板 #9）与明细 */
   stage?: string;
   stage_detail?: string;
+  /** [W-SMIMPL ②] 回执契约可见化（W-SMDESIGN 候选 2）：done 收口但回执无「结果：」行
+   *  （worker 静默收工——三次实锤：账面 done 内容空）时置 true。纯观测标记：读侧
+   *  （web 看板卡「无回执」角标/通知账）消费，不改任何状态语义。仅 done 单标（failed
+   *  本身即异常信号不双计）。旧行缺省 undefined=有回执口径（宽容惯例）。 */
+  receipt_missing?: boolean;
 }
 
 export function dispatchLogPath(dir?: string): string {

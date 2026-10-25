@@ -140,6 +140,8 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   stage_detail: { type: "string" },
   /** §2.4 链路演练：drill 标记行（读侧宽容忽略） */
   drill: { type: "boolean" },
+  /** W-SMIMPL ②：回执契约可见化——done 无结果行标记（读侧宽容忽略，旧行缺省=有回执） */
+  receipt_missing: { type: "boolean" },
 };
 
 // ---------- reducer 门面 ----------
