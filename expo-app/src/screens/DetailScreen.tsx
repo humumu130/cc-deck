@@ -1585,6 +1585,13 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     }
     return null;
   }, [allProjects, sid]);
+  // W-FB66REST ③：head 头像角色档判定——列表卡 pmRoleKindOf 同词表同优先级
+  // （pm 档 /^(pm|产品经理|项目经理)$/i、leader 档 /^(leader|领队)$/i，两遍扫描
+  // leader 压 pm=皇冠蟹优先）；本会话单条直查，语义同列表卡全 Map
+  const headRoleKind = useMemo(() => {
+    const hit = (re: RegExp) => allProjects.some((g) => Array.isArray(g.headcount) && g.headcount.some((m) => m && m.session_id === sid && re.test(String(m.role || ""))));
+    return hit(/^(leader|领队)$/i) ? "leader" : hit(/^(pm|产品经理|项目经理)$/i) ? "pm" : null;
+  }, [allProjects, sid]);
   const VS: readonly { k: ViewKind; label: string }[] = useMemo(() => {
     let base: readonly { k: ViewKind; label: string }[] = deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
     if (!pmTeam) base = base.filter((v) => v.k !== "team");
@@ -2331,12 +2338,20 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </Pressable>
-        {/* #239 W-DETAILAVATAR：详情 head 头像品牌化——列表卡 AvaBadge 同款 EngineIcon
-            同 size(18) 同数据源（engine-icon.tsx 双表，claude=像素螃蟹）；d.head gap:8
-            自带间距，无底块无工作灯（head 现行规格不重设计，纯补图标源）。
-            W-MOBLIST：engine 缺失兜底灭「?」——PM/外部会话按 model 子串推断
-            （inferEngine 双端同链），双缺才落字母占位 */}
-        <EngineIcon engine={inferEngine(s.engine, s.model) ?? undefined} size={18} />
+        {/* #239 W-DETAILAVATAR：详情 head 头像品牌化——列表卡 AvaBadge 同款品牌图标。
+            W-FB66REST ③（用户 1026 test.66）：「色块+问号」根修——engine/model 双缺时
+            旧版落 EngineIcon 灰块+「?」字母占位。对齐列表卡完整口径：①PM/Leader 且
+            claude 档（双缺视同 claude）=角色蟹（PM 举旗蟹/Leader 皇冠蟹，列表卡
+            roleCrab 同判定）；②普通会话双缺兜底 claude 像素蟹（列表卡「engine 缺失
+            视同 claude」同语义）；已知引擎品牌图标不变 */}
+        {headRoleKind && (inferEngine(s.engine, s.model) ?? "claude") === "claude" ? (
+          <Image
+            source={headRoleKind === "leader" ? require("../assets/engines/crab-leader.png") : require("../assets/engines/crab-pm.png")}
+            style={{ width: 18, height: 18 }}
+          />
+        ) : (
+          <EngineIcon engine={inferEngine(s.engine, s.model) ?? "claude"} size={18} />
+        )}
         <View style={{ flex: 1, minWidth: 0 }}>
           {/* W-UIFIX 件二：水位计挪标题行右端+整体调小一号——副题行还给元信息文字
               （目录/活跃时间不再被挤截断）；标题 flexShrink 保省略，水位 flexShrink:0 右锚 */}
