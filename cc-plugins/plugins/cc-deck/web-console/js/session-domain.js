@@ -611,8 +611,29 @@
                   if (!p || !Array.isArray(p.sessions)) return;
                   S.sessions = new Map(p.sessions.filter((x) => x && typeof x.session_id === "string").map((x) => [x.session_id, x]));
                   S.snapshotAt = Date.now(); // t25fix #4：快照到达时戳（团队 dock 出卡时序门槛用——快照刚到时编制/会话未到齐，0 同步团队卡先不出防闪现残卡）
-                  S.timelines = new Map(Object.entries(p.logs || {}).map(([k, v]) => [k, Array.isArray(v) ? v.slice() : []]));
-                  S.logsTruncated = new Map(Object.entries(p.logs_truncated || {}));
+                  // #274（用户 1026 裁定：切源=纯视图过滤，本地缓冲优先）：timelines 不再全量
+                  // 替换——按会话「新者胜」upsert（尾条 ts 更新者胜；快照未提及的本地会话
+                  // 保留不清场）。旧全量替换正是切源丢消息放大器：切回聚合时 replaySnapshots
+                  // 两源缓存帧先后到达，陈旧云帧（#268 半开族滞留缓存）的旧 logs 把 LAN 侧
+                  // 更新的消息流整体拉回旧时点（pm 会话停 15:08 实锤）。新者胜后陈旧快照
+                  // 无论来自切源重放/云链下发/断线重连都覆盖不了本地更新；冷启动/重连（本地
+                  // 空）天然取快照份；缺口补拉=同一比较（快照尾 ts 更新即取快照份）自动承接。
+                  {
+                    const tailTs = (arr) => (Array.isArray(arr) && arr.length ? Number(arr[arr.length - 1].ts) || 0 : 0);
+                    const next = new Map(S.timelines);
+                    let truncatedChanged = false;
+                    const nextTrunc = new Map(S.logsTruncated);
+                    for (const [k, v] of Object.entries(p.logs || {})) {
+                      const inc = Array.isArray(v) ? v : [];
+                      const cur = next.get(k);
+                      if (!cur || !cur.length || tailTs(inc) >= tailTs(cur)) next.set(k, inc.slice());
+                      if (!truncatedChanged) truncatedChanged = true;
+                      nextTrunc.set(k, (p.logs_truncated || {})[k]);
+                    }
+                    S.timelines = next;
+                    S.logsTruncated = nextTrunc;
+                  }
+                  // S.logsTruncated 旧全量行已并入上方 upsert（与 timelines 同源同口径）
                   S.hasSnapshot = true;
                   S.relayName = p.relay_name || location.host;
                   S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
@@ -685,7 +706,10 @@
                   if (!s || !p || typeof p !== "object") return;
                   for (const k of MERGE_KEYS) if (p[k] !== undefined) s[k] = p[k];
                   if (Object.prototype.hasOwnProperty.call(p, "waiting_request")) s.waiting_request = p.waiting_request ?? null; // 权威自愈：null 即清
-                  s.updated_at = p.updated_at || Date.now();
+                  // #271：缺载不伪造——旧 fallback `|| Date.now()` 会把定位补水/扫描校正等
+                  // 不带 updated_at 的部分帧洗成接收时刻（置灰判定连带失效）；真活动时刻由
+                  // 服务端载荷显式携带，缺载保持既有值
+                  s.updated_at = p.updated_at || s.updated_at;
                   renderMyList();
                   renderSlimDrawer(); // [t-7e0c6189] 第四列成员卡状态/摘要随更新刷新（隐藏态零开销早退）
                   if (sid === S.selected) renderAll();
@@ -1451,8 +1475,13 @@
                   };
                   const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
-                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency
-                    const pin = Number(b.pinned === true) - Number(a.pinned === true); if (pin) return pin;
+                  // #271：saved 休眠卡（已保存待恢复）不享受 pinned 置顶浮置——重启后重建的
+                  // 休眠锚卡恒 pinned=true（ensureLeader 重建硬编码）+时间戳取锚写入时刻，
+                  // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
+                  // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
+                  const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
+                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                    const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
                     return (b.updated_at || 0) - (a.updated_at || 0);

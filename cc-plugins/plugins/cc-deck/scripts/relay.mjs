@@ -10337,7 +10337,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir24, hostname, tmpdir as tmpdir4 } from "node:os";
+import { networkInterfaces as networkInterfaces3, homedir as homedir24, hostname as hostname2, tmpdir as tmpdir4 } from "node:os";
 import { join as join51, sep as sep9 } from "node:path";
 import { writeFileSync as writeFileSync31, openSync as openSync6, readFileSync as readFileSync44, rmSync as rmSync10, existsSync as existsSync35, readdirSync as readdirSync21, statSync as statSync19 } from "node:fs";
 import { spawn as spawn8, execFileSync as execFileSync6 } from "node:child_process";
@@ -10403,9 +10403,43 @@ import { isAbsolute, join as join2, resolve } from "node:path";
 import { homedir } from "node:os";
 
 // src/settings.ts
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 var SETTINGS_FILE = "settings.json";
+var RELAY_NAME_MAX = 12;
+var RELAY_NAME_FILE = "relay-name";
+function effectiveRelayName(dataDir3) {
+  try {
+    return readFileSync(join(dataDir3, RELAY_NAME_FILE), "utf8").trim().slice(0, 40) || hostname().slice(0, 40);
+  } catch {
+    return hostname().slice(0, 40);
+  }
+}
+function sanitizeRelayName(input) {
+  if (typeof input !== "string") return { ok: false, error: "\u6E90\u540D\u79F0\u987B\u4E3A\u5B57\u7B26\u4E32" };
+  if (/[\x00-\x1f\x7f]/.test(input)) return { ok: false, error: "\u6E90\u540D\u79F0\u542B\u63A7\u5236\u5B57\u7B26" };
+  const name = input.trim();
+  if (name.length === 0) return { ok: true, name: "" };
+  if (name.length > RELAY_NAME_MAX) return { ok: false, error: `\u6E90\u540D\u79F0\u6700\u957F ${RELAY_NAME_MAX} \u5B57\u7B26\uFF08\u5F53\u524D ${name.length}\uFF09` };
+  return { ok: true, name };
+}
+function writeRelayName(dataDir3, name) {
+  try {
+    const p = join(dataDir3, RELAY_NAME_FILE);
+    if (name === "") {
+      try {
+        unlinkSync(p);
+      } catch {
+      }
+      return true;
+    }
+    writeFileSync(p, name, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
 function settingsPath(dataDir3) {
   return join(dataDir3, SETTINGS_FILE);
 }
@@ -13755,7 +13789,7 @@ function diffProjection(domain, jsonVal, sqliteVal) {
 }
 
 // src/fs-safe.ts
-import { appendFileSync, closeSync as closeSync2, existsSync as existsSync12, openSync as openSync2, readSync, renameSync as renameSync3, statSync as statSync5, unlinkSync, writeFileSync as writeFileSync5 } from "node:fs";
+import { appendFileSync, closeSync as closeSync2, existsSync as existsSync12, openSync as openSync2, readSync, renameSync as renameSync3, statSync as statSync5, unlinkSync as unlinkSync2, writeFileSync as writeFileSync5 } from "node:fs";
 import { dirname as dirname3, join as join13 } from "node:path";
 function atomicWriteJson(file, data) {
   const tmp = join13(dirname3(file), `.${String(file.split("/").pop() || "file")}.tmp-${process.pid}`);
@@ -13766,7 +13800,7 @@ function atomicWriteJson(file, data) {
   } catch (e) {
     console.error(`[fs-safe] \u539F\u5B50\u5199\u5931\u8D25 ${file}: ${e instanceof Error ? e.message : String(e)}`);
     try {
-      if (existsSync12(tmp)) unlinkSync(tmp);
+      if (existsSync12(tmp)) unlinkSync2(tmp);
     } catch {
     }
     return false;
@@ -46986,6 +47020,65 @@ function taskDoneLabel(t) {
   return typeof t.id === "number" ? `#${t.id} ${t.content}` : t.content;
 }
 
+// src/ask-user-hold.ts
+function askHoldMs() {
+  const v = Number(process.env.CCR_ASK_HOLD_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 9e5;
+}
+var LATE_INJECT_WINDOW_MS = 30 * 6e4;
+var AskUserHold = class {
+  constructor(lateWindowMs = LATE_INJECT_WINDOW_MS) {
+    this.lateWindowMs = lateWindowMs;
+  }
+  lateWindowMs;
+  timers = /* @__PURE__ */ new Map();
+  late = /* @__PURE__ */ new Map();
+  /** 挂起窗口上膛。超时触发后该 requestId 自动进入迟到可注入窗口（供 answer() 注入）。
+   * ms<=0 = 不挂定时器（超时关死），同时清除既有迟到窗记录。 */
+  arm(requestId, questions, onTimeout, ms = askHoldMs()) {
+    this.settle(requestId);
+    if (ms <= 0) return;
+    this.timers.set(
+      requestId,
+      setTimeout(() => {
+        this.timers.delete(requestId);
+        this.late.set(requestId, { questions, at: Date.now() });
+        onTimeout();
+      }, ms)
+    );
+    if (this.timers.size > 32) {
+      const first = this.timers.keys().next().value;
+      if (first !== void 0) this.settle(first);
+    }
+  }
+  /** 决议收口（allow/deny/answer/superseded/清扫）：撤定时器 + 作废迟到窗。
+   * 注意与超时路径互斥——超时触发时定时器已自然移除且要保留迟到窗，不走本方法。 */
+  settle(requestId) {
+    const t = this.timers.get(requestId);
+    if (t) {
+      clearTimeout(t);
+      this.timers.delete(requestId);
+    }
+    this.late.delete(requestId);
+  }
+  /** 迟到可注入：命中返回当时的问题集（供 buildAnswerMessage 组装注入文本），越窗/未知返回 undefined */
+  injectable(requestId) {
+    const e = this.late.get(requestId);
+    if (!e) return void 0;
+    if (Date.now() - e.at > this.lateWindowMs) {
+      this.late.delete(requestId);
+      return void 0;
+    }
+    return e.questions;
+  }
+  /** 会话终止/停止：全量收口（stop() 路径） */
+  clear() {
+    for (const t of this.timers.values()) clearTimeout(t);
+    this.timers.clear();
+    this.late.clear();
+  }
+};
+
 // src/agent-adapter.ts
 function childEnv(opts) {
   const extra = [
@@ -47200,6 +47293,8 @@ var AgentSession = class {
   pendingFileUses = /* @__PURE__ */ new Map();
   queue = new AsyncQueue();
   pending = /* @__PURE__ */ new Map();
+  // #273 AskUserQuestion 挂起窗口账本（超时定时器 + 迟到可注入窗口）
+  askHold = new AskUserHold();
   // #212 允许并记住：权限请求先查规则，命中直接放行（不下发审批卡）
   rules;
   stopping = false;
@@ -47573,6 +47668,29 @@ var AgentSession = class {
       ...remember ? { remember } : {}
     });
     this.cb.onLog("system", questions.length ? summary : `\u7B49\u5F85\u786E\u8BA4: ${summary}`);
+    if (questions.length) {
+      const holdMs = askHoldMs();
+      const rid = requestId;
+      this.askHold.arm(
+        rid,
+        questions,
+        () => {
+          const p = this.pending.get(rid);
+          if (!p) return;
+          this.cb.onLog(
+            "system",
+            `\u63D0\u95EE ${questions.map((q2) => q2.header).join("/")} ${holdMs >= 6e4 ? `${Math.round(holdMs / 6e4)} \u5206\u949F` : `${Math.round(holdMs / 1e3)} \u79D2`}\u672A\u4F5C\u7B54\uFF0C\u5DF2\u8D85\u65F6\u653E\u884C\uFF08\u6A21\u578B\u5C06\u4E0D\u5E26\u7528\u6237\u9009\u62E9\u7EE7\u7EED\uFF09`
+          );
+          p.resolve({
+            behavior: "deny",
+            message: "\u7528\u6237\u672A\u5728\u8D85\u65F6\u7A97\u53E3\u5185\u4F5C\u7B54\uFF08\u8FDC\u7A0B\u672A\u54CD\u5E94\uFF09\u3002\u8BF7\u6309\u6700\u7A33\u59A5\u7684\u9ED8\u8BA4\u65B9\u6848\u7EE7\u7EED\u6267\u884C\uFF0C\u4E0D\u8981\u91CD\u590D\u63D0\u95EE\u3001\u4E0D\u8981\u505C\u4E0B\u6765\u7B49\u5F85\u3002",
+            interrupt: false
+          });
+          this.cb.onWaitingResolved(rid, "timeout", "relay");
+        },
+        holdMs
+      );
+    }
     return new Promise((resolve11) => {
       this.pending.set(requestId, {
         tool: toolName,
@@ -47623,6 +47741,7 @@ var AgentSession = class {
   allow(requestId, by, rememberScope) {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    this.askHold.settle(requestId);
     if (rememberScope && this.rules) {
       const sug = suggestPattern(p.tool, p.input);
       if (sug) this.rules.add(p.tool, sug.pattern, rememberScope, rememberScope === "session" ? this.id : void 0, by ?? "unknown");
@@ -47634,14 +47753,27 @@ var AgentSession = class {
   deny(requestId, reason, by) {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    this.askHold.settle(requestId);
     p.resolve({ behavior: "deny", message: reason ?? "\u7528\u6237\u62D2\u7EDD", interrupt: false });
     this.cb.onWaitingResolved(requestId, "deny", by);
     return true;
   }
-  // AskUserQuestion 作答：deny-message 机制回传答案（见 summarizer.buildAnswerMessage 注释）
+  // AskUserQuestion 作答：deny-message 机制回传答案（见 summarizer.buildAnswerMessage 注释）。
+  // #273 迟到作答：pending 已被超时放行（decision=timeout）但仍在 AskUserHold 迟到窗内
+  // 的作答，转 sendMessage 注入送达（external askFallback「晚答仍可达」同语义）——
+  // 此时 CLI 已按默认方案跑下去，注入让用户选择在下一回合补位生效。
   answer(requestId, answers, by) {
     const p = this.pending.get(requestId);
-    if (!p) return false;
+    if (!p) {
+      const late = this.askHold.injectable(requestId);
+      if (late && !this.ended) {
+        this.sendMessage(`\u3010AskUserQuestion \u8FDF\u5230\u4F5C\u7B54\u3011${buildAnswerMessage(late, answers)}`);
+        this.cb.onLog("system", `\u8FDF\u5230\u4F5C\u7B54\u5DF2\u8F6C\u6CE8\u5165\uFF1A${answers.join(" / ")}`);
+        return true;
+      }
+      return false;
+    }
+    this.askHold.settle(requestId);
     p.resolve({ behavior: "deny", message: buildAnswerMessage(parseAskQuestions(p.input), answers), interrupt: false });
     this.cb.onWaitingResolved(requestId, "answer", by);
     return true;
@@ -47658,6 +47790,7 @@ var AgentSession = class {
   sweepStalePending() {
     for (const [id2, p] of [...this.pending]) {
       this.pending.delete(id2);
+      this.askHold.settle(id2);
       p.resolve({ behavior: "deny", message: "\u8BF7\u6C42\u5DF2\u5931\u6548\uFF08CLI \u5DF2\u7EE7\u7EED\uFF09", interrupt: false });
       this.cb.onWaitingResolved(id2, "superseded");
     }
@@ -47673,6 +47806,7 @@ var AgentSession = class {
   async stop() {
     this.stopping = true;
     this.ended = true;
+    this.askHold.clear();
     this.denyAllPending("\u4F1A\u8BDD\u88AB\u505C\u6B62");
     await new Promise((r) => setTimeout(r, 250));
     await this.q.interrupt();
@@ -49484,7 +49618,9 @@ function createSessionCommands(mgr2) {
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
         title,
-        title_locked: true
+        title_locked: true,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（改名≠活动）
       });
       return { command_id: cmd.command_id, ok: true };
     }
@@ -50080,7 +50216,9 @@ function createBoardCommands(mgr2) {
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
         pinned: pinned2,
-        saved: !!s.state.saved
+        saved: !!s.state.saved,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（pin 是 UI 态≠活动）
       });
       return { command_id: cmd.command_id, ok: true };
     },
@@ -50089,6 +50227,10 @@ function createBoardCommands(mgr2) {
         return { command_id: cmd.command_id, ok: false, error: "employee_home \u987B\u4E3A\u5E03\u5C14\u503C" };
       }
       const r = mgr2.applyEmployeeHome(cmd.payload.employee_home);
+      return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
+    },
+    COMMAND_RELAY_NAME_SET(cmd, _by) {
+      const r = mgr2.setRelayName(cmd.payload?.name);
       return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? { data: r.data } : { error: r.error } };
     },
     COMMAND_TASK_CREATE(cmd, by) {
@@ -51898,7 +52040,7 @@ var DecisionNotificationWatcher = class {
 };
 
 // src/restart-ledger.ts
-import { existsSync as existsSync26, mkdirSync as mkdirSync19, readFileSync as readFileSync33, renameSync as renameSync10, rmSync as rmSync5, unlinkSync as unlinkSync3, writeFileSync as writeFileSync20 } from "node:fs";
+import { existsSync as existsSync26, mkdirSync as mkdirSync19, readFileSync as readFileSync33, renameSync as renameSync10, rmSync as rmSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync20 } from "node:fs";
 import { join as join39 } from "node:path";
 function restartLedgerTtlMs() {
   const v = Number(process.env.CCR_RESTART_LEDGER_TTL_MS);
@@ -51943,7 +52085,7 @@ function loadRestartLedger(dataDir3, now = Date.now()) {
   const target = ledgerPath(dataDir3);
   const tmp = target + ".tmp";
   try {
-    if (existsSync26(tmp)) unlinkSync3(tmp);
+    if (existsSync26(tmp)) unlinkSync4(tmp);
   } catch {
   }
   if (!existsSync26(target)) return { entries: [], droppedRenewable: 0, orphans: [] };
@@ -52814,6 +52956,20 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emitTransient("SETTINGS_UPDATED", payload);
     return { ok: true, data: payload };
   }
+  // #272 源名称改名（hostname 默认过长如 huanglin）：relay-name 文件唯一事实源，
+  // sanitize（trim/拒控制字符/≤12；空=清空回落 hostname）→ 写盘 → 广播
+  // RELAY_NAME_UPDATED（LAN+cloud 全连接扇出：web 源 chip/切换器免刷新换名，对端
+  // 云配对源同名跟随——SNAPSHOT.relay_name 与 sessions.relay_source 均现算新名）。
+  setRelayName(input) {
+    const s = sanitizeRelayName(input);
+    if (!s.ok) return { ok: false, error: s.error };
+    if (!writeRelayName(this.cfg.dataDir, s.name)) {
+      return { ok: false, error: "relay-name \u5199\u76D8\u5931\u8D25\uFF08\u76D8\u6EE1/\u6743\u9650\uFF1F\uFF09" };
+    }
+    const relay_name = effectiveRelayName(this.cfg.dataDir);
+    this.bus.emitTransient("RELAY_NAME_UPDATED", { relay_name });
+    return { ok: true, data: { relay_name } };
+  }
   // SNAPSHOT.settings / 设置页数据源（每次现算：env/文件/默认三层合成）
   employeeHomeState() {
     const st2 = resolveEmployeeHome(this.cfg.dataDir);
@@ -53329,7 +53485,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         status: s.state.status,
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
-        title: t
+        title: t,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（重放回落信封 ts=洗活固化）
       });
     });
   }
@@ -53347,7 +53505,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      title: t
+      title: t,
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   /** #219 件②回落档：deriveTitle(首条 prompt) 即时定名——无同构标题源的引擎
@@ -53491,7 +53651,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "\u63A5\u5165\u4E2D",
       started_at: startedAt || Date.now(),
-      updated_at: Date.now(),
+      updated_at: opts?.updatedAt || Date.now(),
+      // #271：转录收编新卡带真实最后活动，防 boot 洗活
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
@@ -53551,7 +53712,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   getExternal(id2) {
     return this.sessions.get(id2)?.state;
   }
-  setExternalStatus(id2, status, summary, turnStartedAt) {
+  // #271 重启洗活根修：at = 活动时刻（缺省判定时刻）。boot 引擎扫描（adoptEngineProfiles）
+  // 的状态/摘要校正传 profile.updatedAt（转录真实最后活动）——原无条件 Date.now() 把久未
+  // 活跃会话全部洗成启动时刻（1026 用户实锤「全员 14:25」：回放态摘要与扫描算出的摘要
+  // 常态不等，summary 失配即触发）。载荷恒带 updated_at（#157 口径）：缺载帧重放回落
+  // 信封 ts 会把洗活固化进下次重启，且双端客户端 fallback 会伪造接收时刻。
+  setExternalStatus(id2, status, summary, turnStartedAt, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
     const changed = s.state.status !== status;
@@ -53560,14 +53726,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id2, "SESSION_UPDATED", {
         status,
         action_summary: summary,
         stats: { ...s.state.stats },
         ...s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {},
-        historical: !!s.state.historical
+        historical: !!s.state.historical,
+        updated_at: s.state.updated_at
       });
     }
   }
@@ -53587,14 +53754,19 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
-      compacting: on2
+      compacting: on2,
+      updated_at: s.state.updated_at
+      // #271：帧完整性（缺载帧重放/客户端 fallback 双洗面）
     });
   }
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
   // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
-  emitExternalSync(id2) {
+  // #271：at = 该状态修复对应的真实活动时刻（缺省 now）。historical 翻转等扫描判定
+  // 不是会话活动——boot 扫描把久休会话标 historical 时若刷 now，洗活从校正帧挪到
+  // 同步帧原样复发（emitUpdated 无 at = Date.now()）
+  emitExternalSync(id2, at) {
     const s = this.sessions.get(id2);
-    if (s) this.emitUpdated(s, true);
+    if (s) this.emitUpdated(s, true, at);
   }
   // #393 手动通知注入（/api/notify）：把一段文字作为 TASK_DONE 汇报推给指定/最新会话，
   // 悬浮框当即弹出（拖图原理答疑/联调实测用）；同时落 last_task_done 供断线恢复
@@ -53735,7 +53907,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
-      stats: { ...stats }
+      stats: { ...stats },
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   // #35 输出物单条合并咽喉点（实时路径：external hook 事件 / 托管 SDK 工具结果）。
@@ -53805,7 +53979,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       stats: { ...s.state.stats },
       artifacts: this.aliveArtifacts(s),
       // #224 下发前 re-stat + 剔除已删
-      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
@@ -53867,7 +54043,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       stats: { ...s.state.stats },
       artifacts: this.aliveArtifacts(s),
       // #224 下发前 re-stat + 剔除已删
-      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
     return { ok: true };
   }
@@ -54209,7 +54387,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      remote_mode: enabled
+      remote_mode: enabled,
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   setExternalCliPid(id2, pid) {
@@ -54219,7 +54399,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
-      cli_pid: pid
+      cli_pid: pid,
+      // #271：定位补水≠会话活动——载荷带既有 updated_at（缺载帧重放回落信封 ts 会把
+      // boot 补水时刻固化成活跃时刻 + 双端客户端 fallback 伪造接收时刻，双洗）
+      updated_at: s.state.updated_at
     });
   }
   clearExternalCliPid(id2) {
@@ -54338,6 +54521,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         }
         case "COMMAND_SETTINGS_UPDATE": {
           return this.boardCmds.COMMAND_SETTINGS_UPDATE(cmd, by);
+        }
+        case "COMMAND_RELAY_NAME_SET": {
+          return this.boardCmds.COMMAND_RELAY_NAME_SET(cmd, by);
         }
         case "COMMAND_ENGINE_LOGIN": {
           return this.engineCmds.COMMAND_ENGINE_LOGIN(cmd, by);
@@ -55427,7 +55613,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       this.bus.emit(id2, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
-        title
+        title,
+        updated_at: s.state.updated_at
+        // #271：帧完整性
       });
     }
   }
@@ -57902,7 +58090,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         status: s.state.status,
         action_summary: s.state.action_summary,
         ...s.state.project_gid ? { project_gid: s.state.project_gid } : {},
-        dispatch_tier: s.state.dispatch_tier
+        dispatch_tier: s.state.dispatch_tier,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（徽标帧≠活动帧）
       });
     }
     this.emitOrgState();
@@ -60751,7 +60941,9 @@ var Bridge = class _Bridge {
         profile.prompt,
         profile.sessionId,
         profile.startedAt,
-        { engine: spec.engine, model: profile.model, provider: profile.provider }
+        // #271：新卡带转录真实最后活动——缺省 Date.now() 会把 boot 收编的久休会话洗成
+        // 启动时刻（1026「全员 14:25」/「6+ 空 Codex 复活」的建卡半边）
+        { engine: spec.engine, model: profile.model, provider: profile.provider, updatedAt: profile.updatedAt }
       );
       if (existing) {
         this.mgr.updateExternalProfile(id2, {
@@ -60775,13 +60967,13 @@ var Bridge = class _Bridge {
         this.streamDeltaStop(id2);
         this.mgr.finishExternal(id2, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
       } else if (state.status !== desiredStatus || state.action_summary !== summary) {
-        this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0);
+        this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0, profile.updatedAt);
         if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id2);
       }
       const historical = !active && inferredDead;
       if (!!state.historical !== historical) {
         state.historical = historical;
-        this.mgr.emitExternalSync(id2);
+        this.mgr.emitExternalSync(id2, profile.updatedAt);
       }
       if (profile.activity && profile.activityKey && this.engineActivityKeys.get(id2) !== profile.activityKey) {
         this.engineActivityKeys.set(id2, profile.activityKey);
@@ -63884,6 +64076,8 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_NOTIFICATION_ACK",
   // #17 第二批：雇员独立家开关切换（三端设置项）
   "COMMAND_SETTINGS_UPDATE",
+  // #272 源名称改名（连接与设备页「本源名称」；与云通道白名单逐字一致纪律）
+  "COMMAND_RELAY_NAME_SET",
   // M12-1 四新命令（v2-m10-freeze §3.1）：经 orgCommand 咽喉→orgAction 单漏斗
   "COMMAND_TASK_CREATE",
   "COMMAND_TASK_UPDATE",
@@ -65437,6 +65631,7 @@ var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_ORG_ACTION",
   "COMMAND_NOTIFICATION_ACK",
   "COMMAND_SETTINGS_UPDATE",
+  "COMMAND_RELAY_NAME_SET",
   "COMMAND_TASK_CREATE",
   "COMMAND_TASK_UPDATE",
   "COMMAND_DISPATCH",
@@ -66589,13 +66784,7 @@ var lanAuthNonces = null;
 var cloudIdentity = null;
 var cloudClients = [];
 var pairCodes = createPairingCodes();
-var relayNameOf = (dataDir3) => {
-  try {
-    return readFileSync44(join51(dataDir3, "relay-name"), "utf8").trim().slice(0, 40) || hostname().slice(0, 40);
-  } catch {
-    return hostname().slice(0, 40);
-  }
-};
+var relayNameOf = (dataDir3) => effectiveRelayName(dataDir3);
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
@@ -66672,7 +66861,7 @@ startServer(bus, mgr, cfg, {
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     if (process.env.CCR_NO_MDNS !== "1") {
-      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
+      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname2()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync31(join51(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");

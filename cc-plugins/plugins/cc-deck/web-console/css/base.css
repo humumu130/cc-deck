@@ -564,8 +564,10 @@
     #d-session .head-sub .head-ctx-meter { height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; font-size: var(--fs-D); margin: 0 3px; } /* 件十八：水位条前后呼吸位 */
     #d-session .head-sub .head-ctx-meter .ctx-mini-band i { height: 4px; }
     #d-session .head-sub [data-sub-time] { font-size: var(--fs-C); }
-    #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: var(--srow-badge-size); line-height: 1; height: calc(var(--srow-badge-size) * 1.22); border-radius: 999px; border: 0; } /* W-CHIP3④：与列表卡徽章同档全对齐（computed 实测卡=10.5px 字号/1px 6px pad/999px 全圆/无边框/盒高 12.8=字号×1.22——head 文字匿名行盒 Chrome 怪癖恒 17，故锁高随档缩放）——旧「fs-C+0 6px」独立胶囊档退役；#248 图标 10.8/gap4 沿用 */
-    #d-session .workspace-title-row .identity-cluster .team-chip { line-height: 1; height: calc(var(--srow-badge-size) * 1.22); } /* 1026 用户实锤 head 团队 chip（行高16≈18px 盒）与引擎徽章（锁高≈12.8px）差≈4px——head 场景同档对齐（padding 沿用 .team-chip 基础规则） */
+    #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: var(--srow-badge-size); line-height: 1; height: calc(var(--srow-badge-size) * 1.48); border-radius: 999px; border: 0; } /* 1026 用户裁定：head 与列表标签高度统一取平均 ≈15.5px */ /* W-CHIP3④：与列表卡徽章同档全对齐（computed 实测卡=10.5px 字号/1px 6px pad/999px 全圆/无边框/盒高 12.8=字号×1.22——head 文字匿名行盒 Chrome 怪癖恒 17，故锁高随档缩放）——旧「fs-C+0 6px」独立胶囊档退役；#248 图标 10.8/gap4 沿用 */
+    #d-session .workspace-title-row .identity-cluster .team-chip { line-height: 1; height: calc(var(--srow-badge-size) * 1.48); } /* 1026 用户实锤 head 团队 chip（行高16≈18px 盒）与引擎徽章（锁高≈12.8px）差≈4px——head 场景同档对齐（padding 沿用 .team-chip 基础规则） */
+    #d-session .srow-r3 .team-chip { line-height: 1; height: 15.5px; } /* 1026 高度统一：列表/head 平均档 */
+    #d-session .srow-r3 .src-cap { min-height: 15.5px; box-sizing: border-box; }
     #d-session .srow-r3 .cwd-cap .icon-inline { width: 10px; height: 10px; vertical-align: -1px; color: #5A6B7D; stroke-width: 2.1; } /* 1026 用户口径：📁 黄色 emoji 换灰线稿 svg；二轮实锤继承 --dim 与背景融成一体现不清——固定中深灰蓝 #5A6B7D + 加粗描边 2.1，立起来但不抢状态灯 */
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
     #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
@@ -2048,7 +2050,7 @@
     #d-session .srow-r3 .src-cap, #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .team-chip { height: 18px; align-items: center; justify-content: center; }
     #d-session .srow-r3 .team-chip { border-radius: 999px; }
     /* W-FB66ALL ⑧：📁 目录 chip（非 PM 卡；与手机 ⑦ 对齐）——中性 dim 胶囊，同 ⑫ 18px 档 */
-    #d-session .srow-r3 .cwd-cap { display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: transparent; color: var(--dim); font-size: var(--fs-micro, 9.5px); white-space: nowrap; max-width: 11em; overflow: hidden; text-overflow: ellipsis; flex: none; }
+    #d-session .srow-r3 .cwd-cap { display: inline-flex; align-items: center; justify-content: center; height: 15.5px; padding: 0 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: transparent; color: var(--dim); font-size: var(--fs-micro, 9.5px); white-space: nowrap; max-width: 11em; overflow: hidden; text-overflow: ellipsis; flex: none; }
     #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); /* W-V8 批10：摘要行提亮一档（路径/摘要全图最暗项） */ font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }
     #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
@@ -2064,7 +2066,8 @@
     #d-session .team-chip { display: inline-flex; align-items: center; gap: 3px; flex: none; max-width: 11em; min-width: 0; padding: 1px 6px; border: transparent; border: 1px solid color-mix(in srgb, var(--team-accent, var(--brand)) 32%, transparent); border-radius: 6px; background: transparent; background: color-mix(in srgb, var(--team-accent, var(--brand)) 9%, transparent); color: var(--dim); font-size: var(--srow-badge-size); line-height: 14px; white-space: nowrap; } /* W-CHIP3 ②：缩档对齐引擎徽章（10.5px 字号+pad 1px 6px，视觉重量同档） */
     #d-session .team-chip .tc-ico { flex: none; width: 9px; height: 9px; color: var(--team-accent, var(--brand)); } /* W-TEAMCHIP2 ①：双人剪影 svg（fill=currentColor 随 accent）替代语义不明色块；W-CHIP3 ②：12→9 与缩档字号协调 */
     #d-session .team-chip .tc-ico circle, #d-session .team-chip .tc-ico path { fill: currentColor; }
-    #d-session .team-chip .tc-run { flex: none; margin-left: 4px; color: var(--st-working); text-shadow: 0 0 2.5px rgba(0,0,0,.85), 0 1px 1.5px rgba(0,0,0,.5); font: 800 10.5px/14px var(--mono); font-variant-numeric: tabular-nums; } /* W-ENGLM2 F：数字位=活跃成员数（WORKING 计数，0 不显；working 色）。1026 用户两轮实锤：黄细字浅底看不清→灯珠式被否（丑）→定稿同色黄字+黑色光晕双勾边（与工作灯同色系，任何底上立起） */
+    #d-session .team-chip .tc-run { flex: none; margin-left: 4px; display: inline-flex; align-items: center; gap: 3px; color: #5A6B7D; font: 700 10.5px/15.5px var(--mono); font-variant-numeric: tabular-nums; } /* 1026 三版定稿：实底徽章/黑晕黄字均被否——黄点(工作灯同语言)+深灰数字，轻盈可读 */
+    #d-session .team-chip .tc-run::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--st-working); flex: none; } /* W-ENGLM2 F：数字位=活跃成员数（WORKING 计数，0 不显；working 色）。1026 用户两轮实锤：黄细字浅底看不清→灯珠式被否（丑）→定稿同色黄字+黑色光晕双勾边（与工作灯同色系，任何底上立起） */
     #d-session .team-chip .tc-dot { flex: none; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; } /* W-ENGLM2 F：未读降级小圆点（保留注意力信号不占数字位；tc-unread 数字角标随语义返工退役） */
     #d-session .team-chip.has-unread { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 55%, transparent); color: var(--text-strong); }
     #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

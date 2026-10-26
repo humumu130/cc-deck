@@ -31,7 +31,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.70";
+      const CONSOLE_VERSION = "0.7.0-test.71";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -3365,6 +3365,24 @@ function connectLan(ctx) {
             + '<span class="tag ' + cls + '">' + label + '</span></div>';
         }).join("");
       }
+      // #272 本源名称编辑行：hostname 默认过长（如 huanglin）——relay-name 文件为唯一
+      // 事实源，改名走命令通道 COMMAND_RELAY_NAME_SET（本机视角=LAN relay，云视角=已配对
+      // 远端 relay——命令随 __ccDeck005MainWs 路由）。成功后 RELAY_NAME_UPDATED 广播即时
+      // 刷新源 chip/切换器（对端云配对源同名跟随）。
+      function relayNameRowHtml(mobile) {
+        const srcCloud = cloudMode || viewSource() === "cloud";
+        const srcCtx = srcCloud ? cloudCtx : ctx;
+        const cur = String(srcCtx.relayName || "");
+        const shown = cur && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(cur) ? cur : "（未连接）";
+        const label = srcCloud ? "云源名称" : "本机 relay 名称";
+        const body = '<strong style="font-size:var(--fs-B)">' + label + '</strong>'
+          + '<p style="margin:2px 0 0;color:var(--dim);font-size:var(--fs-A)">当前 ' + escapeHtml(shown) + ' · 留空保存=回落主机名 · ≤12 字符</p>'
+          + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
+          + '<input class="composer-input" data-relay-name-input type="text" maxlength="12" placeholder="新名称（≤12 字符）" aria-label="源名称" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em;font-size:var(--fs-A)">'
+          + '<button class="primary-btn" data-relay-name-save type="button">保存</button></div>';
+        if (mobile) return '<div class="mobile-task">' + body + '</div>';
+        return '<div class="settings-row"><span class="avatar">🏷</span><div style="flex:1;min-width:0">' + body + '</div></div>';
+      }
       function cloudSettingsRows() {
         const entries = cloudSharedCloudServers();
         let html = "";
@@ -3374,6 +3392,7 @@ function connectLan(ctx) {
           html += sdelServerRows(false);
           html += '<div class="settings-row"><span class="avatar">＋</span><div><strong>添加服务器</strong><p>8 位配对码连接其他电脑的 CC Deck</p></div><button class="row-share" data-settings-add type="button">＋ 添加</button></div>';
         }
+        html += relayNameRowHtml(false); // #272 本源名称（所有形态恒显——本机/云随视角）
         if (cloudUIOn()) {
           const peer = cloudPeerOf(cloudCtx.cfg);
           html += '<div class="settings-row"><span class="avatar">▣</span><div><strong>本页设备 · ' + (ckp ? escapeHtml(devId(ckp.publicKey, "wb")) : "—")
@@ -3398,6 +3417,7 @@ function connectLan(ctx) {
         let html = '<div class="mobile-lane-head"><span>远程源 · ' + entries.length + '</span></div>';
         html += sdelServerRows(true);
         html += '<div class="mobile-task"><button class="primary-btn" data-settings-add type="button" style="font-size:var(--fs-A)">＋ 添加服务器</button></div>';
+        html += relayNameRowHtml(true); // #272 移动端同编辑行
         if (cloudUIOn()) {
           const peer = cloudPeerOf(cloudCtx.cfg);
           if (!peer) {
@@ -3414,7 +3434,7 @@ function connectLan(ctx) {
       // 云态刷新：输入框聚焦中跳过重渲（防打字被 innerHTML 清掉），状态文字下一拍再追
       function renderCloudUI() {
         const active = document.activeElement;
-        const typing = !!(active && active.matches && active.matches("[data-cloud-pair-input]"));
+        const typing = !!(active && active.matches && active.matches("[data-cloud-pair-input], [data-relay-name-input]"));
         if (typing) return;
         document.querySelectorAll("[data-cloud-settings-slot]").forEach((slot) => { slot.innerHTML = cloudSettingsRows(); });
         document.querySelectorAll("[data-cloud-mobile-slot]").forEach((lane) => { lane.innerHTML = cloudMobileLaneInner(); });
@@ -3431,6 +3451,34 @@ function connectLan(ctx) {
         }
         setTimeout(() => { const el = document.querySelector("[data-cloud-pair-input]"); if (el) { try { el.focus(); } catch {} } }, 140);
       }
+      // #272 本源名称保存：命令通道 COMMAND_RELAY_NAME_SET（随视角路由本机 LAN/云配对
+      // 远端），ACK 经帧总线按 command_id 结算（Team.sendCommand 同款）；成功后
+      // RELAY_NAME_UPDATED 广播负责全部 UI 跟随（chip/切换器/会话源标签），此处只结算回执。
+      function submitRelayNameSet() {
+        const input = document.querySelector("[data-relay-name-input]");
+        if (!input) return;
+        const name = String(input.value || "").trim();
+        const ws = window.__ccDeck005MainWs || ctx.ws;
+        if (!ws || ws.readyState !== 1) { showToast("命令通道未连接，改名稍后再试"); return; }
+        const commandId = "rname-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
+        const off = window.__ccDeck005Frames.subscribe((ev) => {
+          if (!ev || ev.kind !== "frame" || !ev.frame) return;
+          const f = ev.frame;
+          if (f.type !== "COMMAND_ACK" || f.command_id !== commandId) return;
+          off(); clearTimeout(timer);
+          if (f.ok === true) {
+            showToast("源名称已更新：" + ((f.data && f.data.relay_name) || name || "（已回落主机名）"));
+            input.value = "";
+          } else showToast("改名失败：" + (f.error || "未知错误"));
+        });
+        const timer = setTimeout(() => { off(); showToast("改名无回执（通道超时或未连接）"); }, 9000);
+        try { ws.send(JSON.stringify({ command_id: commandId, type: "COMMAND_RELAY_NAME_SET", payload: { name }, ts: Date.now() })); }
+        catch (e) { off(); clearTimeout(timer); showToast("命令发送失败（通道已断）"); }
+      }
+      // #272 保存钮委托（不带 cloudUIOn 门：本机形态同样可改名）；回车同提交
+      document.addEventListener("click", (event) => {
+        if (event.target.closest("[data-relay-name-save]")) { submitRelayNameSet(); return; }
+      });
       // 配对表单/重试钮事件（文档级委托：桌面 #d-settings 与移动 #m-settings 同一套 data-* 锚）
       document.addEventListener("click", (event) => {
         if (!cloudUIOn()) return;
@@ -3456,6 +3504,7 @@ function connectLan(ctx) {
         if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return; // IME 守卫（005 既有军规）
         const t = event.target;
         if (t && t.closest && t.closest("[data-cloud-pair-input]")) { event.preventDefault(); submitPairCode(); }
+        if (t && t.closest && t.closest("[data-relay-name-input]")) { event.preventDefault(); submitRelayNameSet(); } // #272 回车提交改名
       });
       // 域脚本只读挂钩（B4 桥 waitingText / 移动端 B7 lane 与列表副文案借道取云态；帧路由零改动）
       // W-WINPAIR-R4：云桥技术状态不再外泄到会话/项目/详情列横幅（用户实测「本机云桥已连接」
@@ -3614,6 +3663,18 @@ function connectLan(ctx) {
         // BOARD 锚定投影/经验规则覆盖透传)与 #236 B 合成 SNAPSHOT 兜底共存:增量按帧源
         // 粒度更新混合态,跨源重叠低域的覆盖由合成重喂自愈(teamvis 已备案取舍)
         if ((viewSource() !== "aggregate" && context === (viewSource() === "cloud" ? cloudCtx : ctx)) || (viewSource() === "aggregate" && message.type !== "SNAPSHOT")) Team.onFrame(context, message);
+        // #272 源名称改名广播（LAN+cloud 全扇出）：本源 chip/切换器/存量会话源标签
+        // 即时跟随——SNAPSHOT.relay_name 虽也现算新名，但等快照要等重连，此处免等
+        if (message.type === "RELAY_NAME_UPDATED" && message.payload && typeof message.payload.relay_name === "string") {
+          const next = message.payload.relay_name;
+          const before = context.relayName;
+          context.relayName = next;
+          for (const s of context.sessions.values()) if (!s.relay_source || s.relay_source === before) s.relay_source = next;
+          if (typeof refreshSourceSwitchers === "function") refreshSourceSwitchers();
+          renderSessionList();
+          renderCloudUI();
+          return;
+        }
         if (message.type !== "SNAPSHOT" || !Array.isArray(message.payload?.sessions)) return;
         context.lastSnapshotPayload = message.payload; // W-WINPAIR-R3：全字段缓存（projects/org_confirms/acceptances/notifications…）
         // W-WINPAIR-R6 件九：每条会话挂源标识（relay_name）——聚合合并后徽章/色块按源渲染的锚
