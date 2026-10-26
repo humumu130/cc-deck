@@ -1451,7 +1451,12 @@
                   };
                   const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
-                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => Number(b.pinned === true) - Number(a.pinned === true) || Number(b.updated_at || 0) - Number(a.updated_at || 0));
+                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency
+                    const pin = Number(b.pinned === true) - Number(a.pinned === true); if (pin) return pin;
+                    const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
+                    if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
+                    return (b.updated_at || 0) - (a.updated_at || 0);
+                  });
                   // FB17：被筛掉的 sid 记账——观察者完整性检查据此放行，防「缺卡→重渲→仍缺」死循环（同 _collapsedIdleIds 口径）；件九搜索并入同一隐藏口径；#240 leader 卡恒进记账
                   const filterHidden = [...S.sessions.values()].filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;

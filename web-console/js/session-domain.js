@@ -685,7 +685,10 @@
                   if (!s || !p || typeof p !== "object") return;
                   for (const k of MERGE_KEYS) if (p[k] !== undefined) s[k] = p[k];
                   if (Object.prototype.hasOwnProperty.call(p, "waiting_request")) s.waiting_request = p.waiting_request ?? null; // 权威自愈：null 即清
-                  s.updated_at = p.updated_at || Date.now();
+                  // #271：缺载不伪造——旧 fallback `|| Date.now()` 会把定位补水/扫描校正等
+                  // 不带 updated_at 的部分帧洗成接收时刻（置灰判定连带失效）；真活动时刻由
+                  // 服务端载荷显式携带，缺载保持既有值
+                  s.updated_at = p.updated_at || s.updated_at;
                   renderMyList();
                   renderSlimDrawer(); // [t-7e0c6189] 第四列成员卡状态/摘要随更新刷新（隐藏态零开销早退）
                   if (sid === S.selected) renderAll();
@@ -1451,8 +1454,13 @@
                   };
                   const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
-                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency
-                    const pin = Number(b.pinned === true) - Number(a.pinned === true); if (pin) return pin;
+                  // #271：saved 休眠卡（已保存待恢复）不享受 pinned 置顶浮置——重启后重建的
+                  // 休眠锚卡恒 pinned=true（ensureLeader 重建硬编码）+时间戳取锚写入时刻，
+                  // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
+                  // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
+                  const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
+                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                    const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
                     return (b.updated_at || 0) - (a.updated_at || 0);

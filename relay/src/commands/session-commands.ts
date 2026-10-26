@@ -477,6 +477,7 @@ export function createSessionCommands(mgr: any) {
             stats: { ...s.state.stats },
             title,
             title_locked: true,
+            updated_at: s.state.updated_at, // #271：帧完整性（改名≠活动）
           });
           return { command_id: cmd.command_id, ok: true };
     },

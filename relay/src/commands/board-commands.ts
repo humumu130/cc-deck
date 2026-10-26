@@ -179,6 +179,7 @@ export function createBoardCommands(mgr: any) {
             stats: { ...s.state.stats },
             pinned,
             saved: !!s.state.saved,
+            updated_at: s.state.updated_at, // #271：帧完整性（pin 是 UI 态≠活动）
           });
           return { command_id: cmd.command_id, ok: true };
     },
