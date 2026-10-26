@@ -1657,7 +1657,7 @@ export class SessionManager {
 
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
-  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0, opts?: { engine?: SessionEngine; model?: string; provider?: string }): SessionState {
+  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0, opts?: { engine?: SessionEngine; model?: string; provider?: string; /** #271：新卡真实最后活动时刻（转录 profile.updatedAt）——缺省 now；不带则 boot 收编的久休会话被洗成启动时刻 */ updatedAt?: number }): SessionState {
     const existing = this.sessions.get(id);
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
@@ -1688,7 +1688,7 @@ export class SessionManager {
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "接入中",
       started_at: startedAt || Date.now(),
-      updated_at: Date.now(),
+      updated_at: opts?.updatedAt || Date.now(), // #271：转录收编新卡带真实最后活动，防 boot 洗活
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
@@ -1736,7 +1736,12 @@ export class SessionManager {
     return this.sessions.get(id)?.state;
   }
 
-  setExternalStatus(id: string, status: SessionState["status"], summary: string, turnStartedAt?: number): void {
+  // #271 重启洗活根修：at = 活动时刻（缺省判定时刻）。boot 引擎扫描（adoptEngineProfiles）
+  // 的状态/摘要校正传 profile.updatedAt（转录真实最后活动）——原无条件 Date.now() 把久未
+  // 活跃会话全部洗成启动时刻（1026 用户实锤「全员 14:25」：回放态摘要与扫描算出的摘要
+  // 常态不等，summary 失配即触发）。载荷恒带 updated_at（#157 口径）：缺载帧重放回落
+  // 信封 ts 会把洗活固化进下次重启，且双端客户端 fallback 会伪造接收时刻。
+  setExternalStatus(id: string, status: SessionState["status"], summary: string, turnStartedAt?: number, at?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
     const changed = s.state.status !== status;
@@ -1745,7 +1750,7 @@ export class SessionManager {
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = undefined;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,
@@ -1753,6 +1758,7 @@ export class SessionManager {
         stats: { ...s.state.stats },
         ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
         historical: !!s.state.historical,
+        updated_at: s.state.updated_at,
       });
     }
   }
@@ -1778,6 +1784,7 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       compacting: on,
+      updated_at: s.state.updated_at, // #271：帧完整性（缺载帧重放/客户端 fallback 双洗面）
     });
   }
 
@@ -2482,6 +2489,9 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       cli_pid: pid,
+      // #271：定位补水≠会话活动——载荷带既有 updated_at（缺载帧重放回落信封 ts 会把
+      // boot 补水时刻固化成活跃时刻 + 双端客户端 fallback 伪造接收时刻，双洗）
+      updated_at: s.state.updated_at,
     });
   }
 

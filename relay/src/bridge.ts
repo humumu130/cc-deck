@@ -490,7 +490,9 @@ export class Bridge {
         profile.prompt,
         profile.sessionId,
         profile.startedAt,
-        { engine: spec.engine, model: profile.model, provider: profile.provider },
+        // #271：新卡带转录真实最后活动——缺省 Date.now() 会把 boot 收编的久休会话洗成
+        // 启动时刻（1026「全员 14:25」/「6+ 空 Codex 复活」的建卡半边）
+        { engine: spec.engine, model: profile.model, provider: profile.provider, updatedAt: profile.updatedAt },
       );
       if (existing) {
         this.mgr.updateExternalProfile(id, {
@@ -517,7 +519,10 @@ export class Bridge {
       if (desiredStatus === "DONE" && state.status !== "DONE") {
         this.streamDeltaStop(id); this.mgr.finishExternal(id, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
       } else if (state.status !== desiredStatus || state.action_summary !== summary) {
-        this.mgr.setExternalStatus(id, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : undefined);
+        // #271：扫描校正的活动时刻=转录真实最后活动（profile.updatedAt）——原缺省
+        // Date.now() 在 boot 扫描时把回放态与扫描摘要失配的会话整批洗成启动时刻
+        //（「全员 14:25」的既有卡半边；summary 失配是常态不是异常）
+        this.mgr.setExternalStatus(id, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : undefined, profile.updatedAt);
         if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id);
       }
       const historical = !active && inferredDead;

@@ -2546,9 +2546,11 @@ class RelayStore {
         if (msg.payload.engine !== undefined) s.engine = msg.payload.engine;
         // #157 最后活跃时间优先采信载荷显式值：relay 重启后的水合帧（任务清单/用量/
         // 输出物回放重建）不是真实活动，信 envelope ts 会把重启时刻当活动时刻（全表
-        // 不置灰根因）。旧 relay 不带该字段 → 回落 msg.ts，行为不变
+        // 不置灰根因）。#271 收紧：缺载回落**既有值**而非 msg.ts——定位补水/扫描校正等
+        // 部分帧缺 updated_at 时，接收时刻被伪造为活动时刻（置灰失效同根）；本批起
+        // relay 侧全部 SESSION_UPDATED 载荷恒带该字段，缺载只剩旧 relay 窗，保旧值零洗
         const pu = (msg.payload as { updated_at?: number }).updated_at;
-        s.updated_at = typeof pu === "number" && pu > 0 ? pu : msg.ts;
+        if (typeof pu === "number" && pu > 0) s.updated_at = pu;
         break;
       }
       case "SESSION_HEARTBEAT": {
