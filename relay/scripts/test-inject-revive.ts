@@ -7,11 +7,14 @@
 //   ④ 注入失败保留重投：1~2 连败队列+pending 保留落盘；3 连败转显式失败终态
 //   ⑤ 重启回种：queue 文件 → 新 Bridge 回种 inputQueue+pending → hook 重连自动补投
 //   ⑥ scheduleSubmitEnter：注入成功后 ~300ms 补发纯回车（提交快路径）
-import { rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+//   ⑪ #257 spawn 前活进程探测闸：a 注册空窗 boot 即时回读（进程扫描补定位）；
+//      b 活进程拦 fork（降级预检闸重定位转注入重试）；c 死进程放行 fork（降级照旧）；
+//      d 面板误标校准（活进程在场不标「无 hook 会话」）
+import { rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -69,6 +72,7 @@ writeFileSync(
     "const args = process.argv.slice(2);",
     'appendFileSync(process.env.CCR_INJECT_LOG, JSON.stringify(args) + "\\n");',
     'if (args.some((a) => String(a).includes("FORCE_FAIL"))) process.exit(1);',
+    "if (process.env.CCR_GATE_FAIL_PID && String(process.env.CCR_GATE_FAIL_PID).split(\",\").includes(args[0])) process.exit(1);",
     'if (args[1] === "--peek") {',
     '  // 防抢发守门读屏：框内 = CCR_FAKE_BOX 指定的文本（守门判定 enter 需框内只有已知文本）；',
     '  // 未设 = 快照不可用（exit 1 → capture null → unknown，⑨a 的判定源）；',
@@ -374,6 +378,150 @@ const sessionLogText = (id: string) =>
     }, 6000);
     assert(true, "⑨c given_up 后新消息补偿链存活（提交回车照发）");
     delete process.env.CCR_FAKE_BOX;
+  }
+
+  // ---------- ⑪ #257 spawn 前活进程探测闸（双源）+ 注册空窗即时回读 + 面板误标校准 ----------
+  {
+    // 真子进程扮演「活恢复进程」：node 宿主过 VALID_TARGET，argv 带 --resume <uuid sid>
+    //（脚本文件名含 claude，过扫描的 /claude/i 防误配护栏）——真 ps、真探测、假注入。
+    // 注意不能用 -e 内联：node 会把 --resume 当自身选项吞掉（bad option 秒退，首版实测）。
+    // 自毁定时器（#257-F7）：断言失败/测试被杀时子进程最长 120s 自行退场，不泄漏
+    const STANDIN = join(DATA, "cc-deck-gate-claude-standin.mjs");
+    writeFileSync(STANDIN, "setTimeout(() => process.exit(0), 120000);\n");
+    const sleepChild = (sid: string) => {
+      const c = spawn(process.execPath, [STANDIN, "--resume", sid], { stdio: "ignore" });
+      c.unref();
+      return c;
+    };
+    const mkSid = () => randomUUID();
+    const osaText = () => {
+      try {
+        return readFileSync(OSA_LOG, "utf-8");
+      } catch {
+        return "";
+      }
+    };
+
+    // (a) 注册空窗即时回读（件二）：会话无 pid（重启丢定位形态）+ 活恢复进程在进程表
+    //     → 新 Bridge boot 即扫描补定位（旧链路要等进程自己动起来回注册，实测空窗 9 分钟）
+    const sidBoot = mkSid();
+    const idBoot = "ext-" + sidBoot;
+    const sb = mgr.ensureExternal(idBoot, "/tmp/tir", "空窗回读验证", sidBoot);
+    sb.status = "DONE";
+    sb.historical = true; // 重启收养误标形态一并验证翻案
+    const cBoot = sleepChild(sidBoot);
+    await wait(500); // 等子进程进 ps 快照
+    const bGate = new Bridge(bus, mgr, { gateTools: new Set(["Bash"]), hasClients: () => false, dataDir: DATA });
+    assert(sb.cli_pid === cBoot.pid, `⑪a 注册空窗即时回读：boot 进程扫描定位活恢复进程（cli_pid=${sb.cli_pid} child=${cBoot.pid}）`);
+    assert(!sb.historical, "⑪a 活定位连带翻案 historical（重启误标自愈）");
+    assert(sessionLogText(idBoot).includes("进程扫描恢复定位"), "⑪a 补定位留痕落人话日志");
+    bGate.close();
+    cBoot.kill();
+
+    // (b) 活进程拦 fork（件一·降级预检闸）：WORKING 会话 + 坏定位 3 连败 + 活真身（≠失败
+    //     pid）→ 不开新终端标签，重定位转注入重试，消息全数经注入器送达真身 pid
+    const sidGate = mkSid();
+    const idGate = "ext-" + sidGate;
+    const sg = mgr.ensureExternal(idGate, "/tmp/tir", "闸门验证", sidGate);
+    sg.status = "WORKING"; // WORKING 不走 DONE 抢救闸，失败账才能攒满 3（1026 PM 分身事故真实形态）
+    const cGate = sleepChild(sidGate);
+    await wait(500);
+    process.env.CCR_GATE_FAIL_PID = "424242"; // 假注入器按目标 pid 失败：坏定位必败、真身必成
+    const gateMsgs = ["闸门消息一", "闸门消息二", "闸门消息三"];
+    for (const m of gateMsgs) {
+      mgr.setExternalCliPid(idGate, 424242); // 模拟坏定位回挂（失败即清，与生产分诊一致）
+      bridge.extInput(idGate, m);
+      await wait(800); // 出队→注入失败→onInjectFail 记账
+    }
+    await waitLog(() => sessionLogText(idGate).includes("不开新终端标签"), 8000);
+    assert(sessionLogText(idGate).includes("已重定位转注入重试"), "⑪b 降级预检闸留痕：重定位转注入重试（拦 fork）");
+    assert(!osaText().includes(sidGate), "⑪b 活进程在场：resumeSession 未被调起（无该会话 claude --resume，分身零 fork）");
+    // 闸门日志先落、重投在其后（0ms 定时器 + 逐条 400ms 节奏）：等三条全部送达再断言
+    await waitLog(() => {
+      const gl = fakeLog().filter((a) => a[0] === String(cGate.pid));
+      return gateMsgs.every((m) => gl.some((a) => a.some((x) => String(x).includes(m))));
+    }, 8000);
+    const gateLog = fakeLog().filter((a) => a[0] === String(cGate.pid));
+    assert(gateMsgs.every((m) => gateLog.some((a) => a.some((x) => String(x).includes(m)))), `⑪b 三条消息全数经注入器送达真身 pid（实测 ${gateLog.length} 笔）`);
+    assert(sg.cli_pid === cGate.pid, "⑪b 真身 pid 已注册回会话定位");
+    await waitLog(() => {
+      try {
+        const d = JSON.parse(readFileSync(qfile, "utf-8")) as Record<string, unknown[]>;
+        return (d[idGate]?.length ?? 0) === 0;
+      } catch {
+        return false;
+      }
+    }, 6000);
+    assert(true, "⑪b 重试成功后落盘队列清空（消息不滞留不丢失）");
+    cGate.kill();
+
+    // (b2) #257-F1 反面覆盖：闸门转重试后新定位同样不可注入（nohup 无 tty 形态）——
+    //      重试首败即凑满 3 败再降级 fork，无「转重试失败后缺自触发器」滞留窗
+    const sidG2 = mkSid();
+    const idG2 = "ext-" + sidG2;
+    const sg2 = mgr.ensureExternal(idG2, "/tmp/tir", "闸门反面验证", sidG2);
+    sg2.status = "WORKING";
+    const cG2 = sleepChild(sidG2);
+    await wait(500);
+    process.env.CCR_GATE_FAIL_PID = `424242,${cG2.pid}`; // 坏定位与「真身」都不可注入
+    for (const m of ["反面消息一", "反面消息二", "反面消息三"]) {
+      mgr.setExternalCliPid(idG2, 424242);
+      bridge.extInput(idG2, m);
+      await wait(800);
+    }
+    await waitLog(() => osaText().includes(sidG2), 10000);
+    assert(sessionLogText(idG2).includes("不开新终端标签"), "⑪b2 闸门先拦（重定位转注入重试留痕在场）");
+    assert(osaText().includes("claude --resume") && osaText().includes(sidG2), "⑪b2 重试首败即降级 fork（转重试失败不滞留，最终走恢复投递）");
+    assert(sessionLogText(idG2).includes("降级:回合末"), "⑪b2 降级汇总横幅收口（闭环无残留）");
+    cG2.kill();
+
+    // (c) 死进程放行 fork：无活恢复进程 + 坏定位 3 连败 → 降级恢复投递照旧（闸门不放行一切）
+    const sidDead = mkSid();
+    const idDead = "ext-" + sidDead;
+    const sd = mgr.ensureExternal(idDead, "/tmp/tir", "死进程放行验证", sidDead);
+    sd.status = "WORKING";
+    for (const m of ["死腿消息一", "死腿消息二", "死腿消息三"]) {
+      mgr.setExternalCliPid(idDead, 424242);
+      bridge.extInput(idDead, m);
+      await wait(800);
+    }
+    await waitLog(() => osaText().includes(sidDead), 8000);
+    assert(osaText().includes("claude --resume") && osaText().includes(sidDead), "⑪c 无活进程：降级恢复投递照旧 fork（osascript 真调起 claude --resume）");
+    assert(sessionLogText(idDead).includes("降级:回合末"), "⑪c 降级汇总横幅照旧（#142 语义不受闸门侵蚀）");
+    delete process.env.CCR_GATE_FAIL_PID;
+
+    // (d) 面板误标校准（件三）：转录增长 + hook 静默>15s 时，活进程在场 → 不标「无 hook 会话」
+    const labelTick = async (idLab: string, f: string, wantAlive: boolean) => {
+      const stl = mgr.getExternal(idLab)!;
+      writeFileSync(f, JSON.stringify({ type: "user", message: { content: "首轮" }, timestamp: new Date().toISOString() }) + "\n");
+      // hook 时钟回拨到 60s 前（否则 ?? 0 兜底把「从无事件」误判 hookRecent，标签路径不触发）
+      ((bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt).set(idLab, Date.now() - 60_000);
+      ((bridge as unknown as { transcriptPaths: Map<string, string> }).transcriptPaths).set(idLab, f);
+      // 轮询定时器是惰性启动（首个 hook 事件/孤儿收养才点）：测试直挂路径后手动点闸
+      ((bridge as unknown as { ensureQueuePoll: () => void }).ensureQueuePoll)();
+      await wait(3600); // 首见 = firstRead（只记偏移不触发）
+      appendFileSync(f, JSON.stringify({ type: "assistant", message: { content: "增长" }, timestamp: new Date().toISOString() }) + "\n");
+      await waitLog(() => /转录活跃/.test(String(stl.action_summary ?? "")), 9000);
+      if (wantAlive) {
+        assert(String(stl.action_summary).includes("进程在，hook 事件未达"), `⑪d 活进程在场：文案=「进程在，hook 事件未达」（实测 ${stl.action_summary}）`);
+        assert(!((bridge as unknown as { noHookIds: Set<string> }).noHookIds).has(idLab), "⑪d 活进程会话不进 noHookIds（Stop 权威收尾语义保持）");
+      } else {
+        assert(String(stl.action_summary).includes("转录活跃（无 hook 会话）"), `⑪d 死定位对照：原文案保持（实测 ${stl.action_summary}）`);
+        assert(((bridge as unknown as { noHookIds: Set<string> }).noHookIds).has(idLab), "⑪d 死定位对照：照旧进 noHookIds（真无 hook 启发式不受影响）");
+      }
+    };
+    const idLab1 = "ext-" + mkSid();
+    const sl1 = mgr.ensureExternal(idLab1, "/tmp/tir", "误标校准活", idLab1.slice(4));
+    sl1.status = "DONE";
+    mgr.setExternalCliPid(idLab1, process.pid); // 本测试进程恒活（node 宿主）
+    await labelTick(idLab1, join(DATA, "t-label-alive.jsonl"), true);
+    const idLab2 = "ext-" + mkSid();
+    const sl2 = mgr.ensureExternal(idLab2, "/tmp/tir", "误标校准死", idLab2.slice(4));
+    sl2.status = "DONE";
+    mgr.setExternalCliPid(idLab2, 424242); // 死定位（本机无此进程）
+    await labelTick(idLab2, join(DATA, "t-label-dead.jsonl"), false);
+    void sl1;
+    void sl2;
   }
 
   // ⑦ W-INJECT 问题④：历史回滚根治——LAN 快照宽窗 vs 云端安全默认（#408 口径不动）
