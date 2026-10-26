@@ -44,6 +44,8 @@ import {
   zaiBridgePrefix,
   splitZaiText,
 } from "./summarizer.js";
+// #273 managed AskUserQuestion 挂起窗口：超时放行防死锁（passcomb 84min 实锤）+ 迟到作答转注入
+import { AskUserHold, askHoldMs } from "./ask-user-hold.js";
 
 // 会话子进程环境（M0，2026-09-18）：relay 守护进程常由 Finder/launchd/Tauri 拉起，
 // PATH 仅 /usr/bin:/bin:/usr/sbin:/sbin——会话里 hook 报 node: command not found、
@@ -305,7 +307,7 @@ export interface AgentCallbacks {
   onStatusChange(status: SessionStatus, actionSummary: string): void;
   onWaiting(p: WaitingPayload): void;
   // superseded = CLI 已自行越过权限门（新输入打断/回合推进），relay 清扫孤儿 pending 补发
-  onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer" | "superseded", by?: string): void;
+  onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer" | "timeout" | "superseded", by?: string): void;
   onStats(stats: FileChangeStats): void;
   // #35 输出物：Edit/Write 类工具单条产出（tool_use/tool_result 配对后回调；
   // 可选——非会话级实现方（标题生成等）无需关心）
@@ -390,6 +392,8 @@ export class AgentSession {
   private pendingFileUses = new Map<string, { tool: string; path: string }>();
   private queue = new AsyncQueue<SDKUserMessage>();
   private pending = new Map<string, PendingPermission>();
+  // #273 AskUserQuestion 挂起窗口账本（超时定时器 + 迟到可注入窗口）
+  private readonly askHold = new AskUserHold();
   // #212 允许并记住：权限请求先查规则，命中直接放行（不下发审批卡）
   private readonly rules: AllowRuleStore | undefined;
   private stopping = false;
@@ -981,6 +985,32 @@ export class AgentSession {
       ...(remember ? { remember } : {}),
     });
     this.cb.onLog("system", questions.length ? summary : `等待确认: ${summary}`);
+    // #273 managed 提问挂起窗口：无本地选择器可放行（external 走 questionHoldMs 90s
+    // 放行本地选择器，managed 没有），超时 = deny-message 放行防死锁；迟到作答在
+    // AskUserHold 迟到窗内转 sendMessage 注入（external askFallback 同语义）。
+    if (questions.length) {
+      const holdMs = askHoldMs();
+      const rid = requestId;
+      this.askHold.arm(
+        rid,
+        questions,
+        () => {
+          const p = this.pending.get(rid);
+          if (!p) return; // 已决议（allow/deny/answer 先到）：迟到触发 noop
+          this.cb.onLog(
+            "system",
+            `提问 ${questions.map((q) => q.header).join("/")} ${holdMs >= 60_000 ? `${Math.round(holdMs / 60_000)} 分钟` : `${Math.round(holdMs / 1000)} 秒`}未作答，已超时放行（模型将不带用户选择继续）`,
+          );
+          p.resolve({
+            behavior: "deny",
+            message: "用户未在超时窗口内作答（远程未响应）。请按最稳妥的默认方案继续执行，不要重复提问、不要停下来等待。",
+            interrupt: false,
+          });
+          this.cb.onWaitingResolved(rid, "timeout", "relay");
+        },
+        holdMs,
+      );
+    }
     return new Promise<PermissionResult>((resolve) => {
       this.pending.set(requestId, {
         tool: toolName,
@@ -1039,6 +1069,7 @@ export class AgentSession {
   allow(requestId: string, by?: string, rememberScope?: "session" | "global"): boolean {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    this.askHold.settle(requestId); // #273 真决议收口：撤提问挂起窗（迟到窗一并作废）
     // #212 允许并记住：落规则（pattern 由 pending 里的 tool+input 重新推导——
     // 与下发卡片时的 remember 同源，危险形态此处自然得 null 不落）
     if (rememberScope && this.rules) {
@@ -1053,15 +1084,30 @@ export class AgentSession {
   deny(requestId: string, reason?: string, by?: string): boolean {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    this.askHold.settle(requestId); // #273 真决议收口：撤提问挂起窗（迟到窗一并作废）
     p.resolve({ behavior: "deny", message: reason ?? "用户拒绝", interrupt: false });
     this.cb.onWaitingResolved(requestId, "deny", by);
     return true;
   }
 
-  // AskUserQuestion 作答：deny-message 机制回传答案（见 summarizer.buildAnswerMessage 注释）
+  // AskUserQuestion 作答：deny-message 机制回传答案（见 summarizer.buildAnswerMessage 注释）。
+  // #273 迟到作答：pending 已被超时放行（decision=timeout）但仍在 AskUserHold 迟到窗内
+  // 的作答，转 sendMessage 注入送达（external askFallback「晚答仍可达」同语义）——
+  // 此时 CLI 已按默认方案跑下去，注入让用户选择在下一回合补位生效。
   answer(requestId: string, answers: string[], by?: string): boolean {
     const p = this.pending.get(requestId);
-    if (!p) return false;
+    if (!p) {
+      const late = this.askHold.injectable(requestId);
+      if (late && !this.ended) {
+        // ended 守卫：流已关（stop/进程退出）时 AsyncQueue.push 会 throw，迟到作答
+        // 无处注入——如实回 false 让 COMMAND_ANSWER 报「已失效」，不炸命令面
+        this.sendMessage(`【AskUserQuestion 迟到作答】${buildAnswerMessage(late, answers)}`);
+        this.cb.onLog("system", `迟到作答已转注入：${answers.join(" / ")}`);
+        return true;
+      }
+      return false;
+    }
+    this.askHold.settle(requestId);
     p.resolve({ behavior: "deny", message: buildAnswerMessage(parseAskQuestions(p.input), answers), interrupt: false });
     this.cb.onWaitingResolved(requestId, "answer", by);
     return true;
@@ -1080,6 +1126,7 @@ export class AgentSession {
   private sweepStalePending(): void {
     for (const [id, p] of [...this.pending]) {
       this.pending.delete(id);
+      this.askHold.settle(id); // #273 CLI 已越过该门：挂起窗与迟到窗一并收口
       p.resolve({ behavior: "deny", message: "请求已失效（CLI 已继续）", interrupt: false });
       this.cb.onWaitingResolved(id, "superseded");
     }
@@ -1101,6 +1148,7 @@ export class AgentSession {
   async stop(): Promise<void> {
     this.stopping = true;
     this.ended = true;
+    this.askHold.clear(); // #273 提问挂起窗全量收口（denyAllPending 逐条 settle 亦可，clear 兜底）
     this.denyAllPending("会话被停止");
     // deny 的 control 响应还没写完就立刻 interrupt，实测会把 CLI 的权限控制通道打坏
     // （resume 后所有门控工具 "AbortError: Stream closed" 六连挂）。留 250ms 让
