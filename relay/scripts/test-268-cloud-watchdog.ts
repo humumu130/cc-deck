@@ -218,7 +218,14 @@ function buildHarness(ctx: Record<string, unknown>, wsMode: "hang" | "zombie" | 
     showToast: () => {}, loadCloudIdentity: () => {}, devId: () => "wb-mock", ckp: { publicKey: "pk" },
     serverBridgeToken: () => "tok", pendingPairOf: () => null,
     sendPairReq: () => {}, startPairWatchdog: () => {}, discoverRelay: () => {},
-    onCloudText: () => {}, cloudUuid: () => "sid-" + (++uuidN),
+    // onCloudText 拟真（#268 复发 A' 批起）：可解析 JSON 帧 = _lastFrameAt/lastPong 刷新
+    //（虚拟钟时刻！）+ 通道看门狗退役——真 onCloudTextRaw 的三个关键副作用；密文帧业务面
+    // 本测试不涉。注意：必须用 clock.now——裸 Date.now() 是真时钟，虚拟钟下会成「未来帧」
+    // 让看门狗「近期有帧」永久误判（P3 调试实录）
+    onCloudText: (c: Record<string, unknown>, text: string) => {
+      try { JSON.parse(text); c._lastFrameAt = clock.now; c.lastPong = clock.now; (late("stopChannelWatchdog") as (x: unknown) => void)(c); } catch {}
+    },
+    cloudUuid: () => "sid-" + (++uuidN),
     cloudPeerOf: late("cloudPeerOf"), // Inner/startPollTransport 都要判定 peer 就绪（晚绑定：env 先建后链）
     syncTeamBind: () => {}, renderCloudUI: () => {},
     setConn: (...a: unknown[]) => { setConnCalls.push(a); },
@@ -265,7 +272,8 @@ function buildHarness(ctx: Record<string, unknown>, wsMode: "hang" | "zombie" | 
   });
   env.stopCloudPing = link(stopPingBlock, ["ctx"], baseDeps);
   env.startCloudPing = link(pingBlock, ["ctx"], {
-    ...baseDeps, sendCloud, stopCloudPing: late("stopCloudPing"), cloudSetConn: late("cloudSetConn"),
+    ...baseDeps, sendCloud, stopCloudPing: late("stopCloudPing"), startChannelWatchdog: late("startChannelWatchdog"),
+    cloudSetConn: late("cloudSetConn"),
     cloudDiagNote: late("cloudDiagNote"), killWsTransport: late("killWsTransport"),
     scheduleCloudReconnect: late("scheduleCloudReconnect"),
   });
@@ -274,6 +282,7 @@ function buildHarness(ctx: Record<string, unknown>, wsMode: "hang" | "zombie" | 
     cloudDiagNote: late("cloudDiagNote"), cloudSetConn: late("cloudSetConn"),
     killWsTransport: late("killWsTransport"), scheduleCloudReconnect: late("scheduleCloudReconnect"),
   });
+  env.onCloudText = baseDeps.onCloudText; // P 组直驱用（w.onmessage 手工接线）
   env.pollLoop = link(pollLoopBlock, ["ctx"], {
     ...baseDeps, fetch: fetchMock, cloudSetConn: late("cloudSetConn"), cloudDiagNote: late("cloudDiagNote"),
     connectCloudFor: late("connectCloudFor"), scheduleCloudReconnect: late("scheduleCloudReconnect"),
@@ -364,6 +373,73 @@ async function tick(n = 8) { for (let i = 0; i < n; i++) await Promise.resolve()
   const note = h.logs.find((l) => l.includes("心跳判死"));
   ok(!!note, "Z4 心跳判死 console 显形");
   ok(w.closeCalled >= 1, "Z4 收尸口对僵尸 socket 调过 close（best-effort）");
+}
+
+// ---------- P 组：#268 复发 A' 根治——稳态半开判死提速（ping 发出点武装看门狗） ----------
+// 背景：公司 TLS 代理掐 ws 下行（上行通）→ 稳态只剩 45s 心跳判死 → 恢复窗 60s >> UI ack
+// 阈值 8s → 窗内命令全报「未确认」但实际送达（1026 PM 实锤）。P1-a：ping 后 13s 无帧即判死。
+// P1 稳态半开判死时刻：ping 发出 +13s（不再等 45s 心跳）
+{
+  const ctx = mkCtx();
+  const { h, env } = buildHarness(ctx, "zombie");
+  const w = new FakeWS("wss://b/cloud?token=tok&dev=wb-mock");
+  w.readyState = 1;
+  ctx.ws = w;
+  ctx.status = "online";
+  (env.startCloudPing as (c: unknown) => void)(ctx);
+  h.clock.advance(19_999);
+  ok(ctx.wsFails === 0 && ctx.status === "online", "P1 ping 前（<20s）不打扰");
+  h.clock.advance(1); // t=20s：ping #1 发出 + 看门狗武装（半开起点：pong 永不回）
+  ok(w.sent.some((s) => s.includes('"ping"')), "P1 ping 已发出");
+  ok(!!ctx.helloTimer, "P1 ping 发出点武装通道看门狗（helloTimer 在岗）");
+  h.clock.advance(13_000); // t=33s：pong 无回 → 判死
+  ok(ctx.ws === null && Number(ctx.wsFails) === 1, "P1 稳态半开 ping 后 13s 即判死（修复前 45s 心跳——恢复窗主导项拔除）");
+  ok(ctx.status === "connecting" && Number(ctx.retryAt) > h.clock.now, "P1 判死后收尸+重连直排");
+  const note = h.logs.find((l) => l.includes("心跳判死") || l.includes("通道看门狗判死"));
+  ok(!!note, "P1 判死 verdict console 显形");
+}
+// P2 安静系统 3 周期零误判：pong 秒级回 → 看门狗即退役，健康通道不被误杀
+{
+  const ctx = mkCtx();
+  const { h, env } = buildHarness(ctx, "zombie");
+  const w = new FakeWS("wss://b/cloud?token=tok&dev=wb-mock");
+  w.readyState = 1;
+  ctx.ws = w;
+  ctx.status = "online";
+  w.onmessage = (ev: { data: string }) => (env.onCloudText as (c: unknown, t: string) => void)(ctx, ev.data);
+  (env.startCloudPing as (c: unknown) => void)(ctx);
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    h.clock.advance(20_000); // 精确落在 ping 时刻：tick 触发（ping 发出 + 武装）
+    ok(w.sent.filter((s) => s.includes('"ping"')).length === cycle, "P2 第 " + cycle + " 周期 ping 发出");
+    if (cycle === 2) h.clock.advance(5_000); // 第 2 周期模拟 pong 慢 5s（仍在 13s 窗内，考验退役路径）
+    w.simulateMessage('{"pong":' + cycle + "}"); // pong 到：_lastFrameAt 刷新 + 看门狗退役
+    ok(ctx.status === "online" && Number(ctx.wsFails) === 0 && ctx.ws === w && !ctx.helloTimer,
+      "P2 第 " + cycle + " 周期零误判（pong 到→看门狗退役 helloTimer=0；安静通道不被 ping 武装误杀）");
+  }
+}
+// P3 全链：健康连接→半开（ping 无回）→判死×2→poll 接管，恢复窗 ≤35s（修复前 60s）
+{
+  const ctx = mkCtx();
+  const { h, env } = buildHarness(ctx, "zombie");
+  (env.connectCloudFor as (c: unknown, m: boolean) => void)(ctx, false);
+  FakeWS.created[0].simulateOpen();
+  ok(ctx.status === "online", "P3 健康期建连 online");
+  FakeWS.created[0].simulateMessage('{"type":"SNAPSHOT_LIKE"}'); // hello 应答帧退役初连看门狗（稳态起点）
+  h.clock.advance(20_000); // 稳态 ping #1 发出——此刻起半开（pong 永不回）
+  const tBlack = h.clock.now;
+  ok(!!ctx.helloTimer, "P3 半开起点：ping 已发+看门狗在岗");
+  h.clock.advance(13_000); // 判死 #1（wsFails=1）→ 3s 重连
+  ok(Number(ctx.wsFails) === 1, "P3 判死 #1（半开后 13s）");
+  h.clock.advance(3_000); // 重连 → ws #2
+  FakeWS.created[1].simulateOpen(); // 半开复现（onopen 达、回包死）
+  h.clock.advance(13_000); // 判死 #2 → wsFails=2 → poll
+  ok(ctx.transport === "poll", "P3 二次判死降级 poll");
+  h.clock.advance(3_000); // poll 起跑
+  await tick();
+  const pollGets = h.fetchCalls.filter((f) => String(f.url).includes("/cloud-poll") && !String(f.url).includes("POST"));
+  ok(pollGets.length >= 1, "P3 poll 接管（/cloud-poll GET 发出）");
+  const recovery = h.clock.now - tBlack;
+  ok(recovery <= 35_000, "P3 半开→poll 接管 ≤35s（实测 " + Math.round(recovery / 1000) + "s；修复前 60s——UI 8s 阈值误报窗大幅收窄）");
 }
 
 // ---------- H1 握手被拒（onclose 先于 open）：立即降级 poll ----------
@@ -494,6 +570,8 @@ ok(bodyOf(chanWdBlock).includes("killWsTransport(ctx)") && bodyOf(chanWdBlock).i
 ok(!bodyOf(chanWdBlock).includes("onclose → scheduleCloudReconnect"), "S1 旧注释「onclose → scheduleCloudReconnect」已退役");
 ok(bodyOf(pingBlock).includes("killWsTransport(ctx)") && bodyOf(pingBlock).includes("scheduleCloudReconnect(ctx)"),
   "S2 心跳判死路径同口径（收尸+直排重连）");
+ok(bodyOf(pingBlock).includes("startChannelWatchdog(ctx)"),
+  "S6 ping 发出点武装通道看门狗（#268 复发 A' P1-a 防回退锁——稳态半开判死 45s→13s 的本体）");
 ok(bodyOf(helloBlock).includes("killWsTransport(ctx)"), "S3 hello 发送失败路径收尸（不赌 onclose）");
 {
   const visZone = sd.slice(sd.indexOf("document.addEventListener(\"visibilitychange\""), sd.indexOf("function classifyCloudFail"));
