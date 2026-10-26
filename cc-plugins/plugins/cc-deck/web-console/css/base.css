@@ -565,6 +565,8 @@
     #d-session .head-sub .head-ctx-meter .ctx-mini-band i { height: 4px; }
     #d-session .head-sub [data-sub-time] { font-size: var(--fs-C); }
     #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: var(--srow-badge-size); line-height: 1; height: calc(var(--srow-badge-size) * 1.22); border-radius: 999px; border: 0; } /* W-CHIP3④：与列表卡徽章同档全对齐（computed 实测卡=10.5px 字号/1px 6px pad/999px 全圆/无边框/盒高 12.8=字号×1.22——head 文字匿名行盒 Chrome 怪癖恒 17，故锁高随档缩放）——旧「fs-C+0 6px」独立胶囊档退役；#248 图标 10.8/gap4 沿用 */
+    #d-session .workspace-title-row .identity-cluster .team-chip { line-height: 1; height: calc(var(--srow-badge-size) * 1.22); } /* 1026 用户实锤 head 团队 chip（行高16≈18px 盒）与引擎徽章（锁高≈12.8px）差≈4px——head 场景同档对齐（padding 沿用 .team-chip 基础规则） */
+    #d-session .srow-r3 .cwd-cap .icon-inline { width: 10px; height: 10px; vertical-align: -1px; } /* 1026 用户口径：📁 黄色 emoji 换灰线稿 svg（继承 cwd-cap 的 --dim 灰），16px 通用档在 9.5px 字号胶囊里过大，缩至 10px */
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
     #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
     #d-session #session-extmode-capsule[data-ext-on] .cap-dot { background: var(--ok); box-shadow: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); } /* 开态绿点示 approvals 正在推送 */
