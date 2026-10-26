@@ -45,6 +45,26 @@ function withRelaySource(sessions: ReturnType<SessionManager["snapshot"]>, relay
   return sessions.map((s) => ({ ...s, relay_source: s.relay_source ?? relayName }));
 }
 
+/** #265 增量续传对账帧（瞬态）：last_seq 快路径只补漏事件，不建「哪些会话还活着」
+ * 的权威清单——relay 侧已消失且无 SESSION_DELETED 事件的会话（重启历史回放未复活/
+ * 外部 GC）在客户端增量态永久滞留（1026 用户 16 张死卡根因，PM 实测快照 12 活、
+ * 16 死 sid 零命中）。replay 后补发在线会话 id 全集，端上集合外会话就地清卡。
+ * seq:0 瞬态（PAIR_REQUEST 同语义）：不进缓冲、不落 ndjson、不补发——每次重连
+ * 现算重发，天然幂等；session_ids 与 SNAPSHOT.sessions 同源（snapshot() 收口，
+ * 含 no-leader 锚卡过滤）。LAN ws-server 与云桥 resumePhone/resumeWan 三出口共用 */
+export function buildSessionsReconcile(mgr: SessionManager, relayName: string | undefined): Envelope {
+  return {
+    seq: 0,
+    session_id: "",
+    ts: Date.now(),
+    type: "SESSIONS_RECONCILE",
+    payload: {
+      session_ids: mgr.snapshot().map((s) => s.session_id),
+      relay_source: relayName ?? "",
+    },
+  };
+}
+
 function localIps(): Set<string> {
   const out = new Set<string>();
   for (const list of Object.values(networkInterfaces())) {
@@ -1085,6 +1105,8 @@ export function startServer(
     // 已知会话、建不出列表，且上千帧补发挤占带宽——超过阈值直接 SNAPSHOT 全量重建
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) ws.send(JSON.stringify(env));
+      // #265 增量续传对账：快路径无 SNAPSHOT，补发 SESSIONS_RECONCILE 清集合外陈旧卡
+      ws.send(JSON.stringify(buildSessionsReconcile(mgr, opts.relayName?.())));
     } else {
       // #408 大帧根治：日志不再全量内联（随历史膨胀，实测 3 会话即 0.63MiB，规模
       // 上去必撞 CF 桥 1MiB 单帧硬限），改预算装配（每会话最近 K 条 + 总字节上限，

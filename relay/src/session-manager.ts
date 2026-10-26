@@ -2341,7 +2341,13 @@ export class SessionManager {
   // no-op，重启前无入口。解散组织走清锚通道：删锚后重启即不再拉起）
   deleteSession(id: string): boolean {
     const s = this.sessions.get(id);
-    if (!s) return true;
+    if (!s) {
+      // #265 幂等语义补口：目标已不在内存 = 删除已达成——照常广播 SESSION_DELETED
+      // 让持有陈旧卡的在线端（历史回放残留/他端已删）就地清卡；无卡端无操作。
+      // 此前缺席分支静默返回 true，COMMAND_DELETE 幂等化后广播是清卡的唯一信号
+      this.bus.emit(id, "SESSION_DELETED", { session_id: id });
+      return true;
+    }
     if (this.isLeaderSession(id)) return false;
     // #25-P2 删卡清挂单：FIFO 残条此前进程内常驻（重启才清）。先收口再删（对齐
     // 退休/挂起联动口径）；bootTimer 开火路径已先行收口，此处幂等 no-op 不双记

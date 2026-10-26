@@ -182,6 +182,9 @@ export interface SourceConn {
 // 已发出未回执的命令（ACK 追踪，按源隔离）：断开时静默清空，靠重连快照对账
 interface PendingCmd {
   type: string;
+  // #265 删除幂等兜底：命令目标 sid（payload.session_id 为 string 时随单携带）——
+  // ACK 失败路径要本地清卡时从这取（失败路径无从回读 payload）
+  sid?: string;
   tries: number;
   timer: ReturnType<typeof setTimeout>;
   wire: () => boolean;
@@ -1866,6 +1869,16 @@ class RelayStore {
       // 结果语义命令（p.onAck）的错误由调用方回调接管展示，不叠全局 toast（#17 第二批
       // 审查 P3：empHomeSet 的 Alert 与 lastErrorCmd toast 同文案双弹；对齐 web-console
       // ackWaiters 命中即 return 的口径。fetchArtifact/orgDetail 调用方均有本地错误 UI）
+      // #265 删除幂等兜底（老 relay 兼容窗）：COMMAND_DELETE 报「会话不存在」= 目标已
+      // 不在（新 relay 幂等返 ok + SESSION_DELETED 双路，此分支仅旧版触达）——本地清卡
+      // 即达成，不再弹错误 toast 把残留卡钉死在列表（滑删 3s 兜底还会把卡闪回）
+      if (!ack.ok && ack.error && p?.type === "COMMAND_DELETE" && p.sid && /会话不存在/.test(ack.error)) {
+        conn.sessions.delete(p.sid);
+        conn.timelines.delete(p.sid);
+        if (this.sidIndex.get(p.sid) === conn) this.sidIndex.delete(p.sid);
+        this.emit();
+        return;
+      }
       if (!ack.ok && ack.error && !p?.onAck) {
         this.emit({ lastErrorCmd: ack.error });
       }
@@ -2627,6 +2640,23 @@ class RelayStore {
         if (this.sidIndex.get(sid) === conn) this.sidIndex.delete(sid);
         break;
       }
+      // #265 增量续传对账（PM 1026 实测定根因）：relay last_seq 快路径只补漏事件不带
+      // 快照——relay 侧已消失且无 SESSION_DELETED 事件的会话（重启历史回放未复活/
+      // 外部 GC）在手机增量态永久滞留。SESSIONS_RECONCILE 携带在线 id 全集（瞬态帧，
+      // 每次重连现算重发），集合外本源会话就地清（conn 按源隔离，天然无跨源误伤）。
+      // SNAPSHOT 全量重建（conn.sessions.clear()）已覆盖慢路径，本分支只补快路径窗
+      case "SESSIONS_RECONCILE": {
+        const ids = (msg.payload as { session_ids?: unknown } | undefined)?.session_ids;
+        if (!Array.isArray(ids)) break;
+        const live = new Set(ids.filter((x): x is string => typeof x === "string"));
+        for (const gone of [...conn.sessions.keys()]) {
+          if (live.has(gone)) continue;
+          conn.sessions.delete(gone);
+          conn.timelines.delete(gone);
+          if (this.sidIndex.get(gone) === conn) this.sidIndex.delete(gone);
+        }
+        break;
+      }
       // #316 手表配对（瞬态帧，不落 seq 账本）：请求 → 全局弹窗比对 6 位码；
       // 结果（allow/deny/timeout，含手表放弃断开）→ 收弹窗
       case "PAIR_REQUEST": {
@@ -3050,6 +3080,7 @@ class RelayStore {
     const id = cmd.command_id;
     const entry: PendingCmd = {
       type,
+      ...(sid ? { sid } : {}), // #265 删除幂等兜底：失败路径本地清卡取目标 sid
       tries: 0,
       timer: null as unknown as ReturnType<typeof setTimeout>,
       wire,

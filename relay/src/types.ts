@@ -622,6 +622,7 @@ export type EventType =
   | "SESSION_ACTIVITY"
   | "TASK_DONE"
   | "SESSION_DELETED"
+  | "SESSIONS_RECONCILE" /* #265 增量续传对账帧（瞬态）：在线会话 id 全集，端上清快照外陈旧卡 */
   | "SNAPSHOT"
   | "PAIR_REQUEST"
   | "PAIR_RESOLVED"
@@ -655,6 +656,12 @@ export type EventPayloadMap = {
   SESSION_ACTIVITY: SessionActivityPayload;
   TASK_DONE: TaskDonePayload;
   SESSION_DELETED: SessionDeletedPayload;
+  // #265 陈旧卡根治（瞬态：seq:0 不落 ndjson、重连每次现算重发）——增量续传
+  // （last_seq 快路径）只补事件不建权威清单，relay 侧已消失且无 SESSION_DELETED
+  // 事件的会话在客户端永久滞留。此帧携带在线会话 id 全集，端上对账：快照外会话
+  // 就地清卡。session_ids 与 SNAPSHOT.sessions 同源同构（snapshot() 收口，含
+  // no-leader 锚卡过滤）；relay_source 同 withRelaySource 口径供聚合视角按源对账
+  SESSIONS_RECONCILE: SessionsReconcilePayload;
   SNAPSHOT: SnapshotPayload;
   PAIR_REQUEST: PairRequestPayload;
   PAIR_RESOLVED: PairResolvedPayload;
@@ -732,6 +739,14 @@ export interface WatchdogPayload {
 
 export interface SessionDeletedPayload {
   session_id: string;
+}
+
+// #265 增量续传对账帧（瞬态）：session_ids=当前在线会话 id 全集（snapshot() 同源，
+// 含 no-leader 锚卡过滤）；relay_source=本 relay 显示名（空=未命名，聚合视角端上
+// 以会话卡 relay_source 标签匹配对账范围）。端上语义：不在集合内的本地卡就地移除
+export interface SessionsReconcilePayload {
+  session_ids: string[];
+  relay_source: string;
 }
 
 // #316 手表配对请求：手表经 mDNS 发现 relay 后走 /ws?pair=1 待配对信道，relay 生成

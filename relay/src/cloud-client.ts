@@ -13,7 +13,7 @@ function withRelaySource(sessions: ReturnType<SessionManager["snapshot"]>, relay
 }
 import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
-import { readPluginConfig } from "./ws-server.js";
+import { buildSessionsReconcile, readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
 import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 云通道同源携带
@@ -442,6 +442,8 @@ export class CloudClient {
     // 建不出列表，且上千帧补发挤占桥带宽——超过阈值直接 SNAPSHOT 全量重建
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendSealed(dev, env);
+      // #265 增量续传对账：快路径无 SNAPSHOT，补发 SESSIONS_RECONCILE 清集合外陈旧卡
+      this.sendSealed(dev, buildSessionsReconcile(this.mgr, this.extra?.relayName?.()));
       return;
     }
     // W-CLOUD③：快照总量自适应夹紧。#408 只给日志上了预算（512KB），快照其余载荷
@@ -912,6 +914,8 @@ export class CloudClient {
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendWan(dev, env);
+      // #265 增量续传对账：快路径无 SNAPSHOT，补发 SESSIONS_RECONCILE 清集合外陈旧卡
+      this.sendWan(dev, buildSessionsReconcile(this.mgr, this.extra?.relayName?.()));
       return;
     }
     // W-CLOUD③：快照总量自适应夹紧。#408 只给日志上了预算（512KB），快照其余载荷
