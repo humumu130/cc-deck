@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
+// node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
+// node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
+  "node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
+// node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
+// node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
+  "node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
+// node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
+// node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
+  "node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
+// node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
+  "node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
+// node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
+  "node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
+// node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
+  "node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
+// node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
+  "node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
+// node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
+  "node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
+// node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
+  "node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
+// node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
+// node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num3, shift) {
       if (num3.length === void 0) {
@@ -6053,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
+// node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
+// node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
+// node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
+// node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
+// node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
+// node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
+// node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
+  "node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
+// node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
+  "node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
+// node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
+  "node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
+// node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
+  "node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
+// node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
+  "node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
+// node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
+// node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
+  "node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
+// node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
+  "node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
+// node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
+  "node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
+// node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
+// node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
+// node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
+// node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
+// node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -11148,7 +11148,7 @@ function buildSnapshotLogs(sessions, budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES, p
 // src/session-manager.ts
 import { appendFileSync as appendFileSync5, existsSync as existsSync28, mkdirSync as mkdirSync20, readFileSync as readFileSync34, readdirSync as readdirSync14, realpathSync as realpathSync3, rmSync as rmSync7, statSync as statSync12, writeFileSync as writeFileSync22 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
-import { isAbsolute as isAbsolute7, join as join41, resolve as resolve9, sep as sep6 } from "node:path";
+import { isAbsolute as isAbsolute6, join as join41, resolve as resolve9, sep as sep6 } from "node:path";
 
 // src/artifacts.ts
 import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync as readFileSync6, realpathSync } from "node:fs";
@@ -14890,7 +14890,7 @@ function mkdirGit(dir) {
 // src/projects.ts
 import { appendFileSync as appendFileSync2, copyFileSync, existsSync as existsSync17, mkdirSync as mkdirSync9, readFileSync as readFileSync15, renameSync as renameSync4, rmSync as rmSync3, statSync as statSync7, writeFileSync as writeFileSync9 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { isAbsolute as isAbsolute2, join as join18 } from "node:path";
+import { join as join18, posix, win32 } from "node:path";
 
 // src/routing.ts
 import { existsSync as existsSync16, mkdirSync as mkdirSync8, readFileSync as readFileSync14, writeFileSync as writeFileSync8 } from "node:fs";
@@ -15221,6 +15221,13 @@ function sanitizeHeadcount(raw, gate) {
   }
   return { ok: true, ...out.length ? { headcount: out } : {} };
 }
+function anchorPathError(anchor, platform = process.platform) {
+  const absolute = platform === "win32" ? win32.isAbsolute(anchor) : posix.isAbsolute(anchor);
+  if (absolute) return "";
+  const osName = platform === "win32" ? "Windows" : "macOS/Linux";
+  const sample = platform === "win32" ? "C:\\Users\\you\\project" : "/Users/you/project";
+  return `\u951A\u70B9\u76EE\u5F55\u5FC5\u987B\u662F relay \u5BBF\u4E3B\u673A\uFF08${osName}\uFF09\u4E0A\u7684\u7EDD\u5BF9\u8DEF\u5F84\uFF08\u5F62\u5982 ${sample}\uFF09\uFF1B\u6536\u5230 "${anchor.slice(0, 80)}" \u5728\u5BBF\u4E3B\u673A\u4E0A\u4E0D\u662F\u7EDD\u5BF9\u8DEF\u5F84`;
+}
 function handleOrgActionCreate(payload, dir, gate) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false, error: "org action payload \u65E0\u6548" };
@@ -15231,7 +15238,8 @@ function handleOrgActionCreate(payload, dir, gate) {
   const anchor = typeof raw.anchor_dir === "string" ? raw.anchor_dir.trim() : "";
   const tier = typeof raw.tier === "string" ? raw.tier.trim() : "";
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir \u5FC5\u586B" };
-  if (!isAbsolute2(anchor)) return { ok: false, error: "anchor_dir \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+  const anchorErr = anchorPathError(anchor);
+  if (anchorErr) return { ok: false, error: anchorErr };
   if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
   const hc2 = sanitizeHeadcount(raw.headcount, gate);
   if (!hc2.ok) return { ok: false, error: hc2.error };
@@ -16157,14 +16165,14 @@ function takeBlockedDispatches(engine) {
 }
 
 // src/permission-audit.ts
-import { isAbsolute as isAbsolute3, join as join20, resolve as resolve3 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join20, resolve as resolve3 } from "node:path";
 import { homedir as homedir8 } from "node:os";
 import { readFileSync as readFileSync17 } from "node:fs";
 function resolveDirScope(cwd) {
   if (!cwd || typeof cwd !== "string") return "unknown";
   let abs;
   try {
-    if (!isAbsolute3(cwd)) return "unknown";
+    if (!isAbsolute2(cwd)) return "unknown";
     abs = resolve3(cwd);
   } catch {
     return "unknown";
@@ -16791,7 +16799,7 @@ import { accessSync as accessSync3, constants as constants5 } from "node:fs";
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -49450,8 +49458,8 @@ function createSessionCommands(mgr2) {
       return { command_id: cmd.command_id, ok: true };
     },
     COMMAND_DELETE(cmd, by) {
-      const s = mgr2.require(cmd.payload.session_id);
-      if (s.state.status === "WORKING" || s.state.status === "WAITING") {
+      const s = mgr2.sessions.get(cmd.payload.session_id);
+      if (s && (s.state.status === "WORKING" || s.state.status === "WAITING")) {
         return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u8FD0\u884C\u4E2D\uFF0C\u4E0D\u80FD\u5220\u9664" };
       }
       if (!mgr2.deleteSession(cmd.payload.session_id)) {
@@ -52871,7 +52879,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     } catch {
     }
   }
-  // #199 C：审计镜像队列——emitChainAudit 五动作（#205 补 gate-release）同步 append data/chain-audit.jsonl
+  // #199 C：审计镜像队列——emitChainAudit 六动作（#205 补 gate-release、#263 补 recon-autoclose）同步 append data/chain-audit.jsonl
   // （云通道无运行时 KV 直推能力——云桥是 wss 中继；镜像文件=KV 批量同步的现成队列，
   // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
   chainAuditMirror(action, detail) {
@@ -53003,6 +53011,62 @@ provider=${opts.provider ?? "default"}` : void 0,
         });
       } catch {
       }
+    }
+    this.reconAutoCloseStaleCards(trigger, now);
+  }
+  /** #263：台账终态×板滞留卡自动收敛（runLedgerRecon 专用半边）。保护边界四件：
+   * ①running/dispatched/queued 非终态不碰（收敛末行=终态行才入选）；②终态 1h 缓冲窗
+   * 内不搬（worker 重连补报真回执会追加终态行刷新 ts，窗内搬=抢跑吞掉真收口）；③
+   * submitted/ready_to_install 复核态不搬（有自己的确认闭环，自动搬=碾过复核闸——D18
+   * 教训同「第四写口」）；④挂起/归档组板冻结不绕 writableBoard 闸（只计数不写——复活
+   * 时 reconcileStaleDoing 先归 backlog，下轮 recon 再收敛 done，冻结语义不被绕）。
+   * 幂等：卡已在目标态或无 dispatch_id 手写卡天然 no-op；搬卡经 moveEntryByDispatch
+   * 单口（板 journal action=dispatch-move 留痕），搬后回读核实才计数（不信静默写）。
+   * 零搬动零审计（防 turn-report/patrol 双触发轮询刷屏）。 */
+  reconAutoCloseStaleCards(trigger, now) {
+    const led = /* @__PURE__ */ new Map();
+    for (const e of readDispatchLog()) {
+      if (e.status !== "done" && e.status !== "failed") continue;
+      if (now - e.ts < 36e5) continue;
+      led.set(e.id, e.status);
+    }
+    if (!led.size) return;
+    let movedDone = 0, movedBacklog = 0, frozenSkipped = 0;
+    const samples = [];
+    for (const g2 of listGroups()) {
+      const board = loadBoardFile(g2.id);
+      if (!board) continue;
+      const hits2 = board.entries.flatMap((x) => {
+        if (x.status !== "claimed" && x.status !== "backlog" || !x.dispatch_id) return [];
+        const led2 = led.get(x.dispatch_id);
+        if (!led2) return [];
+        const to2 = led2 === "done" ? "done" : "backlog";
+        return to2 === x.status ? [] : [{ dispatch_id: x.dispatch_id, to: to2, text: x.text }];
+      });
+      if (!hits2.length) continue;
+      if (g2.status !== "active") {
+        frozenSkipped += hits2.length;
+        continue;
+      }
+      for (const h of hits2) moveEntryByDispatch(g2.id, h.dispatch_id, h.to);
+      const after = loadBoardFile(g2.id);
+      if (!after) continue;
+      for (const h of hits2) {
+        const ent = after.entries.find((x) => x.dispatch_id === h.dispatch_id);
+        if (ent?.status !== h.to) continue;
+        if (h.to === "done") movedDone++;
+        else movedBacklog++;
+        if (samples.length < 5) {
+          const m = String(h.text ?? "").match(/#\d{2,4}\b/);
+          samples.push(m ? m[0] : `${h.dispatch_id.slice(0, 8)}\u2192${h.to}`);
+        }
+      }
+    }
+    if (movedDone + movedBacklog > 0) {
+      this.emitChainAudit(
+        "recon-autoclose",
+        `recon(${trigger}) \u53F0\u8D26\u7EC8\u6001\xD7\u677F\u6EDE\u7559\u6536\u655B\uFF1A${movedDone} \u5F20\u2192done\u3001${movedBacklog} \u5F20\u2192backlog` + (frozenSkipped ? `\uFF08\u51BB\u7ED3\u7EC4\u5F85\u590D\u6D3B\u6536\u655B ${frozenSkipped} \u5F20\uFF09` : "") + (samples.length ? `\uFF5C${samples.join(" ")}` : "")
+      );
     }
   }
   /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
@@ -53685,7 +53749,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!item.path || item.path === "(\u672A\u77E5\u6587\u4EF6)") return;
     const cwd = s.state.cwd || "";
     let p = item.path;
-    if (!isAbsolute7(p) && cwd) p = resolve9(cwd, p);
+    if (!isAbsolute6(p) && cwd) p = resolve9(cwd, p);
     const adir = resolve9(artifactsDir()).toLowerCase();
     if (!p.toLowerCase().startsWith(adir + sep6)) return;
     const key = p.toLowerCase();
@@ -54048,7 +54112,10 @@ provider=${opts.provider ?? "default"}` : void 0,
   // no-op，重启前无入口。解散组织走清锚通道：删锚后重启即不再拉起）
   deleteSession(id2) {
     const s = this.sessions.get(id2);
-    if (!s) return true;
+    if (!s) {
+      this.bus.emit(id2, "SESSION_DELETED", { session_id: id2 });
+      return true;
+    }
     if (this.isLeaderSession(id2)) return false;
     this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
     this.sessions.delete(id2);
@@ -56557,7 +56624,8 @@ provider=${opts.provider ?? "default"}` : void 0,
           const anchor = str2("anchor");
           const tier = str2("tier");
           if (!name || !anchor) return { ok: false, error: "name/anchor \u5FC5\u586B" };
-          if (!isAbsolute7(anchor)) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
+          const anchorErr = anchorPathError(anchor);
+          if (anchorErr) return { ok: false, error: anchorErr };
           if (tier !== "\u8F7B\u7ACB\u9879" && tier !== "\u6B63\u7ECF\u7ACB\u9879") return { ok: false, error: "tier \u5FC5\u987B\u662F \u8F7B\u7ACB\u9879|\u6B63\u7ECF\u7ACB\u9879" };
           const roleDefaults = {};
           if (p.role_defaults && typeof p.role_defaults === "object" && !Array.isArray(p.role_defaults)) {
@@ -59240,7 +59308,7 @@ function extractUrls(logFile) {
 // src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
+// node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -60409,6 +60477,7 @@ var Bridge = class _Bridge {
     }
     this.reconcilePidsFromSessions();
     this.hydratePidsFromCache();
+    this.reconcilePidsFromProcesses();
     this.healExternal();
     this.loadQueueDisk();
     this.reviveAliveExternals();
@@ -60417,6 +60486,7 @@ var Bridge = class _Bridge {
     this.healTimer = setInterval(() => {
       this.reconcilePidsFromSessions();
       this.hydratePidsFromCache();
+      this.reconcilePidsFromProcesses();
       this.healExternal();
       this.reviveAliveExternals();
       this.adoptOrphans();
@@ -60512,6 +60582,8 @@ var Bridge = class _Bridge {
     this.enqueuedKeys.delete(id2);
     this.turnShape.delete(id2);
     this.injectFails.delete(id2);
+    this.lastFailPid.delete(id2);
+    this.divertTries.delete(id2);
     this.noPidNote.delete(id2);
     this.resumeSpawns.delete(id2);
     this.orphanProbe.delete(id2);
@@ -60626,6 +60698,20 @@ var Bridge = class _Bridge {
   // 路径盲发（unknown-failopen）失败的那发恰好把 lastTry 记上=慢层被锁 60s+周期
   // （用户实锤 22:34 fired → 24:03 sent 的 89s 空窗真身）。探针直接调 fireStuckEnter
   injectProbeTimers = /* @__PURE__ */ new Map();
+  // #257（件一）：会话最近一次注入失败打在哪个 pid 上。降级预检闸用它区分「失败
+  // 归因」——探测到的活进程若正是刚连败的那个，说明该进程的注入通道真断（fork
+  // 恢复才是出路），闸不拦；活进程 ≠ 失败 pid（注册空窗型：失败打在陈旧/缺失定位
+  // 上，真身另有其人）才拦 fork 转注入重试。防「闸→重试→再败→再闸」死循环。
+  // 注入成功/会话清场时清除。
+  lastFailPid = /* @__PURE__ */ new Map();
+  // #257-P2-1：会话级 divert 次数账——同会话多活体且各注入通道皆坏时，预检闸会在
+  // 多 pid 间自驱振荡（每次重试失败即再入预检、换体再 divert）永不收敛降级。累计
+  // 2 次 divert 而无一次注入成功（成功即清）后强制放行降级 fork。forget 清场。
+  divertTries = /* @__PURE__ */ new Map();
+  // #257（件一/件二共享）：进程表快照短 TTL 记忆化——闸门/补定位/误标校准可能
+  // 同秒多次探测（降级预检 + resumeExternal 内闸 + extInput 抢救），共享一次 ps。
+  procSnapAt = 0;
+  procSnap = null;
   // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
   get resumeWindowMs() {
     return Number(process.env.CCR_RESUME_WINDOW_MS) > 0 ? Number(process.env.CCR_RESUME_WINDOW_MS) : 12e4;
@@ -61014,6 +61100,86 @@ var Bridge = class _Bridge {
       return true;
     } catch {
       return false;
+    }
+  }
+  // ---------- #257 活进程探测（双源：注册表 + 进程表扫描）----------
+  // 恢复进程 argv 的会话 id 标记：resumeSession 自身的 `--resume <sid>`（空格形）、
+  // lcu 适配器的 `--resume=<sid>`（等号形）、显式 `--session-id <sid>` 三种形态；
+  // sid 锚定 UUID 形状防误配，另要求命令行含 claude（防 grep/echo 类同串进程）
+  static RESUME_ARG = /(?:^|\s)(?:--resume|--session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?=\s|$)/i;
+  // 进程表快照（3s 记忆化）：与引擎扫描的 5s 快照各自独立，本处只服务 #257 三消费方
+  procSnapshot() {
+    if (Date.now() - this.procSnapAt < 3e3) return this.procSnap;
+    this.procSnapAt = Date.now();
+    this.procSnap = captureCliProcesses();
+    return this.procSnap;
+  }
+  // 同会话活进程探测（#257 件一核心）。源序：①内存注册表（state.cli_pid）②hook 侧
+  // pid 缓存——两源在 onInjectFail 里已被清空，降级预检时自然只剩源③进程表扫描：
+  // argv 带 --resume/--session-id <sid> 的活 claude 进程（注册空窗期唯一的即时源，
+  // 1026 06:56 PM 分身事故的真身 15585 即此形态）。找不到 = 无证据表明会话已有活身。
+  findAliveCliProcess(sessionId) {
+    const st2 = this.mgr.getExternal(sessionId);
+    const sid = (st2?.relay_session_id || sessionId.slice(4)).toLowerCase();
+    const reg = st2?.cli_pid;
+    if (reg && cliHostAlive(reg)) return reg;
+    try {
+      const cache = JSON.parse(readFileSync39(this.pidCacheFile, "utf-8"));
+      if (cache[sid] && cliHostAlive(cache[sid])) return cache[sid];
+    } catch {
+    }
+    const snap = this.procSnapshot();
+    if (!snap) return void 0;
+    return _Bridge.resumeCandidates(snap, sid.toLowerCase())[0];
+  }
+  // #257-F2 扫描候选选择：同 sid 多活体并存时（残留分身/用户手开第二窗），命令首
+  // token 可执行名以 claude 起头的「直连真身」排前——node 包裹进程（适配器等路径
+  // 含 claude 字样的宿主）与真身并存时优先直连，注入不绕道包裹层；同组内保持 ps
+  // 序（老进程在前）稳定。返回按优先级排好的全部命中（留痕/观察用）。
+  static resumeCandidates(snap, wantSid) {
+    const hits2 = [];
+    for (const e of snap) {
+      const m = _Bridge.RESUME_ARG.exec(e.command);
+      if (!m || m[1].toLowerCase() !== wantSid) continue;
+      if (!/claude/i.test(e.command)) continue;
+      if (!cliHostAlive(e.pid)) continue;
+      const exe3 = (e.command.trim().split(/\s+/)[0] ?? "").split("/").pop() ?? "";
+      hits2.push({ pid: e.pid, direct: /^claude(-\w+)?(\.exe)?$/i.test(exe3) });
+    }
+    if (!hits2.length) return [];
+    hits2.sort((a, b) => Number(b.direct) - Number(a.direct));
+    return hits2.map((h) => h.pid);
+  }
+  // #257 件二：进程表扫描补定位（重启后 pid 注册回读的即时源）。只补「无 pid 或
+  // pid 已死」的既有会话（不覆盖活定位——与 reconcilePidsFromSessions 同纪律），
+  // 因此对隔离沙盒（合成 sid）天然无交叉：扫到也配不上任何会话。命中即注册并留痕。
+  reconcilePidsFromProcesses() {
+    const snap = this.procSnapshot();
+    if (!snap) return;
+    const bySid = /* @__PURE__ */ new Map();
+    for (const e of snap) {
+      const m = _Bridge.RESUME_ARG.exec(e.command);
+      if (!m || !/claude/i.test(e.command)) continue;
+      const sid = m[1].toLowerCase();
+      if (!bySid.has(sid)) bySid.set(sid, []);
+    }
+    if (!bySid.size) return;
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external) continue;
+      if (s.cli_pid && cliHostAlive(s.cli_pid)) continue;
+      const key = (s.relay_session_id || s.session_id.slice(4)).toLowerCase();
+      if (!bySid.has(key)) continue;
+      const pids = _Bridge.resumeCandidates(snap, key);
+      const pid = pids[0];
+      if (!pid) continue;
+      if (s.cli_pid === pid) continue;
+      this.mgr.setExternalCliPid(s.session_id, pid);
+      const st2 = this.mgr.getExternal(s.session_id);
+      if (st2?.historical && !st2.idle_archived) {
+        st2.historical = false;
+      }
+      this.mgr.pushExternalLog(s.session_id, "system", `\u5DF2\u901A\u8FC7\u8FDB\u7A0B\u626B\u63CF\u6062\u590D\u5B9A\u4F4D\uFF08pid ${pid}${pids.length > 1 ? `\uFF0C\u540C\u4F1A\u8BDD\u5019\u9009 ${pids.length} \u4E2A` : ""}\uFF09\u2014\u2014\u91CD\u542F\u6CE8\u518C\u7A7A\u7A97\u81EA\u6108\uFF0C\u65E0\u9700\u7B49\u5F85\u8FDB\u7A0B\u4E0A\u62A5`);
+      this.mgr.emitExternalSync(s.session_id);
     }
   }
   async handleEvent(ev2) {
@@ -61657,12 +61823,14 @@ var Bridge = class _Bridge {
       if (!state.cli_pid || !pidAlive(state.cli_pid)) {
         this.reconcilePidsFromSessions();
         this.hydratePidsFromCache();
+        this.reconcilePidsFromProcesses();
       }
       const pid2 = this.mgr.getExternal(sessionId)?.cli_pid ?? state.cli_pid;
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2);
       if (!alive2) {
-        return this.resumeExternal(sessionId, body, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`, echoText, imgRefs.length ? imgRefs : void 0);
+        const rr2 = this.resumeExternal(sessionId, body, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`, echoText, imgRefs.length ? imgRefs : void 0);
+        if (!rr2.diverted) return rr2;
       }
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
@@ -61688,6 +61856,17 @@ var Bridge = class _Bridge {
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
     const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
+    if (!inWindow) {
+      const alive2 = this.findAliveCliProcess(sessionId);
+      if (alive2 && alive2 !== this.lastFailPid.get(sessionId) && (this.divertTries.get(sessionId) ?? 0) < 2) {
+        this.mgr.setExternalCliPid(sessionId, alive2);
+        this.divertTries.set(sessionId, (this.divertTries.get(sessionId) ?? 0) + 1);
+        this.injectFails.set(sessionId, Math.max(this.injectFails.get(sessionId) ?? 0, 2));
+        this.injectFailNoted.delete(sessionId);
+        this.mgr.pushExternalLog(sessionId, "system", `\u63A2\u6D4B\u5230\u540C\u4F1A\u8BDD\u6D3B\u8FDB\u7A0B\uFF08pid ${alive2}\uFF09\uFF0C\u4E0D\u5F00\u65B0\u7EC8\u7AEF\u6807\u7B7E\u2014\u2014\u5DF2\u91CD\u5B9A\u4F4D\u8F6C\u6CE8\u5165\u91CD\u8BD5\uFF08\u6B64\u524D\u6062\u590D\u89E6\u53D1\u7591\u4E3A\u5B9A\u4F4D\u7A7A\u7A97\uFF0C\u975E\u8FDB\u7A0B\u6B7B\u4EA1\uFF09`);
+        return { ok: true, diverted: true };
+      }
+    }
     const shown = echo ?? text.trim();
     this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: shown, ts: Date.now(), ...shown !== text.trim() ? { body: text.trim() } : {}, ...refs?.length ? { refs } : {} }]);
     if (inWindow) {
@@ -61875,6 +62054,8 @@ var Bridge = class _Bridge {
         this.noPidNote.delete(sessionId);
         this.injectFails.delete(sessionId);
         this.injectFailNoted.delete(sessionId);
+        this.lastFailPid.delete(sessionId);
+        this.divertTries.delete(sessionId);
         this.saveQueueDisk();
         const sentAt = Date.now();
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue\u2192written)`);
@@ -62062,13 +62243,27 @@ var Bridge = class _Bridge {
   //            「排队中」气泡撤下），杜绝无限排队。
   // 计数在注入成功（flushQueue）/消息晋升（promotePending）时清零。
   onInjectFail(sessionId, error) {
+    const failedPid = this.mgr.getExternal(sessionId)?.cli_pid;
     this.mgr.clearExternalCliPid(sessionId);
     this.clearPidCache(sessionId);
+    if (failedPid) this.lastFailPid.set(sessionId, failedPid);
     const fails = (this.injectFails.get(sessionId) ?? 0) + 1;
     this.injectFails.set(sessionId, fails);
     const q2 = this.inputQueue.get(sessionId) ?? [];
     const why = error === "pid-reuse" ? "\u8FDB\u7A0B\u5B9A\u4F4D\u5931\u6548\uFF08PID \u88AB\u7CFB\u7EDF\u590D\u7528\uFF09" : error ?? "\u672A\u77E5";
     if (fails >= 3) {
+      const alive2 = this.findAliveCliProcess(sessionId);
+      if (alive2 && alive2 !== this.lastFailPid.get(sessionId) && (this.divertTries.get(sessionId) ?? 0) < 2) {
+        this.mgr.setExternalCliPid(sessionId, alive2);
+        this.divertTries.set(sessionId, (this.divertTries.get(sessionId) ?? 0) + 1);
+        this.injectFails.set(sessionId, 2);
+        this.injectFailNoted.delete(sessionId);
+        this.noPidNote.delete(sessionId);
+        this.mgr.pushExternalLog(sessionId, "system", `\u6CE8\u5165\u8FDE\u8D25 ${fails} \u6B21\u540E\u63A2\u6D4B\u5230\u540C\u4F1A\u8BDD\u6D3B\u8FDB\u7A0B\uFF08pid ${alive2}\uFF09\uFF0C\u5DF2\u91CD\u5B9A\u4F4D\u8F6C\u6CE8\u5165\u91CD\u8BD5\uFF08\u4E0D\u5F00\u65B0\u7EC8\u7AEF\u6807\u7B7E\uFF09\u2014\u2014\u8FDE\u8D25\u7591\u4E3A\u5B9A\u4F4D\u7A7A\u7A97\uFF0C\u975E\u8FDB\u7A0B\u6B7B\u4EA1`);
+        const gt2 = setTimeout(() => void this.flushQueue(sessionId), 0);
+        gt2.unref?.();
+        return;
+      }
       const texts = q2.map((p) => pBody(p));
       this.inputQueue.delete(sessionId);
       this.saveQueueDisk();
@@ -62076,7 +62271,17 @@ var Bridge = class _Bridge {
       const st2 = this.mgr.getExternal(sessionId);
       if (st2?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
       for (let i = 0; i < q2.length; i++) {
-        this.resumeExternal(sessionId, texts[i], `\u6CE8\u5165\u8FDE\u7EED ${fails} \u6B21\u5931\u8D25\uFF08${why}\uFF09`, q2[i].text, q2[i].refs);
+        const r = this.resumeExternal(sessionId, texts[i], `\u6CE8\u5165\u8FDE\u7EED ${fails} \u6B21\u5931\u8D25\uFF08${why}\uFF09`, q2[i].text, q2[i].refs);
+        if (r.diverted) {
+          const rest = q2.slice(i);
+          this.inputQueue.set(sessionId, [...this.inputQueue.get(sessionId) ?? [], ...rest.map((p) => ({ ...p }))]);
+          this.saveQueueDisk();
+          const st22 = this.mgr.getExternal(sessionId);
+          this.mgr.setExternalPending(sessionId, [...st22?.pending_inputs ?? [], ...rest.map((p) => ({ ...p }))]);
+          const gt2 = setTimeout(() => void this.flushQueue(sessionId), 0);
+          gt2.unref?.();
+          return;
+        }
       }
       this.mgr.pushExternalLog(
         sessionId,
@@ -62279,13 +62484,19 @@ var Bridge = class _Bridge {
         const st0 = this.mgr.getExternal(id2);
         const hookRecent = Date.now() - (this.lastHookAt.get(id2) ?? 0) < 15e3;
         if (st0 && !hookRecent && (st0.status === "DONE" || st0.status === "ERROR")) {
-          this.noHookIds.add(id2);
-          if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
-          this.mgr.setExternalStatus(
-            id2,
-            "WORKING",
-            st0.status === "ERROR" ? "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u81EA\u6108\uFF1A\u91CD\u542F\u8BEF\u6807\u9519\u8BEF\uFF09" : "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09"
-          );
+          const alivePid = this.findAliveCliProcess(id2);
+          if (alivePid) {
+            if (st0.cli_pid !== alivePid) this.mgr.setExternalCliPid(id2, alivePid);
+            this.mgr.setExternalStatus(id2, "WORKING", "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u8FDB\u7A0B\u5728\uFF0Chook \u4E8B\u4EF6\u672A\u8FBE\uFF09");
+          } else {
+            this.noHookIds.add(id2);
+            if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
+            this.mgr.setExternalStatus(
+              id2,
+              "WORKING",
+              st0.status === "ERROR" ? "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u81EA\u6108\uFF1A\u91CD\u542F\u8BEF\u6807\u9519\u8BEF\uFF09" : "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09"
+            );
+          }
         }
         if (st0?.historical) st0.historical = false;
       }
@@ -63554,6 +63765,18 @@ function withRelaySource(sessions, relayName) {
   if (!relayName) return sessions;
   return sessions.map((s) => ({ ...s, relay_source: s.relay_source ?? relayName }));
 }
+function buildSessionsReconcile(mgr2, relayName) {
+  return {
+    seq: 0,
+    session_id: "",
+    ts: Date.now(),
+    type: "SESSIONS_RECONCILE",
+    payload: {
+      session_ids: mgr2.snapshot().map((s) => s.session_id),
+      relay_source: relayName ?? ""
+    }
+  };
+}
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -64437,6 +64660,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const replay = lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq) ? bus2.replayAfter(lastSeq).filter((env) => !mgr2.suppressLeaderEvent(env)) : null;
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) ws2.send(JSON.stringify(env));
+      ws2.send(JSON.stringify(buildSessionsReconcile(mgr2, opts.relayName?.())));
     } else {
       const snapLogs = mgr2.buildSnapshotLogs(SNAPSHOT_LOGS_LAN.budgetBytes, SNAPSHOT_LOGS_LAN.perSessionCap);
       const snapshot = {
@@ -65530,6 +65754,7 @@ var CloudClient = class {
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendSealed(dev, env);
+      this.sendSealed(dev, buildSessionsReconcile(this.mgr, this.extra?.relayName?.()));
       return;
     }
     const snapSeq = this.bus.lastSeq();
@@ -65907,6 +66132,7 @@ var CloudClient = class {
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendWan(dev, env);
+      this.sendWan(dev, buildSessionsReconcile(this.mgr, this.extra?.relayName?.()));
       return;
     }
     const snapSeq = this.bus.lastSeq();

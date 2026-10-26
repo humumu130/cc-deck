@@ -559,6 +559,7 @@
                     case "SESSION_ERROR": onErrorEvt(sid, m.payload); break;
                     case "SESSION_DONE": onDoneEvt(sid, m.payload); break;
                     case "SESSION_DELETED": onDeleted(sid); break;
+                    case "SESSIONS_RECONCILE": onReconcile(m.payload); break; // #265 增量续传对账：快路径补发的在线 id 全集，集合外陈旧卡就地清
                     case "SESSION_LOG": onLog(sid, m.payload); break;
                     case "SESSION_LOG_PATCH": onLogRemove(sid, m.payload); break; // W-STREAMDELTA：终态撤流块
                     case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
@@ -730,9 +731,36 @@
                   }
                 }
                 function onDeleted(sid) {
+                  dropSessionLocal(sid);
+                  renderMyList(); renderAll();
+                }
+                // #265 抽出单卡清理体（无渲染）——onDeleted（单删）与 onReconcile（批量对账）
+                // 共用：内存卡/转录/FB14 附图缓存/#B3-3 输入历史桶/#B3-4 草稿/选中态全套，
+                // 渲染留给调用方（批量清一次再渲，避免逐卡抖动）
+                function dropSessionLocal(sid) {
                   S.sessions.delete(sid); S.timelines.delete(sid);
                   for (const [key, c] of S.imgUrls) if (key.startsWith(sid + "/")) { if (c && c.url) { try { URL.revokeObjectURL(c.url); } catch (_) {} } S.imgUrls.delete(key); } // FB14 附图缓存随会话回收
-                  try { localStorage.removeItem(HIST_PREFIX + sid); } catch (_) {} inputDrafts.delete(sid); if (S.selected === sid) S.selected = ""; renderMyList(); renderAll();
+                  try { localStorage.removeItem(HIST_PREFIX + sid); } catch (_) {} inputDrafts.delete(sid); if (S.selected === sid) S.selected = "";
+                }
+                // #265 增量续传对账（PM 1026 实测定根因）：relay last_seq 快路径只补漏事件
+                // 不带快照——relay 侧已消失且无 SESSION_DELETED 事件的会话（重启历史回放
+                // 未复活/外部 GC）在增量态永久滞留（用户 16 张死卡）。SESSIONS_RECONCILE
+                // 携带在线 id 全集（瞬态帧，每次重连现算重发），集合外本地卡就地清。
+                // 清理范围按 relay_source 对账（另一源的卡不误伤——聚合视角/源切换残留
+                // 同口径）；未命名源（空名）多源并存时可能跨清，对端快照到达即回填，
+                // 自愈无数据丢失
+                function onReconcile(p) {
+                  if (!p || !Array.isArray(p.session_ids)) return;
+                  const live = new Set(p.session_ids.filter((x) => typeof x === "string"));
+                  const srcName = String(p.relay_source ?? "");
+                  let dropped = 0;
+                  for (const sid of [...S.sessions.keys()]) {
+                    if (live.has(sid)) continue;
+                    if (String(S.sessions.get(sid)?.relay_source ?? "") !== srcName) continue;
+                    dropSessionLocal(sid);
+                    dropped++;
+                  }
+                  if (dropped) { renderMyList(); renderAll(); }
                 }
 
                 // 同 id 流式块原地替换（v1 pushLog/streamMergeDecide 口径）
@@ -995,6 +1023,7 @@
                   "trae": "<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAF9SURBVHgB7Zm9SsNQFMf/EYWiVB2KKGLBScHFN9BJurmoa0dn9QGqD1CdHbtWFzd10jfQQdBJqIgKGYw4VCR+nGD0ptqmsSectD0/CKXpbXJ+3HvOyYfVP5B+RxvTgzZHBaRRAWlUQBoVkEYFpOkNGzC0MgtJnPJZw99DBcZ2FiFJmIDmgDSdn8S1PB9d4aFwiDgY2cwhnZuK9J/IAq5TxevNI+Lg7amKqGgO/DrgYIplTNPnAyN9E8OYPF5FZmOu7hgKPrufZ+svkXOgHhR8di/vfWbW5719dvE0MMYPPjUz6m3E3doBWoFlBszgfUjCnAkzeB+6TGl1JuJNYuOJk/W1ccMiQGW1slwKlFe7eAJ7+2cJuZ8lsrJUwsvF/fc+us5JxBIiTIna4H1MCY7gCbYkJij464Xdhg3Jl3D/0bT+gj0HmummXMET2omlCc2By/GtwHeq3dO3BSQFXULSdN8dGdV6p3yOpGDpOzJhVEAaFZBGBaRRAWlUQJoPEeV5RYlN/QYAAAAASUVORK5CYII=\" width=\"12\" height=\"12\" alt=\"\" style=\"border-radius:2px;display:block\">",
                   "zcode": "<svg role=\"img\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><title>Z pixel outline</title><rect x=\"1\" y=\"1\" width=\"22\" height=\"22\" rx=\"5\" fill=\"#13272B\"/><g fill=\"#0F8A80\"><rect x=\"5\" y=\"5\" width=\"14\" height=\"2.6\"/><rect x=\"14.6\" y=\"7.6\" width=\"2.6\" height=\"2.6\"/><rect x=\"11.4\" y=\"10.7\" width=\"2.6\" height=\"2.6\"/><rect x=\"8.2\" y=\"13.8\" width=\"2.6\" height=\"2.6\"/><rect x=\"5\" y=\"16.4\" width=\"14\" height=\"2.6\"/></g></svg>",
                 };
+                window.__ccDeck005EngineBrandSvg = ENGINE_BRAND_SVG; // #264：团队域成员头像借道（IIFE 跨域单口，__ccDeck005SlimUi 同范式）
                 // #227 件四：占位 getter——无品牌 SVG 引擎（zcode/glm/未知）=品牌色圆角字母
                 // （与像素螃蟹同族谱；expo EngineIcon PLACEHOLDER 同源色）
                 const engineBrandSvgOf = (item) => ENGINE_BRAND_SVG[item.engineClass] ?? (() => {
@@ -1575,10 +1604,12 @@
                     if (s.status === "WORKING" || s.status === "WAITING") { b2Toast("会话运行中，不能删除"); return; } // 前端预拦，relay 同规则
                     const ack = await commandAck("COMMAND_DELETE", { session_id: s.session_id });
                     const v = ackVerdict(ack);
-                    if (v.ok) {
-                      S.sessions.delete(s.session_id);
-                      if (S.selected === s.session_id) S.selected = "";
-                      renderMyList();
+                    // #265 删除幂等落地：ok 走全套本地清理（onDeleted——#B3-3 历史桶/草稿/
+                    // 转录/附图全收，不再只清内存卡）；「会话不存在」= 目标已不在（老 relay
+                    // 兼容窗，新 relay 已幂等返 ok），清卡即达成——不再用报错 toast 把残留
+                    // 卡钉死在面板（1026 用户 16 张死卡）
+                    if (v.ok || /会话不存在/.test(v.error)) {
+                      onDeleted(s.session_id);
                       b2Toast("会话已删除");
                     } else b2Toast(v.error);
                   });
@@ -3091,7 +3122,10 @@
                   if (!s) return;
                   commandAck("COMMAND_DELETE", { session_id: s.session_id }).then((ack) => {
                     const v = ackVerdict(ack);
-                    b2Toast(v.ok ? "已删除会话" : "删除失败：" + v.error);
+                    // #265 删除幂等落地（同 openDeleteConfirm 口径）：「会话不存在」=已达成，
+                    // 本地清卡（onDeleted 全套）；新 relay 的 ok + SESSION_DELETED 双路幂等不冲突
+                    if (v.ok || /会话不存在/.test(v.error)) { onDeleted(s.session_id); b2Toast("已删除会话"); }
+                    else b2Toast("删除失败：" + v.error);
                   });
                 }
 
