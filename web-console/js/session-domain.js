@@ -611,8 +611,29 @@
                   if (!p || !Array.isArray(p.sessions)) return;
                   S.sessions = new Map(p.sessions.filter((x) => x && typeof x.session_id === "string").map((x) => [x.session_id, x]));
                   S.snapshotAt = Date.now(); // t25fix #4：快照到达时戳（团队 dock 出卡时序门槛用——快照刚到时编制/会话未到齐，0 同步团队卡先不出防闪现残卡）
-                  S.timelines = new Map(Object.entries(p.logs || {}).map(([k, v]) => [k, Array.isArray(v) ? v.slice() : []]));
-                  S.logsTruncated = new Map(Object.entries(p.logs_truncated || {}));
+                  // #274（用户 1026 裁定：切源=纯视图过滤，本地缓冲优先）：timelines 不再全量
+                  // 替换——按会话「新者胜」upsert（尾条 ts 更新者胜；快照未提及的本地会话
+                  // 保留不清场）。旧全量替换正是切源丢消息放大器：切回聚合时 replaySnapshots
+                  // 两源缓存帧先后到达，陈旧云帧（#268 半开族滞留缓存）的旧 logs 把 LAN 侧
+                  // 更新的消息流整体拉回旧时点（pm 会话停 15:08 实锤）。新者胜后陈旧快照
+                  // 无论来自切源重放/云链下发/断线重连都覆盖不了本地更新；冷启动/重连（本地
+                  // 空）天然取快照份；缺口补拉=同一比较（快照尾 ts 更新即取快照份）自动承接。
+                  {
+                    const tailTs = (arr) => (Array.isArray(arr) && arr.length ? Number(arr[arr.length - 1].ts) || 0 : 0);
+                    const next = new Map(S.timelines);
+                    let truncatedChanged = false;
+                    const nextTrunc = new Map(S.logsTruncated);
+                    for (const [k, v] of Object.entries(p.logs || {})) {
+                      const inc = Array.isArray(v) ? v : [];
+                      const cur = next.get(k);
+                      if (!cur || !cur.length || tailTs(inc) >= tailTs(cur)) next.set(k, inc.slice());
+                      if (!truncatedChanged) truncatedChanged = true;
+                      nextTrunc.set(k, (p.logs_truncated || {})[k]);
+                    }
+                    S.timelines = next;
+                    S.logsTruncated = nextTrunc;
+                  }
+                  // S.logsTruncated 旧全量行已并入上方 upsert（与 timelines 同源同口径）
                   S.hasSnapshot = true;
                   S.relayName = p.relay_name || location.host;
                   S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
