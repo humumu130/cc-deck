@@ -638,6 +638,7 @@ export type EventType =
   | "DISPATCH_DONE"
   | "NOTIFY_CHAIN_AUDIT" /* #92 W-NOTIFY2 E：派发/回执链审计帧（pm-wake/dispatch-reroute/stale-escalate/dispatch-close/gate-release/recon-autoclose 六动作——#205 补 gate-release、#263 补 recon-autoclose，落盘可检索） */
   | "SETTINGS_UPDATED"
+  | "RELAY_NAME_UPDATED" /* #272 源名称改名（瞬态）：relay-name 写盘成功边广播，LAN+cloud 全扇出 */
   | "NOTIFICATIONS_UPDATED"
   | "COLLAB_MODE_UPDATED"
   | "AUTH_REQUIRED"
@@ -695,6 +696,8 @@ export type EventPayloadMap = {
   // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
   // SNAPSHOT.settings 兜底
   SETTINGS_UPDATED: EmployeeHomeSettingsPayload;
+  // #272 源名称改名（瞬态）：payload=生效名（清空改名时即回落后的 hostname）
+  RELAY_NAME_UPDATED: { relay_name: string };
   NOTIFICATIONS_UPDATED: NotificationsUpdatedPayload;
   // W-MODE 协作模式切换（瞬态）：orgAction collab-mode set 成功边广播；离线端由
   // SNAPSHOT.collab_mode 兜底（SETTINGS_UPDATED 同款收敛模型）
@@ -946,6 +949,7 @@ export type CommandType =
   | "COMMAND_PROJECT_DETAIL"
   | "COMMAND_ARTIFACT_FETCH"
   | "COMMAND_SETTINGS_UPDATE"
+  | "COMMAND_RELAY_NAME_SET"
   | "COMMAND_ORG_ACTION"
   | "COMMAND_NOTIFICATION_ACK"
   | "COMMAND_ENGINE_PROFILE_UPDATE"
@@ -1136,6 +1140,12 @@ export interface SettingsUpdateCommand extends CommandBase {
   payload: { employee_home: boolean };
 }
 
+// #272 源名称改名：name 空=清空回落 hostname；ack.data={relay_name} 生效名
+export interface RelayNameSetCommand extends CommandBase {
+  type: "COMMAND_RELAY_NAME_SET";
+  payload: { name: string };
+}
+
 export interface OrgActionCommand extends CommandBase {
   type: "COMMAND_ORG_ACTION";
   payload: { action: "create"; name: string; anchor_dir: string; tier: string };
@@ -1270,6 +1280,7 @@ export type Command =
   | OrgConfirmCommand
   | ProjectDetailCommand
   | SettingsUpdateCommand
+  | RelayNameSetCommand
   | ArtifactFetchCommand
   | OrgActionCommand
   | NotificationAckCommand

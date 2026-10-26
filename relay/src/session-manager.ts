@@ -75,7 +75,7 @@ import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { readCodexThreadName } from "./title-codex.js";
 import { generateTitle } from "./title-gen.js";
-import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, type CollabMode } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, effectiveRelayName, sanitizeRelayName, writeRelayName, type CollabMode } from "./settings.js";
 import type { EmployeeHomeSettingsPayload } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
@@ -936,6 +936,21 @@ export class SessionManager {
     const payload: EmployeeHomeSettingsPayload = { employee_home: next.enabled, value: next.value, source: next.source };
     this.bus.emitTransient("SETTINGS_UPDATED", payload);
     return { ok: true, data: payload };
+  }
+
+  // #272 源名称改名（hostname 默认过长如 huanglin）：relay-name 文件唯一事实源，
+  // sanitize（trim/拒控制字符/≤12；空=清空回落 hostname）→ 写盘 → 广播
+  // RELAY_NAME_UPDATED（LAN+cloud 全连接扇出：web 源 chip/切换器免刷新换名，对端
+  // 云配对源同名跟随——SNAPSHOT.relay_name 与 sessions.relay_source 均现算新名）。
+  setRelayName(input: unknown): { ok: boolean; error?: string; data?: { relay_name: string } } {
+    const s = sanitizeRelayName(input);
+    if (!s.ok) return { ok: false, error: s.error };
+    if (!writeRelayName(this.cfg.dataDir, s.name)) {
+      return { ok: false, error: "relay-name 写盘失败（盘满/权限？）" };
+    }
+    const relay_name = effectiveRelayName(this.cfg.dataDir);
+    this.bus.emitTransient("RELAY_NAME_UPDATED", { relay_name });
+    return { ok: true, data: { relay_name } };
   }
 
   // SNAPSHOT.settings / 设置页数据源（每次现算：env/文件/默认三层合成）
@@ -2607,6 +2622,9 @@ export class SessionManager {
         }
         case "COMMAND_SETTINGS_UPDATE": {
           return this.boardCmds.COMMAND_SETTINGS_UPDATE(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
+        }
+        case "COMMAND_RELAY_NAME_SET": {
+          return this.boardCmds.COMMAND_RELAY_NAME_SET(cmd, by); // #272 源名称改名（体在 commands/board-commands.ts）
         }
         case "COMMAND_ENGINE_LOGIN": {
           return this.engineCmds.COMMAND_ENGINE_LOGIN(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/engine-commands.ts）

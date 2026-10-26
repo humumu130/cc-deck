@@ -4,7 +4,8 @@
 // 默认值策略（用户 2026-09-28 拍板）：新装默认开（全新环境零迁移负担）；
 // 存量升级默认关（行为不变，UI 引导后再开——开启只影响新会话，存量会话按
 // 创建时记录的家走，无需迁移）。
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { parseEmployeeConfigDir } from "./config.js";
 import type { SessionEngine } from "./types.js";
@@ -52,6 +53,47 @@ const ENGINE_PROFILES_FILE = "engine-profiles.json";
 const ENGINE_PROFILE_ENGINES: readonly SessionEngine[] = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
 const SECRET_FIELD = /(token|secret|password|api[_-]?key|private[_-]?key)/i;
 const REFERENCE_FIELD = /(?:_env|_ref)$/i;
+
+// ---------- #272 源名称（relay-name 文件唯一事实源，W-SRCLABEL #134 单点收编模块） ----------
+// 语义：dataDir/relay-name 存在且非空 → 即源名（读侧沿用历史 40 字符上限兜底，防手改
+// 文件超长撑爆 chip）；缺失/空 → 回落 hostname。写口（本模块 writeRelayName）统一
+// sanitize：trim、拒控制字符、限长 ≤12（任务书口径：聚合模式源 chip 高频出现，长名噪声大）；
+// 空串=清空文件（回落 hostname）。SNAPSHOT relay_name / SESSIONS_RECONCILE relay_source
+// 均经 effectiveRelayName 现算（改名免重启生效）。
+export const RELAY_NAME_MAX = 12;
+const RELAY_NAME_FILE = "relay-name";
+
+export function effectiveRelayName(dataDir: string): string {
+  try {
+    return readFileSync(join(dataDir, RELAY_NAME_FILE), "utf8").trim().slice(0, 40) || hostname().slice(0, 40);
+  } catch {
+    return hostname().slice(0, 40);
+  }
+}
+
+/** sanitize 源名输入：非字符串/含控制字符/超长 → ok:false 带可读指引；空串（trim 后）→ ok:true name="" = 清空回落 hostname */
+export function sanitizeRelayName(input: unknown): { ok: true; name: string } | { ok: false; error: string } {
+  if (typeof input !== "string") return { ok: false, error: "源名称须为字符串" };
+  if (/[\x00-\x1f\x7f]/.test(input)) return { ok: false, error: "源名称含控制字符" };
+  const name = input.trim();
+  if (name.length === 0) return { ok: true, name: "" };
+  if (name.length > RELAY_NAME_MAX) return { ok: false, error: `源名称最长 ${RELAY_NAME_MAX} 字符（当前 ${name.length}）` };
+  return { ok: true, name };
+}
+
+export function writeRelayName(dataDir: string, name: string): boolean {
+  try {
+    const p = join(dataDir, RELAY_NAME_FILE);
+    if (name === "") {
+      try { unlinkSync(p); } catch { /* 无文件=已回落，幂等 */ }
+      return true;
+    }
+    writeFileSync(p, name, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function engineProfilesPath(dataDir: string): string {
   return join(dataDir, ENGINE_PROFILES_FILE);
