@@ -77,6 +77,7 @@
     "test:import-acceptance": "tsx scripts/test-import-acceptance.ts",
     "test:import-artifact": "tsx scripts/test-import-artifact.ts",
     "test:read-mode": "tsx scripts/test-read-mode.ts",
+    "test:recon-autoclose": "tsx scripts/test-recon-autoclose.ts",
     "test:sqlite-resilience": "tsx scripts/test-sqlite-resilience.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",
     "rehearse:rollback": "tsx scripts/rehearse-cutover-rollback.ts",
