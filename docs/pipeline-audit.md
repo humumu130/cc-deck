@@ -454,3 +454,29 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 2. **chain-audit→KV 同步脚本挂载**（§11 P2）——五层栈层 5 的最后一公里。
 3. **死会话 retire 机器化**（§12 台账风险③——「派单后探活+retire」从纪律升为 patrol 件：台账 running 行目标会话死亡 N 分钟→自动 member-retire+告警；1021 六次路由实证的最直接根治）。
 4. F5/F6 通知 ledger 收编维持 §7 建议（v4 无变化）。
+
+## 13. 1024 实战断点增补（test.57→63 七连包日）
+
+> 1024 全天七连包（test.57→63）高频派单实战新增四条损失点。当日纪律变更：worker_done 喂活到达=立即收割（memory feedback-harvest-on-done，用户「非常重点」定调），巡检降为兜底——运转有效。
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1024-1 | **内容安全过滤杀席**：bigmodel API 400「敏感内容」无预警击杀 worker CLI 会话，席上多单全废 | 1024 16:16 审查席三单全废（review-t57-a 首派即殁）；触发词不可知（正常审查文本命中） | 不可预防只可快速恢复：无回执即对账军规+重派（当日四发落地） | 喂活/巡检对 SESSION_ERROR 帧告警升级（区别于正常 DONE） |
+| L-1024-2 | **relay 重启双分身竞态**：auto-revive 与路由侧并存拉起同一 CLI 会话双进程，同写一 transcript+worktree | 1024 22:19 teamsync 席实锤（两 uuid 链交错；worker 击毙分身收编工作未丢，w-teamsync-impl.md 事故记录） | worker 自处置+Leader 收编 | **revive 前「同会话活进程」检测闸**（test-bridge 189g 只测同管理器防双拉，跨重启+路由并存复合场景无闸） |
+| L-1024-3 | **派单路由无定向追加通道**：dispatch 路由避开忙碌席→无法给在跑 worker 追加规格/勘误 | 1024 皇冠尺寸勘误两次误投（membergrid 席/designer C 席），靠误投忽略通知兜住 | 误投忽略通知+收割时强校验 | dispatch 支持 `--seat` 定向（允许排队注入忙碌席）或队列化追加 API |
+| L-1024-4 | **同文重复卡**：重派未关旧卡致板面同文卡簇 | 编制膨胀×7/优先修复批×3/SRCVANISH×5（W-STALETRIAGE 1024 审计实锤） | 分诊审计 30 条+人工清板 | 建卡前 normalizeBoardCardText 查重闸（单口已立，闸缺位） |
+
+附：当日另一断点「worker 无回执静默收工」三起（审查 A 两连+TS63FIX+AUDITLOG）——与 L-1021「交付零通知」同族，worker_done 即收割军规已兜住恢复侧，**根因=worker 侧收工时回执写入失败无重试无告警**，根治归 §11 回执契约机器闸的收工自检扩展（回执未落盘则 SESSION 拒绝 DONE）。
+
+## 13. 1026 凌晨实战断点增补（test.66 反馈夜）
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1026-1 | **压缩恢复循环吞单**：worker 会话上下文吃紧陷入「压缩恢复锚」重播循环，唤醒后 125s 零产出即 SESSION_DONE（0 files/0 lines），席上队列单（FB66B+FB66 两批 9 件）静默丢失 3 小时 | 1026 00:15 深查实锤（671ad0dc：恢复锚 2 秒重播 8 次→DONE 无回执无提交；该席此前 CHIP3/RELBTN/FB66C/FB66D 四批正常交付=好席退化） | member-retire 退化席 + 合并重派 self-contained 批（W-FB66ALL → 3b5cd57c 落地） | SESSION_DONE **stats 零产出闸**：done 时 files=0 且该席有未完结派单 → 拒绝 DONE/自动升级 pm-wake（现回执闸只对「约定回执缺失」，对「零产出+有单在身」盲） |
+| L-1026-2 | **巡检活性假阳性（PM 侧方法 bug）**：`grep "会话id" events.ndjson` 会命中自家命令文本（命令里含 id 字符串），把 PM 自身心跳/日志误读为 worker 活性，掩盖 worker 已停 | 1026 全夜三轮巡检误判「671ad0dc 活跃在干」实为自回声；00:10 改 session_id 字段精确过滤后 5 分钟破案 | 巡检脚本已改字段级过滤 | 巡检件（patrol）固化过滤口径进 runLedgerRecon 同源代码，不留在人肉记忆 |
+| L-1026-3 | **回执测试声明环境分歧不可复现**：worker 声称「表测 18/18 绿」Leader 复跑 17/18——**双方输出都真实**，分歧源=bash 3.2 的 `$name<多字节>` 邻接行为 **locale 依赖**（C locale 不炸/UTF-8 locale 把字节吸进变量名 set -u 炸 127）；但 UTF-8 侧实锤 deploy-web.sh:139 **--force 逃生口本身是坏的**（本批要保的正是逃生口）——同机同 bash 仍可因 env 不同得出相反结论 | 1026 01:00 W-DEPLOYGATE 收割复跑实锤（case16 FAIL）→ 打回 W-DEPLOYFIX → 补记最小复现双 locale 对照（LC_ALL=en_US.UTF-8 炸 / LC_ALL=C 不炸）；修后双 locale 19/19 | 收割复跑制度抓到（verify-receipt-claims 精神的人工执行）；${fv} 花括号修+表测硬化（警告行 grep 断言+3.2 语义禁令注释）已收 923120dc | 回执闸（§11）升级：测试类声明必须附**终端原样输出尾部+关键 env（locale/shell 版本）**，verify-receipt-claims 对「表测 N/N 绿」声明抽跑复核（多 locale） |
+| L-1026-4 | **压缩恢复循环吞单复发（第 2 例）**：同 L-1026-1 机制，好席干到 5/9 件后退化死亡 | 1026 00:39 W-FB66ALL 席 3b5cd57c：五笔提交（⑦⑧⑨⑩①）后状态摘要连播+files_changed=1 即 DONE，③④⑤⑥+双回执全丢 | member-retire + 续批 W-FB66REST（含核验前席五件+还回执账） | 同 L-1026-1 根治件（零产出 DONE 闸）；另：**worker 分件提交+末尾统写回执的形态放大损失**——回执随件写（每件一还）可把损失从「整批回执」缩到「单件」，写入任务书模板 |
+| L-1026-6 | **降级恢复腿盲 fork 同会话活进程**：resumeExternal 不查「该会话已有活进程」就 spawn claude --resume 新标签——真身若已是活恢复进程=同会话双活分身（L-1024-2 同族跨复发）；叠加 relay 重启后 pid 注册回读空窗（实测 06:50 重启→06:56 注入仍败→06:59 才回注册=9 分钟空窗），空窗内注入必败→误触发降级 | 1026 06:56 生产实锤：PM 会话 29ab705b 真身=10/15 拉起的恢复进程 15585（原 nohup 早已死，「无头 PM」为误诊）；INJDEGRADE 降级路径首战即拉出 37992 分身，用户手机测试消息差点喂给分身（面板「恢复进行中，消息已排队」×N）；PM 击毙 37992+队列已空+cli-pids 回指 15585 | PM 侧手动击毙分身+直接代答用户消息 | **spawn 前活进程探测闸**（pgrep 同会话 claude 活进程→改注入重试不 fork，任务 #257）；relay 重启 pid 注册表回读链路核查（空窗 9 分钟应缩短为即时）；面板「转录活跃（无 hook 会话）」误标同源 |
+| L-1026-5 | **双线脚本漂移误诊（PM 侧）**：V2 五面闸爆红初判「bash 3.2 邻接第二案复发」派 W-BASHSWEEP 全仓清扫——worker 核对发现任务书指定的 check-deploy-complete.sh:27/29 **在脚本正典线（feat/1010-audit-fixbatch@1e264975）基点已修**，爆红运行体=船线（feat/test56-integ）scripts/ 的**旧拷贝**（四面同步时只 cp 了 deploy-web/test-deploygate 两件，漏了 checker）；真复发零起，实修仅 check-behavior-parity.sh 另三处会炸面 | 1026 01:17 W-BASHSWEEP 回执「重要核对发现」节实锤（cmp 证据：deploy-web/test-deploygate SAME、check-deploy-complete DIFF） | 船线收编同步 77e483d3（两件换新）+复跑 V2 全绿 rc=0；正典线合并 569b34fd | **多线并行时脚本类收编=全件 cp 不是挑件 cp**：deploy-web.sh 出包/部署流程应把 check-deploy-complete.sh 一并随批同步（或脚本单源从仓根硬链到船线），否则闸本身漂移=闸失真 |
+
+附：本例零产出 DONE **未被任何机器闸捕获**（NOTIFY_CHAIN_AUDIT 当时只报三账缺角），靠用户巡检轮触发 PM 深查才发现——L-1026-1 的零产出闸与 §13（1024）「收工自检扩展」合并为同一根治件候选。

@@ -42,14 +42,18 @@ async function waitFor(fn: () => boolean, ms = 4000, every = 25): Promise<boolea
 }
 
 // ---------- 0) 抽取 005 壳内密封层标记段（test-005-cloud 抽取直跑的契约锚） ----------
+// #258 抽取源修复：W-SPLIT-S4b（27c6b87a）把云链/密封层内联块外置到 js/ 目录后，本测试
+// 仍读 index-005.html 内联段——标记段不存在，测试开局即红。改读 js/settings-domain.js
+// （云链唯一真身；index-005.html 只剩 <script src> 挂载），nacl.js 根引用锚保留在壳上。
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html005 = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+const sd005 = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8");
 const SEAL_START = "// ---------- 云桥 E2E 密封层（";
 const SEAL_END = "// ---------- 云桥 E2E 密封层结束 ----------";
-const sealStart = html005.indexOf(SEAL_START);
-const sealEnd = html005.indexOf(SEAL_END, sealStart);
-assert(sealStart >= 0 && sealEnd > sealStart, "005 壳内密封层标记段存在（test-005-cloud 抽取锚）");
-const sealCode = sealStart >= 0 && sealEnd > sealStart ? html005.slice(sealStart, sealEnd + SEAL_END.length) : "";
+const sealStart = sd005.indexOf(SEAL_START);
+const sealEnd = sd005.indexOf(SEAL_END, sealStart);
+assert(sealStart >= 0 && sealEnd > sealStart, "005 壳内密封层标记段存在（test-005-cloud 抽取锚，外置 js 后仍配对）");
+const sealCode = sealStart >= 0 && sealEnd > sealStart ? sd005.slice(sealStart, sealEnd + SEAL_END.length) : "";
 assert(sealCode.includes("function unseal") && sealCode.includes("function seal") && sealCode.includes("function devId"), "密封段含 seal/unseal/devId 全套");
 // head 阻塞加载 nacl.js（坑 6：密封依赖在云链模块前就绪）
 assert(/<script src="\/nacl\.js"><\/script>/.test(html005), "壳 head 含 /nacl.js 根相对引用");
@@ -65,25 +69,26 @@ const W = (function () {
       devId: (pk: string, prefix: string) => string;
       seal: (obj: unknown, theirPk: string, mySk: string) => SealedBox;
       unseal: <T>(box: SealedBox, theirPk: string, mySk: string) => T | null;
-    };
+    } | null;
   } catch { return null; }
 })();
 assert(!!W && !!W.seal && !!W.unseal && !!W.genKp && !!W.devId, "密封段在 Node 可直跑（new Function 求值成活）");
 
 // base64 往返 + 与 relay 实现互通（005 加密 → relay 解密；relay 加密 → 005 解密）
+// （W 判空收窄：前面 assert 已保证非空，ts strict 下 W.toB64 等调用需 W! —— #258 顺手清 tsc 旧错）
 {
   const bytes = new Uint8Array(256);
   for (let i = 0; i < 256; i++) bytes[i] = i;
-  const b64 = W.toB64(bytes);
+  const b64 = W!.toB64(bytes);
   assert(b64.length === 344 && b64.endsWith("=="), "toB64 输出带 padding 的标准 base64");
-  assert(Buffer.from(W.fromB64(b64)).equals(Buffer.from(bytes)), "fromB64 完整往返 256 字节");
+  assert(Buffer.from(W!.fromB64(b64)).equals(Buffer.from(bytes)), "fromB64 完整往返 256 字节");
   const relayKp = generateKeyPair();
-  const kp = W.genKp();
-  const boxed1 = W.seal({ hello: "005" }, relayKp.publicKey, kp.secretKey);
+  const kp = W!.genKp();
+  const boxed1 = W!.seal({ hello: "005" }, relayKp.publicKey, kp.secretKey);
   assert(relayUnseal<{ hello: string }>(boxed1, kp.publicKey, relayKp.secretKey)?.hello === "005", "005 seal → relay unseal 互通");
   const boxed2 = relaySeal({ ok: 2 }, kp.publicKey, relayKp.secretKey);
-  assert(W.unseal<{ ok: number }>(boxed2, relayKp.publicKey, kp.secretKey)?.ok === 2, "relay seal → 005 unseal 互通");
-  assert(W.devId(kp.publicKey, "wb") === devId(kp.publicKey, "wb") && W.devId(kp.publicKey, "wb").startsWith("wb-"), "devId 与 relay 派生一致（wb- 前缀）");
+  assert(W!.unseal<{ ok: number }>(boxed2, relayKp.publicKey, kp.secretKey)?.ok === 2, "relay seal → 005 unseal 互通");
+  assert(W!.devId(kp.publicKey, "wb") === devId(kp.publicKey, "wb") && W!.devId(kp.publicKey, "wb").startsWith("wb-"), "devId 与 relay 派生一致（wb- 前缀）");
 }
 
 // ---------- 环境（沙盒铁律：临时 dataDir + 钉 env，绝不连生产桥） ----------
@@ -154,9 +159,14 @@ assert(
 assert(identity.peers.has(webDev), "005 web 设备已登记 peers");
 
 // ---------- 2) 密封 hello → SNAPSHOT ----------
+// #258 批注：本机装了 codex CLI 时，SNAPSHOT payload 的 engineCatalogSummary 会对每引擎
+// 跑 preflightEngine+probeEngineAuth 真探测，同步阻塞 relay 事件循环实测 ~5.6s（快照
+// 构建在 hello 回合同一线程），waitFor 默认 4s 会被这台机器的探测耗时击穿。此为预存
+// 性能问题（W-SPLIT 后本测试失锚不可跑，一直没暴露），非配对链语义回归——放宽到 15s
+// 容纳，根修（探测结果缓存/异步预热）另立任务跟进。
 webSendSealed({ t: "hello", last_seq: 0 });
 assert(
-  await waitFor(() => webInbox.some((m) => m.type === "SNAPSHOT")),
+  await waitFor(() => webInbox.some((m) => m.type === "SNAPSHOT"), 15_000),
   "配对后密封 hello 收到 SNAPSHOT（005 刷新空会话→last_seq=0 全量重建语义）",
 );
 {

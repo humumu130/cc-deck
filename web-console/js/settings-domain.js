@@ -2164,11 +2164,13 @@ function connectLan(ctx) {
           ctx.reconnectDelay = CLOUD_RETRY_BASE_MS; // 连上即归零退避
           if (!peer || pair) {
             if (pair && pair.pc === "" && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); } // 空码信标态预取发现帧（路径保留，005 无 QR UI 不会走到）
-            // 配对退避：窗内不发也不起看门狗（无尝试即无耗尽——否则每轮重连空转照样耗尽刷屏）
-            if (pair.pc === "" || Date.now() >= (ctx.pairNextAt || 0)) {
-              sendPairReq(ctx, pair, dev);
-              startPairWatchdog(ctx);
-            }
+            // #258 自愈铁律：配对态每次连接建立必补发一查——pair_req 幂等（relay 对已配对
+            // 设备直补 pair_ack，cloud-client.ts「幂等补发 ack」），30s 级配对退避不再拦开门首查。
+            // 旧版窗内跳过发送且不起看门狗，而看门狗耗尽后的快速重连（3s）恰在退避窗内打开
+            // → 无看门狗/无重连定时器/无心跳，三无停摆永久卡「配对进行中」（1026 实锤根因）。
+            // 防刷屏改由重连节奏承担：耗尽时退避时长并入 scheduleCloudReconnect 延迟。
+            sendPairReq(ctx, pair, dev);
+            startPairWatchdog(ctx);
             return;
           }
           cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
@@ -2218,21 +2220,23 @@ function connectLan(ctx) {
         ctx.pairTimer = setInterval(() => {
           const peer = cloudPeerOf(ctx.cfg);
           if ((peer && peer.relay_dev !== peerBefore) || ++tries > 3) {
-            clearInterval(ctx.pairTimer);
+            clearInterval(ctx.pairTimer); ctx.pairTimer = 0;
             if (peer && peer.relay_dev !== peerBefore) {
               // 配对成功（新身份到手）：清配对退避——下次配对满速开始
               ctx.pairNextAt = 0; ctx.pairBackoffMs = 0;
               return;
             }
+            // 配对退避推进：耗尽一轮指数退避一轮，封顶 15 分钟。#258：退避时长并入重连延迟
+            // （scheduleCloudReconnect 第二参）——重连打开时窗口已过，onopen 恒补查即刻续跑，
+            // 整个自愈循环（补查→看门狗→退避→重连→补查）无需任何用户动作即可转起来。
+            ctx.pairBackoffMs = Math.min(ctx.pairBackoffMs ? ctx.pairBackoffMs * 2 : 30_000, 900_000);
+            ctx.pairNextAt = Date.now() + ctx.pairBackoffMs;
             // 耗尽无新身份：offline + 退避重连，不能静默 return——否则状态永久卡「配对中」
             const bcMiss = ctx.pendingPair && !ctx.pendingPair.rd; // 广播态：码没找到持码者
             cloudSetConn("offline", bcMiss ? "未找到持码服务器" : "配对无应答", "pair");
-            scheduleCloudReconnect(ctx);
+            scheduleCloudReconnect(ctx, ctx.pairBackoffMs);
             showToast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图备查");
-            console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
-            // 配对退避推进：耗尽一轮指数退避一轮，封顶 15 分钟；relay 回线后最迟一个退避窗内自动续上
-            ctx.pairBackoffMs = Math.min(ctx.pairBackoffMs ? ctx.pairBackoffMs * 2 : 30_000, 900_000);
-            ctx.pairNextAt = Date.now() + ctx.pairBackoffMs;
+            console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack，" + Math.round(ctx.pairBackoffMs / 1000) + "s 后自动重试");
             return;
           }
           const pair = ctx.pendingPair || pendingPairOf(ctx.cfg.id);
@@ -2253,10 +2257,9 @@ function connectLan(ctx) {
         if (!peer || pair) {
           cloudSetConn("connecting", "配对中（轮询）");
           if (pair && pair.pc === "" && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); }
-          if (pair.pc === "" || Date.now() >= (ctx.pairNextAt || 0)) {
-            sendPairReq(ctx, pair, dev);
-            startPairWatchdog(ctx);
-          }
+          // #258 同 onopen 口径：轮询传输建连即补发一查（幂等），退避窗不拦——防同型停摆
+          sendPairReq(ctx, pair, dev);
+          startPairWatchdog(ctx);
         } else {
           cloudSetConn("online", "已连接（轮询）");
           sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
@@ -2477,6 +2480,7 @@ function connectLan(ctx) {
           cloudPersistPaired(cfg); // 决策 1：配对成功才落写共享库（旧壳 /app 免配对直连的锚点）
           setPendingPair(cfg.id, null);
           ctx.pendingPair = null;
+          ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #258 成功即清：配对退避归零，下次配对满速（看门狗 tick 路径之外补齐——ack 到达即清 timer，tick 不再跑）
           cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
           showToast("配对成功");
           sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
@@ -2594,16 +2598,18 @@ function connectLan(ctx) {
         return "transport";
       }
       // 自动重试：3s 起指数退避至 30s 封顶；真未配对不刷重试——5 分钟静默慢速重试（瞬时误判自愈，
-      // nack 幂等限频无害），可见文案仍引导输码；桥不可达把诊断文案保留为前缀
-      function scheduleCloudReconnect(ctx) {
+      // nack 幂等限频无害），可见文案仍引导输码；桥不可达把诊断文案保留为前缀。
+      // #258 minDelayMs：配对看门狗耗尽时传退避时长——等待整个退避窗后再重连，开门即补查
+      // （否则 3s 快速重连落在退避窗内，旧版跳过发送又不起看门狗=三无停摆）
+      function scheduleCloudReconnect(ctx, minDelayMs) {
         const cfg = ctx.cfg;
         if (!cfg.wsUrl) return;
         if (ctx.failKind === "unpaired") {
           if (!ctx.reconnectTimer) ctx.reconnectTimer = setTimeout(() => connectCloudFor(cloudCtx, false), 300_000);
           return;
         }
-        const delay = ctx.reconnectDelay || CLOUD_RETRY_BASE_MS;
-        ctx.reconnectDelay = Math.min(delay * 2, CLOUD_RETRY_MAX_MS);
+        const delay = Math.max(ctx.reconnectDelay || CLOUD_RETRY_BASE_MS, minDelayMs || 0);
+        ctx.reconnectDelay = Math.min((ctx.reconnectDelay || CLOUD_RETRY_BASE_MS) * 2, CLOUD_RETRY_MAX_MS);
         const note = ctx.failKind === "bridge" && ctx.statusText ? ctx.statusText + " · " : "";
         cloudSetConn("connecting", note + "重试中·下次 " + Math.round(delay / 1000) + "s");
         ctx.retryNote = note;
