@@ -147,6 +147,7 @@ ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc
 
 // ---- §C 列表渲染链 ----
 console.log("-- §C render chain");
+ok(sessionSrc.includes("tailTs(inc) >= tailTs(cur)") && sessionSrc.includes("next.set(k, inc.slice())") && !sessionSrc.includes("S.timelines = new Map(Object.entries(p.logs"), "#274: onSnapshot timelines 按会话新者胜 upsert（切源=纯视图过滤，本地缓冲优先——陈旧快照不能拉回消息流；快照未提及 sid 本地保留；缺口=快照尾新自动取快照份）");
 ok(sessionSrc.includes("const slimRoster = slimRosterOf(S.projects);") && sessionSrc.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x))") && sessionSrc.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
 ok(sessionSrc.includes("const pinnedKeep = (x) => x.pinned === true;") && sessionSrc.includes(".filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x)))"), "1015 pinned keep: pinned cards exempt from status filter (always rendered, pinned-first top); filterHidden ledger shares the same predicate so observer amnesty stays exact"); /* W-TS63FIX 顺手修锚：预存红——W-LEADERHIDE 批给 filterHidden 加 isLeaderSession 前缀后锚未跟（pinned 豁免语义未丢，stash 实证与 TS63 改动无关） */
 ok(sessionSrc.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
