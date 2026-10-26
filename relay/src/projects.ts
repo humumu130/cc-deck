@@ -12,7 +12,7 @@
 //   <orgDir>/confirms.json           组织确认单队列（正经立项/升降级/建议暂缓/结项/复活）
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { isAbsolute, join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
 import { appendJournal, atomicWriteJson, lastGoodJournalSnapshot } from "./fs-safe.js";
 import { applyOrgChange } from "./org-schema.js";
@@ -585,6 +585,20 @@ function sanitizeHeadcount(raw: unknown, gate?: HeadcountGate): { ok: true; head
   return { ok: true, ...(out.length ? { headcount: out } : {}) };
 }
 
+/** #260 锚点宿主判定单点：anchor 是 relay 宿主机上的物理路径，绝对性随宿主 OS 而
+ * 定（win32：C:\ 或 \\ 开头；posix：/ 开头——node:path 平台命名空间即权威语义，
+ * 勿手写 startsWith）。前端 web-console 只做宽松格式闸（/ 或盘符开头均放行，
+ * anchorFormatOk 单点），严格合法性只在此判定；拒绝文案带宿主平台与期望形态
+ * （网页操作端 OS 未必同宿主，1026 公司 Windows 网页版被拦实测），前端透传显示。
+ * platform 供测试注入（"win32" 分支在 mac/linux 测试机可验），缺省真宿主。 */
+export function anchorPathError(anchor: string, platform: NodeJS.Platform = process.platform): string {
+  const absolute = platform === "win32" ? win32.isAbsolute(anchor) : posix.isAbsolute(anchor);
+  if (absolute) return "";
+  const osName = platform === "win32" ? "Windows" : "macOS/Linux";
+  const sample = platform === "win32" ? "C:\\Users\\you\\project" : "/Users/you/project";
+  return `锚点目录必须是 relay 宿主机（${osName}）上的绝对路径（形如 ${sample}）；收到 "${anchor.slice(0, 80)}" 在宿主机上不是绝对路径`;
+}
+
 /** B2a adapter：只把 COMMAND_ORG_ACTION=create 收敛到既有 createGroup 单漏斗。 */
 export function handleOrgActionCreate(payload: unknown, dir?: string, gate?: HeadcountGate): CreateGroupResult {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -596,7 +610,8 @@ export function handleOrgActionCreate(payload: unknown, dir?: string, gate?: Hea
   const anchor = typeof raw.anchor_dir === "string" ? raw.anchor_dir.trim() : "";
   const tier = typeof raw.tier === "string" ? raw.tier.trim() : "";
   if (!name || !anchor) return { ok: false, error: "name/anchor_dir 必填" };
-  if (!isAbsolute(anchor)) return { ok: false, error: "anchor_dir 必须是绝对路径" };
+  const anchorErr = anchorPathError(anchor);
+  if (anchorErr) return { ok: false, error: anchorErr };
   if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
   const hc = sanitizeHeadcount(raw.headcount, gate);
   if (!hc.ok) return { ok: false, error: hc.error };
