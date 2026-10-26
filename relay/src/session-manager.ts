@@ -1006,14 +1006,14 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal", detail: string, target?: string): void { /* #205：gate-release=勾选跳过权限放行审计；W-SMIMPL ③：transition-illegal=状态转移断言层观察 */
+  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛 */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
     } catch { /* 审计尽力而为，绝不阻断主路径 */ }
   }
 
-  // #199 C：审计镜像队列——emitChainAudit 五动作（#205 补 gate-release）同步 append data/chain-audit.jsonl
+  // #199 C：审计镜像队列——emitChainAudit 六动作（#205 补 gate-release、#263 补 recon-autoclose）同步 append data/chain-audit.jsonl
   // （云通道无运行时 KV 直推能力——云桥是 wss 中继；镜像文件=KV 批量同步的现成队列，
   // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
   private chainAuditMirror(action: string, detail: string): void {
@@ -1127,6 +1127,67 @@ export class SessionManager {
         body: truncate(report.join("；"), 160),
         severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
       }); } catch { /* 尽力而为 */ }
+    }
+    // #263 收口边沿自动收敛：台账终态（done/failed）超 1h 缓冲窗 × 板卡仍滞留
+    // claimed/backlog → 幂等搬卡（done→done / failed→backlog 保留卡）+ chain-audit
+    // 审计行（action=recon-autoclose）。背景：relay 重启吞收口边沿——closeHungDispatchRows
+    // 对挂起组搬卡被 writableBoard 冻结闸静默拒写（1026 PM 清板实锤 22 张 claimed 堆积
+    // 全此根因）；只告警=转嫁决策债（exp-3721561e 教训），台账是派单生命周期事实源、板
+    // 是投影，投影滞后超窗即收敛。
+    this.reconAutoCloseStaleCards(trigger, now);
+  }
+
+  /** #263：台账终态×板滞留卡自动收敛（runLedgerRecon 专用半边）。保护边界四件：
+   * ①running/dispatched/queued 非终态不碰（收敛末行=终态行才入选）；②终态 1h 缓冲窗
+   * 内不搬（worker 重连补报真回执会追加终态行刷新 ts，窗内搬=抢跑吞掉真收口）；③
+   * submitted/ready_to_install 复核态不搬（有自己的确认闭环，自动搬=碾过复核闸——D18
+   * 教训同「第四写口」）；④挂起/归档组板冻结不绕 writableBoard 闸（只计数不写——复活
+   * 时 reconcileStaleDoing 先归 backlog，下轮 recon 再收敛 done，冻结语义不被绕）。
+   * 幂等：卡已在目标态或无 dispatch_id 手写卡天然 no-op；搬卡经 moveEntryByDispatch
+   * 单口（板 journal action=dispatch-move 留痕），搬后回读核实才计数（不信静默写）。
+   * 零搬动零审计（防 turn-report/patrol 双触发轮询刷屏）。 */
+  private reconAutoCloseStaleCards(trigger: string, now: number): void {
+    const led = new Map<string, "done" | "failed">();
+    for (const e of readDispatchLog()) {
+      if (e.status !== "done" && e.status !== "failed") continue;
+      if (now - e.ts < 3_600_000) continue; // 1h 缓冲窗（防收口在途）
+      led.set(e.id, e.status);
+    }
+    if (!led.size) return;
+    let movedDone = 0, movedBacklog = 0, frozenSkipped = 0;
+    const samples: string[] = [];
+    for (const g of listGroups()) {
+      const board = loadBoardFile(g.id);
+      if (!board) continue; // 坏半态板跳过（读失败≠空板，同 emitBoard 口径）
+      // 目标态≠现态才算待搬（failed×已 backlog=已收敛不重搬不重记——幂等零搬动零审计）
+      const hits = board.entries.flatMap((x): { dispatch_id: string; to: "done" | "backlog"; text?: string }[] => {
+        if ((x.status !== "claimed" && x.status !== "backlog") || !x.dispatch_id) return [];
+        const led2 = led.get(x.dispatch_id);
+        if (!led2) return [];
+        const to = led2 === "done" ? "done" : "backlog"; // failed→backlog 保留卡（不吞——重派/换人/放弃是 failed 单的对账决策面）
+        return to === x.status ? [] : [{ dispatch_id: x.dispatch_id, to, text: x.text }];
+      });
+      if (!hits.length) continue;
+      if (g.status !== "active") { frozenSkipped += hits.length; continue; }
+      for (const h of hits) moveEntryByDispatch(g.id, h.dispatch_id, h.to);
+      // 搬后回读核实（moveEntryByDispatch void 返回，静默拒写不可信——计数只认落盘实态）
+      const after = loadBoardFile(g.id);
+      if (!after) continue;
+      for (const h of hits) {
+        const ent = after.entries.find((x) => x.dispatch_id === h.dispatch_id);
+        if (ent?.status !== h.to) continue;
+        if (h.to === "done") movedDone++; else movedBacklog++;
+        if (samples.length < 5) {
+          const m = String(h.text ?? "").match(/#\d{2,4}\b/);
+          samples.push(m ? m[0] : `${h.dispatch_id.slice(0, 8)}→${h.to}`);
+        }
+      }
+    }
+    if (movedDone + movedBacklog > 0) {
+      this.emitChainAudit("recon-autoclose",
+        `recon(${trigger}) 台账终态×板滞留收敛：${movedDone} 张→done、${movedBacklog} 张→backlog` +
+        (frozenSkipped ? `（冻结组待复活收敛 ${frozenSkipped} 张）` : "") +
+        (samples.length ? `｜${samples.join(" ")}` : ""));
     }
   }
 
