@@ -692,29 +692,6 @@ export class Bridge {
               this.transcriptPaths.set(id, p);
               this.ensureQueuePoll();
             }
-            // #276 孤儿卡活性回迁（rea/passcomb 案的无 pid 半边）：无 hook 终端的卡
-            //（无 cli_pid——hook 事件不来、sessions 账本无条目、claude 引擎不走进程
-            // 扫描，reclaimAliveAtBoot 的 pid 判据接不住它）转录 mtime = 真实最后
-            // 活动——mtime 前进即 updated_at 推进（panel 可见「活着」）；近 5 分钟
-            // 仍在写 = 真回合翻 WORKING；停更超窗收口回 DONE。只管 pid-less 卡：
-            // hook 驱动卡（有 cli_pid，含 reclaimAliveAtBoot 接管的）状态由事件流
-            // 权威驱动，两层管理不得打架
-            const st = this.mgr.getExternal(id);
-            if (st && !st.cli_pid) {
-              try {
-                const mtime = statSync(p).mtimeMs;
-                if (mtime > (st.updated_at || 0)) {
-                  if (Date.now() - mtime < 5 * 60_000 && st.status === "DONE") {
-                    this.mgr.setExternalStatus(id, "WORKING", "终端在线（转录增长中，只读跟进）", undefined, mtime);
-                  } else {
-                    this.mgr.emitExternalSync(id, mtime); // DONE/ERROR 卡：时刻推进+帧下发（#271 at 参）
-                  }
-                } else if (st.status === "WORKING" && Date.now() - mtime > 5 * 60_000) {
-                  this.streamDeltaStop(id);
-                  this.mgr.finishExternal(id, "completed", 0, mtime, "终端回合结束（转录停更）");
-                }
-              } catch {}
-            }
             continue;
           }
           if (this.mgr.ownsCliSession(sid)) continue; // 托管会话/一次性子会话：不收养
