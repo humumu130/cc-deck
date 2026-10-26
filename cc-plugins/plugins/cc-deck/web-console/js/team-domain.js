@@ -1140,7 +1140,7 @@
                   const cands = teamCandidates();
                   // W-UIFB 追加⑭：顶部说明一句话收敛（原句啰嗦且「轻立项」与档位选项重复）；
                   // 档位语义由下拉选项自身表达，说明只答「创建后去哪、要不要确认」
-                  let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的新建项目会在确认卡上请你决议</p>';
+                  let html = '<h3>新建团队</h3><p class="create-sub">需确认的新建项目会在确认卡上请你决议</p>';
                   html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名">';
                   html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="relay 宿主机上的项目绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
                   // #260 就近一句话：锚点在 relay 宿主机上，不是当前浏览器电脑（操作端≠宿主端，
