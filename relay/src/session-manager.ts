@@ -24,7 +24,7 @@ import {
   moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
-  PM_ROLE_RE, seatGate,
+  PM_ROLE_RE, seatGate, anchorPathError,
 } from "./projects.js";
 import type { SeatGateContext } from "./projects.js"; // W-SMIMPL ①：席位门单源判据
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permDenyMessage, permissionPolicyEnabled } from "./permission-policy.js";
@@ -5249,7 +5249,8 @@ export class SessionManager {
           const anchor = str("anchor");
           const tier = str("tier") as ProjectTier;
           if (!name || !anchor) return { ok: false, error: "name/anchor 必填" };
-          if (!isAbsolute(anchor)) return { ok: false, error: "anchor 必须是绝对路径" };
+          const anchorErr = anchorPathError(anchor); // #260：宿主判定单点（win32 盘符/posix 斜杠），文案自解释
+          if (anchorErr) return { ok: false, error: anchorErr };
           if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
           const roleDefaults: Record<string, { engine?: SessionEngine; model?: string; provider?: string }> = {};
           if (p.role_defaults && typeof p.role_defaults === "object" && !Array.isArray(p.role_defaults)) {

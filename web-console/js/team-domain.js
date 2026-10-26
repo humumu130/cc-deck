@@ -29,6 +29,13 @@
                   else console.info("[team] " + text);
                 };
                 const feedback = toast;
+                // #260 锚点格式闸（宽松）：/ 开头、Windows 盘符 [a-zA-Z]:[\\/]、UNC \\\\server\\share
+                // 三形态均放行（win32.isAbsolute 认的三种绝对路径）——锚点是 relay 宿主机上
+                // 的路径，浏览器操作端 OS 未必同宿主（公司 Windows 网页版连 mac 宿主是常态）；
+                // 严格合法性由 relay 按宿主 OS 判定（projects.ts anchorPathError 单点），拒绝
+                // 文案经 result.error 透传显示。挂 window 供 headless 断言复用同一实现。
+                const anchorFormatOk = (v) => /^(\/|[a-zA-Z]:[\\/]|\\\\)/.test(String(v ?? "").trim());
+                window.__ccDeckAnchorFormatOk = anchorFormatOk;
                 const group = () => state.projects?.find((item) => item.id === state.selected);
                 const engine = (key) => engines.get(key) || [key || "引擎未知", ""];
                 const engineBadge = (key) => { const value = engine(key); return '<span class="engine-badge ' + value[1] + '">' + escape(value[0]) + "</span>"; };
@@ -1103,7 +1110,10 @@
                   // 档位语义由下拉选项自身表达，说明只答「创建后去哪、要不要确认」
                   let html = '<h3>新建团队</h3><p class="create-sub">创建后进入团队列表；需确认的新建项目会在确认卡上请你决议</p>';
                   html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名">';
-                  html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="项目仓库绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
+                  html += '<div class="create-label">锚点目录</div><input class="create-field" data-team-field="anchor" placeholder="relay 宿主机上的项目绝对路径 · 一锚一团" aria-label="锚点目录" value="' + escape(teamCwdDefault()) + '">';
+                  // #260 就近一句话：锚点在 relay 宿主机上，不是当前浏览器电脑（操作端≠宿主端，
+                  // 1026 用户公司 Windows 网页版实测被拦的语义误解点）
+                  html += '<div class="create-hint">路径在 relay 宿主机上，不是当前浏览器电脑——Mac/Linux 宿主形如 /Users/…，Windows 宿主形如 C:\\…</div>';
                   html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档"><option value="轻立项">轻量项目（单卡简化态）</option><option value="正经立项">正式项目（每次创建都需确认）</option></select>';
                   // W-UIFB 追加⑬：成员编制入分组盒（字段区/编制区分层）；追加⑮：组内「+ 添加成员」
                   // 手动行（agent 类型+角色名），候选勾选与手动行合计 ≤8 席
@@ -1155,7 +1165,7 @@
                   const tier = String(pop.querySelector("[data-team-field='tier']")?.value ?? "轻立项");
                   const template = String(pop.querySelector("[data-team-field='template']")?.value ?? "worker");
                   if (!name) { toast("先填团队名"); return; }
-                  if (!anchor.startsWith("/")) { toast("锚点目录需是绝对路径"); return; }
+                  if (!anchorFormatOk(anchor)) { toast("锚点目录需是绝对路径（relay 宿主机路径：Mac/Linux 形如 /Users/…，Windows 宿主形如 C:\\…）"); return; }
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
                     const roleInput = pop.querySelector("[data-team-role='" + cssEscape(sid) + "']");

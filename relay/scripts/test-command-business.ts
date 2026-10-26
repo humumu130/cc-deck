@@ -7,7 +7,7 @@ import {
   evaluateCommandPermission,
   evaluateEngineCapability,
 } from "../src/org.js";
-import { adaptOrgAction, handleOrgActionCreate, type OrgActionCreatePayload } from "../src/projects.js";
+import { adaptOrgAction, handleOrgActionCreate, anchorPathError, type OrgActionCreatePayload } from "../src/projects.js";
 import {
   engineProfilesPath,
   preflightEngineProfile,
@@ -44,6 +44,19 @@ try {
   const invalidAction = fixture<OrgActionCreatePayload>("command-org-action-invalid.json");
   check(errorOf(handleOrgActionCreate(invalidAction, dataDir)).includes("unsupported"), "member actions are explicitly unsupported");
   check(errorOf(handleOrgActionCreate({ ...validOrg, anchor_dir: "relative/path" }, dataDir)).includes("绝对路径"), "relative anchor is rejected");
+  // #260 锚点宿主判定（anchorPathError 单点）：win32 宿主放行盘符双斜杠形态、posix
+  // 宿主拒盘符且文案自解释（含平台名+期望形态，前端透传即自说明）；前端 web-console
+  // 只做宽松格式闸，严格面只在这条漏斗
+  check(anchorPathError("/Users/x/proj") === "", "posix absolute anchor passes on host platform");
+  check(anchorPathError("C:\\Users\\x\\proj", "win32") === "", "win32 host accepts drive-letter backslash anchor");
+  check(anchorPathError("C:/Users/x/proj", "win32") === "", "win32 host accepts drive-letter forward-slash anchor");
+  const posixReject = anchorPathError("C:\\Users\\x\\proj", "linux");
+  check(posixReject.includes("绝对路径") && posixReject.includes("macOS/Linux") && posixReject.includes("C:"), "posix host rejects drive-letter anchor with host-aware message");
+  check(anchorPathError("relative/path", "win32").includes("Windows"), "win32 host rejects relative anchor with host-aware message");
+  if (process.platform !== "win32") {
+    const funnelReject = errorOf(handleOrgActionCreate({ ...validOrg, anchor_dir: "C:\\Users\\x\\proj" }, dataDir));
+    check(funnelReject.includes("宿主机") && funnelReject.includes("绝对路径"), "create single funnel rejects drive-letter anchor on posix host via anchorPathError");
+  }
   check(errorOf(handleOrgActionCreate({ ...validOrg, tier: "member-add" }, dataDir)).includes("tier"), "invalid tier is rejected");
   check(adaptOrgAction({ ...validOrg, anchor_dir: join(dataDir, "alias-anchor") }, dataDir).ok === true, "org action adapter alias uses the same single funnel");
 
