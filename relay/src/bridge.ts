@@ -280,6 +280,8 @@ export class Bridge {
     this.enqueuedKeys.delete(id);
     this.turnShape.delete(id);
     this.injectFails.delete(id);
+    this.lastFailPid.delete(id); // #257：失败归因账随会话清场
+    this.divertTries.delete(id); // #257-P2-1：divert 封顶账随会话清场
     this.noPidNote.delete(id);
     this.resumeSpawns.delete(id);
     this.orphanProbe.delete(id);
@@ -376,6 +378,20 @@ export class Bridge {
   // 路径盲发（unknown-failopen）失败的那发恰好把 lastTry 记上=慢层被锁 60s+周期
   // （用户实锤 22:34 fired → 24:03 sent 的 89s 空窗真身）。探针直接调 fireStuckEnter
   private injectProbeTimers = new Map<string, NodeJS.Timeout>();
+  // #257（件一）：会话最近一次注入失败打在哪个 pid 上。降级预检闸用它区分「失败
+  // 归因」——探测到的活进程若正是刚连败的那个，说明该进程的注入通道真断（fork
+  // 恢复才是出路），闸不拦；活进程 ≠ 失败 pid（注册空窗型：失败打在陈旧/缺失定位
+  // 上，真身另有其人）才拦 fork 转注入重试。防「闸→重试→再败→再闸」死循环。
+  // 注入成功/会话清场时清除。
+  private lastFailPid = new Map<string, number>();
+  // #257-P2-1：会话级 divert 次数账——同会话多活体且各注入通道皆坏时，预检闸会在
+  // 多 pid 间自驱振荡（每次重试失败即再入预检、换体再 divert）永不收敛降级。累计
+  // 2 次 divert 而无一次注入成功（成功即清）后强制放行降级 fork。forget 清场。
+  private divertTries = new Map<string, number>();
+  // #257（件一/件二共享）：进程表快照短 TTL 记忆化——闸门/补定位/误标校准可能
+  // 同秒多次探测（降级预检 + resumeExternal 内闸 + extInput 抢救），共享一次 ps。
+  private procSnapAt = 0;
+  private procSnap: Array<{ pid: number; command: string }> | null = null;
 
   // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
   private get resumeWindowMs(): number {
@@ -412,6 +428,10 @@ export class Bridge {
     //（与 healExternal 抢救路径的既有顺序对齐）
     this.reconcilePidsFromSessions();
     this.hydratePidsFromCache();
+    // #257（件二）：进程表扫描补定位殿后——前两源对「空闲中的恢复进程」全盲（hook
+    // 不动不来事、sessions 文件不必然存在——15585 实锤无），重启后 pid 注册回读
+    // 空窗（实测 9 分钟，直到进程自己动起来才回注册）由此缩为 boot 即时
+    this.reconcilePidsFromProcesses();
     this.healExternal();
     // W-INJECT：先回种落盘排队（revive 的重投触发要见到非空队列），再跑存活自愈
     this.loadQueueDisk();
@@ -420,9 +440,10 @@ export class Bridge {
     this.scanExternalEngines();
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
     this.healTimer = setInterval(() => {
-      // #113 同 boot 顺序：活证据先行，缓存兜底殿后
+      // #113 同 boot 顺序：活证据先行，缓存兜底殿后；#257 进程扫描收尾（迟到的活恢复进程）
       this.reconcilePidsFromSessions();
       this.hydratePidsFromCache();
+      this.reconcilePidsFromProcesses();
       this.healExternal();
       this.reviveAliveExternals(); // W-INJECT：迟定位 pid 的补自愈
       this.adoptOrphans();
@@ -856,6 +877,94 @@ export class Bridge {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  // ---------- #257 活进程探测（双源：注册表 + 进程表扫描）----------
+
+  // 恢复进程 argv 的会话 id 标记：resumeSession 自身的 `--resume <sid>`（空格形）、
+  // lcu 适配器的 `--resume=<sid>`（等号形）、显式 `--session-id <sid>` 三种形态；
+  // sid 锚定 UUID 形状防误配，另要求命令行含 claude（防 grep/echo 类同串进程）
+  private static readonly RESUME_ARG =
+    /(?:^|\s)(?:--resume|--session-id)[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?=\s|$)/i;
+
+  // 进程表快照（3s 记忆化）：与引擎扫描的 5s 快照各自独立，本处只服务 #257 三消费方
+  private procSnapshot(): Array<{ pid: number; command: string }> | null {
+    if (Date.now() - this.procSnapAt < 3000) return this.procSnap;
+    this.procSnapAt = Date.now();
+    this.procSnap = captureCliProcesses();
+    return this.procSnap;
+  }
+
+  // 同会话活进程探测（#257 件一核心）。源序：①内存注册表（state.cli_pid）②hook 侧
+  // pid 缓存——两源在 onInjectFail 里已被清空，降级预检时自然只剩源③进程表扫描：
+  // argv 带 --resume/--session-id <sid> 的活 claude 进程（注册空窗期唯一的即时源，
+  // 1026 06:56 PM 分身事故的真身 15585 即此形态）。找不到 = 无证据表明会话已有活身。
+  private findAliveCliProcess(sessionId: string): number | undefined {
+    // sid 键口径与 reconcilePidsFromSessions/hydratePidsFromCache 对齐：relay_session_id
+    // 优先、ext 前缀剥离兜底（#257-P2 复核：两处口径不一会让引擎收编会话永远配不上）
+    const st = this.mgr.getExternal(sessionId);
+    const sid = (st?.relay_session_id || sessionId.slice(4)).toLowerCase();
+    const reg = st?.cli_pid;
+    if (reg && cliHostAlive(reg)) return reg;
+    try {
+      const cache = JSON.parse(readFileSync(this.pidCacheFile, "utf-8")) as Record<string, number>;
+      if (cache[sid] && cliHostAlive(cache[sid])) return cache[sid];
+    } catch {}
+    const snap = this.procSnapshot();
+    if (!snap) return undefined;
+    return Bridge.resumeCandidates(snap, sid.toLowerCase())[0];
+  }
+
+  // #257-F2 扫描候选选择：同 sid 多活体并存时（残留分身/用户手开第二窗），命令首
+  // token 可执行名以 claude 起头的「直连真身」排前——node 包裹进程（适配器等路径
+  // 含 claude 字样的宿主）与真身并存时优先直连，注入不绕道包裹层；同组内保持 ps
+  // 序（老进程在前）稳定。返回按优先级排好的全部命中（留痕/观察用）。
+  private static resumeCandidates(snap: Array<{ pid: number; command: string }>, wantSid: string): number[] {
+    const hits: Array<{ pid: number; direct: boolean }> = [];
+    for (const e of snap) {
+      const m = Bridge.RESUME_ARG.exec(e.command);
+      if (!m || m[1].toLowerCase() !== wantSid) continue;
+      if (!/claude/i.test(e.command)) continue;
+      if (!cliHostAlive(e.pid)) continue;
+      const exe = (e.command.trim().split(/\s+/)[0] ?? "").split("/").pop() ?? "";
+      hits.push({ pid: e.pid, direct: /^claude(-\w+)?(\.exe)?$/i.test(exe) });
+    }
+    if (!hits.length) return [];
+    hits.sort((a, b) => Number(b.direct) - Number(a.direct)); // node 稳定排序：组内序保持
+    return hits.map((h) => h.pid);
+  }
+
+  // #257 件二：进程表扫描补定位（重启后 pid 注册回读的即时源）。只补「无 pid 或
+  // pid 已死」的既有会话（不覆盖活定位——与 reconcilePidsFromSessions 同纪律），
+  // 因此对隔离沙盒（合成 sid）天然无交叉：扫到也配不上任何会话。命中即注册并留痕。
+  private reconcilePidsFromProcesses(): void {
+    const snap = this.procSnapshot();
+    if (!snap) return;
+    const bySid = new Map<string, number[]>();
+    for (const e of snap) {
+      const m = Bridge.RESUME_ARG.exec(e.command);
+      if (!m || !/claude/i.test(e.command)) continue;
+      const sid = m[1].toLowerCase();
+      if (!bySid.has(sid)) bySid.set(sid, []);
+    }
+    if (!bySid.size) return;
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external) continue;
+      if (s.cli_pid && cliHostAlive(s.cli_pid)) continue; // 活定位不覆盖
+      const key = (s.relay_session_id || s.session_id.slice(4)).toLowerCase();
+      if (!bySid.has(key)) continue;
+      const pids = Bridge.resumeCandidates(snap, key);
+      const pid = pids[0];
+      if (!pid) continue;
+      if (s.cli_pid === pid) continue; // P2 复核：定位已在位（首查 ps 瞬时失败二查通过的抖动）不重复留痕/下发
+      this.mgr.setExternalCliPid(s.session_id, pid);
+      const st = this.mgr.getExternal(s.session_id);
+      if (st?.historical && !st.idle_archived) {
+        st.historical = false; // 活 pid 即会话真实存活的证明（#50 刻意沉底不翻案）
+      }
+      this.mgr.pushExternalLog(s.session_id, "system", `已通过进程扫描恢复定位（pid ${pid}${pids.length > 1 ? `，同会话候选 ${pids.length} 个` : ""}）——重启注册空窗自愈，无需等待进程上报`);
+      this.mgr.emitExternalSync(s.session_id);
     }
   }
 
@@ -1651,12 +1760,19 @@ export class Bridge {
       if (!state.cli_pid || !pidAlive(state.cli_pid)) {
         this.reconcilePidsFromSessions();
         this.hydratePidsFromCache();
+        // #257（件一）：第三抢救源——进程表扫描（argv 带 --resume <sid> 的活恢复
+        // 进程）。前两源对「注册空窗里的活真身」全盲（1026 PM 事故：真身 15585 活着
+        // 却查无定位，消息走 fork 拉出分身 37992）；此处补扫，扫到即重定位不打扰恢复
+        this.reconcilePidsFromProcesses();
       }
       const pid2 = this.mgr.getExternal(sessionId)?.cli_pid ?? state.cli_pid;
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2); // 二次探测
       if (!alive2) {
-        return this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`, echoText, imgRefs.length ? imgRefs : undefined);
+        const rr = this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`, echoText, imgRefs.length ? imgRefs : undefined);
+        // #257 闸门截胡：resumeExternal 内部探测到同会话活进程（已重定位）——不 fork，
+        // 落回下方正常排队注入通路（state 是活引用，cli_pid 已更新）
+        if (!rr.diverted) return rr;
       }
     }
 
@@ -1693,11 +1809,32 @@ export class Bridge {
   // pending，恢复进程空闲时 flushQueue 自动带上
   private resumeSpawns = new Map<string, number>();
 
-  private resumeExternal(sessionId: string, text: string, why?: string, echo?: string, refs?: string[]): { ok: boolean; error?: string } {
+  private resumeExternal(sessionId: string, text: string, why?: string, echo?: string, refs?: string[]): { ok: boolean; error?: string; diverted?: boolean } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
     const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
+    // #257（件一）spawn 前活进程探测闸：即将 fork 前先探「该会话是否已有活进程」
+    //（注册表 + 进程扫描双源）。命中且不是刚连败的那个 pid → 不开新终端标签（分身
+    // 根治：1026 06:56 PM 真身 15585 活着，降级腿盲 fork 出同会话分身 37992，用户
+    // 消息差点喂给分身），重定位 pid 后交回正常注入通路——调用方按 diverted 分流。
+    // 探测命中证明「恢复触发归因于陈旧/缺失定位」而非「进程死亡」，fork 只会制造
+    // 双活分身。恢复窗口内不拦（自家 spawn 刚起、启动中，窗口机制本身即在防重复
+    // fork）；置于 pending 回显/resumeSpawns 置位之前，截胡路径零状态变更。
+    if (!inWindow) {
+      const alive = this.findAliveCliProcess(sessionId);
+      if (alive && alive !== this.lastFailPid.get(sessionId) && (this.divertTries.get(sessionId) ?? 0) < 2) {
+        this.mgr.setExternalCliPid(sessionId, alive);
+        this.divertTries.set(sessionId, (this.divertTries.get(sessionId) ?? 0) + 1); // P2-1 封顶：多体振荡时第 3 次起放行降级
+        // #257-F1：探测命中≠可注入（nohup 恢复体无 tty 形态）——不清零而置 2：重试
+        // 首败即达 3 败再降级，杜绝「转重试→失败→无自触发器→队列滞留至 24h 清扫」
+        //（审查反例：旧路径 fails=3 无条件 fork 无此滞留窗）；注入成功/晋升照常清零
+        this.injectFails.set(sessionId, Math.max(this.injectFails.get(sessionId) ?? 0, 2));
+        this.injectFailNoted.delete(sessionId);
+        this.mgr.pushExternalLog(sessionId, "system", `探测到同会话活进程（pid ${alive}），不开新终端标签——已重定位转注入重试（此前恢复触发疑为定位空窗，非进程死亡）`);
+        return { ok: true, diverted: true };
+      }
+    }
     // 带图消息：pending 回显/日志用短文本（不暴露临时路径），对账键仍是注入全文
     const shown = echo ?? text.trim();
     this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: shown, ts: Date.now(), ...(shown !== text.trim() ? { body: text.trim() } : {}), ...(refs?.length ? { refs } : {}) }]);
@@ -1925,6 +2062,8 @@ export class Bridge {
         this.noPidNote.delete(sessionId);
         this.injectFails.delete(sessionId); // 注入成功：连续失败计数清零
         this.injectFailNoted.delete(sessionId); // W-INJDEGRADE：失败横幅周期终结
+        this.lastFailPid.delete(sessionId); // #257：通道已证活，失败归因账翻篇
+        this.divertTries.delete(sessionId); // #257-P2-1：通道已证活，divert 封顶重置
         this.saveQueueDisk();
         const sentAt = Date.now();
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue→written)`);
@@ -2140,13 +2279,40 @@ export class Bridge {
   //            「排队中」气泡撤下），杜绝无限排队。
   // 计数在注入成功（flushQueue）/消息晋升（promotePending）时清零。
   private onInjectFail(sessionId: string, error?: string): void {
+    // #257（件一）：失败归因记账——先于清定位捕获「这次失败打在哪个 pid 上」。降级
+    // 预检闸据此区分：探测到的活进程若正是它 → 该进程注入通道真断（fork 恢复才是
+    // 出路）；若另有其人 → 失败只打在陈旧/缺失定位上（注册空窗型），拦 fork 转重试
+    const failedPid = this.mgr.getExternal(sessionId)?.cli_pid;
     this.mgr.clearExternalCliPid(sessionId);
     this.clearPidCache(sessionId);
+    if (failedPid) this.lastFailPid.set(sessionId, failedPid);
     const fails = (this.injectFails.get(sessionId) ?? 0) + 1;
     this.injectFails.set(sessionId, fails);
     const q = this.inputQueue.get(sessionId) ?? [];
     const why = error === "pid-reuse" ? "进程定位失效（PID 被系统复用）" : (error ?? "未知");
     if (fails >= 3) {
+      // #257（件一）降级预检闸：转恢复投递腿之前先探同会话活进程。3 连败的常见真因
+      // 之一是注册空窗（重启后定位丢失/陈旧——本函数已清注册表与缓存，探测实际走
+      // 进程扫描）：真身活着（argv 带 --resume <sid>）且不是刚连败的那个 pid = 失败
+      // 归因于坏定位而非进程死亡 → 重定位+清账转注入重试，不 fork 分身（1026 06:56
+      // PM 事故：真身 15585 活着，降级腿首战即拉出 37992 分身）。未命中（无活进程/
+      // 活进程即连败真身）= 通道或进程真断 → 照旧降级恢复投递
+      const alive = this.findAliveCliProcess(sessionId);
+      if (alive && alive !== this.lastFailPid.get(sessionId) && (this.divertTries.get(sessionId) ?? 0) < 2) {
+        this.mgr.setExternalCliPid(sessionId, alive);
+        this.divertTries.set(sessionId, (this.divertTries.get(sessionId) ?? 0) + 1); // P2-1 封顶：多体振荡时第 3 次起放行降级
+        // #257-F1：置 2 不清零——转重试后若新定位同样不可注入（nohup 无 tty），重试
+        // 首败即凑满 3 败再降级 fork，不靠后续用户消息推进（防队列滞留 24h 被清扫）
+        this.injectFails.set(sessionId, 2);
+        this.injectFailNoted.delete(sessionId);
+        this.noPidNote.delete(sessionId);
+        this.mgr.pushExternalLog(sessionId, "system", `注入连败 ${fails} 次后探测到同会话活进程（pid ${alive}），已重定位转注入重试（不开新终端标签）——连败疑为定位空窗，非进程死亡`);
+        // 重试须经 0ms 定时器：此刻仍在失败 flush 的调用栈内（flushing 位未清，
+        // 同步重入会被重入锁挡掉静默放弃）；定时器必然晚于外层 finally 执行
+        const gt = setTimeout(() => void this.flushQueue(sessionId), 0);
+        gt.unref?.();
+        return;
+      }
       // W-INJDEGRADE（#142，2026-10-26 用户拍屏实锤）：3 连败不再丢弃——降级到恢复投递腿
       //（resumeExternal→claude --resume 带 prompt 开新终端标签）。该腿已被同窗实证可用：
       // 无头 PM 会话（nohup，tty 不在任何 Terminal 标签）Terminal 腿连败丢消息的同时，
@@ -2162,7 +2328,20 @@ export class Bridge {
       const st = this.mgr.getExternal(sessionId);
       if (st?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []); // 重建前清旧回显，防同消息双气泡
       for (let i = 0; i < q.length; i++) {
-        this.resumeExternal(sessionId, texts[i], `注入连续 ${fails} 次失败（${why}）`, q[i].text, q[i].refs);
+        const r = this.resumeExternal(sessionId, texts[i], `注入连续 ${fails} 次失败（${why}）`, q[i].text, q[i].refs);
+        // #257 竞态兜底（正常时序构造性不可达——预检与内闸同调用栈共享同一 3s 快照，
+        // 仅并发 hook 改写 pid 缓存的间隙理论可触）：内闸命中时本条起全部回注入队列
+        // 重投（diverted 路径未动 pending/队列，此处补记即可），不开新标签
+        if (r.diverted) {
+          const rest = q.slice(i);
+          this.inputQueue.set(sessionId, [...(this.inputQueue.get(sessionId) ?? []), ...rest.map((p) => ({ ...p }))]);
+          this.saveQueueDisk();
+          const st2 = this.mgr.getExternal(sessionId);
+          this.mgr.setExternalPending(sessionId, [...(st2?.pending_inputs ?? []), ...rest.map((p) => ({ ...p }))]);
+          const gt2 = setTimeout(() => void this.flushQueue(sessionId), 0);
+          gt2.unref?.();
+          return; // 横幅不落（未降级），闸门留痕已由 diverted 路径写
+        }
       }
       this.mgr.pushExternalLog(
         sessionId,
@@ -2392,13 +2571,24 @@ export class Bridge {
         // 否则回合刚结束就被兜底文案回潮覆盖（2026-10-09 redbook 会话实测）
         const hookRecent = Date.now() - (this.lastHookAt.get(id) ?? 0) < 15_000;
         if (st0 && !hookRecent && (st0.status === "DONE" || st0.status === "ERROR")) {
-          this.noHookIds.add(id);
-          if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
-          this.mgr.setExternalStatus(
-            id,
-            "WORKING",
-            st0.status === "ERROR" ? "转录活跃（自愈：重启误标错误）" : "转录活跃（无 hook 会话）",
-          );
+          // #257（件三）定性前先验活进程：「转录在写 + 一阵子没 hook 事件」不必然是
+          // 「无 hook 会话」——注册空窗（重启后定位丢失/陈旧、hook 事件未达或丢失）里
+          // 真身活着照写转录。活进程在场 = CLI 带 hook 配置（正常/恢复进程都装 hook），
+          // 误进 noHookIds 会把 Stop 权威收尾降级成 90s 静默启发，且「无 hook 会话」
+          // 文案误导排障方向——与 #257 分身同源（都是「relay 不知道进程活着」的误判）
+          const alivePid = this.findAliveCliProcess(id);
+          if (alivePid) {
+            if (st0.cli_pid !== alivePid) this.mgr.setExternalCliPid(id, alivePid); // 顺带重定位（空窗自愈）
+            this.mgr.setExternalStatus(id, "WORKING", "转录活跃（进程在，hook 事件未达）");
+          } else {
+            this.noHookIds.add(id);
+            if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
+            this.mgr.setExternalStatus(
+              id,
+              "WORKING",
+              st0.status === "ERROR" ? "转录活跃（自愈：重启误标错误）" : "转录活跃（无 hook 会话）",
+            );
+          }
         }
         if (st0?.historical) st0.historical = false;
       }
