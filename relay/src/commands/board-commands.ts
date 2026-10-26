@@ -193,6 +193,15 @@ export function createBoardCommands(mgr: any) {
           const r = mgr.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
     },
+    COMMAND_RELAY_NAME_SET(cmd: any, _by: string): any {
+          // #272 源名称可编辑（hostname 默认过长如 huanglin）：relay-name 文件唯一事实源
+          //（W-SRCLABEL #134 单点，读写都收口 settings.ts），本命令是唯一写口——
+          // sanitize ≤12/拒控制字符/空=清空回落 hostname；成功即广播 RELAY_NAME_UPDATED
+          //（LAN+cloud 全扇出：本端与对端云配对源同名即时跟随，SNAPSHOT 亦现算新名）。
+          // ack.data = { relay_name }（生效名——清空时即回落后的 hostname）
+          const r = mgr.setRelayName((cmd.payload as { name?: unknown } | undefined)?.name);
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+    },
     COMMAND_TASK_CREATE(cmd: any, by: string): any {
           // M12-1 三新命令（v2-m10-freeze §3.1 新增候选定岗）：LAN/cloud 两入口都经
           // handleCommand 到这里，同走 orgCommand 咽喉（权限矩阵+审计一行），adapter

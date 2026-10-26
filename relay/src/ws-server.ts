@@ -206,6 +206,8 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_NOTIFICATION_ACK",
   // #17 第二批：雇员独立家开关切换（三端设置项）
   "COMMAND_SETTINGS_UPDATE",
+  // #272 源名称改名（连接与设备页「本源名称」；与云通道白名单逐字一致纪律）
+  "COMMAND_RELAY_NAME_SET",
   // M12-1 四新命令（v2-m10-freeze §3.1）：经 orgCommand 咽喉→orgAction 单漏斗
   "COMMAND_TASK_CREATE",
   "COMMAND_TASK_UPDATE",

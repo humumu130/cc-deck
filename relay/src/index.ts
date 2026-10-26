@@ -7,7 +7,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { attachAgentActivator } from "./agent-activator.js";
 import { loadConfig } from "./config.js";
-import { resolveEmployeeHome, writeSettingsFile, ensureEmployeeHomeSeed } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, ensureEmployeeHomeSeed, effectiveRelayName } from "./settings.js";
 import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
@@ -434,13 +434,9 @@ const pairCodes = createPairingCodes();
 // 空名，W-SRC2 的 withRelaySource「空名=零注入」守卫随之清零：两台 relay 的会话全无
 // relay_source，web 聚合 srcSet 塌成 1 → CSS 门控隐藏全部源标签（1022 用户截图根因）。
 // 主机名恒在场 → relay_name/relay_source 恒下发，源身份不再依赖用户先去设置页命名
-const relayNameOf = (dataDir: string): string => {
-  try {
-    return readFileSync(join(dataDir, "relay-name"), "utf8").trim().slice(0, 40) || hostname().slice(0, 40);
-  } catch {
-    return hostname().slice(0, 40);
-  }
-};
+// #272：读写收编 settings.ts 单源模块（effectiveRelayName 现算——setRelayName 改名后
+// SNAPSHOT/reconcile 免重启带新名）；此处仅保留注入闭包形态
+const relayNameOf = (dataDir: string): string => effectiveRelayName(dataDir);
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);

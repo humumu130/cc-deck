@@ -49484,7 +49484,9 @@ function createSessionCommands(mgr2) {
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
         title,
-        title_locked: true
+        title_locked: true,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（改名≠活动）
       });
       return { command_id: cmd.command_id, ok: true };
     }
@@ -50080,7 +50082,9 @@ function createBoardCommands(mgr2) {
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
         pinned: pinned2,
-        saved: !!s.state.saved
+        saved: !!s.state.saved,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（pin 是 UI 态≠活动）
       });
       return { command_id: cmd.command_id, ok: true };
     },
@@ -53329,7 +53333,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         status: s.state.status,
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
-        title: t
+        title: t,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（重放回落信封 ts=洗活固化）
       });
     });
   }
@@ -53347,7 +53353,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      title: t
+      title: t,
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   /** #219 件②回落档：deriveTitle(首条 prompt) 即时定名——无同构标题源的引擎
@@ -53491,7 +53499,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "\u63A5\u5165\u4E2D",
       started_at: startedAt || Date.now(),
-      updated_at: Date.now(),
+      updated_at: opts?.updatedAt || Date.now(),
+      // #271：转录收编新卡带真实最后活动，防 boot 洗活
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
@@ -53551,7 +53560,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   getExternal(id2) {
     return this.sessions.get(id2)?.state;
   }
-  setExternalStatus(id2, status, summary, turnStartedAt) {
+  // #271 重启洗活根修：at = 活动时刻（缺省判定时刻）。boot 引擎扫描（adoptEngineProfiles）
+  // 的状态/摘要校正传 profile.updatedAt（转录真实最后活动）——原无条件 Date.now() 把久未
+  // 活跃会话全部洗成启动时刻（1026 用户实锤「全员 14:25」：回放态摘要与扫描算出的摘要
+  // 常态不等，summary 失配即触发）。载荷恒带 updated_at（#157 口径）：缺载帧重放回落
+  // 信封 ts 会把洗活固化进下次重启，且双端客户端 fallback 会伪造接收时刻。
+  setExternalStatus(id2, status, summary, turnStartedAt, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
     const changed = s.state.status !== status;
@@ -53560,14 +53574,15 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.action_summary = summary;
     if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id2, "SESSION_UPDATED", {
         status,
         action_summary: summary,
         stats: { ...s.state.stats },
         ...s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {},
-        historical: !!s.state.historical
+        historical: !!s.state.historical,
+        updated_at: s.state.updated_at
       });
     }
   }
@@ -53587,14 +53602,19 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
-      compacting: on2
+      compacting: on2,
+      updated_at: s.state.updated_at
+      // #271：帧完整性（缺载帧重放/客户端 fallback 双洗面）
     });
   }
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
   // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
-  emitExternalSync(id2) {
+  // #271：at = 该状态修复对应的真实活动时刻（缺省 now）。historical 翻转等扫描判定
+  // 不是会话活动——boot 扫描把久休会话标 historical 时若刷 now，洗活从校正帧挪到
+  // 同步帧原样复发（emitUpdated 无 at = Date.now()）
+  emitExternalSync(id2, at) {
     const s = this.sessions.get(id2);
-    if (s) this.emitUpdated(s, true);
+    if (s) this.emitUpdated(s, true, at);
   }
   // #393 手动通知注入（/api/notify）：把一段文字作为 TASK_DONE 汇报推给指定/最新会话，
   // 悬浮框当即弹出（拖图原理答疑/联调实测用）；同时落 last_task_done 供断线恢复
@@ -53735,7 +53755,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
-      stats: { ...stats }
+      stats: { ...stats },
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   // #35 输出物单条合并咽喉点（实时路径：external hook 事件 / 托管 SDK 工具结果）。
@@ -53805,7 +53827,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       stats: { ...s.state.stats },
       artifacts: this.aliveArtifacts(s),
       // #224 下发前 re-stat + 剔除已删
-      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
@@ -53867,7 +53891,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       stats: { ...s.state.stats },
       artifacts: this.aliveArtifacts(s),
       // #224 下发前 re-stat + 剔除已删
-      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
     return { ok: true };
   }
@@ -54209,7 +54235,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      remote_mode: enabled
+      remote_mode: enabled,
+      updated_at: s.state.updated_at
+      // #271：帧完整性
     });
   }
   setExternalCliPid(id2, pid) {
@@ -54219,7 +54247,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
-      cli_pid: pid
+      cli_pid: pid,
+      // #271：定位补水≠会话活动——载荷带既有 updated_at（缺载帧重放回落信封 ts 会把
+      // boot 补水时刻固化成活跃时刻 + 双端客户端 fallback 伪造接收时刻，双洗）
+      updated_at: s.state.updated_at
     });
   }
   clearExternalCliPid(id2) {
@@ -55427,7 +55458,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       this.bus.emit(id2, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
-        title
+        title,
+        updated_at: s.state.updated_at
+        // #271：帧完整性
       });
     }
   }
@@ -57902,7 +57935,9 @@ provider=${opts.provider ?? "default"}` : void 0,
         status: s.state.status,
         action_summary: s.state.action_summary,
         ...s.state.project_gid ? { project_gid: s.state.project_gid } : {},
-        dispatch_tier: s.state.dispatch_tier
+        dispatch_tier: s.state.dispatch_tier,
+        updated_at: s.state.updated_at
+        // #271：帧完整性（徽标帧≠活动帧）
       });
     }
     this.emitOrgState();
@@ -60751,7 +60786,9 @@ var Bridge = class _Bridge {
         profile.prompt,
         profile.sessionId,
         profile.startedAt,
-        { engine: spec.engine, model: profile.model, provider: profile.provider }
+        // #271：新卡带转录真实最后活动——缺省 Date.now() 会把 boot 收编的久休会话洗成
+        // 启动时刻（1026「全员 14:25」/「6+ 空 Codex 复活」的建卡半边）
+        { engine: spec.engine, model: profile.model, provider: profile.provider, updatedAt: profile.updatedAt }
       );
       if (existing) {
         this.mgr.updateExternalProfile(id2, {
@@ -60775,13 +60812,13 @@ var Bridge = class _Bridge {
         this.streamDeltaStop(id2);
         this.mgr.finishExternal(id2, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
       } else if (state.status !== desiredStatus || state.action_summary !== summary) {
-        this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0);
+        this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0, profile.updatedAt);
         if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id2);
       }
       const historical = !active && inferredDead;
       if (!!state.historical !== historical) {
         state.historical = historical;
-        this.mgr.emitExternalSync(id2);
+        this.mgr.emitExternalSync(id2, profile.updatedAt);
       }
       if (profile.activity && profile.activityKey && this.engineActivityKeys.get(id2) !== profile.activityKey) {
         this.engineActivityKeys.set(id2, profile.activityKey);
