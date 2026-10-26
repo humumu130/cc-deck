@@ -528,7 +528,9 @@ export class Bridge {
       const historical = !active && inferredDead;
       if (!!state.historical !== historical) {
         state.historical = historical;
-        this.mgr.emitExternalSync(id);
+        // #271：historical 翻转是扫描判定非活动——同步帧带转录真实时刻（无 at 的
+        // emitExternalSync=emitUpdated(Date.now())，boot 洗活从校正帧挪到这里的原样复发）
+        this.mgr.emitExternalSync(id, profile.updatedAt);
       }
       if (profile.activity && profile.activityKey && this.engineActivityKeys.get(id) !== profile.activityKey) {
         this.engineActivityKeys.set(id, profile.activityKey);

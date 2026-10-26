@@ -1467,6 +1467,7 @@ export class SessionManager {
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
         title: t,
+        updated_at: s.state.updated_at, // #271：帧完整性（重放回落信封 ts=洗活固化）
       });
     });
   }
@@ -1486,6 +1487,7 @@ export class SessionManager {
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       title: t,
+      updated_at: s.state.updated_at, // #271：帧完整性
     });
   }
 
@@ -1790,9 +1792,12 @@ export class SessionManager {
 
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
   // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
-  emitExternalSync(id: string): void {
+  // #271：at = 该状态修复对应的真实活动时刻（缺省 now）。historical 翻转等扫描判定
+  // 不是会话活动——boot 扫描把久休会话标 historical 时若刷 now，洗活从校正帧挪到
+  // 同步帧原样复发（emitUpdated 无 at = Date.now()）
+  emitExternalSync(id: string, at?: number): void {
     const s = this.sessions.get(id);
-    if (s) this.emitUpdated(s, true);
+    if (s) this.emitUpdated(s, true, at);
   }
 
   // #393 手动通知注入（/api/notify）：把一段文字作为 TASK_DONE 汇报推给指定/最新会话，
@@ -1935,6 +1940,7 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...stats },
+      updated_at: s.state.updated_at, // #271：帧完整性
     });
   }
 
@@ -2020,6 +2026,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       artifacts: this.aliveArtifacts(s), // #224 下发前 re-stat + 剔除已删
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+      updated_at: s.state.updated_at, // #271：帧完整性
     });
   }
 
@@ -2082,6 +2089,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       artifacts: this.aliveArtifacts(s), // #224 下发前 re-stat + 剔除已删
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+      updated_at: s.state.updated_at, // #271：帧完整性
     });
     return { ok: true };
   }
@@ -2473,6 +2481,7 @@ export class SessionManager {
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       remote_mode: enabled,
+      updated_at: s.state.updated_at, // #271：帧完整性
     });
   }
 
@@ -4003,6 +4012,7 @@ export class SessionManager {
         status: s.state.status,
         action_summary: s.state.action_summary,
         title,
+        updated_at: s.state.updated_at, // #271：帧完整性
       });
     }
   }
@@ -6844,6 +6854,7 @@ export class SessionManager {
         action_summary: s.state.action_summary,
         ...(s.state.project_gid ? { project_gid: s.state.project_gid } : {}),
         dispatch_tier: s.state.dispatch_tier,
+        updated_at: s.state.updated_at, // #271：帧完整性（徽标帧≠活动帧）
       });
     }
     this.emitOrgState();
