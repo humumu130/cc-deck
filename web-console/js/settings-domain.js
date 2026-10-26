@@ -2722,6 +2722,12 @@ function connectLan(ctx) {
             return;
           }
           sendCloud(ctx, { t: "ping", last_seq: ctx.lastSeq });
+          // #268 复发 A' 根治（PM 批准 P1-a）：ping 发出点武装通道看门狗——稳态半开形态
+          //（上行通下行死，公司 TLS 代理掐 ws 下行）原先只能等 45s 心跳判死，恢复窗 60s
+          // >> UI ack 阈值 8s，窗内命令全报「未确认」但实际送达。现 ping 后 13s 无任何帧
+          //（含 pong）即判死：pong 正常秒级回（13 倍余量，安静系统零误判——任何帧到即退役），
+          // 恢复窗压至 13+3+13+3≈32s。45s 心跳兜底保留（看门狗漏网第二道闸）。
+          startChannelWatchdog(ctx);
         }, 20000);
       }
       function stopCloudPing(ctx) { if (ctx.pingTimer) { clearInterval(ctx.pingTimer); ctx.pingTimer = null; } }
