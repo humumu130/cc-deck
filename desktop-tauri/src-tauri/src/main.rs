@@ -94,6 +94,11 @@ if (!window.__CCDECK_MIRROR__) {
         const k = localStorage.key(i);
         o[k] = localStorage.getItem(k);
       }
+      // #259：localStorage 写失败被 Web 层直写影子补救过的键（已并入 __CCDECK_SHADOW），
+      // 巡拍 dump 时保留——否则任一其他键变更触发的全量落盘会把补救键从影子备份冲掉
+      if (window.__CCDECK_SHADOW && typeof window.__CCDECK_SHADOW === "object") {
+        for (const k in window.__CCDECK_SHADOW) if (!(k in o)) o[k] = window.__CCDECK_SHADOW[k];
+      }
       return JSON.stringify(o);
     } catch (e) { return null; }
   };

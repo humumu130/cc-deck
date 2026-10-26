@@ -31,7 +31,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.67";
+      const CONSOLE_VERSION = "0.7.0-test.69";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -1906,13 +1906,66 @@ function connectLan(ctx) {
       // ---------- 云桥 E2E 密封层结束 ----------
 
       let ckp = null; // 本浏览器固定 box 密钥对（跨壳共用 ccr_cloud_kp：旧壳已配对 → 同一设备身份）
-      function loadCloudIdentity() {
-        try { ckp = JSON.parse(localStorage.getItem("ccr_cloud_kp") || sessionStorage.getItem("ccr_cloud_kp") || "null"); } catch { ckp = null; }
-        if (!ckp || !ckp.publicKey || !ckp.secretKey) {
-          ckp = genKp();
-          try { sessionStorage.setItem("ccr_cloud_kp", JSON.stringify(ckp)); } catch {}
-          lsSet("ccr_cloud_kp", JSON.stringify(ckp));
+      // ---------- #259 身份持久化加固（Windows 桌面壳配对身份丢失专项）----------
+      // 旧实现只查「键在不在」不验内容：存储层半损（WebView2 硬退出丢尾巴/分区坏）时，
+      // 残存的坏 base64 会被当有效身份采信，devId/seal 抛异常 → 通道启动层静默死；且
+      // 全部写入 try{}catch{} 静默——存储写不进也无人知晓，重启即丢身份重配对。三层加固：
+      // ① 读校验（base64+32 字节长度，坏库弃用）② 壳层影子补种（__CCDECK_SHADOW 单键恢复）
+      // ③ 写后读回验证，失败即直写壳层影子（storage_shadow_write）+ 响亮报错。
+      function cloudKpLooksValid(kp) {
+        if (!kp || typeof kp.publicKey !== "string" || typeof kp.secretKey !== "string") return false;
+        try { return fromB64(kp.publicKey).length === 32 && fromB64(kp.secretKey).length === 32; } catch { return false; }
+      }
+      function readStoredCloudKp() {
+        const parse = (get) => { try { return JSON.parse(get() || "null"); } catch { return null; } };
+        const fromLs = parse(() => localStorage.getItem("ccr_cloud_kp"));
+        if (cloudKpLooksValid(fromLs)) return fromLs;
+        const fromSs = parse(() => sessionStorage.getItem("ccr_cloud_kp"));
+        if (cloudKpLooksValid(fromSs)) return fromSs;
+        return null;
+      }
+      // 壳层影子种子单键读取（INIT_SCRIPT 注入的 __CCDECK_SHADOW；值与 localStorage 同为字符串）
+      function shadowSeedGet(key) {
+        try {
+          const raw = window.__CCDECK_SHADOW && window.__CCDECK_SHADOW[key];
+          if (typeof raw !== "string" || !raw) return null;
+          return JSON.parse(raw);
+        } catch { return null; }
+      }
+      let cloudStoreErrReported = false; // 存储异常每会话只响一次（避免重连循环刷屏）
+      function persistCloudIdentity() {
+        const payload = JSON.stringify(ckp);
+        try { sessionStorage.setItem("ccr_cloud_kp", payload); } catch {}
+        lsSet("ccr_cloud_kp", payload);
+        let echoed = null;
+        try { echoed = localStorage.getItem("ccr_cloud_kp"); } catch {}
+        if (echoed === payload) return; // 写入生效，正常路径
+        // 写未生效（隐私模式/WebView2 存储分区异常）：把身份并入壳层影子备份直写落盘——
+        // 全量 dump 巡拍（INIT_SCRIPT）对缺失键保留（dumpLS 合并 __CCDECK_SHADOW），下次
+        // 启动影子种子/单键补种都能带回来；浏览器形态无 __TAURI__ 时仅报错留痕
+        try {
+          const seed = (window.__CCDECK_SHADOW && typeof window.__CCDECK_SHADOW === "object") ? Object.assign({}, window.__CCDECK_SHADOW) : {};
+          seed["ccr_cloud_kp"] = payload;
+          window.__CCDECK_SHADOW = seed;
+          if (window.__TAURI__ && window.__TAURI__.core) window.__TAURI__.core.invoke("storage_shadow_write", { payload: JSON.stringify(seed) }).catch(() => {});
+        } catch {}
+        if (!cloudStoreErrReported) {
+          cloudStoreErrReported = true;
+          console.error("[cloud] localStorage 写入未生效（隐私模式/WebView2 存储异常？）：设备身份已兜底写入壳层影子备份；若重启后仍要求重新配对，请截图此日志反馈");
         }
+      }
+      function loadCloudIdentity() {
+        const hadStored = (() => { try { return !!(localStorage.getItem("ccr_cloud_kp") || sessionStorage.getItem("ccr_cloud_kp")); } catch { return false; } })();
+        ckp = readStoredCloudKp();
+        if (!ckp) ckp = shadowSeedGet("ccr_cloud_kp"); // 影子补种：localStorage 丢键但壳备份还在
+        if (!cloudKpLooksValid(ckp)) {
+          if (hadStored && !cloudStoreErrReported) {
+            cloudStoreErrReported = true;
+            console.warn("[cloud] 存储的设备密钥无法解析（损坏/写坏），已重新生成设备身份——原配对将失效需重新配对一次");
+          }
+          ckp = genKp();
+        }
+        persistCloudIdentity();
       }
 
       // ---------- 共享身份 read-shared（决策 1：读 ccd_servers/ccr_cloud_kp 与旧壳互通；写仅配对成功后） ----------
@@ -2053,6 +2106,7 @@ function connectLan(ctx) {
         pairNextAt: 0, pairBackoffMs: 0, // 配对退避：看门狗耗尽后指数退避（30s 起 15min 封顶），输码/成功即清零
         transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
         wsFails: 0, postFails: 0, hsTimer: 0, discTried: false, discTimer: 0, _everOnline: false,
+        helloTimer: 0, _lastFrameAt: 0, // #259 通道看门狗：hello 发出后的回包期限计时 + 最近有效帧时刻
       };
       function cloudPeerOf(cfg) {
         const c = cfg.cloud;
@@ -2107,7 +2161,21 @@ function connectLan(ctx) {
         renderCloudUI();
       }
 
+      // #259 通道启动层静默死根修：connectCloudFor 全包裹。ws 构造/devId/seal 等同步异常
+      // 原先直接穿透调用方（bootstrapCloud/重连定时器均无 catch）——状态恒卡「连接中」
+      // 且无任何看门狗兜底（hsTimer 尚未挂上），UI 与 relay 侧双静默。包裹后显形为
+      // offline+transport 归因并按退避重试；ws 传输构造失败时下次重试换 poll 通道顶上。
       function connectCloudFor(ctx, manual) { // ctx 恒为 cloudCtx（005 单源；参数保留旧壳签名）
+        try {
+          connectCloudForInner(ctx, manual);
+        } catch (e) {
+          console.error("[cloud:" + ((ctx.cfg && ctx.cfg.name) || "云桥") + "] 通道启动异常（已转离线重试）:", e);
+          if (ctx.transport === "ws") ctx.transport = "poll"; // WS 构造面挂了：下次重试走 HTTP 轮询通道
+          cloudSetConn("offline", "通道启动失败：" + ((e && e.message) || String(e)), "transport");
+          scheduleCloudReconnect(ctx);
+        }
+      }
+      function connectCloudForInner(ctx, manual) {
         const cfg = ctx.cfg;
         const base = cfg.wsUrl;
         if (!base) { ctx.status = "offline"; ctx.statusText = "未配置"; ctx.failKind = "none"; renderCloudUI(); return; }
@@ -2127,6 +2195,7 @@ function connectLan(ctx) {
         ctx.discTried = false;         // 发现帧预算按连接重置
         clearTimeout(ctx.discTimer); ctx.discTimer = 0;
         clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
+        stopChannelWatchdog(ctx);      // #259：新一轮连接重挂（hello 发出点重新武装）
         try { ctx.ws && ctx.ws.close(); } catch {}
         ctx.ws = null;
         cloudSetConn("connecting", peer && !pair ? "连接中" : "配对中");
@@ -2176,7 +2245,7 @@ function connectLan(ctx) {
           cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
           // 刷新后内存无会话：last_seq=0 走全量 SNAPSHOT 重建（持久化旧 seq 只会造成空列表；
           // SNAPSHOT 单帧携带预算内日志，1MiB 帧限由 relay 侧有界化，页面不自建拉全量逻辑）
-          sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
+          sendCloudHello(ctx);
           startCloudPing(ctx);
         };
         w.onclose = (ev) => {
@@ -2262,7 +2331,7 @@ function connectLan(ctx) {
           startPairWatchdog(ctx);
         } else {
           cloudSetConn("online", "已连接（轮询）");
-          sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
+          sendCloudHello(ctx); // #259：hello 发送收口 + 通道看门狗（poll POST 被吞时 13s 兜底）
           startCloudPing(ctx);
         }
         pollLoop(ctx); // 收包循环必须一直在跑：配对 ack / hello 回包都从它进
@@ -2323,6 +2392,8 @@ function connectLan(ctx) {
       function onCloudTextRaw(ctx, text) {
         let f;
         try { f = JSON.parse(text); } catch { return; }
+        ctx._lastFrameAt = Date.now(); // #259 通道看门狗锚：任何可解析帧 = 通道活着
+        stopChannelWatchdog(ctx);      // 回包已到（SNAPSHOT/resume/pong/控制帧皆算），看门狗退役，业务态自行推进
         const cfg = ctx.cfg;
         if (f.type === "ROUTE_MISS") {
           // 配对期 ROUTE_MISS：待配对 rd 不在线——本源记忆的 relay 身份失效（relay 换过密钥对）时
@@ -2416,7 +2487,7 @@ function connectLan(ctx) {
           if (peer && peer.relay_dev === pick.dev) {
             // 已配对运行中吃 ROUTE_MISS 多为桥闪断竞态：relay 实际在线，重发 hello 恢复
             cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
-            sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
+            sendCloudHello(ctx); // #259 hello 收口（四号发出点）
             startCloudPing(ctx);
             return;
           }
@@ -2483,7 +2554,7 @@ function connectLan(ctx) {
           ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #258 成功即清：配对退避归零，下次配对满速（看门狗 tick 路径之外补齐——ack 到达即清 timer，tick 不再跑）
           cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
           showToast("配对成功");
-          sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
+          sendCloudHello(ctx); // #259：配对完成即 hello + 看门狗——ack 到 hello 之间通道死/POST 被吞不再静默
           startCloudPing(ctx);
           return;
         }
@@ -2545,7 +2616,10 @@ function connectLan(ctx) {
           return true;
         }
         if (!ctx.ws || ctx.ws.readyState !== 1) return false;
-        ctx.ws.send(str);
+        try { ctx.ws.send(str); } catch (e) { // #259：INVALID_STATE_ERR（刚进入 CLOSING）等同步异常原先穿透调用方
+          console.error("[cloud:" + ctx.cfg.name + "] ws.send 异常（通道已死）:", e && e.message);
+          return false;
+        }
         return true;
       }
 
@@ -2553,6 +2627,20 @@ function connectLan(ctx) {
         const peer = cloudPeerOf(ctx.cfg);
         if (!peer) return false;
         return sendCloudRaw(ctx, JSON.stringify({ to: peer.relay_dev, data: seal(obj, peer.relay_pubkey, ckp.secretKey) }));
+      }
+      // #259 hello 发送收口：sendCloud 返回 false = ws 未就绪（半开/刚死），hello 根本没
+      // 发出——原先静默吞掉，relay 侧永远等不到 hello（配对成功零通道活动的直接形态）。
+      // 收口后武装通道看门狗（poll POST 丢包兜底），发送失败显形并立即重连。
+      function sendCloudHello(ctx) {
+        const ok = sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
+        startChannelWatchdog(ctx);
+        if (ok === false) {
+          console.error("[cloud:" + ctx.cfg.name + "] hello 发送失败（ws 未就绪/已死），强制重连");
+          cloudSetConn("offline", "通道已死（hello 未发出），重连", "transport");
+          if (ctx.transport === "ws") { try { ctx.ws && ctx.ws.close(); } catch {} } // onclose 再排一次重连也幂等
+          scheduleCloudReconnect(ctx);
+        }
+        return ok;
       }
 
       // 应用层心跳：20s 密封 ping + 45s 无 pong 判死；兼作断线自愈（relay 侧 ping-resume 按 last_seq 补发）
@@ -2570,6 +2658,30 @@ function connectLan(ctx) {
         }, 20000);
       }
       function stopCloudPing(ctx) { if (ctx.pingTimer) { clearInterval(ctx.pingTimer); ctx.pingTimer = null; } }
+
+      // ---------- #259 通道看门狗：peer 就绪/配对完成 → hello 已发，N 秒无任何回包即判通道死 ----------
+      // 病灶（Windows test.67 实锤）：relay 侧配对成功后零通道活动——hello 从未到达（ws 半开/
+      // poll POST 被吞/ack 处理链异常吞掉后续动作），UI 恒「连接中」或假在线，无任何报错。
+      // 看门狗在三个 hello 发出点武装（onopen peer 就绪 / poll peer 就绪 / pair_ack 后），
+      // 期限内无任何帧到达（SNAPSHOT/resume/pong/任何 JSON 帧都算通道活着）→ console 显形
+      // + UI 离线归因 + 重连（poll 掐代次，ws 走 close→onclose 链）。
+      const CHANNEL_DEAD_MS = 13000;
+      function startChannelWatchdog(ctx) {
+        clearTimeout(ctx.helloTimer);
+        ctx.helloTimer = setTimeout(() => {
+          ctx.helloTimer = 0;
+          if (ctx.status !== "online" && ctx.status !== "connecting") return; // 已离线重试中，不叠加
+          if (ctx._lastFrameAt && Date.now() - ctx._lastFrameAt < CHANNEL_DEAD_MS) return; // 近期有帧：通道活着，业务态自行推进
+          console.error("[cloud:" + ctx.cfg.name + "] 通道看门狗：hello 后 " + Math.round(CHANNEL_DEAD_MS / 1000)
+            + "s 无任何回包（transport=" + ctx.transport + "，dev=" + (ckp ? devId(ckp.publicKey, "wb") : "?")
+            + "）——hello 疑未达对端，判通道死并重连");
+          cloudSetConn("offline", "通道无响应（hello 未达），重连", "transport");
+          showToast("云桥通道无响应，正在重连（F12 Console 有诊断日志）");
+          if (ctx.transport === "ws") { try { ctx.ws && ctx.ws.close(); } catch {} } // onclose → scheduleCloudReconnect
+          else { ctx.pollGen++; scheduleCloudReconnect(ctx); }
+        }, CHANNEL_DEAD_MS);
+      }
+      function stopChannelWatchdog(ctx) { clearTimeout(ctx.helloTimer); ctx.helloTimer = 0; }
 
       // 回前台立即 resume：后台标签页定时器被节流甚至冻结，20s 心跳发不出去；visibilitychange
       // 不受节流影响——切回标签瞬间补一次 ping-resume（带 last_seq，relay 按需补发），顺带探测
@@ -3048,6 +3160,7 @@ function connectLan(ctx) {
         clearTimeout(cloudCtx.reconnectTimer); cloudCtx.reconnectTimer = 0;
         clearTimeout(cloudCtx.hsTimer); cloudCtx.hsTimer = 0;
         clearTimeout(cloudCtx.discTimer); cloudCtx.discTimer = 0;
+        stopChannelWatchdog(cloudCtx); // #259 通道看门狗一并掐（断链即无 hello 待回包）
         try { cloudCtx.ws && cloudCtx.ws.close(); } catch {}
         cloudCtx.ws = null;
         cloudCtx.status = "offline";

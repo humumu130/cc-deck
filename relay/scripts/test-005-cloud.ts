@@ -42,37 +42,40 @@ async function waitFor(fn: () => boolean, ms = 4000, every = 25): Promise<boolea
 }
 
 // ---------- 0) 抽取 005 壳内密封层标记段（test-005-cloud 抽取直跑的契约锚） ----------
-// #258 抽取源修复：W-SPLIT-S4b（27c6b87a）把云链/密封层内联块外置到 js/ 目录后，本测试
-// 仍读 index-005.html 内联段——标记段不存在，测试开局即红。改读 js/settings-domain.js
-// （云链唯一真身；index-005.html 只剩 <script src> 挂载），nacl.js 根引用锚保留在壳上。
+// #259 适配 W-SPLIT-S4b：密封层已从 index-005.html 内联块外置到 js/settings-domain.js——
+// 抽取源改为「两处谁有标记段用谁」（外置 js 优先），index-005.html 若重新内联也能回得来
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const html005 = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
-const sd005 = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8");
+const sdSrc = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8");
 const SEAL_START = "// ---------- 云桥 E2E 密封层（";
 const SEAL_END = "// ---------- 云桥 E2E 密封层结束 ----------";
-const sealStart = sd005.indexOf(SEAL_START);
-const sealEnd = sd005.indexOf(SEAL_END, sealStart);
-assert(sealStart >= 0 && sealEnd > sealStart, "005 壳内密封层标记段存在（test-005-cloud 抽取锚，外置 js 后仍配对）");
-const sealCode = sealStart >= 0 && sealEnd > sealStart ? sd005.slice(sealStart, sealEnd + SEAL_END.length) : "";
+const sealHost = sdSrc.includes(SEAL_START) ? sdSrc : html005;
+const sealHostLabel = sealHost === sdSrc ? "js/settings-domain.js" : "index-005.html";
+const sealStart = sealHost.indexOf(SEAL_START);
+const sealEnd = sealHost.indexOf(SEAL_END, sealStart);
+assert(sealStart >= 0 && sealEnd > sealStart, `005 壳内密封层标记段存在（test-005-cloud 抽取锚，宿主=${sealHostLabel}）`);
+const sealCode = sealStart >= 0 && sealEnd > sealStart ? sealHost.slice(sealStart, sealEnd + SEAL_END.length) : "";
 assert(sealCode.includes("function unseal") && sealCode.includes("function seal") && sealCode.includes("function devId"), "密封段含 seal/unseal/devId 全套");
 // head 阻塞加载 nacl.js（坑 6：密封依赖在云链模块前就绪）
 assert(/<script src="\/nacl\.js"><\/script>/.test(html005), "壳 head 含 /nacl.js 根相对引用");
 // 与 relay/src/e2e.ts 同构：B64 字母表逐字符一致（互操作的地基）
-const W = (function () {
+type SealW = {
+  toB64: (b: Uint8Array) => string;
+  fromB64: (s: string) => Uint8Array;
+  genKp: () => { publicKey: string; secretKey: string };
+  devId: (pk: string, prefix: string) => string;
+  seal: (obj: unknown, theirPk: string, mySk: string) => SealedBox;
+  unseal: <T>(box: SealedBox, theirPk: string, mySk: string) => T | null;
+};
+const W = (function (): SealW | null {
   try {
     // eslint-disable-next-line no-new-func
     const factory = new Function("nacl", `"use strict";\n${sealCode}\n;return { toB64: (typeof toB64 === "function") ? toB64 : null, fromB64: (typeof fromB64 === "function") ? fromB64 : null, genKp: (typeof genKp === "function") ? genKp : null, devId: (typeof devId === "function") ? devId : null, seal: (typeof seal === "function") ? seal : null, unseal: (typeof unseal === "function") ? unseal : null };`);
-    return factory(nacl) as {
-      toB64: (b: Uint8Array) => string;
-      fromB64: (s: string) => Uint8Array;
-      genKp: () => { publicKey: string; secretKey: string };
-      devId: (pk: string, prefix: string) => string;
-      seal: (obj: unknown, theirPk: string, mySk: string) => SealedBox;
-      unseal: <T>(box: SealedBox, theirPk: string, mySk: string) => T | null;
-    } | null;
+    return factory(nacl) as SealW;
   } catch { return null; }
 })();
 assert(!!W && !!W.seal && !!W.unseal && !!W.genKp && !!W.devId, "密封段在 Node 可直跑（new Function 求值成活）");
+if (!W) process.exit(1); // 抽取失败即无后续可测（TS 收窄 + 快速失败）
 
 // base64 往返 + 与 relay 实现互通（005 加密 → relay 解密；relay 加密 → 005 解密）
 // （W 判空收窄：前面 assert 已保证非空，ts strict 下 W.toB64 等调用需 W! —— #258 顺手清 tsc 旧错）
