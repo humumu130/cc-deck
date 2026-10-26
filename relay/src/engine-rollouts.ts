@@ -411,7 +411,9 @@ export class RolloutScanner {
   }
 }
 
-function processCwd(pid: number): string | undefined {
+// #276：export 供 bridge 的 cwd 兜底定位段复用（与 engineProcesses 同一实现单源，
+// 防两处 lsof 解析漂移）
+export function processCwd(pid: number): string | undefined {
   if (process.platform === "win32") return undefined;
   try {
     const raw = execFileSync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf8", timeout: 3000 });

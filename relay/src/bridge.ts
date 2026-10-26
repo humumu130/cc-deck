@@ -1,6 +1,6 @@
 // hooks 桥接：用户自开 CLI 会话（外部会话）事件路由 + 远程审批挂起 + 终端按键注入
 import { randomUUID } from "node:crypto";
-import { closeSync, openSync, readSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { closeSync, openSync, readSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,7 +41,7 @@ import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
 import type { ActivityKind, SessionEngine } from "./types.js";
 import {
-  ENGINE_SCAN_SPECS, RolloutScanner, captureCliProcesses, engineProcesses, engineRoot, matchEngineProcess,
+  ENGINE_SCAN_SPECS, RolloutScanner, captureCliProcesses, engineProcesses, engineRoot, matchEngineProcess, processCwd,
   type EngineProcessInfo, type EngineRolloutProfile, type EngineScanSpec,
 } from "./engine-rollouts.js";
 
@@ -436,6 +436,7 @@ export class Bridge {
     // W-INJECT：先回种落盘排队（revive 的重投触发要见到非空队列），再跑存活自愈
     this.loadQueueDisk();
     this.reviveAliveExternals(); // W-INJECT：重启收养误标 historical 的活 pid 自愈（先于孤儿扫描）
+    this.reclaimAliveAtBoot(); // #276 P0：boot 活进程重接管（DONE+pid 活 → WORKING+转录管道补挂）
     this.adoptOrphans();
     this.scanExternalEngines();
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
@@ -568,6 +569,53 @@ export class Bridge {
   // 活 pid 的 historical 永挂，直到用户去终端敲一下（hook 事件才清）。
   // boot + 60s 周期各跑一轮（pid 缓存/会话文件迟定位的给补自愈）。
   // #50 idle 归档（idle_archived 标记）是刻意沉底，不翻案——hook 回归或手动恢复才清。
+  // #276 P0：boot 活进程重接管（一次性，不进 60s tick）。重启后回放态的外部会话
+  // 常见形态 = 上次回合终态 DONE + cli_pid 在册且进程活（用户终端还开着）——既有
+  // 自愈面覆盖不到：reviveAliveExternals 只认 historical、healExternal 只认 ERROR
+  //（且跑在本方法前，ERROR+活 pid 已翻 WORKING 不会再进这里），卡片就停在 DONE
+  // 直到下一个 hook 事件；hook 通道断链时 = 永远（1026 晚 rea/keyhive 实锤：转录
+  // 在长、卡不动、updated_at 停在重启时刻——「从未重接管」）。boot 对 pid 活的
+  // DONE 外部卡一次性翻 WORKING + 转录轮询管道补挂（transcriptPaths 纯内存，
+  // 重启即丢，孤儿扫描补挂分支依赖 60s 节拍）。死 pid 不碰（不误接）；idle_archived
+  // 刻意沉底不翻案（#50 口径）。一次性而非常驻：常驻版会把每回合 Stop 的正常收尾
+  // 立刻翻回 WORKING（DONE+进程活=回合间常态），只有 boot 这一刻「进程活+卡终态」
+  // 才是重启痕迹而非回合语义。跑在 hydrate/reconcile 之后：pid 已是回读后最新值。
+  private reclaimAliveAtBoot(): void {
+    try {
+      const root = process.env.CCR_PROJECTS_ROOT ?? path.join(homedir(), ".claude", "projects");
+      for (const s of this.mgr.snapshot()) {
+        if (!s.external || s.idle_archived) continue;
+        if (s.status !== "DONE") continue; // ERROR 已由 healExternal（构造序在前）处理
+        const pid = s.cli_pid;
+        if (!pid || !pidAlive(pid)) continue; // 死进程/无定位不误接（定位补救归 hook/回读链）
+        const sid = s.relay_session_id || s.session_id.slice(4);
+        if (!this.transcriptPaths.has(s.session_id)) {
+          const hit = this.findTranscriptForSid(root, sid);
+          if (hit) {
+            this.transcriptPaths.set(s.session_id, hit);
+            this.ensureQueuePoll();
+          }
+        }
+        this.mgr.setExternalStatus(s.session_id, "WORKING", "重启接管：CLI 进程仍在运行");
+        this.mgr.pushExternalLog(s.session_id, "system", "relay 重启后检测到终端进程仍在运行，会话已重新接管（状态翻活+转录管道补挂）");
+      }
+    } catch { /* 尽力而为，绝不挡 boot */ }
+  }
+
+  // sid → 转录文件定向查找（#276）：projects 根下一级目录内 `${sid}.jsonl` 命中即
+  // 返回——boot 补挂专用（孤儿扫描全量扫有 30min 新鲜窗与探针闸，不适合补挂路径）
+  private findTranscriptForSid(root: string, sid: string): string | undefined {
+    if (!sid) return undefined;
+    try {
+      for (const dir of readdirSync(root, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue;
+        const p = path.join(root, dir.name, `${sid}.jsonl`);
+        try { if (existsSync(p)) return p; } catch {}
+      }
+    } catch {}
+    return undefined;
+  }
+
   private reviveAliveExternals(): void {
     const candidates = this.mgr.snapshot().filter((s) => s.external && s.historical && !s.idle_archived);
     if (!candidates.length) return;
@@ -644,6 +692,29 @@ export class Bridge {
               this.transcriptPaths.set(id, p);
               this.ensureQueuePoll();
             }
+            // #276 孤儿卡活性回迁（rea/passcomb 案的无 pid 半边）：无 hook 终端的卡
+            //（无 cli_pid——hook 事件不来、sessions 账本无条目、claude 引擎不走进程
+            // 扫描，reclaimAliveAtBoot 的 pid 判据接不住它）转录 mtime = 真实最后
+            // 活动——mtime 前进即 updated_at 推进（panel 可见「活着」）；近 5 分钟
+            // 仍在写 = 真回合翻 WORKING；停更超窗收口回 DONE。只管 pid-less 卡：
+            // hook 驱动卡（有 cli_pid，含 reclaimAliveAtBoot 接管的）状态由事件流
+            // 权威驱动，两层管理不得打架
+            const st = this.mgr.getExternal(id);
+            if (st && !st.cli_pid) {
+              try {
+                const mtime = statSync(p).mtimeMs;
+                if (mtime > (st.updated_at || 0)) {
+                  if (Date.now() - mtime < 5 * 60_000 && st.status === "DONE") {
+                    this.mgr.setExternalStatus(id, "WORKING", "终端在线（转录增长中，只读跟进）", undefined, mtime);
+                  } else {
+                    this.mgr.emitExternalSync(id, mtime); // DONE/ERROR 卡：时刻推进+帧下发（#271 at 参）
+                  }
+                } else if (st.status === "WORKING" && Date.now() - mtime > 5 * 60_000) {
+                  this.streamDeltaStop(id);
+                  this.mgr.finishExternal(id, "completed", 0, mtime, "终端回合结束（转录停更）");
+                }
+              } catch {}
+            }
             continue;
           }
           if (this.mgr.ownsCliSession(sid)) continue; // 托管会话/一次性子会话：不收养
@@ -697,9 +768,14 @@ export class Bridge {
             }
           }
           this.orphanProbe.delete(p); // 已收养/穿透收养：探针记录即时清掉，不占 200 上额
-          this.mgr.ensureExternal(id, cwd, "", sid, transcriptFirstTs(p));
+          // #276 孤儿建卡半边（rea 案）：新收养卡带转录真实最后活动（mtime）——原缺省
+          // now 把每个 boot 收养的卡洗成启动时刻（updated_at 冻结在重启时刻的根源，
+          // 与 #271 引擎扫描洗活同族的孤儿路径漏网点）
+          let orphanAt = Date.now();
+          try { orphanAt = statSync(p).mtimeMs; } catch {}
+          this.mgr.ensureExternal(id, cwd, "", sid, transcriptFirstTs(p), { updatedAt: orphanAt });
           this.transcriptPaths.set(id, p);
-          this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
+          this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）", undefined, orphanAt);
           this.mgr.pushExternalLog(
             id,
             "system",
@@ -955,22 +1031,91 @@ export class Bridge {
       const sid = m[1].toLowerCase();
       if (!bySid.has(sid)) bySid.set(sid, []);
     }
-    if (!bySid.size) return;
-    for (const s of this.mgr.snapshot()) {
+    // #276：原「bySid 空即早退」会把 cwd 兜底段一并吞掉——机器上无 --resume 形态
+    // 进程时（纯交互式 CLI 场景）第二段永远不跑。改为条件分派+认领集传递
+    const claimed = new Set<number>();
+    if (bySid.size) {
+      for (const s of this.mgr.snapshot()) {
+        if (!s.external) continue;
+        if (s.cli_pid && cliHostAlive(s.cli_pid)) continue; // 活定位不覆盖
+        const key = (s.relay_session_id || s.session_id.slice(4)).toLowerCase();
+        if (!bySid.has(key)) continue;
+        const pids = Bridge.resumeCandidates(snap, key);
+        const pid = pids[0];
+        if (!pid) continue;
+        if (s.cli_pid === pid) continue; // P2 复核：定位已在位（首查 ps 瞬时失败二查通过的抖动）不重复留痕/下发
+        this.mgr.setExternalCliPid(s.session_id, pid);
+        const st = this.mgr.getExternal(s.session_id);
+        if (st?.historical && !st.idle_archived) {
+          st.historical = false; // 活 pid 即会话真实存活的证明（#50 刻意沉底不翻案）
+        }
+        this.mgr.pushExternalLog(s.session_id, "system", `已通过进程扫描恢复定位（pid ${pid}${pids.length > 1 ? `，同会话候选 ${pids.length} 个` : ""}）——重启注册空窗自愈，无需等待进程上报`);
+        this.mgr.emitExternalSync(s.session_id);
+        claimed.add(pid);
+      }
+    }
+    this.reconcilePidsFromCwd(snap, claimed);
+  }
+
+  // #276 件一：cwd 兜底定位——argv 无会话 id 形态的活 CLI（用户手敲 claude /
+  // claude --continue 等）在 relay 重启后 pid 四源全空（hook 空闲不来、cli-pids.json
+  // 无注册、~/.claude/sessions 仅桥接形态写、argv 无 sid 扫不上），DONE 卡悬空直到
+  // 用户敲下一条命令（1026 rea 实锤：boot 后 293 分钟无人接管，PM 候选池同期判它
+  // 出局）。本段用「进程 cwd === 卡 cwd」配位：五重防误配——词级 claude 匹配（路径
+  // 撞名不进）、cwd 归一精确相等、唯一候选才配（同 cwd 多 CLI 不猜）、活 pid 校验、
+  // sid 段已认领/他卡已持有的 pid 不抢。死进程天然不配（pidAlive 前置）。
+  private static readonly CLAUDE_CMD_WORD = /(?:^|\s|\/)claude(?:\.exe)?(?:\s|$)/i;
+
+  private reconcilePidsFromCwd(snap: Array<{ pid: number; command: string }>, claimed: Set<number>): void {
+    // 他卡已持有的活 pid（一进程一身份；compact 换代归档语义靠这个不破）
+    const held = new Set<number>();
+    // #276 双向唯一（卡侧）：待配卡按 cwd 分组——同 cwd 多张待配卡（旧回合死卡+
+    // 新会话活卡并存）无法判定谁是真身，该 cwd 整组不配（与进程侧多候选同款
+    // 「歧义不猜」纪律；单向唯一会把活进程错配给先遍历到的死卡）
+    const pendingByCwd = new Map<string, number>();
+    const norm = (p: string) => p.replace(/[\\/]+$/, "").toLowerCase();
+    const all = this.mgr.snapshot();
+    for (const s of all) {
+      if (s.external && s.cli_pid && cliHostAlive(s.cli_pid)) held.add(s.cli_pid);
+    }
+    for (const s of all) {
       if (!s.external) continue;
-      if (s.cli_pid && cliHostAlive(s.cli_pid)) continue; // 活定位不覆盖
-      const key = (s.relay_session_id || s.session_id.slice(4)).toLowerCase();
-      if (!bySid.has(key)) continue;
-      const pids = Bridge.resumeCandidates(snap, key);
-      const pid = pids[0];
-      if (!pid) continue;
-      if (s.cli_pid === pid) continue; // P2 复核：定位已在位（首查 ps 瞬时失败二查通过的抖动）不重复留痕/下发
-      this.mgr.setExternalCliPid(s.session_id, pid);
+      if (s.cli_pid && cliHostAlive(s.cli_pid)) continue; // 活定位不覆盖（与 sid 段同口径）
+      const cardCwd = s.cwd ? norm(s.cwd) : "";
+      if (!cardCwd) continue;
+      pendingByCwd.set(cardCwd, (pendingByCwd.get(cardCwd) ?? 0) + 1);
+    }
+    // cwd 惰性解析（lsof 每 pid 一次，多卡共享缓存）
+    const cwdByPid = new Map<number, string | undefined>();
+    for (const s of all) {
+      if (!s.external) continue;
+      if (s.cli_pid && cliHostAlive(s.cli_pid)) continue; // 活定位不覆盖（与 sid 段同口径）
+      const cardCwd = s.cwd ? norm(s.cwd) : "";
+      if (!cardCwd) continue;
+      if ((pendingByCwd.get(cardCwd) ?? 0) > 1) continue; // 卡侧歧义：整组不猜
+      let hit: number | undefined;
+      let ambiguity = false;
+      for (const e of snap) {
+        if (!Bridge.CLAUDE_CMD_WORD.test(e.command)) continue;
+        if (claimed.has(e.pid) || held.has(e.pid)) continue;
+        if (!Bridge.pidAlive(e.pid)) continue;
+        let pcwd = cwdByPid.get(e.pid);
+        if (pcwd === undefined && !cwdByPid.has(e.pid)) {
+          pcwd = processCwd(e.pid);
+          cwdByPid.set(e.pid, pcwd);
+        }
+        if (pcwd && norm(pcwd) === cardCwd) {
+          if (hit !== undefined) { ambiguity = true; break; }
+          hit = e.pid;
+        }
+      }
+      if (hit === undefined || ambiguity) continue; // 零候选=无进程证据；多候选=不猜
+      this.mgr.setExternalCliPid(s.session_id, hit);
       const st = this.mgr.getExternal(s.session_id);
       if (st?.historical && !st.idle_archived) {
-        st.historical = false; // 活 pid 即会话真实存活的证明（#50 刻意沉底不翻案）
+        st.historical = false; // 活 pid 即会话真实存活的证明（与 sid 段同款语义）
       }
-      this.mgr.pushExternalLog(s.session_id, "system", `已通过进程扫描恢复定位（pid ${pid}${pids.length > 1 ? `，同会话候选 ${pids.length} 个` : ""}）——重启注册空窗自愈，无需等待进程上报`);
+      this.mgr.pushExternalLog(s.session_id, "system", `已通过 cwd 匹配恢复定位（pid ${hit}）——argv 无会话标记形态的活终端自愈，无需等待 hook 上报`);
       this.mgr.emitExternalSync(s.session_id);
     }
   }
@@ -1021,6 +1166,19 @@ export class Bridge {
       if ((this.inputQueue.get(id)?.length ?? 0) > 0 && !this.flushing.has(id)) {
         const qst = this.mgr.getExternal(id);
         if (qst && (qst.status === "DONE" || qst.status === "WORKING" || qst.status === "ERROR")) void this.flushQueue(id);
+      }
+    }
+    // #276 件二：工具事件活跃 = 回合进行铁证。DONE 挂死出现在「半接管」窗口——relay
+    // 重启错过回合首事件（UserPromptSubmit 翻 WORKING 的唯一入口在 onPrompt），回合
+    // 跨重启长跑时 hook 工具帧照常到达而状态停在回放残态 DONE（1026 passcomb 实锤：
+    // boot 后 419 分钟无一条 SESSION_UPDATED，工具/转录帧一直在推——转录兜底掩盖
+    // 断管）。PreToolUse/PostToolUse 只在回合内发生，Stop/SessionEnd 权威收尾兜底
+    // 回翻，伪翻面为零；historical 卡不在此翻（idle 刻意沉底纪律归 #50 链）
+    if (ev.event === "PreToolUse" || ev.event === "PostToolUse") {
+      const tid = this.extId(ev);
+      const tst = this.mgr.getExternal(tid);
+      if (tst && tst.status === "DONE" && !tst.historical) {
+        this.mgr.setExternalStatus(tid, "WORKING", "工具活动进行中（接续半接管窗口）");
       }
     }
     if (ev.transcript_path) {
@@ -2537,6 +2695,23 @@ export class Bridge {
 
   // hooks 不携带助手输出——从 transcript JSONL 增量提取 assistant 文本块。
   // 首见（或文件变小=轮转）只取最后一条，避免把历史回复全量刷进时间线；
+  // #276 件三：水合穿孔翻活——重启/轮转后首读 tail 时以「进程活」为证据恢复接管。
+  // 与 !firstRead 增量路径（转录增长=活动，含 hookRecent/noHookIds 语义）正交：
+  // 这里只处理「offset 丢失的重建水合」，pid 可发现且活 → 状态翻活＋定位重绑＋
+  // historical 翻案（idle_archived 刻意沉底除外）。幂等：仅 DONE/ERROR 态进，
+  // 已 WORKING 跳过；每会话每次水合最多翻一次，Stop/SessionEnd 权威收尾照常兜底。
+  private reviveOnHydrate(id: string): void {
+    const st = this.mgr.getExternal(id);
+    if (!st || st.idle_archived) return;
+    if (st.status !== "DONE" && st.status !== "ERROR") return;
+    const alivePid = this.findAliveCliProcess(id);
+    if (!alivePid) return; // 无进程证据不翻（死卡/盲卡保持终态语义）
+    if (st.cli_pid !== alivePid) this.mgr.setExternalCliPid(id, alivePid);
+    if (st.historical) st.historical = false;
+    this.mgr.setExternalStatus(id, "WORKING", "重启接管：终端进程仍在运行");
+    this.mgr.pushExternalLog(id, "system", "重启后检测到终端进程仍在运行，恢复会话接管（状态翻活＋定位重绑）");
+  }
+
   // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
   private pushAssistantTexts(id: string, transcriptPath?: string): void {
     if (!transcriptPath) return;
@@ -2562,6 +2737,12 @@ export class Bridge {
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
       this.transcriptOffsets.set(id, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
+      // #276 件三：水合墙穿孔——首读（offset 丢失＝重启/轮转后的重建水合）只重建
+      // 不翻活，空闲活会话（转录无增量，!firstRead 块永不进）重启后 DONE 恒死
+      //（1026 rea 实证：tail 帧在流、updated_at 在动、status 永不翻＝半接管）。
+      // 穿孔以「进程活」为翻活证据（非转录增量）：findAliveCliProcess 含 #276 cwd
+      // 兜底源，直接 claude 形态也能命中；找不到进程不翻（终态语义保持，死卡不误翻）
+      if (firstRead) this.reviveOnHydrate(id);
       if (!firstRead) {
         if (this.lastGrow.size > 200) this.lastGrow.clear(); // 兜底上限（普通会话也在记账）
         this.lastGrow.set(id, Date.now());
