@@ -431,8 +431,13 @@ export function createSessionCommands(mgr: any) {
           return { command_id: cmd.command_id, ok: true };
     },
     COMMAND_DELETE(cmd: any, by: string): CommandAckPayload {
-          const s = mgr.require(cmd.payload.session_id);
-          if (s.state.status === "WORKING" || s.state.status === "WAITING") {
+          // #265 删除幂等化（用户 1026 实锤，原话「目标不存在 = 删除已达成」）：不再
+          // require() 对缺席会话抛「会话不存在」——历史回放/前端历史桶残留卡删除时
+          // relay 内存早无此会话，报错只会把死卡钉死在面板。目标缺席 → 视为已删成
+          // 功：deleteSession 幂等返回 true 并照常广播 SESSION_DELETED（全端清卡，
+          // 无卡端自然无操作）。「会话运行中不能删」与 Leader 卡拒删语义不变。
+          const s = mgr.sessions.get(cmd.payload.session_id);
+          if (s && (s.state.status === "WORKING" || s.state.status === "WAITING")) {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
           if (!mgr.deleteSession(cmd.payload.session_id)) {
