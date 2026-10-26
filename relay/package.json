@@ -22,6 +22,7 @@
     "test:cloud": "tsx scripts/test-cloud.ts",
     "replay:zombipark": "tsx scripts/replay-zombipark.ts",
     "test:005-cloud": "tsx scripts/test-005-cloud.ts",
+    "test:258-pair-selfheal": "tsx scripts/test-258-pair-selfheal.ts",
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-blankset": "node --import tsx/esm scripts/test-005-blankset.ts",
     "test:permerr": "tsx scripts/test-permerr.ts",

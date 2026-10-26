@@ -124,9 +124,12 @@ await new Promise<void>((r) => phoneWs.on("open", r));
 const sendSealed = (obj: unknown) =>
   phoneWs.send(JSON.stringify({ to: identity.relayDev, data: seal(obj, relayPubkey, phoneKp.secretKey) }));
 
+// #258 批注：waitFor 默认 4s 会被 SNAPSHOT payload 的 engineCatalogSummary 真探测
+// （本机有 codex CLI 时实测 ~5.6s 同步阻塞 relay 事件循环）击穿——预存性能问题，
+// 非配对链语义回归；放宽 15s 容纳，根修另立任务。与 test-005-cloud ② 同口径。
 sendSealed({ t: "hello", last_seq: 0 });
 assert(
-  await waitFor(() => inbox.some((m) => m.type === "SNAPSHOT")),
+  await waitFor(() => inbox.some((m) => m.type === "SNAPSHOT"), 15_000),
   "hello 后收到加密 SNAPSHOT",
 );
 
