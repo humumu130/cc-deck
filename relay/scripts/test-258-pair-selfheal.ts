@@ -54,9 +54,12 @@ function evalFn(block: string, params: string[], args: unknown[]): (...a: unknow
 
 console.log("#258 配对自愈——settings-domain.js 状态机（源码抽取直跑）");
 
-// ---------- 抽取：connectCloudFor → onopen 体 ----------
-const connectBlock = blockFrom("function connectCloudFor(ctx, manual)");
-ok(!!connectBlock, "锚定 connectCloudFor 函数体");
+// ---------- 抽取：connectCloudForInner → onopen 体 ----------
+// #268 顺修：#259 给通道启动层加 try/catch 包裹时把大函数改名 connectCloudForInner、
+// 新增同名薄壳 connectCloudFor——本锚自那笔起落空（onopen 体取不到 → A1-A3 七断言
+// 连锁红，锁失效无人察觉）。锚改指 Inner 恢复锁力；薄壳行为由 test-268 独立覆盖。
+const connectBlock = blockFrom("function connectCloudForInner(ctx, manual)");
+ok(!!connectBlock, "锚定 connectCloudForInner 函数体（#259 改名后真身）");
 const onopenNeedle = "w.onopen = () => {";
 const onopenBlock = blockFrom(onopenNeedle, connectBlock);
 ok(!!onopenBlock, "锚定云链 onopen 体（connectCloudFor 内，区别于 483 行 LAN onopen）");
@@ -80,24 +83,24 @@ function mkOnopenStubCtx(over: Record<string, unknown> = {}) {
     over,
   ) as Record<string, unknown>;
 }
-interface Stubs { calls: Record<string, unknown[][]>; discoverRelay: (...a: unknown[]) => void; sendPairReq: (...a: unknown[]) => void; startPairWatchdog: (...a: unknown[]) => void; cloudSetConn: (...a: unknown[]) => void; sendCloud: (...a: unknown[]) => void; startCloudPing: (...a: unknown[]) => void }
+interface Stubs { calls: Record<string, unknown[][]>; discoverRelay: (...a: unknown[]) => void; sendPairReq: (...a: unknown[]) => void; startPairWatchdog: (...a: unknown[]) => void; cloudSetConn: (...a: unknown[]) => void; sendCloudHello: (...a: unknown[]) => void; startCloudPing: (...a: unknown[]) => void }
 function runOnopen(ctx: Record<string, unknown>, peer: unknown, pair: unknown, stubs: Stubs) {
   const f = new Function(
     "ctx", "w", "peer", "pair", "dev", "CLOUD_RETRY_BASE_MS", "clearTimeout",
-    "discoverRelay", "sendPairReq", "startPairWatchdog", "cloudSetConn", "sendCloud", "startCloudPing",
+    "discoverRelay", "sendPairReq", "startPairWatchdog", "cloudSetConn", "sendCloudHello", "startCloudPing",
     onopenBody,
   );
-  f(ctx, ctx.ws, peer, pair, "wb-mock", 3000, () => {}, stubs.discoverRelay, stubs.sendPairReq, stubs.startPairWatchdog, stubs.cloudSetConn, stubs.sendCloud, stubs.startCloudPing);
+  f(ctx, ctx.ws, peer, pair, "wb-mock", 3000, () => {}, stubs.discoverRelay, stubs.sendPairReq, stubs.startPairWatchdog, stubs.cloudSetConn, stubs.sendCloudHello, stubs.startCloudPing);
 }
 function mkStubs(): Stubs {
-  const calls: Record<string, unknown[][]> = { sendPairReq: [], startPairWatchdog: [], cloudSetConn: [], sendCloud: [], startCloudPing: [], discoverRelay: [] };
+  const calls: Record<string, unknown[][]> = { sendPairReq: [], startPairWatchdog: [], cloudSetConn: [], sendCloudHello: [], startCloudPing: [], discoverRelay: [] };
   return {
     calls,
     discoverRelay: (...a: unknown[]) => { calls.discoverRelay.push(a); },
     sendPairReq: (...a: unknown[]) => { calls.sendPairReq.push(a); },
     startPairWatchdog: (...a: unknown[]) => { calls.startPairWatchdog.push(a); },
     cloudSetConn: (...a: unknown[]) => { calls.cloudSetConn.push(a); },
-    sendCloud: (...a: unknown[]) => { calls.sendCloud.push(a); },
+    sendCloudHello: (...a: unknown[]) => { calls.sendCloudHello.push(a); },
     startCloudPing: (...a: unknown[]) => { calls.startCloudPing.push(a); },
   };
 }
@@ -109,7 +112,7 @@ function mkStubs(): Stubs {
   runOnopen(ctx, null, { pc: "87654321", rd: "rl-x", rk: "rk" }, stubs);
   ok(stubs.calls.sendPairReq.length === 1, "A1 退避窗内 onopen 仍补发一查 pair_req（旧版此处跳过=三无停摆）");
   ok(stubs.calls.startPairWatchdog.length === 1, "A1 退避窗内 onopen 仍起配对看门狗（重试驱动不缺席）");
-  ok(stubs.calls.cloudSetConn.length === 0 && stubs.calls.sendCloud.length === 0, "A1 未配对不落 online/不发 hello");
+  ok(stubs.calls.cloudSetConn.length === 0 && stubs.calls.sendCloudHello.length === 0, "A1 未配对不落 online/不发 hello");
 }
 
 // ---------- A2 已配对设备重连直显 ----------
@@ -120,9 +123,7 @@ function mkStubs(): Stubs {
   ok(stubs.calls.sendPairReq.length === 0, "A2 已配对（有身份无 pendingPair）不发 pair_req");
   const conn = stubs.calls.cloudSetConn[0] as unknown[];
   ok(!!conn && conn[0] === "online", "A2 直落 online（重连直显，不经配对中）");
-  const helloArgs = (stubs.calls.sendCloud[0] ?? []) as unknown[];
-  const hello = helloArgs[1] as { t?: string } | undefined;
-  ok(!!hello && hello.t === "hello", "A2 立发 hello 进业务恢复");
+  ok(stubs.calls.sendCloudHello.length === 1, "A2 立发 hello 进业务恢复（#259 起经 sendCloudHello 收口，单参 ctx）");
   ok(stubs.calls.startCloudPing.length === 1, "A2 心跳即起");
 }
 
