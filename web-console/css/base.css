@@ -1314,6 +1314,13 @@
     #d-team .workspace-pane .member-list { align-content: start; }
     #d-team .workspace-pane .member-card .m-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
     #d-team .workspace-pane .member-card .m-head .avatar { flex-basis: 32px; width: 32px; height: 32px; border-radius: 9px; }
+    /* #264 头像标准化：引擎淡彩底（--ava-c inline）+26px 主体（角色蟹/品牌 SVG）；
+       金冠叠角=非 claude PM/Leader（expo AvaBadge 同规格 12px -15°）；QA 角标沿用 qa 色 */
+    #d-team .workspace-pane .member-card .m-head .avatar.m-ava { background: color-mix(in srgb, var(--ava-c, var(--hover)) 22%, var(--surface2)); border-color: color-mix(in srgb, var(--ava-c, var(--hover)) 38%, transparent); }
+    #d-team .workspace-pane .member-card .m-head .avatar.m-ava .ava-crab { width: 26px; height: 26px; object-fit: contain; }
+    #d-team .workspace-pane .member-card .m-head .avatar.m-ava svg { width: 18px; height: 18px; }
+    #d-team .workspace-pane .member-card .m-head .avatar.m-ava .ava-crown { position: absolute; top: -5px; right: -6px; width: 12px; height: 12px; background: linear-gradient(180deg, #F5C842 55%, #C9930A); clip-path: polygon(15% 100%, 22% 38%, 0 52%, 8% 8%, 38% 26%, 50% 0, 62% 26%, 92% 8%, 100% 52%, 78% 38%, 85% 100%); transform: rotate(-15deg); }
+    #d-team .workspace-pane .member-card .m-head .avatar.m-ava .ava-qatag { position: absolute; top: -6px; right: -7px; padding: 0 3px; border-radius: 4px; background: var(--avatar-qa-bg); color: var(--avatar-qa-text); font: 700 8px/11px var(--mono); }
     #d-team .workspace-pane .member-card .m-name { display: flex; align-items: center; min-width: 0; flex: 1; }
     #d-team .workspace-pane .member-card .m-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .workspace-pane .member-card .m-role { flex: none; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--dim); font-size: var(--fs-E); }
@@ -1330,7 +1337,11 @@
        宽反算锁死 148×1.618≈239.5px（css-sizing-4：一轴定尺寸时另一轴 auto 按比例解析，
        grid item 不再 stretch 到轨道宽）——1fr 轨道再宽卡也不动，卡右空带即「两列空旷」
        卡层根因。width:100% 拉满轨道+max-width:380 封顶+轨内居中；摘要截断语义不变 */
-    #d-team .workspace-pane .member-card { width: 100%; max-width: 380px; justify-self: center; aspect-ratio: 1.618 / 1; overflow: hidden; }
+    /* #264（1026 用户实锤「两列但不齐」）：等高行对齐根治——退役 aspect-ratio 定比（高随
+       宽变=行内高矮不一）与 max-width:380+center 组合（轨道宽于 380 时列内偏移=错位观感）；
+       改 stretch 拉满轨道+min-height 统一下限（行内 grid 默认 stretch 即等高），窄容器由
+       轨道 auto-fill minmax(280) 天然降级单列（<560px 单轨），无需媒体断点 */
+    #d-team .workspace-pane .member-card { width: 100%; max-width: none; justify-self: stretch; aspect-ratio: auto; min-height: 150px; overflow: hidden; }
     #d-team .workspace-pane .member-card .member-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     #d-team .workspace-pane .member-card .m-open { flex: none; margin-left: auto; padding: 2px 9px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--dim); font-size: var(--fs-E); cursor: pointer; }
     #d-team .workspace-pane .member-card .m-open:hover { color: var(--brand-hover); border-color: var(--brand-line); }
