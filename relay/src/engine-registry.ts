@@ -1,5 +1,5 @@
 import type { AgentCallbacks, AgentLike } from "./agent-adapter.js";
-import { createCodeBuddyAgent, preflightCodeBuddy, CODEBUDDY_CAPABILITIES } from "./agent-codebuddy.js";
+import { createCodeBuddyAgent, preflightCodeBuddy, CODEBUDDY_CAPABILITIES, type CodeBuddySpawnConfig } from "./agent-codebuddy.js";
 import { createQwenCodeAgent, preflightQwen, QWEN_CODE_CAPABILITIES } from "./agent-qwen.js";
 import { createTraeAgent, preflightTrae, TRAE_CAPABILITIES } from "./agent-trae.js";
 import type { EngineCapabilities, PreflightResult, ProviderProfile } from "./agent-jsonl.js";
@@ -14,6 +14,8 @@ export interface RegisteredEngineOptions {
   contextPacket?: string;
   configHome?: string;
   providerProfile?: ProviderProfile;
+  /** #285 codebuddy 能力面配置（session-manager 从 engine profile / spawn opts 组装） */
+  codebuddy?: CodeBuddySpawnConfig;
 }
 
 export interface EngineDefinition {
@@ -55,7 +57,7 @@ const definitions: Record<"trae" | "qwen-code" | "codebuddy", EngineDefinition> 
     label: "CodeBuddy Code",
     capabilities: CODEBUDDY_CAPABILITIES,
     reinjection: true,
-    create: (opts) => createCodeBuddyAgent(opts),
+    create: (opts) => createCodeBuddyAgent({ ...opts, codebuddy: opts.codebuddy }), // #285 能力面透传
     preflight: (provider) => preflightCodeBuddy({ provider }),
   },
 };

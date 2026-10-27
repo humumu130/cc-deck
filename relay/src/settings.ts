@@ -25,6 +25,10 @@ export interface EngineProfile {
   api_key_env?: string;
   base_url_env?: string;
   keychain_ref?: string;
+  /** #285 codebuddy 专键：--effort 档位（六档或 快速/均衡/极致 别名）；其余引擎忽略 */
+  effort?: string;
+  /** #285 codebuddy 专键：--permission-mode（六档，bypassPermissions 仅显式配置）；其余引擎忽略 */
+  permission_mode?: string;
 }
 
 export interface EngineProfilePreflight {
@@ -140,6 +144,8 @@ export function validateEngineProfile(profile: unknown): { ok: true; profile: En
       ...(typeof raw.api_key_env === "string" ? { api_key_env: raw.api_key_env.trim() } : {}),
       ...(typeof raw.base_url_env === "string" ? { base_url_env: raw.base_url_env.trim() } : {}),
       ...(typeof raw.keychain_ref === "string" ? { keychain_ref: raw.keychain_ref.trim() } : {}),
+      ...(typeof raw.effort === "string" && raw.effort.trim() ? { effort: raw.effort.trim() } : {}),
+      ...(typeof raw.permission_mode === "string" && raw.permission_mode.trim() ? { permission_mode: raw.permission_mode.trim() } : {}),
     },
   };
 }
