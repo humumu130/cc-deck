@@ -989,7 +989,7 @@
                     }
                     if (!hitRole) continue;
                     // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
-                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" ? 1 : 0); }, 0);
+                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" && !/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")) ? 1 : 0); }, 0); /* 1027 用户裁定：WORKING⟺有活应闭环——在跑计数=干活成员（worker/QA），PM/Leader 是管理岗不计入（他们恒有活但不是「在跑工人」） */
                     out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, running, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）；W-ENGLM2 F：running 随行下发（chip 数字位=活跃数）
                   }
                   return out;
@@ -1082,6 +1082,16 @@
                   return b2SourcePalette[h % b2SourcePalette.length];
                 };
                 window.__ccDeck005SourceColor = b2SourceColor; // #245 跨 IIFE 暴露(team/bridge 域源胶囊取源色)
+                // #277 ⑥：成员卡头像同源单口——团队域 memberAvatarHtml 委派到本域 avaBrandHtmlOf
+                //（列表卡 srow-ava 同规格：品牌 SVG 必经 .ava-brand 包装受尺寸约束；PM/Leader
+                // 角色蟹走 ROLE_AVATAR_BRAND，非 claude 带皇冠角标）。此前团队域裸注
+                // ENGINE_BRAND_SVG（无宽高属性）+ CSS 选择器 .m-head 与 markup .member-head
+                // 脱锚 → 原尺寸渲染 = 用户实锤「大大的像素小螃蟹」。
+                window.__ccDeck005AvaOf = (engine, teamRole) => avaBrandHtmlOf({
+                  engine: engine || "claude",
+                  engineClass: (ENGINES[engine] || ENGINES.claude)[1],
+                  teamRole: teamRole || "",
+                });
                 // UIPOLISH2 件一：头像底色引擎品牌色淡彩——地基 sessionAvaColor 逐字节同构（myCardMarkup
                 // 与地基 renderSessionCard 的 DOM 一致性是 observer 完整性检查的前提，两处必须同步改）
                 const b2AvaColor = (item) => ({
@@ -1398,7 +1408,7 @@
                   pop.style.zIndex = "96";
                   pop.innerHTML = '<div class="source-menu-head">筛选会话</div>' + SESSION_FILTERS.map((f) => {
                     const n = f.id === "all" ? S.sessions.size : [...S.sessions.values()].filter(f.test).length;
-                    return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + " 个</small></button>";
+                    return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + '</small></button>';
                   }).join("");
                   const rect = anchor.getBoundingClientRect();
                   pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 220)) + "px";
@@ -1416,10 +1426,28 @@
                   document.body.append(pop);
                   setTimeout(() => document.addEventListener("click", onDoc, true), 0);
                 }
+                // #281 滚动保持（1027 用户实锤：会话列表滚到下方后周期帧一到自动跳回顶部）：
+                // 滚动容器 .list-upper（CSS :372 overflow:hidden auto）每次重渲染被 mountUpper
+                // 整节点重建（replaceChildren 新 div），scrollTop 随元素销毁归零。最小修=替换前
+                // 记录旧节点 scrollTop、替换后写回新节点；用户正在滚动（wheel/touchmove 落在
+                // 300ms 手势活跃窗内）跳过恢复——惯性滚动中程序写 scrollTop 会与手势打架，由
+                // 用户继续掌控。根治=渲染层定向更新（不整节点重建），热点全景另行立项，见
+                // docs/research/research-render-hotspots.md。
+                let listGestureAt = 0;
+                const LIST_GESTURE_WINDOW_MS = 300;
+                function bindListScrollKeep(list) {
+                  if (list.dataset.scrollKeepBound) return; // dataset 守卫幂等（renderMyList 高频重入）
+                  list.dataset.scrollKeepBound = "1";
+                  const mark = () => { listGestureAt = Date.now(); };
+                  // 捕获+passive 挂常驻 .session-list 代理——滚动元素 .list-upper 每帧重建不能挂它身上
+                  list.addEventListener("wheel", mark, { passive: true, capture: true });
+                  list.addEventListener("touchmove", mark, { passive: true, capture: true });
+                }
                 function renderMyList() {
                   if (!UI) return;
                   const list = UI.sessionList;
                   if (!S.hasSnapshot) return; // 连接中的占位由地基渲染，不抢
+                  bindListScrollKeep(list); // #281 惰性一次性绑定（首帧快照后常驻）
                   list.dataset.b2Owned = "1"; // #143 盲评A-1 止血：接管标记——地基据此让位列表渲染与走秒，防陈旧快照回盖
                   list.dataset.relayState = "snapshot";
                   list.dataset.connection = S.status;
@@ -1442,11 +1470,16 @@
                   // chip（列表 r3+详情 head，未读角标 tc-unread 唯一列表未读面）；收纳逻辑保留，
                   // 收起会话入口=抽屉 roster 行直开；队级聚合健康/队数一览走 chip idle 态+团队域。
                   const mountUpper = (upperContent) => { // 单段挂载单口（上段节点=会话卡/空态占位）
+                    // #281 滚动保持：替换前记录旧滚动位（手势活跃窗内 -1=跳过哨兵；0=顶部本就无需写回），
+                    // 替换后写回新节点。内容变短时浏览器自动钳到 scrollHeight 上限，符合直觉。
+                    const prevUpper = list.querySelector(".list-upper");
+                    const keepScroll = prevUpper && Date.now() - listGestureAt >= LIST_GESTURE_WINDOW_MS ? prevUpper.scrollTop : -1;
                     const upper = document.createElement("div");
                     upper.className = "list-upper";
                     upper.append(upperContent);
                     if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩
                     list.replaceChildren(upper);
+                    if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 写回（is-empty 态 overflow:visible 写入无效，天然跳过）
                   };
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");

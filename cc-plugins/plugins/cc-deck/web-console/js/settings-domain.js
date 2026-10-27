@@ -1082,7 +1082,7 @@ function connectLan(ctx) {
         body.innerHTML = `
 <div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号</div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度</div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">空闲置灰</div><select class="idle-dim-select" data-idle-dim-input aria-label="空闲置灰"><option value="15">15 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="-1">永不</option></select></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音</div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知</div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><button class="primary-btn" data-settings-add-provider type="button">＋ 添加 provider</button></div>
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div></div><div class="v8-setcard"><h5>relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard"><h5>已配设备</h5><div class="settings-list" data-settings-live="devices"></div><div class="v8-escape">踢出设备需重新配对</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div></div><div class="v8-setcard"><h5>本机 relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard" data-conn-remote-card><h5>远程源</h5><div class="settings-list" data-settings-live="remote-sources"></div></div><div class="v8-setcard"><h5>本设备与配对</h5><div class="settings-list" data-settings-live="devices"></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button class="primary-btn" data-settings-pair type="button">＋ 配对新设备</button></div><div class="v8-escape">踢出设备需重新配对</div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">模板只是初始值 · 开团可逐成员覆盖。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载 · 停用开关待注册表就绪后生效。</div></div><details class="v8-setcard" style="padding:12px 14px"><summary style="cursor:pointer;font-weight:650;font-size:12.5px">权限声明（只读）</summary><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div></div></div></div></details>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录</div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页</div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App</div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置</div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">覆盖现有设置</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
@@ -1271,6 +1271,31 @@ function connectLan(ctx) {
         const oneLine = (t) => { const v = String(t ?? "").replace(/\s+/g, " ").trim(); return v.length > 160 ? v.slice(0, 160) + "…" : v; }; // #102 批 A：auth_hint 单行化（本块独立定义，不跨 script 块借对话域同名函数）
         const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
         const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
+        // ---------- #280-A 失焦根修：settings-live 容器统一写口 ----------
+        // 旧版 connLive 等容器无条件 innerHTML 整块重写——输入框在容器内，下一帧
+        // SNAPSHOT/心跳到达即重渲（1-2s 节奏）=用户实锤「自动失焦+已输入内容消失」。
+        // 统一写口：焦点在容器内可编辑元素上时跳过本轮重写（值/焦点/IMe 全保），
+        // 焦点真正离开容器后补刷一帧（focusout 委托，容器内互切不触发）。
+        const liveSkipped = new WeakSet();
+        function liveSetHtml(el, html) {
+          if (!el) return;
+          const a = document.activeElement;
+          if (a && el.contains(a) && a.matches && a.matches("input, select, textarea, [contenteditable='true']")) {
+            liveSkipped.add(el);
+            return; // 输入中：跳过本轮，等 focusout 补刷（防打字被 innerHTML 清掉）
+          }
+          liveSkipped.delete(el);
+          el.innerHTML = html;
+        }
+        document.addEventListener("focusout", (ev) => {
+          const t = ev.target;
+          const live = t && t.closest && t.closest("[data-settings-live]");
+          if (!live || !liveSkipped.has(live)) return;
+          const next = ev.relatedTarget; // 容器内互切（input→保存钮）不算离开
+          if (next && live.contains(next)) return;
+          liveSkipped.delete(live);
+          if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+        });
         const render = () => {
           const section = document.querySelector("#d-settings");
           const bodyEl = section?.querySelector(".workspace-body");
@@ -1282,18 +1307,21 @@ function connectLan(ctx) {
           // WS 已断（offline/unconfigured）时曾收过 SNAPSHOT 也显示实际态，不再假「在线」
           const connState = bridge.hasSnapshot && bridge.connection !== "offline" && bridge.connection !== "unconfigured" ? "online" : bridge.connection;
           const stateText = connState === "online" ? "在线" : connState === "connecting" ? "连接中" : "未连接";
+          const desktopForm = !!(window.__TAURI__ || window.ccDeck); // #280-A：提升出分支（devLive 在分支外消费）
           const connLive = section.querySelector('[data-settings-live="connections"]');
+          const remoteLive = section.querySelector('[data-settings-live="remote-sources"]');
+          // #280-A IA 重梳：远程源独立卡（云形态整块由云槽渲染，本卡隐藏防双份）
+          if (section.querySelector("[data-conn-remote-card]")) section.querySelector("[data-conn-remote-card]").hidden = !!cloudMode;
           if (connLive) {
             if (cloudMode) {
               // 缝合点 d：云形态连接面板整块交给云链模块渲染（云桥状态行/本页设备行/输码表单/重试钮）
-              connLive.innerHTML = '<div data-cloud-settings-slot></div>';
+              liveSetHtml(connLive, '<div data-cloud-settings-slot></div>');
               renderCloudUI();
             } else {
               // #158-批3：桌面形态加 relay 诊断小字行（relayStatus 病因透出）；端口行优先取
               // 探测命中端口（tauri.localhost 的 location.port 是空，8787 硬编会误导多端口变体）
               const shellDiag = !!(window.ccDeck && typeof window.ccDeck.relayStatus === "function");
               const relayPort = (localRelayInfo && localRelayInfo.port) || location.port || "8787";
-              const desktopForm = !!(window.__TAURI__ || window.ccDeck);
               // #45 行级分享钮（2026-10-10）：旧壳 srv-share 语义对位——恒渲染、未在线置灰，
               // 点击开 B1 配对弹窗（openLanPairDialog，QR/码/链接/设备四件套）；云形态行由
               // cloudSettingsRows 渲染（未配对时自带输码表单），不进此分支
@@ -1302,22 +1330,27 @@ function connectLan(ctx) {
                 + ' title="' + (shareOn ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "relay 未在线 · 连接后可分享") + '">分享</button>';
               // W-V8R 批6（连接与设备 v8 化）：relay 卡=relaystat 形态（v8 setpage-conn：
               // 绿点+主行+meta+动作钮右置），远程源/本页设备行=swrow 形态（v8 已配设备卡行）
-              connLive.innerHTML =
+              // #280-A IA 重梳（用户裁定「逻辑混乱」）：原 connLive 单列混排四类关注点
+              //（relay 状态/远程源列表/源名编辑/本设备行）——拆三卡：本机 relay（状态+源名
+              // 编辑同卡=同主体）、远程源（cloudSettingsRows(false) 不含源名行）、本设备与
+              // 配对（devLive）。写口全走 liveSetHtml（#280-A 失焦根修：输入中跳过重写）。
+              liveSetHtml(connLive,
                 `<div class="v8-relaystat"><span class="v8-rdot2 ${connState === "online" ? "" : "off"}"></span><div><div class="st">本机 relay${esc(window.__ccDeck005SourceDisplayName && window.__ccDeck005SourceDisplayName(bridge.relayName) !== "本机" ? " · " + bridge.relayName : "")} · ${stateText}</div><div class="meta">端口 ${relayPort}</div>${shellDiag ? '<p class="relay-diag" data-relay-diag role="note"></p>' : ""}</div>${shareBtn}</div>` +
-                // W-SDEL：远程源区=共享库条目列表（多条+连接/编辑/删除；云桥降级为条目之一）——
-                // 桌面壳/浏览器 LAN 形态同样列出，死条目清理不依赖云链激活态（cloudSettingsRows
-                // 空列表自给引导行；cloudUIOn 时附本页设备行与输码表单）
-                cloudSettingsRows() +
-                `<div class="v8-swrow"><span class="v8-swico">▣</span><div class="v8-swtxt">${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}<div class="v8-swd">${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")} <span style="color:var(--${connState === "unconfigured" ? "working" : "done"})">●</span></div></div><span class="v8-prbtn ${connState === "unconfigured" ? "go" : "ok"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>`;
+                relayNameRowHtml(false));
+              // W-SDEL 远程源区（多条+连接/编辑/删除；死条目清理不依赖云链激活态）——
+              // withName=false：源名编辑归本机 relay 卡，云形态槽内仍自带（cloudSettingsRows() 缺省 true）
+              liveSetHtml(remoteLive, cloudSettingsRows(false));
               if (shellDiag) void refreshRelayDiag();
             }
           }
           const devLive = section.querySelector('[data-settings-live="devices"]');
-          if (devLive) devLive.innerHTML = '<div class="v8-escape">当前 relay 未下发已配设备清单 · 设备管理在桌面端完成。</div>';
+          if (devLive) liveSetHtml(devLive,
+            `<div class="v8-swrow"><span class="v8-swico">▣</span><div class="v8-swtxt">${desktopForm ? "桌面 App（" + (IS_MAC ? "macOS" : "Windows") + "）" : "浏览器 · 网页端"}<div class="v8-swd">${desktopForm ? "版本 " + esc(window.__shellVer || CONSOLE_VERSION) : "本页设备 · 配对 token " + (connState === "unconfigured" ? "未配置" : "已就绪")} <span style="color:var(--${connState === "unconfigured" ? "working" : "done"})">●</span></div></div><span class="v8-prbtn ${connState === "unconfigured" ? "go" : "ok"}">${connState === "unconfigured" ? "待配对" : "在线"}</span></div>` +
+            '<div class="v8-escape">当前 relay 未下发已配设备清单 · 设备管理在桌面端完成。</div>');
           const provLive = section.querySelector('[data-settings-live="provider"]');
           if (provLive) {
-            if (!catalog) provLive.innerHTML = '<div class="v8-escape">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>'; /* W-SETTINGS3 批2：空态蓝描边 banner 退役，回 V3 灰字内联说明 */
-            else provLive.innerHTML = catalog.map((e) => {
+            if (!catalog) liveSetHtml(provLive, '<div class="v8-escape">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>'); /* W-SETTINGS3 批2：空态蓝描边 banner 退役，回 V3 灰字内联说明 */
+            else liveSetHtml(provLive, catalog.map((e) => {
               if (!e || typeof e.id !== "string") return "";
               const ok = e.state === "ready";
               const na = e.state === "needs_auth"; // #102 批 A：装了未登录——黄点+登录指引（不混「待装」）
@@ -1332,7 +1365,7 @@ function connectLan(ctx) {
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
               // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
               return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd">${copy}</div></div>${loginBtn || tag}</div>`;
-            }).join("");
+            }).join(""));
           }
           // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
           // 数组存在且非空——旧 relay/缺 docs 部署自动隐藏）。按 group 分组小标题 + 行；
@@ -1345,12 +1378,12 @@ function connectLan(ctx) {
             if (docs.length) {
               const groups = [];
               for (const d of docs) if (!groups.includes(d.group)) groups.push(d.group);
-              designLive.innerHTML = groups.map((g) =>
+              liveSetHtml(designLive, groups.map((g) =>
                 '<div class="queue-group">' + esc(g) + " · " + docs.filter((d) => d.group === g).length + "</div>"
                 + docs.filter((d) => d.group === g).map((d) =>
                   '<div class="v8-swrow"><span class="v8-swico"><svg class="icon-inline" aria-hidden="true"><use href="#icon-layers"></use></svg></span><div class="v8-swtxt">' + esc(d.title) + '<div class="v8-swd">' + esc(d.path) + "</div></div>"
                   + '<button class="v8-prbtn" data-design-doc="' + esc(d.path) + '" type="button" title="新窗打开图纸">打开 ↗</button></div>').join("")
-              ).join("");
+              ).join(""));
             }
           }
           const idLive = section.querySelector('[data-settings-live="identity"]');
@@ -1365,9 +1398,9 @@ function connectLan(ctx) {
             const cmRow = (cm === "leader" || cm === "no-leader")
               ? '<div class="v8-swrow"><span class="v8-swico"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div class="v8-swtxt">协作模式<div class="v8-swd">无 Leader 隐藏 Leader 卡 · 团队看板照常</div></div><div class="density-control collab-mode-control" role="group" aria-label="协作模式"><button type="button" data-collab-mode-option="leader"' + (cm === "leader" ? ' class="active"' : "") + '>有 Leader</button><button type="button" data-collab-mode-option="no-leader"' + (cm === "no-leader" ? ' class="active"' : "") + '>无 Leader</button></div></div>'
               : "";
-            idLive.innerHTML = cmRow + (roleMap.size
+            liveSetHtml(idLive, cmRow + (roleMap.size
               ? [...roleMap.entries()].map(([role, e]) => `<div class="v8-swrow"><span class="v8-swico">${esc(String(role).trim().charAt(0).toUpperCase() || "·")}</span><div class="v8-swtxt">${esc(role)}</div><span class="kbd-inline-chip">${esc(e.label || ENGINE_SHORT[e.id] || e.id)}</span></div>`).join("")
-              : '<div class="v8-escape">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>');
+              : '<div class="v8-escape">无预置角色模板 · 建团时在组织侧配置角色缺省引擎。</div>'));
           }
           const cards = [...section.querySelectorAll(".queue .queue-card")];
           const setSub = (index, text) => { const p = cards[index]?.querySelector("p"); if (p) p.textContent = text; };
@@ -3369,21 +3402,33 @@ function connectLan(ctx) {
       // 事实源，改名走命令通道 COMMAND_RELAY_NAME_SET（本机视角=LAN relay，云视角=已配对
       // 远端 relay——命令随 __ccDeck005MainWs 路由）。成功后 RELAY_NAME_UPDATED 广播即时
       // 刷新源 chip/切换器（对端云配对源同名跟随）。
+      // #280-A v2（5.3Flash 审查逐条修）：①当前值独立行加重（现状≠规则分层）②规则压一句
+      // 自然语言放输入框下（去「=」「回落」术语）③「≤12」只在计数器出现一次（去占位符重复）
+      // ④保存钮紧邻输入框（主操作 primary 档）⑤加实时字数计数 n/12 ⑥左对齐三线合一
       function relayNameRowHtml(mobile) {
         const srcCloud = cloudMode || viewSource() === "cloud";
         const srcCtx = srcCloud ? cloudCtx : ctx;
         const cur = String(srcCtx.relayName || "");
         const shown = cur && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(cur) ? cur : "（未连接）";
-        const label = srcCloud ? "云源名称" : "本机 relay 名称";
-        const body = '<strong style="font-size:var(--fs-B)">' + label + '</strong>'
-          + '<p style="margin:2px 0 0;color:var(--dim);font-size:var(--fs-A)">当前 ' + escapeHtml(shown) + ' · 留空保存=回落主机名 · ≤12 字符</p>'
-          + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
-          + '<input class="composer-input" data-relay-name-input type="text" maxlength="12" placeholder="新名称（≤12 字符）" aria-label="源名称" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em;font-size:var(--fs-A)">'
-          + '<button class="primary-btn" data-relay-name-save type="button">保存</button></div>';
+        const label = srcCloud ? "云源名称" : "源名称";
+        const body = '<div class="rname-block">'
+          + '<div class="rname-head"><strong class="rname-label">' + label + '</strong><span class="rname-cur" title="当前源名">' + escapeHtml(shown) + '</span></div>'
+          + '<div class="rname-row"><input class="composer-input rname-input" data-relay-name-input type="text" maxlength="12" placeholder="新名称" aria-label="源名称">'
+          + '<span class="rname-count" data-relay-name-count aria-live="polite">0/12</span>'
+          + '<button class="primary-btn rname-save" data-relay-name-save type="button">保存</button></div>'
+          + '<p class="rname-hint">留空保存则恢复主机名默认 · 回车也可提交</p></div>';
         if (mobile) return '<div class="mobile-task">' + body + '</div>';
-        return '<div class="settings-row"><span class="avatar">🏷</span><div style="flex:1;min-width:0">' + body + '</div></div>';
+        return '<div class="settings-row rname-rowcard"><div style="flex:1;min-width:0">' + body + '</div></div>';
       }
-      function cloudSettingsRows() {
+      // #280-A 计数器：输入即时刷新（文档级 input 委托一次挂）
+      document.addEventListener("input", (ev) => {
+        const t = ev.target;
+        if (!t || !t.matches || !t.matches("[data-relay-name-input]")) return;
+        const card = t.closest(".rname-block");
+        const c = card && card.querySelector("[data-relay-name-count]");
+        if (c) c.textContent = String(t.value || "").length + "/12";
+      });
+      function cloudSettingsRows(withName = true) { // #280-A：withName=false 供桌面远程源卡（源名编辑归本机 relay 卡）
         const entries = cloudSharedCloudServers();
         let html = "";
         if (!entries.length) {
@@ -3392,7 +3437,7 @@ function connectLan(ctx) {
           html += sdelServerRows(false);
           html += '<div class="settings-row"><span class="avatar">＋</span><div><strong>添加服务器</strong><p>8 位配对码连接其他电脑的 CC Deck</p></div><button class="row-share" data-settings-add type="button">＋ 添加</button></div>';
         }
-        html += relayNameRowHtml(false); // #272 本源名称（所有形态恒显——本机/云随视角）
+        if (withName) html += relayNameRowHtml(false); // #272 源名编辑（云形态槽内恒显；桌面形态归本机 relay 卡）
         if (cloudUIOn()) {
           const peer = cloudPeerOf(cloudCtx.cfg);
           html += '<div class="settings-row"><span class="avatar">▣</span><div><strong>本页设备 · ' + (ckp ? escapeHtml(devId(ckp.publicKey, "wb")) : "—")
@@ -3534,11 +3579,13 @@ function connectLan(ctx) {
         ctxName(context) { return (context && context.relayName) || location.host; },
         bind(online) {
           const api = this.api(); if (!api) return;
-          try { api.bind({ command: (type, payload, timeoutMs) => this.sendCommand(type, payload, timeoutMs), online: online === true }); } catch {}
+          try { api.bind({ command: (type, payload, timeoutMs, wsOverride) => this.sendCommand(type, payload, timeoutMs, wsOverride), online: online === true }); } catch {}
         },
-        sendCommand(type, payload, timeoutMs = 8000) {
+        sendCommand(type, payload, timeoutMs = 8000, wsOverride = null) {
           return new Promise((resolve) => {
-            const ws = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : (window.__ccDeck005MainWs || ctx.ws); // W-WINPAIR-R2 视角通道 + R7① 会话源路由（聚合下远程会话走云链）
+            // #277 ②：wsOverride=建团「创建到」显式选源锁通道（与新建会话 R-2/T10 同语义：
+            // 显式选择优先级最高不随视角漂移），未传时维持 RouteWs 视角通道
+            const ws = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : (window.__ccDeck005MainWs || ctx.ws)); // W-WINPAIR-R2 视角通道 + R7① 会话源路由（聚合下远程会话走云链）
             if (!ws || ws.readyState !== WebSocket.OPEN) { resolve(null); return; }
             const commandId = "team-" + Date.now().toString(36) + "-" + String(++this.cmdSeq);
             const timer = setTimeout(() => { this.ackWaiters.delete(commandId); resolve(null); }, timeoutMs);
@@ -3712,7 +3759,9 @@ function connectLan(ctx) {
         const out = { projects: [], sessions: [], receipts: [], org_confirms: [], boards: [], relay_name: "聚合 · 全部源" };
         for (const c of parts) {
           const p = c.lastSnapshotPayload || {};
-          for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(g); }
+          // #277 ⑤：project 打源标 __relay_source（该团来自哪个源的真值）——团队卡
+          // src-cap 在成员会话已收摊/不在册时的确定性兜底（浅拷贝不改单源快照原对象）
+          for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(Object.assign({}, g, { __relay_source: String(c.relayName || "") })); }
           for (const s of (Array.isArray(p.sessions) ? p.sessions : [])) if (s && typeof s.session_id === "string" && !sessionsById.has(s.session_id)) { sessionsById.set(s.session_id, s); out.sessions.push(s); }
           for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(b); }
           for (const r of (Array.isArray(p.receipts) ? p.receipts : [])) out.receipts.push(r);
