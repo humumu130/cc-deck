@@ -1051,6 +1051,10 @@
                 // #227 件四：占位 getter——无品牌 SVG 引擎（zcode/glm/未知）=品牌色圆角字母
                 // （与像素螃蟹同族谱；expo EngineIcon PLACEHOLDER 同源色）
                 const engineBrandSvgOf = (item) => ENGINE_BRAND_SVG[item.engineClass] ?? (() => {
+                  // #286① 双保险：engineClass 空（engine 缺席且 model 无 hint）= relay
+                  // 「缺席即 claude」存量口径——兜底 claude 螃蟹而非「?」字母占位（旧 relay
+                  // 快照未归一时的前端侧兜住）；未知非空引擎仍走首字母占位（设计不变）
+                  if (!item.engineClass) return ENGINE_BRAND_SVG.claude;
                   const PH = { zcode: ["#546784", "Z"], glm: ["#3E8EF7", "G"] }[item.engineClass] ?? ["#546784", (item.engine || "?").charAt(0).toUpperCase()];
                   return '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="' + PH[0] + '"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">' + PH[1] + '</text></svg>';
                 })();

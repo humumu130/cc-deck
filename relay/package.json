@@ -115,7 +115,8 @@
     "test:reclaim": "tsx scripts/test-reclaim.ts",
     "test:alive": "tsx scripts/test-alive.ts",
     "test:wildonboard": "tsx scripts/test-wild-onboard.ts",
-    "test:orgagg": "tsx scripts/test-org-agg.ts"
+    "test:orgagg": "tsx scripts/test-org-agg.ts",
+    "test:msp": "tsx scripts/test-msp.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

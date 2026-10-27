@@ -1082,14 +1082,9 @@ function SettingsPageBase({
         </>) : null}
         {subPage === "prefs" ? (<>
         {/* 偏好组（W-MSET3 ③ 合并：原「显示与字号」+「通用」两组 → 一组四行）。
-            「显示与字号」组名与内容不符（过程消息档/空闲置灰皆非全局字号）早已
-            该正名；通用组仅两行撑不起独立组——合并后少一层组头一处分折叠（原
-            显示组折叠记忆 cc_display_collapsed 退役，偏好恒展开）。行序：显示类
-            （过程消息/空闲置灰）→ 输入类（回车发送）→ 系统类（后台保活收尾） */}
-        <View style={d.secHead}>
-          <Text style={d.secTitleT}>偏好</Text>
-          <View style={d.secToggle} />
-        </View>
+            行序：显示类（过程消息/空闲置灰）→ 输入类（回车发送）→ 系统类（后台保活收尾）。
+            #286③ 块标题退役：页头「设置 · 偏好」已表意，内层「偏好」组头双层重复
+            （用户 1027 实锤）——组头整层去（偏好组恒展开无折叠语义，零功能损失） */}
         <GroupCard>
           {/* #37 同行化：缩小版拨杆（118×24）与标题同行；三档 = 标准三档字距 */}
           <Row
@@ -1161,10 +1156,8 @@ function SettingsPageBase({
             更新，开关回弹即失败/未生效），失败 Alert 原文提示 */}
         {snap.empHome || expSections.length ? (
         <>
-        <View style={d.secHead}>
-          <Text style={d.secTitleT}>Agent 引擎</Text>
-          <View style={d.secToggle} />
-        </View>
+        {/* #286③ 块标题退役：页头「设置 · 引擎」已表意，内层组头双层重复 */}
+
         <GroupCard>
           {snap.empHome ? (
             <Row
@@ -1209,11 +1202,9 @@ function SettingsPageBase({
         {/* 通用组已删（W-MSET3 ③ 并入偏好组）：后台保活+回车发送两行上移，多源聚
             合开关早在 2026-09-14 移除（与会话列表「单源/聚合」胶囊重复，单一入口） */}
         {/* 关于组（任务书分组⑤，低频沉底）：#313 版本行（呼出弹窗——本版特性/检查
-            更新/反馈都在里面）+ 反馈行；Build 尾行收组卡下（面板元信息收尾） */}
-        <View style={d.secHead}>
-          <Text style={d.secTitleT}>关于</Text>
-          <View style={d.secToggle} />
-        </View>
+            更新/反馈都在里面）+ 反馈行；Build 尾行收组卡下（面板元信息收尾）。
+            #286③ 块标题退役：页头「设置 · 关于」已表意，内层组头双层重复 */}
+
         <GroupCard>
           <Row
             icon={ICON_BOX}
@@ -1232,7 +1223,10 @@ function SettingsPageBase({
             a11y="反馈"
           />
         </GroupCard>
-        <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>        </>) : null}
+        {/* #286② 版本水印（对齐桌面右下角 test.xx 标识）：右对齐弱化 + 完整通道
+            版本（nativeApplicationVersion 真机含 CI 烙印 test.xx 后缀；模拟器/开发态
+            回落 expoConfig.version）——用户要「同款可辨版本」 */}
+        <Text style={[d.aboutBuildT, { textAlign: "right" }]}>CC Deck · {APP_VER.replace(/^v/, "")}</Text>        </>) : null}
 
         </ScrollView>
       </View>

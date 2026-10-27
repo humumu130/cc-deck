@@ -88,7 +88,10 @@ export function hasEngineIcon(engine: string | undefined | null): boolean {
 }
 
 export function EngineIcon({ engine, size = 13, color }: { engine: string | undefined | null; size?: number; color?: string }) {
-  const key = engine ?? "";
+  // #286① 双保险：engine 空（undefined/""）= relay「缺席即 claude」存量口径——
+  // 兜底 claude 蟹而非「?」字母（旧 relay 快照未归一时的前端侧兜住）；未知非空
+  // 引擎仍走首字母占位（设计不变）
+  const key = engine || "claude";
   const xml = ENGINE_SVG_XML[key];
   if (xml) {
     return <SvgXml xml={xml} width={size} height={size} />;
