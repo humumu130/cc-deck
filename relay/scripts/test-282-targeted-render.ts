@@ -295,7 +295,11 @@ ok(ssd.includes('out.replace(\'<div class="message-ai"\', \'<div class="message-
 ok(mj.includes("function mConversationItems") && mj.includes("rkC(base.convHost, mConversationItems(sid, s))") && mj.includes("function mConversationHtml(sid, s) { return mConversationItems(sid, s).map"),
   "MOB-conv 对话流 keyed 同构（items 单源：keyed 与整串 fallback 同源产出）");
 ok(ssd.includes('const rkHost = pane.querySelector("[data-conv-body]");') && ssd.includes("openProcGrp.parentElement === (rkHost || pane)"),
-  "S4D applyDomLog 增量路径 host-aware（尾增/过程组落宿主内防游离副本双渲染——探针 ③ 实证；真浏览器行为探针 /tmp/w-tr282/probe-s4d.mjs 8/8）");
+  "S4D applyDomLog 增量路径 host-aware（尾增/过程组落宿主内防游离副本双渲染——探针 ③ 实证）");
+ok(ssd.includes('eh.indexOf(\'data-role="proc"\') > -1') && mj.includes('eh.indexOf(\'data-role="proc"\') > -1'),
+  "S4D-P1 过程组判据补 data-role=proc（TaskCreate/Update 生命周期行不再被吞——桌面+MOB 双修，探针 ③b 实证）");
+ok(ssd.includes("S.forceScroll = false; // 审查 P2-1") && ssd.includes("syncWaitCard(false); // 审查 P2-2"),
+  "S4D-P2 forceScroll 一次性标志复位对齐旧路径 + !s 分支 wait-card 双清（残留卡+waitElapsedTimer）");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

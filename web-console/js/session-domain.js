@@ -2464,6 +2464,7 @@
                     const noteHtml = (t) => { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(t ?? "")) ? " warn" : ""); d.textContent = t; return d.outerHTML; };
                     if (!s) {
                       rk4(host, [["empty", noteHtml(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")]]);
+                      syncWaitCard(false); // 审查 P2-2（review-282d-a）：取消选中窗口清残留卡+waitElapsedTimer（旧路径靠 textContent="" 清节点但漏计时器——本路径双清）
                       return;
                     }
                     const trunc = S.logsTruncated.get(s.session_id) || 0;
@@ -2485,7 +2486,11 @@
                       if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; } // 日期分隔断组（件九：新分节重显署名行）
                       const eh = entryHtml(e, s); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
                       if (!eh) continue; // 开关关闭的条目（思考）不断组也不占位
-                      if (eh.startsWith('<div class="trow')) {
+                      // 审查 P1-1（review-282d-a）：过程组判据补 data-role="proc"——#47 任务生命周期行
+                      //（trow task-life data-role="task"）同以 <div class="trow 开头，仅前缀判据会把它
+                      // 吞进过程组（默认收起不可见/proc-off 下隐藏）=回归 #47 常显特性。旧全量路径用
+                      // DOM 判据 dataset.role==="proc"，此处字符串等价判据。
+                      if (eh.startsWith('<div class="trow') && eh.indexOf('data-role="proc"') > -1) {
                         if (!procBuf) { procBuf = []; procKey = eKey(e); }
                         procBuf.push(eh);
                         lastAiChain = false; // 件九：过程组是强分隔——组后新正文重显署名
@@ -2512,6 +2517,7 @@
                     rk4(host, desired);
                     syncWaitCard(true);
                     autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
+                    S.forceScroll = false; // 审查 P2-1（review-282d-a）：一次性强滚标志复位与旧路径对齐
                     return;
                   }
                   // ---- rk 缺席兜底：旧全量重灌逐字节保留（零删） ----

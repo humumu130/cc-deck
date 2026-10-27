@@ -272,7 +272,8 @@
           if (dk && dk !== prevDay) { flushProc(); items.push(["md:" + dk, '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"]); prevDay = dk; }
           const eh = mEntryHtml(e, s);
           if (!eh) continue;
-          if (eh.startsWith('<div class="trow')) {
+          // 审查 P1-1 同款（review-282d-a）：任务生命周期行（data-role="task"）不进过程组
+          if (eh.startsWith('<div class="trow') && eh.indexOf('data-role="proc"') > -1) {
             if (!procBuf) { procBuf = []; procKey = api && api.eKey ? api.eKey(e) : String(e.ts || ""); }
             procBuf.push(eh);
           } else { flushProc(); items.push([api && api.eKey ? api.eKey(e) : "me:" + String(e.ts || "") + ":" + items.length, eh]); }
