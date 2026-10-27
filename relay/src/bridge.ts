@@ -1260,18 +1260,27 @@ export class Bridge {
       if (now - (this.cliStatusAt.get(s.session_id) ?? 0) < 5_000) continue;
       this.cliStatusAt.set(s.session_id, now);
       const st = cliSessionStatus(s.cli_pid);
-      if (!st) continue;
+      if (!st && now - (this.lastGrow.get(s.session_id) ?? 0) > 30_000) continue; // 无状态文件信号且转录不增：不判
       try {
-        if (st === "busy") {
+        // #276②（第5轮打回）：busy 判定加 lastGrow 第二源——CLI 状态文件对部分形态
+        //（老 CLI 不写/恢复进程路径漂移/存量会话 hook 死链的环境层修复不热载）恒
+        // null/盲，单源下「转录在长+进程活」的 external 会话永不翻活（生产 pm 案：
+        // 活进程+帧在打恒 DONE）。转录 30s 内增长=活跃铁证，与状态文件 busy 等价
+        if (st === "busy" || (st !== "idle" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 30_000)) {
           if (s.status !== "WORKING") {
-            this.mgr.setExternalStatus(s.session_id, "WORKING", s.action_summary || "CLI 运行中");
-            this.mgr.pushExternalLog(s.session_id, "system", "CLI 状态恢复运行（状态文件）");
+            this.mgr.setExternalStatus(s.session_id, "WORKING", st === "busy" ? (s.action_summary || "CLI 运行中") : "转录增长中（进程运行）");
+            this.mgr.pushExternalLog(s.session_id, "system", st === "busy" ? "CLI 状态恢复运行（状态文件）" : "CLI 状态恢复运行（转录增长判定）");
           }
         } else if (st === "idle") {
+          // #276②（决定性线索③断点）：quiet 分母加卡既有 updated_at 做基线锚——
+          // 重启后 lastHookAt/lastGrow 是空 Map（内存态），quiet=now-0 巨大 → boot 后
+          // 首轮 tick 就把回放恢复的 WORKING 全部误杀成 DONE（用户实测「重启后不恢
+          // 复、发消息才恢复」的帧驱动断点）。锚住回放末帧时刻：重启后静默窗内不回落，
+          // 有真观测（hook 帧/转录增长记账）后才按 20s 判静默
           const quiet = now - Math.max(
             this.lastGrow.get(s.session_id) ?? 0,
             this.lastHookAt.get(s.session_id) ?? 0,
-            0,
+            s.updated_at ?? 0,
           );
           if (s.status === "WORKING" && quiet > 20_000) {
             const turn = this.turnStart.get(s.session_id) ?? s.started_at;
