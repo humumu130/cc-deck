@@ -20,7 +20,8 @@
                 // relay 重启漂移成脏过滤；actionable 行清除时另发 ACK 同步权威账面）。
                 // 挂 window 与移动端 renderNotify 共账（桌面/手机同一浏览器才共，跨设备各自清）
                 const dismissedNotifyKeys = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
-                let lastRows = []; // FB18：清除动作要行信息（synth/actionable），渲染期留账
+                let lastRows = [];
+                let lastRenderSig = ""; // #282 签名跳帧（等待/降级分支置空防回跳脏数据） // FB18：清除动作要行信息（synth/actionable），渲染期留账
                 // #B3-17 新通知入场动画：仅首见行挂 .enter（首帧存量不动画，防整列闪烁）
                 const seenNotifyKeys = new Set();
                 let notifySeenInit = false;
@@ -139,6 +140,7 @@
                 function render() {
                   const waiting = bridge.waitingText();
                   if (waiting) {
+                    lastRenderSig = ""; // #282 离开数据态清签名
                     panelBody.replaceChildren(bridge.bannerOf(waiting));
                     syncCounts(0);
                     return;
@@ -153,6 +155,16 @@
                   const rows = buildRows();
                   lastRows = rows;
                   for (const r of rows) r.isNew = notifySeenInit && !seenNotifyKeys.has(r.key); // #B3-17
+                  // #282 N1 ①签名跳帧（置于 FX 之前防重复响铃）：通知数据与 isNew/active/
+                  // unresolved 态整列签名未变 → 零 DOM 零副作用直接返回——bridge 任何事件
+                  // 都触发 render，多数与通知无关（每帧全量重渲+重复 FX 的双重根治）。
+                  const actionRows0 = rows.filter((r) => r.active);
+                  const attentionRows0 = rows.filter((r) => !r.active && r.unresolved);
+                  const dynamicRows0 = rows.filter((r) => !r.unresolved);
+                  const sig = rows.map((r) => r.key + ":" + (r.isNew ? 1 : 0) + ":" + (r.active ? 1 : 0) + ":" + (r.unresolved ? 1 : 0)).join("|")
+                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length;
+                  if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
+                  lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
                   if (notifySeenInit && window.__ccDeck005NotifyFx) {
                     const fresh = rows.filter((r) => r.isNew && r.active);
@@ -169,10 +181,25 @@
                     ? '<div class="ngrp"><i class="ndot ' + dot + '"></i>' + escapeHtml(label) + '<span class="cnt">' + items.length + "</span></div>" + items.map(rowMarkup).join("")
                     : "";
                   if (rows.length) {
-                    panelBody.replaceChildren(nodesFrom(
-                      group("需你行动", "r", actionRows)
+                    // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
+                    //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
+                    const flatHtml = group("需你行动", "r", actionRows)
                       + group("注意", "y", attentionRows)
-                      + group("动态", "n", dynamicRows)));
+                      + group("动态", "n", dynamicRows);
+                    const rkN = window.__ccDeck005Reconcile;
+                    if (rkN) {
+                      const t = document.createElement("template");
+                      t.innerHTML = flatHtml;
+                      const desired = [];
+                      let gN = 0;
+                      for (const n of t.content.children) {
+                        const nk = n.getAttribute("data-notify-key");
+                        desired.push([nk ? "row:" + nk : "grp:" + (gN++), n.outerHTML]);
+                      }
+                      rkN(panelBody, desired);
+                      return;
+                    }
+                    panelBody.replaceChildren(nodesFrom(flatHtml));
                   } else {
                     panelBody.replaceChildren(nodesFrom('<div class="readonly-banner">暂无需要你行动的通知 · 行动项到达时在此提示。</div>'));
                   }

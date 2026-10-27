@@ -780,3 +780,50 @@
                 setTimeout(render, 0);
               })();
             
+// ---------- #282 定向渲染共享单口：keyed 子项 reconcile ----------
+// 渲染热点问题族（#281 附清单）根因=整容器重建（innerHTML/replaceChildren）→ 浏览器侧
+// 一切瞬态（滚动位/焦点/选区/动画/输入草稿）归零。本单口按 key 对齐新旧子项：
+//   · html 未变的子项 → 节点零触碰（身份保住 ⇒ 焦点/选区/输入草稿天然存活）
+//   · 变化的子项 → 单节点替换；新增/删除 → 定点插删；乱序 → 就地搬移
+// 节点上记 __rkHtml 缓存做 O(1) 等值比较。首次运行把容器内无 data-rk 的存量子节点
+// 整体迁移为 keyed（旧全量渲染语义无痛过渡）。调用方负责容器本体复用（不重建容器
+// ⇒ scrollTop 天然保持；#281 类 scrollTop 记录/恢复补丁继续作兜底）。
+window.__ccDeck005Reconcile = function reconcileKeyed(container, desired) {
+  if (!container) return { kept: 0, replaced: 0, added: 0, removed: 0 };
+  const doc = container.ownerDocument || document;
+  const parse = (html) => {
+    const t = doc.createElement("template");
+    t.innerHTML = html;
+    return t.content.firstElementChild;
+  };
+  const existing = new Map();
+  for (const el of Array.from(container.children)) {
+    const k = el.getAttribute && el.getAttribute("data-rk");
+    if (k != null) existing.set(k, el);
+  }
+  const stats = { kept: 0, replaced: 0, added: 0, removed: 0 };
+  const seen = new Set();
+  let prev = null;
+  const place = (node) => container.insertBefore(node, prev ? prev.nextSibling : container.firstChild);
+  for (const pair of desired) {
+    const key = pair[0], html = pair[1];
+    seen.add(key);
+    const cur = existing.get(key);
+    if (cur && cur.__rkHtml === html) {
+      const at = prev ? prev.nextSibling : container.firstChild;
+      if (at !== cur) place(cur); // 乱序搬移（不重建节点）
+      prev = cur; stats.kept++; continue;
+    }
+    const node = parse(html);
+    if (!node) continue;
+    node.setAttribute("data-rk", key);
+    node.__rkHtml = html;
+    if (cur) { container.replaceChild(node, cur); stats.replaced++; }
+    else { place(node); stats.added++; }
+    prev = node;
+  }
+  for (const [k, el] of existing) if (!seen.has(k)) { el.remove(); stats.removed++; }
+  // 非 keyed 残留清场（首跑迁移/零散节点）——keyed 体系语义=容器子集完全由 desired 组成
+  for (const el of Array.from(container.children)) if (!(el.getAttribute && el.getAttribute("data-rk"))) { el.remove(); stats.removed++; }
+  return stats;
+};

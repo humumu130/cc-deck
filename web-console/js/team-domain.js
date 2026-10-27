@@ -854,6 +854,13 @@
                 }
                 function render() {
                   if (!state.mounted) return;
+                  // #282 M1 行内表单草稿守卫：经验/规则表单（expForm/rulesForm 只记目标 id 不记
+                  // 草稿文本）输入中任何帧到达→整 pane 重建→草稿丢。焦点在本域可编辑元素上时
+                  // 跳过本轮（下一帧重试——心跳/事件恒持续，选区/草稿存活窗口即用户输入窗口）。
+                  try {
+                    const ae = document.activeElement;
+                    if (ae && root.contains(ae) && ae.matches && ae.matches("input, select, textarea, [contenteditable='true']")) return;
+                  } catch (_) {}
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
                   const project = group();
                   const count = state.confirms.length;
@@ -863,7 +870,10 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
+                  // #282 M1b 团队列表 keyed：html 照旧拼装，解析成键序（组头 grp:N/团队卡 t:<id>）
+                  // reconcile——未变卡零触碰（滚动/选中/hover/动画全保），变化单卡替换，容器不重建。
+                  const projectsEl = query("[data-team-projects]");
+                  const projectsHtml = state.projects?.length ? (() => {
                     // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
                     // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
                     // 状态胶囊保留（UIPOLISH3 件九⑩ 用户拍板件不动）；分组只二分不改数据语义
@@ -885,6 +895,18 @@
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
                     return html;
                   })() : banner(projectsEmpty());
+                  const rkTeam = window.__ccDeck005Reconcile;
+                  if (rkTeam && state.projects?.length) {
+                    const t = document.createElement("template");
+                    t.innerHTML = projectsHtml;
+                    const desired = [];
+                    let gN = 0;
+                    for (const n of t.content.children) {
+                      const tid = n.getAttribute("data-team-project");
+                      desired.push([tid ? "t:" + tid : "grp:" + gN++, n.outerHTML]);
+                    }
+                    rkTeam(projectsEl, desired);
+                  } else projectsEl.innerHTML = projectsHtml;
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // V8R head 第二行 meta（原型 dhead.row2 语言）：编制/任务卡/待确认/开团时间——
                   // 无团队选中（空态）整行隐藏；数据缺项跳过不占位

@@ -1470,16 +1470,26 @@
                   // chip（列表 r3+详情 head，未读角标 tc-unread 唯一列表未读面）；收纳逻辑保留，
                   // 收起会话入口=抽屉 roster 行直开；队级聚合健康/队数一览走 chip idle 态+团队域。
                   const mountUpper = (upperContent) => { // 单段挂载单口（上段节点=会话卡/空态占位）
-                    // #281 滚动保持：替换前记录旧滚动位（手势活跃窗内 -1=跳过哨兵；0=顶部本就无需写回），
-                    // 替换后写回新节点。内容变短时浏览器自动钳到 scrollHeight 上限，符合直觉。
+                    // #282 S1 定向化根治：容器 .list-upper 节点复用（不重建 ⇒ scrollTop 天然
+                    // 保持），会话卡按 data-session-card 键 reconcile——html 未变的卡零触碰
+                    //（焦点/重命名输入草稿/入场动画/hover 全保），变化的单卡替换，增删定点。
+                    // #281 scrollTop 记录/恢复保留为兜底（容器首建/键位全换的极端窗仍生效）。
                     const prevUpper = list.querySelector(".list-upper");
                     const keepScroll = prevUpper && Date.now() - listGestureAt >= LIST_GESTURE_WINDOW_MS ? prevUpper.scrollTop : -1;
-                    const upper = document.createElement("div");
-                    upper.className = "list-upper";
-                    upper.append(upperContent);
-                    if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩
-                    list.replaceChildren(upper);
-                    if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 写回（is-empty 态 overflow:visible 写入无效，天然跳过）
+                    const upper = prevUpper || document.createElement("div");
+                    if (!prevUpper) { upper.className = "list-upper"; list.replaceChildren(upper); }
+                    const isEmpty = upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true";
+                    upper.classList.toggle("is-empty", !!isEmpty); // #103-B3 空态：上段不撑满随内容收缩
+                    const rk = window.__ccDeck005Reconcile;
+                    if (!rk) { upper.replaceChildren(upperContent); if (keepScroll > 0) upper.scrollTop = keepScroll; return; } // 工具未载兜底
+                    if (isEmpty) { rk(upper, [["empty", upperContent.outerHTML ? upperContent.outerHTML : ""]]); return; }
+                    const desired = [];
+                    upperContent.childNodes && upperContent.childNodes.forEach && upperContent.childNodes.forEach((n) => {
+                      if (n.nodeType === 1) desired.push([n.getAttribute("data-session-card") || "n:" + desired.length, n.outerHTML]);
+                    });
+                    if (!desired.length) desired.push(["empty", '<div class="readonly-banner"></div>']);
+                    rk(upper, desired);
+                    if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 兜底写回（节点复用时通常 no-op）
                   };
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
@@ -2401,6 +2411,13 @@
                                 function renderConversation() {
                   const pane = UI.convPane;
                   if (!pane) return;
+                  // #282 S4 选区守卫：全量重灌（textContent=""）会清掉用户正选中的文本（复制
+                  // 中帧到→选区丢）。非折叠选区锚在对话面板内时跳过本轮重建——timeline 只尾增，
+                  // 下一帧事件到达自然补渲；选区折叠/移走后恢复常态。零成本防复制打断。
+                  try {
+                    const sel = document.getSelection();
+                    if (sel && !sel.isCollapsed && sel.rangeCount && pane.contains(sel.anchorNode)) return;
+                  } catch (_) {}
                   // 件十九（2026-10-12 用户实测「发完消息墙跳到顶」根修）：全量重建（textContent=""）
                   // 会让滚动容器塌缩→scrollTop 归零。v3 用 top-anchor（距顶）：对话前缀稳定（历史只尾增），
                   // 距顶恢复天然免疫 bottom-anchor 的 clamp 折损（回涨高度把位置拖进贴底窗的链式失效）。
