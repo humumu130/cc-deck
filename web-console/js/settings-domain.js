@@ -3172,6 +3172,14 @@ function connectLan(ctx) {
         if (source === "cloud") return cloudCtx.status === "online" ? cloudCmdShim : null;
         return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
       };
+      // #288③ 目标源宿主系统（SNAPSHOT.platform 全字段缓存读）：darwin→"darwin" 类 unix 提示、
+      // win32→Windows 盘符提示；无快照/无字段=未知（提示回落通用文案，不猜）。建团锚点 hint 按
+      // 所选源切换消费（team-domain syncTeamCreateSource）
+      window.__ccDeck005PlatformFor = (source) => {
+        const c = source === "cloud" ? cloudCtx : ctx;
+        const plat = c && c.lastSnapshotPayload && c.lastSnapshotPayload.platform;
+        return typeof plat === "string" && plat ? plat : null;
+      };
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
       // 先 switchToCloudSource）+ 覆盖 cfg + 走 submitPairCodeWith 配对链（pair_ack 后落共享库）。

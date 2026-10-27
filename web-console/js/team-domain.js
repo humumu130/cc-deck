@@ -1234,15 +1234,29 @@
                   } catch (e) { toast("打开目录选择器失败: " + ((e && e.message) || e)); }
                 }
                 // 源联动态：浏览钮显隐 + 锚点提示文案（远程源=那台电脑的路径）
+                // #288③ 锚点提示按目标源宿主系统（用户 1028 拍板「选源=数据落点」的配套）：
+                // 从所选源 SNAPSHOT.platform 读真实系统——darwin/linux→POSIX 路径示例、
+                // win32→盘符示例；快照未达/旧 relay 无字段=未知回落通用文案（不猜）
+                function teamAnchorHint(which) {
+                  const plat = window.__ccDeck005PlatformFor ? window.__ccDeck005PlatformFor(which) : null;
+                  const posix = "形如 /Users/名字/项目 或 /home/名字/项目";
+                  const win = "形如 C:\\Users\\名字\\项目";
+                  if (which === "cloud") {
+                    if (plat === "win32") return "路径在那台电脑（远程 Windows 宿主机）上——" + win;
+                    if (plat) return "路径在那台电脑（远程源宿主机）上——" + posix;
+                    return "路径在那台电脑（远程源宿主机）上——请按它的文件系统填项目绝对路径";
+                  }
+                  if (plat === "win32") return "路径在 relay 宿主机（Windows）上——" + win;
+                  if (plat) return "路径在 relay 宿主机上（非当前浏览器电脑）——" + posix;
+                  return "路径在 relay 宿主机上（非当前浏览器电脑）——Mac/Linux " + posix + "，Windows " + win;
+                }
                 function syncTeamCreateSource(pop) {
                   const sel = pop.querySelector("[data-team-field='source']");
                   const which = sel ? sel.value : "local";
                   const browse = pop.querySelector("[data-team-anchor-browse]");
                   if (browse) browse.hidden = !teamAnchorBrowseable(which);
                   const hint = pop.querySelector("[data-team-anchor-hint]");
-                  if (hint) hint.textContent = which === "cloud"
-                    ? "路径在那台电脑（远程源宿主机）上——请按它的文件系统填项目绝对路径"
-                    : "路径在 relay 宿主机上（非当前浏览器电脑）——Mac/Linux 形如 /Users/…，Windows 形如 C:\\…";
+                  if (hint) hint.textContent = teamAnchorHint(which);
                 }
                 // W-UIFB 追加⑮：手动成员行——agent 类型 + 角色名，候选勾选与手动行合计 ≤8 席。
                 // 接通现状（回执「追加批」详述）：relay sanitizeHeadcount 硬性要求 session_id 且
@@ -1349,9 +1363,23 @@
                   });
                   // W-TEAMSNC ①：PM 带队默认档——pm_session_id=会话域当前选中会话（跨域取
                   // __ccDeck005SlimUi.selectedSid；relay orgCommand create 单点插 role="pm" 身份行）。
-                  // 无选中/选中会话不在册：降级不带 PM 行继续建团（feedback 提示，不拦单）
+                  // #288② 按源在册闸（用户 1028 拍板「选源=数据落点」）：所选源在册校验用
+                  // teamCandsForSource 同一数据口（relay_source 对位）——PM 会话不在所选源：
+                  // 拦单+引导切源/换选中（原「降级不带 PM 行继续建团」会把 PM 行静默落到
+                  // 无 PM 的团——跨源建团时该 PM 行本来就不在目标源，落了也是空指挥）。
+                  // 未选源（单源形态）行为不变：拦单降级原口径（feedback 不拦）
                   const pmSid = template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "";
-                  if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                  const srcSelEarly = pop.querySelector("[data-team-field='source']"); // #288②：闸块先于下方 srcSel 声明，早取同节点
+                  if (template === "pm-led" && srcSelEarly) {
+                    const cands = teamCandsForSource(srcSelEarly.value, teamSourceInfo());
+                    if (pmSid && !cands.some((x) => x.session_id === pmSid)) {
+                      const srcLabel = srcSelEarly.value === "cloud" ? "远程源" : "本机源";
+                      feedback("PM 会话需属于所选源：当前选中会话不在" + srcLabel + "——请切换目标源或先在会话列表选中该源的 PM 会话");
+                      toast("PM 会话需属于所选源（当前选中不在" + srcLabel + "）");
+                      return;
+                    }
+                    if (!pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                  } else if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
                   if (pmSid) { const i = headcount.findIndex((h) => h.session_id === pmSid); if (i >= 0) headcount.splice(i, 1); } // PM 会话被同时勾选：让位 pm_session_id 身份行（同 sid 双行会被 relay 去重，先去保角色正确）
                   // W-UIFB 追加⑮：手动席（agent 类型+角色名）——relay sanitizeHeadcount 现版
                   // 硬性要求 session_id 且 adapter 不透传 role_defaults，入载会整单被拒；
