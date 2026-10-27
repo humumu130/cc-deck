@@ -3763,9 +3763,11 @@ function connectLan(ctx) {
           // src-cap 在成员会话已收摊/不在册时的确定性兜底（浅拷贝不改单源快照原对象）
           for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(Object.assign({}, g, { __relay_source: String(c.relayName || "") })); }
           for (const s of (Array.isArray(p.sessions) ? p.sessions : [])) if (s && typeof s.session_id === "string" && !sessionsById.has(s.session_id)) { sessionsById.set(s.session_id, s); out.sessions.push(s); }
-          for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(b); }
+          // #283：boards/org_confirms 同打 __relay_source 源标（team-domain 聚合分区
+          // 合并的分区键——确认卡并集在 per-source 增量帧到达时不再被整替清掉）
+          for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(Object.assign({}, b, { __relay_source: String(c.relayName || "") })); }
           for (const r of (Array.isArray(p.receipts) ? p.receipts : [])) out.receipts.push(r);
-          for (const cf of (Array.isArray(p.org_confirms) ? p.org_confirms : [])) out.org_confirms.push(cf);
+          for (const cf of (Array.isArray(p.org_confirms) ? p.org_confirms : [])) out.org_confirms.push(Object.assign({}, cf, { __relay_source: String(c.relayName || "") }));
           if (out.experience === undefined && p.experience !== undefined) out.experience = p.experience;
           if (out.experience_enabled === undefined && p.experience_enabled !== undefined) out.experience_enabled = p.experience_enabled;
           if (out.rules === undefined && p.rules !== undefined) out.rules = p.rules;

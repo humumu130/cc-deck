@@ -961,6 +961,30 @@
                   state.confirms = entities(items).filter((confirm) => confirm.status === "pending");
                   for (const id of state.accepted) if (!state.confirms.some((confirm) => confirm.id === id)) state.accepted.delete(id);
                 }
+                // ---------- #283 org 域跨源聚合：分区合并 ----------
+                // 病灶：聚合视角下 per-source 全量帧（PROJECTS_UPDATED/ORG_CONFIRM_UPDATED）
+                // 走 :3712 路由直达本域，旧 case 整替换 state.projects/confirms → 并集被
+                // 单源帧清掉（家 relay 重启首播 groups 无 delta 即命中——「公司源团队卡
+                // 聚合视图不可见」活跃形态，#236B「增量不重喂」的意图被此路由旁路）。
+                // 修法：聚合视角=分区替换——入参逐条盖 __relay_source=帧源（settings-domain
+                // 合成快照同款真值源标，src-cap 兜底链 :56-58 消费），他源分区原样保留；
+                // 同 id 异源碰撞按帧源权威（非帧源旧拷贝剔除，确定性优先）。单源视角=
+                // 整替换不盖章，既有行为逐字不变（「单源视图不变」断言面）。
+                const aggViewOn = () => !!(window.__ccDeck005SourceView && window.__ccDeck005SourceView() === "aggregate");
+                function mergePartition(current, incoming, frameSrc, keyOf) {
+                  if (!aggViewOn() || !frameSrc) return incoming.slice();
+                  const src = String(frameSrc);
+                  const stamped = incoming.map((x) => (x && typeof x === "object" ? Object.assign({}, x, { __relay_source: src }) : x));
+                  const stampIds = new Set(stamped.map(keyOf).filter((k) => k !== undefined));
+                  const kept = (Array.isArray(current) ? current : []).filter((x) => {
+                    if (!(x && typeof x === "object")) return false;
+                    if (String(x.__relay_source || "") === src) return false; // 帧源分区：整替换
+                    return !stampIds.has(keyOf(x)); // 同 id 碰撞：帧源权威，他源旧拷贝剔除
+                  });
+                  return kept.concat(stamped);
+                }
+                const groupKeyOf = (g) => (g && typeof g.id === "string" ? g.id : undefined);
+                const confirmKeyOf = (c) => (c && typeof c.id === "string" ? c.id : undefined);
                 function updateProjects(items) {
                   state.projects = Array.isArray(items) ? entities(items) : null;
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
@@ -1062,9 +1086,15 @@
                 function onEvent(context, message) {
                   const payload = message?.payload;
                   if (message?.type === "SNAPSHOT") return snapshot(payload, context);
-                  if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups) && payload.delta === undefined) { updateProjects(payload.groups); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
-                  if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(payload.pending); render(); return true; }
-                  if (message?.type === "BOARD_UPDATED" && payload?.delta === undefined && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  // #283：groups 全量帧恒消费（delta 在场与否——relay emitOrgState 稳态帧
+                  // 恒带 groups 全量+delta 并载，旧 `delta === undefined` 守卫把稳态帧全
+                  // 丢弃=团队列表陈旧到下次快照，与 :1096「创建后帧自动刷新」注释意图相悖）；
+                  // 聚合视角经 mergePartition 分区替换保并集，单源视角整替换行为不变
+                  if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups)) { updateProjects(mergePartition(state.projects, payload.groups, context && context.relayName, groupKeyOf)); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
+                  if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(mergePartition(state.confirms, payload.pending, context && context.relayName, confirmKeyOf)); render(); return true; }
+                  // #283 同理：board 全量形态（board.gid+entries 在场）即权威覆盖，delta
+                  // 并载不影响（本 case 只取 board.entries 全量）；gid 门控=并集含该组
+                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
                   // W-EXPP2 经验域帧：帧双载恒带 entries 全量 → 覆盖式消费（未锚定=experiences
                   // null 时同帧即锚定——SNAPSHOT 先行兜底过，此处权威刷新）；expArm/expForm 保持
                   if (message?.type === "EXPERIENCE_UPDATED" && Array.isArray(payload?.entries)) { updateExperiences(payload.entries); render(); return true; }
