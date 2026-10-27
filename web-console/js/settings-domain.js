@@ -3006,7 +3006,18 @@ function connectLan(ctx) {
         // 团队域不订阅总线，onEvent 门控跳过的帧在此按缓存 payload 重建）
         const teamSrc = v === "cloud" ? cloudCtx : ctx;
         if (teamSrc.hasSnapshot && teamSrc.lastSnapshotPayload) {
-          try { Team.onFrame(teamSrc, { type: "SNAPSHOT", payload: teamSrc.lastSnapshotPayload }); } catch {}
+          // #283（审查 A-P2-1）：切聚合视角的补喂改走合成快照（mergedTeamPayload 逐条带
+          // 真源标=分区合并的分区键基线）。原样补喂单源裸 payload=无戳基线：他源条目不属
+          // 任何分区，跨源删除走 kept 分支滞留幽灵到下次快照；且首帧 delta 盖标失真。
+          // 单源视角（local/cloud）补喂维持原行为不变
+          try {
+            if (v === "aggregate") {
+              const merged = mergedTeamPayload();
+              if (merged) Team.onFrame({ relayName: "聚合 · 全部源" }, { type: "SNAPSHOT", payload: merged });
+            } else {
+              Team.onFrame(teamSrc, { type: "SNAPSHOT", payload: teamSrc.lastSnapshotPayload });
+            }
+          } catch {}
         }
         replaySnapshots();
         renderSessionList();

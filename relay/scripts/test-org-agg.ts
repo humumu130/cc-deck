@@ -99,6 +99,9 @@ console.log("\nS3b wrapper delta 分支喂帧源裸全量（静态锚，审查 A
 {
   const deltaBranch = settingsSrc.slice(settingsSrc.indexOf('message.type === "PROJECTS_UPDATED" && p.delta !== undefined'), settingsSrc.indexOf('message.type === "BOARD_UPDATED" && p.delta !== undefined'));
   ok(deltaBranch.includes("Array.isArray(p.groups) ? p.groups : this.projects"), "delta 分支喂帧源裸 groups（不喂并集投影；缺 groups 回落投影由保真源标承接）");
+  // 审查 A-P2-1：切聚合补喂走合成快照（带真源标基线）
+  const switchFeed = settingsSrc.slice(settingsSrc.indexOf("W-WINPAIR-R3：目标源 SNAPSHOT 补喂"), settingsSrc.indexOf("replaySnapshots()", settingsSrc.indexOf("W-WINPAIR-R3：目标源 SNAPSHOT 补喂")));
+  ok(switchFeed.includes('v === "aggregate"') && switchFeed.includes("mergedTeamPayload()"), "切聚合视角补喂走合成快照（无戳基线不留幽灵）");
 }
 console.log("\nS4 settings-domain 合成快照源标（静态锚）");
 {
