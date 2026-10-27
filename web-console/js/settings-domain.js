@@ -3534,11 +3534,13 @@ function connectLan(ctx) {
         ctxName(context) { return (context && context.relayName) || location.host; },
         bind(online) {
           const api = this.api(); if (!api) return;
-          try { api.bind({ command: (type, payload, timeoutMs) => this.sendCommand(type, payload, timeoutMs), online: online === true }); } catch {}
+          try { api.bind({ command: (type, payload, timeoutMs, wsOverride) => this.sendCommand(type, payload, timeoutMs, wsOverride), online: online === true }); } catch {}
         },
-        sendCommand(type, payload, timeoutMs = 8000) {
+        sendCommand(type, payload, timeoutMs = 8000, wsOverride = null) {
           return new Promise((resolve) => {
-            const ws = window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : (window.__ccDeck005MainWs || ctx.ws); // W-WINPAIR-R2 视角通道 + R7① 会话源路由（聚合下远程会话走云链）
+            // #277 ②：wsOverride=建团「创建到」显式选源锁通道（与新建会话 R-2/T10 同语义：
+            // 显式选择优先级最高不随视角漂移），未传时维持 RouteWs 视角通道
+            const ws = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : (window.__ccDeck005MainWs || ctx.ws)); // W-WINPAIR-R2 视角通道 + R7① 会话源路由（聚合下远程会话走云链）
             if (!ws || ws.readyState !== WebSocket.OPEN) { resolve(null); return; }
             const commandId = "team-" + Date.now().toString(36) + "-" + String(++this.cmdSeq);
             const timer = setTimeout(() => { this.ackWaiters.delete(commandId); resolve(null); }, timeoutMs);
@@ -3712,7 +3714,9 @@ function connectLan(ctx) {
         const out = { projects: [], sessions: [], receipts: [], org_confirms: [], boards: [], relay_name: "聚合 · 全部源" };
         for (const c of parts) {
           const p = c.lastSnapshotPayload || {};
-          for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(g); }
+          // #277 ⑤：project 打源标 __relay_source（该团来自哪个源的真值）——团队卡
+          // src-cap 在成员会话已收摊/不在册时的确定性兜底（浅拷贝不改单源快照原对象）
+          for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(Object.assign({}, g, { __relay_source: String(c.relayName || "") })); }
           for (const s of (Array.isArray(p.sessions) ? p.sessions : [])) if (s && typeof s.session_id === "string" && !sessionsById.has(s.session_id)) { sessionsById.set(s.session_id, s); out.sessions.push(s); }
           for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(b); }
           for (const r of (Array.isArray(p.receipts) ? p.receipts : [])) out.receipts.push(r);

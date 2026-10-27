@@ -267,6 +267,19 @@
     .team-cand:hover { background: var(--hover); }
     .team-cand-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
     .team-cand .team-cand-role { flex: 0 0 96px; height: 26px; padding: 0 7px; font-size: var(--fs-E); }
+    /* #277 ① 建团弹窗 v2（PM 美化基调）：头行 h3+✕（标题不截断）、锚点行内浏览钮、
+       分段卡片流（灰盒 create-group 退役）、滚动条弱化、select 自绘箭头（原生朴素） */
+    .create-pop .create-head { display: flex; align-items: flex-start; gap: 8px; }
+    .create-pop .create-head h3 { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .create-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: -3px -4px 0 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; line-height: 1; }
+    .create-x:hover { background: var(--hover); color: var(--text); }
+    .create-inline { display: flex; gap: 6px; align-items: center; }
+    .create-inline .create-field { flex: 1; min-width: 0; }
+    .create-browse { flex: none; height: 32px; padding: 0 10px; }
+    .create-pop { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--faint) 45%, transparent) transparent; }
+    .create-pop::-webkit-scrollbar { width: 6px; }
+    .create-pop::-webkit-scrollbar-thumb { border-radius: 3px; background: color-mix(in srgb, var(--faint) 45%, transparent); }
+    select.create-field { appearance: none; -webkit-appearance: none; padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
     /* #df2-A 顶栏唯一胶囊：connection-capsule 整链退役（:337-356），连接摘要+统计并入 source-trigger；重连按钮迁入 source-menu（.connection-reconnect 保留复用） */
     .source-option .connection-reconnect {min-width: 34px; min-height: 22px; padding: 2px 7px; margin-left: auto; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: var(--fs-E); white-space: nowrap;}
     .source-group-bar {display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: var(--fs-B) var(--mono);}
@@ -1323,11 +1336,18 @@
     #d-team .workspace-pane .member-card .m-head .avatar { flex-basis: 32px; width: 32px; height: 32px; border-radius: 9px; }
     /* #264 头像标准化：引擎淡彩底（--ava-c inline）+26px 主体（角色蟹/品牌 SVG）；
        金冠叠角=非 claude PM/Leader（expo AvaBadge 同规格 12px -15°）；QA 角标沿用 qa 色 */
-    #d-team .workspace-pane .member-card .m-head .avatar.m-ava { background: color-mix(in srgb, var(--ava-c, var(--hover)) 22%, var(--surface2)); border-color: color-mix(in srgb, var(--ava-c, var(--hover)) 38%, transparent); }
-    #d-team .workspace-pane .member-card .m-head .avatar.m-ava .ava-crab { width: 26px; height: 26px; object-fit: contain; }
-    #d-team .workspace-pane .member-card .m-head .avatar.m-ava svg { width: 18px; height: 18px; }
-    #d-team .workspace-pane .member-card .m-head .avatar.m-ava .ava-crown { position: absolute; top: -5px; right: -6px; width: 12px; height: 12px; background: linear-gradient(180deg, #F5C842 55%, #C9930A); clip-path: polygon(15% 100%, 22% 38%, 0 52%, 8% 8%, 38% 26%, 50% 0, 62% 26%, 92% 8%, 100% 52%, 78% 38%, 85% 100%); transform: rotate(-15deg); }
-    #d-team .workspace-pane .member-card .m-head .avatar.m-ava .ava-qatag { position: absolute; top: -6px; right: -7px; padding: 0 3px; border-radius: 4px; background: var(--avatar-qa-bg); color: var(--avatar-qa-text); font: 700 8px/11px var(--mono); }
+    /* #277 ⑥ 成员卡头像修锚+同规格：旧规则挂 .m-head（#264 两列改造后 markup=.member-head）
+       长期脱锚 → 尺寸约束全失效=「大大的像素小螃蟹」根因。现头像内容委派 session-domain
+       avaBrandHtmlOf（.ava-brand 包装），尺寸与列表卡 srow-ava 同构：角色蟹 img 26px
+       contain / 品牌 svg 18px / 皇冠角标 12px 右上 -15°。 */
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava { position: relative; background: color-mix(in srgb, var(--ava-c, var(--hover)) 22%, var(--surface2)); border-color: color-mix(in srgb, var(--ava-c, var(--hover)) 38%, transparent); }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .ava-brand { display: flex; align-items: center; justify-content: center; }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .ava-brand img { width: 26px; height: 26px; object-fit: contain; }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .ava-brand svg { width: 18px; height: 18px; }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .role-badge-host { position: relative; }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .ava-crown { position: absolute; top: -5px; right: -6px; width: 12px; height: 12px; transform: rotate(-15deg); pointer-events: none; }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .ava-crown svg { width: 100% !important; height: 100% !important; display: block; }
+    #d-team .workspace-pane .member-card .member-head .avatar.m-ava .ava-qatag { position: absolute; top: -6px; right: -7px; padding: 0 3px; border-radius: 4px; background: var(--avatar-qa-bg); color: var(--avatar-qa-text); font: 700 8px/11px var(--mono); }
     #d-team .workspace-pane .member-card .m-name { display: flex; align-items: center; min-width: 0; flex: 1; }
     #d-team .workspace-pane .member-card .m-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #d-team .workspace-pane .member-card .m-role { flex: none; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--dim); font-size: var(--fs-E); }
@@ -1937,6 +1957,10 @@
        （mobile 三发射体产 .source-badge 零 src-cap）均零发射体，死选择器整删 */
     body[data-source-mode="single"] #d-session .queue-card .src-cap,
     body[data-source-count="1"] #d-session .queue-card .src-cap { display: none; }
+    /* #277 ⑤ 团队列表卡 src-cap 同门（单源隐藏/聚合显示——对齐 #248 会话列表口径与
+       W-SRCLABEL-MIG 注释本意；此前漏配孪生键=单源下每卡一枚噪音胶囊） */
+    body[data-source-mode="single"] #d-team .queue-card .src-cap,
+    body[data-source-count="1"] #d-team .queue-card .src-cap { display: none; }
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge .icon-inline { width: 12px; height: 12px; }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }

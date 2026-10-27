@@ -1082,6 +1082,16 @@
                   return b2SourcePalette[h % b2SourcePalette.length];
                 };
                 window.__ccDeck005SourceColor = b2SourceColor; // #245 跨 IIFE 暴露(team/bridge 域源胶囊取源色)
+                // #277 ⑥：成员卡头像同源单口——团队域 memberAvatarHtml 委派到本域 avaBrandHtmlOf
+                //（列表卡 srow-ava 同规格：品牌 SVG 必经 .ava-brand 包装受尺寸约束；PM/Leader
+                // 角色蟹走 ROLE_AVATAR_BRAND，非 claude 带皇冠角标）。此前团队域裸注
+                // ENGINE_BRAND_SVG（无宽高属性）+ CSS 选择器 .m-head 与 markup .member-head
+                // 脱锚 → 原尺寸渲染 = 用户实锤「大大的像素小螃蟹」。
+                window.__ccDeck005AvaOf = (engine, teamRole) => avaBrandHtmlOf({
+                  engine: engine || "claude",
+                  engineClass: (ENGINES[engine] || ENGINES.claude)[1],
+                  teamRole: teamRole || "",
+                });
                 // UIPOLISH2 件一：头像底色引擎品牌色淡彩——地基 sessionAvaColor 逐字节同构（myCardMarkup
                 // 与地基 renderSessionCard 的 DOM 一致性是 observer 完整性检查的前提，两处必须同步改）
                 const b2AvaColor = (item) => ({

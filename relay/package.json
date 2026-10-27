@@ -28,6 +28,7 @@
     "repro:268-zombie-ws": "tsx scripts/repro-268-zombie-ws.ts",
     "repro:268b-stale-dead": "tsx scripts/repro-268b-stale-dead.ts",
     "test:272-source-name": "tsx scripts/test-272-source-name.ts",
+    "test:277-team-create-redesign": "tsx scripts/test-277-team-create-redesign.ts",
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-blankset": "node --import tsx/esm scripts/test-005-blankset.ts",
     "test:permerr": "tsx scripts/test-permerr.ts",
