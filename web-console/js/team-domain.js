@@ -962,24 +962,30 @@
                   for (const id of state.accepted) if (!state.confirms.some((confirm) => confirm.id === id)) state.accepted.delete(id);
                 }
                 // ---------- #283 org 域跨源聚合：分区合并 ----------
-                // 病灶：聚合视角下 per-source 全量帧（PROJECTS_UPDATED/ORG_CONFIRM_UPDATED）
-                // 走 :3712 路由直达本域，旧 case 整替换 state.projects/confirms → 并集被
-                // 单源帧清掉（家 relay 重启首播 groups 无 delta 即命中——「公司源团队卡
-                // 聚合视图不可见」活跃形态，#236B「增量不重喂」的意图被此路由旁路）。
-                // 修法：聚合视角=分区替换——入参逐条盖 __relay_source=帧源（settings-domain
-                // 合成快照同款真值源标，src-cap 兜底链 :56-58 消费），他源分区原样保留；
-                // 同 id 异源碰撞按帧源权威（非帧源旧拷贝剔除，确定性优先）。单源视角=
-                // 整替换不盖章，既有行为逐字不变（「单源视图不变」断言面）。
+                // 病灶：聚合视角下 per-source 全量帧经 Team 中间层（settings-domain）到达本域，
+                // 旧 case 整替换 state.projects/confirms → 并集被单源帧清掉（家 relay 重启
+                // 首播 groups 无 delta 直达裸透传=「公司源团队卡聚合视图不可见」活跃形态）。
+                // 修法：聚合视角=分区替换，他源分区原样保留；同 id 异源碰撞按帧源权威。
+                // 输入两形态（审查 B-P1-1 回修）：
+                //   · 裸透传（no-delta 帧）＝帧源自己的全量清单，条目无源标 → 盖帧源标；
+                //   · 中间层投影（delta 帧经 wrapper 并集重合成）＝全并集，条目已带真源标
+                //     （合成快照/槽缓存所盖）→ **保真不覆盖**，仅本帧新增条目（delta upsert
+                //     的裸对象）落帧源标。无条件盖章会污染全并集源标+跨源删除留僵尸卡
+                //     （污染后条目两过滤条件皆不命中，已删组滞留到下次快照）。
+                // 单源视角=整替换不盖章，既有行为逐字不变（「单源视图不变」断言面）。
                 const aggViewOn = () => !!(window.__ccDeck005SourceView && window.__ccDeck005SourceView() === "aggregate");
                 function mergePartition(current, incoming, frameSrc, keyOf) {
                   if (!aggViewOn() || !frameSrc) return incoming.slice();
                   const src = String(frameSrc);
-                  const stamped = incoming.map((x) => (x && typeof x === "object" ? Object.assign({}, x, { __relay_source: src }) : x));
+                  const stamped = incoming.map((x) => {
+                    if (!(x && typeof x === "object")) return x;
+                    return x.__relay_source === undefined ? Object.assign({}, x, { __relay_source: src }) : x; // 保真源标（投影路）；裸路条目无标→盖帧源
+                  });
                   const stampIds = new Set(stamped.map(keyOf).filter((k) => k !== undefined));
                   const kept = (Array.isArray(current) ? current : []).filter((x) => {
                     if (!(x && typeof x === "object")) return false;
-                    if (String(x.__relay_source || "") === src) return false; // 帧源分区：整替换
-                    return !stampIds.has(keyOf(x)); // 同 id 碰撞：帧源权威，他源旧拷贝剔除
+                    if (String(x.__relay_source || "") === src) return false; // 帧源分区：整替换（真源标=帧源的条目含已删组一并退场）
+                    return !stampIds.has(keyOf(x)); // 同 id 碰撞：帧源/投影内版本权威，他源旧拷贝剔除
                   });
                   return kept.concat(stamped);
                 }
@@ -993,7 +999,12 @@
                 }
                 function detail(gid, data) {
                   if (!state.projects?.some((item) => item.id === gid) || !data || data.group?.id !== gid || data.board?.gid !== gid || !Array.isArray(data.board.entries) || !Array.isArray(data.receipts)) return false;
-                  state.projects = state.projects.map((item) => item.id === gid ? data.group : item);
+                  // #283（审查 A-P2-1）：detail 回执整条替换时保真源标——data.group 来自
+                  // relay 无 __relay_source，裸替换会让该组脱离分区身份（源标兜底链失效+
+                  // 删除时走 kept 分支滞留成幽灵）
+                  state.projects = state.projects.map((item) => item.id === gid
+                    ? Object.assign({}, data.group, item.__relay_source !== undefined ? { __relay_source: item.__relay_source } : null)
+                    : item);
                   state.boards.set(gid, data.board);
                   state.receipts.set(gid, entities(data.receipts).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   // W-DISPVIS C2：组内排队单存本（dispatch_queue 能力位——旧 relay 缺省不
@@ -1086,10 +1097,12 @@
                 function onEvent(context, message) {
                   const payload = message?.payload;
                   if (message?.type === "SNAPSHOT") return snapshot(payload, context);
-                  // #283：groups 全量帧恒消费（delta 在场与否——relay emitOrgState 稳态帧
-                  // 恒带 groups 全量+delta 并载，旧 `delta === undefined` 守卫把稳态帧全
-                  // 丢弃=团队列表陈旧到下次快照，与 :1096「创建后帧自动刷新」注释意图相悖）；
-                  // 聚合视角经 mergePartition 分区替换保并集，单源视角整替换行为不变
+                  // #283：groups 全量帧恒消费（delta 在场与否）。注：本域唯一喂入方是
+                  // settings 层 wrapper（feed）——稳态 delta 帧在那侧已被剥 delta 重喂
+                  // {groups}，旧 `delta === undefined` 守卫在该接线下恒通过（死条件，
+                  // 行为中性），删除属防误接线的收紧而非修陈旧；聚合视角经 mergePartition
+                  // 分区替换保并集（no-delta 裸透传=重启首播清并集的原始病灶路径），
+                  // 单源视角整替换行为逐字不变
                   if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups)) { updateProjects(mergePartition(state.projects, payload.groups, context && context.relayName, groupKeyOf)); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
                   if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(mergePartition(state.confirms, payload.pending, context && context.relayName, confirmKeyOf)); render(); return true; }
                   // #283 同理：board 全量形态（board.gid+entries 在场）即权威覆盖，delta

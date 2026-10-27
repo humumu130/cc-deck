@@ -58,6 +58,21 @@ console.log("\nS1 聚合分区合并（mergePartition 直跑）");
   // current 空/未锚定
   const out4 = mergePartition<G>(null, [{ id: "a", name: "A" }], "srcX", groupKeyOf as never);
   ok(out4.length === 1 && out4[0].__relay_source === "srcX", "current 未锚定（null）→ 仅入参分区");
+  // 中间层并集投影入参（审查 A/B-P1 同报场景——wrapper 未喂裸 groups 时的承接语义）：
+  // 已带真源标的条目保真不覆盖，仅无标条目（本帧 delta 新增）落帧源标
+  {
+    const proj = mergePartition<G>(
+      [{ id: "h", name: "家", __relay_source: "家" }, { id: "c", name: "司", __relay_source: "公司" }],
+      [{ id: "h", name: "家v2", __relay_source: "家" }, { id: "c", name: "司", __relay_source: "公司" }, { id: "n", name: "新组" }],
+      "家", groupKeyOf as never);
+    ok(proj.find((x) => x.id === "h")?.__relay_source === "家" && proj.find((x) => x.id === "c")?.__relay_source === "公司", "并集投影路：真源标保真不被帧源覆盖（源标无污染）");
+    ok(proj.find((x) => x.id === "n")?.__relay_source === "家", "并集投影路：无标新条目落帧源标");
+    // 跨源删除经并集投影（帧源=删除方）：真源标条目随帧源分区替换退场，无幽灵
+    const del = mergePartition<G>(
+      [{ id: "h", name: "家", __relay_source: "家" }, { id: "c", name: "司", __relay_source: "公司" }],
+      [{ id: "c", name: "司", __relay_source: "公司" }], "家", groupKeyOf as never);
+    ok(del.length === 1 && del[0].id === "c", "并集投影路：帧源删除退场无幽灵（真源标可命中分区替换）");
+  }
 }
 console.log("\nS2 单源视图不变（整替换/不盖章）");
 {
@@ -71,12 +86,19 @@ console.log("\nS2 单源视图不变（整替换/不盖章）");
 console.log("\nS3 team-domain case 守卫修正（静态锚）");
 {
   const caseProjects = teamSrc.slice(teamSrc.indexOf('message?.type === "PROJECTS_UPDATED"'), teamSrc.indexOf('message?.type === "ORG_CONFIRM_UPDATED"'));
-  ok(caseProjects.includes("Array.isArray(payload?.groups)") && !caseProjects.includes("delta === undefined"), "PROJECTS_UPDATED 消费 delta 并载全量帧（稳态帧不再被丢）");
+  ok(caseProjects.includes("Array.isArray(payload?.groups)") && !caseProjects.includes("delta === undefined"), "PROJECTS_UPDATED 恒消费全量帧（死条件守卫移除——wrapper 喂入恒无 delta）");
   ok(caseProjects.includes("mergePartition(state.projects"), "PROJECTS_UPDATED 走分区合并");
   const caseConfirm = teamSrc.slice(teamSrc.indexOf('message?.type === "ORG_CONFIRM_UPDATED"'), teamSrc.indexOf('message?.type === "BOARD_UPDATED"'));
   ok(caseConfirm.includes("mergePartition(state.confirms"), "ORG_CONFIRM_UPDATED 走分区合并（确认卡并集不清）");
-  const caseBoard = teamSrc.slice(teamSrc.indexOf('message?.type === "BOARD_UPDATED"'), teamSrc.indexOf("return false;", teamSrc.indexOf('message?.type === "BOARD_UPDATED"')));
-  ok(caseBoard.includes("payload.board?.gid === payload.gid") && !caseBoard.includes("delta === undefined"), "BOARD_UPDATED 全量形态恒消费（delta 并载不挡）");
+  const caseBoard = teamSrc.slice(teamSrc.indexOf('message?.type === "BOARD_UPDATED"'), teamSrc.indexOf('message?.type === "EXPERIENCE_UPDATED"'));
+  ok(caseBoard.includes("payload.board?.gid === payload.gid") && !caseBoard.includes("delta === undefined"), "BOARD_UPDATED 全量形态恒消费（delta 并载不挡；BOARD 帧经 wrapper 投影恒全量）");
+  // 审查 A-P2-1：detail 回执整条替换保真源标
+  ok(teamSrc.includes("Object.assign({}, data.group, item.__relay_source !== undefined ? { __relay_source: item.__relay_source } : null)"), "detail() 替换组时保真 __relay_source（防脱离分区身份）");
+}
+console.log("\nS3b wrapper delta 分支喂帧源裸全量（静态锚，审查 A/B-P1 回修）");
+{
+  const deltaBranch = settingsSrc.slice(settingsSrc.indexOf('message.type === "PROJECTS_UPDATED" && p.delta !== undefined'), settingsSrc.indexOf('message.type === "BOARD_UPDATED" && p.delta !== undefined'));
+  ok(deltaBranch.includes("Array.isArray(p.groups) ? p.groups : this.projects"), "delta 分支喂帧源裸 groups（不喂并集投影；缺 groups 回落投影由保真源标承接）");
 }
 console.log("\nS4 settings-domain 合成快照源标（静态锚）");
 {

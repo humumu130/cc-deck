@@ -3647,7 +3647,12 @@ function connectLan(ctx) {
             for (const group of (Array.isArray(p.delta.upserts) ? p.delta.upserts : [])) if (group && typeof group.id === "string") byId.set(group.id, group);
             for (const id of (Array.isArray(p.delta.removes) ? p.delta.removes : [])) byId.delete(String(id));
             this.projects = [...byId.values()];
-            this.feed(api, teamContext, "PROJECTS_UPDATED", { groups: this.projects });
+            // #283（审查 A/B-P1 同报回修）：喂帧源自己的全量清单（relay emitOrgState 稳态帧
+            // 恒带 groups 全量+delta 并载），不喂本层并集投影——下游 mergePartition 的分区
+            // 契约=「incoming=帧源分区」，并集投影会把全并集盖成单源分区（源标污染+跨源
+            // 删除留幽灵）。本层 this.projects 并集照旧维护（其余消费面不变）。旧 relay 稳态
+            // 帧缺 groups 的假想形态回落并集投影（下游保真源标语义可承接）
+            this.feed(api, teamContext, "PROJECTS_UPDATED", { groups: Array.isArray(p.groups) ? p.groups : this.projects });
             return;
           }
           if (message.type === "BOARD_UPDATED" && p.delta !== undefined) {
@@ -3736,10 +3741,11 @@ function connectLan(ctx) {
         renderSessionList();
         // #236 B：聚合=两源团队数据合成一张 SNAPSHOT 喂 Team（此时本源 lastSnapshotPayload
         // 已更新，并集恒最新）。快照级字段覆盖团队域全部渲染面（组列表/成员卡/板/回执流/
-        // 经验铁律）；增量帧（ORG_CONFIRM/BOARD_UPDATED 等）聚合下不重喂——下次任一源
-        // SNAPSHOT 到达自动重合成（增量实时性换合并确定性，最小面取舍入回执）。
-        // requestDetail 命令通道仍走视角源（__ccDeck005MainWs=ctx）：远端组详情刷新会
-        // 失败降级 toast，快照级数据可渲染不受阻——跨源命令路由属增强面留拍板。
+        // 经验铁律）。增量帧（PROJECTS/ORG_CONFIRM/BOARD）聚合下**也直喂团队域**（下方
+        // wrapper onFrame 各分支重合成/投影后 feed；#283 起 team-domain 分区合并保并集、
+        // wrapper delta 分支喂帧源裸全量——「聚合下不重喂」的旧取舍已被 #283 收窄为
+        // 「不重复合成快照」）。requestDetail 命令通道仍走视角源（__ccDeck005MainWs=ctx）：
+        // 远端组详情刷新会失败降级 toast，快照级数据可渲染不受阻——跨源命令路由属增强面留拍板。
         if (message.type === "SNAPSHOT") {
           const merged = mergedTeamPayload();
           if (merged) Team.onFrame({ relayName: "聚合 · 全部源" }, { type: "SNAPSHOT", payload: merged });
@@ -3763,8 +3769,9 @@ function connectLan(ctx) {
           // src-cap 在成员会话已收摊/不在册时的确定性兜底（浅拷贝不改单源快照原对象）
           for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(Object.assign({}, g, { __relay_source: String(c.relayName || "") })); }
           for (const s of (Array.isArray(p.sessions) ? p.sessions : [])) if (s && typeof s.session_id === "string" && !sessionsById.has(s.session_id)) { sessionsById.set(s.session_id, s); out.sessions.push(s); }
-          // #283：boards/org_confirms 同打 __relay_source 源标（team-domain 聚合分区
-          // 合并的分区键——确认卡并集在 per-source 增量帧到达时不再被整替清掉）
+          // #283：boards/org_confirms 同打 __relay_source 源标（org_confirms 是 team-domain
+          // 分区合并的分区键——确认卡并集在 per-source 增量帧到达时不再被整替清掉；boards
+          // 本身走 gid 直写不进分区合并，源标为真值元数据供 src-cap 兜底/后续消费）
           for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(Object.assign({}, b, { __relay_source: String(c.relayName || "") })); }
           for (const r of (Array.isArray(p.receipts) ? p.receipts : [])) out.receipts.push(r);
           for (const cf of (Array.isArray(p.org_confirms) ? p.org_confirms : [])) out.org_confirms.push(Object.assign({}, cf, { __relay_source: String(c.relayName || "") }));
