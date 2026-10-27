@@ -253,10 +253,11 @@ delete process.env.CCR_ORG_DIR;
   const SID_CDX_THR = "cdx-thread-aaa"; // codex thread_id 兼作 relay_session_id
   mgr2.adopt(new Map([
     mkCdx("cdx-working", SID_CDX_THR, Date.now(), { engine: "codex", status: "WORKING" }),
-    mkCdx("cdx-error", "cdx-thread-bbb", Date.now() - 2000, { engine: "codex", status: "ERROR" }),
+    mkCdx("cdx-error", "cdx-thread-bbb", Date.now() - 2000, { engine: "codex", status: "ERROR", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, usage: { output_tokens: 5000 } }), // #275R：真死流带 token 产出（零 token ERROR=尸体归闸管）
     mkCdx("cdx-done", "cdx-thread-ccc", Date.now() - 3000, { engine: "codex", status: "DONE" }),
     mkCdx("cdx-noanchor", "", Date.now(), { engine: "codex", status: "WORKING" }), // 无锚点：首回合未完成
     mkCdx("cdx-stale", "cdx-thread-ddd", Date.now() - 72 * 3600_000, { engine: "codex", status: "WORKING" }), // 超 48h
+    mkCdx("cdx-corpse", "cdx-thread-fff", Date.now() - 1000, { engine: "codex", status: "ERROR", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, usage: { output_tokens: 0 } }), // #275R 尸体：零产出 ERROR 不拉
     // 引擎缺省（claude）行为零变：DONE+无待办不拉（守既有语义防 codex 分叉误伤）
     mkCdx("cla-done", SID_IDLE, Date.now() - 4000, { status: "DONE" }),
   ]));
@@ -267,6 +268,7 @@ delete process.env.CCR_ORG_DIR;
   assert(!resumes2.some((r) => r.resume === "cdx-thread-ccc"), "codex DONE 正常收工不拉（与 claude 语义一致）");
   assert(!resumes2.some((r) => r.resume === ""), "codex 无锚点仍被拦（no-resume-anchor 闸门共用）");
   assert(!resumes2.some((r) => r.resume === "cdx-thread-ddd"), "codex 超 48h 陈旧不拉（新鲜度闸门共用）");
+  assert(!resumes2.some((r) => r.resume === "cdx-thread-fff"), "#275R codex 尸体（ERROR+零产出）boot 不拉");
   assert(!resumes2.some((r) => r.resume === SID_IDLE), "claude 缺省路径行为零变（DONE+无待办不拉）");
   const wTxt = resumes2.find((r) => r.resume === SID_CDX_THR)?.text ?? "";
   assert(wTxt.includes("中断处接续"), `codex 复活文案=中断接续口径（非任务清单）got=${wTxt.slice(0, 60)}`);
@@ -283,7 +285,11 @@ delete process.env.CCR_ORG_DIR;
   const rDone = mgr2.reviveManagedSession("cdx-done", "test", "误触发");
   assert(rDone.ok === false && rDone.skipped === "codex-idle", `DONE 态 codex 激活器入口同拦 got=${JSON.stringify(rDone)}`);
   // ERROR 态未被拉过的 codex（模拟激活器独立发现死流）：engine 分叉放行真复活
-  mgr2.adopt(new Map([mkCdx("cdx-error2", "cdx-thread-eee", Date.now(), { engine: "codex", status: "ERROR" })]));
+  mgr2.adopt(new Map([mkCdx("cdx-error2", "cdx-thread-eee", Date.now(), { engine: "codex", status: "ERROR", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, usage: { output_tokens: 8000 } })]));
+  // #275R 尸体走激活器入口同拦（空会话闸对两入口同效——与 W-CDXREV「死流可达」不冲突：
+  // 死流=有产出，尸体=零产出）
+  const rCorpse = mgr2.reviveManagedSession("cdx-corpse", "test", "误触发");
+  assert(rCorpse.ok === false && rCorpse.skipped === "codex-empty", `#275R codex 尸体激活器入口同拦 got=${JSON.stringify(rCorpse)}`);
   const rAct2 = mgr2.reviveManagedSession("cdx-error2", "test", "回合失败");
   assert(rAct2.ok === true, `激活器事件驱动复活 codex 死流可达 got=${JSON.stringify(rAct2)}`);
   assert(resumes2.some((r) => r.resume === "cdx-thread-eee" && r.text.includes("激活器")), "激活器路径 codex 同拉起（含 engine 感知文案）");

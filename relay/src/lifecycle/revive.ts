@@ -26,8 +26,16 @@ import { resumePendingWindowMs } from "../session-manager.js"; // 类侧导出�
 export function autoReviveManaged(mgr: any, limit = 3): number {
   if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
   const candidates: { s: any; updated: number }[] = [];
+  // #275R 陈年待办需确认面：reviveEligible 拦下的 stale-todos 不静默——boot 聚合出
+  // 一条可操作通知（用户点头=去会话卡手动恢复），既不自动拉也不无声丢
+  const staleTodoSkipped: string[] = [];
   for (const s of mgr.sessions.values()) {
-    if (reviveEligible(mgr, s)) continue;
+    const why = reviveEligible(mgr, s);
+    if (why === "stale-todos") {
+      staleTodoSkipped.push(s.state.title || s.state.session_id.slice(0, 8));
+      continue;
+    }
+    if (why) continue;
     candidates.push({ s, updated: s.state.updated_at });
   }
   candidates.sort((a, b) => b.updated - a.updated);
@@ -42,6 +50,17 @@ export function autoReviveManaged(mgr: any, limit = 3): number {
     }
   }
   if (revived > 0) console.log(`[auto-revive] 已自动拉起 ${revived} 个有未完成待办的托管会话`);
+  if (staleTodoSkipped.length > 0) {
+    try {
+      // revision 用天级时间桶（审查 A/B-P1 同报）：静态键会让通知冻结在首 Fire 的
+      // 名单且用户 dismiss 后永不再现——按天分桶既刷新内容又不至于每次 boot 刷屏
+      mgr.upsertNotification("system", "revive-stale-todos", String(Math.floor(Date.now() / 86_400_000)), {
+        title: "陈年待办未自动恢复（需确认）",
+        body: truncate(`点本行跳会话列表找会话卡手动恢复。${staleTodoSkipped.slice(0, 3).join("、")}${staleTodoSkipped.length > 3 ? ` 等 ${staleTodoSkipped.length} 个` : ""}——待办超过 ${todoStaleDays()} 天未动，已跳过自动拉起`, 160),
+        severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
+      });
+    } catch { /* 通知面尽力而为 */ }
+  }
   return revived;
 }
 
@@ -130,7 +149,17 @@ function reviveInstruction(s: any): string {
     ? "请从中断处接续推进当前任务：先简述已完成部分与下一步，再继续执行。"
     : "请直接读取任务清单继续推进工作，无需复述上下文。";
 }
-function reviveEligible(mgr: any, s: any): string | null {
+// #275R 陈年待办闸阈值（天）：待办文件 mtime（readTaskStoreTodos 的 updated_at 来源）
+// 距今超过该值 = 陈年愿望非活工作。CCR_REVIVE_TODO_STALE_DAYS 缺省 3，显式 "0"=关闸；
+// 空串（launchd/compose 设而空）落缺省不静默关闸（审查 P3：与 CCR_ENGINE_STALE_MS
+// 「空/非正→缺省」惯例对齐，防误关）
+export function todoStaleDays(): number {
+  const raw = process.env.CCR_REVIVE_TODO_STALE_DAYS;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 3;
+}
+
+export function reviveEligible(mgr: any, s: any): string | null {
   if (s.state.external) return "external";
   if (s.agent) return "agent-alive";
   // #26 M3 审查修正：挂起退休成员不自动拉起——组挂起=编制退休释放（板冻结）
@@ -157,10 +186,32 @@ function reviveEligible(mgr: any, s: any): string | null {
   // 48h 新鲜度/互斥/冷却等闸门在后段共用不变
   if (s.state.engine === "codex") {
     if (s.state.status !== "ERROR" && s.state.status !== "WORKING") return "codex-idle";
+    // #275R 空会话闸（1027 实锤 Codex 尸体复活）：ERROR 且从未产出（token 用量零——
+    // 产出权威在 state.usage.output_tokens，session-manager「有产出」判定同字段；文件
+    // 面 stats.files_changed 作次级双保险）= 尸体，不自动拉。真在干活被腰斩的 WORKING/
+    // 有产出的 ERROR 照拉（W-CDXREV 1013 语义对「有产出死流」不变，闸只收窄空尸体
+    // 子集）。残余风险（审查 B-P3-2）：relay 在 usage 帧落盘前崩溃→回放后误判尸体
+    // 少拉一次，手动恢复不受影响——接受
+    if (s.state.status === "ERROR") {
+      const produced = (s.state.usage?.output_tokens ?? 0) > 0 || (s.state.stats?.files_changed ?? 0) > 0;
+      if (!produced) return "codex-empty";
+    }
   } else {
+    // 48h 会话闸前置（审查 A-P3-3 归因顺序）：>48h 的会话本就不会被拉，先归因
+    // stale-48h——不进陈年待办通知名单（防古老会话挤占显示位淹没真目标带）
+    if (Date.now() - s.state.updated_at > 48 * 3600_000) return "stale-48h";
     // #17 雇员按家读取任务存储
     const todos = readTaskStoreTodos(s.state.relay_session_id, mgr.employeeHome(s.state));
     if (!todos || !todos.some((t: { status: string }) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    // #275R 陈年待办闸（1027 实锤傲修图旧会话被拉起自主改任务）：会话 48h 内被摸过
+    // 不代表待办是活的——**最新一条**开放待办也超过 N 天未动 = 全部陈年，不自动拉
+    //（boot 入口的「需确认」通知在 autoReviveManaged 聚合）
+    const days = todoStaleDays();
+    if (days > 0) {
+      const openTodos = todos.filter((t: { status: string }) => t.status === "pending" || t.status === "in_progress");
+      const newestOpenAt = Math.max(0, ...openTodos.map((t: { updated_at?: number }) => t.updated_at ?? 0));
+      if (newestOpenAt > 0 && Date.now() - newestOpenAt > days * 86_400_000) return "stale-todos";
+    }
   }
   // 48h 新鲜度：残留的"pending 愿望"不是活工作
   if (Date.now() - s.state.updated_at > 48 * 3600_000) return "stale-48h";
