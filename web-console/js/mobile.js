@@ -245,38 +245,43 @@
         const last = act[act.length - 1];
         return '<div class="timeline-note subagent-live">⑂' + act.length + " 子任务运行中 · " + esc(oneLine(last.desc || last.kind || "")) + "</div>";
       }
-      function mConversationHtml(sid, s) {
+      // #282 四批：对话流 items 单源——keyed（未变条目零触碰）与整串（fallback/他处消费）同源产出
+      function mConversationItems(sid, s) {
         const api = b2Api();
         let list = [];
         try { const tl = api && api.S && api.S.timelines ? api.S.timelines.get(sid) : null; if (Array.isArray(tl)) list = tl; } catch (_) {}
         const cut = sliceTimeline(list, DETAIL_TL_MAX);
-        let html = s && s.waiting_request ? mWaitCardHtml(s.waiting_request) : "";
-        html += mSubagentNoteHtml(s);
-        if (!cut.items.length) return html + '<div class="readonly-banner">暂无对话记录</div>';
-        html += mConvCtrlHtml();
-        if (cut.truncated) html += '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>";
+        const items = [];
+        if (s && s.waiting_request) items.push(["mw", mWaitCardHtml(s.waiting_request)]);
+        const sub = mSubagentNoteHtml(s);
+        if (sub) items.push(["msub", sub]);
+        if (!cut.items.length) { items.push(["mempty", '<div class="readonly-banner">暂无对话记录</div>']); return items; }
+        items.push(["mctrl", mConvCtrlHtml()]);
+        if (cut.truncated) items.push(["mtrunc", '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>"]);
         let prevDay = "";
         let procBuf = null, procKey = ""; // #164 连续工具/结果行 → 过程组（与桌面 renderConversation 同口径）
         const flushProc = () => {
           if (procBuf && procBuf.length) {
             const open = !!(api && api.expanded && api.expanded.has("proc:" + procKey));
-            html += '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>";
+            items.push(["mpg:" + procKey, '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>"]);
           }
           procBuf = null;
         };
         for (const e of cut.items) {
           const dk = e.ts ? mDayKey(e.ts) : "";
-          if (dk && dk !== prevDay) { flushProc(); html += '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"; prevDay = dk; }
+          if (dk && dk !== prevDay) { flushProc(); items.push(["md:" + dk, '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"]); prevDay = dk; }
           const eh = mEntryHtml(e, s);
           if (!eh) continue;
-          if (eh.startsWith('<div class="trow')) {
+          // 审查 P1-1 同款（review-282d-a）：任务生命周期行（data-role="task"）不进过程组
+          if (eh.startsWith('<div class="trow') && eh.indexOf('data-role="proc"') > -1) {
             if (!procBuf) { procBuf = []; procKey = api && api.eKey ? api.eKey(e) : String(e.ts || ""); }
             procBuf.push(eh);
-          } else { flushProc(); html += eh; }
+          } else { flushProc(); items.push([api && api.eKey ? api.eKey(e) : "me:" + String(e.ts || "") + ":" + items.length, eh]); }
         }
         flushProc();
-        return html;
+        return items;
       }
+      function mConversationHtml(sid, s) { return mConversationItems(sid, s).map((x) => x[1]).join(""); }
       function mTasksHtml(s) {
         if (!s) return '<div class="readonly-banner">未选择会话</div>';
         const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
@@ -362,7 +367,7 @@
         // 上部：ctxMeter 水位计 + 本回合时长/tokens（原「用量」tab 迁入，.metric 左线形态退役改键值行）
         if (s.context_usage) html += mCtxMeterHtml(s);
         else html += '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
-        if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + mDurText(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
+        if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-mturn-elapsed>__MELAPSED__</b><span>本回合已运行</span></div>'; // #282 三批：秒级文本走占位符（不进签名）+调用点定点写——B 审查 P3（跳帧对活跃会话失效）收口
         const u = s.usage;
         if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + mTokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + mTokStr(u.input_tokens || 0) + " · 出 " + mTokStr(u.output_tokens || 0) + "）</span></div>";
         // 下部：统计键值行全量（与桌面 renderMore 同字段；目录/引擎用手机作用域助手 displayPath/ENGINE_SHORT）
@@ -457,16 +462,32 @@
         dock.classList.remove("terminal-fade");
         if (s && s.status === "DONE") mDockTermT = setTimeout(() => dock.classList.add("terminal-fade"), 8000);
       }
+      // #282 MOB 双壳同族收敛（清单 §2.5）：sig 跳帧（html 未变零 DOM——移动壳各渲染面
+      // 逐帧 innerHTML 全量的同族病在此批收口；列表类另走 keyed 单口见各写点）
+      const mHtmlSig = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "m" + (h >>> 0).toString(36); };
+      function mSigWrite(el, sig, html) {
+        if (el.dataset.mSig === sig && el.childElementCount) return false;
+        el.dataset.mSig = sig;
+        el.innerHTML = html;
+        return true;
+      }
       function renderMobileDetail(sid) {
         const base = detailBase || (detailBase = ensureDetailBase());
         if (!base) return;
         const s = bridge.sessions.get(sid) || null;
         const keepScroll = base.content.scrollTop;
-        base.convHost.innerHTML = mConversationHtml(sid, s);
+        // #282 MOB：详情四 pane sig 跳帧（sid 进签名防跨会话同形误跳）——未变帧零重建，
+        // 选区/折叠态/滚动逐帧存活；proc-off 类 toggle 照常（host 级，不依赖重建）
+        { // #282 四批：对话流 keyed（未变条目零解析零触碰——与桌面 S4 同构）；rk 缺席回落 sig 跳帧
+          const rkC = window.__ccDeck005Reconcile;
+          if (rkC) rkC(base.convHost, mConversationItems(sid, s));
+          else { const h = mConversationHtml(sid, s); mSigWrite(base.convHost, "conv:" + sid + ":" + mHtmlSig(h), h); } }
         { const api = b2Api(); base.convHost.classList.toggle("proc-off", !(api && api.convCtl && api.convCtl.proc())); } // #164 过程总开关（host 级类，innerHtml 重建不丢）
-        base.tasks.innerHTML = mTasksHtml(s);
-        base.arts.innerHTML = mArtifactsHtml(s);
-        base.more.innerHTML = mMoreHtml(s);
+        { const h = mTasksHtml(s); mSigWrite(base.tasks, "t:" + sid + ":" + mHtmlSig(h), h); }
+        { const h = mArtifactsHtml(s); mSigWrite(base.arts, "a:" + sid + ":" + mHtmlSig(h), h); }
+        { const h = mMoreHtml(s); mSigWrite(base.more, "m:" + sid + ":" + mHtmlSig(h), h);
+          const elapsedTxt = s && s.status === "WORKING" && s.turn_started_at ? mDurText(Math.max(0, Date.now() - s.turn_started_at)) : "";
+          const el = base.more.querySelector("[data-mturn-elapsed]"); if (el && elapsedTxt) el.textContent = elapsedTxt; } // #282 三批：写/跳帧两路径同款定点写（与桌面 renderMore 对齐）
         updateMobileDetailDock(s);
         syncMobileComposer(); // #169 输入栏随会话态同步（停止钮可见性/发送禁用/提示小字）
         base.content.scrollTop = keepScroll;
@@ -573,7 +594,22 @@
           const wN = items.filter((s) => s.status === "WORKING").length;
           return `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${esc(String(g).trim().slice(0, 1) || "团")}</span><span>${esc(g)}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${items.length}${wN ? ` ${grpIc("activity", true)}${wN}` : ""}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`;
         }).join("");
-        list.innerHTML = (pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span><span class="grp-count" data-session-group-count>${grpIc("activity", true)}${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "") + otherMarkup;
+        // #282 MOB keyed：组级身份对齐（a:active / p:<项目名>）——未变组零触碰（FB16 折叠
+        // 态/组内滚动/长按菜单瞬态逐帧存活），变化组单点替换；rk 缺席回落旧整串（零删）
+        const activeMarkup = pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span><span class="grp-count" data-session-group-count>${grpIc("activity", true)}${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "";
+        const rkM = window.__ccDeck005Reconcile;
+        if (rkM) {
+          const desired = [];
+          if (pend.length) desired.push(["a:active", activeMarkup]);
+          // 按组重建 desired（与 otherMarkup 同构逐组产串——keyed 身份粒度=项目组）
+          groups.forEach((g) => {
+            const items = other.filter((s) => getSessionProject(s) === g);
+            const open = mobileProjOpen.has(g);
+            const wN = items.filter((s) => s.status === "WORKING").length;
+            desired.push(["p:" + g, `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${esc(String(g).trim().slice(0, 1) || "团")}</span><span>${esc(g)}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${items.length}${wN ? ` ${grpIc("activity", true)}${wN}` : ""}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`]);
+          });
+          rkM(list, desired);
+        } else list.innerHTML = activeMarkup + otherMarkup;
         const act = sessions.filter(needAction).length;
         const work = sessions.filter((s) => s.status === "WORKING").length;
         const done = sessions.filter((s) => s.status === "DONE").length;
@@ -595,7 +631,9 @@
         document.querySelectorAll("[data-notify-clear-all]").forEach((b) => { b.hidden = !items.length; }); // FB18：移动端批量清除钮
         const list = document.querySelector("#m-notify [data-mobile-notification-list]");
         if (!list) return;
-        list.innerHTML = items.length ? items.map((n) => {
+        // #282 MOB keyed：通知行按 n.key 身份对齐（标记已读/清除后行级增删定点，列表滚动
+        // 位逐帧存活）；rk 缺席回落旧整串（零删）
+        const rowOf = (n) => {
           const act = !isDone(n);
           const sid = n.sourceContext && n.sourceContext.sessionId;
           const domain = n.sourceContext && n.sourceContext.domain;
@@ -603,7 +641,10 @@
             ? `<button class="primary-btn" type="button" data-notify-mobile-jump="${esc(sid)}">回会话处理</button>`
             : domain ? `<button class="primary-btn" type="button" data-notify-jump-domain="${esc(domain)}">回${domain === "team" ? "团队" : domain === "project" ? "项目" : "会话"}域处理</button>` : "";
           return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="tag ${act ? "action" : ""}">${act ? (n.group === "action" ? "需行动" : "注意") : "历史"}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}<button class="notify-light-action" type="button" data-mobile-notify-dismiss="${esc(n.key)}" title="清除这条通知" aria-label="清除通知">✕</button></div></article>`;
-        }).join("") : '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>';
+        };
+        const rkN = window.__ccDeck005Reconcile;
+        if (rkN) rkN(list, items.length ? items.map((n) => ["n:" + n.key, rowOf(n)]) : [["n:empty", '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>']]);
+        else list.innerHTML = items.length ? items.map(rowOf).join("") : '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>';
       }
       function renderTeam() {
         const screen = screenOf("team");
@@ -616,20 +657,23 @@
         document.querySelectorAll(".mobile-nav .tag.action").forEach((tag) => { if (confirms.length) tag.textContent = String(confirms.length); else tag.remove(); });
         const slot = screen.querySelector("[data-team-confirm-slot]");
         if (slot) {
-          if (confirms.length) { slot.hidden = false; slot.innerHTML = `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`; }
-          else { slot.hidden = true; slot.textContent = ""; }
+          // #282 MOB sig 跳帧：确认卡内容未变零重建
+          if (confirms.length) { slot.hidden = false; mSigWrite(slot, "cf:" + confirms.length, `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`); }
+          else { slot.hidden = true; slot.textContent = ""; slot.dataset.mSig = ""; }
         }
         const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
         const lane = (label, items, mapper) => `<div class="mobile-lane"><div class="mobile-lane-head"><span>${label}</span><span>${items.length}</span></div>${items.map(mapper).join("") || '<div class="mobile-task"><span class="muted">暂无</span></div>'}</div>`;
         const todo = screen.querySelector('[data-team-pane="todo"]');
-        if (todo) todo.innerHTML = lane("需行动", sessions.filter(needAction).sort(byPinnedUpdated), taskRow) + (confirms.length ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>组织确认</span><span class="tag action">${confirms.length}</span></div><div class="mobile-task"><b>确认事项待处理</b><br><span class="muted">回桌面团队域确认</span></div></div>` : "");
+        // #282 MOB sig 跳帧：三 pane 内容未变零重建（泳道滚动位/成员列表滚动逐帧存活）
+        if (todo) { const h = lane("需行动", sessions.filter(needAction).sort(byPinnedUpdated), taskRow) + (confirms.length ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>组织确认</span><span class="tag action">${confirms.length}</span></div><div class="mobile-task"><b>确认事项待处理</b><br><span class="muted">回桌面团队域确认</span></div></div>` : ""); mSigWrite(todo, "todo:" + mHtmlSig(h), h); }
         const board = screen.querySelector('[data-team-pane="board"]');
-        if (board) board.innerHTML = `<div class="mobile-board">${lane("运行中", sessions.filter((s) => s.status === "WORKING"), taskRow)}${lane("需行动", sessions.filter(needAction), taskRow)}${lane("已完成", sessions.filter((s) => s.status === "DONE"), taskRow)}</div>`;
+        if (board) { const h = `<div class="mobile-board">${lane("运行中", sessions.filter((s) => s.status === "WORKING"), taskRow)}${lane("需行动", sessions.filter(needAction), taskRow)}${lane("已完成", sessions.filter((s) => s.status === "DONE"), taskRow)}</div>`; mSigWrite(board, "board:" + mHtmlSig(h), h); }
         const members = screen.querySelector('[data-team-pane="members"]');
         if (members) {
           const engineMap = new Map();
           sessions.forEach((s) => { const eng = s.engine || "unknown"; if (!engineMap.has(eng)) engineMap.set(eng, []); engineMap.get(eng).push(s); });
-          members.innerHTML = `<div class="member-list">${[...engineMap.entries()].map(([eng, arr]) => `<div class="member-card"><span class="avatar">${esc(String(ENGINE_SHORT[eng] || eng).charAt(0))}</span><div><strong>${esc(ENGINE_SHORT[eng] || eng)}</strong><p>${arr.length} 个会话</p><div class="identity-cluster"><span class="engine-badge ${ENGINE_BADGE[eng] || ""}">${esc(ENGINE_SHORT[eng] || eng)}</span>${sourceBadge()}</div></div></div>`).join("") || '<div class="readonly-banner">暂无成员 · 会话接入后按引擎聚合。</div>'}</div>`;
+          const h = `<div class="member-list">${[...engineMap.entries()].map(([eng, arr]) => `<div class="member-card"><span class="avatar">${esc(String(ENGINE_SHORT[eng] || eng).charAt(0))}</span><div><strong>${esc(ENGINE_SHORT[eng] || eng)}</strong><p>${arr.length} 个会话</p><div class="identity-cluster"><span class="engine-badge ${ENGINE_BADGE[eng] || ""}">${esc(ENGINE_SHORT[eng] || eng)}</span>${sourceBadge()}</div></div></div>`).join("") || '<div class="readonly-banner">暂无成员 · 会话接入后按引擎聚合。</div>'}</div>`;
+          mSigWrite(members, "mem:" + mHtmlSig(h), h);
         }
       }
       function renderProject() {
@@ -649,13 +693,14 @@
         const headTag = screen.querySelector(".mobile-head .tag.action");
         if (headTag) { headTag.style.display = actN ? "" : "none"; const n = headTag.querySelector("span"); if (n) n.textContent = String(actN); }
         const cards = screen.querySelector("[data-mobile-project-cards]");
-        if (cards) cards.innerHTML = projects.length ? projects.map((p) => {
+        // #282 MOB sig 跳帧：项目卡/聚合 lane 内容未变零重建
+        if (cards) { const h = projects.length ? projects.map((p) => {
           const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
           const [word, cls] = p.status === "active" ? ["活跃", "done"] : p.status === "parked" ? ["挂起", ""] : ["归档", ""];
           return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(displayPath(p.anchor_dir || ""))}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
-        }).join("") : '<div class="readonly-banner">暂无项目组 · 新建项目后在组织侧同步。</div>';
+        }).join("") : '<div class="readonly-banner">暂无项目组 · 新建项目后在组织侧同步。</div>'; mSigWrite(cards, "pc:" + mHtmlSig(h), h); }
         const laneHost = screen.querySelector("[data-mobile-project-lane]");
-        if (laneHost) laneHost.innerHTML = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`;
+        if (laneHost) { const h = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`; mSigWrite(laneHost, "pl:" + mHtmlSig(h), h); }
       }
       function renderSettingsRows() {
         const screen = screenOf("settings");

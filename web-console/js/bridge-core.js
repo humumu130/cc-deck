@@ -498,6 +498,9 @@
                   return template.content;
                 }
 
+                // #282 三批 N2（清单 §2.4）：项目域队列/长页/检查器签名跳帧——帧驱动 replaceChildren
+                // 整树重建收口（队列折叠态/长页滚动位逐帧存活）；等待分支清签防陈旧跳帧（P1-2 同型防线）
+                const bSigOf = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "b" + (h >>> 0).toString(36); };
                 function renderQueue(entries) {
                   // W-PROJP1 P1-2：未立项（group:null）从活跃项目拆出置底折叠组（设计 §3 方案 a），
                   // 组序：活跃项目 → 待确认立项 → 挂起/归档 → 未立项。降噪靠折叠不靠过滤，所有卡始终可回。
@@ -532,7 +535,11 @@
                       + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
                     : "";
                   const markup = group("活跃项目", activeList) + group("待确认新建项目", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
-                  els.queue.replaceChildren(nodesFrom(markup));
+                  const qSig = "q:" + bSigOf(markup); // #282 三批 N2：未变帧零重建（折叠态/hover 存活）
+                  if (els.queue.dataset.b2qSig !== qSig || !els.queue.childElementCount) {
+                    els.queue.dataset.b2qSig = qSig;
+                    els.queue.replaceChildren(nodesFrom(markup));
+                  }
                 }
 
                 function renderHead(entry) {
@@ -640,7 +647,12 @@
                   }
                   const artifacts = artifactsOf(entry);
                   els.artifactCount.textContent = String(artifacts.length);
-                  els.artifactRows.replaceChildren(nodesFrom(artifacts.slice(0, 4).map((a) => '<div class="artifact-row">' + escapeHtml(basename(a.path)) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>").join("")));
+                  const artRowsHtml = artifacts.slice(0, 4).map((a) => '<div class="artifact-row">' + escapeHtml(basename(a.path)) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>").join("");
+                  const arSig = "ar:" + bSigOf(artRowsHtml); // #282 三批 N2：未变帧零重建（relTime 分钟粒度翻转才重建）
+                  if (els.artifactRows.dataset.b2arSig !== arSig || !els.artifactRows.childElementCount) {
+                    els.artifactRows.dataset.b2arSig = arSig;
+                    els.artifactRows.innerHTML = artRowsHtml;
+                  }
                   // ⑥a-4 最活跃会话水位块：项目内 context 用量占比最高会话（原型 data-context-waterline 终态）
                   if (els.waterline) {
                     const withCtx = (entry ? entry.sessions : []).filter((s) => Number(s && s.context_usage) > 0 && Number(s && s.context_limit) > 0);
@@ -648,9 +660,14 @@
                     if (busiest) {
                       const pct = Math.max(1, Math.min(100, Math.round((Number(busiest.context_usage) / Number(busiest.context_limit)) * 100)));
                       els.waterline.hidden = false;
-                      els.waterline.innerHTML = '<div class="inspector-title"><span>最活跃会话水位</span><span>' + pct + "%</span></div>"
+                      const wlHtml = '<div class="inspector-title"><span>最活跃会话水位</span><span>' + pct + "%</span></div>"
                         + '<div class="mini-context-meter"><i><b style="width:' + pct + '%"></b></i><span>聚合水位</span></div>'
                         + '<div class="inspector-copy">' + escapeHtml(busiest.title || busiest.initial_prompt || busiest.session_id) + " · 当前会话上下文</div>";
+                      const wlSig = "wl:" + bSigOf(wlHtml); // #282 三批 N2：未变帧零重建
+                      if (els.waterline.dataset.b2wlSig !== wlSig || !els.waterline.childElementCount) {
+                        els.waterline.dataset.b2wlSig = wlSig;
+                        els.waterline.innerHTML = wlHtml;
+                      }
                     } else {
                       els.waterline.hidden = true;
                       els.waterline.textContent = "";
@@ -671,13 +688,19 @@
                   html += psecMarkup("artifacts", "package", "输出物", artifactsRows(entry), "暂无输出物登记，输出物由会话域实时产生。");
                   html += psecMarkup("accepts", "check", "验收单", acceptsRows(), "暂无验收单登记。");
                   if (bridge.designDocsSeen && bridge.designDocs.length > 0) html += psecMarkup("design", "layers", "图纸", designRows(), "图纸目录为空。");
-                  els.body.replaceChildren(nodesFrom(html));
+                  const lSig = "lp:" + bSigOf(html); // #282 三批 N2：未变帧零重建（长页滚动位存活）
+                  if (els.body.dataset.b2lSig !== lSig || !els.body.childElementCount) {
+                    els.body.dataset.b2lSig = lSig;
+                    els.body.replaceChildren(nodesFrom(html));
+                  }
                 }
 
                 function render() {
                   const waiting = bridge.waitingText();
                   els.queue.dataset.relayState = bridge.hasSnapshot ? "snapshot" : bridge.connection;
                   if (waiting) {
+                    els.queue.dataset.b2qSig = ""; // #282 三批 N2：降级分支清签（回数据态不误跳帧）
+                    if (els.body) els.body.dataset.b2lSig = "";
                     els.queue.replaceChildren(bannerNode(waiting));
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
@@ -699,7 +722,10 @@
                   const entry = entries.find((e) => e.key === selectedKey) || null;
                   renderHead(entry);
                   if (!entry) {
-                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>'));
+                    if (els.body) {
+                      els.body.dataset.b2lSig = ""; // #282 三批审查 P2（review-282c-a）：空聚合分支清签——防「非空→空→同形非空」残留陈旧横幅
+                      els.body.replaceChildren(nodesFrom('<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>'));
+                    }
                     renderInspector(null);
                     return;
                   }
@@ -780,3 +806,55 @@
                 setTimeout(render, 0);
               })();
             
+// ---------- #282 定向渲染共享单口：keyed 子项 reconcile ----------
+// 渲染热点问题族（#281 附清单）根因=整容器重建（innerHTML/replaceChildren）→ 浏览器侧
+// 一切瞬态（滚动位/焦点/选区/动画/输入草稿）归零。本单口按 key 对齐新旧子项：
+//   · html 未变的子项 → 节点零触碰（身份保住 ⇒ 焦点/选区/输入草稿天然存活）
+//   · 变化的子项 → 单节点替换；新增/删除 → 定点插删；乱序 → 就地搬移
+// 节点上记 __rkHtml 缓存做 O(1) 等值比较。首次运行把容器内无 data-rk 的存量子节点
+// 整体迁移为 keyed（旧全量渲染语义无痛过渡）。调用方负责容器本体复用（不重建容器
+// ⇒ scrollTop 天然保持；#281 类 scrollTop 记录/恢复补丁继续作兜底）。
+window.__ccDeck005Reconcile = function reconcileKeyed(container, desired) {
+  if (!container) return { kept: 0, replaced: 0, added: 0, removed: 0 };
+  const doc = container.ownerDocument || document;
+  const parse = (html) => {
+    const t = doc.createElement("template");
+    t.innerHTML = html;
+    return t.content.firstElementChild;
+  };
+  const existing = new Map();
+  for (const el of Array.from(container.children)) {
+    const k = el.getAttribute && el.getAttribute("data-rk");
+    if (k != null) existing.set(k, el);
+  }
+  const stats = { kept: 0, replaced: 0, added: 0, removed: 0 };
+  const seen = new Set();
+  let prev = null;
+  const place = (node) => container.insertBefore(node, prev ? prev.nextSibling : container.firstChild);
+  for (const pair of desired) {
+    const key = pair[0], html = pair[1];
+    // 同键守卫（#282 四批审查 B3，review-282d-b 真浏览器坐实）：重复键 desired 后续跳过
+    //（首键胜出）——无守卫时 existing Map 同键 last-wins → replaceChild 摘离节点 → 后续同
+    // 键对以 __rkHtml 匹配走 kept 分支 place() 把离体节点再插回=每帧+1 无上界静默增殖。
+    // 单口一处守卫，全部八个调用点免疫（比改各调用方键公式便宜）。
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const cur = existing.get(key);
+    if (cur && cur.__rkHtml === html) {
+      const at = prev ? prev.nextSibling : container.firstChild;
+      if (at !== cur) place(cur); // 乱序搬移（不重建节点）
+      prev = cur; stats.kept++; continue;
+    }
+    const node = parse(html);
+    if (!node) continue;
+    node.setAttribute("data-rk", key);
+    node.__rkHtml = html;
+    if (cur) { container.replaceChild(node, cur); stats.replaced++; }
+    else { place(node); stats.added++; }
+    prev = node;
+  }
+  for (const [k, el] of existing) if (!seen.has(k)) { el.remove(); stats.removed++; }
+  // 非 keyed 残留清场（首跑迁移/零散节点）——keyed 体系语义=容器子集完全由 desired 组成
+  for (const el of Array.from(container.children)) if (!(el.getAttribute && el.getAttribute("data-rk"))) { el.remove(); stats.removed++; }
+  return stats;
+};

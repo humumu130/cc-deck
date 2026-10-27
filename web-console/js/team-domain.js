@@ -347,6 +347,17 @@
                   if (!rows.length) return head + banner("当前编制尚无输出物 · 会话产出实时登记。");
                   return head + rows.map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("");
                 }
+                // #282 三批 M2（清单 §2.3）：团队详情六 pane+成员/活动/确认区签名跳帧——
+                // 筛选切换+帧的整串 innerHTML 收口（活动/看板滚动位、筛选 chips 悬停逐帧存活）。
+                // 行文时间为绝对 HH:MM / 分钟粒度相对文本——分钟翻转才触发重建（无秒级签名失效面）。
+                const tSigOf = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "t" + (h >>> 0).toString(36); };
+                function tSigWrite(el, sig, html) {
+                  if (!el) return false;
+                  if (el.dataset.tSig === sig && el.childElementCount) return false;
+                  el.dataset.tSig = sig;
+                  el.innerHTML = html;
+                  return true;
+                }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
                   const tasks = entities(board?.entries);
@@ -854,6 +865,13 @@
                 }
                 function render() {
                   if (!state.mounted) return;
+                  // #282 M1 行内表单草稿守卫：经验/规则表单（expForm/rulesForm 只记目标 id 不记
+                  // 草稿文本）输入中任何帧到达→整 pane 重建→草稿丢。焦点在本域可编辑元素上时
+                  // 跳过本轮（下一帧重试——心跳/事件恒持续，选区/草稿存活窗口即用户输入窗口）。
+                  try {
+                    const ae = document.activeElement;
+                    if (ae && root.contains(ae) && ae.matches && ae.matches("input, select, textarea, [contenteditable='true']")) return;
+                  } catch (_) {}
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
                   const project = group();
                   const count = state.confirms.length;
@@ -863,7 +881,10 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
+                  // #282 M1b 团队列表 keyed：html 照旧拼装，解析成键序（组头 grp:N/团队卡 t:<id>）
+                  // reconcile——未变卡零触碰（滚动/选中/hover/动画全保），变化单卡替换，容器不重建。
+                  const projectsEl = query("[data-team-projects]");
+                  const projectsHtml = state.projects?.length ? (() => {
                     // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
                     // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
                     // 状态胶囊保留（UIPOLISH3 件九⑩ 用户拍板件不动）；分组只二分不改数据语义
@@ -885,6 +906,18 @@
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
                     return html;
                   })() : banner(projectsEmpty());
+                  const rkTeam = window.__ccDeck005Reconcile;
+                  if (rkTeam && state.projects?.length) {
+                    const t = document.createElement("template");
+                    t.innerHTML = projectsHtml;
+                    const desired = [];
+                    let gN = 0;
+                    for (const n of t.content.children) {
+                      const tid = n.getAttribute("data-team-project");
+                      desired.push([tid ? "t:" + tid : "grp:" + gN++, n.outerHTML]);
+                    }
+                    rkTeam(projectsEl, desired);
+                  } else projectsEl.innerHTML = projectsHtml;
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // V8R head 第二行 meta（原型 dhead.row2 语言）：编制/任务卡/待确认/开团时间——
                   // 无团队选中（空态）整行隐藏；数据缺项跳过不占位
@@ -916,20 +949,25 @@
                   window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = sortRoster(members(project), project).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
+                  const activityCompactHtml = activityMarkup(project, { compact: true });
                   query("[data-team-member-count]").textContent = String(members(project).length);
-                  query("[data-team-members]").innerHTML = memberHtml;
-                  query("[data-team-activity]").innerHTML = activityMarkup(project, { compact: true }); // W-ACTIVITY3：右栏回执流=compact 态（v3 dispfeed 纯行形态，无头无 chips）
+                  tSigWrite(query("[data-team-members]"), "mem:" + tSigOf(memberHtml), memberHtml); // #282 三批 M2 签名跳帧
+                  tSigWrite(query("[data-team-activity]"), "act:" + tSigOf(activityCompactHtml), activityCompactHtml); // W-ACTIVITY3：右栏回执流=compact 态（v3 dispfeed 纯行形态，无头无 chips）
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
-                  panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
+                  tSigWrite(panes[0], "p0", banner("团队对话请回到来源会话；此处不生成演示消息。")); // 常驻文案：签名恒定=首帧后零写
                   if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
-                  panes[1].innerHTML = boardMarkup(project);
+                  // #282 三批 M2：panes[1] 原三步写（=board、+=确认卡、+=图纸区）收口为单笔终态写
+                  //（终态在确认卡构建后落笔，见下方 boardFinal）；成员/经验/铁律/输出物 var 先算后签
+                  const teamOutputsHtml = teamOutputsMarkup(project);
+                  const expHtml = experienceMarkup();
+                  const rulesHtml = rulesMarkup();
                   // V8R：成员页尾 crewfoot（原型 .crewfoot）——顺带承载五色灯词表图例（用户定版）
                   const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · watchdog 双信号（心跳+日志） · 点卡片直开成员会话</div>';
-                  panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>" + crewFoot;
-                  panes[3].innerHTML = activityHtml;
-                  panes[4].innerHTML = teamOutputsMarkup(project); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）
-                  panes[5].innerHTML = experienceMarkup(); // W-EXPP2 经验库第六 tab
-                  panes[6].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第七 tab
+                  tSigWrite(panes[2], "p2:" + tSigOf(memberHtml), '<div class="member-list">' + memberHtml + "</div>" + crewFoot); // #282 三批 M2
+                  tSigWrite(panes[3], "p3:" + tSigOf(activityHtml), activityHtml);
+                  tSigWrite(panes[4], "p4:" + tSigOf(teamOutputsHtml), teamOutputsHtml); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）
+                  tSigWrite(panes[5], "p5:" + tSigOf(expHtml), expHtml); // W-EXPP2 经验库第六 tab
+                  tSigWrite(panes[6], "p6:" + tSigOf(rulesHtml), rulesHtml); // W-RULES2 团队铁律第七 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
                   // UIPOLISH3 件四②（2026-10-11 用户拍板）：底部常驻栏废除——决议钮下沉到每张
@@ -947,12 +985,14 @@
                     const owner = state.projects?.find((item) => item.id === confirm.payload?.gid);
                     return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + escape(confirmKinds.get(confirm.kind) || confirm.kind) + " · " + escape(confirm.title) + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div><p>" + escape(confirm.reason) + (owner ? " · " + escape(owner.name || owner.id) : "") + '</p><div class="inspector-copy">' + escape(JSON.stringify(confirm.payload || {})) + "</div>" + decisionButtons(confirm) + "</div>";
                   }).join("") : "";
-                  query("[data-team-confirms]").innerHTML = count ? confirmCards : banner("暂无待确认事项");
-                  panes[1].innerHTML += count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "";
+                  tSigWrite(query("[data-team-confirms]"), "cf:" + tSigOf(confirmCards), count ? confirmCards : banner("暂无待确认事项")); // #282 三批 M2
                   // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
                   // 口径（name/锚点分词 ∩ tags 子串双向）。输出物原第二区已迁独立「输出」tab
                   // （W-OUTTAB，用户 1015 拍板：输出物不放看板里）
-                  panes[1].innerHTML += teamDesignSection(project);
+                  const boardFinal = boardMarkup(project)
+                    + (count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "")
+                    + teamDesignSection(project);
+                  tSigWrite(panes[1], "p1:" + tSigOf(boardFinal), boardFinal);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
                   if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
