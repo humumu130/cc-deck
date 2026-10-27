@@ -157,6 +157,47 @@ writeFileSync(join(DATA, "tr.jsonl"), "");
   ok(src.includes("reconcilePidsFromCwd(snap, claimed)"), "B3c 静态锚：cwd 兜底段挂进 reconcile 主链（boot+60s 轮节拍）");
 }
 
+// ---- §P 第5轮打回：external 活会话翻活第二源（pm 案：活进程+帧在打恒 DONE）----
+// 真凶：pollCliStatus 翻活单源依赖 cliSessionStatus（CLI 状态文件）——老 CLI 不写/
+// 恢复进程路径漂移/hook 死链不热载的环境层场景恒 null/盲，「转录在长+进程活」
+// 的 external 会话永不翻活。修=busy 判定加 lastGrow（转录 30s 内增长）第二源。
+// 样本口径（打回要求）：external 卡+真转录增长信号（managed 会话测不到此路径）
+{
+  const anyBridge = bridge as unknown as {
+    lastGrow: Map<string, number>;
+    cliStatusAt: Map<string, number>;
+    pollCliStatus(): void;
+  };
+  const id = "ext-ar-pm";
+  mgr.ensureExternal(id, MY_CWD, "pm 型活终端（无状态文件）", "ar-pm");
+  const s = cards.get(id)!;
+  s.state.status = "DONE";
+  s.state.cli_pid = ME; // 活进程（测试自身）；cliSessionStatus(ME) 无状态文件=null（单源盲区形态）
+  anyBridge.cliStatusAt.delete(id);
+  // P1 无增长+无状态文件：不误翻（DONE 保持——死卡/静默卡不被拉活）
+  anyBridge.lastGrow.set(id, Date.now() - 120_000);
+  anyBridge.pollCliStatus();
+  ok(s.state.status === "DONE", "P1 转录不增+状态文件盲：不误翻（久休/静默卡保持终态）");
+  // P2 转录近期增长+进程活+状态文件盲：翻 WORKING（pm 案根修——第二源）
+  anyBridge.cliStatusAt.delete(id);
+  anyBridge.lastGrow.set(id, Date.now() - 5_000);
+  anyBridge.pollCliStatus();
+  ok(s.state.status === "WORKING", `P2 转录增长+进程活 → 翻 WORKING（实 ${s.state.status}）——状态文件盲区的第二源翻活`);
+  ok(String(s.state.action_summary).includes("转录增长中"), `P2b summary 溯源第二源（实 ${s.state.action_summary}）`);
+}
+// P3 external+hook 帧样本（打回点名）：UserPromptSubmit 主链回归锚——DONE 卡收到
+// 首事件照翻（dispatch 既有链），与件二 PreToolUse/PostToolUse（§B）合围 hook 帧面
+{
+  const id = "ext-ar-ups";
+  mgr.ensureExternal(id, MY_CWD, "UPS 主链卡", "ar-ups");
+  const s = cards.get(id)!;
+  s.state.status = "DONE";
+  s.state.cli_pid = ME;
+  const mkUps = (ev: string, sid: string) => ({ event: ev, session_id: sid, cwd: MY_CWD, prompt: "主链回合", permission_mode: "default", cli_pid: ME, hook_event_name: ev } as unknown as Parameters<typeof bridge.handleEvent>[0]);
+  await bridge.handleEvent(mkUps("UserPromptSubmit", "ar-ups"));
+  ok(s.state.status === "WORKING", `P3 UserPromptSubmit 到达 DONE → 翻 WORKING（实 ${s.state.status}）——hook 帧样本主链锚`);
+}
+
 // ---- §W 公司侧升级面（0926 实证：7 卡 updated_at 全=重启时刻 + 6 张久休卡假活跃）----
 // 真凶=boot 自愈链裸 emitExternalSync（emitUpdated 无 at 写 Date.now()）：公司侧无
 // hook 旧会话多、boot 集中翻案逐卡洗一次；Mac 侧 hook 会话多真事件随后覆盖故未显。
