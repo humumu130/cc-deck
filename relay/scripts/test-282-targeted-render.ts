@@ -282,6 +282,8 @@ ok(bc.includes("els.artifactRows.dataset.b2arSig !== arSig") && bc.includes("els
   "N2-3 检查器产物行+水位块签名跳帧（relTime 分钟粒度翻转才重建）");
 ok(mj.includes("__MELAPSED__") && mj.includes('querySelector("[data-mturn-elapsed]")') && !mj.includes('mDurText(Math.max(0, Date.now() - s.turn_started_at)) + "</b>'),
   "MOB-E 时长占位剔签名+定点写（B 审查 P3「活跃会话跳帧失效」收口；写/跳帧两路径同款，与桌面 renderMore 对齐）");
+ok(bc.includes('els.body.dataset.b2lSig = ""; // #282 三批审查 P2') || (bc.indexOf('if (!entry) {') < bc.indexOf('els.body.dataset.b2lSig = "";') && bc.indexOf('readonly-banner">暂无项目可聚合') - bc.indexOf('if (!entry) {') < 400),
+  "N2-P2 空聚合分支清签（双路审查独立同发现：非空→空→同形非空陈旧横幅窄窗封口）");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

@@ -722,7 +722,10 @@
                   const entry = entries.find((e) => e.key === selectedKey) || null;
                   renderHead(entry);
                   if (!entry) {
-                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>'));
+                    if (els.body) {
+                      els.body.dataset.b2lSig = ""; // #282 三批审查 P2（review-282c-a）：空聚合分支清签——防「非空→空→同形非空」残留陈旧横幅
+                      els.body.replaceChildren(nodesFrom('<div class="readonly-banner">暂无项目可聚合：SNAPSHOT 无项目组，也无会话目录可归组。</div>'));
+                    }
                     renderInspector(null);
                     return;
                   }
