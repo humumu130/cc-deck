@@ -352,7 +352,10 @@ export class RolloutScanner {
       try {
         const stat = statSync(filePath);
         size = stat.size;
-        mtime = stat.mtimeMs;
+        // #276：mtimeMs 是浮点毫秒（实测 1793030044881.0469）——round 到整数毫秒，
+        // 防小数 updated_at 经 #271 的 boot 收编链（profile.updatedAt → ensureExternal
+        // /setExternalStatus）进卡进帧（热生产实锤新卡带小数时刻）
+        mtime = Math.round(stat.mtimeMs);
       } catch {
         continue;
       }
