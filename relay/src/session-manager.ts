@@ -895,6 +895,11 @@ export class SessionManager {
       .map((s) => {
         const c = this.cloneState(s);
         if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+        // #286① 引擎空值归一：create() 条件展开（engine 缺省不落键=「缺席即 claude」
+        // 约定），但约定从未在下发面兑现——生产实测 19 卡 17 张 engine=undefined 直达
+        // 三端，前端 PH 分支落「?」占位而非 claude 螃蟹（1027 用户实锤）。下发单口
+        // 归一（SNAPSHOT 双出口+快照消费端一次收口；内存原样不动内部判定）
+        if (!c.engine) c.engine = "claude";
         return c;
       });
   }
@@ -2336,8 +2341,10 @@ export class SessionManager {
       normalized_mode: mode === "acceptEdits" ? "edit-auto" : mode === "plan" ? "plan" : "ask",
       effective_mode: mode,
       native_mode: null,
-      capability_state: engineCapabilityState(s.state.engine ?? "claude"),
-      engine: s.state.engine ?? "claude",
+      // #286①：?? 不兜空串（"" ?? x === ""）——历史帧可能带空串 engine，权限面
+      // 与审计面统一 || 兜底（权限判定按 claude 档走，不因空串掉进未知档）
+      capability_state: engineCapabilityState(s.state.engine || "claude"),
+      engine: s.state.engine || "claude",
       reason: "legacy_state_normalized",
       policy_source: null,
       environment: resolveEnvScope(this.cfg.port),
@@ -2370,7 +2377,9 @@ export class SessionManager {
     if (!permissionPolicyEnabled()) return raw;
     const n = normalizeLegacyPermissionMode(raw);
     if (n.kind === "bypass_demoted") {
-      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      // #286① 审查 A-P1①：判定行与 :2332 审计行同口径 ||（原 ?? 只改审计未改判定，
+      // 空串 engine 卡判 unsupported 降档、审计却记 confirmed/claude 自相矛盾）
+      if (engineCapabilityState(s.state.engine || "claude") === "confirmed") return "bypassPermissions";
       s.state.permission_mode = n.mode;
       this.auditLegacyPermMode(s, raw, n.mode);
       return n.mode;
