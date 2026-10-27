@@ -1426,10 +1426,28 @@
                   document.body.append(pop);
                   setTimeout(() => document.addEventListener("click", onDoc, true), 0);
                 }
+                // #281 滚动保持（1027 用户实锤：会话列表滚到下方后周期帧一到自动跳回顶部）：
+                // 滚动容器 .list-upper（CSS :372 overflow:hidden auto）每次重渲染被 mountUpper
+                // 整节点重建（replaceChildren 新 div），scrollTop 随元素销毁归零。最小修=替换前
+                // 记录旧节点 scrollTop、替换后写回新节点；用户正在滚动（wheel/touchmove 落在
+                // 300ms 手势活跃窗内）跳过恢复——惯性滚动中程序写 scrollTop 会与手势打架，由
+                // 用户继续掌控。根治=渲染层定向更新（不整节点重建），热点全景另行立项，见
+                // docs/research/research-render-hotspots.md。
+                let listGestureAt = 0;
+                const LIST_GESTURE_WINDOW_MS = 300;
+                function bindListScrollKeep(list) {
+                  if (list.dataset.scrollKeepBound) return; // dataset 守卫幂等（renderMyList 高频重入）
+                  list.dataset.scrollKeepBound = "1";
+                  const mark = () => { listGestureAt = Date.now(); };
+                  // 捕获+passive 挂常驻 .session-list 代理——滚动元素 .list-upper 每帧重建不能挂它身上
+                  list.addEventListener("wheel", mark, { passive: true, capture: true });
+                  list.addEventListener("touchmove", mark, { passive: true, capture: true });
+                }
                 function renderMyList() {
                   if (!UI) return;
                   const list = UI.sessionList;
                   if (!S.hasSnapshot) return; // 连接中的占位由地基渲染，不抢
+                  bindListScrollKeep(list); // #281 惰性一次性绑定（首帧快照后常驻）
                   list.dataset.b2Owned = "1"; // #143 盲评A-1 止血：接管标记——地基据此让位列表渲染与走秒，防陈旧快照回盖
                   list.dataset.relayState = "snapshot";
                   list.dataset.connection = S.status;
@@ -1452,11 +1470,16 @@
                   // chip（列表 r3+详情 head，未读角标 tc-unread 唯一列表未读面）；收纳逻辑保留，
                   // 收起会话入口=抽屉 roster 行直开；队级聚合健康/队数一览走 chip idle 态+团队域。
                   const mountUpper = (upperContent) => { // 单段挂载单口（上段节点=会话卡/空态占位）
+                    // #281 滚动保持：替换前记录旧滚动位（手势活跃窗内 -1=跳过哨兵；0=顶部本就无需写回），
+                    // 替换后写回新节点。内容变短时浏览器自动钳到 scrollHeight 上限，符合直觉。
+                    const prevUpper = list.querySelector(".list-upper");
+                    const keepScroll = prevUpper && Date.now() - listGestureAt >= LIST_GESTURE_WINDOW_MS ? prevUpper.scrollTop : -1;
                     const upper = document.createElement("div");
                     upper.className = "list-upper";
                     upper.append(upperContent);
                     if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩
                     list.replaceChildren(upper);
+                    if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 写回（is-empty 态 overflow:visible 写入无效，天然跳过）
                   };
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
