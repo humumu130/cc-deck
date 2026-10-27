@@ -245,38 +245,42 @@
         const last = act[act.length - 1];
         return '<div class="timeline-note subagent-live">⑂' + act.length + " 子任务运行中 · " + esc(oneLine(last.desc || last.kind || "")) + "</div>";
       }
-      function mConversationHtml(sid, s) {
+      // #282 四批：对话流 items 单源——keyed（未变条目零触碰）与整串（fallback/他处消费）同源产出
+      function mConversationItems(sid, s) {
         const api = b2Api();
         let list = [];
         try { const tl = api && api.S && api.S.timelines ? api.S.timelines.get(sid) : null; if (Array.isArray(tl)) list = tl; } catch (_) {}
         const cut = sliceTimeline(list, DETAIL_TL_MAX);
-        let html = s && s.waiting_request ? mWaitCardHtml(s.waiting_request) : "";
-        html += mSubagentNoteHtml(s);
-        if (!cut.items.length) return html + '<div class="readonly-banner">暂无对话记录</div>';
-        html += mConvCtrlHtml();
-        if (cut.truncated) html += '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>";
+        const items = [];
+        if (s && s.waiting_request) items.push(["mw", mWaitCardHtml(s.waiting_request)]);
+        const sub = mSubagentNoteHtml(s);
+        if (sub) items.push(["msub", sub]);
+        if (!cut.items.length) { items.push(["mempty", '<div class="readonly-banner">暂无对话记录</div>']); return items; }
+        items.push(["mctrl", mConvCtrlHtml()]);
+        if (cut.truncated) items.push(["mtrunc", '<div class="timeline-note">共 ' + cut.total + " 条 · 显示最近 " + DETAIL_TL_MAX + "</div>"]);
         let prevDay = "";
         let procBuf = null, procKey = ""; // #164 连续工具/结果行 → 过程组（与桌面 renderConversation 同口径）
         const flushProc = () => {
           if (procBuf && procBuf.length) {
             const open = !!(api && api.expanded && api.expanded.has("proc:" + procKey));
-            html += '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>";
+            items.push(["mpg:" + procKey, '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>"]);
           }
           procBuf = null;
         };
         for (const e of cut.items) {
           const dk = e.ts ? mDayKey(e.ts) : "";
-          if (dk && dk !== prevDay) { flushProc(); html += '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"; prevDay = dk; }
+          if (dk && dk !== prevDay) { flushProc(); items.push(["md:" + dk, '<div class="timeline-note">── ' + mDayLabel(e.ts) + " ──</div>"]); prevDay = dk; }
           const eh = mEntryHtml(e, s);
           if (!eh) continue;
           if (eh.startsWith('<div class="trow')) {
             if (!procBuf) { procBuf = []; procKey = api && api.eKey ? api.eKey(e) : String(e.ts || ""); }
             procBuf.push(eh);
-          } else { flushProc(); html += eh; }
+          } else { flushProc(); items.push([api && api.eKey ? api.eKey(e) : "me:" + String(e.ts || "") + ":" + items.length, eh]); }
         }
         flushProc();
-        return html;
+        return items;
       }
+      function mConversationHtml(sid, s) { return mConversationItems(sid, s).map((x) => x[1]).join(""); }
       function mTasksHtml(s) {
         if (!s) return '<div class="readonly-banner">未选择会话</div>';
         const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
@@ -473,7 +477,10 @@
         const keepScroll = base.content.scrollTop;
         // #282 MOB：详情四 pane sig 跳帧（sid 进签名防跨会话同形误跳）——未变帧零重建，
         // 选区/折叠态/滚动逐帧存活；proc-off 类 toggle 照常（host 级，不依赖重建）
-        { const h = mConversationHtml(sid, s); mSigWrite(base.convHost, "conv:" + sid + ":" + mHtmlSig(h), h); }
+        { // #282 四批：对话流 keyed（未变条目零解析零触碰——与桌面 S4 同构）；rk 缺席回落 sig 跳帧
+          const rkC = window.__ccDeck005Reconcile;
+          if (rkC) rkC(base.convHost, mConversationItems(sid, s));
+          else { const h = mConversationHtml(sid, s); mSigWrite(base.convHost, "conv:" + sid + ":" + mHtmlSig(h), h); } }
         { const api = b2Api(); base.convHost.classList.toggle("proc-off", !(api && api.convCtl && api.convCtl.proc())); } // #164 过程总开关（host 级类，innerHtml 重建不丢）
         { const h = mTasksHtml(s); mSigWrite(base.tasks, "t:" + sid + ":" + mHtmlSig(h), h); }
         { const h = mArtifactsHtml(s); mSigWrite(base.arts, "a:" + sid + ":" + mHtmlSig(h), h); }

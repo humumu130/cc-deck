@@ -2446,8 +2446,76 @@
                   // 距顶恢复天然免疫 bottom-anchor 的 clamp 折损（回涨高度把位置拖进贴底窗的链式失效）。
                   const scrollAnchor = UI.body ? { top: UI.body.scrollTop } : null;
                   openProcGrp = null;
-                  pane.textContent = "";
                   const s = curSession();
+                  // #282 四批 S4 深度 keyed：timeline 条目进稳定内层宿主 [data-conv-body]，单口按
+                  // eKey 对齐——未变条目零解析零触碰（心跳/空闲帧全链路零成本；流式帧只替换尾条；
+                  // 长对话滚动/选区/入场动画天然存活——选区守卫保留前排双保险）。wait-card 是体系外
+                  // 受管子节点（timer 挂内部 + appendChild 移位），永在宿主外作兄弟，单口非键清场
+                  // 扫不到（S3 resizer 同型防线）。rk 缺席回落旧全量重灌（零删）。
+                  const rk4 = window.__ccDeck005Reconcile;
+                  if (rk4) {
+                    let host = pane.querySelector("[data-conv-body]");
+                    if (!host) {
+                      host = document.createElement("div");
+                      host.setAttribute("data-conv-body", "");
+                      [...pane.children].forEach((c) => { if (!c.classList.contains("wait-card")) c.remove(); }); // 旧全量重灌残留清场（wait-card 保留，syncWaitCard 收口）
+                      pane.appendChild(host);
+                    }
+                    const noteHtml = (t) => { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(t ?? "")) ? " warn" : ""); d.textContent = t; return d.outerHTML; };
+                    if (!s) {
+                      rk4(host, [["empty", noteHtml(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")]]);
+                      return;
+                    }
+                    const trunc = S.logsTruncated.get(s.session_id) || 0;
+                    const list = S.timelines.get(s.session_id) || [];
+                    const desired = [];
+                    if (trunc > 0) desired.push(["trunc", noteHtml("更早的 " + trunc + " 条已截断 · 仅显示最近记录")]);
+                    let prevDay = "";
+                    let procBuf = null, procKey = "";
+                    let lastAiChain = false, lastAiTs = 0; // 件九 string 版：连续 AI 正文去重署名链（间隔 >5min/过程组/气泡断）
+                    const flushProc = () => {
+                      if (procBuf && procBuf.length) {
+                        const open = expanded.has("proc:" + procKey);
+                        desired.push(["pg:" + procKey, '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>"]);
+                      }
+                      procBuf = null;
+                    };
+                    for (const e of list) {
+                      const dk = e.ts ? dayKey(e.ts) : "";
+                      if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; } // 日期分隔断组（件九：新分节重显署名行）
+                      const eh = entryHtml(e, s); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
+                      if (!eh) continue; // 开关关闭的条目（思考）不断组也不占位
+                      if (eh.startsWith('<div class="trow')) {
+                        if (!procBuf) { procBuf = []; procKey = eKey(e); }
+                        procBuf.push(eh);
+                        lastAiChain = false; // 件九：过程组是强分隔——组后新正文重显署名
+                      } else {
+                        flushProc();
+                        // 件九（层级降噪）string 版：cont 类注入首 class（entryHtml 的 ai 正文恒以
+                        // '<div class="message-ai"' 开头——精确前缀替换非模糊匹配）
+                        const isAi = eh.startsWith('<div class="message-ai"');
+                        const gapBreak = lastAiTs && e.ts && e.ts - lastAiTs > 300_000;
+                        let out = eh;
+                        if (isAi && lastAiChain && !gapBreak) out = out.replace('<div class="message-ai"', '<div class="message-ai cont"');
+                        if (isAi) { lastAiChain = true; lastAiTs = e.ts || lastAiTs; } else { lastAiChain = false; lastAiTs = 0; }
+                        desired.push([eKey(e), out]);
+                      }
+                    }
+                    flushProc();
+                    // W-PORT-A R-4：发送乐观回显气泡（时间线权威流之后、wait-card 之前；惰性超时清理同拍）
+                    echoSweep(s.session_id);
+                    const eqs = S.echo.get(s.session_id) || [];
+                    for (const eq of eqs) desired.push(["echo:" + eq.key, '<div class="msg-user-row msg-echo' + (eq.state === "fail" ? " echo-fail" : "") + '" data-echo-key="' + esc(eq.key) + '"><div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : "发送中…") + "</div></div>"]);
+                    if (s.status === "DONE" && s._terminal === "interrupted") desired.push(["note:stopped", noteHtml("已停止 · 生成在此中断")]);
+                    if (s.status === "ERROR" && s.last_error) desired.push(["note:err", noteHtml("⚠ " + oneLine(s.last_error))]);
+                    if (s.status === "ERROR" && s.auth_hint) desired.push(["note:auth", noteHtml("🔑 " + oneLine(s.auth_hint))]); /* #102 批 A：引擎登录态失效指引行 */
+                    rk4(host, desired);
+                    syncWaitCard(true);
+                    autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
+                    return;
+                  }
+                  // ---- rk 缺席兜底：旧全量重灌逐字节保留（零删） ----
+                  pane.textContent = "";
                   if (!s) { pane.appendChild(noteNode(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")); return; }
                   const trunc = S.logsTruncated.get(s.session_id) || 0;
                   if (trunc > 0) pane.appendChild(noteNode("更早的 " + trunc + " 条已截断 · 仅显示最近记录"));
@@ -2709,12 +2777,16 @@
                 // #164 增量追加统一入口：过程条目续入活动组（组头步数递增）、非过程条目断组；
                 // 插入位保持在 wait-card 之前（syncWaitCard 随后会把卡挪回末尾）
                 function appendEntryNode(pane, n, dayNode) {
-                  const wait = pane.querySelector(".wait-card[data-b2-wait]");
-                  const ins = (node) => { if (wait && wait.parentNode === pane) pane.insertBefore(node, wait); else pane.appendChild(node); };
+                  // #282 四批 S4：keyed 宿主 [data-conv-body] 在场时增量插入落宿主内——否则
+                  // 游离节点挂宿主外与下一帧 keyed 副本双渲染。宿主本身位于 wait-card 之前，
+                  // 落宿主尾=时间线末尾、wait-card 仍殿后。插入节点无 data-rk（下一帧单口以
+                  // 非键残留清场收敛为 keyed 副本，单帧收敛可接受）
+                  const rkHost = pane.querySelector("[data-conv-body]");
+                  const ins = (node) => { if (rkHost) rkHost.appendChild(node); else { const wait = pane.querySelector(".wait-card[data-b2-wait]"); if (wait && wait.parentNode === pane) pane.insertBefore(node, wait); else pane.appendChild(node); } };
                   if (dayNode) { ins(dayNode); openProcGrp = null; } // 新的一天：断组
                   if (!n) return;
                   if (n.dataset.role === "proc") {
-                    if (!(openProcGrp && openProcGrp.isConnected && openProcGrp.parentElement === pane)) {
+                    if (!(openProcGrp && openProcGrp.isConnected && openProcGrp.parentElement === (rkHost || pane))) {
                       openProcGrp = procGroupNode(n.dataset.x || "");
                       ins(openProcGrp);
                     }

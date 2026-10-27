@@ -284,6 +284,18 @@ ok(mj.includes("__MELAPSED__") && mj.includes('querySelector("[data-mturn-elapse
   "MOB-E 时长占位剔签名+定点写（B 审查 P3「活跃会话跳帧失效」收口；写/跳帧两路径同款，与桌面 renderMore 对齐）");
 ok(bc.includes('els.body.dataset.b2lSig = ""; // #282 三批审查 P2') || (bc.indexOf('if (!entry) {') < bc.indexOf('els.body.dataset.b2lSig = "";') && bc.indexOf('readonly-banner">暂无项目可聚合') - bc.indexOf('if (!entry) {') < 400),
   "N2-P2 空聚合分支清签（双路审查独立同发现：非空→空→同形非空陈旧横幅窄窗封口）");
+// ==================== #282 四批（S4 对话流 timeline keyed 深度化） ====================
+console.log("#282 四批——S4 桌面对话流 keyed + MOB 同构");
+ok(ssd.includes('host.setAttribute("data-conv-body", "")') && ssd.includes("rk4(host, desired)") && ssd.includes('["pg:" + procKey,') && ssd.includes('"echo:" + eq.key') && ssd.includes("const eh = entryHtml(e, s);"),
+  "S4D 桌面对话流 keyed：宿主 [data-conv-body] + 条目 eKey + 过程组 pg:<key> + 回显 echo:<key>——entryHtml 字符串直出，未变帧零解析零触碰");
+ok(ssd.includes('if (!c.classList.contains("wait-card")) c.remove();'),
+  "S4D wait-card 体系外受管防线（宿主外兄弟节点，单口非键清场扫不到——S3 resizer 同型）");
+ok(ssd.includes('out.replace(\'<div class="message-ai"\', \'<div class="message-ai cont"') && ssd.includes("lastAiChain"),
+  "S4D 件九 string 版链：cont 精确前缀注入（去重署名语义在 keyed 路径等价保留）");
+ok(mj.includes("function mConversationItems") && mj.includes("rkC(base.convHost, mConversationItems(sid, s))") && mj.includes("function mConversationHtml(sid, s) { return mConversationItems(sid, s).map"),
+  "MOB-conv 对话流 keyed 同构（items 单源：keyed 与整串 fallback 同源产出）");
+ok(ssd.includes('const rkHost = pane.querySelector("[data-conv-body]");') && ssd.includes("openProcGrp.parentElement === (rkHost || pane)"),
+  "S4D applyDomLog 增量路径 host-aware（尾增/过程组落宿主内防游离副本双渲染——探针 ③ 实证；真浏览器行为探针 /tmp/w-tr282/probe-s4d.mjs 8/8）");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;
