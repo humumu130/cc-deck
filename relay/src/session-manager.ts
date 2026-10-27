@@ -3677,6 +3677,12 @@ export class SessionManager {
   // 权威清单（历史事件里的 pinned 可能过时——unpin 落盘后重启的兜底，一律按文件
   // 归一）。清单内托管会话标 pinned+saved 休眠（可见、状态 DONE「已保存」、不可
   // 操作，点卡走 COMMAND_RESUME_SESSION）；查无会话的条目（压缩丢失/已删）静默清理
+  // #275R：置顶清单只读出口（bridge 收编闸的置顶豁免用——置顶=最强持久意图信号，
+  // events 压缩丢卡后不得因转录陈年被收编闸拒之门外，否则置顶卡随压缩永久消失）
+  pinnedSessionIds(): string[] {
+    return readPinnedSessions(this.cfg.dataDir);
+  }
+
   applyPinned(): { saved: number } {
     const file = readPinnedSessions(this.cfg.dataDir);
     const keep: string[] = [];
