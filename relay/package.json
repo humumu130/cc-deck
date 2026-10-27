@@ -110,7 +110,8 @@
     "test:273-askuser": "tsx scripts/test-273-askuser.ts",
     "test:273-askuser-e2e": "tsx scripts/test-273-askuser-e2e.ts",
     "test:reclaim": "tsx scripts/test-reclaim.ts",
-    "test:alive": "tsx scripts/test-alive.ts"
+    "test:alive": "tsx scripts/test-alive.ts",
+    "test:wildonboard": "tsx scripts/test-wild-onboard.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

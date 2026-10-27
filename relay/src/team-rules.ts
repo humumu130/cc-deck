@@ -34,7 +34,7 @@
 // projects.ts OrgConfirm，store 层只认已批准的写入。
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { orgDir } from "./org.js";
 import { listGroups } from "./projects.js";
 import { readPluginConfig } from "./plugin-config.js";
@@ -158,9 +158,50 @@ function saveRules(s: RuleStore, dir?: string): boolean {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
     atomicWrite(rulesPath(d), JSON.stringify(s, null, 2) + "\n");
+    writeRulesMirror(dir); // #279 规则可发现性：随库刷新 RULES.md 镜像（失败不阻断入库）
     return true;
   } catch (e) {
     console.warn(`[team-rules] 规则库写入失败: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+
+// ---------- #279 RULES.md 镜像（野生会话可发现性通道） ----------
+// 规则真相唯一在 rules.json（org 命令面读写）；镜像落 org 目录旁（生产
+// ~/.cc-deck/RULES.md），给「不经 org 体系的会话/人」一个纯文本可发现入口——
+// SessionStart 广播（session-manager.sessionStartBroadcast）引用同一路径。
+// 只镜像 active 条目；机器生成文件，手编会在下次写库/boot 刷新时被覆盖。
+export function rulesMirrorPath(dir?: string): string {
+  // org 目录的父层（生产 orgDir=~/.cc-deck/org → ~/.cc-deck/RULES.md，任务书指定的
+  // 可发现位置；沙盒随 CCR_ORG_DIR 同层隔离）。注意不是 dirname(rules.json)=org 目录
+  // 本身——埋进 org/ 里的文件野生会话照样发现不了（本批测试实锤纠偏）
+  return join(dirname(dirname(rulesPath(dir))), "RULES.md");
+}
+
+export function writeRulesMirror(dir?: string): boolean {
+  try {
+    // 两道前置闸（审查 A-P2 收敛）：①org 目录未建（boot 早于 ensureOrgDir 的裸启）
+    // 不递归建目录不落镜像——镜像只在 org 已初始化的机器出现，也避免测试沙盒把
+    // RULES.md 写进共享 tmp 根；②坏 JSON 保护态跳过刷新——corrupted 时库内容不可
+    // 信，覆写会抹掉最后一份有效镜像（排障时刻最需要它）
+    if (!existsSync(dirname(rulesPath(dir)))) return false;
+    const loaded = loadRules(dir);
+    if (loaded.corrupted) return false;
+    const active = loaded.store.rules.filter((e) => e.status === "active");
+    const lines = [
+      "# cc-deck 团队规则（RULES.md 镜像）",
+      "",
+      `> 机器生成，勿手编——真相在 ${rulesPath(dir)}，改动走 \`org rule append|retire|supersede\`。生成于 ${new Date().toISOString()}`,
+      "",
+      ...(active.length
+        ? active.map((e) => `- [${e.id}] ${e.audience} · ${e.scope}：${e.text}`)
+        : ["（当前无 active 规则）"]),
+      "",
+    ];
+    atomicWrite(rulesMirrorPath(dir), lines.join("\n"));
+    return true;
+  } catch (e) {
+    console.warn(`[team-rules] RULES.md 镜像刷新失败: ${e instanceof Error ? e.message : String(e)}`);
     return false;
   }
 }

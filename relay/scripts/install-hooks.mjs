@@ -93,6 +93,7 @@ const EVENTS = {
   PostToolUse: { matcher: "*" },
   PreCompact: {},
   PreToolUse: { matcher: "*", timeout: 620 },
+  SessionStart: {}, // #279 野生会话广播：会话启动注入 cc-deck 在场声明（hook 内 2s 快速通道）
   SessionEnd: {},
   Stop: {},
   UserPromptSubmit: {},
