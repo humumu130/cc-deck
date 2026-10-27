@@ -131,6 +131,9 @@ console.log("§A 静态锚：");
   ok(/else if \(template === "pm-led" && !pmSid\) feedback/.test(team), "A5 未选源形态行为不变（降级原口径——本机源零变化）");
   ok(/PROJECTS_UPDATED[\s\S]{0,120}mergePartition\(state\.projects[\s\S]{0,200}render\(\)/.test(team), "A6 #283 聚合链：远程 PROJECTS_UPDATED→mergePartition→render（团队卡即时亮）");
   ok(/window\.__ccDeck005WsFor = \(source\) => \{\s*\n\s*if \(source === "cloud"\) return cloudCtx\.status === "online" \? cloudCmdShim : null;/.test(settings), "A7 WsFor 双源通道（cloud 在线才有 shim）");
+  // 审查 B-P1-2 修复锚：decide 按确认卡源标路由
+  ok(/const card = state\.confirms\.find\(\(confirm\) => confirm\.id === id\);[\s\S]{0,900}confirmWs \|\| undefined/.test(team), "A8 远程确认卡按源路由（__relay_source→lane→WsFor——原视角通道恒「确认单不存在」）");
+  ok(team.includes('pmSidOut.v = "";') && team.includes("审查 B：让提示为真") && team.includes("...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {})"), "A9 absent 分支提示为真（payload 不带 PM 行——反向撒谎根除）");
 }
 
 console.log(`\n§S-§A：${pass} ok / ${fail} FAIL`);

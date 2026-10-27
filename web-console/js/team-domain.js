@@ -1090,7 +1090,20 @@
                   state.flights.add(id);
                   render();
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_CONFIRM", { confirm_id: id, approve }));
+                    // #288 审查 B-P1-2：远程确认卡「可见可决」——确认卡带 __relay_source 源标
+                    //（mergePartition 保真），决议命令按源路由（原视角通道=local 时对远程卡
+                    // 恒「确认单不存在」，远程正经立项/新 relay 首个轻立项永久 pending）。
+                    // 源名→通道位（cloudRelayName=cloud / lanRelayName=local）→ WsFor 通道
+                    const card = state.confirms.find((confirm) => confirm.id === id);
+                    const cardSrc = String(card?.__relay_source || "");
+                    let confirmWs = null;
+                    if (cardSrc) {
+                      const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                      const lane = cardSrc && st && String(st.cloudRelayName || "") === cardSrc ? "cloud"
+                        : cardSrc && st && String(st.lanRelayName || "") === cardSrc ? "local" : "";
+                      confirmWs = lane && window.__ccDeck005WsFor ? window.__ccDeck005WsFor(lane) : null;
+                    }
+                    const result = verdict(await state.command("COMMAND_ORG_CONFIRM", { confirm_id: id, approve }, undefined, confirmWs || undefined));
                     if (epoch !== state.epoch) return false;
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_CONFIRM", result.error); throw new Error(result.error); }
                     if (state.confirms.some((confirm) => confirm.id === id)) state.accepted.add(id);
@@ -1370,7 +1383,8 @@
                   // WsFor 短路（离线时归因应为「源不在线」而非「PM 不在册」）；名册对不上
                   // 源名（未知态）降级放行+warning（与 relay 权威校验兜底分层）。
                   // 未选源（单源形态）行为不变：降级原口径（feedback 不拦）
-                  const pmSid = template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "";
+                  const pmSidOut = { v: template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "" };
+                  const pmSid = pmSidOut.v; // 读侧兼容（下方去重/splice 用）
                   const srcSelEarly = pop.querySelector("[data-team-field='source']"); // #288②：闸块先于下方 srcSel 声明，早取同节点
                   const pmInSource = (which, sid) => {
                     const st = teamSourceInfo();
@@ -1394,7 +1408,7 @@
                         return; // 审查 P2②：feedback 即 toast 别名，双响退役
                       }
                       if (v.verdict === "unknown") feedback("暂无法核对选中会话是否属于" + srcLabel + "（源名册未同步）——将以该源 relay 校验为准");
-                      if (v.verdict === "absent") feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                      if (v.verdict === "absent") { feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）"); pmSidOut.v = ""; } // 审查 B：让提示为真（payload 不带该行）
                     } else if (online && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
                   } else if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
                   if (pmSid) { const i = headcount.findIndex((h) => h.session_id === pmSid); if (i >= 0) headcount.splice(i, 1); } // PM 会话被同时勾选：让位 pm_session_id 身份行（同 sid 双行会被 relay 去重，先去保角色正确）
@@ -1417,7 +1431,7 @@
                   if (state.flights.has(flight)) return;
                   state.flights.add(flight);
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSid ? { pm_session_id: pmSid } : {}) }, undefined, wsOverride));
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {}) }, undefined, wsOverride));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";
