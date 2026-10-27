@@ -248,3 +248,36 @@ export function reviveManagedSession(mgr: any, id: string, source: string, reaso
     return { ok: false, error: msg };
   }
 }
+
+// ---------- #287 PM 常驻化：dutyTarget 托管会话空闲保活判定（纯函数，测试直吃） ----------
+// 语义：PM 唯一常驻（1027 用户裁定「PM 空闲有必要挂起退出吗？又不会有很多个 PM」）。
+// 托管 SDK 会话=回合制进程（回合完 CLI 退出→saved 驻档→下一条消息 resumeAgent 冷启动
+// 「已恢复 SDK 会话」）。保活=空闲自然关闭后延时无消息拉起（reviveSaved 复用：拉起后
+// CLI 停在等待输入=温床，下一条消息 sendMessage 直达零冷启动；无积压落 DONE 待命态
+// =#26 待命化同语义）。判定纯函数化：schedule 与 fire 双查同源，防调度窗竞态（换届/
+// 删除/熔断/互斥全在火时现算）。
+export const PM_KEEPALIVE_DELAY_MS = 3_000;
+export const PM_KEEPALIVE_MAX_IDLE_STREAK = 2;
+
+export interface PmKeepaliveParams {
+  envOff?: string | undefined;   // process.env.CCR_PM_KEEPALIVE（"0"=逃生阀：测试/紧急关停）
+  reason: string;                // onSessionEnd 收口原因（"stream closed"=自然空闲退出；stopped/其他不保活）
+  external: boolean;             // 托管面（外部会话终端自管不保活）
+  historical: boolean;           // 弃档态不保活
+  isDutyTarget: boolean;         // 当前值守 PM（dutyTargetId；schedule/fire 双查=换届后旧 PM 自然衰减）
+  resumePending?: number;        // #189 换流互斥窗内不拉
+  resumeCooldownUntil?: number;  // W-LEADFIX 熔断冷却期不拉
+  now: number;
+  idleStreak: number;            // 连续「拉起后无任何回合活动即退出」计数（防死循环闸）
+}
+
+export function pmKeepaliveEligible(p: PmKeepaliveParams): boolean {
+  if (p.envOff === "0") return false;
+  if (p.reason !== "stream closed") return false;
+  if (p.external || p.historical) return false;
+  if (!p.isDutyTarget) return false;
+  if (p.resumePending) return false;
+  if (p.resumeCooldownUntil && p.resumeCooldownUntil > p.now) return false;
+  if (p.idleStreak >= PM_KEEPALIVE_MAX_IDLE_STREAK) return false; // 拉起即退死循环闸：连续无活动退出≥2 停拉，等真实消息/回合复位（onTurnEnd 清零）
+  return true;
+}

@@ -30,7 +30,7 @@
       const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
       const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
       const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
-      const stTag = (s) => STATUS_TAG[s.status] || ["完成", "done"];
+      const stTag = (s) => s.pm_standby ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死
       const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
       const allSessions = () => [...bridge.sessions.values()];
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
