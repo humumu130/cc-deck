@@ -3267,7 +3267,10 @@
                   if (s.relay_session_id) html += '<div class="kv-row kv-row-copy" data-copy-relay-session-id="' + esc(s.relay_session_id) + '"><b>' + esc(String(s.relay_session_id).slice(0, 16)) + '…</b><span>SDK 会话</span><button class="kv-copy-btn" type="button" title="复制 SDK 会话 ID" aria-label="复制 SDK 会话 ID">⧉</button></div>';
                   html += "</div>"; // 关闭标识节
                   if (s.status === "DONE" || s.status === "ERROR") html += '<button class="danger-btn" type="button" data-session-delete style="margin-top:14px">删除会话</button>';
-                  // #282 S5 签名跳帧：elapsed 占位符不进签名（时变行定点写），其余内容未变=零重建
+                  // #282 S5 签名跳帧：elapsed 占位符不进签名（时变行定点写），其余内容未变=零重建。
+                  // 审查 P2（review-282b-b）：占位文本不用字符串 replace 回填——pre_compact_summary
+                  // 含 __ELAPSED__ 字面量时会首错替换（时长行裸显占位/摘要被吃）；统一 querySelector
+                  // 定点写（写路径与跳帧路径同款，三行收口）
                   const sig = "more:" + htmlSig(html);
                   if (pane.dataset.rkSig === sig && pane.childElementCount) {
                     const el = pane.querySelector("[data-turn-elapsed]");
@@ -3275,7 +3278,9 @@
                     return;
                   }
                   pane.dataset.rkSig = sig;
-                  pane.innerHTML = html.replace("__ELAPSED__", elapsedTxt);
+                  pane.innerHTML = html;
+                  const elFresh = pane.querySelector("[data-turn-elapsed]");
+                  if (elFresh) elFresh.textContent = elapsedTxt;
                 }
                 function confirmDelete() {
                   const s = curSession();

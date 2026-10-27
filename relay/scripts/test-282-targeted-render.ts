@@ -189,8 +189,8 @@ ok(ssd.includes('host.setAttribute("data-af-body", "")') && ssd.includes('desire
   "S5b 输出物 keyed：[data-af-body] 稳定宿主 + 组级键 g:<dir>（在途下载 meta 定点写不再被帧重建孤儿化）");
 ok(ssd.includes('wrap.insertAdjacentHTML("beforeend"'),
   "S5b' rk 缺席回落旧整树路径保留（零删）");
-ok(ssd.includes("data-turn-elapsed") && ssd.includes('html.replace("__ELAPSED__", elapsedTxt)'),
-  "S5c 更多 pane：时长占位剔签名 + [data-turn-elapsed] 定点写（WORKING 逐帧零整建，details 折叠存活）");
+ok(ssd.includes("data-turn-elapsed") && !ssd.includes('html.replace("__ELAPSED__"') && ssd.includes("const elFresh = pane.querySelector(\"[data-turn-elapsed]\")"),
+  "S5c 更多 pane：时长占位剔签名 + 定点写（写路径与跳帧路径同款 querySelector——占位字面量误伤面封死，审查 P2 收口）");
 
 // ---------- S7 置灰看门狗 ----------
 ok(ssd.includes('card.classList.toggle("idle", dim)') && !ssd.includes("idleDimmed(s)) { renderMyList(); return; }"),
