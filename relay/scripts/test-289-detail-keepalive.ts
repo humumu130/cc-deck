@@ -37,5 +37,27 @@ ok(!setup.includes("kaWrap") || (setup.match(/kaWrap/g) || []).length === 0,
 ok(settings.includes('{fgSupported() ? <KeepAliveCard /> : null}'),
   "S1 SettingsPage「通用与偏好」末行保留（App 级设置域唯一入口——任务③设置页保留锚）");
 
+// R6 仓级唯一性锚（审查 P3 补强：白名单式断言拦不住未来新 screen 挂载——
+// 全 src 扫描 KeepAliveCard 消费点必须恰为 SettingsPage 一处）
+{
+  const { readdirSync, statSync } = await import("node:fs");
+  const srcDir = join(root, "expo-app", "src");
+  const offenders: string[] = [];
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const fp = join(dir, name);
+      if (statSync(fp).isDirectory()) { walk(fp); continue; }
+      if (!/\.(tsx|ts)$/.test(name)) continue;
+      if (fp.endsWith("KeepAliveCard.tsx")) continue;
+      const txt = readFileSync(fp, "utf-8");
+      // 只认消费面（import/JSX 挂载），注释性提及不算
+      const consumes = txt.includes('import KeepAliveCard') || txt.includes("<KeepAliveCard");
+      if (consumes && !fp.endsWith(join("screens", "SettingsPage.tsx"))) offenders.push(fp.replace(srcDir + "/", ""));
+    }
+  };
+  walk(srcDir);
+  ok(offenders.length === 0, `R6 仓级唯一消费点锚：expo src 内 KeepAliveCard 挂载仅 SettingsPage（违者：${offenders.join("、") || "无"}）`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

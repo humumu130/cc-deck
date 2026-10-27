@@ -946,7 +946,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   backT: { color: c.dim, fontSize: 14 },
 });
 
-// #60 后台保活豁免卡：迁至 src/KeepAliveCard.tsx（#85 抽共享，SettingsPage 同显）
+// #60 后台保活豁免卡：迁至 src/KeepAliveCard.tsx（#85 抽共享；#289 起唯一消费点=SettingsPage——本页已退役挂载）
 
 // 编辑态顶部状态行（2026-09-16 方案 A 对齐小优化①）：详情页不再只是表单——
 // 进页先看到这条源连没连上、走的哪条通道。数据取 useRelay 快照 sources（与
