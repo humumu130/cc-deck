@@ -41,34 +41,46 @@ const cfg = loadConfig();
 cfg.token = "t";
 const mgr = new SessionManager(new EventBus(), cfg);
 const cards = (mgr as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+// #286 审查 A/B-P1：cards.set 直播种（test-reclaim 先例）——mgr.create() 会真 spawn
+// claude CLI（真进程+真计费+transcript 落生产 ~/.claude/projects 可被孤儿扫描收编成
+// 幽灵卡，探针实锤 3 进程/跑）。快照归一断言只需 state 在册，不需要真会话
+const seed = (id: string, engine: unknown) => {
+  cards.set(id, { state: { session_id: id, engine, status: "DONE", title: id, updated_at: Date.now() } });
+};
 
 console.log("§R relay 行为面：");
 // R1 snapshot 归一（undefined / 空串 / 显式引擎三态）
 {
   // engine 缺席（create 条件展开不落键——生产 17/19 卡形态）
-  const created = (mgr as unknown as { create(cwd: string, prompt: string): string }).create(process.env.CCR_PROJECTS_ROOT!, "R1 缺席卡");
-  cards.get(created)!.state.engine = undefined;
+  seed("msp-r1-undefined", undefined);
   // 空串（历史帧可能带的形态）
-  const empty = (mgr as unknown as { create(cwd: string, prompt: string): string }).create(process.env.CCR_PROJECTS_ROOT!, "R1 空串卡");
-  cards.get(empty)!.state.engine = "";
+  seed("msp-r1-empty", "");
   // 显式引擎
-  const codex = (mgr as unknown as { create(cwd: string, prompt: string): string }).create(process.env.CCR_PROJECTS_ROOT!, "R1 codex卡");
-  cards.get(codex)!.state.engine = "codex";
+  seed("msp-r1-codex", "codex");
   const snap = mgr.snapshot();
-  const c1 = snap.find((s) => s.session_id === created);
-  const c2 = snap.find((s) => s.session_id === empty);
-  const c3 = snap.find((s) => s.session_id === codex);
+  const c1 = snap.find((s) => s.session_id === "msp-r1-undefined");
+  const c2 = snap.find((s) => s.session_id === "msp-r1-empty");
+  const c3 = snap.find((s) => s.session_id === "msp-r1-codex");
   ok(c1?.engine === "claude", `R1a engine=undefined 下发归一 claude（实 ${c1?.engine}）`);
   ok(c2?.engine === "claude", `R1b engine="" 下发归一 claude（实 ${c2?.engine}）`);
   ok(c3?.engine === "codex", `R1c 显式引擎原样（实 ${c3?.engine}，非 claude 不动）`);
-  ok((cards.get(created)!.state.engine as unknown) === undefined, "R1d 内存原样（归一只在下发面，内部判定零扰动）");
+  ok((cards.get("msp-r1-undefined")!.state.engine as unknown) === undefined, "R1d 内存原样（归一只在下发面，内部判定零扰动）");
+}
+
+// R2 权限面 ??→||（A-P2③ 补真断言：判定行 :2366 与审计行 :2332 同口径——
+// 审查 P1① 的回归锁。normalizeLegacyPermissionMode 走 bypass 分支的判定链）
+{
+  const smSrc = readFileSync(join(root, "relay", "src", "session-manager.ts"), "utf-8");
+  // 判定行跨行（|| 与 "claude" 断行）——宽松锚：bypass 分支内的 engineCapabilityState 调用
+  const cond = smSrc.match(/bypass_demoted"\)\s*\{[\s\S]{0,200}?engineCapabilityState\(s\.state\.engine(.{1,12}?)"claude"\)/);
+  ok(!!cond && cond[1].trim() === "||", `R2 权限判定行空串兜底（实 ${cond ? JSON.stringify(cond[1]) : "未找到"}——与 :2332 审计行同口径）`);
 }
 
 console.log("§W web 前端面：");
 {
   const src = readFileSync(join(root, "web-console", "js", "session-domain.js"), "utf-8");
-  ok(/if \(!item\.engineClass\) return ENGINE_BRAND_SVG\.claude;/.test(src), "W1 engineBrandSvgOf 空 class 兜底 claude 螃蟹（旧 relay 快照双保险）");
-  ok(src.includes('(item.engine || "?").charAt(0).toUpperCase()'), "W1' 未知非空引擎仍首字母占位（设计保持）");
+  ok(/const engineKey = inferEngineOf\(session\) \|\| "claude";/.test(src), "W1 myCardItem engineKey 空值归一 claude（未知引擎不再折叠空 class——审查 B-P2① 修点）");
+  ok(src.includes('(item.engine || "?").charAt(0).toUpperCase()'), "W1' PH 首字母占位链保持（真未知引擎仍占位，设计不变）");
 }
 
 console.log("§E expo 面：");

@@ -2363,7 +2363,9 @@ export class SessionManager {
     if (!permissionPolicyEnabled()) return raw;
     const n = normalizeLegacyPermissionMode(raw);
     if (n.kind === "bypass_demoted") {
-      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      // #286① 审查 A-P1①：判定行与 :2332 审计行同口径 ||（原 ?? 只改审计未改判定，
+      // 空串 engine 卡判 unsupported 降档、审计却记 confirmed/claude 自相矛盾）
+      if (engineCapabilityState(s.state.engine || "claude") === "confirmed") return "bypassPermissions";
       s.state.permission_mode = n.mode;
       this.auditLegacyPermMode(s, raw, n.mode);
       return n.mode;
