@@ -26,6 +26,7 @@
     "test:258-pair-selfheal": "tsx scripts/test-258-pair-selfheal.ts",
     "test:268-cloud-watchdog": "tsx scripts/test-268-cloud-watchdog.ts",
     "repro:268-zombie-ws": "tsx scripts/repro-268-zombie-ws.ts",
+    "repro:268b-stale-dead": "tsx scripts/repro-268b-stale-dead.ts",
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-blankset": "node --import tsx/esm scripts/test-005-blankset.ts",
     "test:permerr": "tsx scripts/test-permerr.ts",
@@ -104,6 +105,8 @@
     "test:t10-login-loop": "tsx scripts/test-t10-login-loop.ts",
     "test:session-title": "tsx scripts/test-session-title.ts",
     "test:adoptgate": "tsx scripts/test-adoptgate.ts",
+    "test:alivereclaim": "tsx scripts/test-alivereclaim.ts",
+    "test:wildonboard": "tsx scripts/test-wild-onboard.ts",
     "test:bootts": "tsx scripts/test-bootts.ts"
   },
   "dependencies": {
