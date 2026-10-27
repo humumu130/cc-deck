@@ -1363,22 +1363,39 @@
                   });
                   // W-TEAMSNC ①：PM 带队默认档——pm_session_id=会话域当前选中会话（跨域取
                   // __ccDeck005SlimUi.selectedSid；relay orgCommand create 单点插 role="pm" 身份行）。
-                  // #288② 按源在册闸（用户 1028 拍板「选源=数据落点」）：所选源在册校验用
-                  // teamCandsForSource 同一数据口（relay_source 对位）——PM 会话不在所选源：
-                  // 拦单+引导切源/换选中（原「降级不带 PM 行继续建团」会把 PM 行静默落到
-                  // 无 PM 的团——跨源建团时该 PM 行本来就不在目标源，落了也是空指挥）。
-                  // 未选源（单源形态）行为不变：拦单降级原口径（feedback 不拦）
+                  // #288② 按源在册闸（用户 1028 拍板「选源=数据落点」）——审查 A-P1 修正版：
+                  // 专用谓词 pmInSource（不 slice 截断/不排 external——relay 侧 pm_session_id
+                  // 校验口径「在册即可、外部允许」，生产 PM 主会话常为 ext- 外部会话，用展示用
+                  // 候选列表当判据会把双源×PM 带队头条场景恒拦死且归因错误）；源离线先探
+                  // WsFor 短路（离线时归因应为「源不在线」而非「PM 不在册」）；名册对不上
+                  // 源名（未知态）降级放行+warning（与 relay 权威校验兜底分层）。
+                  // 未选源（单源形态）行为不变：降级原口径（feedback 不拦）
                   const pmSid = template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "";
                   const srcSelEarly = pop.querySelector("[data-team-field='source']"); // #288②：闸块先于下方 srcSel 声明，早取同节点
-                  if (template === "pm-led" && srcSelEarly) {
-                    const cands = teamCandsForSource(srcSelEarly.value, teamSourceInfo());
-                    if (pmSid && !cands.some((x) => x.session_id === pmSid)) {
-                      const srcLabel = srcSelEarly.value === "cloud" ? "远程源" : "本机源";
-                      feedback("PM 会话需属于所选源：当前选中会话不在" + srcLabel + "——请切换目标源或先在会话列表选中该源的 PM 会话");
-                      toast("PM 会话需属于所选源（当前选中不在" + srcLabel + "）");
-                      return;
+                  const pmInSource = (which, sid) => {
+                    const st = teamSourceInfo();
+                    const s = sid && state.sessions.get(sid);
+                    if (!s) return { verdict: "absent" };
+                    const src = String(s.relay_source || s.source || "");
+                    if (which === "cloud") {
+                      const cn = String((st && st.cloudRelayName) || "");
+                      return cn && src ? (src === cn ? { verdict: "in" } : { verdict: "out" }) : { verdict: "unknown" };
                     }
-                    if (!pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                    const ln = String((st && st.lanRelayName) || "");
+                    return (!src || (ln && src === ln)) ? { verdict: "in" } : (ln && src !== ln) ? { verdict: "out" } : { verdict: "unknown" };
+                  };
+                  if (template === "pm-led" && srcSelEarly) {
+                    const srcLabel = srcSelEarly.value === "cloud" ? "远程源" : "本机源";
+                    const online = window.__ccDeck005WsFor ? window.__ccDeck005WsFor(srcSelEarly.value) : null;
+                    if (online && pmSid) {
+                      const v = pmInSource(srcSelEarly.value, pmSid);
+                      if (v.verdict === "out") {
+                        feedback("PM 会话需属于所选源：当前选中会话不在" + srcLabel + "——请切换目标源或先在会话列表选中该源的 PM 会话");
+                        return; // 审查 P2②：feedback 即 toast 别名，双响退役
+                      }
+                      if (v.verdict === "unknown") feedback("暂无法核对选中会话是否属于" + srcLabel + "（源名册未同步）——将以该源 relay 校验为准");
+                      if (v.verdict === "absent") feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                    } else if (online && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
                   } else if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
                   if (pmSid) { const i = headcount.findIndex((h) => h.session_id === pmSid); if (i >= 0) headcount.splice(i, 1); } // PM 会话被同时勾选：让位 pm_session_id 身份行（同 sid 双行会被 relay 去重，先去保角色正确）
                   // W-UIFB 追加⑮：手动席（agent 类型+角色名）——relay sanitizeHeadcount 现版

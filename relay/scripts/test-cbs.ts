@@ -39,7 +39,7 @@ function startRelay(port: string, base: string): ChildProcess {
   const env = {
     ...process.env, CCR_PORT: port,
     CCR_ORG_DIR: join(base, "org"), CCR_DATA_DIR: join(base, "data"), CCR_PROJECTS_ROOT: join(base, "projects"),
-    CCR_CLOUD_URL: "", CCR_NO_TITLE_GEN: "1", CCR_NO_BRIDGE_MIRROR: "1", CCR_MDNS_DISABLED: "1",
+    CCR_CLOUD_URL: "", CCR_NO_TITLE_GEN: "1", CCR_NO_BRIDGE_MIRROR: "1", CCR_NO_MDNS: "1",
   } as Record<string, string>;
   delete env.CC_DECK_PLUGIN; delete env.CCR_PARENT_PID; delete env.CCR_RELAY_CHILD; delete env.CCR_EMPLOYEE_CONFIG_DIR; delete env.CCR_NO_LEADER; delete env.CCR_PM_DUTY;
   const p = spawn(process.execPath, ["--import", tsxLoader, join(root, "relay", "src", "index.ts")], { env, stdio: ["ignore", "pipe", "ignore"], cwd: root });
@@ -123,7 +123,11 @@ console.log("§A 静态锚：");
   ok(settings.includes("window.__ccDeck005PlatformFor = (source) =>"), "A1 platformFor 目标源快照读（SNAPSHOT.platform 全字段缓存）");
   ok(/wsOverride = window\.__ccDeck005WsFor \? window\.__ccDeck005WsFor\(srcSel\.value\) : null;/.test(team) && team.includes("远程源不在线，无法在远程创建"), "A2 create 按所选源路由（#277 wsOverride+离线守卫锁死）");
   ok(team.includes("PM 会话需属于所选源：当前选中会话不在"), "A3 PM 按源在册闸+引导文案（拦单）");
-  ok(/const cands = teamCandsForSource\(srcSelEarly\.value, teamSourceInfo\(\)\);[\s\S]{0,200}cands\.some\(\(x\) => x\.session_id === pmSid\)/.test(team), "A4 在册校验走 teamCandsForSource 同数据口（relay_source 对位）");
+  // 审查 A-P1 修正版断言：专用谓词（不走展示候选列表）
+  ok(/const pmInSource = \(which, sid\) => \{[\s\S]{0,900}verdict: "in"[\s\S]{0,400}verdict: "out"/.test(team), "A4 专用谓词 pmInSource（精确 sid+relay_source 对位）");
+  ok(!/cands\.some\(\(x\) => x\.session_id === pmSid\)/.test(team), "A4b 展示候选列表不再充当在册判据（slice 截断/external 排除两错位根除——审查 A-P1）");
+  ok(/const online = window\.__ccDeck005WsFor \? window\.__ccDeck005WsFor\(srcSelEarly\.value\) : null;[\s\S]{0,300}v\.verdict === "out"/.test(team), "A4c 源离线先探 WsFor 短路（离线归因不混在册，审查 A-P2a）");
+  ok(team.includes('verdict: "unknown"') && team.includes("将以该源 relay 校验为准"), "A4d 名册未知降级放行+warning（与 relay 权威校验分层）");
   ok(/else if \(template === "pm-led" && !pmSid\) feedback/.test(team), "A5 未选源形态行为不变（降级原口径——本机源零变化）");
   ok(/PROJECTS_UPDATED[\s\S]{0,120}mergePartition\(state\.projects[\s\S]{0,200}render\(\)/.test(team), "A6 #283 聚合链：远程 PROJECTS_UPDATED→mergePartition→render（团队卡即时亮）");
   ok(/window\.__ccDeck005WsFor = \(source\) => \{\s*\n\s*if \(source === "cloud"\) return cloudCtx\.status === "online" \? cloudCmdShim : null;/.test(settings), "A7 WsFor 双源通道（cloud 在线才有 shim）");
