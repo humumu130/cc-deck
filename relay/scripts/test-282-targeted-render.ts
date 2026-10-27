@@ -233,5 +233,40 @@ ok(mj.includes('["n:" + n.key, rowOf(n)]') && mj.includes("rkN(list,"),
 ok(mj.includes('mSigWrite(todo, "todo:" + mHtmlSig(h)') && mj.includes('mSigWrite(members, "mem:" + mHtmlSig(h)') && mj.includes('mSigWrite(cards, "pc:" + mHtmlSig(h)'),
   "MOB-4 团队 todo/board/members + 项目 cards/lane sig 跳帧（泳道滚动位存活）");
 
+// ---------- P1 修复回归（审查 review-282b-a 收口） ----------
+ok(ssd.includes('c.classList.contains("inspector-resizer"))) c.remove();'),
+  "P1-1 S3 首建 host 静态占位子节点显式清场（resizer 除外）——旧整写隐式清场语义补回（模板假数据不再同屏）");
+ok(ssd.includes("delete pane.dataset.rkSig;"),
+  "P1-2 S5b keyed 路径清空态签名（empty→keyed→empty 陈旧签名误跳帧封口）");
+{
+  // 行为级复刻双协议序列（修复语义）：sigWrite=sig 协议；keyed 协议=清签名+直挂 host
+  const mkPane = () => {
+    const p: Record<string, unknown> = { dataset: {} as Record<string, string>, kids: [] as unknown[] };
+    Object.defineProperty(p, "childElementCount", { get(this: { kids: unknown[] }) { return this.kids.length; } });
+    Object.defineProperty(p, "innerHTML", {
+      set(this: { kids: unknown[] }, v: string) { this.kids = v ? [v] : []; },
+      get(this: { kids: unknown[] }) { return String(this.kids[0] ?? ""); },
+      configurable: true,
+    });
+    return p as { dataset: Record<string, string>; kids: unknown[]; childElementCount: number; innerHTML: string };
+  };
+  const sigWrite = (pane: { dataset: Record<string, string>; childElementCount: number; innerHTML: string }, sig: string, html: string) => {
+    if (pane.dataset.rkSig === sig && pane.childElementCount) return false;
+    pane.dataset.rkSig = sig;
+    pane.innerHTML = html;
+    return true;
+  };
+  const p = mkPane();
+  sigWrite(p, "empty", "<banner>暂无输出物</banner>");          // ① 空态写入
+  delete p.dataset.rkSig; p.kids = ["<host>会话A产物树</host>"]; // ② keyed 路径接管（清签名=修复点）
+  ok(sigWrite(p, "empty", "<banner>暂无输出物</banner>") === true && p.kids[0] === "<banner>暂无输出物</banner>",
+    "P1-2' 行为级：empty→keyed→empty 不再陈旧跳帧（banner 正确接管，A 树退役）");
+  const p2 = mkPane();
+  sigWrite(p2, "empty", "<banner>x</banner>");
+  p2.kids = ["<host>A</host>"];                                  // 反例（无修复语义：签名残留）
+  ok(sigWrite(p2, "empty", "<banner>x</banner>") === false,
+    "P1-2'' 反例锚：签名残留时同签名确实会跳（修复=在 keyed 路径清签名，本断言锁死该风险形态）");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

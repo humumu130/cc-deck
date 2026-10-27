@@ -2212,7 +2212,15 @@
                   const rk = window.__ccDeck005Reconcile;
                   if (rk) {
                     let host = UI.inspector.querySelector("[data-insp-body]");
-                    if (!host) { host = document.createElement("div"); host.setAttribute("data-insp-body", ""); UI.inspector.appendChild(host); }
+                    if (!host) {
+                      // 审查 P1-1（review-282b-a）：旧 innerHTML 整写隐式清场了模板静态占位
+                      // 子节点（index-005 检查器假验收数据）——keyed 体系外显式清一次（resizer
+                      // 除外，FB6 拖宽条跨路径存活），否则每次加载假数据与真块永久同屏。
+                      host = document.createElement("div");
+                      host.setAttribute("data-insp-body", "");
+                      [...UI.inspector.children].forEach((c) => { if (!(c.classList && c.classList.contains("inspector-resizer"))) c.remove(); });
+                      UI.inspector.appendChild(host);
+                    }
                     rk(host, blocks);
                     return;
                   }
@@ -2948,6 +2956,10 @@
                   // 隐性丢失面），变化组单点替换。rk 缺席回落旧整树重建（零删）。
                   const rk = window.__ccDeck005Reconcile;
                   if (rk) {
+                    // 审查 P1-2（review-282b-a）：本 pane 双协议（空态走 paneSigWrite/内容态
+                    // 走 keyed）——keyed 路径必清空态签名，否则 empty→keyed→empty 序列下
+                    // 陈旧 rkSig 让第二次 empty 误跳帧，错显上一会话产物树。
+                    if (pane.dataset.rkSig !== undefined) delete pane.dataset.rkSig;
                     let host = pane.querySelector("[data-af-body]");
                     if (!host) {
                       pane.textContent = "";
