@@ -219,13 +219,15 @@ async function main() {
   // PreToolUse 等远程审批（最长 600s，须 < settings.json 里该 hook 的 timeout 620s）。
   // 旁路事件 1500→3000（2026-10-09）：relay 主线程高负载时事件循环阻塞普遍 >1.5s
   //（实测 UserPromptSubmit 广播滞后 6.6s），1.5s 短窗在回合首尾（relay 正忙）必撞
-  const waitMs = event === "PreToolUse" ? 600_000 : 3000;
+  // #279 SessionStart（广播注入）：会话启动路径——短窗 2s、单轮不重试，宁可这次
+  // 不注入也不拖慢开局（下次 resume/clear 还有机会；relay 不在=无输出静默降级）
+  const waitMs = event === "PreToolUse" ? 600_000 : event === "SessionStart" ? 2000 : 3000;
   // 逐候选上报：403（token 失配）/连不上（relay 未起或换班）就试下一目录的
   // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求
   // 外层补 3 轮整体重试（2s/4s 退避，仅旁路事件）：relay 热替换重启窗口约 5~8s，
   // 旁路事件短等撞上即丢（审批/通知凭空消失的根因之一）；PreToolUse 的
   // 600s 长等天然覆盖重启窗口，无需多轮
-  const rounds = event === "PreToolUse" ? 1 : 3;
+  const rounds = event === "PreToolUse" || event === "SessionStart" ? 1 : 3;
   let res = null;
   for (let round = 0; round < rounds && !res; round++) {
     if (round) await new Promise((r) => setTimeout(r, 2000 * round).unref?.());
@@ -277,6 +279,20 @@ async function main() {
       await new Promise((r) => process.stdout.write(JSON.stringify(out), r));
     }
     // decision === "pass" 或超时：无输出，CLI 走正常权限流程
+  }
+
+  // #279 SessionStart 广播回传：relay 决策携带 {context} → additionalContext 注入
+  //（CLI 把它并入会话启动上下文，野生会话由此得知 cc-deck 在场）。无 context/
+  // 超时/relay 不在：零输出静默降级，会话照常启动——广播是增益不是依赖。
+  // 存量兼容：老 relay 不认识 SessionStart 事件也回 2xx（dispatchInner default
+  // pass，无 context 字段）→ 同样零输出，双端任一旧版本均不炸
+  if (event === "SessionStart" && res && res.ok) {
+    const d = await res.json().catch(() => null);
+    const ctx = d && typeof d.context === "string" ? d.context.trim() : "";
+    if (ctx) {
+      const out = { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: ctx } };
+      await new Promise((r) => process.stdout.write(JSON.stringify(out), r));
+    }
   }
 }
 

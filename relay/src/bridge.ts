@@ -59,6 +59,7 @@ export interface BridgeDecision {
   decision: "allow" | "deny" | "pass";   // pass = 不干预，CLI 走正常权限流程
   reason?: string;
   updatedInput?: Record<string, unknown>; // allow 时改写工具入参（AskUserQuestion 答案注入）
+  context?: string;                       // #279 SessionStart 广播文案（hook 侧转 additionalContext；其余事件不携带）
 }
 
 export const BRIDGE_ACTIVITY_CAPABILITIES = {
@@ -1560,8 +1561,23 @@ export class Bridge {
         return this.onSessionEnd(ev);
       case "PreCompact":
         return this.onPreCompact(ev);
+      case "SessionStart":
+        return this.onSessionStart(ev);
       default:
         return { decision: "pass" };
+    }
+  }
+
+  // #279 野生会话广播：严格只读——不 ensureExternal/不改状态（外部卡生命周期仍由
+  // UserPromptSubmit 首事件建卡，此处的提前到达不得改变既有建卡时序），只把
+  // session-manager 组清单+PM 值守快照递给 hook（additionalContext 注入）。
+  // 任何异常都 pass：广播是增益不是依赖，绝不因它干扰会话启动。
+  private onSessionStart(ev: BridgeEvent): BridgeDecision {
+    try {
+      const context = this.mgr.sessionStartBroadcast(ev.cwd ?? "");
+      return context ? { decision: "pass", context } : { decision: "pass" };
+    } catch {
+      return { decision: "pass" };
     }
   }
 

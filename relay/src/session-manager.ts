@@ -107,6 +107,8 @@ import { buildRoleInjection, getRoleTemplate, listRoleTemplates } from "./role-t
 import {
   appendRule, retireRule, supersedeRule, promoteExperienceToRule, listRules, buildRuleInjection,
   ensureBuiltinRulesSeed, // #108：org 初始化内置铁律种子（PM 不编码）
+  writeRulesMirror, // #279：boot 刷新 RULES.md 镜像（写点随 saveRules 挂钩，此处只做开机自愈）
+  rulesMirrorPath, // #279：广播文案引用镜像路径（与写点同源，防两处漂移）
   type RuleEntry, // W-RULES2：emitRules diff 基线类型
 } from "./team-rules.js";
 
@@ -822,6 +824,9 @@ export class SessionManager {
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
     this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
     this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
+    // #279 野生会话纳管：boot 自愈 RULES.md 镜像（写库点已随 saveRules 刷新，此处
+    // 兜底镜像丢失/漂移——失败自吞，镜像非关键路径）
+    try { writeRulesMirror(); } catch { /* 尽力而为 */ }
     // #018-R1FIX1 P1-1：确认单产生回调（projects.addConfirm 单咽喉 → 本 manager
     // 通知账）。单回调槽后注册覆盖——生产单 manager 进程假设内成立（多 manager
     // 仅测试形态，后建者接管产生登记）
@@ -4546,6 +4551,50 @@ export class SessionManager {
     return best;
   }
 
+  // ---------- #279 野生会话纳管：SessionStart 广播文案 ----------
+  // 给「用户项目目录直接开的 CLI 会话」的只读在场声明：它们此前对 cc-deck 零感知
+  //（data-integration-platform 自建编排团队实锤），分层指引=共存不禁止（1027 PM
+  // 裁决）：会话内子任务可自理，立项级/跨会话/多成员走 org 分诊。文案约束 ≤5 行、
+  // 只读（不建卡/不劫持/不改任何状态），由 bridge.onSessionStart 经 additionalContext
+  // 注入；PM 值守口径=dutyTargetId（no-leader=最近活跃 external+pid 探活；leader 模式
+  // 沿用 leaderId 锚卡语义不加新探活——leader_session_id 遗留字段不依赖不增强）。
+  sessionStartBroadcast(cwd: string): string {
+    let groupsText = "";
+    try {
+      const active = listGroups().filter((g) => g.status === "active" || g.status === "pending");
+      if (active.length) {
+        const sorted = [...active].sort((a, b) => {
+          const hit = (g: { anchor_dir: string }) => cwd.startsWith(g.anchor_dir) ? 0 : 1; // cwd 命中组前置
+          return hit(a) - hit(b);
+        });
+        const shown = sorted.slice(0, 5).map((g) => `${cwd.startsWith(g.anchor_dir) ? "★" : ""}${g.name}`);
+        groupsText = `项目组 ${active.length} 个：${shown.join("、")}${active.length > 5 ? " 等" : ""}。`;
+      }
+    } catch { /* 组清单读失败按无组口径继续广播——在场声明本身不依赖 org 数据 */ }
+    const pmAlive = !!this.dutyTargetId();
+    const rulesPath = rulesMirrorPath();
+    const orgMd = join(orgDir(), "CLAUDE.md");
+    return [
+      `[cc-deck] 本机有 cc-deck 团队调度（PM 值守：${pmAlive ? "在岗 ✓" : "当前无在岗 PM"}）。${groupsText}`,
+      "[cc-deck] 会话内短平快子任务可用内置 Agent/subagent 自理；立项级/跨会话/多成员编排走 org 分诊（org status / org dispatch），PM 值守在岗时自动接管记账。",
+      `[cc-deck] 团队规则镜像 ${rulesPath}；组织说明 ${orgMd}。`,
+    ].join("\n");
+  }
+
+  // #279 org status 的值守视图（与「死席巡检提示」#261 备档同族同口径——无在岗 PM
+  // 的提示语单源在此，避免两套文案分叉）。alive 只在 no-leader 模式含 pid 探活
+  //（dutyTargetId 内置）；leader 模式=锚卡在位语义，不新增探活（修正④）。
+  pmDutyStatus(): { mode: string; session_id: string; alive: boolean; hint?: string } {
+    const mode = this.collabMode();
+    const target = this.dutyTargetId();
+    return {
+      mode,
+      session_id: target ?? "",
+      alive: !!target,
+      ...(target ? {} : { hint: "当前无在岗 PM，分诊暂缓或走接管流程" }),
+    };
+  }
+
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
   // （四值 reason：actionable→喂；all_running/blocked/empty→sleep 放行——「全 running
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
@@ -5299,6 +5348,10 @@ export class SessionManager {
               groups: listGroups(),
               pending: listPendingConfirms(),
               open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20),
+              // #279 值守 PM 视图（dutyTargetId 口径；无在岗 PM 带提示——Leader 会话/
+              // 野生编排会话据此决定分诊暂缓或走接管）。leader_session_id 为遗留字段
+              // 不在此依赖（修正④）。
+              pm: this.pmDutyStatus(),
             },
           };
         }
