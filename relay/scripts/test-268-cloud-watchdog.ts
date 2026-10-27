@@ -590,7 +590,7 @@ ok(sd.includes("html += cloudDiagRowHtml(cloudDiag(), false);") && sd.includes("
 {
   const ctx = mkCtx();
   const { env } = buildHarness(ctx, "natural");
-  const rowsBlock = blockFrom("function cloudSettingsRows()");
+  const rowsBlock = blockFrom("function cloudSettingsRows("); // #280-A：签名增 withName 缺省参
   const laneBlock = blockFrom("function cloudMobileLaneInner()");
   const sharedDeps = {
     cloudUIOn: () => true, // 云链激活态（面板出现的前提）
@@ -598,7 +598,7 @@ ok(sd.includes("html += cloudDiagRowHtml(cloudDiag(), false);") && sd.includes("
     sdelServerRows: () => "", // 服务器行渲染不在本断言范围
     cloudPeerOf: env.cloudPeerOf, cloudCtx: ctx, cloudDiag: env.cloudDiag,
     cloudDiagRowHtml: env.cloudDiagRowHtml, escapeHtml: (s: string) => String(s),
-    relayNameRowHtml: () => "", viewSource: () => "local", cloudMode: false,
+    relayNameRowHtml: () => "", viewSource: () => "local", cloudMode: false, withName: true, // #280-A：cloudSettingsRows 签名参
     ckp: { publicKey: "pk" }, devId: () => "wb-mock",
   };
   const rows = (link(rowsBlock, [], sharedDeps) as () => string)();
