@@ -75,7 +75,7 @@ import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { readCodexThreadName } from "./title-codex.js";
 import { generateTitle } from "./title-gen.js";
-import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, effectiveRelayName, sanitizeRelayName, writeRelayName, type CollabMode } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, effectiveRelayName, sanitizeRelayName, writeRelayName, readEngineProfiles, type CollabMode } from "./settings.js";
 import type { EmployeeHomeSettingsPayload } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
@@ -774,6 +774,19 @@ export class SessionManager {
     // 构造器签名兼容但忽略）。测试注入工厂时同样收 engine——fake factory 可按
     // 引擎分型。缺省 undefined = claude，行为与从前逐字节一致
     if (opts?.engine && opts.engine !== "claude" && opts.engine !== "codex") {
+      // #285 codebuddy 免费引擎分流：engine profile 的 effort/permission_mode 组装进
+      // spawn 配置（model 走既有 model 链——dispatch/profile 显式值已在 model 参数内）。
+      // profile 读失败=零配置降级（adapter 侧 buildArgs 只透传有值的键，行为=旧版兼容）。
+      let cbConfig: { effort?: string; permissionMode?: string } | undefined;
+      if (opts.engine === "codebuddy") {
+        try {
+          const profiles = readEngineProfiles(this.cfg.dataDir) || [];
+          const prof = profiles.find((e) => e.engine === "codebuddy");
+          if (prof && (prof.effort || prof.permission_mode)) {
+            cbConfig = { ...(prof.effort ? { effort: prof.effort } : {}), ...(prof.permission_mode ? { permissionMode: prof.permission_mode } : {}) };
+          }
+        } catch { /* profile 读失败：零配置 spawn（行为=旧版） */ }
+      }
       const registered = createRegisteredEngine(opts.engine, {
         cwd,
         model,
@@ -782,6 +795,7 @@ export class SessionManager {
         initialPrompt,
         contextPacket: opts.role ? `role=${opts.role}\nprovider=${opts.provider ?? "default"}` : undefined,
         providerProfile: providerProfileFor(opts.engine, opts.provider),
+        ...(cbConfig ? { codebuddy: cbConfig } : {}),
       });
       if (registered) return registered;
       throw new Error(`未注册引擎: ${opts.engine}`);

@@ -25,6 +25,7 @@
 import { listModels } from "./models.js";
 import { preflightEngine } from "./agent-jsonl.js";
 import { getEngineDefinition } from "./engine-registry.js";
+import { CODEBUDDY_MODELS } from "./agent-codebuddy.js";
 import { listGroups } from "./projects.js";
 import { probeEngineAuth } from "./engine-auth.js";
 import type { EngineCatalogEntry, SessionEngine } from "./types.js";
@@ -108,7 +109,10 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
         artifacts: def.capabilities?.artifacts ?? false,
       },
       preflight: pf.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf.errors.join("；") },
-      models: [],
+      // #285：codebuddy 模型清单进 catalog（adapter CODEBUDDY_MODELS 同源单一事实源
+      //——2026-10-27 一手 help 核实 20 个，端上设置页可选可存 engine profile）；其余
+      // registry 引擎（trae/qwen-code）维持 []（无源级清单不冒充）
+      models: id === "codebuddy" ? [...CODEBUDDY_MODELS] : [],
       default_for_roles: roles,
       ...(auth.state === "needs_auth" ? { auth_hint: auth.auth_hint } : {}),
     };
