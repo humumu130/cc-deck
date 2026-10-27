@@ -524,7 +524,7 @@ export class Bridge {
         // Date.now() 在 boot 扫描时把回放态与扫描摘要失配的会话整批洗成启动时刻
         //（「全员 14:25」的既有卡半边；summary 失配是常态不是异常）
         this.mgr.setExternalStatus(id, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : undefined, profile.updatedAt);
-        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id);
+        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id, profile.updatedAt); // #276 同步帧不洗活（转录真实时刻）
       }
       const historical = !active && inferredDead;
       if (!!state.historical !== historical) {
@@ -626,7 +626,10 @@ export class Bridge {
       if (!pid || !pidAlive(pid)) continue;
       st.historical = false;
       this.mgr.pushExternalLog(s.session_id, "system", "检测到终端进程仍在运行，会话恢复可交互");
-      this.mgr.emitExternalSync(s.session_id);
+      // #276：翻案/自愈同步帧带卡既有时刻（无 at=Date.now() 洗活——公司侧 test.71
+      // 实锤 7 卡 updated_at 全=重启时刻：boot 自愈链对无 hook 旧会话集中翻案，裸
+      // emit 逐卡洗一次；Mac 侧 hook 会话多、真事件随后覆盖时间戳故未显）
+      this.mgr.emitExternalSync(s.session_id, s.updated_at);
       // 有落盘排队消息的：进程活着即可投递，直接触发重投（重启丢消息的闭环口）
       if ((this.inputQueue.get(s.session_id)?.length ?? 0) > 0) void this.flushQueue(s.session_id);
     }
@@ -925,7 +928,7 @@ export class Bridge {
             st.historical = false;
             this.mgr.pushExternalLog(s.session_id, "system", "已通过 CLI 会话信息恢复进程定位（自愈）");
           }
-          this.mgr.emitExternalSync(s.session_id);
+          this.mgr.emitExternalSync(s.session_id, s.updated_at); // #276 自愈帧不洗活（同 revive 口径）
         }
       }
     } catch {}
@@ -1027,7 +1030,7 @@ export class Bridge {
           st.historical = false; // 活 pid 即会话真实存活的证明（#50 刻意沉底不翻案）
         }
         this.mgr.pushExternalLog(s.session_id, "system", `已通过进程扫描恢复定位（pid ${pid}${pids.length > 1 ? `，同会话候选 ${pids.length} 个` : ""}）——重启注册空窗自愈，无需等待进程上报`);
-        this.mgr.emitExternalSync(s.session_id);
+        this.mgr.emitExternalSync(s.session_id, s.updated_at); // #276 自愈帧不洗活（同 revive 口径）
         claimed.add(pid);
       }
     }
@@ -1093,7 +1096,7 @@ export class Bridge {
         st.historical = false; // 活 pid 即会话真实存活的证明（与 sid 段同款语义）
       }
       this.mgr.pushExternalLog(s.session_id, "system", `已通过 cwd 匹配恢复定位（pid ${hit}）——argv 无会话标记形态的活终端自愈，无需等待 hook 上报`);
-      this.mgr.emitExternalSync(s.session_id);
+      this.mgr.emitExternalSync(s.session_id, s.updated_at); // #276 自愈帧不洗活（同 revive 口径）
     }
   }
 
@@ -2154,7 +2157,7 @@ export class Bridge {
         st.permission_mode = mode; // 镜像 CLI 实际档位（#191 同源）
         const zh: Record<string, string> = { default: "默认确认", acceptEdits: "接受编辑", plan: "规划（只读）", bypassPermissions: "跳过确认" };
         this.mgr.pushExternalLog(sessionId, "system", `已循环切换权限模式 → ${zh[mode] ?? mode}`);
-        this.mgr.emitExternalSync(sessionId);
+        this.mgr.emitExternalSync(sessionId, st.updated_at); // #276 权限镜像≠会话活动，帧带既有时刻
       } else {
         // 读屏未识别档位（弹窗遮挡/非 claude TUI 文案）：切换键已注入，档位待转录镜像收敛
         console.log(`[perm] fallback sid=${sessionId.slice(0, 14)}：切换键已注入，档位未识别（本地诊断）`);
@@ -2693,7 +2696,11 @@ export class Bridge {
   private pushAssistantTexts(id: string, transcriptPath?: string): void {
     if (!transcriptPath) return;
     try {
-      const size = statSync(transcriptPath).size;
+      const fstat = statSync(transcriptPath);
+      const size = fstat.size;
+      // #276 ③：转录新鲜度——文件 mtime（最后写入时刻）。else 翻活门用：久休转录的
+      // 滞后增量（结尾 flush/时钟漂移/挂载盘批量同步）不是活跃，不得翻绿灯拉活跃区
+      const fileMtime = Math.round(fstat.mtimeMs);
       const prev = this.transcriptOffsets.get(id);
       let start: number;
       let firstRead = false;
@@ -2746,13 +2753,20 @@ export class Bridge {
             if (st0.cli_pid !== alivePid) this.mgr.setExternalCliPid(id, alivePid); // 顺带重定位（空窗自愈）
             this.mgr.setExternalStatus(id, "WORKING", "转录活跃（进程在，hook 事件未达）");
           } else {
-            this.noHookIds.add(id);
-            if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
-            this.mgr.setExternalStatus(
-              id,
-              "WORKING",
-              st0.status === "ERROR" ? "转录活跃（自愈：重启误标错误）" : "转录活跃（无 hook 会话）",
-            );
+            // #276 ③ 新鲜度门：文件 mtime 距今 > 5min = 久休转录的滞后增量（结尾
+            // flush/挂载盘批量同步等），不是活跃——不翻绿灯不进 noHookIds（公司侧
+            // test.71 实锤 6 张久休卡被拉活跃区仅 1 真活）。真活跃（用户刚敲键，
+            // mtime 新）照旧翻活，regrowth 政体不变
+            const nohookStaleMs = Number(process.env.CCR_NOHOOK_STALE_MS) > 0 ? Number(process.env.CCR_NOHOOK_STALE_MS) : 5 * 60_000;
+            if (Date.now() - fileMtime <= nohookStaleMs) {
+              this.noHookIds.add(id);
+              if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
+              this.mgr.setExternalStatus(
+                id,
+                "WORKING",
+                st0.status === "ERROR" ? "转录活跃（自愈：重启误标错误）" : "转录活跃（无 hook 会话）",
+              );
+            }
           }
         }
         if (st0?.historical) st0.historical = false;

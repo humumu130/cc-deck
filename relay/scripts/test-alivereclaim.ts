@@ -157,5 +157,45 @@ writeFileSync(join(DATA, "tr.jsonl"), "");
   ok(src.includes("reconcilePidsFromCwd(snap, claimed)"), "B3c 静态锚：cwd 兜底段挂进 reconcile 主链（boot+60s 轮节拍）");
 }
 
+// ---- §W 公司侧升级面（0926 实证：7 卡 updated_at 全=重启时刻 + 6 张久休卡假活跃）----
+// 真凶=boot 自愈链裸 emitExternalSync（emitUpdated 无 at 写 Date.now()）：公司侧无
+// hook 旧会话多、boot 集中翻案逐卡洗一次；Mac 侧 hook 会话多真事件随后覆盖故未显。
+// ①②提取链平台无关已锚（eventTime ISO/数值解析无平台分支；updatedAt=0 回落 mtime
+// 优先）——Windows 样本行为锚定 + emit 面带 at 静态锚 + ③久休门静态锚
+{
+  const { RolloutScanner, specOf } = await import("../src/engine-rollouts.js");
+  const { utimesSync } = await import("node:fs");
+  // W1 Windows 风格转录（反斜杠 cwd/盘符）提取不受平台差异影响
+  const codexRoot = SB("../data/test-alivereclaim-projects/codex-win/");
+  mkdirSync(codexRoot, { recursive: true });
+  const winTs = Date.now() - 3600_000;
+  const winFile = join(codexRoot, `rollout-a11e0002-0000-4000-8000-000000000002.jsonl`);
+  writeFileSync(winFile, [
+    JSON.stringify({ timestamp: new Date(winTs).toISOString(), type: "session_meta", payload: { cwd: "C:\\Users\\dev\\keyhive", session_id: "a11e0002-0000-4000-8000-000000000002" } }),
+    JSON.stringify({ timestamp: new Date(winTs + 1000).toISOString(), type: "response_item", payload: { type: "message", role: "user", content: [{ text: "windows 样本回合" }] } }),
+    "",
+  ].join("\n"));
+  const winProfiles = new RolloutScanner(specOf("codex"), codexRoot).scan();
+  const winP = winProfiles.find((p) => p.sessionId.includes("a11e0002"));
+  ok(!!winP, "W1a Windows 风格转录被扫到（文件名/会话 id 提取不受平台影响）");
+  ok(winP?.cwd === "C:\\Users\\dev\\keyhive", `W1b 反斜杠盘符 cwd 原样提取（实 ${winP?.cwd}）`);
+  ok(Math.abs((winP?.updatedAt ?? 0) - (winTs + 1000)) < 5, `W1c updatedAt=行内 timestamp（实 ${winP?.updatedAt}，期望 ${winTs + 1000}，非 now 洗活）`);
+  // W2 无 timestamp 行：updatedAt 回落文件 mtime（而非扫描 now）——双保险锚
+  const noTsFile = join(codexRoot, `rollout-a11e0003-0000-4000-8000-000000000003.jsonl`);
+  writeFileSync(noTsFile, JSON.stringify({ type: "response_item", payload: { type: "message", role: "user", content: [{ text: "无时间戳行" }] } }) + "\n");
+  const oldMtime = Date.now() - 7200_000;
+  utimesSync(noTsFile, new Date(oldMtime), new Date(oldMtime));
+  const noTsProfiles = new RolloutScanner(specOf("codex"), codexRoot).scan();
+  const noTsP = noTsProfiles.find((p) => p.sessionId.includes("a11e0003"));
+  ok(!!noTsP && Math.abs(noTsP.updatedAt - oldMtime) < 2000, `W2 无 timestamp 行回落文件 mtime（实 ${noTsP?.updatedAt}，期望≈${oldMtime}，非 now）`);
+  // W3 emit 面带 at 静态锚（五处自愈/镜像帧不洗活——防回退）
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/bridge.ts"), "utf8");
+  ok(src.includes("emitExternalSync(s.session_id, s.updated_at)"), "W3a revive/自愈链 emit 带卡既有时刻（公司侧 7 卡洗活根修）");
+  ok((src.match(/emitExternalSync\(s\.session_id\);/g) ?? []).length === 0 && (src.match(/emitExternalSync\(sessionId\);/g) ?? []).length === 0, "W3b bridge 自愈/镜像面裸 emitExternalSync 清零");
+  ok(src.includes("emitExternalSync(id, profile.updatedAt)"), "W3c ERROR 同步帧带转录真实时刻");
+  // W4 ③久休门静态锚：else 翻活分支有 mtime 新鲜度门槛（久休滞后增量不翻绿灯）
+  ok(src.includes("nohookStaleMs") && src.includes("Date.now() - fileMtime <= nohookStaleMs"), "W4 「转录活跃（无 hook 会话）」翻活带久休门（公司侧 6 张假活跃根修）");
+}
+
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail ? 1 : 0);
