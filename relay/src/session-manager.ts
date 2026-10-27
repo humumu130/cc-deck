@@ -63,6 +63,7 @@ import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, saniti
 import { adoptReplayed } from "./lifecycle/adopt.js"; // W-SPLIT-S5①：收养域出舱（类面留壳）
 import { transitionLegal } from "./lifecycle/transition.js"; // W-SMIMPL ③：状态转移断言层（纯观测；SessionStatus 用 types.js 既有 import）
 import * as reviveMod from "./lifecycle/revive.js"; // W-SPLIT-S5②：autoRevive/激活器协调出舱
+import { pmKeepaliveEligible, PM_KEEPALIVE_DELAY_MS } from "./lifecycle/revive.js"; // #287 PM 常驻化保活判定（纯函数，schedule/fire 双查同源）
 import { setExternalUsage as setExtUsageMod, ctxWatchdogOnContext as ctxWdOnCtx, ctxWatchdogOnTurnBoundary as ctxWdOnBoundary } from "./lifecycle/context-link.js"; // W-SPLIT-S5③：上下文链出舱
 import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT-S3c
 import { createEngineCommands } from "./commands/engine-commands.js"; // W-SPLIT-S3c
@@ -453,6 +454,11 @@ interface ManagedSession {
   // 重试机会），与 resumePending 同生命周期
   resumeFailStreak?: number;
   resumeCooldownUntil?: number;
+  // #287 PM 常驻化：dutyTarget 空闲保活账——idleStreak=连续「拉起后无回合活动即退
+  // 出」计数（pmKeepaliveEligible 死循环闸；onTurnEnd 复位——回合跑过即证明拉起有
+  // 效）；timer=延时拉起句柄（deleteSession 清，防删卡后幽灵拉起）
+  pmKeepaliveStreak: number;
+  pmKeepaliveTimer: ReturnType<typeof setTimeout> | null;
   // #21③ 首回合在途标记：create(prompt) 的 initialPrompt 在 adapter 构造时已 push 进
   // SDK 队列（不进 unacked——create 路径没有 user_message 回显日志可出队，塞了会变
   // 永久悬账激活 watchdog 重放）。onInit 待命化（Leader 防看门狗误杀的 DONE 翻转）
@@ -876,10 +882,16 @@ export class SessionManager {
     // 现读 collab-mode.json 小文件可接受，employeeHomeState 同款「每次现算」口径）。
     // 只挡下发面：内存卡/锚/ensureLeader 照常（团队/看板/通知不受影响）
     const hideLeader = this.leaderId && readCollabMode(this.cfg.dataDir) === "no-leader";
+    // #287 PM 常驻化：待命态派生（零存储 flag=无陈旧面）——当前值守 PM 且空闲
+    //（DONE）→ pm_standby=true，端上渲染「待命」替代 DONE 假死（活跃/待命连续态，
+    // 与 #276 状态机对齐）。leader 模式 dutyId=this.leaderId O(1)；no-leader 模式
+    // dutyTargetId 含 pid 探活（会话量小、快照低频，可接受）
+    const dutyId = this.dutyTargetId();
     return [...this.sessions.values()]
       .filter((s) => !(hideLeader && s.state.session_id === this.leaderId))
       .map((s) => {
         const c = this.cloneState(s);
+        c.pm_standby = !!(dutyId && c.session_id === dutyId && c.status === "DONE");
         if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
         return c;
       });
@@ -1726,7 +1738,7 @@ export class SessionManager {
     // UIPOLISH3 件一：置顶回放（pinned-sessions.json 权威）——journal 压缩丢 CREATED 帧
     // 的外部会话走不到 applyPinned（不在回放表里），新建时按文件补挂 pinned 标记
     if (readPinnedSessions(this.cfg.dataDir).includes(id)) state.pinned = true;
-    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
+    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0, pmKeepaliveStreak: 0, pmKeepaliveTimer: null });
     this.applyDeclaredDeliverables(id);
     this.bus.emit(id, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -2384,6 +2396,8 @@ export class SessionManager {
       return true;
     }
     if (this.isLeaderSession(id)) return false;
+    // #287 PM 常驻化：删卡清保活 timer（防删后幽灵拉起）
+    if (s.pmKeepaliveTimer) { clearTimeout(s.pmKeepaliveTimer); s.pmKeepaliveTimer = null; }
     // #25-P2 删卡清挂单：FIFO 残条此前进程内常驻（重启才清）。先收口再删（对齐
     // 退休/挂起联动口径）；bootTimer 开火路径已先行收口，此处幂等 no-op 不双记
     this.closeOpenDispatches(id, "failed", "会话删除，回合中断", true, false, undefined, "backlog");
@@ -2732,6 +2746,8 @@ export class SessionManager {
       wd: { phase: "idle", recoveries: [], gaveUp: false },
       streamGen: 0,
       activitySeq: 0,
+      pmKeepaliveStreak: 0,
+      pmKeepaliveTimer: null,
     };
 
     const agent = this.newAgent(
@@ -3157,6 +3173,7 @@ export class SessionManager {
         onTurnEnd: (ok, reason, durationMs) => {
           if (!mine()) return;
           managed.pendingInitial = undefined; // #21③ 首回合已终态，后续空闲 init 可待命化
+          managed.pmKeepaliveStreak = 0; // #287 回合真实跑过=上次保活拉起有效，死循环闸计数复位
           // #7 看门狗恢复期：杀树时 CLI 可能吐出最后的 interrupted result——状态
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
@@ -3287,8 +3304,44 @@ export class SessionManager {
           }
           // R1c：流关闭兜底收口 → waiting 通知 resolved（统一同步点）
           this.syncWaitingNotification(managed);
+          // #287 PM 常驻化：dutyTarget 托管会话空闲自然关闭 → 延时无消息拉起保活
+          //（拉起后 CLI 停在等待输入=温床，下一条消息 sendMessage 直达零冷启动）
+          this.schedulePmKeepalive(managed, reason);
         },
     };
+  }
+
+  // #287 PM 常驻化：保活调度（判定纯函数 pmKeepaliveEligible 单源，schedule 与 fire
+  // 双查同参——fire 时现算 dutyTarget/互斥/熔断/删除，防 3s 调度窗内的换届与竞态；
+  // streak 闸防「拉起即退」死循环：连续无活动退出≥2 停拉，等真实消息/回合复位）
+  private schedulePmKeepalive(s: ManagedSession, reason: string): void {
+    if (s.pmKeepaliveTimer) clearTimeout(s.pmKeepaliveTimer);
+    const check = () => pmKeepaliveEligible({
+      envOff: process.env.CCR_PM_KEEPALIVE,
+      reason,
+      external: !!s.state.external,
+      historical: !!s.state.historical,
+      isDutyTarget: this.dutyTargetId() === s.state.session_id,
+      resumePending: s.resumePending,
+      resumeCooldownUntil: s.resumeCooldownUntil,
+      now: Date.now(),
+      idleStreak: s.pmKeepaliveStreak,
+    });
+    if (!check()) return;
+    s.pmKeepaliveTimer = setTimeout(() => {
+      s.pmKeepaliveTimer = null;
+      try {
+        if (!this.sessions.has(s.state.session_id)) return; // 已删卡（deleteSession 已清 timer，双保险）
+        if (s.agent && !s.agent.ended) return; // 调度窗内消息先到/他路已换流——活流在场不扰
+        if (!check()) return; // 换届/熔断/互斥在火时重查
+        s.pmKeepaliveStreak += 1;
+        this.pushExternalLog(s.state.session_id, "system", "PM 常驻保活：空闲自动拉起待命（#287）");
+        this.reviveSaved(s); // 无消息拉起：onInit 无积压落 DONE 待命态（#26 待命化同语义）
+      } catch {
+        // reviveSaved 体内已收口（spawn 失败进熔断记账/ERROR 态）；此处静默防调度器炸
+      }
+    }, PM_KEEPALIVE_DELAY_MS);
+    s.pmKeepaliveTimer.unref?.();
   }
 
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
@@ -4004,6 +4057,8 @@ export class SessionManager {
       wd: { phase: "idle", recoveries: [], gaveUp: false },
       streamGen: 0,
       activitySeq: 0,
+      pmKeepaliveStreak: 0,
+      pmKeepaliveTimer: null,
     };
     this.sessions.set(id, managed);
     this.pinLeaderFile(id);

@@ -243,6 +243,7 @@ export interface SessionState {
   last_error?: string;
   done_reason?: string;
   duration_ms?: number;
+  pm_standby?: boolean;       // #287 PM 常驻化：快照派生（dutyTarget 且 DONE）——值守 PM 待命态，端上替代 DONE 假死
   historical?: boolean;       // true = Relay 重启前遗留的历史会话，不可操作
   // W-INJECT：historical 的来源标记。#50 idle 归档（12h 无活动刻意沉底降权）置位——
   // 存活自愈（reviveAliveExternals）见到它不翻案（旧终端挂着是用户已知状态），hook 回归
