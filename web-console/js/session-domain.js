@@ -1408,7 +1408,7 @@
                   pop.style.zIndex = "96";
                   pop.innerHTML = '<div class="source-menu-head">筛选会话</div>' + SESSION_FILTERS.map((f) => {
                     const n = f.id === "all" ? S.sessions.size : [...S.sessions.values()].filter(f.test).length;
-                    return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + " 个</small></button>";
+                    return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + '</small></button>';
                   }).join("");
                   const rect = anchor.getBoundingClientRect();
                   pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 220)) + "px";
