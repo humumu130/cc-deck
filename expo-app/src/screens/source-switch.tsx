@@ -6,14 +6,34 @@
 //   · 「管理连接」行（跳设置）
 // 单源（≤1）点击不弹（直连行为不变）。
 // 参考实现=ListScreen 顶栏 srcMenu（同锚定/同行语言），本组件为其跨页化收敛。
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, { Path, Rect } from "react-native-svg";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay } from "../store";
 import type { ThemeColors } from "../theme";
 import type { ServerEntry } from "../store";
+
+/**
+ * #290 弹窗左缘 clamp（用户 1028 截图 22 实锤）：W-HEAD6 把触发器内联进标题行
+ * （屏幕左侧），菜单原 right:0 锚定触发器右缘、宽 ~208 向左展开——触发器 x≈60 时
+ * 左缘 ≈ -148 出屏（左半切字）。本函数给出菜单相对 wrap 的 left 偏移：
+ * 优先右对齐触发器（右缘对齐）；左溢出（<8）则改左对齐（向右展开）；右也溢出则
+ * clamp 到屏右内边（宽自适应由调用方 maxWidth 兜）。
+ * @param triggerX 触发器屏坐标 x（measureInWindow）
+ * @param triggerW 触发器宽（右对齐锚）
+ * @param menuW 菜单实宽（onLayout）
+ * @param screenW 屏宽
+ * @param wrapX wrap 屏坐标 x（换算回 wrap 相对坐标）
+ */
+export function clampMenuLeft(triggerX: number, triggerW: number, menuW: number, screenW: number, wrapX: number): number {
+  const M = 8; // 屏内边距
+  let leftScreen = triggerX + triggerW - menuW; // 优先：右缘对齐触发器
+  if (leftScreen < M) leftScreen = Math.min(triggerX, M); // 左溢出→左对齐触发器（仍夹 ≥M）
+  if (leftScreen + menuW > screenW - M) leftScreen = screenW - M - menuW; // 右溢出→夹屏内
+  return leftScreen - wrapX; // wrap 相对坐标（菜单在 wrap 内绝对定位）
+}
 
 function DeskGlyph({ color }: { color: string }) {
   return (
@@ -31,6 +51,17 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
   const c = useThemeStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<ServerEntry[]>([]);
+  // #290 锚定测量态：触发器/wrap 屏坐标（开弹时 measureInWindow）+ 菜单实宽（onLayout）
+  const wrapRef = useRef<View>(null);
+  const trigRef = useRef<View>(null);
+  const [anchor, setAnchor] = useState<{ tx: number; tw: number; wx: number } | null>(null);
+  const [menuW, setMenuW] = useState(208);
+  const { width: screenW } = useWindowDimensions();
+  const measureAnchor = () => {
+    trigRef.current?.measureInWindow((tx, _y, tw, _h) => {
+      wrapRef.current?.measureInWindow((wx, _wy, _ww, _wh) => setAnchor({ tx, tw, wx }));
+    });
+  };
 
   useEffect(() => {
     if (open) void store.loadServers().then(setEntries).catch(() => {});
@@ -56,13 +87,15 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
   };
 
   return (
-    <View style={c.wrap}>
+    <View style={c.wrap} ref={wrapRef}>
       <Pressable
+        ref={trigRef}
         style={c.trigger}
         hitSlop={6}
         android_ripple={{ color: tc.tintSoft, borderless: false, radius: 14 }}
         accessibilityLabel={`数据源 ${onlineN}/${sources.length} 在线，点击${multi ? "切换或聚合" : "查看或管理连接"}`}
         onPress={() => {
+          measureAnchor(); // #290：开弹前测锚（measureInWindow 异步回调，首开未达时回落 right:0）
           // W-UIFIX 件六（用户 test.39 推翻「>1 源才弹」）：点击总弹——单源=自己行+
           // 管理连接（查看/管理入口常在）；聚合行/切源自然只在多源时有意义（菜单内
           // 聚合行对单源无操作对象，恒在场仅作状态展示）
@@ -74,7 +107,10 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
       </Pressable>
       {open ? <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} /> : null}
       {open ? (
-        <View style={c.menu}>
+        <View
+          style={[c.menu, anchor ? { right: "auto", left: clampMenuLeft(anchor.tx, anchor.tw, menuW, screenW, anchor.wx) } : null]}
+          onLayout={(e) => setMenuW(Math.max(208, e.nativeEvent.layout.width))} /* #290：实宽回测（自适应内容后 clamp 重算） */
+        >
           {[...sources].sort((a, b) => (b.id === snap.activeSourceId ? 1 : 0) - (a.id === snap.activeSourceId ? 1 : 0)).map((src) => {
             const stc = src.state === "online" ? tc.done : src.state === "offline" ? tc.error : tc.working;
             const isActive = src.id === snap.activeSourceId;
@@ -112,6 +148,8 @@ const makeStyles = (c: ThemeColors) =>
     trigger: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 6, borderRadius: 13 }, /* W-UIFIX 件八：30→26——titleRow 内不撑高（设置页 51→48 与四页齐一） */
     countT: { fontSize: 11, fontWeight: "600" },
     menu: {
+      /* #290：right:0 是首开未测到锚时的回落（右缘对齐触发器）；测到后 clampMenuLeft
+       * 接管 left（右对齐优先/左溢出左对齐/双溢出夹屏内——标题行左侧形态不再出屏） */
       position: "absolute", top: 30, right: 0, minWidth: 208, zIndex: 100,
       backgroundColor: c.panel, borderRadius: 12, borderWidth: 1, borderColor: c.line,
       paddingVertical: 4, elevation: 6,
