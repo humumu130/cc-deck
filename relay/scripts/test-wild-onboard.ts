@@ -69,6 +69,7 @@ section("\nS1 sessionStartBroadcast 基线（无组/无在岗 PM）");
   assert(text.includes("当前无在岗 PM"), "无在岗 PM 如实声明");
   assert(text.includes("subagent") && text.includes("org 分诊"), "分层指引（修正B：共存不禁止——subagent 自理 + org 分诊并存）");
   assert(!text.includes("勿自建团队"), "不含一刀切禁令（修正B：旧文案作废）");
+  assert(!text.includes("自动接管"), "不含「自动接管」虚假承诺（审查 B-P1-1：值守=喂活提醒非自动记账）");
   assert(text.includes(rulesMirrorPath(ORG)), "引用 RULES.md 镜像真实路径");
   assert(text.includes(join(ORG, "CLAUDE.md")), "引用 org CLAUDE.md 路径");
   assert(text.split("\n").length <= 5, "≤5 行（轻量纪律）");
@@ -85,7 +86,9 @@ section("\nS2 组清单与在岗 PM（dutyTargetId 口径）");
   assert(text0.includes("野测项目"), "组名入广播（pending 组也可见）");
   const text1 = mgr.sessionStartBroadcast(join(anchor, "sub"));
   assert(text1.includes("★野测项目"), "cwd 命中组带 ★ 前置");
-
+  // ★ 段边界（审查 A/B-P2 双路同报）：anchor=/x/bro 不得命中 /x/brother
+  assert(!mgr.sessionStartBroadcast(`${anchor}brother`).includes("★"), "同前缀兄弟目录不误标 ★（段边界）");
+  assert(mgr.sessionStartBroadcast(anchor).includes("★野测项目"), "cwd=anchor 本身命中 ★");
   // no-leader 模式 + 活 external（本测试进程 pid 即活进程）→ 在岗
   const cm = mgr.orgAction("collab-mode", { mode: "no-leader" }) as { ok: boolean };
   assert(cm.ok === true, "切 no-leader ok");
@@ -123,10 +126,17 @@ section("\nS3 org status pm 块与 RULES.md 镜像");
   assert(!m2.includes("PM 不直接编码"), "退役即从镜像移除");
   rmSync(mirror);
   assert(writeRulesMirror(ORG) === true && existsSync(mirror), "boot 自愈：手动刷新重建镜像");
-  // ENOENT 边界（test-bridge 实锤形态）：org 目录父层整条不存在时 boot 刷新不炸
+  // 裸启边界（审查 A-P2 收敛）：org 目录未建时不递归建目录不落镜像（防测试沙盒外溢）
   {
     const deep = join(mkDir("s3b"), "never", "created");
-    assert(writeRulesMirror(deep) === true && existsSync(join(deep, "..", "RULES.md")), "org 目录未建时镜像刷新自建父层（boot 前置安全）");
+    assert(writeRulesMirror(deep) === false && !existsSync(join(deep, "..", "RULES.md")), "org 目录未建：跳过且零落盘（boot 前置安全）");
+  }
+  // 坏 JSON 保护态（审查 A-P2）：corrupted 跳过刷新，保住最后一份有效镜像
+  {
+    const keep = readFileSync(mirror, "utf-8");
+    writeFileSync(join(ORG, "rules.json"), "{broken json", "utf-8");
+    assert(writeRulesMirror(ORG) === false, "corrupted 态拒绝刷新");
+    assert(readFileSync(mirror, "utf-8") === keep, "corrupted 态不覆写既有镜像（留证排障）");
   }
 }
 
@@ -141,6 +151,11 @@ section("\nS4 onSessionStart：只读注入、不建卡、沙盒早退");
   assert(mgr.getExternal("ext-cli-wild") === undefined || mgr.getExternal("ext-cli-wild") === null, "不建卡（外部卡仍由首条 UserPromptSubmit 建）");
   const sbx = await bridge.handleEvent({ event: "SessionStart", session_id: "cli-sbx", cwd: "/x/.tmp-sandbox/y" } as never);
   assert(sbx.decision === "pass" && sbx.context === undefined, ".tmp- 沙盒早退：无 context 纯 pass");
+  // resume 完整形态（审查 A-P2-5 补锁）：SessionStart 带 cli_pid+transcript_path 的
+  // 未知新会话——通用管线守卫空转（pid 采纳/transcript 播种均不建卡），广播照常
+  const full = await bridge.handleEvent({ event: "SessionStart", session_id: "cli-resume", cwd: "/definitely/real/dir2", cli_pid: process.pid, transcript_path: join(DATA, "no-such.jsonl") } as never);
+  assert(full.decision === "pass" && typeof full.context === "string" && full.context.length > 0, "resume 形态（pid+transcript）照常广播");
+  assert(mgr.getExternal("ext-cli-resume") === undefined || mgr.getExternal("ext-cli-resume") === null, "resume 形态仍不建卡（pid 采纳对无卡 no-op）");
 }
 
 // ---------- S5 hook 真链子进程：注入回传与静默降级 ----------
@@ -209,5 +224,7 @@ for (const k of ENV_KEYS) {
   if (savedEnv[k] === undefined) delete process.env[k];
   else process.env[k] = savedEnv[k];
 }
-setTimeout(() => { for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }); } catch {} } }, 100).unref();
+// 同步清理（审查 A-P2：unref timer 会被紧随的 process.exit 跳过=每跑一次泄漏 9 个
+// mkdtemp 目录；兄弟套件同为先 rmSync 后 exit）
+for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
 process.exit(fail > 0 ? 1 : 0);

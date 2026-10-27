@@ -18,9 +18,12 @@
 
 ```
 [cc-deck] 本机有 cc-deck 团队调度（PM 值守：在岗 ✓ / 当前无在岗 PM）。项目组 N 个：★名（当前目录组）…
-[cc-deck] 会话内短平快子任务可用内置 Agent/subagent 自理；立项级/跨会话/多成员编排走 org 分诊（org status / org dispatch），PM 值守在岗时自动接管记账。
+[cc-deck] 会话内短平快子任务可用内置 Agent/subagent 自理；立项级/跨会话/多成员编排走 org 分诊（org status / org dispatch），PM 值守在岗时会收到分诊提醒。
 [cc-deck] 团队规则镜像 ~/.cc-deck/RULES.md；组织说明 ~/.cc-deck/org/CLAUDE.md。
 ```
+
+> 措辞注意（审查 B-P1-1 修正）：值守链路是 feedPM 喂活提醒（`CCR_PM_DUTY` env 门 +
+> 插件设置产品门两级控制），不是 relay 自动记账——文案不得写「自动接管记账」。
 
 - PM 值守口径 = `dutyTargetId()`（no-leader 模式=最近活跃 external 会话+cli_pid 探活；
   leader 模式=锚卡在位语义，不新增探活）。`org.json leader_session_id` 为遗留字段，
@@ -34,8 +37,9 @@
 
 规则真相唯一在 `~/.cc-deck/org/rules.json`（`org rule append|retire|supersede` 命令面）。
 `team-rules.saveRules` 每次写库后把 **active 条目**镜像到 `~/.cc-deck/RULES.md`（org 目录
-旁；沙盒形态随 `CCR_ORG_DIR` 隔离），relay 启动时自愈刷新一次。镜像为机器生成文件，手编
-会被下次写库覆盖；每行格式 `[rule-id] audience · scope：文本`。
+旁；沙盒形态随 `CCR_ORG_DIR` 隔离），relay 启动时自愈刷新一次。两道前置闸：org 目录未初始化
+不落镜像（裸启不递归建目录）；规则库坏 JSON 保护态跳过刷新（保住最后一份有效镜像）。镜像为
+机器生成文件，手编会被下次写库覆盖；每行格式 `[rule-id] audience · scope：文本`。
 
 ## 三、可选 PreToolUse 拦截模板（默认不启用，仅文档化）
 

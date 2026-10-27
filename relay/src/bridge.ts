@@ -1568,10 +1568,11 @@ export class Bridge {
     }
   }
 
-  // #279 野生会话广播：严格只读——不 ensureExternal/不改状态（外部卡生命周期仍由
+  // #279 野生会话广播：onSessionStart 本体不建卡、不劫持决策（外部卡生命周期仍由
   // UserPromptSubmit 首事件建卡，此处的提前到达不得改变既有建卡时序），只把
-  // session-manager 组清单+PM 值守快照递给 hook（additionalContext 注入）。
-  // 任何异常都 pass：广播是增益不是依赖，绝不因它干扰会话启动。
+  // session-manager 组清单+PM 值守快照递给 hook（additionalContext 注入）。注意
+  // 公共入口 handleEvent 的通用管线（pid 采纳/transcript 播种等守卫空转）照走——
+  // 「只读」指本 handler 而非整个事件链。任何异常都 pass：广播是增益不是依赖。
   private onSessionStart(ev: BridgeEvent): BridgeDecision {
     try {
       const context = this.mgr.sessionStartBroadcast(ev.cwd ?? "");

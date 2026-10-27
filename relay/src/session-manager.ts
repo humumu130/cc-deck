@@ -4563,11 +4563,17 @@ export class SessionManager {
     try {
       const active = listGroups().filter((g) => g.status === "active" || g.status === "pending");
       if (active.length) {
-        const sorted = [...active].sort((a, b) => {
-          const hit = (g: { anchor_dir: string }) => cwd.startsWith(g.anchor_dir) ? 0 : 1; // cwd 命中组前置
-          return hit(a) - hit(b);
-        });
-        const shown = sorted.slice(0, 5).map((g) => `${cwd.startsWith(g.anchor_dir) ? "★" : ""}${g.name}`);
+        // cwd 命中判定：尾斜杠归一 + 段边界（anchor=/a/bro 不得命中 /a/brother——审查
+        // P2 双路同报；projects.ts:1286 同款归一口径）；组名做单行清洗（组名无字符
+        // 校验，换行会打破 ≤5 行结构——审查 B-P2-1）
+        const hit = (anchor: string): boolean => {
+          const a = anchor.replace(/\/+$/, "").toLowerCase();
+          const c = cwd.replace(/\/+$/, "").toLowerCase();
+          return c === a || c.startsWith(a + "/");
+        };
+        const name = (raw: string): string => raw.replace(/[\r\n\t]+/g, " ").trim().slice(0, 40);
+        const sorted = [...active].sort((x, y) => (hit(y.anchor_dir) ? 1 : 0) - (hit(x.anchor_dir) ? 1 : 0));
+        const shown = sorted.slice(0, 5).map((g) => `${hit(g.anchor_dir) ? "★" : ""}${name(g.name)}`);
         groupsText = `项目组 ${active.length} 个：${shown.join("、")}${active.length > 5 ? " 等" : ""}。`;
       }
     } catch { /* 组清单读失败按无组口径继续广播——在场声明本身不依赖 org 数据 */ }
@@ -4576,7 +4582,9 @@ export class SessionManager {
     const orgMd = join(orgDir(), "CLAUDE.md");
     return [
       `[cc-deck] 本机有 cc-deck 团队调度（PM 值守：${pmAlive ? "在岗 ✓" : "当前无在岗 PM"}）。${groupsText}`,
-      "[cc-deck] 会话内短平快子任务可用内置 Agent/subagent 自理；立项级/跨会话/多成员编排走 org 分诊（org status / org dispatch），PM 值守在岗时自动接管记账。",
+      // 审查 B-P1-1 修正：值守链路=feedPM 喂活提醒（CCR_PM_DUTY env 门+产品门控制），
+      // 非自动记账——「自动接管记账」在缺省环境是虚假承诺，弱化为如实表述
+      "[cc-deck] 会话内短平快子任务可用内置 Agent/subagent 自理；立项级/跨会话/多成员编排走 org 分诊（org status / org dispatch），PM 值守在岗时会收到分诊提醒。",
       `[cc-deck] 团队规则镜像 ${rulesPath}；组织说明 ${orgMd}。`,
     ].join("\n");
   }

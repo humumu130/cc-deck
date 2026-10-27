@@ -180,11 +180,14 @@ export function rulesMirrorPath(dir?: string): string {
 
 export function writeRulesMirror(dir?: string): boolean {
   try {
-    // boot 自愈场景 org 目录可能尚未建（构造器早于 ensureOrgDir）：镜像落 org 目录
-    // 旁（其父层），父层一并兜底创建——失败自吞（镜像非关键路径，不得阻断 boot）
-    mkdirSync(dirname(rulesMirrorPath(dir)), { recursive: true });
-    const { store } = loadRules(dir);
-    const active = store.rules.filter((e) => e.status === "active");
+    // 两道前置闸（审查 A-P2 收敛）：①org 目录未建（boot 早于 ensureOrgDir 的裸启）
+    // 不递归建目录不落镜像——镜像只在 org 已初始化的机器出现，也避免测试沙盒把
+    // RULES.md 写进共享 tmp 根；②坏 JSON 保护态跳过刷新——corrupted 时库内容不可
+    // 信，覆写会抹掉最后一份有效镜像（排障时刻最需要它）
+    if (!existsSync(dirname(rulesPath(dir)))) return false;
+    const loaded = loadRules(dir);
+    if (loaded.corrupted) return false;
+    const active = loaded.store.rules.filter((e) => e.status === "active");
     const lines = [
       "# cc-deck 团队规则（RULES.md 镜像）",
       "",
