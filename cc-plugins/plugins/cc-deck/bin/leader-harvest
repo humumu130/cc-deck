@@ -1,0 +1,182 @@
+#!/bin/bash
+# leader-harvest —— PM 收割机械手（#213 W-DISPATCHX，2026-10-22）
+# 机器闸只核机械事实：回执存在性+必需节 / 派单台账终态 / 分支新提交清单 / 未提交改动 / squash 命令建议打印。
+# 判断不自动化（SSOT 不可自动化内核，docs/design/ssot-decision.md 拍板表）：
+#   diff 抽查、自测证据核验、真机分级、是否执行 squash——全部留 PM（界面层 .claude/commands/harvest.md 有人工清单）。
+# 用法：
+#   leader-harvest <dispatch-id> [选项]
+# 选项（缺省按派单账 leader-dispatches.ndjson 寻址；手工覆盖用于账外单）：
+#   --receipt <path>   回执路径覆盖
+#   --worktree <dir>   worktree 覆盖
+#   --branch <ref>     分支覆盖
+#   --base <sha|ref>   基线覆盖（git log 起点缺省用派单时记账的 base_sha）
+# 账源两本：
+#   派单账 $CCR_DATA_DIR/leader-dispatches.ndjson（leader-dispatch 写，slug/分支/回执路径在此）；
+#   派单台账 <org>/dispatch-log.ndjson（relay 写，status/收口回执在此；org 目录寻址三段
+#   与 relay orgDir 同款：显式 CCR_ORG_DIR > CCR_DATA_DIR 隔离态随 data > ~/.cc-deck/org）。
+# 回执必需节机器闸（W-DISPATCHX 任务书口径）：根因 / 自测证据 / 验收点 / 尾行「结果：…｜改动文件：…」。
+# 退出码：0 闸全绿｜1 闸有 ✗｜2 单寻址失败
+set -uo pipefail
+
+usage() { grep '^# ' "$0" | sed 's/^# //; s/^#$//' >&2; }
+die() { echo "leader-harvest：$2" >&2; exit "$1"; }
+need_value() { [ -n "${2:-}" ] || die 2 "选项 $1 缺值"; }
+
+did=""; rc_opt=""; wt_opt=""; br_opt=""; base_opt=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --receipt) need_value "$1" "${2:-}"; rc_opt="$2"; shift 2 ;;
+    --worktree) need_value "$1" "${2:-}"; wt_opt="$2"; shift 2 ;;
+    --branch) need_value "$1" "${2:-}"; br_opt="$2"; shift 2 ;;
+    --base) need_value "$1" "${2:-}"; base_opt="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die 2 "未知选项: $1" ;;
+    *) [ -z "$did" ] || die 2 "多余参数: $1（只收一个 dispatch-id）"; did="$1"; shift ;;
+  esac
+done
+[ -n "$did" ] || { usage; die 2 "用法: leader-harvest <dispatch-id> [选项]"; }
+
+data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
+# org 目录三段复刻 relay orgDir（org.ts:117 orgDir）：显式 CCR_ORG_DIR > CCR_DATA_DIR
+# 隔离态随 data 走（值≠生产缺省，join(data,"org")）> 家目录 ~/.cc-deck/org
+if [ -n "${CCR_ORG_DIR:-}" ]; then org_dir="$CCR_ORG_DIR"
+elif [ -n "${CCR_DATA_DIR:-}" ] && [ "$data" != "$HOME/.cc-deck/data" ]; then org_dir="$data/org"
+else org_dir="$HOME/.cc-deck/org"; fi
+dispatch_log="$org_dir/dispatch-log.ndjson"
+ledger="$data/leader-dispatches.ndjson"
+
+# ---------- 寻址：派单账（leader-dispatch 写）→ 回退派单台账（relay 写） ----------
+led="$(python3 - "$ledger" "$did" <<'PY'
+import json, sys
+path, did = sys.argv[1], sys.argv[2]
+try:
+    rows = [json.loads(r) for r in open(path, encoding="utf-8") if r.strip()]
+except OSError:
+    rows = []
+m = [r for r in rows if r.get("dispatch_id") == did]
+print(json.dumps(m[-1], ensure_ascii=False) if m else "")
+PY
+)"
+dl="$(python3 - "$dispatch_log" "$did" <<'PY'
+import json, sys
+path, did = sys.argv[1], sys.argv[2]
+last = None
+try:
+    for r in open(path, encoding="utf-8"):
+        r = r.strip()
+        if not r:
+            continue
+        try:
+            e = json.loads(r)
+        except Exception:
+            continue
+        if e.get("id") == did:
+            last = e
+except OSError:
+    pass
+print(json.dumps(last, ensure_ascii=False) if last else "")
+PY
+)"
+if [ -z "$led" ] && [ -z "$dl" ] && { [ -z "$rc_opt" ] || [ -z "$br_opt" ]; }; then
+  die 2 "两本账都无 dispatch_id=${did:0:8} 的记录（派单账 ${ledger} / 台账 ${dispatch_log}）——账外单用 --receipt/--branch/--worktree 手工指路"
+fi
+
+led_field() { # $1=字段名（空账安全：解析失败返空串）
+  printf '%s' "$led" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: d={}
+v=d.get(sys.argv[1]) or ""
+print(v if isinstance(v,str) else json.dumps(v,ensure_ascii=False))' "$1"
+}
+dl_field() {
+  printf '%s' "$dl" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: d={}
+v=d.get(sys.argv[1]) or ""
+print(v if isinstance(v,str) else json.dumps(v,ensure_ascii=False))' "$1"
+}
+
+title="$(led_field title)"; [ -n "$title" ] || title="$(dl_field title)"
+sid="$(led_field session_id)"; [ -n "$sid" ] || sid="$(dl_field session_id)"
+receipt="${rc_opt:-$(led_field receipt)}"
+worktree="${wt_opt:-$(led_field worktree)}"
+branch="${br_opt:-$(led_field branch)}"
+base="${base_opt:-$(led_field base_sha)}"
+[ -n "$base" ] || base="$(led_field base_ref)"
+dl_status="$(dl_field status)"
+dl_receipt="$(dl_field receipt)"   # 台账的 receipt=收口回执摘要（≠回执文件路径）
+
+echo "== 收割单 ${did:0:8} =="
+echo "标题：${title:-（账无标题）}"
+echo "会话：${sid:0:12}${sid:+…}"
+echo "台账终态：${dl_status:-（无台账记录）}${dl_receipt:+｜收口回执：$dl_receipt}"
+[ -n "$(led_field gate)" ] && echo "派单闸：$(led_field gate)（slug=$(led_field slug)，分支=${branch}）"
+
+fails=0
+
+# ---------- 闸①：回执文件存在性 + 必需节 ----------
+echo "== 回执机器闸：$receipt =="
+if [ -z "$receipt" ]; then
+  echo "✗ 回执路径未知（账无记录且未 --receipt）"; fails=$((fails+1))
+elif [ ! -f "$receipt" ]; then
+  echo "✗ 回执文件不存在（worker 未交？核对任务书回执路径约定）"; fails=$((fails+1))
+else
+  echo "✓ 回执存在（$(wc -c < "$receipt" | tr -d ' ') 字节）"
+  for sec in 根因 自测 验收点; do
+    # 行首节头式匹配（## 根因 / - 根因： / **根因**），裸子串会被「结果：缺根因与验收点」这类尾行误命中
+    if grep -Eq "^[[:space:]]*[-*#> ]*${sec}" "$receipt"; then echo "✓ 必需节「${sec}」在"; else echo "✗ 必需节「${sec}」缺（W-DISPATCHX 回执格式）"; fails=$((fails+1)); fi
+  done
+  if grep -qE '^[[:space:]]*结果：.*' "$receipt" && grep '^[[:space:]]*结果：' "$receipt" | tail -1 | grep -q '改动文件'; then
+    echo "✓ 尾行结果摘要（结果：…｜改动文件：…）在"
+  else
+    echo "✗ 尾行结果摘要缺（固定格式：结果：<一行>｜改动文件：<列表或无>）"; fails=$((fails+1))
+  fi
+fi
+
+# ---------- 闸②：分支新提交清单 + 未提交改动（机械事实，判断留 PM） ----------
+echo "== 分支账（${branch}）=="
+if [ -n "$worktree" ] && [ -d "$worktree" ]; then
+  if [ -n "$base" ] && git -C "$worktree" rev-parse --verify --quiet "$base" >/dev/null 2>&1; then
+    log="$(git -C "$worktree" log --oneline "$base..HEAD" 2>/dev/null || true)"
+  else
+    log="$(git -C "$worktree" log --oneline -10 2>/dev/null || true)"
+    [ -n "$log" ] && echo "（基线 $base 不可解析，退最近 10 条）"
+  fi
+  if [ -n "$log" ]; then
+    echo "$log" | sed 's/^/  /'
+    n="$(printf '%s\n' "$log" | wc -l | tr -d ' ')"
+    echo "  新提交 $n 笔（自基线 ${base:0:8}）"
+  else
+    echo "  （基线后无新提交——worker 未 commit？）"
+    fails=$((fails+1))
+  fi
+  dirty="$(git -C "$worktree" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$dirty" != "0" ] && { echo "  ⚠ 未提交改动 $dirty 处（squash 前需先收口）"; fails=$((fails+1)); }
+  echo "  HEAD=$(git -C "$worktree" rev-parse --short HEAD 2>/dev/null || echo '?')"
+elif [ -n "$worktree" ]; then
+  echo "⚠ worktree 不存在：${worktree}（已被清理？分支仍在主仓可查）"
+else
+  echo "（无 worktree 记录——随手办/账外单，分支账跳过）"
+fi
+
+# ---------- 建议（打印不执行；判断与执行全留 PM） ----------
+main_repo=""
+if [ -n "$worktree" ] && [ -d "$worktree" ]; then
+  gd="$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  [ -n "$gd" ] && main_repo="$(dirname "$gd")"
+fi
+echo "== squash 命令建议（不自动执行；✗/未验项先修复，全 ✓ 且你复核过 diff 再动手）=="
+echo "  # 1) worker 未提交时先收口："
+[ -n "$branch" ] && echo "  git -C ${worktree:-<worktree>} add -A && git -C ${worktree:-<worktree>} commit -m \"[正经立项] ${title:-<标题>}\""
+echo "  # 2) 主仓 squash 一笔（dev 只收验证过的一笔，一 worker 一笔）："
+echo "  cd ${main_repo:-<主仓>} && git merge --squash ${branch:-<分支>} && git commit   # 信息带 #NN，body 列逐条清单"
+echo "  # 3) 收尾："
+[ -n "$worktree" ] && echo "  git worktree remove ${worktree} && git branch -D ${branch:-<分支>}"
+echo "  # 不自动化项（SSOT 内核，逐项人工）：diff 抽查｜自测证据核验｜真机分级（L2 看 UI，L3/L4 未真机不收）"
+
+if [ "$fails" -gt 0 ]; then
+  echo "RESULT harvest=$did fails=${fails}（闸有 ✗，处置后重跑）"
+  exit 1
+fi
+echo "RESULT harvest=$did fails=0（机器闸全绿；人工判断项见上，勿跳过）"
+exit 0

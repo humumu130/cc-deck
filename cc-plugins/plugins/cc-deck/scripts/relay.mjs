@@ -10339,7 +10339,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir24, hostname as hostname2, tmpdir as tmpdir4 } from "node:os";
 import { join as join51, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync31, openSync as openSync6, readFileSync as readFileSync44, rmSync as rmSync10, existsSync as existsSync35, readdirSync as readdirSync21, statSync as statSync19 } from "node:fs";
+import { writeFileSync as writeFileSync31, openSync as openSync6, readFileSync as readFileSync44, rmSync as rmSync10, existsSync as existsSync36, readdirSync as readdirSync21, statSync as statSync19 } from "node:fs";
 import { spawn as spawn8, execFileSync as execFileSync6 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -51438,7 +51438,7 @@ function buildRoleInjection(input) {
 // src/team-rules.ts
 import { existsSync as existsSync25, mkdirSync as mkdirSync17, readFileSync as readFileSync31, readdirSync as readdirSync13, renameSync as renameSync9, writeFileSync as writeFileSync18 } from "node:fs";
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { join as join37 } from "node:path";
+import { join as join37, dirname as dirname11 } from "node:path";
 function envNum4(name, fallback, min = 1) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -51509,9 +51509,34 @@ function saveRules(s, dir) {
     const d2 = dir ?? orgDir();
     mkdirSync17(d2, { recursive: true });
     atomicWrite2(rulesPath(d2), JSON.stringify(s, null, 2) + "\n");
+    writeRulesMirror(dir);
     return true;
   } catch (e) {
     console.warn(`[team-rules] \u89C4\u5219\u5E93\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function rulesMirrorPath(dir) {
+  return join37(dirname11(dirname11(rulesPath(dir))), "RULES.md");
+}
+function writeRulesMirror(dir) {
+  try {
+    if (!existsSync25(dirname11(rulesPath(dir)))) return false;
+    const loaded = loadRules(dir);
+    if (loaded.corrupted) return false;
+    const active = loaded.store.rules.filter((e) => e.status === "active");
+    const lines = [
+      "# cc-deck \u56E2\u961F\u89C4\u5219\uFF08RULES.md \u955C\u50CF\uFF09",
+      "",
+      `> \u673A\u5668\u751F\u6210\uFF0C\u52FF\u624B\u7F16\u2014\u2014\u771F\u76F8\u5728 ${rulesPath(dir)}\uFF0C\u6539\u52A8\u8D70 \`org rule append|retire|supersede\`\u3002\u751F\u6210\u4E8E ${(/* @__PURE__ */ new Date()).toISOString()}`,
+      "",
+      ...active.length ? active.map((e) => `- [${e.id}] ${e.audience} \xB7 ${e.scope}\uFF1A${e.text}`) : ["\uFF08\u5F53\u524D\u65E0 active \u89C4\u5219\uFF09"],
+      ""
+    ];
+    atomicWrite2(rulesMirrorPath(dir), lines.join("\n"));
+    return true;
+  } catch (e) {
+    console.warn(`[team-rules] RULES.md \u955C\u50CF\u5237\u65B0\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
     return false;
   }
 }
@@ -52113,7 +52138,7 @@ import { spawn as spawn5 } from "node:child_process";
 import { randomUUID as randomUUID11 } from "node:crypto";
 import { existsSync as existsSync27, mkdtempSync as mkdtempSync2, rmSync as rmSync6, writeFileSync as writeFileSync21 } from "node:fs";
 import { tmpdir as tmpdir2 } from "node:os";
-import { delimiter as delimiter3, dirname as dirname11, join as join40 } from "node:path";
+import { delimiter as delimiter3, dirname as dirname12, join as join40 } from "node:path";
 var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
 var CODEX_ACTIVITY_CAPABILITIES = {
   native_status: true,
@@ -52331,7 +52356,7 @@ var CodexAgentSession = class {
     if (this.ended) return;
     this.stopping = true;
     this.ended = true;
-    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname11(p))));
+    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname12(p))));
     this.queued = [];
     this.cleanupTurnImages(queuedDirs);
     const child = this.proc;
@@ -52347,7 +52372,7 @@ var CodexAgentSession = class {
     if (this.threadId) args.push("resume", this.threadId);
     for (const p of images) args.push("--image", p);
     args.push("-");
-    this.turnImageDirs = new Set(images.map((p) => dirname11(p)));
+    this.turnImageDirs = new Set(images.map((p) => dirname12(p)));
     this.mapper.turnTerminal = false;
     this.mapper.turnStartMs = Date.now();
     let child;
@@ -52751,6 +52776,10 @@ var SessionManager = class {
     this.titleOverrides = readTitleOverrides(cfg2.dataDir);
     this.loadNotifications();
     this.reconcileOrphanConfirms();
+    try {
+      writeRulesMirror();
+    } catch {
+    }
     setConfirmCreatedHook((c2) => this.recordOrgConfirmNotification(c2));
     setExperienceGcSummaryHook((s) => this.onExperienceGcRound(s));
     setAuthWatchReadyHook((engine) => this.recoverEngineAfterAuth(engine));
@@ -56108,6 +56137,54 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     return best;
   }
+  // ---------- #279 野生会话纳管：SessionStart 广播文案 ----------
+  // 给「用户项目目录直接开的 CLI 会话」的只读在场声明：它们此前对 cc-deck 零感知
+  //（data-integration-platform 自建编排团队实锤），分层指引=共存不禁止（1027 PM
+  // 裁决）：会话内子任务可自理，立项级/跨会话/多成员走 org 分诊。文案约束 ≤5 行、
+  // 只读（不建卡/不劫持/不改任何状态），由 bridge.onSessionStart 经 additionalContext
+  // 注入；PM 值守口径=dutyTargetId（no-leader=最近活跃 external+pid 探活；leader 模式
+  // 沿用 leaderId 锚卡语义不加新探活——leader_session_id 遗留字段不依赖不增强）。
+  sessionStartBroadcast(cwd) {
+    let groupsText = "";
+    try {
+      const active = listGroups().filter((g2) => g2.status === "active" || g2.status === "pending");
+      if (active.length) {
+        const hit = (anchor) => {
+          const a = anchor.replace(/\/+$/, "").toLowerCase();
+          const c = cwd.replace(/\/+$/, "").toLowerCase();
+          return c === a || c.startsWith(a + "/");
+        };
+        const name = (raw) => raw.replace(/[\r\n\t]+/g, " ").trim().slice(0, 40);
+        const sorted = [...active].sort((x, y) => (hit(y.anchor_dir) ? 1 : 0) - (hit(x.anchor_dir) ? 1 : 0));
+        const shown = sorted.slice(0, 5).map((g2) => `${hit(g2.anchor_dir) ? "\u2605" : ""}${name(g2.name)}`);
+        groupsText = `\u9879\u76EE\u7EC4 ${active.length} \u4E2A\uFF1A${shown.join("\u3001")}${active.length > 5 ? " \u7B49" : ""}\u3002`;
+      }
+    } catch {
+    }
+    const pmAlive = !!this.dutyTargetId();
+    const rulesPath2 = rulesMirrorPath();
+    const orgMd = join41(orgDir(), "CLAUDE.md");
+    return [
+      `[cc-deck] \u672C\u673A\u6709 cc-deck \u56E2\u961F\u8C03\u5EA6\uFF08PM \u503C\u5B88\uFF1A${pmAlive ? "\u5728\u5C97 \u2713" : "\u5F53\u524D\u65E0\u5728\u5C97 PM"}\uFF09\u3002${groupsText}`,
+      // 审查 B-P1-1 修正：值守链路=feedPM 喂活提醒（CCR_PM_DUTY env 门+产品门控制），
+      // 非自动记账——「自动接管记账」在缺省环境是虚假承诺，弱化为如实表述
+      "[cc-deck] \u4F1A\u8BDD\u5185\u77ED\u5E73\u5FEB\u5B50\u4EFB\u52A1\u53EF\u7528\u5185\u7F6E Agent/subagent \u81EA\u7406\uFF1B\u7ACB\u9879\u7EA7/\u8DE8\u4F1A\u8BDD/\u591A\u6210\u5458\u7F16\u6392\u8D70 org \u5206\u8BCA\uFF08org status / org dispatch\uFF09\uFF0CPM \u503C\u5B88\u5728\u5C97\u65F6\u4F1A\u6536\u5230\u5206\u8BCA\u63D0\u9192\u3002",
+      `[cc-deck] \u56E2\u961F\u89C4\u5219\u955C\u50CF ${rulesPath2}\uFF1B\u7EC4\u7EC7\u8BF4\u660E ${orgMd}\u3002`
+    ].join("\n");
+  }
+  // #279 org status 的值守视图（与「死席巡检提示」#261 备档同族同口径——无在岗 PM
+  // 的提示语单源在此，避免两套文案分叉）。alive 只在 no-leader 模式含 pid 探活
+  //（dutyTargetId 内置）；leader 模式=锚卡在位语义，不新增探活（修正④）。
+  pmDutyStatus() {
+    const mode = this.collabMode();
+    const target = this.dutyTargetId();
+    return {
+      mode,
+      session_id: target ?? "",
+      alive: !!target,
+      ...target ? {} : { hint: "\u5F53\u524D\u65E0\u5728\u5C97 PM\uFF0C\u5206\u8BCA\u6682\u7F13\u6216\u8D70\u63A5\u7BA1\u6D41\u7A0B" }
+    };
+  }
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
   // （四值 reason：actionable→喂；all_running/blocked/empty→sleep 放行——「全 running
   // 放行」由纯函数 :170-174 既有判定承接，健康干活中不催）。
@@ -56794,7 +56871,11 @@ provider=${opts.provider ?? "default"}` : void 0,
             data: {
               groups: listGroups(),
               pending: listPendingConfirms(),
-              open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20)
+              open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20),
+              // #279 值守 PM 视图（dutyTargetId 口径；无在岗 PM 带提示——Leader 会话/
+              // 野生编排会话据此决定分诊暂缓或走接管）。leader_session_id 为遗留字段
+              // 不在此依赖（修正④）。
+              pm: this.pmDutyStatus()
             }
           };
         }
@@ -59163,8 +59244,8 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID14 } from "node:crypto";
-import { readFileSync as readFileSync40, writeFileSync as writeFileSync27, mkdirSync as mkdirSync24, existsSync as existsSync31, readdirSync as readdirSync19, statSync as statSync17 } from "node:fs";
-import { join as join47, dirname as dirname12, sep as sep8 } from "node:path";
+import { readFileSync as readFileSync40, writeFileSync as writeFileSync27, mkdirSync as mkdirSync24, existsSync as existsSync32, readdirSync as readdirSync19, statSync as statSync17 } from "node:fs";
+import { join as join47, dirname as dirname13, sep as sep8 } from "node:path";
 import { homedir as homedir20, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/design-docs.ts
@@ -59511,7 +59592,7 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID13 } from "node:crypto";
-import { closeSync as closeSync5, openSync as openSync5, readSync as readSync4, readFileSync as readFileSync39, readdirSync as readdirSync18, statSync as statSync16, writeFileSync as writeFileSync26 } from "node:fs";
+import { closeSync as closeSync5, openSync as openSync5, readSync as readSync4, readFileSync as readFileSync39, readdirSync as readdirSync18, statSync as statSync16, writeFileSync as writeFileSync26, existsSync as existsSync31 } from "node:fs";
 import { homedir as homedir19 } from "node:os";
 import path5 from "node:path";
 
@@ -60459,7 +60540,7 @@ var RolloutScanner = class {
       try {
         const stat2 = statSync15(filePath);
         size = stat2.size;
-        mtime = stat2.mtimeMs;
+        mtime = Math.round(stat2.mtimeMs);
       } catch {
         continue;
       }
@@ -60671,6 +60752,7 @@ var Bridge = class _Bridge {
     this.healExternal();
     this.loadQueueDisk();
     this.reviveAliveExternals();
+    this.reclaimAliveAtBoot();
     this.adoptOrphans();
     this.scanExternalEngines();
     this.healTimer = setInterval(() => {
@@ -60968,7 +61050,7 @@ var Bridge = class _Bridge {
         this.mgr.finishExternal(id2, profile.terminal ? "completed" : "process exited", Math.max(0, profile.updatedAt - profile.startedAt), profile.updatedAt, summary);
       } else if (state.status !== desiredStatus || state.action_summary !== summary) {
         this.mgr.setExternalStatus(id2, desiredStatus, summary, desiredStatus === "WORKING" ? profile.startedAt : void 0, profile.updatedAt);
-        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id2);
+        if (desiredStatus === "ERROR" && profile.error) this.mgr.emitExternalSync(id2, profile.updatedAt);
       }
       const historical = !active && inferredDead;
       if (!!state.historical !== historical) {
@@ -61009,6 +61091,56 @@ var Bridge = class _Bridge {
   // 活 pid 的 historical 永挂，直到用户去终端敲一下（hook 事件才清）。
   // boot + 60s 周期各跑一轮（pid 缓存/会话文件迟定位的给补自愈）。
   // #50 idle 归档（idle_archived 标记）是刻意沉底，不翻案——hook 回归或手动恢复才清。
+  // #276 P0：boot 活进程重接管（一次性，不进 60s tick）。重启后回放态的外部会话
+  // 常见形态 = 上次回合终态 DONE + cli_pid 在册且进程活（用户终端还开着）——既有
+  // 自愈面覆盖不到：reviveAliveExternals 只认 historical、healExternal 只认 ERROR
+  //（且跑在本方法前，ERROR+活 pid 已翻 WORKING 不会再进这里），卡片就停在 DONE
+  // 直到下一个 hook 事件；hook 通道断链时 = 永远（1026 晚 rea/keyhive 实锤：转录
+  // 在长、卡不动、updated_at 停在重启时刻——「从未重接管」）。boot 对 pid 活的
+  // DONE 外部卡一次性翻 WORKING + 转录轮询管道补挂（transcriptPaths 纯内存，
+  // 重启即丢，孤儿扫描补挂分支依赖 60s 节拍）。死 pid 不碰（不误接）；idle_archived
+  // 刻意沉底不翻案（#50 口径）。一次性而非常驻：常驻版会把每回合 Stop 的正常收尾
+  // 立刻翻回 WORKING（DONE+进程活=回合间常态），只有 boot 这一刻「进程活+卡终态」
+  // 才是重启痕迹而非回合语义。跑在 hydrate/reconcile 之后：pid 已是回读后最新值。
+  reclaimAliveAtBoot() {
+    try {
+      const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir19(), ".claude", "projects");
+      for (const s of this.mgr.snapshot()) {
+        if (!s.external || s.idle_archived) continue;
+        if (s.status !== "DONE") continue;
+        const pid = s.cli_pid;
+        if (!pid || !pidAlive(pid)) continue;
+        const sid = s.relay_session_id || s.session_id.slice(4);
+        if (!this.transcriptPaths.has(s.session_id)) {
+          const hit = this.findTranscriptForSid(root, sid);
+          if (hit) {
+            this.transcriptPaths.set(s.session_id, hit);
+            this.ensureQueuePoll();
+          }
+        }
+        this.mgr.setExternalStatus(s.session_id, "WORKING", "\u91CD\u542F\u63A5\u7BA1\uFF1ACLI \u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C");
+        this.mgr.pushExternalLog(s.session_id, "system", "relay \u91CD\u542F\u540E\u68C0\u6D4B\u5230\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF0C\u4F1A\u8BDD\u5DF2\u91CD\u65B0\u63A5\u7BA1\uFF08\u72B6\u6001\u7FFB\u6D3B+\u8F6C\u5F55\u7BA1\u9053\u8865\u6302\uFF09");
+      }
+    } catch {
+    }
+  }
+  // sid → 转录文件定向查找（#276）：projects 根下一级目录内 `${sid}.jsonl` 命中即
+  // 返回——boot 补挂专用（孤儿扫描全量扫有 30min 新鲜窗与探针闸，不适合补挂路径）
+  findTranscriptForSid(root, sid) {
+    if (!sid) return void 0;
+    try {
+      for (const dir of readdirSync18(root, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue;
+        const p = path5.join(root, dir.name, `${sid}.jsonl`);
+        try {
+          if (existsSync31(p)) return p;
+        } catch {
+        }
+      }
+    } catch {
+    }
+    return void 0;
+  }
   reviveAliveExternals() {
     const candidates = this.mgr.snapshot().filter((s) => s.external && s.historical && !s.idle_archived);
     if (!candidates.length) return;
@@ -61019,7 +61151,7 @@ var Bridge = class _Bridge {
       if (!pid || !pidAlive(pid)) continue;
       st2.historical = false;
       this.mgr.pushExternalLog(s.session_id, "system", "\u68C0\u6D4B\u5230\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF0C\u4F1A\u8BDD\u6062\u590D\u53EF\u4EA4\u4E92");
-      this.mgr.emitExternalSync(s.session_id);
+      this.mgr.emitExternalSync(s.session_id, s.updated_at);
       if ((this.inputQueue.get(s.session_id)?.length ?? 0) > 0) void this.flushQueue(s.session_id);
     }
   }
@@ -61107,9 +61239,14 @@ var Bridge = class _Bridge {
             }
           }
           this.orphanProbe.delete(p);
-          this.mgr.ensureExternal(id2, cwd, "", sid, transcriptFirstTs(p));
+          let orphanAt = Date.now();
+          try {
+            orphanAt = statSync16(p).mtimeMs;
+          } catch {
+          }
+          this.mgr.ensureExternal(id2, cwd, "", sid, transcriptFirstTs(p), { updatedAt: orphanAt });
           this.transcriptPaths.set(id2, p);
-          this.mgr.setExternalStatus(id2, "DONE", "\u626B\u63CF\u63A5\u5165\uFF08\u53EA\u8BFB\uFF09");
+          this.mgr.setExternalStatus(id2, "DONE", "\u626B\u63CF\u63A5\u5165\uFF08\u53EA\u8BFB\uFF09", void 0, orphanAt);
           this.mgr.pushExternalLog(
             id2,
             "system",
@@ -61280,7 +61417,7 @@ var Bridge = class _Bridge {
             st2.historical = false;
             this.mgr.pushExternalLog(s.session_id, "system", "\u5DF2\u901A\u8FC7 CLI \u4F1A\u8BDD\u4FE1\u606F\u6062\u590D\u8FDB\u7A0B\u5B9A\u4F4D\uFF08\u81EA\u6108\uFF09");
           }
-          this.mgr.emitExternalSync(s.session_id);
+          this.mgr.emitExternalSync(s.session_id, s.updated_at);
         }
       }
     } catch {
@@ -61355,23 +61492,86 @@ var Bridge = class _Bridge {
       const sid = m[1].toLowerCase();
       if (!bySid.has(sid)) bySid.set(sid, []);
     }
-    if (!bySid.size) return;
-    for (const s of this.mgr.snapshot()) {
+    const claimed = /* @__PURE__ */ new Set();
+    if (bySid.size) {
+      for (const s of this.mgr.snapshot()) {
+        if (!s.external) continue;
+        if (s.cli_pid && cliHostAlive(s.cli_pid)) continue;
+        const key = (s.relay_session_id || s.session_id.slice(4)).toLowerCase();
+        if (!bySid.has(key)) continue;
+        const pids = _Bridge.resumeCandidates(snap, key);
+        const pid = pids[0];
+        if (!pid) continue;
+        if (s.cli_pid === pid) continue;
+        this.mgr.setExternalCliPid(s.session_id, pid);
+        const st2 = this.mgr.getExternal(s.session_id);
+        if (st2?.historical && !st2.idle_archived) {
+          st2.historical = false;
+        }
+        this.mgr.pushExternalLog(s.session_id, "system", `\u5DF2\u901A\u8FC7\u8FDB\u7A0B\u626B\u63CF\u6062\u590D\u5B9A\u4F4D\uFF08pid ${pid}${pids.length > 1 ? `\uFF0C\u540C\u4F1A\u8BDD\u5019\u9009 ${pids.length} \u4E2A` : ""}\uFF09\u2014\u2014\u91CD\u542F\u6CE8\u518C\u7A7A\u7A97\u81EA\u6108\uFF0C\u65E0\u9700\u7B49\u5F85\u8FDB\u7A0B\u4E0A\u62A5`);
+        this.mgr.emitExternalSync(s.session_id, s.updated_at);
+        claimed.add(pid);
+      }
+    }
+    this.reconcilePidsFromCwd(snap, claimed);
+  }
+  // #276 件一：cwd 兜底定位——argv 无会话 id 形态的活 CLI（用户手敲 claude /
+  // claude --continue 等）在 relay 重启后 pid 四源全空（hook 空闲不来、cli-pids.json
+  // 无注册、~/.claude/sessions 仅桥接形态写、argv 无 sid 扫不上），DONE 卡悬空直到
+  // 用户敲下一条命令（1026 rea 实锤：boot 后 293 分钟无人接管，PM 候选池同期判它
+  // 出局）。本段用「进程 cwd === 卡 cwd」配位：五重防误配——词级 claude 匹配（路径
+  // 撞名不进）、cwd 归一精确相等、唯一候选才配（同 cwd 多 CLI 不猜）、活 pid 校验、
+  // sid 段已认领/他卡已持有的 pid 不抢。死进程天然不配（pidAlive 前置）。
+  static CLAUDE_CMD_WORD = /(?:^|\s|\/)claude(?:\.exe)?(?:\s|$)/i;
+  reconcilePidsFromCwd(snap, claimed) {
+    const held = /* @__PURE__ */ new Set();
+    const pendingByCwd = /* @__PURE__ */ new Map();
+    const norm = (p) => p.replace(/[\\/]+$/, "").toLowerCase();
+    const all = this.mgr.snapshot();
+    for (const s of all) {
+      if (s.external && s.cli_pid && cliHostAlive(s.cli_pid)) held.add(s.cli_pid);
+    }
+    for (const s of all) {
       if (!s.external) continue;
       if (s.cli_pid && cliHostAlive(s.cli_pid)) continue;
-      const key = (s.relay_session_id || s.session_id.slice(4)).toLowerCase();
-      if (!bySid.has(key)) continue;
-      const pids = _Bridge.resumeCandidates(snap, key);
-      const pid = pids[0];
-      if (!pid) continue;
-      if (s.cli_pid === pid) continue;
-      this.mgr.setExternalCliPid(s.session_id, pid);
+      const cardCwd = s.cwd ? norm(s.cwd) : "";
+      if (!cardCwd) continue;
+      pendingByCwd.set(cardCwd, (pendingByCwd.get(cardCwd) ?? 0) + 1);
+    }
+    const cwdByPid = /* @__PURE__ */ new Map();
+    for (const s of all) {
+      if (!s.external) continue;
+      if (s.cli_pid && cliHostAlive(s.cli_pid)) continue;
+      const cardCwd = s.cwd ? norm(s.cwd) : "";
+      if (!cardCwd) continue;
+      if ((pendingByCwd.get(cardCwd) ?? 0) > 1) continue;
+      let hit;
+      let ambiguity = false;
+      for (const e of snap) {
+        if (!_Bridge.CLAUDE_CMD_WORD.test(e.command)) continue;
+        if (claimed.has(e.pid) || held.has(e.pid)) continue;
+        if (!_Bridge.pidAlive(e.pid)) continue;
+        let pcwd = cwdByPid.get(e.pid);
+        if (pcwd === void 0 && !cwdByPid.has(e.pid)) {
+          pcwd = processCwd(e.pid);
+          cwdByPid.set(e.pid, pcwd);
+        }
+        if (pcwd && norm(pcwd) === cardCwd) {
+          if (hit !== void 0) {
+            ambiguity = true;
+            break;
+          }
+          hit = e.pid;
+        }
+      }
+      if (hit === void 0 || ambiguity) continue;
+      this.mgr.setExternalCliPid(s.session_id, hit);
       const st2 = this.mgr.getExternal(s.session_id);
       if (st2?.historical && !st2.idle_archived) {
         st2.historical = false;
       }
-      this.mgr.pushExternalLog(s.session_id, "system", `\u5DF2\u901A\u8FC7\u8FDB\u7A0B\u626B\u63CF\u6062\u590D\u5B9A\u4F4D\uFF08pid ${pid}${pids.length > 1 ? `\uFF0C\u540C\u4F1A\u8BDD\u5019\u9009 ${pids.length} \u4E2A` : ""}\uFF09\u2014\u2014\u91CD\u542F\u6CE8\u518C\u7A7A\u7A97\u81EA\u6108\uFF0C\u65E0\u9700\u7B49\u5F85\u8FDB\u7A0B\u4E0A\u62A5`);
-      this.mgr.emitExternalSync(s.session_id);
+      this.mgr.pushExternalLog(s.session_id, "system", `\u5DF2\u901A\u8FC7 cwd \u5339\u914D\u6062\u590D\u5B9A\u4F4D\uFF08pid ${hit}\uFF09\u2014\u2014argv \u65E0\u4F1A\u8BDD\u6807\u8BB0\u5F62\u6001\u7684\u6D3B\u7EC8\u7AEF\u81EA\u6108\uFF0C\u65E0\u9700\u7B49\u5F85 hook \u4E0A\u62A5`);
+      this.mgr.emitExternalSync(s.session_id, s.updated_at);
     }
   }
   async handleEvent(ev2) {
@@ -61398,6 +61598,13 @@ var Bridge = class _Bridge {
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0 && !this.flushing.has(id2)) {
         const qst = this.mgr.getExternal(id2);
         if (qst && (qst.status === "DONE" || qst.status === "WORKING" || qst.status === "ERROR")) void this.flushQueue(id2);
+      }
+    }
+    if (ev2.event === "PreToolUse" || ev2.event === "PostToolUse") {
+      const tid = this.extId(ev2);
+      const tst = this.mgr.getExternal(tid);
+      if (tst && tst.status === "DONE" && !tst.historical) {
+        this.mgr.setExternalStatus(tid, "WORKING", "\u5DE5\u5177\u6D3B\u52A8\u8FDB\u884C\u4E2D\uFF08\u63A5\u7EED\u534A\u63A5\u7BA1\u7A97\u53E3\uFF09");
       }
     }
     if (ev2.transcript_path) {
@@ -61487,18 +61694,18 @@ var Bridge = class _Bridge {
       if (now - (this.cliStatusAt.get(s.session_id) ?? 0) < 5e3) continue;
       this.cliStatusAt.set(s.session_id, now);
       const st2 = cliSessionStatus(s.cli_pid);
-      if (!st2) continue;
+      if (!st2 && now - (this.lastGrow.get(s.session_id) ?? 0) > 3e4) continue;
       try {
-        if (st2 === "busy") {
+        if (st2 === "busy" || st2 !== "idle" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 3e4) {
           if (s.status !== "WORKING") {
-            this.mgr.setExternalStatus(s.session_id, "WORKING", s.action_summary || "CLI \u8FD0\u884C\u4E2D");
-            this.mgr.pushExternalLog(s.session_id, "system", "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u72B6\u6001\u6587\u4EF6\uFF09");
+            this.mgr.setExternalStatus(s.session_id, "WORKING", st2 === "busy" ? s.action_summary || "CLI \u8FD0\u884C\u4E2D" : "\u8F6C\u5F55\u589E\u957F\u4E2D\uFF08\u8FDB\u7A0B\u8FD0\u884C\uFF09");
+            this.mgr.pushExternalLog(s.session_id, "system", st2 === "busy" ? "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u72B6\u6001\u6587\u4EF6\uFF09" : "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u8F6C\u5F55\u589E\u957F\u5224\u5B9A\uFF09");
           }
         } else if (st2 === "idle") {
           const quiet = now - Math.max(
             this.lastGrow.get(s.session_id) ?? 0,
             this.lastHookAt.get(s.session_id) ?? 0,
-            0
+            s.updated_at ?? 0
           );
           if (s.status === "WORKING" && quiet > 2e4) {
             const turn = this.turnStart.get(s.session_id) ?? s.started_at;
@@ -61870,8 +62077,23 @@ var Bridge = class _Bridge {
         return this.onSessionEnd(ev2);
       case "PreCompact":
         return this.onPreCompact(ev2);
+      case "SessionStart":
+        return this.onSessionStart(ev2);
       default:
         return { decision: "pass" };
+    }
+  }
+  // #279 野生会话广播：onSessionStart 本体不建卡、不劫持决策（外部卡生命周期仍由
+  // UserPromptSubmit 首事件建卡，此处的提前到达不得改变既有建卡时序），只把
+  // session-manager 组清单+PM 值守快照递给 hook（additionalContext 注入）。注意
+  // 公共入口 handleEvent 的通用管线（pid 采纳/transcript 播种等守卫空转）照走——
+  // 「只读」指本 handler 而非整个事件链。任何异常都 pass：广播是增益不是依赖。
+  onSessionStart(ev2) {
+    try {
+      const context = this.mgr.sessionStartBroadcast(ev2.cwd ?? "");
+      return context ? { decision: "pass", context } : { decision: "pass" };
+    } catch {
+      return { decision: "pass" };
     }
   }
   // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）。
@@ -62206,7 +62428,7 @@ var Bridge = class _Bridge {
         st2.permission_mode = mode;
         const zh2 = { default: "\u9ED8\u8BA4\u786E\u8BA4", acceptEdits: "\u63A5\u53D7\u7F16\u8F91", plan: "\u89C4\u5212\uFF08\u53EA\u8BFB\uFF09", bypassPermissions: "\u8DF3\u8FC7\u786E\u8BA4" };
         this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u5FAA\u73AF\u5207\u6362\u6743\u9650\u6A21\u5F0F \u2192 ${zh2[mode] ?? mode}`);
-        this.mgr.emitExternalSync(sessionId);
+        this.mgr.emitExternalSync(sessionId, st2.updated_at);
       } else {
         console.log(`[perm] fallback sid=${sessionId.slice(0, 14)}\uFF1A\u5207\u6362\u952E\u5DF2\u6CE8\u5165\uFF0C\u6863\u4F4D\u672A\u8BC6\u522B\uFF08\u672C\u5730\u8BCA\u65AD\uFF09`);
       }
@@ -62644,11 +62866,29 @@ var Bridge = class _Bridge {
   turnShape = /* @__PURE__ */ new Map();
   // hooks 不携带助手输出——从 transcript JSONL 增量提取 assistant 文本块。
   // 首见（或文件变小=轮转）只取最后一条，避免把历史回复全量刷进时间线；
+  // #276 件三：水合穿孔翻活——重启/轮转后首读 tail 时以「进程活」为证据恢复接管。
+  // 与 !firstRead 增量路径（转录增长=活动，含 hookRecent/noHookIds 语义）正交：
+  // 这里只处理「offset 丢失的重建水合」，pid 可发现且活 → 状态翻活＋定位重绑＋
+  // historical 翻案（idle_archived 刻意沉底除外）。幂等：仅 DONE/ERROR 态进，
+  // 已 WORKING 跳过；每会话每次水合最多翻一次，Stop/SessionEnd 权威收尾照常兜底。
+  reviveOnHydrate(id2) {
+    const st2 = this.mgr.getExternal(id2);
+    if (!st2 || st2.idle_archived) return;
+    if (st2.status !== "DONE" && st2.status !== "ERROR") return;
+    const alivePid = this.findAliveCliProcess(id2);
+    if (!alivePid) return;
+    if (st2.cli_pid !== alivePid) this.mgr.setExternalCliPid(id2, alivePid);
+    if (st2.historical) st2.historical = false;
+    this.mgr.setExternalStatus(id2, "WORKING", "\u91CD\u542F\u63A5\u7BA1\uFF1A\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C");
+    this.mgr.pushExternalLog(id2, "system", "\u91CD\u542F\u540E\u68C0\u6D4B\u5230\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF0C\u6062\u590D\u4F1A\u8BDD\u63A5\u7BA1\uFF08\u72B6\u6001\u7FFB\u6D3B\uFF0B\u5B9A\u4F4D\u91CD\u7ED1\uFF09");
+  }
   // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync16(transcriptPath).size;
+      const fstat = statSync16(transcriptPath);
+      const size = fstat.size;
+      const fileMtime = Math.round(fstat.mtimeMs);
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -62669,6 +62909,7 @@ var Bridge = class _Bridge {
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
       this.transcriptOffsets.set(id2, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
+      if (firstRead) this.reviveOnHydrate(id2);
       if (!firstRead) {
         if (this.lastGrow.size > 200) this.lastGrow.clear();
         this.lastGrow.set(id2, Date.now());
@@ -62681,13 +62922,16 @@ var Bridge = class _Bridge {
             if (st0.cli_pid !== alivePid) this.mgr.setExternalCliPid(id2, alivePid);
             this.mgr.setExternalStatus(id2, "WORKING", "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u8FDB\u7A0B\u5728\uFF0Chook \u4E8B\u4EF6\u672A\u8FBE\uFF09");
           } else {
-            this.noHookIds.add(id2);
-            if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
-            this.mgr.setExternalStatus(
-              id2,
-              "WORKING",
-              st0.status === "ERROR" ? "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u81EA\u6108\uFF1A\u91CD\u542F\u8BEF\u6807\u9519\u8BEF\uFF09" : "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09"
-            );
+            const nohookStaleMs = Number(process.env.CCR_NOHOOK_STALE_MS) > 0 ? Number(process.env.CCR_NOHOOK_STALE_MS) : 5 * 6e4;
+            if (Date.now() - fileMtime <= nohookStaleMs) {
+              this.noHookIds.add(id2);
+              if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
+              this.mgr.setExternalStatus(
+                id2,
+                "WORKING",
+                st0.status === "ERROR" ? "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u81EA\u6108\uFF1A\u91CD\u542F\u8BEF\u6807\u9519\u8BEF\uFF09" : "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09"
+              );
+            }
           }
         }
         if (st0?.historical) st0.historical = false;
@@ -64165,7 +64409,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync31(join47(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
+  const webRoot = webRootCandidates.find((p) => p && existsSync32(join47(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
   const consoleHtml005 = join47(webRoot, "web-console", "index-005.html");
   const naclJs = join47(webRoot, "web-console", "nacl.js");
   const qrJs = join47(webRoot, "web-console", "qr.js");
@@ -64250,7 +64494,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     if (req.method === "GET" && serveMobile(url, res)) return;
     if (req.method === "GET" && serveDesign(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync31(consoleHtml005)) {
+      if (!existsSync32(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
@@ -64258,7 +64502,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && url.pathname === "/app2") {
-      if (!existsSync31(consoleHtml005)) {
+      if (!existsSync32(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
@@ -64272,7 +64516,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
       const previewPath = join47(webRoot, "web-console", "preview", name);
-      if (!existsSync31(previewPath)) {
+      if (!existsSync32(previewPath)) {
         res.writeHead(404).end("preview \u4E0D\u5B58\u5728: " + name);
         return;
       }
@@ -64280,7 +64524,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
-      if (!existsSync31(naclJs)) {
+      if (!existsSync32(naclJs)) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
@@ -64288,7 +64532,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
-      if (!existsSync31(qrJs)) {
+      if (!existsSync32(qrJs)) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
@@ -64302,7 +64546,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
       const assetPath = join47(webRoot, "web-console", rel);
-      if (!existsSync31(assetPath)) {
+      if (!existsSync32(assetPath)) {
         res.writeHead(404).end("not found");
         return;
       }
@@ -64312,7 +64556,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
       const file = join47(webRoot, "web-console", url.pathname.slice(1));
-      if (!existsSync31(file)) {
+      if (!existsSync32(file)) {
         res.writeHead(404).end("not found");
         return;
       }
@@ -65097,7 +65341,7 @@ async function handlePluginConfig(req, res) {
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
-      mkdirSync24(dirname12(pluginConfigPath()), { recursive: true });
+      mkdirSync24(dirname13(pluginConfigPath()), { recursive: true });
       writeFileSync27(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
     } catch {
       res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
@@ -65213,7 +65457,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/patrol.ts
-import { statfsSync, writeFileSync as writeFileSync28, readFileSync as readFileSync41, readdirSync as readdirSync20, existsSync as existsSync32, rmSync as rmSync9 } from "node:fs";
+import { statfsSync, writeFileSync as writeFileSync28, readFileSync as readFileSync41, readdirSync as readdirSync20, existsSync as existsSync33, rmSync as rmSync9 } from "node:fs";
 import { join as join48 } from "node:path";
 import { statSync as statSync18 } from "node:fs";
 import { homedir as homedir21 } from "node:os";
@@ -65306,7 +65550,7 @@ var PatrolModule = class {
           else if (depth < 3) scan(full, depth + 1);
         }
       };
-      if (existsSync32(tmpRoot)) {
+      if (existsSync33(tmpRoot)) {
         for (const top of readdirSync20(tmpRoot)) scan(join48(tmpRoot, top), 1);
       }
       if (hit.length > CBC_PREFETCH_MAX) {
@@ -65388,7 +65632,7 @@ var PatrolModule = class {
       const artDir = process.env.CCR_ARTIFACTS_DIR || join48(homedir21(), ".cc-deck", "artifacts");
       const candidates = [];
       const scanDir = (d2) => {
-        if (!existsSync32(d2)) return;
+        if (!existsSync33(d2)) return;
         for (const n of readdirSync20(d2)) {
           if (!/^receipt|^acceptance/i.test(n)) continue;
           const full = join48(d2, n);
@@ -65509,13 +65753,13 @@ var PatrolModule = class {
 };
 
 // src/cloud-identity.ts
-import { existsSync as existsSync33, readFileSync as readFileSync42, writeFileSync as writeFileSync29 } from "node:fs";
+import { existsSync as existsSync34, readFileSync as readFileSync42, writeFileSync as writeFileSync29 } from "node:fs";
 import { join as join49 } from "node:path";
 import { createHash as createHash4, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir3) {
   const kpPath = join49(dataDir3, "cloud-keypair.json");
   let keypair;
-  if (existsSync33(kpPath)) {
+  if (existsSync34(kpPath)) {
     keypair = JSON.parse(readFileSync42(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
@@ -65524,7 +65768,7 @@ function loadOrCreateIdentity(dataDir3) {
   }
   const wanSecretPath = join49(dataDir3, "wan-secret");
   let wanSecret = "";
-  if (existsSync33(wanSecretPath)) wanSecret = readFileSync42(wanSecretPath, "utf-8").trim();
+  if (existsSync34(wanSecretPath)) wanSecret = readFileSync42(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
     writeFileSync29(wanSecretPath, wanSecret, "utf-8");
@@ -65532,7 +65776,7 @@ function loadOrCreateIdentity(dataDir3) {
   const wanDev = "wt-" + createHash4("sha256").update(wanSecret).digest("hex").slice(0, 16);
   const peersPath = join49(dataDir3, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
-  if (existsSync33(peersPath)) {
+  if (existsSync34(peersPath)) {
     try {
       const raw = JSON.parse(readFileSync42(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
@@ -66455,7 +66699,7 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync34, readFileSync as readFileSync43, writeFileSync as writeFileSync30 } from "node:fs";
+import { existsSync as existsSync35, readFileSync as readFileSync43, writeFileSync as writeFileSync30 } from "node:fs";
 import { join as join50 } from "node:path";
 import { homedir as homedir23 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
@@ -66464,10 +66708,10 @@ function claudeConfigDir() {
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
-  if (!existsSync34(dir)) return "skip-no-dir";
+  if (!existsSync35(dir)) return "skip-no-dir";
   const file = join50(dir, "settings.json");
   let obj;
-  if (!existsSync34(file)) {
+  if (!existsSync35(file)) {
     obj = {};
   } else {
     try {
@@ -66640,7 +66884,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync35("/proc")) return readFileSync44(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync36("/proc")) return readFileSync44(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync6("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -66870,7 +67114,7 @@ startServer(bus, mgr, cfg, {
     writeFileSync31(join51(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join51(homedir24(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir4(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep9).startsWith(t + sep9));
-    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync35(hookHome)) {
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync36(hookHome)) {
       try {
         writeFileSync31(join51(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {

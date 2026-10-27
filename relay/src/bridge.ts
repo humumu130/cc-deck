@@ -204,6 +204,47 @@ export function deriveStreamFrame(prev: string[] | null, next: string[]): { line
 }
 export const STREAM_DELTA_ENV = () => process.env.CCR_STREAM_DELTA !== "0"; // 缺省开
 
+// ---------- #275R 首次发现收编闸（纯函数单点判据） ----------
+// 事故（1026 晚）：重启 Nova 后磁盘上所有历史引擎转录（含 N 天前废弃 CLI 会话/
+// 沙盒测试残留）被 adoptEngineProfiles 无条件 ensureExternal 成静态 DONE 卡涌进面板
+//（ccr-273e2e-ans / web-console 单源 / 团队标签续作三卡同毫秒=boot 扫描统一收编）。
+// 闸语义：
+//   · 只拦「首次发现」（!existing）——已建卡的更新路径/删过又回的墓碑路径（isDeletedExt）
+//     均不受影响；用户显式打开旧转录 → 文件增长 → updatedAt 刷新 → 下拍自然过闸收编
+//     （人工意图优先，不经特殊通道）
+//   · 活进程豁免：进程表匹配到活进程 = 旧转录正在被使用（resume 后尚未写新行），
+//     照收——闸只防尸体，不防活人
+//   · 沙盒护栏与 handleEvent 首行同规则（.tmp- 段）：测试/沙盒转录永不进主列表，
+//     补上 adoptEngineProfiles 此前缺失的这面（ccr-* 类事故卡的来源面之一）
+export interface AdoptGateInput {
+  hasLiveProcess: boolean;  // 进程表匹配到该转录的活进程（在用豁免）
+  now: number;
+  maxAgeMs?: number;        // 测试注入；缺省 CCR_ADOPT_MAX_AGE_DAYS（天，默认 3；0=关闸）
+}
+export interface AdoptGateVerdict { adopt: boolean; reason?: string }
+
+export function adoptMaxAgeMs(): number {
+  // 空串（launchd/compose 设而空）落缺省 3 天，不静默关闸——显式 "0" 才关
+  //（审查 P3：与 CCR_ENGINE_STALE_MS「空/非正→缺省」惯例对齐）
+  const raw = process.env.CCR_ADOPT_MAX_AGE_DAYS;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  const days = Number.isFinite(n) && n >= 0 ? n : 3;
+  return days * 86_400_000;
+}
+
+export function shouldAdoptEngineProfile(profile: EngineRolloutProfile, input: AdoptGateInput): AdoptGateVerdict {
+  const cwd = profile.cwd ?? "";
+  if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) {
+    return { adopt: false, reason: "sandbox-cwd" };
+  }
+  const maxAge = input.maxAgeMs !== undefined ? input.maxAgeMs : adoptMaxAgeMs();
+  if (maxAge > 0 && !input.hasLiveProcess && input.now - profile.updatedAt > maxAge) {
+    // updatedAt=0（无任何可解析时间戳）一并按陈年处理：解析不出活动的转录不建卡
+    return { adopt: false, reason: `stale-${Math.max(1, Math.round((input.now - profile.updatedAt) / 86_400_000))}d` };
+  }
+  return { adopt: true };
+}
+
 export class Bridge {
   private pending = new Map<string, Pending>();
   // W-STREAMDELTA 终端流状态：sid → { id（流块 id）, lines（上次捕获）, buf, timer }
@@ -485,6 +526,30 @@ export class Bridge {
       const existing = this.mgr.getExternal(id);
       if (!existing && this.mgr.ownsCliSession(profile.sessionId)) continue;
       if (this.mgr.isDeletedExt(id)) continue;
+      // #275R 首次发现收编闸：老转录/沙盒转录不再无条件建卡（判据单点在
+      // shouldAdoptEngineProfile 纯函数，测试直锁）。进程表在场时先试匹配——活进程
+      // =旧转录在被实际使用（如 claude/codex resume 后未写新行），在用豁免照收。
+      // 已建卡（existing）路径不受闸：#271 时间戳语义照旧，闸只拦「首次发现」；
+      // 删过又回来的由 isDeletedExt 墓碑拦截（早于本闸，语义不变）。
+      // 置顶豁免（审查 B-P1-2）：events 压缩（MAX_SESSIONS_KEPT=30）会把闲置>3 天的
+      // 已收编卡挤出重放窗，重启后 existing 丢失即「首次发现」——若该会话被置顶
+      //（最强持久意图信号，且置顶补挂路径正为此场景设计），陈年拒收会让置顶卡随
+      // 压缩永久消失。沙盒护栏不豁免（.tmp- 置顶无意义）。
+      if (!existing) {
+        const preMatch = processes ? matchEngineProcess(profile, processes) : undefined;
+        const verdict = shouldAdoptEngineProfile(profile, { hasLiveProcess: !!preMatch, now });
+        if (!verdict.adopt) {
+          if (verdict.reason !== "sandbox-cwd" && this.adoptPinnedSet().has(id)) {
+            // 置顶意图豁免：照收（等价压缩前的既有行为）
+          } else {
+            if (!this.adoptRejectLogged.has(id)) {
+              this.adoptRejectLogged.add(id);
+              console.log(`[adopt-gate] 拒收 ${id}（${verdict.reason}）——首次发现且超龄/沙盒；打开该转录或置顶可恢复收编`);
+            }
+            continue;
+          }
+        }
+      }
       const title = profile.prompt ? profile.title : undefined;
       const state = existing ?? this.mgr.ensureExternal(
         id,
@@ -842,6 +907,21 @@ export class Bridge {
   //   活跃会话下一轮必然变长，-p 单发不会。
   private orphanProbe = new Map<string, { size: number; ts: number; adopt: boolean }>();
   private orphanSkipBannerShown = false; // W-SANDBOXFIX：隔离态跳过横幅 once（60s 轮询防刷屏）
+
+  // #275R 收编闸配套：置顶豁免集（60s 缓存的 pinned 清单读——拒收是稀疏事件，
+  // 不值得每拍读盘）+ 拒收日志去重（每 id 每进程一次，防 5s 扫描刷屏）
+  private pinnedExtCache: { at: number; ids: Set<string> } | null = null;
+  private adoptRejectLogged = new Set<string>();
+  private adoptPinnedSet(): Set<string> {
+    if (!this.pinnedExtCache || Date.now() - this.pinnedExtCache.at > 60_000) {
+      try {
+        this.pinnedExtCache = { at: Date.now(), ids: new Set(this.mgr.pinnedSessionIds()) };
+      } catch {
+        this.pinnedExtCache = { at: Date.now(), ids: new Set<string>() };
+      }
+    }
+    return this.pinnedExtCache.ids;
+  }
 
   private scanOrphanActivity(p: string): { adopt: boolean; size: number } {
     let fd: number | undefined;
