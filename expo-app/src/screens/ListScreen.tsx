@@ -464,7 +464,21 @@ export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
   // 件九（用户拍板 2026-10-12）：「进行中」状态分组取消——列表=置顶+平铺；状态
   // 过滤交给筛选档。平铺序沿用 all（真行动卡前置 + recency）
   void isActive;
-  for (const s of unpinned) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  // 1028 用户拍板（推翻 W-FB66ALL ⑨ 平铺）：恢复编制两分收纳（对齐桌面 session-domain
+  // 口径）——PM/Leader（SLIM_KEEP_ROLE 词表同源）直列带团队 chip；编制内 worker/QA
+  // 从列表收进团队 TabBar；无编制/置顶不受影响。roster 来自 p.projects[].headcount。
+  const rosterSids = new Set<string>();
+  const keepSids = new Set<string>();
+  for (const g of p.projects ?? []) {
+    for (const m of g.headcount ?? []) {
+      rosterSids.add(m.session_id);
+      if (/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || ""))) keepSids.add(m.session_id);
+    }
+  }
+  const slimmedUnpinned = rosterSids.size
+    ? unpinned.filter((s) => !rosterSids.has(s.session_id) || keepSids.has(s.session_id))
+    : unpinned;
+  for (const s of slimmedUnpinned) rows.push({ kind: "card", key: s.session_id, s, pending: false });
   if (!rows.length && !p.sessions.length) return rows;
   // 聚合多源：保留源分组结构（多 relay 场景桌面无对应，维持既有源分组+组内 recency）
   const useGroups = p.aggregate && p.sources.length > 1;
