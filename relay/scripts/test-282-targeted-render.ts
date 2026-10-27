@@ -268,5 +268,20 @@ ok(ssd.includes("delete pane.dataset.rkSig;"),
     "P1-2'' 反例锚：签名残留时同签名确实会跳（修复=在 keyed 路径清签名，本断言锁死该风险形态）");
 }
 
+// ==================== #282 三批（M2 活动流/N2 队列检查器/MOB 秒级签名） ====================
+console.log("#282 三批——M2 团队详情六 pane / N2 项目域队列·长页·检查器 / MOB 时长占位");
+ok(td.includes("function tSigWrite") && td.includes('"mem:" + tSigOf(memberHtml)') && td.includes('"act:" + tSigOf(activityCompactHtml)') && td.includes('"p1:" + tSigOf(boardFinal)'),
+  "M2-1 团队详情签名跳帧：成员/活动双区+看板终态单笔写（原三步 set+=+= 收口）");
+ok(td.includes('"p3:" + tSigOf(activityHtml)') && td.includes('"p4:" + tSigOf(teamOutputsHtml)') && td.includes('"p5:" + tSigOf(expHtml)') && td.includes('"p6:" + tSigOf(rulesHtml)'),
+  "M2-2 活动/输出物/经验/铁律四 tab 签名跳帧（筛选 chips 悬停+活动/看板滚动位逐帧存活）");
+ok(bc.includes("const bSigOf") && bc.includes("els.queue.dataset.b2qSig !== qSig") && bc.includes("els.body.dataset.b2lSig !== lSig"),
+  "N2-1 项目域队列+长页签名跳帧（未立项折叠态/长页滚动位逐帧存活）");
+ok(bc.includes('els.queue.dataset.b2qSig = "";') && bc.includes('els.body.dataset.b2lSig = "";'),
+  "N2-2 等待分支清签（降级→数据态不误跳帧——续批 P1-2 同型防线前置）");
+ok(bc.includes("els.artifactRows.dataset.b2arSig !== arSig") && bc.includes("els.waterline.dataset.b2wlSig !== wlSig"),
+  "N2-3 检查器产物行+水位块签名跳帧（relTime 分钟粒度翻转才重建）");
+ok(mj.includes("__MELAPSED__") && mj.includes('querySelector("[data-mturn-elapsed]")') && !mj.includes('mDurText(Math.max(0, Date.now() - s.turn_started_at)) + "</b>'),
+  "MOB-E 时长占位剔签名+定点写（B 审查 P3「活跃会话跳帧失效」收口；写/跳帧两路径同款，与桌面 renderMore 对齐）");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

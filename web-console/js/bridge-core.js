@@ -498,6 +498,9 @@
                   return template.content;
                 }
 
+                // #282 三批 N2（清单 §2.4）：项目域队列/长页/检查器签名跳帧——帧驱动 replaceChildren
+                // 整树重建收口（队列折叠态/长页滚动位逐帧存活）；等待分支清签防陈旧跳帧（P1-2 同型防线）
+                const bSigOf = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "b" + (h >>> 0).toString(36); };
                 function renderQueue(entries) {
                   // W-PROJP1 P1-2：未立项（group:null）从活跃项目拆出置底折叠组（设计 §3 方案 a），
                   // 组序：活跃项目 → 待确认立项 → 挂起/归档 → 未立项。降噪靠折叠不靠过滤，所有卡始终可回。
@@ -532,7 +535,11 @@
                       + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
                     : "";
                   const markup = group("活跃项目", activeList) + group("待确认新建项目", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
-                  els.queue.replaceChildren(nodesFrom(markup));
+                  const qSig = "q:" + bSigOf(markup); // #282 三批 N2：未变帧零重建（折叠态/hover 存活）
+                  if (els.queue.dataset.b2qSig !== qSig || !els.queue.childElementCount) {
+                    els.queue.dataset.b2qSig = qSig;
+                    els.queue.replaceChildren(nodesFrom(markup));
+                  }
                 }
 
                 function renderHead(entry) {
@@ -640,7 +647,12 @@
                   }
                   const artifacts = artifactsOf(entry);
                   els.artifactCount.textContent = String(artifacts.length);
-                  els.artifactRows.replaceChildren(nodesFrom(artifacts.slice(0, 4).map((a) => '<div class="artifact-row">' + escapeHtml(basename(a.path)) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>").join("")));
+                  const artRowsHtml = artifacts.slice(0, 4).map((a) => '<div class="artifact-row">' + escapeHtml(basename(a.path)) + "<span>" + escapeHtml(relTime(a.last_at)) + "</span></div>").join("");
+                  const arSig = "ar:" + bSigOf(artRowsHtml); // #282 三批 N2：未变帧零重建（relTime 分钟粒度翻转才重建）
+                  if (els.artifactRows.dataset.b2arSig !== arSig || !els.artifactRows.childElementCount) {
+                    els.artifactRows.dataset.b2arSig = arSig;
+                    els.artifactRows.innerHTML = artRowsHtml;
+                  }
                   // ⑥a-4 最活跃会话水位块：项目内 context 用量占比最高会话（原型 data-context-waterline 终态）
                   if (els.waterline) {
                     const withCtx = (entry ? entry.sessions : []).filter((s) => Number(s && s.context_usage) > 0 && Number(s && s.context_limit) > 0);
@@ -648,9 +660,14 @@
                     if (busiest) {
                       const pct = Math.max(1, Math.min(100, Math.round((Number(busiest.context_usage) / Number(busiest.context_limit)) * 100)));
                       els.waterline.hidden = false;
-                      els.waterline.innerHTML = '<div class="inspector-title"><span>最活跃会话水位</span><span>' + pct + "%</span></div>"
+                      const wlHtml = '<div class="inspector-title"><span>最活跃会话水位</span><span>' + pct + "%</span></div>"
                         + '<div class="mini-context-meter"><i><b style="width:' + pct + '%"></b></i><span>聚合水位</span></div>'
                         + '<div class="inspector-copy">' + escapeHtml(busiest.title || busiest.initial_prompt || busiest.session_id) + " · 当前会话上下文</div>";
+                      const wlSig = "wl:" + bSigOf(wlHtml); // #282 三批 N2：未变帧零重建
+                      if (els.waterline.dataset.b2wlSig !== wlSig || !els.waterline.childElementCount) {
+                        els.waterline.dataset.b2wlSig = wlSig;
+                        els.waterline.innerHTML = wlHtml;
+                      }
                     } else {
                       els.waterline.hidden = true;
                       els.waterline.textContent = "";
@@ -671,13 +688,19 @@
                   html += psecMarkup("artifacts", "package", "输出物", artifactsRows(entry), "暂无输出物登记，输出物由会话域实时产生。");
                   html += psecMarkup("accepts", "check", "验收单", acceptsRows(), "暂无验收单登记。");
                   if (bridge.designDocsSeen && bridge.designDocs.length > 0) html += psecMarkup("design", "layers", "图纸", designRows(), "图纸目录为空。");
-                  els.body.replaceChildren(nodesFrom(html));
+                  const lSig = "lp:" + bSigOf(html); // #282 三批 N2：未变帧零重建（长页滚动位存活）
+                  if (els.body.dataset.b2lSig !== lSig || !els.body.childElementCount) {
+                    els.body.dataset.b2lSig = lSig;
+                    els.body.replaceChildren(nodesFrom(html));
+                  }
                 }
 
                 function render() {
                   const waiting = bridge.waitingText();
                   els.queue.dataset.relayState = bridge.hasSnapshot ? "snapshot" : bridge.connection;
                   if (waiting) {
+                    els.queue.dataset.b2qSig = ""; // #282 三批 N2：降级分支清签（回数据态不误跳帧）
+                    if (els.body) els.body.dataset.b2lSig = "";
                     els.queue.replaceChildren(bannerNode(waiting));
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一

@@ -362,7 +362,7 @@
         // 上部：ctxMeter 水位计 + 本回合时长/tokens（原「用量」tab 迁入，.metric 左线形态退役改键值行）
         if (s.context_usage) html += mCtxMeterHtml(s);
         else html += '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
-        if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + mDurText(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
+        if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-mturn-elapsed>__MELAPSED__</b><span>本回合已运行</span></div>'; // #282 三批：秒级文本走占位符（不进签名）+调用点定点写——B 审查 P3（跳帧对活跃会话失效）收口
         const u = s.usage;
         if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + mTokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + mTokStr(u.input_tokens || 0) + " · 出 " + mTokStr(u.output_tokens || 0) + "）</span></div>";
         // 下部：统计键值行全量（与桌面 renderMore 同字段；目录/引擎用手机作用域助手 displayPath/ENGINE_SHORT）
@@ -477,7 +477,9 @@
         { const api = b2Api(); base.convHost.classList.toggle("proc-off", !(api && api.convCtl && api.convCtl.proc())); } // #164 过程总开关（host 级类，innerHtml 重建不丢）
         { const h = mTasksHtml(s); mSigWrite(base.tasks, "t:" + sid + ":" + mHtmlSig(h), h); }
         { const h = mArtifactsHtml(s); mSigWrite(base.arts, "a:" + sid + ":" + mHtmlSig(h), h); }
-        { const h = mMoreHtml(s); mSigWrite(base.more, "m:" + sid + ":" + mHtmlSig(h), h); }
+        { const h = mMoreHtml(s); mSigWrite(base.more, "m:" + sid + ":" + mHtmlSig(h), h);
+          const elapsedTxt = s && s.status === "WORKING" && s.turn_started_at ? mDurText(Math.max(0, Date.now() - s.turn_started_at)) : "";
+          const el = base.more.querySelector("[data-mturn-elapsed]"); if (el && elapsedTxt) el.textContent = elapsedTxt; } // #282 三批：写/跳帧两路径同款定点写（与桌面 renderMore 对齐）
         updateMobileDetailDock(s);
         syncMobileComposer(); // #169 输入栏随会话态同步（停止钮可见性/发送禁用/提示小字）
         base.content.scrollTop = keepScroll;
