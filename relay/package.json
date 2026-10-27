@@ -106,8 +106,11 @@
     "test:t10-login-loop": "tsx scripts/test-t10-login-loop.ts",
     "test:session-title": "tsx scripts/test-session-title.ts",
     "test:bootts": "tsx scripts/test-bootts.ts",
+    "test:alivereclaim": "tsx scripts/test-alivereclaim.ts",
     "test:273-askuser": "tsx scripts/test-273-askuser.ts",
-    "test:273-askuser-e2e": "tsx scripts/test-273-askuser-e2e.ts"
+    "test:273-askuser-e2e": "tsx scripts/test-273-askuser-e2e.ts",
+    "test:reclaim": "tsx scripts/test-reclaim.ts",
+    "test:alive": "tsx scripts/test-alive.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
