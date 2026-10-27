@@ -833,6 +833,11 @@ window.__ccDeck005Reconcile = function reconcileKeyed(container, desired) {
   const place = (node) => container.insertBefore(node, prev ? prev.nextSibling : container.firstChild);
   for (const pair of desired) {
     const key = pair[0], html = pair[1];
+    // 同键守卫（#282 四批审查 B3，review-282d-b 真浏览器坐实）：重复键 desired 后续跳过
+    //（首键胜出）——无守卫时 existing Map 同键 last-wins → replaceChild 摘离节点 → 后续同
+    // 键对以 __rkHtml 匹配走 kept 分支 place() 把离体节点再插回=每帧+1 无上界静默增殖。
+    // 单口一处守卫，全部八个调用点免疫（比改各调用方键公式便宜）。
+    if (seen.has(key)) continue;
     seen.add(key);
     const cur = existing.get(key);
     if (cur && cur.__rkHtml === html) {

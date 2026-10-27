@@ -81,6 +81,7 @@ console.log("#282 渲染层定向更新——reconcileKeyed 行为级 + 四热�
       node.parentNode = container;
     };
     for (const [key, html] of desired) {
+      if (seen.has(key)) continue; // R8 同键守卫（B3）：与真源码单口同步
       seen.add(key);
       const cur = existing.get(key) as Record<string, unknown> | undefined;
       if (cur && (cur.__rkHtml as string) === html) {
@@ -138,6 +139,10 @@ console.log("#282 渲染层定向更新——reconcileKeyed 行为级 + 四热�
   // R7 源码面：bridge-core 单口在挂且带 __rkHtml 缓存比较
   ok(bc.includes("window.__ccDeck005Reconcile") && bc.includes("__rkHtml === html") && bc.includes('getAttribute("data-rk")'),
     "R7 单口在挂：__rkHtml O(1) 等值缓存 + data-rk 键读 + 非键残留清场");
+  // R8 同键守卫（四批审查 B3 真浏览器坐实：重复键 desired 曾每帧+1 无上界静默增殖）
+  const c8 = mkContainer();
+  st = reconcileFake(c8, [["a", '<div class="q">A</div>'], ["a", '<div class="q">A2</div>']]);
+  ok((c8._children as unknown[]).length === 1 && st.kept === 0, "R8 同键 desired 首键胜出零增殖（B3 守卫——单口一处改全部调用点免疫）");
 }
 
 // ---------- S1 会话列表 ----------
