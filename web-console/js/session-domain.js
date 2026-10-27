@@ -989,7 +989,7 @@
                     }
                     if (!hitRole) continue;
                     // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
-                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" ? 1 : 0); }, 0);
+                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" && !/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")) ? 1 : 0); }, 0); /* 1027 用户裁定：WORKING⟺有活应闭环——在跑计数=干活成员（worker/QA），PM/Leader 是管理岗不计入（他们恒有活但不是「在跑工人」） */
                     out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, running, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）；W-ENGLM2 F：running 随行下发（chip 数字位=活跃数）
                   }
                   return out;
