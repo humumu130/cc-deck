@@ -279,6 +279,20 @@
     .create-pop { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--faint) 45%, transparent) transparent; }
     .create-pop::-webkit-scrollbar { width: 6px; }
     .create-pop::-webkit-scrollbar-thumb { border-radius: 3px; background: color-mix(in srgb, var(--faint) 45%, transparent); }
+    /* #280-A 连接页 v2：源名编辑块（5.3Flash 审查逐条修——当前值独立加重行/计数器/
+       保存钮紧邻主操作档/规则压一句自然语言/左对齐合一）+ 三卡 IA（本机 relay/远程源/本设备与配对） */
+    .rname-block { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .rname-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .rname-label { font-size: var(--fs-B); color: var(--text-strong); }
+    .rname-cur { font-size: var(--fs-A); color: var(--text); font-weight: 650; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rname-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .rname-input { flex: 0 0 9em; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: var(--fs-A); background: var(--surface1); color: var(--text); }
+    .rname-input:focus { border-color: var(--brand); outline: none; }
+    .rname-count { flex: none; font: 600 var(--fs-E) var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; min-width: 3em; text-align: right; }
+    .rname-save { flex: none; height: 30px; padding: 0 12px; }
+    .rname-hint { margin: 0; font-size: var(--fs-A); color: var(--faint); }
+    .rname-rowcard { align-items: flex-start; }
+    .rname-rowcard .avatar { display: none; } /* #280-A：源名块自带头行，去重复图标（审查·第2行图标语义不明项） */
     select.create-field { appearance: none; -webkit-appearance: none; padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
     /* #df2-A 顶栏唯一胶囊：connection-capsule 整链退役（:337-356），连接摘要+统计并入 source-trigger；重连按钮迁入 source-menu（.connection-reconnect 保留复用） */
     .source-option .connection-reconnect {min-width: 34px; min-height: 22px; padding: 2px 7px; margin-left: auto; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: var(--fs-E); white-space: nowrap;}
