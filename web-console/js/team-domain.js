@@ -909,7 +909,7 @@
                   // 件十五（2026-10-11 用户拍板）：head「在办」文字标签删除——绿灯状态点已表达
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
-                  query("[data-team-source]").textContent = srcName(state.source); // W-UIPOLISH ⑧：团队名称旁源徽标同走映射（用户实锤漏网点）
+                  // 1026 用户裁定：head 源徽标移除（列表卡 src-cap 已有源信息，head 冗余）——data-team-source 元素与填充一并退役
                   window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = sortRoster(members(project), project).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
