@@ -271,6 +271,9 @@
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
                     if (session && frame.payload && typeof frame.payload === "object") {
                       Object.assign(session, frame.payload, { session_id: frame.session_id, updated_at: frame.ts || session.updated_at });
+                      // #287 审查 P2（review-287-a）：pm_standby 快照派生域外——状态翻离 DONE
+                      // 的帧到达即清（否则换届/翻活后旧「待命」滞留到下次 SNAPSHOT）
+                      if (session.pm_standby && session.status !== "DONE") session.pm_standby = false;
                       changed = true;
                     }
                   }

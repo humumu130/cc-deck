@@ -30,7 +30,7 @@ export function adoptReplayed(mgr: any, replayed: Map<string, ReplayedSession>):
       rs.state.title = ov;
       rs.state.title_locked = true;
     }
-    mgr.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
+    mgr.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0, pmKeepaliveStreak: 0, pmKeepaliveTimer: null }); // #287 审查 P1（review-287-a/b 双报）：第四处创建点——漏字段=收养路径 streak undefined→NaN 击穿死循环闸
     mgr.applyDeclaredDeliverables(id);
     adopted++;
   }

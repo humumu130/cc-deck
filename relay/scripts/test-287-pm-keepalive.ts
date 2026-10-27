@@ -47,8 +47,8 @@ ok(sm.includes("private schedulePmKeepalive") && sm.includes("if (!check()) retu
   "W2 调度体：schedule 与 fire 双查同源（3s 窗内换届/删除/竞态全防）");
 ok(sm.includes("if (s.agent && !s.agent.ended) return; // 调度窗内消息先到"),
   "W3 fire 时活流在场不扰（消息先到=用户意图优先，不换流）");
-ok(sm.includes("managed.pmKeepaliveStreak = 0; // #287 回合真实跑过"),
-  "W4 onTurnEnd 复位死循环闸（回合有效=拉起有功）");
+ok(sm.includes("if (ok) { managed.pmKeepaliveStreak = 0; managed.pmKeepaliveStopNoted = undefined; }"),
+  "W4 onTurnEnd 复位死循环闸（回合有效=拉起有功；仅 ok 终态——崩溃循环不喂闸）");
 ok(sm.includes("clearTimeout(s.pmKeepaliveTimer); s.pmKeepaliveTimer = null; }"),
   "W5 deleteSession 清保活 timer（防删后幽灵拉起）");
 ok(sm.includes("c.pm_standby = !!(dutyId && c.session_id === dutyId && c.status === \"DONE\");"),
@@ -57,11 +57,21 @@ ok(ty.includes("pm_standby?: boolean;"),
   "W7 SessionState 类型补 pm_standby 可选位");
 ok(sm.includes("pmKeepaliveStreak: 0,") && (sm.match(/pmKeepaliveStreak: 0,/g) || []).length >= 3,
   "W8 三处会话创建字面量全初始化保活账（缺一=undefined 崩判定）");
+ok(readFileSync(join(root, "relay", "src", "lifecycle", "adopt.ts"), "utf-8").includes("pmKeepaliveStreak: 0, pmKeepaliveTimer: null"),
+  "W8' adopt.ts 第四处创建点补齐（审查 P1 双报：收养路径漏字段→NaN 击穿死循环闸）");
+ok(sm.includes("Number.isFinite(s.pmKeepaliveStreak) ? s.pmKeepaliveStreak : 0"),
+  "W8'' NaN 保险带（历史创建点再漏字段时不击穿闸）");
+ok(sm.includes("if (ok) { managed.pmKeepaliveStreak = 0;"),
+  "W9 死循环闸仅 ok 终态复位（审查 P2：崩溃循环 false 终态不喂闸）");
+ok(sm.includes("pmKeepaliveStopNoted = true;") && sm.includes("PM 常驻保活已暂停"),
+  "W10 停拉一次性可观测日志（审查 P2：静默降级封口；onTurnEnd 复位连清）");
+ok(readFileSync(join(root, "web-console", "js", "bridge-core.js"), "utf-8").includes('session.pm_standby && session.status !== "DONE") session.pm_standby = false;'),
+  "W11 帧合并清陈旧待命（审查 P2：状态翻离 DONE 即清，换届/翻活不滞留到下次 SNAPSHOT）");
 
 console.log("#287 面板待命态（web-console 源码锚）");
 
-ok(ssd.includes("pmStandby: session.pm_standby === true") && ssd.includes("值守 PM 常驻待命"),
-  "P1 桌面卡：myCardItem 透传 + r2 行「待命」tag（替代 DONE 假死——活跃/待命连续态对齐 #276）");
+ok(ssd.includes("pmStandby: session.pm_standby === true") && ssd.includes("值守 PM 待命（空闲保活 · 异常时可能降级为手动恢复）"),
+  "P1 桌面卡：myCardItem 透传 + r2 行「待命」tag（替代 DONE 假死——活跃/待命连续态对齐 #276；tooltip 如实承诺）");
 ok(mj.includes('s.pm_standby ? ["待命", "waiting"]'),
   "P2 移动卡：stTag 待命二态（waiting 色系）");
 

@@ -459,6 +459,8 @@ interface ManagedSession {
   // 效）；timer=延时拉起句柄（deleteSession 清，防删卡后幽灵拉起）
   pmKeepaliveStreak: number;
   pmKeepaliveTimer: ReturnType<typeof setTimeout> | null;
+  // #287 审查 P2：停拉一次性记账（防重复日志；onTurnEnd 复位连清）
+  pmKeepaliveStopNoted?: boolean;
   // #21③ 首回合在途标记：create(prompt) 的 initialPrompt 在 adapter 构造时已 push 进
   // SDK 队列（不进 unacked——create 路径没有 user_message 回显日志可出队，塞了会变
   // 永久悬账激活 watchdog 重放）。onInit 待命化（Leader 防看门狗误杀的 DONE 翻转）
@@ -3173,7 +3175,7 @@ export class SessionManager {
         onTurnEnd: (ok, reason, durationMs) => {
           if (!mine()) return;
           managed.pendingInitial = undefined; // #21③ 首回合已终态，后续空闲 init 可待命化
-          managed.pmKeepaliveStreak = 0; // #287 回合真实跑过=上次保活拉起有效，死循环闸计数复位
+          if (ok) { managed.pmKeepaliveStreak = 0; managed.pmKeepaliveStopNoted = undefined; } // #287 回合真实跑过=上次保活拉起有效，死循环闸计数复位（审查 P2：仅 ok 复位——崩溃循环的 false 终态不喂闸）
           // #7 看门狗恢复期：杀树时 CLI 可能吐出最后的 interrupted result——状态
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
@@ -3316,6 +3318,8 @@ export class SessionManager {
   // streak 闸防「拉起即退」死循环：连续无活动退出≥2 停拉，等真实消息/回合复位）
   private schedulePmKeepalive(s: ManagedSession, reason: string): void {
     if (s.pmKeepaliveTimer) clearTimeout(s.pmKeepaliveTimer);
+    // 审查 P1 保险带：NaN/undefined 防护（adopt 等历史创建点漏字段时不击穿闸）
+    s.pmKeepaliveStreak = Number.isFinite(s.pmKeepaliveStreak) ? s.pmKeepaliveStreak : 0;
     const check = () => pmKeepaliveEligible({
       envOff: process.env.CCR_PM_KEEPALIVE,
       reason,
@@ -3327,7 +3331,17 @@ export class SessionManager {
       now: Date.now(),
       idleStreak: s.pmKeepaliveStreak,
     });
-    if (!check()) return;
+    if (!check()) {
+      // 审查 P2（review-287-b）：停拉不静默——死循环闸达限记一行（一次性，onTurnEnd
+      // 复位后重新可拉时由下次正常拉起日志自然翻篇），熔断/换届等常规拒绝不记
+      if (reason === "stream closed" && !s.state.external && !s.state.historical
+        && this.dutyTargetId() === s.state.session_id
+        && s.pmKeepaliveStreak >= 2 && !s.pmKeepaliveStopNoted) {
+        s.pmKeepaliveStopNoted = true;
+        this.pushExternalLog(s.state.session_id, "system", `PM 常驻保活已暂停（连续 ${s.pmKeepaliveStreak} 次拉起后无回合活动——下次收到消息自动恢复）`);
+      }
+      return;
+    }
     s.pmKeepaliveTimer = setTimeout(() => {
       s.pmKeepaliveTimer = null;
       try {
