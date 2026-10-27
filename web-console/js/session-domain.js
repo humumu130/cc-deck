@@ -2158,9 +2158,14 @@
                 }
                 function renderInspector() {
                   const s = curSession();
-                  let html = "<h3>证据检查器</h3>";
+                  // #282 S3 块级拆分：块集合（不再拼单串整写）——写点在函数尾部稳定内层容器
+                  // [data-insp-body] 上 keyed reconcile：未变块零触碰（成员胶囊展开/详情块
+                  // 折叠/滚动位逐帧存活），变化块单点替换；FB6 摘下回填保留为 rk 缺席兜底
+                  const blocks = [];
+                  const blk = (key, h) => { if (h) blocks.push([key, h]); };
+                  blk("h", "<h3>证据检查器</h3>");
                   if (!s) {
-                    html += '<div class="readonly-banner">从左侧选择会话查看证据</div>';
+                    blk("empty", '<div class="readonly-banner">从左侧选择会话查看证据</div>');
                   } else {
                     const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
                     const done = todos.filter((t) => t.status === "completed").length;
@@ -2173,7 +2178,7 @@
                     // 任务清单保留；审批/确认区本就在对话流 wait-banner 非本面板）。分支判据=
                     // pmTeamChipOf 词表单口命中（与 chip/头像角色蟹同源）；非 PM 检查器零变化
                     const pmInspectorFocus = pmTeamChipOf(s.session_id).length > 0;
-                    html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + (inspSrc ? '<br><span class="source-badge insp-src">' + esc(inspSrc) + "</span>" : "") + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
+                    blk("sess", '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + (inspSrc ? '<br><span class="source-badge insp-src">' + esc(inspSrc) + "</span>" : "") + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>');
                     // [t-7e0c6189] 团队成员块：选中会话属于某编制时，成员胶囊行（点头像=直开）+ 展开第四列
                     const slimMem = slimRosterOf(S.projects).bySid.get(s.session_id);
                     if (slimMem) {
@@ -2188,24 +2193,34 @@
                           const unread = unreadSet && unreadSet.has(m.session_id);
                           return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
                         }).join("");
-                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">团队信息 ⤢</button></div>'; // W-TEAMSNC ④：链接文案随厚抽屉升级（属性/路由零改动）
+                        blk("team", '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">团队信息 ⤢</button></div>'); // W-TEAMSNC ④：链接文案随厚抽屉升级（属性/路由零改动）
                       }
                     }
-                    if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
-                    if (s.context_usage && !pmInspectorFocus) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>"; // W-DRAWMERGE：PM 瘦身去水位（他 tab 已有）
+                    if (todos.length) blk("todos", '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>");
+                    if (s.context_usage && !pmInspectorFocus) blk("usage", '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>"); // W-DRAWMERGE：PM 瘦身去水位（他 tab 已有）
                     // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
-                    if (s.pre_compact_summary) html += '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>";
+                    if (s.pre_compact_summary) blk("pcsum", '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>");
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
                     if (arts.length && !pmInspectorFocus) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
-                      html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
+                      blk("arts", '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>");
                     }
+                  }
+                  // #282 S3 写点：稳定内层容器 [data-insp-body]（一次创建永复用），块 keyed
+                  // reconcile——resizer 等 inspector 直接子节点永在体系外零触碰（单口的
+                  // 非 keyed 清场扫不到它们）。rk 缺席兜底=旧整写行为逐字节保留（FB6 摘回）。
+                  const rk = window.__ccDeck005Reconcile;
+                  if (rk) {
+                    let host = UI.inspector.querySelector("[data-insp-body]");
+                    if (!host) { host = document.createElement("div"); host.setAttribute("data-insp-body", ""); UI.inspector.appendChild(host); }
+                    rk(host, blocks);
+                    return;
                   }
                   // FB6：innerHTML 会吞掉检查器拖宽条（地基 initInspectors 挂的）——摘下回填。
                   // 件六：收起钮已挂 screen（骑缝会被 overflow 裁 + 拖宽跟随），不在本面板内，
                   // 不再需要摘回
                   const inspectorCtrls = [...UI.inspector.querySelectorAll(".inspector-resizer")];
-                  UI.inspector.innerHTML = html;
+                  UI.inspector.innerHTML = blocks.map((b) => b[1]).join("");
                   inspectorCtrls.forEach((ctrl) => UI.inspector.prepend(ctrl));
                 }
 
@@ -2761,18 +2776,28 @@
                   return ts.some((t) => t && t.source === "board");
                 };
                 window.__ccDeck005SsotDraftOpen = window.__ccDeck005SsotDraftOpen || false;
+                // #282 S5 签名跳帧（N1 同款模式）：pane 级签名——html 未变的帧零 DOM 写
+                //（任务勾选瞬态/hover/折叠态逐帧存活），数据真变才重建（重建=语义变化点，
+                // 可接受）。签名挂 pane.dataset（节点被外部清空时签名随宿主消失=防陈旧跳帧）。
+                const htmlSig = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "h" + (h >>> 0).toString(36); };
+                function paneSigWrite(pane, sig, html) {
+                  if (pane.dataset.rkSig === sig && pane.childElementCount) return false;
+                  pane.dataset.rkSig = sig;
+                  pane.innerHTML = html;
+                  return true;
+                }
                 function renderTasks() {
                   const pane = UI.panes[1];
                   const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   const allTodos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
                   const visible0 = allTodos.filter((t) => !hiddenTaskKeys.has(s.session_id + "#" + t.id));
                   const ssot = ssotBoardMode();
                   // P2 切源：镜像主显；本地条目折叠组（本地草稿在镜像在场时非团队真相，降权）
                   const localTodos = ssot ? visible0.filter((t) => t.source !== "board") : [];
                   const todos = ssot ? visible0.filter((t) => t.source === "board") : visible0;
-                  if (!todos.length && !localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'; return; }
-                  if (!todos.length && localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务进度 · 团队看板</div><div class="readonly-banner">团队看板暂无任务 · 本地草稿 ' + localTodos.length + ' 条（见下方折叠组）</div>' + ssotDraftHtml(localTodos); wireSsotDraft(); return; }
+                  if (!todos.length && !localTodos.length) { paneSigWrite(pane, "empty", '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'); return; }
+                  if (!todos.length && localTodos.length) { const lh = '<div class="pane-summary">任务进度 · 团队看板</div><div class="readonly-banner">团队看板暂无任务 · 本地草稿 ' + localTodos.length + ' 条（见下方折叠组）</div>' + ssotDraftHtml(localTodos); if (paneSigWrite(pane, "local:" + htmlSig(lh), lh)) wireSsotDraft(); return; } // 签名吃全量 html（折叠开合/行文变化必重建）
                   const doneAll = todos.filter((t) => t.status === "completed");
                   const doneWindow = doneAll.length && doneAll.every((t) => typeof t.updated_at === "number") ? doneAll.filter((t) => (t.updated_at || 0) >= Date.now() - 86400e3) : doneAll;
                   const doneList = doneWindow.slice(-15);
@@ -2798,8 +2823,7 @@
                   html += "</div>";
                   if (doneList.length < doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + doneAll.length + " 条）</div>";
                   if (localTodos.length) html += ssotDraftHtml(localTodos);
-                  pane.innerHTML = html;
-                  if (localTodos.length) wireSsotDraft();
+                  if (paneSigWrite(pane, "full:" + htmlSig(html), html) && localTodos.length) wireSsotDraft();
                 }
                 // P0-4 本地草稿折叠组（SSOT P2：默认收起、点按展开、行内 ✕ 照旧）
                 function ssotDraftHtml(items) {
@@ -2912,15 +2936,44 @@
                 function renderArtifacts() {
                   const pane = UI.panes[2];
                   const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   const arts = Array.isArray(s.artifacts) ? s.artifacts : [];
-                  if (!arts.length) { pane.innerHTML = '<div class="pane-summary">输出物</div><div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>'; return; }
+                  if (!arts.length) { paneSigWrite(pane, "empty", '<div class="pane-summary">输出物</div><div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>'); return; }
                   if (artOpenSid !== s.session_id) { artOpenDirs = new Set(); artOpenSid = s.session_id; artOpenInit = false; }
                   const layout = artLayoutItems(arts);
                   if (!artOpenInit && layout.groups.length) { artOpenDirs.add(layout.groups[0].dir); artOpenInit = true; }
+                  // #282 S5 keyed：稳定内层容器 [data-af-body]（一次创建，.artifact-browser
+                  // 类随宿主保留=CSS 祖先选择器不破）承载 keyed 子块——未变组（同目录同文件
+                  // 集同开合态）零触碰：在途下载的 meta 定点写不再被帧重建打成孤儿节点（原
+                  // 隐性丢失面），变化组单点替换。rk 缺席回落旧整树重建（零删）。
+                  const rk = window.__ccDeck005Reconcile;
+                  if (rk) {
+                    let host = pane.querySelector("[data-af-body]");
+                    if (!host) {
+                      pane.textContent = "";
+                      host = document.createElement("div");
+                      host.className = "artifact-browser";
+                      host.setAttribute("data-af-body", "");
+                      pane.appendChild(host);
+                    }
+                    const desired = [];
+                    // #168 汇总条简化：N 文件 · M 文件夹 + 全部下载（cwd 已在 workspace 头，不再挂 chip）
+                    desired.push(["cap", '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>']);
+                    desired.push(["sum", '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>"]);
+                    if (s.artifacts_truncated) desired.push(["trunc", '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>']);
+                    layout.groups.forEach((g) => desired.push(["g:" + g.dir, artGroupNode(g, s.cwd, artOpenDirs.has(g.dir)).outerHTML]));
+                    if (layout.loose.length) {
+                      const loose = document.createElement("div");
+                      loose.className = "art-loose";
+                      for (const a of layout.loose) loose.appendChild(artFileNode(a, s.cwd, false));
+                      desired.push(["loose", loose.outerHTML]);
+                    }
+                    desired.push(["foot", '<div class="af-foot">仅收录文档、表格、图片与安装包等交付物 · ' + layout.files.length + " 项已登记 · 清单来自来源会话实时同步</div>"]);
+                    rk(host, desired);
+                    return;
+                  }
                   const wrap = document.createElement("div");
                   wrap.className = "artifact-browser";
-                  // #168 汇总条简化：N 文件 · M 文件夹 + 全部下载（cwd 已在 workspace 头，不再挂 chip）
                   wrap.innerHTML = '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>' +
                     '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>" +
                     (s.artifacts_truncated ? '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>' : "");
@@ -3127,7 +3180,7 @@
                 function renderMore() {
                   const pane = UI.panes[3];
                   const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   let html = '<div class="detail-panel-list">';
                   // 上部：ctxMeter 水位计
                   if (s.context_usage) html += ctxMeterHtml(s);
@@ -3135,7 +3188,10 @@
                   // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
                   if (s.pre_compact_summary) html += '<details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details>";
                   // 本回合时长 + 输入输出 tokens（原 .metric 改普通键值行）
-                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + fmtDur(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
+                  // #282 S5：时长行用占位符（签名剔时变成分），跳帧路径对 [data-turn-elapsed]
+                  // 定点写——WORKING 选中会话逐帧不再整 pane 重建（details 折叠态存活）
+                  const elapsedTxt = s.status === "WORKING" && s.turn_started_at ? fmtDur(Math.max(0, Date.now() - s.turn_started_at)) : "";
+                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-turn-elapsed>__ELAPSED__</b><span>本回合已运行</span></div>';
                   const u = s.usage;
                   if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + tokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + tokStr(u.input_tokens || 0) + " · 出 " + tokStr(u.output_tokens || 0) + "）</span></div>";
                   html += "</div>"; // 关闭 detail-panel-list
@@ -3199,7 +3255,15 @@
                   if (s.relay_session_id) html += '<div class="kv-row kv-row-copy" data-copy-relay-session-id="' + esc(s.relay_session_id) + '"><b>' + esc(String(s.relay_session_id).slice(0, 16)) + '…</b><span>SDK 会话</span><button class="kv-copy-btn" type="button" title="复制 SDK 会话 ID" aria-label="复制 SDK 会话 ID">⧉</button></div>';
                   html += "</div>"; // 关闭标识节
                   if (s.status === "DONE" || s.status === "ERROR") html += '<button class="danger-btn" type="button" data-session-delete style="margin-top:14px">删除会话</button>';
-                  pane.innerHTML = html;
+                  // #282 S5 签名跳帧：elapsed 占位符不进签名（时变行定点写），其余内容未变=零重建
+                  const sig = "more:" + htmlSig(html);
+                  if (pane.dataset.rkSig === sig && pane.childElementCount) {
+                    const el = pane.querySelector("[data-turn-elapsed]");
+                    if (el && elapsedTxt) el.textContent = elapsedTxt;
+                    return;
+                  }
+                  pane.dataset.rkSig = sig;
+                  pane.innerHTML = html.replace("__ELAPSED__", elapsedTxt);
                 }
                 function confirmDelete() {
                   const s = curSession();
@@ -4334,14 +4398,17 @@
 
                   // #160 置灰看门狗（旧壳 #96 同机制）：renderMyList 纯事件驱动——DONE/ERROR
                   // 会话静默超阈值后不再有事件触发重渲，idleDimmed 判定再对 .idle 也挂不上。
-                  // 60s 逐行对账：DOM 行的 .idle 与重算结果不符才整列重渲——过滤/分组口径
-                  // 天然对齐（不在 DOM 的行不参与），稳态零开销；跨过阈值的时刻本就无交互。
+                  // #282 S7：S1 keyed 地基上失配改单卡类切换（清单 §2.1 建议口径）——idle 只
+                  // 拼卡根 class（markup 单点），类切换与重建产物等价；不再整列重渲（滚动/
+                  // hover 零扰动）。60s 逐行对账：过滤/分组口径天然对齐（不在 DOM 的行不参与），
+                  // 稳态零开销；跨过阈值的时刻本就无交互。
                   setInterval(() => {
                     if (!S.hasSnapshot) return;
                     for (const card of UI.sessionList.querySelectorAll(".queue-card[data-session-card]")) {
                       const s = S.sessions.get(card.dataset.sessionCard);
                       if (!s) continue; // 删除竞态中的孤儿行交给 onDeleted/observer 收口
-                      if (card.classList.contains("idle") !== idleDimmed(s)) { renderMyList(); return; }
+                      const dim = idleDimmed(s);
+                      if (card.classList.contains("idle") !== dim) card.classList.toggle("idle", dim);
                     }
                   }, 60000);
                 }

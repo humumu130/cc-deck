@@ -170,5 +170,68 @@ ok(ssd.includes("bindListScrollKeep") && ssd.includes("LIST_GESTURE_WINDOW_MS"),
 ok(ssd.includes("W-TS63FIX") && ssd.includes("aeAnchor"),
   "W2 S2 抽屉 TS63FIX 滚动+焦点回放保留（等价保焦保滚动方案——已缓解热区不重复改造）");
 
+// ==================== #282 续批（遗留四项：S3/S5/S7/MOB） ====================
+const mj = readFileSync(join(root, "web-console", "js", "mobile.js"), "utf-8");
+console.log("#282 续批——S3 检查器块级拆分 / S5 任务·产物·更多 / S7 看门狗单卡类切换 / MOB 双壳同族");
+
+// ---------- S3 检查器块级拆分 ----------
+ok(ssd.includes('host.setAttribute("data-insp-body", "")') && ssd.includes("rk(host, blocks)") && ssd.includes('blk("sess"') && ssd.includes('blk("team"') && ssd.includes('blk("arts"'),
+  "S3a 块集合 blk() 七块 + 稳定内层容器 [data-insp-body] keyed（未变块零触碰：胶囊展开/详情折叠存活）");
+ok(ssd.includes("blocks.map((b) => b[1]).join(\"\")") && ssd.includes(".inspector-resizer"),
+  "S3b rk 缺席兜底=旧整写+FB6 摘回逐字节保留（零删）");
+ok(!ssd.includes('let html = "<h3>证据检查器</h3>"'),
+  "S3c 旧单串拼接已收口（漏改点哨兵：h3 单串声明不再存在）");
+
+// ---------- S5 任务/输出物/更多 ----------
+ok(ssd.includes("function paneSigWrite") && ssd.includes('"full:" + htmlSig(html)') && ssd.includes('"local:" + htmlSig(lh)'),
+  "S5a 任务 pane 签名跳帧（local 分支签名吃全量 html——折叠开合/行文变化必重建）");
+ok(ssd.includes('host.setAttribute("data-af-body", "")') && ssd.includes('desired.push(["g:" + g.dir, artGroupNode(g, s.cwd, artOpenDirs.has(g.dir)).outerHTML])'),
+  "S5b 输出物 keyed：[data-af-body] 稳定宿主 + 组级键 g:<dir>（在途下载 meta 定点写不再被帧重建孤儿化）");
+ok(ssd.includes('wrap.insertAdjacentHTML("beforeend"'),
+  "S5b' rk 缺席回落旧整树路径保留（零删）");
+ok(ssd.includes("data-turn-elapsed") && ssd.includes('html.replace("__ELAPSED__", elapsedTxt)'),
+  "S5c 更多 pane：时长占位剔签名 + [data-turn-elapsed] 定点写（WORKING 逐帧零整建，details 折叠存活）");
+
+// ---------- S7 置灰看门狗 ----------
+ok(ssd.includes('card.classList.toggle("idle", dim)') && !ssd.includes("idleDimmed(s)) { renderMyList(); return; }"),
+  "S7 失配改单卡类切换（整列重渲退役；idle 只拼卡根 class——类切换与重建产物等价）");
+
+// ---------- S5' paneSigWrite/mSigWrite 行为级（fake DOM 忠实复刻） ----------
+{
+  const mkPane = () => {
+    const p: Record<string, unknown> = { dataset: {} as Record<string, string>, kids: [] as unknown[] };
+    Object.defineProperty(p, "childElementCount", { get(this: { kids: unknown[] }) { return this.kids.length; } });
+    Object.defineProperty(p, "innerHTML", {
+      set(this: { kids: unknown[] }, v: string) { this.kids = v ? [v] : []; },
+      get(this: { kids: unknown[] }) { return String(this.kids[0] ?? ""); },
+      configurable: true,
+    });
+    return p as { dataset: Record<string, string>; kids: unknown[]; childElementCount: number; innerHTML: string };
+  };
+  const sigWrite = (pane: { dataset: Record<string, string>; childElementCount: number; innerHTML: string }, sig: string, html: string) => {
+    if (pane.dataset.rkSig === sig && pane.childElementCount) return false;
+    pane.dataset.rkSig = sig;
+    pane.innerHTML = html;
+    return true;
+  };
+  const p = mkPane();
+  ok(sigWrite(p, "s1", "<x>a</x>") === true, "S5'-1 首写（无签名）必写入");
+  const kidBefore = p.kids[0];
+  ok(sigWrite(p, "s1", "<x>a</x>") === false && p.kids[0] === kidBefore, "S5'-2 同签名跳帧零 DOM 写（子节点身份不动）");
+  ok(sigWrite(p, "s2", "<x>b</x>") === true && p.kids[0] === "<x>b</x>", "S5'-3 签名变化必重建");
+  p.kids.length = 0; // 外部清空（如他路 banner 覆写后残留签名）
+  ok(sigWrite(p, "s2", "<x>b</x>") === true, "S5'-4 空容器+同签名不误跳（dataset 签名随宿主存活时的陈旧防护）");
+}
+
+// ---------- MOB 双壳同族 ----------
+ok(mj.includes("function mSigWrite") && mj.includes('"conv:" + sid + ":" + mHtmlSig(h)') && mj.includes('"t:" + sid + ":" + mHtmlSig(h)'),
+  "MOB-1 详情四 pane sig 跳帧（sid 进签名防跨会话同形误跳；proc-off host 级类不受影响）");
+ok(mj.includes('["a:active", activeMarkup]') && mj.includes('desired.push(["p:" + g,') && mj.includes("rkM(list, desired)"),
+  "MOB-2 收件箱组级 keyed（a:active/p:<组>——FB16 折叠态/组内滚动逐帧存活；rk 缺席回落整串）");
+ok(mj.includes('["n:" + n.key, rowOf(n)]') && mj.includes("rkN(list,"),
+  "MOB-3 通知行级 keyed（n:<key>——标记已读/清除行级增删定点，列表滚动存活）");
+ok(mj.includes('mSigWrite(todo, "todo:" + mHtmlSig(h)') && mj.includes('mSigWrite(members, "mem:" + mHtmlSig(h)') && mj.includes('mSigWrite(cards, "pc:" + mHtmlSig(h)'),
+  "MOB-4 团队 todo/board/members + 项目 cards/lane sig 跳帧（泳道滚动位存活）");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;
