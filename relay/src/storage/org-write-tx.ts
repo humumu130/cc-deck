@@ -46,11 +46,20 @@ let txDepth = 0; // #292-B2 A-P2-2/B-A6：嵌套防护——出口互调出口�
  * （文件态由 fn 自身原子写保证；库锁释放）；正常→commit+导入追赶（追赶失败 warn
  * 降级——文件账在，下次读前触发兜底）。SQLite 不可用→fn 纯文件执行（降级一次告警）。 */
 export function withOrgWriteTx<T>(dir: string | undefined, fn: () => T): T {
+  return withStorageTx(dir ? { orgDir: dir } : undefined, fn);
+}
+
+/** #292-B3：显式 dirs 变体——dataDir 域写口（notifications/deliverables 在
+ * SessionManager.cfg.dataDir，可能与 env CCR_DATA_DIR 不同：生产 env 无覆盖时
+ * resolveDirs 落 cwd/data 而 cfg.dataDir=~/.cc-deck/data——锁错库=互斥失效+追赶
+ * 导错目录）。org 域批2 三口继续走 withOrgWriteTx（兼容壳）。 */
+export function withStorageTx<T>(dirsOverride: Partial<ReadModeDirs> | undefined, fn: () => T, opts?: { deferredSync?: boolean }): T {
   // json 读档=零 SQLite 参与口径（read-mode #158 头注）：事务整段短路，纯文件执行
   if (currentReadMode() === "json") return fn();
+  const dirs: ReadModeDirs = dirsOverride ? { ...dirsForOrgDir(undefined), ...dirsOverride } : dirsForOrgDir(undefined);
   let port;
   try {
-    port = ensureStoreQuiet(dirsForOrgDir(dir));
+    port = ensureStoreQuiet(dirs);
   } catch (err) {
     if (!txDegraded) {
       txDegraded = true;
@@ -91,12 +100,20 @@ export function withOrgWriteTx<T>(dir: string | undefined, fn: () => T): T {
     txDepth = Math.max(0, txDepth - 1);
   }
   // 导入追赶（锁外）：把刚写的文件态灌库，读面（sqlite 投影）立即可见。失败不炸
-  // 调用方（文件账已成功=降级安全；读前触发会在下次读时兜底追赶）
-  try {
-    ensureStore(dirsForOrgDir(dir));
-  } catch (err) {
-    console.warn("[org-write-tx] 导入追赶降级（文件账在，读前触发兜底）：", err instanceof Error ? `${err.message}
-${err.stack}` : err);
-  }
+  // 调用方（文件账已成功=降级安全；读前触发会在下次读时兜底追赶）。
+  // #292-B3 B-P1-3：deferredSync=true 追赶转 setImmediate——高频域（notifications
+  // 生产实测 141ms/条：全量重写→checkpoint 每写必失效→15k 行重灌+27MB events
+  // observe）同步阻塞不可接受。一致性窗口论证：窗口内读者（viaReadMode）走读前
+  // 触发自带追赶=自愈（读到的或旧或新皆一致快照），窗口仅到下个事件循环 tick——
+  // 最终一致，无丢账面（文件账先成）
+  const sync = () => {
+    try {
+      ensureStore(dirs);
+    } catch (err) {
+      console.warn("[org-write-tx] 导入追赶降级（文件账在，读前触发兜底）：", err instanceof Error ? err.message : err);
+    }
+  };
+  if (opts?.deferredSync) setImmediate(sync);
+  else sync();
   return result;
 }
