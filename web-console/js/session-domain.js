@@ -1107,9 +1107,15 @@
                 };
                 // FB19 源色块：源色不再「家里 iMac 二值」——按源名哈希取八色环，同名恒色异名易分
                 const b2SourcePalette = ["#3E8E7E", "#5B8FA8", "#8A7AB5", "#A8763E", "#7D9A3C", "#B55F7A", "#4E85C0", "#9A8A4E"];
+                const b2SourceColorSeq = []; // 1028 用户实锤：哈希撞色无区分度——改「首次出现顺序分配」，同屏源颜色保证互异（>8 源回落哈希）
                 const b2SourceColor = (source) => {
                   const s = String(source || "");
                   if (!s) return "var(--source)";
+                  if (!b2SourceColorSeq.includes(s)) {
+                    if (b2SourceColorSeq.length < b2SourcePalette.length) b2SourceColorSeq.push(s);
+                  }
+                  const idx = b2SourceColorSeq.indexOf(s);
+                  if (idx >= 0) return b2SourcePalette[idx];
                   let h = 0;
                   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
                   return b2SourcePalette[h % b2SourcePalette.length];
