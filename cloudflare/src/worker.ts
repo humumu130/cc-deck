@@ -70,6 +70,11 @@ function cloudCorsHeaders(req: Request): Record<string, string> {
   };
 }
 function cloudCorsWrap(req: Request, res: Response): Response {
+  // 通道例外（1028 深夜抢修）：①Upgrade 请求（ws 101）与②非 200-599 状态一律透传
+  // ——Response 构造器不接受 101，且 101 响应的 .webSocket 属性重建即丢：包壳=新
+  // ws 连接全炸（旧连接部署前建立故桥上仍见在线，新连全进不来=双端远程断链实锤）。
+  if (req.headers.get("upgrade")) return res;
+  if (res.status < 200 || res.status > 599) return res;
   try { const u = new URL(req.url); if (!CLOUD_PATHS.has(u.pathname)) return res; } catch { return res; }
   const h = new Headers(res.headers);
   for (const [k, v] of Object.entries(cloudCorsHeaders(req))) h.set(k, v);
