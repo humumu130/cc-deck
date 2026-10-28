@@ -358,6 +358,43 @@ const SRC_FIX = [
   check(p1.get("srcA") !== p1.get("srcB"), "⑤ 同屏两源异色");
 }
 
+// ---------- ⑥ 1028 三档平铺序（活跃→行动卡→空闲；审查 F1/F2 修复锚） ----------
+{
+  // 场景复刻用户截图：10月23 陈卡（waiting）曾压在 20:25 启动中卡之上
+  const staleWaiting = baseSession({ session_id: "stale-w", status: "WAITING", updated_at: 50, waiting_request: { request_id: "r1", tool_name: "Bash", input_summary: "", suggestions: [] } });
+  const booting = baseSession({ session_id: "booting", status: "WORKING", updated_at: 200, action_summary: "启动中" });
+  const proj = buildListProjection({ sessions: [staleWaiting, booting], aggregate: false, sources: [], sourceActivityCap: false });
+  const cards = proj.filter((r) => r.kind === "card") as Extract<ProjectionRow, { kind: "card" }>[];
+  const order = cards.map((c) => c.s.session_id);
+  check(order[0] === "booting" && order[1] === "stale-w", "⑥ 活跃（启动中 WORKING）排在 waiting 陈卡之上");
+}
+{
+  // F1 锚：活跃档 turn_started_at 稳定序——后吐帧（updated_at 新）但 turn 开得早的不跳顶
+  const earlyTurn = baseSession({ session_id: "early", status: "WORKING", updated_at: 999, turn_started_at: 100 });
+  const lateTurn = baseSession({ session_id: "late", status: "WORKING", updated_at: 500, turn_started_at: 300 });
+  const proj = buildListProjection({ sessions: [earlyTurn, lateTurn], aggregate: false, sources: [], sourceActivityCap: false });
+  const order = (proj.filter((r) => r.kind === "card") as Extract<ProjectionRow, { kind: "card" }>[]).map((c) => c.s.session_id);
+  check(order[0] === "late" && order[1] === "early", "⑥ 活跃档按 turn_started_at 稳定序（不随活动帧跳序）");
+}
+{
+  // F2 锚：行动卡档保 reason 优先级（waiting>acceptance>notification），非 recency
+  const waiting = baseSession({ session_id: "act-w", status: "WAITING", updated_at: 100, waiting_request: { request_id: "r2", tool_name: "Bash", input_summary: "", suggestions: [] } });
+  const acceptance = baseSession({ session_id: "act-acc", status: "DONE", updated_at: 400, last_task_done: { task_id: "t1", title: "T", dispatch_id: "d1" } });
+  const proj = buildListProjection({ sessions: [acceptance, waiting], aggregate: false, sources: [], sourceActivityCap: false });
+  const order = (proj.filter((r) => r.kind === "card") as Extract<ProjectionRow, { kind: "card" }>[]).map((c) => c.s.session_id);
+  check(order[0] === "act-w" && order[1] === "act-acc", "⑥ 行动档保 reason 优先级（waiting 先于 acceptance，updated_at 新旧不倒置）");
+}
+{
+  // 三档全链：WORKING → waiting 行动卡 → 空闲 DONE（recency 降序）
+  const w = baseSession({ session_id: "w1", status: "WORKING", updated_at: 10 });
+  const act = baseSession({ session_id: "a1", status: "WAITING", updated_at: 20, waiting_request: { request_id: "r3", tool_name: "Bash", input_summary: "", suggestions: [] } });
+  const idleOld = baseSession({ session_id: "i-old", status: "DONE", updated_at: 5 });
+  const idleNew = baseSession({ session_id: "i-new", status: "DONE", updated_at: 15 });
+  const proj = buildListProjection({ sessions: [idleOld, act, idleNew, w], aggregate: false, sources: [], sourceActivityCap: false });
+  const order = (proj.filter((r) => r.kind === "card") as Extract<ProjectionRow, { kind: "card" }>[]).map((c) => c.s.session_id);
+  check(order.join(",") === "w1,a1,i-new,i-old", "⑥ 三档全链序：活跃→行动卡→空闲（空闲内 recency 降序）");
+}
+
   console.log(`E2a list projection tests ${tests}/${tests} passed`);
 }
 

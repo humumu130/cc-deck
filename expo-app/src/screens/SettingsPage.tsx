@@ -63,7 +63,11 @@ function defaultHostName(e: { wsUrl: string }): string {
 }
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
 
-// 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更
+// 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更。
+// 审查 F7 复核（1028）：本 app 无 expo-updates/OTA，expoConfig 为 APK 烙死的原生资产
+//（android/.../ConstantsService.kt 读 assets/app.config）——与 versionName 恒同值，
+// 双源取一即可；「显示旧版」= 实机真装了旧版（updates.ts #6：ColorOS 未授权安装
+// 静默失败面），装机侧问题非显示问题。
 const APP_VER = "v" + (Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "-");
 // 通道标识（三通道全覆盖）：版本号后缀即通道来源——
 //   snap → 快照版（CI 对 -snap tag 烙 tag 名进 versionName，如 0.4.23-snap.3）

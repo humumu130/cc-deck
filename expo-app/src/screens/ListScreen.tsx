@@ -447,23 +447,38 @@ export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
   // 单列待处理段——行动卡就地进行中组（摘要行「需要确认 ·」前缀+badge 已表达）
   const { pending, others } = splitPending(p.sessions, { notifications: p.notifications });
   // 并集回全量（splitPending 兼做去重+recency 排序）：行动卡（真需处理的 WAITING/
-  // 验收单/通知绑定）不再单列「待处理」段，就地进行中组——桌面 isActive 同口径
-  const all = [...pending, ...others];
-  void others;
+  // 验收单/通知绑定）不再单列「待处理」段，就地进行中组。
+  // 1028 用户实锤（截图）：活跃会话必须排在空闲上方——三档平铺序取缔「行动卡整体
+  // 前置」（旧行动前置让 10月23 陈卡凭「重启接管」waiting 标记压在 20:25 启动中卡
+  // 之上）。手机三档口径（与桌面 isActive=WORKING/WAITING/ERROR 不同，实述）：
+  // ①活跃档=status==="WORKING"（含「启动中」——store SESSION_CREATED 建卡即置；
+  // 与 queueFlagsOf.is_working 等价——splitPending 已滤畸形会话，此处裸比安全）。
+  //   档内键=turn_started_at 稳定序（桌面 session-domain 定版同键：活跃卡不随活动
+  //   帧跳序，updated_at 每帧推进会引发「谁吐帧谁置顶」抖动）。
+  // ②行动卡档=waiting/acceptance/notification 待用户处理且非活跃——保 splitPending
+  //   既有 reason 优先级序（waiting>acceptance>notification，组内 recency），只滤不
+  //   重排（审查 F2：重排会抹平 reason 优先级）。
+  // ③空闲档=其余，others 保序（已 recency 降序）。badge/「需要确认」前缀不动，只动序。
   const rows: ProjectionRow[] = [];
+  const isActive = (x: SessionState) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
+  const recency = (x: SessionState) => x.updated_at || x.started_at || 0;
+  const turnKey = (x: SessionState) => x.turn_started_at || x.updated_at || x.started_at || 0;
+  const isWorking = (x: SessionState) => x.status === "WORKING";
+  const active = [...pending, ...others].filter(isWorking).sort((a, b) => turnKey(b) - turnKey(a));
+  const actionCards = pending.filter((s) => !isWorking(s));
+  const idle = others.filter((s) => !isWorking(s));
+  const all = [...active, ...actionCards, ...idle];
   const pinnedNow = all.filter((s) => s.pinned === true);
   const unpinned = all.filter((s) => s.pinned !== true);
   if (pinnedNow.length) {
     for (const s of pinnedNow) rows.push({ kind: "card", key: s.session_id, s, pending: false });
   }
-  const isActive = (x: SessionState) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
-  const recency = (x: SessionState) => x.updated_at || x.started_at || 0;
   // W-FB66ALL ⑨（用户 1025：卡片上已放团队标签，底部团队卡区=旧设计移除）——
   // 编制两分收纳退役：PM/Leader/worker 全量直列平铺（归属由卡上团队 chip 承载）；
   // 团队入口卡（dock 同位）整链退役，团队域走底部 TabBar 团队 tab。SLIM_KEEP_ROLE
   // 判定链保留在 chip/头像角色蟹单口（本投影不再消费）。
   // 件九（用户拍板 2026-10-12）：「进行中」状态分组取消——列表=置顶+平铺；状态
-  // 过滤交给筛选档。平铺序沿用 all（真行动卡前置 + recency）
+  // 过滤交给筛选档。平铺序沿用 all（1028 起三档：活跃→行动卡→空闲，各档内 recency）
   void isActive;
   // 1028 用户拍板（推翻 W-FB66ALL ⑨ 平铺）：恢复编制两分收纳（对齐桌面 session-domain
   // 口径）——PM/Leader（SLIM_KEEP_ROLE 词表同源）直列带团队 chip；编制内 worker/QA
