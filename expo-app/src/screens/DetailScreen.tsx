@@ -57,7 +57,6 @@ const TEAM_LANES: { k: string; label: string }[] = [
 ];
 const TEAM_LANE_LEGACY: Record<string, string> = { todo: "backlog", doing: "claimed" };
 const PM_STATUS_ZH: Record<string, string> = { WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" };
-import { isRealWorking } from "../protocol"; /* #291 帧分类判活（待命分层） */
 
 function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
   team: ProjectGroup;
@@ -2790,7 +2789,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             const gFill = lv === "done" ? c.ctxSafeFill : lv === "working" ? c.ctxAttentionFill : c.ctxCriticalFill;
             const on = Math.round((pct / 100) * 12);
             const u = s.usage;
-            const turnRun = s.status === "WORKING" && s.turn_started_at ? fmtElapsed(Math.max(0, Date.now() - s.turn_started_at)) : null;
+            const turnRun = s.status === "WORKING" && isRealWorking(s) && s.turn_started_at ? fmtElapsed(Math.max(0, Date.now() - s.turn_started_at)) : null; /* #291：待命不走秒 */
             const turnTok = u && (u.input_tokens || u.output_tokens) ? fmtTok((u.input_tokens ?? 0) + (u.output_tokens ?? 0)) : null;
             return (
               <View>
@@ -3097,7 +3096,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         {s.status === "WORKING" ? (
           <View style={d.dockWork}>
             <LiveStatusLine
-              summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
+              summary={s.compacting ? "⟳ 正在压缩上下文…" : !isRealWorking(s) ? "⏸ 待开工 · " + (s.action_summary || "已接单未开工") : s.action_summary} /* #291 审查 B-P2-2：详情与卡同屏一致 */
               startedAt={s.turn_started_at ?? s.updated_at}
               color={c.working}
               tok={undefined}
@@ -3432,3 +3431,4 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
 // 输入法风格麦克风矢量图标：胶囊 + U 形支架 + 立柱 + 底座（替代 emoji）
 import { makeStyles } from "../components/detail-styles";
 import { TAB_PAD_L, TAB_GAP } from "../components/detail-consts";
+import { isRealWorking } from "../protocol"; /* #291 帧分类判活（待命分层） */

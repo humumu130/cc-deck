@@ -379,6 +379,7 @@ export interface SessionCreatedPayload {
   title: string;
   model: string;
   external?: boolean;
+  last_tool_use_at?: number; // #291：新 relay 建卡帧恒带 0（增量面判活不降级）；老端忽略
   engine?: SessionEngine;     // #27 非 claude 引擎随首帧下发（端上徽标数据源）
   provider?: string;
 }

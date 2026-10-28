@@ -30,6 +30,8 @@
       const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
       const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
       const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
+      // #291 帧分类判活：WORKING 过真判定（#d-session 域 session-domain 挂的全局；缺=老壳降级原样）——待命不占在跑计数
+      const isRealW = (s) => (window.__ccDeck005IsRealWorking ? window.__ccDeck005IsRealWorking(s) : true);
       const stTag = (s) => s.pm_standby ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死
       const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
       const allSessions = () => [...bridge.sessions.values()];
@@ -367,12 +369,13 @@
         // 上部：ctxMeter 水位计 + 本回合时长/tokens（原「用量」tab 迁入，.metric 左线形态退役改键值行）
         if (s.context_usage) html += mCtxMeterHtml(s);
         else html += '<div class="pane-summary">用量</div><div class="readonly-banner">用量未随该会话下发</div>';
-        if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-mturn-elapsed>__MELAPSED__</b><span>本回合已运行</span></div>'; // #282 三批：秒级文本走占位符（不进签名）+调用点定点写——B 审查 P3（跳帧对活跃会话失效）收口
+        if (s.status === "WORKING" && !isRealW(s) ) html += '<div class="kv-row"><b style="color:var(--dim)">待开工</b><span>已接单未开工或挂起</span></div>'; /* #291 审查 B-P2-2：mobile 详情与卡同屏一致 */
+        else if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-mturn-elapsed>__MELAPSED__</b><span>本回合已运行</span></div>'; // #282 三批：秒级文本走占位符（不进签名）+调用点定点写——B 审查 P3（跳帧对活跃会话失效）收口
         const u = s.usage;
         if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + mTokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + mTokStr(u.input_tokens || 0) + " · 出 " + mTokStr(u.output_tokens || 0) + "）</span></div>";
         // 下部：统计键值行全量（与桌面 renderMore 同字段；目录/引擎用手机作用域助手 displayPath/ENGINE_SHORT）
         html += '<div class="more-section"><h4 class="more-section-title">会话信息</h4>';
-        const statusLabel = { WORKING: "运行中", WAITING: "等待确认", DONE: "已完成", ERROR: "错误", CLOSING: "结束中" }[s.status] || s.status || "—";
+        const statusLabel = s.status === "WORKING" && !isRealW(s) ? "待开工" : { WORKING: "运行中", WAITING: "等待确认", DONE: "已完成", ERROR: "错误", CLOSING: "结束中" }[s.status] || s.status || "—"; /* #291 待命标签 */
         html += '<div class="kv-row"><b>' + esc(statusLabel) + "</b><span>状态</span></div>";
         html += '<div class="kv-row"><b>' + esc(oneLine(displayPath(s.cwd)) || "—") + "</b><span>目录</span></div>";
         html += '<div class="kv-row"><b>' + esc(ENGINE_SHORT[s.engine || "claude"] || s.engine || "Claude") + (s.model ? " · " + esc(s.model) : "") + "</b><span>引擎·模型</span></div>";
@@ -591,7 +594,7 @@
         const otherMarkup = groups.map((g) => {
           const items = other.filter((s) => getSessionProject(s) === g);
           const open = mobileProjOpen.has(g);
-          const wN = items.filter((s) => s.status === "WORKING").length;
+          const wN = items.filter((s) => s.status === "WORKING" && isRealW(s)).length; /* #291 真计数 */
           return `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${esc(String(g).trim().slice(0, 1) || "团")}</span><span>${esc(g)}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${items.length}${wN ? ` ${grpIc("activity", true)}${wN}` : ""}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`;
         }).join("");
         // #282 MOB keyed：组级身份对齐（a:active / p:<项目名>）——未变组零触碰（FB16 折叠
@@ -605,7 +608,7 @@
           groups.forEach((g) => {
             const items = other.filter((s) => getSessionProject(s) === g);
             const open = mobileProjOpen.has(g);
-            const wN = items.filter((s) => s.status === "WORKING").length;
+            const wN = items.filter((s) => s.status === "WORKING" && isRealW(s)).length; /* #291 真计数 */
             desired.push(["p:" + g, `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${esc(String(g).trim().slice(0, 1) || "团")}</span><span>${esc(g)}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${items.length}${wN ? ` ${grpIc("activity", true)}${wN}` : ""}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`]);
           });
           rkM(list, desired);
@@ -667,7 +670,7 @@
         // #282 MOB sig 跳帧：三 pane 内容未变零重建（泳道滚动位/成员列表滚动逐帧存活）
         if (todo) { const h = lane("需行动", sessions.filter(needAction).sort(byPinnedUpdated), taskRow) + (confirms.length ? `<div class="mobile-lane"><div class="mobile-lane-head"><span>组织确认</span><span class="tag action">${confirms.length}</span></div><div class="mobile-task"><b>确认事项待处理</b><br><span class="muted">回桌面团队域确认</span></div></div>` : ""); mSigWrite(todo, "todo:" + mHtmlSig(h), h); }
         const board = screen.querySelector('[data-team-pane="board"]');
-        if (board) { const h = `<div class="mobile-board">${lane("运行中", sessions.filter((s) => s.status === "WORKING"), taskRow)}${lane("需行动", sessions.filter(needAction), taskRow)}${lane("已完成", sessions.filter((s) => s.status === "DONE"), taskRow)}</div>`; mSigWrite(board, "board:" + mHtmlSig(h), h); }
+        if (board) { const h = `<div class="mobile-board">${lane("运行中", sessions.filter((s) => s.status === "WORKING" && isRealW(s)), taskRow)}${lane("需行动", sessions.filter(needAction), taskRow)}${lane("已完成", sessions.filter((s) => s.status === "DONE"), taskRow)}</div>`; mSigWrite(board, "board:" + mHtmlSig(h), h); }
         const members = screen.querySelector('[data-team-pane="members"]');
         if (members) {
           const engineMap = new Map();

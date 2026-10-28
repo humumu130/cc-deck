@@ -66,7 +66,7 @@
                   // 件十一：成员灯数据源=成员会话 run status（与会话卡 status-dot 唯一事实源同
                   // 语义）；查无会话数据=缺省灰（offline）。
                   // 件十⑤：别名解耦——显示名优先 nick（role 在 p 行小字自然弱化），无别名=现状
-                  const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
+                  const status = session.status === "WORKING" && window.__ccDeck005IsRealWorking && !window.__ccDeck005IsRealWorking(session) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || ""; /* #291 审查 B-P2-4：成员灯过真判定（待命灰呼吸与列表卡同源；缺全局=老壳降级原样） */
                   const heartbeatAt = Number(member.last_heartbeat_at || session.activity?.updated_at || session.updated_at || 0);
                   const logAt = Number(member.last_business_log_at || session.activity?.activity?.observed_at || session.activity?.updated_at || session.updated_at || 0);
                   const signalTone = (at) => {
@@ -96,7 +96,7 @@
                   const queued = project ? pendingDispatchSids(project.id) : new Set();
                   const rank = (m) => {
                     const session = state.sessions.get(m.session_id) || {};
-                    const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
+                    const status = session.status === "WORKING" && window.__ccDeck005IsRealWorking && !window.__ccDeck005IsRealWorking(session) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || ""; /* #291 待命 */
                     const lastAt = Number(session.activity?.updated_at || session.updated_at || session.started_at || 0);
                     const isPm = /^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")); // PM 补充指令：词表对齐 SLIM_KEEP_ROLE 五词（中文 PM 实况同收）
                     const active = status === "working" ? 0 : status === "waiting" ? 1 : queued.has(m.session_id) ? 2 : 3;

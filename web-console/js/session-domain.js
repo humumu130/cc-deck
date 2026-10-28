@@ -700,22 +700,27 @@
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
                 }
-                // #291 帧分类判活（心跳≠工作，用户 1028 定立·方案升级版）：主判据=turn
-                // 生命周期直报（turn_started_at 随终态清算，「WORKING ⟔ 活跃 turn」），
-                // 帧分类（last_tool_use_at 10min 新鲜窗）为兜底细分。三态归一：
-                //   干活中 = 近 10min 有工具帧（真工作证据）
-                //          | 无工具帧数据但活跃 turn（managed spawn 起手窗——turn 在跑）
-                //          | 双字段皆缺（老 relay 未下发——降级按干活，不误伤）
-                //   待命（已接单·待开工/挂起）= 其余 WORKING（有字段但无 turn 无近期工具
-                //          = 接单未开工；有 turn 无近期工具 = 挂起——同显一个待命态）
+                // #291 帧分类判活（心跳≠工作，用户 1028 定立）。判定=帧分类单判据：
+                //   干活中 = 近 15min 有工具帧（tool_use/tool_result——真工作证据）
+                //          | last_tool_use_at 缺（老 relay 未下发——降级干活，不误伤）
+                //   待命（已接单·待开工/挂起）= 有字段但 0（从未有工具活动）或超窗
+                // 「turn 生命周期」不在端上判定层（审查 291-A 终版裁决）：turn_started_at
+                // 由 relay 状态机承担（WORKING⟔活跃 turn：onPrompt/spawn 翻活、Stop/
+                // 静默 15min 收殓、本批补终态清算）——若端上再加 turn 新鲜窗分支，spawn
+                // 建卡即写 turn_started_at=now，挂起卡前 15min 会复活「判干活」误判
+                //（本批要杀的形态）；起手窗（读任务未吐工具帧）误显待命是分钟级且首个
+                // 工具帧即自纠，代价可接受。turn_started_at 面上仅作计时显示。
+                // 窗口 15min 对齐 relay sweepWorkingIdle hooked 静默窗（900s——审查
+                // 291-A P2-1：本仓 worker 自测链 10min+ 单工具是常态，10min 窗在
+                // [10,15)min 段把长工具误判待命，与 relay 防误判设计正面冲突）
                 function isRealWorking(s, now) {
                   if (!s || s.status !== "WORKING") return false;
-                  const FRESH_MS = 10 * 60 * 1000;
+                  const FRESH_MS = 15 * 60 * 1000;
                   const t = s.last_tool_use_at;
                   const at = typeof now === "number" ? now : Date.now();
                   if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
                   if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
-                  return false; // 0=从未有工具活动（接单未开工）；有值但超窗（挂起）——同待命
+                  return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
                 }
                 window.__ccDeck005IsRealWorking = isRealWorking; // team-domain 计数同源（跨文件共享）
                 const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
@@ -843,7 +848,7 @@
                   // #291 帧分类判活（增量面）：工具帧本地刷新 last_tool_use_at——relay 增量
                   // 帧不带此键（SNAPSHOT 全量权威），实时性由本行补（与 relay pushExternalLog/
                   // onLog 两咽喉同口径：tool_use/tool_result 刷，心跳类不刷）
-                  if (s && (entry.kind === "tool_use" || entry.kind === "tool_result")) s.last_tool_use_at = entry.occurred_at || entry.ts || Date.now();
+                  if (s && (entry.kind === "tool_use" || entry.kind === "tool_result")) s.last_tool_use_at = entry.occurred_at || entry.ts || Date.now(); /* #291 审查 A-P2①：occurred_at（活动真实时刻）优先，与 relay 两咽喉同口径——scan 回灌旧工具活动时不虚胖窗口 */
                   // #221 同族①（W-INJECT3 扩展）：回显对账双兜底——原唯一路径「精确文本匹配」
                   // 对回显形态差异（空白规整/短回显变体）失配=「发送中…」气泡永挂（用户实锤：
                   // CLI 已回复后续内容气泡仍滞留）。a) 匹配放宽（trim+多空白折叠）b) 回合推进
@@ -1230,7 +1235,7 @@
                       arts: s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [],
                     };
                   });
-                  const running = roster.filter((r) => r.status === "WORKING").length;
+                  const running = roster.filter((r) => r.status === "WORKING" && (() => { const rs = S.sessions.get(r.sid); return rs ? isRealWorking(rs) : true; })()).length; /* #291 审查 B-P1-2：同屏口径一致（行灯已真判定，计数跟上；rs 未同步保守按干活，与行灯降级一致） */
                   const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
                   const entries = Array.isArray(boardEntries) ? boardEntries : null;
                   const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
@@ -2092,7 +2097,7 @@
                     }
                     subEl.dataset.act = act;
                     subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
-                    subEl.textContent = act ? "⚙ Running " + act.slice(0, 110) : "";
+                    subEl.textContent = act ? (isRealWorking(s) ? "⚙ Running " : "⏸ 待开工 ") + act.slice(0, 110) : ""; /* #291 审查 B-P2-2：dock 与卡同屏一致（待命不走秒语义） */
                     subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
                   } else {
                     if (subEl) subEl.remove();
@@ -3310,8 +3315,10 @@
                   // 本回合时长 + 输入输出 tokens（原 .metric 改普通键值行）
                   // #282 S5：时长行用占位符（签名剔时变成分），跳帧路径对 [data-turn-elapsed]
                   // 定点写——WORKING 选中会话逐帧不再整 pane 重建（details 折叠态存活）
-                  const elapsedTxt = s.status === "WORKING" && s.turn_started_at ? fmtDur(Math.max(0, Date.now() - s.turn_started_at)) : "";
-                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-turn-elapsed>__ELAPSED__</b><span>本回合已运行</span></div>';
+                  const dStandby = s.status === "WORKING" && !isRealWorking(s); /* #291 审查 B-P2-2：详情与卡同屏一致 */
+                  const elapsedTxt = s.status === "WORKING" && !dStandby && s.turn_started_at ? fmtDur(Math.max(0, Date.now() - s.turn_started_at)) : "";
+                  if (dStandby) html += '<div class="kv-row"><b style="color:var(--dim)">待开工</b><span>已接单未开工或挂起（无近期工具活动）</span></div>';
+                  else if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-turn-elapsed>__ELAPSED__</b><span>本回合已运行</span></div>';
                   const u = s.usage;
                   if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + tokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + tokStr(u.input_tokens || 0) + " · 出 " + tokStr(u.output_tokens || 0) + "）</span></div>";
                   html += "</div>"; // 关闭 detail-panel-list

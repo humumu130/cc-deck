@@ -129,7 +129,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; provider?: string; started_at?: number };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; provider?: string; started_at?: number; last_tool_use_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -144,6 +144,9 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
           started_at: p.started_at && p.started_at > 0 ? p.started_at : e.ts,
           updated_at: e.ts,
           stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+          // #291 审查 A-P2-2：CREATED 帧带键则回放归一落 0（新 relay 帧）；老帧缺省
+          // undefined=降级档（过渡期可接受，首个工具帧即起算）
+          ...(p.last_tool_use_at !== undefined ? { last_tool_use_at: p.last_tool_use_at } : {}),
         },
         logs: [],
       };

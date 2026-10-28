@@ -1112,19 +1112,20 @@ export function pairErrNote(raw: string | null, fails: number): string {
 
 /**
  * #291 帧分类判活（心跳≠工作，用户 1028 定立·方案升级版）：WORKING 会话分「真干活中」
- * 与「待命（已接单·待开工/挂起）」。主判据=turn 生命周期直报（turn_started_at 随终态
- * 清算），帧分类（last_tool_use_at 10min 新鲜窗）为兜底细分——与 web 端
+ * 与「待命（已接单·待开工/挂起）」。turn 生命周期由 relay 状态机承担（终态清算+
+ * 静默收殓），端上帧分类单判据（last_tool_use_at 15min 新鲜窗）——与 web 端
  * session-domain isRealWorking 逐句同源（三端口径一致，测试锚互锁）。
- *   干活中 = 近 10min 有工具帧 | 无工具帧数据但活跃 turn（managed spawn 起手窗）
- *          | 双字段皆缺（老 relay 未下发——降级按干活，不误伤）
- *   待命   = 其余 WORKING（0=接单未开工；有值超窗=挂起）
+ * 帧分类单判据（审查 291-A 终版裁决：turn 生命周期由 relay 状态机承担，端上不加
+ * turn 分支——spawn 建卡即写 turn_started_at=now，turn 窗会复活挂起卡「判干活」
+ * 误判；起手窗误显待命分钟级自纠）。窗口 15min 对齐 relay sweepWorkingIdle hooked
+ * 窗（900s）。与 web 端 session-domain isRealWorking 逐句同源，测试锚互锁
  */
 export function isRealWorking(s: { status?: string; last_tool_use_at?: number } | null | undefined, now: number = Date.now()): boolean {
   if (!s || s.status !== "WORKING") return false;
-  const FRESH_MS = 10 * 60 * 1000;
+  const FRESH_MS = 15 * 60 * 1000; // 对齐 relay sweepWorkingIdle hooked 窗（900s）——长工具段不误判（审查 291-A P2-1）
   const t = s.last_tool_use_at;
   const at = typeof now === "number" ? now : Date.now();
   if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
   if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
-  return false; // 0=从未有工具活动（接单未开工）；有值但超窗（挂起）——同待命
+  return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
 }
