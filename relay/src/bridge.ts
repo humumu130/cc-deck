@@ -232,9 +232,29 @@ export function adoptMaxAgeMs(): number {
   return days * 86_400_000;
 }
 
+// #275S：沙盒/临时会话目录判定——四处收编/建档口单点（原四处 .tmp- 内联逐点漂移
+// 风险）。三族判据：①.tmp- 前缀段（#269 起：.tmp-test 沙盒/.tmp-titlegen）②系统
+// 临时目录前缀（Unix /tmp、/private/tmp、/var/tmp）③macOS mkdtemp 家族=运行时
+// TMPDIR 前缀（/private/var/folders/*/T/…，零猜测零误伤——用户目录恰好叫 T 的
+// 业务路径不在 TMPDIR 下恒不命中）。1026 实锤：ccr-273e2e-ans 三卡=cwd 落
+// $TMPDIR/ccr-…（relay 自家 test-harness 的 mkdtemp）的新鲜转录，.tmp- 护栏
+// 不匹配被 adoptOrphans 30min 窗收编（#275R③「引擎扫描收编」归因修正为孤儿扫描）。
+export function isSandboxCwd(cwd: string | undefined | null): boolean {
+  if (!cwd) return false;
+  if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return true;
+  const norm = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (/^\/(private\/)?tmp\//.test(norm) || /^\/var\/tmp\//.test(norm)) return true;
+  const tmpdir = process.env.TMPDIR;
+  if (tmpdir) {
+    const t = tmpdir.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+    if (norm.startsWith(t)) return true;
+  }
+  return false;
+}
+
 export function shouldAdoptEngineProfile(profile: EngineRolloutProfile, input: AdoptGateInput): AdoptGateVerdict {
   const cwd = profile.cwd ?? "";
-  if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) {
+  if (isSandboxCwd(cwd)) {
     return { adopt: false, reason: "sandbox-cwd" };
   }
   const maxAge = input.maxAgeMs !== undefined ? input.maxAgeMs : adoptMaxAgeMs();
@@ -791,8 +811,9 @@ export class Bridge {
           // 测试沙箱不收养：relay 自测（test:sessions 等）在 .tmp-test 起真实 SDK 会话，
           // transcript 落全局 projects 目录，不拦就以孤儿身份混进手机会话列表（#269）。
           // Windows 路径大小写不敏感，段比较需 lower（手工建 .TMP-TEST 会让护栏静默失效）
-          // .tmp- 前缀泛化：.tmp-test 沙箱 + .tmp-titlegen 起标题子会话（#283）
-          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
+          // .tmp- 前缀泛化：.tmp-test 沙盒 + .tmp-titlegen 起标题子会话（#283）；
+          // #275S 扩系统临时目录+TMPDIR 前缀（isSandboxCwd 单点，ccr- 实锤收编口在此）
+          if (isSandboxCwd(cwd)) continue;
           // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：user<2 且
           // 无工具调用时观察一轮文件增长再定（见 scanOrphanActivity 注释）；
           // 仍在增长 → 穿透收养，否则记探针等下一轮。
@@ -1185,7 +1206,7 @@ export class Bridge {
     // 测试沙箱事件直接放行不建档：relay 自测（test:sessions 等）的 SDK 子进程会加载
     // 全局 hook 把事件发给生产 relay，不拦就以真实会话身份混进手机列表（#269；
     // 孤儿收养侧 adoptOrphans 另有同款护栏，两路都堵才断根）
-    if ((ev.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return { decision: "pass" };
+    if (isSandboxCwd(ev.cwd)) return { decision: "pass" }; // #275S 判定收口 isSandboxCwd（+TMPDIR/临时目录族）
     // hook 事件到达即证明该会话有 hook：从无 hook 疑似名单除名（回合首条转录写入
     // 早于 UserPromptSubmit POST 到达的竞态窗口里可能被 5s tick 误登记，长工具
     // 静默期会被 sweepNoHookIdle 误判回合结束）
@@ -1438,7 +1459,7 @@ export class Bridge {
   // 文件名 = CLI 会话 uuid（relay_session_id；ext id 是 "ext-" 前缀包装，须剥壳）
   private locateTranscriptByCwd(st: { cwd?: string; session_id: string; relay_session_id?: string }): string | null {
     if (!st.cwd) return null;
-    if (st.cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return null;
+    if (isSandboxCwd(st.cwd)) return null;
     const sid = st.relay_session_id || st.session_id.replace(/^ext-/, "");
     return resolveSessionTitleFile({ cwd: st.cwd, sessionId: sid });
   }

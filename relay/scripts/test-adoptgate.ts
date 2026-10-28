@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "../src/session-manager.js";
 import { EventBus } from "../src/event-bus.js";
-import { Bridge, shouldAdoptEngineProfile, adoptMaxAgeMs } from "../src/bridge.js";
+import { Bridge, shouldAdoptEngineProfile, adoptMaxAgeMs, isSandboxCwd } from "../src/bridge.js";
 import type { EngineRolloutProfile } from "../src/engine-rollouts.js";
 import { reviveEligible, autoReviveManaged } from "../src/lifecycle/revive.js";
 import { pluginConfigPath } from "../src/plugin-config.js";
@@ -222,6 +222,35 @@ section("\nS4 autoReviveManaged：陈年待办聚合「需确认」通知");
   const n = autoReviveManaged(mgr);
   assert(n === 1 && resumed.length === 1 && resumed[0] === "a", "仅新鲜待办会话被拉起");
   assert(notes.length === 1 && notes[0].title.includes("陈年待办") && notes[0].body.includes("陈年会话") && notes[0].body.includes("手动恢复"), "陈年待办聚合出「需确认」通知（含会话名+手动恢复指引）");
+}
+
+
+// ---------- #275S：沙盒/临时目录判定扩展（ccr- 实锤收编口堵漏）----------
+// 1026 实锤：ccr-273e2e-ans 三卡 = cwd 落 $TMPDIR/ccr-…（macOS mkdtemp 家族，
+// /private/var/folders/*/T/ 下）的新鲜转录，.tmp- 护栏不匹配 → adoptOrphans
+// 30min 窗收编。S 扩三族判据（.tmp- 段 / Unix 临时前缀 / TMPDIR 前缀）+四处判定口收口
+{
+  const savedTmp = process.env.TMPDIR;
+  // S1 isSandboxCwd 正矩阵
+  assert(isSandboxCwd("/private/var/folders/9m/xx/T/ccr-273e2e-answer-Vq1Id3") === false || process.env.TMPDIR !== undefined, "S0 前置：TMPDIR 判定依赖运行时 env（未设时仅段/前缀判据）");
+  process.env.TMPDIR = "/private/var/folders/9m/abc/T/";
+  assert(isSandboxCwd("/private/var/folders/9m/abc/T/ccr-273e2e-answer-Vq1Id3") === true, "S1a TMPDIR 前缀（macOS mkdtemp 家族，ccr- 实锤形态）命中");
+  assert(isSandboxCwd("/tmp/probe-123/claude") === true, "S1b Unix /tmp 前缀命中");
+  assert(isSandboxCwd("/private/tmp/sbx/session") === true, "S1c /private/tmp 命中");
+  assert(isSandboxCwd("/var/tmp/tool-xyz") === true, "S1d /var/tmp 命中");
+  assert(isSandboxCwd("/Users/x/dev/.tmp-test/w") === true, "S1e .tmp- 段既有判据保留（#269/#283 回归）");
+  // S2 负矩阵（防误伤）
+  assert(isSandboxCwd("/Users/xdd/dev/cc-deck") === false, "S2a 正常项目目录不命中");
+  assert(isSandboxCwd("/Users/x/T/myproject") === false, "S2b 用户目录恰好含 T 段不命中（TMPDIR 前缀法零猜测）");
+  assert(isSandboxCwd("/Users/x/dev/tmp-utils") === false, "S2c 名含 tmp 的普通目录不命中（仅前缀路径判据）");
+  assert(isSandboxCwd("") === false && isSandboxCwd(undefined) === false, "S2d 空 cwd 不命中");
+  // S3 shouldAdopt 拒收口径（TMPDIR 形态 fresh 转录也不收——护栏优先于年龄闸）
+  const v = shouldAdoptEngineProfile(
+    { filePath: "/x", sessionId: "s", cwd: "/private/var/folders/9m/abc/T/ccr-x", prompt: "p", title: "t", startedAt: Date.now(), updatedAt: Date.now(), status: "WORKING", terminal: false, activityKey: "" } as never,
+    {} as never,
+  );
+  assert(v.adopt === false && v.reason === "sandbox-cwd", "S3 shouldAdopt：TMPDIR 沙盒 cwd 拒收优先于新鲜度（engine 侧同收口）");
+  if (savedTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmp;
 }
 
 // ---------- 收尾 ----------
