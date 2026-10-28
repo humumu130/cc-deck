@@ -39,6 +39,9 @@ export function sha12(s: string): string {
 /** 单文件观测产物：mtime 已 Math.round（checkpoint 五元组 mtime 位口径）。 */
 export interface ObservedFile {
   mtimeMs: number;
+  /** #292-B2（B 路审查真根修）：纳秒失效腿直出——checkpoint 比较键升级用（ms 取整在
+   * 同毫秒二次写+等长覆盖形态下假有效=投影陈旧=写回抹写，import-util 头注早已论证）。 */
+  mtimeNs: string;
   text: string;
 }
 
@@ -65,10 +68,10 @@ export function statThenRead(file: string): ObservedFile {
   const mtimeNs = statSync(file, { bigint: true }).mtimeNs.toString(); // 纳秒失效腿（ms 同粒度写也能区分）
   const hit = OBS_MEMO.get(file);
   if (hit !== undefined && hit.mtimeNs === mtimeNs && hit.size === st.size) {
-    return { mtimeMs, text: hit.text }; // 双未变短路：跳过全文读
+    return { mtimeMs, mtimeNs, text: hit.text }; // 双未变短路：跳过全文读
   }
   const text = readFileSync(file, "utf8");
   if (st.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st.size, text });
   else OBS_MEMO.delete(file); // 超限源不 memo（曾 memo 过的膨胀源顺手清出，防滞留旧 text）
-  return { mtimeMs, text };
+  return { mtimeMs, mtimeNs, text };
 }

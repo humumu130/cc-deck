@@ -18,6 +18,7 @@ import { appendJournal, atomicWriteJson, lastGoodJournalSnapshot } from "./fs-sa
 import { applyOrgChange } from "./org-schema.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
+import { withOrgWriteTx } from "./storage/org-write-tx.js";
 import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb } from "./storage/read-mode.js";
 import type { DutyPolicy } from "./leader-duty.js";
 import type { SessionEngine } from "./types.js";
@@ -212,6 +213,46 @@ export function isProjectsReadOnly(): boolean {
   return projectsReadOnly;
 }
 
+
+/** #292-B2 写口锁内直读（json 真相源，完整 T0a 语义）：withOrgWriteTx 的 fn 内**必须**
+ * 走本函数——readProjectsFile（viaReadMode）在 sqlite 档触发 ensureStore→
+ * importAllForShadow，org 重扫联动自持 begin 嵌套写锁事务=「cannot start a
+ * transaction within a transaction」，且 viaReadMode 会把该错吞成失实的「sqlite
+ * 不可用降级」横幅+degradationNotified 永久静音真实降级告警（A 路审查 P1-1 探针
+ * 实证）。锁内文件=最新（锁外写口已串行化）。
+ * 坏文件不裸抛（A 路审查 P1-2：裸异常穿透调用面+绕过 T0a 防线）——与 io.json 分支
+ * 同语义：journal 回放重建，回放失败置只读闸返回空态（写侧 writeProjectsFile 的
+ * 只读闸随后拒写，调用面收 {ok:false} 不收异常）。 */
+function readProjectsFileJson(dir?: string): ProjectsFile {
+  try {
+    const raw = JSON.parse(readFileSync(projectsFilePath(dir), "utf-8")) as Partial<ProjectsFile>;
+    projectsReadOnly = false;
+    return {
+      groups: Array.isArray(raw.groups) ? (raw.groups as ProjectGroup[]) : [],
+      trust_light: raw.trust_light === true,
+    };
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === "ENOENT") return { groups: [], trust_light: false };
+    console.error(`[projects] 索引文件损坏（写口直读），进入只读模式并尝试 journal 回放: ${e instanceof Error ? e.message : String(e)}`);
+    const recovered = recoverProjectsFromJournal(dir);
+    if (recovered) {
+      console.error(`[projects] journal 回放成功，索引已重建（含 ${recovered.groups.length} 组），只读解除`);
+      return recovered;
+    }
+    projectsReadOnly = true;
+    console.error(`[projects] journal 回放失败——保持只读模式，写操作将拒绝（人工处置前不覆盖损坏文件）`);
+    return { groups: [], trust_light: false };
+  }
+}
+function readConfirmsJson(dir?: string): OrgConfirm[] {
+  try {
+    const raw = JSON.parse(readFileSync(confirmsFilePath(dir), "utf-8")) as { confirms?: OrgConfirm[] };
+    return Array.isArray(raw.confirms) ? raw.confirms : [];
+  } catch {
+    return [];
+  }
+}
 function readProjectsFile(dir?: string): ProjectsFile {
   // M11-G1 读入口接线（三档：json 原样 / sqlite 表投影 / shadow 返回值以 JSON 为准+旁路对比）
   return viaReadMode("group", {
@@ -435,7 +476,7 @@ function saveGroup(g: ProjectGroup, dir?: string): boolean {
     console.error(`[projects] ${chk.error}（gid=${g.id}）`);
     return false;
   }
-  const f = readProjectsFile(dir);
+  const f = readProjectsFileJson(dir); // #292-B2 A-P1-1：saveGroup 常在写口事务内被调（setGroupStatusInner 尾段），投影读会嵌套导入事务
   const i = f.groups.findIndex((x) => x.id === g.id);
   if (i >= 0) f.groups[i] = g;
   else f.groups.push(g);
@@ -629,8 +670,13 @@ export const adaptOrgAction = handleOrgActionCreate;
 
 export type TransitionResult = { ok: true; group: ProjectGroup } | { ok: false; error: string };
 
+// #292-B2 三口事务外包：锁（BEGIN IMMEDIATE）+锁内文件直读+commit 后导入追赶（B 路审查
+// 修正注释：新鲜度来自「直读+追赶」，不是锁本身——checkpoint 假有效态下投影恒陈旧，锁内禁投影）
 export function setGroupStatus(id: string, to: ProjectGroupStatus, note?: string, dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+  return withOrgWriteTx(dir, () => setGroupStatusInner(id, to, note, dir));
+}
+function setGroupStatusInner(id: string, to: ProjectGroupStatus, note?: string, dir?: string): TransitionResult {
+  const f = readProjectsFileJson(dir); // #292-B2 锁内直读（投影读嵌套导入事务）
   const g = f.groups.find((x) => x.id === id || x.name === id);
   if (!g) return { ok: false, error: `项目组不存在: ${id}` };
   if (g.status === to) return { ok: true, group: g };
@@ -841,7 +887,8 @@ export function loadBoard(gid: string, dir?: string): ProjectBoard {
 
 /** 板写入前置校验：组须存在且 active（挂起=冻结保留、结项=归档只读，§2.2） */
 function writableBoard(gid: string, dir?: string): { ok: true; board: ProjectBoard } | { ok: false; error: string } {
-  const g = listGroups(dir).find((x) => x.id === gid);
+  // #292-B2 锁内直读（upsertBoardEntry 事务段调用本函数——listGroups 投影读会嵌套导入事务）
+  const g = readProjectsFileJson(dir).groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   if (g.status !== "active") return { ok: false, error: `任务板已冻结（项目组 ${g.status}），恢复在办后可写` };
   const b = loadBoardOrEmpty(gid, dir);
@@ -881,23 +928,26 @@ function resolveStatusTransition(
   return { ok: true, status: to };
 }
 
+/** #292-B2 三口事务外包（同 setGroupStatus 口径） */
+export type UpsertBoardEntryInput = {
+  id?: string; text: string; status?: BoardEntryStatus;
+  owner_session?: string; dispatch_id?: string; note?: string;
+  review_required?: boolean;
+  depends_on?: string[];
+  gate?: { reason: string } | null;
+  priority?: string | null;
+  parent_id?: string | null;
+};
 export function upsertBoardEntry(
   gid: string,
-  entry: {
-    id?: string; text: string; status?: BoardEntryStatus;
-    owner_session?: string; dispatch_id?: string; note?: string;
-    /** D18：完成候选复核资格位——true=设位；false=清位；缺省=status 缺省时不动、
-     * status=done 时作 R2 触发条件消费。submitted 生成的唯一资格来源。 */
-    review_required?: boolean;
-    /** #087 beads：依赖卡 id 引用（空串元素洗刷剔除） */
-    depends_on?: string[];
-    /** #087 beads gate：对象=设闸（opened_at 自动补）；null=显式清除（唯一清除口，人决策）；缺省=不动 */
-    gate?: { reason: string } | null;
-    /** #G3 板卡富模型：优先级（P0/P1/P2；缺省=不动，词表校验在 schema）；null=清除 */
-    priority?: string | null;
-    /** #G3 父子链：父卡 id（缺省=不动；null=解除挂靠置根卡；空串洗掉=根卡） */
-    parent_id?: string | null;
-  },
+  entry: UpsertBoardEntryInput,
+  dir?: string,
+): { ok: true; entry: BoardEntry } | { ok: false; error: string } {
+  return withOrgWriteTx(dir, () => upsertBoardEntryInner(gid, entry, dir));
+}
+function upsertBoardEntryInner(
+  gid: string,
+  entry: UpsertBoardEntryInput,
   dir?: string,
 ): { ok: true; entry: BoardEntry } | { ok: false; error: string } {
   const w = writableBoard(gid, dir);
@@ -1239,8 +1289,12 @@ export type DecideResult = { ok: true; confirm: OrgConfirm } | { ok: false; erro
 
 /** 决议确认单（一次性的：已决不可再决）。副作用（组状态迁移/信任累积）由调用方执行——
  * 本函数只管决策记录，保证决议与执行分离可审计。 */
+/** #292-B2 三口事务外包（同 setGroupStatus 口径） */
 export function decideConfirm(id: string, approve: boolean, by: string, dir?: string): DecideResult {
-  const list = readConfirms(dir);
+  return withOrgWriteTx(dir, () => decideConfirmInner(id, approve, by, dir));
+}
+function decideConfirmInner(id: string, approve: boolean, by: string, dir?: string): DecideResult {
+  const list = readConfirmsJson(dir); // #292-B2 锁内直读
   const c = list.find((x) => x.id === id);
   if (!c) return { ok: false, error: `确认单不存在: ${id}` };
   if (c.status !== "pending") return { ok: false, error: `确认单已决议（${c.status}），不可再决` };

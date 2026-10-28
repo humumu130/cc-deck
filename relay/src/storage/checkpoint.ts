@@ -13,6 +13,10 @@ export interface CheckpointKey {
   path: string;
   /** 写入时观测的源文件 mtime（epoch-ms）。 */
   mtimeMs: number;
+  /** #292-B2 纳秒失效腿（可选）：org 三源先行接入——双方（行与当前观测）都有 ns 时以
+   * ns 精度比对（ms 取整同毫秒碰撞=假有效=投影陈旧，B 路审查探针实锤）；任一侧缺省
+   * 退化 ms 比对（六域旧调用零破坏，逐批补传参收编）。 */
+  mtimeNs?: string;
   /** 写入时观测的源文件总行数。 */
   lineCount: number;
   /** 已成功处理的行数（0..lineCount）；续跑从 offset+1 行起。 */
@@ -33,13 +37,13 @@ export function writeCheckpoint(port: StoragePort, key: CheckpointKey): void {
   }
   const now = Date.now();
   port.exec(
-    `INSERT INTO import_checkpoint (path, mtime_ms, line_count, line_offset, schema_version, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO import_checkpoint (path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(path) DO UPDATE SET
-       mtime_ms = excluded.mtime_ms, line_count = excluded.line_count,
+       mtime_ms = excluded.mtime_ms, mtime_ns = excluded.mtime_ns, line_count = excluded.line_count,
        line_offset = excluded.line_offset, schema_version = excluded.schema_version,
        updated_at = excluded.updated_at`,
-    [key.path, key.mtimeMs, key.lineCount, key.offset, key.schemaVersion, now],
+    [key.path, key.mtimeMs, key.mtimeNs ?? null, key.lineCount, key.offset, key.schemaVersion, now],
   );
 }
 
@@ -50,15 +54,16 @@ export function writeCheckpoint(port: StoragePort, key: CheckpointKey): void {
 export function readCheckpoint(
   port: StoragePort,
   path: string,
-  current: { mtimeMs: number; lineCount: number; schemaVersion: number },
+  current: { mtimeMs: number; mtimeNs?: string; lineCount: number; schemaVersion: number },
 ): ImportCheckpoint | null {
   const row = port.query<{
-    path: string; mtime_ms: number; line_count: number; line_offset: number; schema_version: number; updated_at: number;
-  }>("SELECT path, mtime_ms, line_count, line_offset, schema_version, updated_at FROM import_checkpoint WHERE path = ?", [path])[0];
+    path: string; mtime_ms: number; mtime_ns: string | null; line_count: number; line_offset: number; schema_version: number; updated_at: number;
+  }>("SELECT path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at FROM import_checkpoint WHERE path = ?", [path])[0];
   if (!row) return null;
   const checkpoint: ImportCheckpoint = {
     path: row.path,
     mtimeMs: row.mtime_ms,
+    ...(row.mtime_ns != null ? { mtimeNs: row.mtime_ns } : {}),
     lineCount: row.line_count,
     offset: row.line_offset,
     schemaVersion: row.schema_version,
@@ -69,6 +74,10 @@ export function readCheckpoint(
     checkpoint.lineCount !== current.lineCount ||
     checkpoint.schemaVersion !== current.schemaVersion
   ) {
+    return null;
+  }
+  // #292-B2 ns 精化：ms 三元全等但双侧都有 ns 且不等（同毫秒二次写）=失效——防假有效
+  if (checkpoint.mtimeNs !== undefined && current.mtimeNs !== undefined && checkpoint.mtimeNs !== current.mtimeNs) {
     return null;
   }
   return checkpoint;

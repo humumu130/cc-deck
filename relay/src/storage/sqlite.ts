@@ -112,6 +112,11 @@ class SqliteStorage implements StoragePort {
     this._open = false;
   }
 
+  /** #292-B2：连接是否处于未结事务（better-sqlite3 inTransaction 直通）——写口事务
+   * 自愈清场用（导入器偶发遗留未结事务的防御，遗留疑点见 org-write-tx 头注）。 */
+  get inTransaction(): boolean {
+    return this.requireDb("inTransaction").inTransaction;
+  }
   begin(): void {
     // IMMEDIATE：begin 即取写锁，事务升级死锁在源头消除（迁移 runner 单写者语义）。
     this.requireDb("begin").exec("BEGIN IMMEDIATE");

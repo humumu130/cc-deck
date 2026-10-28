@@ -167,6 +167,12 @@ export function isSqliteDegradationNotifiedForTest(): boolean {
   return degradationNotified;
 }
 
+/** 测试面：重置降级一次性标志（隔离断言「某操作自身不触发降级」用——批2 test-c2 P3e）。 */
+export function resetSqliteDegradationFlagForTest(): void {
+  degradationNotified = false;
+}
+
+
 // ---------- store 惰性单例：open + migrate + 灌库（铁律 3 读前触发） ----------
 
 const portCache = new Map<string, StoragePort>();
@@ -187,6 +193,20 @@ export function ensureStore(dirs: ReadModeDirs): StoragePort {
   port.open();
   runMigrations(port, migrations);
   importAllForShadow(port, dirs);
+  portCache.set(dirs.dataDir, port);
+  return port;
+}
+
+/** #292-B2 写口事务端口：与 ensureStore 同建（open→migrate→cache）但**不触发导入**——
+ * 写事务（withOrgWriteTx）持锁期间不得进入导入面：importAllForShadow 的 org 重扫联动
+ * 分支自持 begin（嵌套事务=端口编程错误），且域清重灌不宜进业务锁域。导入追赶由事务
+ * commit 之后经 ensureStore 显式执行（批1 write-dispatch 同款导入面语义）。 */
+export function ensureStoreQuiet(dirs: ReadModeDirs): StoragePort {
+  const cached = portCache.get(dirs.dataDir);
+  if (cached) return cached;
+  const port = createSqlitePort({ dataDir: dirs.dataDir });
+  port.open();
+  runMigrations(port, migrations);
   portCache.set(dirs.dataDir, port);
   return port;
 }
@@ -218,15 +238,17 @@ function orgRescanPending(port: StoragePort, orgDirPath: string): boolean {
   const sources = ["org.json", "projects.json", "confirms.json"].map((f) => join(orgDirPath, f));
   for (const file of sources) {
     let mtimeMs = 0;
+    let mtimeNs: string | undefined;
     let lineCount = 0;
     if (existsSync(file)) {
       const obs = statThenRead(file);
       mtimeMs = obs.mtimeMs;
+      mtimeNs = obs.mtimeNs; // #292-B2 ns 精化：同毫秒二次写（等长覆盖形态）不再假有效
       const lines = obs.text.split("\n");
       if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
       lineCount = lines.length;
     }
-    if (readCheckpoint(port, file, { mtimeMs, lineCount, schemaVersion: ORG_IMPORT_SCHEMA_VERSION }) === null) return true;
+    if (readCheckpoint(port, file, { mtimeMs, mtimeNs, lineCount, schemaVersion: ORG_IMPORT_SCHEMA_VERSION }) === null) return true;
   }
   return false;
 }

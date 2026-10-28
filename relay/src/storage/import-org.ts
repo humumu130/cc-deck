@@ -49,16 +49,18 @@ interface ObservedSource {
   name: string;
   file: string;
   mtimeMs: number;
+  /** #292-B2 纳秒失效腿（org 三源接入，六域暂缺省退化 ms） */
+  mtimeNs?: string;
   lineCount: number;
   text: string | null; // null=文件缺失
 }
 
 function observe(file: string, name: string): ObservedSource {
-  if (!existsSync(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
+  if (!existsSync(file)) return { name, file, mtimeMs: 0, mtimeNs: undefined, lineCount: 0, text: null };
   const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts，本函数是定稿序出处）
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { name, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, text: obs.text };
+  return { name, file, mtimeMs: obs.mtimeMs, mtimeNs: obs.mtimeNs, lineCount: lines.length, text: obs.text }; // #292-B2 ns 腿随行
 }
 
 // ---------- 中间行模型（解析产物，事务内落库） ----------
@@ -101,7 +103,7 @@ export function importOrg(port: StoragePort, orgDir: string, opts?: { schemaVers
     observe(join(orgDir, "projects.json"), "projects.json"),
     observe(join(orgDir, "confirms.json"), "confirms.json"),
   ];
-  const current = (s: ObservedSource) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
+  const current = (s: ObservedSource) => ({ mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
 
   if (allValid) {
@@ -350,7 +352,7 @@ export function importOrg(port: StoragePort, orgDir: string, opts?: { schemaVers
       );
     }
     for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
-    for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
+    for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
     port.commit();
   } catch (err) {
     port.rollback();
