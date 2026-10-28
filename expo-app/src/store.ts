@@ -223,6 +223,26 @@ interface ArtFetchState {
 }
 
 // 按源连接状态（#294 批1：聚合视图数据源；单源模式仅活动源在连，UI 暂不消费）
+/** #conn-ux-P0-1 六态→四态用户词映射（纯函数，测试直跑）：connecting/idle=连接中、
+ * online=已连接、reconnecting/offline=已断开、unpaired=配对失效。呈现层专用，
+ * 不改任何连接机制状态机。 */
+export type ConnStateText = "连接中" | "已连接" | "已断开" | "配对失效";
+export function connStateTextOf(state: Snapshot["connState"]): ConnStateText {
+  switch (state) {
+    case "online": return "已连接";
+    case "unpaired": return "配对失效";
+    case "reconnecting":
+    case "offline": return "已断开";
+    default: return "连接中"; // connecting/idle
+  }
+}
+/** failNote 首句（≤ 首个句号/分号前，呈现层截断口径） */
+export function failNoteBriefOf(note: string | null): string | null {
+  if (!note) return null;
+  const first = note.split(/[。；;.]/)[0] ?? note;
+  return first.length > 40 ? first.slice(0, 40) + "…" : first;
+}
+
 export interface SourceStatus {
   id: string;
   name: string;
@@ -232,6 +252,11 @@ export interface SourceStatus {
   // = wsUrl——同一台服务器在手机/网页两端取到同色（本地 uuid 两端各异不可用）
   colorKey: string;
   relayName?: string; // #100 relay 侧自定义名（客户端未手动改名时的默认显示）
+  // #conn-ux-P0-1 每源四态呈现字段（纯搬运，机制零改动）：六态压四态的用户词
+  // （连接中/已连接/已断开/配对失效）+failNote 首句——源胶囊副行与空态共用，
+  // 消灭「蓝点看不出连没连上」
+  stateText: ConnStateText;
+  failNoteBrief: string | null;
   // relay 平台（SNAPSHOT platform，0.5.3 起）：新建会话表单据此自适应工作目录
   // 文案/示例并拦截盘符路径（Windows 手机端填 D:\ 发到 mac relay 的 /C: 回落问题）
   platform?: string;
@@ -616,6 +641,8 @@ class RelayStore {
       id: c.id,
       name: c.name,
       state: c.state,
+      stateText: connStateTextOf(c.state), // #conn-ux-P0-1 四态用户词
+      failNoteBrief: failNoteBriefOf(c.failNote), // P0-1 失败原因首句
       channel: c.channel,
       relayName: c.relayName || undefined, // #100 relay 侧自定义名（未手动改名时的默认显示）
       colorKey: c.entry.cloud?.relayDev || c.entry.wsUrl,
@@ -1495,10 +1522,12 @@ class RelayStore {
       const ccode = Number((ev as { code?: number }).code) || 0;
       const creason = String((ev as { reason?: unknown }).reason ?? "");
       if (opened) {
+        // #conn-ux-P0-2 段2 人话：close=桥已连但断开——最常见因是电脑端 relay 离线
+        //（上线自动恢复），文案直说；顶替/限流等特例保留原语义
         conn.failNote = ccode === 4000 ? "云桥连接被顶替（同设备另开了连接）"
           : ccode === 4291 ? "云桥限流（连接过频）"
-          : ccode === 1006 ? "云桥连接异常断开（网络/边缘节点）"
-          : "云桥连接断开" + (ccode ? `（code ${ccode}${creason ? " · " + creason : ""}）` : "");
+          : ccode === 1006 ? "网络异常断开，正在自动重连"
+          : "电脑端可能离线，上线后自动恢复" + (ccode && ccode !== 1006 ? `（code ${ccode}${creason ? " · " + creason : ""}）` : "");
         console.log(`[cloud] phone ws closed code=${ccode} reason=${creason} opened=${opened}`);
       } else {
         // 从未开过门 = 桥不可达（桥地址错/网络断/封锁），不是配对问题——继续自动重试
@@ -1584,7 +1613,7 @@ class RelayStore {
     conn.epoch++;
     conn.state = "unpaired";
     conn.stateText = "未配对";
-    conn.failNote = reason;
+    conn.failNote = `配对已失效，需重新配对（${reason}）`; // P0-2 段3 一段式：状态+动作一句说清
     if (conn.reconnectTimer) {
       clearTimeout(conn.reconnectTimer);
       conn.reconnectTimer = null;

@@ -115,15 +115,24 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
             const stc = src.state === "online" ? tc.done : src.state === "offline" ? tc.error : tc.working;
             const isActive = src.id === snap.activeSourceId;
             return (
-              <Pressable key={src.id} style={[c.row, isActive && c.rowOn]} android_ripple={{ color: tc.tintSoft, borderless: false }} onPress={() => pick(src.id)}>
+              <Pressable key={src.id} style={[c.row, c.rowTwoLine, isActive && c.rowOn]} android_ripple={{ color: tc.tintSoft, borderless: false }} onPress={() => pick(src.id)}>
                 {/* #226 件A：源标前缀换电脑图标（用户 1023 截图——⤷/色点升级）；
                     显示器形随源色填充，在线态语义并入色值本身（离线灰） */}
                 <Svg width={11} height={11} viewBox="0 0 24 24">
                   <Rect x="2" y="3.5" width="20" height="13.5" rx="2" fill={stc} />
                   <Path d="M8 21h8" stroke={stc} strokeWidth="2.4" strokeLinecap="round" />
                 </Svg>
-                <Text style={c.rowT} numberOfLines={1}>{src.name}</Text>
-                <Text style={c.rowChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={c.rowT} numberOfLines={1}>{src.name}</Text>
+                    <Text style={c.rowChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
+                  </View>
+                  {/* #conn-ux-P0-1 副行：四态用户词+失败原因首句（store stateText/failNoteBrief
+                      纯搬运）——消灭「蓝点看不出连没连上」；P0-2 云桥三段文案经 failNote 已带段位 */}
+                  <Text style={[c.rowSub, { color: stc }]} numberOfLines={1}>
+                    {src.stateText}{src.failNoteBrief ? ` · ${src.failNoteBrief}` : ""}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
@@ -144,6 +153,8 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
+    rowTwoLine: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7 }, /* P0-1 二行行高 */
+    rowSub: { fontSize: 10, marginTop: 1, opacity: 0.9 }, /* P0-1 副行（四态+原因） */
     wrap: { position: "relative", flexShrink: 0 },
     trigger: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 6, borderRadius: 13 }, /* W-UIFIX 件八：30→26——titleRow 内不撑高（设置页 51→48 与四页齐一） */
     countT: { fontSize: 11, fontWeight: "600" },

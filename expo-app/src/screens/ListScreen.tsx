@@ -1867,18 +1867,24 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                 ? "换个词或点 ✕ 清空搜索"
                 : collapseIdle && idleCount > 0
                 ? "点上方「展开空闲」查看"
-                : !connected
-                  ? snap.connState === "unpaired"
-                    ? "配对已失效\n点左上角图标重新配对"
-                    : badgeOn
-                      ? `${onlineSrcs}/${snap.sources.length} 源在线 · 重连中`
-                      : "未连接 · 等待自动重连"
-                  : badgeOn
-                    ? onlineSrcs < snap.sources.length
-                      ? `${snap.sources.length - onlineSrcs} 个源离线\n点右下角 ＋ 开始新会话`
-                      : "点右下角 ＋ 开始新会话"
-                    : "点右下角 ＋ 开始新会话"}
+                : "点右上角 ＋ 开始新会话"}
             </Text>
+            {/* #conn-ux-P0-3 空态按源报状态：连接态下逐源一行（名+四态词+failNote
+                首句，≤3 行截断）——「列表空看不出连没连上」的正面回答；右上角 ＋
+                错位文案修复（FAB 已退役于 W-EXPOLISH 件七，新建入口在顶栏右上角，
+                报告实锤的「点右下角」错位一并退役） */}
+            {connected || snap.connState === "unpaired" ? (
+              <View style={{ marginTop: 8, gap: 2, alignSelf: "stretch", paddingHorizontal: 24 }}>
+                {snap.sources.slice(0, 3).map((src) => (
+                  <Text key={src.id} style={[styles.emptyS, { fontSize: 11 }]} numberOfLines={1}>
+                    {src.name} · {src.stateText}{src.failNoteBrief ? ` · ${src.failNoteBrief}` : ""}
+                  </Text>
+                ))}
+                {snap.sources.length > 3 ? (
+                  <Text style={[styles.emptyS, { fontSize: 11 }]}>…等 {snap.sources.length - 3} 个源</Text>
+                ) : null}
+              </View>
+            ) : null}
             {/* #116 正中间提示下面的三个点：重连中在居中提示下补 wave 三点（与右上角
                 chip 同组件同节拍），让"正在重连"在视觉正中也可被感知 */}
             {snap.connState === "connecting" || snap.connState === "reconnecting" ? (
