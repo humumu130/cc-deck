@@ -3252,7 +3252,29 @@ function connectLan(ctx) {
         const isCur = cloudCtx.cfg && cloudCtx.cfg.id === entry.id;
         const live = isCur && (cloudCtx.status === "online" || cloudCtx.status === "connecting");
         const label = sdelDisplayName(entry, isCur);
-        if (live && !confirm("正在连接「" + label + "」，删除将断开连接。确定删除？")) return;
+        // Nova 壳页内确认（1028 ACL 雷）：Tauri 2 dialog:default 不含 confirm——原生
+        // confirm() 被桥到 plugin:dialog|confirm 遭默认拒绝（用户诊断版实锤）。改页内
+        // 双钮小条：壳/浏览器同路径零分叉，不再依赖 Tauri 权限面（07f05867 已补
+        // dialog:allow-confirm 双保险，本改使旧壳立即恢复）。
+        if (live) {
+          const host = document.getElementById("sdel-confirm-bar");
+          if (host) host.remove(); // 已有确认条=先撤（重复点击不叠条）
+          const bar = document.createElement("div");
+          bar.id = "sdel-confirm-bar";
+          bar.style.cssText = "display:flex;gap:8px;align-items:center;margin:6px 0;padding:8px 10px;border:1px solid #d88;border-radius:8px;background:#fff5f5;font-size:12px;";
+          const msg = document.createElement("span");
+          msg.textContent = "正在连接「" + label + "」，删除将断开连接。";
+          msg.style.flex = "1";
+          const yes = document.createElement("button");
+          yes.textContent = "删除";
+          const no = document.createElement("button");
+          no.textContent = "取消";
+          yes.onclick = () => { bar.remove(); if (deleteCloudServer(entry.id)) showToast("已删除服务器「" + label + "」"); };
+          no.onclick = () => bar.remove();
+          bar.append(msg, no, yes);
+          (document.getElementById("cloud-servers-list") || document.body).append(bar);
+          return;
+        }
         if (deleteCloudServer(entry.id)) showToast("已删除服务器「" + label + "」");
       }
       // W-SDEL 编辑弹窗（名称 / 服务器地址 / 桥令牌——旧壳 saveSrvBtn 编辑分支语义移植）：
