@@ -317,7 +317,7 @@
                   const subOpen = boardExpanded.has(task.id);
                   // #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀；P2=默认档不显——显了反而噪音）+ data-priority 左缘色条（CSS）
                   const prio = /^(P0|P1)$/.test(String(task.priority || "")) ? String(task.priority) : "";
-                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链）">' + (subOpen ? "▾" : "▸") + " " + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
+                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
                 }
                 // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -394,23 +394,31 @@
                       if (!kidsByParent.has(sub.parent_id)) kidsByParent.set(sub.parent_id, []);
                       kidsByParent.get(sub.parent_id).push(sub);
                     }
-                    const orphanKids = subs.filter((sub) => !kidsByParent.has(sub.parent_id) || !kidsByParent.get(sub.parent_id).includes(sub));
-                    const withSubs = [...roots, ...orphanKids].map((t) => { t.__subs = kidsByParent.get(t.id) || []; t.__subCount = t.__subs.length; return t; });
+                    const orphanKids = subs.filter((sub) => !rootIds.has(sub.parent_id)); // 审查 B-P3：删恒假第二支（kidsByParent 收录判定已由 rootIds 蕴含）
+                    const withSubs = [...roots, ...orphanKids].map((t) => {
+                      t.__subs = kidsByParent.get(t.id) || [];
+                      t.__subCount = t.__subs.length;
+                      // 审查 B-P2-2：子卡有运行中派单→父卡折叠钮亮黄点（折叠不吞「里面有活跑」信号）
+                      t.__subRunning = t.__subs.some((sub) => dispatchStatus.get(sub.dispatch_id) === "running");
+                      return t;
+                    });
                     const flatRender = (list, withOrdinals) => list.map((t, i) => taskMarkup(t, project, withOrdinals && list.length > 1 ? { ordinal: i + 1, running: dispatchStatus.get(t.dispatch_id) === "running" } : withOrdinals ? { running: dispatchStatus.get(t.dispatch_id) === "running" } : undefined)).join("");
-                    if (status === "claimed") {
+                    const claimedBody = (() => {
                       const ordered = withSubs.slice().sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
-                      const runningIdx = ordered.findIndex((t) => dispatchStatus.get(t.dispatch_id) === "running");
-                      if (runningIdx > 0) ordered.unshift(...ordered.splice(runningIdx, 1)); // 运行中置顶=当前活
+                      const runningIdx = ordered.findIndex((t) => dispatchStatus.get(t.dispatch_id) === "running" || t.__subRunning);
+                      if (runningIdx > 0) ordered.unshift(...ordered.splice(runningIdx, 1)); // 运行中置顶=当前活（审查 B-P2-2：子卡 running 的父卡同权置顶）
                       return flatRender(ordered, true);
-                    }
-                    return flatRender(withSubs, false);
+                    })();
+                    // 审查 B-P2-3：泳道计数=可见卡数（根+孤儿子卡）——原 items.length 含折叠子卡（显 8 见 2）
+                    return { html: status === "claimed" ? claimedBody : flatRender(withSubs, false), visibleN: withSubs.length };
                   };
                   const columns = lanes.map(([status, label]) => {
                     const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
-                    const body = laneBody(status, items);
+                    const laneRes = laneBody(status, items);
+                    const body = laneRes.html;
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + items.length + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>";
+                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + laneRes.visibleN + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数） */
                     // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
                     // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
                     // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+

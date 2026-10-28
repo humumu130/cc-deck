@@ -715,7 +715,7 @@ export class SessionManager {
   private cloudCmds = createCloudCommands(this);
   // W-SPLIT-S3c：组织/看板/任务域命令 mixin
   private boardCmds = createBoardCommands(this);
-  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string }[]>();
+  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string }[]>(); /* #G5：retry_of 随在途记录（收口行透传源） */
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
   // chain 起算无对账风险；跨重启持久化属 #71 产品面
@@ -4154,7 +4154,7 @@ export class SessionManager {
   // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
   //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
   // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
-  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string }): void {
+  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string }): void {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
@@ -4266,7 +4266,7 @@ export class SessionManager {
         })()
       : all
         ? q.splice(0)
-        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string } => !!x);
+        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
     for (const e of es) {
       // W-TASKFLOW task_ref（2026-10-12 用户拍板）：回执头部携带 [task_ref:卡id]——
@@ -4294,6 +4294,10 @@ export class SessionManager {
         ...(e.engine ? { engine: e.engine } : {}),
         ...(e.provider ? { provider: e.provider } : {}),
         ...(e.model ? { model: e.model } : {}),
+        // #G5 审查 B-P1-2：重试标记随收口行透传——json 档收敛末行赢，收口行不带
+        // retry_of 会把 dispatched 行的标记洗掉（web「自动重试」标识恰在重试再
+        // 失败/收口时刻消失=最有价值时刻），与 engine 字段透传同口径
+        ...(e.retry_of ? { retry_of: e.retry_of } : {}),
       });
       // #40 M4 派单完成回调（谁派活谁收通知）：收口即通知——端上广播帧恒发；
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
@@ -6622,8 +6626,10 @@ export class SessionManager {
    *  +台账 retry_of 标记双保险（同 id 已有重试行不派第二回）。逻辑类（参数错/编制闸）
    *  不重试——人工/PM 决策。delay 经 scheduleTransientRetry 包装（测试注入缝）。 */
   private maybeTransientRetry(dispatchId: string, input: Parameters<SessionManager["dispatchWorker"]>[0], errorMsg: string): void {
-    if (input.retry_of) return; // 本单已是重试：不再重试（链深恒 1）
-    if (input.queue_replay && input.queue_replay !== dispatchId) return; // 排队重放单：队列层自管，不叠加自动重试
+    if (input.retry_of) return; // 本单已是重试：不再重试（链深恒 1——含排队重放单带 retry_of 的复合形态）
+    // 审查 A-P2-1：原「queue_replay !== dispatchId 排队单不重试」门控是死分支
+    //（dispatchId 恒等于 queue_replay）已删——排队重放遇瞬态失败同样自动重试一次
+    //（重试单带 retry_of 标记，链深恒 1 真实成立）；队列层语义不受影响
     const reason = classifyDispatchFailure(errorMsg);
     if (!isTransientFailure(reason)) return; // 逻辑类/取消：人工决策域
     if (readDispatchLog().some((e) => e.retry_of === dispatchId)) return; // 台账标记双保险（收敛视图可能盖掉历史标记——主门控 input.retry_of 为准，此处拦并发双拉窗）
@@ -6962,7 +6968,8 @@ export class SessionManager {
         const veteranGroupAtCap = !capReuse && !!gCap && gCap.status === "active" && genericWorkerCount(gCap.headcount) >= headcountCapOf(gCap);
         if (capReuse || veteranGroupAtCap) {
           const receipt = truncate(`编制已满${capReuse ? "，复用 worker resume 失败且不扩编降级" : "，在编熟手 resume 熔断且不扩编降级"}: ${msg}`, 200);
-          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields }); /* 审查 A-P2-4：编制闸类恒 logic——msg 含网络词时误标瞬态=「网络错误」chip 误导+不实重试预期 */
+
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
           console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=resume 编制已满不扩编: ${truncate(msg, 120)}`);
           return { ok: false, error: `编制已满（${capReuse ? "触顶复用" : "在编熟手"} resume 失败，不扩编）: ${msg}` };
@@ -6980,7 +6987,9 @@ export class SessionManager {
           // P1-2（R1FIX1）出口②复活后再失败：事实源先行，统一通知口（failed →
           // action/error 可操作；actor=leader 按 M4 规则注入派单方）
           const receipt = truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200);
-          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
+          // 审查 A-P2-2：failure_reason 用原始串分类（receipt 截 200 会砍掉尾部错误码，
+          // 台账标签与重试行为不一致）；B-P1-2：重试单 failed 行透传 retry_of（收敛末行不丢标记）
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, failure_reason: classifyDispatchFailure(`${msg}\n${msg2}`), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields });
           this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
           this.maybeTransientRetry(dispatchId, input, `${msg}\n${msg2}`); // #G5：瞬态类（网络/超时/过载）30s 自动重试一次
           console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=spawn 复用降级拉起失败: ${truncate(msg2, 120)}`);
@@ -7000,7 +7009,7 @@ export class SessionManager {
         // P1-2（R1FIX1）出口③首次拉起失败：同出口②口径（旧「CLI 同步拿 error」
         // 例外只针对在线弹窗通道，账面不豁免）
         const receipt = truncate(msg, 200);
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, ...engineFields });
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor, failure_reason: classifyDispatchFailure(msg), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields }); /* 审查 A-P2-2/B-P1-2：原始串分类+重试标记透传 */
         this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
         this.maybeTransientRetry(dispatchId, input, msg); // #G5：瞬态类（网络/超时/过载）30s 自动重试一次
         console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=spawn 新会话拉起失败: ${truncate(msg, 120)}`);
@@ -7046,7 +7055,7 @@ export class SessionManager {
     // 是两个独立缺陷，本批同修）
     const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
     const receiptPath = receiptRel ? join(homedir(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : undefined;
-    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}) });
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}) }); /* #G5：重试标记随在途记录（收口行透传源） */
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
         ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）

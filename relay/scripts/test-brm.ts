@@ -40,6 +40,12 @@ console.log("§P classifyDispatchFailure 纯函数（匹配序 specific→generi
   ok(classifyDispatchFailure("任务已取消（cancelled by user）") === "cancelled", "P5 cancel/取消→cancelled（最 specific 先匹配）");
   ok(classifyDispatchFailure("入编被编制上限闸拒绝: headcount_cap=6") === "logic_error", "P6 编制闸拒→logic_error（兜底——逻辑类不自动重试）");
   ok(classifyDispatchFailure("无 SDK 会话记录，无法恢复") === "logic_error", "P6b 参数/状态错→logic_error 兜底");
+  // 审查 A-P1-1 修复锚：Node 网络瞬态错误码族三族（原全漏自动重试）
+  ok(classifyDispatchFailure("Error: read EPIPE") === "network_error", "P6c EPIPE→network_error（A-P1-1：原落 logic_error 漏重试）");
+  ok(classifyDispatchFailure("getaddrinfo EAI_AGAIN api.example.com") === "network_error", "P6d EAI_AGAIN→network_error（A-P1-1）");
+  ok(classifyDispatchFailure("ECONNABORTED connection aborted") === "network_error", "P6e ECONNABORTED→network_error（A-P1-1：原落 cancelled 漏重试）");
+  ok(classifyDispatchFailure("Request aborted due to timeout") === "timeout", "P6f aborted due to timeout→timeout（A-P1-1：timeout 词自身命中，abort 裸词退役）");
+  ok(classifyDispatchFailure("任务已被用户中止") === "cancelled", "P6g 用户中止→cancelled 仍先命中（abort 移位不伤取消语义）");
   // 瞬态集
   ok(isTransientFailure("network_error") && isTransientFailure("timeout") && isTransientFailure("model_overload"), "P7 瞬态三类=自动重试资格");
   ok(!isTransientFailure("logic_error") && !isTransientFailure("tool_crash") && !isTransientFailure("cancelled"), "P7b 逻辑/崩/取消三类不自动重试（人工/PM 决策）");
@@ -94,20 +100,25 @@ console.log("§A 静态锚（relay/web/schema）：");
   const retry = readFileSync(join(root, "relay", "src", "dispatch-retry.ts"), "utf-8");
 
   // relay：重试挂钩
-  ok(/private maybeTransientRetry\(dispatchId: string/.test(sm) && sm.includes("if (input.retry_of) return; // 本单已是重试：不再重试（链深恒 1）"), "A1 maybeTransientRetry 定义+链深 1 门控");
+  ok(/private maybeTransientRetry\(dispatchId: string/.test(sm) && sm.includes("if (input.retry_of) return; // 本单已是重试：不再重试（链深恒 1——含排队重放单带 retry_of 的复合形态）"), "A1 maybeTransientRetry 定义+链深 1 门控（审查 A-P2-1：死分支已删）");
   ok((sm.match(/this\.maybeTransientRetry\(dispatchId, input/g) ?? []).length === 2, "A2 两 spawn 失败出口挂重试（复用降级再失败+首次拉起失败——编制闸/入编闸出口不挂=逻辑类）");
   ok(sm.includes("queue_replay: dispatchId, retry_of: dispatchId") && sm.includes("scheduleTransientRetry(() => {"), "A3 重试原参重入（queue_replay 同 id 段链+retry_of 标记+30s 调度）");
   // relay：透传
   ok(sm.includes('...(input.priority ? { priority: input.priority } : {}), // #G3：派单优先级随台账全行'), "A4 engineFields 层 priority 透传（台账全行）");
   ok((sm.match(/\.\.\.\(input\.priority \? \{ priority: input\.priority \} : \{\}\), \.\.\.\(input\.parent_id \? \{ parent_id: input\.parent_id \} : \{\}\)/g) ?? []).length === 2, "A5 建卡两分支带 priority+parent_id");
   ok(sm.includes('...(input.retry_of ? { retry_of: input.retry_of } : {})'), "A6 dispatched 行带 retry_of 标记");
+  ok(sm.includes("...(e.retry_of ? { retry_of: e.retry_of } : {})") && sm.includes("重试标记随收口行透传"), "A6b 收口行透传 retry_of——json 档收敛末行赢，收口行不带会洗掉 dispatched 行标记（审查 B-P1-2）");
+  ok(sm.includes("failure_reason: classifyDispatchFailure(`${msg}\\n${msg2}`)") && sm.includes("failure_reason: classifyDispatchFailure(msg)"), "A6c spawn 两出口 failure_reason 用原始串（审查 A-P2-2：receipt 截断砍错误码=标签与行为不一致）");
+  ok(sm.includes('failure_reason: "logic_error"') && sm.includes("审查 A-P2-4：编制闸类恒 logic"), "A6d capReuse 出口显式 logic_error（审查 A-P2-4：msg 含网络词时不误标瞬态）");
   // web
   ok(web.includes("const boardExpanded = new Set();") && web.includes('data-board-toggle='), "A7 web 折叠态 Set+折叠钮");
   ok(web.includes("const subCount = task.__subCount || 0;") && web.includes('"subtasks">'), "A8 web 子卡挂靠容器（默认折叠）");
+  ok(web.includes("visibleN: withSubs.length") && web.includes("laneRes.visibleN"), "A8b 泳道计数=可见卡数（审查 B-P2-3：折叠子卡不计数）");
+  ok(web.includes('t.__subRunning = t.__subs.some((sub) => dispatchStatus.get(sub.dispatch_id) === "running");'), "A8c 父卡运行信号（审查 B-P2-2：折叠不吞子卡 running）");
   ok(/rootIds\.has\(sub\.parent_id\)/.test(web) && web.includes("孤儿子卡（孙链）：平铺进根列"), "A9 web 孤儿容错（孙链/坏引用平铺不丢）");
   ok(web.includes('data-priority=') && web.includes("prio-' + prio.toLowerCase()"), "A10 web 优先级 chip+data-priority（P0/P1 显）");
   ok(web.includes("const failChip = entry.status === \"failed\" && entry.failure_reason") && web.includes("自动重试"), "A11 web 活动行失败分类 chip+重试标识");
-  ok(css.includes('.tchip.prio-p0') && css.includes('.task-card[data-priority="P0"]') && css.includes(".subtasks {") && css.includes(".act-freason"), "A12 CSS 四件（prio chip/左缘条/子卡缩进/失败分类 chip）");
+  ok(css.includes('.tchip.prio-p0') && css.includes('.task-card[data-priority="P0"] { box-shadow: inset 0 2.5px 0') && css.includes("#d-team .subtasks .task-card.compact") && css.includes(".act-freason") && css.includes(".sub-toggle.sub-running"), "A12 CSS 六件（prio chip/顶部条·B-P1-1/子卡特异性·B-P2-1/sub-running·B-P2-2/失败分类 chip）");
   // schema
   ok(schema.includes('export const BOARD_PRIORITIES = ["P0", "P1", "P2"] as const;') && schema.includes('export const FAILURE_REASONS = ['), "A13 schema 词表（优先级三档+失败六枚举镜像）");
   ok(schema.includes("板卡 priority 不在词表") && schema.includes("failure_reason 不在词表") && schema.includes("派单 priority 不在词表"), "A14 schema 三处词表闸（板卡/失败/派单）");

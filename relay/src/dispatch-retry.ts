@@ -36,10 +36,15 @@ export const TRANSIENT_RETRY_DELAY_MS = 30_000;
  */
 export function classifyDispatchFailure(text: string): DispatchFailureReason {
   const t = String(text ?? "");
-  if (/cancel|interrupt|abort|中止|取消/i.test(t)) return "cancelled";
+  // 审查 A-P1-1 修：abort 裸词整体退役——「aborted due to timeout」由 timeout 词自身
+  // 命中；裸 abort（用户中断语境）落 cancelled 的 cancel 词或保守 logic_error，
+  // 不再劫持 ECONNABORTED 的 network 归路
+  if (/cancel|interrupt|中止|取消/i.test(t)) return "cancelled";
   if (/429|rate.?limit|overload|使用上限|配额|quota|too many requests/i.test(t)) return "model_overload";
-  if (/timeout|timed?.?out|etimedout|超时/i.test(t)) return "timeout";
-  if (/network|econnreset|econnrefused|enotfound|ehostunreach|fetch failed|socket|hang ?up|网络|连接/i.test(t)) return "network_error";
+  if (/timeout|timed?.?out|etimedout|超时/i.test(t)) return "timeout"; // abort 裸词退役：timeout 词自身可命中（aborted due to timeout）且裸 abort 会劫持 ECONNABORTED→network 的归路
+  // 审查 A-P1-1 修：补 epipe/eai_again/econnaborted——Node 网络瞬态错误码族
+  //（本机实测三族原全落 cancelled/logic_error 漏自动重试）
+  if (/network|econnreset|econnrefused|econnaborted|enotfound|ehostunreach|epipe|eai_again|fetch failed|socket|hang ?up|网络|连接/i.test(t)) return "network_error";
   if (/crash|panic|segfault|崩/i.test(t)) return "tool_crash";
   return "logic_error";
 }
